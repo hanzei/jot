@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { XMarkIcon, PlusIcon, TrashIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon, PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
 import { Dialog } from '@headlessui/react';
 import { Note, NoteType, CreateNoteRequest, UpdateNoteRequest } from '@/types';
 import { notes } from '@/utils/api';
@@ -98,7 +98,6 @@ export default function NoteModal({ note, onClose, onSave }: NoteModalProps) {
   const [pinned, setPinned] = useState(false);
   const [items, setItems] = useState<{ text: string; completed: boolean; position: number }[]>([]);
   const [loading, setLoading] = useState(false);
-  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -214,7 +213,34 @@ export default function NoteModal({ note, onClose, onSave }: NoteModalProps) {
     }
   };
 
-  const canSave = title.trim() || content.trim() || (noteType === 'todo' && items.some(item => item.text.trim()));
+  const handlePinToggle = async () => {
+    if (!note) return;
+    
+    const newPinnedState = !pinned;
+    setPinned(newPinnedState);
+    
+    try {
+      const updateData: UpdateNoteRequest = {
+        title,
+        content,
+        pinned: newPinnedState,
+        archived: note.archived,
+        color,
+        items: note.note_type === 'todo' ? items.map((item, idx) => ({ 
+          text: item.text, 
+          position: idx, 
+          completed: item.completed 
+        })) : undefined,
+      };
+      await notes.update(note.id, updateData);
+      onSave(); // Refresh the notes list to show updated pin status
+    } catch (error) {
+      console.error('Failed to update pin status:', error);
+      // Revert the pin state on error
+      setPinned(!newPinnedState);
+    }
+  };
+
 
   const hasUnsavedChanges = () => {
     if (note) {
@@ -233,22 +259,15 @@ export default function NoteModal({ note, onClose, onSave }: NoteModalProps) {
     }
   };
 
-  const handleCloseRequest = () => {
+  const handleCloseRequest = async () => {
     if (hasUnsavedChanges()) {
-      setShowConfirmDialog(true);
+      // Auto-save before closing if there are unsaved changes
+      await handleSave();
     } else {
       onClose();
     }
   };
 
-  const handleConfirmClose = () => {
-    setShowConfirmDialog(false);
-    onClose();
-  };
-
-  const handleCancelClose = () => {
-    setShowConfirmDialog(false);
-  };
 
   return (
     <>
@@ -269,7 +288,7 @@ export default function NoteModal({ note, onClose, onSave }: NoteModalProps) {
             <div className="flex items-center space-x-2">
               {note && (
                 <button
-                  onClick={() => setPinned(!pinned)}
+                  onClick={handlePinToggle}
                   className="p-1 rounded-full hover:bg-gray-200 transition-colors"
                   title={pinned ? 'Unpin note' : 'Pin note'}
                 >
@@ -394,60 +413,19 @@ export default function NoteModal({ note, onClose, onSave }: NoteModalProps) {
                 Last edited: {new Date(note.updated_at).toLocaleString()}
               </p>
             )}
-            <div className="flex space-x-2 ml-auto">
-              <button
-                onClick={handleCloseRequest}
-                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
-              >
-                Cancel
-              </button>
-              <button
-                onClick={handleSave}
-                disabled={!canSave || loading}
-                className="px-4 py-2 text-sm text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-              >
-                {loading ? 'Saving...' : 'Save'}
-              </button>
+            <div className="flex items-center ml-auto">
+              {loading && (
+                <div className="flex items-center space-x-2 text-sm text-gray-600">
+                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600"></div>
+                  <span>Saving...</span>
+                </div>
+              )}
             </div>
           </div>
         </Dialog.Panel>
       </div>
       </Dialog>
 
-      {/* Confirmation Dialog */}
-      <Dialog open={showConfirmDialog} onClose={handleCancelClose} className="relative z-50">
-        <div className="fixed inset-0 bg-black/30" aria-hidden="true" />
-        
-        <div className="fixed inset-0 flex items-center justify-center p-4">
-          <Dialog.Panel className="mx-auto max-w-sm w-full bg-white rounded-lg shadow-xl p-6">
-            <div className="flex items-center space-x-3 mb-4">
-              <ExclamationTriangleIcon className="h-6 w-6 text-amber-500" />
-              <Dialog.Title className="text-lg font-medium text-gray-900">
-                Unsaved Changes
-              </Dialog.Title>
-            </div>
-            
-            <p className="text-sm text-gray-600 mb-6">
-              You have unsaved changes. Are you sure you want to close without saving?
-            </p>
-            
-            <div className="flex justify-end space-x-3">
-              <button
-                onClick={handleCancelClose}
-                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
-              >
-                Keep Editing
-              </button>
-              <button
-                onClick={handleConfirmClose}
-                className="px-4 py-2 text-sm text-white bg-red-600 rounded-md hover:bg-red-700"
-              >
-                Discard Changes
-              </button>
-            </div>
-          </Dialog.Panel>
-        </div>
-      </Dialog>
     </>
   );
 }
