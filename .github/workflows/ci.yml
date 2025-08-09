@@ -72,7 +72,6 @@ jobs:
         with:
           version: latest
           working-directory: ./server
-          args: --version
 
       - name: Install webapp dependencies
         working-directory: ./webapp
