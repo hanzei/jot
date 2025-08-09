@@ -150,6 +150,30 @@ func (h *NotesHandler) GetNote(w http.ResponseWriter, r *http.Request) (int, err
 	return 0, nil
 }
 
+func (h *NotesHandler) updateTodoItems(noteID int, userID string, items []UpdateNoteItem) error {
+	// Get current note to check if it's a todo type
+	currentNote, err := h.noteStore.GetByID(noteID, userID)
+	if err != nil {
+		return err
+	}
+
+	if currentNote.NoteType == models.NoteTypeTodo {
+		// Delete all existing items (we'll recreate them)
+		if err := h.noteStore.DeleteItemsByNoteID(noteID); err != nil {
+			return err
+		}
+
+		// Create new items with updated positions
+		for _, item := range items {
+			_, err := h.noteStore.CreateItemWithCompleted(noteID, item.Text, item.Position, item.Completed)
+			if err != nil {
+				return err
+			}
+		}
+	}
+	return nil
+}
+
 func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, error) {
 	claims, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
@@ -180,25 +204,8 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 
 	// Handle todo items update if provided
 	if len(req.Items) > 0 {
-		// Get current note to check if it's a todo type
-		currentNote, err := h.noteStore.GetByID(id, claims.UserID)
-		if err != nil {
+		if err = h.updateTodoItems(id, claims.UserID, req.Items); err != nil {
 			return http.StatusInternalServerError, err
-		}
-
-		if currentNote.NoteType == models.NoteTypeTodo {
-			// Delete all existing items (we'll recreate them)
-			if err := h.noteStore.DeleteItemsByNoteID(id); err != nil {
-				return http.StatusInternalServerError, err
-			}
-
-			// Create new items with updated positions
-			for _, item := range req.Items {
-				_, err := h.noteStore.CreateItemWithCompleted(id, item.Text, item.Position, item.Completed)
-				if err != nil {
-					return http.StatusInternalServerError, err
-				}
-			}
 		}
 	}
 
