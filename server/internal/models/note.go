@@ -23,6 +23,7 @@ type Note struct {
 	Color      string      `json:"color"`
 	Pinned     bool        `json:"pinned"`
 	Archived   bool        `json:"archived"`
+	Position   int         `json:"position"`
 	Items      []NoteItem  `json:"items,omitempty"`
 	SharedWith []NoteShare `json:"shared_with,omitempty"`
 	IsShared   bool        `json:"is_shared"`
@@ -60,11 +61,20 @@ func NewNoteStore(db *sql.DB) *NoteStore {
 }
 
 func (s *NoteStore) Create(userID string, title, content string, noteType NoteType, color string) (*Note, error) {
-	query := `INSERT INTO notes (user_id, title, content, note_type, color) 
-			  VALUES (?, ?, ?, ?, ?) RETURNING id, pinned, archived, created_at, updated_at`
+	// Get the next position for unpinned notes
+	var maxPosition int
+	posQuery := `SELECT COALESCE(MAX(position), -1) FROM notes WHERE user_id = ? AND pinned = FALSE AND archived = FALSE`
+	err := s.db.QueryRow(posQuery, userID).Scan(&maxPosition)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get max position: %w", err)
+	}
+	nextPosition := maxPosition + 1
+
+	query := `INSERT INTO notes (user_id, title, content, note_type, color, position) 
+			  VALUES (?, ?, ?, ?, ?, ?) RETURNING id, pinned, archived, created_at, updated_at`
 
 	var note Note
-	err := s.db.QueryRow(query, userID, title, content, noteType, color).Scan(
+	err = s.db.QueryRow(query, userID, title, content, noteType, color, nextPosition).Scan(
 		&note.ID, &note.Pinned, &note.Archived,
 		&note.CreatedAt, &note.UpdatedAt,
 	)
@@ -77,12 +87,13 @@ func (s *NoteStore) Create(userID string, title, content string, noteType NoteTy
 	note.Content = content
 	note.NoteType = noteType
 	note.Color = color
+	note.Position = nextPosition
 
 	return &note, nil
 }
 
 func (s *NoteStore) GetByUserID(userID string, archived bool, search string) ([]*Note, error) {
-	query := `SELECT DISTINCT n.id, n.user_id, n.title, n.content, n.note_type, n.color, n.pinned, n.archived, n.created_at, n.updated_at
+	query := `SELECT DISTINCT n.id, n.user_id, n.title, n.content, n.note_type, n.color, n.pinned, n.archived, n.position, n.created_at, n.updated_at
 			  FROM notes n
 			  LEFT JOIN note_shares ns ON n.id = ns.note_id
 			  WHERE (n.user_id = ? OR ns.shared_with_user_id = ?) AND n.archived = ?`
@@ -94,7 +105,7 @@ func (s *NoteStore) GetByUserID(userID string, archived bool, search string) ([]
 		args = append(args, searchTerm, searchTerm)
 	}
 
-	query += ` ORDER BY n.pinned DESC, n.updated_at DESC`
+	query += ` ORDER BY n.pinned DESC, n.position ASC`
 
 	rows, err := s.db.Query(query, args...)
 	if err != nil {
@@ -111,7 +122,7 @@ func (s *NoteStore) GetByUserID(userID string, archived bool, search string) ([]
 		var note Note
 		err := rows.Scan(
 			&note.ID, &note.UserID, &note.Title, &note.Content,
-			&note.NoteType, &note.Color, &note.Pinned, &note.Archived,
+			&note.NoteType, &note.Color, &note.Pinned, &note.Archived, &note.Position,
 			&note.CreatedAt, &note.UpdatedAt,
 		)
 		if err != nil {
@@ -148,13 +159,13 @@ func (s *NoteStore) GetByID(id int, userID string) (*Note, error) {
 		return nil, fmt.Errorf("note not found")
 	}
 
-	query := `SELECT id, user_id, title, content, note_type, color, pinned, archived, created_at, updated_at
+	query := `SELECT id, user_id, title, content, note_type, color, pinned, archived, position, created_at, updated_at
 			  FROM notes WHERE id = ?`
 
 	var note Note
 	err = s.db.QueryRow(query, id).Scan(
 		&note.ID, &note.UserID, &note.Title, &note.Content,
-		&note.NoteType, &note.Color, &note.Pinned, &note.Archived,
+		&note.NoteType, &note.Color, &note.Pinned, &note.Archived, &note.Position,
 		&note.CreatedAt, &note.UpdatedAt,
 	)
 	if err != nil {
@@ -191,6 +202,12 @@ func (s *NoteStore) Update(id int, userID string, title, content string, pinned,
 		return fmt.Errorf("note not found or no access")
 	}
 
+	// Get current note state to check if pinned status is changing
+	currentNote, err := s.GetByID(id, userID)
+	if err != nil {
+		return fmt.Errorf("failed to get current note: %w", err)
+	}
+
 	query := `UPDATE notes SET title = ?, content = ?, pinned = ?, archived = ?, color = ?, updated_at = CURRENT_TIMESTAMP
 			  WHERE id = ?`
 
@@ -206,6 +223,23 @@ func (s *NoteStore) Update(id int, userID string, title, content string, pinned,
 
 	if rowsAffected == 0 {
 		return fmt.Errorf("note not found")
+	}
+
+	// If pinned status changed, reposition the note appropriately
+	if currentNote.Pinned != pinned {
+		var maxPosition int
+		posQuery := `SELECT COALESCE(MAX(position), -1) FROM notes WHERE user_id = ? AND pinned = ? AND archived = FALSE`
+		err := s.db.QueryRow(posQuery, userID, pinned).Scan(&maxPosition)
+		if err != nil {
+			return fmt.Errorf("failed to get max position: %w", err)
+		}
+		newPosition := maxPosition + 1
+
+		posUpdateQuery := `UPDATE notes SET position = ? WHERE id = ?`
+		_, err = s.db.Exec(posUpdateQuery, newPosition, id)
+		if err != nil {
+			return fmt.Errorf("failed to update position: %w", err)
+		}
 	}
 
 	return nil
@@ -437,4 +471,43 @@ func (s *NoteStore) IsOwner(noteID int, userID string) (bool, error) {
 	}
 
 	return count > 0, nil
+}
+
+func (s *NoteStore) ReorderNotes(userID string, noteIDs []int) error {
+	if len(noteIDs) == 0 {
+		return nil
+	}
+
+	// Start transaction
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer tx.Rollback()
+
+	// Update positions for each note
+	for i, noteID := range noteIDs {
+		// Verify user has access to this note
+		hasAccess, err := s.HasAccess(noteID, userID)
+		if err != nil {
+			return fmt.Errorf("failed to check access for note %d: %w", noteID, err)
+		}
+		if !hasAccess {
+			return fmt.Errorf("no access to note %d", noteID)
+		}
+
+		// Update position
+		_, err = tx.Exec("UPDATE notes SET position = ? WHERE id = ?", i, noteID)
+		if err != nil {
+			return fmt.Errorf("failed to update position for note %d: %w", noteID, err)
+		}
+	}
+
+	// Commit transaction
+	err = tx.Commit()
+	if err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
 }

@@ -432,3 +432,34 @@ func (h *NotesHandler) SearchUsers(w http.ResponseWriter, r *http.Request) (int,
 	}
 	return 0, nil
 }
+
+type ReorderNotesRequest struct {
+	NoteIDs []int `json:"note_ids"`
+}
+
+func (h *NotesHandler) ReorderNotes(w http.ResponseWriter, r *http.Request) (int, error) {
+	claims, ok := auth.GetUserFromContext(r.Context())
+	if !ok {
+		return http.StatusUnauthorized, errors.New("unauthorized")
+	}
+
+	var req ReorderNotesRequest
+	if decodeErr := json.NewDecoder(r.Body).Decode(&req); decodeErr != nil {
+		return http.StatusBadRequest, decodeErr
+	}
+
+	if len(req.NoteIDs) == 0 {
+		return http.StatusBadRequest, errors.New("empty note IDs list")
+	}
+
+	err := h.noteStore.ReorderNotes(claims.UserID, req.NoteIDs)
+	if err != nil {
+		if strings.Contains(err.Error(), "no access") {
+			return http.StatusForbidden, err
+		}
+		return http.StatusInternalServerError, err
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+	return 0, nil
+}
