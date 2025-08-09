@@ -205,25 +205,6 @@ services:
       - "80:8080"  # Expose on port 80
 ```
 
-## Security Considerations
-
-### Production Checklist
-
-- [ ] **Change JWT Secret**: Set strong `JWT_SECRET` environment variable
-- [ ] **Use HTTPS**: Deploy behind reverse proxy (nginx/caddy/traefik)
-- [ ] **Database Permissions**: Ensure SQLite file has correct permissions
-- [ ] **Firewall**: Only expose necessary ports (8080/443)
-- [ ] **Updates**: Keep dependencies updated regularly
-- [ ] **Backups**: Regular database backups
-
-### Security Features
-
-- **Password Hashing**: Uses bcrypt with default cost
-- **JWT Authentication**: Tokens expire after 24 hours
-- **Input Validation**: All inputs validated and sanitized
-- **SQL Injection Prevention**: Uses prepared statements
-- **CORS Protection**: Configurable CORS headers
-
 ## Troubleshooting
 
 ### Common Issues
