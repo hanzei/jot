@@ -1,0 +1,39 @@
+@tailwind base;
+@tailwind components;
+@tailwind utilities;
+
+body {
+  margin: 0;
+  font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', 'Roboto', 'Oxygen',
+    'Ubuntu', 'Cantarell', 'Fira Sans', 'Droid Sans', 'Helvetica Neue',
+    sans-serif;
+  -webkit-font-smoothing: antialiased;
+  -moz-osx-font-smoothing: grayscale;
+  background-color: #fafafa;
+}
+
+@layer components {
+  .note-card {
+    @apply bg-white rounded-lg border border-gray-200 hover:shadow-md transition-shadow duration-200 cursor-pointer;
+  }
+  
+  .note-card.yellow {
+    @apply bg-yellow-100 border-yellow-200;
+  }
+  
+  .note-card.green {
+    @apply bg-green-100 border-green-200;
+  }
+  
+  .note-card.blue {
+    @apply bg-blue-100 border-blue-200;
+  }
+  
+  .note-card.red {
+    @apply bg-red-100 border-red-200;
+  }
+  
+  .note-card.purple {
+    @apply bg-purple-100 border-purple-200;
+  }
+}

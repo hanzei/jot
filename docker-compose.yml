@@ -1,0 +1,26 @@
+version: '3.8'
+
+services:
+  keep:
+    build:
+      context: .
+      dockerfile: Dockerfile
+    container_name: keep
+    environment:
+      - DB_PATH=/data/keep.db
+      - JWT_SECRET=${JWT_SECRET:-your-secret-key-change-in-production}
+      - STATIC_DIR=/app/webapp/build
+    volumes:
+      - ./data:/data
+    ports:
+      - "8080:8080"
+    restart: unless-stopped
+    healthcheck:
+      test: ["CMD", "wget", "--quiet", "--tries=1", "--spider", "http://localhost:8080/health"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+
+volumes:
+  data:
+    driver: local

@@ -1,0 +1,67 @@
+version: "2"
+run:
+  timeout: 5m
+  tests: false
+  modules-download-mode: readonly
+
+
+linters:
+  enable:
+    - bodyclose
+    - errcheck
+    - gocyclo
+    - gosec
+    - govet
+    - ineffassign
+    - misspell
+    - revive
+    - staticcheck
+    - unconvert
+    - unused
+    - testifylint
+  settings:
+    govet:
+      enable-all: true
+      disable:
+        - fieldalignment
+    gocyclo:
+      min-complexity: 15
+    goconst:
+      min-len: 2
+      min-occurrences: 3
+    misspell:
+      locale: US
+    revive:
+      confidence: 0.8
+    testifylint:
+      enable:
+        - blank-import
+        - bool-compare
+        - compares
+        - contains
+        - empty
+        - encoded-compare
+        - equal-values
+        - error-is-as
+        - error-nil
+        - expected-actual
+        - float-compare
+        - formatter
+        - go-require
+        - len
+        - negative-positive
+        - nil-compare
+        - regexp
+        - require-error
+        - suite-broken-parallel
+        - suite-dont-use-pkg
+        - suite-extra-assert-call
+        - suite-method-signature
+        - suite-subtest-run
+        - suite-thelper
+        - useless-assert
+
+
+issues:
+  max-issues-per-linter: 0
+  max-same-issues: 0

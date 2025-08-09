@@ -1,0 +1,26 @@
+version: '3'
+
+tasks:
+  run-server:
+    desc: Start the Keep server
+    dir: server
+    cmd: go run main.go
+
+  run-webapp:
+    desc: Build webapp in watch mode
+    dir: webapp
+    cmd: npm run build:watch
+
+  test:
+    desc: Run all tests
+    deps: [test-server]
+
+  test-server:
+    desc: Run server tests
+    dir: server
+    cmd: go test -v ./...
+
+  coverage:
+    desc: Run server tests with coverage
+    dir: server
+    cmd: go test -v -coverprofile=coverage.out ./... && go tool cover -html=coverage.out -o coverage.html

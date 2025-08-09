@@ -1,0 +1,199 @@
+package models
+
+import (
+	"crypto/rand"
+	"database/sql"
+	"encoding/base32"
+	"fmt"
+	"log"
+	"strings"
+	"time"
+
+	"golang.org/x/crypto/bcrypt"
+)
+
+type User struct {
+	ID          string    `json:"id"`
+	Email       string    `json:"email"`
+	PasswordHash string   `json:"-"`
+	IsAdmin     bool      `json:"is_admin"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
+}
+
+type UserStore struct {
+	db *sql.DB
+}
+
+func NewUserStore(db *sql.DB) *UserStore {
+	return &UserStore{db: db}
+}
+
+func generateUserID() (string, error) {
+	bytes := make([]byte, 15) // 15 bytes = 120 bits, which gives us 24 base32 chars, we'll take first 20
+	if _, err := rand.Read(bytes); err != nil {
+		return "", err
+	}
+	encoded := base32.StdEncoding.EncodeToString(bytes)
+	return strings.ToLower(encoded[:20]), nil
+}
+
+func (s *UserStore) Create(email, password string) (*User, error) {
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, fmt.Errorf("failed to hash password: %w", err)
+	}
+
+	userID, err := generateUserID()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate user ID: %w", err)
+	}
+
+	var isFirstUser bool
+	var count int
+	err = s.db.QueryRow("SELECT COUNT(*) FROM users").Scan(&count)
+	if err != nil {
+		return nil, fmt.Errorf("failed to count users: %w", err)
+	}
+	isFirstUser = count == 0
+
+	query := `INSERT INTO users (id, email, password_hash, is_admin) 
+			  VALUES (?, ?, ?, ?) RETURNING created_at, updated_at`
+	
+	var user User
+	err = s.db.QueryRow(query, userID, email, string(hashedPassword), isFirstUser).Scan(
+		&user.CreatedAt, &user.UpdatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create user: %w", err)
+	}
+
+	user.ID = userID
+	user.Email = email
+	user.IsAdmin = isFirstUser
+
+	return &user, nil
+}
+
+func (s *UserStore) GetByEmail(email string) (*User, error) {
+	var user User
+	query := `SELECT id, email, password_hash, is_admin, created_at, updated_at 
+			  FROM users WHERE email = ?`
+	
+	err := s.db.QueryRow(query, email).Scan(
+		&user.ID, &user.Email, &user.PasswordHash,
+		&user.IsAdmin, &user.CreatedAt, &user.UpdatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("user not found")
+		}
+		return nil, fmt.Errorf("failed to get user: %w", err)
+	}
+
+	return &user, nil
+}
+
+func (s *UserStore) GetByID(id string) (*User, error) {
+	var user User
+	query := `SELECT id, email, password_hash, is_admin, created_at, updated_at 
+			  FROM users WHERE id = ?`
+	
+	err := s.db.QueryRow(query, id).Scan(
+		&user.ID, &user.Email, &user.PasswordHash,
+		&user.IsAdmin, &user.CreatedAt, &user.UpdatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("user not found")
+		}
+		return nil, fmt.Errorf("failed to get user: %w", err)
+	}
+
+	return &user, nil
+}
+
+func (u *User) CheckPassword(password string) bool {
+	err := bcrypt.CompareHashAndPassword([]byte(u.PasswordHash), []byte(password))
+	return err == nil
+}
+
+func (s *UserStore) GetAll() ([]*User, error) {
+	query := `SELECT id, email, password_hash, is_admin, created_at, updated_at 
+			  FROM users ORDER BY created_at DESC`
+	
+	rows, err := s.db.Query(query)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query users: %w", err)
+	}
+	defer func() {
+		if closeErr := rows.Close(); closeErr != nil {
+			log.Printf("Failed to close rows: %v", closeErr)
+		}
+	}()
+
+	var users []*User
+	for rows.Next() {
+		var user User
+		if scanErr := rows.Scan(
+			&user.ID, &user.Email, &user.PasswordHash,
+			&user.IsAdmin, &user.CreatedAt, &user.UpdatedAt,
+		); scanErr != nil {
+			return nil, fmt.Errorf("failed to scan user: %w", scanErr)
+		}
+		users = append(users, &user)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating users: %w", err)
+	}
+
+	return users, nil
+}
+
+func (s *UserStore) CreateByAdmin(email, password string, isAdmin bool) (*User, error) {
+	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
+	if err != nil {
+		return nil, fmt.Errorf("failed to hash password: %w", err)
+	}
+
+	userID, err := generateUserID()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate user ID: %w", err)
+	}
+
+	query := `INSERT INTO users (id, email, password_hash, is_admin) 
+			  VALUES (?, ?, ?, ?) RETURNING created_at, updated_at`
+	
+	var user User
+	err = s.db.QueryRow(query, userID, email, string(hashedPassword), isAdmin).Scan(
+		&user.CreatedAt, &user.UpdatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create user: %w", err)
+	}
+
+	user.ID = userID
+	user.Email = email
+	user.IsAdmin = isAdmin
+
+	return &user, nil
+}
+
+func (s *UserStore) SearchByEmail(email string) (*User, error) {
+	var user User
+	query := `SELECT id, email, is_admin, created_at, updated_at 
+			  FROM users WHERE email = ?`
+	
+	err := s.db.QueryRow(query, email).Scan(
+		&user.ID, &user.Email, &user.IsAdmin, &user.CreatedAt, &user.UpdatedAt,
+	)
+	if err != nil {
+		if err == sql.ErrNoRows {
+			return nil, fmt.Errorf("user not found")
+		}
+		return nil, fmt.Errorf("failed to get user: %w", err)
+	}
+
+	return &user, nil
+}

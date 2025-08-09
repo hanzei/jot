@@ -1,0 +1,237 @@
+package main
+
+import (
+	"fmt"
+	"net/http"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+// Note sharing endpoint tests
+func TestNoteSharingEndpoints(t *testing.T) {
+	ts := setupTestServer(t)
+	owner := ts.createTestUser(t, "owner@example.com", "password123", false)
+	_ = ts.createTestUser(t, "user@example.com", "password123", false)
+	other := ts.createTestUser(t, "other@example.com", "password123", false)
+
+	// Create a note to share
+	body := map[string]any{
+		"title":   "Shared Note",
+		"content": "This will be shared",
+	}
+	createResp := ts.authRequest(t, owner, http.MethodPost, "/api/v1/notes", body)
+	var createdNote map[string]any
+	createResp.UnmarshalBody(&createdNote)
+	noteID := int(createdNote["id"].(float64))
+
+	t.Run("share note with user", func(t *testing.T) {
+		shareBody := map[string]string{
+			"email": "user@example.com",
+		}
+
+		resp := ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%d/share", noteID), shareBody)
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+		var response map[string]any
+		require.NoError(t, resp.UnmarshalBody(&response))
+		assert.True(t, response["success"].(bool))
+	})
+
+	t.Run("share with duplicate user returns conflict", func(t *testing.T) {
+		// First share with other@example.com
+		shareBody := map[string]string{
+			"email": "other@example.com",
+		}
+		resp1 := ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%d/share", noteID), shareBody)
+		assert.Equal(t, http.StatusOK, resp1.StatusCode)
+
+		// Try to share again with the same user - should return conflict
+		resp := ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%d/share", noteID), shareBody)
+		assert.Equal(t, http.StatusConflict, resp.StatusCode)
+	})
+
+	t.Run("share with nonexistent email returns not found", func(t *testing.T) {
+		shareBody := map[string]string{
+			"email": "nonexistent@example.com",
+		}
+
+		resp := ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%d/share", noteID), shareBody)
+		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+	})
+
+	t.Run("share with empty email returns bad request", func(t *testing.T) {
+		shareBody := map[string]string{
+			"email": "",
+		}
+
+		resp := ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%d/share", noteID), shareBody)
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+		assert.Contains(t, resp.GetString(), "empty email")
+	})
+
+	t.Run("share with self returns bad request", func(t *testing.T) {
+		shareBody := map[string]string{
+			"email": "owner@example.com",
+		}
+
+		resp := ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%d/share", noteID), shareBody)
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+		assert.Contains(t, resp.GetString(), "cannot share with self")
+	})
+
+	t.Run("share by non-owner returns forbidden", func(t *testing.T) {
+		shareBody := map[string]string{
+			"email": "other@example.com",
+		}
+
+		resp := ts.authRequest(t, other, http.MethodPost, fmt.Sprintf("/api/v1/notes/%d/share", noteID), shareBody)
+		assert.Equal(t, http.StatusForbidden, resp.StatusCode)
+	})
+
+	t.Run("get note shares", func(t *testing.T) {
+		resp := ts.authRequest(t, owner, http.MethodGet, fmt.Sprintf("/api/v1/notes/%d/shares", noteID), nil)
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+		var shares []any
+		require.NoError(t, resp.UnmarshalBody(&shares))
+		assert.GreaterOrEqual(t, len(shares), 1)
+	})
+
+	t.Run("get note shares by non-owner returns forbidden", func(t *testing.T) {
+		resp := ts.authRequest(t, other, http.MethodGet, fmt.Sprintf("/api/v1/notes/%d/shares", noteID), nil)
+		assert.Equal(t, http.StatusForbidden, resp.StatusCode)
+	})
+
+	t.Run("unshare note", func(t *testing.T) {
+		unshareBody := map[string]string{
+			"email": "user@example.com",
+		}
+
+		resp := ts.request(t, http.MethodDelete, fmt.Sprintf("/api/v1/notes/%d/share", noteID), unshareBody, map[string]string{
+			"Authorization": fmt.Sprintf("Bearer %s", owner.Token),
+		})
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+		var response map[string]any
+		require.NoError(t, resp.UnmarshalBody(&response))
+		assert.True(t, response["success"].(bool))
+	})
+
+	t.Run("unshare non-shared user returns not found", func(t *testing.T) {
+		unshareBody := map[string]string{
+			"email": "user@example.com", // Already unshared
+		}
+
+		resp := ts.request(t, http.MethodDelete, fmt.Sprintf("/api/v1/notes/%d/share", noteID), unshareBody, map[string]string{
+			"Authorization": fmt.Sprintf("Bearer %s", owner.Token),
+		})
+		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+	})
+}
+
+func TestSearchUsersEndpoint(t *testing.T) {
+	ts := setupTestServer(t)
+	user1 := ts.createTestUser(t, "user1@example.com", "password123", false)
+	_ = ts.createTestUser(t, "user2@example.com", "password123", false)
+	_ = ts.createTestUser(t, "admin@example.com", "password123", true)
+
+	t.Run("search users returns all except current user", func(t *testing.T) {
+		resp := ts.authRequest(t, user1, http.MethodGet, "/api/v1/users", nil)
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+		var users []map[string]any
+		require.NoError(t, resp.UnmarshalBody(&users))
+		assert.Len(t, users, 2)
+
+		// Check that current user is not in results
+		for _, user := range users {
+			assert.NotEqual(t, "user1@example.com", user["email"], "Should not include current user in results")
+		}
+
+		// Check that response doesn't include passwords
+		for _, user := range users {
+			assert.NotContains(t, user, "password", "User response should not include password")
+			assert.NotContains(t, user, "password_hash", "User response should not include password_hash")
+		}
+	})
+
+	t.Run("search users without auth returns unauthorized", func(t *testing.T) {
+		resp := ts.request(t, http.MethodGet, "/api/v1/users", nil, nil)
+		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	})
+}
+
+func TestEdgeCases(t *testing.T) {
+	ts := setupTestServer(t)
+	user := ts.createTestUser(t, "user@example.com", "password123", false)
+
+	t.Run("invalid note ID returns bad request", func(t *testing.T) {
+		resp := ts.authRequest(t, user, http.MethodGet, "/api/v1/notes/invalid", nil)
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	})
+
+	t.Run("nonexistent note ID returns not found", func(t *testing.T) {
+		resp := ts.authRequest(t, user, http.MethodGet, "/api/v1/notes/999", nil)
+		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+	})
+
+	t.Run("create note with empty fields", func(t *testing.T) {
+		body := map[string]any{
+			"title":   "",
+			"content": "",
+		}
+
+		resp := ts.authRequest(t, user, http.MethodPost, "/api/v1/notes", body)
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+		assert.Contains(t, resp.GetString(), "empty note")
+	})
+
+	t.Run("create note with todo items", func(t *testing.T) {
+		body := map[string]any{
+			"title":     "Todo List",
+			"content":   "",
+			"note_type": "todo",
+			"items": []map[string]any{
+				{"text": "Item 1", "position": 0},
+				{"text": "Item 2", "position": 1},
+			},
+		}
+
+		resp := ts.authRequest(t, user, http.MethodPost, "/api/v1/notes", body)
+		assert.Equal(t, http.StatusCreated, resp.StatusCode)
+
+		var note map[string]any
+		require.NoError(t, resp.UnmarshalBody(&note))
+		assert.Equal(t, "todo", note["note_type"])
+	})
+
+	t.Run("update note with default color", func(t *testing.T) {
+		// Create note first
+		createBody := map[string]any{
+			"title":   "Test Note",
+			"content": "Content",
+		}
+		createResp := ts.authRequest(t, user, http.MethodPost, "/api/v1/notes", createBody)
+		var createdNote map[string]any
+		createResp.UnmarshalBody(&createdNote)
+		noteID := int(createdNote["id"].(float64))
+
+		updateBody := map[string]any{
+			"title":    "Updated",
+			"content":  "Updated",
+			"pinned":   false,
+			"archived": false,
+			"color":    "", // Empty color should default to #ffffff
+		}
+
+		resp := ts.authRequest(t, user, http.MethodPut, fmt.Sprintf("/api/v1/notes/%d", noteID), updateBody)
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+		var updatedNote map[string]any
+		require.NoError(t, resp.UnmarshalBody(&updatedNote))
+
+		assert.Equal(t, "#ffffff", updatedNote["color"])
+	})
+}
