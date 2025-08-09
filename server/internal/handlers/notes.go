@@ -25,11 +25,11 @@ func NewNotesHandler(noteStore *models.NoteStore, userStore *models.UserStore) *
 }
 
 type CreateNoteRequest struct {
-	Title    string              `json:"title"`
-	Content  string              `json:"content"`
-	NoteType models.NoteType     `json:"note_type"`
-	Color    string              `json:"color,omitempty"`
-	Items    []CreateNoteItem    `json:"items,omitempty"`
+	Title    string           `json:"title"`
+	Content  string           `json:"content"`
+	NoteType models.NoteType  `json:"note_type"`
+	Color    string           `json:"color,omitempty"`
+	Items    []CreateNoteItem `json:"items,omitempty"`
 }
 
 type CreateNoteItem struct {
@@ -38,12 +38,12 @@ type CreateNoteItem struct {
 }
 
 type UpdateNoteRequest struct {
-	Title    string              `json:"title"`
-	Content  string              `json:"content"`
-	Pinned   bool                `json:"pinned"`
-	Archived bool                `json:"archived"`
-	Color    string              `json:"color"`
-	Items    []UpdateNoteItem    `json:"items,omitempty"`
+	Title    string           `json:"title"`
+	Content  string           `json:"content"`
+	Pinned   bool             `json:"pinned"`
+	Archived bool             `json:"archived"`
+	Color    string           `json:"color"`
+	Items    []UpdateNoteItem `json:"items,omitempty"`
 }
 
 type UpdateNoteItem struct {
@@ -186,8 +186,8 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 	}
 
 	var req UpdateNoteRequest
-	if decodeErr := json.NewDecoder(r.Body).Decode(&req); decodeErr != nil {
-		return http.StatusBadRequest, decodeErr
+	if err = json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return http.StatusBadRequest, err
 	}
 
 	if req.Color == "" {
@@ -265,8 +265,8 @@ func (h *NotesHandler) ShareNote(w http.ResponseWriter, r *http.Request) (int, e
 	}
 
 	var req ShareNoteRequest
-	if decodeErr := json.NewDecoder(r.Body).Decode(&req); decodeErr != nil {
-		return http.StatusBadRequest, decodeErr
+	if err = json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return http.StatusBadRequest, err
 	}
 
 	if req.Email == "" {
@@ -323,8 +323,8 @@ func (h *NotesHandler) UnshareNote(w http.ResponseWriter, r *http.Request) (int,
 	}
 
 	var req ShareNoteRequest
-	if decodeErr := json.NewDecoder(r.Body).Decode(&req); decodeErr != nil {
-		return http.StatusBadRequest, decodeErr
+	if err = json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return http.StatusBadRequest, err
 	}
 
 	if req.Email == "" {
@@ -444,8 +444,8 @@ func (h *NotesHandler) ReorderNotes(w http.ResponseWriter, r *http.Request) (int
 	}
 
 	var req ReorderNotesRequest
-	if decodeErr := json.NewDecoder(r.Body).Decode(&req); decodeErr != nil {
-		return http.StatusBadRequest, decodeErr
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return http.StatusBadRequest, err
 	}
 
 	if len(req.NoteIDs) == 0 {
