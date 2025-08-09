@@ -182,17 +182,53 @@ export default function Dashboard({ onLogout }: DashboardProps) {
             </div>
           </div>
         ) : (
-          <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-            {notesList.map((note) => (
-              <NoteCard
-                key={note.id}
-                note={note}
-                onEdit={handleEditNote}
-                onDelete={handleDeleteNote}
-                onShare={handleShareNote}
-                currentUserId={user?.id}
-              />
-            ))}
+          <div className="space-y-8">
+            {/* Pinned notes section */}
+            {notesList.some(note => note.pinned) && (
+              <div>
+                <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                  <svg className="h-4 w-4 text-blue-500 mr-2" fill="currentColor" viewBox="0 0 24 24">
+                    <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/>
+                  </svg>
+                  Pinned
+                </h2>
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                  {notesList.filter(note => note.pinned).map((note) => (
+                    <NoteCard
+                      key={note.id}
+                      note={note}
+                      onEdit={handleEditNote}
+                      onDelete={handleDeleteNote}
+                      onShare={handleShareNote}
+                      currentUserId={user?.id}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
+
+            {/* Other notes section */}
+            {notesList.some(note => !note.pinned) && (
+              <div>
+                {notesList.some(note => note.pinned) && (
+                  <h2 className="text-lg font-semibold text-gray-900 mb-4">
+                    Other Notes
+                  </h2>
+                )}
+                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                  {notesList.filter(note => !note.pinned).map((note) => (
+                    <NoteCard
+                      key={note.id}
+                      note={note}
+                      onEdit={handleEditNote}
+                      onDelete={handleDeleteNote}
+                      onShare={handleShareNote}
+                      currentUserId={user?.id}
+                    />
+                  ))}
+                </div>
+              </div>
+            )}
           </div>
         )}
       </main>
