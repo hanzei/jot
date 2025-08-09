@@ -14,25 +14,6 @@ A self-hosted note-taking application built with Go backend and React frontend. 
 - **Admin Support**: First registered user becomes admin
 - **Single Binary**: Frontend and backend served from one Go binary
 
-## Architecture
-
-```
-┌─────────────────────────────────────┐
-│           Jot Server                │
-│        (Port 8080)                  │
-├─────────────────────────────────────┤
-│  /api/v1/*          → API Handler   │
-│  /health            → Health Check  │
-│  /* (static files)  → React SPA     │
-└─────────────────────────────────────┘
-```
-
-The Go server handles:
-- **API endpoints** at `/api/v1/*` for backend functionality
-- **Static file serving** for the React frontend
-- **SPA routing** with fallback to `index.html`
-- **Database operations** with SQLite and migrations
-
 ## Development Setup
 
 ### Prerequisites
@@ -152,15 +133,6 @@ curl -X POST http://localhost:8080/api/v1/notes \
   -H "Content-Type: application/json" \
   -d '{"title":"My Note","content":"Note content","note_type":"text"}'
 ```
-
-## Database Schema
-
-The application uses SQLite with automatic migrations:
-
-- **users**: User accounts (`id`, `email`, `password_hash`, `is_admin`, timestamps)
-- **notes**: Notes storage (`id`, `user_id`, `title`, `content`, `note_type`, `color`, `pinned`, `archived`, timestamps)
-- **note_items**: Todo list items (`id`, `note_id`, `text`, `completed`, `position`, timestamps)
-- **migrations**: Migration tracking (`id`, `filename`, `applied_at`)
 
 ## Building for Production
 
