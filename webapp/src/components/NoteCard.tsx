@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { 
   EllipsisVerticalIcon, 
-  PencilIcon, 
   TrashIcon, 
   ArchiveBoxIcon,
   ArchiveBoxXMarkIcon,
@@ -117,19 +116,6 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, currentUserI
         </Menu.Button>
         <Menu.Items className="absolute right-0 mt-1 w-48 bg-white rounded-md shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none z-10">
           <div className="py-1">
-            <Menu.Item>
-              {({ active }) => (
-                <button
-                  onClick={() => onEdit(note)}
-                  className={`${
-                    active ? 'bg-gray-100' : ''
-                  } flex items-center w-full px-4 py-2 text-sm text-gray-700`}
-                >
-                  <PencilIcon className="h-4 w-4 mr-2" />
-                  Edit
-                </button>
-              )}
-            </Menu.Item>
             {isOwner && onShare && (
               <Menu.Item>
                 {({ active }) => (
