@@ -24,3 +24,8 @@ tasks:
     desc: Run server tests with coverage
     dir: server
     cmd: go test -v -coverprofile=coverage.out ./... && go tool cover -html=coverage.out -o coverage.html
+
+  lint-webapp:
+    desc: Run webapp linting
+    dir: webapp
+    cmd: npm run lint

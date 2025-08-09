@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { XMarkIcon, PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon, PlusIcon, TrashIcon, ExclamationTriangleIcon } from '@heroicons/react/24/outline';
 import { Dialog } from '@headlessui/react';
 import { Note, NoteType, CreateNoteRequest, UpdateNoteRequest } from '@/types';
 import { notes } from '@/utils/api';
@@ -17,6 +17,7 @@ export default function NoteModal({ note, onClose, onSave }: NoteModalProps) {
   const [color, setColor] = useState('#ffffff');
   const [items, setItems] = useState<{ text: string; completed: boolean; position: number }[]>([]);
   const [loading, setLoading] = useState(false);
+  const [showConfirmDialog, setShowConfirmDialog] = useState(false);
 
   const colors = [
     { value: '#ffffff', name: 'White', class: 'bg-white border-gray-300' },
@@ -97,9 +98,43 @@ export default function NoteModal({ note, onClose, onSave }: NoteModalProps) {
 
   const canSave = title.trim() || content.trim() || (noteType === 'todo' && items.some(item => item.text.trim()));
 
+  const hasUnsavedChanges = () => {
+    if (note) {
+      return (
+        title !== note.title ||
+        content !== note.content ||
+        color !== note.color
+      );
+    } else {
+      return (
+        title.trim() !== '' ||
+        content.trim() !== '' ||
+        (noteType === 'todo' && items.some(item => item.text.trim() !== ''))
+      );
+    }
+  };
+
+  const handleCloseRequest = () => {
+    if (hasUnsavedChanges()) {
+      setShowConfirmDialog(true);
+    } else {
+      onClose();
+    }
+  };
+
+  const handleConfirmClose = () => {
+    setShowConfirmDialog(false);
+    onClose();
+  };
+
+  const handleCancelClose = () => {
+    setShowConfirmDialog(false);
+  };
+
   return (
-    <Dialog open={true} onClose={onClose} className="relative z-50">
-      <div className="fixed inset-0 bg-black/30" aria-hidden="true" />
+    <>
+      <Dialog open={true} onClose={handleCloseRequest} className="relative z-50">
+        <div className="fixed inset-0 bg-black/30" aria-hidden="true" />
       
       <div className="fixed inset-0 flex items-center justify-center p-4">
         <Dialog.Panel 
@@ -113,7 +148,7 @@ export default function NoteModal({ note, onClose, onSave }: NoteModalProps) {
               {note ? 'Edit Note' : 'New Note'}
             </h2>
             <button
-              onClick={onClose}
+              onClick={handleCloseRequest}
               className="p-1 rounded-full hover:bg-gray-200 transition-colors"
             >
               <XMarkIcon className="h-5 w-5 text-gray-600" />
@@ -219,7 +254,7 @@ export default function NoteModal({ note, onClose, onSave }: NoteModalProps) {
           {/* Footer */}
           <div className="flex justify-end space-x-2 p-4 border-t border-gray-200">
             <button
-              onClick={onClose}
+              onClick={handleCloseRequest}
               className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
             >
               Cancel
@@ -234,6 +269,42 @@ export default function NoteModal({ note, onClose, onSave }: NoteModalProps) {
           </div>
         </Dialog.Panel>
       </div>
-    </Dialog>
+      </Dialog>
+
+      {/* Confirmation Dialog */}
+      <Dialog open={showConfirmDialog} onClose={handleCancelClose} className="relative z-50">
+        <div className="fixed inset-0 bg-black/30" aria-hidden="true" />
+        
+        <div className="fixed inset-0 flex items-center justify-center p-4">
+          <Dialog.Panel className="mx-auto max-w-sm w-full bg-white rounded-lg shadow-xl p-6">
+            <div className="flex items-center space-x-3 mb-4">
+              <ExclamationTriangleIcon className="h-6 w-6 text-amber-500" />
+              <Dialog.Title className="text-lg font-medium text-gray-900">
+                Unsaved Changes
+              </Dialog.Title>
+            </div>
+            
+            <p className="text-sm text-gray-600 mb-6">
+              You have unsaved changes. Are you sure you want to close without saving?
+            </p>
+            
+            <div className="flex justify-end space-x-3">
+              <button
+                onClick={handleCancelClose}
+                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
+              >
+                Keep Editing
+              </button>
+              <button
+                onClick={handleConfirmClose}
+                className="px-4 py-2 text-sm text-white bg-red-600 rounded-md hover:bg-red-700"
+              >
+                Discard Changes
+              </button>
+            </div>
+          </Dialog.Panel>
+        </div>
+      </Dialog>
+    </>
   );
 }
