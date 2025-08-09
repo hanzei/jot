@@ -95,6 +95,7 @@ export default function NoteModal({ note, onClose, onSave }: NoteModalProps) {
   const [content, setContent] = useState('');
   const [noteType, setNoteType] = useState<NoteType>('text');
   const [color, setColor] = useState('#ffffff');
+  const [pinned, setPinned] = useState(false);
   const [items, setItems] = useState<{ text: string; completed: boolean; position: number }[]>([]);
   const [loading, setLoading] = useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
@@ -121,6 +122,7 @@ export default function NoteModal({ note, onClose, onSave }: NoteModalProps) {
       setContent(note.content);
       setNoteType(note.note_type);
       setColor(note.color);
+      setPinned(note.pinned);
       setItems(
         note.items?.map((item) => ({
           text: item.text,
@@ -133,6 +135,7 @@ export default function NoteModal({ note, onClose, onSave }: NoteModalProps) {
       setContent('');
       setNoteType('text');
       setColor('#ffffff');
+      setPinned(false);
       setItems([]);
     }
   }, [note]);
@@ -182,7 +185,7 @@ export default function NoteModal({ note, onClose, onSave }: NoteModalProps) {
         const updateData: UpdateNoteRequest = {
           title,
           content,
-          pinned: note.pinned,
+          pinned,
           archived: note.archived,
           color,
           items: note.note_type === 'todo' ? items.map((item, idx) => ({ 
@@ -218,7 +221,8 @@ export default function NoteModal({ note, onClose, onSave }: NoteModalProps) {
       return (
         title !== note.title ||
         content !== note.content ||
-        color !== note.color
+        color !== note.color ||
+        pinned !== note.pinned
       );
     } else {
       return (
@@ -262,12 +266,31 @@ export default function NoteModal({ note, onClose, onSave }: NoteModalProps) {
             <h2 className="text-lg font-semibold text-gray-900">
               {note ? 'Edit Note' : 'New Note'}
             </h2>
-            <button
-              onClick={handleCloseRequest}
-              className="p-1 rounded-full hover:bg-gray-200 transition-colors"
-            >
-              <XMarkIcon className="h-5 w-5 text-gray-600" />
-            </button>
+            <div className="flex items-center space-x-2">
+              {note && (
+                <button
+                  onClick={() => setPinned(!pinned)}
+                  className="p-1 rounded-full hover:bg-gray-200 transition-colors"
+                  title={pinned ? 'Unpin note' : 'Pin note'}
+                >
+                  {pinned ? (
+                    <svg className="h-5 w-5 text-blue-500" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/>
+                    </svg>
+                  ) : (
+                    <svg className="h-5 w-5 text-gray-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/>
+                    </svg>
+                  )}
+                </button>
+              )}
+              <button
+                onClick={handleCloseRequest}
+                className="p-1 rounded-full hover:bg-gray-200 transition-colors"
+              >
+                <XMarkIcon className="h-5 w-5 text-gray-600" />
+              </button>
+            </div>
           </div>
 
           {/* Content */}
@@ -365,20 +388,27 @@ export default function NoteModal({ note, onClose, onSave }: NoteModalProps) {
           </div>
 
           {/* Footer */}
-          <div className="flex justify-end space-x-2 p-4 border-t border-gray-200">
-            <button
-              onClick={handleCloseRequest}
-              className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
-            >
-              Cancel
-            </button>
-            <button
-              onClick={handleSave}
-              disabled={!canSave || loading}
-              className="px-4 py-2 text-sm text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
-            >
-              {loading ? 'Saving...' : 'Save'}
-            </button>
+          <div className="flex justify-between items-center p-4 border-t border-gray-200">
+            {note && (
+              <p className="text-sm text-gray-500">
+                Last edited: {new Date(note.updated_at).toLocaleString()}
+              </p>
+            )}
+            <div className="flex space-x-2 ml-auto">
+              <button
+                onClick={handleCloseRequest}
+                className="px-4 py-2 text-sm text-gray-600 hover:text-gray-800"
+              >
+                Cancel
+              </button>
+              <button
+                onClick={handleSave}
+                disabled={!canSave || loading}
+                className="px-4 py-2 text-sm text-white bg-blue-600 rounded-md hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed"
+              >
+                {loading ? 'Saving...' : 'Save'}
+              </button>
+            </div>
           </div>
         </Dialog.Panel>
       </div>
