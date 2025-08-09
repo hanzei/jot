@@ -1,4 +1,4 @@
-# Multi-stage build for Keep application
+# Multi-stage build for Jot application
 FROM node:18-alpine AS frontend-builder
 
 WORKDIR /app/webapp
@@ -55,7 +55,7 @@ RUN mkdir -p /data
 EXPOSE 8080
 
 # Set environment variables
-ENV DB_PATH=/data/keep.db
+ENV DB_PATH=/data/jot.db
 ENV JWT_SECRET=change-this-in-production
 ENV STATIC_DIR=/app/webapp/build
 

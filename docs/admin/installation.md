@@ -1,6 +1,6 @@
-# Keep Installation Guide
+# Jot Installation Guide
 
-This guide covers all installation methods for Keep, from development setup to production deployment.
+This guide covers all installation methods for Jot, from development setup to production deployment.
 
 ## System Requirements
 
@@ -35,10 +35,10 @@ Docker provides the easiest installation and maintenance experience.
 #### Quick Start
 ```bash
 # 1. Create project directory
-mkdir keep && cd keep
+mkdir jot && cd jot
 
 # 2. Download docker-compose.yml
-curl -O https://raw.githubusercontent.com/your-repo/keep/main/docker-compose.yml
+curl -O https://raw.githubusercontent.com/your-repo/jot/main/docker-compose.yml
 
 # 3. Create environment file
 echo "JWT_SECRET=$(openssl rand -base64 32)" > .env
@@ -55,11 +55,11 @@ docker-compose up -d
 version: '3.8'
 
 services:
-  keep:
-    image: keep:latest  # or build from source
-    container_name: keep
+  jot:
+    image: jot:latest  # or build from source
+    container_name: jot
     environment:
-      - DB_PATH=/data/keep.db
+      - DB_PATH=/data/jot.db
       - JWT_SECRET=${JWT_SECRET}
       - PORT=8080
     volumes:
@@ -86,49 +86,49 @@ Direct installation using pre-compiled binaries.
 #### Download Binary
 ```bash
 # Download latest release
-wget https://github.com/your-repo/keep/releases/latest/download/keep-linux-amd64
-chmod +x keep-linux-amd64
-mv keep-linux-amd64 /usr/local/bin/keep
+wget https://github.com/your-repo/jot/releases/latest/download/jot-linux-amd64
+chmod +x jot-linux-amd64
+mv jot-linux-amd64 /usr/local/bin/jot
 
 # Or for other platforms:
-# keep-darwin-amd64 (macOS)
-# keep-windows-amd64.exe (Windows)
+# jot-darwin-amd64 (macOS)
+# jot-windows-amd64.exe (Windows)
 ```
 
 #### Create Service User
 ```bash
 # Create dedicated user
-sudo useradd --system --home-dir /var/lib/keep --create-home keep
-sudo usermod --shell /usr/sbin/nologin keep
+sudo useradd --system --home-dir /var/lib/jot --create-home jot
+sudo usermod --shell /usr/sbin/nologin jot
 
 # Create directories
-sudo mkdir -p /var/lib/keep /var/log/keep /etc/keep
-sudo chown keep:keep /var/lib/keep /var/log/keep
+sudo mkdir -p /var/lib/jot /var/log/jot /etc/jot
+sudo chown jot:jot /var/lib/jot /var/log/jot
 ```
 
 #### Configuration File
 ```bash
-# /etc/keep/config.env
-DB_PATH=/var/lib/keep/keep.db
+# /etc/jot/config.env
+DB_PATH=/var/lib/jot/jot.db
 JWT_SECRET=your-very-secure-secret-key-here
 PORT=8080
 ```
 
 #### Systemd Service
 ```ini
-# /etc/systemd/system/keep.service
+# /etc/systemd/system/jot.service
 [Unit]
-Description=Keep Note-Taking Application
+Description=Jot Note-Taking Application
 After=network.target
 Wants=network.target
 
 [Service]
 Type=simple
-User=keep
-Group=keep
-WorkingDirectory=/var/lib/keep
-EnvironmentFile=/etc/keep/config.env
-ExecStart=/usr/local/bin/keep
+User=jot
+Group=jot
+WorkingDirectory=/var/lib/jot
+EnvironmentFile=/etc/jot/config.env
+ExecStart=/usr/local/bin/jot
 Restart=always
 RestartSec=5
 StandardOutput=journal
@@ -138,7 +138,7 @@ StandardError=journal
 NoNewPrivileges=yes
 ProtectSystem=strict
 ProtectHome=yes
-ReadWritePaths=/var/lib/keep /var/log/keep
+ReadWritePaths=/var/lib/jot /var/log/jot
 
 [Install]
 WantedBy=multi-user.target
@@ -147,9 +147,9 @@ WantedBy=multi-user.target
 #### Start Service
 ```bash
 sudo systemctl daemon-reload
-sudo systemctl enable keep
-sudo systemctl start keep
-sudo systemctl status keep
+sudo systemctl enable jot
+sudo systemctl start jot
+sudo systemctl status jot
 ```
 
 ### Method 3: Source Installation
@@ -165,8 +165,8 @@ Build and install from source code.
 #### Build Process
 ```bash
 # 1. Clone repository
-git clone https://github.com/your-repo/keep.git
-cd keep
+git clone https://github.com/your-repo/jot.git
+cd jot
 
 # 2. Build frontend
 cd webapp
@@ -177,17 +177,17 @@ cd ..
 # 3. Build backend
 cd server
 go mod tidy
-go build -o keep main.go
+go build -o jot main.go
 cd ..
 
 # 4. Install binary
-sudo cp server/keep /usr/local/bin/
-sudo chmod +x /usr/local/bin/keep
+sudo cp server/jot /usr/local/bin/
+sudo chmod +x /usr/local/bin/jot
 
 # 5. Copy frontend files
-sudo mkdir -p /var/lib/keep/webapp
-sudo cp -r webapp/build/* /var/lib/keep/webapp/
-sudo chown -R keep:keep /var/lib/keep
+sudo mkdir -p /var/lib/jot/webapp
+sudo cp -r webapp/build/* /var/lib/jot/webapp/
+sudo chown -R jot:jot /var/lib/jot
 ```
 
 ## Configuration
@@ -200,7 +200,7 @@ sudo chown -R keep:keep /var/lib/keep
 JWT_SECRET=your-very-secure-secret-key-here
 
 # Database file path
-DB_PATH=/var/lib/keep/keep.db
+DB_PATH=/var/lib/jot/jot.db
 ```
 
 #### Optional Configuration
@@ -209,7 +209,7 @@ DB_PATH=/var/lib/keep/keep.db
 PORT=8080
 
 # Frontend static files directory (default: ../webapp/build/)
-STATIC_DIR=/var/lib/keep/webapp
+STATIC_DIR=/var/lib/jot/webapp
 
 # Log level (default: info)
 LOG_LEVEL=info
@@ -232,33 +232,33 @@ python3 -c "import secrets; print(secrets.token_urlsafe(32))"
 #### File Permissions
 ```bash
 # Application binary
-chmod 755 /usr/local/bin/keep
+chmod 755 /usr/local/bin/jot
 
 # Configuration files
-chmod 600 /etc/keep/config.env
-chown root:keep /etc/keep/config.env
+chmod 600 /etc/jot/config.env
+chown root:jot /etc/jot/config.env
 
 # Database directory
-chmod 755 /var/lib/keep
-chmod 644 /var/lib/keep/keep.db
-chown -R keep:keep /var/lib/keep
+chmod 755 /var/lib/jot
+chmod 644 /var/lib/jot/jot.db
+chown -R jot:jot /var/lib/jot
 
 # Log directory
-chmod 755 /var/log/keep
-chown keep:keep /var/log/keep
+chmod 755 /var/log/jot
+chown jot:jot /var/log/jot
 ```
 
 ## Database Setup
 
 ### Automatic Migration
-Keep automatically runs database migrations on startup:
+Jot automatically runs database migrations on startup:
 
 ```bash
 # Check migration status in logs
-sudo journalctl -u keep -f
+sudo journalctl -u jot -f
 
 # Or for Docker
-docker logs keep
+docker logs jot
 ```
 
 ### Manual Database Operations
@@ -266,33 +266,33 @@ docker logs keep
 #### Backup Database
 ```bash
 # SQLite backup
-sqlite3 /var/lib/keep/keep.db ".backup backup-$(date +%Y%m%d).db"
+sqlite3 /var/lib/jot/jot.db ".backup backup-$(date +%Y%m%d).db"
 
 # Or using cp (stop service first)
-sudo systemctl stop keep
-cp /var/lib/keep/keep.db /backups/keep-backup-$(date +%Y%m%d).db
-sudo systemctl start keep
+sudo systemctl stop jot
+cp /var/lib/jot/jot.db /backups/jot-backup-$(date +%Y%m%d).db
+sudo systemctl start jot
 ```
 
 #### Restore Database
 ```bash
 # Stop service
-sudo systemctl stop keep
+sudo systemctl stop jot
 
 # Restore from backup
-cp /backups/keep-backup-20240101.db /var/lib/keep/keep.db
-chown keep:keep /var/lib/keep/keep.db
+cp /backups/jot-backup-20240101.db /var/lib/jot/jot.db
+chown jot:jot /var/lib/jot/jot.db
 
 # Start service
-sudo systemctl start keep
+sudo systemctl start jot
 ```
 
 #### Reset Database
 ```bash
 # WARNING: This deletes all data
-sudo systemctl stop keep
-sudo rm /var/lib/keep/keep.db
-sudo systemctl start keep
+sudo systemctl stop jot
+sudo rm /var/lib/jot/jot.db
+sudo systemctl start jot
 ```
 
 ## Reverse Proxy Setup
@@ -301,7 +301,7 @@ sudo systemctl start keep
 
 #### Basic Configuration
 ```nginx
-# /etc/nginx/sites-available/keep
+# /etc/nginx/sites-available/jot
 server {
     listen 80;
     server_name your-domain.com;
@@ -326,7 +326,7 @@ server {
     add_header X-Content-Type-Options "nosniff" always;
     add_header Strict-Transport-Security "max-age=63072000; includeSubDomains; preload" always;
     
-    # Proxy to Keep application
+    # Proxy to Jot application
     location / {
         proxy_pass http://127.0.0.1:8080;
         proxy_set_header Host $host;
@@ -342,7 +342,7 @@ server {
     
     # Optional: serve static files directly from Nginx
     location /static/ {
-        alias /var/lib/keep/webapp/;
+        alias /var/lib/jot/webapp/;
         expires 1y;
         add_header Cache-Control "public, immutable";
     }
@@ -351,7 +351,7 @@ server {
 
 #### Enable Site
 ```bash
-sudo ln -s /etc/nginx/sites-available/keep /etc/nginx/sites-enabled/
+sudo ln -s /etc/nginx/sites-available/jot /etc/nginx/sites-enabled/
 sudo nginx -t
 sudo systemctl reload nginx
 ```
@@ -374,7 +374,7 @@ your-domain.com {
     
     # Logging
     log {
-        output file /var/log/caddy/keep.log
+        output file /var/log/caddy/jot.log
         format json
     }
 }
@@ -387,20 +387,20 @@ your-domain.com {
 version: '3.8'
 
 services:
-  keep:
-    image: keep:latest
-    container_name: keep
+  jot:
+    image: jot:latest
+    container_name: jot
     environment:
-      - DB_PATH=/data/keep.db
+      - DB_PATH=/data/jot.db
       - JWT_SECRET=${JWT_SECRET}
     volumes:
       - ./data:/data
     labels:
       - "traefik.enable=true"
-      - "traefik.http.routers.keep.rule=Host(`your-domain.com`)"
-      - "traefik.http.routers.keep.tls=true"
-      - "traefik.http.routers.keep.tls.certresolver=letsencrypt"
-      - "traefik.http.services.keep.loadbalancer.server.port=8080"
+      - "traefik.http.routers.jot.rule=Host(`your-domain.com`)"
+      - "traefik.http.routers.jot.tls=true"
+      - "traefik.http.routers.jot.tls.certresolver=letsencrypt"
+      - "traefik.http.services.jot.loadbalancer.server.port=8080"
     networks:
       - traefik
 
@@ -417,22 +417,22 @@ networks:
 curl -f http://localhost:8080/health || exit 1
 
 # Check database connectivity
-sqlite3 /var/lib/keep/keep.db "SELECT 1;" || exit 1
+sqlite3 /var/lib/jot/jot.db "SELECT 1;" || exit 1
 
 # Check disk space
-df -h /var/lib/keep
+df -h /var/lib/jot
 ```
 
 ### Log Management
 ```bash
 # View recent logs
-sudo journalctl -u keep -n 50
+sudo journalctl -u jot -n 50
 
 # Follow logs in real-time
-sudo journalctl -u keep -f
+sudo journalctl -u jot -f
 
 # View logs by date
-sudo journalctl -u keep --since "2024-01-01" --until "2024-01-31"
+sudo journalctl -u jot --since "2024-01-01" --until "2024-01-31"
 
 # Rotate logs (systemd handles this automatically)
 sudo systemctl restart systemd-journald
@@ -441,19 +441,19 @@ sudo systemctl restart systemd-journald
 ### Backup Strategy
 ```bash
 #!/bin/bash
-# /usr/local/bin/keep-backup.sh
+# /usr/local/bin/jot-backup.sh
 
 # Configuration
-BACKUP_DIR="/backups/keep"
+BACKUP_DIR="/backups/jot"
 RETENTION_DAYS=30
-DB_PATH="/var/lib/keep/keep.db"
+DB_PATH="/var/lib/jot/jot.db"
 
 # Create backup directory
 mkdir -p "$BACKUP_DIR"
 
 # Create backup
 DATE=$(date +%Y%m%d_%H%M%S)
-BACKUP_FILE="$BACKUP_DIR/keep_backup_$DATE.db"
+BACKUP_FILE="$BACKUP_DIR/jot_backup_$DATE.db"
 
 # Backup database
 sqlite3 "$DB_PATH" ".backup '$BACKUP_FILE'"
@@ -462,7 +462,7 @@ sqlite3 "$DB_PATH" ".backup '$BACKUP_FILE'"
 gzip "$BACKUP_FILE"
 
 # Clean old backups
-find "$BACKUP_DIR" -name "keep_backup_*.db.gz" -mtime +$RETENTION_DAYS -delete
+find "$BACKUP_DIR" -name "jot_backup_*.db.gz" -mtime +$RETENTION_DAYS -delete
 
 echo "Backup completed: ${BACKUP_FILE}.gz"
 ```
@@ -471,7 +471,7 @@ echo "Backup completed: ${BACKUP_FILE}.gz"
 ```bash
 # Add to crontab (sudo crontab -e)
 # Daily backup at 2 AM
-0 2 * * * /usr/local/bin/keep-backup.sh >> /var/log/keep-backup.log 2>&1
+0 2 * * * /usr/local/bin/jot-backup.sh >> /var/log/jot-backup.log 2>&1
 ```
 
 ## Troubleshooting Installation
@@ -485,37 +485,37 @@ sudo netstat -tulpn | grep :8080
 sudo lsof -i :8080
 
 # Use different port
-PORT=8081 keep
+PORT=8081 jot
 ```
 
 #### Permission Denied
 ```bash
 # Fix file permissions
-sudo chown -R keep:keep /var/lib/keep
-sudo chmod 644 /var/lib/keep/keep.db
-sudo chmod 755 /var/lib/keep
+sudo chown -R jot:jot /var/lib/jot
+sudo chmod 644 /var/lib/jot/jot.db
+sudo chmod 755 /var/lib/jot
 ```
 
 #### Database Connection Failed
 ```bash
 # Check database file exists and permissions
-ls -la /var/lib/keep/keep.db
-sqlite3 /var/lib/keep/keep.db ".schema"
+ls -la /var/lib/jot/jot.db
+sqlite3 /var/lib/jot/jot.db ".schema"
 
 # Check disk space
-df -h /var/lib/keep
+df -h /var/lib/jot
 ```
 
 #### Service Won't Start
 ```bash
 # Check service status
-sudo systemctl status keep
+sudo systemctl status jot
 
 # View detailed logs
-sudo journalctl -u keep -n 50
+sudo journalctl -u jot -n 50
 
 # Check configuration
-sudo -u keep keep --help  # if available
+sudo -u jot jot --help  # if available
 ```
 
 ### Getting Help
@@ -528,4 +528,4 @@ sudo -u keep keep --help  # if available
 
 ---
 
-Your Keep installation should now be ready for production use! 🚀
+Your Jot installation should now be ready for production use! 🚀

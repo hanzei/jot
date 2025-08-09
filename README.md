@@ -1,6 +1,6 @@
-# Keep - Self-hosted Google Keep Alternative
+# Jot - Self-hosted Note-Taking Application
 
-A self-hosted note-taking application inspired by Google Keep, built with Go backend and React frontend. The server serves both the API and the web application from a single port, making deployment and development simple.
+A self-hosted note-taking application built with Go backend and React frontend. The server serves both the API and the web application from a single port, making deployment and development simple.
 
 ## Features
 
@@ -18,7 +18,7 @@ A self-hosted note-taking application inspired by Google Keep, built with Go bac
 
 ```
 ┌─────────────────────────────────────┐
-│           Keep Server               │
+│           Jot Server                │
 │        (Port 8080)                  │
 ├─────────────────────────────────────┤
 │  /api/v1/*          → API Handler   │
@@ -46,7 +46,7 @@ The Go server handles:
 1. **Clone the repository**:
    ```bash
    git clone <repository-url>
-   cd keep
+   cd jot
    ```
 
 2. **Build and run** (recommended for most development):
@@ -72,7 +72,7 @@ This project includes a [Taskfile](https://taskfile.dev/) for common development
 go install github.com/go-task/task/v3/cmd/task@latest
 
 # Available commands
-task run-server      # Start the Keep server
+task run-server      # Start the Jot server
 task run-webapp      # Build webapp in watch mode
 task test            # Run all tests
 task test-server     # Run server tests
@@ -111,7 +111,7 @@ Configure the application using environment variables or `.env` file:
 
 ```bash
 # Database configuration
-DB_PATH=./keep.db                    # SQLite database file location
+DB_PATH=./jot.db                     # SQLite database file location
 JWT_SECRET=your-secure-secret-key    # JWT signing key (change in production!)
 
 # Server configuration  
@@ -180,10 +180,10 @@ cd ..
 
 # 2. Build backend (includes frontend files)
 cd server
-go build -o keep main.go
+go build -o jot main.go
 
 # 3. Deploy single binary
-./keep
+./jot
 ```
 
 The binary will serve both API and frontend from port 8080.
@@ -194,7 +194,7 @@ Create `.env` file for production:
 
 ```bash
 # Production environment
-DB_PATH=/var/lib/keep/keep.db
+DB_PATH=/var/lib/jot/jot.db
 JWT_SECRET=your-very-secure-random-secret-key-here
 PORT=8080
 ```
@@ -208,8 +208,8 @@ PORT=8080
 docker-compose up -d
 
 # Or build manually
-docker build -t keep .
-docker run -p 8080:8080 -v ./data:/data -e JWT_SECRET=your-secret keep
+docker build -t jot .
+docker run -p 8080:8080 -v ./data:/data -e JWT_SECRET=your-secret jot
 ```
 
 The Docker image uses multi-stage build:
@@ -223,7 +223,7 @@ The Docker image uses multi-stage build:
 # docker-compose.override.yml
 version: '3.8'
 services:
-  keep:
+  jot:
     environment:
       - JWT_SECRET=your-production-secret
       - DB_PATH=/data/production.db
@@ -268,8 +268,8 @@ services:
 2. **Database permissions**:
    ```bash
    # Fix SQLite file permissions
-   chmod 644 keep.db
-   chown app:app keep.db
+   chmod 644 jot.db
+   chown app:app jot.db
    ```
 
 3. **Port conflicts**:
@@ -281,7 +281,7 @@ services:
 4. **Migration errors**:
    ```bash
    # Reset database (WARNING: deletes all data)
-   rm keep.db
+   rm jot.db
    ```
 
 5. **Build errors**:
@@ -295,7 +295,7 @@ services:
 
 - **Frontend changes**: Rebuild with `npm run build` after React changes
 - **Backend changes**: Go has hot-reload when using `go run`
-- **Database inspection**: Use SQLite browser or `sqlite3 keep.db`
+- **Database inspection**: Use SQLite browser or `sqlite3 jot.db`
 - **Logs**: Check console output for detailed error messages
 - **API testing**: Use browser dev tools or curl/Postman
 
@@ -312,13 +312,13 @@ cd webapp && npm run dev
 cd webapp && npm run build:watch
 
 # Check database contents
-sqlite3 keep.db "SELECT * FROM users;"
+sqlite3 jot.db "SELECT * FROM users;"
 ```
 
 ## Contributing
 
 1. **Fork** the repository
-2. **Clone** your fork: `git clone https://github.com/yourusername/keep.git`
+2. **Clone** your fork: `git clone https://github.com/yourusername/jot.git`
 3. **Create** feature branch: `git checkout -b feature/amazing-feature`
 4. **Make** your changes following the existing code style
 5. **Test** your changes thoroughly
@@ -340,4 +340,4 @@ sqlite3 keep.db "SELECT * FROM users;"
 
 ---
 
-**Keep** - Simple, fast, and secure note-taking for everyone. 🚀
+**Jot** - Simple, fast, and secure note-taking for everyone. 🚀

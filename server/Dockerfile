@@ -32,7 +32,7 @@ RUN mkdir -p /data
 EXPOSE 8080
 
 # Set environment variables
-ENV DB_PATH=/data/keep.db
+ENV DB_PATH=/data/jot.db
 ENV JWT_SECRET=change-this-in-production
 
 # Run the binary

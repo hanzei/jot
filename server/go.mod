@@ -1,4 +1,4 @@
-module github.com/hanzei/keep/server
+module github.com/hanzei/jot/server
 
 go 1.24
 

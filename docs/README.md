@@ -1,17 +1,17 @@
-# Keep Documentation
+# Jot Documentation
 
-Welcome to the Keep documentation! This directory contains comprehensive guides for both users and administrators.
+Welcome to the Jot documentation! This directory contains comprehensive guides for both users and administrators.
 
 ## Documentation Structure
 
 ### 📖 User Documentation
-Documentation for end users of the Keep note-taking application.
+Documentation for end users of the Jot note-taking application.
 
 - **[Getting Started](user/getting-started.md)** - First-time setup, creating accounts, and basic usage
-- **[Features Guide](user/features.md)** - Complete guide to all Keep features and functionality
+- **[Features Guide](user/features.md)** - Complete guide to all Jot features and functionality
 
 ### ⚙️ Admin Documentation  
-Documentation for system administrators managing Keep installations.
+Documentation for system administrators managing Jot installations.
 
 - **[Installation Guide](admin/installation.md)** - Complete installation methods and setup
 - **[Configuration Guide](admin/configuration.md)** - Environment variables, security, and performance settings
@@ -24,7 +24,7 @@ Documentation for system administrators managing Keep installations.
 2. Explore the [Features Guide](user/features.md) to learn about all available functionality
 
 ### For System Administrators
-1. Follow the [Installation Guide](admin/installation.md) to deploy Keep
+1. Follow the [Installation Guide](admin/installation.md) to deploy Jot
 2. Configure your installation using the [Configuration Guide](admin/configuration.md)
 3. Set up monitoring and maintenance with the [Maintenance Guide](admin/maintenance.md)
 
@@ -74,4 +74,4 @@ Documentation for system administrators managing Keep installations.
 
 ---
 
-**Keep** - Simple, secure, self-hosted note-taking for everyone! 📝
+**Jot** - Simple, secure, self-hosted note-taking for everyone! 📝

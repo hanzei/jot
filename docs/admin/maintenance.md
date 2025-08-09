@@ -1,6 +1,6 @@
-# Keep Maintenance Guide
+# Jot Maintenance Guide
 
-This guide covers ongoing maintenance tasks for Keep administrators, including monitoring, backups, updates, and troubleshooting.
+This guide covers ongoing maintenance tasks for Jot administrators, including monitoring, backups, updates, and troubleshooting.
 
 ## Regular Maintenance Tasks
 
@@ -12,20 +12,20 @@ This guide covers ongoing maintenance tasks for Keep administrators, including m
 curl -f http://localhost:8080/health
 
 # Check service status
-sudo systemctl status keep
+sudo systemctl status jot
 
 # Monitor resource usage
-ps aux | grep keep
-df -h /var/lib/keep
+ps aux | grep jot
+df -h /var/lib/jot
 ```
 
 #### Log Review
 ```bash
 # Check for errors in recent logs
-sudo journalctl -u keep --since "24 hours ago" | grep -i error
+sudo journalctl -u jot --since "24 hours ago" | grep -i error
 
 # Monitor log growth
-ls -lh /var/log/keep/
+ls -lh /var/log/jot/
 ```
 
 ### Weekly Tasks
@@ -33,19 +33,19 @@ ls -lh /var/log/keep/
 #### Database Maintenance
 ```bash
 # Check database integrity
-sqlite3 /var/lib/keep/keep.db "PRAGMA integrity_check;"
+sqlite3 /var/lib/jot/jot.db "PRAGMA integrity_check;"
 
 # Update database statistics
-sqlite3 /var/lib/keep/keep.db "ANALYZE;"
+sqlite3 /var/lib/jot/jot.db "ANALYZE;"
 
 # Check database size
-sqlite3 /var/lib/keep/keep.db "SELECT page_count * page_size as size FROM pragma_page_count(), pragma_page_size();"
+sqlite3 /var/lib/jot/jot.db "SELECT page_count * page_size as size FROM pragma_page_count(), pragma_page_size();"
 ```
 
 #### Backup Verification
 ```bash
 # Verify recent backups exist
-ls -la /backups/keep/ | head -10
+ls -la /backups/jot/ | head -10
 
 # Test backup restoration (in safe environment)
 ./test-backup-restore.sh
@@ -56,11 +56,11 @@ ls -la /backups/keep/ | head -10
 #### Security Review
 ```bash
 # Review user accounts (check for suspicious activity)
-sqlite3 /var/lib/keep/keep.db "SELECT id, email, created_at, is_admin FROM users ORDER BY created_at DESC;"
+sqlite3 /var/lib/jot/jot.db "SELECT id, email, created_at, is_admin FROM users ORDER BY created_at DESC;"
 
 # Check file permissions
-ls -la /var/lib/keep/
-ls -la /etc/keep/
+ls -la /var/lib/jot/
+ls -la /etc/jot/
 
 # Review firewall rules
 sudo ufw status verbose
@@ -69,7 +69,7 @@ sudo ufw status verbose
 #### Performance Analysis
 ```bash
 # Analyze database performance
-sqlite3 /var/lib/keep/keep.db ".stats on" ".schema"
+sqlite3 /var/lib/jot/jot.db ".stats on" ".schema"
 
 # Check system resource trends
 sar -u 1 3  # CPU usage
@@ -79,7 +79,7 @@ iostat 1 3  # I/O statistics
 
 #### Updates and Patching
 ```bash
-# Check for Keep updates
+# Check for Jot updates
 # (Manual process - check GitHub releases)
 
 # Update system packages
@@ -97,15 +97,15 @@ docker-compose up -d
 #### Automated Daily Backups
 ```bash
 #!/bin/bash
-# /usr/local/bin/keep-backup.sh
+# /usr/local/bin/jot-backup.sh
 
 set -e  # Exit on any error
 
 # Configuration
-BACKUP_DIR="/backups/keep"
-DB_PATH="/var/lib/keep/keep.db"
+BACKUP_DIR="/backups/jot"
+DB_PATH="/var/lib/jot/jot.db"
 RETENTION_DAYS=30
-LOG_FILE="/var/log/keep-backup.log"
+LOG_FILE="/var/log/jot-backup.log"
 ALERT_EMAIL="admin@example.com"
 
 # Logging function
@@ -116,16 +116,16 @@ log() {
 # Error handling
 error_exit() {
     log "ERROR: $1"
-    echo "Keep backup failed on $(hostname): $1" | mail -s "Backup Failed" "$ALERT_EMAIL"
+    echo "Jot backup failed on $(hostname): $1" | mail -s "Backup Failed" "$ALERT_EMAIL"
     exit 1
 }
 
 # Pre-backup checks
 log "Starting backup process"
 
-# Check if Keep is running
-if ! systemctl is-active --quiet keep; then
-    error_exit "Keep service is not running"
+# Check if Jot is running
+if ! systemctl is-active --quiet jot; then
+    error_exit "Jot service is not running"
 fi
 
 # Check database file exists and is readable
@@ -144,7 +144,7 @@ mkdir -p "$BACKUP_DIR" || error_exit "Failed to create backup directory"
 
 # Generate backup filename with timestamp
 DATE=$(date +%Y%m%d_%H%M%S)
-BACKUP_FILE="$BACKUP_DIR/keep_backup_$DATE.db"
+BACKUP_FILE="$BACKUP_DIR/jot_backup_$DATE.db"
 
 # Perform database backup
 log "Creating backup: $BACKUP_FILE"
@@ -171,7 +171,7 @@ log "Backup completed successfully: $(basename "$COMPRESSED_BACKUP") ($BACKUP_SI
 
 # Clean up old backups
 log "Cleaning up old backups (older than $RETENTION_DAYS days)"
-OLD_BACKUPS=$(find "$BACKUP_DIR" -name "keep_backup_*.db.gz" -mtime +$RETENTION_DAYS)
+OLD_BACKUPS=$(find "$BACKUP_DIR" -name "jot_backup_*.db.gz" -mtime +$RETENTION_DAYS)
 if [[ -n "$OLD_BACKUPS" ]]; then
     echo "$OLD_BACKUPS" | xargs rm -f
     log "Removed old backups: $(echo "$OLD_BACKUPS" | wc -l) files"
@@ -180,7 +180,7 @@ else
 fi
 
 # Backup statistics
-TOTAL_BACKUPS=$(ls "$BACKUP_DIR"/keep_backup_*.db.gz 2>/dev/null | wc -l)
+TOTAL_BACKUPS=$(ls "$BACKUP_DIR"/jot_backup_*.db.gz 2>/dev/null | wc -l)
 TOTAL_SIZE=$(du -sh "$BACKUP_DIR" | cut -f1)
 log "Backup completed. Total backups: $TOTAL_BACKUPS, Total size: $TOTAL_SIZE"
 ```
@@ -189,25 +189,25 @@ log "Backup completed. Total backups: $TOTAL_BACKUPS, Total size: $TOTAL_SIZE"
 ```bash
 # Add to root crontab: sudo crontab -e
 # Daily backup at 2:00 AM
-0 2 * * * /usr/local/bin/keep-backup.sh
+0 2 * * * /usr/local/bin/jot-backup.sh
 
 # Weekly backup verification at 2:30 AM on Sundays
-30 2 * * 0 /usr/local/bin/keep-verify-backup.sh
+30 2 * * 0 /usr/local/bin/jot-verify-backup.sh
 
 # Monthly cleanup of very old backups at 3:00 AM on 1st
-0 3 1 * * find /backups/keep -name "keep_backup_*.db.gz" -mtime +90 -delete
+0 3 1 * * find /backups/jot -name "jot_backup_*.db.gz" -mtime +90 -delete
 ```
 
 ### Backup Verification Script
 ```bash
 #!/bin/bash
-# /usr/local/bin/keep-verify-backup.sh
+# /usr/local/bin/jot-verify-backup.sh
 
 set -e
 
-BACKUP_DIR="/backups/keep"
-TEST_DIR="/tmp/keep-backup-test"
-LOG_FILE="/var/log/keep-backup.log"
+BACKUP_DIR="/backups/jot"
+TEST_DIR="/tmp/jot-backup-test"
+LOG_FILE="/var/log/jot-backup.log"
 
 log() {
     echo "$(date '+%Y-%m-%d %H:%M:%S'): $1" | tee -a "$LOG_FILE"
@@ -216,7 +216,7 @@ log() {
 log "Starting backup verification"
 
 # Find most recent backup
-LATEST_BACKUP=$(ls -1t "$BACKUP_DIR"/keep_backup_*.db.gz 2>/dev/null | head -1)
+LATEST_BACKUP=$(ls -1t "$BACKUP_DIR"/jot_backup_*.db.gz 2>/dev/null | head -1)
 
 if [[ -z "$LATEST_BACKUP" ]]; then
     log "ERROR: No backup files found"
@@ -257,7 +257,7 @@ log "Backup verification completed successfully"
 #### Full System Restore
 ```bash
 #!/bin/bash
-# /usr/local/bin/keep-restore.sh
+# /usr/local/bin/jot-restore.sh
 
 set -e
 
@@ -267,8 +267,8 @@ if [[ $# -ne 1 ]]; then
 fi
 
 BACKUP_FILE="$1"
-DB_PATH="/var/lib/keep/keep.db"
-BACKUP_CURRENT="/tmp/keep_current_backup.db"
+DB_PATH="/var/lib/jot/jot.db"
+BACKUP_CURRENT="/tmp/jot_current_backup.db"
 
 # Verify backup file exists
 if [[ ! -f "$BACKUP_FILE" ]]; then
@@ -276,7 +276,7 @@ if [[ ! -f "$BACKUP_FILE" ]]; then
     exit 1
 fi
 
-echo "WARNING: This will restore Keep from backup and replace all current data."
+echo "WARNING: This will restore Jot from backup and replace all current data."
 echo "Current database will be backed up to: $BACKUP_CURRENT"
 echo "Backup file: $BACKUP_FILE"
 read -p "Are you sure you want to continue? (yes/no): " confirm
@@ -286,9 +286,9 @@ if [[ "$confirm" != "yes" ]]; then
     exit 0
 fi
 
-# Stop Keep service
-echo "Stopping Keep service..."
-sudo systemctl stop keep
+# Stop Jot service
+echo "Stopping Jot service..."
+sudo systemctl stop jot
 
 # Backup current database
 echo "Backing up current database..."
@@ -302,7 +302,7 @@ echo "Restoring from backup..."
 gunzip -c "$BACKUP_FILE" > "$DB_PATH"
 
 # Set correct permissions
-chown keep:keep "$DB_PATH"
+chown jot:jot "$DB_PATH"
 chmod 600 "$DB_PATH"
 
 # Verify restored database
@@ -316,26 +316,26 @@ else
     exit 1
 fi
 
-# Start Keep service
-echo "Starting Keep service..."
-sudo systemctl start keep
+# Start Jot service
+echo "Starting Jot service..."
+sudo systemctl start jot
 
 # Wait for service to start
 sleep 5
 
 # Verify service is running
-if systemctl is-active --quiet keep; then
-    echo "Keep service started successfully"
+if systemctl is-active --quiet jot; then
+    echo "Jot service started successfully"
     echo "Checking health endpoint..."
     if curl -f http://localhost:8080/health > /dev/null 2>&1; then
         echo "Restore completed successfully!"
-        echo "Users can now access Keep normally"
+        echo "Users can now access Jot normally"
     else
         echo "Warning: Service started but health check failed"
     fi
 else
-    echo "Error: Keep service failed to start"
-    echo "Check logs with: sudo journalctl -u keep -f"
+    echo "Error: Jot service failed to start"
+    echo "Check logs with: sudo journalctl -u jot -f"
     exit 1
 fi
 ```
@@ -345,14 +345,14 @@ fi
 ### System Monitoring Script
 ```bash
 #!/bin/bash
-# /usr/local/bin/keep-monitor.sh
+# /usr/local/bin/jot-monitor.sh
 
 set -e
 
 # Configuration
-CONFIG_FILE="/etc/keep/monitor.conf"
-LOG_FILE="/var/log/keep-monitor.log"
-STATE_FILE="/var/lib/keep/monitor.state"
+CONFIG_FILE="/etc/jot/monitor.conf"
+LOG_FILE="/var/log/jot-monitor.log"
+STATE_FILE="/var/lib/jot/monitor.state"
 
 # Default thresholds (can be overridden in config file)
 CPU_THRESHOLD=80
@@ -376,7 +376,7 @@ alert() {
     local severity="${3:-WARNING}"
     
     log "$severity: $message"
-    echo "$message" | mail -s "Keep $severity: $subject" "$ALERT_EMAIL"
+    echo "$message" | mail -s "Jot $severity: $subject" "$ALERT_EMAIL"
     
     # Update state file to prevent spam
     echo "$(date +%s):$subject" >> "$STATE_FILE"
@@ -393,10 +393,10 @@ recently_alerted() {
 
 # Health check
 check_health() {
-    log "Checking Keep health endpoint"
+    log "Checking Jot health endpoint"
     if ! curl -f -s --max-time "$RESPONSE_TIMEOUT" http://localhost:8080/health > /dev/null; then
         if ! recently_alerted "health_check"; then
-            alert "Health Check Failed" "Keep health endpoint is not responding"
+            alert "Health Check Failed" "Jot health endpoint is not responding"
         fi
         return 1
     fi
@@ -406,10 +406,10 @@ check_health() {
 
 # Service check
 check_service() {
-    log "Checking Keep service status"
-    if ! systemctl is-active --quiet keep; then
+    log "Checking Jot service status"
+    if ! systemctl is-active --quiet jot; then
         if ! recently_alerted "service_down"; then
-            alert "Service Down" "Keep systemd service is not running"
+            alert "Service Down" "Jot systemd service is not running"
         fi
         return 1
     fi
@@ -420,9 +420,9 @@ check_service() {
 # Database check
 check_database() {
     log "Checking database connectivity"
-    if ! sqlite3 /var/lib/keep/keep.db "SELECT 1;" > /dev/null 2>&1; then
+    if ! sqlite3 /var/lib/jot/jot.db "SELECT 1;" > /dev/null 2>&1; then
         if ! recently_alerted "database_error"; then
-            alert "Database Error" "Cannot connect to Keep database"
+            alert "Database Error" "Cannot connect to Jot database"
         fi
         return 1
     fi
@@ -461,7 +461,7 @@ check_memory() {
 
 # Disk usage check
 check_disk() {
-    local disk_usage=$(df /var/lib/keep | awk 'NR==2 {print $5}' | sed 's/%//')
+    local disk_usage=$(df /var/lib/jot | awk 'NR==2 {print $5}' | sed 's/%//')
     
     log "Disk usage: ${disk_usage}%"
     if [[ $disk_usage -gt $DISK_THRESHOLD ]]; then
@@ -499,7 +499,7 @@ check_certificate() {
 
 # Main monitoring logic
 main() {
-    log "Starting Keep monitoring checks"
+    log "Starting Jot monitoring checks"
     
     local failed_checks=0
     
@@ -532,13 +532,13 @@ main "$@"
 
 ### Monitoring Configuration
 ```bash
-# /etc/keep/monitor.conf
+# /etc/jot/monitor.conf
 CPU_THRESHOLD=75
 MEMORY_THRESHOLD=80
 DISK_THRESHOLD=90
 RESPONSE_TIMEOUT=15
 ALERT_EMAIL="admin@yourdomain.com"
-KEEP_DOMAIN="keep.yourdomain.com"
+KEEP_DOMAIN="jot.yourdomain.com"
 KEEP_PORT=443
 ```
 
@@ -546,13 +546,13 @@ KEEP_PORT=443
 ```bash
 # Add to crontab
 # Every 5 minutes during business hours (9 AM to 6 PM, Mon-Fri)
-*/5 9-18 * * 1-5 /usr/local/bin/keep-monitor.sh
+*/5 9-18 * * 1-5 /usr/local/bin/jot-monitor.sh
 
 # Every hour outside business hours
-0 * * * * /usr/local/bin/keep-monitor.sh
+0 * * * * /usr/local/bin/jot-monitor.sh
 
 # Daily comprehensive check at 6 AM
-0 6 * * * /usr/local/bin/keep-monitor.sh --comprehensive
+0 6 * * * /usr/local/bin/jot-monitor.sh --comprehensive
 ```
 
 ## Performance Optimization
@@ -560,12 +560,12 @@ KEEP_PORT=443
 ### Database Optimization
 ```bash
 #!/bin/bash
-# /usr/local/bin/keep-optimize-db.sh
+# /usr/local/bin/jot-optimize-db.sh
 
 set -e
 
-DB_PATH="/var/lib/keep/keep.db"
-LOG_FILE="/var/log/keep-maintenance.log"
+DB_PATH="/var/lib/jot/jot.db"
+LOG_FILE="/var/log/jot-maintenance.log"
 
 log() {
     echo "$(date '+%Y-%m-%d %H:%M:%S'): $1" | tee -a "$LOG_FILE"
@@ -577,12 +577,12 @@ log "Starting database optimization"
 BEFORE_SIZE=$(stat -c%s "$DB_PATH")
 log "Database size before optimization: $(numfmt --to=iec $BEFORE_SIZE)"
 
-# Stop Keep service for maintenance
-log "Stopping Keep service"
-systemctl stop keep
+# Stop Jot service for maintenance
+log "Stopping Jot service"
+systemctl stop jot
 
 # Backup database before optimization
-BACKUP_FILE="/tmp/keep_pre_optimize_$(date +%Y%m%d_%H%M%S).db"
+BACKUP_FILE="/tmp/jot_pre_optimize_$(date +%Y%m%d_%H%M%S).db"
 cp "$DB_PATH" "$BACKUP_FILE"
 log "Created backup: $BACKUP_FILE"
 
@@ -601,7 +601,7 @@ if sqlite3 "$DB_PATH" "PRAGMA integrity_check;" | grep -q "ok"; then
 else
     log "ERROR: Database integrity check failed, restoring backup"
     cp "$BACKUP_FILE" "$DB_PATH"
-    systemctl start keep
+    systemctl start jot
     exit 1
 fi
 
@@ -611,9 +611,9 @@ SAVED_SPACE=$((BEFORE_SIZE - AFTER_SIZE))
 log "Database size after optimization: $(numfmt --to=iec $AFTER_SIZE)"
 log "Space reclaimed: $(numfmt --to=iec $SAVED_SPACE)"
 
-# Start Keep service
-log "Starting Keep service"
-systemctl start keep
+# Start Jot service
+log "Starting Jot service"
+systemctl start jot
 
 # Wait for service to start and verify
 sleep 5
@@ -621,30 +621,30 @@ if curl -f http://localhost:8080/health > /dev/null 2>&1; then
     log "Database optimization completed successfully"
     rm -f "$BACKUP_FILE"  # Remove temporary backup
 else
-    log "ERROR: Keep service failed to start after optimization"
+    log "ERROR: Jot service failed to start after optimization"
     exit 1
 fi
 ```
 
 ### Log Rotation and Cleanup
 ```bash
-# /etc/logrotate.d/keep
-/var/log/keep/*.log {
+# /etc/logrotate.d/jot
+/var/log/jot/*.log {
     daily
     missingok
     rotate 30
     compress
     delaycompress
     notifempty
-    create 644 keep keep
+    create 644 jot jot
     postrotate
-        # Signal Keep to reopen log files if needed
-        systemctl reload-or-restart keep > /dev/null 2>&1 || true
+        # Signal Jot to reopen log files if needed
+        systemctl reload-or-restart jot > /dev/null 2>&1 || true
     endscript
 }
 
-# Keep monitoring logs
-/var/log/keep-monitor.log {
+# Jot monitoring logs
+/var/log/jot-monitor.log {
     weekly
     missingok
     rotate 12
@@ -654,8 +654,8 @@ fi
     create 644 root root
 }
 
-# Keep backup logs
-/var/log/keep-backup.log {
+# Jot backup logs
+/var/log/jot-backup.log {
     monthly
     missingok
     rotate 12
@@ -671,29 +671,29 @@ fi
 ### Service Won't Start
 ```bash
 # Check service status
-systemctl status keep
+systemctl status jot
 
 # Check logs for errors
-journalctl -u keep --since "1 hour ago" | grep -i error
+journalctl -u jot --since "1 hour ago" | grep -i error
 
 # Check configuration
-sudo -u keep env | grep -E "(JWT_SECRET|DB_PATH|PORT)"
+sudo -u jot env | grep -E "(JWT_SECRET|DB_PATH|PORT)"
 
 # Test database connectivity
-sudo -u keep sqlite3 /var/lib/keep/keep.db "SELECT 1;"
+sudo -u jot sqlite3 /var/lib/jot/jot.db "SELECT 1;"
 
 # Check file permissions
-ls -la /var/lib/keep/
+ls -la /var/lib/jot/
 ```
 
 ### High Resource Usage
 ```bash
 # Check what's consuming resources
-top -p $(pgrep keep)
-htop -p $(pgrep keep)
+top -p $(pgrep jot)
+htop -p $(pgrep jot)
 
 # Check database operations
-sqlite3 /var/lib/keep/keep.db ".stats on"
+sqlite3 /var/lib/jot/jot.db ".stats on"
 
 # Analyze slow queries (if any)
 # Enable query logging in SQLite if needed
@@ -716,15 +716,15 @@ iptables -L | grep 8080
 ### Data Corruption
 ```bash
 # Check database integrity
-sqlite3 /var/lib/keep/keep.db "PRAGMA integrity_check;"
+sqlite3 /var/lib/jot/jot.db "PRAGMA integrity_check;"
 
 # Repair database if possible
-sqlite3 /var/lib/keep/keep.db ".recover" | sqlite3 /var/lib/keep/keep_recovered.db
+sqlite3 /var/lib/jot/jot.db ".recover" | sqlite3 /var/lib/jot/jot_recovered.db
 
 # Restore from backup if necessary
-./keep-restore.sh /backups/keep/keep_backup_latest.db.gz
+./jot-restore.sh /backups/jot/jot_backup_latest.db.gz
 ```
 
 ---
 
-Regular maintenance ensures Keep runs smoothly and reliably! 🔧
+Regular maintenance ensures Jot runs smoothly and reliably! 🔧

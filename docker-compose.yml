@@ -1,13 +1,13 @@
 version: '3.8'
 
 services:
-  keep:
+  jot:
     build:
       context: .
       dockerfile: Dockerfile
-    container_name: keep
+    container_name: jot
     environment:
-      - DB_PATH=/data/keep.db
+      - DB_PATH=/data/jot.db
       - JWT_SECRET=${JWT_SECRET:-your-secret-key-change-in-production}
       - STATIC_DIR=/app/webapp/build
     volumes:

@@ -8,8 +8,8 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
-	"github.com/hanzei/keep/server/internal/auth"
-	"github.com/hanzei/keep/server/internal/models"
+	"github.com/hanzei/jot/server/internal/auth"
+	"github.com/hanzei/jot/server/internal/models"
 )
 
 type NotesHandler struct {

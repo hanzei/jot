@@ -1,4 +1,4 @@
-# Keep Project Instructions
+# Jot Project Instructions
 
 - When development instructions change (build scripts, dev setup, etc.), update the README.md to reflect the changes
 - When functionality changes (API endpoints, features, configuration options, etc.), update the documentation in docs/ directory:
@@ -9,7 +9,7 @@
 
 Use the following Task commands for development:
 
-- `task run-server` - Start the Keep server
+- `task run-server` - Start the Jot server
 - `task run-webapp` - Build webapp in watch mode
 - `task test` - Run all tests
 - `task test-server` - Run server tests

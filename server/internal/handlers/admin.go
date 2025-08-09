@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"strings"
 
-	"github.com/hanzei/keep/server/internal/models"
+	"github.com/hanzei/jot/server/internal/models"
 )
 
 type AdminHandler struct {

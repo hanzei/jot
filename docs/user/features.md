@@ -1,6 +1,6 @@
-# Keep Features Guide
+# Jot Features Guide
 
-This comprehensive guide covers all the features available in Keep and how to use them effectively.
+This comprehensive guide covers all the features available in Jot and how to use them effectively.
 
 ## Core Features
 
@@ -42,7 +42,7 @@ Interactive checklists for tasks and reminders.
 ### Note Organization
 
 #### Pinning Notes
-Keep important notes visible at the top of your list.
+Jot keeps important notes visible at the top of your list.
 
 **How to pin:**
 1. Click the three dots (⋮) on any note
@@ -154,7 +154,7 @@ Switch between different views of your notes.
 ### Navigation
 
 #### Header
-- **Keep Logo**: Returns to main notes view
+- **Jot Logo**: Returns to main notes view
 - **Notes/Archive Tabs**: Switch between views
 - **Search Bar**: Find notes quickly
 - **User Menu**: Shows email and logout option
@@ -251,10 +251,10 @@ These limitations are intentional for:
 ### Organization Strategies
 1. **Daily notes**: Create daily todo lists with consistent naming
 2. **Project separation**: Use colors to separate work/personal
-3. **Reference notes**: Keep important info in pinned notes
+3. **Reference notes**: Store important info in pinned notes
 4. **Review routine**: Regularly archive completed items
 5. **Search habits**: Use search instead of scrolling for large note collections
 
 ---
 
-Master these features to become a Keep power user! 🚀
+Master these features to become a Jot power user! 🚀

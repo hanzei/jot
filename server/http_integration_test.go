@@ -10,9 +10,9 @@ import (
 	"os"
 	"testing"
 
-	"github.com/hanzei/keep/server/internal/auth"
-	"github.com/hanzei/keep/server/internal/models"
-	"github.com/hanzei/keep/server/internal/server"
+	"github.com/hanzei/jot/server/internal/auth"
+	"github.com/hanzei/jot/server/internal/models"
+	"github.com/hanzei/jot/server/internal/server"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )

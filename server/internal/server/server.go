@@ -10,10 +10,10 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
-	"github.com/hanzei/keep/server/internal/auth"
-	"github.com/hanzei/keep/server/internal/database"
-	"github.com/hanzei/keep/server/internal/handlers"
-	"github.com/hanzei/keep/server/internal/models"
+	"github.com/hanzei/jot/server/internal/auth"
+	"github.com/hanzei/jot/server/internal/database"
+	"github.com/hanzei/jot/server/internal/handlers"
+	"github.com/hanzei/jot/server/internal/models"
 	"github.com/sirupsen/logrus"
 )
 
@@ -29,7 +29,7 @@ type Server struct {
 func New() *Server {
 	dbPath := os.Getenv("DB_PATH")
 	if dbPath == "" {
-		dbPath = "./keep.db"
+		dbPath = "./jot.db"
 	}
 
 	db, err := database.New(dbPath)

@@ -1,12 +1,12 @@
-# Getting Started with Keep
+# Getting Started with Jot
 
-Welcome to Keep, your self-hosted note-taking application! This guide will help you get started with creating and managing your notes.
+Welcome to Jot, your self-hosted note-taking application! This guide will help you get started with creating and managing your notes.
 
 ## First Time Setup
 
 ### Creating Your Account
 
-1. **Open Keep** in your web browser (usually at `http://localhost:8080`)
+1. **Open Jot** in your web browser (usually at `http://localhost:8080`)
 2. **Click "Create Account"** on the login page
 3. **Enter your details**:
    - Email address (this will be your username)
@@ -19,7 +19,7 @@ Welcome to Keep, your self-hosted note-taking application! This guide will help 
 ### Your Dashboard
 
 After logging in, you'll see your dashboard with:
-- **Header**: Contains the Keep logo, navigation tabs, search bar, and user menu
+- **Header**: Contains the Jot logo, navigation tabs, search bar, and user menu
 - **Notes Grid**: Where all your notes are displayed
 - **New Note Button**: Blue button to create your first note
 
@@ -146,4 +146,4 @@ If you need additional help:
 
 ---
 
-Enjoy using Keep for all your note-taking needs! 📝
+Enjoy using Jot for all your note-taking needs! 📝
