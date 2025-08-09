@@ -73,11 +73,14 @@ go install github.com/go-task/task/v3/cmd/task@latest
 
 # Available commands
 task run-server      # Start the Keep server
-task run-webapp      # Start the webapp development server
-task webapp-watch    # Build webapp in watch mode
-task test           # Run all tests
-task test-server    # Run server tests
-task coverage       # Run server tests with coverage report
+task run-webapp      # Build webapp in watch mode
+task test            # Run all tests
+task test-server     # Run server tests
+task test-webapp     # Run webapp tests
+task coverage        # Run server tests with coverage report
+task lint            # Run linters
+task lint-server     # Run server linting with golangci-lint
+task lint-webapp     # Run webapp linting
 ```
    
 3. **Access the application**:
