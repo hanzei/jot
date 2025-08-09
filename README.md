@@ -173,7 +173,24 @@ PORT=8080
 
 ## Docker Deployment
 
-### Single Container (Recommended)
+### Using Published Image (Recommended)
+
+```bash
+# Pull and run the latest image from Docker Hub
+docker run -d \
+  --name jot \
+  -p 8080:8080 \
+  -v ./data:/data \
+  -e JWT_SECRET=$(openssl rand -base64 32) \
+  hanzei/jot:latest
+
+# Or use docker-compose
+curl -O https://raw.githubusercontent.com/hanzei/jot/master/docker-compose.yml
+echo "JWT_SECRET=$(openssl rand -base64 32)" > .env
+docker-compose up -d
+```
+
+### Building from Source
 
 ```bash
 # Build and run with docker-compose
@@ -189,6 +206,12 @@ The Docker image uses multi-stage build:
 2. **Go stage**: Builds the backend binary
 3. **Alpine stage**: Combines everything in minimal production image
 
+### Available Tags
+
+- `hanzei/jot:latest` - Latest stable release (master branch)
+- `hanzei/jot:pr-<number>` - Pull request builds
+- `hanzei/jot:<branch>-<sha>` - Specific commit builds
+
 ### Custom Configuration
 
 ```yaml
@@ -196,6 +219,7 @@ The Docker image uses multi-stage build:
 version: '3.8'
 services:
   jot:
+    image: hanzei/jot:latest
     environment:
       - JWT_SECRET=your-production-secret
       - DB_PATH=/data/production.db
@@ -286,6 +310,16 @@ sqlite3 jot.db "SELECT * FROM users;"
 - Update documentation for API changes
 - Ensure Docker build passes
 - Test both development modes
+
+### CI/CD Pipeline
+
+Jot uses GitHub Actions for automated testing and Docker image publishing:
+
+- **Automated testing**: All PRs trigger test and lint jobs
+- **Docker publishing**: Master branch builds are published to `hanzei/jot` on Docker Hub
+- **Multi-platform**: Images support both AMD64 and ARM64 architectures
+
+For setup instructions, see [CI/CD Setup Guide](docs/admin/ci-setup.md).
 
 ## License
 

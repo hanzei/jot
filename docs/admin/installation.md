@@ -2,21 +2,31 @@
 
 This guide covers all installation methods for Jot, from development setup to production deployment.
 
-## Installation 
+## Docker Installation (Recommended)
 
-Docker provides the easiest installation and maintenance experience.
+Docker provides the easiest installation and maintenance experience using the published image from Docker Hub.
 
-#### Prerequisites
+### Prerequisites
 - Docker 20.10+
 - Docker Compose 2.0+ (optional but recommended)
 
-#### Quick Start
+### Quick Start
+
 ```bash
+# Method 1: Using Docker Run
+docker run -d \
+  --name jot \
+  -p 8080:8080 \
+  -v ./data:/data \
+  -e JWT_SECRET=$(openssl rand -base64 32) \
+  hanzei/jot:latest
+
+# Method 2: Using Docker Compose
 # 1. Create project directory
 mkdir jot && cd jot
 
 # 2. Download docker-compose.yml
-curl -O https://raw.githubusercontent.com/hanzei/jot/refs/heads/master/docker-compose.yml
+curl -O https://raw.githubusercontent.com/hanzei/jot/master/docker-compose.yml
 
 # 3. Create environment file
 echo "JWT_SECRET=$(openssl rand -base64 32)" > .env
@@ -25,6 +35,25 @@ echo "JWT_SECRET=$(openssl rand -base64 32)" > .env
 docker-compose up -d
 
 # 5. Access at http://localhost:8080
+```
+
+### Available Docker Images
+
+The official images are automatically built and published to Docker Hub:
+
+- **`hanzei/jot:latest`** - Latest stable release (recommended)
+- **`hanzei/jot:pr-<number>`** - Pull request builds (for testing)
+- **`hanzei/jot:<branch>-<sha>`** - Specific commit builds
+
+### Building from Source
+
+If you prefer to build the image locally:
+
+```bash
+git clone https://github.com/hanzei/jot.git
+cd jot
+docker build -t jot .
+docker run -p 8080:8080 -v ./data:/data -e JWT_SECRET=your-secret jot
 ```
 
 ## Configuration

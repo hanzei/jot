@@ -2,9 +2,7 @@ version: '3.8'
 
 services:
   jot:
-    build:
-      context: .
-      dockerfile: Dockerfile
+    image: hanzei/jot:latest
     container_name: jot
     environment:
       - DB_PATH=/data/jot.db
