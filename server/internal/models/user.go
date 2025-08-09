@@ -13,12 +13,12 @@ import (
 )
 
 type User struct {
-	ID          string    `json:"id"`
-	Email       string    `json:"email"`
-	PasswordHash string   `json:"-"`
-	IsAdmin     bool      `json:"is_admin"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID           string    `json:"id"`
+	Email        string    `json:"email"`
+	PasswordHash string    `json:"-"`
+	IsAdmin      bool      `json:"is_admin"`
+	CreatedAt    time.Time `json:"created_at"`
+	UpdatedAt    time.Time `json:"updated_at"`
 }
 
 type UserStore struct {
@@ -59,7 +59,7 @@ func (s *UserStore) Create(email, password string) (*User, error) {
 
 	query := `INSERT INTO users (id, email, password_hash, is_admin) 
 			  VALUES (?, ?, ?, ?) RETURNING created_at, updated_at`
-	
+
 	var user User
 	err = s.db.QueryRow(query, userID, email, string(hashedPassword), isFirstUser).Scan(
 		&user.CreatedAt, &user.UpdatedAt,
@@ -79,7 +79,7 @@ func (s *UserStore) GetByEmail(email string) (*User, error) {
 	var user User
 	query := `SELECT id, email, password_hash, is_admin, created_at, updated_at 
 			  FROM users WHERE email = ?`
-	
+
 	err := s.db.QueryRow(query, email).Scan(
 		&user.ID, &user.Email, &user.PasswordHash,
 		&user.IsAdmin, &user.CreatedAt, &user.UpdatedAt,
@@ -98,7 +98,7 @@ func (s *UserStore) GetByID(id string) (*User, error) {
 	var user User
 	query := `SELECT id, email, password_hash, is_admin, created_at, updated_at 
 			  FROM users WHERE id = ?`
-	
+
 	err := s.db.QueryRow(query, id).Scan(
 		&user.ID, &user.Email, &user.PasswordHash,
 		&user.IsAdmin, &user.CreatedAt, &user.UpdatedAt,
@@ -121,25 +121,25 @@ func (u *User) CheckPassword(password string) bool {
 func (s *UserStore) GetAll() ([]*User, error) {
 	query := `SELECT id, email, password_hash, is_admin, created_at, updated_at 
 			  FROM users ORDER BY created_at DESC`
-	
+
 	rows, err := s.db.Query(query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query users: %w", err)
 	}
 	defer func() {
-		if closeErr := rows.Close(); closeErr != nil {
-			log.Printf("Failed to close rows: %v", closeErr)
+		if err = rows.Close(); err != nil {
+			log.Printf("Failed to close rows: %v", err)
 		}
 	}()
 
 	var users []*User
 	for rows.Next() {
 		var user User
-		if scanErr := rows.Scan(
+		if err = rows.Scan(
 			&user.ID, &user.Email, &user.PasswordHash,
 			&user.IsAdmin, &user.CreatedAt, &user.UpdatedAt,
-		); scanErr != nil {
-			return nil, fmt.Errorf("failed to scan user: %w", scanErr)
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan user: %w", err)
 		}
 		users = append(users, &user)
 	}
@@ -164,7 +164,7 @@ func (s *UserStore) CreateByAdmin(email, password string, isAdmin bool) (*User, 
 
 	query := `INSERT INTO users (id, email, password_hash, is_admin) 
 			  VALUES (?, ?, ?, ?) RETURNING created_at, updated_at`
-	
+
 	var user User
 	err = s.db.QueryRow(query, userID, email, string(hashedPassword), isAdmin).Scan(
 		&user.CreatedAt, &user.UpdatedAt,
@@ -184,7 +184,7 @@ func (s *UserStore) SearchByEmail(email string) (*User, error) {
 	var user User
 	query := `SELECT id, email, is_admin, created_at, updated_at 
 			  FROM users WHERE email = ?`
-	
+
 	err := s.db.QueryRow(query, email).Scan(
 		&user.ID, &user.Email, &user.IsAdmin, &user.CreatedAt, &user.UpdatedAt,
 	)

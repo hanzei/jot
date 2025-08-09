@@ -149,8 +149,8 @@ func FileServer(r chi.Router, path string, root http.FileSystem) {
 		file, err := root.Open(requestedFile)
 		if err != nil {
 			// File doesn't exist, serve index.html for SPA routing
-			indexFile, indexErr := root.Open("/index.html")
-			if indexErr != nil {
+			indexFile, err := root.Open("/index.html")
+			if err != nil {
 				http.NotFound(w, req)
 				return
 			}
