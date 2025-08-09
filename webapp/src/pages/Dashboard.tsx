@@ -4,9 +4,27 @@ import { notes } from '@/utils/api';
 import { removeToken, getUser, isAdmin } from '@/utils/auth';
 import { Note } from '@/types';
 import { Link } from 'react-router-dom';
-import NoteCard from '@/components/NoteCard';
+import SortableNoteCard from '@/components/SortableNoteCard';
 import NoteModal from '@/components/NoteModal';
 import ShareModal from '@/components/ShareModal';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  rectSortingStrategy,
+} from '@dnd-kit/sortable';
+import {
+  restrictToWindowEdges,
+} from '@dnd-kit/modifiers';
 
 interface DashboardProps {
   onLogout: () => void;
@@ -22,6 +40,17 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [sharingNote, setSharingNote] = useState<Note | null>(null);
   const user = getUser();
+
+  const sensors = useSensors(
+    useSensor(PointerSensor, {
+      activationConstraint: {
+        distance: 8,
+      },
+    }),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   const loadNotes = useCallback(async () => {
     try {
@@ -77,6 +106,60 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     setIsShareModalOpen(false);
     setSharingNote(null);
     loadNotes(); // Refresh notes to show updated sharing status
+  };
+
+  const handleDragEnd = async (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (!over || active.id === over.id) {
+      return;
+    }
+
+    const activeNote = notesList.find(note => note.id === active.id);
+    const overNote = notesList.find(note => note.id === over.id);
+
+    if (!activeNote || !overNote) {
+      return;
+    }
+
+    // Only allow reordering within the same group (pinned vs unpinned)
+    if (activeNote.pinned !== overNote.pinned) {
+      return;
+    }
+
+    // Filter notes by the same pinned status
+    const sameGroupNotes = notesList.filter(note => note.pinned === activeNote.pinned);
+    
+    const oldIndex = sameGroupNotes.findIndex(note => note.id === active.id);
+    const newIndex = sameGroupNotes.findIndex(note => note.id === over.id);
+
+    if (oldIndex !== newIndex) {
+      // Reorder the notes in the same group
+      const reorderedNotes = arrayMove(sameGroupNotes, oldIndex, newIndex);
+      
+      // Update local state immediately for better UX
+      const updatedNotesList = [...notesList];
+      const pinnedNotes = updatedNotesList.filter(note => note.pinned);
+      const unpinnedNotes = updatedNotesList.filter(note => !note.pinned);
+      
+      if (activeNote.pinned) {
+        // Replace pinned notes with reordered ones
+        setNotesList([...reorderedNotes, ...unpinnedNotes]);
+      } else {
+        // Replace unpinned notes with reordered ones
+        setNotesList([...pinnedNotes, ...reorderedNotes]);
+      }
+
+      // Send the reorder request to the backend
+      try {
+        const noteIDs = reorderedNotes.map(note => note.id);
+        await notes.reorder(noteIDs);
+      } catch (error) {
+        console.error('Failed to reorder notes:', error);
+        // Reload notes to revert to server state on error
+        loadNotes();
+      }
+    }
   };
 
   if (loading) {
@@ -182,54 +265,71 @@ export default function Dashboard({ onLogout }: DashboardProps) {
             </div>
           </div>
         ) : (
-          <div className="space-y-8">
-            {/* Pinned notes section */}
-            {notesList.some(note => note.pinned) && (
-              <div>
-                <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                  <svg className="h-4 w-4 text-blue-500 mr-2" fill="currentColor" viewBox="0 0 24 24">
-                    <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/>
-                  </svg>
-                  Pinned
-                </h2>
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                  {notesList.filter(note => note.pinned).map((note) => (
-                    <NoteCard
-                      key={note.id}
-                      note={note}
-                      onEdit={handleEditNote}
-                      onDelete={handleDeleteNote}
-                      onShare={handleShareNote}
-                      currentUserId={user?.id}
-                    />
-                  ))}
-                </div>
-              </div>
-            )}
-
-            {/* Other notes section */}
-            {notesList.some(note => !note.pinned) && (
-              <div>
-                {notesList.some(note => note.pinned) && (
-                  <h2 className="text-lg font-semibold text-gray-900 mb-4">
-                    Other Notes
+          <DndContext
+            sensors={sensors}
+            collisionDetection={closestCenter}
+            onDragEnd={handleDragEnd}
+            modifiers={[restrictToWindowEdges]}
+          >
+            <div className="space-y-8">
+              {/* Pinned notes section */}
+              {notesList.some(note => note.pinned) && (
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
+                    <svg className="h-4 w-4 text-blue-500 mr-2" fill="currentColor" viewBox="0 0 24 24">
+                      <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/>
+                    </svg>
+                    Pinned
                   </h2>
-                )}
-                <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-                  {notesList.filter(note => !note.pinned).map((note) => (
-                    <NoteCard
-                      key={note.id}
-                      note={note}
-                      onEdit={handleEditNote}
-                      onDelete={handleDeleteNote}
-                      onShare={handleShareNote}
-                      currentUserId={user?.id}
-                    />
-                  ))}
+                  <SortableContext
+                    items={notesList.filter(note => note.pinned).map(note => note.id)}
+                    strategy={rectSortingStrategy}
+                  >
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                      {notesList.filter(note => note.pinned).map((note) => (
+                        <SortableNoteCard
+                          key={note.id}
+                          note={note}
+                          onEdit={handleEditNote}
+                          onDelete={handleDeleteNote}
+                          onShare={handleShareNote}
+                          currentUserId={user?.id}
+                        />
+                      ))}
+                    </div>
+                  </SortableContext>
                 </div>
-              </div>
-            )}
-          </div>
+              )}
+
+              {/* Other notes section */}
+              {notesList.some(note => !note.pinned) && (
+                <div>
+                  {notesList.some(note => note.pinned) && (
+                    <h2 className="text-lg font-semibold text-gray-900 mb-4">
+                      Other Notes
+                    </h2>
+                  )}
+                  <SortableContext
+                    items={notesList.filter(note => !note.pinned).map(note => note.id)}
+                    strategy={rectSortingStrategy}
+                  >
+                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                      {notesList.filter(note => !note.pinned).map((note) => (
+                        <SortableNoteCard
+                          key={note.id}
+                          note={note}
+                          onEdit={handleEditNote}
+                          onDelete={handleDeleteNote}
+                          onShare={handleShareNote}
+                          currentUserId={user?.id}
+                        />
+                      ))}
+                    </div>
+                  </SortableContext>
+                </div>
+              )}
+            </div>
+          </DndContext>
         )}
       </main>
 

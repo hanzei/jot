@@ -59,6 +59,9 @@ export const notes = {
   
   getShares: (id: number): Promise<NoteShare[]> =>
     api.get(`/notes/${id}/shares`).then(res => res.data),
+  
+  reorder: (noteIDs: number[]): Promise<void> =>
+    api.post('/notes/reorder', { note_ids: noteIDs }),
 };
 
 export const users = {

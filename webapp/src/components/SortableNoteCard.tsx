@@ -1,0 +1,69 @@
+import { useSortable } from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
+import { Bars3Icon } from '@heroicons/react/24/outline';
+import { Note } from '@/types';
+import NoteCard from './NoteCard';
+
+interface SortableNoteCardProps {
+  note: Note;
+  onEdit: (note: Note) => void;
+  onDelete: (noteId: number) => void;
+  onShare: (note: Note) => void;
+  currentUserId?: string;
+}
+
+export default function SortableNoteCard({
+  note,
+  onEdit,
+  onDelete,
+  onShare,
+  currentUserId,
+}: SortableNoteCardProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    setActivatorNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id: note.id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+    opacity: isDragging ? 0.8 : 1,
+    zIndex: isDragging ? 1000 : 'auto',
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      {...attributes}
+      {...listeners}
+      className={`touch-none select-none relative cursor-grab active:cursor-grabbing ${isDragging ? 'scale-105 shadow-xl' : ''}`}
+    >
+      {/* Dedicated drag handle */}
+      <div
+        ref={setActivatorNodeRef}
+        {...attributes}
+        {...listeners}
+        className="absolute top-2 right-10 p-2 rounded-md bg-gray-100 opacity-0 group-hover:opacity-100 hover:bg-gray-200 transition-all cursor-grab active:cursor-grabbing z-20"
+        title="Drag to reorder"
+      >
+        <Bars3Icon className="h-4 w-4 text-gray-600" />
+      </div>
+
+      <div className="group" style={{ pointerEvents: isDragging ? 'none' : 'auto' }}>
+        <NoteCard
+          note={note}
+          onEdit={onEdit}
+          onDelete={onDelete}
+          onShare={onShare}
+          currentUserId={currentUserId}
+        />
+      </div>
+    </div>
+  );
+}

@@ -53,6 +53,7 @@ export interface Note {
   color: string;
   pinned: boolean;
   archived: boolean;
+  position: number;
   items?: NoteItem[];
   shared_with?: NoteShare[];
   is_shared: boolean;
