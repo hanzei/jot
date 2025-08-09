@@ -23,6 +23,18 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
   const searchRef = useRef<HTMLInputElement>(null);
   const suggestionsRef = useRef<HTMLDivElement>(null);
 
+  const loadShares = useCallback(async () => {
+    if (!note) return;
+    
+    try {
+      const sharesList = await notes.getShares(note.id);
+      setShares(sharesList || []);
+    } catch (error) {
+      console.error('Failed to load shares:', error);
+      setShares([]);
+    }
+  }, [note]);
+
   useEffect(() => {
     if (note && isOpen) {
       loadShares();
@@ -65,18 +77,6 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
       document.removeEventListener('mousedown', handleClickOutside);
     };
   }, []);
-
-  const loadShares = useCallback(async () => {
-    if (!note) return;
-    
-    try {
-      const sharesList = await notes.getShares(note.id);
-      setShares(sharesList || []);
-    } catch (error) {
-      console.error('Failed to load shares:', error);
-      setShares([]);
-    }
-  }, [note]);
 
   const loadUsers = async () => {
     try {
