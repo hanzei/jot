@@ -7,12 +7,22 @@ import tsparser from '@typescript-eslint/parser'
 
 export default [
   {
+    ignores: ['dist/**', 'build/**'],
+  },
+  {
     files: ['**/*.{ts,tsx}'],
-    ignores: ['dist'],
     languageOptions: {
       ecmaVersion: 2020,
-      globals: globals.browser,
+      globals: {
+        ...globals.browser,
+        ...globals.node,
+      },
       parser: tsparser,
+      parserOptions: {
+        ecmaFeatures: {
+          jsx: true,
+        },
+      },
     },
     plugins: {
       '@typescript-eslint': tseslint,
@@ -27,6 +37,7 @@ export default [
         'warn',
         { allowConstantExport: true },
       ],
+      'no-undef': 'off', // TypeScript handles this
     },
   },
 ]

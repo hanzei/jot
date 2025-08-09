@@ -307,6 +307,33 @@ func (s *NoteStore) DeleteItem(id int) error {
 	return nil
 }
 
+func (s *NoteStore) DeleteItemsByNoteID(noteID int) error {
+	_, err := s.db.Exec("DELETE FROM note_items WHERE note_id = ?", noteID)
+	if err != nil {
+		return fmt.Errorf("failed to delete note items: %w", err)
+	}
+	return nil
+}
+
+func (s *NoteStore) CreateItemWithCompleted(noteID int, text string, position int, completed bool) (*NoteItem, error) {
+	query := `INSERT INTO note_items (note_id, text, position, completed)
+			  VALUES (?, ?, ?, ?) RETURNING id, created_at, updated_at`
+	var item NoteItem
+	err := s.db.QueryRow(query, noteID, text, position, completed).Scan(
+		&item.ID, &item.CreatedAt, &item.UpdatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create note item: %w", err)
+	}
+
+	item.NoteID = noteID
+	item.Text = text
+	item.Position = position
+	item.Completed = completed
+
+	return &item, nil
+}
+
 func (s *NoteStore) ShareNote(noteID int, sharedByUserID, sharedWithUserID string) error {
 	query := `INSERT INTO note_shares (note_id, shared_with_user_id, shared_by_user_id, permission_level)
 			  VALUES (?, ?, ?, 'edit')`

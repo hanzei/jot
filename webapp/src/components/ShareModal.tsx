@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { Dialog } from '@headlessui/react';
 import { XMarkIcon, TrashIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
 import { Note, NoteShare, User } from '@/types';
@@ -28,7 +28,7 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
       loadShares();
       loadUsers();
     }
-  }, [note, isOpen]);
+  }, [note, isOpen, loadShares]);
 
   useEffect(() => {
     if (searchQuery.trim()) {
@@ -66,7 +66,7 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
     };
   }, []);
 
-  const loadShares = async () => {
+  const loadShares = useCallback(async () => {
     if (!note) return;
     
     try {
@@ -76,7 +76,7 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
       console.error('Failed to load shares:', error);
       setShares([]);
     }
-  };
+  }, [note]);
 
   const loadUsers = async () => {
     try {
@@ -100,12 +100,13 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
       setSearchQuery('');
       setSuccess('Note shared successfully!');
       await loadShares();
-    } catch (error: any) {
-      if (error.response?.status === 404) {
+    } catch (error: unknown) {
+      const axiosError = error as { response?: { status?: number; data?: string } };
+      if (axiosError.response?.status === 404) {
         setError('User not found with this email address.');
-      } else if (error.response?.status === 409) {
+      } else if (axiosError.response?.status === 409) {
         setError('Note is already shared with this user.');
-      } else if (error.response?.status === 400 && error.response?.data?.includes('yourself')) {
+      } else if (axiosError.response?.status === 400 && axiosError.response?.data?.includes('yourself')) {
         setError('You cannot share a note with yourself.');
       } else {
         setError('Failed to share note. Please try again.');
@@ -122,7 +123,7 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
       await notes.unshare(note.id, { email: shareEmail });
       setSuccess('Note unshared successfully!');
       await loadShares();
-    } catch (error) {
+    } catch {
       setError('Failed to unshare note. Please try again.');
     }
   };

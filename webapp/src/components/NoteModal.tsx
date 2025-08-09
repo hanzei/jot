@@ -3,11 +3,91 @@ import { XMarkIcon, PlusIcon, TrashIcon, ExclamationTriangleIcon } from '@heroic
 import { Dialog } from '@headlessui/react';
 import { Note, NoteType, CreateNoteRequest, UpdateNoteRequest } from '@/types';
 import { notes } from '@/utils/api';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+} from '@dnd-kit/sortable';
+import {
+  useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 interface NoteModalProps {
   note?: Note | null;
   onClose: () => void;
   onSave: () => void;
+}
+
+interface SortableItemProps {
+  id: string;
+  index: number;
+  item: { text: string; completed: boolean; position: number };
+  onUpdateTodoItem: (index: number, field: 'text' | 'completed', value: string | boolean) => void;
+  onRemoveTodoItem: (index: number) => void;
+}
+
+function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem }: SortableItemProps) {
+  const {
+    attributes,
+    listeners,
+    setNodeRef,
+    transform,
+    transition,
+    isDragging,
+  } = useSortable({ id });
+
+  const style = {
+    transform: CSS.Transform.toString(transform),
+    transition,
+  };
+
+  return (
+    <div
+      ref={setNodeRef}
+      style={style}
+      className={`flex items-center space-x-2 ${isDragging ? 'opacity-50' : ''}`}
+      {...attributes}
+    >
+      <div
+        {...listeners}
+        className="cursor-grab active:cursor-grabbing p-1 text-gray-400 hover:text-gray-600"
+      >
+        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+          <path d="M7 2a2 2 0 1 1 .001 4.001A2 2 0 0 1 7 2zm0 6a2 2 0 1 1 .001 4.001A2 2 0 0 1 7 8zm0 6a2 2 0 1 1 .001 4.001A2 2 0 0 1 7 14zm6-8a2 2 0 1 1-.001-4.001A2 2 0 0 1 13 6zm0 2a2 2 0 1 1 .001 4.001A2 2 0 0 1 13 8zm0 6a2 2 0 1 1 .001 4.001A2 2 0 0 1 13 14z" />
+        </svg>
+      </div>
+      <input
+        type="checkbox"
+        checked={item.completed}
+        onChange={(e) => onUpdateTodoItem(index, 'completed', e.target.checked)}
+        className="h-4 w-4 text-blue-600 rounded"
+      />
+      <input
+        type="text"
+        placeholder="List item..."
+        className="flex-1 p-1 bg-transparent border-none outline-none placeholder-gray-500"
+        value={item.text}
+        onChange={(e) => onUpdateTodoItem(index, 'text', e.target.value)}
+      />
+      <button
+        onClick={() => onRemoveTodoItem(index)}
+        className="p-1 text-gray-400 hover:text-gray-600"
+      >
+        <TrashIcon className="h-4 w-4" />
+      </button>
+    </div>
+  );
 }
 
 export default function NoteModal({ note, onClose, onSave }: NoteModalProps) {
@@ -18,6 +98,13 @@ export default function NoteModal({ note, onClose, onSave }: NoteModalProps) {
   const [items, setItems] = useState<{ text: string; completed: boolean; position: number }[]>([]);
   const [loading, setLoading] = useState(false);
   const [showConfirmDialog, setShowConfirmDialog] = useState(false);
+
+  const sensors = useSensors(
+    useSensor(PointerSensor),
+    useSensor(KeyboardSensor, {
+      coordinateGetter: sortableKeyboardCoordinates,
+    })
+  );
 
   const colors = [
     { value: '#ffffff', name: 'White', class: 'bg-white border-gray-300' },
@@ -50,12 +137,35 @@ export default function NoteModal({ note, onClose, onSave }: NoteModalProps) {
     }
   }, [note]);
 
+  const handleDragEnd = (event: DragEndEvent) => {
+    const { active, over } = event;
+
+    if (over && active.id !== over.id) {
+      const oldIndex = items.findIndex((item, index) => `item-${index}` === active.id);
+      const newIndex = items.findIndex((item, index) => `item-${index}` === over.id);
+
+      const newItems = arrayMove(items, oldIndex, newIndex);
+      
+      const updatedItems = newItems.map((item, index) => ({
+        ...item,
+        position: index,
+      }));
+      
+      setItems(updatedItems);
+    }
+  };
+
   const addTodoItem = () => {
     setItems([...items, { text: '', completed: false, position: items.length }]);
   };
 
   const removeTodoItem = (index: number) => {
-    setItems(items.filter((_, i) => i !== index));
+    const newItems = items.filter((_, i) => i !== index);
+    const updatedItems = newItems.map((item, idx) => ({
+      ...item,
+      position: idx,
+    }));
+    setItems(updatedItems);
   };
 
   const updateTodoItem = (index: number, field: 'text' | 'completed', value: string | boolean) => {
@@ -75,6 +185,11 @@ export default function NoteModal({ note, onClose, onSave }: NoteModalProps) {
           pinned: note.pinned,
           archived: note.archived,
           color,
+          items: note.note_type === 'todo' ? items.map((item, idx) => ({ 
+            text: item.text, 
+            position: idx, 
+            completed: item.completed 
+          })) : undefined,
         };
         await notes.update(note.id, updateData);
       } else {
@@ -203,29 +318,27 @@ export default function NoteModal({ note, onClose, onSave }: NoteModalProps) {
               />
             ) : (
               <div className="space-y-2">
-                {items.map((item, index) => (
-                  <div key={index} className="flex items-center space-x-2">
-                    <input
-                      type="checkbox"
-                      checked={item.completed}
-                      onChange={(e) => updateTodoItem(index, 'completed', e.target.checked)}
-                      className="h-4 w-4 text-blue-600 rounded"
-                    />
-                    <input
-                      type="text"
-                      placeholder="List item..."
-                      className="flex-1 p-1 bg-transparent border-none outline-none placeholder-gray-500"
-                      value={item.text}
-                      onChange={(e) => updateTodoItem(index, 'text', e.target.value)}
-                    />
-                    <button
-                      onClick={() => removeTodoItem(index)}
-                      className="p-1 text-gray-400 hover:text-gray-600"
-                    >
-                      <TrashIcon className="h-4 w-4" />
-                    </button>
-                  </div>
-                ))}
+                <DndContext
+                  sensors={sensors}
+                  collisionDetection={closestCenter}
+                  onDragEnd={handleDragEnd}
+                >
+                  <SortableContext
+                    items={items.map((_, index) => `item-${index}`)}
+                    strategy={verticalListSortingStrategy}
+                  >
+                    {items.map((item, index) => (
+                      <SortableItem
+                        key={`item-${index}`}
+                        id={`item-${index}`}
+                        index={index}
+                        item={item}
+                        onUpdateTodoItem={updateTodoItem}
+                        onRemoveTodoItem={removeTodoItem}
+                      />
+                    ))}
+                  </SortableContext>
+                </DndContext>
                 <button
                   onClick={addTodoItem}
                   className="flex items-center space-x-2 text-sm text-gray-600 hover:text-gray-800 p-1"

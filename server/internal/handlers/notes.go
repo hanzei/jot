@@ -38,11 +38,18 @@ type CreateNoteItem struct {
 }
 
 type UpdateNoteRequest struct {
-	Title    string `json:"title"`
-	Content  string `json:"content"`
-	Pinned   bool   `json:"pinned"`
-	Archived bool   `json:"archived"`
-	Color    string `json:"color"`
+	Title    string              `json:"title"`
+	Content  string              `json:"content"`
+	Pinned   bool                `json:"pinned"`
+	Archived bool                `json:"archived"`
+	Color    string              `json:"color"`
+	Items    []UpdateNoteItem    `json:"items,omitempty"`
+}
+
+type UpdateNoteItem struct {
+	Text      string `json:"text"`
+	Position  int    `json:"position"`
+	Completed bool   `json:"completed"`
 }
 
 func (h *NotesHandler) GetNotes(w http.ResponseWriter, r *http.Request) (int, error) {
@@ -169,6 +176,30 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 			return http.StatusNotFound, err
 		}
 		return http.StatusInternalServerError, err
+	}
+
+	// Handle todo items update if provided
+	if len(req.Items) > 0 {
+		// Get current note to check if it's a todo type
+		currentNote, err := h.noteStore.GetByID(id, claims.UserID)
+		if err != nil {
+			return http.StatusInternalServerError, err
+		}
+
+		if currentNote.NoteType == models.NoteTypeTodo {
+			// Delete all existing items (we'll recreate them)
+			if err := h.noteStore.DeleteItemsByNoteID(id); err != nil {
+				return http.StatusInternalServerError, err
+			}
+
+			// Create new items with updated positions
+			for _, item := range req.Items {
+				_, err := h.noteStore.CreateItemWithCompleted(id, item.Text, item.Position, item.Completed)
+				if err != nil {
+					return http.StatusInternalServerError, err
+				}
+			}
+		}
 	}
 
 	note, err := h.noteStore.GetByID(id, claims.UserID)

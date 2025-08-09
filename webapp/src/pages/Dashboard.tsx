@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { PlusIcon, MagnifyingGlassIcon, UserCircleIcon } from '@heroicons/react/24/outline';
 import { notes } from '@/utils/api';
 import { removeToken, getUser, isAdmin } from '@/utils/auth';
@@ -23,7 +23,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const [sharingNote, setSharingNote] = useState<Note | null>(null);
   const user = getUser();
 
-  const loadNotes = async () => {
+  const loadNotes = useCallback(async () => {
     try {
       const notesData = await notes.getAll(showArchived, searchQuery);
       setNotesList(notesData);
@@ -32,11 +32,11 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     } finally {
       setLoading(false);
     }
-  };
+  }, [showArchived, searchQuery]);
 
   useEffect(() => {
     loadNotes();
-  }, [showArchived, searchQuery]);
+  }, [loadNotes]);
 
   const handleLogout = () => {
     removeToken();

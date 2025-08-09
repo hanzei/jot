@@ -36,8 +36,9 @@ export default function Register({ onRegister }: RegisterProps) {
       setToken(response.token);
       setUser(response.user);
       onRegister();
-    } catch (err: any) {
-      setError(err.response?.data || 'Registration failed');
+    } catch (err: unknown) {
+      const axiosError = err as { response?: { data?: string } };
+      setError(axiosError.response?.data || 'Registration failed');
     } finally {
       setLoading(false);
     }

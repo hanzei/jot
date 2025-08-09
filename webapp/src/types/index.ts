@@ -65,7 +65,7 @@ export interface CreateNoteRequest {
   content: string;
   note_type: NoteType;
   color?: string;
-  items?: { text: string; position: number }[];
+  items?: { text: string; position: number; completed?: boolean }[];
 }
 
 export interface UpdateNoteRequest {
@@ -74,6 +74,7 @@ export interface UpdateNoteRequest {
   pinned: boolean;
   archived: boolean;
   color: string;
+  items?: { text: string; position: number; completed?: boolean }[];
 }
 
 export interface CreateUserRequest {

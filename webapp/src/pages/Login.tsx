@@ -23,8 +23,9 @@ export default function Login({ onLogin }: LoginProps) {
       setToken(response.token);
       setUser(response.user);
       onLogin();
-    } catch (err: any) {
-      setError(err.response?.data || 'Login failed');
+    } catch (err: unknown) {
+      const axiosError = err as { response?: { data?: string } };
+      setError(axiosError.response?.data || 'Login failed');
     } finally {
       setLoading(false);
     }

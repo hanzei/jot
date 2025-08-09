@@ -22,20 +22,23 @@ const Admin = ({ onLogout }: AdminProps) => {
   });
 
   const currentUser = getUser();
-
-  if (!isAdmin()) {
-    return <Navigate to="/" />;
-  }
+  const userIsAdmin = isAdmin();
 
   useEffect(() => {
-    fetchUsers();
-  }, []);
+    if (userIsAdmin) {
+      fetchUsers();
+    }
+  }, [userIsAdmin]);
+
+  if (!userIsAdmin) {
+    return <Navigate to="/" />;
+  }
 
   const fetchUsers = async () => {
     try {
       setLoading(true);
       const response = await admin.getUsers();
-      setUsers(response.users);
+      setUsers(response.users || []);
     } catch (err) {
       setError('Failed to load users');
       console.error(err);
@@ -54,8 +57,9 @@ const Admin = ({ onLogout }: AdminProps) => {
       setUsers([newUser, ...users]);
       setFormData({ email: '', password: '', is_admin: false });
       setShowCreateForm(false);
-    } catch (err: any) {
-      setCreateError(err.response?.data || 'Failed to create user');
+    } catch (err: unknown) {
+      const axiosError = err as { response?: { data?: string } };
+      setCreateError(axiosError.response?.data || 'Failed to create user');
     } finally {
       setCreateLoading(false);
     }
@@ -187,7 +191,7 @@ const Admin = ({ onLogout }: AdminProps) => {
 
           <div className="bg-white shadow overflow-hidden sm:rounded-md">
             <ul className="divide-y divide-gray-200">
-              {users.map((user) => (
+              {(users || []).map((user) => (
                 <li key={user.id}>
                   <div className="px-4 py-4 sm:px-6">
                     <div className="flex items-center justify-between">
@@ -218,7 +222,7 @@ const Admin = ({ onLogout }: AdminProps) => {
             </ul>
           </div>
 
-          {users.length === 0 && !loading && (
+          {(!users || users.length === 0) && !loading && (
             <div className="text-center py-12">
               <p className="text-gray-500">No users found.</p>
             </div>

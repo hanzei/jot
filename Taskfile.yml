@@ -1,4 +1,4 @@
-version: '3'
+version: "3"
 
 tasks:
   run-server:
@@ -13,17 +13,31 @@ tasks:
 
   test:
     desc: Run all tests
-    deps: [test-server]
+    deps: [test-server, test-webapp]
 
   test-server:
     desc: Run server tests
     dir: server
     cmd: go test -v ./...
 
+  test-webapp:
+    desc: Run webapp tests
+    dir: webapp
+    cmd: echo "not yet implemented"
+
   coverage:
     desc: Run server tests with coverage
     dir: server
     cmd: go test -v -coverprofile=coverage.out ./... && go tool cover -html=coverage.out -o coverage.html
+
+  lint:
+    desc: Run linters
+    deps: [lint-server, lint-webapp]
+
+  lint-server:
+    desc: Run server linting with golangci-lint
+    dir: server
+    cmd: golangci-lint run
 
   lint-webapp:
     desc: Run webapp linting
