@@ -15,31 +15,33 @@ const (
 )
 
 type Note struct {
-	ID               int         `json:"id"`
-	UserID           string      `json:"user_id"`
-	Title            string      `json:"title"`
-	Content          string      `json:"content"`
-	NoteType         NoteType    `json:"note_type"`
-	Color            string      `json:"color"`
-	Pinned           bool        `json:"pinned"`
-	Archived         bool        `json:"archived"`
-	Position         int         `json:"position"`
-	UnpinnedPosition *int        `json:"-"` // Hidden from JSON, used internally
-	Items            []NoteItem  `json:"items,omitempty"`
-	SharedWith       []NoteShare `json:"shared_with,omitempty"`
-	IsShared         bool        `json:"is_shared"`
-	CreatedAt        time.Time   `json:"created_at"`
-	UpdatedAt        time.Time   `json:"updated_at"`
+	ID                     int         `json:"id"`
+	UserID                 string      `json:"user_id"`
+	Title                  string      `json:"title"`
+	Content                string      `json:"content"`
+	NoteType               NoteType    `json:"note_type"`
+	Color                  string      `json:"color"`
+	Pinned                 bool        `json:"pinned"`
+	Archived               bool        `json:"archived"`
+	Position               int         `json:"position"`
+	UnpinnedPosition       *int        `json:"-"` // Hidden from JSON, used internally
+	CheckedItemsCollapsed  bool        `json:"checked_items_collapsed"`
+	Items                  []NoteItem  `json:"items,omitempty"`
+	SharedWith             []NoteShare `json:"shared_with,omitempty"`
+	IsShared               bool        `json:"is_shared"`
+	CreatedAt              time.Time   `json:"created_at"`
+	UpdatedAt              time.Time   `json:"updated_at"`
 }
 
 type NoteItem struct {
-	ID        int       `json:"id"`
-	NoteID    int       `json:"note_id"`
-	Text      string    `json:"text"`
-	Completed bool      `json:"completed"`
-	Position  int       `json:"position"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID               int       `json:"id"`
+	NoteID           int       `json:"note_id"`
+	Text             string    `json:"text"`
+	Completed        bool      `json:"completed"`
+	Position         int       `json:"position"`
+	OriginalPosition *int      `json:"original_position,omitempty"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
 }
 
 type NoteShare struct {
@@ -95,7 +97,7 @@ func (s *NoteStore) Create(userID string, title, content string, noteType NoteTy
 }
 
 func (s *NoteStore) GetByUserID(userID string, archived bool, search string) ([]*Note, error) {
-	query := `SELECT DISTINCT n.id, n.user_id, n.title, n.content, n.note_type, n.color, n.pinned, n.archived, n.position, n.unpinned_position, n.created_at, n.updated_at
+	query := `SELECT DISTINCT n.id, n.user_id, n.title, n.content, n.note_type, n.color, n.pinned, n.archived, n.position, n.unpinned_position, n.checked_items_collapsed, n.created_at, n.updated_at
 			  FROM notes n
 			  LEFT JOIN note_shares ns ON n.id = ns.note_id
 			  WHERE (n.user_id = ? OR ns.shared_with_user_id = ?) AND n.archived = ?`
@@ -124,7 +126,7 @@ func (s *NoteStore) GetByUserID(userID string, archived bool, search string) ([]
 		var note Note
 		err = rows.Scan(
 			&note.ID, &note.UserID, &note.Title, &note.Content,
-			&note.NoteType, &note.Color, &note.Pinned, &note.Archived, &note.Position, &note.UnpinnedPosition,
+			&note.NoteType, &note.Color, &note.Pinned, &note.Archived, &note.Position, &note.UnpinnedPosition, &note.CheckedItemsCollapsed,
 			&note.CreatedAt, &note.UpdatedAt,
 		)
 		if err != nil {
@@ -161,13 +163,13 @@ func (s *NoteStore) GetByID(id int, userID string) (*Note, error) {
 		return nil, fmt.Errorf("note not found")
 	}
 
-	query := `SELECT id, user_id, title, content, note_type, color, pinned, archived, position, unpinned_position, created_at, updated_at
+	query := `SELECT id, user_id, title, content, note_type, color, pinned, archived, position, unpinned_position, checked_items_collapsed, created_at, updated_at
 			  FROM notes WHERE id = ?`
 
 	var note Note
 	err = s.db.QueryRow(query, id).Scan(
 		&note.ID, &note.UserID, &note.Title, &note.Content,
-		&note.NoteType, &note.Color, &note.Pinned, &note.Archived, &note.Position, &note.UnpinnedPosition,
+		&note.NoteType, &note.Color, &note.Pinned, &note.Archived, &note.Position, &note.UnpinnedPosition, &note.CheckedItemsCollapsed,
 		&note.CreatedAt, &note.UpdatedAt,
 	)
 	if err != nil {
@@ -302,7 +304,7 @@ func (s *NoteStore) Delete(id int, userID string) error {
 }
 
 func (s *NoteStore) getItemsByNoteID(noteID int) ([]NoteItem, error) {
-	query := `SELECT id, note_id, text, completed, position, created_at, updated_at
+	query := `SELECT id, note_id, text, completed, position, original_position, created_at, updated_at
 			  FROM note_items WHERE note_id = ? ORDER BY position`
 
 	rows, err := s.db.Query(query, noteID)
@@ -320,7 +322,7 @@ func (s *NoteStore) getItemsByNoteID(noteID int) ([]NoteItem, error) {
 		var item NoteItem
 		err := rows.Scan(
 			&item.ID, &item.NoteID, &item.Text, &item.Completed,
-			&item.Position, &item.CreatedAt, &item.UpdatedAt,
+			&item.Position, &item.OriginalPosition, &item.CreatedAt, &item.UpdatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan note item: %w", err)
@@ -355,6 +357,18 @@ func (s *NoteStore) UpdateItem(id int, text string, completed bool, position int
 			  WHERE id = ?`
 
 	_, err := s.db.Exec(query, text, completed, position, id)
+	if err != nil {
+		return fmt.Errorf("failed to update note item: %w", err)
+	}
+
+	return nil
+}
+
+func (s *NoteStore) UpdateItemWithOriginalPosition(id int, text string, completed bool, position int, originalPosition *int) error {
+	query := `UPDATE note_items SET text = ?, completed = ?, position = ?, original_position = ?, updated_at = CURRENT_TIMESTAMP
+			  WHERE id = ?`
+
+	_, err := s.db.Exec(query, text, completed, position, originalPosition, id)
 	if err != nil {
 		return fmt.Errorf("failed to update note item: %w", err)
 	}
@@ -501,6 +515,33 @@ func (s *NoteStore) IsOwner(noteID int, userID string) (bool, error) {
 	}
 
 	return count > 0, nil
+}
+
+func (s *NoteStore) UpdateCheckedItemsCollapsed(id int, userID string, collapsed bool) error {
+	hasAccess, err := s.HasAccess(id, userID)
+	if err != nil {
+		return fmt.Errorf("failed to check access: %w", err)
+	}
+	if !hasAccess {
+		return fmt.Errorf("note not found or no access")
+	}
+
+	query := `UPDATE notes SET checked_items_collapsed = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
+	result, err := s.db.Exec(query, collapsed, id)
+	if err != nil {
+		return fmt.Errorf("failed to update checked items collapsed: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+
+	if rowsAffected == 0 {
+		return fmt.Errorf("note not found")
+	}
+
+	return nil
 }
 
 func (s *NoteStore) ReorderNotes(userID string, noteIDs []int) error {

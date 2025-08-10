@@ -62,6 +62,9 @@ export const notes = {
   
   reorder: (noteIDs: number[]): Promise<void> =>
     api.post('/notes/reorder', { note_ids: noteIDs }),
+
+  updateCheckedItemsCollapsed: (id: number, collapsed: boolean): Promise<void> =>
+    api.put(`/notes/${id}/checked-items-collapsed`, { collapsed }),
 };
 
 export const users = {

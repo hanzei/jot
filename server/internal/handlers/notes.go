@@ -463,3 +463,35 @@ func (h *NotesHandler) ReorderNotes(w http.ResponseWriter, r *http.Request) (int
 	w.WriteHeader(http.StatusNoContent)
 	return 0, nil
 }
+
+type UpdateCheckedItemsCollapsedRequest struct {
+	Collapsed bool `json:"collapsed"`
+}
+
+func (h *NotesHandler) UpdateCheckedItemsCollapsed(w http.ResponseWriter, r *http.Request) (int, error) {
+	claims, ok := auth.GetUserFromContext(r.Context())
+	if !ok {
+		return http.StatusUnauthorized, errors.New("unauthorized")
+	}
+
+	id, err := strconv.Atoi(chi.URLParam(r, "id"))
+	if err != nil {
+		return http.StatusBadRequest, err
+	}
+
+	var req UpdateCheckedItemsCollapsedRequest
+	if err = json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return http.StatusBadRequest, err
+	}
+
+	err = h.noteStore.UpdateCheckedItemsCollapsed(id, claims.UserID, req.Collapsed)
+	if err != nil {
+		if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "no access") {
+			return http.StatusNotFound, err
+		}
+		return http.StatusInternalServerError, err
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+	return 0, nil
+}

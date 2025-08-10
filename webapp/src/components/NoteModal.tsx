@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { XMarkIcon, PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon, PlusIcon, TrashIcon, ChevronDownIcon, ChevronRightIcon } from '@heroicons/react/24/outline';
 import { Dialog } from '@headlessui/react';
 import { Note, NoteType, CreateNoteRequest, UpdateNoteRequest } from '@/types';
 import { notes } from '@/utils/api';
@@ -32,9 +32,31 @@ interface NoteModalProps {
 interface SortableItemProps {
   id: string;
   index: number;
-  item: { text: string; completed: boolean; position: number };
+  item: { text: string; completed: boolean; position: number; original_position?: number };
   onUpdateTodoItem: (index: number, field: 'text' | 'completed', value: string | boolean) => void;
   onRemoveTodoItem: (index: number) => void;
+}
+
+interface CheckedItemProps {
+  item: { text: string; completed: boolean; position: number; original_position?: number };
+  onRestore: () => void;
+}
+
+function CheckedItem({ item, onRestore }: CheckedItemProps) {
+  return (
+    <div 
+      className="flex items-center space-x-2 cursor-pointer hover:bg-gray-50 p-1 rounded"
+      onClick={onRestore}
+    >
+      <input
+        type="checkbox"
+        checked={true}
+        readOnly
+        className="h-4 w-4 text-blue-600 rounded cursor-pointer"
+      />
+      <span className="flex-1 text-gray-500 line-through cursor-pointer">{item.text}</span>
+    </div>
+  );
 }
 
 function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem }: SortableItemProps) {
@@ -96,7 +118,8 @@ export default function NoteModal({ note, onClose, onSave }: NoteModalProps) {
   const [noteType, setNoteType] = useState<NoteType>('text');
   const [color, setColor] = useState('#ffffff');
   const [pinned, setPinned] = useState(false);
-  const [items, setItems] = useState<{ text: string; completed: boolean; position: number }[]>([]);
+  const [items, setItems] = useState<{ text: string; completed: boolean; position: number; original_position?: number }[]>([]);
+  const [checkedItemsCollapsed, setCheckedItemsCollapsed] = useState(true);
   const [loading, setLoading] = useState(false);
 
   const sensors = useSensors(
@@ -127,8 +150,10 @@ export default function NoteModal({ note, onClose, onSave }: NoteModalProps) {
           text: item.text,
           completed: item.completed,
           position: item.position,
+          original_position: item.original_position,
         })) || []
       );
+      setCheckedItemsCollapsed(note.checked_items_collapsed);
     } else {
       setTitle('');
       setContent('');
@@ -136,6 +161,7 @@ export default function NoteModal({ note, onClose, onSave }: NoteModalProps) {
       setColor('#ffffff');
       setPinned(false);
       setItems([]);
+      setCheckedItemsCollapsed(true);
     }
   }, [note]);
 
@@ -172,8 +198,91 @@ export default function NoteModal({ note, onClose, onSave }: NoteModalProps) {
 
   const updateTodoItem = (index: number, field: 'text' | 'completed', value: string | boolean) => {
     const newItems = [...items];
-    newItems[index] = { ...newItems[index], [field]: value };
-    setItems(newItems);
+    const item = newItems[index];
+    let restoringToOriginalPosition = false;
+    let originalPosition: number | undefined;
+    
+    if (field === 'completed') {
+      if (value === true && !item.completed) {
+        // Item is being checked - store original position
+        item.original_position = item.position;
+      } else if (value === false && item.completed && item.original_position !== undefined) {
+        // Item is being unchecked - restore original position
+        originalPosition = item.original_position;
+        item.position = item.original_position;
+        item.original_position = undefined;
+        restoringToOriginalPosition = true;
+      }
+    }
+    
+    newItems[index] = { ...item, [field]: value };
+    
+    // Reorder items to separate completed and uncompleted
+    if (field === 'completed') {
+      const uncompletedItems = newItems.filter(item => !item.completed);
+      const completedItems = newItems.filter(item => item.completed);
+      
+      if (restoringToOriginalPosition && originalPosition !== undefined) {
+        // Item is being unchecked - restore it to its original position and sort all items
+        const restoredItem = item;
+        
+        // Get all uncompleted items and assign them temporary original positions for sorting
+        // For items that never had an original_position, use their current position as their "original"
+        const allUncompletedWithOriginalPos = uncompletedItems.map(uncompletedItem => ({
+          ...uncompletedItem,
+          sortPosition: uncompletedItem === restoredItem 
+            ? originalPosition 
+            : (uncompletedItem.original_position !== undefined ? uncompletedItem.original_position : uncompletedItem.position)
+        }));
+        
+        // Sort by the original positions
+        allUncompletedWithOriginalPos.sort((a, b) => a.sortPosition - b.sortPosition);
+        
+        // Reassign positions sequentially and clean up temp property
+        const finalItems = allUncompletedWithOriginalPos.map((item, idx) => ({
+          text: item.text,
+          completed: item.completed,
+          position: idx,
+          original_position: item.original_position
+        }));
+        
+        // Update the uncompletedItems reference
+        uncompletedItems.length = 0;
+        uncompletedItems.push(...finalItems);
+      } else {
+        // Normal case - just sort uncompleted items and reassign positions sequentially
+        uncompletedItems.sort((a, b) => a.position - b.position);
+        uncompletedItems.forEach((item, idx) => {
+          item.position = idx;
+        });
+      }
+      
+      // Sort completed items by original position for consistent display
+      completedItems.sort((a, b) => (a.original_position || a.position) - (b.original_position || b.position));
+      
+      setItems([...uncompletedItems, ...completedItems]);
+    } else {
+      setItems(newItems);
+    }
+  };
+
+  const toggleCheckedItemsCollapsed = async () => {
+    if (!note) return;
+    
+    const newCollapsedState = !checkedItemsCollapsed;
+    setCheckedItemsCollapsed(newCollapsedState);
+    
+    try {
+      await notes.updateCheckedItemsCollapsed(note.id, newCollapsedState);
+    } catch (error) {
+      console.error('Failed to update checked items collapsed state:', error);
+      // Revert on error
+      setCheckedItemsCollapsed(!newCollapsedState);
+    }
+  };
+
+  const restoreCheckedItem = (index: number) => {
+    updateTodoItem(index, 'completed', false);
   };
 
   const handleSave = async () => {
@@ -187,9 +296,9 @@ export default function NoteModal({ note, onClose, onSave }: NoteModalProps) {
           pinned,
           archived: note.archived,
           color,
-          items: note.note_type === 'todo' ? items.map((item, idx) => ({ 
+          items: note.note_type === 'todo' ? items.map((item) => ({ 
             text: item.text, 
-            position: idx, 
+            position: item.position, 
             completed: item.completed 
           })) : undefined,
         };
@@ -244,11 +353,24 @@ export default function NoteModal({ note, onClose, onSave }: NoteModalProps) {
 
   const hasUnsavedChanges = () => {
     if (note) {
+      const itemsChanged = note.note_type === 'todo' && (
+        !note.items || 
+        items.length !== note.items.length ||
+        items.some((item, idx) => {
+          const originalItem = note.items?.[idx];
+          return !originalItem || 
+            item.text !== originalItem.text ||
+            item.completed !== originalItem.completed ||
+            item.position !== originalItem.position;
+        })
+      );
+      
       return (
         title !== note.title ||
         content !== note.content ||
         color !== note.color ||
-        pinned !== note.pinned
+        pinned !== note.pinned ||
+        itemsChanged
       );
     } else {
       return (
@@ -360,34 +482,75 @@ export default function NoteModal({ note, onClose, onSave }: NoteModalProps) {
               />
             ) : (
               <div className="space-y-2">
-                <DndContext
-                  sensors={sensors}
-                  collisionDetection={closestCenter}
-                  onDragEnd={handleDragEnd}
-                >
-                  <SortableContext
-                    items={items.map((_, index) => `item-${index}`)}
-                    strategy={verticalListSortingStrategy}
-                  >
-                    {items.map((item, index) => (
-                      <SortableItem
-                        key={`item-${index}`}
-                        id={`item-${index}`}
-                        index={index}
-                        item={item}
-                        onUpdateTodoItem={updateTodoItem}
-                        onRemoveTodoItem={removeTodoItem}
-                      />
-                    ))}
-                  </SortableContext>
-                </DndContext>
-                <button
-                  onClick={addTodoItem}
-                  className="flex items-center space-x-2 text-sm text-gray-600 hover:text-gray-800 p-1"
-                >
-                  <PlusIcon className="h-4 w-4" />
-                  <span>Add item</span>
-                </button>
+                {(() => {
+                  const completedItems = items.filter(item => item.completed);
+                  const uncompletedIndices = items.map((item, index) => ({ item, index })).filter(({ item }) => !item.completed);
+                  const completedIndices = items.map((item, index) => ({ item, index })).filter(({ item }) => item.completed);
+
+                  return (
+                    <>
+                      {/* Uncompleted items - draggable */}
+                      <DndContext
+                        sensors={sensors}
+                        collisionDetection={closestCenter}
+                        onDragEnd={handleDragEnd}
+                      >
+                        <SortableContext
+                          items={uncompletedIndices.map(({ index }) => `item-${index}`)}
+                          strategy={verticalListSortingStrategy}
+                        >
+                          {uncompletedIndices.map(({ item, index }) => (
+                            <SortableItem
+                              key={`item-${index}`}
+                              id={`item-${index}`}
+                              index={index}
+                              item={item}
+                              onUpdateTodoItem={updateTodoItem}
+                              onRemoveTodoItem={removeTodoItem}
+                            />
+                          ))}
+                        </SortableContext>
+                      </DndContext>
+
+                      <button
+                        onClick={addTodoItem}
+                        className="flex items-center space-x-2 text-sm text-gray-600 hover:text-gray-800 p-1"
+                      >
+                        <PlusIcon className="h-4 w-4" />
+                        <span>Add item</span>
+                      </button>
+
+                      {/* Checked items section */}
+                      {completedItems.length > 0 && (
+                        <div className="mt-4 border-t pt-2">
+                          <button
+                            onClick={toggleCheckedItemsCollapsed}
+                            className="flex items-center space-x-2 text-sm text-gray-500 hover:text-gray-700 mb-2"
+                          >
+                            {checkedItemsCollapsed ? (
+                              <ChevronRightIcon className="h-4 w-4" />
+                            ) : (
+                              <ChevronDownIcon className="h-4 w-4" />
+                            )}
+                            <span>Checked items ({completedItems.length})</span>
+                          </button>
+                          
+                          {!checkedItemsCollapsed && (
+                            <div className="space-y-1">
+                              {completedIndices.map(({ item, index }) => (
+                                <CheckedItem
+                                  key={`checked-${index}`}
+                                  item={item}
+                                  onRestore={() => restoreCheckedItem(index)}
+                                />
+                              ))}
+                            </div>
+                          )}
+                        </div>
+                      )}
+                    </>
+                  );
+                })()}
               </div>
             )}
 

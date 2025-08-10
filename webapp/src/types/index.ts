@@ -29,6 +29,7 @@ export interface NoteItem {
   text: string;
   completed: boolean;
   position: number;
+  original_position?: number;
   created_at: string;
   updated_at: string;
 }
@@ -54,6 +55,7 @@ export interface Note {
   pinned: boolean;
   archived: boolean;
   position: number;
+  checked_items_collapsed: boolean;
   items?: NoteItem[];
   shared_with?: NoteShare[];
   is_shared: boolean;

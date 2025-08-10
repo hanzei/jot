@@ -91,6 +91,7 @@ func (s *Server) setupRoutes() {
 			r.Get("/notes/{id}", s.wrapHandler(s.notesHandler.GetNote))
 			r.Put("/notes/{id}", s.wrapHandler(s.notesHandler.UpdateNote))
 			r.Delete("/notes/{id}", s.wrapHandler(s.notesHandler.DeleteNote))
+			r.Put("/notes/{id}/checked-items-collapsed", s.wrapHandler(s.notesHandler.UpdateCheckedItemsCollapsed))
 
 			r.Post("/notes/{id}/share", s.wrapHandler(s.notesHandler.ShareNote))
 			r.Delete("/notes/{id}/share", s.wrapHandler(s.notesHandler.UnshareNote))
