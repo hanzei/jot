@@ -45,17 +45,14 @@ jobs:
         run: task test
 
       - name: Run coverage
-        run: |
-          cd server
-          go test -v -coverprofile=coverage.out ./... || true
+        run: task coverage || true
 
       - name: Upload coverage to Codecov
-        uses: codecov/codecov-action@v4
+        uses: codecov/codecov-action@v5
         with:
           file: ./server/coverage.out
           flags: server
-          name: codecov-umbrella
-          fail_ci_if_error: false
+          name: jot-server
         env:
           CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
 
