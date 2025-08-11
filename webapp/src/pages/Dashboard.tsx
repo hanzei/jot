@@ -175,49 +175,75 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       {/* Header */}
       <header className="bg-white shadow-sm border-b">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-4">
-            <div className="flex items-center space-x-4">
-              <h1 className="text-2xl font-bold text-gray-900">Jot</h1>
-              <div className="hidden sm:flex space-x-4">
+          {/* Mobile and Desktop Layout */}
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center py-4 space-y-3 sm:space-y-0">
+            {/* Top row on mobile, left side on desktop */}
+            <div className="flex items-center justify-between sm:justify-start">
+              <div className="flex items-center space-x-2 sm:space-x-4">
+                <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Jot</h1>
+                <div className="hidden sm:flex space-x-4">
+                  <button
+                    onClick={() => setShowArchived(false)}
+                    className={`px-3 py-1 rounded-md text-sm font-medium ${
+                      !showArchived
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    Notes
+                  </button>
+                  <button
+                    onClick={() => setShowArchived(true)}
+                    className={`px-3 py-1 rounded-md text-sm font-medium ${
+                      showArchived
+                        ? 'bg-blue-100 text-blue-700'
+                        : 'text-gray-600 hover:text-gray-900'
+                    }`}
+                  >
+                    Archive
+                  </button>
+                </div>
+              </div>
+
+              {/* Mobile user menu */}
+              <div className="flex items-center space-x-2 sm:hidden">
+                <div className="flex items-center space-x-1 text-xs text-gray-600">
+                  <UserCircleIcon className="h-4 w-4" />
+                  <span className="max-w-16 truncate">{user?.username}</span>
+                </div>
+                {isAdmin() && (
+                  <Link
+                    to="/admin"
+                    className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                  >
+                    Admin
+                  </Link>
+                )}
                 <button
-                  onClick={() => setShowArchived(false)}
-                  className={`px-3 py-1 rounded-md text-sm font-medium ${
-                    !showArchived
-                      ? 'bg-blue-100 text-blue-700'
-                      : 'text-gray-600 hover:text-gray-900'
-                  }`}
+                  onClick={handleLogout}
+                  className="text-xs text-gray-600 hover:text-gray-900"
                 >
-                  Notes
-                </button>
-                <button
-                  onClick={() => setShowArchived(true)}
-                  className={`px-3 py-1 rounded-md text-sm font-medium ${
-                    showArchived
-                      ? 'bg-blue-100 text-blue-700'
-                      : 'text-gray-600 hover:text-gray-900'
-                  }`}
-                >
-                  Archive
+                  Logout
                 </button>
               </div>
             </div>
 
-            {/* Search */}
-            <div className="flex-1 max-w-lg mx-4">
+            {/* Search - full width on mobile, constrained on desktop */}
+            <div className="w-full sm:flex-1 sm:max-w-lg sm:mx-4">
               <div className="relative">
-                <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-5 w-5 text-gray-400" />
+                <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-gray-400" />
                 <input
                   type="text"
                   placeholder="Search notes..."
-                  className="w-full pl-10 pr-4 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full pl-9 sm:pl-10 pr-4 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
               </div>
             </div>
 
-            {/* User menu */}
-            <div className="flex items-center space-x-4">
+            {/* Desktop user menu */}
+            <div className="hidden sm:flex items-center space-x-4">
               <div className="flex items-center space-x-2 text-sm text-gray-600">
                 <UserCircleIcon className="h-5 w-5" />
                 <span>{user?.username}</span>
@@ -235,6 +261,30 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                 className="text-sm text-gray-600 hover:text-gray-900"
               >
                 Logout
+              </button>
+            </div>
+            
+            {/* Mobile tabs */}
+            <div className="flex sm:hidden space-x-4 justify-center">
+              <button
+                onClick={() => setShowArchived(false)}
+                className={`px-3 py-1 rounded-md text-sm font-medium ${
+                  !showArchived
+                    ? 'bg-blue-100 text-blue-700'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                Notes
+              </button>
+              <button
+                onClick={() => setShowArchived(true)}
+                className={`px-3 py-1 rounded-md text-sm font-medium ${
+                  showArchived
+                    ? 'bg-blue-100 text-blue-700'
+                    : 'text-gray-600 hover:text-gray-900'
+                }`}
+              >
+                Archive
               </button>
             </div>
           </div>
