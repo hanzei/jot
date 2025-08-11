@@ -1,7 +1,7 @@
 -- Note shares table - tracks which users have access to which notes
 CREATE TABLE note_shares (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    note_id INTEGER NOT NULL,
+    id TEXT PRIMARY KEY,
+    note_id TEXT NOT NULL,
     shared_with_user_id TEXT NOT NULL,
     shared_by_user_id TEXT NOT NULL,
     permission_level TEXT NOT NULL DEFAULT 'edit', -- 'edit' is the only permission level for now
