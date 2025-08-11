@@ -197,7 +197,7 @@ export default function NoteModal({ note, onClose, onSave }: NoteModalProps) {
   };
 
   // Helper function to restore unchecked items to their original positions
-  const restoreItemToOriginalPosition = (restoredItem: any, originalPosition: number, uncompletedItems: any[]) => {
+  const restoreItemToOriginalPosition = (restoredItem: { text: string; completed: boolean; position: number; original_position?: number }, originalPosition: number, uncompletedItems: { text: string; completed: boolean; position: number; original_position?: number }[]) => {
     // Get all uncompleted items and assign them temporary original positions for sorting
     // For items that never had an original_position, use their current position as their "original"
     const allUncompletedWithOriginalPos = uncompletedItems.map(uncompletedItem => ({
