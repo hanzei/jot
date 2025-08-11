@@ -86,7 +86,7 @@ const Admin = ({ onLogout }: AdminProps) => {
           <div className="flex justify-between items-center py-6">
             <div className="flex items-center space-x-4">
               <Link to="/" className="text-2xl font-bold text-gray-900 hover:text-blue-600">
-                Keep
+                Jot
               </Link>
               <span className="text-sm text-gray-500">Admin Panel</span>
             </div>
