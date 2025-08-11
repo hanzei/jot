@@ -177,7 +177,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
     }
   }, [note]);
 
-  const handleDragEnd = (event: DragEndEvent) => {
+  const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
 
     if (over && active.id !== over.id) {
@@ -196,6 +196,29 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
       // Combine with completed items to create new items array
       const newItems = [...updatedUncompletedItems, ...completedItems];
       setItems(newItems);
+
+      // Auto-save if editing an existing note
+      if (note) {
+        try {
+          const updateData: UpdateNoteRequest = {
+            title,
+            content,
+            pinned,
+            archived,
+            color,
+            checked_items_collapsed: checkedItemsCollapsed,
+            items: newItems.map((item, idx) => ({ 
+              text: item.text, 
+              position: idx, 
+              completed: item.completed 
+            })),
+          };
+          await notes.update(note.id, updateData);
+          onRefresh?.(); // Refresh the notes list to reflect the changes
+        } catch (error) {
+          console.error('Failed to auto-save note after reorder:', error);
+        }
+      }
     }
   };
 
@@ -345,7 +368,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
                   })),
                 };
                 await notes.update(note.id, updateData);
-                onSave(); // Refresh the notes list to reflect the changes
+                onRefresh?.(); // Refresh the notes list to reflect the changes
               } catch (error) {
                 console.error('Failed to auto-save note:', error);
               }
