@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
 
 	"github.com/hanzei/jot/server/internal/auth"
@@ -73,10 +74,13 @@ func (ts *TestServer) createTestUser(t *testing.T, email, password string, isAdm
 	var user *models.User
 	var err error
 
+	// Generate username from email for tests
+	username := strings.Split(email, "@")[0]
+
 	if isAdmin {
-		user, err = userStore.CreateByAdmin(email, password, isAdmin)
+		user, err = userStore.CreateByAdmin(username, email, password, isAdmin)
 	} else {
-		user, err = userStore.Create(email, password)
+		user, err = userStore.Create(username, email, password)
 	}
 	require.NoError(t, err)
 
@@ -149,7 +153,7 @@ func TestRegisterEndpoint(t *testing.T) {
 
 	t.Run("valid registration", func(t *testing.T) {
 		body := map[string]string{
-			"email":    "test@example.com",
+			"username": "testuser",
 			"password": "password123",
 		}
 
@@ -161,9 +165,9 @@ func TestRegisterEndpoint(t *testing.T) {
 		assert.NotNil(t, response["token"])
 	})
 
-	t.Run("duplicate email", func(t *testing.T) {
+	t.Run("duplicate username", func(t *testing.T) {
 		body := map[string]string{
-			"email":    "duplicate@example.com",
+			"username": "duplicate",
 			"password": "password123",
 		}
 
@@ -173,9 +177,9 @@ func TestRegisterEndpoint(t *testing.T) {
 		assert.Equal(t, http.StatusConflict, resp.StatusCode)
 	})
 
-	t.Run("invalid email", func(t *testing.T) {
+	t.Run("invalid username", func(t *testing.T) {
 		body := map[string]string{
-			"email":    "invalid-email",
+			"username": "x",
 			"password": "password123",
 		}
 
@@ -189,14 +193,14 @@ func TestLoginEndpoint(t *testing.T) {
 
 	// Register a user first
 	registerBody := map[string]string{
-		"email":    "login@example.com",
+		"username": "loginuser",
 		"password": "password123",
 	}
 	ts.request(t, http.MethodPost, "/api/v1/register", registerBody, nil)
 
 	t.Run("valid login", func(t *testing.T) {
 		body := map[string]string{
-			"email":    "login@example.com",
+			"username": "loginuser",
 			"password": "password123",
 		}
 
@@ -210,7 +214,7 @@ func TestLoginEndpoint(t *testing.T) {
 
 	t.Run("invalid credentials", func(t *testing.T) {
 		body := map[string]string{
-			"email":    "login@example.com",
+			"username": "loginuser",
 			"password": "wrongpassword",
 		}
 
@@ -327,6 +331,7 @@ func TestAdminEndpoints(t *testing.T) {
 
 	t.Run("create user as admin", func(t *testing.T) {
 		body := map[string]any{
+			"username": "newuser",
 			"email":    "newuser@example.com",
 			"password": "password123",
 			"is_admin": false,
@@ -338,11 +343,13 @@ func TestAdminEndpoints(t *testing.T) {
 		var createdUser map[string]any
 		require.NoError(t, resp.UnmarshalBody(&createdUser))
 
+		assert.Equal(t, "newuser", createdUser["username"])
 		assert.Equal(t, "newuser@example.com", createdUser["email"])
 	})
 
 	t.Run("create user as non-admin", func(t *testing.T) {
 		body := map[string]any{
+			"username": "hacker",
 			"email":    "hacker@example.com",
 			"password": "password123",
 			"is_admin": true,

@@ -1,7 +1,7 @@
 -- Users table
 CREATE TABLE users (
     id TEXT PRIMARY KEY,
-    email TEXT UNIQUE NOT NULL,
+    email TEXT UNIQUE,
     password_hash TEXT NOT NULL,
     is_admin BOOLEAN DEFAULT FALSE,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,

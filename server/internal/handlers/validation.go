@@ -17,7 +17,7 @@ func validateEmail(email string) error {
 
 func validateUsername(username string) error {
 	if len(username) < 2 {
-		return errors.New("username must be at least 3 characters")
+		return errors.New("username must be at least 2 characters")
 	}
 	if len(username) > 30 {
 		return errors.New("username must be less than 30 characters")

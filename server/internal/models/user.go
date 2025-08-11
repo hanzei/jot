@@ -20,6 +20,7 @@ type User struct {
 	IsAdmin      bool      `json:"is_admin"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
+	emailValue   sql.NullString // Internal field for scanning
 }
 
 type UserStore struct {
@@ -37,6 +38,12 @@ func generateUserID() (string, error) {
 	}
 	encoded := base32.StdEncoding.EncodeToString(bytes)
 	return strings.ToLower(encoded[:20]), nil
+}
+
+func (u *User) populateEmailFromNullString() {
+	if u.emailValue.Valid {
+		u.Email = u.emailValue.String
+	}
 }
 
 func (s *UserStore) Create(username, email, password string) (*User, error) {
@@ -58,11 +65,18 @@ func (s *UserStore) Create(username, email, password string) (*User, error) {
 	}
 	isFirstUser = count == 0
 
+	var emailValue any
+	if email == "" {
+		emailValue = nil
+	} else {
+		emailValue = email
+	}
+
 	query := `INSERT INTO users (id, username, email, password_hash, is_admin) 
 			  VALUES (?, ?, ?, ?, ?) RETURNING created_at, updated_at`
 
 	var user User
-	err = s.db.QueryRow(query, userID, username, email, string(hashedPassword), isFirstUser).Scan(
+	err = s.db.QueryRow(query, userID, username, emailValue, string(hashedPassword), isFirstUser).Scan(
 		&user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
@@ -83,7 +97,7 @@ func (s *UserStore) GetByEmail(email string) (*User, error) {
 			  FROM users WHERE email = ?`
 
 	err := s.db.QueryRow(query, email).Scan(
-		&user.ID, &user.Username, &user.Email, &user.PasswordHash,
+		&user.ID, &user.Username, &user.emailValue, &user.PasswordHash,
 		&user.IsAdmin, &user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
@@ -93,6 +107,7 @@ func (s *UserStore) GetByEmail(email string) (*User, error) {
 		return nil, fmt.Errorf("failed to get user: %w", err)
 	}
 
+	user.populateEmailFromNullString()
 	return &user, nil
 }
 
@@ -102,7 +117,7 @@ func (s *UserStore) GetByUsername(username string) (*User, error) {
 			  FROM users WHERE username = ?`
 
 	err := s.db.QueryRow(query, username).Scan(
-		&user.ID, &user.Username, &user.Email, &user.PasswordHash,
+		&user.ID, &user.Username, &user.emailValue, &user.PasswordHash,
 		&user.IsAdmin, &user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
@@ -112,6 +127,7 @@ func (s *UserStore) GetByUsername(username string) (*User, error) {
 		return nil, fmt.Errorf("failed to get user: %w", err)
 	}
 
+	user.populateEmailFromNullString()
 	return &user, nil
 }
 
@@ -121,7 +137,7 @@ func (s *UserStore) GetByID(id string) (*User, error) {
 			  FROM users WHERE id = ?`
 
 	err := s.db.QueryRow(query, id).Scan(
-		&user.ID, &user.Username, &user.Email, &user.PasswordHash,
+		&user.ID, &user.Username, &user.emailValue, &user.PasswordHash,
 		&user.IsAdmin, &user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
@@ -131,6 +147,7 @@ func (s *UserStore) GetByID(id string) (*User, error) {
 		return nil, fmt.Errorf("failed to get user: %w", err)
 	}
 
+	user.populateEmailFromNullString()
 	return &user, nil
 }
 
@@ -157,11 +174,12 @@ func (s *UserStore) GetAll() ([]*User, error) {
 	for rows.Next() {
 		var user User
 		if err = rows.Scan(
-			&user.ID, &user.Username, &user.Email, &user.PasswordHash,
+			&user.ID, &user.Username, &user.emailValue, &user.PasswordHash,
 			&user.IsAdmin, &user.CreatedAt, &user.UpdatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan user: %w", err)
 		}
+		user.populateEmailFromNullString()
 		users = append(users, &user)
 	}
 
@@ -183,11 +201,18 @@ func (s *UserStore) CreateByAdmin(username, email, password string, isAdmin bool
 		return nil, fmt.Errorf("failed to generate user ID: %w", err)
 	}
 
+	var emailValue any
+	if email == "" {
+		emailValue = nil
+	} else {
+		emailValue = email
+	}
+
 	query := `INSERT INTO users (id, username, email, password_hash, is_admin) 
 			  VALUES (?, ?, ?, ?, ?) RETURNING created_at, updated_at`
 
 	var user User
-	err = s.db.QueryRow(query, userID, username, email, string(hashedPassword), isAdmin).Scan(
+	err = s.db.QueryRow(query, userID, username, emailValue, string(hashedPassword), isAdmin).Scan(
 		&user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
@@ -208,7 +233,7 @@ func (s *UserStore) SearchByEmail(email string) (*User, error) {
 			  FROM users WHERE email = ?`
 
 	err := s.db.QueryRow(query, email).Scan(
-		&user.ID, &user.Username, &user.Email, &user.IsAdmin, &user.CreatedAt, &user.UpdatedAt,
+		&user.ID, &user.Username, &user.emailValue, &user.IsAdmin, &user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -217,5 +242,6 @@ func (s *UserStore) SearchByEmail(email string) (*User, error) {
 		return nil, fmt.Errorf("failed to get user: %w", err)
 	}
 
+	user.populateEmailFromNullString()
 	return &user, nil
 }
