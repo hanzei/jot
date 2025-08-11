@@ -54,6 +54,7 @@ export interface Note {
   pinned: boolean;
   archived: boolean;
   position: number;
+  checked_items_collapsed: boolean;
   items?: NoteItem[];
   shared_with?: NoteShare[];
   is_shared: boolean;
@@ -75,6 +76,7 @@ export interface UpdateNoteRequest {
   pinned: boolean;
   archived: boolean;
   color: string;
+  checked_items_collapsed: boolean;
   items?: { text: string; position: number; completed?: boolean }[];
 }
 

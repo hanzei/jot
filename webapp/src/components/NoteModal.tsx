@@ -128,7 +128,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
   const [archived, setArchived] = useState(false);
   const [items, setItems] = useState<TodoItem[]>([]);
   const [loading, setLoading] = useState(false);
-  const [showCompleted, setShowCompleted] = useState(true);
+  const [checkedItemsCollapsed, setCheckedItemsCollapsed] = useState(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -158,6 +158,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
       setColor(note.color);
       setPinned(note.pinned);
       setArchived(note.archived);
+      setCheckedItemsCollapsed(note.checked_items_collapsed);
       setItems(
         note.items?.map((item) => ({
           text: item.text,
@@ -258,6 +259,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
                 pinned,
                 archived,
                 color,
+                checked_items_collapsed: checkedItemsCollapsed,
                 items: updatedItems.map((item, idx) => ({ 
                   text: item.text, 
                   position: item.completed ? item.position : idx, 
@@ -335,6 +337,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
                   pinned,
                   archived,
                   color,
+                  checked_items_collapsed: checkedItemsCollapsed,
                   items: finalItems.map((item, idx) => ({ 
                     text: item.text, 
                     position: item.completed ? item.position : idx, 
@@ -391,6 +394,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
                 pinned,
                 archived,
                 color,
+                checked_items_collapsed: checkedItemsCollapsed,
                 items: updatedItems.map((item, idx) => ({ 
                   text: item.text, 
                   position: item.completed ? item.position : idx, 
@@ -419,6 +423,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
           pinned,
           archived,
           color,
+          checked_items_collapsed: !checkedItemsCollapsed,
           items: note.note_type === 'todo' ? items.map((item, idx) => ({ 
             text: item.text, 
             position: idx, 
@@ -458,6 +463,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
         pinned: newPinnedState,
         archived,
         color,
+        checked_items_collapsed: !checkedItemsCollapsed,
         items: note.note_type === 'todo' ? items.map((item, idx) => ({ 
           text: item.text, 
           position: idx, 
@@ -486,6 +492,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
         pinned,
         archived: newArchivedState,
         color,
+        checked_items_collapsed: !checkedItemsCollapsed,
         items: note.note_type === 'todo' ? items.map((item, idx) => ({ 
           text: item.text, 
           position: idx, 
@@ -501,6 +508,38 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
     }
   };
 
+  const handleToggleCompleted = async () => {
+    if (!note) {
+      // If creating a new note, just toggle local state
+      setCheckedItemsCollapsed(!checkedItemsCollapsed);
+      return;
+    }
+    
+    const newCollapsedState = !checkedItemsCollapsed;
+    setCheckedItemsCollapsed(newCollapsedState);
+    
+    try {
+      const updateData: UpdateNoteRequest = {
+        title,
+        content,
+        pinned,
+        archived,
+        color,
+        checked_items_collapsed: newCollapsedState,
+        items: note.note_type === 'todo' ? items.map((item, idx) => ({ 
+          text: item.text, 
+          position: idx, 
+          completed: item.completed 
+        })) : undefined,
+      };
+      await notes.update(note.id, updateData);
+      onRefresh?.(); // Refresh the notes list to reflect the changes
+    } catch (error) {
+      console.error('Failed to update collapse state:', error);
+      // Revert the state on error
+      setCheckedItemsCollapsed(checkedItemsCollapsed);
+    }
+  };
 
   const hasUnsavedChanges = () => {
     if (note) {
@@ -671,16 +710,16 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
                 {completedItems.length > 0 && (
                   <div className="border-t border-gray-200 pt-3">
                     <button
-                      onClick={() => setShowCompleted(!showCompleted)}
+                      onClick={handleToggleCompleted}
                       className="flex items-center space-x-2 text-sm text-gray-600 hover:text-gray-800 mb-2"
                     >
                       <ChevronDownIcon 
-                        className={`h-4 w-4 transition-transform ${showCompleted ? 'rotate-0' : '-rotate-90'}`}
+                        className={`h-4 w-4 transition-transform ${checkedItemsCollapsed ? '-rotate-90' : 'rotate-0'}`}
                       />
                       <span>Completed items ({completedItems.length})</span>
                     </button>
                     
-                    {showCompleted && (
+                    {!checkedItemsCollapsed && (
                       <div className="space-y-2">
                         {completedItems.map((item, index) => (
                           <SortableItem
