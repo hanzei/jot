@@ -352,3 +352,159 @@ func TestAdminEndpoints(t *testing.T) {
 		assert.Equal(t, http.StatusForbidden, resp.StatusCode)
 	})
 }
+
+// Test checked items functionality
+func TestCheckedItemsFunctionality(t *testing.T) {
+	ts := setupTestServer(t)
+	user := ts.createTestUser(t, "user@example.com", "password123", false)
+
+	t.Run("create todo note with items", func(t *testing.T) {
+		body := map[string]any{
+			"title":     "Test Todo",
+			"content":   "Todo list",
+			"note_type": "todo",
+			"items": []map[string]any{
+				{"text": "Item 1", "position": 0},
+				{"text": "Item 2", "position": 1},
+				{"text": "Item 3", "position": 2},
+			},
+		}
+
+		resp := ts.authRequest(t, user, http.MethodPost, "/api/v1/notes", body)
+		assert.Equal(t, http.StatusCreated, resp.StatusCode)
+
+		var note map[string]any
+		require.NoError(t, resp.UnmarshalBody(&note))
+		
+		items := note["items"].([]any)
+		assert.Len(t, items, 3)
+		assert.Equal(t, "Item 1", items[0].(map[string]any)["text"])
+		assert.Equal(t, false, items[0].(map[string]any)["completed"])
+	})
+
+	// Create a todo note for further tests
+	createBody := map[string]any{
+		"title":     "Position Test Todo",
+		"content":   "Testing position restoration",
+		"note_type": "todo",
+		"items": []map[string]any{
+			{"text": "First item", "position": 0},
+			{"text": "Second item", "position": 1},
+			{"text": "Third item", "position": 2},
+		},
+	}
+	createResp := ts.authRequest(t, user, http.MethodPost, "/api/v1/notes", createBody)
+	var createdNote map[string]any
+	createResp.UnmarshalBody(&createdNote)
+	noteID := int(createdNote["id"].(float64))
+
+	t.Run("update note with checked items", func(t *testing.T) {
+		updateBody := map[string]any{
+			"title":    "Position Test Todo",
+			"content":  "Testing position restoration",
+			"pinned":   false,
+			"archived": false,
+			"color":    "#ffffff",
+			"items": []map[string]any{
+				{"text": "First item", "position": 0, "completed": false},
+				{"text": "Second item", "position": 1, "completed": true, "original_position": 1},
+				{"text": "Third item", "position": 2, "completed": false},
+			},
+		}
+
+		resp := ts.authRequest(t, user, http.MethodPut, fmt.Sprintf("/api/v1/notes/%d", noteID), updateBody)
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+		// Get the updated note to verify changes
+		getResp := ts.authRequest(t, user, http.MethodGet, fmt.Sprintf("/api/v1/notes/%d", noteID), nil)
+		var updatedNote map[string]any
+		require.NoError(t, getResp.UnmarshalBody(&updatedNote))
+		
+		items := updatedNote["items"].([]any)
+		assert.Len(t, items, 3)
+		
+		// Find the second item and check it's marked as completed
+		var secondItem map[string]any
+		for _, item := range items {
+			if item.(map[string]any)["text"] == "Second item" {
+				secondItem = item.(map[string]any)
+				break
+			}
+		}
+		assert.NotNil(t, secondItem)
+		assert.Equal(t, true, secondItem["completed"])
+		assert.Equal(t, float64(1), secondItem["original_position"])
+	})
+
+	t.Run("update checked items collapsed state", func(t *testing.T) {
+		resp := ts.authRequest(t, user, http.MethodPut, fmt.Sprintf("/api/v1/notes/%d/checked-items-collapsed", noteID), map[string]bool{"collapsed": false})
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+		// Verify the state was updated
+		getResp := ts.authRequest(t, user, http.MethodGet, fmt.Sprintf("/api/v1/notes/%d", noteID), nil)
+		var note map[string]any
+		require.NoError(t, getResp.UnmarshalBody(&note))
+		
+		assert.Equal(t, false, note["checked_items_collapsed"])
+	})
+}
+
+// Test UpdateItem method with optional original_position parameter
+func TestUpdateItemMethods(t *testing.T) {
+	ts := setupTestServer(t)
+	
+	noteStore := models.NewNoteStore(ts.Server.GetDB().DB)
+	
+	// Create a test note
+	note, err := noteStore.Create("test-user", "Test Note", "Test Content", models.NoteTypeTodo, "#ffffff")
+	require.NoError(t, err)
+	
+	// Create a test item
+	item, err := noteStore.CreateItem(note.ID, "Test Item", 0)
+	require.NoError(t, err)
+	
+	t.Run("UpdateItem without original_position", func(t *testing.T) {
+		err := noteStore.UpdateItem(item.ID, "Updated Item", true, 0)
+		assert.NoError(t, err)
+		
+		// Verify the update
+		items, err := noteStore.getItemsByNoteID(note.ID)
+		require.NoError(t, err)
+		assert.Len(t, items, 1)
+		assert.Equal(t, "Updated Item", items[0].Text)
+		assert.Equal(t, true, items[0].Completed)
+		assert.Nil(t, items[0].OriginalPosition)
+	})
+	
+	t.Run("UpdateItem with original_position", func(t *testing.T) {
+		originalPos := 5
+		err := noteStore.UpdateItem(item.ID, "Updated Item 2", false, 1, &originalPos)
+		assert.NoError(t, err)
+		
+		// Verify the update
+		items, err := noteStore.getItemsByNoteID(note.ID)
+		require.NoError(t, err)
+		assert.Len(t, items, 1)
+		assert.Equal(t, "Updated Item 2", items[0].Text)
+		assert.Equal(t, false, items[0].Completed)
+		assert.Equal(t, 1, items[0].Position)
+		assert.NotNil(t, items[0].OriginalPosition)
+		assert.Equal(t, 5, *items[0].OriginalPosition)
+	})
+	
+	t.Run("UpdateItemWithOriginalPosition delegates correctly", func(t *testing.T) {
+		originalPos := 3
+		err := noteStore.UpdateItemWithOriginalPosition(item.ID, "Final Update", true, 2, &originalPos)
+		assert.NoError(t, err)
+		
+		// Verify the update
+		items, err := noteStore.getItemsByNoteID(note.ID)
+		require.NoError(t, err)
+		assert.Len(t, items, 1)
+		assert.Equal(t, "Final Update", items[0].Text)
+		assert.Equal(t, true, items[0].Completed)
+		assert.Equal(t, 2, items[0].Position)
+		assert.NotNil(t, items[0].OriginalPosition)
+		assert.Equal(t, 3, *items[0].OriginalPosition)
+	})
+}

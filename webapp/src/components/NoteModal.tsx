@@ -196,6 +196,29 @@ export default function NoteModal({ note, onClose, onSave }: NoteModalProps) {
     setItems(updatedItems);
   };
 
+  // Helper function to restore unchecked items to their original positions
+  const restoreItemToOriginalPosition = (restoredItem: any, originalPosition: number, uncompletedItems: any[]) => {
+    // Get all uncompleted items and assign them temporary original positions for sorting
+    // For items that never had an original_position, use their current position as their "original"
+    const allUncompletedWithOriginalPos = uncompletedItems.map(uncompletedItem => ({
+      ...uncompletedItem,
+      sortPosition: uncompletedItem === restoredItem 
+        ? originalPosition 
+        : (uncompletedItem.original_position !== undefined ? uncompletedItem.original_position : uncompletedItem.position)
+    }));
+    
+    // Sort by the original positions
+    allUncompletedWithOriginalPos.sort((a, b) => a.sortPosition - b.sortPosition);
+    
+    // Reassign positions sequentially and clean up temp property
+    return allUncompletedWithOriginalPos.map((item, idx) => ({
+      text: item.text,
+      completed: item.completed,
+      position: idx,
+      original_position: item.original_position
+    }));
+  };
+
   const updateTodoItem = (index: number, field: 'text' | 'completed', value: string | boolean) => {
     const newItems = [...items];
     const item = newItems[index];
@@ -224,27 +247,7 @@ export default function NoteModal({ note, onClose, onSave }: NoteModalProps) {
       
       if (restoringToOriginalPosition && originalPosition !== undefined) {
         // Item is being unchecked - restore it to its original position and sort all items
-        const restoredItem = item;
-        
-        // Get all uncompleted items and assign them temporary original positions for sorting
-        // For items that never had an original_position, use their current position as their "original"
-        const allUncompletedWithOriginalPos = uncompletedItems.map(uncompletedItem => ({
-          ...uncompletedItem,
-          sortPosition: uncompletedItem === restoredItem 
-            ? originalPosition 
-            : (uncompletedItem.original_position !== undefined ? uncompletedItem.original_position : uncompletedItem.position)
-        }));
-        
-        // Sort by the original positions
-        allUncompletedWithOriginalPos.sort((a, b) => a.sortPosition - b.sortPosition);
-        
-        // Reassign positions sequentially and clean up temp property
-        const finalItems = allUncompletedWithOriginalPos.map((item, idx) => ({
-          text: item.text,
-          completed: item.completed,
-          position: idx,
-          original_position: item.original_position
-        }));
+        const finalItems = restoreItemToOriginalPosition(item, originalPosition, uncompletedItems);
         
         // Update the uncompletedItems reference
         uncompletedItems.length = 0;
@@ -299,7 +302,8 @@ export default function NoteModal({ note, onClose, onSave }: NoteModalProps) {
           items: note.note_type === 'todo' ? items.map((item) => ({ 
             text: item.text, 
             position: item.position, 
-            completed: item.completed 
+            completed: item.completed,
+            original_position: item.original_position
           })) : undefined,
         };
         await notes.update(note.id, updateData);
@@ -338,7 +342,8 @@ export default function NoteModal({ note, onClose, onSave }: NoteModalProps) {
         items: note.note_type === 'todo' ? items.map((item, idx) => ({ 
           text: item.text, 
           position: idx, 
-          completed: item.completed 
+          completed: item.completed,
+          original_position: item.original_position
         })) : undefined,
       };
       await notes.update(note.id, updateData);
@@ -480,79 +485,75 @@ export default function NoteModal({ note, onClose, onSave }: NoteModalProps) {
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
               />
-            ) : (
-              <div className="space-y-2">
-                {(() => {
-                  const completedItems = items.filter(item => item.completed);
-                  const uncompletedIndices = items.map((item, index) => ({ item, index })).filter(({ item }) => !item.completed);
-                  const completedIndices = items.map((item, index) => ({ item, index })).filter(({ item }) => item.completed);
+            ) : (() => {
+              const completedItems = items.filter(item => item.completed);
+              const uncompletedIndices = items.map((item, index) => ({ item, index })).filter(({ item }) => !item.completed);
+              const completedIndices = items.map((item, index) => ({ item, index })).filter(({ item }) => item.completed);
 
-                  return (
-                    <>
-                      {/* Uncompleted items - draggable */}
-                      <DndContext
-                        sensors={sensors}
-                        collisionDetection={closestCenter}
-                        onDragEnd={handleDragEnd}
+              return (
+                <div className="space-y-2">
+                  {/* Uncompleted items - draggable */}
+                  <DndContext
+                    sensors={sensors}
+                    collisionDetection={closestCenter}
+                    onDragEnd={handleDragEnd}
+                  >
+                    <SortableContext
+                      items={uncompletedIndices.map(({ index }) => `item-${index}`)}
+                      strategy={verticalListSortingStrategy}
+                    >
+                      {uncompletedIndices.map(({ item, index }) => (
+                        <SortableItem
+                          key={`item-${index}`}
+                          id={`item-${index}`}
+                          index={index}
+                          item={item}
+                          onUpdateTodoItem={updateTodoItem}
+                          onRemoveTodoItem={removeTodoItem}
+                        />
+                      ))}
+                    </SortableContext>
+                  </DndContext>
+
+                  <button
+                    onClick={addTodoItem}
+                    className="flex items-center space-x-2 text-sm text-gray-600 hover:text-gray-800 p-1"
+                  >
+                    <PlusIcon className="h-4 w-4" />
+                    <span>Add item</span>
+                  </button>
+
+                  {/* Checked items section */}
+                  {completedItems.length > 0 && (
+                    <div className="mt-4 border-t pt-2">
+                      <button
+                        onClick={toggleCheckedItemsCollapsed}
+                        className="flex items-center space-x-2 text-sm text-gray-500 hover:text-gray-700 mb-2"
                       >
-                        <SortableContext
-                          items={uncompletedIndices.map(({ index }) => `item-${index}`)}
-                          strategy={verticalListSortingStrategy}
-                        >
-                          {uncompletedIndices.map(({ item, index }) => (
-                            <SortableItem
-                              key={`item-${index}`}
-                              id={`item-${index}`}
-                              index={index}
+                        {checkedItemsCollapsed ? (
+                          <ChevronRightIcon className="h-4 w-4" />
+                        ) : (
+                          <ChevronDownIcon className="h-4 w-4" />
+                        )}
+                        <span>Checked items ({completedItems.length})</span>
+                      </button>
+                      
+                      {!checkedItemsCollapsed && (
+                        <div className="space-y-1">
+                          {completedIndices.map(({ item, index }) => (
+                            <CheckedItem
+                              key={`checked-${index}`}
                               item={item}
-                              onUpdateTodoItem={updateTodoItem}
-                              onRemoveTodoItem={removeTodoItem}
+                              onRestore={() => restoreCheckedItem(index)}
                             />
                           ))}
-                        </SortableContext>
-                      </DndContext>
-
-                      <button
-                        onClick={addTodoItem}
-                        className="flex items-center space-x-2 text-sm text-gray-600 hover:text-gray-800 p-1"
-                      >
-                        <PlusIcon className="h-4 w-4" />
-                        <span>Add item</span>
-                      </button>
-
-                      {/* Checked items section */}
-                      {completedItems.length > 0 && (
-                        <div className="mt-4 border-t pt-2">
-                          <button
-                            onClick={toggleCheckedItemsCollapsed}
-                            className="flex items-center space-x-2 text-sm text-gray-500 hover:text-gray-700 mb-2"
-                          >
-                            {checkedItemsCollapsed ? (
-                              <ChevronRightIcon className="h-4 w-4" />
-                            ) : (
-                              <ChevronDownIcon className="h-4 w-4" />
-                            )}
-                            <span>Checked items ({completedItems.length})</span>
-                          </button>
-                          
-                          {!checkedItemsCollapsed && (
-                            <div className="space-y-1">
-                              {completedIndices.map(({ item, index }) => (
-                                <CheckedItem
-                                  key={`checked-${index}`}
-                                  item={item}
-                                  onRestore={() => restoreCheckedItem(index)}
-                                />
-                              ))}
-                            </div>
-                          )}
                         </div>
                       )}
-                    </>
-                  );
-                })()}
-              </div>
-            )}
+                    </div>
+                  )}
+                </div>
+              );
+            })()}
 
             {/* Color selector */}
             <div className="flex space-x-2">

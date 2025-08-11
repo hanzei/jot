@@ -352,11 +352,23 @@ func (s *NoteStore) CreateItem(noteID int, text string, position int) (*NoteItem
 	return &item, nil
 }
 
-func (s *NoteStore) UpdateItem(id int, text string, completed bool, position int) error {
-	query := `UPDATE note_items SET text = ?, completed = ?, position = ?, updated_at = CURRENT_TIMESTAMP
+func (s *NoteStore) UpdateItem(id int, text string, completed bool, position int, originalPosition ...*int) error {
+	var query string
+	var args []interface{}
+	
+	if len(originalPosition) > 0 {
+		// Include original_position in the update
+		query = `UPDATE note_items SET text = ?, completed = ?, position = ?, original_position = ?, updated_at = CURRENT_TIMESTAMP
 			  WHERE id = ?`
+		args = []interface{}{text, completed, position, originalPosition[0], id}
+	} else {
+		// Original behavior without original_position
+		query = `UPDATE note_items SET text = ?, completed = ?, position = ?, updated_at = CURRENT_TIMESTAMP
+			  WHERE id = ?`
+		args = []interface{}{text, completed, position, id}
+	}
 
-	_, err := s.db.Exec(query, text, completed, position, id)
+	_, err := s.db.Exec(query, args...)
 	if err != nil {
 		return fmt.Errorf("failed to update note item: %w", err)
 	}
@@ -365,15 +377,8 @@ func (s *NoteStore) UpdateItem(id int, text string, completed bool, position int
 }
 
 func (s *NoteStore) UpdateItemWithOriginalPosition(id int, text string, completed bool, position int, originalPosition *int) error {
-	query := `UPDATE note_items SET text = ?, completed = ?, position = ?, original_position = ?, updated_at = CURRENT_TIMESTAMP
-			  WHERE id = ?`
-
-	_, err := s.db.Exec(query, text, completed, position, originalPosition, id)
-	if err != nil {
-		return fmt.Errorf("failed to update note item: %w", err)
-	}
-
-	return nil
+	// Delegate to UpdateItem with original_position parameter
+	return s.UpdateItem(id, text, completed, position, originalPosition)
 }
 
 func (s *NoteStore) DeleteItem(id int) error {
