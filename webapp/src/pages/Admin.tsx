@@ -150,7 +150,7 @@ const Admin = ({ onLogout }: AdminProps) => {
                     <input
                       type="password"
                       required
-                      minLength={8}
+                      minLength={4}
                       value={formData.password}
                       onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                       className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
