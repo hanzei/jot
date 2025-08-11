@@ -45,6 +45,7 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, currentUserI
         pinned: note.pinned,
         archived: !note.archived,
         color: note.color,
+        checked_items_collapsed: note.checked_items_collapsed,
       });
       // Refresh will be handled by parent component
       window.location.reload();
@@ -64,6 +65,7 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, currentUserI
         pinned: !note.pinned,
         archived: note.archived,
         color: note.color,
+        checked_items_collapsed: note.checked_items_collapsed,
       });
       window.location.reload();
     } catch (error) {
