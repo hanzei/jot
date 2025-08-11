@@ -11,6 +11,7 @@ interface SortableNoteCardProps {
   onShare: (note: Note) => void;
   currentUserId?: string;
   disabled?: boolean;
+  onRefresh?: () => void;
 }
 
 export default function SortableNoteCard({
@@ -20,6 +21,7 @@ export default function SortableNoteCard({
   onShare,
   currentUserId,
   disabled = false,
+  onRefresh,
 }: SortableNoteCardProps) {
   const {
     attributes,
@@ -71,6 +73,7 @@ export default function SortableNoteCard({
           onDelete={onDelete}
           onShare={onShare}
           currentUserId={currentUserId}
+          onRefresh={onRefresh}
         />
       </div>
     </div>

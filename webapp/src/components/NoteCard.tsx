@@ -17,9 +17,10 @@ interface NoteCardProps {
   onDelete: (noteId: string) => void;
   onShare?: (note: Note) => void;
   currentUserId?: string;
+  onRefresh?: () => void;
 }
 
-export default function NoteCard({ note, onEdit, onDelete, onShare, currentUserId }: NoteCardProps) {
+export default function NoteCard({ note, onEdit, onDelete, onShare, currentUserId, onRefresh }: NoteCardProps) {
   const [isUpdating, setIsUpdating] = useState(false);
   
   const isOwner = note.user_id === currentUserId;
@@ -47,8 +48,8 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, currentUserI
         color: note.color,
         checked_items_collapsed: note.checked_items_collapsed,
       });
-      // Refresh will be handled by parent component
-      window.location.reload();
+      // Refresh data using callback
+      onRefresh?.();
     } catch (error) {
       console.error('Failed to toggle archive:', error);
     } finally {
@@ -67,7 +68,7 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, currentUserI
         color: note.color,
         checked_items_collapsed: note.checked_items_collapsed,
       });
-      window.location.reload();
+      onRefresh?.();
     } catch (error) {
       console.error('Failed to toggle pin:', error);
     } finally {

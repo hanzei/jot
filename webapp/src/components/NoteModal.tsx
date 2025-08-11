@@ -1,8 +1,12 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { XMarkIcon, PlusIcon, TrashIcon, ChevronDownIcon, ArchiveBoxIcon, ArchiveBoxXMarkIcon } from '@heroicons/react/24/outline';
 import { Dialog } from '@headlessui/react';
 import { Note, NoteType, CreateNoteRequest, UpdateNoteRequest } from '@/types';
 import { notes } from '@/utils/api';
+
+// Constants
+const AUTO_SAVE_TIMEOUT = 1000; // Save 1 second after user stops typing
+const MAX_ITEM_LENGTH = 500; // Maximum length for todo item text
 
 // Extend Window type for timeout
 declare global {
@@ -137,9 +141,11 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
     })
   );
 
-  // Separate completed and uncompleted items
-  const uncompletedItems = items.filter(item => !item.completed);
-  const completedItems = items.filter(item => item.completed);
+  // Separate completed and uncompleted items with memoization
+  const { uncompletedItems, completedItems } = useMemo(() => ({
+    uncompletedItems: items.filter(item => !item.completed),
+    completedItems: items.filter(item => item.completed)
+  }), [items]);
 
   const colors = [
     { value: '#ffffff', name: 'White', class: 'bg-white border-gray-300' },
@@ -176,6 +182,49 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
       setItems([]);
     }
   }, [note]);
+
+  // Cleanup timeout on component unmount
+  useEffect(() => {
+    return () => {
+      if (window.todoItemSaveTimeout) {
+        clearTimeout(window.todoItemSaveTimeout);
+      }
+    };
+  }, []);
+
+  // Helper function to restore item to original position
+  const restoreItemPosition = (items: TodoItem[], itemToRestore: TodoItem): TodoItem[] => {
+    const otherItems = items.filter(item => item !== itemToRestore);
+    const uncompletedItems = otherItems.filter(item => !item.completed);
+    
+    // Use stored original position or append to end
+    const targetPosition = Math.min(itemToRestore.originalPosition ?? uncompletedItems.length, uncompletedItems.length);
+    
+    // Create new array with item inserted at correct position
+    const result: TodoItem[] = [];
+    let uncompletedIndex = 0;
+    
+    // Add all items, inserting the restored item at the correct position
+    for (const item of otherItems) {
+      if (!item.completed) {
+        if (uncompletedIndex === targetPosition) {
+          result.push({ ...itemToRestore, completed: false, originalPosition: undefined, position: uncompletedIndex });
+          uncompletedIndex++;
+        }
+        result.push({ ...item, position: uncompletedIndex });
+        uncompletedIndex++;
+      } else {
+        result.push(item);
+      }
+    }
+    
+    // If we haven't inserted yet (inserting at the end)
+    if (uncompletedIndex === targetPosition) {
+      result.push({ ...itemToRestore, completed: false, originalPosition: undefined, position: uncompletedIndex });
+    }
+    
+    return result;
+  };
 
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
@@ -300,60 +349,12 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
         // Unchecking an item - restore to original position
         if (index < completedItems.length) {
           const itemToUncomplete = completedItems[index];
-          const updatedItems = [...items];
-          const itemIndex = items.findIndex(item => item === itemToUncomplete);
+          const finalItems = restoreItemPosition(items, itemToUncomplete);
+          setItems(finalItems);
           
-          if (itemIndex !== -1) {
-            const item = updatedItems[itemIndex];
-            let finalItems;
-            
-            if (item.originalPosition !== undefined) {
-              // Remove item from its current position
-              const itemToMove = { ...item, completed: false, originalPosition: undefined };
-              updatedItems.splice(itemIndex, 1);
-              
-              // Find the correct insertion point among uncompleted items
-              const currentUncompleted = updatedItems.filter(i => !i.completed);
-              const insertionIndex = Math.min(item.originalPosition, currentUncompleted.length);
-              
-              // Insert the item back
-              let insertedIndex = 0;
-              finalItems = [];
-              let uncompletedCount = 0;
-              
-              for (let i = 0; i < updatedItems.length; i++) {
-                if (!updatedItems[i].completed) {
-                  if (uncompletedCount === insertionIndex) {
-                    finalItems.push({ ...itemToMove, position: uncompletedCount });
-                    uncompletedCount++;
-                    insertedIndex = finalItems.length - 1;
-                  }
-                  finalItems.push({ ...updatedItems[i], position: uncompletedCount });
-                  uncompletedCount++;
-                } else {
-                  finalItems.push(updatedItems[i]);
-                }
-              }
-              
-              // If we haven't inserted yet (inserting at the end)
-              if (insertedIndex === 0 && !finalItems.some(item => item === itemToMove)) {
-                finalItems.push({ ...itemToMove, position: uncompletedCount });
-              }
-            } else {
-              // Fallback: just uncheck and add to end of uncompleted items
-              updatedItems[itemIndex] = {
-                ...item,
-                completed: false,
-                position: uncompletedItems.length,
-              };
-              finalItems = updatedItems;
-            }
-            
-            setItems(finalItems);
-            
-            // Auto-save if editing an existing note
-            if (note) {
-              try {
+          // Auto-save if editing an existing note
+          if (note) {
+            try {
                 const updateData: UpdateNoteRequest = {
                   title,
                   content,
@@ -375,7 +376,6 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
             }
           }
         }
-      }
     } else {
       // Handle text updates
       let targetItem;
@@ -392,7 +392,8 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
         const updatedItems = items.map(item => {
           if (item === targetItem) {
             if (field === 'text') {
-              return { ...item, text: value as string };
+              const textValue = (value as string).slice(0, MAX_ITEM_LENGTH);
+              return { ...item, text: textValue };
             } else if (field === 'completed') {
               return { ...item, completed: value as boolean };
             }
@@ -429,7 +430,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
             } catch (error) {
               console.error('Failed to auto-save note:', error);
             }
-          }, 1000); // Save 1 second after user stops typing
+          }, AUTO_SAVE_TIMEOUT);
         }
       }
     }

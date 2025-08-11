@@ -349,6 +349,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                           onShare={handleShareNote}
                           currentUserId={user?.id}
                           disabled={showArchived}
+                          onRefresh={loadNotes}
                         />
                       ))}
                     </div>
@@ -378,6 +379,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                           onShare={handleShareNote}
                           currentUserId={user?.id}
                           disabled={showArchived}
+                          onRefresh={loadNotes}
                         />
                       ))}
                     </div>
