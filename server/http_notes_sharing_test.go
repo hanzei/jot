@@ -167,13 +167,19 @@ func TestEdgeCases(t *testing.T) {
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "user@example.com", "password123", false)
 
-	t.Run("invalid note ID returns not found", func(t *testing.T) {
+	t.Run("invalid note ID returns bad request", func(t *testing.T) {
 		resp := ts.authRequest(t, user, http.MethodGet, "/api/v1/notes/invalid", nil)
-		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 	})
 
-	t.Run("nonexistent note ID returns not found", func(t *testing.T) {
+	t.Run("nonexistent note ID returns bad request", func(t *testing.T) {
 		resp := ts.authRequest(t, user, http.MethodGet, "/api/v1/notes/999", nil)
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	})
+
+	t.Run("valid but nonexistent note ID returns not found", func(t *testing.T) {
+		// Use a valid 22-character ID format that doesn't exist
+		resp := ts.authRequest(t, user, http.MethodGet, "/api/v1/notes/abcdefghijklmnopqrstuvwx", nil)
 		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 	})
 
