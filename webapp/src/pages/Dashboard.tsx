@@ -88,7 +88,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     setEditingNote(null);
   };
 
-  const handleDeleteNote = async (noteId: number) => {
+  const handleDeleteNote = async (noteId: string) => {
     try {
       await notes.delete(noteId);
       loadNotes();

@@ -133,6 +133,9 @@ func (h *NotesHandler) GetNote(w http.ResponseWriter, r *http.Request) (int, err
 	if id == "" {
 		return http.StatusBadRequest, errors.New("missing note ID")
 	}
+	if !models.IsValidID(id) {
+		return http.StatusBadRequest, errors.New("invalid note ID format")
+	}
 
 	note, err := h.noteStore.GetByID(id, claims.UserID)
 	if err != nil {
@@ -183,6 +186,9 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 	if id == "" {
 		return http.StatusBadRequest, errors.New("missing note ID")
 	}
+	if !models.IsValidID(id) {
+		return http.StatusBadRequest, errors.New("invalid note ID format")
+	}
 
 	var req UpdateNoteRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -230,6 +236,9 @@ func (h *NotesHandler) DeleteNote(w http.ResponseWriter, r *http.Request) (int, 
 	if id == "" {
 		return http.StatusBadRequest, errors.New("missing note ID")
 	}
+	if !models.IsValidID(id) {
+		return http.StatusBadRequest, errors.New("invalid note ID format")
+	}
 
 	err := h.noteStore.Delete(id, claims.UserID)
 	if err != nil {
@@ -261,6 +270,9 @@ func (h *NotesHandler) ShareNote(w http.ResponseWriter, r *http.Request) (int, e
 	id := chi.URLParam(r, "id")
 	if id == "" {
 		return http.StatusBadRequest, errors.New("missing note ID")
+	}
+	if !models.IsValidID(id) {
+		return http.StatusBadRequest, errors.New("invalid note ID format")
 	}
 
 	var req ShareNoteRequest
@@ -320,6 +332,9 @@ func (h *NotesHandler) UnshareNote(w http.ResponseWriter, r *http.Request) (int,
 	if id == "" {
 		return http.StatusBadRequest, errors.New("missing note ID")
 	}
+	if !models.IsValidID(id) {
+		return http.StatusBadRequest, errors.New("invalid note ID format")
+	}
 
 	var req ShareNoteRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -373,6 +388,9 @@ func (h *NotesHandler) GetNoteShares(w http.ResponseWriter, r *http.Request) (in
 	id := chi.URLParam(r, "id")
 	if id == "" {
 		return http.StatusBadRequest, errors.New("missing note ID")
+	}
+	if !models.IsValidID(id) {
+		return http.StatusBadRequest, errors.New("invalid note ID format")
 	}
 
 	isOwner, err := h.noteStore.IsOwner(id, claims.UserID)

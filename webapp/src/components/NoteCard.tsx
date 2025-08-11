@@ -14,7 +14,7 @@ import { notes } from '@/utils/api';
 interface NoteCardProps {
   note: Note;
   onEdit: (note: Note) => void;
-  onDelete: (noteId: number) => void;
+  onDelete: (noteId: string) => void;
   onShare?: (note: Note) => void;
   currentUserId?: string;
 }

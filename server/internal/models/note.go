@@ -63,7 +63,7 @@ func NewNoteStore(db *sql.DB) *NoteStore {
 }
 
 func generateID() (string, error) {
-	const chars = "0123456789abcdefghijklmnopqrstuvwxyz"
+	const chars = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 	bytes := make([]byte, 22)
 	randBytes := make([]byte, 22)
 	
@@ -76,6 +76,26 @@ func generateID() (string, error) {
 	}
 	
 	return string(bytes), nil
+}
+
+func IsValidID(id string) bool {
+	if len(id) != 22 {
+		return false
+	}
+	const chars = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	for _, char := range id {
+		found := false
+		for _, validChar := range chars {
+			if char == validChar {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
 }
 
 func (s *NoteStore) Create(userID string, title, content string, noteType NoteType, color string) (*Note, error) {

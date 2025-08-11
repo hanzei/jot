@@ -26,9 +26,6 @@ func NewUserStore(db *sql.DB) *UserStore {
 	return &UserStore{db: db}
 }
 
-func generateUserID() (string, error) {
-	return generateID()
-}
 
 func (s *UserStore) Create(email, password string) (*User, error) {
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
@@ -36,7 +33,7 @@ func (s *UserStore) Create(email, password string) (*User, error) {
 		return nil, fmt.Errorf("failed to hash password: %w", err)
 	}
 
-	userID, err := generateUserID()
+	userID, err := generateID()
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate user ID: %w", err)
 	}
@@ -149,7 +146,7 @@ func (s *UserStore) CreateByAdmin(email, password string, isAdmin bool) (*User, 
 		return nil, fmt.Errorf("failed to hash password: %w", err)
 	}
 
-	userID, err := generateUserID()
+	userID, err := generateID()
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate user ID: %w", err)
 	}
