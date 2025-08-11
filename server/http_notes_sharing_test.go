@@ -24,14 +24,14 @@ func TestNoteSharingEndpoints(t *testing.T) {
 	createResp := ts.authRequest(t, owner, http.MethodPost, "/api/v1/notes", body)
 	var createdNote map[string]any
 	createResp.UnmarshalBody(&createdNote)
-	noteID := int(createdNote["id"].(float64))
+	noteID := createdNote["id"].(string)
 
 	t.Run("share note with user", func(t *testing.T) {
 		shareBody := map[string]string{
 			"email": "user@example.com",
 		}
 
-		resp := ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%d/share", noteID), shareBody)
+		resp := ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/share", noteID), shareBody)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 		var response map[string]any
@@ -44,11 +44,11 @@ func TestNoteSharingEndpoints(t *testing.T) {
 		shareBody := map[string]string{
 			"email": "other@example.com",
 		}
-		resp1 := ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%d/share", noteID), shareBody)
+		resp1 := ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/share", noteID), shareBody)
 		assert.Equal(t, http.StatusOK, resp1.StatusCode)
 
 		// Try to share again with the same user - should return conflict
-		resp := ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%d/share", noteID), shareBody)
+		resp := ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/share", noteID), shareBody)
 		assert.Equal(t, http.StatusConflict, resp.StatusCode)
 	})
 
@@ -57,7 +57,7 @@ func TestNoteSharingEndpoints(t *testing.T) {
 			"email": "nonexistent@example.com",
 		}
 
-		resp := ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%d/share", noteID), shareBody)
+		resp := ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/share", noteID), shareBody)
 		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 	})
 
@@ -66,7 +66,7 @@ func TestNoteSharingEndpoints(t *testing.T) {
 			"email": "",
 		}
 
-		resp := ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%d/share", noteID), shareBody)
+		resp := ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/share", noteID), shareBody)
 		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 		assert.Contains(t, resp.GetString(), "empty email")
 	})
@@ -76,7 +76,7 @@ func TestNoteSharingEndpoints(t *testing.T) {
 			"email": "owner@example.com",
 		}
 
-		resp := ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%d/share", noteID), shareBody)
+		resp := ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/share", noteID), shareBody)
 		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 		assert.Contains(t, resp.GetString(), "cannot share with self")
 	})
@@ -86,12 +86,12 @@ func TestNoteSharingEndpoints(t *testing.T) {
 			"email": "other@example.com",
 		}
 
-		resp := ts.authRequest(t, other, http.MethodPost, fmt.Sprintf("/api/v1/notes/%d/share", noteID), shareBody)
+		resp := ts.authRequest(t, other, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/share", noteID), shareBody)
 		assert.Equal(t, http.StatusForbidden, resp.StatusCode)
 	})
 
 	t.Run("get note shares", func(t *testing.T) {
-		resp := ts.authRequest(t, owner, http.MethodGet, fmt.Sprintf("/api/v1/notes/%d/shares", noteID), nil)
+		resp := ts.authRequest(t, owner, http.MethodGet, fmt.Sprintf("/api/v1/notes/%s/shares", noteID), nil)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 		var shares []any
@@ -100,7 +100,7 @@ func TestNoteSharingEndpoints(t *testing.T) {
 	})
 
 	t.Run("get note shares by non-owner returns forbidden", func(t *testing.T) {
-		resp := ts.authRequest(t, other, http.MethodGet, fmt.Sprintf("/api/v1/notes/%d/shares", noteID), nil)
+		resp := ts.authRequest(t, other, http.MethodGet, fmt.Sprintf("/api/v1/notes/%s/shares", noteID), nil)
 		assert.Equal(t, http.StatusForbidden, resp.StatusCode)
 	})
 
@@ -109,7 +109,7 @@ func TestNoteSharingEndpoints(t *testing.T) {
 			"email": "user@example.com",
 		}
 
-		resp := ts.request(t, http.MethodDelete, fmt.Sprintf("/api/v1/notes/%d/share", noteID), unshareBody, map[string]string{
+		resp := ts.request(t, http.MethodDelete, fmt.Sprintf("/api/v1/notes/%s/share", noteID), unshareBody, map[string]string{
 			"Authorization": fmt.Sprintf("Bearer %s", owner.Token),
 		})
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
@@ -124,7 +124,7 @@ func TestNoteSharingEndpoints(t *testing.T) {
 			"email": "user@example.com", // Already unshared
 		}
 
-		resp := ts.request(t, http.MethodDelete, fmt.Sprintf("/api/v1/notes/%d/share", noteID), unshareBody, map[string]string{
+		resp := ts.request(t, http.MethodDelete, fmt.Sprintf("/api/v1/notes/%s/share", noteID), unshareBody, map[string]string{
 			"Authorization": fmt.Sprintf("Bearer %s", owner.Token),
 		})
 		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
@@ -167,9 +167,9 @@ func TestEdgeCases(t *testing.T) {
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "user@example.com", "password123", false)
 
-	t.Run("invalid note ID returns bad request", func(t *testing.T) {
+	t.Run("invalid note ID returns not found", func(t *testing.T) {
 		resp := ts.authRequest(t, user, http.MethodGet, "/api/v1/notes/invalid", nil)
-		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 	})
 
 	t.Run("nonexistent note ID returns not found", func(t *testing.T) {
@@ -216,7 +216,7 @@ func TestEdgeCases(t *testing.T) {
 		createResp := ts.authRequest(t, user, http.MethodPost, "/api/v1/notes", createBody)
 		var createdNote map[string]any
 		createResp.UnmarshalBody(&createdNote)
-		noteID := int(createdNote["id"].(float64))
+		noteID := createdNote["id"].(string)
 
 		updateBody := map[string]any{
 			"title":    "Updated",
@@ -226,7 +226,7 @@ func TestEdgeCases(t *testing.T) {
 			"color":    "", // Empty color should default to #ffffff
 		}
 
-		resp := ts.authRequest(t, user, http.MethodPut, fmt.Sprintf("/api/v1/notes/%d", noteID), updateBody)
+		resp := ts.authRequest(t, user, http.MethodPut, fmt.Sprintf("/api/v1/notes/%s", noteID), updateBody)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 		var updatedNote map[string]any

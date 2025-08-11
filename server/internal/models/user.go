@@ -1,12 +1,9 @@
 package models
 
 import (
-	"crypto/rand"
 	"database/sql"
-	"encoding/base32"
 	"fmt"
 	"log"
-	"strings"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
@@ -30,12 +27,7 @@ func NewUserStore(db *sql.DB) *UserStore {
 }
 
 func generateUserID() (string, error) {
-	bytes := make([]byte, 15) // 15 bytes = 120 bits, which gives us 24 base32 chars, we'll take first 20
-	if _, err := rand.Read(bytes); err != nil {
-		return "", err
-	}
-	encoded := base32.StdEncoding.EncodeToString(bytes)
-	return strings.ToLower(encoded[:20]), nil
+	return generateID()
 }
 
 func (s *UserStore) Create(email, password string) (*User, error) {
