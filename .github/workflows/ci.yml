@@ -44,6 +44,19 @@ jobs:
       - name: Run tests
         run: task test
 
+      - name: Run coverage
+        run: task coverage || true
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v5
+        with:
+          files: ./server/coverage.out
+          flags: server
+          name: jot-server
+          slug: hanzei/jot
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
   lint:
     runs-on: ubuntu-latest
 

@@ -4,7 +4,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"strconv"
 	"strings"
 
 	"github.com/go-chi/chi/v5"
@@ -38,12 +37,13 @@ type CreateNoteItem struct {
 }
 
 type UpdateNoteRequest struct {
-	Title    string           `json:"title"`
-	Content  string           `json:"content"`
-	Pinned   bool             `json:"pinned"`
-	Archived bool             `json:"archived"`
-	Color    string           `json:"color"`
-	Items    []UpdateNoteItem `json:"items,omitempty"`
+	Title                 string           `json:"title"`
+	Content               string           `json:"content"`
+	Pinned                bool             `json:"pinned"`
+	Archived              bool             `json:"archived"`
+	Color                 string           `json:"color"`
+	CheckedItemsCollapsed bool             `json:"checked_items_collapsed"`
+	Items                 []UpdateNoteItem `json:"items,omitempty"`
 }
 
 type UpdateNoteItem struct {
@@ -130,9 +130,12 @@ func (h *NotesHandler) GetNote(w http.ResponseWriter, r *http.Request) (int, err
 		return http.StatusUnauthorized, errors.New("unauthorized")
 	}
 
-	id, err := strconv.Atoi(chi.URLParam(r, "id"))
-	if err != nil {
-		return http.StatusBadRequest, err
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		return http.StatusBadRequest, errors.New("missing note ID")
+	}
+	if !models.IsValidID(id) {
+		return http.StatusBadRequest, errors.New("invalid note ID format")
 	}
 
 	note, err := h.noteStore.GetByID(id, claims.UserID)
@@ -150,7 +153,7 @@ func (h *NotesHandler) GetNote(w http.ResponseWriter, r *http.Request) (int, err
 	return 0, nil
 }
 
-func (h *NotesHandler) updateTodoItems(noteID int, userID string, items []UpdateNoteItem) error {
+func (h *NotesHandler) updateTodoItems(noteID string, userID string, items []UpdateNoteItem) error {
 	// Get current note to check if it's a todo type
 	currentNote, err := h.noteStore.GetByID(noteID, userID)
 	if err != nil {
@@ -180,13 +183,16 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 		return http.StatusUnauthorized, errors.New("unauthorized")
 	}
 
-	id, err := strconv.Atoi(chi.URLParam(r, "id"))
-	if err != nil {
-		return http.StatusBadRequest, err
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		return http.StatusBadRequest, errors.New("missing note ID")
+	}
+	if !models.IsValidID(id) {
+		return http.StatusBadRequest, errors.New("invalid note ID format")
 	}
 
 	var req UpdateNoteRequest
-	if err = json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		return http.StatusBadRequest, err
 	}
 
@@ -194,7 +200,7 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 		req.Color = "#ffffff"
 	}
 
-	err = h.noteStore.Update(id, claims.UserID, req.Title, req.Content, req.Pinned, req.Archived, req.Color)
+	err := h.noteStore.Update(id, claims.UserID, req.Title, req.Content, req.Pinned, req.Archived, req.Color, req.CheckedItemsCollapsed)
 	if err != nil {
 		if err.Error() == "note not found or no access" || err.Error() == "note not found" {
 			return http.StatusNotFound, err
@@ -227,12 +233,15 @@ func (h *NotesHandler) DeleteNote(w http.ResponseWriter, r *http.Request) (int, 
 		return http.StatusUnauthorized, errors.New("unauthorized")
 	}
 
-	id, err := strconv.Atoi(chi.URLParam(r, "id"))
-	if err != nil {
-		return http.StatusBadRequest, err
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		return http.StatusBadRequest, errors.New("missing note ID")
+	}
+	if !models.IsValidID(id) {
+		return http.StatusBadRequest, errors.New("invalid note ID format")
 	}
 
-	err = h.noteStore.Delete(id, claims.UserID)
+	err := h.noteStore.Delete(id, claims.UserID)
 	if err != nil {
 		if err.Error() == "note not found or not owned by user" {
 			return http.StatusNotFound, err
@@ -259,13 +268,16 @@ func (h *NotesHandler) ShareNote(w http.ResponseWriter, r *http.Request) (int, e
 		return http.StatusUnauthorized, errors.New("unauthorized")
 	}
 
-	id, err := strconv.Atoi(chi.URLParam(r, "id"))
-	if err != nil {
-		return http.StatusBadRequest, err
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		return http.StatusBadRequest, errors.New("missing note ID")
+	}
+	if !models.IsValidID(id) {
+		return http.StatusBadRequest, errors.New("invalid note ID format")
 	}
 
 	var req ShareNoteRequest
-	if err = json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		return http.StatusBadRequest, err
 	}
 
@@ -317,13 +329,16 @@ func (h *NotesHandler) UnshareNote(w http.ResponseWriter, r *http.Request) (int,
 		return http.StatusUnauthorized, errors.New("unauthorized")
 	}
 
-	id, err := strconv.Atoi(chi.URLParam(r, "id"))
-	if err != nil {
-		return http.StatusBadRequest, err
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		return http.StatusBadRequest, errors.New("missing note ID")
+	}
+	if !models.IsValidID(id) {
+		return http.StatusBadRequest, errors.New("invalid note ID format")
 	}
 
 	var req ShareNoteRequest
-	if err = json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		return http.StatusBadRequest, err
 	}
 
@@ -371,9 +386,12 @@ func (h *NotesHandler) GetNoteShares(w http.ResponseWriter, r *http.Request) (in
 		return http.StatusUnauthorized, errors.New("unauthorized")
 	}
 
-	id, err := strconv.Atoi(chi.URLParam(r, "id"))
-	if err != nil {
-		return http.StatusBadRequest, err
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		return http.StatusBadRequest, errors.New("missing note ID")
+	}
+	if !models.IsValidID(id) {
+		return http.StatusBadRequest, errors.New("invalid note ID format")
 	}
 
 	isOwner, err := h.noteStore.IsOwner(id, claims.UserID)
@@ -434,7 +452,7 @@ func (h *NotesHandler) SearchUsers(w http.ResponseWriter, r *http.Request) (int,
 }
 
 type ReorderNotesRequest struct {
-	NoteIDs []int `json:"note_ids"`
+	NoteIDs []string `json:"note_ids"`
 }
 
 func (h *NotesHandler) ReorderNotes(w http.ResponseWriter, r *http.Request) (int, error) {
@@ -464,34 +482,3 @@ func (h *NotesHandler) ReorderNotes(w http.ResponseWriter, r *http.Request) (int
 	return 0, nil
 }
 
-type UpdateCheckedItemsCollapsedRequest struct {
-	Collapsed bool `json:"collapsed"`
-}
-
-func (h *NotesHandler) UpdateCheckedItemsCollapsed(w http.ResponseWriter, r *http.Request) (int, error) {
-	claims, ok := auth.GetUserFromContext(r.Context())
-	if !ok {
-		return http.StatusUnauthorized, errors.New("unauthorized")
-	}
-
-	id, err := strconv.Atoi(chi.URLParam(r, "id"))
-	if err != nil {
-		return http.StatusBadRequest, err
-	}
-
-	var req UpdateCheckedItemsCollapsedRequest
-	if err = json.NewDecoder(r.Body).Decode(&req); err != nil {
-		return http.StatusBadRequest, err
-	}
-
-	err = h.noteStore.UpdateCheckedItemsCollapsed(id, claims.UserID, req.Collapsed)
-	if err != nil {
-		if strings.Contains(err.Error(), "not found") || strings.Contains(err.Error(), "no access") {
-			return http.StatusNotFound, err
-		}
-		return http.StatusInternalServerError, err
-	}
-
-	w.WriteHeader(http.StatusNoContent)
-	return 0, nil
-}

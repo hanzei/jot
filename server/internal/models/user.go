@@ -1,12 +1,9 @@
 package models
 
 import (
-	"crypto/rand"
 	"database/sql"
-	"encoding/base32"
 	"fmt"
 	"log"
-	"strings"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
@@ -29,14 +26,6 @@ func NewUserStore(db *sql.DB) *UserStore {
 	return &UserStore{db: db}
 }
 
-func generateUserID() (string, error) {
-	bytes := make([]byte, 15) // 15 bytes = 120 bits, which gives us 24 base32 chars, we'll take first 20
-	if _, err := rand.Read(bytes); err != nil {
-		return "", err
-	}
-	encoded := base32.StdEncoding.EncodeToString(bytes)
-	return strings.ToLower(encoded[:20]), nil
-}
 
 func (s *UserStore) Create(username, password string) (*User, error) {
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
@@ -44,7 +33,7 @@ func (s *UserStore) Create(username, password string) (*User, error) {
 		return nil, fmt.Errorf("failed to hash password: %w", err)
 	}
 
-	userID, err := generateUserID()
+	userID, err := generateID()
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate user ID: %w", err)
 	}
@@ -156,7 +145,7 @@ func (s *UserStore) CreateByAdmin(username, password string, isAdmin bool) (*Use
 		return nil, fmt.Errorf("failed to hash password: %w", err)
 	}
 
-	userID, err := generateUserID()
+	userID, err := generateID()
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate user ID: %w", err)
 	}

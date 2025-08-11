@@ -169,8 +169,8 @@ export default function NoteModal({ note, onClose, onSave }: NoteModalProps) {
     const { active, over } = event;
 
     if (over && active.id !== over.id) {
-      const oldIndex = items.findIndex((item, index) => `item-${index}` === active.id);
-      const newIndex = items.findIndex((item, index) => `item-${index}` === over.id);
+      const oldIndex = items.findIndex((_, index) => `item-${index}` === active.id);
+      const newIndex = items.findIndex((_, index) => `item-${index}` === over.id);
 
       const newItems = arrayMove(items, oldIndex, newIndex);
       
@@ -401,9 +401,9 @@ export default function NoteModal({ note, onClose, onSave }: NoteModalProps) {
       <Dialog open={true} onClose={handleCloseRequest} className="relative z-50">
         <div className="fixed inset-0 bg-black/30" aria-hidden="true" />
       
-      <div className="fixed inset-0 flex items-center justify-center p-4">
+      <div className="fixed inset-0 flex items-center justify-center p-2 sm:p-4 overflow-hidden">
         <Dialog.Panel 
-          className={`mx-auto max-w-md w-full rounded-lg shadow-xl p-0 ${
+          className={`mx-auto w-full max-w-md max-h-[90vh] overflow-hidden rounded-lg shadow-xl ${
             colors.find(c => c.value === color)?.class || 'bg-white border-gray-300'
           }`}
         >
@@ -440,7 +440,7 @@ export default function NoteModal({ note, onClose, onSave }: NoteModalProps) {
           </div>
 
           {/* Content */}
-          <div className="p-4 space-y-4">
+          <div className="p-2 sm:p-4 space-y-4 overflow-y-auto max-h-[calc(90vh-8rem)]">
             {/* Note type selector (only for new notes) */}
             {!note && (
               <div className="flex space-x-2">
@@ -480,8 +480,8 @@ export default function NoteModal({ note, onClose, onSave }: NoteModalProps) {
             {noteType === 'text' ? (
               <textarea
                 placeholder="Take a note..."
-                rows={6}
-                className="w-full p-2 bg-transparent border-none outline-none resize-none placeholder-gray-500"
+                rows={4}
+                className="w-full p-2 bg-transparent border-none outline-none resize-none placeholder-gray-500 min-h-[6rem]"
                 value={content}
                 onChange={(e) => setContent(e.target.value)}
               />
