@@ -18,3 +18,8 @@ Use the following Task commands for development:
 - `task lint` - Run linters
 - `task lint-server` - Run server linting with golangci-lint
 - `task lint-webapp` - Run webapp linting
+
+- Don't commit to master unless I specically ask you to do some. Use a seperate feature branch instead.
+
+
+- Before creating a PR, run all tests and ensure they pass. Also run the linter.
