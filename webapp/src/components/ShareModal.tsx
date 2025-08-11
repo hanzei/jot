@@ -45,7 +45,7 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
   useEffect(() => {
     if (searchQuery.trim()) {
       const filtered = users.filter(user => 
-        user.email.toLowerCase().includes(searchQuery.toLowerCase()) &&
+        user.username.toLowerCase().includes(searchQuery.toLowerCase()) &&
         !shares.some(share => share.shared_with_user_id === user.id)
       );
       setFilteredUsers(filtered);
@@ -88,22 +88,22 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
     }
   };
 
-  const handleShare = async (userEmail: string) => {
-    if (!note || !userEmail.trim()) return;
+  const handleShare = async (username: string) => {
+    if (!note || !username.trim()) return;
 
     setIsLoading(true);
     setError('');
     setSuccess('');
 
     try {
-      await notes.share(note.id, { email: userEmail.trim() });
+      await notes.share(note.id, { username: username.trim() });
       setSearchQuery('');
       setSuccess('Note shared successfully!');
       await loadShares();
     } catch (error: unknown) {
       const axiosError = error as { response?: { status?: number; data?: string } };
       if (axiosError.response?.status === 404) {
-        setError('User not found with this email address.');
+        setError('User not found with this username.');
       } else if (axiosError.response?.status === 409) {
         setError('Note is already shared with this user.');
       } else if (axiosError.response?.status === 400 && axiosError.response?.data?.includes('yourself')) {
@@ -116,11 +116,11 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
     }
   };
 
-  const handleUnshare = async (shareEmail: string) => {
+  const handleUnshare = async (shareUsername: string) => {
     if (!note) return;
 
     try {
-      await notes.unshare(note.id, { email: shareEmail });
+      await notes.unshare(note.id, { username: shareUsername });
       setSuccess('Note unshared successfully!');
       await loadShares();
     } catch {
@@ -129,7 +129,7 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
   };
 
   const handleUserSelect = (user: User) => {
-    handleShare(user.email);
+    handleShare(user.username);
     setShowSuggestions(false);
   };
 
@@ -222,7 +222,7 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onFocus={handleInputFocus}
                   onKeyDown={handleKeyDown}
-                  placeholder="Search users by email..."
+                  placeholder="Search users by username..."
                   className="w-full rounded-md border border-gray-300 px-3 py-2 pr-10 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                   disabled={isLoading}
                 />
@@ -244,7 +244,7 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
                         onClick={() => handleUserSelect(user)}
                         onMouseEnter={() => setSelectedUserIndex(index)}
                       >
-                        <div className="font-medium">{user.email}</div>
+                        <div className="font-medium">{user.username}</div>
                         {user.is_admin && (
                           <div className="text-xs text-gray-500">Admin</div>
                         )}
@@ -269,9 +269,9 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
                 <div className="space-y-2 max-h-40 overflow-y-auto">
                   {shares.map((share) => (
                     <div key={share.id} className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                      <span className="text-sm text-gray-700">{share.user_email}</span>
+                      <span className="text-sm text-gray-700">{share.username}</span>
                       <button
-                        onClick={() => handleUnshare(share.user_email || '')}
+                        onClick={() => handleUnshare(share.username || '')}
                         className="text-red-600 hover:text-red-800 p-1"
                         title="Remove access"
                       >

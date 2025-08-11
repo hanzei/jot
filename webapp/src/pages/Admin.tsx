@@ -16,7 +16,7 @@ const Admin = ({ onLogout }: AdminProps) => {
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState('');
   const [formData, setFormData] = useState<CreateUserRequest>({
-    email: '',
+    username: '',
     password: '',
     is_admin: false,
   });
@@ -55,7 +55,7 @@ const Admin = ({ onLogout }: AdminProps) => {
     try {
       const newUser = await admin.createUser(formData);
       setUsers([newUser, ...users]);
-      setFormData({ email: '', password: '', is_admin: false });
+      setFormData({ username: '', password: '', is_admin: false });
       setShowCreateForm(false);
     } catch (err: unknown) {
       const axiosError = err as { response?: { data?: string } };
@@ -86,13 +86,13 @@ const Admin = ({ onLogout }: AdminProps) => {
           <div className="flex justify-between items-center py-6">
             <div className="flex items-center space-x-4">
               <Link to="/" className="text-2xl font-bold text-gray-900 hover:text-blue-600">
-                Keep
+                Jot
               </Link>
               <span className="text-sm text-gray-500">Admin Panel</span>
             </div>
             <div className="flex items-center space-x-4">
               <span className="text-sm text-gray-700">
-                Welcome, {currentUser?.email}
+                Welcome, {currentUser?.username}
               </span>
               <Link
                 to="/"
@@ -132,14 +132,15 @@ const Admin = ({ onLogout }: AdminProps) => {
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div>
                     <label className="block text-sm font-medium text-gray-700">
-                      Email
+                      Username
                     </label>
                     <input
-                      type="email"
+                      type="text"
                       required
-                      value={formData.email}
-                      onChange={(e) => setFormData({ ...formData, email: e.target.value })}
+                      value={formData.username}
+                      onChange={(e) => setFormData({ ...formData, username: e.target.value })}
                       className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Username (2-30 characters)"
                     />
                   </div>
                   <div>
@@ -149,7 +150,7 @@ const Admin = ({ onLogout }: AdminProps) => {
                     <input
                       type="password"
                       required
-                      minLength={8}
+                      minLength={4}
                       value={formData.password}
                       onChange={(e) => setFormData({ ...formData, password: e.target.value })}
                       className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
@@ -198,7 +199,7 @@ const Admin = ({ onLogout }: AdminProps) => {
                       <div className="flex items-center">
                         <div>
                           <p className="text-sm font-medium text-gray-900">
-                            {user.email}
+                            {user.username}
                           </p>
                           <p className="text-sm text-gray-500">
                             ID: {user.id} • Created: {new Date(user.created_at).toLocaleDateString()}

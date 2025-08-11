@@ -8,7 +8,7 @@ interface RegisterProps {
 }
 
 export default function Register({ onRegister }: RegisterProps) {
-  const [email, setEmail] = useState('');
+  const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [loading, setLoading] = useState(false);
@@ -18,6 +18,32 @@ export default function Register({ onRegister }: RegisterProps) {
     e.preventDefault();
     setLoading(true);
     setError('');
+
+    if (username.length < 2) {
+      setError('Username must be at least 2 characters');
+      setLoading(false);
+      return;
+    }
+
+    if (username.length > 30) {
+      setError('Username must be less than 30 characters');
+      setLoading(false);
+      return;
+    }
+
+    const usernameRegex = /^[a-zA-Z0-9_-]+$/;
+    if (!usernameRegex.test(username)) {
+      setError('Username can only contain letters, numbers, underscores, and hyphens');
+      setLoading(false);
+      return;
+    }
+
+    if (username.startsWith('_') || username.startsWith('-') || 
+        username.endsWith('_') || username.endsWith('-')) {
+      setError('Username cannot start or end with underscore or hyphen');
+      setLoading(false);
+      return;
+    }
 
     if (password !== confirmPassword) {
       setError('Passwords do not match');
@@ -32,7 +58,7 @@ export default function Register({ onRegister }: RegisterProps) {
     }
 
     try {
-      const response = await auth.register({ email, password });
+      const response = await auth.register({ username, password });
       setToken(response.token);
       setUser(response.user);
       onRegister();
@@ -64,19 +90,19 @@ export default function Register({ onRegister }: RegisterProps) {
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           <div className="rounded-md shadow-sm space-y-4">
             <div>
-              <label htmlFor="email-address" className="block text-sm font-medium text-gray-700">
-                Email address
+              <label htmlFor="username" className="block text-sm font-medium text-gray-700">
+                Username
               </label>
               <input
-                id="email-address"
-                name="email"
-                type="email"
-                autoComplete="email"
+                id="username"
+                name="username"
+                type="text"
+                autoComplete="username"
                 required
                 className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                placeholder="Email address"
-                value={email}
-                onChange={(e) => setEmail(e.target.value)}
+                placeholder="Username (2-30 characters)"
+                value={username}
+                onChange={(e) => setUsername(e.target.value)}
               />
             </div>
             <div>

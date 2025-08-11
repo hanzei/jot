@@ -157,7 +157,7 @@ Switch between different views of your notes.
 - **Jot Logo**: Returns to main notes view
 - **Notes/Archive Tabs**: Switch between views
 - **Search Bar**: Find notes quickly
-- **User Menu**: Shows email and logout option
+- **User Menu**: Shows username and logout option
 
 #### Note Actions Menu
 Access via three dots (⋮) on each note:
@@ -177,7 +177,6 @@ While editing notes:
 ## Security and Privacy
 
 ### Authentication
-- Secure email/password login
 - JWT tokens for session management
 - 24-hour token expiration
 - Automatic logout on expiration

@@ -1,6 +1,6 @@
 export interface User {
   id: string;
-  email: string;
+  username: string;
   is_admin: boolean;
   created_at: string;
   updated_at: string;
@@ -12,12 +12,12 @@ export interface AuthResponse {
 }
 
 export interface LoginRequest {
-  email: string;
+  username: string;
   password: string;
 }
 
 export interface RegisterRequest {
-  email: string;
+  username: string;
   password: string;
 }
 
@@ -39,7 +39,7 @@ export interface NoteShare {
   shared_with_user_id: string;
   shared_by_user_id: string;
   permission_level: string;
-  user_email?: string;
+  username?: string;
   created_at: string;
   updated_at: string;
 }
@@ -79,7 +79,7 @@ export interface UpdateNoteRequest {
 }
 
 export interface CreateUserRequest {
-  email: string;
+  username: string;
   password: string;
   is_admin: boolean;
 }
@@ -89,7 +89,7 @@ export interface UserListResponse {
 }
 
 export interface ShareNoteRequest {
-  email: string;
+  username: string;
 }
 
 export interface ShareNoteResponse {
