@@ -204,24 +204,33 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, currentUserI
           </div>
         ) : (
           <div className="space-y-1">
-            {note.items?.slice(0, 5).map((item) => (
-              <div key={item.id} className="flex items-center text-sm">
-                <input
-                  type="checkbox"
-                  checked={item.completed}
-                  readOnly
-                  className="h-4 w-4 text-blue-600 rounded mr-2"
-                />
-                <span className={item.completed ? 'line-through text-gray-500' : 'text-gray-700'}>
-                  {item.text}
-                </span>
-              </div>
-            ))}
-            {(note.items?.length ?? 0) > 5 && (
-              <div className="text-xs text-gray-500">
-                +{(note.items?.length ?? 0) - 5} more items
-              </div>
-            )}
+            {(() => {
+              const uncompletedItems = note.items?.filter(item => !item.completed) || [];
+              const completedItems = note.items?.filter(item => item.completed) || [];
+              
+              return (
+                <>
+                  {uncompletedItems.map((item) => (
+                    <div key={item.id} className="flex items-center text-sm">
+                      <input
+                        type="checkbox"
+                        checked={item.completed}
+                        readOnly
+                        className="h-4 w-4 text-blue-600 rounded mr-2"
+                      />
+                      <span className="text-gray-700">
+                        {item.text}
+                      </span>
+                    </div>
+                  ))}
+                  {completedItems.length > 0 && (
+                    <div className="text-xs text-gray-500 mt-2">
+                      +{completedItems.length} completed items
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </div>
         )}
       </div>

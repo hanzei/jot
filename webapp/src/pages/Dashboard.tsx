@@ -88,6 +88,10 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     setEditingNote(null);
   };
 
+  const handleNoteRefresh = () => {
+    loadNotes(); // Only refresh data, don't close modal
+  };
+
   const handleDeleteNote = async (noteId: string) => {
     try {
       await notes.delete(noteId);
@@ -344,6 +348,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                           onDelete={handleDeleteNote}
                           onShare={handleShareNote}
                           currentUserId={user?.id}
+                          disabled={showArchived}
                         />
                       ))}
                     </div>
@@ -372,6 +377,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                           onDelete={handleDeleteNote}
                           onShare={handleShareNote}
                           currentUserId={user?.id}
+                          disabled={showArchived}
                         />
                       ))}
                     </div>
@@ -389,6 +395,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
           note={editingNote}
           onClose={() => setIsModalOpen(false)}
           onSave={handleNoteUpdate}
+          onRefresh={handleNoteRefresh}
         />
       )}
 

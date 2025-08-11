@@ -105,14 +105,15 @@ func (s *NoteStore) Create(userID string, title, content string, noteType NoteTy
 		return nil, fmt.Errorf("failed to generate note ID: %w", err)
 	}
 
-	// Get the next position for unpinned notes
-	var maxPosition int
-	posQuery := `SELECT COALESCE(MAX(position), -1) FROM notes WHERE user_id = ? AND pinned = FALSE AND archived = FALSE`
-	err = s.db.QueryRow(posQuery, userID).Scan(&maxPosition)
+	// Shift existing unpinned notes down to make room at position 0
+	shiftQuery := `UPDATE notes SET position = position + 1 WHERE user_id = ? AND pinned = FALSE AND archived = FALSE`
+	_, err = s.db.Exec(shiftQuery, userID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get max position: %w", err)
+		return nil, fmt.Errorf("failed to shift existing notes: %w", err)
 	}
-	nextPosition := maxPosition + 1
+	
+	// New notes go at position 0 (first position)
+	nextPosition := 0
 
 	query := `INSERT INTO notes (id, user_id, title, content, note_type, color, position, unpinned_position) 
 			  VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING pinned, archived, created_at, updated_at`

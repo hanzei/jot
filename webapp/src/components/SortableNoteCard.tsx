@@ -10,6 +10,7 @@ interface SortableNoteCardProps {
   onDelete: (noteId: string) => void;
   onShare: (note: Note) => void;
   currentUserId?: string;
+  disabled?: boolean;
 }
 
 export default function SortableNoteCard({
@@ -18,6 +19,7 @@ export default function SortableNoteCard({
   onDelete,
   onShare,
   currentUserId,
+  disabled = false,
 }: SortableNoteCardProps) {
   const {
     attributes,
@@ -27,7 +29,10 @@ export default function SortableNoteCard({
     transform,
     transition,
     isDragging,
-  } = useSortable({ id: note.id });
+  } = useSortable({ 
+    id: note.id,
+    disabled: disabled
+  });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -40,20 +45,24 @@ export default function SortableNoteCard({
     <div
       ref={setNodeRef}
       style={style}
-      {...attributes}
-      {...listeners}
-      className={`touch-none select-none relative cursor-grab active:cursor-grabbing ${isDragging ? 'scale-105 shadow-xl' : ''}`}
+      {...(!disabled ? attributes : {})}
+      {...(!disabled ? listeners : {})}
+      className={`touch-none select-none relative ${
+        disabled ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'
+      } ${isDragging ? 'scale-105 shadow-xl' : ''}`}
     >
-      {/* Dedicated drag handle */}
-      <div
-        ref={setActivatorNodeRef}
-        {...attributes}
-        {...listeners}
-        className="absolute top-2 right-10 p-2 rounded-md bg-gray-100 opacity-0 group-hover:opacity-100 hover:bg-gray-200 transition-all cursor-grab active:cursor-grabbing z-20"
-        title="Drag to reorder"
-      >
-        <Bars3Icon className="h-4 w-4 text-gray-600" />
-      </div>
+      {/* Dedicated drag handle - only show for non-disabled notes */}
+      {!disabled && (
+        <div
+          ref={setActivatorNodeRef}
+          {...attributes}
+          {...listeners}
+          className="absolute top-2 right-10 p-2 rounded-md bg-gray-100 opacity-0 group-hover:opacity-100 hover:bg-gray-200 transition-all cursor-grab active:cursor-grabbing z-20"
+          title="Drag to reorder"
+        >
+          <Bars3Icon className="h-4 w-4 text-gray-600" />
+        </div>
+      )}
 
       <div className="group" style={{ pointerEvents: isDragging ? 'none' : 'auto' }}>
         <NoteCard
