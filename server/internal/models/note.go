@@ -1,6 +1,7 @@
 package models
 
 import (
+	"crypto/rand"
 	"database/sql"
 	"fmt"
 	"log"
@@ -15,7 +16,7 @@ const (
 )
 
 type Note struct {
-	ID               int         `json:"id"`
+	ID               string      `json:"id"`
 	UserID           string      `json:"user_id"`
 	Title            string      `json:"title"`
 	Content          string      `json:"content"`
@@ -33,8 +34,8 @@ type Note struct {
 }
 
 type NoteItem struct {
-	ID        int       `json:"id"`
-	NoteID    int       `json:"note_id"`
+	ID        string    `json:"id"`
+	NoteID    string    `json:"note_id"`
 	Text      string    `json:"text"`
 	Completed bool      `json:"completed"`
 	Position  int       `json:"position"`
@@ -43,8 +44,8 @@ type NoteItem struct {
 }
 
 type NoteShare struct {
-	ID               int       `json:"id"`
-	NoteID           int       `json:"note_id"`
+	ID               string    `json:"id"`
+	NoteID           string    `json:"note_id"`
 	SharedWithUserID string    `json:"shared_with_user_id"`
 	SharedByUserID   string    `json:"shared_by_user_id"`
 	PermissionLevel  string    `json:"permission_level"`
@@ -61,28 +62,71 @@ func NewNoteStore(db *sql.DB) *NoteStore {
 	return &NoteStore{db: db}
 }
 
+func generateID() (string, error) {
+	const chars = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	bytes := make([]byte, 22)
+	randBytes := make([]byte, 22)
+	
+	if _, err := rand.Read(randBytes); err != nil {
+		return "", err
+	}
+	
+	for i := 0; i < 22; i++ {
+		bytes[i] = chars[randBytes[i]%byte(len(chars))]
+	}
+	
+	return string(bytes), nil
+}
+
+func IsValidID(id string) bool {
+	if len(id) != 22 {
+		return false
+	}
+	const chars = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
+	for _, char := range id {
+		found := false
+		for _, validChar := range chars {
+			if char == validChar {
+				found = true
+				break
+			}
+		}
+		if !found {
+			return false
+		}
+	}
+	return true
+}
+
 func (s *NoteStore) Create(userID string, title, content string, noteType NoteType, color string) (*Note, error) {
+	// Generate note ID
+	noteID, err := generateID()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate note ID: %w", err)
+	}
+
 	// Get the next position for unpinned notes
 	var maxPosition int
 	posQuery := `SELECT COALESCE(MAX(position), -1) FROM notes WHERE user_id = ? AND pinned = FALSE AND archived = FALSE`
-	err := s.db.QueryRow(posQuery, userID).Scan(&maxPosition)
+	err = s.db.QueryRow(posQuery, userID).Scan(&maxPosition)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get max position: %w", err)
 	}
 	nextPosition := maxPosition + 1
 
-	query := `INSERT INTO notes (user_id, title, content, note_type, color, position, unpinned_position) 
-			  VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING id, pinned, archived, created_at, updated_at`
+	query := `INSERT INTO notes (id, user_id, title, content, note_type, color, position, unpinned_position) 
+			  VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING pinned, archived, created_at, updated_at`
 
 	var note Note
-	err = s.db.QueryRow(query, userID, title, content, noteType, color, nextPosition, nextPosition).Scan(
-		&note.ID, &note.Pinned, &note.Archived,
+	err = s.db.QueryRow(query, noteID, userID, title, content, noteType, color, nextPosition, nextPosition).Scan(
+		&note.Pinned, &note.Archived,
 		&note.CreatedAt, &note.UpdatedAt,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create note: %w", err)
 	}
 
+	note.ID = noteID
 	note.UserID = userID
 	note.Title = title
 	note.Content = content
@@ -152,7 +196,7 @@ func (s *NoteStore) GetByUserID(userID string, archived bool, search string) ([]
 	return notes, nil
 }
 
-func (s *NoteStore) GetByID(id int, userID string) (*Note, error) {
+func (s *NoteStore) GetByID(id string, userID string) (*Note, error) {
 	hasAccess, err := s.HasAccess(id, userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to check access: %w", err)
@@ -196,7 +240,7 @@ func (s *NoteStore) GetByID(id int, userID string) (*Note, error) {
 	return &note, nil
 }
 
-func (s *NoteStore) Update(id int, userID string, title, content string, pinned, archived bool, color string) error {
+func (s *NoteStore) Update(id string, userID string, title, content string, pinned, archived bool, color string) error {
 	hasAccess, err := s.HasAccess(id, userID)
 	if err != nil {
 		return fmt.Errorf("failed to check access: %w", err)
@@ -275,7 +319,7 @@ func (s *NoteStore) Update(id int, userID string, title, content string, pinned,
 	return nil
 }
 
-func (s *NoteStore) Delete(id int, userID string) error {
+func (s *NoteStore) Delete(id string, userID string) error {
 	isOwner, err := s.IsOwner(id, userID)
 	if err != nil {
 		return fmt.Errorf("failed to check ownership: %w", err)
@@ -301,7 +345,7 @@ func (s *NoteStore) Delete(id int, userID string) error {
 	return nil
 }
 
-func (s *NoteStore) getItemsByNoteID(noteID int) ([]NoteItem, error) {
+func (s *NoteStore) getItemsByNoteID(noteID string) ([]NoteItem, error) {
 	query := `SELECT id, note_id, text, completed, position, created_at, updated_at
 			  FROM note_items WHERE note_id = ? ORDER BY position`
 
@@ -331,18 +375,25 @@ func (s *NoteStore) getItemsByNoteID(noteID int) ([]NoteItem, error) {
 	return items, nil
 }
 
-func (s *NoteStore) CreateItem(noteID int, text string, position int) (*NoteItem, error) {
-	query := `INSERT INTO note_items (note_id, text, position)
-			  VALUES (?, ?, ?) RETURNING id, completed, created_at, updated_at`
+func (s *NoteStore) CreateItem(noteID string, text string, position int) (*NoteItem, error) {
+	// Generate item ID
+	itemID, err := generateID()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate item ID: %w", err)
+	}
+
+	query := `INSERT INTO note_items (id, note_id, text, position)
+			  VALUES (?, ?, ?, ?) RETURNING completed, created_at, updated_at`
 
 	var item NoteItem
-	err := s.db.QueryRow(query, noteID, text, position).Scan(
-		&item.ID, &item.Completed, &item.CreatedAt, &item.UpdatedAt,
+	err = s.db.QueryRow(query, itemID, noteID, text, position).Scan(
+		&item.Completed, &item.CreatedAt, &item.UpdatedAt,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create note item: %w", err)
 	}
 
+	item.ID = itemID
 	item.NoteID = noteID
 	item.Text = text
 	item.Position = position
@@ -350,7 +401,7 @@ func (s *NoteStore) CreateItem(noteID int, text string, position int) (*NoteItem
 	return &item, nil
 }
 
-func (s *NoteStore) UpdateItem(id int, text string, completed bool, position int) error {
+func (s *NoteStore) UpdateItem(id string, text string, completed bool, position int) error {
 	query := `UPDATE note_items SET text = ?, completed = ?, position = ?, updated_at = CURRENT_TIMESTAMP
 			  WHERE id = ?`
 
@@ -362,7 +413,7 @@ func (s *NoteStore) UpdateItem(id int, text string, completed bool, position int
 	return nil
 }
 
-func (s *NoteStore) DeleteItem(id int) error {
+func (s *NoteStore) DeleteItem(id string) error {
 	_, err := s.db.Exec("DELETE FROM note_items WHERE id = ?", id)
 	if err != nil {
 		return fmt.Errorf("failed to delete note item: %w", err)
@@ -371,7 +422,7 @@ func (s *NoteStore) DeleteItem(id int) error {
 	return nil
 }
 
-func (s *NoteStore) DeleteItemsByNoteID(noteID int) error {
+func (s *NoteStore) DeleteItemsByNoteID(noteID string) error {
 	_, err := s.db.Exec("DELETE FROM note_items WHERE note_id = ?", noteID)
 	if err != nil {
 		return fmt.Errorf("failed to delete note items: %w", err)
@@ -379,17 +430,24 @@ func (s *NoteStore) DeleteItemsByNoteID(noteID int) error {
 	return nil
 }
 
-func (s *NoteStore) CreateItemWithCompleted(noteID int, text string, position int, completed bool) (*NoteItem, error) {
-	query := `INSERT INTO note_items (note_id, text, position, completed)
-			  VALUES (?, ?, ?, ?) RETURNING id, created_at, updated_at`
+func (s *NoteStore) CreateItemWithCompleted(noteID string, text string, position int, completed bool) (*NoteItem, error) {
+	// Generate item ID
+	itemID, err := generateID()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate item ID: %w", err)
+	}
+
+	query := `INSERT INTO note_items (id, note_id, text, position, completed)
+			  VALUES (?, ?, ?, ?, ?) RETURNING created_at, updated_at`
 	var item NoteItem
-	err := s.db.QueryRow(query, noteID, text, position, completed).Scan(
-		&item.ID, &item.CreatedAt, &item.UpdatedAt,
+	err = s.db.QueryRow(query, itemID, noteID, text, position, completed).Scan(
+		&item.CreatedAt, &item.UpdatedAt,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create note item: %w", err)
 	}
 
+	item.ID = itemID
 	item.NoteID = noteID
 	item.Text = text
 	item.Position = position
@@ -398,11 +456,17 @@ func (s *NoteStore) CreateItemWithCompleted(noteID int, text string, position in
 	return &item, nil
 }
 
-func (s *NoteStore) ShareNote(noteID int, sharedByUserID, sharedWithUserID string) error {
-	query := `INSERT INTO note_shares (note_id, shared_with_user_id, shared_by_user_id, permission_level)
-			  VALUES (?, ?, ?, 'edit')`
+func (s *NoteStore) ShareNote(noteID string, sharedByUserID, sharedWithUserID string) error {
+	// Generate share ID
+	shareID, err := generateID()
+	if err != nil {
+		return fmt.Errorf("failed to generate share ID: %w", err)
+	}
 
-	_, err := s.db.Exec(query, noteID, sharedWithUserID, sharedByUserID)
+	query := `INSERT INTO note_shares (id, note_id, shared_with_user_id, shared_by_user_id, permission_level)
+			  VALUES (?, ?, ?, ?, 'edit')`
+
+	_, err = s.db.Exec(query, shareID, noteID, sharedWithUserID, sharedByUserID)
 	if err != nil {
 		return fmt.Errorf("failed to share note: %w", err)
 	}
@@ -410,7 +474,7 @@ func (s *NoteStore) ShareNote(noteID int, sharedByUserID, sharedWithUserID strin
 	return nil
 }
 
-func (s *NoteStore) UnshareNote(noteID int, sharedWithUserID string) error {
+func (s *NoteStore) UnshareNote(noteID string, sharedWithUserID string) error {
 	query := `DELETE FROM note_shares WHERE note_id = ? AND shared_with_user_id = ?`
 
 	result, err := s.db.Exec(query, noteID, sharedWithUserID)
@@ -430,7 +494,7 @@ func (s *NoteStore) UnshareNote(noteID int, sharedWithUserID string) error {
 	return nil
 }
 
-func (s *NoteStore) GetNoteShares(noteID int) ([]NoteShare, error) {
+func (s *NoteStore) GetNoteShares(noteID string) ([]NoteShare, error) {
 	query := `SELECT ns.id, ns.note_id, ns.shared_with_user_id, ns.shared_by_user_id, 
 			  ns.permission_level, u.username, ns.created_at, ns.updated_at
 			  FROM note_shares ns
@@ -463,7 +527,7 @@ func (s *NoteStore) GetNoteShares(noteID int) ([]NoteShare, error) {
 	return shares, nil
 }
 
-func (s *NoteStore) HasAccess(noteID int, userID string) (bool, error) {
+func (s *NoteStore) HasAccess(noteID string, userID string) (bool, error) {
 	var count int
 	query := `SELECT COUNT(*) FROM notes WHERE id = ? AND user_id = ?
 			  UNION ALL
@@ -491,7 +555,7 @@ func (s *NoteStore) HasAccess(noteID int, userID string) (bool, error) {
 	return totalCount > 0, nil
 }
 
-func (s *NoteStore) IsOwner(noteID int, userID string) (bool, error) {
+func (s *NoteStore) IsOwner(noteID string, userID string) (bool, error) {
 	var count int
 	query := `SELECT COUNT(*) FROM notes WHERE id = ? AND user_id = ?`
 
@@ -503,7 +567,7 @@ func (s *NoteStore) IsOwner(noteID int, userID string) (bool, error) {
 	return count > 0, nil
 }
 
-func (s *NoteStore) ReorderNotes(userID string, noteIDs []int) error {
+func (s *NoteStore) ReorderNotes(userID string, noteIDs []string) error {
 	if len(noteIDs) == 0 {
 		return nil
 	}
@@ -525,15 +589,15 @@ func (s *NoteStore) ReorderNotes(userID string, noteIDs []int) error {
 		var hasAccess bool
 		hasAccess, err = s.HasAccess(noteID, userID)
 		if err != nil {
-			return fmt.Errorf("failed to check access for note %d: %w", noteID, err)
+			return fmt.Errorf("failed to check access for note %s: %w", noteID, err)
 		}
 		if !hasAccess {
-			return fmt.Errorf("no access to note %d", noteID)
+			return fmt.Errorf("no access to note %s", noteID)
 		}
 
 		// Update position
 		if _, err = tx.Exec("UPDATE notes SET position = ? WHERE id = ?", i, noteID); err != nil {
-			return fmt.Errorf("failed to update position for note %d: %w", noteID, err)
+			return fmt.Errorf("failed to update position for note %s: %w", noteID, err)
 		}
 	}
 

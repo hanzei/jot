@@ -257,10 +257,10 @@ func TestNotesEndpoints(t *testing.T) {
 	createResp := ts.authRequest(t, user, http.MethodPost, "/api/v1/notes", body)
 	var createdNote map[string]any
 	createResp.UnmarshalBody(&createdNote)
-	noteID := int(createdNote["id"].(float64))
+	noteID := createdNote["id"].(string)
 
 	t.Run("get specific note", func(t *testing.T) {
-		resp := ts.authRequest(t, user, http.MethodGet, fmt.Sprintf("/api/v1/notes/%d", noteID), nil)
+		resp := ts.authRequest(t, user, http.MethodGet, fmt.Sprintf("/api/v1/notes/%s", noteID), nil)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 		var note map[string]any
@@ -278,7 +278,7 @@ func TestNotesEndpoints(t *testing.T) {
 			"color":    "#ff0000",
 		}
 
-		resp := ts.authRequest(t, user, http.MethodPut, fmt.Sprintf("/api/v1/notes/%d", noteID), updateBody)
+		resp := ts.authRequest(t, user, http.MethodPut, fmt.Sprintf("/api/v1/notes/%s", noteID), updateBody)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 		var updatedNote map[string]any
@@ -288,11 +288,11 @@ func TestNotesEndpoints(t *testing.T) {
 	})
 
 	t.Run("delete note", func(t *testing.T) {
-		resp := ts.authRequest(t, user, http.MethodDelete, fmt.Sprintf("/api/v1/notes/%d", noteID), nil)
+		resp := ts.authRequest(t, user, http.MethodDelete, fmt.Sprintf("/api/v1/notes/%s", noteID), nil)
 		assert.Equal(t, http.StatusNoContent, resp.StatusCode)
 
 		// Verify note is deleted
-		getResp := ts.authRequest(t, user, http.MethodGet, fmt.Sprintf("/api/v1/notes/%d", noteID), nil)
+		getResp := ts.authRequest(t, user, http.MethodGet, fmt.Sprintf("/api/v1/notes/%s", noteID), nil)
 		assert.Equal(t, http.StatusNotFound, getResp.StatusCode)
 	})
 }

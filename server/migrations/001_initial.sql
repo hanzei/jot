@@ -10,7 +10,7 @@ CREATE TABLE users (
 
 -- Notes table
 CREATE TABLE notes (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    id TEXT PRIMARY KEY,
     user_id TEXT NOT NULL,
     title TEXT NOT NULL DEFAULT '',
     content TEXT NOT NULL DEFAULT '',
@@ -25,8 +25,8 @@ CREATE TABLE notes (
 
 -- Note items table (for todo lists)
 CREATE TABLE note_items (
-    id INTEGER PRIMARY KEY AUTOINCREMENT,
-    note_id INTEGER NOT NULL,
+    id TEXT PRIMARY KEY,
+    note_id TEXT NOT NULL,
     text TEXT NOT NULL,
     completed BOOLEAN DEFAULT FALSE,
     position INTEGER NOT NULL DEFAULT 0,

@@ -24,8 +24,8 @@ export interface RegisterRequest {
 export type NoteType = 'text' | 'todo';
 
 export interface NoteItem {
-  id: number;
-  note_id: number;
+  id: string;
+  note_id: string;
   text: string;
   completed: boolean;
   position: number;
@@ -34,8 +34,8 @@ export interface NoteItem {
 }
 
 export interface NoteShare {
-  id: number;
-  note_id: number;
+  id: string;
+  note_id: string;
   shared_with_user_id: string;
   shared_by_user_id: string;
   permission_level: string;
@@ -45,7 +45,7 @@ export interface NoteShare {
 }
 
 export interface Note {
-  id: number;
+  id: string;
   user_id: string;
   title: string;
   content: string;
