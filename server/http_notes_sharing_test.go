@@ -12,9 +12,9 @@ import (
 // Note sharing endpoint tests
 func TestNoteSharingEndpoints(t *testing.T) {
 	ts := setupTestServer(t)
-	owner := ts.createTestUser(t, "owner@example.com", "password123", false)
-	_ = ts.createTestUser(t, "user@example.com", "password123", false)
-	other := ts.createTestUser(t, "other@example.com", "password123", false)
+	owner := ts.createTestUser(t, "owner", "password123", false)
+	_ = ts.createTestUser(t, "user", "password123", false)
+	other := ts.createTestUser(t, "other", "password123", false)
 
 	// Create a note to share
 	body := map[string]any{
@@ -28,7 +28,7 @@ func TestNoteSharingEndpoints(t *testing.T) {
 
 	t.Run("share note with user", func(t *testing.T) {
 		shareBody := map[string]string{
-			"email": "user@example.com",
+			"username": "user",
 		}
 
 		resp := ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%d/share", noteID), shareBody)
@@ -40,9 +40,9 @@ func TestNoteSharingEndpoints(t *testing.T) {
 	})
 
 	t.Run("share with duplicate user returns conflict", func(t *testing.T) {
-		// First share with other@example.com
+		// First share with other user
 		shareBody := map[string]string{
-			"email": "other@example.com",
+			"username": "other",
 		}
 		resp1 := ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%d/share", noteID), shareBody)
 		assert.Equal(t, http.StatusOK, resp1.StatusCode)
@@ -52,28 +52,28 @@ func TestNoteSharingEndpoints(t *testing.T) {
 		assert.Equal(t, http.StatusConflict, resp.StatusCode)
 	})
 
-	t.Run("share with nonexistent email returns not found", func(t *testing.T) {
+	t.Run("share with nonexistent username returns not found", func(t *testing.T) {
 		shareBody := map[string]string{
-			"email": "nonexistent@example.com",
+			"username": "nonexistent",
 		}
 
 		resp := ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%d/share", noteID), shareBody)
 		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 	})
 
-	t.Run("share with empty email returns bad request", func(t *testing.T) {
+	t.Run("share with empty username returns bad request", func(t *testing.T) {
 		shareBody := map[string]string{
-			"email": "",
+			"username": "",
 		}
 
 		resp := ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%d/share", noteID), shareBody)
 		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
-		assert.Contains(t, resp.GetString(), "empty email")
+		assert.Contains(t, resp.GetString(), "empty username")
 	})
 
 	t.Run("share with self returns bad request", func(t *testing.T) {
 		shareBody := map[string]string{
-			"email": "owner@example.com",
+			"username": "owner",
 		}
 
 		resp := ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%d/share", noteID), shareBody)
@@ -83,7 +83,7 @@ func TestNoteSharingEndpoints(t *testing.T) {
 
 	t.Run("share by non-owner returns forbidden", func(t *testing.T) {
 		shareBody := map[string]string{
-			"email": "other@example.com",
+			"username": "other",
 		}
 
 		resp := ts.authRequest(t, other, http.MethodPost, fmt.Sprintf("/api/v1/notes/%d/share", noteID), shareBody)
@@ -106,7 +106,7 @@ func TestNoteSharingEndpoints(t *testing.T) {
 
 	t.Run("unshare note", func(t *testing.T) {
 		unshareBody := map[string]string{
-			"email": "user@example.com",
+			"username": "user",
 		}
 
 		resp := ts.request(t, http.MethodDelete, fmt.Sprintf("/api/v1/notes/%d/share", noteID), unshareBody, map[string]string{
@@ -121,7 +121,7 @@ func TestNoteSharingEndpoints(t *testing.T) {
 
 	t.Run("unshare non-shared user returns not found", func(t *testing.T) {
 		unshareBody := map[string]string{
-			"email": "user@example.com", // Already unshared
+			"username": "user", // Already unshared
 		}
 
 		resp := ts.request(t, http.MethodDelete, fmt.Sprintf("/api/v1/notes/%d/share", noteID), unshareBody, map[string]string{
@@ -133,9 +133,9 @@ func TestNoteSharingEndpoints(t *testing.T) {
 
 func TestSearchUsersEndpoint(t *testing.T) {
 	ts := setupTestServer(t)
-	user1 := ts.createTestUser(t, "user1@example.com", "password123", false)
-	_ = ts.createTestUser(t, "user2@example.com", "password123", false)
-	_ = ts.createTestUser(t, "admin@example.com", "password123", true)
+	user1 := ts.createTestUser(t, "user1", "password123", false)
+	_ = ts.createTestUser(t, "user2", "password123", false)
+	_ = ts.createTestUser(t, "admin", "password123", true)
 
 	t.Run("search users returns all except current user", func(t *testing.T) {
 		resp := ts.authRequest(t, user1, http.MethodGet, "/api/v1/users", nil)
@@ -147,7 +147,7 @@ func TestSearchUsersEndpoint(t *testing.T) {
 
 		// Check that current user is not in results
 		for _, user := range users {
-			assert.NotEqual(t, "user1@example.com", user["email"], "Should not include current user in results")
+			assert.NotEqual(t, "user1", user["username"], "Should not include current user in results")
 		}
 
 		// Check that response doesn't include passwords
@@ -165,7 +165,7 @@ func TestSearchUsersEndpoint(t *testing.T) {
 
 func TestEdgeCases(t *testing.T) {
 	ts := setupTestServer(t)
-	user := ts.createTestUser(t, "user@example.com", "password123", false)
+	user := ts.createTestUser(t, "user", "password123", false)
 
 	t.Run("invalid note ID returns bad request", func(t *testing.T) {
 		resp := ts.authRequest(t, user, http.MethodGet, "/api/v1/notes/invalid", nil)

@@ -39,7 +39,6 @@ type TestUser struct {
 type TestServer struct {
 	Server     *server.Server
 	HTTPServer *httptest.Server
-	TestUsers  map[string]*TestUser
 }
 
 func setupTestServer(t *testing.T) *TestServer {
@@ -55,7 +54,6 @@ func setupTestServer(t *testing.T) *TestServer {
 	ts := &TestServer{
 		Server:     s,
 		HTTPServer: httpServer,
-		TestUsers:  make(map[string]*TestUser),
 	}
 
 	t.Cleanup(func() {
@@ -67,21 +65,18 @@ func setupTestServer(t *testing.T) *TestServer {
 	return ts
 }
 
-func (ts *TestServer) createTestUser(t *testing.T, email, password string, isAdmin bool) *TestUser {
+func (ts *TestServer) createTestUser(t *testing.T, username, password string, isAdmin bool) *TestUser {
 	userStore := models.NewUserStore(ts.Server.GetDB().DB)
-
 	var user *models.User
 	var err error
-
 	if isAdmin {
-		user, err = userStore.CreateByAdmin(email, password, isAdmin)
+		user, err = userStore.CreateByAdmin(username, password, isAdmin)
 	} else {
-		user, err = userStore.Create(email, password)
+		user, err = userStore.Create(username, password)
 	}
-	require.NoError(t, err)
 
 	tokenService := auth.NewTokenService("test-secret-key")
-	token, err := tokenService.GenerateToken(user.ID, user.Email, user.IsAdmin)
+	token, err := tokenService.GenerateToken(user.ID, user.Username, user.IsAdmin)
 	require.NoError(t, err)
 
 	testUser := &TestUser{
@@ -89,7 +84,6 @@ func (ts *TestServer) createTestUser(t *testing.T, email, password string, isAdm
 		Token: token,
 	}
 
-	ts.TestUsers[email] = testUser
 	return testUser
 }
 
@@ -149,7 +143,7 @@ func TestRegisterEndpoint(t *testing.T) {
 
 	t.Run("valid registration", func(t *testing.T) {
 		body := map[string]string{
-			"email":    "test@example.com",
+			"username": "testuser",
 			"password": "password123",
 		}
 
@@ -161,9 +155,9 @@ func TestRegisterEndpoint(t *testing.T) {
 		assert.NotNil(t, response["token"])
 	})
 
-	t.Run("duplicate email", func(t *testing.T) {
+	t.Run("duplicate username", func(t *testing.T) {
 		body := map[string]string{
-			"email":    "duplicate@example.com",
+			"username": "duplicate",
 			"password": "password123",
 		}
 
@@ -173,9 +167,9 @@ func TestRegisterEndpoint(t *testing.T) {
 		assert.Equal(t, http.StatusConflict, resp.StatusCode)
 	})
 
-	t.Run("invalid email", func(t *testing.T) {
+	t.Run("invalid username", func(t *testing.T) {
 		body := map[string]string{
-			"email":    "invalid-email",
+			"username": "x",
 			"password": "password123",
 		}
 
@@ -189,14 +183,14 @@ func TestLoginEndpoint(t *testing.T) {
 
 	// Register a user first
 	registerBody := map[string]string{
-		"email":    "login@example.com",
+		"username": "loginuser",
 		"password": "password123",
 	}
 	ts.request(t, http.MethodPost, "/api/v1/register", registerBody, nil)
 
 	t.Run("valid login", func(t *testing.T) {
 		body := map[string]string{
-			"email":    "login@example.com",
+			"username": "loginuser",
 			"password": "password123",
 		}
 
@@ -210,7 +204,7 @@ func TestLoginEndpoint(t *testing.T) {
 
 	t.Run("invalid credentials", func(t *testing.T) {
 		body := map[string]string{
-			"email":    "login@example.com",
+			"username": "loginuser",
 			"password": "wrongpassword",
 		}
 
@@ -222,7 +216,7 @@ func TestLoginEndpoint(t *testing.T) {
 // Notes endpoint tests
 func TestNotesEndpoints(t *testing.T) {
 	ts := setupTestServer(t)
-	user := ts.createTestUser(t, "user@example.com", "password123", false)
+	user := ts.createTestUser(t, "user", "password123", false)
 
 	t.Run("unauthorized access", func(t *testing.T) {
 		resp := ts.request(t, http.MethodGet, "/api/v1/notes", nil, nil)
@@ -306,8 +300,8 @@ func TestNotesEndpoints(t *testing.T) {
 // Admin endpoint tests
 func TestAdminEndpoints(t *testing.T) {
 	ts := setupTestServer(t)
-	admin := ts.createTestUser(t, "admin@example.com", "password123", true)
-	user := ts.createTestUser(t, "user@example.com", "password123", false)
+	admin := ts.createTestUser(t, "admin", "password123", true)
+	user := ts.createTestUser(t, "user", "password123", false)
 
 	t.Run("get users as admin", func(t *testing.T) {
 		resp := ts.authRequest(t, admin, http.MethodGet, "/api/v1/admin/users", nil)
@@ -327,7 +321,7 @@ func TestAdminEndpoints(t *testing.T) {
 
 	t.Run("create user as admin", func(t *testing.T) {
 		body := map[string]any{
-			"email":    "newuser@example.com",
+			"username": "newuser",
 			"password": "password123",
 			"is_admin": false,
 		}
@@ -338,12 +332,12 @@ func TestAdminEndpoints(t *testing.T) {
 		var createdUser map[string]any
 		require.NoError(t, resp.UnmarshalBody(&createdUser))
 
-		assert.Equal(t, "newuser@example.com", createdUser["email"])
+		assert.Equal(t, "newuser", createdUser["username"])
 	})
 
 	t.Run("create user as non-admin", func(t *testing.T) {
 		body := map[string]any{
-			"email":    "hacker@example.com",
+			"username": "hacker",
 			"password": "password123",
 			"is_admin": true,
 		}
