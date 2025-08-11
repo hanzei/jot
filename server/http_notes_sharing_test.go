@@ -179,7 +179,7 @@ func TestEdgeCases(t *testing.T) {
 
 	t.Run("valid but nonexistent note ID returns not found", func(t *testing.T) {
 		// Use a valid 22-character ID format that doesn't exist
-		resp := ts.authRequest(t, user, http.MethodGet, "/api/v1/notes/abcdefghijklmnopqrstuvwx", nil)
+		resp := ts.authRequest(t, user, http.MethodGet, "/api/v1/notes/abcdefghijklmnopqrstuv", nil)
 		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 	})
 
