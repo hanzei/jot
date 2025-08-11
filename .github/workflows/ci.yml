@@ -44,6 +44,21 @@ jobs:
       - name: Run tests
         run: task test
 
+      - name: Run coverage
+        run: |
+          cd server
+          go test -v -coverprofile=coverage.out ./... || true
+
+      - name: Upload coverage to Codecov
+        uses: codecov/codecov-action@v4
+        with:
+          file: ./server/coverage.out
+          flags: server
+          name: codecov-umbrella
+          fail_ci_if_error: false
+        env:
+          CODECOV_TOKEN: ${{ secrets.CODECOV_TOKEN }}
+
   lint:
     runs-on: ubuntu-latest
 
