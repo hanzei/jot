@@ -38,8 +38,8 @@ export default function Register({ onRegister }: RegisterProps) {
       return;
     }
 
-    if (username.startsWith('_') || username.startsWith('-') || 
-        username.endsWith('_') || username.endsWith('-')) {
+    if (username.startsWith('_') || username.startsWith('-') ||
+      username.endsWith('_') || username.endsWith('-')) {
       setError('Username cannot start or end with underscore or hyphen');
       setLoading(false);
       return;

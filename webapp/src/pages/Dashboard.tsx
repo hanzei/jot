@@ -133,19 +133,19 @@ export default function Dashboard({ onLogout }: DashboardProps) {
 
     // Filter notes by the same pinned status
     const sameGroupNotes = notesList.filter(note => note.pinned === activeNote.pinned);
-    
+
     const oldIndex = sameGroupNotes.findIndex(note => note.id === active.id);
     const newIndex = sameGroupNotes.findIndex(note => note.id === over.id);
 
     if (oldIndex !== newIndex) {
       // Reorder the notes in the same group
       const reorderedNotes = arrayMove(sameGroupNotes, oldIndex, newIndex);
-      
+
       // Update local state immediately for better UX
       const updatedNotesList = [...notesList];
       const pinnedNotes = updatedNotesList.filter(note => note.pinned);
       const unpinnedNotes = updatedNotesList.filter(note => !note.pinned);
-      
+
       if (activeNote.pinned) {
         // Replace pinned notes with reordered ones
         setNotesList([...reorderedNotes, ...unpinnedNotes]);
@@ -188,21 +188,19 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                 <div className="hidden sm:flex space-x-4">
                   <button
                     onClick={() => setShowArchived(false)}
-                    className={`px-3 py-1 rounded-md text-sm font-medium ${
-                      !showArchived
+                    className={`px-3 py-1 rounded-md text-sm font-medium ${!showArchived
                         ? 'bg-blue-100 text-blue-700'
                         : 'text-gray-600 hover:text-gray-900'
-                    }`}
+                      }`}
                   >
                     Notes
                   </button>
                   <button
                     onClick={() => setShowArchived(true)}
-                    className={`px-3 py-1 rounded-md text-sm font-medium ${
-                      showArchived
+                    className={`px-3 py-1 rounded-md text-sm font-medium ${showArchived
                         ? 'bg-blue-100 text-blue-700'
                         : 'text-gray-600 hover:text-gray-900'
-                    }`}
+                      }`}
                   >
                     Archive
                   </button>
@@ -267,26 +265,24 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                 Logout
               </button>
             </div>
-            
+
             {/* Mobile tabs */}
             <div className="flex sm:hidden space-x-4 justify-center">
               <button
                 onClick={() => setShowArchived(false)}
-                className={`px-3 py-1 rounded-md text-sm font-medium ${
-                  !showArchived
+                className={`px-3 py-1 rounded-md text-sm font-medium ${!showArchived
                     ? 'bg-blue-100 text-blue-700'
                     : 'text-gray-600 hover:text-gray-900'
-                }`}
+                  }`}
               >
                 Notes
               </button>
               <button
                 onClick={() => setShowArchived(true)}
-                className={`px-3 py-1 rounded-md text-sm font-medium ${
-                  showArchived
+                className={`px-3 py-1 rounded-md text-sm font-medium ${showArchived
                     ? 'bg-blue-100 text-blue-700'
                     : 'text-gray-600 hover:text-gray-900'
-                }`}
+                  }`}
               >
                 Archive
               </button>
@@ -331,7 +327,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                 <div>
                   <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
                     <svg className="h-4 w-4 text-blue-500 mr-2" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/>
+                      <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z" />
                     </svg>
                     Pinned
                   </h2>
