@@ -9,7 +9,7 @@ Welcome to Jot, your self-hosted note-taking application! This guide will help y
 1. **Open Jot** in your web browser (usually at `http://localhost:8080`)
 2. **Click "Create Account"** on the login page
 3. **Enter your details**:
-   - Email address (this will be your username)
+   - Username (minimum 2 characters)
    - Password (minimum 4 characters)
    - Confirm your password
 4. **Click "Create Account"**

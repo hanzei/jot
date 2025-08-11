@@ -220,7 +220,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
             <div className="flex items-center space-x-4">
               <div className="flex items-center space-x-2 text-sm text-gray-600">
                 <UserCircleIcon className="h-5 w-5" />
-                <span>{user?.email}</span>
+                <span>{user?.username}</span>
               </div>
               {isAdmin() && (
                 <Link

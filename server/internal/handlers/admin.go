@@ -20,7 +20,6 @@ func NewAdminHandler(userStore *models.UserStore) *AdminHandler {
 
 type CreateUserRequest struct {
 	Username string `json:"username"`
-	Email    string `json:"email,omitempty"`
 	Password string `json:"password"`
 	IsAdmin  bool   `json:"is_admin"`
 }
@@ -56,17 +55,11 @@ func (h *AdminHandler) CreateUser(w http.ResponseWriter, r *http.Request) (int, 
 		return http.StatusBadRequest, err
 	}
 
-	if req.Email != "" {
-		if err := validateEmail(req.Email); err != nil {
-			return http.StatusBadRequest, err
-		}
-	}
-
 	if err := validatePassword(req.Password); err != nil {
 		return http.StatusBadRequest, err
 	}
 
-	user, err := h.userStore.CreateByAdmin(req.Username, req.Email, req.Password, req.IsAdmin)
+	user, err := h.userStore.CreateByAdmin(req.Username, req.Password, req.IsAdmin)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
 			return http.StatusConflict, err

@@ -1,7 +1,7 @@
 -- Users table
 CREATE TABLE users (
     id TEXT PRIMARY KEY,
-    email TEXT UNIQUE,
+    username TEXT NOT NULL,
     password_hash TEXT NOT NULL,
     is_admin BOOLEAN DEFAULT FALSE,
     created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
@@ -37,6 +37,7 @@ CREATE TABLE note_items (
 
 -- Indexes for better performance
 CREATE INDEX idx_notes_user_id ON notes(user_id);
+CREATE UNIQUE INDEX idx_users_username ON users(username);
 CREATE INDEX idx_notes_updated_at ON notes(updated_at DESC);
 CREATE INDEX idx_note_items_note_id ON note_items(note_id);
 CREATE INDEX idx_note_items_position ON note_items(note_id, position);

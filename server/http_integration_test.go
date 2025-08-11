@@ -2,6 +2,8 @@ package main
 
 import (
 	"bytes"
+	"crypto/rand"
+	"encoding/base32"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -40,7 +42,6 @@ type TestUser struct {
 type TestServer struct {
 	Server     *server.Server
 	HTTPServer *httptest.Server
-	TestUsers  map[string]*TestUser
 }
 
 func setupTestServer(t *testing.T) *TestServer {
@@ -56,7 +57,6 @@ func setupTestServer(t *testing.T) *TestServer {
 	ts := &TestServer{
 		Server:     s,
 		HTTPServer: httpServer,
-		TestUsers:  make(map[string]*TestUser),
 	}
 
 	t.Cleanup(func() {
@@ -68,24 +68,27 @@ func setupTestServer(t *testing.T) *TestServer {
 	return ts
 }
 
-func (ts *TestServer) createTestUser(t *testing.T, email, password string, isAdmin bool) *TestUser {
-	userStore := models.NewUserStore(ts.Server.GetDB().DB)
+func generateTestUserID() (string, error) {
+	bytes := make([]byte, 15) // 15 bytes = 120 bits, which gives us 24 base32 chars, we'll take first 20
+	if _, err := rand.Read(bytes); err != nil {
+		return "", err
+	}
+	encoded := base32.StdEncoding.EncodeToString(bytes)
+	return strings.ToLower(encoded[:20]), nil
+}
 
+func (ts *TestServer) createTestUser(t *testing.T, username, password string, isAdmin bool) *TestUser {
+	userStore := models.NewUserStore(ts.Server.GetDB().DB)
 	var user *models.User
 	var err error
-
-	// Generate username from email for tests
-	username := strings.Split(email, "@")[0]
-
 	if isAdmin {
-		user, err = userStore.CreateByAdmin(username, email, password, isAdmin)
+		user, err = userStore.CreateByAdmin(username, password, isAdmin)
 	} else {
-		user, err = userStore.Create(username, email, password)
+		user, err = userStore.Create(username, password)
 	}
-	require.NoError(t, err)
 
 	tokenService := auth.NewTokenService("test-secret-key")
-	token, err := tokenService.GenerateToken(user.ID, user.Email, user.IsAdmin)
+	token, err := tokenService.GenerateToken(user.ID, user.Username, user.IsAdmin)
 	require.NoError(t, err)
 
 	testUser := &TestUser{
@@ -93,7 +96,6 @@ func (ts *TestServer) createTestUser(t *testing.T, email, password string, isAdm
 		Token: token,
 	}
 
-	ts.TestUsers[email] = testUser
 	return testUser
 }
 
@@ -226,7 +228,7 @@ func TestLoginEndpoint(t *testing.T) {
 // Notes endpoint tests
 func TestNotesEndpoints(t *testing.T) {
 	ts := setupTestServer(t)
-	user := ts.createTestUser(t, "user@example.com", "password123", false)
+	user := ts.createTestUser(t, "user", "password123", false)
 
 	t.Run("unauthorized access", func(t *testing.T) {
 		resp := ts.request(t, http.MethodGet, "/api/v1/notes", nil, nil)
@@ -310,8 +312,8 @@ func TestNotesEndpoints(t *testing.T) {
 // Admin endpoint tests
 func TestAdminEndpoints(t *testing.T) {
 	ts := setupTestServer(t)
-	admin := ts.createTestUser(t, "admin@example.com", "password123", true)
-	user := ts.createTestUser(t, "user@example.com", "password123", false)
+	admin := ts.createTestUser(t, "admin", "password123", true)
+	user := ts.createTestUser(t, "user", "password123", false)
 
 	t.Run("get users as admin", func(t *testing.T) {
 		resp := ts.authRequest(t, admin, http.MethodGet, "/api/v1/admin/users", nil)
@@ -332,7 +334,6 @@ func TestAdminEndpoints(t *testing.T) {
 	t.Run("create user as admin", func(t *testing.T) {
 		body := map[string]any{
 			"username": "newuser",
-			"email":    "newuser@example.com",
 			"password": "password123",
 			"is_admin": false,
 		}
@@ -344,13 +345,11 @@ func TestAdminEndpoints(t *testing.T) {
 		require.NoError(t, resp.UnmarshalBody(&createdUser))
 
 		assert.Equal(t, "newuser", createdUser["username"])
-		assert.Equal(t, "newuser@example.com", createdUser["email"])
 	})
 
 	t.Run("create user as non-admin", func(t *testing.T) {
 		body := map[string]any{
 			"username": "hacker",
-			"email":    "hacker@example.com",
 			"password": "password123",
 			"is_admin": true,
 		}

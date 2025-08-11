@@ -51,7 +51,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) (int, err
 		return http.StatusBadRequest, err
 	}
 
-	user, err := h.userStore.Create(req.Username, "", req.Password)
+	user, err := h.userStore.Create(req.Username, req.Password)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
 			return http.StatusConflict, err
@@ -59,7 +59,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) (int, err
 		return http.StatusInternalServerError, err
 	}
 
-	token, err := h.tokenService.GenerateToken(user.ID, user.Email, user.IsAdmin)
+	token, err := h.tokenService.GenerateToken(user.ID, user.Username, user.IsAdmin)
 	if err != nil {
 		return http.StatusInternalServerError, err
 	}
@@ -96,7 +96,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) (int, error)
 		return http.StatusUnauthorized, errors.New("invalid password")
 	}
 
-	token, err := h.tokenService.GenerateToken(user.ID, user.Email, user.IsAdmin)
+	token, err := h.tokenService.GenerateToken(user.ID, user.Username, user.IsAdmin)
 	if err != nil {
 		return http.StatusInternalServerError, err
 	}

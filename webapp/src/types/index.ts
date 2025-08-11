@@ -1,7 +1,6 @@
 export interface User {
   id: string;
   username: string;
-  email: string;
   is_admin: boolean;
   created_at: string;
   updated_at: string;
@@ -40,7 +39,7 @@ export interface NoteShare {
   shared_with_user_id: string;
   shared_by_user_id: string;
   permission_level: string;
-  user_email?: string;
+  username?: string;
   created_at: string;
   updated_at: string;
 }
@@ -81,7 +80,6 @@ export interface UpdateNoteRequest {
 
 export interface CreateUserRequest {
   username: string;
-  email?: string;
   password: string;
   is_admin: boolean;
 }
@@ -91,7 +89,7 @@ export interface UserListResponse {
 }
 
 export interface ShareNoteRequest {
-  email: string;
+  username: string;
 }
 
 export interface ShareNoteResponse {

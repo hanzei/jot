@@ -48,7 +48,7 @@ type NoteShare struct {
 	SharedWithUserID string    `json:"shared_with_user_id"`
 	SharedByUserID   string    `json:"shared_by_user_id"`
 	PermissionLevel  string    `json:"permission_level"`
-	UserEmail        string    `json:"user_email,omitempty"`
+	Username         string    `json:"username,omitempty"`
 	CreatedAt        time.Time `json:"created_at"`
 	UpdatedAt        time.Time `json:"updated_at"`
 }
@@ -432,7 +432,7 @@ func (s *NoteStore) UnshareNote(noteID int, sharedWithUserID string) error {
 
 func (s *NoteStore) GetNoteShares(noteID int) ([]NoteShare, error) {
 	query := `SELECT ns.id, ns.note_id, ns.shared_with_user_id, ns.shared_by_user_id, 
-			  ns.permission_level, u.email, ns.created_at, ns.updated_at
+			  ns.permission_level, u.username, ns.created_at, ns.updated_at
 			  FROM note_shares ns
 			  JOIN users u ON ns.shared_with_user_id = u.id
 			  WHERE ns.note_id = ?`
@@ -452,7 +452,7 @@ func (s *NoteStore) GetNoteShares(noteID int) ([]NoteShare, error) {
 		var share NoteShare
 		err := rows.Scan(
 			&share.ID, &share.NoteID, &share.SharedWithUserID, &share.SharedByUserID,
-			&share.PermissionLevel, &share.UserEmail, &share.CreatedAt, &share.UpdatedAt,
+			&share.PermissionLevel, &share.Username, &share.CreatedAt, &share.UpdatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan note share: %w", err)

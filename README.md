@@ -4,7 +4,6 @@ A self-hosted note-taking application built with Go backend and React frontend. 
 
 ## Features
 
-- **User Authentication**: Email/password authentication with JWT tokens
 - **Notes Management**: Create, edit, delete, and organize notes
 - **Note Types**: Support for both plain text notes and todo lists with checkboxes
 - **Search & Filter**: Find notes quickly with search and filtering capabilities
@@ -66,7 +65,7 @@ task lint-webapp     # Run webapp linting
    
 3. **Access the application**:
    - Open `http://localhost:8080` in your browser
-   - Register your first account (becomes admin automatically)
+   - Register your first account with a username and password (becomes admin automatically)
    - Start creating notes!
 
 ### Development Options
@@ -125,7 +124,7 @@ All API endpoints are prefixed with `/api/v1/`:
 # Register user
 curl -X POST http://localhost:8080/api/v1/register \
   -H "Content-Type: application/json" \
-  -d '{"email":"user@example.com","password":"password123"}'
+  -d '{"username":"myuser","password":"password123"}'
 
 # Create note (with token)
 curl -X POST http://localhost:8080/api/v1/notes \

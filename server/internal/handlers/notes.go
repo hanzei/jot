@@ -245,7 +245,7 @@ func (h *NotesHandler) DeleteNote(w http.ResponseWriter, r *http.Request) (int, 
 }
 
 type ShareNoteRequest struct {
-	Email string `json:"email"`
+	Username string `json:"username"`
 }
 
 type ShareNoteResponse struct {
@@ -269,8 +269,8 @@ func (h *NotesHandler) ShareNote(w http.ResponseWriter, r *http.Request) (int, e
 		return http.StatusBadRequest, err
 	}
 
-	if req.Email == "" {
-		return http.StatusBadRequest, errors.New("empty email")
+	if req.Username == "" {
+		return http.StatusBadRequest, errors.New("empty username")
 	}
 
 	isOwner, err := h.noteStore.IsOwner(id, claims.UserID)
@@ -281,7 +281,7 @@ func (h *NotesHandler) ShareNote(w http.ResponseWriter, r *http.Request) (int, e
 		return http.StatusForbidden, errors.New("not owner")
 	}
 
-	targetUser, err := h.userStore.SearchByEmail(req.Email)
+	targetUser, err := h.userStore.GetByUsername(req.Username)
 	if err != nil {
 		if err.Error() == "user not found" {
 			return http.StatusNotFound, err
@@ -327,8 +327,8 @@ func (h *NotesHandler) UnshareNote(w http.ResponseWriter, r *http.Request) (int,
 		return http.StatusBadRequest, err
 	}
 
-	if req.Email == "" {
-		return http.StatusBadRequest, errors.New("empty email")
+	if req.Username == "" {
+		return http.StatusBadRequest, errors.New("empty username")
 	}
 
 	isOwner, err := h.noteStore.IsOwner(id, claims.UserID)
@@ -339,7 +339,7 @@ func (h *NotesHandler) UnshareNote(w http.ResponseWriter, r *http.Request) (int,
 		return http.StatusForbidden, errors.New("not owner")
 	}
 
-	targetUser, err := h.userStore.SearchByEmail(req.Email)
+	targetUser, err := h.userStore.GetByUsername(req.Username)
 	if err != nil {
 		if err.Error() == "user not found" {
 			return http.StatusNotFound, err
@@ -407,11 +407,11 @@ func (h *NotesHandler) SearchUsers(w http.ResponseWriter, r *http.Request) (int,
 		return http.StatusInternalServerError, err
 	}
 
-	// Filter out passwords and only return id, email, is_admin for sharing purposes
+	// Filter out passwords and only return id, username, is_admin for sharing purposes
 	type UserInfo struct {
-		ID      string `json:"id"`
-		Email   string `json:"email"`
-		IsAdmin bool   `json:"is_admin"`
+		ID       string `json:"id"`
+		Username string `json:"username"`
+		IsAdmin  bool   `json:"is_admin"`
 	}
 
 	var userInfos []UserInfo
@@ -419,9 +419,9 @@ func (h *NotesHandler) SearchUsers(w http.ResponseWriter, r *http.Request) (int,
 		// Don't include the current user in the list
 		if user.ID != claims.UserID {
 			userInfos = append(userInfos, UserInfo{
-				ID:      user.ID,
-				Email:   user.Email,
-				IsAdmin: user.IsAdmin,
+				ID:       user.ID,
+				Username: user.Username,
+				IsAdmin:  user.IsAdmin,
 			})
 		}
 	}
