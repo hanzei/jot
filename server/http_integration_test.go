@@ -2,15 +2,12 @@ package main
 
 import (
 	"bytes"
-	"crypto/rand"
-	"encoding/base32"
 	"encoding/json"
 	"fmt"
 	"io"
 	"net/http"
 	"net/http/httptest"
 	"os"
-	"strings"
 	"testing"
 
 	"github.com/hanzei/jot/server/internal/auth"
@@ -66,15 +63,6 @@ func setupTestServer(t *testing.T) *TestServer {
 	})
 
 	return ts
-}
-
-func generateTestUserID() (string, error) {
-	bytes := make([]byte, 15) // 15 bytes = 120 bits, which gives us 24 base32 chars, we'll take first 20
-	if _, err := rand.Read(bytes); err != nil {
-		return "", err
-	}
-	encoded := base32.StdEncoding.EncodeToString(bytes)
-	return strings.ToLower(encoded[:20]), nil
 }
 
 func (ts *TestServer) createTestUser(t *testing.T, username, password string, isAdmin bool) *TestUser {
