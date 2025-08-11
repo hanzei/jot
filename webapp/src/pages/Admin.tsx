@@ -140,7 +140,7 @@ const Admin = ({ onLogout }: AdminProps) => {
                       value={formData.username}
                       onChange={(e) => setFormData({ ...formData, username: e.target.value })}
                       className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="Username (3-30 characters)"
+                      placeholder="Username (2-30 characters)"
                     />
                   </div>
                   <div>

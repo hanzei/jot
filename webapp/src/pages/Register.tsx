@@ -100,7 +100,7 @@ export default function Register({ onRegister }: RegisterProps) {
                 autoComplete="username"
                 required
                 className="mt-1 appearance-none relative block w-full px-3 py-2 border border-gray-300 placeholder-gray-500 text-gray-900 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm"
-                placeholder="Username (3-30 characters)"
+                placeholder="Username (2-30 characters)"
                 value={username}
                 onChange={(e) => setUsername(e.target.value)}
               />
