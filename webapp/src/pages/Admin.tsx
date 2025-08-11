@@ -16,6 +16,7 @@ const Admin = ({ onLogout }: AdminProps) => {
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState('');
   const [formData, setFormData] = useState<CreateUserRequest>({
+    username: '',
     email: '',
     password: '',
     is_admin: false,
@@ -55,7 +56,7 @@ const Admin = ({ onLogout }: AdminProps) => {
     try {
       const newUser = await admin.createUser(formData);
       setUsers([newUser, ...users]);
-      setFormData({ email: '', password: '', is_admin: false });
+      setFormData({ username: '', email: '', password: '', is_admin: false });
       setShowCreateForm(false);
     } catch (err: unknown) {
       const axiosError = err as { response?: { data?: string } };
@@ -132,14 +133,27 @@ const Admin = ({ onLogout }: AdminProps) => {
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div>
                     <label className="block text-sm font-medium text-gray-700">
-                      Email
+                      Username
+                    </label>
+                    <input
+                      type="text"
+                      required
+                      value={formData.username}
+                      onChange={(e) => setFormData({ ...formData, username: e.target.value })}
+                      className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Username (3-30 characters)"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-sm font-medium text-gray-700">
+                      Email (optional)
                     </label>
                     <input
                       type="email"
-                      required
                       value={formData.email}
                       onChange={(e) => setFormData({ ...formData, email: e.target.value })}
                       className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      placeholder="Optional email address"
                     />
                   </div>
                   <div>
@@ -198,10 +212,10 @@ const Admin = ({ onLogout }: AdminProps) => {
                       <div className="flex items-center">
                         <div>
                           <p className="text-sm font-medium text-gray-900">
-                            {user.email}
+                            {user.username}
                           </p>
                           <p className="text-sm text-gray-500">
-                            ID: {user.id} • Created: {new Date(user.created_at).toLocaleDateString()}
+                            {user.email} • ID: {user.id} • Created: {new Date(user.created_at).toLocaleDateString()}
                           </p>
                         </div>
                       </div>

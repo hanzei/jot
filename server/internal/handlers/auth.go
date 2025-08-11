@@ -23,12 +23,12 @@ func NewAuthHandler(userStore *models.UserStore, tokenService *auth.TokenService
 }
 
 type RegisterRequest struct {
-	Email    string `json:"email"`
+	Username string `json:"username"`
 	Password string `json:"password"`
 }
 
 type LoginRequest struct {
-	Email    string `json:"email"`
+	Username string `json:"username"`
 	Password string `json:"password"`
 }
 
@@ -43,7 +43,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) (int, err
 		return http.StatusBadRequest, err
 	}
 
-	if err := validateEmail(req.Email); err != nil {
+	if err := validateUsername(req.Username); err != nil {
 		return http.StatusBadRequest, err
 	}
 
@@ -51,7 +51,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) (int, err
 		return http.StatusBadRequest, err
 	}
 
-	user, err := h.userStore.Create(req.Email, req.Password)
+	user, err := h.userStore.Create(req.Username, "", req.Password)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
 			return http.StatusConflict, err
@@ -83,11 +83,11 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) (int, error)
 		return http.StatusBadRequest, err
 	}
 
-	if req.Email == "" || req.Password == "" {
-		return http.StatusBadRequest, errors.New("missing email or password")
+	if req.Username == "" || req.Password == "" {
+		return http.StatusBadRequest, errors.New("missing username or password")
 	}
 
-	user, err := h.userStore.GetByEmail(req.Email)
+	user, err := h.userStore.GetByUsername(req.Username)
 	if err != nil {
 		return http.StatusUnauthorized, err
 	}

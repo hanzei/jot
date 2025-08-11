@@ -1,5 +1,6 @@
 export interface User {
   id: string;
+  username: string;
   email: string;
   is_admin: boolean;
   created_at: string;
@@ -12,12 +13,12 @@ export interface AuthResponse {
 }
 
 export interface LoginRequest {
-  email: string;
+  username: string;
   password: string;
 }
 
 export interface RegisterRequest {
-  email: string;
+  username: string;
   password: string;
 }
 
@@ -79,7 +80,8 @@ export interface UpdateNoteRequest {
 }
 
 export interface CreateUserRequest {
-  email: string;
+  username: string;
+  email?: string;
   password: string;
   is_admin: boolean;
 }
