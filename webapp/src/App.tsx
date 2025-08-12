@@ -4,6 +4,7 @@ import Login from '@/pages/Login';
 import Register from '@/pages/Register';
 import Dashboard from '@/pages/Dashboard';
 import Admin from '@/pages/Admin';
+import { OfflineNotification } from '@/components/OfflineNotification';
 import { isAuthenticated, isAdmin } from '@/utils/auth';
 
 function App() {
@@ -26,6 +27,7 @@ function App() {
   return (
     <Router>
       <div className="min-h-screen bg-gray-50 dark:bg-slate-900">
+        <OfflineNotification />
         <Routes>
           <Route 
             path="/login" 
