@@ -1,7 +1,7 @@
 export interface User {
   id: string;
   username: string;
-  is_admin: boolean;
+  role: string;
   created_at: string;
   updated_at: string;
 }
@@ -83,7 +83,7 @@ export interface UpdateNoteRequest {
 export interface CreateUserRequest {
   username: string;
   password: string;
-  is_admin: boolean;
+  role: string;
 }
 
 export interface UserListResponse {

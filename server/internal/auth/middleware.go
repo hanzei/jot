@@ -1,6 +1,10 @@
 package auth
 
 import (
+	"github.com/hanzei/jot/server/internal/models"
+)
+
+import (
 	"context"
 	"net/http"
 	"strings"
@@ -48,7 +52,7 @@ func AdminRequired(next http.Handler) http.Handler {
 			return
 		}
 
-		if !claims.IsAdmin {
+		if claims.Role != models.RoleAdmin {
 			http.Error(w, "Admin required", http.StatusForbidden)
 			return
 		}

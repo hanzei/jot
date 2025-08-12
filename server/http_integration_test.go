@@ -70,13 +70,13 @@ func (ts *TestServer) createTestUser(t *testing.T, username, password string, is
 	var user *models.User
 	var err error
 	if isAdmin {
-		user, err = userStore.CreateByAdmin(username, password, isAdmin)
+		user, err = userStore.CreateByAdmin(username, password, models.RoleAdmin)
 	} else {
 		user, err = userStore.Create(username, password)
 	}
 
 	tokenService := auth.NewTokenService("test-secret-key")
-	token, err := tokenService.GenerateToken(user.ID, user.Username, user.IsAdmin)
+	token, err := tokenService.GenerateToken(user.ID, user.Username, user.Role)
 	require.NoError(t, err)
 
 	testUser := &TestUser{

@@ -1,4 +1,5 @@
 import { User } from '@/types';
+import { ROLES } from '@/constants/roles';
 
 export const getToken = (): string | null => {
   return localStorage.getItem('token');
@@ -35,5 +36,5 @@ export const isAuthenticated = (): boolean => {
 
 export const isAdmin = (): boolean => {
   const user = getUser();
-  return !!(user && user.is_admin);
+  return !!(user && user.role === ROLES.ADMIN);
 };

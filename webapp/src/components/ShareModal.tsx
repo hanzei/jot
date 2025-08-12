@@ -3,6 +3,7 @@ import { Dialog } from '@headlessui/react';
 import { XMarkIcon, TrashIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
 import { Note, NoteShare, User } from '@/types';
 import { notes, users as usersApi } from '@/utils/api';
+import { ROLES } from '@/constants/roles';
 
 interface ShareModalProps {
   note: Note | null;
@@ -245,7 +246,7 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
                         onMouseEnter={() => setSelectedUserIndex(index)}
                       >
                         <div className="font-medium">{user.username}</div>
-                        {user.is_admin && (
+                        {user.role === ROLES.ADMIN && (
                           <div className="text-xs text-gray-500 dark:text-gray-400">Admin</div>
                         )}
                       </div>

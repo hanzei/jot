@@ -425,11 +425,11 @@ func (h *NotesHandler) SearchUsers(w http.ResponseWriter, r *http.Request) (int,
 		return http.StatusInternalServerError, err
 	}
 
-	// Filter out passwords and only return id, username, is_admin for sharing purposes
+	// Filter out passwords and only return id, username, role for sharing purposes
 	type UserInfo struct {
 		ID       string `json:"id"`
 		Username string `json:"username"`
-		IsAdmin  bool   `json:"is_admin"`
+		Role     string `json:"role"`
 	}
 
 	var userInfos []UserInfo
@@ -439,7 +439,7 @@ func (h *NotesHandler) SearchUsers(w http.ResponseWriter, r *http.Request) (int,
 			userInfos = append(userInfos, UserInfo{
 				ID:       user.ID,
 				Username: user.Username,
-				IsAdmin:  user.IsAdmin,
+				Role:     user.Role,
 			})
 		}
 	}
