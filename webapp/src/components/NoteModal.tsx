@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo } from 'react';
+import { useState, useEffect, useMemo, useRef } from 'react';
 import { XMarkIcon, PlusIcon, TrashIcon, ChevronDownIcon, ArchiveBoxIcon, ArchiveBoxXMarkIcon } from '@heroicons/react/24/outline';
 import { Dialog } from '@headlessui/react';
 import { Note, NoteType, CreateNoteRequest, UpdateNoteRequest } from '@/types';
@@ -7,13 +7,32 @@ import { notes } from '@/utils/api';
 // Constants
 const AUTO_SAVE_TIMEOUT = 1000; // Save 1 second after user stops typing
 const MAX_ITEM_LENGTH = 500; // Maximum length for todo item text
+const MAX_TITLE_LENGTH = 200; // Maximum length for note title
+const MAX_CONTENT_LENGTH = 10000; // Maximum length for note content
 
-// Extend Window type for timeout
-declare global {
-  interface Window {
-    todoItemSaveTimeout?: number;
-  }
-}
+// Validation functions
+const validateItemText = (text: string): string | null => {
+  const trimmed = text.trim();
+  if (trimmed.length === 0) return null; // Allow empty items (will be removed on save)
+  if (trimmed.length > MAX_ITEM_LENGTH) return `Item text must be ${MAX_ITEM_LENGTH} characters or less`;
+  if (/[<>]/g.test(trimmed)) return 'Item text cannot contain < or > characters';
+  return null;
+};
+
+const validateTitle = (title: string): string | null => {
+  if (title.length > MAX_TITLE_LENGTH) return `Title must be ${MAX_TITLE_LENGTH} characters or less`;
+  return null;
+};
+
+const validateContent = (content: string): string | null => {
+  if (content.length > MAX_CONTENT_LENGTH) return `Content must be ${MAX_CONTENT_LENGTH} characters or less`;
+  return null;
+};
+
+// Utility function to generate unique IDs for todo items
+const generateItemId = () => `item_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+// Timeout management now handled via useRef instead of global window property
 import {
   DndContext,
   closestCenter,
@@ -42,6 +61,7 @@ interface NoteModalProps {
 }
 
 interface TodoItem {
+  id: string; // Add unique ID for reliable tracking
   text: string;
   completed: boolean;
   position: number;
@@ -53,7 +73,7 @@ interface SortableItemProps {
   index: number;
   item: TodoItem;
   onUpdateTodoItem: (index: number, field: 'text' | 'completed', value: string | boolean) => Promise<void>;
-  onRemoveTodoItem: (index: number) => void;
+  onRemoveTodoItem: (itemId: string) => void;
   isCompleted?: boolean;
 }
 
@@ -114,7 +134,7 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
         onChange={(e) => onUpdateTodoItem(index, 'text', e.target.value)}
       />
       <button
-        onClick={() => onRemoveTodoItem(index)}
+        onClick={() => onRemoveTodoItem(item.id)}
         className="p-1 text-gray-400 hover:text-gray-600"
       >
         <TrashIcon className="h-4 w-4" />
@@ -133,6 +153,11 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
   const [items, setItems] = useState<TodoItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [checkedItemsCollapsed, setCheckedItemsCollapsed] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  
+  // Use useRef for timeout management instead of global window property
+  const saveTimeoutRef = useRef<number>();
+  const errorTimeoutRef = useRef<number>();
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -166,7 +191,8 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
       setArchived(note.archived);
       setCheckedItemsCollapsed(note.checked_items_collapsed);
       setItems(
-        note.items?.map((item) => ({
+        note.items?.map((item, index) => ({
+          id: item.id || `existing_${item.position}_${index}`, // Use existing ID or generate fallback
           text: item.text,
           completed: item.completed,
           position: item.position,
@@ -183,56 +209,74 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
     }
   }, [note]);
 
-  // Cleanup timeout on component unmount
+  // Cleanup timeouts on component unmount
   useEffect(() => {
     return () => {
-      if (window.todoItemSaveTimeout) {
-        clearTimeout(window.todoItemSaveTimeout);
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+      if (errorTimeoutRef.current) {
+        clearTimeout(errorTimeoutRef.current);
       }
     };
   }, []);
 
-  // Helper function to restore item to original position
+  // Helper function to show error messages with auto-dismiss
+  const showError = (message: string) => {
+    setErrorMessage(message);
+    
+    // Clear any existing error timeout
+    if (errorTimeoutRef.current) {
+      clearTimeout(errorTimeoutRef.current);
+    }
+    
+    // Auto-dismiss error after 5 seconds
+    errorTimeoutRef.current = setTimeout(() => {
+      setErrorMessage(null);
+    }, 5000);
+  };
+
+  // Simplified position restoration logic using Map for position tracking
   const restoreItemPosition = (items: TodoItem[], itemToRestore: TodoItem): TodoItem[] => {
-    const otherItems = items.filter(item => item !== itemToRestore);
+    // Remove the item to restore from the items array
+    const otherItems = items.filter(item => item.id !== itemToRestore.id);
     const uncompletedItems = otherItems.filter(item => !item.completed);
     
-    // Use stored original position or append to end
-    const targetPosition = Math.min(itemToRestore.originalPosition ?? uncompletedItems.length, uncompletedItems.length);
+    // Determine target position (use stored original position or end)
+    const targetPosition = Math.min(
+      itemToRestore.originalPosition ?? uncompletedItems.length, 
+      uncompletedItems.length
+    );
     
-    // Create new array with item inserted at correct position
-    const result: TodoItem[] = [];
-    let uncompletedIndex = 0;
+    // Create restored item
+    const restoredItem: TodoItem = {
+      ...itemToRestore,
+      completed: false,
+      originalPosition: undefined,
+      position: targetPosition,
+    };
     
-    // Add all items, inserting the restored item at the correct position
-    for (const item of otherItems) {
-      if (!item.completed) {
-        if (uncompletedIndex === targetPosition) {
-          result.push({ ...itemToRestore, completed: false, originalPosition: undefined, position: uncompletedIndex });
-          uncompletedIndex++;
-        }
-        result.push({ ...item, position: uncompletedIndex });
-        uncompletedIndex++;
-      } else {
-        result.push(item);
-      }
-    }
+    // Insert the restored item and renumber positions
+    const uncompletedWithRestored = [
+      ...uncompletedItems.slice(0, targetPosition),
+      restoredItem,
+      ...uncompletedItems.slice(targetPosition),
+    ].map((item, index) => ({ ...item, position: index }));
     
-    // If we haven't inserted yet (inserting at the end)
-    if (uncompletedIndex === targetPosition) {
-      result.push({ ...itemToRestore, completed: false, originalPosition: undefined, position: uncompletedIndex });
-    }
-    
-    return result;
+    // Combine with completed items (keep their positions unchanged)
+    const completedItems = otherItems.filter(item => item.completed);
+    return [...uncompletedWithRestored, ...completedItems];
   };
 
   const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
 
     if (over && active.id !== over.id) {
-      // Only handle reordering of uncompleted items (completed items are disabled)
-      const activeIndex = parseInt(active.id.toString().split('-').pop() || '0');
-      const overIndex = parseInt(over.id.toString().split('-').pop() || '0');
+      // Find the active and over items by their IDs
+      const activeIndex = uncompletedItems.findIndex(item => item.id === active.id);
+      const overIndex = uncompletedItems.findIndex(item => item.id === over.id);
+      
+      if (activeIndex === -1 || overIndex === -1) return;
       
       const reorderedUncompletedItems = arrayMove(uncompletedItems, activeIndex, overIndex);
       
@@ -247,192 +291,153 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
       setItems(newItems);
 
       // Auto-save if editing an existing note
-      if (note) {
-        try {
-          const updateData: UpdateNoteRequest = {
-            title,
-            content,
-            pinned,
-            archived,
-            color,
-            checked_items_collapsed: checkedItemsCollapsed,
-            items: newItems.map((item, idx) => ({ 
-              text: item.text, 
-              position: idx, 
-              completed: item.completed 
-            })),
-          };
-          await notes.update(note.id, updateData);
-          onRefresh?.(); // Refresh the notes list to reflect the changes
-        } catch (error) {
-          console.error('Failed to auto-save note after reorder:', error);
-        }
-      }
+      await autoSaveNote(newItems);
     }
   };
 
   const addTodoItem = () => {
-    setItems([...items, { text: '', completed: false, position: uncompletedItems.length }]);
+    const newItem: TodoItem = {
+      id: generateItemId(),
+      text: '',
+      completed: false,
+      position: uncompletedItems.length,
+    };
+    setItems([...items, newItem]);
   };
 
-  const removeTodoItem = (index: number) => {
-    // For uncompleted items, find by position in uncompletedItems array
-    if (index < uncompletedItems.length) {
-      const itemToRemove = uncompletedItems[index];
-      const newItems = items.filter(item => item !== itemToRemove);
-      
-      // Renumber positions for remaining uncompleted items
-      let uncompletedCount = 0;
-      const updatedItems = newItems.map((item) => {
-        if (!item.completed) {
-          return { ...item, position: uncompletedCount++ };
-        }
-        return item;
-      });
-      
-      setItems(updatedItems);
-    } else {
-      // For completed items, this is handled in the UI callback above
-      const newItems = items.filter((_, i) => i !== index);
-      const updatedItems = newItems.map((item, idx) => ({
-        ...item,
-        position: item.completed ? item.position : idx,
-      }));
-      setItems(updatedItems);
+  const removeTodoItem = (itemId: string) => {
+    const newItems = items.filter(item => item.id !== itemId);
+    
+    // Renumber positions for remaining uncompleted items
+    let uncompletedCount = 0;
+    const updatedItems = newItems.map((item) => {
+      if (!item.completed) {
+        return { ...item, position: uncompletedCount++ };
+      }
+      return item;
+    });
+    
+    setItems(updatedItems);
+  };
+
+  // Helper function to auto-save note changes
+  const autoSaveNote = async (updatedItems: TodoItem[]) => {
+    if (!note) return;
+    
+    try {
+      const updateData: UpdateNoteRequest = {
+        title,
+        content,
+        pinned,
+        archived,
+        color,
+        checked_items_collapsed: checkedItemsCollapsed,
+        items: updatedItems.map((item, idx) => ({ 
+          text: item.text, 
+          position: item.completed ? item.position : idx, 
+          completed: item.completed 
+        })),
+      };
+      await notes.update(note.id, updateData);
+      onRefresh?.(); // Refresh the notes list to reflect the changes
+    } catch (error) {
+      console.error('Failed to auto-save note:', error);
+      showError('Failed to save changes. Please try again.');
     }
   };
 
+  // Helper function to handle item completion
+  const handleItemCompletion = async (itemId: string) => {
+    const itemToComplete = items.find(item => item.id === itemId);
+    if (!itemToComplete || itemToComplete.completed) return;
+    
+    const updatedItems = items.map(item => {
+      if (item.id === itemId) {
+        return {
+          ...item,
+          completed: true,
+          originalPosition: item.position, // Store original position
+        };
+      }
+      return item;
+    });
+    
+    setItems(updatedItems);
+    await autoSaveNote(updatedItems);
+  };
+
+  // Helper function to handle item un-completion
+  const handleItemUncompletion = async (itemId: string) => {
+    const itemToUncomplete = items.find(item => item.id === itemId);
+    if (!itemToUncomplete || !itemToUncomplete.completed) return;
+    
+    const finalItems = restoreItemPosition(items, itemToUncomplete);
+    
+    setItems(finalItems);
+    await autoSaveNote(finalItems);
+  };
+
+  // Helper function to handle text updates with debouncing
+  const handleTextUpdate = (itemId: string, newText: string) => {
+    // Validate the text input
+    const validationError = validateItemText(newText);
+    if (validationError && newText.trim() !== '') {
+      showError(validationError);
+      return;
+    }
+    
+    const textValue = newText.slice(0, MAX_ITEM_LENGTH);
+    const updatedItems = items.map(item => {
+      if (item.id === itemId) {
+        return { ...item, text: textValue };
+      }
+      return item;
+    });
+    
+    setItems(updatedItems);
+    
+    // Auto-save text changes if editing an existing note (with debouncing)
+    if (note) {
+      // Clear previous timeout if exists
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+      
+      // Set new timeout to save after user stops typing
+      saveTimeoutRef.current = setTimeout(async () => {
+        await autoSaveNote(updatedItems);
+      }, AUTO_SAVE_TIMEOUT);
+    }
+  };
+
+  // Helper function to find target item by index (for backward compatibility)
+  const findTargetItem = (index: number): TodoItem | null => {
+    if (index < uncompletedItems.length) {
+      return uncompletedItems[index];
+    } else {
+      const completedIndex = index - uncompletedItems.length;
+      if (completedIndex < completedItems.length) {
+        return completedItems[completedIndex];
+      }
+    }
+    return null;
+  };
+
+  // Main updateTodoItem function - now much simpler and more reliable
   const updateTodoItem = async (index: number, field: 'text' | 'completed', value: string | boolean) => {
+    const targetItem = findTargetItem(index);
+    if (!targetItem) return;
+
     if (field === 'completed') {
       const isCompleting = value as boolean;
       
       if (isCompleting) {
-        // Checking an item - move to completed section
-        if (index < uncompletedItems.length) {
-          const itemToComplete = uncompletedItems[index];
-          const updatedItems = items.map(item => {
-            if (item === itemToComplete) {
-              return {
-                ...item,
-                completed: true,
-                originalPosition: item.position, // Store original position
-              };
-            }
-            return item;
-          });
-          setItems(updatedItems);
-          
-          // Auto-save if editing an existing note
-          if (note) {
-            try {
-              const updateData: UpdateNoteRequest = {
-                title,
-                content,
-                pinned,
-                archived,
-                color,
-                checked_items_collapsed: checkedItemsCollapsed,
-                items: updatedItems.map((item, idx) => ({ 
-                  text: item.text, 
-                  position: item.completed ? item.position : idx, 
-                  completed: item.completed 
-                })),
-              };
-              await notes.update(note.id, updateData);
-              onRefresh?.(); // Refresh the notes list to reflect the changes
-            } catch (error) {
-              console.error('Failed to auto-save note:', error);
-            }
-          }
-        }
+        await handleItemCompletion(targetItem.id);
       } else {
-        // Unchecking an item - restore to original position
-        if (index < completedItems.length) {
-          const itemToUncomplete = completedItems[index];
-          const finalItems = restoreItemPosition(items, itemToUncomplete);
-          setItems(finalItems);
-          
-          // Auto-save if editing an existing note
-          if (note) {
-            try {
-                const updateData: UpdateNoteRequest = {
-                  title,
-                  content,
-                  pinned,
-                  archived,
-                  color,
-                  checked_items_collapsed: checkedItemsCollapsed,
-                  items: finalItems.map((item, idx) => ({ 
-                    text: item.text, 
-                    position: item.completed ? item.position : idx, 
-                    completed: item.completed 
-                  })),
-                };
-                await notes.update(note.id, updateData);
-                onRefresh?.(); // Refresh the notes list to reflect the changes
-              } catch (error) {
-                console.error('Failed to auto-save note:', error);
-              }
-            }
-          }
-        }
-    } else {
-      // Handle text updates
-      let targetItem;
-      if (index < uncompletedItems.length) {
-        targetItem = uncompletedItems[index];
-      } else {
-        const completedIndex = index - uncompletedItems.length;
-        if (completedIndex < completedItems.length) {
-          targetItem = completedItems[completedIndex];
-        }
+        await handleItemUncompletion(targetItem.id);
       }
-      
-      if (targetItem) {
-        const updatedItems = items.map(item => {
-          if (item === targetItem) {
-            if (field === 'text') {
-              const textValue = (value as string).slice(0, MAX_ITEM_LENGTH);
-              return { ...item, text: textValue };
-            } else if (field === 'completed') {
-              return { ...item, completed: value as boolean };
-            }
-          }
-          return item;
-        });
-        setItems(updatedItems);
-        
-        // Auto-save text changes if editing an existing note (with debouncing via timeout)
-        if (note && field === 'text') {
-          // Clear previous timeout if exists
-          if (window.todoItemSaveTimeout) {
-            clearTimeout(window.todoItemSaveTimeout);
-          }
-          
-          // Set new timeout to save after user stops typing
-          window.todoItemSaveTimeout = setTimeout(async () => {
-            try {
-              const updateData: UpdateNoteRequest = {
-                title,
-                content,
-                pinned,
-                archived,
-                color,
-                checked_items_collapsed: checkedItemsCollapsed,
-                items: updatedItems.map((item, idx) => ({ 
-                  text: item.text, 
-                  position: item.completed ? item.position : idx, 
-                  completed: item.completed 
-                })),
-              };
-              await notes.update(note.id, updateData);
-              onRefresh?.(); // Refresh the notes list to reflect the changes
-            } catch (error) {
-              console.error('Failed to auto-save note:', error);
-            }
-          }, AUTO_SAVE_TIMEOUT);
-        }
-      }
+    } else if (field === 'text') {
+      handleTextUpdate(targetItem.id, value as string);
     }
   };
 
@@ -649,6 +654,19 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
             </div>
           </div>
 
+          {/* Error Message */}
+          {errorMessage && (
+            <div className="mx-4 mt-2 p-3 bg-red-100 border border-red-300 text-red-700 text-sm rounded-md flex items-center justify-between">
+              <span>{errorMessage}</span>
+              <button
+                onClick={() => setErrorMessage(null)}
+                className="ml-2 text-red-500 hover:text-red-700"
+              >
+                ×
+              </button>
+            </div>
+          )}
+
           {/* Content */}
           <div className="p-2 sm:p-4 space-y-4 overflow-y-auto max-h-[calc(90vh-8rem)]">
             {/* Note type selector (only for new notes) */}
@@ -683,7 +701,15 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
               placeholder="Note title..."
               className="w-full p-2 text-lg font-medium bg-transparent border-none outline-none placeholder-gray-500"
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              onChange={(e) => {
+                const newTitle = e.target.value;
+                const validationError = validateTitle(newTitle);
+                if (validationError) {
+                  showError(validationError);
+                  return;
+                }
+                setTitle(newTitle);
+              }}
             />
 
             {/* Content based on type */}
@@ -693,7 +719,15 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
                 rows={4}
                 className="w-full p-2 bg-transparent border-none outline-none resize-none placeholder-gray-500 min-h-[6rem]"
                 value={content}
-                onChange={(e) => setContent(e.target.value)}
+                onChange={(e) => {
+                  const newContent = e.target.value;
+                  const validationError = validateContent(newContent);
+                  if (validationError) {
+                    showError(validationError);
+                    return;
+                  }
+                  setContent(newContent);
+                }}
               />
             ) : (
               <div className="space-y-4">
@@ -705,13 +739,13 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
                     onDragEnd={handleDragEnd}
                   >
                     <SortableContext
-                      items={uncompletedItems.map((_, index) => `item-${index}`)}
+                      items={uncompletedItems.map((item) => item.id)}
                       strategy={verticalListSortingStrategy}
                     >
                       {uncompletedItems.map((item, index) => (
                         <SortableItem
-                          key={`item-${index}`}
-                          id={`item-${index}`}
+                          key={item.id}
+                          id={item.id}
                           index={index}
                           item={item}
                           onUpdateTodoItem={updateTodoItem}
@@ -747,18 +781,12 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
                       <div className="space-y-2">
                         {completedItems.map((item, index) => (
                           <SortableItem
-                            key={`completed-item-${index}`}
-                            id={`completed-item-${index}`}
-                            index={index}
+                            key={item.id}
+                            id={item.id}
+                            index={index + uncompletedItems.length} // Adjust index for completed items
                             item={item}
                             onUpdateTodoItem={(idx, field, value) => updateTodoItem(idx, field, value)}
-                            onRemoveTodoItem={(idx) => {
-                              // Find the actual index in the full items array
-                              const actualIndex = items.findIndex(item => item === completedItems[idx]);
-                              if (actualIndex !== -1) {
-                                removeTodoItem(actualIndex);
-                              }
-                            }}
+                            onRemoveTodoItem={removeTodoItem}
                             isCompleted={true}
                           />
                         ))}
