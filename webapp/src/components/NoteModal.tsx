@@ -156,8 +156,8 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   
   // Use useRef for timeout management instead of global window property
-  const saveTimeoutRef = useRef<number>();
-  const errorTimeoutRef = useRef<number>();
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+  const errorTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
 
   const sensors = useSensors(
     useSensor(PointerSensor),
