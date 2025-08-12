@@ -73,36 +73,36 @@ const Admin = ({ onLogout }: AdminProps) => {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-slate-900">
         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-500"></div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
-      <div className="bg-white shadow">
+    <div className="min-h-screen bg-gray-50 dark:bg-slate-900">
+      <div className="bg-white dark:bg-slate-800 shadow border-b border-gray-200 dark:border-slate-700">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           <div className="flex justify-between items-center py-6">
             <div className="flex items-center space-x-4">
-              <Link to="/" className="text-2xl font-bold text-gray-900 hover:text-blue-600">
+              <Link to="/" className="text-2xl font-bold text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400">
                 Jot
               </Link>
-              <span className="text-sm text-gray-500">Admin Panel</span>
+              <span className="text-sm text-gray-500 dark:text-gray-400">Admin Panel</span>
             </div>
             <div className="flex items-center space-x-4">
-              <span className="text-sm text-gray-700">
+              <span className="text-sm text-gray-700 dark:text-gray-300">
                 Welcome, {currentUser?.username}
               </span>
               <Link
                 to="/"
-                className="text-blue-600 hover:text-blue-800 text-sm font-medium"
+                className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 text-sm font-medium"
               >
                 Dashboard
               </Link>
               <button
                 onClick={handleLogout}
-                className="bg-red-600 hover:bg-red-700 text-white px-4 py-2 rounded-md text-sm font-medium"
+                className="bg-red-600 hover:bg-red-700 dark:bg-red-600 dark:hover:bg-red-700 text-white px-4 py-2 rounded-md text-sm font-medium"
               >
                 Logout
               </button>
@@ -115,10 +115,10 @@ const Admin = ({ onLogout }: AdminProps) => {
         <div className="px-4 py-6 sm:px-0">
           <div className="mb-6">
             <div className="flex justify-between items-center">
-              <h1 className="text-3xl font-bold text-gray-900">User Management</h1>
+              <h1 className="text-3xl font-bold text-gray-900 dark:text-white">User Management</h1>
               <button
                 onClick={() => setShowCreateForm(!showCreateForm)}
-                className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium"
+                className="bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium"
               >
                 {showCreateForm ? 'Cancel' : 'Create User'}
               </button>
@@ -126,12 +126,12 @@ const Admin = ({ onLogout }: AdminProps) => {
           </div>
 
           {showCreateForm && (
-            <div className="bg-white shadow rounded-lg p-6 mb-6">
-              <h2 className="text-lg font-medium text-gray-900 mb-4">Create New User</h2>
+            <div className="bg-white dark:bg-slate-800 shadow rounded-lg p-6 mb-6 border border-gray-200 dark:border-slate-700">
+              <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Create New User</h2>
               <form onSubmit={handleCreateUser}>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                       Username
                     </label>
                     <input
@@ -139,12 +139,12 @@ const Admin = ({ onLogout }: AdminProps) => {
                       required
                       value={formData.username}
                       onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                      className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      className="mt-1 block w-full border border-gray-300 dark:border-slate-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                       placeholder="Username (2-30 characters)"
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700">
+                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                       Password
                     </label>
                     <input
@@ -153,7 +153,7 @@ const Admin = ({ onLogout }: AdminProps) => {
                       minLength={4}
                       value={formData.password}
                       onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                      className="mt-1 block w-full border border-gray-300 rounded-md px-3 py-2 text-sm focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      className="mt-1 block w-full border border-gray-300 dark:border-slate-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                     />
                   </div>
                 </div>
@@ -163,19 +163,19 @@ const Admin = ({ onLogout }: AdminProps) => {
                       type="checkbox"
                       checked={formData.is_admin}
                       onChange={(e) => setFormData({ ...formData, is_admin: e.target.checked })}
-                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 rounded"
+                      className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 rounded"
                     />
-                    <span className="ml-2 text-sm text-gray-700">Admin user</span>
+                    <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Admin user</span>
                   </label>
                 </div>
                 {createError && (
-                  <div className="mt-4 text-red-600 text-sm">{createError}</div>
+                  <div className="mt-4 text-red-600 dark:text-red-400 text-sm">{createError}</div>
                 )}
                 <div className="mt-6">
                   <button
                     type="submit"
                     disabled={createLoading}
-                    className="bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 text-white px-4 py-2 rounded-md text-sm font-medium"
+                    className="bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700 disabled:bg-blue-400 dark:disabled:bg-blue-500 text-white px-4 py-2 rounded-md text-sm font-medium"
                   >
                     {createLoading ? 'Creating...' : 'Create User'}
                   </button>
@@ -185,34 +185,34 @@ const Admin = ({ onLogout }: AdminProps) => {
           )}
 
           {error && (
-            <div className="bg-red-50 border border-red-200 text-red-600 px-4 py-3 rounded mb-4">
+            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 px-4 py-3 rounded mb-4">
               {error}
             </div>
           )}
 
-          <div className="bg-white shadow overflow-hidden sm:rounded-md">
-            <ul className="divide-y divide-gray-200">
+          <div className="bg-white dark:bg-slate-800 shadow overflow-hidden sm:rounded-md border border-gray-200 dark:border-slate-700">
+            <ul className="divide-y divide-gray-200 dark:divide-slate-700">
               {(users || []).map((user) => (
                 <li key={user.id}>
                   <div className="px-4 py-4 sm:px-6">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center">
                         <div>
-                          <p className="text-sm font-medium text-gray-900">
+                          <p className="text-sm font-medium text-gray-900 dark:text-white">
                             {user.username}
                           </p>
-                          <p className="text-sm text-gray-500">
+                          <p className="text-sm text-gray-500 dark:text-gray-400">
                             ID: {user.id} • Created: {new Date(user.created_at).toLocaleDateString()}
                           </p>
                         </div>
                       </div>
                       <div className="flex items-center space-x-2">
                         {user.is_admin && (
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800">
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300">
                             Admin
                           </span>
                         )}
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 text-green-800">
+                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300">
                           Active
                         </span>
                       </div>
@@ -225,7 +225,7 @@ const Admin = ({ onLogout }: AdminProps) => {
 
           {(!users || users.length === 0) && !loading && (
             <div className="text-center py-12">
-              <p className="text-gray-500">No users found.</p>
+              <p className="text-gray-500 dark:text-gray-400">No users found.</p>
             </div>
           )}
         </div>

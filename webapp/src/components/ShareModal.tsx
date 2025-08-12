@@ -184,9 +184,9 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
       
       <div className="fixed inset-0 overflow-y-auto">
         <div className="flex min-h-full items-center justify-center p-4">
-          <Dialog.Panel className="mx-auto max-w-md rounded bg-white p-6 shadow-xl">
+          <Dialog.Panel className="mx-auto max-w-md rounded bg-white dark:bg-slate-800 p-6 shadow-xl border border-gray-200 dark:border-slate-700">
             <div className="flex items-center justify-between mb-4">
-              <Dialog.Title className="text-lg font-medium">
+              <Dialog.Title className="text-lg font-medium text-gray-900 dark:text-white">
                 Share "{note.title || 'Untitled Note'}"
               </Dialog.Title>
               <button

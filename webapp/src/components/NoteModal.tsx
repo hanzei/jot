@@ -173,12 +173,12 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
   }), [items]);
 
   const colors = [
-    { value: '#ffffff', name: 'White', class: 'bg-white border-gray-300' },
-    { value: '#fbbc04', name: 'Yellow', class: 'bg-yellow-100 border-yellow-300' },
-    { value: '#34a853', name: 'Green', class: 'bg-green-100 border-green-300' },
-    { value: '#4285f4', name: 'Blue', class: 'bg-blue-100 border-blue-300' },
-    { value: '#ea4335', name: 'Red', class: 'bg-red-100 border-red-300' },
-    { value: '#9aa0a6', name: 'Purple', class: 'bg-purple-100 border-purple-300' },
+    { value: '#ffffff', name: 'White', class: 'bg-white dark:bg-slate-800 border-gray-300 dark:border-slate-600' },
+    { value: '#fbbc04', name: 'Yellow', class: 'bg-yellow-100 dark:bg-yellow-900/20 border-yellow-300 dark:border-yellow-700' },
+    { value: '#34a853', name: 'Green', class: 'bg-green-100 dark:bg-green-900/20 border-green-300 dark:border-green-700' },
+    { value: '#4285f4', name: 'Blue', class: 'bg-blue-100 dark:bg-blue-900/20 border-blue-300 dark:border-blue-700' },
+    { value: '#ea4335', name: 'Red', class: 'bg-red-100 dark:bg-red-900/20 border-red-300 dark:border-red-700' },
+    { value: '#9aa0a6', name: 'Purple', class: 'bg-purple-100 dark:bg-purple-900/20 border-purple-300 dark:border-purple-700' },
   ];
 
   useEffect(() => {
@@ -601,17 +601,17 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
   return (
     <>
       <Dialog open={true} onClose={handleCloseRequest} className="relative z-50">
-        <div className="fixed inset-0 bg-black/30" aria-hidden="true" />
+        <div className="fixed inset-0 bg-black/30 dark:bg-black/50" aria-hidden="true" />
       
       <div className="fixed inset-0 flex items-center justify-center p-2 sm:p-4 overflow-hidden">
         <Dialog.Panel 
           className={`mx-auto w-full max-w-md max-h-[90vh] overflow-hidden rounded-lg shadow-xl ${
-            colors.find(c => c.value === color)?.class || 'bg-white border-gray-300'
+            colors.find(c => c.value === color)?.class || 'bg-white dark:bg-slate-800 border-gray-300 dark:border-slate-600'
           }`}
         >
           {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b border-gray-200">
-            <h2 className="text-lg font-semibold text-gray-900">
+          <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-slate-600">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
               {note ? 'Edit Note' : 'New Note'}
             </h2>
             <div className="flex items-center space-x-2">
@@ -656,7 +656,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
 
           {/* Error Message */}
           {errorMessage && (
-            <div className="mx-4 mt-2 p-3 bg-red-100 border border-red-300 text-red-700 text-sm rounded-md flex items-center justify-between">
+            <div className="mx-4 mt-2 p-3 bg-red-100 dark:bg-red-900/20 border border-red-300 dark:border-red-700 text-red-700 dark:text-red-300 text-sm rounded-md flex items-center justify-between">
               <span>{errorMessage}</span>
               <button
                 onClick={() => setErrorMessage(null)}
@@ -676,8 +676,8 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
                   onClick={() => setNoteType('text')}
                   className={`px-3 py-1 text-sm rounded-md ${
                     noteType === 'text'
-                      ? 'bg-blue-100 text-blue-700'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                      : 'bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-600'
                   }`}
                 >
                   Text
@@ -686,8 +686,8 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
                   onClick={() => setNoteType('todo')}
                   className={`px-3 py-1 text-sm rounded-md ${
                     noteType === 'todo'
-                      ? 'bg-blue-100 text-blue-700'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                      : 'bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-600'
                   }`}
                 >
                   Todo List

@@ -168,29 +168,29 @@ export default function Dashboard({ onLogout }: DashboardProps) {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
+      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-slate-900">
         <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
       </div>
     );
   }
 
   return (
-    <div className="min-h-screen bg-gray-50">
+    <div className="min-h-screen bg-gray-50 dark:bg-slate-900">
       {/* Header */}
-      <header className="bg-white shadow-sm border-b">
+      <header className="bg-white dark:bg-slate-800 shadow-sm border-b border-gray-200 dark:border-slate-700">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
           {/* Mobile and Desktop Layout */}
           <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center py-4 space-y-3 sm:space-y-0">
             {/* Top row on mobile, left side on desktop */}
             <div className="flex items-center justify-between sm:justify-start">
               <div className="flex items-center space-x-2 sm:space-x-4">
-                <h1 className="text-xl sm:text-2xl font-bold text-gray-900">Jot</h1>
+                <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">Jot</h1>
                 <div className="hidden sm:flex space-x-4">
                   <button
                     onClick={() => setShowArchived(false)}
                     className={`px-3 py-1 rounded-md text-sm font-medium ${!showArchived
-                        ? 'bg-blue-100 text-blue-700'
-                        : 'text-gray-600 hover:text-gray-900'
+                        ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                        : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
                       }`}
                   >
                     Notes
@@ -198,8 +198,8 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                   <button
                     onClick={() => setShowArchived(true)}
                     className={`px-3 py-1 rounded-md text-sm font-medium ${showArchived
-                        ? 'bg-blue-100 text-blue-700'
-                        : 'text-gray-600 hover:text-gray-900'
+                        ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                        : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
                       }`}
                   >
                     Archive
@@ -209,21 +209,21 @@ export default function Dashboard({ onLogout }: DashboardProps) {
 
               {/* Mobile user menu */}
               <div className="flex items-center space-x-2 sm:hidden">
-                <div className="flex items-center space-x-1 text-xs text-gray-600">
+                <div className="flex items-center space-x-1 text-xs text-gray-600 dark:text-gray-300">
                   <UserCircleIcon className="h-4 w-4" />
                   <span className="max-w-16 truncate">{user?.username}</span>
                 </div>
                 {isAdmin() && (
                   <Link
                     to="/admin"
-                    className="text-xs text-blue-600 hover:text-blue-800 font-medium"
+                    className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-medium"
                   >
                     Admin
                   </Link>
                 )}
                 <button
                   onClick={handleLogout}
-                  className="text-xs text-gray-600 hover:text-gray-900"
+                  className="text-xs text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
                 >
                   Logout
                 </button>
@@ -233,11 +233,11 @@ export default function Dashboard({ onLogout }: DashboardProps) {
             {/* Search - full width on mobile, constrained on desktop */}
             <div className="w-full sm:flex-1 sm:max-w-lg sm:mx-4">
               <div className="relative">
-                <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-gray-400" />
+                <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-gray-400 dark:text-gray-500" />
                 <input
                   type="text"
                   placeholder="Search notes..."
-                  className="w-full pl-9 sm:pl-10 pr-4 py-2 text-sm sm:text-base border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+                  className="w-full pl-9 sm:pl-10 pr-4 py-2 text-sm sm:text-base border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                 />
@@ -246,21 +246,21 @@ export default function Dashboard({ onLogout }: DashboardProps) {
 
             {/* Desktop user menu */}
             <div className="hidden sm:flex items-center space-x-4">
-              <div className="flex items-center space-x-2 text-sm text-gray-600">
+              <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300">
                 <UserCircleIcon className="h-5 w-5" />
                 <span>{user?.username}</span>
               </div>
               {isAdmin() && (
                 <Link
                   to="/admin"
-                  className="text-sm text-blue-600 hover:text-blue-800 font-medium"
+                  className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-medium"
                 >
                   Admin
                 </Link>
               )}
               <button
                 onClick={handleLogout}
-                className="text-sm text-gray-600 hover:text-gray-900"
+                className="text-sm text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
               >
                 Logout
               </button>
@@ -271,8 +271,8 @@ export default function Dashboard({ onLogout }: DashboardProps) {
               <button
                 onClick={() => setShowArchived(false)}
                 className={`px-3 py-1 rounded-md text-sm font-medium ${!showArchived
-                    ? 'bg-blue-100 text-blue-700'
-                    : 'text-gray-600 hover:text-gray-900'
+                    ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                    : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
                   }`}
               >
                 Notes
@@ -280,8 +280,8 @@ export default function Dashboard({ onLogout }: DashboardProps) {
               <button
                 onClick={() => setShowArchived(true)}
                 className={`px-3 py-1 rounded-md text-sm font-medium ${showArchived
-                    ? 'bg-blue-100 text-blue-700'
-                    : 'text-gray-600 hover:text-gray-900'
+                    ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                    : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
                   }`}
               >
                 Archive
@@ -297,7 +297,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
         <div className="mb-8">
           <button
             onClick={handleCreateNote}
-            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500"
+            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 focus:ring-offset-gray-50 dark:focus:ring-offset-slate-900"
           >
             <PlusIcon className="h-5 w-5 mr-2" />
             New Note
@@ -307,10 +307,10 @@ export default function Dashboard({ onLogout }: DashboardProps) {
         {/* Notes grid */}
         {!notesList || notesList.length === 0 ? (
           <div className="text-center py-12">
-            <div className="text-gray-500 text-lg">
+            <div className="text-gray-500 dark:text-gray-400 text-lg">
               {showArchived ? 'No archived notes' : 'No notes yet'}
             </div>
-            <div className="text-gray-400 text-sm mt-2">
+            <div className="text-gray-400 dark:text-gray-500 text-sm mt-2">
               {!showArchived && 'Click "New Note" to create your first note'}
             </div>
           </div>
@@ -325,8 +325,8 @@ export default function Dashboard({ onLogout }: DashboardProps) {
               {/* Pinned notes section */}
               {notesList.some(note => note.pinned) && (
                 <div>
-                  <h2 className="text-lg font-semibold text-gray-900 mb-4 flex items-center">
-                    <svg className="h-4 w-4 text-blue-500 mr-2" fill="currentColor" viewBox="0 0 24 24">
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
+                    <svg className="h-4 w-4 text-blue-500 dark:text-blue-400 mr-2" fill="currentColor" viewBox="0 0 24 24">
                       <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z" />
                     </svg>
                     Pinned
@@ -357,7 +357,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
               {notesList.some(note => !note.pinned) && (
                 <div>
                   {notesList.some(note => note.pinned) && (
-                    <h2 className="text-lg font-semibold text-gray-900 mb-4">
+                    <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
                       Other Notes
                     </h2>
                   )}
