@@ -16,21 +16,22 @@ const (
 )
 
 type Note struct {
-	ID               string      `json:"id"`
-	UserID           string      `json:"user_id"`
-	Title            string      `json:"title"`
-	Content          string      `json:"content"`
-	NoteType         NoteType    `json:"note_type"`
-	Color            string      `json:"color"`
-	Pinned           bool        `json:"pinned"`
-	Archived         bool        `json:"archived"`
-	Position         int         `json:"position"`
-	UnpinnedPosition *int        `json:"-"` // Hidden from JSON, used internally
-	Items            []NoteItem  `json:"items,omitempty"`
-	SharedWith       []NoteShare `json:"shared_with,omitempty"`
-	IsShared         bool        `json:"is_shared"`
-	CreatedAt        time.Time   `json:"created_at"`
-	UpdatedAt        time.Time   `json:"updated_at"`
+	ID                    string      `json:"id"`
+	UserID                string      `json:"user_id"`
+	Title                 string      `json:"title"`
+	Content               string      `json:"content"`
+	NoteType              NoteType    `json:"note_type"`
+	Color                 string      `json:"color"`
+	Pinned                bool        `json:"pinned"`
+	Archived              bool        `json:"archived"`
+	Position              int         `json:"position"`
+	UnpinnedPosition      *int        `json:"-"` // Hidden from JSON, used internally
+	CheckedItemsCollapsed bool        `json:"checked_items_collapsed"`
+	Items                 []NoteItem  `json:"items,omitempty"`
+	SharedWith            []NoteShare `json:"shared_with,omitempty"`
+	IsShared              bool        `json:"is_shared"`
+	CreatedAt             time.Time   `json:"created_at"`
+	UpdatedAt             time.Time   `json:"updated_at"`
 }
 
 type NoteItem struct {
@@ -66,15 +67,15 @@ func generateID() (string, error) {
 	const chars = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 	bytes := make([]byte, 22)
 	randBytes := make([]byte, 22)
-	
+
 	if _, err := rand.Read(randBytes); err != nil {
 		return "", err
 	}
-	
-	for i := 0; i < 22; i++ {
+
+	for i := range 22 {
 		bytes[i] = chars[randBytes[i]%byte(len(chars))]
 	}
-	
+
 	return string(bytes), nil
 }
 
@@ -105,20 +106,21 @@ func (s *NoteStore) Create(userID string, title, content string, noteType NoteTy
 		return nil, fmt.Errorf("failed to generate note ID: %w", err)
 	}
 
-	// Get the next position for unpinned notes
-	var maxPosition int
-	posQuery := `SELECT COALESCE(MAX(position), -1) FROM notes WHERE user_id = ? AND pinned = FALSE AND archived = FALSE`
-	err = s.db.QueryRow(posQuery, userID).Scan(&maxPosition)
+	// Shift existing unpinned notes down to make room at position 0
+	shiftQuery := `UPDATE notes SET position = position + 1 WHERE user_id = ? AND pinned = FALSE AND archived = FALSE`
+	_, err = s.db.Exec(shiftQuery, userID)
 	if err != nil {
-		return nil, fmt.Errorf("failed to get max position: %w", err)
+		return nil, fmt.Errorf("failed to shift existing notes: %w", err)
 	}
-	nextPosition := maxPosition + 1
 
-	query := `INSERT INTO notes (id, user_id, title, content, note_type, color, position, unpinned_position) 
-			  VALUES (?, ?, ?, ?, ?, ?, ?, ?) RETURNING pinned, archived, created_at, updated_at`
+	// New notes go at position 0 (first position)
+	nextPosition := 0
+
+	query := `INSERT INTO notes (id, user_id, title, content, note_type, color, position, unpinned_position, checked_items_collapsed) 
+			  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING pinned, archived, created_at, updated_at`
 
 	var note Note
-	err = s.db.QueryRow(query, noteID, userID, title, content, noteType, color, nextPosition, nextPosition).Scan(
+	err = s.db.QueryRow(query, noteID, userID, title, content, noteType, color, nextPosition, nextPosition, false).Scan(
 		&note.Pinned, &note.Archived,
 		&note.CreatedAt, &note.UpdatedAt,
 	)
@@ -134,12 +136,13 @@ func (s *NoteStore) Create(userID string, title, content string, noteType NoteTy
 	note.Color = color
 	note.Position = nextPosition
 	note.UnpinnedPosition = &nextPosition
+	note.CheckedItemsCollapsed = false
 
 	return &note, nil
 }
 
 func (s *NoteStore) GetByUserID(userID string, archived bool, search string) ([]*Note, error) {
-	query := `SELECT DISTINCT n.id, n.user_id, n.title, n.content, n.note_type, n.color, n.pinned, n.archived, n.position, n.unpinned_position, n.created_at, n.updated_at
+	query := `SELECT DISTINCT n.id, n.user_id, n.title, n.content, n.note_type, n.color, n.pinned, n.archived, n.position, n.unpinned_position, n.checked_items_collapsed, n.created_at, n.updated_at
 			  FROM notes n
 			  LEFT JOIN note_shares ns ON n.id = ns.note_id
 			  WHERE (n.user_id = ? OR ns.shared_with_user_id = ?) AND n.archived = ?`
@@ -168,7 +171,7 @@ func (s *NoteStore) GetByUserID(userID string, archived bool, search string) ([]
 		var note Note
 		err = rows.Scan(
 			&note.ID, &note.UserID, &note.Title, &note.Content,
-			&note.NoteType, &note.Color, &note.Pinned, &note.Archived, &note.Position, &note.UnpinnedPosition,
+			&note.NoteType, &note.Color, &note.Pinned, &note.Archived, &note.Position, &note.UnpinnedPosition, &note.CheckedItemsCollapsed,
 			&note.CreatedAt, &note.UpdatedAt,
 		)
 		if err != nil {
@@ -205,13 +208,13 @@ func (s *NoteStore) GetByID(id string, userID string) (*Note, error) {
 		return nil, fmt.Errorf("note not found")
 	}
 
-	query := `SELECT id, user_id, title, content, note_type, color, pinned, archived, position, unpinned_position, created_at, updated_at
+	query := `SELECT id, user_id, title, content, note_type, color, pinned, archived, position, unpinned_position, checked_items_collapsed, created_at, updated_at
 			  FROM notes WHERE id = ?`
 
 	var note Note
 	err = s.db.QueryRow(query, id).Scan(
 		&note.ID, &note.UserID, &note.Title, &note.Content,
-		&note.NoteType, &note.Color, &note.Pinned, &note.Archived, &note.Position, &note.UnpinnedPosition,
+		&note.NoteType, &note.Color, &note.Pinned, &note.Archived, &note.Position, &note.UnpinnedPosition, &note.CheckedItemsCollapsed,
 		&note.CreatedAt, &note.UpdatedAt,
 	)
 	if err != nil {
@@ -240,7 +243,7 @@ func (s *NoteStore) GetByID(id string, userID string) (*Note, error) {
 	return &note, nil
 }
 
-func (s *NoteStore) Update(id string, userID string, title, content string, pinned, archived bool, color string) error {
+func (s *NoteStore) Update(id string, userID string, title, content string, pinned, archived bool, color string, checkedItemsCollapsed bool) error {
 	hasAccess, err := s.HasAccess(id, userID)
 	if err != nil {
 		return fmt.Errorf("failed to check access: %w", err)
@@ -255,10 +258,10 @@ func (s *NoteStore) Update(id string, userID string, title, content string, pinn
 		return fmt.Errorf("failed to get current note: %w", err)
 	}
 
-	query := `UPDATE notes SET title = ?, content = ?, pinned = ?, archived = ?, color = ?, updated_at = CURRENT_TIMESTAMP
+	query := `UPDATE notes SET title = ?, content = ?, pinned = ?, archived = ?, color = ?, checked_items_collapsed = ?, updated_at = CURRENT_TIMESTAMP
 			  WHERE id = ?`
 
-	result, err := s.db.Exec(query, title, content, pinned, archived, color, id)
+	result, err := s.db.Exec(query, title, content, pinned, archived, color, checkedItemsCollapsed, id)
 	if err != nil {
 		return fmt.Errorf("failed to update note: %w", err)
 	}

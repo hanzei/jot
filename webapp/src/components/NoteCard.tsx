@@ -1,7 +1,7 @@
 import { useState } from 'react';
-import { 
-  EllipsisVerticalIcon, 
-  TrashIcon, 
+import {
+  EllipsisVerticalIcon,
+  TrashIcon,
   ArchiveBoxIcon,
   ArchiveBoxXMarkIcon,
   ShareIcon,
@@ -17,11 +17,12 @@ interface NoteCardProps {
   onDelete: (noteId: string) => void;
   onShare?: (note: Note) => void;
   currentUserId?: string;
+  onRefresh?: () => void;
 }
 
-export default function NoteCard({ note, onEdit, onDelete, onShare, currentUserId }: NoteCardProps) {
+export default function NoteCard({ note, onEdit, onDelete, onShare, currentUserId, onRefresh }: NoteCardProps) {
   const [isUpdating, setIsUpdating] = useState(false);
-  
+
   const isOwner = note.user_id === currentUserId;
 
   const getColorClass = (color: string) => {
@@ -45,9 +46,10 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, currentUserI
         pinned: note.pinned,
         archived: !note.archived,
         color: note.color,
+        checked_items_collapsed: note.checked_items_collapsed,
       });
-      // Refresh will be handled by parent component
-      window.location.reload();
+      // Refresh data using callback
+      onRefresh?.();
     } catch (error) {
       console.error('Failed to toggle archive:', error);
     } finally {
@@ -64,8 +66,9 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, currentUserI
         pinned: !note.pinned,
         archived: note.archived,
         color: note.color,
+        checked_items_collapsed: note.checked_items_collapsed,
       });
-      window.location.reload();
+      onRefresh?.();
     } catch (error) {
       console.error('Failed to toggle pin:', error);
     } finally {
@@ -80,10 +83,9 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, currentUserI
   };
 
   return (
-    <div 
-      className={`note-card ${getColorClass(note.color)} p-4 relative group ${
-        isUpdating ? 'opacity-50' : ''
-      }`}
+    <div
+      className={`note-card ${getColorClass(note.color)} p-4 relative group ${isUpdating ? 'opacity-50' : ''
+        }`}
     >
       {/* Indicators */}
       <div className="absolute top-2 left-2 flex gap-1">
@@ -100,11 +102,11 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, currentUserI
           </div>
         )}
       </div>
-      
+
       {note.pinned && (
         <div className="absolute top-2 right-8">
           <svg className="h-3 w-3 text-blue-500" fill="currentColor" viewBox="0 0 24 24">
-            <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/>
+            <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z" />
           </svg>
         </div>
       )}
@@ -121,9 +123,8 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, currentUserI
                 {({ active }) => (
                   <button
                     onClick={() => onShare(note)}
-                    className={`${
-                      active ? 'bg-gray-100' : ''
-                    } flex items-center w-full px-4 py-2 text-sm text-gray-700`}
+                    className={`${active ? 'bg-gray-100' : ''
+                      } flex items-center w-full px-4 py-2 text-sm text-gray-700`}
                   >
                     <ShareIcon className="h-4 w-4 mr-2" />
                     Share
@@ -135,12 +136,11 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, currentUserI
               {({ active }) => (
                 <button
                   onClick={handleTogglePin}
-                  className={`${
-                    active ? 'bg-gray-100' : ''
-                  } flex items-center w-full px-4 py-2 text-sm text-gray-700`}
+                  className={`${active ? 'bg-gray-100' : ''
+                    } flex items-center w-full px-4 py-2 text-sm text-gray-700`}
                 >
                   <svg className="h-4 w-4 mr-2" fill={note.pinned ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                    <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/>
+                    <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z" />
                   </svg>
                   {note.pinned ? 'Unpin' : 'Pin'}
                 </button>
@@ -150,9 +150,8 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, currentUserI
               {({ active }) => (
                 <button
                   onClick={handleToggleArchive}
-                  className={`${
-                    active ? 'bg-gray-100' : ''
-                  } flex items-center w-full px-4 py-2 text-sm text-gray-700`}
+                  className={`${active ? 'bg-gray-100' : ''
+                    } flex items-center w-full px-4 py-2 text-sm text-gray-700`}
                 >
                   {note.archived ? (
                     <>
@@ -173,9 +172,8 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, currentUserI
                 {({ active }) => (
                   <button
                     onClick={handleDelete}
-                    className={`${
-                      active ? 'bg-gray-100' : ''
-                    } flex items-center w-full px-4 py-2 text-sm text-red-600`}
+                    className={`${active ? 'bg-gray-100' : ''
+                      } flex items-center w-full px-4 py-2 text-sm text-red-600`}
                   >
                     <TrashIcon className="h-4 w-4 mr-2" />
                     Delete
@@ -188,8 +186,8 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, currentUserI
       </Menu>
 
       {/* Content */}
-      <div 
-        onClick={() => onEdit(note)} 
+      <div
+        onClick={() => onEdit(note)}
         className={`cursor-pointer ${note.is_shared ? 'pt-8' : ''}`}
       >
         {note.title && (
@@ -197,31 +195,40 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, currentUserI
             {note.title}
           </h3>
         )}
-        
+
         {note.note_type === 'text' ? (
           <div className="text-sm text-gray-700 line-clamp-6 whitespace-pre-wrap">
             {note.content}
           </div>
         ) : (
           <div className="space-y-1">
-            {note.items?.slice(0, 5).map((item) => (
-              <div key={item.id} className="flex items-center text-sm">
-                <input
-                  type="checkbox"
-                  checked={item.completed}
-                  readOnly
-                  className="h-4 w-4 text-blue-600 rounded mr-2"
-                />
-                <span className={item.completed ? 'line-through text-gray-500' : 'text-gray-700'}>
-                  {item.text}
-                </span>
-              </div>
-            ))}
-            {(note.items?.length ?? 0) > 5 && (
-              <div className="text-xs text-gray-500">
-                +{(note.items?.length ?? 0) - 5} more items
-              </div>
-            )}
+            {(() => {
+              const uncompletedItems = note.items?.filter(item => !item.completed) || [];
+              const completedItems = note.items?.filter(item => item.completed) || [];
+
+              return (
+                <>
+                  {uncompletedItems.map((item) => (
+                    <div key={item.id} className="flex items-center text-sm">
+                      <input
+                        type="checkbox"
+                        checked={item.completed}
+                        readOnly
+                        className="h-4 w-4 text-blue-600 rounded mr-2"
+                      />
+                      <span className="text-gray-700">
+                        {item.text}
+                      </span>
+                    </div>
+                  ))}
+                  {completedItems.length > 0 && (
+                    <div className="text-xs text-gray-500 mt-2">
+                      +{completedItems.length} completed items
+                    </div>
+                  )}
+                </>
+              );
+            })()}
           </div>
         )}
       </div>

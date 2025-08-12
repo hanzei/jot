@@ -1,8 +1,38 @@
-import { useState, useEffect } from 'react';
-import { XMarkIcon, PlusIcon, TrashIcon } from '@heroicons/react/24/outline';
+import { useState, useEffect, useMemo, useRef } from 'react';
+import { XMarkIcon, PlusIcon, TrashIcon, ChevronDownIcon, ArchiveBoxIcon, ArchiveBoxXMarkIcon } from '@heroicons/react/24/outline';
 import { Dialog } from '@headlessui/react';
 import { Note, NoteType, CreateNoteRequest, UpdateNoteRequest } from '@/types';
 import { notes } from '@/utils/api';
+
+// Constants
+const AUTO_SAVE_TIMEOUT = 1000; // Save 1 second after user stops typing
+const MAX_ITEM_LENGTH = 500; // Maximum length for todo item text
+const MAX_TITLE_LENGTH = 200; // Maximum length for note title
+const MAX_CONTENT_LENGTH = 10000; // Maximum length for note content
+
+// Validation functions
+const validateItemText = (text: string): string | null => {
+  const trimmed = text.trim();
+  if (trimmed.length === 0) return null; // Allow empty items (will be removed on save)
+  if (trimmed.length > MAX_ITEM_LENGTH) return `Item text must be ${MAX_ITEM_LENGTH} characters or less`;
+  if (/[<>]/g.test(trimmed)) return 'Item text cannot contain < or > characters';
+  return null;
+};
+
+const validateTitle = (title: string): string | null => {
+  if (title.length > MAX_TITLE_LENGTH) return `Title must be ${MAX_TITLE_LENGTH} characters or less`;
+  return null;
+};
+
+const validateContent = (content: string): string | null => {
+  if (content.length > MAX_CONTENT_LENGTH) return `Content must be ${MAX_CONTENT_LENGTH} characters or less`;
+  return null;
+};
+
+// Utility function to generate unique IDs for todo items
+const generateItemId = () => `item_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+
+// Timeout management now handled via useRef instead of global window property
 import {
   DndContext,
   closestCenter,
@@ -27,17 +57,27 @@ interface NoteModalProps {
   note?: Note | null;
   onClose: () => void;
   onSave: () => void;
+  onRefresh?: () => void;
+}
+
+interface TodoItem {
+  id: string; // Add unique ID for reliable tracking
+  text: string;
+  completed: boolean;
+  position: number;
+  originalPosition?: number;
 }
 
 interface SortableItemProps {
   id: string;
   index: number;
-  item: { text: string; completed: boolean; position: number };
-  onUpdateTodoItem: (index: number, field: 'text' | 'completed', value: string | boolean) => void;
-  onRemoveTodoItem: (index: number) => void;
+  item: TodoItem;
+  onUpdateTodoItem: (index: number, field: 'text' | 'completed', value: string | boolean) => Promise<void>;
+  onRemoveTodoItem: (itemId: string) => void;
+  isCompleted?: boolean;
 }
 
-function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem }: SortableItemProps) {
+function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isCompleted = false }: SortableItemProps) {
   const {
     attributes,
     listeners,
@@ -45,7 +85,10 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem }: S
     transform,
     transition,
     isDragging,
-  } = useSortable({ id });
+  } = useSortable({ 
+    id,
+    disabled: isCompleted // Disable dragging for completed items
+  });
 
   const style = {
     transform: CSS.Transform.toString(transform),
@@ -56,17 +99,25 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem }: S
     <div
       ref={setNodeRef}
       style={style}
-      className={`flex items-center space-x-2 ${isDragging ? 'opacity-50' : ''}`}
+      className={`flex items-center space-x-2 ${isDragging ? 'opacity-50' : ''} ${
+        isCompleted ? 'opacity-60' : ''
+      }`}
       {...attributes}
     >
-      <div
-        {...listeners}
-        className="cursor-grab active:cursor-grabbing p-1 text-gray-400 hover:text-gray-600"
-      >
-        <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
-          <path d="M7 2a2 2 0 1 1 .001 4.001A2 2 0 0 1 7 2zm0 6a2 2 0 1 1 .001 4.001A2 2 0 0 1 7 8zm0 6a2 2 0 1 1 .001 4.001A2 2 0 0 1 7 14zm6-8a2 2 0 1 1-.001-4.001A2 2 0 0 1 13 6zm0 2a2 2 0 1 1 .001 4.001A2 2 0 0 1 13 8zm0 6a2 2 0 1 1 .001 4.001A2 2 0 0 1 13 14z" />
-        </svg>
-      </div>
+      {/* Only show drag handle for uncompleted items */}
+      {!isCompleted && (
+        <div
+          {...listeners}
+          className="cursor-grab active:cursor-grabbing p-1 text-gray-400 hover:text-gray-600"
+        >
+          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
+            <path d="M7 2a2 2 0 1 1 .001 4.001A2 2 0 0 1 7 2zm0 6a2 2 0 1 1 .001 4.001A2 2 0 0 1 7 8zm0 6a2 2 0 1 1 .001 4.001A2 2 0 0 1 7 14zm6-8a2 2 0 1 1-.001-4.001A2 2 0 0 1 13 6zm0 2a2 2 0 1 1 .001 4.001A2 2 0 0 1 13 8zm0 6a2 2 0 1 1 .001 4.001A2 2 0 0 1 13 14z" />
+          </svg>
+        </div>
+      )}
+      {/* Add spacing for completed items to align with uncompleted items */}
+      {isCompleted && <div className="w-6 h-4"></div>}
+      
       <input
         type="checkbox"
         checked={item.completed}
@@ -76,12 +127,14 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem }: S
       <input
         type="text"
         placeholder="List item..."
-        className="flex-1 p-1 bg-transparent border-none outline-none placeholder-gray-500"
+        className={`flex-1 p-1 bg-transparent border-none outline-none placeholder-gray-500 ${
+          isCompleted ? 'line-through text-gray-500' : ''
+        }`}
         value={item.text}
         onChange={(e) => onUpdateTodoItem(index, 'text', e.target.value)}
       />
       <button
-        onClick={() => onRemoveTodoItem(index)}
+        onClick={() => onRemoveTodoItem(item.id)}
         className="p-1 text-gray-400 hover:text-gray-600"
       >
         <TrashIcon className="h-4 w-4" />
@@ -90,14 +143,21 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem }: S
   );
 }
 
-export default function NoteModal({ note, onClose, onSave }: NoteModalProps) {
+export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModalProps) {
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [noteType, setNoteType] = useState<NoteType>('text');
   const [color, setColor] = useState('#ffffff');
   const [pinned, setPinned] = useState(false);
-  const [items, setItems] = useState<{ text: string; completed: boolean; position: number }[]>([]);
+  const [archived, setArchived] = useState(false);
+  const [items, setItems] = useState<TodoItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [checkedItemsCollapsed, setCheckedItemsCollapsed] = useState(false);
+  const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  
+  // Use useRef for timeout management instead of global window property
+  const saveTimeoutRef = useRef<number>();
+  const errorTimeoutRef = useRef<number>();
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -105,6 +165,12 @@ export default function NoteModal({ note, onClose, onSave }: NoteModalProps) {
       coordinateGetter: sortableKeyboardCoordinates,
     })
   );
+
+  // Separate completed and uncompleted items with memoization
+  const { uncompletedItems, completedItems } = useMemo(() => ({
+    uncompletedItems: items.filter(item => !item.completed),
+    completedItems: items.filter(item => item.completed)
+  }), [items]);
 
   const colors = [
     { value: '#ffffff', name: 'White', class: 'bg-white border-gray-300' },
@@ -122,8 +188,11 @@ export default function NoteModal({ note, onClose, onSave }: NoteModalProps) {
       setNoteType(note.note_type);
       setColor(note.color);
       setPinned(note.pinned);
+      setArchived(note.archived);
+      setCheckedItemsCollapsed(note.checked_items_collapsed);
       setItems(
-        note.items?.map((item) => ({
+        note.items?.map((item, index) => ({
+          id: item.id || `existing_${item.position}_${index}`, // Use existing ID or generate fallback
           text: item.text,
           completed: item.completed,
           position: item.position,
@@ -135,45 +204,241 @@ export default function NoteModal({ note, onClose, onSave }: NoteModalProps) {
       setNoteType('text');
       setColor('#ffffff');
       setPinned(false);
+      setArchived(false);
       setItems([]);
     }
   }, [note]);
 
-  const handleDragEnd = (event: DragEndEvent) => {
+  // Cleanup timeouts on component unmount
+  useEffect(() => {
+    return () => {
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+      if (errorTimeoutRef.current) {
+        clearTimeout(errorTimeoutRef.current);
+      }
+    };
+  }, []);
+
+  // Helper function to show error messages with auto-dismiss
+  const showError = (message: string) => {
+    setErrorMessage(message);
+    
+    // Clear any existing error timeout
+    if (errorTimeoutRef.current) {
+      clearTimeout(errorTimeoutRef.current);
+    }
+    
+    // Auto-dismiss error after 5 seconds
+    errorTimeoutRef.current = setTimeout(() => {
+      setErrorMessage(null);
+    }, 5000);
+  };
+
+  // Simplified position restoration logic using Map for position tracking
+  const restoreItemPosition = (items: TodoItem[], itemToRestore: TodoItem): TodoItem[] => {
+    // Remove the item to restore from the items array
+    const otherItems = items.filter(item => item.id !== itemToRestore.id);
+    const uncompletedItems = otherItems.filter(item => !item.completed);
+    
+    // Determine target position (use stored original position or end)
+    const targetPosition = Math.min(
+      itemToRestore.originalPosition ?? uncompletedItems.length, 
+      uncompletedItems.length
+    );
+    
+    // Create restored item
+    const restoredItem: TodoItem = {
+      ...itemToRestore,
+      completed: false,
+      originalPosition: undefined,
+      position: targetPosition,
+    };
+    
+    // Insert the restored item and renumber positions
+    const uncompletedWithRestored = [
+      ...uncompletedItems.slice(0, targetPosition),
+      restoredItem,
+      ...uncompletedItems.slice(targetPosition),
+    ].map((item, index) => ({ ...item, position: index }));
+    
+    // Combine with completed items (keep their positions unchanged)
+    const completedItems = otherItems.filter(item => item.completed);
+    return [...uncompletedWithRestored, ...completedItems];
+  };
+
+  const handleDragEnd = async (event: DragEndEvent) => {
     const { active, over } = event;
 
     if (over && active.id !== over.id) {
-      const oldIndex = items.findIndex((item, index) => `item-${index}` === active.id);
-      const newIndex = items.findIndex((item, index) => `item-${index}` === over.id);
-
-      const newItems = arrayMove(items, oldIndex, newIndex);
+      // Find the active and over items by their IDs
+      const activeIndex = uncompletedItems.findIndex(item => item.id === active.id);
+      const overIndex = uncompletedItems.findIndex(item => item.id === over.id);
       
-      const updatedItems = newItems.map((item, index) => ({
+      if (activeIndex === -1 || overIndex === -1) return;
+      
+      const reorderedUncompletedItems = arrayMove(uncompletedItems, activeIndex, overIndex);
+      
+      // Update uncompleted items and renumber their positions
+      const updatedUncompletedItems = reorderedUncompletedItems.map((item, index) => ({
         ...item,
         position: index,
       }));
       
-      setItems(updatedItems);
+      // Combine with completed items to create new items array
+      const newItems = [...updatedUncompletedItems, ...completedItems];
+      setItems(newItems);
+
+      // Auto-save if editing an existing note
+      await autoSaveNote(newItems);
     }
   };
 
   const addTodoItem = () => {
-    setItems([...items, { text: '', completed: false, position: items.length }]);
+    const newItem: TodoItem = {
+      id: generateItemId(),
+      text: '',
+      completed: false,
+      position: uncompletedItems.length,
+    };
+    setItems([...items, newItem]);
   };
 
-  const removeTodoItem = (index: number) => {
-    const newItems = items.filter((_, i) => i !== index);
-    const updatedItems = newItems.map((item, idx) => ({
-      ...item,
-      position: idx,
-    }));
+  const removeTodoItem = (itemId: string) => {
+    const newItems = items.filter(item => item.id !== itemId);
+    
+    // Renumber positions for remaining uncompleted items
+    let uncompletedCount = 0;
+    const updatedItems = newItems.map((item) => {
+      if (!item.completed) {
+        return { ...item, position: uncompletedCount++ };
+      }
+      return item;
+    });
+    
     setItems(updatedItems);
   };
 
-  const updateTodoItem = (index: number, field: 'text' | 'completed', value: string | boolean) => {
-    const newItems = [...items];
-    newItems[index] = { ...newItems[index], [field]: value };
-    setItems(newItems);
+  // Helper function to auto-save note changes
+  const autoSaveNote = async (updatedItems: TodoItem[]) => {
+    if (!note) return;
+    
+    try {
+      const updateData: UpdateNoteRequest = {
+        title,
+        content,
+        pinned,
+        archived,
+        color,
+        checked_items_collapsed: checkedItemsCollapsed,
+        items: updatedItems.map((item, idx) => ({ 
+          text: item.text, 
+          position: item.completed ? item.position : idx, 
+          completed: item.completed 
+        })),
+      };
+      await notes.update(note.id, updateData);
+      onRefresh?.(); // Refresh the notes list to reflect the changes
+    } catch (error) {
+      console.error('Failed to auto-save note:', error);
+      showError('Failed to save changes. Please try again.');
+    }
+  };
+
+  // Helper function to handle item completion
+  const handleItemCompletion = async (itemId: string) => {
+    const itemToComplete = items.find(item => item.id === itemId);
+    if (!itemToComplete || itemToComplete.completed) return;
+    
+    const updatedItems = items.map(item => {
+      if (item.id === itemId) {
+        return {
+          ...item,
+          completed: true,
+          originalPosition: item.position, // Store original position
+        };
+      }
+      return item;
+    });
+    
+    setItems(updatedItems);
+    await autoSaveNote(updatedItems);
+  };
+
+  // Helper function to handle item un-completion
+  const handleItemUncompletion = async (itemId: string) => {
+    const itemToUncomplete = items.find(item => item.id === itemId);
+    if (!itemToUncomplete || !itemToUncomplete.completed) return;
+    
+    const finalItems = restoreItemPosition(items, itemToUncomplete);
+    
+    setItems(finalItems);
+    await autoSaveNote(finalItems);
+  };
+
+  // Helper function to handle text updates with debouncing
+  const handleTextUpdate = (itemId: string, newText: string) => {
+    // Validate the text input
+    const validationError = validateItemText(newText);
+    if (validationError && newText.trim() !== '') {
+      showError(validationError);
+      return;
+    }
+    
+    const textValue = newText.slice(0, MAX_ITEM_LENGTH);
+    const updatedItems = items.map(item => {
+      if (item.id === itemId) {
+        return { ...item, text: textValue };
+      }
+      return item;
+    });
+    
+    setItems(updatedItems);
+    
+    // Auto-save text changes if editing an existing note (with debouncing)
+    if (note) {
+      // Clear previous timeout if exists
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+      }
+      
+      // Set new timeout to save after user stops typing
+      saveTimeoutRef.current = setTimeout(async () => {
+        await autoSaveNote(updatedItems);
+      }, AUTO_SAVE_TIMEOUT);
+    }
+  };
+
+  // Helper function to find target item by index (for backward compatibility)
+  const findTargetItem = (index: number): TodoItem | null => {
+    if (index < uncompletedItems.length) {
+      return uncompletedItems[index];
+    } else {
+      const completedIndex = index - uncompletedItems.length;
+      if (completedIndex < completedItems.length) {
+        return completedItems[completedIndex];
+      }
+    }
+    return null;
+  };
+
+  // Main updateTodoItem function - now much simpler and more reliable
+  const updateTodoItem = async (index: number, field: 'text' | 'completed', value: string | boolean) => {
+    const targetItem = findTargetItem(index);
+    if (!targetItem) return;
+
+    if (field === 'completed') {
+      const isCompleting = value as boolean;
+      
+      if (isCompleting) {
+        await handleItemCompletion(targetItem.id);
+      } else {
+        await handleItemUncompletion(targetItem.id);
+      }
+    } else if (field === 'text') {
+      handleTextUpdate(targetItem.id, value as string);
+    }
   };
 
   const handleSave = async () => {
@@ -185,8 +450,9 @@ export default function NoteModal({ note, onClose, onSave }: NoteModalProps) {
           title,
           content,
           pinned,
-          archived: note.archived,
+          archived,
           color,
+          checked_items_collapsed: !checkedItemsCollapsed,
           items: note.note_type === 'todo' ? items.map((item, idx) => ({ 
             text: item.text, 
             position: idx, 
@@ -224,8 +490,9 @@ export default function NoteModal({ note, onClose, onSave }: NoteModalProps) {
         title,
         content,
         pinned: newPinnedState,
-        archived: note.archived,
+        archived,
         color,
+        checked_items_collapsed: !checkedItemsCollapsed,
         items: note.note_type === 'todo' ? items.map((item, idx) => ({ 
           text: item.text, 
           position: idx, 
@@ -241,6 +508,67 @@ export default function NoteModal({ note, onClose, onSave }: NoteModalProps) {
     }
   };
 
+  const handleArchiveToggle = async () => {
+    if (!note) return;
+    
+    const newArchivedState = !archived;
+    setArchived(newArchivedState);
+    
+    try {
+      const updateData: UpdateNoteRequest = {
+        title,
+        content,
+        pinned,
+        archived: newArchivedState,
+        color,
+        checked_items_collapsed: !checkedItemsCollapsed,
+        items: note.note_type === 'todo' ? items.map((item, idx) => ({ 
+          text: item.text, 
+          position: idx, 
+          completed: item.completed 
+        })) : undefined,
+      };
+      await notes.update(note.id, updateData);
+      onSave(); // Refresh the notes list to show updated archive status
+    } catch (error) {
+      console.error('Failed to update archive status:', error);
+      // Revert the archive state on error
+      setArchived(!newArchivedState);
+    }
+  };
+
+  const handleToggleCompleted = async () => {
+    if (!note) {
+      // If creating a new note, just toggle local state
+      setCheckedItemsCollapsed(!checkedItemsCollapsed);
+      return;
+    }
+    
+    const newCollapsedState = !checkedItemsCollapsed;
+    setCheckedItemsCollapsed(newCollapsedState);
+    
+    try {
+      const updateData: UpdateNoteRequest = {
+        title,
+        content,
+        pinned,
+        archived,
+        color,
+        checked_items_collapsed: newCollapsedState,
+        items: note.note_type === 'todo' ? items.map((item, idx) => ({ 
+          text: item.text, 
+          position: idx, 
+          completed: item.completed 
+        })) : undefined,
+      };
+      await notes.update(note.id, updateData);
+      onRefresh?.(); // Refresh the notes list to reflect the changes
+    } catch (error) {
+      console.error('Failed to update collapse state:', error);
+      // Revert the state on error
+      setCheckedItemsCollapsed(checkedItemsCollapsed);
+    }
+  };
 
   const hasUnsavedChanges = () => {
     if (note) {
@@ -248,7 +576,8 @@ export default function NoteModal({ note, onClose, onSave }: NoteModalProps) {
         title !== note.title ||
         content !== note.content ||
         color !== note.color ||
-        pinned !== note.pinned
+        pinned !== note.pinned ||
+        archived !== note.archived
       );
     } else {
       return (
@@ -287,21 +616,34 @@ export default function NoteModal({ note, onClose, onSave }: NoteModalProps) {
             </h2>
             <div className="flex items-center space-x-2">
               {note && (
-                <button
-                  onClick={handlePinToggle}
-                  className="p-1 rounded-full hover:bg-gray-200 transition-colors"
-                  title={pinned ? 'Unpin note' : 'Pin note'}
-                >
-                  {pinned ? (
-                    <svg className="h-5 w-5 text-blue-500" fill="currentColor" viewBox="0 0 24 24">
-                      <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/>
-                    </svg>
-                  ) : (
-                    <svg className="h-5 w-5 text-gray-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                      <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/>
-                    </svg>
-                  )}
-                </button>
+                <>
+                  <button
+                    onClick={handlePinToggle}
+                    className="p-1 rounded-full hover:bg-gray-200 transition-colors"
+                    title={pinned ? 'Unpin note' : 'Pin note'}
+                  >
+                    {pinned ? (
+                      <svg className="h-5 w-5 text-blue-500" fill="currentColor" viewBox="0 0 24 24">
+                        <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/>
+                      </svg>
+                    ) : (
+                      <svg className="h-5 w-5 text-gray-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                        <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/>
+                      </svg>
+                    )}
+                  </button>
+                  <button
+                    onClick={handleArchiveToggle}
+                    className="p-1 rounded-full hover:bg-gray-200 transition-colors"
+                    title={archived ? 'Unarchive note' : 'Archive note'}
+                  >
+                    {archived ? (
+                      <ArchiveBoxXMarkIcon className="h-5 w-5 text-blue-500" />
+                    ) : (
+                      <ArchiveBoxIcon className="h-5 w-5 text-gray-600" />
+                    )}
+                  </button>
+                </>
               )}
               <button
                 onClick={handleCloseRequest}
@@ -311,6 +653,19 @@ export default function NoteModal({ note, onClose, onSave }: NoteModalProps) {
               </button>
             </div>
           </div>
+
+          {/* Error Message */}
+          {errorMessage && (
+            <div className="mx-4 mt-2 p-3 bg-red-100 border border-red-300 text-red-700 text-sm rounded-md flex items-center justify-between">
+              <span>{errorMessage}</span>
+              <button
+                onClick={() => setErrorMessage(null)}
+                className="ml-2 text-red-500 hover:text-red-700"
+              >
+                ×
+              </button>
+            </div>
+          )}
 
           {/* Content */}
           <div className="p-2 sm:p-4 space-y-4 overflow-y-auto max-h-[calc(90vh-8rem)]">
@@ -346,7 +701,15 @@ export default function NoteModal({ note, onClose, onSave }: NoteModalProps) {
               placeholder="Note title..."
               className="w-full p-2 text-lg font-medium bg-transparent border-none outline-none placeholder-gray-500"
               value={title}
-              onChange={(e) => setTitle(e.target.value)}
+              onChange={(e) => {
+                const newTitle = e.target.value;
+                const validationError = validateTitle(newTitle);
+                if (validationError) {
+                  showError(validationError);
+                  return;
+                }
+                setTitle(newTitle);
+              }}
             />
 
             {/* Content based on type */}
@@ -356,38 +719,81 @@ export default function NoteModal({ note, onClose, onSave }: NoteModalProps) {
                 rows={4}
                 className="w-full p-2 bg-transparent border-none outline-none resize-none placeholder-gray-500 min-h-[6rem]"
                 value={content}
-                onChange={(e) => setContent(e.target.value)}
+                onChange={(e) => {
+                  const newContent = e.target.value;
+                  const validationError = validateContent(newContent);
+                  if (validationError) {
+                    showError(validationError);
+                    return;
+                  }
+                  setContent(newContent);
+                }}
               />
             ) : (
-              <div className="space-y-2">
-                <DndContext
-                  sensors={sensors}
-                  collisionDetection={closestCenter}
-                  onDragEnd={handleDragEnd}
-                >
-                  <SortableContext
-                    items={items.map((_, index) => `item-${index}`)}
-                    strategy={verticalListSortingStrategy}
+              <div className="space-y-4">
+                {/* Uncompleted items section */}
+                <div className="space-y-2">
+                  <DndContext
+                    sensors={sensors}
+                    collisionDetection={closestCenter}
+                    onDragEnd={handleDragEnd}
                   >
-                    {items.map((item, index) => (
-                      <SortableItem
-                        key={`item-${index}`}
-                        id={`item-${index}`}
-                        index={index}
-                        item={item}
-                        onUpdateTodoItem={updateTodoItem}
-                        onRemoveTodoItem={removeTodoItem}
+                    <SortableContext
+                      items={uncompletedItems.map((item) => item.id)}
+                      strategy={verticalListSortingStrategy}
+                    >
+                      {uncompletedItems.map((item, index) => (
+                        <SortableItem
+                          key={item.id}
+                          id={item.id}
+                          index={index}
+                          item={item}
+                          onUpdateTodoItem={updateTodoItem}
+                          onRemoveTodoItem={removeTodoItem}
+                          isCompleted={false}
+                        />
+                      ))}
+                    </SortableContext>
+                  </DndContext>
+                  <button
+                    onClick={addTodoItem}
+                    className="flex items-center space-x-2 text-sm text-gray-600 hover:text-gray-800 p-1"
+                  >
+                    <PlusIcon className="h-4 w-4" />
+                    <span>Add item</span>
+                  </button>
+                </div>
+
+                {/* Completed items section */}
+                {completedItems.length > 0 && (
+                  <div className="border-t border-gray-200 pt-3">
+                    <button
+                      onClick={handleToggleCompleted}
+                      className="flex items-center space-x-2 text-sm text-gray-600 hover:text-gray-800 mb-2"
+                    >
+                      <ChevronDownIcon 
+                        className={`h-4 w-4 transition-transform ${checkedItemsCollapsed ? '-rotate-90' : 'rotate-0'}`}
                       />
-                    ))}
-                  </SortableContext>
-                </DndContext>
-                <button
-                  onClick={addTodoItem}
-                  className="flex items-center space-x-2 text-sm text-gray-600 hover:text-gray-800 p-1"
-                >
-                  <PlusIcon className="h-4 w-4" />
-                  <span>Add item</span>
-                </button>
+                      <span>Completed items ({completedItems.length})</span>
+                    </button>
+                    
+                    {!checkedItemsCollapsed && (
+                      <div className="space-y-2">
+                        {completedItems.map((item, index) => (
+                          <SortableItem
+                            key={item.id}
+                            id={item.id}
+                            index={index + uncompletedItems.length} // Adjust index for completed items
+                            item={item}
+                            onUpdateTodoItem={(idx, field, value) => updateTodoItem(idx, field, value)}
+                            onRemoveTodoItem={removeTodoItem}
+                            isCompleted={true}
+                          />
+                        ))}
+                      </div>
+                    )}
+                  </div>
+                )}
               </div>
             )}
 

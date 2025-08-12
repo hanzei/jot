@@ -37,12 +37,13 @@ type CreateNoteItem struct {
 }
 
 type UpdateNoteRequest struct {
-	Title    string           `json:"title"`
-	Content  string           `json:"content"`
-	Pinned   bool             `json:"pinned"`
-	Archived bool             `json:"archived"`
-	Color    string           `json:"color"`
-	Items    []UpdateNoteItem `json:"items,omitempty"`
+	Title                 string           `json:"title"`
+	Content               string           `json:"content"`
+	Pinned                bool             `json:"pinned"`
+	Archived              bool             `json:"archived"`
+	Color                 string           `json:"color"`
+	CheckedItemsCollapsed bool             `json:"checked_items_collapsed"`
+	Items                 []UpdateNoteItem `json:"items,omitempty"`
 }
 
 type UpdateNoteItem struct {
@@ -199,7 +200,7 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 		req.Color = "#ffffff"
 	}
 
-	err := h.noteStore.Update(id, claims.UserID, req.Title, req.Content, req.Pinned, req.Archived, req.Color)
+	err := h.noteStore.Update(id, claims.UserID, req.Title, req.Content, req.Pinned, req.Archived, req.Color, req.CheckedItemsCollapsed)
 	if err != nil {
 		if err.Error() == "note not found or no access" || err.Error() == "note not found" {
 			return http.StatusNotFound, err
