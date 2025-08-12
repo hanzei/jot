@@ -70,13 +70,13 @@ func (ts *TestServer) createTestUser(t *testing.T, username, password string, is
 	var user *models.User
 	var err error
 	if isAdmin {
-		user, err = userStore.CreateByAdmin(username, password, isAdmin)
+		user, err = userStore.CreateByAdmin(username, password, models.RoleAdmin)
 	} else {
 		user, err = userStore.Create(username, password)
 	}
 
 	tokenService := auth.NewTokenService("test-secret-key")
-	token, err := tokenService.GenerateToken(user.ID, user.Username, user.IsAdmin)
+	token, err := tokenService.GenerateToken(user.ID, user.Username, user.Role)
 	require.NoError(t, err)
 
 	testUser := &TestUser{
@@ -323,7 +323,7 @@ func TestAdminEndpoints(t *testing.T) {
 		body := map[string]any{
 			"username": "newuser",
 			"password": "password123",
-			"is_admin": false,
+			"role": "user",
 		}
 
 		resp := ts.authRequest(t, admin, http.MethodPost, "/api/v1/admin/users", body)
@@ -339,7 +339,7 @@ func TestAdminEndpoints(t *testing.T) {
 		body := map[string]any{
 			"username": "hacker",
 			"password": "password123",
-			"is_admin": true,
+			"role": "admin",
 		}
 
 		resp := ts.authRequest(t, user, http.MethodPost, "/api/v1/admin/users", body)

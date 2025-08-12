@@ -59,7 +59,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) (int, err
 		return http.StatusInternalServerError, err
 	}
 
-	token, err := h.tokenService.GenerateToken(user.ID, user.Username, user.IsAdmin)
+	token, err := h.tokenService.GenerateToken(user.ID, user.Username, user.Role)
 	if err != nil {
 		return http.StatusInternalServerError, err
 	}
@@ -96,7 +96,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) (int, error)
 		return http.StatusUnauthorized, errors.New("invalid password")
 	}
 
-	token, err := h.tokenService.GenerateToken(user.ID, user.Username, user.IsAdmin)
+	token, err := h.tokenService.GenerateToken(user.ID, user.Username, user.Role)
 	if err != nil {
 		return http.StatusInternalServerError, err
 	}

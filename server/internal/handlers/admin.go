@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"encoding/json"
+	"errors"
 	"net/http"
 	"strings"
 
@@ -21,7 +22,7 @@ func NewAdminHandler(userStore *models.UserStore) *AdminHandler {
 type CreateUserRequest struct {
 	Username string `json:"username"`
 	Password string `json:"password"`
-	IsAdmin  bool   `json:"is_admin"`
+	Role     string `json:"role"`
 }
 
 type UserListResponse struct {
@@ -59,7 +60,11 @@ func (h *AdminHandler) CreateUser(w http.ResponseWriter, r *http.Request) (int, 
 		return http.StatusBadRequest, err
 	}
 
-	user, err := h.userStore.CreateByAdmin(req.Username, req.Password, req.IsAdmin)
+	if err := validateRole(req.Role); err != nil {
+		return http.StatusBadRequest, err
+	}
+
+	user, err := h.userStore.CreateByAdmin(req.Username, req.Password, req.Role)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
 			return http.StatusConflict, err
@@ -73,4 +78,11 @@ func (h *AdminHandler) CreateUser(w http.ResponseWriter, r *http.Request) (int, 
 		return http.StatusInternalServerError, err
 	}
 	return 0, nil
+}
+
+func validateRole(role string) error {
+	if role != models.RoleUser && role != models.RoleAdmin {
+		return errors.New("invalid role: must be 'user' or 'admin'")
+	}
+	return nil
 }

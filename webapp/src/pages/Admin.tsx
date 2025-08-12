@@ -2,6 +2,7 @@ import { useState, useEffect } from 'react';
 import { User, CreateUserRequest } from '@/types';
 import { admin } from '@/utils/api';
 import { isAdmin, removeToken } from '@/utils/auth';
+import { ROLES } from '@/constants/roles';
 import { Navigate, Link } from 'react-router-dom';
 import NavigationHeader from '@/components/NavigationHeader';
 
@@ -19,7 +20,7 @@ const Admin = ({ onLogout }: AdminProps) => {
   const [formData, setFormData] = useState<CreateUserRequest>({
     username: '',
     password: '',
-    is_admin: false,
+    role: ROLES.USER,
   });
 
   const userIsAdmin = isAdmin();
@@ -60,7 +61,7 @@ const Admin = ({ onLogout }: AdminProps) => {
     try {
       const newUser = await admin.createUser(formData);
       setUsers([newUser, ...users]);
-      setFormData({ username: '', password: '', is_admin: false });
+      setFormData({ username: '', password: '', role: ROLES.USER });
       setShowCreateForm(false);
     } catch (err: unknown) {
       const axiosError = err as { response?: { data?: string } };
@@ -169,8 +170,8 @@ const Admin = ({ onLogout }: AdminProps) => {
                   <label className="flex items-center">
                     <input
                       type="checkbox"
-                      checked={formData.is_admin}
-                      onChange={(e) => setFormData({ ...formData, is_admin: e.target.checked })}
+                      checked={formData.role === ROLES.ADMIN}
+                      onChange={(e) => setFormData({ ...formData, role: e.target.checked ? ROLES.ADMIN : ROLES.USER })}
                       className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 rounded"
                     />
                     <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Admin user</span>
@@ -215,7 +216,7 @@ const Admin = ({ onLogout }: AdminProps) => {
                         </div>
                       </div>
                       <div className="flex items-center space-x-2">
-                        {user.is_admin && (
+                        {user.role === ROLES.ADMIN && (
                           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300">
                             Admin
                           </span>

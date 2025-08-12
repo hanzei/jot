@@ -10,7 +10,7 @@ import (
 type Claims struct {
 	UserID   string `json:"user_id"`
 	Username string `json:"username"`
-	IsAdmin  bool   `json:"is_admin"`
+	Role     string `json:"role"`
 	jwt.RegisteredClaims
 }
 
@@ -24,11 +24,11 @@ func NewTokenService(secret string) *TokenService {
 	}
 }
 
-func (t *TokenService) GenerateToken(userID string, username string, isAdmin bool) (string, error) {
+func (t *TokenService) GenerateToken(userID string, username string, role string) (string, error) {
 	claims := &Claims{
 		UserID:   userID,
 		Username: username,
-		IsAdmin:  isAdmin,
+		Role:     role,
 		RegisteredClaims: jwt.RegisteredClaims{
 			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
 			IssuedAt:  jwt.NewNumericDate(time.Now()),

@@ -13,7 +13,7 @@ type User struct {
 	ID           string    `json:"id"`
 	Username     string    `json:"username"`
 	PasswordHash string    `json:"-"`
-	IsAdmin      bool      `json:"is_admin"`
+	Role         string    `json:"role"`
 	CreatedAt    time.Time `json:"created_at"`
 	UpdatedAt    time.Time `json:"updated_at"`
 }
@@ -46,11 +46,16 @@ func (s *UserStore) Create(username, password string) (*User, error) {
 	}
 	isFirstUser = count == 0
 
-	query := `INSERT INTO users (id, username, password_hash, is_admin) 
+	role := RoleUser
+	if isFirstUser {
+		role = RoleAdmin
+	}
+
+	query := `INSERT INTO users (id, username, password_hash, role) 
 			  VALUES (?, ?, ?, ?) RETURNING created_at, updated_at`
 
 	var user User
-	err = s.db.QueryRow(query, userID, username, string(hashedPassword), isFirstUser).Scan(
+	err = s.db.QueryRow(query, userID, username, string(hashedPassword), role).Scan(
 		&user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
@@ -59,19 +64,19 @@ func (s *UserStore) Create(username, password string) (*User, error) {
 
 	user.ID = userID
 	user.Username = username
-	user.IsAdmin = isFirstUser
+	user.Role = role
 
 	return &user, nil
 }
 
 func (s *UserStore) GetByUsername(username string) (*User, error) {
 	var user User
-	query := `SELECT id, username, password_hash, is_admin, created_at, updated_at 
+	query := `SELECT id, username, password_hash, role, created_at, updated_at 
 			  FROM users WHERE username = ?`
 
 	err := s.db.QueryRow(query, username).Scan(
 		&user.ID, &user.Username, &user.PasswordHash,
-		&user.IsAdmin, &user.CreatedAt, &user.UpdatedAt,
+		&user.Role, &user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -84,12 +89,12 @@ func (s *UserStore) GetByUsername(username string) (*User, error) {
 
 func (s *UserStore) GetByID(id string) (*User, error) {
 	var user User
-	query := `SELECT id, username, password_hash, is_admin, created_at, updated_at 
+	query := `SELECT id, username, password_hash, role, created_at, updated_at 
 			  FROM users WHERE id = ?`
 
 	err := s.db.QueryRow(query, id).Scan(
 		&user.ID, &user.Username, &user.PasswordHash,
-		&user.IsAdmin, &user.CreatedAt, &user.UpdatedAt,
+		&user.Role, &user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
 		if err == sql.ErrNoRows {
@@ -107,7 +112,7 @@ func (u *User) CheckPassword(password string) bool {
 }
 
 func (s *UserStore) GetAll() ([]*User, error) {
-	query := `SELECT id, username, password_hash, is_admin, created_at, updated_at 
+	query := `SELECT id, username, password_hash, role, created_at, updated_at 
 			  FROM users ORDER BY created_at DESC`
 
 	rows, err := s.db.Query(query)
@@ -125,7 +130,7 @@ func (s *UserStore) GetAll() ([]*User, error) {
 		var user User
 		if err = rows.Scan(
 			&user.ID, &user.Username, &user.PasswordHash,
-			&user.IsAdmin, &user.CreatedAt, &user.UpdatedAt,
+			&user.Role, &user.CreatedAt, &user.UpdatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan user: %w", err)
 		}
@@ -139,7 +144,7 @@ func (s *UserStore) GetAll() ([]*User, error) {
 	return users, nil
 }
 
-func (s *UserStore) CreateByAdmin(username, password string, isAdmin bool) (*User, error) {
+func (s *UserStore) CreateByAdmin(username, password string, role string) (*User, error) {
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return nil, fmt.Errorf("failed to hash password: %w", err)
@@ -150,11 +155,11 @@ func (s *UserStore) CreateByAdmin(username, password string, isAdmin bool) (*Use
 		return nil, fmt.Errorf("failed to generate user ID: %w", err)
 	}
 
-	query := `INSERT INTO users (id, username, password_hash, is_admin) 
+	query := `INSERT INTO users (id, username, password_hash, role) 
 			  VALUES (?, ?, ?, ?) RETURNING created_at, updated_at`
 
 	var user User
-	err = s.db.QueryRow(query, userID, username, string(hashedPassword), isAdmin).Scan(
+	err = s.db.QueryRow(query, userID, username, string(hashedPassword), role).Scan(
 		&user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
@@ -163,7 +168,7 @@ func (s *UserStore) CreateByAdmin(username, password string, isAdmin bool) (*Use
 
 	user.ID = userID
 	user.Username = username
-	user.IsAdmin = isAdmin
+	user.Role = role
 
 	return &user, nil
 }
