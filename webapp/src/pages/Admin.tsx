@@ -1,7 +1,8 @@
 import { useState, useEffect } from 'react';
+import { UserCircleIcon } from '@heroicons/react/24/outline';
 import { User, CreateUserRequest } from '@/types';
 import { admin } from '@/utils/api';
-import { isAdmin, getUser } from '@/utils/auth';
+import { isAdmin, getUser, removeToken } from '@/utils/auth';
 import { Navigate, Link } from 'react-router-dom';
 
 interface AdminProps {
@@ -23,6 +24,11 @@ const Admin = ({ onLogout }: AdminProps) => {
 
   const currentUser = getUser();
   const userIsAdmin = isAdmin();
+
+  const handleLogout = () => {
+    removeToken();
+    onLogout();
+  };
 
   useEffect(() => {
     if (userIsAdmin) {
@@ -65,12 +71,6 @@ const Admin = ({ onLogout }: AdminProps) => {
     }
   };
 
-  const handleLogout = () => {
-    localStorage.removeItem('token');
-    localStorage.removeItem('user');
-    onLogout();
-  };
-
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-slate-900">
@@ -81,35 +81,85 @@ const Admin = ({ onLogout }: AdminProps) => {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-slate-900">
-      <div className="bg-white dark:bg-slate-800 shadow border-b border-gray-200 dark:border-slate-700">
+      <header className="bg-white dark:bg-slate-800 shadow-sm border-b border-gray-200 dark:border-slate-700">
         <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          <div className="flex justify-between items-center py-6">
-            <div className="flex items-center space-x-4">
-              <Link to="/" className="text-2xl font-bold text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400">
-                Jot
-              </Link>
-              <span className="text-sm text-gray-500 dark:text-gray-400">Admin Panel</span>
+          {/* Mobile and Desktop Layout */}
+          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center py-4 space-y-3 sm:space-y-0">
+            {/* Top row on mobile, left side on desktop */}
+            <div className="flex items-center justify-between sm:justify-start">
+              <div className="flex items-center space-x-2 sm:space-x-4">
+                <Link to="/" className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400">
+                  Jot
+                </Link>
+                <div className="hidden sm:flex space-x-4">
+                  <Link
+                    to="/"
+                    className="px-3 py-1 rounded-md text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
+                  >
+                    Notes
+                  </Link>
+                  <Link
+                    to="/?view=archive"
+                    className="px-3 py-1 rounded-md text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
+                  >
+                    Archive
+                  </Link>
+                  <span className="px-3 py-1 rounded-md text-sm font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">
+                    Admin
+                  </span>
+                </div>
+              </div>
+
+              {/* Mobile user menu */}
+              <div className="flex items-center space-x-2 sm:hidden">
+                <div className="flex items-center space-x-1 text-xs text-gray-600 dark:text-gray-300">
+                  <UserCircleIcon className="h-4 w-4" />
+                  <span className="max-w-16 truncate">{currentUser?.username}</span>
+                </div>
+                <button
+                  onClick={handleLogout}
+                  className="text-xs text-gray-600 dark:text-gray-300 hover:text-red-600 dark:hover:text-red-400"
+                >
+                  Logout
+                </button>
+              </div>
             </div>
-            <div className="flex items-center space-x-4">
-              <span className="text-sm text-gray-700 dark:text-gray-300">
-                Welcome, {currentUser?.username}
-              </span>
-              <Link
-                to="/"
-                className="text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 text-sm font-medium"
-              >
-                Dashboard
-              </Link>
+
+            {/* Desktop user menu */}
+            <div className="hidden sm:flex items-center space-x-4">
+              <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300">
+                <UserCircleIcon className="h-5 w-5" />
+                <span>{currentUser?.username}</span>
+              </div>
               <button
                 onClick={handleLogout}
-                className="bg-red-600 hover:bg-red-700 dark:bg-red-600 dark:hover:bg-red-700 text-white px-4 py-2 rounded-md text-sm font-medium"
+                className="text-sm text-gray-600 dark:text-gray-300 hover:text-red-600 dark:hover:text-red-400"
               >
                 Logout
               </button>
             </div>
+
+            {/* Mobile tabs */}
+            <div className="flex sm:hidden space-x-4 justify-center">
+              <Link
+                to="/"
+                className="px-3 py-1 rounded-md text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
+              >
+                Notes
+              </Link>
+              <Link
+                to="/?view=archive"
+                className="px-3 py-1 rounded-md text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
+              >
+                Archive
+              </Link>
+              <span className="px-3 py-1 rounded-md text-sm font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">
+                Admin
+              </span>
+            </div>
           </div>
         </div>
-      </div>
+      </header>
 
       <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         <div className="px-4 py-6 sm:px-0">

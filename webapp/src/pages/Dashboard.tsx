@@ -3,7 +3,7 @@ import { PlusIcon, MagnifyingGlassIcon, UserCircleIcon } from '@heroicons/react/
 import { notes } from '@/utils/api';
 import { removeToken, getUser, isAdmin } from '@/utils/auth';
 import { Note } from '@/types';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
 import SortableNoteCard from '@/components/SortableNoteCard';
 import NoteModal from '@/components/NoteModal';
 import ShareModal from '@/components/ShareModal';
@@ -31,15 +31,25 @@ interface DashboardProps {
 }
 
 export default function Dashboard({ onLogout }: DashboardProps) {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [notesList, setNotesList] = useState<Note[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [showArchived, setShowArchived] = useState(false);
+  const [showArchived, setShowArchived] = useState(searchParams.get('view') === 'archive');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingNote, setEditingNote] = useState<Note | null>(null);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [sharingNote, setSharingNote] = useState<Note | null>(null);
   const user = getUser();
+
+  const handleViewChange = (archived: boolean) => {
+    setShowArchived(archived);
+    if (archived) {
+      setSearchParams({ view: 'archive' });
+    } else {
+      setSearchParams({});
+    }
+  };
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -187,7 +197,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                 <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">Jot</h1>
                 <div className="hidden sm:flex space-x-4">
                   <button
-                    onClick={() => setShowArchived(false)}
+                    onClick={() => handleViewChange(false)}
                     className={`px-3 py-1 rounded-md text-sm font-medium ${!showArchived
                         ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
                         : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
@@ -196,7 +206,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                     Notes
                   </button>
                   <button
-                    onClick={() => setShowArchived(true)}
+                    onClick={() => handleViewChange(true)}
                     className={`px-3 py-1 rounded-md text-sm font-medium ${showArchived
                         ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
                         : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
@@ -204,6 +214,14 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                   >
                     Archive
                   </button>
+                  {isAdmin() && (
+                    <Link
+                      to="/admin"
+                      className="px-3 py-1 rounded-md text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300"
+                    >
+                      Admin
+                    </Link>
+                  )}
                 </div>
               </div>
 
@@ -223,7 +241,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                 )}
                 <button
                   onClick={handleLogout}
-                  className="text-xs text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
+                  className="text-xs text-gray-600 dark:text-gray-300 hover:text-red-600 dark:hover:text-red-400"
                 >
                   Logout
                 </button>
@@ -250,17 +268,9 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                 <UserCircleIcon className="h-5 w-5" />
                 <span>{user?.username}</span>
               </div>
-              {isAdmin() && (
-                <Link
-                  to="/admin"
-                  className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-medium"
-                >
-                  Admin
-                </Link>
-              )}
               <button
                 onClick={handleLogout}
-                className="text-sm text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
+                className="text-sm text-gray-600 dark:text-gray-300 hover:text-red-600 dark:hover:text-red-400"
               >
                 Logout
               </button>
@@ -269,7 +279,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
             {/* Mobile tabs */}
             <div className="flex sm:hidden space-x-4 justify-center">
               <button
-                onClick={() => setShowArchived(false)}
+                onClick={() => handleViewChange(false)}
                 className={`px-3 py-1 rounded-md text-sm font-medium ${!showArchived
                     ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
                     : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
@@ -278,7 +288,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                 Notes
               </button>
               <button
-                onClick={() => setShowArchived(true)}
+                onClick={() => handleViewChange(true)}
                 className={`px-3 py-1 rounded-md text-sm font-medium ${showArchived
                     ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
                     : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
