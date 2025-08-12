@@ -634,13 +634,13 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
                   </button>
                   <button
                     onClick={handleArchiveToggle}
-                    className="p-1 rounded-full hover:bg-gray-200 transition-colors"
+                    className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
                     title={archived ? 'Unarchive note' : 'Archive note'}
                   >
                     {archived ? (
                       <ArchiveBoxXMarkIcon className="h-5 w-5 text-blue-500" />
                     ) : (
-                      <ArchiveBoxIcon className="h-5 w-5 text-gray-600" />
+                      <ArchiveBoxIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
                     )}
                   </button>
                 </>
