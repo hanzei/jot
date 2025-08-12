@@ -23,7 +23,7 @@ tasks:
   test-webapp:
     desc: Run webapp tests
     dir: webapp
-    cmd: echo "not yet implemented"
+    cmd: npm run test:run
 
   coverage:
     desc: Run server tests with coverage
