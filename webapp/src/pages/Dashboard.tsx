@@ -1,9 +1,10 @@
 import { useState, useEffect, useCallback } from 'react';
-import { PlusIcon, MagnifyingGlassIcon, UserCircleIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline';
 import { notes } from '@/utils/api';
 import { removeToken, getUser, isAdmin } from '@/utils/auth';
 import { Note } from '@/types';
-import { Link } from 'react-router-dom';
+import { Link, useSearchParams } from 'react-router-dom';
+import NavigationHeader from '@/components/NavigationHeader';
 import SortableNoteCard from '@/components/SortableNoteCard';
 import NoteModal from '@/components/NoteModal';
 import ShareModal from '@/components/ShareModal';
@@ -31,15 +32,25 @@ interface DashboardProps {
 }
 
 export default function Dashboard({ onLogout }: DashboardProps) {
+  const [searchParams, setSearchParams] = useSearchParams();
   const [notesList, setNotesList] = useState<Note[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQuery] = useState('');
-  const [showArchived, setShowArchived] = useState(false);
+  const [showArchived, setShowArchived] = useState(searchParams.get('view') === 'archive');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingNote, setEditingNote] = useState<Note | null>(null);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [sharingNote, setSharingNote] = useState<Note | null>(null);
   const user = getUser();
+
+  const handleViewChange = (archived: boolean) => {
+    setShowArchived(archived);
+    if (archived) {
+      setSearchParams({ view: 'archive' });
+    } else {
+      setSearchParams({});
+    }
+  };
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -174,122 +185,74 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     );
   }
 
+  const navigationTabs = [
+    {
+      label: 'Notes',
+      element: (
+        <button
+          onClick={() => handleViewChange(false)}
+          className={`px-3 py-1 rounded-md text-sm font-medium ${!showArchived
+              ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+              : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
+            }`}
+        >
+          Notes
+        </button>
+      ),
+      isActive: !showArchived
+    },
+    {
+      label: 'Archive',
+      element: (
+        <button
+          onClick={() => handleViewChange(true)}
+          className={`px-3 py-1 rounded-md text-sm font-medium ${showArchived
+              ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+              : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
+            }`}
+        >
+          Archive
+        </button>
+      ),
+      isActive: showArchived
+    },
+    ...(isAdmin() ? [{
+      label: 'Admin',
+      element: (
+        <Link
+          to="/admin"
+          className="px-3 py-1 rounded-md text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300"
+        >
+          Admin
+        </Link>
+      )
+    }] : [])
+  ];
+
+  const searchBar = (
+    <div className="w-full sm:flex-1 sm:max-w-lg sm:mx-4">
+      <div className="relative">
+        <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-gray-400 dark:text-gray-500" />
+        <input
+          type="text"
+          placeholder="Search notes..."
+          className="w-full pl-9 sm:pl-10 pr-4 py-2 text-sm sm:text-base border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+          value={searchQuery}
+          onChange={(e) => setSearchQuery(e.target.value)}
+        />
+      </div>
+    </div>
+  );
+
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-slate-900">
-      {/* Header */}
-      <header className="bg-white dark:bg-slate-800 shadow-sm border-b border-gray-200 dark:border-slate-700">
-        <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-          {/* Mobile and Desktop Layout */}
-          <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center py-4 space-y-3 sm:space-y-0">
-            {/* Top row on mobile, left side on desktop */}
-            <div className="flex items-center justify-between sm:justify-start">
-              <div className="flex items-center space-x-2 sm:space-x-4">
-                <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">Jot</h1>
-                <div className="hidden sm:flex space-x-4">
-                  <button
-                    onClick={() => setShowArchived(false)}
-                    className={`px-3 py-1 rounded-md text-sm font-medium ${!showArchived
-                        ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
-                        : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
-                      }`}
-                  >
-                    Notes
-                  </button>
-                  <button
-                    onClick={() => setShowArchived(true)}
-                    className={`px-3 py-1 rounded-md text-sm font-medium ${showArchived
-                        ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
-                        : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
-                      }`}
-                  >
-                    Archive
-                  </button>
-                </div>
-              </div>
-
-              {/* Mobile user menu */}
-              <div className="flex items-center space-x-2 sm:hidden">
-                <div className="flex items-center space-x-1 text-xs text-gray-600 dark:text-gray-300">
-                  <UserCircleIcon className="h-4 w-4" />
-                  <span className="max-w-16 truncate">{user?.username}</span>
-                </div>
-                {isAdmin() && (
-                  <Link
-                    to="/admin"
-                    className="text-xs text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-medium"
-                  >
-                    Admin
-                  </Link>
-                )}
-                <button
-                  onClick={handleLogout}
-                  className="text-xs text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
-                >
-                  Logout
-                </button>
-              </div>
-            </div>
-
-            {/* Search - full width on mobile, constrained on desktop */}
-            <div className="w-full sm:flex-1 sm:max-w-lg sm:mx-4">
-              <div className="relative">
-                <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-gray-400 dark:text-gray-500" />
-                <input
-                  type="text"
-                  placeholder="Search notes..."
-                  className="w-full pl-9 sm:pl-10 pr-4 py-2 text-sm sm:text-base border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-                  value={searchQuery}
-                  onChange={(e) => setSearchQuery(e.target.value)}
-                />
-              </div>
-            </div>
-
-            {/* Desktop user menu */}
-            <div className="hidden sm:flex items-center space-x-4">
-              <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300">
-                <UserCircleIcon className="h-5 w-5" />
-                <span>{user?.username}</span>
-              </div>
-              {isAdmin() && (
-                <Link
-                  to="/admin"
-                  className="text-sm text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300 font-medium"
-                >
-                  Admin
-                </Link>
-              )}
-              <button
-                onClick={handleLogout}
-                className="text-sm text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
-              >
-                Logout
-              </button>
-            </div>
-
-            {/* Mobile tabs */}
-            <div className="flex sm:hidden space-x-4 justify-center">
-              <button
-                onClick={() => setShowArchived(false)}
-                className={`px-3 py-1 rounded-md text-sm font-medium ${!showArchived
-                    ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
-                    : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
-                  }`}
-              >
-                Notes
-              </button>
-              <button
-                onClick={() => setShowArchived(true)}
-                className={`px-3 py-1 rounded-md text-sm font-medium ${showArchived
-                    ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
-                    : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
-                  }`}
-              >
-                Archive
-              </button>
-            </div>
-          </div>
-        </div>
-      </header>
+      <NavigationHeader
+        title="Jot"
+        onLogout={handleLogout}
+        tabs={navigationTabs}
+      >
+        {searchBar}
+      </NavigationHeader>
 
       {/* Main content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
