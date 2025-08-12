@@ -42,4 +42,4 @@ tasks:
   lint-webapp:
     desc: Run webapp linting
     dir: webapp
-    cmd: npm run lint
+    cmd: npm run lint && npm run lint:ts
