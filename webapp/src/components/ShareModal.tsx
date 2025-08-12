@@ -231,22 +231,22 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
                 {showSuggestions && (
                   <div 
                     ref={suggestionsRef}
-                    className="absolute z-10 mt-1 w-full bg-white border border-gray-300 rounded-md shadow-lg max-h-48 overflow-y-auto"
+                    className="absolute z-10 mt-1 w-full bg-white dark:bg-slate-800 border border-gray-300 dark:border-slate-600 rounded-md shadow-lg max-h-48 overflow-y-auto"
                   >
                     {filteredUsers.map((user, index) => (
                       <div
                         key={user.id}
                         className={`px-3 py-2 cursor-pointer text-sm ${
                           index === selectedUserIndex
-                            ? 'bg-blue-50 text-blue-900'
-                            : 'text-gray-700 hover:bg-gray-50'
+                            ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-900 dark:text-blue-300'
+                            : 'text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-slate-700'
                         }`}
                         onClick={() => handleUserSelect(user)}
                         onMouseEnter={() => setSelectedUserIndex(index)}
                       >
                         <div className="font-medium">{user.username}</div>
                         {user.is_admin && (
-                          <div className="text-xs text-gray-500">Admin</div>
+                          <div className="text-xs text-gray-500 dark:text-gray-400">Admin</div>
                         )}
                       </div>
                     ))}
