@@ -145,13 +145,14 @@ func (s *NoteStore) GetByUserID(userID string, archived bool, search string) ([]
 	query := `SELECT DISTINCT n.id, n.user_id, n.title, n.content, n.note_type, n.color, n.pinned, n.archived, n.position, n.unpinned_position, n.checked_items_collapsed, n.created_at, n.updated_at
 			  FROM notes n
 			  LEFT JOIN note_shares ns ON n.id = ns.note_id
+			  LEFT JOIN note_items ni ON n.id = ni.note_id
 			  WHERE (n.user_id = ? OR ns.shared_with_user_id = ?) AND n.archived = ?`
 	args := []any{userID, userID, archived}
 
 	if search != "" {
-		query += ` AND (n.title LIKE ? OR n.content LIKE ?)`
+		query += ` AND (n.title LIKE ? OR n.content LIKE ? OR ni.text LIKE ?)`
 		searchTerm := "%" + search + "%"
-		args = append(args, searchTerm, searchTerm)
+		args = append(args, searchTerm, searchTerm, searchTerm)
 	}
 
 	query += ` ORDER BY n.pinned DESC, n.position ASC`

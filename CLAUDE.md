@@ -23,3 +23,4 @@ Use the following Task commands for development:
 
 
 - Before creating a PR, run all tests and ensure they pass. Also run the linter.
+- Don't create commits on the master branch unless I specifically ask you to do so.
