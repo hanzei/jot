@@ -8,7 +8,8 @@ export default defineConfig(({ mode }) => ({
   plugins: [
     react(),
     VitePWA({
-      registerType: 'autoUpdate',
+      registerType: 'prompt',
+      injectRegister: false,
       strategies: 'injectManifest',
       srcDir: 'src',
       filename: 'service-worker.ts',

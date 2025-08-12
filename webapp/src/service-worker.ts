@@ -77,8 +77,7 @@ const bgSyncQueue = new Queue('api-queue', {
             metadata: { retryCount: retryCount + 1 }
           });
         }
-        // Max retries reached - drop the request
-        break;
+        // Max retries reached - drop the request and continue with next item
       }
     }
   },
