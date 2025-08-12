@@ -8,7 +8,7 @@ if ('serviceWorker' in navigator) {
   window.addEventListener('load', async () => {
     try {
       const { Workbox } = await import('workbox-window');
-      const wb = new Workbox('/sw.js');
+      const wb = new Workbox('/service-worker.js');
 
       wb.addEventListener('waiting', () => {
         // Show a prompt to user to refresh/update the app

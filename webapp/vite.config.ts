@@ -17,8 +17,8 @@ export default defineConfig(({ mode }) => ({
         name: 'Jot - Your Personal Note Taker',
         short_name: 'Jot',
         description: 'A simple and elegant note-taking application',
-        theme_color: '#ffffff',
-        background_color: '#ffffff',
+        theme_color: '#4f46e5',
+        background_color: '#f8fafc',
         display: 'standalone',
         scope: '/',
         start_url: '/',
@@ -28,6 +28,18 @@ export default defineConfig(({ mode }) => ({
             sizes: '192x192 512x512',
             type: 'image/svg+xml',
             purpose: 'maskable any'
+          },
+          {
+            src: '/pwa-192x192.png',
+            sizes: '192x192',
+            type: 'image/png',
+            purpose: 'any'
+          },
+          {
+            src: '/pwa-512x512.png',
+            sizes: '512x512',
+            type: 'image/png',
+            purpose: 'any'
           }
         ]
       }

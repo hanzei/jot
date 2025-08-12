@@ -40,10 +40,12 @@ registerRoute(
           return response.status === 200 ? response : null;
         },
         cacheKeyWillBeUsed: async ({ request }) => {
-          // Create cache key without query parameters for GET requests
+          // Create cache key ignoring only safe-to-ignore query parameters for GET requests
           if (request.method === 'GET') {
             const url = new URL(request.url);
-            url.search = '';
+            // Only remove specific query parameters that don't affect the response
+            const paramsToIgnore = ['_t', 'timestamp', 'cache_bust'];
+            paramsToIgnore.forEach(param => url.searchParams.delete(param));
             return url.toString();
           }
           return request.url;
@@ -53,18 +55,29 @@ registerRoute(
   })
 );
 
-// Background sync for failed API requests
+// Background sync for failed API requests with retry limits
+const MAX_RETRY_COUNT = 3;
+const RETRY_DELAY_MS = 1000;
+
 const bgSyncQueue = new Queue('api-queue', {
   onSync: async ({ queue }) => {
     let entry;
     while ((entry = await queue.shiftRequest())) {
+      const retryCount = (entry.metadata as { retryCount?: number })?.retryCount || 0;
+      
       try {
         await fetch(entry.request);
-        console.log('Background sync successful for:', entry.request.url);
-      } catch (error) {
-        console.error('Background sync failed for:', entry.request.url, error);
-        // Re-add to queue if failed
-        await queue.unshiftRequest(entry);
+        // Success - don't re-add to queue
+      } catch {
+        if (retryCount < MAX_RETRY_COUNT) {
+          // Add delay before retry and increment counter
+          await new Promise(resolve => setTimeout(resolve, RETRY_DELAY_MS * Math.pow(2, retryCount)));
+          await queue.unshiftRequest({
+            ...entry,
+            metadata: { retryCount: retryCount + 1 }
+          });
+        }
+        // Max retries reached - drop the request
         break;
       }
     }
@@ -107,12 +120,10 @@ registerRoute(
 
 // Handle install event
 self.addEventListener('install', (event) => {
-  console.log('Service worker installing...');
   event.waitUntil(self.skipWaiting());
 });
 
 // Handle activate event
 self.addEventListener('activate', (event) => {
-  console.log('Service worker activating...');
   event.waitUntil(self.clients.claim());
 });
