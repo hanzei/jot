@@ -335,7 +335,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                     items={notesList.filter(note => note.pinned).map(note => note.id)}
                     strategy={rectSortingStrategy}
                   >
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                    <div className="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-4 space-y-0">
                       {notesList.filter(note => note.pinned).map((note) => (
                         <SortableNoteCard
                           key={note.id}
@@ -365,7 +365,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                     items={notesList.filter(note => !note.pinned).map(note => note.id)}
                     strategy={rectSortingStrategy}
                   >
-                    <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
+                    <div className="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-4 space-y-0">
                       {notesList.filter(note => !note.pinned).map((note) => (
                         <SortableNoteCard
                           key={note.id}
