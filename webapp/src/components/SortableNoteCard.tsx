@@ -59,10 +59,10 @@ export default function SortableNoteCard({
           ref={setActivatorNodeRef}
           {...attributes}
           {...listeners}
-          className="absolute top-2 right-10 p-2 rounded-md bg-gray-100 opacity-0 group-hover:opacity-100 hover:bg-gray-200 transition-all cursor-grab active:cursor-grabbing z-20"
+          className="absolute top-2 right-10 p-2 rounded-md bg-gray-100 dark:bg-slate-700 opacity-0 group-hover:opacity-100 hover:bg-gray-200 dark:hover:bg-slate-600 transition-all cursor-grab active:cursor-grabbing z-20"
           title="Drag to reorder"
         >
-          <Bars3Icon className="h-4 w-4 text-gray-600" />
+          <Bars3Icon className="h-4 w-4 text-gray-600 dark:text-gray-300" />
         </div>
       )}
 

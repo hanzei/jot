@@ -96,7 +96,7 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, currentUserI
             ) : (
               <UserIcon className="h-3 w-3 text-green-600" />
             )}
-            <span className="text-xs text-blue-600 ml-1">
+            <span className="text-xs text-blue-600 dark:text-blue-400 ml-1">
               {isOwner ? 'Shared' : 'Shared with me'}
             </span>
           </div>
@@ -116,15 +116,15 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, currentUserI
         <Menu.Button className="p-1 rounded-full hover:bg-gray-200 transition-colors">
           <EllipsisVerticalIcon className="h-4 w-4 text-gray-600" />
         </Menu.Button>
-        <Menu.Items className="absolute right-0 mt-1 w-48 bg-white rounded-md shadow-lg ring-1 ring-black ring-opacity-5 focus:outline-none z-10">
+        <Menu.Items className="absolute right-0 mt-1 w-48 bg-white dark:bg-slate-800 rounded-md shadow-lg ring-1 ring-black dark:ring-slate-600 ring-opacity-5 focus:outline-none z-10 border border-gray-200 dark:border-slate-600">
           <div className="py-1">
             {isOwner && onShare && (
               <Menu.Item>
                 {({ active }) => (
                   <button
                     onClick={() => onShare(note)}
-                    className={`${active ? 'bg-gray-100' : ''
-                      } flex items-center w-full px-4 py-2 text-sm text-gray-700`}
+                    className={`${active ? 'bg-gray-100 dark:bg-slate-700' : ''
+                      } flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-200`}
                   >
                     <ShareIcon className="h-4 w-4 mr-2" />
                     Share
@@ -136,8 +136,8 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, currentUserI
               {({ active }) => (
                 <button
                   onClick={handleTogglePin}
-                  className={`${active ? 'bg-gray-100' : ''
-                    } flex items-center w-full px-4 py-2 text-sm text-gray-700`}
+                  className={`${active ? 'bg-gray-100 dark:bg-slate-700' : ''
+                    } flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-200`}
                 >
                   <svg className="h-4 w-4 mr-2" fill={note.pinned ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                     <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z" />
@@ -150,8 +150,8 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, currentUserI
               {({ active }) => (
                 <button
                   onClick={handleToggleArchive}
-                  className={`${active ? 'bg-gray-100' : ''
-                    } flex items-center w-full px-4 py-2 text-sm text-gray-700`}
+                  className={`${active ? 'bg-gray-100 dark:bg-slate-700' : ''
+                    } flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-200`}
                 >
                   {note.archived ? (
                     <>
@@ -191,13 +191,13 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, currentUserI
         className={`cursor-pointer ${note.is_shared ? 'pt-8' : ''}`}
       >
         {note.title && (
-          <h3 className="font-medium text-gray-900 mb-2 line-clamp-2">
+          <h3 className="font-medium text-gray-900 dark:text-white mb-2 line-clamp-2">
             {note.title}
           </h3>
         )}
 
         {note.note_type === 'text' ? (
-          <div className="text-sm text-gray-700 line-clamp-6 whitespace-pre-wrap">
+          <div className="text-sm text-gray-700 dark:text-gray-200 line-clamp-6 whitespace-pre-wrap">
             {note.content}
           </div>
         ) : (
@@ -216,13 +216,13 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, currentUserI
                         readOnly
                         className="h-4 w-4 text-blue-600 rounded mr-2"
                       />
-                      <span className="text-gray-700">
+                      <span className="text-gray-700 dark:text-gray-200">
                         {item.text}
                       </span>
                     </div>
                   ))}
                   {completedItems.length > 0 && (
-                    <div className="text-xs text-gray-500 mt-2">
+                    <div className="text-xs text-gray-500 dark:text-gray-400 mt-2">
                       +{completedItems.length} completed items
                     </div>
                   )}
