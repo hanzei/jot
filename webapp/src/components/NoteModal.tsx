@@ -127,8 +127,8 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
       <input
         type="text"
         placeholder="List item..."
-        className={`flex-1 p-1 bg-transparent border-none outline-none placeholder-gray-500 ${
-          isCompleted ? 'line-through text-gray-500' : ''
+        className={`flex-1 p-1 bg-transparent border-none outline-none placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white ${
+          isCompleted ? 'line-through text-gray-500 dark:text-gray-400' : ''
         }`}
         value={item.text}
         onChange={(e) => onUpdateTodoItem(index, 'text', e.target.value)}
@@ -173,12 +173,12 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
   }), [items]);
 
   const colors = [
-    { value: '#ffffff', name: 'White', class: 'bg-white border-gray-300' },
-    { value: '#fbbc04', name: 'Yellow', class: 'bg-yellow-100 border-yellow-300' },
-    { value: '#34a853', name: 'Green', class: 'bg-green-100 border-green-300' },
-    { value: '#4285f4', name: 'Blue', class: 'bg-blue-100 border-blue-300' },
-    { value: '#ea4335', name: 'Red', class: 'bg-red-100 border-red-300' },
-    { value: '#9aa0a6', name: 'Purple', class: 'bg-purple-100 border-purple-300' },
+    { value: '#ffffff', name: 'White', class: 'bg-white dark:bg-slate-800 border-gray-300 dark:border-slate-600' },
+    { value: '#fbbc04', name: 'Yellow', class: 'bg-yellow-100 dark:bg-yellow-900 border-yellow-300 dark:border-yellow-700' },
+    { value: '#34a853', name: 'Green', class: 'bg-green-100 dark:bg-green-900 border-green-300 dark:border-green-700' },
+    { value: '#4285f4', name: 'Blue', class: 'bg-blue-100 dark:bg-blue-900 border-blue-300 dark:border-blue-700' },
+    { value: '#ea4335', name: 'Red', class: 'bg-red-100 dark:bg-red-900 border-red-300 dark:border-red-700' },
+    { value: '#9aa0a6', name: 'Purple', class: 'bg-purple-100 dark:bg-purple-900 border-purple-300 dark:border-purple-700' },
   ];
 
   useEffect(() => {
@@ -601,17 +601,17 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
   return (
     <>
       <Dialog open={true} onClose={handleCloseRequest} className="relative z-50">
-        <div className="fixed inset-0 bg-black/30" aria-hidden="true" />
+        <div className="fixed inset-0 bg-black/30 dark:bg-black/50" aria-hidden="true" />
       
       <div className="fixed inset-0 flex items-center justify-center p-2 sm:p-4 overflow-hidden">
         <Dialog.Panel 
           className={`mx-auto w-full max-w-md max-h-[90vh] overflow-hidden rounded-lg shadow-xl ${
-            colors.find(c => c.value === color)?.class || 'bg-white border-gray-300'
+            colors.find(c => c.value === color)?.class || 'bg-white dark:bg-slate-800 border-gray-300 dark:border-slate-600'
           }`}
         >
           {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b border-gray-200">
-            <h2 className="text-lg font-semibold text-gray-900">
+          <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-slate-600">
+            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
               {note ? 'Edit Note' : 'New Note'}
             </h2>
             <div className="flex items-center space-x-2">
@@ -619,7 +619,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
                 <>
                   <button
                     onClick={handlePinToggle}
-                    className="p-1 rounded-full hover:bg-gray-200 transition-colors"
+                    className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
                     title={pinned ? 'Unpin note' : 'Pin note'}
                   >
                     {pinned ? (
@@ -627,36 +627,36 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
                         <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/>
                       </svg>
                     ) : (
-                      <svg className="h-5 w-5 text-gray-600" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                      <svg className="h-5 w-5 text-gray-600 dark:text-gray-300" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                         <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/>
                       </svg>
                     )}
                   </button>
                   <button
                     onClick={handleArchiveToggle}
-                    className="p-1 rounded-full hover:bg-gray-200 transition-colors"
+                    className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
                     title={archived ? 'Unarchive note' : 'Archive note'}
                   >
                     {archived ? (
                       <ArchiveBoxXMarkIcon className="h-5 w-5 text-blue-500" />
                     ) : (
-                      <ArchiveBoxIcon className="h-5 w-5 text-gray-600" />
+                      <ArchiveBoxIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
                     )}
                   </button>
                 </>
               )}
               <button
                 onClick={handleCloseRequest}
-                className="p-1 rounded-full hover:bg-gray-200 transition-colors"
+                className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
               >
-                <XMarkIcon className="h-5 w-5 text-gray-600" />
+                <XMarkIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
               </button>
             </div>
           </div>
 
           {/* Error Message */}
           {errorMessage && (
-            <div className="mx-4 mt-2 p-3 bg-red-100 border border-red-300 text-red-700 text-sm rounded-md flex items-center justify-between">
+            <div className="mx-4 mt-2 p-3 bg-red-100 dark:bg-red-900/20 border border-red-300 dark:border-red-700 text-red-700 dark:text-red-300 text-sm rounded-md flex items-center justify-between">
               <span>{errorMessage}</span>
               <button
                 onClick={() => setErrorMessage(null)}
@@ -676,8 +676,8 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
                   onClick={() => setNoteType('text')}
                   className={`px-3 py-1 text-sm rounded-md ${
                     noteType === 'text'
-                      ? 'bg-blue-100 text-blue-700'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                      : 'bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-600'
                   }`}
                 >
                   Text
@@ -686,8 +686,8 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
                   onClick={() => setNoteType('todo')}
                   className={`px-3 py-1 text-sm rounded-md ${
                     noteType === 'todo'
-                      ? 'bg-blue-100 text-blue-700'
-                      : 'bg-gray-100 text-gray-700 hover:bg-gray-200'
+                      ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+                      : 'bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-600'
                   }`}
                 >
                   Todo List
@@ -699,7 +699,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
             <input
               type="text"
               placeholder="Note title..."
-              className="w-full p-2 text-lg font-medium bg-transparent border-none outline-none placeholder-gray-500"
+              className="w-full p-2 text-lg font-medium bg-transparent border-none outline-none placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white"
               value={title}
               onChange={(e) => {
                 const newTitle = e.target.value;
@@ -717,7 +717,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
               <textarea
                 placeholder="Take a note..."
                 rows={4}
-                className="w-full p-2 bg-transparent border-none outline-none resize-none placeholder-gray-500 min-h-[6rem]"
+                className="w-full p-2 bg-transparent border-none outline-none resize-none placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white min-h-[6rem]"
                 value={content}
                 onChange={(e) => {
                   const newContent = e.target.value;
@@ -757,7 +757,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
                   </DndContext>
                   <button
                     onClick={addTodoItem}
-                    className="flex items-center space-x-2 text-sm text-gray-600 hover:text-gray-800 p-1"
+                    className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-white p-1"
                   >
                     <PlusIcon className="h-4 w-4" />
                     <span>Add item</span>
@@ -766,10 +766,10 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
 
                 {/* Completed items section */}
                 {completedItems.length > 0 && (
-                  <div className="border-t border-gray-200 pt-3">
+                  <div className="border-t border-gray-200 dark:border-slate-600 pt-3">
                     <button
                       onClick={handleToggleCompleted}
-                      className="flex items-center space-x-2 text-sm text-gray-600 hover:text-gray-800 mb-2"
+                      className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-white mb-2"
                     >
                       <ChevronDownIcon 
                         className={`h-4 w-4 transition-transform ${checkedItemsCollapsed ? '-rotate-90' : 'rotate-0'}`}
@@ -813,9 +813,9 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
           </div>
 
           {/* Footer */}
-          <div className="flex justify-between items-center p-4 border-t border-gray-200">
+          <div className="flex justify-between items-center p-4 border-t border-gray-200 dark:border-slate-600">
             {note && (
-              <p className="text-sm text-gray-500">
+              <p className="text-sm text-gray-500 dark:text-gray-400">
                 Last edited: {new Date(note.updated_at).toLocaleString()}
               </p>
             )}

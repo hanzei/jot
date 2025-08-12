@@ -12,28 +12,34 @@ body {
   background-color: #fafafa;
 }
 
+@media (prefers-color-scheme: dark) {
+  body {
+    background-color: #0f172a;
+  }
+}
+
 @layer components {
   .note-card {
-    @apply bg-white rounded-lg border border-gray-200 hover:shadow-md transition-shadow duration-200 cursor-pointer;
+    @apply bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 hover:shadow-md dark:hover:shadow-slate-900/20 transition-shadow duration-200 cursor-pointer;
   }
   
   .note-card.yellow {
-    @apply bg-yellow-100 border-yellow-200;
+    @apply bg-yellow-100 dark:bg-yellow-900/40 border-yellow-200 dark:border-yellow-800;
   }
   
   .note-card.green {
-    @apply bg-green-100 border-green-200;
+    @apply bg-green-100 dark:bg-green-900/40 border-green-200 dark:border-green-800;
   }
   
   .note-card.blue {
-    @apply bg-blue-100 border-blue-200;
+    @apply bg-blue-100 dark:bg-blue-900/40 border-blue-200 dark:border-blue-800;
   }
   
   .note-card.red {
-    @apply bg-red-100 border-red-200;
+    @apply bg-red-100 dark:bg-red-900/40 border-red-200 dark:border-red-800;
   }
   
   .note-card.purple {
-    @apply bg-purple-100 border-purple-200;
+    @apply bg-purple-100 dark:bg-purple-900/40 border-purple-200 dark:border-purple-800;
   }
 }
