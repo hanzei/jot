@@ -323,7 +323,7 @@ func TestAdminEndpoints(t *testing.T) {
 		body := map[string]any{
 			"username": "newuser",
 			"password": "password123",
-			"is_admin": false,
+			"role": "user",
 		}
 
 		resp := ts.authRequest(t, admin, http.MethodPost, "/api/v1/admin/users", body)
@@ -339,7 +339,7 @@ func TestAdminEndpoints(t *testing.T) {
 		body := map[string]any{
 			"username": "hacker",
 			"password": "password123",
-			"is_admin": true,
+			"role": "admin",
 		}
 
 		resp := ts.authRequest(t, user, http.MethodPost, "/api/v1/admin/users", body)
