@@ -22,6 +22,16 @@ func TestIsValidID(t *testing.T) {
 		assert.False(t, IsValidID(shortID))
 	})
 
+	t.Run("invalid ID with 21 characters - boundary test", func(t *testing.T) {
+		id21Chars := "abcdefghijklmnopqrstu"
+		assert.False(t, IsValidID(id21Chars))
+	})
+
+	t.Run("invalid ID with 23 characters - boundary test", func(t *testing.T) {
+		id23Chars := "abcdefghijklmnopqrstuvw"
+		assert.False(t, IsValidID(id23Chars))
+	})
+
 	t.Run("invalid ID with wrong length - too long", func(t *testing.T) {
 		longID := "abcdefghijklmnopqrstuvwxyz"
 		assert.False(t, IsValidID(longID))
@@ -29,6 +39,11 @@ func TestIsValidID(t *testing.T) {
 
 	t.Run("invalid ID with special characters", func(t *testing.T) {
 		invalidID := "abcdefghijklmnopqrst!@"
+		assert.False(t, IsValidID(invalidID))
+	})
+
+	t.Run("invalid ID with unicode characters", func(t *testing.T) {
+		invalidID := "abcdefghijklmnopqrst🔥"
 		assert.False(t, IsValidID(invalidID))
 	})
 
