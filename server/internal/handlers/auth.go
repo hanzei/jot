@@ -86,11 +86,15 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) (int, error)
 
 	user, err := h.userStore.GetByUsername(req.Username)
 	if err != nil {
-		return http.StatusUnauthorized, err
+		return http.StatusUnauthorized, errors.New("invalid username or password")
 	}
 
 	if !user.CheckPassword(req.Password) {
-		return http.StatusUnauthorized, errors.New("invalid password")
+		return http.StatusUnauthorized, errors.New("invalid username or password")
+	}
+
+	if err := h.sessionService.InvalidateUserSessions(user.ID); err != nil {
+		return http.StatusInternalServerError, err
 	}
 
 	if err := h.sessionService.CreateSession(w, user.ID); err != nil {
@@ -118,14 +122,9 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) (int, error
 }
 
 func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) (int, error) {
-	claims, ok := auth.GetUserFromContext(r.Context())
+	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
 		return http.StatusUnauthorized, errors.New("unauthorized")
-	}
-
-	user, err := h.userStore.GetByID(claims.UserID)
-	if err != nil {
-		return http.StatusUnauthorized, err
 	}
 
 	w.Header().Set("Content-Type", "application/json")

@@ -2,9 +2,15 @@ package auth
 
 import (
 	"net/http"
+	"os"
 
 	"github.com/hanzei/jot/server/internal/models"
 )
+
+func cookieSecure() bool {
+	v := os.Getenv("COOKIE_SECURE")
+	return v != "false"
+}
 
 const (
 	SessionCookieName = "jot_session"
@@ -33,6 +39,7 @@ func (s *SessionService) CreateSession(w http.ResponseWriter, userID string) err
 		Value:    session.Token,
 		Path:     "/",
 		HttpOnly: true,
+		Secure:   cookieSecure(),
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   int(models.SessionDuration.Seconds()),
 	})
@@ -55,11 +62,16 @@ func (s *SessionService) DeleteSession(w http.ResponseWriter, r *http.Request) e
 		Value:    "",
 		Path:     "/",
 		HttpOnly: true,
+		Secure:   cookieSecure(),
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   -1,
 	})
 
 	return nil
+}
+
+func (s *SessionService) InvalidateUserSessions(userID string) error {
+	return s.sessionStore.DeleteByUserID(userID)
 }
 
 func (s *SessionService) GetSessionUser(r *http.Request) (*models.User, error) {

@@ -46,7 +46,8 @@ func setupTestServer(t *testing.T) *TestServer {
 	tmpDB := fmt.Sprintf("/tmp/test_%s.db", t.Name())
 	os.Remove(tmpDB)
 
-	os.Setenv("DB_PATH", tmpDB)
+	t.Setenv("DB_PATH", tmpDB)
+	t.Setenv("COOKIE_SECURE", "false")
 
 	s := server.New()
 	httpServer := httptest.NewServer(s.GetRouter())
@@ -65,13 +66,14 @@ func setupTestServer(t *testing.T) *TestServer {
 	return ts
 }
 
-func newCookieClient() *http.Client {
-	jar, _ := cookiejar.New(nil)
+func newCookieClient(t *testing.T) *http.Client {
+	jar, err := cookiejar.New(nil)
+	require.NoError(t, err)
 	return &http.Client{Jar: jar}
 }
 
 func (ts *TestServer) createTestUser(t *testing.T, username, password string, isAdmin bool) *TestUser {
-	client := newCookieClient()
+	client := newCookieClient(t)
 
 	// Register user via API to get a session cookie
 	body := map[string]string{
@@ -164,7 +166,7 @@ func TestRegisterEndpoint(t *testing.T) {
 			"password": "password123",
 		}
 
-		resp := ts.request(t, newCookieClient(), http.MethodPost, "/api/v1/register", body)
+		resp := ts.request(t, newCookieClient(t), http.MethodPost, "/api/v1/register", body)
 		assert.Equal(t, http.StatusCreated, resp.StatusCode)
 
 		var response map[string]any
@@ -178,8 +180,8 @@ func TestRegisterEndpoint(t *testing.T) {
 			"password": "password123",
 		}
 
-		ts.request(t, newCookieClient(), http.MethodPost, "/api/v1/register", body)
-		resp := ts.request(t, newCookieClient(), http.MethodPost, "/api/v1/register", body)
+		ts.request(t, newCookieClient(t), http.MethodPost, "/api/v1/register", body)
+		resp := ts.request(t, newCookieClient(t), http.MethodPost, "/api/v1/register", body)
 
 		assert.Equal(t, http.StatusConflict, resp.StatusCode)
 	})
@@ -190,7 +192,7 @@ func TestRegisterEndpoint(t *testing.T) {
 			"password": "password123",
 		}
 
-		resp := ts.request(t, newCookieClient(), http.MethodPost, "/api/v1/register", body)
+		resp := ts.request(t, newCookieClient(t), http.MethodPost, "/api/v1/register", body)
 		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 	})
 }
@@ -203,10 +205,10 @@ func TestLoginEndpoint(t *testing.T) {
 		"username": "loginuser",
 		"password": "password123",
 	}
-	ts.request(t, newCookieClient(), http.MethodPost, "/api/v1/register", registerBody)
+	ts.request(t, newCookieClient(t), http.MethodPost, "/api/v1/register", registerBody)
 
 	t.Run("valid login", func(t *testing.T) {
-		client := newCookieClient()
+		client := newCookieClient(t)
 		body := map[string]string{
 			"username": "loginuser",
 			"password": "password123",
@@ -230,7 +232,7 @@ func TestLoginEndpoint(t *testing.T) {
 			"password": "wrongpassword",
 		}
 
-		resp := ts.request(t, newCookieClient(), http.MethodPost, "/api/v1/login", body)
+		resp := ts.request(t, newCookieClient(t), http.MethodPost, "/api/v1/login", body)
 		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 	})
 }

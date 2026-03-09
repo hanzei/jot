@@ -44,6 +44,14 @@ func New() *Server {
 
 	sessionService := auth.NewSessionService(sessionStore, userStore)
 
+	go func() {
+		for range time.Tick(time.Hour) {
+			if err := sessionStore.DeleteExpired(); err != nil {
+				logrus.WithError(err).Error("failed to delete expired sessions")
+			}
+		}
+	}()
+
 	authHandler := handlers.NewAuthHandler(userStore, sessionService)
 	notesHandler := handlers.NewNotesHandler(noteStore, userStore)
 	adminHandler := handlers.NewAdminHandler(userStore)
@@ -64,10 +72,14 @@ func New() *Server {
 func (s *Server) setupRoutes() {
 	s.router.Use(middleware.Logger)
 	s.router.Use(middleware.Recoverer)
+	allowedOrigin := os.Getenv("CORS_ALLOWED_ORIGIN")
+	if allowedOrigin == "" {
+		allowedOrigin = "http://localhost:3000"
+	}
 	s.router.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"*"},
+		AllowedOrigins:   []string{allowedOrigin},
 		AllowedMethods:   []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodOptions},
-		AllowedHeaders:   []string{"Accept", "Content-Type", "X-CSRF-Token"},
+		AllowedHeaders:   []string{"Accept", "Content-Type"},
 		ExposedHeaders:   []string{"Link"},
 		AllowCredentials: true,
 		MaxAge:           300,

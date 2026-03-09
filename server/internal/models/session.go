@@ -39,7 +39,8 @@ func (s *SessionStore) Create(userID string) (*Session, error) {
 		return nil, err
 	}
 
-	expiresAt := time.Now().Add(SessionDuration)
+	now := time.Now()
+	expiresAt := now.Add(SessionDuration)
 
 	query := `INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)`
 	if _, err := s.db.Exec(query, token, userID, expiresAt); err != nil {
@@ -49,7 +50,7 @@ func (s *SessionStore) Create(userID string) (*Session, error) {
 	return &Session{
 		Token:     token,
 		UserID:    userID,
-		CreatedAt: time.Now(),
+		CreatedAt: now,
 		ExpiresAt: expiresAt,
 	}, nil
 }
