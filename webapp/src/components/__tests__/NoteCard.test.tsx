@@ -226,8 +226,8 @@ describe('NoteCard', () => {
     it('handles concurrent pin operations', async () => {
       const user = userEvent.setup()
       const mockUpdate = vi.mocked(notes.update)
-      let resolveFirst: (value: any) => void = () => { }
-      let resolveSecond: (value: any) => void = () => { }
+      let resolveFirst: (value: Note | PromiseLike<Note>) => void = () => { }
+      let resolveSecond: (value: Note | PromiseLike<Note>) => void = () => { }
 
       const firstPromise = new Promise<Note>(resolve => {
         resolveFirst = resolve
@@ -484,7 +484,7 @@ describe('NoteCard', () => {
       const user = userEvent.setup()
       const mockUpdate = vi.mocked(notes.update)
 
-      let resolvePromise: (value: any) => void = () => { }
+      let resolvePromise: (value: Note | PromiseLike<Note>) => void = () => { }
       const promise = new Promise<Note>(resolve => {
         resolvePromise = resolve
       })
@@ -589,8 +589,8 @@ describe('NoteCard', () => {
       const malformedNote = {
         ...createMockNote(),
         created_at: 'invalid-date',
-        updated_at: null as any,
-        items: null as any,
+        updated_at: null as unknown as string,
+        items: null as unknown as NoteItem[],
       }
 
       render(<NoteCard {...defaultProps} note={malformedNote} />)

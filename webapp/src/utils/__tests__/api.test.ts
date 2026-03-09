@@ -111,7 +111,7 @@ describe('API Module', () => {
     it('tests auth token logic independently', () => {
       // Since interceptors are set up at module load time and our mocks
       // aren't available then, we test the interceptor logic separately
-      const addAuthToken = (config: any, token: string | null) => {
+      const addAuthToken = (config: { headers: Record<string, string> }, token: string | null) => {
         if (token) {
           config.headers.Authorization = `Bearer ${token}`
         }
@@ -131,7 +131,7 @@ describe('API Module', () => {
   describe('Response Interceptor Logic', () => {
     it('tests 401 error handling logic independently', () => {
       // Test the 401 error handling logic separately from axios interceptors
-      const handle401Error = (error: any) => {
+      const handle401Error = (error: { response?: { status: number } }) => {
         if (error.response?.status === 401) {
           // In real code, this would clear tokens and redirect
           return { shouldClearAuth: true, shouldRedirect: true }
@@ -735,7 +735,7 @@ describe('API Module', () => {
       const getTokenSafely = () => {
         try {
           return localStorage.getItem('token')
-        } catch (error) {
+        } catch {
           return null
         }
       }
@@ -779,9 +779,9 @@ describe('API Module', () => {
       mockPut.mockResolvedValue({ data: sampleNote })
 
       // These should handle gracefully
-      await notes.getAll(undefined as any, null as any)
-      await notes.create(null as any)
-      await notes.update(undefined as any, null as any)
+      await notes.getAll(undefined as unknown as boolean, null as unknown as string)
+      await notes.create(null as unknown as CreateNoteRequest)
+      await notes.update(undefined as unknown as string, null as unknown as UpdateNoteRequest)
 
       expect(mockGet).toHaveBeenCalled()
       expect(mockPost).toHaveBeenCalled()

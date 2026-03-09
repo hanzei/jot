@@ -114,13 +114,13 @@ describe('Auth Utilities', () => {
     })
 
     it('handles null token', () => {
-      setToken(null as any)
+      setToken(null as unknown as string)
 
       expect(mockLocalStorage.setItem).toHaveBeenCalledWith('token', null)
     })
 
     it('handles undefined token', () => {
-      setToken(undefined as any)
+      setToken(undefined as unknown as string)
 
       expect(mockLocalStorage.setItem).toHaveBeenCalledWith('token', undefined)
     })
@@ -245,7 +245,7 @@ describe('Auth Utilities', () => {
     })
 
     it('handles circular references in JSON gracefully', () => {
-      const circularObj: any = { id: '1', username: 'test' }
+      const circularObj: Record<string, unknown> = { id: '1', username: 'test' }
       circularObj.self = circularObj
       
       // JSON.stringify would fail with circular references
@@ -285,14 +285,14 @@ describe('Auth Utilities', () => {
     })
 
     it('handles user object with null values', () => {
-      const userWithNulls = { ...mockUser, role: null } as any
+      const userWithNulls = { ...mockUser, role: null } as unknown as User
       setUser(userWithNulls)
 
       expect(mockLocalStorage.setItem).toHaveBeenCalledWith('user', JSON.stringify(userWithNulls))
     })
 
     it('handles user object with undefined values', () => {
-      const userWithUndefined = { ...mockUser, role: undefined } as any
+      const userWithUndefined = { ...mockUser, role: undefined } as unknown as User
       setUser(userWithUndefined)
 
       expect(mockLocalStorage.setItem).toHaveBeenCalledWith('user', JSON.stringify(userWithUndefined))
@@ -448,7 +448,7 @@ describe('Auth Utilities', () => {
     })
 
     it('returns false when user has no role', () => {
-      const userWithoutRole = { ...mockUser, role: undefined } as any
+      const userWithoutRole = { ...mockUser, role: undefined } as unknown as User
       mockLocalStorage.getItem.mockReturnValue(JSON.stringify(userWithoutRole))
 
       const result = isAdmin()
@@ -457,7 +457,7 @@ describe('Auth Utilities', () => {
     })
 
     it('returns false when user role is null', () => {
-      const userWithNullRole = { ...mockUser, role: null } as any
+      const userWithNullRole = { ...mockUser, role: null } as unknown as User
       mockLocalStorage.getItem.mockReturnValue(JSON.stringify(userWithNullRole))
 
       const result = isAdmin()
@@ -493,7 +493,7 @@ describe('Auth Utilities', () => {
     })
 
     it('handles user object without required properties', () => {
-      const incompleteUser = { id: '1' } as any
+      const incompleteUser = { id: '1' } as unknown as User
       mockLocalStorage.getItem.mockReturnValue(JSON.stringify(incompleteUser))
 
       const result = isAdmin()
@@ -511,7 +511,7 @@ describe('Auth Utilities', () => {
     })
 
     it('handles numeric role values', () => {
-      const userWithNumericRole = { ...mockUser, role: 1 } as any
+      const userWithNumericRole = { ...mockUser, role: 1 } as unknown as User
       mockLocalStorage.getItem.mockReturnValue(JSON.stringify(userWithNumericRole))
 
       const result = isAdmin()

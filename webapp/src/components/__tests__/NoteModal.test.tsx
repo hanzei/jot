@@ -1,5 +1,6 @@
 import { render, screen, fireEvent } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { type ReactNode } from 'react'
 import NoteModal from '../NoteModal'
 import { Note, NoteItem } from '@/types'
 
@@ -13,11 +14,11 @@ vi.mock('@/utils/api', () => ({
 
 // Mock @headlessui/react
 vi.mock('@headlessui/react', () => {
-  const DialogPanel = ({ className, children }: any) => (
+  const DialogPanel = ({ className, children }: { className?: string; children?: ReactNode }) => (
     <div className={className} data-testid="dialog-panel">{children}</div>
   )
 
-  const Dialog = ({ children, open }: any) => (
+  const Dialog = ({ children, open }: { children?: ReactNode; open?: boolean }) => (
     <div data-testid="dialog" style={{ display: open ? 'block' : 'none' }}>
       {open && children}
     </div>
@@ -30,8 +31,8 @@ vi.mock('@headlessui/react', () => {
 
 // Mock @dnd-kit components
 vi.mock('@dnd-kit/core', () => ({
-  DndContext: ({ children, onDragEnd }: any) => (
-    <div data-testid="dnd-context" onDrop={(e) => onDragEnd && onDragEnd(e)}>
+  DndContext: ({ children, onDragEnd }: { children?: ReactNode; onDragEnd?: (event: Record<string, unknown>) => void }) => (
+    <div data-testid="dnd-context" onDrop={(e) => onDragEnd && onDragEnd(e as unknown as Record<string, unknown>)}>
       {children}
     </div>
   ),
@@ -49,7 +50,7 @@ vi.mock('@dnd-kit/sortable', () => ({
     result.splice(newIndex, 0, removed)
     return result
   }),
-  SortableContext: ({ children }: any) => <div data-testid="sortable-context">{children}</div>,
+  SortableContext: ({ children }: { children?: ReactNode }) => <div data-testid="sortable-context">{children}</div>,
   sortableKeyboardCoordinates: vi.fn(),
   verticalListSortingStrategy: vi.fn(),
   useSortable: vi.fn(() => ({
@@ -334,7 +335,7 @@ describe('NoteModal', () => {
         title: null,
         content: undefined,
         items: null,
-      } as any
+      } as unknown as Note
 
       render(<NoteModal {...defaultProps} note={malformedNote} />)
 

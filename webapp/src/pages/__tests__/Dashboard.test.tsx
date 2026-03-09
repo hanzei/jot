@@ -2,6 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
+import { type ReactNode } from 'react'
 import Dashboard from '../Dashboard'
 import { Note } from '@/types'
 import { notes } from '@/utils/api'
@@ -24,13 +25,14 @@ vi.mock('@/utils/auth', () => ({
 
 // Mock @dnd-kit components
 vi.mock('@dnd-kit/core', () => ({
-  DndContext: ({ children, onDragEnd }: any) => (
-    <div 
-      data-testid="dnd-context" 
-      onDrop={(e: any) => {
+  DndContext: ({ children, onDragEnd }: { children?: ReactNode; onDragEnd?: (event: Record<string, unknown>) => void }) => (
+    <div
+      data-testid="dnd-context"
+      onDrop={(e) => {
         // Pass through the custom event data instead of the DOM event
-        if (onDragEnd && (e.active || e.over)) {
-          onDragEnd(e)
+        const evt = e as unknown as Record<string, unknown>
+        if (onDragEnd && (evt['active'] || evt['over'])) {
+          onDragEnd(evt)
         }
       }}
     >
@@ -51,7 +53,7 @@ vi.mock('@dnd-kit/sortable', () => ({
     result.splice(newIndex, 0, removed)
     return result
   }),
-  SortableContext: ({ children }: any) => <div data-testid="sortable-context">{children}</div>,
+  SortableContext: ({ children }: { children?: ReactNode }) => <div data-testid="sortable-context">{children}</div>,
   sortableKeyboardCoordinates: vi.fn(),
   rectSortingStrategy: vi.fn(),
 }))
@@ -62,12 +64,17 @@ vi.mock('@dnd-kit/modifiers', () => ({
 
 // Mock child components
 vi.mock('@/components/NavigationHeader', () => ({
-  default: ({ title, onLogout, tabs, children }: any) => (
+  default: ({ title, onLogout, tabs, children }: {
+    title?: string;
+    onLogout?: () => void;
+    tabs?: { label: string; element: ReactNode }[];
+    children?: ReactNode;
+  }) => (
     <div data-testid="navigation-header">
       <h1>{title}</h1>
       <button onClick={onLogout} data-testid="logout-button">Logout</button>
       <div data-testid="tabs">
-        {tabs?.map((tab: any, index: number) => (
+        {tabs?.map((tab, index) => (
           <div key={index} data-testid={`tab-${tab.label.toLowerCase()}`}>
             {tab.element}
           </div>
@@ -79,7 +86,13 @@ vi.mock('@/components/NavigationHeader', () => ({
 }))
 
 vi.mock('@/components/SortableNoteCard', () => ({
-  default: ({ note, onEdit, onDelete, onShare, onRefresh }: any) => (
+  default: ({ note, onEdit, onDelete, onShare, onRefresh }: {
+    note: Note;
+    onEdit?: (note: Note) => void;
+    onDelete?: (id: string) => void;
+    onShare?: (note: Note) => void;
+    onRefresh?: () => void;
+  }) => (
     <div data-testid={`note-card-${note.id}`}>
       <h3>{note.title}</h3>
       <p>{note.content}</p>
@@ -92,7 +105,7 @@ vi.mock('@/components/SortableNoteCard', () => ({
 }))
 
 vi.mock('@/components/NoteModal', () => ({
-  default: ({ note, onClose, onSave }: any) => (
+  default: ({ note, onClose, onSave }: { note?: Note | null; onClose?: () => void; onSave?: () => void }) => (
     <div data-testid="note-modal">
       <h2>{note ? 'Edit Note' : 'New Note'}</h2>
       <button onClick={onClose} data-testid="modal-close">Close</button>
@@ -102,7 +115,7 @@ vi.mock('@/components/NoteModal', () => ({
 }))
 
 vi.mock('@/components/ShareModal', () => ({
-  default: ({ note, isOpen, onClose }: any) => (
+  default: ({ note, isOpen, onClose }: { note?: Note | null; isOpen?: boolean; onClose?: () => void }) => (
     isOpen ? (
       <div data-testid="share-modal">
         <h2>Share Note: {note?.title}</h2>
@@ -436,8 +449,8 @@ describe('Dashboard', () => {
 
     it('handles notes with missing or malformed data', async () => {
       const malformedNotes = [
-        { id: '1', title: null, content: 'Test' } as any,
-        { id: '2', title: 'Test', content: undefined } as any,
+        { id: '1', title: null, content: 'Test' } as unknown as Note,
+        { id: '2', title: 'Test', content: undefined } as unknown as Note,
         createMockNote({ id: '3', created_at: 'invalid-date' }),
       ]
       vi.mocked(notes.getAll).mockResolvedValue(malformedNotes)
