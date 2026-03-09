@@ -55,5 +55,8 @@
     "test:run": "vitest run",
     "test:coverage": "vitest --coverage"
   },
-  "proxy": "http://localhost:8080"
+  "proxy": "http://localhost:8080",
+  "overrides": {
+    "serialize-javascript": "^7.0.3"
+  }
 }
