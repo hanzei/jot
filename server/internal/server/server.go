@@ -3,6 +3,7 @@ package server
 import (
 	"log"
 	"net/http"
+	"path/filepath"
 	"os"
 	"strings"
 	"time"
@@ -117,6 +118,7 @@ func (s *Server) setupRoutes() {
 		}
 		staticDir = workDir + "/../webapp/build/"
 	}
+	staticDir = filepath.Clean(staticDir)
 
 	if _, err := os.Stat(staticDir); os.IsNotExist(err) {
 		log.Printf("Static directory not found: %s (frontend files not available)", staticDir)
