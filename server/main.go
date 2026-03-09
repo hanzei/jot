@@ -17,7 +17,7 @@ func main() {
 	}
 	portNum, err := strconv.Atoi(port)
 	if err != nil {
-		log.Fatalf("Invalid PORT value %q: must be a number", port)
+		log.Fatal("Invalid PORT value: must be a number")
 	}
 	log.Printf("Starting Jot server on :%d", portNum)
 	log.Fatal(s.Start(fmt.Sprintf(":%d", portNum)))
