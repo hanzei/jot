@@ -293,7 +293,7 @@ describe('useOnlineStatus Hook', () => {
 
   describe('Performance Considerations', () => {
     it('does not cause memory leaks with proper cleanup', () => {
-      const hooks = []
+      const hooks: ReturnType<typeof renderHook>[] = []
       
       // Create multiple hook instances
       for (let i = 0; i < 100; i++) {

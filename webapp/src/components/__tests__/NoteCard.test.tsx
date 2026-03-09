@@ -139,7 +139,7 @@ describe('NoteCard', () => {
       const pinnedNote = createMockNote({ pinned: true })
       render(<NoteCard {...defaultProps} note={pinnedNote} />)
 
-      const pinIcon = document.querySelector('svg[viewBox="0 0 24 24"]')
+      const pinIcon = screen.getByTestId('pin-icon')
       expect(pinIcon).toBeInTheDocument()
     })
 

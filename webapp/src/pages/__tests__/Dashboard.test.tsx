@@ -162,8 +162,8 @@ describe('Dashboard', () => {
       
       renderDashboard()
       
-      // Look for the loading spinner by class name
-      expect(document.querySelector('.animate-spin')).toBeInTheDocument()
+      // Look for the loading spinner by test id
+      expect(screen.getByTestId('loading-spinner')).toBeInTheDocument()
     })
 
     it('renders dashboard after loading completes', async () => {
@@ -341,9 +341,9 @@ describe('Dashboard', () => {
       const archiveButton = screen.getByText('Archive')
       await user.click(archiveButton)
       
-      // The button itself should have the active class, not the parent
+      // The active tab should have aria-current="page"
       await waitFor(() => {
-        expect(archiveButton).toHaveClass('bg-blue-100')
+        expect(archiveButton).toHaveAttribute('aria-current', 'page')
       })
     })
 

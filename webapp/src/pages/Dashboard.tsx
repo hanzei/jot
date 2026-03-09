@@ -180,7 +180,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   if (loading) {
     return (
       <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-slate-900">
-        <div className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
+        <div data-testid="loading-spinner" className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
       </div>
     );
   }
@@ -191,6 +191,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       element: (
         <button
           onClick={() => handleViewChange(false)}
+          aria-current={!showArchived ? 'page' : undefined}
           className={`px-3 py-1 rounded-md text-sm font-medium ${!showArchived
               ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
               : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
@@ -206,6 +207,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       element: (
         <button
           onClick={() => handleViewChange(true)}
+          aria-current={showArchived ? 'page' : undefined}
           className={`px-3 py-1 rounded-md text-sm font-medium ${showArchived
               ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
               : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'

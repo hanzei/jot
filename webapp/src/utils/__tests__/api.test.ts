@@ -763,13 +763,15 @@ describe('API Module', () => {
       expect(mockGet).toHaveBeenCalledTimes(4)
     })
 
-    it('handles API calls with null/undefined parameters', async () => {
+    it('passes null/undefined parameters through to axios without throwing', async () => {
       const sampleNote = createMockNote()
       mockGet.mockResolvedValue({ data: [] })
       mockPost.mockResolvedValue({ data: sampleNote })
       mockPut.mockResolvedValue({ data: sampleNote })
 
-      // These should handle gracefully
+      // Verifies that the API wrappers do not add their own null-checks and pass
+      // the values straight to axios (mocked here). Input validation is the
+      // caller's responsibility.
       await notes.getAll(undefined as unknown as boolean, null as unknown as string)
       await notes.create(null as unknown as CreateNoteRequest)
       await notes.update(undefined as unknown as string, null as unknown as UpdateNoteRequest)
