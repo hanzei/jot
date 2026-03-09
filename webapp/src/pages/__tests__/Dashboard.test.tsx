@@ -7,6 +7,7 @@ import Dashboard from '../Dashboard'
 import { Note } from '@/types'
 import { notes } from '@/utils/api'
 import * as auth from '@/utils/auth'
+import { createMockNote } from '@/utils/__tests__/test-helpers'
 
 // Mock dependencies
 vi.mock('@/utils/api', () => ({
@@ -128,24 +129,6 @@ vi.mock('@/components/ShareModal', () => ({
 // Mock console.error to silence error logs in tests
 const mockConsoleError = vi.fn()
 vi.spyOn(console, 'error').mockImplementation(mockConsoleError)
-
-const createMockNote = (overrides: Partial<Note> = {}): Note => ({
-  id: '1',
-  title: 'Test Note',
-  content: 'Test content',
-  note_type: 'text',
-  pinned: false,
-  archived: false,
-  color: '#ffffff',
-  user_id: 'user1',
-  is_shared: false,
-  created_at: '2023-01-01T00:00:00Z',
-  updated_at: '2023-01-01T00:00:00Z',
-  checked_items_collapsed: false,
-  items: [],
-  position: 0,
-  ...overrides,
-})
 
 const renderDashboard = (initialEntries = ['/']) => {
   return render(
@@ -400,14 +383,14 @@ describe('Dashboard', () => {
     it('shows empty archive state', async () => {
       const user = userEvent.setup()
       vi.mocked(notes.getAll).mockResolvedValue([])
-      
+
       renderDashboard()
-      
+
       await waitFor(() => {
-        const archiveButton = screen.getByText('Archive')
-        user.click(archiveButton)
+        expect(screen.getByText('Archive')).toBeInTheDocument()
       })
-      
+      await user.click(screen.getByText('Archive'))
+
       await waitFor(() => {
         expect(screen.getByText('No archived notes')).toBeInTheDocument()
       })
@@ -490,14 +473,14 @@ describe('Dashboard', () => {
       const user = userEvent.setup()
       const mockNotes = [createMockNote({ id: '1', title: 'Test Note' })]
       vi.mocked(notes.getAll).mockResolvedValue(mockNotes)
-      
+
       renderDashboard()
-      
+
       await waitFor(() => {
-        const editButton = screen.getByTestId('edit-1')
-        user.click(editButton)
+        expect(screen.getByTestId('edit-1')).toBeInTheDocument()
       })
-      
+      await user.click(screen.getByTestId('edit-1'))
+
       await waitFor(() => {
         expect(screen.getByTestId('note-modal')).toBeInTheDocument()
         expect(screen.getByText('Edit Note')).toBeInTheDocument()
@@ -509,14 +492,14 @@ describe('Dashboard', () => {
       const mockNotes = [createMockNote({ id: '1', title: 'Test Note' })]
       vi.mocked(notes.getAll).mockResolvedValue(mockNotes)
       vi.mocked(notes.delete).mockResolvedValue()
-      
+
       renderDashboard()
-      
+
       await waitFor(() => {
-        const deleteButton = screen.getByTestId('delete-1')
-        user.click(deleteButton)
+        expect(screen.getByTestId('delete-1')).toBeInTheDocument()
       })
-      
+      await user.click(screen.getByTestId('delete-1'))
+
       await waitFor(() => {
         expect(notes.delete).toHaveBeenCalledWith('1')
       })
@@ -527,14 +510,14 @@ describe('Dashboard', () => {
       const mockNotes = [createMockNote({ id: '1', title: 'Test Note' })]
       vi.mocked(notes.getAll).mockResolvedValue(mockNotes)
       vi.mocked(notes.delete).mockRejectedValue(new Error('Delete failed'))
-      
+
       renderDashboard()
-      
+
       await waitFor(() => {
-        const deleteButton = screen.getByTestId('delete-1')
-        user.click(deleteButton)
+        expect(screen.getByTestId('delete-1')).toBeInTheDocument()
       })
-      
+      await user.click(screen.getByTestId('delete-1'))
+
       await waitFor(() => {
         expect(mockConsoleError).toHaveBeenCalledWith('Failed to delete note:', expect.any(Error))
       })
@@ -544,14 +527,14 @@ describe('Dashboard', () => {
       const user = userEvent.setup()
       const mockNotes = [createMockNote({ id: '1', title: 'Test Note' })]
       vi.mocked(notes.getAll).mockResolvedValue(mockNotes)
-      
+
       renderDashboard()
-      
+
       await waitFor(() => {
-        const shareButton = screen.getByTestId('share-1')
-        user.click(shareButton)
+        expect(screen.getByTestId('share-1')).toBeInTheDocument()
       })
-      
+      await user.click(screen.getByTestId('share-1'))
+
       await waitFor(() => {
         expect(screen.getByTestId('share-modal')).toBeInTheDocument()
         expect(screen.getByText('Share Note: Test Note')).toBeInTheDocument()
@@ -563,14 +546,14 @@ describe('Dashboard', () => {
       const mockNotes = [createMockNote({ id: '1', title: 'Test Note' })]
       vi.mocked(notes.getAll).mockResolvedValue(mockNotes)
       const mockGetAll = vi.mocked(notes.getAll)
-      
+
       renderDashboard()
-      
+
       await waitFor(() => {
-        const refreshButton = screen.getByTestId('refresh-1')
-        user.click(refreshButton)
+        expect(screen.getByTestId('refresh-1')).toBeInTheDocument()
       })
-      
+      await user.click(screen.getByTestId('refresh-1'))
+
       await waitFor(() => {
         // Should call getAll again to refresh
         expect(mockGetAll).toHaveBeenCalledTimes(2)
@@ -631,18 +614,18 @@ describe('Dashboard', () => {
       const user = userEvent.setup()
       const mockOnLogout = vi.fn()
       const mockRemoveToken = vi.mocked(auth.removeToken)
-      
+
       render(
         <MemoryRouter>
           <Dashboard onLogout={mockOnLogout} />
         </MemoryRouter>
       )
-      
+
       await waitFor(() => {
-        const logoutButton = screen.getByTestId('logout-button')
-        user.click(logoutButton)
+        expect(screen.getByTestId('logout-button')).toBeInTheDocument()
       })
-      
+      await user.click(screen.getByTestId('logout-button'))
+
       await waitFor(() => {
         expect(mockRemoveToken).toHaveBeenCalled()
         expect(mockOnLogout).toHaveBeenCalled()

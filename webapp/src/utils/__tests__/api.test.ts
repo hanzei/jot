@@ -1,4 +1,4 @@
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest'
 import type { 
   AuthResponse, 
   LoginRequest, 
@@ -38,6 +38,7 @@ vi.mock('axios', () => ({
 // Import API module after mocking axios
 import axios from 'axios'
 import { auth, notes, users, admin } from '../api'
+import { createMockNote } from './test-helpers'
 
 // Mock localStorage
 const mockLocalStorage = {
@@ -59,24 +60,6 @@ Object.defineProperty(window, 'location', {
   writable: true,
 })
 
-// Global mock note function for tests
-const createMockNote = (overrides: Partial<Note> = {}): Note => ({
-  id: '1',
-  title: 'Test Note',
-  content: 'Test content',
-  note_type: 'text',
-  pinned: false,
-  archived: false,
-  color: '#ffffff',
-  user_id: 'user1',
-  is_shared: false,
-  created_at: '2023-01-01T00:00:00Z',
-  updated_at: '2023-01-01T00:00:00Z',
-  checked_items_collapsed: false,
-  items: [],
-  position: 0,
-  ...overrides,
-})
 
 describe('API Module', () => {
   beforeEach(() => {
@@ -107,52 +90,60 @@ describe('API Module', () => {
     })
   })
 
-  describe('Request Interceptor Logic', () => {
-    it('tests auth token logic independently', () => {
-      // Since interceptors are set up at module load time and our mocks
-      // aren't available then, we test the interceptor logic separately
-      const addAuthToken = (config: { headers: Record<string, string> }, token: string | null) => {
-        if (token) {
-          config.headers.Authorization = `Bearer ${token}`
-        }
-        return config
-      }
+  describe('Request Interceptor', () => {
+    // Capture handler before beforeEach clears mock.calls
+    let requestHandler: (config: { headers: Record<string, string> }) => { headers: Record<string, string> }
+    beforeAll(() => {
+      requestHandler = mockRequestUse.mock.calls[0][0] as (config: { headers: Record<string, string> }) => { headers: Record<string, string> }
+    })
 
-      const config = { headers: {} }
-      const result = addAuthToken(config, 'test-token')
+    it('adds auth token to requests when token exists', () => {
+      mockLocalStorage.getItem.mockReturnValue('test-token')
+
+      const config = { headers: {} as Record<string, string> }
+      const result = requestHandler(config)
+
       expect(result.headers.Authorization).toBe('Bearer test-token')
+    })
 
-      const configNoToken = { headers: {} }
-      const resultNoToken = addAuthToken(configNoToken, null)
-      expect(resultNoToken.headers.Authorization).toBeUndefined()
+    it('does not add auth token when no token exists', () => {
+      mockLocalStorage.getItem.mockReturnValue(null)
+
+      const config = { headers: {} as Record<string, string> }
+      const result = requestHandler(config)
+
+      expect(result.headers.Authorization).toBeUndefined()
     })
   })
 
-  describe('Response Interceptor Logic', () => {
-    it('tests 401 error handling logic independently', () => {
-      // Test the 401 error handling logic separately from axios interceptors
-      const handle401Error = (error: { response?: { status: number } }) => {
-        if (error.response?.status === 401) {
-          // In real code, this would clear tokens and redirect
-          return { shouldClearAuth: true, shouldRedirect: true }
-        }
-        return { shouldClearAuth: false, shouldRedirect: false }
-      }
+  describe('Response Interceptor', () => {
+    // Capture handler before beforeEach clears mock.calls
+    let errorHandler: (error: unknown) => Promise<never>
+    beforeAll(() => {
+      errorHandler = mockResponseUse.mock.calls[0][1] as (error: unknown) => Promise<never>
+    })
 
+    it('clears auth and redirects to login on 401 error', async () => {
       const error401 = { response: { status: 401 } }
-      const result401 = handle401Error(error401)
-      expect(result401.shouldClearAuth).toBe(true)
-      expect(result401.shouldRedirect).toBe(true)
+      await expect(errorHandler(error401)).rejects.toEqual(error401)
 
+      expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('token')
+      expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('user')
+      expect(mockLocation.href).toBe('/login')
+    })
+
+    it('does not redirect for non-401 errors', async () => {
       const error500 = { response: { status: 500 } }
-      const result500 = handle401Error(error500)
-      expect(result500.shouldClearAuth).toBe(false)
-      expect(result500.shouldRedirect).toBe(false)
+      await expect(errorHandler(error500)).rejects.toEqual(error500)
 
+      expect(mockLocation.href).not.toBe('/login')
+    })
+
+    it('does not redirect for network errors without response', async () => {
       const networkError = new Error('Network error')
-      const resultNetwork = handle401Error(networkError as unknown as { response?: { status: number } })
-      expect(resultNetwork.shouldClearAuth).toBe(false)
-      expect(resultNetwork.shouldRedirect).toBe(false)
+      await expect(errorHandler(networkError)).rejects.toEqual(networkError)
+
+      expect(mockLocation.href).not.toBe('/login')
     })
   })
 

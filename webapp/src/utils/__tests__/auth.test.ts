@@ -403,7 +403,7 @@ describe('Auth Utilities', () => {
       expect(result).toBe(true) // Both exist, even if user object is minimal
     })
 
-    it('returns false for whitespace-only token', () => {
+    it('returns true for whitespace-only token (whitespace is truthy)', () => {
       mockLocalStorage.getItem
         .mockReturnValueOnce('   ') // getToken call
         .mockReturnValueOnce(JSON.stringify(mockUser)) // getUser call

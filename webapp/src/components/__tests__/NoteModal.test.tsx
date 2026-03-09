@@ -3,6 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { type ReactNode } from 'react'
 import NoteModal from '../NoteModal'
 import { Note, NoteItem } from '@/types'
+import { createMockNote } from '@/utils/__tests__/test-helpers'
 
 // Mock the API module
 vi.mock('@/utils/api', () => ({
@@ -75,24 +76,6 @@ vi.mock('@dnd-kit/utilities', () => ({
 // Mock console.error to silence error logs in tests
 const mockConsoleError = vi.fn()
 vi.spyOn(console, 'error').mockImplementation(mockConsoleError)
-
-const createMockNote = (overrides: Partial<Note> = {}): Note => ({
-  id: '1',
-  title: 'Test Note',
-  content: 'Test content',
-  note_type: 'text',
-  pinned: false,
-  archived: false,
-  color: '#ffffff',
-  user_id: 'user1',
-  is_shared: false,
-  created_at: '2023-01-01T00:00:00Z',
-  updated_at: '2023-01-01T00:00:00Z',
-  checked_items_collapsed: false,
-  items: [],
-  position: 0,
-  ...overrides,
-})
 
 const createMockTodoItems = (): NoteItem[] => [
   {
@@ -312,21 +295,9 @@ describe('NoteModal', () => {
       const onClose = vi.fn()
       render(<NoteModal {...defaultProps} onClose={onClose} />)
 
-      // Find close button by role
-      const buttons = screen.getAllByRole('button')
-      const closeButton = buttons.find(button => 
-        button.getAttribute('aria-label') === 'Close' ||
-        button.textContent === '×' ||
-        button.className.includes('close')
-      )
-
-      if (closeButton) {
-        fireEvent.click(closeButton)
-        expect(onClose).toHaveBeenCalled()
-      } else {
-        // If no specific close button found, test that modal has buttons
-        expect(buttons.length).toBeGreaterThan(0)
-      }
+      const closeButton = screen.getByRole('button', { name: 'Close' })
+      fireEvent.click(closeButton)
+      expect(onClose).toHaveBeenCalled()
     })
 
     it('handles malformed note data', () => {

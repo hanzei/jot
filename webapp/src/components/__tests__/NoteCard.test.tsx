@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import NoteCard from '../NoteCard'
 import { Note, NoteItem } from '@/types'
 import { notes } from '@/utils/api'
+import { createMockNote } from '@/utils/__tests__/test-helpers'
 
 // Mock the API module
 vi.mock('@/utils/api', () => ({
@@ -22,24 +23,6 @@ Object.defineProperty(window, 'confirm', {
 // Mock console.error to silence error logs in tests
 const mockConsoleError = vi.fn()
 vi.spyOn(console, 'error').mockImplementation(mockConsoleError)
-
-const createMockNote = (overrides: Partial<Note> = {}): Note => ({
-  id: '1',
-  title: 'Test Note',
-  content: 'This is a test note content',
-  note_type: 'text',
-  pinned: false,
-  archived: false,
-  color: '#ffffff',
-  user_id: 'user1',
-  is_shared: false,
-  created_at: '2023-01-01T00:00:00Z',
-  updated_at: '2023-01-01T00:00:00Z',
-  checked_items_collapsed: false,
-  items: [],
-  position: 0,
-  ...overrides,
-})
 
 const createMockTodoItems = (): NoteItem[] => [
   {
@@ -63,7 +46,7 @@ const createMockTodoItems = (): NoteItem[] => [
 ]
 
 const defaultProps = {
-  note: createMockNote(),
+  note: createMockNote({ content: 'This is a test note content' }),
   onEdit: vi.fn(),
   onDelete: vi.fn(),
   currentUserId: 'user1',
@@ -121,10 +104,9 @@ describe('NoteCard', () => {
 
       validColors.forEach(color => {
         const coloredNote = createMockNote({ color })
-        const { container, unmount } = render(<NoteCard {...defaultProps} note={coloredNote} />)
+        const { unmount } = render(<NoteCard {...defaultProps} note={coloredNote} />)
 
-        const noteCard = container.querySelector('.note-card')
-        expect(noteCard).toBeInTheDocument()
+        expect(screen.getByTestId('note-card')).toBeInTheDocument()
 
         unmount()
       })
@@ -169,11 +151,10 @@ describe('NoteCard', () => {
       render(<NoteCard {...defaultProps} />)
 
       // Hover to show menu
-      const noteCard = document.querySelector('.note-card')
-      await user.hover(noteCard!)
+      await user.hover(screen.getByTestId('note-card'))
 
       // Click the menu button
-      const menuButton = screen.getByRole('button', { name: '' })
+      const menuButton = screen.getByRole('button', { name: 'Note options' })
       await user.click(menuButton)
 
       // Click pin button
@@ -194,10 +175,9 @@ describe('NoteCard', () => {
 
       render(<NoteCard {...defaultProps} />)
 
-      const noteCard = document.querySelector('.note-card')
-      await user.hover(noteCard!)
+      await user.hover(screen.getByTestId('note-card'))
 
-      const menuButton = screen.getByRole('button', { name: '' })
+      const menuButton = screen.getByRole('button', { name: 'Note options' })
       await user.click(menuButton)
 
       const pinButton = screen.getByText('Pin')
@@ -214,10 +194,9 @@ describe('NoteCard', () => {
       // Test unpinned note
       render(<NoteCard {...defaultProps} />)
 
-      const noteCard = document.querySelector('.note-card')
-      await user.hover(noteCard!)
+      await user.hover(screen.getByTestId('note-card'))
 
-      const menuButton = screen.getByRole('button', { name: '' })
+      const menuButton = screen.getByRole('button', { name: 'Note options' })
       await user.click(menuButton)
 
       expect(screen.getByText('Pin')).toBeInTheDocument()
@@ -242,10 +221,9 @@ describe('NoteCard', () => {
 
       render(<NoteCard {...defaultProps} />)
 
-      const noteCard = document.querySelector('.note-card')
-      await user.hover(noteCard!)
+      await user.hover(screen.getByTestId('note-card'))
 
-      const menuButton = screen.getByRole('button', { name: '' })
+      const menuButton = screen.getByRole('button', { name: 'Note options' })
       await user.click(menuButton)
 
       const pinButton = screen.getByText('Pin')
@@ -254,7 +232,7 @@ describe('NoteCard', () => {
       await user.click(pinButton)
 
       // Need to reopen the menu since it closes after first click
-      await user.hover(noteCard!)
+      await user.hover(screen.getByTestId('note-card'))
       await user.click(menuButton)
       const pinButton2 = screen.getByText('Pin')
       await user.click(pinButton2)
@@ -277,10 +255,9 @@ describe('NoteCard', () => {
 
       render(<NoteCard {...defaultProps} />)
 
-      const noteCard = document.querySelector('.note-card')
-      await user.hover(noteCard!)
+      await user.hover(screen.getByTestId('note-card'))
 
-      const menuButton = screen.getByRole('button', { name: '' })
+      const menuButton = screen.getByRole('button', { name: 'Note options' })
       await user.click(menuButton)
 
       const archiveButton = screen.getByText('Archive')
@@ -299,10 +276,9 @@ describe('NoteCard', () => {
       const archivedNote = createMockNote({ archived: true })
       render(<NoteCard {...defaultProps} note={archivedNote} />)
 
-      const noteCard = document.querySelector('.note-card')
-      await user.hover(noteCard!)
+      await user.hover(screen.getByTestId('note-card'))
 
-      const menuButton = screen.getByRole('button', { name: '' })
+      const menuButton = screen.getByRole('button', { name: 'Note options' })
       await user.click(menuButton)
 
       expect(screen.getByText('Unarchive')).toBeInTheDocument()
@@ -330,10 +306,9 @@ describe('NoteCard', () => {
 
       render(<NoteCard {...defaultProps} onShare={onShare} />)
 
-      const noteCard = document.querySelector('.note-card')
-      await user.hover(noteCard!)
+      await user.hover(screen.getByTestId('note-card'))
 
-      const menuButton = screen.getByRole('button', { name: '' })
+      const menuButton = screen.getByRole('button', { name: 'Note options' })
       await user.click(menuButton)
 
       expect(screen.getByText('Share')).toBeInTheDocument()
@@ -346,10 +321,9 @@ describe('NoteCard', () => {
 
       render(<NoteCard {...defaultProps} note={notOwnedNote} onShare={onShare} currentUserId="user1" />)
 
-      const noteCard = document.querySelector('.note-card')
-      await user.hover(noteCard!)
+      await user.hover(screen.getByTestId('note-card'))
 
-      const menuButton = screen.getByRole('button', { name: '' })
+      const menuButton = screen.getByRole('button', { name: 'Note options' })
       await user.click(menuButton)
 
       expect(screen.queryByText('Share')).not.toBeInTheDocument()
@@ -364,10 +338,9 @@ describe('NoteCard', () => {
 
       render(<NoteCard {...defaultProps} onDelete={onDelete} />)
 
-      const noteCard = document.querySelector('.note-card')
-      await user.hover(noteCard!)
+      await user.hover(screen.getByTestId('note-card'))
 
-      const menuButton = screen.getByRole('button', { name: '' })
+      const menuButton = screen.getByRole('button', { name: 'Note options' })
       await user.click(menuButton)
 
       const deleteButton = screen.getByText('Delete')
@@ -384,10 +357,9 @@ describe('NoteCard', () => {
 
       render(<NoteCard {...defaultProps} onDelete={onDelete} />)
 
-      const noteCard = document.querySelector('.note-card')
-      await user.hover(noteCard!)
+      await user.hover(screen.getByTestId('note-card'))
 
-      const menuButton = screen.getByRole('button', { name: '' })
+      const menuButton = screen.getByRole('button', { name: 'Note options' })
       await user.click(menuButton)
 
       const deleteButton = screen.getByText('Delete')
@@ -403,10 +375,9 @@ describe('NoteCard', () => {
 
       render(<NoteCard {...defaultProps} note={notOwnedNote} currentUserId="user1" />)
 
-      const noteCard = document.querySelector('.note-card')
-      await user.hover(noteCard!)
+      await user.hover(screen.getByTestId('note-card'))
 
-      const menuButton = screen.getByRole('button', { name: '' })
+      const menuButton = screen.getByRole('button', { name: 'Note options' })
       await user.click(menuButton)
 
       expect(screen.queryByText('Delete')).not.toBeInTheDocument()
@@ -492,27 +463,24 @@ describe('NoteCard', () => {
 
       render(<NoteCard {...defaultProps} />)
 
-      const noteCard = document.querySelector('.note-card')
-      await user.hover(noteCard!)
+      await user.hover(screen.getByTestId('note-card'))
 
-      const menuButton = screen.getByRole('button', { name: '' })
+      const menuButton = screen.getByRole('button', { name: 'Note options' })
       await user.click(menuButton)
 
       const pinButton = screen.getByText('Pin')
       await user.click(pinButton)
 
-      // Check loading state - it should have opacity-50 class somewhere in the hierarchy
+      // Check loading state - note-card should have opacity-50 class
       await waitFor(() => {
-        const loadingElement = document.querySelector('.opacity-50')
-        expect(loadingElement).toBeInTheDocument()
+        expect(screen.getByTestId('note-card')).toHaveClass('opacity-50')
       })
 
       // Resolve the promise
       resolvePromise!(createMockNote({ pinned: true }))
 
       await waitFor(() => {
-        const loadingElement = document.querySelector('.opacity-50')
-        expect(loadingElement).not.toBeInTheDocument()
+        expect(screen.getByTestId('note-card')).not.toHaveClass('opacity-50')
       })
     })
 
@@ -523,10 +491,9 @@ describe('NoteCard', () => {
 
       render(<NoteCard {...defaultProps} />)
 
-      const noteCard = document.querySelector('.note-card')
-      await user.hover(noteCard!)
+      await user.hover(screen.getByTestId('note-card'))
 
-      const menuButton = screen.getByRole('button', { name: '' })
+      const menuButton = screen.getByRole('button', { name: 'Note options' })
       await user.click(menuButton)
 
       const archiveButton = screen.getByText('Archive')
@@ -559,10 +526,9 @@ describe('NoteCard', () => {
       const user = userEvent.setup()
       render(<NoteCard {...defaultProps} />)
 
-      const noteCard = document.querySelector('.note-card')
-      await user.hover(noteCard!)
+      await user.hover(screen.getByTestId('note-card'))
 
-      const menuButton = screen.getByRole('button', { name: '' })
+      const menuButton = screen.getByRole('button', { name: 'Note options' })
       menuButton.focus()
 
       await user.keyboard('{Enter}')
