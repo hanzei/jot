@@ -5,15 +5,33 @@ import Register from '@/pages/Register';
 import Dashboard from '@/pages/Dashboard';
 import Admin from '@/pages/Admin';
 import { OfflineNotification } from '@/components/OfflineNotification';
-import { isAuthenticated, isAdmin } from '@/utils/auth';
+import { isAuthenticated, isAdmin, setUser, removeUser } from '@/utils/auth';
+import { auth } from '@/utils/api';
 
 function App() {
   const [isAuth, setIsAuth] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    setIsAuth(isAuthenticated());
-    setLoading(false);
+    if (!isAuthenticated()) {
+      setLoading(false);
+      return;
+    }
+    // Validate session against server to detect expired sessions
+    auth.me()
+      .then((user) => {
+        setUser(user);
+        setIsAuth(true);
+      })
+      .catch(() => {
+        // 401 is handled by the axios interceptor (clears user, redirects to /login)
+        // For other errors, also treat as unauthenticated
+        removeUser();
+        setIsAuth(false);
+      })
+      .finally(() => {
+        setLoading(false);
+      });
   }, []);
 
   if (loading) {

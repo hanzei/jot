@@ -53,7 +53,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) (int, err
 	user, err := h.userStore.Create(req.Username, req.Password)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
-			return http.StatusConflict, err
+			return http.StatusConflict, errors.New("username already taken")
 		}
 		return http.StatusInternalServerError, err
 	}

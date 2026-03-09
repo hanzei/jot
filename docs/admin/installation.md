@@ -72,4 +72,14 @@ STATIC_DIR=/var/lib/jot/webapp
 
 # Log level (default: info)
 LOG_LEVEL=info
+
+# Allowed CORS origin for the frontend (default: http://localhost:3000)
+# Set this to the exact URL your frontend is served from (e.g. https://jot.example.com)
+# Wildcards are not supported — must be an exact origin
+CORS_ALLOWED_ORIGIN=https://jot.example.com
+
+# Enable Secure flag on session cookies (default: true)
+# Set to "false" only for local development over plain HTTP
+# Must remain "true" in production (requires HTTPS)
+COOKIE_SECURE=true
 ```

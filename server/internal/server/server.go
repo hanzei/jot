@@ -194,7 +194,11 @@ func (s *Server) wrapHandler(handler func(w http.ResponseWriter, r *http.Request
 		statusCode, err := handler(w, r)
 		if err != nil {
 			logrus.WithError(err).WithField("status_code", statusCode).WithField("method", r.Method).WithField("path", r.URL.Path).Error("HTTP handler error")
-			http.Error(w, err.Error(), statusCode)
+			msg := err.Error()
+			if statusCode >= 500 {
+				msg = "internal server error"
+			}
+			http.Error(w, msg, statusCode)
 		}
 	}
 }
