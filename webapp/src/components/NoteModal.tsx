@@ -646,6 +646,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
                 </>
               )}
               <button
+                aria-label="Close"
                 onClick={handleCloseRequest}
                 className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
               >

@@ -84,6 +84,7 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, currentUserI
 
   return (
     <div
+      data-testid="note-card"
       className={`note-card ${getColorClass(note.color)} p-4 relative group ${isUpdating ? 'opacity-50' : ''
         }`}
     >
@@ -105,7 +106,7 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, currentUserI
 
       {note.pinned && (
         <div className="absolute top-2 right-8">
-          <svg className="h-3 w-3 text-blue-500" fill="currentColor" viewBox="0 0 24 24">
+          <svg data-testid="pin-icon" className="h-3 w-3 text-blue-500" fill="currentColor" viewBox="0 0 24 24">
             <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z" />
           </svg>
         </div>
@@ -113,7 +114,7 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, currentUserI
 
       {/* Menu */}
       <Menu as="div" className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-        <Menu.Button className="p-1 rounded-full hover:bg-gray-200 transition-colors">
+        <Menu.Button aria-label="Note options" className="p-1 rounded-full hover:bg-gray-200 transition-colors">
           <EllipsisVerticalIcon className="h-4 w-4 text-gray-600" />
         </Menu.Button>
         <Menu.Items className="absolute right-0 mt-1 w-48 bg-white dark:bg-slate-800 rounded-md shadow-lg ring-1 ring-black dark:ring-slate-600 ring-opacity-5 focus:outline-none z-10 border border-gray-200 dark:border-slate-600">
