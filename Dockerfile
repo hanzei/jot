@@ -56,7 +56,6 @@ EXPOSE 8080
 
 # Set environment variables
 ENV DB_PATH=/data/jot.db
-ENV JWT_SECRET=change-this-in-production
 ENV STATIC_DIR=/app/webapp/build
 
 # Run the application

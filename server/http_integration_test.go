@@ -6,11 +6,11 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/http/cookiejar"
 	"net/http/httptest"
 	"os"
 	"testing"
 
-	"github.com/hanzei/jot/server/internal/auth"
 	"github.com/hanzei/jot/server/internal/models"
 	"github.com/hanzei/jot/server/internal/server"
 	"github.com/stretchr/testify/assert"
@@ -21,6 +21,7 @@ type TestResponse struct {
 	StatusCode int
 	Body       []byte
 	Headers    http.Header
+	Cookies    []*http.Cookie
 }
 
 func (r *TestResponse) UnmarshalBody(v any) error {
@@ -32,8 +33,8 @@ func (r *TestResponse) GetString() string {
 }
 
 type TestUser struct {
-	User  *models.User
-	Token string
+	User   *models.User
+	Client *http.Client
 }
 
 type TestServer struct {
@@ -45,8 +46,8 @@ func setupTestServer(t *testing.T) *TestServer {
 	tmpDB := fmt.Sprintf("/tmp/test_%s.db", t.Name())
 	os.Remove(tmpDB)
 
-	os.Setenv("DB_PATH", tmpDB)
-	os.Setenv("JWT_SECRET", "test-secret-key")
+	t.Setenv("DB_PATH", tmpDB)
+	t.Setenv("COOKIE_SECURE", "false")
 
 	s := server.New()
 	httpServer := httptest.NewServer(s.GetRouter())
@@ -65,29 +66,49 @@ func setupTestServer(t *testing.T) *TestServer {
 	return ts
 }
 
-func (ts *TestServer) createTestUser(t *testing.T, username, password string, isAdmin bool) *TestUser {
-	userStore := models.NewUserStore(ts.Server.GetDB().DB)
-	var user *models.User
-	var err error
-	if isAdmin {
-		user, err = userStore.CreateByAdmin(username, password, models.RoleAdmin)
-	} else {
-		user, err = userStore.Create(username, password)
-	}
-
-	tokenService := auth.NewTokenService("test-secret-key")
-	token, err := tokenService.GenerateToken(user.ID, user.Username, user.Role)
+func newCookieClient(t *testing.T) *http.Client {
+	jar, err := cookiejar.New(nil)
 	require.NoError(t, err)
-
-	testUser := &TestUser{
-		User:  user,
-		Token: token,
-	}
-
-	return testUser
+	return &http.Client{Jar: jar}
 }
 
-func (ts *TestServer) request(t *testing.T, method, path string, body any, headers map[string]string) *TestResponse {
+func (ts *TestServer) createTestUser(t *testing.T, username, password string, isAdmin bool) *TestUser {
+	client := newCookieClient(t)
+
+	// Register user via API to get a session cookie
+	body := map[string]string{
+		"username": username,
+		"password": password,
+	}
+	jsonBody, err := json.Marshal(body)
+	require.NoError(t, err)
+
+	resp, err := client.Post(ts.HTTPServer.URL+"/api/v1/register", "application/json", bytes.NewBuffer(jsonBody))
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	var authResp struct {
+		User *models.User `json:"user"`
+	}
+	respBody, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(respBody, &authResp))
+
+	// If admin role is needed, update directly in DB
+	if isAdmin {
+		_, err = ts.Server.GetDB().DB.Exec("UPDATE users SET role = ? WHERE id = ?", models.RoleAdmin, authResp.User.ID)
+		require.NoError(t, err)
+
+		authResp.User.Role = models.RoleAdmin
+	}
+
+	return &TestUser{
+		User:   authResp.User,
+		Client: client,
+	}
+}
+
+func (ts *TestServer) request(t *testing.T, client *http.Client, method, path string, body any) *TestResponse {
 	var reqBody io.Reader
 	if body != nil {
 		jsonBody, err := json.Marshal(body)
@@ -102,11 +123,11 @@ func (ts *TestServer) request(t *testing.T, method, path string, body any, heade
 		req.Header.Set("Content-Type", "application/json")
 	}
 
-	for key, value := range headers {
-		req.Header.Set(key, value)
+	if client == nil {
+		client = &http.Client{}
 	}
 
-	resp, err := http.DefaultClient.Do(req)
+	resp, err := client.Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
@@ -117,21 +138,19 @@ func (ts *TestServer) request(t *testing.T, method, path string, body any, heade
 		StatusCode: resp.StatusCode,
 		Body:       respBody,
 		Headers:    resp.Header,
+		Cookies:    resp.Cookies(),
 	}
 }
 
 func (ts *TestServer) authRequest(t *testing.T, user *TestUser, method, path string, body any) *TestResponse {
-	headers := map[string]string{
-		"Authorization": fmt.Sprintf("Bearer %s", user.Token),
-	}
-	return ts.request(t, method, path, body, headers)
+	return ts.request(t, user.Client, method, path, body)
 }
 
 // Health endpoint tests
 func TestHealthEndpoint(t *testing.T) {
 	ts := setupTestServer(t)
 
-	resp := ts.request(t, http.MethodGet, "/health", nil, nil)
+	resp := ts.request(t, nil, http.MethodGet, "/health", nil)
 
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 	assert.Equal(t, "OK", resp.GetString())
@@ -147,12 +166,12 @@ func TestRegisterEndpoint(t *testing.T) {
 			"password": "password123",
 		}
 
-		resp := ts.request(t, http.MethodPost, "/api/v1/register", body, nil)
+		resp := ts.request(t, newCookieClient(t), http.MethodPost, "/api/v1/register", body)
 		assert.Equal(t, http.StatusCreated, resp.StatusCode)
 
 		var response map[string]any
 		require.NoError(t, resp.UnmarshalBody(&response))
-		assert.NotNil(t, response["token"])
+		assert.NotNil(t, response["user"])
 	})
 
 	t.Run("duplicate username", func(t *testing.T) {
@@ -161,8 +180,8 @@ func TestRegisterEndpoint(t *testing.T) {
 			"password": "password123",
 		}
 
-		ts.request(t, http.MethodPost, "/api/v1/register", body, nil)
-		resp := ts.request(t, http.MethodPost, "/api/v1/register", body, nil)
+		ts.request(t, newCookieClient(t), http.MethodPost, "/api/v1/register", body)
+		resp := ts.request(t, newCookieClient(t), http.MethodPost, "/api/v1/register", body)
 
 		assert.Equal(t, http.StatusConflict, resp.StatusCode)
 	})
@@ -173,7 +192,7 @@ func TestRegisterEndpoint(t *testing.T) {
 			"password": "password123",
 		}
 
-		resp := ts.request(t, http.MethodPost, "/api/v1/register", body, nil)
+		resp := ts.request(t, newCookieClient(t), http.MethodPost, "/api/v1/register", body)
 		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 	})
 }
@@ -186,20 +205,25 @@ func TestLoginEndpoint(t *testing.T) {
 		"username": "loginuser",
 		"password": "password123",
 	}
-	ts.request(t, http.MethodPost, "/api/v1/register", registerBody, nil)
+	ts.request(t, newCookieClient(t), http.MethodPost, "/api/v1/register", registerBody)
 
 	t.Run("valid login", func(t *testing.T) {
+		client := newCookieClient(t)
 		body := map[string]string{
 			"username": "loginuser",
 			"password": "password123",
 		}
 
-		resp := ts.request(t, http.MethodPost, "/api/v1/login", body, nil)
+		resp := ts.request(t, client, http.MethodPost, "/api/v1/login", body)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 		var response map[string]any
 		require.NoError(t, resp.UnmarshalBody(&response))
-		assert.NotNil(t, response["token"])
+		assert.NotNil(t, response["user"])
+
+		// Verify the session cookie works for authenticated requests
+		meResp := ts.request(t, client, http.MethodGet, "/api/v1/me", nil)
+		assert.Equal(t, http.StatusOK, meResp.StatusCode)
 	})
 
 	t.Run("invalid credentials", func(t *testing.T) {
@@ -208,9 +232,26 @@ func TestLoginEndpoint(t *testing.T) {
 			"password": "wrongpassword",
 		}
 
-		resp := ts.request(t, http.MethodPost, "/api/v1/login", body, nil)
+		resp := ts.request(t, newCookieClient(t), http.MethodPost, "/api/v1/login", body)
 		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 	})
+}
+
+func TestLogoutEndpoint(t *testing.T) {
+	ts := setupTestServer(t)
+	user := ts.createTestUser(t, "logoutuser", "password123", false)
+
+	// Verify session works before logout
+	meResp := ts.authRequest(t, user, http.MethodGet, "/api/v1/me", nil)
+	assert.Equal(t, http.StatusOK, meResp.StatusCode)
+
+	// Logout
+	logoutResp := ts.authRequest(t, user, http.MethodPost, "/api/v1/logout", nil)
+	assert.Equal(t, http.StatusNoContent, logoutResp.StatusCode)
+
+	// Verify session no longer works
+	meResp2 := ts.authRequest(t, user, http.MethodGet, "/api/v1/me", nil)
+	assert.Equal(t, http.StatusUnauthorized, meResp2.StatusCode)
 }
 
 // Notes endpoint tests
@@ -219,7 +260,7 @@ func TestNotesEndpoints(t *testing.T) {
 	user := ts.createTestUser(t, "user", "password123", false)
 
 	t.Run("unauthorized access", func(t *testing.T) {
-		resp := ts.request(t, http.MethodGet, "/api/v1/notes", nil, nil)
+		resp := ts.request(t, nil, http.MethodGet, "/api/v1/notes", nil)
 		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 	})
 
@@ -300,11 +341,11 @@ func TestNotesEndpoints(t *testing.T) {
 // Admin endpoint tests
 func TestAdminEndpoints(t *testing.T) {
 	ts := setupTestServer(t)
-	admin := ts.createTestUser(t, "admin", "password123", true)
+	adminUser := ts.createTestUser(t, "admin", "password123", true)
 	user := ts.createTestUser(t, "user", "password123", false)
 
 	t.Run("get users as admin", func(t *testing.T) {
-		resp := ts.authRequest(t, admin, http.MethodGet, "/api/v1/admin/users", nil)
+		resp := ts.authRequest(t, adminUser, http.MethodGet, "/api/v1/admin/users", nil)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 		var response map[string]any
@@ -323,10 +364,10 @@ func TestAdminEndpoints(t *testing.T) {
 		body := map[string]any{
 			"username": "newuser",
 			"password": "password123",
-			"role": "user",
+			"role":     "user",
 		}
 
-		resp := ts.authRequest(t, admin, http.MethodPost, "/api/v1/admin/users", body)
+		resp := ts.authRequest(t, adminUser, http.MethodPost, "/api/v1/admin/users", body)
 		assert.Equal(t, http.StatusCreated, resp.StatusCode)
 
 		var createdUser map[string]any
@@ -339,7 +380,7 @@ func TestAdminEndpoints(t *testing.T) {
 		body := map[string]any{
 			"username": "hacker",
 			"password": "password123",
-			"role": "admin",
+			"role":     "admin",
 		}
 
 		resp := ts.authRequest(t, user, http.MethodPost, "/api/v1/admin/users", body)

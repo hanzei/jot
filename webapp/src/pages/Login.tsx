@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { auth } from '@/utils/api';
-import { setToken, setUser } from '@/utils/auth';
+import { setUser } from '@/utils/auth';
 
 interface LoginProps {
   onLogin: () => void;
@@ -20,7 +20,6 @@ export default function Login({ onLogin }: LoginProps) {
 
     try {
       const response = await auth.login({ username, password });
-      setToken(response.token);
       setUser(response.user);
       onLogin();
     } catch (err: unknown) {

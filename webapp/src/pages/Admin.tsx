@@ -1,7 +1,7 @@
 import { useState, useEffect } from 'react';
 import { User, CreateUserRequest } from '@/types';
-import { admin } from '@/utils/api';
-import { isAdmin, removeToken } from '@/utils/auth';
+import { admin, auth } from '@/utils/api';
+import { isAdmin, removeUser } from '@/utils/auth';
 import { ROLES } from '@/constants/roles';
 import { Navigate, Link } from 'react-router-dom';
 import NavigationHeader from '@/components/NavigationHeader';
@@ -25,8 +25,13 @@ const Admin = ({ onLogout }: AdminProps) => {
 
   const userIsAdmin = isAdmin();
 
-  const handleLogout = () => {
-    removeToken();
+  const handleLogout = async () => {
+    try {
+      await auth.logout();
+    } catch {
+      // Continue with logout even if the server call fails
+    }
+    removeUser();
     onLogout();
   };
 

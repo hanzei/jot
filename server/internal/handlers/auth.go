@@ -11,14 +11,14 @@ import (
 )
 
 type AuthHandler struct {
-	userStore    *models.UserStore
-	tokenService *auth.TokenService
+	userStore      *models.UserStore
+	sessionService *auth.SessionService
 }
 
-func NewAuthHandler(userStore *models.UserStore, tokenService *auth.TokenService) *AuthHandler {
+func NewAuthHandler(userStore *models.UserStore, sessionService *auth.SessionService) *AuthHandler {
 	return &AuthHandler{
-		userStore:    userStore,
-		tokenService: tokenService,
+		userStore:      userStore,
+		sessionService: sessionService,
 	}
 }
 
@@ -33,8 +33,7 @@ type LoginRequest struct {
 }
 
 type AuthResponse struct {
-	Token string       `json:"token"`
-	User  *models.User `json:"user"`
+	User *models.User `json:"user"`
 }
 
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) (int, error) {
@@ -54,19 +53,17 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) (int, err
 	user, err := h.userStore.Create(req.Username, req.Password)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
-			return http.StatusConflict, err
+			return http.StatusConflict, errors.New("username already taken")
 		}
 		return http.StatusInternalServerError, err
 	}
 
-	token, err := h.tokenService.GenerateToken(user.ID, user.Username, user.Role)
-	if err != nil {
+	if err := h.sessionService.CreateSession(w, user.ID); err != nil {
 		return http.StatusInternalServerError, err
 	}
 
 	response := AuthResponse{
-		Token: token,
-		User:  user,
+		User: user,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -89,21 +86,23 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) (int, error)
 
 	user, err := h.userStore.GetByUsername(req.Username)
 	if err != nil {
-		return http.StatusUnauthorized, err
+		return http.StatusUnauthorized, errors.New("invalid username or password")
 	}
 
 	if !user.CheckPassword(req.Password) {
-		return http.StatusUnauthorized, errors.New("invalid password")
+		return http.StatusUnauthorized, errors.New("invalid username or password")
 	}
 
-	token, err := h.tokenService.GenerateToken(user.ID, user.Username, user.Role)
-	if err != nil {
+	if err := h.sessionService.InvalidateUserSessions(user.ID); err != nil {
+		return http.StatusInternalServerError, err
+	}
+
+	if err := h.sessionService.CreateSession(w, user.ID); err != nil {
 		return http.StatusInternalServerError, err
 	}
 
 	response := AuthResponse{
-		Token: token,
-		User:  user,
+		User: user,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -113,3 +112,24 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) (int, error)
 	return 0, nil
 }
 
+func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) (int, error) {
+	if err := h.sessionService.DeleteSession(w, r); err != nil {
+		return http.StatusInternalServerError, err
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+	return 0, nil
+}
+
+func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) (int, error) {
+	user, ok := auth.GetUserFromContext(r.Context())
+	if !ok {
+		return http.StatusUnauthorized, errors.New("unauthorized")
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(user); err != nil {
+		return http.StatusInternalServerError, err
+	}
+	return 0, nil
+}

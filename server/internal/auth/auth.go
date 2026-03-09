@@ -1,61 +1,89 @@
 package auth
 
 import (
-	"fmt"
-	"time"
+	"net/http"
+	"os"
 
-	"github.com/golang-jwt/jwt/v5"
+	"github.com/hanzei/jot/server/internal/models"
 )
 
-type Claims struct {
-	UserID   string `json:"user_id"`
-	Username string `json:"username"`
-	Role     string `json:"role"`
-	jwt.RegisteredClaims
+func cookieSecure() bool {
+	v := os.Getenv("COOKIE_SECURE")
+	return v != "false"
 }
 
-type TokenService struct {
-	secret []byte
+const (
+	SessionCookieName = "jot_session"
+)
+
+type SessionService struct {
+	sessionStore *models.SessionStore
+	userStore    *models.UserStore
 }
 
-func NewTokenService(secret string) *TokenService {
-	return &TokenService{
-		secret: []byte(secret),
+func NewSessionService(sessionStore *models.SessionStore, userStore *models.UserStore) *SessionService {
+	return &SessionService{
+		sessionStore: sessionStore,
+		userStore:    userStore,
 	}
 }
 
-func (t *TokenService) GenerateToken(userID string, username string, role string) (string, error) {
-	claims := &Claims{
-		UserID:   userID,
-		Username: username,
-		Role:     role,
-		RegisteredClaims: jwt.RegisteredClaims{
-			ExpiresAt: jwt.NewNumericDate(time.Now().Add(24 * time.Hour)),
-			IssuedAt:  jwt.NewNumericDate(time.Now()),
-			NotBefore: jwt.NewNumericDate(time.Now()),
-		},
+func (s *SessionService) CreateSession(w http.ResponseWriter, userID string) error {
+	session, err := s.sessionStore.Create(userID)
+	if err != nil {
+		return err
 	}
 
-	token := jwt.NewWithClaims(jwt.SigningMethodHS256, claims)
-	return token.SignedString(t.secret)
-}
-
-func (t *TokenService) ValidateToken(tokenString string) (*Claims, error) {
-	token, err := jwt.ParseWithClaims(tokenString, &Claims{}, func(token *jwt.Token) (any, error) {
-		if _, ok := token.Method.(*jwt.SigningMethodHMAC); !ok {
-			return nil, fmt.Errorf("unexpected signing method: %v", token.Header["alg"])
-		}
-		return t.secret, nil
+	http.SetCookie(w, &http.Cookie{
+		Name:     SessionCookieName,
+		Value:    session.Token,
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   cookieSecure(),
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   int(models.SessionDuration.Seconds()),
 	})
 
+	return nil
+}
+
+func (s *SessionService) DeleteSession(w http.ResponseWriter, r *http.Request) error {
+	cookie, err := r.Cookie(SessionCookieName)
 	if err != nil {
-		return nil, fmt.Errorf("failed to parse token: %w", err)
+		return nil // No session to delete
 	}
 
-	claims, ok := token.Claims.(*Claims)
-	if !ok || !token.Valid {
-		return nil, fmt.Errorf("invalid token")
+	if err := s.sessionStore.Delete(cookie.Value); err != nil {
+		return err
 	}
 
-	return claims, nil
+	http.SetCookie(w, &http.Cookie{
+		Name:     SessionCookieName,
+		Value:    "",
+		Path:     "/",
+		HttpOnly: true,
+		Secure:   cookieSecure(),
+		SameSite: http.SameSiteLaxMode,
+		MaxAge:   -1,
+	})
+
+	return nil
+}
+
+func (s *SessionService) InvalidateUserSessions(userID string) error {
+	return s.sessionStore.DeleteByUserID(userID)
+}
+
+func (s *SessionService) GetSessionUser(r *http.Request) (*models.User, error) {
+	cookie, err := r.Cookie(SessionCookieName)
+	if err != nil {
+		return nil, err
+	}
+
+	session, err := s.sessionStore.GetByToken(cookie.Value)
+	if err != nil {
+		return nil, err
+	}
+
+	return s.userStore.GetByID(session.UserID)
 }

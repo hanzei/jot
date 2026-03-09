@@ -1,12 +1,10 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { 
-  getToken, 
-  setToken, 
-  removeToken, 
-  getUser, 
-  setUser, 
-  isAuthenticated, 
-  isAdmin 
+import {
+  removeUser,
+  getUser,
+  setUser,
+  isAuthenticated,
+  isAdmin
 } from '../auth'
 import { User } from '@/types'
 import { ROLES } from '@/constants/roles'
@@ -49,129 +47,27 @@ describe('Auth Utilities', () => {
     mockLocalStorage.removeItem.mockReset()
   })
 
-  describe('getToken', () => {
-    it('retrieves token from localStorage', () => {
-      mockLocalStorage.getItem.mockReturnValue('test-token')
+  describe('removeUser', () => {
+    it('removes user from localStorage', () => {
+      removeUser()
 
-      const result = getToken()
-
-      expect(mockLocalStorage.getItem).toHaveBeenCalledWith('token')
-      expect(result).toBe('test-token')
-    })
-
-    it('returns null when no token exists', () => {
-      mockLocalStorage.getItem.mockReturnValue(null)
-
-      const result = getToken()
-
-      expect(result).toBeNull()
-    })
-
-    it('handles localStorage errors gracefully', () => {
-      mockLocalStorage.getItem.mockImplementation(() => {
-        throw new Error('localStorage error')
-      })
-
-      expect(() => getToken()).toThrow('localStorage error')
-    })
-
-    it('handles empty string token', () => {
-      mockLocalStorage.getItem.mockReturnValue('')
-
-      const result = getToken()
-
-      expect(result).toBe('')
-    })
-
-    it('handles malformed token data', () => {
-      mockLocalStorage.getItem.mockReturnValue(undefined)
-
-      const result = getToken()
-
-      expect(result).toBeUndefined()
-    })
-  })
-
-  describe('setToken', () => {
-    it('stores token in localStorage', () => {
-      setToken('new-token')
-
-      expect(mockLocalStorage.setItem).toHaveBeenCalledWith('token', 'new-token')
-    })
-
-    it('handles localStorage errors during token storage', () => {
-      mockLocalStorage.setItem.mockImplementation(() => {
-        throw new Error('localStorage error')
-      })
-
-      expect(() => setToken('test-token')).toThrow('localStorage error')
-    })
-
-    it('handles empty string token', () => {
-      setToken('')
-
-      expect(mockLocalStorage.setItem).toHaveBeenCalledWith('token', '')
-    })
-
-    it('handles null token', () => {
-      setToken(null as unknown as string)
-
-      expect(mockLocalStorage.setItem).toHaveBeenCalledWith('token', null)
-    })
-
-    it('handles undefined token', () => {
-      setToken(undefined as unknown as string)
-
-      expect(mockLocalStorage.setItem).toHaveBeenCalledWith('token', undefined)
-    })
-
-    it('handles very long token strings', () => {
-      const longToken = 'a'.repeat(10000)
-      setToken(longToken)
-
-      expect(mockLocalStorage.setItem).toHaveBeenCalledWith('token', longToken)
-    })
-
-    it('handles tokens with special characters', () => {
-      const specialToken = 'token-with-special!@#$%^&*()_+{}[]|;:,.<>?'
-      setToken(specialToken)
-
-      expect(mockLocalStorage.setItem).toHaveBeenCalledWith('token', specialToken)
-    })
-  })
-
-  describe('removeToken', () => {
-    it('removes token and user from localStorage', () => {
-      removeToken()
-
-      expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('token')
       expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('user')
     })
 
-    it('handles localStorage errors during token removal', () => {
+    it('handles localStorage errors during user removal', () => {
       mockLocalStorage.removeItem.mockImplementation(() => {
         throw new Error('localStorage error')
       })
 
-      expect(() => removeToken()).toThrow('localStorage error')
+      expect(() => removeUser()).toThrow('localStorage error')
     })
 
-    it('removes both items even if localStorage is empty', () => {
+    it('removes user even if localStorage is empty', () => {
       mockLocalStorage.getItem.mockReturnValue(null)
 
-      removeToken()
+      removeUser()
 
-      expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('token')
       expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('user')
-    })
-
-    it('handles partial failures gracefully', () => {
-      mockLocalStorage.removeItem
-        .mockImplementationOnce(() => {}) // token removal succeeds
-        .mockImplementationOnce(() => { throw new Error('Failed to remove user') }) // user removal fails
-
-      expect(() => removeToken()).toThrow('Failed to remove user')
-      expect(mockLocalStorage.removeItem).toHaveBeenCalledTimes(2)
     })
   })
 
@@ -327,37 +223,15 @@ describe('Auth Utilities', () => {
   })
 
   describe('isAuthenticated', () => {
-    it('returns true when both token and user exist', () => {
-      mockLocalStorage.getItem
-        .mockReturnValueOnce('test-token') // getToken call
-        .mockReturnValueOnce(JSON.stringify(mockUser)) // getUser call
+    it('returns true when user exists', () => {
+      mockLocalStorage.getItem.mockReturnValue(JSON.stringify(mockUser))
 
       const result = isAuthenticated()
 
       expect(result).toBe(true)
     })
 
-    it('returns false when token is missing', () => {
-      mockLocalStorage.getItem
-        .mockReturnValueOnce(null) // getToken call
-        .mockReturnValueOnce(JSON.stringify(mockUser)) // getUser call
-
-      const result = isAuthenticated()
-
-      expect(result).toBe(false)
-    })
-
     it('returns false when user is missing', () => {
-      mockLocalStorage.getItem
-        .mockReturnValueOnce('test-token') // getToken call
-        .mockReturnValueOnce(null) // getUser call
-
-      const result = isAuthenticated()
-
-      expect(result).toBe(false)
-    })
-
-    it('returns false when both token and user are missing', () => {
       mockLocalStorage.getItem.mockReturnValue(null)
 
       const result = isAuthenticated()
@@ -365,20 +239,8 @@ describe('Auth Utilities', () => {
       expect(result).toBe(false)
     })
 
-    it('returns false when token is empty string', () => {
-      mockLocalStorage.getItem
-        .mockReturnValueOnce('') // getToken call
-        .mockReturnValueOnce(JSON.stringify(mockUser)) // getUser call
-
-      const result = isAuthenticated()
-
-      expect(result).toBe(false)
-    })
-
     it('returns false when user data is malformed', () => {
-      mockLocalStorage.getItem
-        .mockReturnValueOnce('test-token') // getToken call
-        .mockReturnValueOnce('invalid-json') // getUser call
+      mockLocalStorage.getItem.mockReturnValue('invalid-json')
 
       const result = isAuthenticated()
 
@@ -393,24 +255,12 @@ describe('Auth Utilities', () => {
       expect(() => isAuthenticated()).toThrow('localStorage error')
     })
 
-    it('handles partial authentication state', () => {
-      mockLocalStorage.getItem
-        .mockReturnValueOnce('test-token') // getToken call
-        .mockReturnValueOnce(JSON.stringify({})) // getUser call with empty object
+    it('returns true for minimal user object', () => {
+      mockLocalStorage.getItem.mockReturnValue(JSON.stringify({}))
 
       const result = isAuthenticated()
 
-      expect(result).toBe(true) // Both exist, even if user object is minimal
-    })
-
-    it('returns true for whitespace-only token (whitespace is truthy)', () => {
-      mockLocalStorage.getItem
-        .mockReturnValueOnce('   ') // getToken call
-        .mockReturnValueOnce(JSON.stringify(mockUser)) // getUser call
-
-      const result = isAuthenticated()
-
-      expect(result).toBe(true) // Whitespace is still a truthy string
+      expect(result).toBe(true)
     })
   })
 
@@ -528,7 +378,6 @@ describe('Auth Utilities', () => {
         throw error
       })
 
-      expect(() => setToken('test-token')).toThrow('Quota exceeded')
       expect(() => setUser(mockUser)).toThrow('Quota exceeded')
     })
 
@@ -536,7 +385,7 @@ describe('Auth Utilities', () => {
       // Test that functions handle disabled localStorage gracefully
       // This test verifies the current behavior - that functions will throw when localStorage is disabled
       const originalLocalStorage = window.localStorage
-      
+
       try {
         // Simulate localStorage being disabled
         Object.defineProperty(window, 'localStorage', {
@@ -545,11 +394,9 @@ describe('Auth Utilities', () => {
         })
 
         // These should throw because localStorage is null
-        expect(() => getToken()).toThrow()
-        expect(() => setToken('test')).toThrow()
         expect(() => getUser()).toThrow()
         expect(() => setUser(mockUser)).toThrow()
-        expect(() => removeToken()).toThrow()
+        expect(() => removeUser()).toThrow()
         expect(() => isAuthenticated()).toThrow()
         expect(() => isAdmin()).toThrow()
       } finally {
@@ -565,16 +412,15 @@ describe('Auth Utilities', () => {
       let callCount = 0
       mockLocalStorage.getItem.mockImplementation(() => {
         callCount++
-        if (callCount === 1) return 'token1'
-        if (callCount === 2) return JSON.stringify(mockUser)
-        return 'token2'
+        if (callCount === 1) return JSON.stringify(mockUser)
+        return null
       })
 
       const result1 = isAuthenticated()
-      const result2 = getToken()
+      const result2 = getUser()
 
       expect(result1).toBe(true)
-      expect(result2).toBe('token2')
+      expect(result2).toBeNull()
     })
 
     it('handles XSS attempts in stored data', () => {
@@ -611,35 +457,19 @@ describe('Auth Utilities', () => {
       expect(isAdmin()).toBe(false) // Should still work correctly
     })
 
-    it('handles memory exhaustion with very large data', () => {
-      const hugeToken = 'x'.repeat(1000000) // 1MB token
-      
-      setToken(hugeToken)
-
-      expect(mockLocalStorage.setItem).toHaveBeenCalledWith('token', hugeToken)
-    })
-
     it('handles race conditions in authentication state', () => {
-      let tokenCallCount = 0
       let userCallCount = 0
-      
-      mockLocalStorage.getItem.mockImplementation((key) => {
-        if (key === 'token') {
-          tokenCallCount++
-          return tokenCallCount === 1 ? 'test-token' : null
-        }
-        if (key === 'user') {
-          userCallCount++
-          return userCallCount === 1 ? JSON.stringify(mockUser) : null
-        }
-        return null
+
+      mockLocalStorage.getItem.mockImplementation(() => {
+        userCallCount++
+        return userCallCount === 1 ? JSON.stringify(mockUser) : null
       })
 
-      // First call should be authenticated (token and user both exist)
+      // First call should be authenticated (user exists)
       const result1 = isAuthenticated()
       expect(result1).toBe(true)
-      
-      // Second call should not be authenticated (token and user are null now)
+
+      // Second call should not be authenticated (user is null now)
       const result2 = isAuthenticated()
       expect(result2).toBe(false)
     })

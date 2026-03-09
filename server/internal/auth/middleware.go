@@ -1,58 +1,43 @@
 package auth
 
 import (
-	"github.com/hanzei/jot/server/internal/models"
-)
-
-import (
 	"context"
 	"net/http"
-	"strings"
+
+	"github.com/hanzei/jot/server/internal/models"
 )
 
 type contextKey string
 
 const UserContextKey contextKey = "user"
 
-func (t *TokenService) AuthMiddleware(next http.Handler) http.Handler {
+func (s *SessionService) AuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		authHeader := r.Header.Get("Authorization")
-		if authHeader == "" {
-			http.Error(w, "Authorization header required", http.StatusUnauthorized)
-			return
-		}
-
-		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-		if tokenString == authHeader {
-			http.Error(w, "Bearer token required", http.StatusUnauthorized)
-			return
-		}
-
-		claims, err := t.ValidateToken(tokenString)
+		user, err := s.GetSessionUser(r)
 		if err != nil {
-			http.Error(w, "Invalid token", http.StatusUnauthorized)
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
 
-		ctx := context.WithValue(r.Context(), UserContextKey, claims)
+		ctx := context.WithValue(r.Context(), UserContextKey, user)
 		next.ServeHTTP(w, r.WithContext(ctx))
 	})
 }
 
-func GetUserFromContext(ctx context.Context) (*Claims, bool) {
-	claims, ok := ctx.Value(UserContextKey).(*Claims)
-	return claims, ok
+func GetUserFromContext(ctx context.Context) (*models.User, bool) {
+	user, ok := ctx.Value(UserContextKey).(*models.User)
+	return user, ok
 }
 
 func AdminRequired(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		claims, ok := GetUserFromContext(r.Context())
+		user, ok := GetUserFromContext(r.Context())
 		if !ok {
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
 
-		if claims.Role != models.RoleAdmin {
+		if user.Role != models.RoleAdmin {
 			http.Error(w, "Admin required", http.StatusForbidden)
 			return
 		}

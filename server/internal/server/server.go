@@ -19,12 +19,12 @@ import (
 )
 
 type Server struct {
-	router       chi.Router
-	db           *database.DB
-	tokenService *auth.TokenService
-	authHandler  *handlers.AuthHandler
-	notesHandler *handlers.NotesHandler
-	adminHandler *handlers.AdminHandler
+	router         chi.Router
+	db             *database.DB
+	sessionService *auth.SessionService
+	authHandler    *handlers.AuthHandler
+	notesHandler   *handlers.NotesHandler
+	adminHandler   *handlers.AdminHandler
 }
 
 func New() *Server {
@@ -38,27 +38,31 @@ func New() *Server {
 		log.Fatalf("Failed to initialize database: %v", err)
 	}
 
-	jwtSecret := os.Getenv("JWT_SECRET")
-	if jwtSecret == "" {
-		jwtSecret = "your-secret-key-change-in-production"
-		log.Println("Warning: Using default JWT secret. Set JWT_SECRET environment variable in production.")
-	}
-
-	tokenService := auth.NewTokenService(jwtSecret)
 	userStore := models.NewUserStore(db.DB)
 	noteStore := models.NewNoteStore(db.DB)
+	sessionStore := models.NewSessionStore(db.DB)
 
-	authHandler := handlers.NewAuthHandler(userStore, tokenService)
+	sessionService := auth.NewSessionService(sessionStore, userStore)
+
+	go func() {
+		for range time.Tick(time.Hour) {
+			if err := sessionStore.DeleteExpired(); err != nil {
+				logrus.WithError(err).Error("failed to delete expired sessions")
+			}
+		}
+	}()
+
+	authHandler := handlers.NewAuthHandler(userStore, sessionService)
 	notesHandler := handlers.NewNotesHandler(noteStore, userStore)
 	adminHandler := handlers.NewAdminHandler(userStore)
 
 	s := &Server{
-		router:       chi.NewRouter(),
-		db:           db,
-		tokenService: tokenService,
-		authHandler:  authHandler,
-		notesHandler: notesHandler,
-		adminHandler: adminHandler,
+		router:         chi.NewRouter(),
+		db:             db,
+		sessionService: sessionService,
+		authHandler:    authHandler,
+		notesHandler:   notesHandler,
+		adminHandler:   adminHandler,
 	}
 
 	s.setupRoutes()
@@ -68,12 +72,16 @@ func New() *Server {
 func (s *Server) setupRoutes() {
 	s.router.Use(middleware.Logger)
 	s.router.Use(middleware.Recoverer)
+	allowedOrigin := os.Getenv("CORS_ALLOWED_ORIGIN")
+	if allowedOrigin == "" {
+		allowedOrigin = "http://localhost:3000"
+	}
 	s.router.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{"*"},
+		AllowedOrigins:   []string{allowedOrigin},
 		AllowedMethods:   []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodOptions},
-		AllowedHeaders:   []string{"Accept", "Authorization", "Content-Type", "X-CSRF-Token"},
+		AllowedHeaders:   []string{"Accept", "Content-Type"},
 		ExposedHeaders:   []string{"Link"},
-		AllowCredentials: false,
+		AllowCredentials: true,
 		MaxAge:           300,
 	}))
 
@@ -82,9 +90,12 @@ func (s *Server) setupRoutes() {
 	s.router.Route("/api/v1", func(r chi.Router) {
 		r.Post("/register", s.wrapHandler(s.authHandler.Register))
 		r.Post("/login", s.wrapHandler(s.authHandler.Login))
+		r.Post("/logout", s.wrapHandler(s.authHandler.Logout))
 
 		r.Group(func(r chi.Router) {
-			r.Use(s.tokenService.AuthMiddleware)
+			r.Use(s.sessionService.AuthMiddleware)
+
+			r.Get("/me", s.wrapHandler(s.authHandler.Me))
 
 			r.Get("/notes", s.wrapHandler(s.notesHandler.GetNotes))
 			r.Post("/notes", s.wrapHandler(s.notesHandler.CreateNote))
@@ -101,7 +112,7 @@ func (s *Server) setupRoutes() {
 		})
 
 		r.Group(func(r chi.Router) {
-			r.Use(s.tokenService.AuthMiddleware)
+			r.Use(s.sessionService.AuthMiddleware)
 			r.Use(auth.AdminRequired)
 
 			r.Get("/admin/users", s.wrapHandler(s.adminHandler.GetUsers))
@@ -183,7 +194,11 @@ func (s *Server) wrapHandler(handler func(w http.ResponseWriter, r *http.Request
 		statusCode, err := handler(w, r)
 		if err != nil {
 			logrus.WithError(err).WithField("status_code", statusCode).WithField("method", r.Method).WithField("path", r.URL.Path).Error("HTTP handler error")
-			http.Error(w, err.Error(), statusCode)
+			msg := err.Error()
+			if statusCode >= 500 {
+				msg = "internal server error"
+			}
+			http.Error(w, msg, statusCode)
 		}
 	}
 }

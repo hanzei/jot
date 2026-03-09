@@ -1,7 +1,7 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { auth } from '@/utils/api';
-import { setToken, setUser } from '@/utils/auth';
+import { setUser } from '@/utils/auth';
 
 interface RegisterProps {
   onRegister: () => void;
@@ -59,7 +59,6 @@ export default function Register({ onRegister }: RegisterProps) {
 
     try {
       const response = await auth.register({ username, password });
-      setToken(response.token);
       setUser(response.user);
       onRegister();
     } catch (err: unknown) {
