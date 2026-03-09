@@ -92,9 +92,8 @@ Configure the application using environment variables or `.env` file:
 ```bash
 # Database configuration
 DB_PATH=./jot.db                     # SQLite database file location
-JWT_SECRET=your-secure-secret-key    # JWT signing key (change in production!)
 
-# Server configuration  
+# Server configuration
 PORT=8080                           # Server port (optional)
 STATIC_DIR=../webapp/build/         # Frontend build directory (optional)
 ```
@@ -104,8 +103,10 @@ STATIC_DIR=../webapp/build/         # Frontend build directory (optional)
 All API endpoints are prefixed with `/api/v1/`:
 
 ### Authentication
-- `POST /api/v1/register` - Register new user
-- `POST /api/v1/login` - Login user and receive JWT token
+- `POST /api/v1/register` - Register new user (sets session cookie)
+- `POST /api/v1/login` - Login user (sets session cookie)
+- `POST /api/v1/logout` - Logout and invalidate session
+- `GET /api/v1/me` - Get current authenticated user
 
 ### Notes (Requires Authentication)
 - `GET /api/v1/notes` - List user's notes
@@ -121,16 +122,18 @@ All API endpoints are prefixed with `/api/v1/`:
 ### Example API Usage
 
 ```bash
-# Register user
-curl -X POST http://localhost:8080/api/v1/register \
+# Register user (session cookie is set automatically)
+curl -c cookies.txt -X POST http://localhost:8080/api/v1/register \
   -H "Content-Type: application/json" \
   -d '{"username":"myuser","password":"password123"}'
 
-# Create note (with token)
-curl -X POST http://localhost:8080/api/v1/notes \
-  -H "Authorization: Bearer YOUR_TOKEN" \
+# Create note (using session cookie)
+curl -b cookies.txt -X POST http://localhost:8080/api/v1/notes \
   -H "Content-Type: application/json" \
   -d '{"title":"My Note","content":"Note content","note_type":"text"}'
+
+# Logout
+curl -b cookies.txt -X POST http://localhost:8080/api/v1/logout
 ```
 
 ## Building for Production
@@ -166,7 +169,6 @@ Create `.env` file for production:
 ```bash
 # Production environment
 DB_PATH=/var/lib/jot/jot.db
-JWT_SECRET=your-very-secure-random-secret-key-here
 PORT=8080
 ```
 
@@ -180,12 +182,10 @@ docker run -d \
   --name jot \
   -p 8080:8080 \
   -v ./data:/data \
-  -e JWT_SECRET=$(openssl rand -base64 32) \
   hanzei/jot:latest
 
 # Or use docker-compose
 curl -O https://raw.githubusercontent.com/hanzei/jot/master/docker-compose.yml
-echo "JWT_SECRET=$(openssl rand -base64 32)" > .env
 docker-compose up -d
 ```
 
@@ -197,7 +197,7 @@ docker-compose up -d
 
 # Or build manually
 docker build -t jot .
-docker run -p 8080:8080 -v ./data:/data -e JWT_SECRET=your-secret jot
+docker run -p 8080:8080 -v ./data:/data jot
 ```
 
 The Docker image uses multi-stage build:
@@ -220,7 +220,6 @@ services:
   jot:
     image: hanzei/jot:latest
     environment:
-      - JWT_SECRET=your-production-secret
       - DB_PATH=/data/production.db
     volumes:
       - ./custom-data:/data

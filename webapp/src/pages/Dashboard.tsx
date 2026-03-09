@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback } from 'react';
 import { PlusIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline';
-import { notes } from '@/utils/api';
-import { removeToken, getUser, isAdmin } from '@/utils/auth';
+import { notes, auth } from '@/utils/api';
+import { removeUser, getUser, isAdmin } from '@/utils/auth';
 import { Note } from '@/types';
 import { Link, useSearchParams } from 'react-router-dom';
 import NavigationHeader from '@/components/NavigationHeader';
@@ -78,8 +78,13 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     loadNotes();
   }, [loadNotes]);
 
-  const handleLogout = () => {
-    removeToken();
+  const handleLogout = async () => {
+    try {
+      await auth.logout();
+    } catch {
+      // Continue with logout even if the server call fails
+    }
+    removeUser();
     onLogout();
   };
 

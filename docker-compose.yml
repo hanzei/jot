@@ -6,7 +6,6 @@ services:
     container_name: jot
     environment:
       - DB_PATH=/data/jot.db
-      - JWT_SECRET=${JWT_SECRET:-your-secret-key-change-in-production}
       - STATIC_DIR=/app/webapp/build
     volumes:
       - ./data:/data

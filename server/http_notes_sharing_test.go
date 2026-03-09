@@ -109,9 +109,7 @@ func TestNoteSharingEndpoints(t *testing.T) {
 			"username": "user",
 		}
 
-		resp := ts.request(t, http.MethodDelete, fmt.Sprintf("/api/v1/notes/%s/share", noteID), unshareBody, map[string]string{
-			"Authorization": fmt.Sprintf("Bearer %s", owner.Token),
-		})
+		resp := ts.authRequest(t, owner, http.MethodDelete, fmt.Sprintf("/api/v1/notes/%s/share", noteID), unshareBody)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 		var response map[string]any
@@ -124,9 +122,7 @@ func TestNoteSharingEndpoints(t *testing.T) {
 			"username": "user", // Already unshared
 		}
 
-		resp := ts.request(t, http.MethodDelete, fmt.Sprintf("/api/v1/notes/%s/share", noteID), unshareBody, map[string]string{
-			"Authorization": fmt.Sprintf("Bearer %s", owner.Token),
-		})
+		resp := ts.authRequest(t, owner, http.MethodDelete, fmt.Sprintf("/api/v1/notes/%s/share", noteID), unshareBody)
 		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 	})
 }
@@ -158,7 +154,7 @@ func TestSearchUsersEndpoint(t *testing.T) {
 	})
 
 	t.Run("search users without auth returns unauthorized", func(t *testing.T) {
-		resp := ts.request(t, http.MethodGet, "/api/v1/users", nil, nil)
+		resp := ts.request(t, nil, http.MethodGet, "/api/v1/users", nil)
 		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 	})
 }

@@ -1,37 +1,34 @@
 package auth
 
 import (
-	"github.com/hanzei/jot/server/internal/models"
-)
-
-import (
 	"context"
 	"net/http"
-	"strings"
+
+	"github.com/hanzei/jot/server/internal/models"
 )
 
 type contextKey string
 
 const UserContextKey contextKey = "user"
 
-func (t *TokenService) AuthMiddleware(next http.Handler) http.Handler {
+type UserClaims struct {
+	UserID   string
+	Username string
+	Role     string
+}
+
+func (s *SessionService) AuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		authHeader := r.Header.Get("Authorization")
-		if authHeader == "" {
-			http.Error(w, "Authorization header required", http.StatusUnauthorized)
-			return
-		}
-
-		tokenString := strings.TrimPrefix(authHeader, "Bearer ")
-		if tokenString == authHeader {
-			http.Error(w, "Bearer token required", http.StatusUnauthorized)
-			return
-		}
-
-		claims, err := t.ValidateToken(tokenString)
+		user, err := s.GetSessionUser(r)
 		if err != nil {
-			http.Error(w, "Invalid token", http.StatusUnauthorized)
+			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
+		}
+
+		claims := &UserClaims{
+			UserID:   user.ID,
+			Username: user.Username,
+			Role:     user.Role,
 		}
 
 		ctx := context.WithValue(r.Context(), UserContextKey, claims)
@@ -39,8 +36,8 @@ func (t *TokenService) AuthMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func GetUserFromContext(ctx context.Context) (*Claims, bool) {
-	claims, ok := ctx.Value(UserContextKey).(*Claims)
+func GetUserFromContext(ctx context.Context) (*UserClaims, bool) {
+	claims, ok := ctx.Value(UserContextKey).(*UserClaims)
 	return claims, ok
 }
 
