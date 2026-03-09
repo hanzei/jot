@@ -3,6 +3,7 @@ package server
 import (
 	"log"
 	"net/http"
+	"path/filepath"
 	"os"
 	"strings"
 	"time"
@@ -117,11 +118,13 @@ func (s *Server) setupRoutes() {
 		}
 		staticDir = workDir + "/../webapp/build/"
 	}
+	staticDir = filepath.Clean(staticDir)
+	safeStaticDir := strings.NewReplacer("\n", "", "\r", "").Replace(staticDir)
 
 	if _, err := os.Stat(staticDir); os.IsNotExist(err) {
-		log.Printf("Static directory not found: %s (frontend files not available)", staticDir)
+		log.Printf("Static directory not found: %s (frontend files not available)", safeStaticDir) // #nosec G706 -- safeStaticDir has newlines stripped
 	} else {
-		log.Printf("Serving static files from: %s", staticDir)
+		log.Printf("Serving static files from: %s", safeStaticDir) // #nosec G706 -- safeStaticDir has newlines stripped
 		filesDir := http.Dir(staticDir)
 		FileServer(s.router, "/", filesDir)
 	}
