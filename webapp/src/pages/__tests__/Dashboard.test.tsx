@@ -96,8 +96,8 @@ vi.mock('@/components/SortableNoteCard', () => ({
     <div data-testid={`note-card-${note.id}`}>
       <h3>{note.title}</h3>
       <p>{note.content}</p>
-      <button onClick={() => onEdit(note)} data-testid={`edit-${note.id}`}>Edit</button>
-      <button onClick={() => onDelete(note.id)} data-testid={`delete-${note.id}`}>Delete</button>
+      <button onClick={() => onEdit?.(note)} data-testid={`edit-${note.id}`}>Edit</button>
+      <button onClick={() => onDelete?.(note.id)} data-testid={`delete-${note.id}`}>Delete</button>
       {onShare && <button onClick={() => onShare(note)} data-testid={`share-${note.id}`}>Share</button>}
       {onRefresh && <button onClick={onRefresh} data-testid={`refresh-${note.id}`}>Refresh</button>}
     </div>

@@ -113,13 +113,13 @@ describe('useOnlineStatus Hook', () => {
     it('uses the same function references for add and remove', () => {
       const { unmount } = renderHook(() => useOnlineStatus())
       
-      const addOnlineHandler = mockAddEventListener.mock.calls.find(call => call[0] === 'online')[1]
-      const addOfflineHandler = mockAddEventListener.mock.calls.find(call => call[0] === 'offline')[1]
-      
+      const addOnlineHandler = mockAddEventListener.mock.calls.find(call => call[0] === 'online')![1]
+      const addOfflineHandler = mockAddEventListener.mock.calls.find(call => call[0] === 'offline')![1]
+
       unmount()
-      
-      const removeOnlineHandler = mockRemoveEventListener.mock.calls.find(call => call[0] === 'online')[1]
-      const removeOfflineHandler = mockRemoveEventListener.mock.calls.find(call => call[0] === 'offline')[1]
+
+      const removeOnlineHandler = mockRemoveEventListener.mock.calls.find(call => call[0] === 'online')![1]
+      const removeOfflineHandler = mockRemoveEventListener.mock.calls.find(call => call[0] === 'offline')![1]
       
       expect(addOnlineHandler).toBe(removeOnlineHandler)
       expect(addOfflineHandler).toBe(removeOfflineHandler)
@@ -135,7 +135,7 @@ describe('useOnlineStatus Hook', () => {
       expect(result.current).toBe(false)
       
       // Get the online event handler
-      const onlineHandler = mockAddEventListener.mock.calls.find(call => call[0] === 'online')[1]
+      const onlineHandler = mockAddEventListener.mock.calls.find(call => call[0] === 'online')![1]
       
       act(() => {
         onlineHandler()
@@ -152,7 +152,7 @@ describe('useOnlineStatus Hook', () => {
       expect(result.current).toBe(true)
       
       // Get the offline event handler
-      const offlineHandler = mockAddEventListener.mock.calls.find(call => call[0] === 'offline')[1]
+      const offlineHandler = mockAddEventListener.mock.calls.find(call => call[0] === 'offline')![1]
       
       act(() => {
         offlineHandler()
@@ -164,8 +164,8 @@ describe('useOnlineStatus Hook', () => {
     it('handles rapid online/offline transitions', () => {
       const { result } = renderHook(() => useOnlineStatus())
       
-      const onlineHandler = mockAddEventListener.mock.calls.find(call => call[0] === 'online')[1]
-      const offlineHandler = mockAddEventListener.mock.calls.find(call => call[0] === 'offline')[1]
+      const onlineHandler = mockAddEventListener.mock.calls.find(call => call[0] === 'online')![1]
+      const offlineHandler = mockAddEventListener.mock.calls.find(call => call[0] === 'offline')![1]
       
       // Rapid state changes
       act(() => {
@@ -192,7 +192,7 @@ describe('useOnlineStatus Hook', () => {
     it('handles multiple event triggers correctly', () => {
       const { result } = renderHook(() => useOnlineStatus())
       
-      const onlineHandler = mockAddEventListener.mock.calls.find(call => call[0] === 'online')[1]
+      const onlineHandler = mockAddEventListener.mock.calls.find(call => call[0] === 'online')![1]
       
       // Multiple online events shouldn't cause issues
       act(() => {
@@ -310,8 +310,8 @@ describe('useOnlineStatus Hook', () => {
     it('handles frequent status changes efficiently', () => {
       const { result } = renderHook(() => useOnlineStatus())
       
-      const onlineHandler = mockAddEventListener.mock.calls.find(call => call[0] === 'online')[1]
-      const offlineHandler = mockAddEventListener.mock.calls.find(call => call[0] === 'offline')[1]
+      const onlineHandler = mockAddEventListener.mock.calls.find(call => call[0] === 'online')![1]
+      const offlineHandler = mockAddEventListener.mock.calls.find(call => call[0] === 'offline')![1]
       
       // Simulate many rapid changes
       const startTime = performance.now()
@@ -364,7 +364,7 @@ describe('useOnlineStatus Hook', () => {
       expect(result.current).toBe(true) // Initially online
       
       // Simulate network disconnection
-      const offlineHandler = mockAddEventListener.mock.calls.find(call => call[0] === 'offline')[1]
+      const offlineHandler = mockAddEventListener.mock.calls.find(call => call[0] === 'offline')![1]
       
       act(() => {
         offlineHandler()
@@ -377,7 +377,7 @@ describe('useOnlineStatus Hook', () => {
       const { result } = renderHook(() => useOnlineStatus())
       
       // App goes to background (might lose connection)
-      const offlineHandler = mockAddEventListener.mock.calls.find(call => call[0] === 'offline')[1]
+      const offlineHandler = mockAddEventListener.mock.calls.find(call => call[0] === 'offline')![1]
       
       act(() => {
         offlineHandler()
@@ -386,7 +386,7 @@ describe('useOnlineStatus Hook', () => {
       expect(result.current).toBe(false)
       
       // App comes back to foreground (connection restored)
-      const onlineHandler = mockAddEventListener.mock.calls.find(call => call[0] === 'online')[1]
+      const onlineHandler = mockAddEventListener.mock.calls.find(call => call[0] === 'online')![1]
       
       act(() => {
         onlineHandler()
@@ -398,8 +398,8 @@ describe('useOnlineStatus Hook', () => {
     it('simulates unstable connection with frequent disconnects', () => {
       const { result } = renderHook(() => useOnlineStatus())
       
-      const onlineHandler = mockAddEventListener.mock.calls.find(call => call[0] === 'online')[1]
-      const offlineHandler = mockAddEventListener.mock.calls.find(call => call[0] === 'offline')[1]
+      const onlineHandler = mockAddEventListener.mock.calls.find(call => call[0] === 'online')![1]
+      const offlineHandler = mockAddEventListener.mock.calls.find(call => call[0] === 'offline')![1]
       
       // Simulate unstable connection
       const events = [
@@ -423,7 +423,7 @@ describe('useOnlineStatus Hook', () => {
     it('handles component unmounting during network transitions', () => {
       const { result, unmount } = renderHook(() => useOnlineStatus())
       
-      const offlineHandler = mockAddEventListener.mock.calls.find(call => call[0] === 'offline')[1]
+      const offlineHandler = mockAddEventListener.mock.calls.find(call => call[0] === 'offline')![1]
       
       // Start network transition
       act(() => {

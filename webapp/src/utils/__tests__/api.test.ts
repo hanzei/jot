@@ -150,7 +150,7 @@ describe('API Module', () => {
       expect(result500.shouldRedirect).toBe(false)
 
       const networkError = new Error('Network error')
-      const resultNetwork = handle401Error(networkError)
+      const resultNetwork = handle401Error(networkError as unknown as { response?: { status: number } })
       expect(resultNetwork.shouldClearAuth).toBe(false)
       expect(resultNetwork.shouldRedirect).toBe(false)
     })
