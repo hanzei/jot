@@ -18,7 +18,6 @@ docker run -d \
   --name jot \
   -p 8080:8080 \
   -v ./data:/data \
-  -e JWT_SECRET=$(openssl rand -base64 32) \
   hanzei/jot:latest
 
 # Method 2: Using Docker Compose
@@ -28,10 +27,7 @@ mkdir jot && cd jot
 # 2. Download docker-compose.yml
 curl -O https://raw.githubusercontent.com/hanzei/jot/master/docker-compose.yml
 
-# 3. Create environment file
-echo "JWT_SECRET=$(openssl rand -base64 32)" > .env
-
-# 4. Start the application
+# 3. Start the application
 docker-compose up -d
 
 # 5. Access at http://localhost:8080
@@ -53,7 +49,7 @@ If you prefer to build the image locally:
 git clone https://github.com/hanzei/jot.git
 cd jot
 docker build -t jot .
-docker run -p 8080:8080 -v ./data:/data -e JWT_SECRET=your-secret jot
+docker run -p 8080:8080 -v ./data:/data jot
 ```
 
 ## Configuration
@@ -62,9 +58,6 @@ docker run -p 8080:8080 -v ./data:/data -e JWT_SECRET=your-secret jot
 
 #### Required Configuration
 ```bash
-# JWT secret key (generate with: openssl rand -base64 32)
-JWT_SECRET=your-very-secure-secret-key-here
-
 # Database file path
 DB_PATH=/var/lib/jot/jot.db
 ```
