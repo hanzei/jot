@@ -1,10 +1,9 @@
 import { describe, it, expect, vi, beforeAll, beforeEach, afterEach } from 'vitest'
-import type { 
-  AuthResponse, 
-  LoginRequest, 
-  RegisterRequest, 
-  Note, 
-  CreateNoteRequest, 
+import type {
+  AuthResponse,
+  LoginRequest,
+  RegisterRequest,
+  CreateNoteRequest,
   UpdateNoteRequest,
   User,
   CreateUserRequest,
@@ -62,6 +61,16 @@ Object.defineProperty(window, 'location', {
 
 
 describe('API Module', () => {
+  // Capture interceptor handlers before any vi.clearAllMocks() runs.
+  // Nested beforeAll runs after outer beforeEach of prior describes, so
+  // we must capture at the outer level to avoid cleared mock.calls.
+  let requestHandler: (config: { headers: Record<string, string> }) => { headers: Record<string, string> }
+  let errorHandler: (error: unknown) => Promise<never>
+  beforeAll(() => {
+    requestHandler = mockRequestUse.mock.calls[0][0] as (config: { headers: Record<string, string> }) => { headers: Record<string, string> }
+    errorHandler = mockResponseUse.mock.calls[0][1] as (error: unknown) => Promise<never>
+  })
+
   beforeEach(() => {
     vi.clearAllMocks()
     mockLocalStorage.getItem.mockReturnValue('mock-token')
@@ -91,12 +100,6 @@ describe('API Module', () => {
   })
 
   describe('Request Interceptor', () => {
-    // Capture handler before beforeEach clears mock.calls
-    let requestHandler: (config: { headers: Record<string, string> }) => { headers: Record<string, string> }
-    beforeAll(() => {
-      requestHandler = mockRequestUse.mock.calls[0][0] as (config: { headers: Record<string, string> }) => { headers: Record<string, string> }
-    })
-
     it('adds auth token to requests when token exists', () => {
       mockLocalStorage.getItem.mockReturnValue('test-token')
 
@@ -117,11 +120,6 @@ describe('API Module', () => {
   })
 
   describe('Response Interceptor', () => {
-    // Capture handler before beforeEach clears mock.calls
-    let errorHandler: (error: unknown) => Promise<never>
-    beforeAll(() => {
-      errorHandler = mockResponseUse.mock.calls[0][1] as (error: unknown) => Promise<never>
-    })
 
     it('clears auth and redirects to login on 401 error', async () => {
       const error401 = { response: { status: 401 } }

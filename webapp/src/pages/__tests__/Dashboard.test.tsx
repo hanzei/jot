@@ -1,4 +1,4 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
@@ -267,19 +267,20 @@ describe('Dashboard', () => {
     })
 
     it('handles extremely long search queries', async () => {
-      const user = userEvent.setup()
       const mockGetAll = vi.mocked(notes.getAll)
-      
+
       renderDashboard()
-      
+
       await waitFor(() => {
         expect(screen.getByPlaceholderText('Search notes...')).toBeInTheDocument()
       })
-      
+
       const searchInput = screen.getByPlaceholderText('Search notes...')
       const longQuery = 'a'.repeat(1000)
-      await user.type(searchInput, longQuery)
-      
+      // Use fireEvent.change to set the full value at once — avoids character-by-character
+      // keystroke simulation timing out for very long strings
+      fireEvent.change(searchInput, { target: { value: longQuery } })
+
       await waitFor(() => {
         expect(mockGetAll).toHaveBeenCalledWith(false, longQuery)
       })
@@ -288,21 +289,19 @@ describe('Dashboard', () => {
     it('handles rapid search input changes', async () => {
       const user = userEvent.setup()
       const mockGetAll = vi.mocked(notes.getAll)
-      
+
       renderDashboard()
-      
+
       await waitFor(() => {
         expect(screen.getByPlaceholderText('Search notes...')).toBeInTheDocument()
       })
-      
+
       const searchInput = screen.getByPlaceholderText('Search notes...')
-      
-      // Rapid typing
-      await user.type(searchInput, 'a')
-      await user.type(searchInput, 'b')
-      await user.type(searchInput, 'c')
-      
-      // Should call API for each character
+
+      // Rapid typing - use type to append each character sequentially
+      await user.type(searchInput, 'abc')
+
+      // Should have been called with the final value
       await waitFor(() => {
         expect(mockGetAll).toHaveBeenCalledWith(false, 'abc')
       })

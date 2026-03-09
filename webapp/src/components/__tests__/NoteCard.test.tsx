@@ -71,7 +71,7 @@ describe('NoteCard', () => {
     })
 
     it('renders note without title', () => {
-      const noteWithoutTitle = createMockNote({ title: '' })
+      const noteWithoutTitle = createMockNote({ title: '', content: 'This is a test note content' })
       render(<NoteCard {...defaultProps} note={noteWithoutTitle} />)
 
       expect(screen.queryByRole('heading')).not.toBeInTheDocument()
