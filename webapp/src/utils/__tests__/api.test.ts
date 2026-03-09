@@ -61,19 +61,14 @@ Object.defineProperty(window, 'location', {
 
 
 describe('API Module', () => {
-  // Capture interceptor handlers before any vi.clearAllMocks() runs.
-  // Nested beforeAll runs after outer beforeEach of prior describes, so
-  // we must capture at the outer level to avoid cleared mock.calls.
-  let requestHandler: (config: { headers: Record<string, string> }) => { headers: Record<string, string> }
+  // Capture the response error handler before any vi.clearAllMocks() runs.
   let errorHandler: (error: unknown) => Promise<never>
   beforeAll(() => {
-    requestHandler = mockRequestUse.mock.calls[0][0] as (config: { headers: Record<string, string> }) => { headers: Record<string, string> }
     errorHandler = mockResponseUse.mock.calls[0][1] as (error: unknown) => Promise<never>
   })
 
   beforeEach(() => {
     vi.clearAllMocks()
-    mockLocalStorage.getItem.mockReturnValue('mock-token')
   })
 
   afterEach(() => {
@@ -99,33 +94,12 @@ describe('API Module', () => {
     })
   })
 
-  describe('Request Interceptor', () => {
-    it('adds auth token to requests when token exists', () => {
-      mockLocalStorage.getItem.mockReturnValue('test-token')
-
-      const config = { headers: {} as Record<string, string> }
-      const result = requestHandler(config)
-
-      expect(result.headers.Authorization).toBe('Bearer test-token')
-    })
-
-    it('does not add auth token when no token exists', () => {
-      mockLocalStorage.getItem.mockReturnValue(null)
-
-      const config = { headers: {} as Record<string, string> }
-      const result = requestHandler(config)
-
-      expect(result.headers.Authorization).toBeUndefined()
-    })
-  })
-
   describe('Response Interceptor', () => {
 
-    it('clears auth and redirects to login on 401 error', async () => {
+    it('clears user and redirects to login on 401 error', async () => {
       const error401 = { response: { status: 401 } }
       await expect(errorHandler(error401)).rejects.toEqual(error401)
 
-      expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('token')
       expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('user')
       expect(mockLocation.href).toBe('/login')
     })
@@ -149,7 +123,6 @@ describe('API Module', () => {
     describe('login', () => {
       it('makes POST request to /login with credentials', async () => {
         const mockResponse: AuthResponse = {
-          token: 'test-token',
           user: {
             id: '1',
             username: 'testuser',
@@ -211,7 +184,6 @@ describe('API Module', () => {
     describe('register', () => {
       it('makes POST request to /register with user data', async () => {
         const mockResponse: AuthResponse = {
-          token: 'test-token',
           user: {
             id: '1',
             username: 'newuser',
@@ -719,11 +691,11 @@ describe('API Module', () => {
       expect(typeof admin.getUsers).toBe('function')
     })
 
-    it('handles localStorage errors gracefully in token retrieval', () => {
+    it('handles localStorage errors gracefully in user retrieval', () => {
       // Test localStorage error handling separately from interceptors
-      const getTokenSafely = () => {
+      const getUserSafely = () => {
         try {
-          return localStorage.getItem('token')
+          return localStorage.getItem('user')
         } catch {
           return null
         }
@@ -734,10 +706,10 @@ describe('API Module', () => {
       mockLocalStorage.getItem.mockImplementationOnce(() => {
         throw new Error('localStorage error')
       })
-      
-      const token = getTokenSafely()
-      expect(token).toBeNull()
-      
+
+      const user = getUserSafely()
+      expect(user).toBeNull()
+
       // Restore mock
       mockLocalStorage.getItem = originalGetItem
     })

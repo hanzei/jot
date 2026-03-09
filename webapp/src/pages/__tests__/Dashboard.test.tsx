@@ -16,10 +16,13 @@ vi.mock('@/utils/api', () => ({
     delete: vi.fn(),
     reorder: vi.fn(),
   },
+  auth: {
+    logout: vi.fn(),
+  },
 }))
 
 vi.mock('@/utils/auth', () => ({
-  removeToken: vi.fn(),
+  removeUser: vi.fn(),
   getUser: vi.fn(),
   isAdmin: vi.fn(),
 }))
@@ -612,7 +615,7 @@ describe('Dashboard', () => {
     it('handles logout correctly', async () => {
       const user = userEvent.setup()
       const mockOnLogout = vi.fn()
-      const mockRemoveToken = vi.mocked(auth.removeToken)
+      const mockRemoveUser = vi.mocked(auth.removeUser)
 
       render(
         <MemoryRouter>
@@ -626,7 +629,7 @@ describe('Dashboard', () => {
       await user.click(screen.getByTestId('logout-button'))
 
       await waitFor(() => {
-        expect(mockRemoveToken).toHaveBeenCalled()
+        expect(mockRemoveUser).toHaveBeenCalled()
         expect(mockOnLogout).toHaveBeenCalled()
       })
     })
