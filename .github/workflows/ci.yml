@@ -80,7 +80,7 @@ jobs:
           version: 3.x
 
       - name: Install golangci-lint
-        uses: golangci/golangci-lint-action@v8
+        uses: golangci/golangci-lint-action@v9
         with:
           version: latest
           working-directory: ./server
