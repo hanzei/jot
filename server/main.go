@@ -1,8 +1,10 @@
 package main
 
 import (
+	"fmt"
 	"log"
 	"os"
+	"strconv"
 
 	"github.com/hanzei/jot/server/internal/server"
 )
@@ -13,6 +15,10 @@ func main() {
 	if port == "" {
 		port = "8080"
 	}
-	log.Printf("Starting Jot server on :%s", port)
-	log.Fatal(s.Start(":" + port))
+	portNum, err := strconv.Atoi(port)
+	if err != nil {
+		log.Fatalf("Invalid PORT value %q: must be a number", port)
+	}
+	log.Printf("Starting Jot server on :%d", portNum)
+	log.Fatal(s.Start(fmt.Sprintf(":%d", portNum)))
 }
