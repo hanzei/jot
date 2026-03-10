@@ -69,7 +69,15 @@
     "languageLabel": "App-Sprache",
     "languageSystem": "Systemsprache",
     "language_en": "English",
-    "language_de": "Deutsch"
+    "language_de": "Deutsch",
+    "userManagementSection": "Benutzerverwaltung",
+    "userManagementDescription": "Benutzerrollen verwalten.",
+    "makeAdmin": "Zum Admin machen",
+    "removeAdmin": "Admin entfernen",
+    "updatingRole": "Aktualisiere...",
+    "failedUpdateRole": "Rolle konnte nicht aktualisiert werden.",
+    "failedLoadUsers": "Benutzer konnten nicht geladen werden.",
+    "youBadge": "Du"
   },
   "admin": {
     "title": "Benutzerverwaltung",

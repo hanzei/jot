@@ -26,6 +26,7 @@ vi.mock('@/utils/auth', () => ({
   removeUser: vi.fn(),
   getSettings: vi.fn().mockReturnValue(null),
   setSettings: vi.fn(),
+  isAdmin: vi.fn().mockReturnValue(false),
 }))
 
 vi.mock('@/components/NavigationHeader', () => ({

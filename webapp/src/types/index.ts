@@ -123,3 +123,7 @@ export interface ImportResponse {
   skipped: number;
   errors?: string[];
 }
+
+export interface UpdateUserRoleRequest {
+  role: string;
+}

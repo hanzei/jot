@@ -245,6 +245,22 @@ func (s *UserSettingsStore) Update(userID, language string) (*UserSettings, erro
 	return settings, nil
 }
 
+func (s *UserStore) UpdateRole(id, role string) (*User, error) {
+	query := `UPDATE users SET role = ?, updated_at = CURRENT_TIMESTAMP
+			  WHERE id = ? RETURNING id, username, role, created_at, updated_at`
+	var user User
+	err := s.db.QueryRow(query, role, id).Scan(
+		&user.ID, &user.Username, &user.Role, &user.CreatedAt, &user.UpdatedAt,
+	)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("user not found")
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to update role: %w", err)
+	}
+	return &user, nil
+}
+
 func (s *UserStore) CreateByAdmin(username, password string, role string) (*User, error) {
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
