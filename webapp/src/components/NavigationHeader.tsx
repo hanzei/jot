@@ -16,9 +16,12 @@ interface NavigationHeaderProps {
   tabs: NavigationTab[];
   children?: ReactNode; // For content like search bar between title/tabs and user menu
   username?: string;
+  isAdmin?: boolean;
+  adminLinkActive?: boolean;
+  settingsLinkActive?: boolean;
 }
 
-const NavigationHeader = ({ title = 'Jot', onLogout, tabs, children, username }: NavigationHeaderProps) => {
+const NavigationHeader = ({ title = 'Jot', onLogout, tabs, children, username, isAdmin: showAdminLink, adminLinkActive, settingsLinkActive }: NavigationHeaderProps) => {
   const currentUser = getUser();
   const displayUsername = username ?? currentUser?.username;
   const { t } = useTranslation();
@@ -55,10 +58,18 @@ const NavigationHeader = ({ title = 'Jot', onLogout, tabs, children, username }:
               </div>
               <Link
                 to="/settings"
-                className="text-xs text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400"
+                className={`text-xs ${settingsLinkActive ? 'text-blue-600 dark:text-blue-400 font-medium' : 'text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400'}`}
               >
                 {t('nav.settings')}
               </Link>
+              {showAdminLink && (
+                <Link
+                  to="/admin"
+                  className={`text-xs ${adminLinkActive ? 'text-blue-600 dark:text-blue-400 font-medium' : 'text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400'}`}
+                >
+                  {t('nav.admin')}
+                </Link>
+              )}
               <button
                 onClick={onLogout}
                 className="text-xs text-gray-600 dark:text-gray-300 hover:text-red-600 dark:hover:text-red-400"
@@ -79,10 +90,18 @@ const NavigationHeader = ({ title = 'Jot', onLogout, tabs, children, username }:
             </div>
             <Link
               to="/settings"
-              className="text-sm text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400"
+              className={`text-sm ${settingsLinkActive ? 'text-blue-600 dark:text-blue-400 font-medium' : 'text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400'}`}
             >
               {t('nav.settings')}
             </Link>
+            {showAdminLink && (
+              <Link
+                to="/admin"
+                className={`text-sm ${adminLinkActive ? 'text-blue-600 dark:text-blue-400 font-medium' : 'text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400'}`}
+              >
+                {t('nav.admin')}
+              </Link>
+            )}
             <button
               onClick={onLogout}
               className="text-sm text-gray-600 dark:text-gray-300 hover:text-red-600 dark:hover:text-red-400"

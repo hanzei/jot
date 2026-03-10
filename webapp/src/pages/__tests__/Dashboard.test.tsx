@@ -73,11 +73,12 @@ vi.mock('@/utils/useSSE', () => ({
 
 // Mock child components
 vi.mock('@/components/NavigationHeader', () => ({
-  default: ({ title, onLogout, tabs, children }: {
+  default: ({ title, onLogout, tabs, children, isAdmin: showAdminLink }: {
     title?: string;
     onLogout?: () => void;
     tabs?: { label: string; element: ReactNode }[];
     children?: ReactNode;
+    isAdmin?: boolean;
   }) => (
     <div data-testid="navigation-header">
       <h1>{title}</h1>
@@ -89,6 +90,7 @@ vi.mock('@/components/NavigationHeader', () => ({
           </div>
         ))}
       </div>
+      {showAdminLink && <div data-testid="admin-link">Admin</div>}
       <div data-testid="search-bar">{children}</div>
     </div>
   ),
@@ -192,23 +194,23 @@ describe('Dashboard', () => {
       })
     })
 
-    it('shows admin tab for admin users', async () => {
+    it('shows admin link for admin users', async () => {
       vi.mocked(auth.isAdmin).mockReturnValue(true)
-      
+
       renderDashboard()
-      
+
       await waitFor(() => {
-        expect(screen.getByTestId('tab-admin')).toBeInTheDocument()
+        expect(screen.getByTestId('admin-link')).toBeInTheDocument()
       })
     })
 
-    it('does not show admin tab for regular users', async () => {
+    it('does not show admin link for regular users', async () => {
       vi.mocked(auth.isAdmin).mockReturnValue(false)
-      
+
       renderDashboard()
-      
+
       await waitFor(() => {
-        expect(screen.queryByTestId('tab-admin')).not.toBeInTheDocument()
+        expect(screen.queryByTestId('admin-link')).not.toBeInTheDocument()
       })
     })
   })

@@ -5,7 +5,7 @@ import { notes, auth } from '@/utils/api';
 import { removeUser, getUser, isAdmin } from '@/utils/auth';
 import { Note } from '@/types';
 import { useSSE, SSEEvent } from '@/utils/useSSE';
-import { Link, useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router-dom';
 import NavigationHeader from '@/components/NavigationHeader';
 import SortableNoteCard from '@/components/SortableNoteCard';
 import NoteModal from '@/components/NoteModal';
@@ -276,17 +276,6 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       ),
       isActive: showArchived
     },
-    ...(isAdmin() ? [{
-      label: t('dashboard.tabAdmin'),
-      element: (
-        <Link
-          to="/admin"
-          className="px-3 py-1 rounded-md text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300"
-        >
-          {t('dashboard.tabAdmin')}
-        </Link>
-      )
-    }] : [])
   ];
 
   const searchBar = (
@@ -311,6 +300,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
         title="Jot"
         onLogout={handleLogout}
         tabs={navigationTabs}
+        isAdmin={isAdmin()}
       >
         {searchBar}
       </NavigationHeader>

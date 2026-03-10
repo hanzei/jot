@@ -1,6 +1,7 @@
 {
   "nav": {
     "settings": "Settings",
+    "admin": "Admin",
     "logout": "Logout"
   },
   "auth": {
@@ -69,17 +70,7 @@
     "languageLabel": "App language",
     "languageSystem": "System Language",
     "language_en": "English",
-    "language_de": "Deutsch",
-    "loadingUsers": "Loading users...",
-    "userManagementSection": "User Management",
-    "userManagementDescription": "Manage user roles.",
-    "makeAdmin": "Make Admin",
-    "removeAdmin": "Remove Admin",
-    "updatingRole": "Updating...",
-    "roleToggleLabel": "{{action}} for {{username}}",
-    "failedUpdateRole": "Failed to update role.",
-    "failedLoadUsers": "Failed to load users.",
-    "youBadge": "You"
+    "language_de": "Deutsch"
   },
   "admin": {
     "title": "User Management",
@@ -100,7 +91,13 @@
     "userIdCreated": "ID: {{id}} • Created: {{date}}",
     "adminBadge": "Admin",
     "activeBadge": "Active",
-    "noUsersFound": "No users found."
+    "noUsersFound": "No users found.",
+    "makeAdmin": "Make Admin",
+    "removeAdmin": "Remove Admin",
+    "updatingRole": "Updating...",
+    "roleToggleLabel": "{{action}} for {{username}}",
+    "failedUpdateRole": "Failed to update role.",
+    "youBadge": "You"
   },
   "note": {
     "shared": "Shared",
