@@ -2,6 +2,7 @@ import { useState, useRef } from 'react';
 import { Dialog } from '@headlessui/react';
 import { XMarkIcon, ArrowUpTrayIcon } from '@heroicons/react/24/outline';
 import { notes } from '@/utils/api';
+import { ImportResponse } from '@/types';
 
 interface ImportModalProps {
   isOpen: boolean;
@@ -13,7 +14,7 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  const [result, setResult] = useState<{ imported: number; skipped: number; errors?: string[] } | null>(null);
+  const [result, setResult] = useState<ImportResponse | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -27,6 +28,12 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
     e.preventDefault();
     const file = e.dataTransfer.files[0];
     if (file) {
+      const isJson = file.name.endsWith('.json') || file.type === 'application/json';
+      const isZip = file.name.endsWith('.zip') || file.type === 'application/zip';
+      if (!isJson && !isZip) {
+        setError('Invalid file type. Please select a .json or .zip file.');
+        return;
+      }
       setSelectedFile(file);
       setError('');
       setResult(null);
