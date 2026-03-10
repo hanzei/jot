@@ -159,6 +159,7 @@ const Settings = ({ onLogout }: SettingsProps) => {
 
   const handleRoleToggle = async (targetUser: User) => {
     const newRole = targetUser.role === 'admin' ? 'user' : 'admin';
+    setUsersError('');
     setRoleUpdating(prev => new Set(prev).add(targetUser.id));
     try {
       const updated = await admin.updateUserRole(targetUser.id, { role: newRole });
@@ -375,7 +376,7 @@ const Settings = ({ onLogout }: SettingsProps) => {
               <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-1">{t('settings.userManagementSection')}</h2>
               <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">{t('settings.userManagementDescription')}</p>
               {usersLoading && (
-                <p className="text-sm text-gray-500 dark:text-gray-400">{t('settings.saving')}</p>
+                <p className="text-sm text-gray-500 dark:text-gray-400">{t('settings.loadingUsers')}</p>
               )}
               {usersError && (
                 <div role="alert" className="mb-4 text-red-600 dark:text-red-400 text-sm">

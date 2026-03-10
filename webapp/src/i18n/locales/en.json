@@ -70,6 +70,7 @@
     "languageSystem": "System Language",
     "language_en": "English",
     "language_de": "Deutsch",
+    "loadingUsers": "Loading users...",
     "userManagementSection": "User Management",
     "userManagementDescription": "Manage user roles.",
     "makeAdmin": "Make Admin",

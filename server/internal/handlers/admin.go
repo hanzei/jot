@@ -96,8 +96,11 @@ func (h *AdminHandler) UpdateUserRole(w http.ResponseWriter, r *http.Request) (i
 	}
 	user, err := h.userStore.UpdateRole(userID, req.Role)
 	if err != nil {
-		if strings.Contains(err.Error(), "user not found") {
+		if errors.Is(err, models.ErrUserNotFound) {
 			return http.StatusNotFound, err
+		}
+		if errors.Is(err, models.ErrLastAdmin) {
+			return http.StatusConflict, err
 		}
 		return http.StatusInternalServerError, err
 	}
