@@ -1,13 +1,36 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import { auth } from '@/utils/api';
-import { users } from '@/utils/api';
+import axios from 'axios';
+import { auth, users } from '@/utils/api';
 import { getUser, setUser, removeUser } from '@/utils/auth';
 import NavigationHeader from '@/components/NavigationHeader';
 
 interface SettingsProps {
   onLogout: () => void;
 }
+
+const navigationTabs = [
+  {
+    label: 'Notes',
+    element: (
+      <Link
+        to="/"
+        className="px-3 py-1 rounded-md text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
+      >
+        Notes
+      </Link>
+    ),
+  },
+  {
+    label: 'Settings',
+    element: (
+      <span className="px-3 py-1 rounded-md text-sm font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">
+        Settings
+      </span>
+    ),
+    isActive: true,
+  },
+];
 
 const Settings = ({ onLogout }: SettingsProps) => {
   const currentUser = getUser();
@@ -37,39 +60,19 @@ const Settings = ({ onLogout }: SettingsProps) => {
       setUser(updatedUser);
       setSuccess('Username updated successfully.');
     } catch (err: unknown) {
-      const axiosError = err as { response?: { data?: string } };
-      setError(axiosError.response?.data || 'Failed to update username.');
+      if (axios.isAxiosError(err)) {
+        setError(err.response?.data || 'Failed to update username.');
+      } else {
+        setError('Failed to update username.');
+      }
     } finally {
       setSaving(false);
     }
   };
 
-  const navigationTabs = [
-    {
-      label: 'Notes',
-      element: (
-        <Link
-          to="/"
-          className="px-3 py-1 rounded-md text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
-        >
-          Notes
-        </Link>
-      ),
-    },
-    {
-      label: 'Settings',
-      element: (
-        <span className="px-3 py-1 rounded-md text-sm font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">
-          Settings
-        </span>
-      ),
-      isActive: true,
-    },
-  ];
-
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-slate-900">
-      <NavigationHeader onLogout={handleLogout} tabs={navigationTabs} />
+      <NavigationHeader onLogout={handleLogout} tabs={navigationTabs} username={username} />
 
       <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         <div className="px-4 py-6 sm:px-0">
@@ -81,10 +84,11 @@ const Settings = ({ onLogout }: SettingsProps) => {
             <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Account</h2>
             <form onSubmit={handleSubmit}>
               <div>
-                <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                <label htmlFor="username" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                   Username
                 </label>
                 <input
+                  id="username"
                   type="text"
                   required
                   value={username}
