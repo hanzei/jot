@@ -80,8 +80,11 @@ const Settings = ({ onLogout }: SettingsProps) => {
 
   const handleSearch = (e: React.FormEvent) => {
     e.preventDefault();
-    if (searchQuery.trim()) {
-      navigate(`/?search=${encodeURIComponent(searchQuery.trim())}`);
+    const trimmed = searchQuery.trim();
+    if (trimmed) {
+      navigate(`/?search=${encodeURIComponent(trimmed)}`);
+    } else {
+      navigate('/');
     }
   };
 
@@ -93,6 +96,7 @@ const Settings = ({ onLogout }: SettingsProps) => {
           <input
             type="text"
             placeholder="Search notes..."
+            aria-label="Search notes"
             className="w-full pl-9 sm:pl-10 pr-4 py-2 text-sm sm:text-base border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
             value={searchQuery}
             onChange={(e) => setSearchQuery(e.target.value)}
