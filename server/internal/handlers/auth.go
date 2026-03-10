@@ -192,10 +192,21 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) (in
 	}
 
 	if !user.CheckPassword(req.CurrentPassword) {
-		return http.StatusUnauthorized, errors.New("current password is incorrect")
+		return http.StatusForbidden, errors.New("current password is incorrect")
 	}
 
 	if err := h.userStore.UpdatePassword(currentUser.ID, req.NewPassword); err != nil {
+		return http.StatusInternalServerError, err
+	}
+
+	// Invalidate all existing sessions so that stolen/compromised tokens
+	// cannot be reused after a password change.
+	if err := h.sessionService.InvalidateUserSessions(currentUser.ID); err != nil {
+		return http.StatusInternalServerError, err
+	}
+
+	// Issue a fresh session for the current request so the user stays logged in.
+	if err := h.sessionService.CreateSession(w, currentUser.ID); err != nil {
 		return http.StatusInternalServerError, err
 	}
 
