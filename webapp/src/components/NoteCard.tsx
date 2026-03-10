@@ -35,6 +35,7 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, currentUserI
       '#4285f4': 'blue',
       '#ea4335': 'red',
       '#9aa0a6': 'purple',
+      '#8b5cf6': 'purple',
     };
     return colorMap[color] || '';
   };

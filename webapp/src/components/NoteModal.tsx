@@ -183,7 +183,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
     { value: '#34a853', name: t('note.colorGreen'), class: 'bg-green-100 dark:bg-green-900 border-green-300 dark:border-green-700' },
     { value: '#4285f4', name: t('note.colorBlue'), class: 'bg-blue-100 dark:bg-blue-900 border-blue-300 dark:border-blue-700' },
     { value: '#ea4335', name: t('note.colorRed'), class: 'bg-red-100 dark:bg-red-900 border-red-300 dark:border-red-700' },
-    { value: '#9aa0a6', name: t('note.colorPurple'), class: 'bg-purple-100 dark:bg-purple-900 border-purple-300 dark:border-purple-700' },
+    { value: '#8b5cf6', name: t('note.colorPurple'), class: 'bg-purple-100 dark:bg-purple-900 border-purple-300 dark:border-purple-700' },
   ];
 
   useEffect(() => {

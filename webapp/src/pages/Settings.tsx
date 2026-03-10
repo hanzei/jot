@@ -34,7 +34,7 @@ const Settings = ({ onLogout }: SettingsProps) => {
   const [passwordError, setPasswordError] = useState('');
   const [passwordSuccess, setPasswordSuccess] = useState('');
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
-  const [languagePref, setLanguagePref] = useState<LanguagePreference>(getLanguagePreference());
+  const [languagePref, setLanguagePref] = useState<LanguagePreference>(() => getLanguagePreference());
 
   const handleLogout = async () => {
     try {
