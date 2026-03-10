@@ -320,7 +320,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
 
   const handleItemKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key !== 'Enter') return;
-    if (e.nativeEvent.isComposing) return;
+    if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
     e.preventDefault();
     if (index < uncompletedItems.length - 1) {
       // Focus next item
