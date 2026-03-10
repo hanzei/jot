@@ -117,9 +117,11 @@ registerRoute(
   }
 );
 
-// Handle install event
-self.addEventListener('install', (event) => {
-  event.waitUntil(self.skipWaiting());
+// Handle install event - do NOT call skipWaiting() here.
+// The 'prompt' registerType relies on the user approving the update first,
+// which sends a SKIP_WAITING message handled above.
+self.addEventListener('install', () => {
+  // Precaching happens automatically via precacheAndRoute above
 });
 
 // Handle activate event
