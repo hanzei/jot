@@ -23,7 +23,7 @@ func TestNoteSharingEndpoints(t *testing.T) {
 	}
 	createResp := ts.authRequest(t, owner, http.MethodPost, "/api/v1/notes", body)
 	var createdNote map[string]any
-	createResp.UnmarshalBody(&createdNote)
+	require.NoError(t, createResp.UnmarshalBody(&createdNote))
 	noteID := createdNote["id"].(string)
 
 	t.Run("share note with user", func(t *testing.T) {
@@ -217,7 +217,7 @@ func TestEdgeCases(t *testing.T) {
 		}
 		createResp := ts.authRequest(t, user, http.MethodPost, "/api/v1/notes", createBody)
 		var createdNote map[string]any
-		createResp.UnmarshalBody(&createdNote)
+		require.NoError(t, createResp.UnmarshalBody(&createdNote))
 		noteID := createdNote["id"].(string)
 
 		updateBody := map[string]any{

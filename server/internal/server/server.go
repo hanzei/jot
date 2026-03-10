@@ -214,7 +214,7 @@ func (s *Server) wrapHandler(handler func(w http.ResponseWriter, r *http.Request
 	}
 }
 
-func (s *Server) handleHealth(w http.ResponseWriter, r *http.Request) {
+func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	if _, err := w.Write([]byte("OK")); err != nil {
 		log.Printf("Failed to write health check response: %v", err)
