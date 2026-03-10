@@ -418,6 +418,8 @@ export default function Dashboard({ onLogout }: DashboardProps) {
           onClose={() => setIsModalOpen(false)}
           onSave={handleNoteUpdate}
           onRefresh={handleNoteRefresh}
+          onShare={handleShareNote}
+          isOwner={!editingNote || editingNote.user_id === user?.id}
         />
       )}
 
