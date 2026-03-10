@@ -63,9 +63,7 @@ export const notes = {
   importKeep: (file: File): Promise<ImportResponse> => {
     const formData = new FormData();
     formData.append('file', file);
-    return api.post('/notes/import', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
-    }).then(res => res.data);
+    return api.post('/notes/import', formData).then(res => res.data);
   },
 };
 
