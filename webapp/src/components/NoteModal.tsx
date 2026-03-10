@@ -320,6 +320,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
 
   const handleItemKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key !== 'Enter') return;
+    if (e.nativeEvent.isComposing) return;
     e.preventDefault();
     if (index < uncompletedItems.length - 1) {
       // Focus next item
@@ -327,16 +328,9 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
       itemInputRefs.current.get(nextItem.id)?.focus();
     } else {
       // Add a new item and focus it
-      const newItem: TodoItem = {
-        id: generateItemId(),
-        text: '',
-        completed: false,
-        position: uncompletedItems.length,
-      };
-      setItems(prev => [...prev, newItem]);
-      // Focus the new item after render
+      const newId = addTodoItem();
       setTimeout(() => {
-        itemInputRefs.current.get(newItem.id)?.focus();
+        itemInputRefs.current.get(newId)?.focus();
       }, 0);
     }
   };
