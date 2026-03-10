@@ -32,7 +32,7 @@ export const auth = {
   logout: (): Promise<void> =>
     api.post('/logout'),
 
-  me: (): Promise<User> =>
+  me: (): Promise<AuthResponse> =>
     api.get('/me').then(res => res.data),
 };
 

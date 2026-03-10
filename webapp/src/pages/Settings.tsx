@@ -4,7 +4,7 @@ import { MagnifyingGlassIcon, ArrowUpTrayIcon } from '@heroicons/react/24/outlin
 import { useTranslation } from 'react-i18next';
 import i18n from '@/i18n';
 import { auth, users, isAxiosError } from '@/utils/api';
-import { getUser, setUser, removeUser, setSettings } from '@/utils/auth';
+import { getUser, setUser, removeUser, getSettings, setSettings } from '@/utils/auth';
 import { getLanguagePreference, resolveLanguage, LanguagePreference, SUPPORTED_LANGUAGES } from '@/utils/language';
 import NavigationHeader from '@/components/NavigationHeader';
 import ImportModal from '@/components/ImportModal';
@@ -121,11 +121,17 @@ const Settings = ({ onLogout }: SettingsProps) => {
   const handleLanguageChange = async (pref: LanguagePreference) => {
     setLanguagePref(pref);
     i18n.changeLanguage(resolveLanguage(pref));
+    // Persist locally first so a refresh keeps the new language even if the
+    // server call fails.
+    const current = getSettings();
+    if (current) {
+      setSettings({ ...current, language: pref });
+    }
     try {
       const updatedSettings = await users.updateSettings({ language: pref });
       setSettings(updatedSettings);
     } catch {
-      // settings saved locally; server sync failed silently
+      // local cache already updated above; server will sync on next successful call
     }
   };
 
