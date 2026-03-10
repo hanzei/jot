@@ -271,6 +271,7 @@ describe('Settings', () => {
       await waitFor(() => {
         expect(screen.queryByRole('button', { name: 'Make Admin for other' })).not.toBeInTheDocument()
       })
+      expect(screen.getByRole('button', { name: 'Remove Admin for other' })).toBeInTheDocument()
     })
 
     it('shows an error when updateUserRole fails', async () => {

@@ -76,6 +76,7 @@
     "makeAdmin": "Make Admin",
     "removeAdmin": "Remove Admin",
     "updatingRole": "Updating...",
+    "roleToggleLabel": "{{action}} for {{username}}",
     "failedUpdateRole": "Failed to update role.",
     "failedLoadUsers": "Failed to load users.",
     "youBadge": "You"

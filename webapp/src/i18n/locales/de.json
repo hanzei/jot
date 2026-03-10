@@ -76,6 +76,7 @@
     "makeAdmin": "Zum Admin machen",
     "removeAdmin": "Admin entfernen",
     "updatingRole": "Aktualisiere...",
+    "roleToggleLabel": "{{action}} für {{username}}",
     "failedUpdateRole": "Rolle konnte nicht aktualisiert werden.",
     "failedLoadUsers": "Benutzer konnten nicht geladen werden.",
     "youBadge": "Du"

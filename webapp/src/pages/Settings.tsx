@@ -407,7 +407,10 @@ const Settings = ({ onLogout }: SettingsProps) => {
                         onClick={() => handleRoleToggle(u)}
                         aria-label={roleUpdating.has(u.id)
                           ? t('settings.updatingRole')
-                          : `${u.role === 'admin' ? t('settings.removeAdmin') : t('settings.makeAdmin')} for ${u.username}`}
+                          : t('settings.roleToggleLabel', {
+                              action: u.role === 'admin' ? t('settings.removeAdmin') : t('settings.makeAdmin'),
+                              username: u.username,
+                            })}
                         className="text-sm px-3 py-1 rounded-md border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 hover:bg-gray-50 dark:hover:bg-slate-600 disabled:opacity-40 disabled:cursor-not-allowed"
                       >
                         {roleUpdating.has(u.id)
