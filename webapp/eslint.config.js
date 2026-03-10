@@ -7,7 +7,7 @@ import tsparser from '@typescript-eslint/parser'
 
 export default [
   {
-    ignores: ['dist/**', 'build/**'],
+    ignores: ['dist/**', 'build/**', 'e2e/**'],
   },
   {
     files: ['**/*.{ts,tsx}'],
