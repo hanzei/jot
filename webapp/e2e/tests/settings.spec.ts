@@ -8,8 +8,8 @@ test.describe('Settings', () => {
     await settingsPage.changeUsername(newUsername);
     await settingsPage.expectSuccess('Username updated successfully.');
 
-    // Username should be reflected in the nav header (desktop nav has it as a span)
-    await expect(page.getByText(newUsername).last()).toBeVisible();
+    // Username should be reflected in the nav header
+    await expect(page.locator('header')).toContainText(newUsername);
     void authenticatedUser;
   });
 

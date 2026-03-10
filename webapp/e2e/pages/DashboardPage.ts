@@ -107,8 +107,8 @@ export class DashboardPage {
   }
 
   async logout() {
-    // The nav has two logout buttons (mobile + desktop); click the last visible one
-    await this.page.getByRole('button', { name: 'Logout' }).last().click();
+    // Click the visible Logout button via accessibility query
+    await this.page.getByRole('button', { name: 'Logout' }).click();
   }
 
   async editNote(title: string, newTitle: string, newContent: string) {
