@@ -1,5 +1,5 @@
 # Multi-stage build for Jot application
-FROM node:20-alpine AS frontend-builder
+FROM node:22-alpine AS frontend-builder
 
 WORKDIR /app/webapp
 
