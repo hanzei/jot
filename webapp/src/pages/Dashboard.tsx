@@ -88,6 +88,10 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     })
   );
 
+  useEffect(() => {
+    document.title = t(showArchived ? 'pageTitle.archive' : 'pageTitle.notes');
+  }, [showArchived, t]);
+
   const loadNotes = useCallback(async () => {
     try {
       const notesData = await notes.getAll(showArchived, searchQuery);

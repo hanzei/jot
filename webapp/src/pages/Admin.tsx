@@ -27,6 +27,8 @@ const Admin = ({ onLogout }: AdminProps) => {
 
   const userIsAdmin = isAdmin();
 
+  useEffect(() => { document.title = t('pageTitle.admin'); }, [t]);
+
   const handleLogout = async () => {
     try {
       await auth.logout();

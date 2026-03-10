@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { auth } from '@/utils/api';
@@ -10,6 +10,7 @@ interface RegisterProps {
 
 export default function Register({ onRegister }: RegisterProps) {
   const { t } = useTranslation();
+  useEffect(() => { document.title = t('pageTitle.register'); }, [t]);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
