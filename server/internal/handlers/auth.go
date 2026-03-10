@@ -121,6 +121,46 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) (int, error
 	return 0, nil
 }
 
+type UpdateUserRequest struct {
+	Username string `json:"username"`
+}
+
+// UpdateUser handles PUT /api/v1/users/me. It validates the requested username,
+// updates it in the database, and returns the updated user object. Returns 400
+// for invalid format, 409 when the username is already taken, and 401 when the
+// caller is not authenticated.
+func (h *AuthHandler) UpdateUser(w http.ResponseWriter, r *http.Request) (int, error) {
+	currentUser, ok := auth.GetUserFromContext(r.Context())
+	if !ok {
+		return http.StatusUnauthorized, errors.New("unauthorized")
+	}
+
+	var req UpdateUserRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return http.StatusBadRequest, err
+	}
+
+	if err := validateUsername(req.Username); err != nil {
+		return http.StatusBadRequest, err
+	}
+
+	user, err := h.userStore.UpdateUsername(currentUser.ID, req.Username)
+	if err != nil {
+		if errors.Is(err, models.ErrUsernameTaken) {
+			return http.StatusConflict, errors.New("username already taken")
+		}
+		return http.StatusInternalServerError, err
+	}
+
+	response := AuthResponse{User: user}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		return http.StatusInternalServerError, err
+	}
+	return 0, nil
+}
+
 func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) (int, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {

@@ -387,3 +387,48 @@ func TestAdminEndpoints(t *testing.T) {
 		assert.Equal(t, http.StatusForbidden, resp.StatusCode)
 	})
 }
+
+// TestUpdateUserEndpoint tests the PUT /api/v1/users/me endpoint for updating
+// the authenticated user's username.
+func TestUpdateUserEndpoint(t *testing.T) {
+	ts := setupTestServer(t)
+	user := ts.createTestUser(t, "originaluser", "password123", false)
+	other := ts.createTestUser(t, "otheruser", "password123", false)
+
+	t.Run("successful username update", func(t *testing.T) {
+		t.Cleanup(func() {
+			// Restore username for subsequent subtests
+			restoreResp := ts.authRequest(t, user, http.MethodPut, "/api/v1/users/me", map[string]any{"username": "originaluser"})
+			require.Equal(t, http.StatusOK, restoreResp.StatusCode)
+		})
+
+		body := map[string]any{"username": "newusername"}
+		resp := ts.authRequest(t, user, http.MethodPut, "/api/v1/users/me", body)
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+		var response map[string]any
+		require.NoError(t, resp.UnmarshalBody(&response))
+
+		userResp, ok := response["user"].(map[string]any)
+		require.True(t, ok, "expected response.user object")
+		assert.Equal(t, "newusername", userResp["username"])
+	})
+
+	t.Run("duplicate username returns 409", func(t *testing.T) {
+		body := map[string]any{"username": other.User.Username}
+		resp := ts.authRequest(t, user, http.MethodPut, "/api/v1/users/me", body)
+		assert.Equal(t, http.StatusConflict, resp.StatusCode)
+	})
+
+	t.Run("invalid username format returns 400", func(t *testing.T) {
+		body := map[string]any{"username": "a"} // too short (< 2 chars)
+		resp := ts.authRequest(t, user, http.MethodPut, "/api/v1/users/me", body)
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	})
+
+	t.Run("unauthenticated request returns 401", func(t *testing.T) {
+		body := map[string]any{"username": "hacker"}
+		resp := ts.request(t, nil, http.MethodPut, "/api/v1/users/me", body)
+		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	})
+}

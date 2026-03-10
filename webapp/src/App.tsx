@@ -4,6 +4,7 @@ import Login from '@/pages/Login';
 import Register from '@/pages/Register';
 import Dashboard from '@/pages/Dashboard';
 import Admin from '@/pages/Admin';
+import Settings from '@/pages/Settings';
 import { OfflineNotification } from '@/components/OfflineNotification';
 import { isAuthenticated, isAdmin, setUser, removeUser } from '@/utils/auth';
 import { auth } from '@/utils/api';
@@ -59,9 +60,13 @@ function App() {
             path="/" 
             element={isAuth ? <Dashboard onLogout={() => setIsAuth(false)} /> : <Navigate to="/login" />} 
           />
-          <Route 
-            path="/admin" 
-            element={isAuth && isAdmin() ? <Admin onLogout={() => setIsAuth(false)} /> : <Navigate to="/" />} 
+          <Route
+            path="/admin"
+            element={isAuth && isAdmin() ? <Admin onLogout={() => setIsAuth(false)} /> : <Navigate to="/" />}
+          />
+          <Route
+            path="/settings"
+            element={isAuth ? <Settings onLogout={() => setIsAuth(false)} /> : <Navigate to="/login" />}
           />
         </Routes>
       </div>

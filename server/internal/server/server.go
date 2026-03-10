@@ -104,6 +104,7 @@ func (s *Server) setupRoutes() {
 			r.Get("/events", s.eventsHandler.ServeSSE)
 
 			r.Get("/me", s.wrapHandler(s.authHandler.Me))
+			r.Put("/users/me", s.wrapHandler(s.authHandler.UpdateUser))
 
 			r.Get("/notes", s.wrapHandler(s.notesHandler.GetNotes))
 			r.Post("/notes", s.wrapHandler(s.notesHandler.CreateNote))

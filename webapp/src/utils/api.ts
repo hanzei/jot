@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { AuthResponse, LoginRequest, RegisterRequest, Note, CreateNoteRequest, UpdateNoteRequest, User, CreateUserRequest, UserListResponse, ShareNoteRequest, ShareNoteResponse, NoteShare } from '@/types';
+import { AuthResponse, LoginRequest, RegisterRequest, Note, CreateNoteRequest, UpdateNoteRequest, User, CreateUserRequest, UserListResponse, ShareNoteRequest, ShareNoteResponse, NoteShare, UpdateMeRequest } from '@/types';
 
 const api = axios.create({
   baseURL: '/api/v1',
@@ -64,6 +64,9 @@ export const notes = {
 export const users = {
   search: (): Promise<User[]> =>
     api.get('/users').then(res => res.data),
+
+  updateMe: (data: UpdateMeRequest): Promise<User> =>
+    api.put('/users/me', data).then(res => res.data.user),
 };
 
 export const admin = {
