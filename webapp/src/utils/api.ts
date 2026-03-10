@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { AuthResponse, LoginRequest, RegisterRequest, Note, CreateNoteRequest, UpdateNoteRequest, User, CreateUserRequest, UserListResponse, ShareNoteRequest, ShareNoteResponse, NoteShare, ImportResponse, UpdateMeRequest } from '@/types';
+import { AuthResponse, LoginRequest, RegisterRequest, Note, CreateNoteRequest, UpdateNoteRequest, User, CreateUserRequest, UserListResponse, ShareNoteRequest, ShareNoteResponse, NoteShare, ImportResponse, UpdateMeRequest, ChangePasswordRequest } from '@/types';
 
 const api = axios.create({
   baseURL: '/api/v1',
@@ -73,6 +73,9 @@ export const users = {
 
   updateMe: (data: UpdateMeRequest): Promise<User> =>
     api.put('/users/me', data).then(res => res.data.user),
+
+  changePassword: (data: ChangePasswordRequest): Promise<void> =>
+    api.put('/users/me/password', data),
 };
 
 export const admin = {

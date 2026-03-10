@@ -181,6 +181,10 @@ While editing notes:
 - 24-hour token expiration
 - Automatic logout on expiration
 
+### Account Management
+- Change your username from the Settings page
+- Change your password by providing your current password and a new one (minimum 4 characters)
+
 ### Data Protection
 - All notes are private to your account
 - No sharing between users (privacy-first)

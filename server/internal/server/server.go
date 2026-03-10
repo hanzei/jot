@@ -105,6 +105,7 @@ func (s *Server) setupRoutes() {
 
 			r.Get("/me", s.wrapHandler(s.authHandler.Me))
 			r.Put("/users/me", s.wrapHandler(s.authHandler.UpdateUser))
+			r.Put("/users/me/password", s.wrapHandler(s.authHandler.ChangePassword))
 
 			r.Get("/notes", s.wrapHandler(s.notesHandler.GetNotes))
 			r.Post("/notes", s.wrapHandler(s.notesHandler.CreateNote))
