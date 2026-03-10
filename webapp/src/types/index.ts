@@ -6,8 +6,19 @@ export interface User {
   updated_at: string;
 }
 
+export interface UserSettings {
+  user_id: string;
+  language: string;
+  updated_at: string;
+}
+
 export interface AuthResponse {
   user: User;
+  settings: UserSettings;
+}
+
+export interface UpdateSettingsRequest {
+  language: string;
 }
 
 export interface LoginRequest {

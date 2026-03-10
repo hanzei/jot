@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { MagnifyingGlassIcon, ArrowUpTrayIcon } from '@heroicons/react/24/outline';
 import { useTranslation } from 'react-i18next';
 import i18n from '@/i18n';
 import { auth, users, isAxiosError } from '@/utils/api';
-import { getUser, setUser, removeUser } from '@/utils/auth';
-import { getLanguagePreference, setLanguagePreference, resolveLanguage, LanguagePreference, SUPPORTED_LANGUAGES } from '@/utils/language';
+import { getUser, setUser, removeUser, getSettings, setSettings } from '@/utils/auth';
+import { getLanguagePreference, resolveLanguage, LanguagePreference, SUPPORTED_LANGUAGES } from '@/utils/language';
 import NavigationHeader from '@/components/NavigationHeader';
 import ImportModal from '@/components/ImportModal';
 
@@ -35,6 +35,15 @@ const Settings = ({ onLogout }: SettingsProps) => {
   const [passwordSuccess, setPasswordSuccess] = useState('');
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [languagePref, setLanguagePref] = useState<LanguagePreference>(() => getLanguagePreference());
+
+  useEffect(() => {
+    users.getSettings().then(serverSettings => {
+      setSettings(serverSettings);
+      const pref = serverSettings.language as LanguagePreference;
+      setLanguagePref(pref);
+      i18n.changeLanguage(resolveLanguage(pref));
+    }).catch(() => { /* keep cached/system default */ });
+  }, []);
 
   const handleLogout = async () => {
     try {
@@ -109,10 +118,27 @@ const Settings = ({ onLogout }: SettingsProps) => {
     }
   };
 
-  const handleLanguageChange = (pref: LanguagePreference) => {
+  const handleLanguageChange = async (pref: LanguagePreference) => {
+    const prev = languagePref;
+    const current = getSettings();
     setLanguagePref(pref);
-    setLanguagePreference(pref);
     i18n.changeLanguage(resolveLanguage(pref));
+    // Persist locally first so a refresh keeps the new language even if the
+    // server call fails.
+    if (current) {
+      setSettings({ ...current, language: pref });
+    }
+    try {
+      const updatedSettings = await users.updateSettings({ language: pref });
+      setSettings(updatedSettings);
+    } catch {
+      // Server call failed — roll back to previous state.
+      setLanguagePref(prev);
+      i18n.changeLanguage(resolveLanguage(prev));
+      if (current) {
+        setSettings(current);
+      }
+    }
   };
 
   const navigationTabs = [

@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { auth } from '@/utils/api';
-import { setUser } from '@/utils/auth';
+import { setUser, setSettings } from '@/utils/auth';
 
 interface RegisterProps {
   onRegister: () => void;
@@ -62,6 +62,7 @@ export default function Register({ onRegister }: RegisterProps) {
     try {
       const response = await auth.register({ username, password });
       setUser(response.user);
+      setSettings(response.settings);
       onRegister();
     } catch (err: unknown) {
       const axiosError = err as { response?: { data?: string } };

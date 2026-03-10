@@ -589,3 +589,89 @@ func TestChangePasswordEndpoint(t *testing.T) {
 		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 	})
 }
+
+func TestUserSettingsEndpoints(t *testing.T) {
+	ts := setupTestServer(t)
+	user := ts.createTestUser(t, "settingsuser", "password123", false)
+
+	t.Run("GET settings returns defaults for new user", func(t *testing.T) {
+		resp := ts.authRequest(t, user, http.MethodGet, "/api/v1/users/me/settings", nil)
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+		var settings map[string]any
+		require.NoError(t, resp.UnmarshalBody(&settings))
+		assert.Equal(t, "system", settings["language"])
+		assert.Equal(t, user.User.ID, settings["user_id"])
+	})
+
+	t.Run("PUT settings updates language", func(t *testing.T) {
+		body := map[string]string{"language": "de"}
+		resp := ts.authRequest(t, user, http.MethodPut, "/api/v1/users/me/settings", body)
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+		var settings map[string]any
+		require.NoError(t, resp.UnmarshalBody(&settings))
+		assert.Equal(t, "de", settings["language"])
+	})
+
+	t.Run("GET settings returns updated language", func(t *testing.T) {
+		resp := ts.authRequest(t, user, http.MethodGet, "/api/v1/users/me/settings", nil)
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+		var settings map[string]any
+		require.NoError(t, resp.UnmarshalBody(&settings))
+		assert.Equal(t, "de", settings["language"])
+	})
+
+	t.Run("PUT settings with invalid language returns 400", func(t *testing.T) {
+		body := map[string]string{"language": "fr"}
+		resp := ts.authRequest(t, user, http.MethodPut, "/api/v1/users/me/settings", body)
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	})
+
+	t.Run("unauthenticated GET returns 401", func(t *testing.T) {
+		resp := ts.request(t, nil, http.MethodGet, "/api/v1/users/me/settings", nil)
+		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	})
+
+	t.Run("unauthenticated PUT returns 401", func(t *testing.T) {
+		body := map[string]string{"language": "en"}
+		resp := ts.request(t, nil, http.MethodPut, "/api/v1/users/me/settings", body)
+		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	})
+
+	t.Run("me response includes settings", func(t *testing.T) {
+		resp := ts.authRequest(t, user, http.MethodGet, "/api/v1/me", nil)
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+		var response map[string]any
+		require.NoError(t, resp.UnmarshalBody(&response))
+		assert.NotNil(t, response["settings"])
+	})
+
+	t.Run("login response includes settings", func(t *testing.T) {
+		loginBody := map[string]string{"username": "settingsuser", "password": "password123"}
+		resp := ts.request(t, newCookieClient(t), http.MethodPost, "/api/v1/login", loginBody)
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+		var response map[string]any
+		require.NoError(t, resp.UnmarshalBody(&response))
+		assert.NotNil(t, response["settings"])
+		settings, ok := response["settings"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "de", settings["language"])
+	})
+
+	t.Run("register response includes settings", func(t *testing.T) {
+		regBody := map[string]string{"username": "newsettings", "password": "password123"}
+		resp := ts.request(t, newCookieClient(t), http.MethodPost, "/api/v1/register", regBody)
+		assert.Equal(t, http.StatusCreated, resp.StatusCode)
+
+		var response map[string]any
+		require.NoError(t, resp.UnmarshalBody(&response))
+		assert.NotNil(t, response["settings"])
+		settings, ok := response["settings"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "system", settings["language"])
+	})
+}

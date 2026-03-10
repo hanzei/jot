@@ -6,7 +6,7 @@ import Dashboard from '@/pages/Dashboard';
 import Admin from '@/pages/Admin';
 import Settings from '@/pages/Settings';
 import { OfflineNotification } from '@/components/OfflineNotification';
-import { isAuthenticated, isAdmin, setUser, removeUser } from '@/utils/auth';
+import { isAuthenticated, isAdmin, setUser, setSettings, removeUser } from '@/utils/auth';
 import { auth } from '@/utils/api';
 
 function App() {
@@ -20,8 +20,9 @@ function App() {
     }
     // Validate session against server to detect expired sessions
     auth.me()
-      .then((user) => {
-        setUser(user);
+      .then((response) => {
+        setUser(response.user);
+        setSettings(response.settings);
         setIsAuth(true);
       })
       .catch(() => {

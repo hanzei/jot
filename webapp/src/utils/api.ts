@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { AuthResponse, LoginRequest, RegisterRequest, Note, CreateNoteRequest, UpdateNoteRequest, User, CreateUserRequest, UserListResponse, ShareNoteRequest, ShareNoteResponse, NoteShare, ImportResponse, UpdateMeRequest, ChangePasswordRequest } from '@/types';
+import { AuthResponse, LoginRequest, RegisterRequest, Note, CreateNoteRequest, UpdateNoteRequest, User, CreateUserRequest, UserListResponse, ShareNoteRequest, ShareNoteResponse, NoteShare, ImportResponse, UpdateMeRequest, ChangePasswordRequest, UserSettings, UpdateSettingsRequest } from '@/types';
 
 const api = axios.create({
   baseURL: '/api/v1',
@@ -15,6 +15,7 @@ api.interceptors.response.use(
       const isAuthEndpoint = url === '/login' || url === '/register';
       if (!isAuthEndpoint) {
         localStorage.removeItem('user');
+        localStorage.removeItem('settings');
         window.location.href = '/login';
       }
     }
@@ -32,7 +33,7 @@ export const auth = {
   logout: (): Promise<void> =>
     api.post('/logout'),
 
-  me: (): Promise<User> =>
+  me: (): Promise<AuthResponse> =>
     api.get('/me').then(res => res.data),
 };
 
@@ -80,6 +81,12 @@ export const users = {
 
   changePassword: (data: ChangePasswordRequest): Promise<void> =>
     api.put('/users/me/password', data),
+
+  getSettings: (): Promise<UserSettings> =>
+    api.get('/users/me/settings').then(res => res.data),
+
+  updateSettings: (data: UpdateSettingsRequest): Promise<UserSettings> =>
+    api.put('/users/me/settings', data).then(res => res.data),
 };
 
 export const admin = {

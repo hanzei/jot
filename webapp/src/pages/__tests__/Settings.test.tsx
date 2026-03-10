@@ -13,6 +13,9 @@ vi.mock('@/utils/api', () => ({
   },
   users: {
     updateMe: vi.fn(),
+    changePassword: vi.fn(),
+    getSettings: vi.fn().mockResolvedValue({ user_id: 'user1', language: 'system', updated_at: '' }),
+    updateSettings: vi.fn().mockResolvedValue({ user_id: 'user1', language: 'system', updated_at: '' }),
   },
   isAxiosError: vi.fn(),
 }))
@@ -21,6 +24,8 @@ vi.mock('@/utils/auth', () => ({
   getUser: vi.fn(),
   setUser: vi.fn(),
   removeUser: vi.fn(),
+  getSettings: vi.fn().mockReturnValue(null),
+  setSettings: vi.fn(),
 }))
 
 vi.mock('@/components/NavigationHeader', () => ({
@@ -182,6 +187,32 @@ describe('Settings', () => {
       // Second submit — should clear error before resolving
       await user.click(screen.getByRole('button', { name: 'Save Changes' }))
       await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
+    })
+  })
+
+  describe('Language settings', () => {
+    it('fetches settings from server on mount', async () => {
+      renderSettings()
+      await waitFor(() => {
+        expect(users.getSettings).toHaveBeenCalled()
+      })
+    })
+
+    it('calls updateSettings and setSettings when language is changed', async () => {
+      const user = userEvent.setup()
+      const updatedSettings = { user_id: 'user1', language: 'de', updated_at: '' }
+      vi.mocked(users.updateSettings).mockResolvedValue(updatedSettings)
+
+      renderSettings()
+
+      await user.selectOptions(screen.getByRole('combobox'), 'de')
+
+      await waitFor(() => {
+        expect(users.updateSettings).toHaveBeenCalledWith({ language: 'de' })
+      })
+      await waitFor(() => {
+        expect(authUtils.setSettings).toHaveBeenCalledWith(updatedSettings)
+      })
     })
   })
 
