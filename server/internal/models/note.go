@@ -18,13 +18,6 @@ const (
 	DefaultNoteColor = "#ffffff"
 )
 
-var (
-	ErrNoteNotFound      = errors.New("note not found")
-	ErrNoteNoAccess      = errors.New("note not found or no access")
-	ErrNoteNotOwned      = errors.New("note not found or not owned by user")
-	ErrNoteShareNotFound = errors.New("note share not found")
-)
-
 type Note struct {
 	ID                    string      `json:"id"`
 	UserID                string      `json:"user_id"`
@@ -220,7 +213,7 @@ func (s *NoteStore) GetByID(id string, userID string) (*Note, error) {
 		return nil, fmt.Errorf("failed to check access: %w", err)
 	}
 	if !hasAccess {
-		return nil, ErrNoteNotFound
+		return nil, fmt.Errorf("note not found")
 	}
 
 	query := `SELECT id, user_id, title, content, note_type, color, pinned, archived, position, unpinned_position, checked_items_collapsed, created_at, updated_at
@@ -234,7 +227,7 @@ func (s *NoteStore) GetByID(id string, userID string) (*Note, error) {
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, ErrNoteNotFound
+			return nil, fmt.Errorf("note not found")
 		}
 		return nil, fmt.Errorf("failed to get note: %w", err)
 	}
@@ -264,7 +257,7 @@ func (s *NoteStore) Update(id string, userID string, title, content string, pinn
 		return fmt.Errorf("failed to check access: %w", err)
 	}
 	if !hasAccess {
-		return ErrNoteNoAccess
+		return fmt.Errorf("note not found or no access")
 	}
 
 	// Get current note state to check if pinned status is changing
@@ -287,7 +280,7 @@ func (s *NoteStore) Update(id string, userID string, title, content string, pinn
 	}
 
 	if rowsAffected == 0 {
-		return ErrNoteNotFound
+		return fmt.Errorf("note not found")
 	}
 
 	// If pinned status changed, handle position preservation
@@ -343,7 +336,7 @@ func (s *NoteStore) Delete(id string, userID string) error {
 		return fmt.Errorf("failed to check ownership: %w", err)
 	}
 	if !isOwner {
-		return ErrNoteNotOwned
+		return fmt.Errorf("note not found or not owned by user")
 	}
 
 	result, err := s.db.Exec("DELETE FROM notes WHERE id = ? AND user_id = ?", id, userID)
@@ -357,7 +350,7 @@ func (s *NoteStore) Delete(id string, userID string) error {
 	}
 
 	if rowsAffected == 0 {
-		return ErrNoteNotOwned
+		return fmt.Errorf("note not found or not owned by user")
 	}
 
 	return nil
@@ -510,7 +503,7 @@ func (s *NoteStore) UnshareNote(noteID string, sharedWithUserID string) error {
 	}
 
 	if rowsAffected == 0 {
-		return ErrNoteShareNotFound
+		return fmt.Errorf("note share not found")
 	}
 
 	return nil
@@ -622,7 +615,7 @@ func (s *NoteStore) ReorderNotes(userID string, noteIDs []string) error {
 			return fmt.Errorf("failed to check access for note %s: %w", noteID, err)
 		}
 		if !hasAccess {
-			return fmt.Errorf("no access to note %s: %w", noteID, ErrNoteNoAccess)
+			return fmt.Errorf("no access to note %s", noteID)
 		}
 
 		// Update position

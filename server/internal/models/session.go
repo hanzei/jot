@@ -9,9 +9,6 @@ import (
 	"time"
 )
 
-// ErrSessionNotFound is returned when the session token does not exist or has expired.
-var ErrSessionNotFound = errors.New("session not found or expired")
-
 const SessionDuration = 24 * time.Hour
 
 type Session struct {
@@ -68,7 +65,7 @@ func (s *SessionStore) GetByToken(token string) (*Session, error) {
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, ErrSessionNotFound
+			return nil, fmt.Errorf("session not found or expired")
 		}
 		return nil, fmt.Errorf("failed to get session: %w", err)
 	}

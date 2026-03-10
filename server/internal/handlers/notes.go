@@ -82,7 +82,7 @@ type UpdateNoteItem struct {
 func (h *NotesHandler) GetNotes(w http.ResponseWriter, r *http.Request) (int, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
-		return http.StatusUnauthorized, ErrUnauthorized
+		return http.StatusUnauthorized, errors.New("unauthorized")
 	}
 
 	archived := r.URL.Query().Get("archived") == "true"
@@ -103,7 +103,7 @@ func (h *NotesHandler) GetNotes(w http.ResponseWriter, r *http.Request) (int, er
 func (h *NotesHandler) CreateNote(w http.ResponseWriter, r *http.Request) (int, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
-		return http.StatusUnauthorized, ErrUnauthorized
+		return http.StatusUnauthorized, errors.New("unauthorized")
 	}
 
 	var req CreateNoteRequest
@@ -112,7 +112,7 @@ func (h *NotesHandler) CreateNote(w http.ResponseWriter, r *http.Request) (int, 
 	}
 
 	if req.Title == "" && req.Content == "" && len(req.Items) == 0 {
-		return http.StatusBadRequest, ErrEmptyNote
+		return http.StatusBadRequest, errors.New("empty note")
 	}
 
 	if req.NoteType == "" {
@@ -155,20 +155,20 @@ func (h *NotesHandler) CreateNote(w http.ResponseWriter, r *http.Request) (int, 
 func (h *NotesHandler) GetNote(w http.ResponseWriter, r *http.Request) (int, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
-		return http.StatusUnauthorized, ErrUnauthorized
+		return http.StatusUnauthorized, errors.New("unauthorized")
 	}
 
 	id := chi.URLParam(r, "id")
 	if id == "" {
-		return http.StatusBadRequest, ErrMissingNoteID
+		return http.StatusBadRequest, errors.New("missing note ID")
 	}
 	if !models.IsValidID(id) {
-		return http.StatusBadRequest, ErrInvalidNoteIDFormat
+		return http.StatusBadRequest, errors.New("invalid note ID format")
 	}
 
 	note, err := h.noteStore.GetByID(id, user.ID)
 	if err != nil {
-		if errors.Is(err, models.ErrNoteNotFound) {
+		if err.Error() == "note not found" {
 			return http.StatusNotFound, err
 		}
 		return http.StatusInternalServerError, err
@@ -208,15 +208,15 @@ func (h *NotesHandler) updateTodoItems(noteID string, userID string, items []Upd
 func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
-		return http.StatusUnauthorized, ErrUnauthorized
+		return http.StatusUnauthorized, errors.New("unauthorized")
 	}
 
 	id := chi.URLParam(r, "id")
 	if id == "" {
-		return http.StatusBadRequest, ErrMissingNoteID
+		return http.StatusBadRequest, errors.New("missing note ID")
 	}
 	if !models.IsValidID(id) {
-		return http.StatusBadRequest, ErrInvalidNoteIDFormat
+		return http.StatusBadRequest, errors.New("invalid note ID format")
 	}
 
 	var req UpdateNoteRequest
@@ -230,7 +230,7 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 
 	err := h.noteStore.Update(id, user.ID, req.Title, req.Content, req.Pinned, req.Archived, req.Color, req.CheckedItemsCollapsed)
 	if err != nil {
-		if errors.Is(err, models.ErrNoteNoAccess) || errors.Is(err, models.ErrNoteNotFound) {
+		if err.Error() == "note not found or no access" || err.Error() == "note not found" {
 			return http.StatusNotFound, err
 		}
 		return http.StatusInternalServerError, err
@@ -259,15 +259,15 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 func (h *NotesHandler) DeleteNote(w http.ResponseWriter, r *http.Request) (int, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
-		return http.StatusUnauthorized, ErrUnauthorized
+		return http.StatusUnauthorized, errors.New("unauthorized")
 	}
 
 	id := chi.URLParam(r, "id")
 	if id == "" {
-		return http.StatusBadRequest, ErrMissingNoteID
+		return http.StatusBadRequest, errors.New("missing note ID")
 	}
 	if !models.IsValidID(id) {
-		return http.StatusBadRequest, ErrInvalidNoteIDFormat
+		return http.StatusBadRequest, errors.New("invalid note ID format")
 	}
 
 	// Fetch audience before deletion so we can notify share targets too.
@@ -275,7 +275,7 @@ func (h *NotesHandler) DeleteNote(w http.ResponseWriter, r *http.Request) (int, 
 
 	err := h.noteStore.Delete(id, user.ID)
 	if err != nil {
-		if errors.Is(err, models.ErrNoteNotOwned) {
+		if err.Error() == "note not found or not owned by user" {
 			return http.StatusNotFound, err
 		}
 		return http.StatusInternalServerError, err
@@ -306,15 +306,15 @@ type ShareNoteResponse struct {
 func (h *NotesHandler) ShareNote(w http.ResponseWriter, r *http.Request) (int, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
-		return http.StatusUnauthorized, ErrUnauthorized
+		return http.StatusUnauthorized, errors.New("unauthorized")
 	}
 
 	id := chi.URLParam(r, "id")
 	if id == "" {
-		return http.StatusBadRequest, ErrMissingNoteID
+		return http.StatusBadRequest, errors.New("missing note ID")
 	}
 	if !models.IsValidID(id) {
-		return http.StatusBadRequest, ErrInvalidNoteIDFormat
+		return http.StatusBadRequest, errors.New("invalid note ID format")
 	}
 
 	var req ShareNoteRequest
@@ -323,7 +323,7 @@ func (h *NotesHandler) ShareNote(w http.ResponseWriter, r *http.Request) (int, e
 	}
 
 	if req.Username == "" {
-		return http.StatusBadRequest, ErrEmptyUsername
+		return http.StatusBadRequest, errors.New("empty username")
 	}
 
 	isOwner, err := h.noteStore.IsOwner(id, user.ID)
@@ -331,7 +331,7 @@ func (h *NotesHandler) ShareNote(w http.ResponseWriter, r *http.Request) (int, e
 		return http.StatusInternalServerError, err
 	}
 	if !isOwner {
-		return http.StatusForbidden, ErrNotOwner
+		return http.StatusForbidden, errors.New("not owner")
 	}
 
 	targetUser, err := h.userStore.GetByUsername(req.Username)
@@ -343,7 +343,7 @@ func (h *NotesHandler) ShareNote(w http.ResponseWriter, r *http.Request) (int, e
 	}
 
 	if targetUser.ID == user.ID {
-		return http.StatusBadRequest, ErrCannotShareWithSelf
+		return http.StatusBadRequest, errors.New("cannot share with self")
 	}
 
 	err = h.noteStore.ShareNote(id, user.ID, targetUser.ID)
@@ -373,15 +373,15 @@ func (h *NotesHandler) ShareNote(w http.ResponseWriter, r *http.Request) (int, e
 func (h *NotesHandler) UnshareNote(w http.ResponseWriter, r *http.Request) (int, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
-		return http.StatusUnauthorized, ErrUnauthorized
+		return http.StatusUnauthorized, errors.New("unauthorized")
 	}
 
 	id := chi.URLParam(r, "id")
 	if id == "" {
-		return http.StatusBadRequest, ErrMissingNoteID
+		return http.StatusBadRequest, errors.New("missing note ID")
 	}
 	if !models.IsValidID(id) {
-		return http.StatusBadRequest, ErrInvalidNoteIDFormat
+		return http.StatusBadRequest, errors.New("invalid note ID format")
 	}
 
 	var req ShareNoteRequest
@@ -390,7 +390,7 @@ func (h *NotesHandler) UnshareNote(w http.ResponseWriter, r *http.Request) (int,
 	}
 
 	if req.Username == "" {
-		return http.StatusBadRequest, ErrEmptyUsername
+		return http.StatusBadRequest, errors.New("empty username")
 	}
 
 	isOwner, err := h.noteStore.IsOwner(id, user.ID)
@@ -398,7 +398,7 @@ func (h *NotesHandler) UnshareNote(w http.ResponseWriter, r *http.Request) (int,
 		return http.StatusInternalServerError, err
 	}
 	if !isOwner {
-		return http.StatusForbidden, ErrNotOwner
+		return http.StatusForbidden, errors.New("not owner")
 	}
 
 	targetUser, err := h.userStore.GetByUsername(req.Username)
@@ -414,7 +414,7 @@ func (h *NotesHandler) UnshareNote(w http.ResponseWriter, r *http.Request) (int,
 
 	err = h.noteStore.UnshareNote(id, targetUser.ID)
 	if err != nil {
-		if errors.Is(err, models.ErrNoteShareNotFound) {
+		if err.Error() == "note share not found" {
 			return http.StatusNotFound, err
 		}
 		return http.StatusInternalServerError, err
@@ -443,15 +443,15 @@ func (h *NotesHandler) UnshareNote(w http.ResponseWriter, r *http.Request) (int,
 func (h *NotesHandler) GetNoteShares(w http.ResponseWriter, r *http.Request) (int, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
-		return http.StatusUnauthorized, ErrUnauthorized
+		return http.StatusUnauthorized, errors.New("unauthorized")
 	}
 
 	id := chi.URLParam(r, "id")
 	if id == "" {
-		return http.StatusBadRequest, ErrMissingNoteID
+		return http.StatusBadRequest, errors.New("missing note ID")
 	}
 	if !models.IsValidID(id) {
-		return http.StatusBadRequest, ErrInvalidNoteIDFormat
+		return http.StatusBadRequest, errors.New("invalid note ID format")
 	}
 
 	isOwner, err := h.noteStore.IsOwner(id, user.ID)
@@ -459,7 +459,7 @@ func (h *NotesHandler) GetNoteShares(w http.ResponseWriter, r *http.Request) (in
 		return http.StatusInternalServerError, err
 	}
 	if !isOwner {
-		return http.StatusForbidden, ErrNotOwner
+		return http.StatusForbidden, errors.New("not owner")
 	}
 
 	shares, err := h.noteStore.GetNoteShares(id)
@@ -477,7 +477,7 @@ func (h *NotesHandler) GetNoteShares(w http.ResponseWriter, r *http.Request) (in
 func (h *NotesHandler) SearchUsers(w http.ResponseWriter, r *http.Request) (int, error) {
 	currentUser, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
-		return http.StatusUnauthorized, ErrUnauthorized
+		return http.StatusUnauthorized, errors.New("unauthorized")
 	}
 
 	users, err := h.userStore.GetAll()
@@ -617,17 +617,17 @@ func parseKeepNotesFromData(filename string, data []byte) ([]keepNote, error) {
 	if isZip {
 		zr, err := zip.NewReader(bytes.NewReader(data), int64(len(data)))
 		if err != nil {
-			return nil, ErrInvalidZipFile
+			return nil, errors.New("invalid zip file")
 		}
 		return parseKeepNotesFromZip(zr), nil
 	}
 
 	var kn keepNote
 	if err := json.Unmarshal(data, &kn); err != nil {
-		return nil, ErrInvalidJSONFile
+		return nil, errors.New("invalid JSON file")
 	}
 	if kn.isEmpty() {
-		return nil, ErrEmptyNoteContent
+		return nil, errors.New("note has no title, content, or list items")
 	}
 	return []keepNote{kn}, nil
 }
@@ -654,17 +654,17 @@ func (h *NotesHandler) importKeepNotes(userID string, keepNotes []keepNote) (imp
 func (h *NotesHandler) ImportNotes(w http.ResponseWriter, r *http.Request) (int, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
-		return http.StatusUnauthorized, ErrUnauthorized
+		return http.StatusUnauthorized, errors.New("unauthorized")
 	}
 
 	r.Body = http.MaxBytesReader(w, r.Body, 32<<20)
 	if err := r.ParseMultipartForm(32 << 20); err != nil {
-		return http.StatusBadRequest, ErrFailedToParseForm
+		return http.StatusBadRequest, errors.New("failed to parse form")
 	}
 
 	file, header, err := r.FormFile("file")
 	if err != nil {
-		return http.StatusBadRequest, ErrMissingFile
+		return http.StatusBadRequest, errors.New("missing file")
 	}
 	defer func() { _ = file.Close() }()
 
@@ -694,7 +694,7 @@ type ReorderNotesRequest struct {
 func (h *NotesHandler) ReorderNotes(w http.ResponseWriter, r *http.Request) (int, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
-		return http.StatusUnauthorized, ErrUnauthorized
+		return http.StatusUnauthorized, errors.New("unauthorized")
 	}
 
 	var req ReorderNotesRequest
@@ -703,12 +703,12 @@ func (h *NotesHandler) ReorderNotes(w http.ResponseWriter, r *http.Request) (int
 	}
 
 	if len(req.NoteIDs) == 0 {
-		return http.StatusBadRequest, ErrEmptyNoteIDsList
+		return http.StatusBadRequest, errors.New("empty note IDs list")
 	}
 
 	err := h.noteStore.ReorderNotes(user.ID, req.NoteIDs)
 	if err != nil {
-		if errors.Is(err, models.ErrNoteNoAccess) {
+		if strings.Contains(err.Error(), "no access to note") {
 			return http.StatusForbidden, err
 		}
 		return http.StatusInternalServerError, err

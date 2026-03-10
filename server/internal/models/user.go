@@ -23,9 +23,6 @@ var ErrUserNotFound = errors.New("user not found")
 // admin user, which would leave the system with no administrators.
 var ErrLastAdmin = errors.New("cannot demote the last admin")
 
-// ErrInvalidRole is returned when an unrecognized role value is supplied.
-var ErrInvalidRole = errors.New("invalid role")
-
 type User struct {
 	ID           string    `json:"id"`
 	Username     string    `json:"username"`
@@ -258,7 +255,7 @@ func (s *UserSettingsStore) Update(userID, language string) (*UserSettings, erro
 
 func (s *UserStore) UpdateRole(id, role string) (*User, error) {
 	if role != RoleUser && role != RoleAdmin {
-		return nil, fmt.Errorf("invalid role %q: must be %q or %q: %w", role, RoleUser, RoleAdmin, ErrInvalidRole)
+		return nil, fmt.Errorf("invalid role %q: must be %q or %q", role, RoleUser, RoleAdmin)
 	}
 
 	tx, err := s.db.Begin()
