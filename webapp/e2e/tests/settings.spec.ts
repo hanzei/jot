@@ -115,7 +115,7 @@ test.describe('Settings', () => {
       await settingsPage.goto();
 
       const saveResponse = page.waitForResponse(resp =>
-        resp.url().includes('/api/v1/users/settings') && resp.request().method() === 'PUT'
+        resp.url().includes('/api/v1/users/me/settings') && resp.request().method() === 'PUT'
       );
       await settingsPage.selectTheme('Dark');
       await saveResponse;
