@@ -87,7 +87,11 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   }, [loadNotes]);
 
   const handleSSEEvent = useCallback((event: SSEEvent) => {
-    if (event.type === 'note_deleted' || event.type === 'note_unshared') {
+    const currentUserLostAccess =
+      event.type === 'note_deleted' ||
+      (event.type === 'note_unshared' && event.target_user_id === user?.id);
+
+    if (currentUserLostAccess) {
       if (editingNote && event.note_id === editingNote.id) {
         setIsModalOpen(false);
         setEditingNote(null);
@@ -99,7 +103,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     }
 
     loadNotes();
-  }, [editingNote, sharingNote, loadNotes]);
+  }, [editingNote, sharingNote, loadNotes, user?.id]);
 
   useSSE({
     onEvent: handleSSEEvent,

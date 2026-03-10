@@ -426,6 +426,7 @@ func (h *NotesHandler) UnshareNote(w http.ResponseWriter, r *http.Request) (int,
 			NoteID:       id,
 			Note:         nil,
 			SourceUserID: user.ID,
+			TargetUserID: targetUser.ID,
 		})
 	}
 

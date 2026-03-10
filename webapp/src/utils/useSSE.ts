@@ -13,6 +13,7 @@ export interface SSEEvent {
   note_id: string;
   note: Note | null;
   source_user_id: string;
+  target_user_id?: string;
 }
 
 interface UseSSEOptions {

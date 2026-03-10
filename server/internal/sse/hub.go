@@ -22,6 +22,7 @@ type Event struct {
 	NoteID       string    `json:"note_id"`
 	Note         any       `json:"note"`            // nil for deleted/unshared
 	SourceUserID string    `json:"source_user_id"` // who triggered the change
+	TargetUserID string    `json:"target_user_id,omitempty"` // user affected (e.g. unshared)
 }
 
 // Hub manages per-user SSE subscriber channels.
