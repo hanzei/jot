@@ -61,6 +61,7 @@ const renderSettings = (onLogout = vi.fn()) => {
 describe('Settings', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.mocked(authUtils.isAdmin).mockReturnValue(false)
     vi.mocked(authUtils.getUser).mockReturnValue(mockUser)
   })
 
@@ -243,6 +244,12 @@ describe('Settings', () => {
         expect(screen.getByText('User Management')).toBeInTheDocument()
       })
       expect(screen.getByText('other')).toBeInTheDocument()
+    })
+
+    it('does not show the user management section for non-admins', () => {
+      vi.mocked(authUtils.isAdmin).mockReturnValue(false)
+      renderSettings()
+      expect(screen.queryByText('User Management')).not.toBeInTheDocument()
     })
 
     it('calls updateUserRole and updates the list when role toggle is clicked', async () => {

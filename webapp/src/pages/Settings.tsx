@@ -111,6 +111,7 @@ const Settings = ({ onLogout }: SettingsProps) => {
       setUser(updatedUser);
       setCurrentUsername(updatedUser.username);
       setDraftUsername(updatedUser.username);
+      setUserList(prev => prev.map(u => u.id === updatedUser.id ? { ...u, username: updatedUser.username } : u));
       setSuccess('settings.usernameUpdated');
     } catch (err: unknown) {
       if (isAxiosError(err)) {

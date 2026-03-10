@@ -254,6 +254,10 @@ func (s *UserSettingsStore) Update(userID, language string) (*UserSettings, erro
 }
 
 func (s *UserStore) UpdateRole(id, role string) (*User, error) {
+	if role != RoleUser && role != RoleAdmin {
+		return nil, fmt.Errorf("invalid role %q: must be %q or %q", role, RoleUser, RoleAdmin)
+	}
+
 	tx, err := s.db.Begin()
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
