@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { PlusIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, MagnifyingGlassIcon, ArrowUpTrayIcon } from '@heroicons/react/24/outline';
 import { notes, auth } from '@/utils/api';
 import { removeUser, getUser, isAdmin } from '@/utils/auth';
 import { Note } from '@/types';
@@ -8,6 +8,7 @@ import NavigationHeader from '@/components/NavigationHeader';
 import SortableNoteCard from '@/components/SortableNoteCard';
 import NoteModal from '@/components/NoteModal';
 import ShareModal from '@/components/ShareModal';
+import ImportModal from '@/components/ImportModal';
 import {
   DndContext,
   closestCenter,
@@ -41,6 +42,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const [editingNote, setEditingNote] = useState<Note | null>(null);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [sharingNote, setSharingNote] = useState<Note | null>(null);
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const user = getUser();
 
   const handleViewChange = (archived: boolean) => {
@@ -263,14 +265,21 @@ export default function Dashboard({ onLogout }: DashboardProps) {
 
       {/* Main content */}
       <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Create note button */}
-        <div className="mb-8">
+        {/* Create note / import buttons */}
+        <div className="mb-8 flex gap-3">
           <button
             onClick={handleCreateNote}
             className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 focus:ring-offset-gray-50 dark:focus:ring-offset-slate-900"
           >
             <PlusIcon className="h-5 w-5 mr-2" />
             New Note
+          </button>
+          <button
+            onClick={() => setIsImportModalOpen(true)}
+            className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-slate-600 text-sm font-medium rounded-md shadow-sm text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 focus:ring-offset-gray-50 dark:focus:ring-offset-slate-900"
+          >
+            <ArrowUpTrayIcon className="h-5 w-5 mr-2" />
+            Import
           </button>
         </div>
 
@@ -373,6 +382,15 @@ export default function Dashboard({ onLogout }: DashboardProps) {
           note={sharingNote}
           isOpen={isShareModalOpen}
           onClose={handleShareModalClose}
+        />
+      )}
+
+      {/* Import modal */}
+      {isImportModalOpen && (
+        <ImportModal
+          isOpen={isImportModalOpen}
+          onClose={() => setIsImportModalOpen(false)}
+          onSuccess={loadNotes}
         />
       )}
     </div>

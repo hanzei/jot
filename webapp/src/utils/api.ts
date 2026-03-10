@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { AuthResponse, LoginRequest, RegisterRequest, Note, CreateNoteRequest, UpdateNoteRequest, User, CreateUserRequest, UserListResponse, ShareNoteRequest, ShareNoteResponse, NoteShare } from '@/types';
+import { AuthResponse, LoginRequest, RegisterRequest, Note, CreateNoteRequest, UpdateNoteRequest, User, CreateUserRequest, UserListResponse, ShareNoteRequest, ShareNoteResponse, NoteShare, ImportResponse } from '@/types';
 
 const api = axios.create({
   baseURL: '/api/v1',
@@ -59,6 +59,14 @@ export const notes = {
 
   reorder: (noteIDs: string[]): Promise<void> =>
     api.post('/notes/reorder', { note_ids: noteIDs }),
+
+  importKeep: (file: File): Promise<ImportResponse> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.post('/notes/import', formData, {
+      headers: { 'Content-Type': 'multipart/form-data' },
+    }).then(res => res.data);
+  },
 };
 
 export const users = {
