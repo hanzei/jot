@@ -1,0 +1,113 @@
+import { Page, expect, Locator } from '@playwright/test';
+
+export class DashboardPage {
+  constructor(private page: Page) {}
+
+  async goto() {
+    await this.page.goto('/');
+  }
+
+  async clickNewNote() {
+    await this.page.click('button:has-text("New Note")');
+  }
+
+  async createNote(title: string, content?: string) {
+    await this.clickNewNote();
+    await this.page.fill('input[placeholder="Note title..."]', title);
+    if (content) {
+      await this.page.fill('textarea[placeholder="Take a note..."]', content);
+    }
+    // Close the modal to save (auto-save on close when there are changes)
+    await this.page.click('button[aria-label="Close"]');
+    await expect(this.page.locator('[data-testid="note-card"]').filter({ hasText: title })).toBeVisible();
+  }
+
+  async createTodoNote(title: string, items: string[]) {
+    await this.clickNewNote();
+    await this.page.click('button:has-text("Todo List")');
+    await this.page.fill('input[placeholder="Note title..."]', title);
+    for (const item of items) {
+      await this.page.click('button:has-text("Add item")');
+      await this.page.locator('input[placeholder="List item..."]').last().fill(item);
+    }
+    await this.page.click('button[aria-label="Close"]');
+    await expect(this.page.locator('[data-testid="note-card"]').filter({ hasText: title })).toBeVisible();
+  }
+
+  async openNote(title: string) {
+    await this.page.locator('[data-testid="note-card"]').filter({ hasText: title }).click();
+  }
+
+  private async openNoteMenu(title: string) {
+    const card = this.page.locator('[data-testid="note-card"]').filter({ hasText: title });
+    await card.hover();
+    await card.locator('button[aria-label="Note options"]').click();
+  }
+
+  async deleteNote(title: string) {
+    await this.openNoteMenu(title);
+    this.page.once('dialog', dialog => dialog.accept());
+    await this.page.getByRole('menuitem', { name: 'Delete' }).click();
+  }
+
+  async pinNote(title: string) {
+    await this.openNoteMenu(title);
+    await this.page.getByRole('menuitem', { name: 'Pin' }).click();
+  }
+
+  async unpinNote(title: string) {
+    await this.openNoteMenu(title);
+    await this.page.getByRole('menuitem', { name: 'Unpin' }).click();
+  }
+
+  async archiveNote(title: string) {
+    await this.openNoteMenu(title);
+    await this.page.getByRole('menuitem', { name: 'Archive' }).click();
+    // Wait for the API call and UI refresh to complete
+    await expect(this.page.locator('[data-testid="note-card"]').filter({ hasText: title })).toHaveCount(0);
+  }
+
+  async unarchiveNote(title: string) {
+    await this.openNoteMenu(title);
+    await this.page.getByRole('menuitem', { name: 'Unarchive' }).click();
+    // Wait for the API call and UI refresh to complete
+    await expect(this.page.locator('[data-testid="note-card"]').filter({ hasText: title })).toHaveCount(0);
+  }
+
+  async search(query: string) {
+    await this.page.fill('[aria-label="Search notes"]', query);
+  }
+
+  async clearSearch() {
+    await this.page.fill('[aria-label="Search notes"]', '');
+  }
+
+  async switchToArchived() {
+    await this.page.click('button:has-text("Archive")');
+  }
+
+  async switchToNotes() {
+    await this.page.click('button:has-text("Notes")');
+  }
+
+  async expectNoteVisible(title: string) {
+    await expect(this.page.locator('[data-testid="note-card"]').filter({ hasText: title })).toBeVisible();
+  }
+
+  async expectNoteNotVisible(title: string) {
+    await expect(this.page.locator('[data-testid="note-card"]').filter({ hasText: title })).toHaveCount(0);
+  }
+
+  async expectEmptyState(message: string) {
+    await expect(this.page.getByText(message)).toBeVisible();
+  }
+
+  noteCard(title: string): Locator {
+    return this.page.locator('[data-testid="note-card"]').filter({ hasText: title });
+  }
+
+  async logout() {
+    // The nav has two logout buttons (mobile + desktop); click the last visible one
+    await this.page.locator('button:has-text("Logout")').last().click();
+  }
+}
