@@ -15,6 +15,14 @@ import (
 // already in use by another account.
 var ErrUsernameTaken = errors.New("username already taken")
 
+// ErrUserNotFound is returned when a user lookup or update targets an ID that
+// does not exist in the database.
+var ErrUserNotFound = errors.New("user not found")
+
+// ErrLastAdmin is returned when an attempt is made to demote the only remaining
+// admin user, which would leave the system with no administrators.
+var ErrLastAdmin = errors.New("cannot demote the last admin")
+
 type User struct {
 	ID           string    `json:"id"`
 	Username     string    `json:"username"`
@@ -243,6 +251,57 @@ func (s *UserSettingsStore) Update(userID, language string) (*UserSettings, erro
 		return nil, fmt.Errorf("failed to update user settings: %w", err)
 	}
 	return settings, nil
+}
+
+func (s *UserStore) UpdateRole(id, role string) (*User, error) {
+	if role != RoleUser && role != RoleAdmin {
+		return nil, fmt.Errorf("invalid role %q: must be %q or %q", role, RoleUser, RoleAdmin)
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	// Guard: if we're demoting an admin to user, ensure they're not the last admin.
+	if role == RoleUser {
+		var currentRole string
+		err = tx.QueryRow(`SELECT role FROM users WHERE id = ?`, id).Scan(&currentRole)
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("%w", ErrUserNotFound)
+		}
+		if err != nil {
+			return nil, fmt.Errorf("failed to query current role: %w", err)
+		}
+		if currentRole == RoleAdmin {
+			var adminCount int
+			if err = tx.QueryRow(`SELECT COUNT(*) FROM users WHERE role = 'admin'`).Scan(&adminCount); err != nil {
+				return nil, fmt.Errorf("failed to count admins: %w", err)
+			}
+			if adminCount <= 1 {
+				return nil, fmt.Errorf("%w", ErrLastAdmin)
+			}
+		}
+	}
+
+	var user User
+	err = tx.QueryRow(
+		`UPDATE users SET role = ?, updated_at = CURRENT_TIMESTAMP
+		 WHERE id = ? RETURNING id, username, role, created_at, updated_at`,
+		role, id,
+	).Scan(&user.ID, &user.Username, &user.Role, &user.CreatedAt, &user.UpdatedAt)
+	if errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("%w", ErrUserNotFound)
+	}
+	if err != nil {
+		return nil, fmt.Errorf("failed to update role: %w", err)
+	}
+
+	if err = tx.Commit(); err != nil {
+		return nil, fmt.Errorf("failed to commit transaction: %w", err)
+	}
+	return &user, nil
 }
 
 func (s *UserStore) CreateByAdmin(username, password string, role string) (*User, error) {

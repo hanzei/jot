@@ -3,11 +3,12 @@ import { Link, useNavigate } from 'react-router-dom';
 import { MagnifyingGlassIcon, ArrowUpTrayIcon } from '@heroicons/react/24/outline';
 import { useTranslation } from 'react-i18next';
 import i18n from '@/i18n';
-import { auth, users, isAxiosError } from '@/utils/api';
-import { getUser, setUser, removeUser, getSettings, setSettings } from '@/utils/auth';
+import { auth, users, admin, isAxiosError } from '@/utils/api';
+import { getUser, setUser, removeUser, getSettings, setSettings, isAdmin } from '@/utils/auth';
 import { getLanguagePreference, resolveLanguage, LanguagePreference, SUPPORTED_LANGUAGES } from '@/utils/language';
 import NavigationHeader from '@/components/NavigationHeader';
 import ImportModal from '@/components/ImportModal';
+import { User } from '@/types';
 
 interface SettingsProps {
   onLogout: () => void;
@@ -36,6 +37,21 @@ const Settings = ({ onLogout }: SettingsProps) => {
   const [passwordSuccess, setPasswordSuccess] = useState('');
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [languagePref, setLanguagePref] = useState<LanguagePreference>(() => getLanguagePreference());
+  const [userList, setUserList] = useState<User[]>([]);
+  const [usersLoading, setUsersLoading] = useState(false);
+  const [usersError, setUsersError] = useState('');
+  const [roleUpdating, setRoleUpdating] = useState<Set<string>>(new Set());
+  const userIsAdmin = isAdmin();
+
+  useEffect(() => {
+    if (userIsAdmin) {
+      setUsersLoading(true);
+      admin.getUsers()
+        .then(res => setUserList(res.users))
+        .catch(() => setUsersError('settings.failedLoadUsers'))
+        .finally(() => setUsersLoading(false));
+    }
+  }, [userIsAdmin]);
 
   useEffect(() => {
     users.getSettings().then(serverSettings => {
@@ -96,6 +112,7 @@ const Settings = ({ onLogout }: SettingsProps) => {
       setUser(updatedUser);
       setCurrentUsername(updatedUser.username);
       setDraftUsername(updatedUser.username);
+      setUserList(prev => prev.map(u => u.id === updatedUser.id ? { ...u, username: updatedUser.username } : u));
       setSuccess('settings.usernameUpdated');
     } catch (err: unknown) {
       if (isAxiosError(err)) {
@@ -139,6 +156,29 @@ const Settings = ({ onLogout }: SettingsProps) => {
       if (current) {
         setSettings(current);
       }
+    }
+  };
+
+  const handleRoleToggle = async (targetUser: User) => {
+    const newRole = targetUser.role === 'admin' ? 'user' : 'admin';
+    setUsersError('');
+    setRoleUpdating(prev => new Set(prev).add(targetUser.id));
+    try {
+      const updated = await admin.updateUserRole(targetUser.id, { role: newRole });
+      setUserList(prev => prev.map(u => u.id === updated.id ? updated : u));
+    } catch (err: unknown) {
+      if (isAxiosError(err)) {
+        const msg = typeof err.response?.data === 'string' ? err.response.data.trim() : '';
+        setUsersError(msg || 'settings.failedUpdateRole');
+      } else {
+        setUsersError('settings.failedUpdateRole');
+      }
+    } finally {
+      setRoleUpdating(prev => {
+        const next = new Set(prev);
+        next.delete(targetUser.id);
+        return next;
+      });
     }
   };
 
@@ -337,6 +377,55 @@ const Settings = ({ onLogout }: SettingsProps) => {
               </select>
             </div>
           </div>
+
+          {userIsAdmin && (
+            <div className="bg-white dark:bg-slate-800 shadow rounded-lg p-6 border border-gray-200 dark:border-slate-700 max-w-2xl mt-6">
+              <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-1">{t('settings.userManagementSection')}</h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">{t('settings.userManagementDescription')}</p>
+              {usersLoading && (
+                <p className="text-sm text-gray-500 dark:text-gray-400">{t('settings.loadingUsers')}</p>
+              )}
+              {usersError && (
+                <div role="alert" className="mb-4 text-red-600 dark:text-red-400 text-sm">
+                  {displayMsg(usersError)}
+                </div>
+              )}
+              {!usersLoading && (
+                <ul className="divide-y divide-gray-200 dark:divide-slate-700">
+                  {userList.map(u => (
+                    <li key={u.id} className="flex items-center justify-between py-3">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-gray-900 dark:text-white">{u.username}</span>
+                        {u.id === currentUser?.id && (
+                          <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 dark:bg-slate-700 text-gray-500 dark:text-gray-400">{t('settings.youBadge')}</span>
+                        )}
+                        {u.role === 'admin' && (
+                          <span className="text-xs px-1.5 py-0.5 rounded bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">{t('admin.adminBadge')}</span>
+                        )}
+                      </div>
+                      <button
+                        disabled={u.id === currentUser?.id || roleUpdating.has(u.id)}
+                        onClick={() => handleRoleToggle(u)}
+                        aria-label={roleUpdating.has(u.id)
+                          ? t('settings.updatingRole')
+                          : t('settings.roleToggleLabel', {
+                              action: u.role === 'admin' ? t('settings.removeAdmin') : t('settings.makeAdmin'),
+                              username: u.username,
+                            })}
+                        className="text-sm px-3 py-1 rounded-md border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 hover:bg-gray-50 dark:hover:bg-slate-600 disabled:opacity-40 disabled:cursor-not-allowed"
+                      >
+                        {roleUpdating.has(u.id)
+                          ? t('settings.updatingRole')
+                          : u.role === 'admin'
+                            ? t('settings.removeAdmin')
+                            : t('settings.makeAdmin')}
+                      </button>
+                    </li>
+                  ))}
+                </ul>
+              )}
+            </div>
+          )}
         </div>
       </div>
 

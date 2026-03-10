@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"strings"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/hanzei/jot/server/internal/models"
 )
 
@@ -74,6 +75,36 @@ func (h *AdminHandler) CreateUser(w http.ResponseWriter, r *http.Request) (int, 
 
 	w.Header().Set("Content-Type", "application/json")
 	w.WriteHeader(http.StatusCreated)
+	if err := json.NewEncoder(w).Encode(user); err != nil {
+		return http.StatusInternalServerError, err
+	}
+	return 0, nil
+}
+
+type UpdateUserRoleRequest struct {
+	Role string `json:"role"`
+}
+
+func (h *AdminHandler) UpdateUserRole(w http.ResponseWriter, r *http.Request) (int, error) {
+	userID := chi.URLParam(r, "id")
+	var req UpdateUserRoleRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return http.StatusBadRequest, err
+	}
+	if err := validateRole(req.Role); err != nil {
+		return http.StatusBadRequest, err
+	}
+	user, err := h.userStore.UpdateRole(userID, req.Role)
+	if err != nil {
+		if errors.Is(err, models.ErrUserNotFound) {
+			return http.StatusNotFound, err
+		}
+		if errors.Is(err, models.ErrLastAdmin) {
+			return http.StatusConflict, err
+		}
+		return http.StatusInternalServerError, err
+	}
+	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(user); err != nil {
 		return http.StatusInternalServerError, err
 	}
