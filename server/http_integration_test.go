@@ -1,7 +1,9 @@
 package main
 
 import (
+	"bufio"
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"io"
@@ -9,7 +11,9 @@ import (
 	"net/http/cookiejar"
 	"net/http/httptest"
 	"os"
+	"strings"
 	"testing"
+	"time"
 
 	"github.com/hanzei/jot/server/internal/models"
 	"github.com/hanzei/jot/server/internal/server"
@@ -430,6 +434,103 @@ func TestUpdateUserEndpoint(t *testing.T) {
 		body := map[string]any{"username": "hacker"}
 		resp := ts.request(t, nil, http.MethodPut, "/api/v1/users/me", body)
 		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	})
+}
+
+// SSE endpoint tests
+
+func TestSSEEndpoint(t *testing.T) {
+	ts := setupTestServer(t)
+	user := ts.createTestUser(t, "sseuser", "password123", false)
+
+	t.Run("unauthenticated returns 401", func(t *testing.T) {
+		resp := ts.request(t, nil, http.MethodGet, "/api/v1/events", nil)
+		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	})
+
+	t.Run("authenticated receives SSE headers and connected comment", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 3*time.Second)
+		defer cancel()
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, ts.HTTPServer.URL+"/api/v1/events", nil)
+		require.NoError(t, err)
+
+		resp, err := user.Client.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		assert.Equal(t, "text/event-stream", resp.Header.Get("Content-Type"))
+		assert.Equal(t, "no-cache", resp.Header.Get("Cache-Control"))
+
+		// The first SSE line must be ": connected"
+		scanner := bufio.NewScanner(resp.Body)
+		require.True(t, scanner.Scan(), "expected first line from SSE stream")
+		assert.Equal(t, ": connected", scanner.Text())
+	})
+
+	t.Run("note creation triggers note_created event", func(t *testing.T) {
+		ctx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+
+		req, err := http.NewRequestWithContext(ctx, http.MethodGet, ts.HTTPServer.URL+"/api/v1/events", nil)
+		require.NoError(t, err)
+
+		resp, err := user.Client.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		// connectedCh is closed once ": connected" is read, guaranteeing the hub
+		// subscription is active before we publish any events.
+		connectedCh := make(chan struct{})
+		eventCh := make(chan map[string]any, 4)
+
+		go func() {
+			scanner := bufio.NewScanner(resp.Body)
+			connectedSent := false
+			for scanner.Scan() {
+				line := scanner.Text()
+				if !connectedSent && line == ": connected" {
+					close(connectedCh)
+					connectedSent = true
+					continue
+				}
+				if strings.HasPrefix(line, "data: ") {
+					var event map[string]any
+					if jsonErr := json.Unmarshal([]byte(line[6:]), &event); jsonErr == nil {
+						eventCh <- event
+					}
+				}
+			}
+		}()
+
+		// Wait until the subscription is registered.
+		select {
+		case <-connectedCh:
+		case <-ctx.Done():
+			t.Fatal("timed out waiting for SSE connection")
+		}
+
+		// Trigger an event by creating a note.
+		noteBody := map[string]any{
+			"title":     "SSE Test Note",
+			"content":   "test content",
+			"note_type": "text",
+		}
+		noteResp := ts.authRequest(t, user, http.MethodPost, "/api/v1/notes", noteBody)
+		require.Equal(t, http.StatusCreated, noteResp.StatusCode)
+
+		var note map[string]any
+		require.NoError(t, noteResp.UnmarshalBody(&note))
+
+		select {
+		case event := <-eventCh:
+			assert.Equal(t, "note_created", event["type"])
+			assert.Equal(t, user.User.ID, event["source_user_id"])
+			assert.Equal(t, note["id"], event["note_id"])
+		case <-ctx.Done():
+			t.Fatal("timed out waiting for SSE event after note creation")
+		}
 	})
 }
 

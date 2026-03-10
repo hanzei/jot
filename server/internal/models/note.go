@@ -613,3 +613,35 @@ func (s *NoteStore) ReorderNotes(userID string, noteIDs []string) error {
 
 	return nil
 }
+
+// GetNoteAudienceIDs returns the owner's user ID plus all shared_with user IDs for a note.
+// Used by handlers to determine who to broadcast SSE events to.
+func (s *NoteStore) GetNoteAudienceIDs(noteID string) ([]string, error) {
+	query := `
+		SELECT user_id FROM notes WHERE id = ?
+		UNION
+		SELECT shared_with_user_id FROM note_shares WHERE note_id = ?
+	`
+	rows, err := s.db.Query(query, noteID, noteID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get note audience: %w", err)
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("failed to close rows in GetNoteAudienceIDs: %v", err)
+		}
+	}()
+
+	var ids []string
+	for rows.Next() {
+		var id string
+		if err := rows.Scan(&id); err != nil {
+			return nil, fmt.Errorf("failed to scan user ID: %w", err)
+		}
+		ids = append(ids, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate note audience rows: %w", err)
+	}
+	return ids, nil
+}

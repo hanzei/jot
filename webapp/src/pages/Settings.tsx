@@ -1,8 +1,7 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import axios from 'axios';
 import { MagnifyingGlassIcon } from '@heroicons/react/24/outline';
-import { auth, users } from '@/utils/api';
+import { auth, users, isAxiosError } from '@/utils/api';
 import { getUser, setUser, removeUser } from '@/utils/auth';
 import NavigationHeader from '@/components/NavigationHeader';
 
@@ -80,7 +79,7 @@ const Settings = ({ onLogout }: SettingsProps) => {
       setNewPassword('');
       setConfirmPassword('');
     } catch (err: unknown) {
-      if (axios.isAxiosError(err)) {
+      if (isAxiosError(err)) {
         setPasswordError(err.response?.data || 'Failed to change password.');
       } else {
         setPasswordError('Failed to change password.');
@@ -103,7 +102,7 @@ const Settings = ({ onLogout }: SettingsProps) => {
       setDraftUsername(updatedUser.username);
       setSuccess('Username updated successfully.');
     } catch (err: unknown) {
-      if (axios.isAxiosError(err)) {
+      if (isAxiosError(err)) {
         setError(err.response?.data || 'Failed to update username.');
       } else {
         setError('Failed to update username.');

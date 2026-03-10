@@ -3,6 +3,7 @@ import { PlusIcon, MagnifyingGlassIcon, ArrowUpTrayIcon } from '@heroicons/react
 import { notes, auth } from '@/utils/api';
 import { removeUser, getUser, isAdmin } from '@/utils/auth';
 import { Note } from '@/types';
+import { useSSE, SSEEvent } from '@/utils/useSSE';
 import { Link, useSearchParams } from 'react-router-dom';
 import NavigationHeader from '@/components/NavigationHeader';
 import SortableNoteCard from '@/components/SortableNoteCard';
@@ -46,6 +47,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const user = getUser();
   const isMountedRef = useRef(true);
   useEffect(() => {
+    isMountedRef.current = true;
     return () => { isMountedRef.current = false; };
   }, []);
 
@@ -100,6 +102,30 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   useEffect(() => {
     loadNotes();
   }, [loadNotes]);
+
+  const handleSSEEvent = useCallback((event: SSEEvent) => {
+    const currentUserLostAccess =
+      event.type === 'note_deleted' ||
+      (event.type === 'note_unshared' && event.target_user_id === user?.id);
+
+    if (currentUserLostAccess) {
+      if (editingNote && event.note_id === editingNote.id) {
+        setIsModalOpen(false);
+        setEditingNote(null);
+      }
+      if (sharingNote && event.note_id === sharingNote.id) {
+        setIsShareModalOpen(false);
+        setSharingNote(null);
+      }
+    }
+
+    loadNotes();
+  }, [editingNote, sharingNote, loadNotes, user?.id]);
+
+  useSSE({
+    onEvent: handleSSEEvent,
+    onConnected: loadNotes,
+  });
 
   const handleLogout = async () => {
     try {

@@ -86,4 +86,6 @@ export const admin = {
     api.post('/admin/users', data).then(res => res.data),
 };
 
+export { isAxiosError } from 'axios';
+
 export default api;

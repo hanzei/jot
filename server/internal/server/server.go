@@ -15,6 +15,7 @@ import (
 	"github.com/hanzei/jot/server/internal/database"
 	"github.com/hanzei/jot/server/internal/handlers"
 	"github.com/hanzei/jot/server/internal/models"
+	"github.com/hanzei/jot/server/internal/sse"
 	"github.com/sirupsen/logrus"
 )
 
@@ -24,6 +25,7 @@ type Server struct {
 	sessionService *auth.SessionService
 	authHandler    *handlers.AuthHandler
 	notesHandler   *handlers.NotesHandler
+	eventsHandler  *handlers.EventsHandler
 	adminHandler   *handlers.AdminHandler
 }
 
@@ -52,8 +54,11 @@ func New() *Server {
 		}
 	}()
 
+	hub := sse.NewHub()
+
 	authHandler := handlers.NewAuthHandler(userStore, sessionService)
-	notesHandler := handlers.NewNotesHandler(noteStore, userStore)
+	notesHandler := handlers.NewNotesHandler(noteStore, userStore, hub)
+	eventsHandler := handlers.NewEventsHandler(hub)
 	adminHandler := handlers.NewAdminHandler(userStore)
 
 	s := &Server{
@@ -62,6 +67,7 @@ func New() *Server {
 		sessionService: sessionService,
 		authHandler:    authHandler,
 		notesHandler:   notesHandler,
+		eventsHandler:  eventsHandler,
 		adminHandler:   adminHandler,
 	}
 
@@ -94,6 +100,8 @@ func (s *Server) setupRoutes() {
 
 		r.Group(func(r chi.Router) {
 			r.Use(s.sessionService.AuthMiddleware)
+
+			r.Get("/events", s.eventsHandler.ServeSSE)
 
 			r.Get("/me", s.wrapHandler(s.authHandler.Me))
 			r.Put("/users/me", s.wrapHandler(s.authHandler.UpdateUser))

@@ -21,10 +21,6 @@ const NavigationHeader = ({ title = 'Jot', onLogout, tabs, children, username }:
   const currentUser = getUser();
   const displayUsername = username ?? currentUser?.username;
 
-  const handleLogout = () => {
-    onLogout();
-  };
-
   return (
     <header className="bg-white dark:bg-slate-800 shadow-sm border-b border-gray-200 dark:border-slate-700">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
@@ -41,8 +37,8 @@ const NavigationHeader = ({ title = 'Jot', onLogout, tabs, children, username }:
                 <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">{title}</h1>
               )}
               <div className="hidden sm:flex space-x-4">
-                {tabs.map((tab, index) => (
-                  <div key={index}>
+                {tabs.map((tab) => (
+                  <div key={tab.label}>
                     {tab.element}
                   </div>
                 ))}
@@ -62,7 +58,7 @@ const NavigationHeader = ({ title = 'Jot', onLogout, tabs, children, username }:
                 Settings
               </Link>
               <button
-                onClick={handleLogout}
+                onClick={onLogout}
                 className="text-xs text-gray-600 dark:text-gray-300 hover:text-red-600 dark:hover:text-red-400"
               >
                 Logout
@@ -86,7 +82,7 @@ const NavigationHeader = ({ title = 'Jot', onLogout, tabs, children, username }:
               Settings
             </Link>
             <button
-              onClick={handleLogout}
+              onClick={onLogout}
               className="text-sm text-gray-600 dark:text-gray-300 hover:text-red-600 dark:hover:text-red-400"
             >
               Logout
