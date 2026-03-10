@@ -1,6 +1,9 @@
 package sse
 
-import "sync"
+import (
+	"log"
+	"sync"
+)
 
 // EventType identifies the kind of note mutation that occurred.
 type EventType string
@@ -73,7 +76,7 @@ func (h *Hub) Publish(userIDs []string, event Event) {
 			select {
 			case ch <- event:
 			default:
-				// channel full — drop event for this client
+				log.Printf("sse: dropping event type=%s note_id=%s for user_id=%s: channel full", event.Type, event.NoteID, uid)
 			}
 		}
 	}

@@ -45,7 +45,6 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const user = getUser();
   const mountedRef = useRef(true);
   useEffect(() => {
-    mountedRef.current = true;
     return () => { mountedRef.current = false; };
   }, []);
 
@@ -87,8 +86,12 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   }, [loadNotes]);
 
   const handleSSEEvent = useCallback((event: SSEEvent) => {
-    // If the open modal's note was deleted or unshared, close the modal.
-    if (event.type === 'note_deleted' || event.type === 'note_unshared') {
+    const isSelfOriginated = event.source_user_id === user?.id;
+
+    // Close the edit/share modal only when someone else deleted or unshared
+    // the note. Skip for self-originated events: the local callback already
+    // handled any necessary UI state changes.
+    if (!isSelfOriginated && (event.type === 'note_deleted' || event.type === 'note_unshared')) {
       if (editingNote && event.note_id === editingNote.id) {
         setIsModalOpen(false);
         setEditingNote(null);
@@ -99,8 +102,12 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       }
     }
 
-    loadNotes();
-  }, [editingNote, sharingNote, loadNotes]);
+    // Skip reload for self-originated events; the local callback already
+    // called loadNotes() on success.
+    if (!isSelfOriginated) {
+      loadNotes();
+    }
+  }, [editingNote, sharingNote, loadNotes, user?.id]);
 
   useSSE({
     onEvent: handleSSEEvent,

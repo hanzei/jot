@@ -45,8 +45,11 @@ export function useSSE({ onEvent, onConnected }: UseSSEOptions): void {
       onEventRef.current(event);
     };
 
-    // onerror is intentionally a no-op: EventSource auto-reconnects natively.
-    // onopen will fire again on reconnect, triggering onConnected -> loadNotes().
+    // EventSource auto-reconnects on transient failures (readyState transitions
+    // to CONNECTING). When the server closes the connection cleanly (e.g. 4xx),
+    // readyState becomes CLOSED and no reconnection occurs. Session expiry is
+    // handled by the axios 401 interceptor on the next regular API call, which
+    // redirects to /login and tears down this component.
     es.onerror = () => {};
 
     return () => {

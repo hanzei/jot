@@ -1,7 +1,6 @@
 import { useState } from 'react';
 import { Link } from 'react-router-dom';
-import axios from 'axios';
-import { auth, users } from '@/utils/api';
+import { auth, users, isAxiosError } from '@/utils/api';
 import { getUser, setUser, removeUser } from '@/utils/auth';
 import NavigationHeader from '@/components/NavigationHeader';
 
@@ -65,7 +64,7 @@ const Settings = ({ onLogout }: SettingsProps) => {
       setDraftUsername(updatedUser.username);
       setSuccess('Username updated successfully.');
     } catch (err: unknown) {
-      if (axios.isAxiosError(err)) {
+      if (isAxiosError(err)) {
         setError(err.response?.data || 'Failed to update username.');
       } else {
         setError('Failed to update username.');
