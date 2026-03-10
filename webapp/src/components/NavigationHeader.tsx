@@ -53,6 +53,12 @@ const NavigationHeader = ({ title = 'Jot', onLogout, tabs, children }: Navigatio
                 <UserCircleIcon className="h-4 w-4" />
                 <span className="max-w-16 truncate">{currentUser?.username}</span>
               </div>
+              <Link
+                to="/settings"
+                className="text-xs text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400"
+              >
+                Settings
+              </Link>
               <button
                 onClick={handleLogout}
                 className="text-xs text-gray-600 dark:text-gray-300 hover:text-red-600 dark:hover:text-red-400"
@@ -71,6 +77,12 @@ const NavigationHeader = ({ title = 'Jot', onLogout, tabs, children }: Navigatio
               <UserCircleIcon className="h-5 w-5" />
               <span>{currentUser?.username}</span>
             </div>
+            <Link
+              to="/settings"
+              className="text-sm text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400"
+            >
+              Settings
+            </Link>
             <button
               onClick={handleLogout}
               className="text-sm text-gray-600 dark:text-gray-300 hover:text-red-600 dark:hover:text-red-400"

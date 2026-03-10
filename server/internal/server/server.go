@@ -96,6 +96,7 @@ func (s *Server) setupRoutes() {
 			r.Use(s.sessionService.AuthMiddleware)
 
 			r.Get("/me", s.wrapHandler(s.authHandler.Me))
+			r.Put("/users/me", s.wrapHandler(s.authHandler.UpdateUser))
 
 			r.Get("/notes", s.wrapHandler(s.notesHandler.GetNotes))
 			r.Post("/notes", s.wrapHandler(s.notesHandler.CreateNote))

@@ -144,6 +144,19 @@ func (s *UserStore) GetAll() ([]*User, error) {
 	return users, nil
 }
 
+func (s *UserStore) UpdateUsername(id, newUsername string) (*User, error) {
+	query := `UPDATE users SET username = ?, updated_at = CURRENT_TIMESTAMP
+			  WHERE id = ? RETURNING id, username, role, created_at, updated_at`
+	var user User
+	err := s.db.QueryRow(query, newUsername, id).Scan(
+		&user.ID, &user.Username, &user.Role, &user.CreatedAt, &user.UpdatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update username: %w", err)
+	}
+	return &user, nil
+}
+
 func (s *UserStore) CreateByAdmin(username, password string, role string) (*User, error) {
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
