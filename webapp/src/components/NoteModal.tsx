@@ -80,9 +80,11 @@ interface SortableItemProps {
   onUpdateTodoItem: (index: number, field: 'text' | 'completed', value: string | boolean) => Promise<void>;
   onRemoveTodoItem: (itemId: string) => void;
   isCompleted?: boolean;
+  onKeyDown?: (index: number, e: React.KeyboardEvent<HTMLInputElement>) => void;
+  inputRef?: React.RefCallback<HTMLInputElement>;
 }
 
-function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isCompleted = false }: SortableItemProps) {
+function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isCompleted = false, onKeyDown, inputRef }: SortableItemProps) {
   const { t } = useTranslation();
   const {
     attributes,
@@ -138,6 +140,8 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
         }`}
         value={item.text}
         onChange={(e) => onUpdateTodoItem(index, 'text', e.target.value)}
+        onKeyDown={onKeyDown ? (e) => onKeyDown(index, e) : undefined}
+        ref={inputRef}
       />
       <button
         onClick={() => onRemoveTodoItem(item.id)}
@@ -165,6 +169,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
   // Use useRef for timeout management instead of global window property
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
   const errorTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+  const itemInputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -309,7 +314,28 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
       completed: false,
       position: uncompletedItems.length,
     };
-    setItems([...items, newItem]);
+    const newItems = [...items, newItem];
+    setItems(newItems);
+    autoSaveNote(newItems);
+    return newItem.id;
+  };
+
+  const handleItemKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== 'Enter') return;
+    if (e.repeat) return;
+    if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
+    e.preventDefault();
+    if (index < uncompletedItems.length - 1) {
+      // Focus next item
+      const nextItem = uncompletedItems[index + 1];
+      itemInputRefs.current.get(nextItem.id)?.focus();
+    } else {
+      // Add a new item and focus it
+      const newId = addTodoItem();
+      setTimeout(() => {
+        itemInputRefs.current.get(newId)?.focus();
+      }, 0);
+    }
   };
 
   const removeTodoItem = (itemId: string) => {
@@ -771,6 +797,11 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
                           onUpdateTodoItem={updateTodoItem}
                           onRemoveTodoItem={removeTodoItem}
                           isCompleted={false}
+                          onKeyDown={handleItemKeyDown}
+                          inputRef={(el) => {
+                            if (el) itemInputRefs.current.set(item.id, el);
+                            else itemInputRefs.current.delete(item.id);
+                          }}
                         />
                       ))}
                     </SortableContext>

@@ -105,4 +105,40 @@ test.describe('Notes', () => {
     await dashboardPage.goto();
     await dashboardPage.expectEmptyState('No notes yet');
   });
+
+  test('pressing Enter on a todo item jumps to the next item', async ({ page, dashboardPage }) => {
+    await dashboardPage.goto();
+    await page.click('button:has-text("New Note")');
+    await page.click('button:has-text("Todo List")');
+
+    // Add two items via the button
+    await page.click('button:has-text("Add item")');
+    await page.locator('input[placeholder="List item..."]').last().fill('First item');
+    await page.click('button:has-text("Add item")');
+    await page.locator('input[placeholder="List item..."]').last().fill('Second item');
+
+    // Focus the first item and press Enter
+    await page.locator('input[placeholder="List item..."]').first().focus();
+    await page.keyboard.press('Enter');
+
+    // The second item should now be focused
+    await expect(page.locator('input[placeholder="List item..."]').nth(1)).toBeFocused();
+  });
+
+  test('pressing Enter on the last todo item creates a new item', async ({ page, dashboardPage }) => {
+    await dashboardPage.goto();
+    await page.click('button:has-text("New Note")');
+    await page.click('button:has-text("Todo List")');
+
+    // Add one item
+    await page.click('button:has-text("Add item")');
+    await page.locator('input[placeholder="List item..."]').last().fill('Only item');
+
+    // Press Enter on the only (last) item
+    await page.locator('input[placeholder="List item..."]').last().press('Enter');
+
+    // A new empty input should appear and be focused
+    await expect(page.locator('input[placeholder="List item..."]')).toHaveCount(2);
+    await expect(page.locator('input[placeholder="List item..."]').nth(1)).toBeFocused();
+  });
 });

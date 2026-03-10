@@ -287,6 +287,55 @@ describe('NoteModal', () => {
       expect(screen.getByDisplayValue('First item')).toBeInTheDocument()
       expect(screen.getByDisplayValue('Second item')).toBeInTheDocument()
     })
+
+    it('pressing Enter on the last uncompleted item creates a new item', async () => {
+      render(<NoteModal {...defaultProps} />)
+
+      // Switch to todo mode and add an item
+      fireEvent.click(screen.getByText('Todo List'))
+      fireEvent.click(screen.getByText('Add item'))
+
+      const inputs = screen.getAllByPlaceholderText('List item...')
+      expect(inputs).toHaveLength(1)
+
+      // Press Enter on the only (last) item
+      fireEvent.keyDown(inputs[0], { key: 'Enter', code: 'Enter' })
+
+      // A new item should have been added
+      const inputsAfter = screen.getAllByPlaceholderText('List item...')
+      expect(inputsAfter).toHaveLength(2)
+    })
+
+    it('pressing Enter on a non-last uncompleted item does not create a new item', async () => {
+      render(<NoteModal {...defaultProps} />)
+
+      // Switch to todo mode and add two items
+      fireEvent.click(screen.getByText('Todo List'))
+      fireEvent.click(screen.getByText('Add item'))
+      fireEvent.click(screen.getByText('Add item'))
+
+      const inputs = screen.getAllByPlaceholderText('List item...')
+      expect(inputs).toHaveLength(2)
+
+      // Press Enter on the first (non-last) item
+      fireEvent.keyDown(inputs[0], { key: 'Enter', code: 'Enter' })
+
+      // No new item should be created
+      const inputsAfter = screen.getAllByPlaceholderText('List item...')
+      expect(inputsAfter).toHaveLength(2)
+    })
+
+    it('pressing a key other than Enter on a todo item does not create a new item', async () => {
+      render(<NoteModal {...defaultProps} />)
+
+      fireEvent.click(screen.getByText('Todo List'))
+      fireEvent.click(screen.getByText('Add item'))
+
+      const inputs = screen.getAllByPlaceholderText('List item...')
+      fireEvent.keyDown(inputs[0], { key: 'Tab', code: 'Tab' })
+
+      expect(screen.getAllByPlaceholderText('List item...')).toHaveLength(1)
+    })
   })
 
 
