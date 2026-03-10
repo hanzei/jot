@@ -76,7 +76,7 @@ const Settings = ({ onLogout }: SettingsProps) => {
       setNewPassword('');
       setConfirmPassword('');
     } catch (err: unknown) {
-      if (axios.isAxiosError(err)) {
+      if (isAxiosError(err)) {
         setPasswordError(err.response?.data || 'Failed to change password.');
       } else {
         setPasswordError('Failed to change password.');
