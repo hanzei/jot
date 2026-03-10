@@ -50,7 +50,7 @@ func (s *SessionService) CreateSession(w http.ResponseWriter, userID string) err
 func (s *SessionService) DeleteSession(w http.ResponseWriter, r *http.Request) error {
 	cookie, err := r.Cookie(SessionCookieName)
 	if err != nil {
-		return nil // No session to delete
+		return nil //nolint:nilerr // No cookie means no session to delete
 	}
 
 	if err := s.sessionStore.Delete(cookie.Value); err != nil {

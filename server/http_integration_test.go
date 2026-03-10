@@ -48,7 +48,7 @@ type TestServer struct {
 
 func setupTestServer(t *testing.T) *TestServer {
 	tmpDB := fmt.Sprintf("/tmp/test_%s.db", t.Name())
-	os.Remove(tmpDB)
+	_ = os.Remove(tmpDB)
 
 	t.Setenv("DB_PATH", tmpDB)
 	t.Setenv("COOKIE_SECURE", "false")
@@ -63,8 +63,8 @@ func setupTestServer(t *testing.T) *TestServer {
 
 	t.Cleanup(func() {
 		httpServer.Close()
-		ts.Server.GetDB().Close()
-		os.Remove(tmpDB)
+		_ = ts.Server.GetDB().Close()
+		_ = os.Remove(tmpDB)
 	})
 
 	return ts
@@ -100,7 +100,7 @@ func (ts *TestServer) createTestUser(t *testing.T, username, password string, is
 
 	// If admin role is needed, update directly in DB
 	if isAdmin {
-		_, err = ts.Server.GetDB().DB.Exec("UPDATE users SET role = ? WHERE id = ?", models.RoleAdmin, authResp.User.ID)
+		_, err = ts.Server.GetDB().Exec("UPDATE users SET role = ? WHERE id = ?", models.RoleAdmin, authResp.User.ID)
 		require.NoError(t, err)
 
 		authResp.User.Role = models.RoleAdmin
@@ -301,7 +301,7 @@ func TestNotesEndpoints(t *testing.T) {
 	}
 	createResp := ts.authRequest(t, user, http.MethodPost, "/api/v1/notes", body)
 	var createdNote map[string]any
-	createResp.UnmarshalBody(&createdNote)
+	require.NoError(t, createResp.UnmarshalBody(&createdNote))
 	noteID := createdNote["id"].(string)
 
 	t.Run("get specific note", func(t *testing.T) {
@@ -476,7 +476,7 @@ func TestSSEEndpoint(t *testing.T) {
 		req, err := http.NewRequestWithContext(ctx, http.MethodGet, ts.HTTPServer.URL+"/api/v1/events", nil)
 		require.NoError(t, err)
 
-		resp, err := user.Client.Do(req)
+		resp, err := user.Client.Do(req) //nolint:bodyclose // closed on next line
 		require.NoError(t, err)
 		defer resp.Body.Close()
 

@@ -3,6 +3,7 @@ package models
 import (
 	"crypto/rand"
 	"database/sql"
+	"errors"
 	"fmt"
 	"log"
 	"time"
@@ -13,6 +14,8 @@ type NoteType string
 const (
 	NoteTypeText NoteType = "text"
 	NoteTypeTodo NoteType = "todo"
+
+	DefaultNoteColor = "#ffffff"
 )
 
 type Note struct {
@@ -219,7 +222,7 @@ func (s *NoteStore) GetByID(id string, userID string) (*Note, error) {
 		&note.CreatedAt, &note.UpdatedAt,
 	)
 	if err != nil {
-		if err == sql.ErrNoRows {
+		if errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("note not found")
 		}
 		return nil, fmt.Errorf("failed to get note: %w", err)

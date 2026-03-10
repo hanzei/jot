@@ -1,21 +1,23 @@
 version: "2"
 run:
   timeout: 5m
-  tests: false
   modules-download-mode: readonly
-
 
 linters:
   enable:
     - bodyclose
     - errcheck
+    - errorlint
+    - goconst
     - gocyclo
     - gosec
     - govet
     - ineffassign
     - misspell
+    - nilerr
     - revive
     - staticcheck
+    - sqlclosecheck
     - unconvert
     - unused
     - testifylint
@@ -32,7 +34,11 @@ linters:
     misspell:
       locale: US
     revive:
-      confidence: 0.8
+      rules:
+        - name: exported
+          disabled: true
+        - name: package-comments
+          disabled: true
     testifylint:
       enable:
         - blank-import
@@ -61,6 +67,10 @@ linters:
         - suite-thelper
         - useless-assert
 
+    errcheck:
+      exclude-functions:
+        - (io.Closer).Close
+        - (net/http.ResponseWriter).Write
 
 issues:
   max-issues-per-linter: 0
