@@ -34,7 +34,10 @@ const navigationTabs = [
 
 const Settings = ({ onLogout }: SettingsProps) => {
   const currentUser = getUser();
-  const [username, setUsername] = useState(currentUser?.username ?? '');
+  // currentUsername tracks the persisted value shown in the nav header.
+  // draftUsername is the live value bound to the input field.
+  const [currentUsername, setCurrentUsername] = useState(currentUser?.username ?? '');
+  const [draftUsername, setDraftUsername] = useState(currentUser?.username ?? '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -42,11 +45,11 @@ const Settings = ({ onLogout }: SettingsProps) => {
   const handleLogout = async () => {
     try {
       await auth.logout();
+      removeUser();
+      onLogout();
     } catch {
-      // Continue with logout even if the server call fails
+      setError('Logout failed. Please try again.');
     }
-    removeUser();
-    onLogout();
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
@@ -56,8 +59,10 @@ const Settings = ({ onLogout }: SettingsProps) => {
     setSuccess('');
 
     try {
-      const updatedUser = await users.updateMe({ username });
+      const updatedUser = await users.updateMe({ username: draftUsername });
       setUser(updatedUser);
+      setCurrentUsername(updatedUser.username);
+      setDraftUsername(updatedUser.username);
       setSuccess('Username updated successfully.');
     } catch (err: unknown) {
       if (axios.isAxiosError(err)) {
@@ -72,7 +77,7 @@ const Settings = ({ onLogout }: SettingsProps) => {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-slate-900">
-      <NavigationHeader onLogout={handleLogout} tabs={navigationTabs} username={username} />
+      <NavigationHeader onLogout={handleLogout} tabs={navigationTabs} username={currentUsername} />
 
       <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         <div className="px-4 py-6 sm:px-0">
@@ -91,18 +96,22 @@ const Settings = ({ onLogout }: SettingsProps) => {
                   id="username"
                   type="text"
                   required
-                  value={username}
-                  onChange={(e) => setUsername(e.target.value)}
+                  value={draftUsername}
+                  onChange={(e) => setDraftUsername(e.target.value)}
                   className="mt-1 block w-full border border-gray-300 dark:border-slate-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
                   placeholder="Username (2-30 characters)"
                 />
               </div>
 
               {error && (
-                <div className="mt-4 text-red-600 dark:text-red-400 text-sm">{error}</div>
+                <div role="alert" className="mt-4 text-red-600 dark:text-red-400 text-sm">
+                  {error}
+                </div>
               )}
               {success && (
-                <div className="mt-4 text-green-600 dark:text-green-400 text-sm">{success}</div>
+                <div aria-live="polite" className="mt-4 text-green-600 dark:text-green-400 text-sm">
+                  {success}
+                </div>
               )}
 
               <div className="mt-6">

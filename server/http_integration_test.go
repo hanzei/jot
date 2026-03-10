@@ -407,7 +407,8 @@ func TestUpdateUserEndpoint(t *testing.T) {
 		assert.Equal(t, "newusername", userResp["username"])
 
 		// Restore username for subsequent subtests
-		ts.authRequest(t, user, http.MethodPut, "/api/v1/users/me", map[string]any{"username": "originaluser"})
+		restoreResp := ts.authRequest(t, user, http.MethodPut, "/api/v1/users/me", map[string]any{"username": "originaluser"})
+		require.Equal(t, http.StatusOK, restoreResp.StatusCode)
 	})
 
 	t.Run("duplicate username returns 409", func(t *testing.T) {

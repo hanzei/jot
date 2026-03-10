@@ -2,12 +2,18 @@ package models
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"log"
+	"strings"
 	"time"
 
 	"golang.org/x/crypto/bcrypt"
 )
+
+// ErrUsernameTaken is returned by UpdateUsername when the requested username is
+// already in use by another account.
+var ErrUsernameTaken = errors.New("username already taken")
 
 type User struct {
 	ID           string    `json:"id"`
@@ -145,8 +151,8 @@ func (s *UserStore) GetAll() ([]*User, error) {
 }
 
 // UpdateUsername sets a new username for the user with the given id and returns
-// the updated user. Returns an error if the username is already taken (UNIQUE
-// constraint) or the id does not exist.
+// the updated user. Returns ErrUsernameTaken if the username is already in use,
+// or another error if the id does not exist or the query fails.
 func (s *UserStore) UpdateUsername(id, newUsername string) (*User, error) {
 	query := `UPDATE users SET username = ?, updated_at = CURRENT_TIMESTAMP
 			  WHERE id = ? RETURNING id, username, role, created_at, updated_at`
@@ -155,6 +161,9 @@ func (s *UserStore) UpdateUsername(id, newUsername string) (*User, error) {
 		&user.ID, &user.Username, &user.Role, &user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
+		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+			return nil, ErrUsernameTaken
+		}
 		return nil, fmt.Errorf("failed to update username: %w", err)
 	}
 	return &user, nil
