@@ -1,15 +1,12 @@
 import { getSettings } from './auth';
+import { ThemePreference } from '@/types';
 
-export type ThemePreference = 'system' | 'light' | 'dark';
+export type { ThemePreference };
 
 export const getThemePreference = (): ThemePreference => {
   const settings = getSettings();
   if (!settings) return 'system';
-  const theme = settings.theme;
-  if (theme === 'system' || theme === 'light' || theme === 'dark') {
-    return theme;
-  }
-  return 'system';
+  return settings.theme;
 };
 
 export const applyTheme = (pref: ThemePreference): void => {

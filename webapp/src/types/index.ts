@@ -6,10 +6,12 @@ export interface User {
   updated_at: string;
 }
 
+export type ThemePreference = 'system' | 'light' | 'dark';
+
 export interface UserSettings {
   user_id: string;
   language: string;
-  theme: string;
+  theme: ThemePreference;
   updated_at: string;
 }
 
@@ -20,7 +22,7 @@ export interface AuthResponse {
 
 export interface UpdateSettingsRequest {
   language: string;
-  theme: string;
+  theme: ThemePreference;
 }
 
 export interface LoginRequest {

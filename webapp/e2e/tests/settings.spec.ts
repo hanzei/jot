@@ -114,9 +114,11 @@ test.describe('Settings', () => {
     test('theme select shows saved value after reload', async ({ authenticatedUser, settingsPage, page }) => {
       await settingsPage.goto();
 
+      const saveResponse = page.waitForResponse(resp =>
+        resp.url().includes('/api/v1/users/settings') && resp.request().method() === 'PUT'
+      );
       await settingsPage.selectTheme('Dark');
-      // Wait for the API call to persist
-      await page.waitForTimeout(500);
+      await saveResponse;
 
       await page.reload();
       await page.waitForLoadState('networkidle');

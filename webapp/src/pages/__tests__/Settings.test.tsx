@@ -6,6 +6,7 @@ import { type ReactNode } from 'react'
 import Settings from '../Settings'
 import { users, auth, admin, isAxiosError } from '@/utils/api'
 import * as authUtils from '@/utils/auth'
+import { type UserSettings } from '@/types'
 
 vi.mock('@/utils/api', () => ({
   auth: {
@@ -206,7 +207,7 @@ describe('Settings', () => {
 
     it('calls updateSettings and setSettings when language is changed', async () => {
       const user = userEvent.setup()
-      const updatedSettings = { user_id: 'user1', language: 'de', theme: 'system', updated_at: '' }
+      const updatedSettings: UserSettings = { user_id: 'user1', language: 'de', theme: 'system', updated_at: '' }
       vi.mocked(users.updateSettings).mockResolvedValue(updatedSettings)
 
       renderSettings()
