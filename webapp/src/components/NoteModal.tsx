@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { XMarkIcon, PlusIcon, TrashIcon, ChevronDownIcon, ArchiveBoxIcon, ArchiveBoxXMarkIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon, PlusIcon, TrashIcon, ChevronDownIcon, ArchiveBoxIcon, ArchiveBoxXMarkIcon, ShareIcon } from '@heroicons/react/24/outline';
 import { Dialog } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
 import { Note, NoteType, CreateNoteRequest, UpdateNoteRequest } from '@/types';
@@ -61,6 +61,8 @@ interface NoteModalProps {
   onClose: () => void;
   onSave: () => void;
   onRefresh?: () => void;
+  onShare?: (note: Note) => void;
+  isOwner?: boolean;
 }
 
 interface TodoItem {
@@ -78,9 +80,11 @@ interface SortableItemProps {
   onUpdateTodoItem: (index: number, field: 'text' | 'completed', value: string | boolean) => Promise<void>;
   onRemoveTodoItem: (itemId: string) => void;
   isCompleted?: boolean;
+  onKeyDown?: (index: number, e: React.KeyboardEvent<HTMLInputElement>) => void;
+  inputRef?: React.RefCallback<HTMLInputElement>;
 }
 
-function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isCompleted = false }: SortableItemProps) {
+function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isCompleted = false, onKeyDown, inputRef }: SortableItemProps) {
   const { t } = useTranslation();
   const {
     attributes,
@@ -136,6 +140,8 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
         }`}
         value={item.text}
         onChange={(e) => onUpdateTodoItem(index, 'text', e.target.value)}
+        onKeyDown={onKeyDown ? (e) => onKeyDown(index, e) : undefined}
+        ref={inputRef}
       />
       <button
         onClick={() => onRemoveTodoItem(item.id)}
@@ -147,7 +153,7 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
   );
 }
 
-export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModalProps) {
+export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, isOwner = true }: NoteModalProps) {
   const { t, i18n } = useTranslation();
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
@@ -163,6 +169,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
   // Use useRef for timeout management instead of global window property
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
   const errorTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+  const itemInputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -307,7 +314,28 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
       completed: false,
       position: uncompletedItems.length,
     };
-    setItems([...items, newItem]);
+    const newItems = [...items, newItem];
+    setItems(newItems);
+    autoSaveNote(newItems);
+    return newItem.id;
+  };
+
+  const handleItemKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key !== 'Enter') return;
+    if (e.repeat) return;
+    if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
+    e.preventDefault();
+    if (index < uncompletedItems.length - 1) {
+      // Focus next item
+      const nextItem = uncompletedItems[index + 1];
+      itemInputRefs.current.get(nextItem.id)?.focus();
+    } else {
+      // Add a new item and focus it
+      const newId = addTodoItem();
+      setTimeout(() => {
+        itemInputRefs.current.get(newId)?.focus();
+      }, 0);
+    }
   };
 
   const removeTodoItem = (itemId: string) => {
@@ -650,6 +678,16 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
                       <ArchiveBoxIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
                     )}
                   </button>
+                  {isOwner && onShare && (
+                    <button
+                      onClick={() => onShare(note)}
+                      className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                      title={t('note.share')}
+                      aria-label={t('note.share')}
+                    >
+                      <ShareIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+                    </button>
+                  )}
                 </>
               )}
               <button
@@ -759,6 +797,11 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
                           onUpdateTodoItem={updateTodoItem}
                           onRemoveTodoItem={removeTodoItem}
                           isCompleted={false}
+                          onKeyDown={handleItemKeyDown}
+                          inputRef={(el) => {
+                            if (el) itemInputRefs.current.set(item.id, el);
+                            else itemInputRefs.current.delete(item.id);
+                          }}
                         />
                       ))}
                     </SortableContext>

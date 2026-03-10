@@ -6,6 +6,7 @@ import i18n from '@/i18n';
 import { auth, users, isAxiosError } from '@/utils/api';
 import { getUser, setUser, removeUser, getSettings, setSettings, isAdmin } from '@/utils/auth';
 import { getLanguagePreference, resolveLanguage, LanguagePreference, SUPPORTED_LANGUAGES } from '@/utils/language';
+import { getThemePreference, applyTheme, ThemePreference } from '@/utils/theme';
 import NavigationHeader from '@/components/NavigationHeader';
 import ImportModal from '@/components/ImportModal';
 
@@ -36,13 +37,17 @@ const Settings = ({ onLogout }: SettingsProps) => {
   const [passwordSuccess, setPasswordSuccess] = useState('');
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [languagePref, setLanguagePref] = useState<LanguagePreference>(() => getLanguagePreference());
+  const [themePref, setThemePref] = useState<ThemePreference>(() => getThemePreference());
 
   useEffect(() => {
     users.getSettings().then(serverSettings => {
       setSettings(serverSettings);
-      const pref = serverSettings.language as LanguagePreference;
-      setLanguagePref(pref);
-      i18n.changeLanguage(resolveLanguage(pref));
+      const langPref = serverSettings.language as LanguagePreference;
+      setLanguagePref(langPref);
+      i18n.changeLanguage(resolveLanguage(langPref));
+      const tPref = serverSettings.theme as ThemePreference;
+      setThemePref(tPref);
+      applyTheme(tPref);
     }).catch(() => { /* keep cached/system default */ });
   }, []);
 
@@ -130,12 +135,33 @@ const Settings = ({ onLogout }: SettingsProps) => {
       setSettings({ ...current, language: pref });
     }
     try {
-      const updatedSettings = await users.updateSettings({ language: pref });
+      const updatedSettings = await users.updateSettings({ language: pref, theme: themePref });
       setSettings(updatedSettings);
     } catch {
       // Server call failed — roll back to previous state.
       setLanguagePref(prev);
       i18n.changeLanguage(resolveLanguage(prev));
+      if (current) {
+        setSettings(current);
+      }
+    }
+  };
+
+  const handleThemeChange = async (pref: ThemePreference) => {
+    const prev = themePref;
+    const current = getSettings();
+    setThemePref(pref);
+    applyTheme(pref);
+    if (current) {
+      setSettings({ ...current, theme: pref });
+    }
+    try {
+      const updatedSettings = await users.updateSettings({ language: languagePref, theme: pref });
+      setSettings(updatedSettings);
+    } catch {
+      // Server call failed — roll back to previous state.
+      setThemePref(prev);
+      applyTheme(prev);
       if (current) {
         setSettings(current);
       }
@@ -336,6 +362,25 @@ const Settings = ({ onLogout }: SettingsProps) => {
                 {SUPPORTED_LANGUAGES.map((lang) => (
                   <option key={lang} value={lang}>{t(`settings.language_${lang}`, { defaultValue: lang.toUpperCase() })}</option>
                 ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-slate-800 shadow rounded-lg p-6 border border-gray-200 dark:border-slate-700 max-w-md mt-6">
+            <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">{t('settings.themeSection')}</h2>
+            <div>
+              <label htmlFor="theme-select" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                {t('settings.themeLabel')}
+              </label>
+              <select
+                id="theme-select"
+                value={themePref}
+                onChange={(e) => handleThemeChange(e.target.value as ThemePreference)}
+                className="block w-full border border-gray-300 dark:border-slate-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="system">{t('settings.themeSystem')}</option>
+                <option value="light">{t('settings.themeLight')}</option>
+                <option value="dark">{t('settings.themeDark')}</option>
               </select>
             </div>
           </div>

@@ -336,7 +336,7 @@ func (h *NotesHandler) ShareNote(w http.ResponseWriter, r *http.Request) (int, e
 
 	targetUser, err := h.userStore.GetByUsername(req.Username)
 	if err != nil {
-		if err.Error() == "user not found" {
+		if errors.Is(err, models.ErrUserNotFound) {
 			return http.StatusNotFound, err
 		}
 		return http.StatusInternalServerError, err
@@ -403,7 +403,7 @@ func (h *NotesHandler) UnshareNote(w http.ResponseWriter, r *http.Request) (int,
 
 	targetUser, err := h.userStore.GetByUsername(req.Username)
 	if err != nil {
-		if err.Error() == "user not found" {
+		if errors.Is(err, models.ErrUserNotFound) {
 			return http.StatusNotFound, err
 		}
 		return http.StatusInternalServerError, err
@@ -708,7 +708,7 @@ func (h *NotesHandler) ReorderNotes(w http.ResponseWriter, r *http.Request) (int
 
 	err := h.noteStore.ReorderNotes(user.ID, req.NoteIDs)
 	if err != nil {
-		if strings.Contains(err.Error(), "no access") {
+		if errors.Is(err, models.ErrNoteNoAccess) {
 			return http.StatusForbidden, err
 		}
 		return http.StatusInternalServerError, err

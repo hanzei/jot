@@ -70,7 +70,12 @@
     "languageLabel": "App-Sprache",
     "languageSystem": "Systemsprache",
     "language_en": "English",
-    "language_de": "Deutsch"
+    "language_de": "Deutsch",
+    "themeSection": "Erscheinungsbild",
+    "themeLabel": "App-Design",
+    "themeSystem": "Systemstandard",
+    "themeLight": "Hell",
+    "themeDark": "Dunkel"
   },
   "admin": {
     "title": "Benutzerverwaltung",
