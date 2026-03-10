@@ -17,7 +17,7 @@ A self-hosted note-taking application built with Go backend and React frontend. 
 
 ### Prerequisites
 
-- **Go 1.25+**: [Download Go](https://golang.org/dl/)
+- **Go 1.24+**: [Download Go](https://golang.org/dl/)
 - **Node.js 22+**: [Download Node.js](https://nodejs.org/)
 - **npm**: Package manager for frontend dependencies
 
