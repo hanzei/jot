@@ -11,14 +11,16 @@ import (
 )
 
 type AuthHandler struct {
-	userStore      *models.UserStore
-	sessionService *auth.SessionService
+	userStore         *models.UserStore
+	sessionService    *auth.SessionService
+	userSettingsStore *models.UserSettingsStore
 }
 
-func NewAuthHandler(userStore *models.UserStore, sessionService *auth.SessionService) *AuthHandler {
+func NewAuthHandler(userStore *models.UserStore, sessionService *auth.SessionService, userSettingsStore *models.UserSettingsStore) *AuthHandler {
 	return &AuthHandler{
-		userStore:      userStore,
-		sessionService: sessionService,
+		userStore:         userStore,
+		sessionService:    sessionService,
+		userSettingsStore: userSettingsStore,
 	}
 }
 
@@ -33,7 +35,8 @@ type LoginRequest struct {
 }
 
 type AuthResponse struct {
-	User *models.User `json:"user"`
+	User     *models.User         `json:"user"`
+	Settings *models.UserSettings `json:"settings"`
 }
 
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) (int, error) {
@@ -58,12 +61,19 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) (int, err
 		return http.StatusInternalServerError, err
 	}
 
-	if err := h.sessionService.CreateSession(w, user.ID); err != nil {
+	settings, err := h.userSettingsStore.GetOrCreate(user.ID)
+	if err != nil {
+		return http.StatusInternalServerError, err
+	}
+
+	err = h.sessionService.CreateSession(w, user.ID)
+	if err != nil {
 		return http.StatusInternalServerError, err
 	}
 
 	response := AuthResponse{
-		User: user,
+		User:     user,
+		Settings: settings,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -93,16 +103,24 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) (int, error)
 		return http.StatusUnauthorized, errors.New("invalid username or password")
 	}
 
-	if err := h.sessionService.InvalidateUserSessions(user.ID); err != nil {
+	settings, err := h.userSettingsStore.GetOrCreate(user.ID)
+	if err != nil {
 		return http.StatusInternalServerError, err
 	}
 
-	if err := h.sessionService.CreateSession(w, user.ID); err != nil {
+	err = h.sessionService.InvalidateUserSessions(user.ID)
+	if err != nil {
+		return http.StatusInternalServerError, err
+	}
+
+	err = h.sessionService.CreateSession(w, user.ID)
+	if err != nil {
 		return http.StatusInternalServerError, err
 	}
 
 	response := AuthResponse{
-		User: user,
+		User:     user,
+		Settings: settings,
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -220,8 +238,71 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) (int, error) {
 		return http.StatusUnauthorized, errors.New("unauthorized")
 	}
 
+	settings, err := h.userSettingsStore.GetOrCreate(user.ID)
+	if err != nil {
+		return http.StatusInternalServerError, err
+	}
+
+	response := AuthResponse{
+		User:     user,
+		Settings: settings,
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(user); err != nil {
+	if err := json.NewEncoder(w).Encode(response); err != nil {
+		return http.StatusInternalServerError, err
+	}
+	return 0, nil
+}
+
+type UpdateSettingsRequest struct {
+	Language string `json:"language"`
+}
+
+var validLanguages = map[string]bool{"system": true, "en": true, "de": true}
+
+// GetSettings handles GET /api/v1/users/me/settings.
+func (h *AuthHandler) GetSettings(w http.ResponseWriter, r *http.Request) (int, error) {
+	currentUser, ok := auth.GetUserFromContext(r.Context())
+	if !ok {
+		return http.StatusUnauthorized, errors.New("unauthorized")
+	}
+
+	settings, err := h.userSettingsStore.GetOrCreate(currentUser.ID)
+	if err != nil {
+		return http.StatusInternalServerError, err
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(settings); err != nil {
+		return http.StatusInternalServerError, err
+	}
+	return 0, nil
+}
+
+// UpdateSettings handles PUT /api/v1/users/me/settings.
+func (h *AuthHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) (int, error) {
+	currentUser, ok := auth.GetUserFromContext(r.Context())
+	if !ok {
+		return http.StatusUnauthorized, errors.New("unauthorized")
+	}
+
+	var req UpdateSettingsRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return http.StatusBadRequest, err
+	}
+
+	if !validLanguages[req.Language] {
+		return http.StatusBadRequest, errors.New("invalid language: must be 'system', 'en', or 'de'")
+	}
+
+	settings, err := h.userSettingsStore.Update(currentUser.ID, req.Language)
+	if err != nil {
+		return http.StatusInternalServerError, err
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(settings); err != nil {
 		return http.StatusInternalServerError, err
 	}
 	return 0, nil

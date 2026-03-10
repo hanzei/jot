@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { Dialog } from '@headlessui/react';
 import { XMarkIcon, TrashIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
+import { useTranslation } from 'react-i18next';
 import { Note, NoteShare, User } from '@/types';
 import { notes, users as usersApi } from '@/utils/api';
 import { ROLES } from '@/constants/roles';
@@ -12,6 +13,7 @@ interface ShareModalProps {
 }
 
 export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
+  const { t } = useTranslation();
   const [searchQuery, setSearchQuery] = useState('');
   const [shares, setShares] = useState<NoteShare[]>([]);
   const [users, setUsers] = useState<User[]>([]);
@@ -99,18 +101,18 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
     try {
       await notes.share(note.id, { username: username.trim() });
       setSearchQuery('');
-      setSuccess('Note shared successfully!');
+      setSuccess(t('share.sharedSuccess'));
       await loadShares();
     } catch (error: unknown) {
       const axiosError = error as { response?: { status?: number; data?: string } };
       if (axiosError.response?.status === 404) {
-        setError('User not found with this username.');
+        setError(t('share.userNotFound'));
       } else if (axiosError.response?.status === 409) {
-        setError('Note is already shared with this user.');
+        setError(t('share.alreadyShared'));
       } else if (axiosError.response?.status === 400 && axiosError.response?.data?.includes('yourself')) {
-        setError('You cannot share a note with yourself.');
+        setError(t('share.cannotShareSelf'));
       } else {
-        setError('Failed to share note. Please try again.');
+        setError(t('share.failedShare'));
       }
     } finally {
       setIsLoading(false);
@@ -122,10 +124,10 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
 
     try {
       await notes.unshare(note.id, { username: shareUsername });
-      setSuccess('Note unshared successfully!');
+      setSuccess(t('share.unsharedSuccess'));
       await loadShares();
     } catch {
-      setError('Failed to unshare note. Please try again.');
+      setError(t('share.failedUnshare'));
     }
   };
 
@@ -188,7 +190,7 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
           <Dialog.Panel className="mx-auto max-w-md rounded bg-white dark:bg-slate-800 p-6 shadow-xl border border-gray-200 dark:border-slate-700">
             <div className="flex items-center justify-between mb-4">
               <Dialog.Title className="text-lg font-medium text-gray-900 dark:text-white">
-                Share "{note.title || 'Untitled Note'}"
+                {t('share.title', { noteTitle: note.title || t('share.untitledNote') })}
               </Dialog.Title>
               <button
                 onClick={handleClose}
@@ -212,7 +214,7 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
 
             <div className="mb-6">
               <label htmlFor="user-search" className="block text-sm font-medium text-gray-700 mb-2">
-                Share with user:
+                {t('share.shareWithUser')}
               </label>
               <div className="relative">
                 <input
@@ -223,7 +225,7 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onFocus={handleInputFocus}
                   onKeyDown={handleKeyDown}
-                  placeholder="Search users by username..."
+                  placeholder={t('share.searchUsersPlaceholder')}
                   className="w-full rounded-md border border-gray-300 px-3 py-2 pr-10 text-sm focus:border-blue-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
                   disabled={isLoading}
                 />
@@ -257,7 +259,7 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
               
               {searchQuery && filteredUsers.length === 0 && !isLoading && (
                 <p className="text-sm text-gray-500 mt-1">
-                  No users found matching "{searchQuery}"
+                  {t('share.noUsersFound', { query: searchQuery })}
                 </p>
               )}
             </div>
@@ -265,7 +267,7 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
             {shares && shares.length > 0 && (
               <div>
                 <h4 className="text-sm font-medium text-gray-700 mb-3">
-                  Shared with ({shares.length}):
+                  {t('share.sharedWith', { count: shares.length })}
                 </h4>
                 <div className="space-y-2 max-h-40 overflow-y-auto">
                   {shares.map((share) => (
@@ -274,7 +276,8 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
                       <button
                         onClick={() => handleUnshare(share.username || '')}
                         className="text-red-600 hover:text-red-800 p-1"
-                        title="Remove access"
+                        title={t('share.removeAccess')}
+                        aria-label={t('share.removeAccess')}
                       >
                         <TrashIcon className="h-4 w-4" />
                       </button>
@@ -286,7 +289,7 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
 
             {(!shares || shares.length === 0) && (
               <p className="text-sm text-gray-500">
-                This note is not shared with anyone yet.
+                {t('share.notSharedYet')}
               </p>
             )}
           </Dialog.Panel>

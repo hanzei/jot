@@ -1,7 +1,9 @@
+import { useTranslation } from 'react-i18next';
 import { useOnlineStatus } from '../utils/useOnlineStatus';
 
 export function OfflineNotification() {
   const isOnline = useOnlineStatus();
+  const { t } = useTranslation();
 
   if (isOnline) {
     return null;
@@ -13,7 +15,7 @@ export function OfflineNotification() {
         <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
           <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
         </svg>
-        You're currently offline. Some features may be limited.
+        {t('offline.message')}
       </div>
     </div>
   );

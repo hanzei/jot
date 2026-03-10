@@ -8,6 +8,7 @@ import {
   UserIcon
 } from '@heroicons/react/24/outline';
 import { Menu } from '@headlessui/react';
+import { useTranslation } from 'react-i18next';
 import { Note } from '@/types';
 import { notes } from '@/utils/api';
 
@@ -21,6 +22,7 @@ interface NoteCardProps {
 }
 
 export default function NoteCard({ note, onEdit, onDelete, onShare, currentUserId, onRefresh }: NoteCardProps) {
+  const { t } = useTranslation();
   const [isUpdating, setIsUpdating] = useState(false);
 
   const isOwner = note.user_id === currentUserId;
@@ -33,6 +35,7 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, currentUserI
       '#4285f4': 'blue',
       '#ea4335': 'red',
       '#9aa0a6': 'purple',
+      '#8b5cf6': 'purple',
     };
     return colorMap[color] || '';
   };
@@ -77,7 +80,7 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, currentUserI
   };
 
   const handleDelete = () => {
-    if (window.confirm('Are you sure you want to delete this note?')) {
+    if (window.confirm(t('note.deleteConfirm'))) {
       onDelete(note.id);
     }
   };
@@ -98,7 +101,7 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, currentUserI
               <UserIcon className="h-3 w-3 text-green-600" />
             )}
             <span className="text-xs text-blue-600 dark:text-blue-400 ml-1">
-              {isOwner ? 'Shared' : 'Shared with me'}
+              {isOwner ? t('note.shared') : t('note.sharedWithMe')}
             </span>
           </div>
         )}
@@ -114,7 +117,7 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, currentUserI
 
       {/* Menu */}
       <Menu as="div" className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
-        <Menu.Button aria-label="Note options" className="p-1 rounded-full hover:bg-gray-200 transition-colors">
+        <Menu.Button aria-label={t('note.menuOptions')} className="p-1 rounded-full hover:bg-gray-200 transition-colors">
           <EllipsisVerticalIcon className="h-4 w-4 text-gray-600" />
         </Menu.Button>
         <Menu.Items className="absolute right-0 mt-1 w-48 bg-white dark:bg-slate-800 rounded-md shadow-lg ring-1 ring-black dark:ring-slate-600 ring-opacity-5 focus:outline-none z-10 border border-gray-200 dark:border-slate-600">
@@ -128,7 +131,7 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, currentUserI
                       } flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-200`}
                   >
                     <ShareIcon className="h-4 w-4 mr-2" />
-                    Share
+                    {t('note.share')}
                   </button>
                 )}
               </Menu.Item>
@@ -143,7 +146,7 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, currentUserI
                   <svg className="h-4 w-4 mr-2" fill={note.pinned ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
                     <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z" />
                   </svg>
-                  {note.pinned ? 'Unpin' : 'Pin'}
+                  {note.pinned ? t('note.unpin') : t('note.pin')}
                 </button>
               )}
             </Menu.Item>
@@ -157,12 +160,12 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, currentUserI
                   {note.archived ? (
                     <>
                       <ArchiveBoxXMarkIcon className="h-4 w-4 mr-2" />
-                      Unarchive
+                      {t('note.unarchive')}
                     </>
                   ) : (
                     <>
                       <ArchiveBoxIcon className="h-4 w-4 mr-2" />
-                      Archive
+                      {t('note.archive')}
                     </>
                   )}
                 </button>
@@ -177,7 +180,7 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, currentUserI
                       } flex items-center w-full px-4 py-2 text-sm text-red-600`}
                   >
                     <TrashIcon className="h-4 w-4 mr-2" />
-                    Delete
+                    {t('note.delete')}
                   </button>
                 )}
               </Menu.Item>
@@ -224,7 +227,7 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, currentUserI
                   ))}
                   {completedItems.length > 0 && (
                     <div className="text-xs text-gray-500 dark:text-gray-400 mt-2">
-                      +{completedItems.length} completed items
+                      {t('note.moreCompletedItems', { count: completedItems.length })}
                     </div>
                   )}
                 </>

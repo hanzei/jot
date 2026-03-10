@@ -20,13 +20,13 @@ import (
 )
 
 type Server struct {
-	router         chi.Router
-	db             *database.DB
-	sessionService *auth.SessionService
-	authHandler    *handlers.AuthHandler
-	notesHandler   *handlers.NotesHandler
-	eventsHandler  *handlers.EventsHandler
-	adminHandler   *handlers.AdminHandler
+	router            chi.Router
+	db                *database.DB
+	sessionService    *auth.SessionService
+	authHandler       *handlers.AuthHandler
+	notesHandler      *handlers.NotesHandler
+	eventsHandler     *handlers.EventsHandler
+	adminHandler      *handlers.AdminHandler
 }
 
 func New() *Server {
@@ -43,6 +43,7 @@ func New() *Server {
 	userStore := models.NewUserStore(db.DB)
 	noteStore := models.NewNoteStore(db.DB)
 	sessionStore := models.NewSessionStore(db.DB)
+	userSettingsStore := models.NewUserSettingsStore(db.DB)
 
 	sessionService := auth.NewSessionService(sessionStore, userStore)
 
@@ -56,7 +57,7 @@ func New() *Server {
 
 	hub := sse.NewHub()
 
-	authHandler := handlers.NewAuthHandler(userStore, sessionService)
+	authHandler := handlers.NewAuthHandler(userStore, sessionService, userSettingsStore)
 	notesHandler := handlers.NewNotesHandler(noteStore, userStore, hub)
 	eventsHandler := handlers.NewEventsHandler(hub)
 	adminHandler := handlers.NewAdminHandler(userStore)
@@ -106,6 +107,8 @@ func (s *Server) setupRoutes() {
 			r.Get("/me", s.wrapHandler(s.authHandler.Me))
 			r.Put("/users/me", s.wrapHandler(s.authHandler.UpdateUser))
 			r.Put("/users/me/password", s.wrapHandler(s.authHandler.ChangePassword))
+			r.Get("/users/me/settings", s.wrapHandler(s.authHandler.GetSettings))
+			r.Put("/users/me/settings", s.wrapHandler(s.authHandler.UpdateSettings))
 
 			r.Get("/notes", s.wrapHandler(s.notesHandler.GetNotes))
 			r.Post("/notes", s.wrapHandler(s.notesHandler.CreateNote))

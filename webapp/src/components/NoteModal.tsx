@@ -1,6 +1,7 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
 import { XMarkIcon, PlusIcon, TrashIcon, ChevronDownIcon, ArchiveBoxIcon, ArchiveBoxXMarkIcon } from '@heroicons/react/24/outline';
 import { Dialog } from '@headlessui/react';
+import { useTranslation } from 'react-i18next';
 import { Note, NoteType, CreateNoteRequest, UpdateNoteRequest } from '@/types';
 import { notes } from '@/utils/api';
 
@@ -11,21 +12,23 @@ const MAX_TITLE_LENGTH = 200; // Maximum length for note title
 const MAX_CONTENT_LENGTH = 10000; // Maximum length for note content
 
 // Validation functions
-const validateItemText = (text: string): string | null => {
+type TFunction = (key: string, opts?: Record<string, unknown>) => string;
+
+const validateItemText = (text: string, t: TFunction): string | null => {
   const trimmed = text.trim();
   if (trimmed.length === 0) return null; // Allow empty items (will be removed on save)
-  if (trimmed.length > MAX_ITEM_LENGTH) return `Item text must be ${MAX_ITEM_LENGTH} characters or less`;
-  if (/[<>]/g.test(trimmed)) return 'Item text cannot contain < or > characters';
+  if (trimmed.length > MAX_ITEM_LENGTH) return t('note.itemTooLong', { max: MAX_ITEM_LENGTH });
+  if (/[<>]/g.test(trimmed)) return t('note.itemInvalidChars');
   return null;
 };
 
-const validateTitle = (title: string): string | null => {
-  if (title.length > MAX_TITLE_LENGTH) return `Title must be ${MAX_TITLE_LENGTH} characters or less`;
+const validateTitle = (title: string, t: TFunction): string | null => {
+  if (title.length > MAX_TITLE_LENGTH) return t('note.titleTooLong', { max: MAX_TITLE_LENGTH });
   return null;
 };
 
-const validateContent = (content: string): string | null => {
-  if (content.length > MAX_CONTENT_LENGTH) return `Content must be ${MAX_CONTENT_LENGTH} characters or less`;
+const validateContent = (content: string, t: TFunction): string | null => {
+  if (content.length > MAX_CONTENT_LENGTH) return t('note.contentTooLong', { max: MAX_CONTENT_LENGTH });
   return null;
 };
 
@@ -78,6 +81,7 @@ interface SortableItemProps {
 }
 
 function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isCompleted = false }: SortableItemProps) {
+  const { t } = useTranslation();
   const {
     attributes,
     listeners,
@@ -85,7 +89,7 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
     transform,
     transition,
     isDragging,
-  } = useSortable({ 
+  } = useSortable({
     id,
     disabled: isCompleted // Disable dragging for completed items
   });
@@ -126,7 +130,7 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
       />
       <input
         type="text"
-        placeholder="List item..."
+        placeholder={t('note.itemPlaceholder')}
         className={`flex-1 p-1 bg-transparent border-none outline-none placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white ${
           isCompleted ? 'line-through text-gray-500 dark:text-gray-400' : ''
         }`}
@@ -144,6 +148,7 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
 }
 
 export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModalProps) {
+  const { t, i18n } = useTranslation();
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [noteType, setNoteType] = useState<NoteType>('text');
@@ -173,12 +178,12 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
   }), [items]);
 
   const colors = [
-    { value: '#ffffff', name: 'White', class: 'bg-white dark:bg-slate-800 border-gray-300 dark:border-slate-600' },
-    { value: '#fbbc04', name: 'Yellow', class: 'bg-yellow-100 dark:bg-yellow-900 border-yellow-300 dark:border-yellow-700' },
-    { value: '#34a853', name: 'Green', class: 'bg-green-100 dark:bg-green-900 border-green-300 dark:border-green-700' },
-    { value: '#4285f4', name: 'Blue', class: 'bg-blue-100 dark:bg-blue-900 border-blue-300 dark:border-blue-700' },
-    { value: '#ea4335', name: 'Red', class: 'bg-red-100 dark:bg-red-900 border-red-300 dark:border-red-700' },
-    { value: '#9aa0a6', name: 'Purple', class: 'bg-purple-100 dark:bg-purple-900 border-purple-300 dark:border-purple-700' },
+    { value: '#ffffff', name: t('note.colorWhite'), class: 'bg-white dark:bg-slate-800 border-gray-300 dark:border-slate-600' },
+    { value: '#fbbc04', name: t('note.colorYellow'), class: 'bg-yellow-100 dark:bg-yellow-900 border-yellow-300 dark:border-yellow-700' },
+    { value: '#34a853', name: t('note.colorGreen'), class: 'bg-green-100 dark:bg-green-900 border-green-300 dark:border-green-700' },
+    { value: '#4285f4', name: t('note.colorBlue'), class: 'bg-blue-100 dark:bg-blue-900 border-blue-300 dark:border-blue-700' },
+    { value: '#ea4335', name: t('note.colorRed'), class: 'bg-red-100 dark:bg-red-900 border-red-300 dark:border-red-700' },
+    { value: '#8b5cf6', name: t('note.colorPurple'), class: 'bg-purple-100 dark:bg-purple-900 border-purple-300 dark:border-purple-700' },
   ];
 
   useEffect(() => {
@@ -342,7 +347,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
       onRefresh?.(); // Refresh the notes list to reflect the changes
     } catch (error) {
       console.error('Failed to auto-save note:', error);
-      showError('Failed to save changes. Please try again.');
+      showError(t('note.failedSaveChanges'));
     }
   };
 
@@ -380,7 +385,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
   // Helper function to handle text updates with debouncing
   const handleTextUpdate = (itemId: string, newText: string) => {
     // Validate the text input
-    const validationError = validateItemText(newText);
+    const validationError = validateItemText(newText, t);
     if (validationError && newText.trim() !== '') {
       showError(validationError);
       return;
@@ -612,7 +617,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
           {/* Header */}
           <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-slate-600">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-              {note ? 'Edit Note' : 'New Note'}
+              {note ? t('note.editNote') : t('note.newNote')}
             </h2>
             <div className="flex items-center space-x-2">
               {note && (
@@ -620,7 +625,8 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
                   <button
                     onClick={handlePinToggle}
                     className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
-                    title={pinned ? 'Unpin note' : 'Pin note'}
+                    title={pinned ? t('note.unpinNote') : t('note.pinNote')}
+                    aria-label={pinned ? t('note.unpinNote') : t('note.pinNote')}
                   >
                     {pinned ? (
                       <svg className="h-5 w-5 text-blue-500" fill="currentColor" viewBox="0 0 24 24">
@@ -635,7 +641,8 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
                   <button
                     onClick={handleArchiveToggle}
                     className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
-                    title={archived ? 'Unarchive note' : 'Archive note'}
+                    title={archived ? t('note.unarchiveNote') : t('note.archiveNote')}
+                    aria-label={archived ? t('note.unarchiveNote') : t('note.archiveNote')}
                   >
                     {archived ? (
                       <ArchiveBoxXMarkIcon className="h-5 w-5 text-blue-500" />
@@ -646,7 +653,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
                 </>
               )}
               <button
-                aria-label="Close"
+                aria-label={t('import.close')}
                 onClick={handleCloseRequest}
                 className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
               >
@@ -681,7 +688,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
                       : 'bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-600'
                   }`}
                 >
-                  Text
+                  {t('note.typeText')}
                 </button>
                 <button
                   onClick={() => setNoteType('todo')}
@@ -691,7 +698,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
                       : 'bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-600'
                   }`}
                 >
-                  Todo List
+                  {t('note.typeTodo')}
                 </button>
               </div>
             )}
@@ -699,12 +706,12 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
             {/* Title */}
             <input
               type="text"
-              placeholder="Note title..."
+              placeholder={t('note.titlePlaceholder')}
               className="w-full p-2 text-lg font-medium bg-transparent border-none outline-none placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white"
               value={title}
               onChange={(e) => {
                 const newTitle = e.target.value;
-                const validationError = validateTitle(newTitle);
+                const validationError = validateTitle(newTitle, t);
                 if (validationError) {
                   showError(validationError);
                   return;
@@ -716,13 +723,13 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
             {/* Content based on type */}
             {noteType === 'text' ? (
               <textarea
-                placeholder="Take a note..."
+                placeholder={t('note.contentPlaceholder')}
                 rows={4}
                 className="w-full p-2 bg-transparent border-none outline-none resize-none placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white min-h-[6rem]"
                 value={content}
                 onChange={(e) => {
                   const newContent = e.target.value;
-                  const validationError = validateContent(newContent);
+                  const validationError = validateContent(newContent, t);
                   if (validationError) {
                     showError(validationError);
                     return;
@@ -761,7 +768,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
                     className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-white p-1"
                   >
                     <PlusIcon className="h-4 w-4" />
-                    <span>Add item</span>
+                    <span>{t('note.addItem')}</span>
                   </button>
                 </div>
 
@@ -775,7 +782,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
                       <ChevronDownIcon 
                         className={`h-4 w-4 transition-transform ${checkedItemsCollapsed ? '-rotate-90' : 'rotate-0'}`}
                       />
-                      <span>Completed items ({completedItems.length})</span>
+                      <span>{t('note.completedItems', { count: completedItems.length })}</span>
                     </button>
                     
                     {!checkedItemsCollapsed && (
@@ -817,14 +824,14 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
           <div className="flex justify-between items-center p-4 border-t border-gray-200 dark:border-slate-600">
             {note && (
               <p className="text-sm text-gray-500 dark:text-gray-400">
-                Last edited: {new Date(note.updated_at).toLocaleString()}
+                {t('note.lastEdited', { date: new Date(note.updated_at).toLocaleString(i18n.resolvedLanguage) })}
               </p>
             )}
             <div className="flex items-center ml-auto">
               {loading && (
                 <div className="flex items-center space-x-2 text-sm text-gray-600">
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600"></div>
-                  <span>Saving...</span>
+                  <span>{t('note.saving')}</span>
                 </div>
               )}
             </div>

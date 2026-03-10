@@ -1,4 +1,5 @@
 import { ReactNode } from 'react';
+import { useTranslation } from 'react-i18next';
 import { UserCircleIcon } from '@heroicons/react/24/outline';
 import { Link } from 'react-router-dom';
 import { getUser } from '@/utils/auth';
@@ -20,6 +21,7 @@ interface NavigationHeaderProps {
 const NavigationHeader = ({ title = 'Jot', onLogout, tabs, children, username }: NavigationHeaderProps) => {
   const currentUser = getUser();
   const displayUsername = username ?? currentUser?.username;
+  const { t } = useTranslation();
 
   return (
     <header className="bg-white dark:bg-slate-800 shadow-sm border-b border-gray-200 dark:border-slate-700">
@@ -55,13 +57,13 @@ const NavigationHeader = ({ title = 'Jot', onLogout, tabs, children, username }:
                 to="/settings"
                 className="text-xs text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400"
               >
-                Settings
+                {t('nav.settings')}
               </Link>
               <button
                 onClick={onLogout}
                 className="text-xs text-gray-600 dark:text-gray-300 hover:text-red-600 dark:hover:text-red-400"
               >
-                Logout
+                {t('nav.logout')}
               </button>
             </div>
           </div>
@@ -79,13 +81,13 @@ const NavigationHeader = ({ title = 'Jot', onLogout, tabs, children, username }:
               to="/settings"
               className="text-sm text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400"
             >
-              Settings
+              {t('nav.settings')}
             </Link>
             <button
               onClick={onLogout}
               className="text-sm text-gray-600 dark:text-gray-300 hover:text-red-600 dark:hover:text-red-400"
             >
-              Logout
+              {t('nav.logout')}
             </button>
           </div>
 
