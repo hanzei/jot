@@ -279,13 +279,11 @@ const Settings = ({ onLogout }: SettingsProps) => {
         </div>
       </div>
 
-      {isImportModalOpen && (
-        <ImportModal
-          isOpen={isImportModalOpen}
-          onClose={() => setIsImportModalOpen(false)}
-          onSuccess={() => setIsImportModalOpen(false)}
-        />
-      )}
+      <ImportModal
+        isOpen={isImportModalOpen}
+        onClose={() => setIsImportModalOpen(false)}
+        onSuccess={() => setIsImportModalOpen(false)}
+      />
     </div>
   );
 };
