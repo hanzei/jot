@@ -101,3 +101,9 @@ export interface ShareNoteResponse {
   success: boolean;
   message: string;
 }
+
+export interface ImportResponse {
+  imported: number;
+  skipped: number;
+  errors?: string[];
+}
