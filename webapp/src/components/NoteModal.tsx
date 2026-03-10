@@ -314,7 +314,9 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
       completed: false,
       position: uncompletedItems.length,
     };
-    setItems([...items, newItem]);
+    const newItems = [...items, newItem];
+    setItems(newItems);
+    autoSaveNote(newItems);
     return newItem.id;
   };
 
