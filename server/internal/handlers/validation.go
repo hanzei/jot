@@ -1,30 +1,28 @@
 package handlers
 
 import (
-	"errors"
-	"fmt"
 	"regexp"
 	"strings"
 )
 
 func validateUsername(username string) error {
 	if len(username) < 2 {
-		return errors.New("username must be at least 2 characters")
+		return ErrUsernameMinLength
 	}
 	if len(username) > 30 {
-		return errors.New("username must be less than 30 characters")
+		return ErrUsernameMaxLength
 	}
 
 	// Username can only contain letters, numbers, underscores, and hyphens
 	usernameRegex := regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 	if !usernameRegex.MatchString(username) {
-		return errors.New("username can only contain letters, numbers, underscores, and hyphens")
+		return ErrUsernameInvalidChars
 	}
 
 	// Username cannot start or end with underscore or hyphen
 	if strings.HasPrefix(username, "_") || strings.HasPrefix(username, "-") ||
 		strings.HasSuffix(username, "_") || strings.HasSuffix(username, "-") {
-		return errors.New("username cannot start or end with underscore or hyphen")
+		return ErrUsernameInvalidStartEnd
 	}
 
 	return nil
@@ -33,7 +31,7 @@ func validateUsername(username string) error {
 func validatePassword(password string) error {
 	const minPasswordLength = 4
 	if len(password) < minPasswordLength {
-		return fmt.Errorf("password must be at least %d characters", minPasswordLength)
+		return ErrPasswordTooShort
 	}
 	return nil
 }

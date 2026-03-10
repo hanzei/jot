@@ -113,7 +113,7 @@ func (h *AdminHandler) UpdateUserRole(w http.ResponseWriter, r *http.Request) (i
 
 func validateRole(role string) error {
 	if role != models.RoleUser && role != models.RoleAdmin {
-		return errors.New("invalid role: must be 'user' or 'admin'")
+		return ErrInvalidRole
 	}
 	return nil
 }

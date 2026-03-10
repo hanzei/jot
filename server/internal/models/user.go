@@ -23,6 +23,9 @@ var ErrUserNotFound = errors.New("user not found")
 // admin user, which would leave the system with no administrators.
 var ErrLastAdmin = errors.New("cannot demote the last admin")
 
+// ErrInvalidRole is returned when an unrecognized role value is supplied.
+var ErrInvalidRole = errors.New("invalid role")
+
 type User struct {
 	ID           string    `json:"id"`
 	Username     string    `json:"username"`
@@ -93,8 +96,8 @@ func (s *UserStore) GetByUsername(username string) (*User, error) {
 		&user.Role, &user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("user not found")
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrUserNotFound
 		}
 		return nil, fmt.Errorf("failed to get user: %w", err)
 	}
@@ -111,8 +114,8 @@ func (s *UserStore) GetByID(id string) (*User, error) {
 		&user.Role, &user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("user not found")
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrUserNotFound
 		}
 		return nil, fmt.Errorf("failed to get user: %w", err)
 	}
@@ -174,7 +177,7 @@ func (s *UserStore) UpdateUsername(id, newUsername string) (*User, error) {
 			return nil, ErrUsernameTaken
 		}
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, fmt.Errorf("user not found")
+			return nil, ErrUserNotFound
 		}
 		return nil, fmt.Errorf("failed to update username: %w", err)
 	}
@@ -200,7 +203,7 @@ func (s *UserStore) UpdatePassword(id, newPassword string) error {
 		return fmt.Errorf("failed to check rows affected: %w", err)
 	}
 	if rows == 0 {
-		return fmt.Errorf("user not found")
+		return ErrUserNotFound
 	}
 
 	return nil
@@ -255,7 +258,7 @@ func (s *UserSettingsStore) Update(userID, language string) (*UserSettings, erro
 
 func (s *UserStore) UpdateRole(id, role string) (*User, error) {
 	if role != RoleUser && role != RoleAdmin {
-		return nil, fmt.Errorf("invalid role %q: must be %q or %q", role, RoleUser, RoleAdmin)
+		return nil, fmt.Errorf("invalid role %q: must be %q or %q: %w", role, RoleUser, RoleAdmin, ErrInvalidRole)
 	}
 
 	tx, err := s.db.Begin()

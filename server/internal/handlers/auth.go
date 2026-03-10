@@ -56,7 +56,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) (int, err
 	user, err := h.userStore.Create(req.Username, req.Password)
 	if err != nil {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
-			return http.StatusConflict, errors.New("username already taken")
+			return http.StatusConflict, models.ErrUsernameTaken
 		}
 		return http.StatusInternalServerError, err
 	}
@@ -91,16 +91,16 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) (int, error)
 	}
 
 	if req.Username == "" || req.Password == "" {
-		return http.StatusBadRequest, errors.New("missing username or password")
+		return http.StatusBadRequest, ErrMissingCredentials
 	}
 
 	user, err := h.userStore.GetByUsername(req.Username)
 	if err != nil {
-		return http.StatusUnauthorized, errors.New("invalid username or password")
+		return http.StatusUnauthorized, ErrInvalidCredentials
 	}
 
 	if !user.CheckPassword(req.Password) {
-		return http.StatusUnauthorized, errors.New("invalid username or password")
+		return http.StatusUnauthorized, ErrInvalidCredentials
 	}
 
 	settings, err := h.userSettingsStore.GetOrCreate(user.ID)
@@ -150,7 +150,7 @@ type UpdateUserRequest struct {
 func (h *AuthHandler) UpdateUser(w http.ResponseWriter, r *http.Request) (int, error) {
 	currentUser, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
-		return http.StatusUnauthorized, errors.New("unauthorized")
+		return http.StatusUnauthorized, ErrUnauthorized
 	}
 
 	var req UpdateUserRequest
@@ -165,7 +165,7 @@ func (h *AuthHandler) UpdateUser(w http.ResponseWriter, r *http.Request) (int, e
 	user, err := h.userStore.UpdateUsername(currentUser.ID, req.Username)
 	if err != nil {
 		if errors.Is(err, models.ErrUsernameTaken) {
-			return http.StatusConflict, errors.New("username already taken")
+			return http.StatusConflict, models.ErrUsernameTaken
 		}
 		return http.StatusInternalServerError, err
 	}
@@ -187,7 +187,7 @@ type ChangePasswordRequest struct {
 func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) (int, error) {
 	currentUser, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
-		return http.StatusUnauthorized, errors.New("unauthorized")
+		return http.StatusUnauthorized, ErrUnauthorized
 	}
 
 	var req ChangePasswordRequest
@@ -196,7 +196,7 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) (in
 	}
 
 	if req.CurrentPassword == "" || req.NewPassword == "" {
-		return http.StatusBadRequest, errors.New("current_password and new_password are required")
+		return http.StatusBadRequest, ErrPasswordFieldsRequired
 	}
 
 	if err := validatePassword(req.NewPassword); err != nil {
@@ -210,7 +210,7 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) (in
 	}
 
 	if !user.CheckPassword(req.CurrentPassword) {
-		return http.StatusForbidden, errors.New("current password is incorrect")
+		return http.StatusForbidden, ErrIncorrectPassword
 	}
 
 	if err := h.userStore.UpdatePassword(currentUser.ID, req.NewPassword); err != nil {
@@ -235,7 +235,7 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) (in
 func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) (int, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
-		return http.StatusUnauthorized, errors.New("unauthorized")
+		return http.StatusUnauthorized, ErrUnauthorized
 	}
 
 	settings, err := h.userSettingsStore.GetOrCreate(user.ID)
@@ -265,7 +265,7 @@ var validLanguages = map[string]bool{"system": true, "en": true, "de": true}
 func (h *AuthHandler) GetSettings(w http.ResponseWriter, r *http.Request) (int, error) {
 	currentUser, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
-		return http.StatusUnauthorized, errors.New("unauthorized")
+		return http.StatusUnauthorized, ErrUnauthorized
 	}
 
 	settings, err := h.userSettingsStore.GetOrCreate(currentUser.ID)
@@ -284,7 +284,7 @@ func (h *AuthHandler) GetSettings(w http.ResponseWriter, r *http.Request) (int, 
 func (h *AuthHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) (int, error) {
 	currentUser, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
-		return http.StatusUnauthorized, errors.New("unauthorized")
+		return http.StatusUnauthorized, ErrUnauthorized
 	}
 
 	var req UpdateSettingsRequest
@@ -293,7 +293,7 @@ func (h *AuthHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) (in
 	}
 
 	if !validLanguages[req.Language] {
-		return http.StatusBadRequest, errors.New("invalid language: must be 'system', 'en', or 'de'")
+		return http.StatusBadRequest, ErrInvalidLanguage
 	}
 
 	settings, err := h.userSettingsStore.Update(currentUser.ID, req.Language)
