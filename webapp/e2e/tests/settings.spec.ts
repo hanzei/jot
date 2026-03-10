@@ -18,6 +18,7 @@ test.describe('Settings', () => {
     authenticatedUser,
     settingsPage,
     loginPage,
+    dashboardPage,
   }) => {
     const newPassword = 'newpass456';
 
@@ -26,7 +27,7 @@ test.describe('Settings', () => {
     await settingsPage.expectSuccess('Password changed successfully.');
 
     // Logout and log back in with new password
-    await page.locator('button:has-text("Logout")').last().click();
+    await dashboardPage.logout();
     await expect(page).toHaveURL('/login');
 
     await loginPage.login(authenticatedUser.username, newPassword);
@@ -44,10 +45,10 @@ test.describe('Settings', () => {
     await settingsPage.goto();
 
     // Fill in mismatching new passwords manually
-    await page.fill('#current-password', authenticatedUser.password);
-    await page.fill('#new-password', 'newpass456');
-    await page.fill('#confirm-password', 'different789');
-    await page.click('button:has-text("Change Password")');
+    await page.getByLabel('Current password').fill(authenticatedUser.password);
+    await page.getByLabel('New password').fill('newpass456');
+    await page.getByLabel('Confirm password').fill('different789');
+    await page.getByRole('button', { name: 'Change Password' }).click();
 
     await expect(page.getByText('New passwords do not match.')).toBeVisible();
     void authenticatedUser;

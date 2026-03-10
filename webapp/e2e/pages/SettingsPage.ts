@@ -8,15 +8,15 @@ export class SettingsPage {
   }
 
   async changeUsername(newUsername: string) {
-    await this.page.fill('#username', newUsername);
-    await this.page.click('button:has-text("Save Changes")');
+    await this.page.getByLabel('Username').fill(newUsername);
+    await this.page.getByRole('button', { name: 'Save Changes' }).click();
   }
 
   async changePassword(currentPassword: string, newPassword: string) {
-    await this.page.fill('#current-password', currentPassword);
-    await this.page.fill('#new-password', newPassword);
-    await this.page.fill('#confirm-password', newPassword);
-    await this.page.click('button:has-text("Change Password")');
+    await this.page.getByLabel('Current password').fill(currentPassword);
+    await this.page.getByLabel('New password').fill(newPassword);
+    await this.page.getByLabel('Confirm password').fill(newPassword);
+    await this.page.getByRole('button', { name: 'Change Password' }).click();
   }
 
   async expectSuccess(message: string) {

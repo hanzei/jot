@@ -108,6 +108,14 @@ export class DashboardPage {
 
   async logout() {
     // The nav has two logout buttons (mobile + desktop); click the last visible one
-    await this.page.locator('button:has-text("Logout")').last().click();
+    await this.page.getByRole('button', { name: 'Logout' }).last().click();
+  }
+
+  async editNote(title: string, newTitle: string, newContent: string) {
+    await this.openNote(title);
+    await expect(this.page.getByRole('heading', { name: 'Edit Note' })).toBeVisible();
+    await this.page.fill('input[placeholder="Note title..."]', newTitle);
+    await this.page.fill('textarea[placeholder="Take a note..."]', newContent);
+    await this.page.click('button[aria-label="Close"]');
   }
 }

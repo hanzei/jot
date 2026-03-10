@@ -18,20 +18,11 @@ test.describe('Notes', () => {
     await dashboardPage.expectNoteVisible('Title Only Note');
   });
 
-  test('edits a note title and content', async ({ page, dashboardPage }) => {
+  test('edits a note title and content', async ({ dashboardPage }) => {
     await dashboardPage.goto();
     await dashboardPage.createNote('Original Title', 'Original content');
 
-    // Open the note for editing
-    await dashboardPage.openNote('Original Title');
-    await expect(page.getByRole('heading', { name: 'Edit Note' })).toBeVisible();
-
-    // Clear and retype the title
-    await page.fill('input[placeholder="Note title..."]', 'Updated Title');
-    await page.fill('textarea[placeholder="Take a note..."]', 'Updated content');
-
-    // Close (auto-saves)
-    await page.click('button[aria-label="Close"]');
+    await dashboardPage.editNote('Original Title', 'Updated Title', 'Updated content');
 
     await dashboardPage.expectNoteVisible('Updated Title');
     await dashboardPage.expectNoteNotVisible('Original Title');

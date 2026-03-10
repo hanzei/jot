@@ -28,7 +28,7 @@ test.describe('Authentication', () => {
     await registerPage.expectError('Password must be at least 4 characters');
   });
 
-  test('shows error for duplicate username', async ({ page, registerPage }) => {
+  test('shows error for duplicate username', async ({ page, registerPage, dashboardPage }) => {
     const username = uniqueUsername('dup');
     // Register once
     await registerPage.goto();
@@ -36,7 +36,7 @@ test.describe('Authentication', () => {
     await expect(page).toHaveURL('/');
 
     // Log out
-    await page.locator('button:has-text("Logout")').last().click();
+    await dashboardPage.logout();
     await expect(page).toHaveURL('/login');
 
     // Try to register with the same username
@@ -45,7 +45,7 @@ test.describe('Authentication', () => {
     await registerPage.expectError('username already taken');
   });
 
-  test('logs in with valid credentials and redirects to dashboard', async ({ page, loginPage, registerPage }) => {
+  test('logs in with valid credentials and redirects to dashboard', async ({ page, loginPage, registerPage, dashboardPage }) => {
     const username = uniqueUsername('login');
     const password = 'securepass';
 
@@ -55,7 +55,7 @@ test.describe('Authentication', () => {
     await expect(page).toHaveURL('/');
 
     // Logout
-    await page.locator('button:has-text("Logout")').last().click();
+    await dashboardPage.logout();
     await expect(page).toHaveURL('/login');
 
     // Login
@@ -64,23 +64,24 @@ test.describe('Authentication', () => {
     await loginPage.expectRedirectedToDashboard();
   });
 
-  test('shows error on login with wrong password', async ({ loginPage, registerPage, page }) => {
+  test('shows error on login with wrong password', async ({ loginPage, registerPage, page, dashboardPage }) => {
     const username = uniqueUsername('badpw');
     await registerPage.goto();
     await registerPage.register(username, 'correctpassword');
     await expect(page).toHaveURL('/');
-    await page.locator('button:has-text("Logout")').last().click();
+    await dashboardPage.logout();
+    await expect(page).toHaveURL('/login');
 
     await loginPage.goto();
     await loginPage.login(username, 'wrongpassword');
     await loginPage.expectError('invalid username or password');
   });
 
-  test('logs out and redirects to login', async ({ page, authenticatedUser }) => {
+  test('logs out and redirects to login', async ({ page, authenticatedUser, dashboardPage }) => {
     // authenticatedUser fixture already logged in
     void authenticatedUser;
     await expect(page).toHaveURL('/');
-    await page.locator('button:has-text("Logout")').last().click();
+    await dashboardPage.logout();
     await expect(page).toHaveURL('/login');
   });
 
