@@ -13,7 +13,7 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
-  const [result, setResult] = useState<{ imported: number; skipped: number } | null>(null);
+  const [result, setResult] = useState<{ imported: number; skipped: number; errors?: string[] } | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
@@ -99,10 +99,22 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
             )}
 
             {result && (
-              <div className="mb-4 p-3 bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 rounded text-sm text-green-700 dark:text-green-400">
-                Successfully imported {result.imported} note{result.imported !== 1 ? 's' : ''}
-                {result.skipped > 0 && ` (${result.skipped} trashed note${result.skipped !== 1 ? 's' : ''} skipped)`}.
-              </div>
+              <>
+                <div className={`mb-4 p-3 rounded text-sm ${result.errors?.length ? 'bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 text-yellow-700 dark:text-yellow-400' : 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-400'}`}>
+                  Imported {result.imported} note{result.imported !== 1 ? 's' : ''}
+                  {result.skipped > 0 && ` (${result.skipped} skipped)`}
+                  {result.errors?.length ? `, ${result.errors.length} failed` : ''}.
+                </div>
+                {result.errors && result.errors.length > 0 && (
+                  <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-sm text-red-600 dark:text-red-400">
+                    <ul className="list-disc list-inside space-y-1">
+                      {result.errors.map((err, i) => (
+                        <li key={i}>{err}</li>
+                      ))}
+                    </ul>
+                  </div>
+                )}
+              </>
             )}
 
             <div

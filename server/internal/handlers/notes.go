@@ -5,6 +5,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"strings"
@@ -455,8 +456,9 @@ func (h *NotesHandler) SearchUsers(w http.ResponseWriter, r *http.Request) (int,
 }
 
 type ImportResponse struct {
-	Imported int `json:"imported"`
-	Skipped  int `json:"skipped"`
+	Imported int      `json:"imported"`
+	Skipped  int      `json:"skipped"`
+	Errors   []string `json:"errors,omitempty"`
 }
 
 type keepNoteItem struct {
@@ -472,6 +474,10 @@ type keepNote struct {
 	IsTrashed                bool           `json:"isTrashed"`
 	IsArchived               bool           `json:"isArchived"`
 	IsPinned                 bool           `json:"isPinned"`
+}
+
+func (kn keepNote) isEmpty() bool {
+	return kn.Title == "" && kn.TextContent == "" && len(kn.ListContent) == 0
 }
 
 func keepColorToHex(color string) string {
@@ -540,6 +546,9 @@ func parseKeepNotesFromZip(zr *zip.Reader) []keepNote {
 		if err := json.Unmarshal(jsonData, &kn); err != nil {
 			continue
 		}
+		if kn.isEmpty() {
+			continue
+		}
 		notes = append(notes, kn)
 	}
 	return notes
@@ -561,21 +570,29 @@ func parseKeepNotesFromData(filename string, data []byte) ([]keepNote, error) {
 	if err := json.Unmarshal(data, &kn); err != nil {
 		return nil, errors.New("invalid JSON file")
 	}
+	if kn.isEmpty() {
+		return nil, errors.New("note has no title, content, or list items")
+	}
 	return []keepNote{kn}, nil
 }
 
-func (h *NotesHandler) importKeepNotes(userID string, keepNotes []keepNote) (imported, skipped int, err error) {
-	for _, kn := range keepNotes {
+func (h *NotesHandler) importKeepNotes(userID string, keepNotes []keepNote) (imported, skipped int, importErrors []string) {
+	for i, kn := range keepNotes {
 		if kn.IsTrashed {
 			skipped++
 			continue
 		}
 		if err := h.importKeepNote(userID, kn); err != nil {
-			return 0, 0, err
+			title := kn.Title
+			if title == "" {
+				title = fmt.Sprintf("note #%d", i+1)
+			}
+			importErrors = append(importErrors, fmt.Sprintf("failed to import %q: %v", title, err))
+			continue
 		}
 		imported++
 	}
-	return imported, skipped, nil
+	return imported, skipped, importErrors
 }
 
 func (h *NotesHandler) ImportNotes(w http.ResponseWriter, r *http.Request) (int, error) {
@@ -605,13 +622,10 @@ func (h *NotesHandler) ImportNotes(w http.ResponseWriter, r *http.Request) (int,
 		return http.StatusBadRequest, err
 	}
 
-	imported, skipped, err := h.importKeepNotes(user.ID, keepNotes)
-	if err != nil {
-		return http.StatusInternalServerError, err
-	}
+	imported, skipped, importErrors := h.importKeepNotes(user.ID, keepNotes)
 
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(ImportResponse{Imported: imported, Skipped: skipped}); err != nil {
+	if err := json.NewEncoder(w).Encode(ImportResponse{Imported: imported, Skipped: skipped, Errors: importErrors}); err != nil {
 		return http.StatusInternalServerError, err
 	}
 	return 0, nil

@@ -101,4 +101,5 @@ export interface ShareNoteResponse {
 export interface ImportResponse {
   imported: number;
   skipped: number;
+  errors?: string[];
 }
