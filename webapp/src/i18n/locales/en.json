@@ -21,7 +21,7 @@
     "createAccount": "Create account",
     "registrationFailed": "Registration failed",
     "usernameMin": "Username must be at least 2 characters",
-    "usernameMax": "Username must be less than 30 characters",
+    "usernameMax": "Username must be 30 characters or fewer",
     "usernameChars": "Username can only contain letters, numbers, underscores, and hyphens",
     "usernameEdge": "Username cannot start or end with underscore or hyphen",
     "passwordsNoMatch": "Passwords do not match",
@@ -69,7 +69,9 @@
     "languageLabel": "App language",
     "languageSystem": "System Language",
     "languageEnglish": "English",
-    "languageGerman": "Deutsch"
+    "languageGerman": "Deutsch",
+    "language_en": "English",
+    "language_de": "Deutsch"
   },
   "admin": {
     "title": "User Management",
@@ -128,7 +130,8 @@
     "itemInvalidChars": "Item text cannot contain < or > characters",
     "titleTooLong": "Title must be {{max}} characters or less",
     "contentTooLong": "Content must be {{max}} characters or less",
-    "failedSaveChanges": "Failed to save changes. Please try again."
+    "failedSaveChanges": "Failed to save changes. Please try again.",
+    "menuOptions": "Note options"
   },
   "share": {
     "title": "Share \"{{noteTitle}}\"",
@@ -147,13 +150,12 @@
     "unsharedSuccess": "Note unshared successfully!",
     "failedUnshare": "Failed to unshare note. Please try again."
   },
+  "serviceWorker": {
+    "updatePrompt": "New app update is available! Click OK to refresh"
+  },
   "import": {
     "title": "Import from Google Keep",
-    "description": "Upload a Google Keep export file. Export your notes from",
-    "googleTakeout": "Google Takeout",
-    "descriptionSuffix": "and upload the",
-    "descriptionSuffix2": "archive or an individual",
-    "descriptionSuffix3": "note file.",
+    "description": "Upload a Google Keep export file. Export your notes from Google Takeout and upload the .zip archive or an individual .json note file.",
     "dropFile": "Drop your file here, or",
     "browse": "browse",
     "fileTypes": ".zip or .json files",

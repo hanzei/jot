@@ -12,7 +12,7 @@ interface AdminProps {
 }
 
 const Admin = ({ onLogout }: AdminProps) => {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -218,7 +218,7 @@ const Admin = ({ onLogout }: AdminProps) => {
                             {user.username}
                           </p>
                           <p className="text-sm text-gray-500 dark:text-gray-400">
-                            {t('admin.userIdCreated', { id: user.id, date: new Date(user.created_at).toLocaleDateString() })}
+                            {t('admin.userIdCreated', { id: user.id, date: new Date(user.created_at).toLocaleDateString(i18n.resolvedLanguage) })}
                           </p>
                         </div>
                       </div>

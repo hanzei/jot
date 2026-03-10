@@ -148,7 +148,7 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
 }
 
 export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModalProps) {
-  const { t } = useTranslation();
+  const { t, i18n } = useTranslation();
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [noteType, setNoteType] = useState<NoteType>('text');
@@ -626,6 +626,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
                     onClick={handlePinToggle}
                     className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
                     title={pinned ? t('note.unpinNote') : t('note.pinNote')}
+                    aria-label={pinned ? t('note.unpinNote') : t('note.pinNote')}
                   >
                     {pinned ? (
                       <svg className="h-5 w-5 text-blue-500" fill="currentColor" viewBox="0 0 24 24">
@@ -641,6 +642,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
                     onClick={handleArchiveToggle}
                     className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
                     title={archived ? t('note.unarchiveNote') : t('note.archiveNote')}
+                    aria-label={archived ? t('note.unarchiveNote') : t('note.archiveNote')}
                   >
                     {archived ? (
                       <ArchiveBoxXMarkIcon className="h-5 w-5 text-blue-500" />
@@ -822,7 +824,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh }: NoteModa
           <div className="flex justify-between items-center p-4 border-t border-gray-200 dark:border-slate-600">
             {note && (
               <p className="text-sm text-gray-500 dark:text-gray-400">
-                {t('note.lastEdited', { date: new Date(note.updated_at).toLocaleString() })}
+                {t('note.lastEdited', { date: new Date(note.updated_at).toLocaleString(i18n.resolvedLanguage) })}
               </p>
             )}
             <div className="flex items-center ml-auto">

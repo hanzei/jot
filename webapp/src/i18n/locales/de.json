@@ -69,7 +69,9 @@
     "languageLabel": "App-Sprache",
     "languageSystem": "Systemsprache",
     "languageEnglish": "English",
-    "languageGerman": "Deutsch"
+    "languageGerman": "Deutsch",
+    "language_en": "English",
+    "language_de": "Deutsch"
   },
   "admin": {
     "title": "Benutzerverwaltung",
@@ -128,7 +130,8 @@
     "itemInvalidChars": "Elementtext darf keine < oder > Zeichen enthalten",
     "titleTooLong": "Titel darf höchstens {{max}} Zeichen lang sein",
     "contentTooLong": "Inhalt darf höchstens {{max}} Zeichen lang sein",
-    "failedSaveChanges": "Änderungen konnten nicht gespeichert werden. Bitte erneut versuchen."
+    "failedSaveChanges": "Änderungen konnten nicht gespeichert werden. Bitte erneut versuchen.",
+    "menuOptions": "Notizoptionen"
   },
   "share": {
     "title": "\"{{noteTitle}}\" teilen",
@@ -147,13 +150,12 @@
     "unsharedSuccess": "Teilen der Notiz erfolgreich aufgehoben!",
     "failedUnshare": "Teilen der Notiz konnte nicht aufgehoben werden. Bitte erneut versuchen."
   },
+  "serviceWorker": {
+    "updatePrompt": "Es ist ein neues App-Update verfügbar! Klicke OK zum Aktualisieren"
+  },
   "import": {
     "title": "Aus Google Keep importieren",
-    "description": "Lade eine Google Keep-Exportdatei hoch. Exportiere deine Notizen aus",
-    "googleTakeout": "Google Takeout",
-    "descriptionSuffix": "und lade das",
-    "descriptionSuffix2": "Archiv oder eine einzelne",
-    "descriptionSuffix3": "Notiz-Datei hoch.",
+    "description": "Lade eine Google Keep-Exportdatei hoch. Exportiere deine Notizen aus Google Takeout und lade das .zip-Archiv oder eine einzelne .json-Notiz-Datei hoch.",
     "dropFile": "Datei hier ablegen oder",
     "browse": "durchsuchen",
     "fileTypes": ".zip- oder .json-Dateien",

@@ -6,8 +6,8 @@ const LANGUAGE_KEY = 'language';
 
 export const getLanguagePreference = (): LanguagePreference => {
   const stored = localStorage.getItem(LANGUAGE_KEY);
-  if (stored === 'system' || stored === 'en' || stored === 'de') {
-    return stored;
+  if (stored === 'system' || (SUPPORTED_LANGUAGES as readonly string[]).includes(stored ?? '')) {
+    return stored as LanguagePreference;
   }
   return 'system';
 };

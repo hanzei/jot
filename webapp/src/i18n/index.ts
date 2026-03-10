@@ -2,10 +2,15 @@ import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 import en from './locales/en.json';
 import de from './locales/de.json';
-import { getLanguagePreference, resolveLanguage } from '@/utils/language';
+import { getLanguagePreference, resolveLanguage, SupportedLanguage } from '@/utils/language';
 
-const pref = getLanguagePreference();
-const lng = resolveLanguage(pref);
+let lng: SupportedLanguage;
+try {
+  const pref = getLanguagePreference();
+  lng = resolveLanguage(pref);
+} catch {
+  lng = 'en';
+}
 
 i18n
   .use(initReactI18next)

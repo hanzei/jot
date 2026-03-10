@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import i18n from '@/i18n';
 import { auth, users, isAxiosError } from '@/utils/api';
 import { getUser, setUser, removeUser } from '@/utils/auth';
-import { getLanguagePreference, setLanguagePreference, resolveLanguage, LanguagePreference } from '@/utils/language';
+import { getLanguagePreference, setLanguagePreference, resolveLanguage, LanguagePreference, SUPPORTED_LANGUAGES } from '@/utils/language';
 import NavigationHeader from '@/components/NavigationHeader';
 import ImportModal from '@/components/ImportModal';
 
@@ -41,7 +41,7 @@ const Settings = ({ onLogout }: SettingsProps) => {
       removeUser();
       onLogout();
     } catch {
-      setError(t('settings.logoutFailed'));
+      setError('settings.logoutFailed');
     }
   };
 
@@ -51,22 +51,22 @@ const Settings = ({ onLogout }: SettingsProps) => {
     setPasswordSuccess('');
 
     if (newPassword !== confirmPassword) {
-      setPasswordError(t('settings.passwordsNoMatch'));
+      setPasswordError('settings.passwordsNoMatch');
       return;
     }
 
     setPasswordSaving(true);
     try {
       await users.changePassword({ current_password: currentPassword, new_password: newPassword });
-      setPasswordSuccess(t('settings.passwordChanged'));
+      setPasswordSuccess('settings.passwordChanged');
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
     } catch (err: unknown) {
       if (isAxiosError(err)) {
-        setPasswordError(err.response?.data || t('settings.failedChangePassword'));
+        setPasswordError(err.response?.data || 'settings.failedChangePassword');
       } else {
-        setPasswordError(t('settings.failedChangePassword'));
+        setPasswordError('settings.failedChangePassword');
       }
     } finally {
       setPasswordSaving(false);
@@ -84,12 +84,12 @@ const Settings = ({ onLogout }: SettingsProps) => {
       setUser(updatedUser);
       setCurrentUsername(updatedUser.username);
       setDraftUsername(updatedUser.username);
-      setSuccess(t('settings.usernameUpdated'));
+      setSuccess('settings.usernameUpdated');
     } catch (err: unknown) {
       if (isAxiosError(err)) {
-        setError(err.response?.data || t('settings.failedUpdateUsername'));
+        setError(err.response?.data || 'settings.failedUpdateUsername');
       } else {
-        setError(t('settings.failedUpdateUsername'));
+        setError('settings.failedUpdateUsername');
       }
     } finally {
       setSaving(false);
@@ -185,12 +185,12 @@ const Settings = ({ onLogout }: SettingsProps) => {
 
               {error && (
                 <div role="alert" className="mt-4 text-red-600 dark:text-red-400 text-sm">
-                  {error}
+                  {t(error, { defaultValue: error })}
                 </div>
               )}
               {success && (
                 <div aria-live="polite" className="mt-4 text-green-600 dark:text-green-400 text-sm">
-                  {success}
+                  {t(success, { defaultValue: success })}
                 </div>
               )}
 
@@ -254,12 +254,12 @@ const Settings = ({ onLogout }: SettingsProps) => {
 
               {passwordError && (
                 <div role="alert" className="mt-4 text-red-600 dark:text-red-400 text-sm">
-                  {passwordError}
+                  {t(passwordError, { defaultValue: passwordError })}
                 </div>
               )}
               {passwordSuccess && (
                 <div aria-live="polite" className="mt-4 text-green-600 dark:text-green-400 text-sm">
-                  {passwordSuccess}
+                  {t(passwordSuccess, { defaultValue: passwordSuccess })}
                 </div>
               )}
 
@@ -301,8 +301,9 @@ const Settings = ({ onLogout }: SettingsProps) => {
                 className="block w-full border border-gray-300 dark:border-slate-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:outline-none focus:ring-blue-500 focus:border-blue-500"
               >
                 <option value="system">{t('settings.languageSystem')}</option>
-                <option value="en">{t('settings.languageEnglish')}</option>
-                <option value="de">{t('settings.languageGerman')}</option>
+                {SUPPORTED_LANGUAGES.map((lang) => (
+                  <option key={lang} value={lang}>{t(`settings.language_${lang}`, { defaultValue: lang.toUpperCase() })}</option>
+                ))}
               </select>
             </div>
           </div>

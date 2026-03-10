@@ -277,6 +277,7 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
                         onClick={() => handleUnshare(share.username || '')}
                         className="text-red-600 hover:text-red-800 p-1"
                         title={t('share.removeAccess')}
+                        aria-label={t('share.removeAccess')}
                       >
                         <TrashIcon className="h-4 w-4" />
                       </button>

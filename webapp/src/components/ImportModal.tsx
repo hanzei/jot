@@ -95,10 +95,7 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
             </div>
 
             <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-              {t('import.description')}{' '}
-              <span className="font-medium">{t('import.googleTakeout')}</span> {t('import.descriptionSuffix')}{' '}
-              <span className="font-mono text-xs bg-gray-100 dark:bg-slate-700 px-1 rounded">.zip</span> {t('import.descriptionSuffix2')}{' '}
-              <span className="font-mono text-xs bg-gray-100 dark:bg-slate-700 px-1 rounded">.json</span> {t('import.descriptionSuffix3')}
+              {t('import.description')}
             </p>
 
             {error && (
