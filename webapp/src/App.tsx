@@ -8,21 +8,31 @@ import Settings from '@/pages/Settings';
 import { OfflineNotification } from '@/components/OfflineNotification';
 import { isAuthenticated, isAdmin, setUser, setSettings, removeUser } from '@/utils/auth';
 import { auth } from '@/utils/api';
+import { applyTheme, getThemePreference } from '@/utils/theme';
 
 function App() {
   const [isAuth, setIsAuth] = useState(false);
   const [loading, setLoading] = useState(true);
 
   useEffect(() => {
+    // Apply theme from cached settings immediately (before server response).
+    applyTheme(getThemePreference());
+
+    // Listen for OS-level dark mode changes when the user has system theme.
+    const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
+    const handleSystemThemeChange = () => applyTheme(getThemePreference());
+    mediaQuery.addEventListener('change', handleSystemThemeChange);
+
     if (!isAuthenticated()) {
       setLoading(false);
-      return;
+      return () => mediaQuery.removeEventListener('change', handleSystemThemeChange);
     }
     // Validate session against server to detect expired sessions
     auth.me()
       .then((response) => {
         setUser(response.user);
         setSettings(response.settings);
+        applyTheme(response.settings.theme as 'system' | 'light' | 'dark');
         setIsAuth(true);
       })
       .catch(() => {
@@ -34,6 +44,8 @@ function App() {
       .finally(() => {
         setLoading(false);
       });
+
+    return () => mediaQuery.removeEventListener('change', handleSystemThemeChange);
   }, []);
 
   if (loading) {

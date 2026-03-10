@@ -257,9 +257,11 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) (int, error) {
 
 type UpdateSettingsRequest struct {
 	Language string `json:"language"`
+	Theme    string `json:"theme"`
 }
 
 var validLanguages = map[string]bool{"system": true, "en": true, "de": true}
+var validThemes = map[string]bool{"system": true, "light": true, "dark": true}
 
 // GetSettings handles GET /api/v1/users/me/settings.
 func (h *AuthHandler) GetSettings(w http.ResponseWriter, r *http.Request) (int, error) {
@@ -296,7 +298,14 @@ func (h *AuthHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) (in
 		return http.StatusBadRequest, errors.New("invalid language: must be 'system', 'en', or 'de'")
 	}
 
-	settings, err := h.userSettingsStore.Update(currentUser.ID, req.Language)
+	if req.Theme == "" {
+		req.Theme = "system"
+	}
+	if !validThemes[req.Theme] {
+		return http.StatusBadRequest, errors.New("invalid theme: must be 'system', 'light', or 'dark'")
+	}
+
+	settings, err := h.userSettingsStore.Update(currentUser.ID, req.Language, req.Theme)
 	if err != nil {
 		return http.StatusInternalServerError, err
 	}

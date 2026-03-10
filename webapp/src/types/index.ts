@@ -9,6 +9,7 @@ export interface User {
 export interface UserSettings {
   user_id: string;
   language: string;
+  theme: string;
   updated_at: string;
 }
 
@@ -19,6 +20,7 @@ export interface AuthResponse {
 
 export interface UpdateSettingsRequest {
   language: string;
+  theme: string;
 }
 
 export interface LoginRequest {

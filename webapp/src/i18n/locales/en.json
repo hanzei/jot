@@ -79,7 +79,12 @@
     "roleToggleLabel": "{{action}} for {{username}}",
     "failedUpdateRole": "Failed to update role.",
     "failedLoadUsers": "Failed to load users.",
-    "youBadge": "You"
+    "youBadge": "You",
+    "themeSection": "Appearance",
+    "themeLabel": "App theme",
+    "themeSystem": "System Default",
+    "themeLight": "Light",
+    "themeDark": "Dark"
   },
   "admin": {
     "title": "User Management",
