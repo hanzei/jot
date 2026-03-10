@@ -94,13 +94,13 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, currentUserI
       {/* Indicators */}
       <div className="absolute top-2 left-2 flex gap-1">
         {note.is_shared && (
-          <div className="flex items-center bg-blue-100 rounded-full px-2 py-1">
+          <div className={`flex items-center rounded-full px-2 py-1 ${isOwner ? 'bg-blue-100 dark:bg-blue-900/50' : 'bg-green-100 dark:bg-green-900/50'}`}>
             {isOwner ? (
-              <ShareIcon className="h-3 w-3 text-blue-600" />
+              <ShareIcon className="h-3 w-3 text-blue-600 dark:text-blue-400" />
             ) : (
-              <UserIcon className="h-3 w-3 text-green-600" />
+              <UserIcon className="h-3 w-3 text-green-600 dark:text-green-400" />
             )}
-            <span className="text-xs text-blue-600 dark:text-blue-400 ml-1">
+            <span className={`text-xs ml-1 ${isOwner ? 'text-blue-600 dark:text-blue-400' : 'text-green-600 dark:text-green-400'}`}>
               {isOwner ? t('note.shared') : t('note.sharedWithMe')}
             </span>
           </div>
