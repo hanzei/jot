@@ -88,15 +88,19 @@ export default function Dashboard({ onLogout }: DashboardProps) {
 
   const handleSSEEvent = useCallback((event: SSEEvent) => {
     // If the open modal's note was deleted or unshared, close the modal.
-    if (editingNote && event.note_id === editingNote.id) {
-      if (event.type === 'note_deleted' || event.type === 'note_unshared') {
+    if (event.type === 'note_deleted' || event.type === 'note_unshared') {
+      if (editingNote && event.note_id === editingNote.id) {
         setIsModalOpen(false);
         setEditingNote(null);
+      }
+      if (sharingNote && event.note_id === sharingNote.id) {
+        setIsShareModalOpen(false);
+        setSharingNote(null);
       }
     }
 
     loadNotes();
-  }, [editingNote, loadNotes]);
+  }, [editingNote, sharingNote, loadNotes]);
 
   useSSE({
     onEvent: handleSSEEvent,

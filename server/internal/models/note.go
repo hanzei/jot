@@ -640,5 +640,8 @@ func (s *NoteStore) GetNoteAudienceIDs(noteID string) ([]string, error) {
 		}
 		ids = append(ids, id)
 	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate note audience rows: %w", err)
+	}
 	return ids, nil
 }

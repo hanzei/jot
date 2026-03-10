@@ -35,12 +35,14 @@ export function useSSE({ onEvent, onConnected }: UseSSEOptions): void {
     };
 
     es.onmessage = (e: MessageEvent) => {
+      let event: SSEEvent;
       try {
-        const event: SSEEvent = JSON.parse(e.data as string);
-        onEventRef.current(event);
+        event = JSON.parse(e.data as string) as SSEEvent;
       } catch {
         // ignore malformed events
+        return;
       }
+      onEventRef.current(event);
     };
 
     // onerror is intentionally a no-op: EventSource auto-reconnects natively.
