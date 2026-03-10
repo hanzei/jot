@@ -46,7 +46,7 @@ test.describe('Settings', () => {
 
     // Fill in mismatching new passwords manually
     await page.getByLabel('Current password').fill(authenticatedUser.password);
-    await page.getByLabel('New password').fill('newpass456');
+    await page.getByLabel('New Password', { exact: true }).fill('newpass456');
     await page.getByLabel('Confirm New Password').fill('different789');
     await page.getByRole('button', { name: 'Change Password' }).click();
 
