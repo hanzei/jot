@@ -18,3 +18,19 @@ Object.defineProperty(globalThis, 'EventSource', {
   value: MockEventSource,
   writable: true,
 });
+
+// window.matchMedia is not available in jsdom. Provide a stub so components
+// that call applyTheme (which reads prefers-color-scheme) do not throw.
+Object.defineProperty(globalThis, 'matchMedia', {
+  writable: true,
+  value: (query: string) => ({
+    matches: false,
+    media: query,
+    onchange: null,
+    addListener: () => {},
+    removeListener: () => {},
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    dispatchEvent: () => false,
+  }),
+});
