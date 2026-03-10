@@ -6,6 +6,8 @@ import { type ReactNode } from 'react'
 import Settings from '../Settings'
 import { users, auth, admin, isAxiosError } from '@/utils/api'
 import * as authUtils from '@/utils/auth'
+import { type UserSettings } from '@/types'
+import i18n from '@/i18n'
 
 vi.mock('@/utils/api', () => ({
   auth: {
@@ -14,8 +16,8 @@ vi.mock('@/utils/api', () => ({
   users: {
     updateMe: vi.fn(),
     changePassword: vi.fn(),
-    getSettings: vi.fn().mockResolvedValue({ user_id: 'user1', language: 'system', updated_at: '' }),
-    updateSettings: vi.fn().mockResolvedValue({ user_id: 'user1', language: 'system', updated_at: '' }),
+    getSettings: vi.fn().mockResolvedValue({ user_id: 'user1', language: 'system', theme: 'system', updated_at: '' }),
+    updateSettings: vi.fn().mockResolvedValue({ user_id: 'user1', language: 'system', theme: 'system', updated_at: '' }),
   },
   admin: {
     getUsers: vi.fn(),
@@ -63,6 +65,7 @@ describe('Settings', () => {
     vi.clearAllMocks()
     vi.mocked(authUtils.isAdmin).mockReturnValue(false)
     vi.mocked(authUtils.getUser).mockReturnValue(mockUser)
+    i18n.changeLanguage('en')
   })
 
   describe('Rendering', () => {
@@ -206,15 +209,34 @@ describe('Settings', () => {
 
     it('calls updateSettings and setSettings when language is changed', async () => {
       const user = userEvent.setup()
-      const updatedSettings = { user_id: 'user1', language: 'de', updated_at: '' }
+      const updatedSettings: UserSettings = { user_id: 'user1', language: 'de', theme: 'system', updated_at: '' }
       vi.mocked(users.updateSettings).mockResolvedValue(updatedSettings)
 
       renderSettings()
 
-      await user.selectOptions(screen.getByRole('combobox'), 'de')
+      await user.selectOptions(screen.getByLabelText('App language'), 'de')
 
       await waitFor(() => {
-        expect(users.updateSettings).toHaveBeenCalledWith({ language: 'de' })
+        expect(users.updateSettings).toHaveBeenCalledWith({ language: 'de', theme: 'system' })
+      })
+      await waitFor(() => {
+        expect(authUtils.setSettings).toHaveBeenCalledWith(updatedSettings)
+      })
+    })
+  })
+
+  describe('Theme settings', () => {
+    it('calls updateSettings and setSettings when theme is changed', async () => {
+      const user = userEvent.setup()
+      const updatedSettings: UserSettings = { user_id: 'user1', language: 'system', theme: 'dark', updated_at: '' }
+      vi.mocked(users.updateSettings).mockResolvedValue(updatedSettings)
+
+      renderSettings()
+
+      await user.selectOptions(screen.getByLabelText('App theme'), 'dark')
+
+      await waitFor(() => {
+        expect(users.updateSettings).toHaveBeenCalledWith({ language: 'system', theme: 'dark' })
       })
       await waitFor(() => {
         expect(authUtils.setSettings).toHaveBeenCalledWith(updatedSettings)
