@@ -86,7 +86,7 @@ const Admin = ({ onLogout }: AdminProps) => {
   };
 
   const handleRoleToggle = async (targetUser: User) => {
-    const newRole = targetUser.role === 'admin' ? 'user' : 'admin';
+    const newRole = targetUser.role === ROLES.ADMIN ? ROLES.USER : ROLES.ADMIN;
     setError('');
     setRoleUpdating(prev => new Set(prev).add(targetUser.id));
     try {
@@ -295,14 +295,14 @@ const Admin = ({ onLogout }: AdminProps) => {
                           aria-label={roleUpdating.has(user.id)
                             ? t('admin.updatingRole')
                             : t('admin.roleToggleLabel', {
-                                action: user.role === 'admin' ? t('admin.removeAdmin') : t('admin.makeAdmin'),
+                                action: user.role === ROLES.ADMIN ? t('admin.removeAdmin') : t('admin.makeAdmin'),
                                 username: user.username,
                               })}
                           className="text-sm px-3 py-1 rounded-md border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 hover:bg-gray-50 dark:hover:bg-slate-600 disabled:opacity-40 disabled:cursor-not-allowed"
                         >
                           {roleUpdating.has(user.id)
                             ? t('admin.updatingRole')
-                            : user.role === 'admin'
+                            : user.role === ROLES.ADMIN
                               ? t('admin.removeAdmin')
                               : t('admin.makeAdmin')}
                         </button>

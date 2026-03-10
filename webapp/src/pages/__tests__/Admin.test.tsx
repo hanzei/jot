@@ -6,6 +6,7 @@ import { type ReactNode } from 'react'
 import Admin from '../Admin'
 import { admin, isAxiosError } from '@/utils/api'
 import * as authUtils from '@/utils/auth'
+import { User } from '@/types'
 
 vi.mock('@/utils/api', () => ({
   admin: {
@@ -34,26 +35,26 @@ vi.mock('@/components/NavigationHeader', () => ({
   ),
 }))
 
-const currentUser = {
+const currentUser: User = {
   id: 'user1',
   username: 'admin1',
-  role: 'admin' as const,
+  role: 'admin',
   created_at: '2023-01-01T00:00:00Z',
   updated_at: '2023-01-01T00:00:00Z',
 }
 
-const otherUser = {
+const otherUser: User = {
   id: 'user2',
   username: 'regularuser',
-  role: 'user' as const,
+  role: 'user',
   created_at: '2023-01-02T00:00:00Z',
   updated_at: '2023-01-02T00:00:00Z',
 }
 
-const otherAdmin = {
+const otherAdmin: User = {
   id: 'user3',
   username: 'otheradmin',
-  role: 'admin' as const,
+  role: 'admin',
   created_at: '2023-01-03T00:00:00Z',
   updated_at: '2023-01-03T00:00:00Z',
 }
@@ -77,7 +78,7 @@ describe('Admin', () => {
   describe('Role toggle - success', () => {
     it('promotes a regular user to admin', async () => {
       const user = userEvent.setup()
-      const updatedUser = { ...otherUser, role: 'admin' as const }
+      const updatedUser: User = { ...otherUser, role: 'admin' }
       vi.mocked(admin.updateUserRole).mockResolvedValue(updatedUser)
 
       renderAdmin()
@@ -102,7 +103,7 @@ describe('Admin', () => {
 
     it('demotes an admin to regular user', async () => {
       const user = userEvent.setup()
-      const updatedUser = { ...otherAdmin, role: 'user' as const }
+      const updatedUser: User = { ...otherAdmin, role: 'user' }
       vi.mocked(admin.updateUserRole).mockResolvedValue(updatedUser)
 
       renderAdmin()
@@ -200,7 +201,7 @@ describe('Admin', () => {
   describe('Role toggle - updating state', () => {
     it('shows updating text while role change is in flight', async () => {
       const user = userEvent.setup()
-      let resolveUpdate!: (u: typeof otherUser) => void
+      let resolveUpdate!: (u: User) => void
       vi.mocked(admin.updateUserRole).mockImplementation(
         () => new Promise((resolve) => { resolveUpdate = resolve })
       )
@@ -222,7 +223,7 @@ describe('Admin', () => {
       })
 
       // Resolve and verify it goes back to normal
-      resolveUpdate({ ...otherUser, role: 'admin' as const })
+      resolveUpdate({ ...otherUser, role: 'admin' })
       await waitFor(() => {
         expect(within(userRow).getByRole('button', { name: /Remove Admin/i })).not.toBeDisabled()
       })
