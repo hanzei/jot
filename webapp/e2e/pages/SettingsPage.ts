@@ -26,4 +26,16 @@ export class SettingsPage {
   async expectError(message: string) {
     await expect(this.page.locator('[role="alert"]').filter({ hasText: message })).toBeVisible();
   }
+
+  async selectTheme(theme: 'System Default' | 'Light' | 'Dark') {
+    await this.page.getByLabel('App theme').selectOption(theme);
+  }
+
+  async getThemeSelectValue() {
+    return this.page.getByLabel('App theme').inputValue();
+  }
+
+  async isDarkMode() {
+    return this.page.evaluate(() => document.documentElement.classList.contains('dark'));
+  }
 }

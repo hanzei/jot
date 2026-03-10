@@ -53,4 +53,78 @@ test.describe('Settings', () => {
     await expect(page.getByText('New passwords do not match.')).toBeVisible();
     void authenticatedUser;
   });
+
+  test.describe('Theme setting', () => {
+    test('shows theme section with system/light/dark options', async ({ authenticatedUser, settingsPage, page }) => {
+      await settingsPage.goto();
+
+      await expect(page.getByText('Appearance')).toBeVisible();
+      await expect(page.getByLabel('App theme')).toBeVisible();
+
+      const select = page.getByLabel('App theme');
+      await expect(select.locator('option[value="system"]')).toHaveText('System Default');
+      await expect(select.locator('option[value="light"]')).toHaveText('Light');
+      await expect(select.locator('option[value="dark"]')).toHaveText('Dark');
+
+      void authenticatedUser;
+    });
+
+    test('selecting dark theme adds dark class to html element', async ({ authenticatedUser, settingsPage, page }) => {
+      await settingsPage.goto();
+
+      await settingsPage.selectTheme('Dark');
+
+      // The dark class must be applied immediately to <html>
+      await expect.poll(() => settingsPage.isDarkMode()).toBe(true);
+
+      // The page background should reflect dark mode styling
+      await expect(page.locator('html')).toHaveClass(/dark/);
+
+      void authenticatedUser;
+    });
+
+    test('selecting light theme removes dark class from html element', async ({ authenticatedUser, settingsPage, page }) => {
+      await settingsPage.goto();
+
+      // First set dark, then switch to light
+      await settingsPage.selectTheme('Dark');
+      await expect.poll(() => settingsPage.isDarkMode()).toBe(true);
+
+      await settingsPage.selectTheme('Light');
+      await expect.poll(() => settingsPage.isDarkMode()).toBe(false);
+      await expect(page.locator('html')).not.toHaveClass(/dark/);
+
+      void authenticatedUser;
+    });
+
+    test('theme preference persists across page reload', async ({ authenticatedUser, settingsPage, page }) => {
+      await settingsPage.goto();
+
+      await settingsPage.selectTheme('Dark');
+      await expect.poll(() => settingsPage.isDarkMode()).toBe(true);
+
+      // Reload and verify the theme is still applied
+      await page.reload();
+      await expect.poll(() => settingsPage.isDarkMode()).toBe(true);
+      await expect(page.locator('html')).toHaveClass(/dark/);
+
+      void authenticatedUser;
+    });
+
+    test('theme select shows saved value after reload', async ({ authenticatedUser, settingsPage, page }) => {
+      await settingsPage.goto();
+
+      await settingsPage.selectTheme('Dark');
+      // Wait for the API call to persist
+      await page.waitForTimeout(500);
+
+      await page.reload();
+      await page.waitForLoadState('networkidle');
+
+      const value = await settingsPage.getThemeSelectValue();
+      expect(value).toBe('dark');
+
+      void authenticatedUser;
+    });
+  });
 });
