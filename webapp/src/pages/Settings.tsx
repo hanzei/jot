@@ -65,7 +65,8 @@ const Settings = ({ onLogout }: SettingsProps) => {
       setConfirmPassword('');
     } catch (err: unknown) {
       if (isAxiosError(err)) {
-        setPasswordError(err.response?.data || 'settings.failedChangePassword');
+        const msg = typeof err.response?.data === 'string' ? err.response.data.trim() : '';
+        setPasswordError(msg || 'settings.failedChangePassword');
       } else {
         setPasswordError('settings.failedChangePassword');
       }
@@ -88,7 +89,8 @@ const Settings = ({ onLogout }: SettingsProps) => {
       setSuccess('settings.usernameUpdated');
     } catch (err: unknown) {
       if (isAxiosError(err)) {
-        setError(err.response?.data || 'settings.failedUpdateUsername');
+        const msg = typeof err.response?.data === 'string' ? err.response.data.trim() : '';
+        setError(msg || 'settings.failedUpdateUsername');
       } else {
         setError('settings.failedUpdateUsername');
       }
