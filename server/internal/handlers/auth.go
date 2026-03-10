@@ -161,6 +161,59 @@ func (h *AuthHandler) UpdateUser(w http.ResponseWriter, r *http.Request) (int, e
 	return 0, nil
 }
 
+type ChangePasswordRequest struct {
+	CurrentPassword string `json:"current_password"`
+	NewPassword     string `json:"new_password"`
+}
+
+func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) (int, error) {
+	currentUser, ok := auth.GetUserFromContext(r.Context())
+	if !ok {
+		return http.StatusUnauthorized, errors.New("unauthorized")
+	}
+
+	var req ChangePasswordRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return http.StatusBadRequest, err
+	}
+
+	if req.CurrentPassword == "" || req.NewPassword == "" {
+		return http.StatusBadRequest, errors.New("current_password and new_password are required")
+	}
+
+	if err := validatePassword(req.NewPassword); err != nil {
+		return http.StatusBadRequest, err
+	}
+
+	// Verify current password
+	user, err := h.userStore.GetByID(currentUser.ID)
+	if err != nil {
+		return http.StatusInternalServerError, err
+	}
+
+	if !user.CheckPassword(req.CurrentPassword) {
+		return http.StatusForbidden, errors.New("current password is incorrect")
+	}
+
+	if err := h.userStore.UpdatePassword(currentUser.ID, req.NewPassword); err != nil {
+		return http.StatusInternalServerError, err
+	}
+
+	// Invalidate all existing sessions so that stolen/compromised tokens
+	// cannot be reused after a password change.
+	if err := h.sessionService.InvalidateUserSessions(currentUser.ID); err != nil {
+		return http.StatusInternalServerError, err
+	}
+
+	// Issue a fresh session for the current request so the user stays logged in.
+	if err := h.sessionService.CreateSession(w, currentUser.ID); err != nil {
+		return http.StatusInternalServerError, err
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+	return 0, nil
+}
+
 func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) (int, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
