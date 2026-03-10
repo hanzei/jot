@@ -125,6 +125,10 @@ type UpdateUserRequest struct {
 	Username string `json:"username"`
 }
 
+// UpdateUser handles PUT /api/v1/users/me. It validates the requested username,
+// updates it in the database, and returns the updated user object. Returns 400
+// for invalid format, 409 when the username is already taken, and 401 when the
+// caller is not authenticated.
 func (h *AuthHandler) UpdateUser(w http.ResponseWriter, r *http.Request) (int, error) {
 	currentUser, ok := auth.GetUserFromContext(r.Context())
 	if !ok {

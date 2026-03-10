@@ -144,6 +144,9 @@ func (s *UserStore) GetAll() ([]*User, error) {
 	return users, nil
 }
 
+// UpdateUsername sets a new username for the user with the given id and returns
+// the updated user. Returns an error if the username is already taken (UNIQUE
+// constraint) or the id does not exist.
 func (s *UserStore) UpdateUsername(id, newUsername string) (*User, error) {
 	query := `UPDATE users SET username = ?, updated_at = CURRENT_TIMESTAMP
 			  WHERE id = ? RETURNING id, username, role, created_at, updated_at`

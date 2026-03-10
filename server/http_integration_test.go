@@ -388,6 +388,8 @@ func TestAdminEndpoints(t *testing.T) {
 	})
 }
 
+// TestUpdateUserEndpoint tests the PUT /api/v1/users/me endpoint for updating
+// the authenticated user's username.
 func TestUpdateUserEndpoint(t *testing.T) {
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "originaluser", "password123", false)
