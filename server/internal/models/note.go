@@ -18,6 +18,8 @@ const (
 	DefaultNoteColor = "#ffffff"
 )
 
+var ErrNoteNoAccess = errors.New("no access to note")
+
 type Note struct {
 	ID                    string      `json:"id"`
 	UserID                string      `json:"user_id"`
@@ -615,7 +617,7 @@ func (s *NoteStore) ReorderNotes(userID string, noteIDs []string) error {
 			return fmt.Errorf("failed to check access for note %s: %w", noteID, err)
 		}
 		if !hasAccess {
-			return fmt.Errorf("no access to note %s", noteID)
+			return fmt.Errorf("no access to note %s: %w", noteID, ErrNoteNoAccess)
 		}
 
 		// Update position

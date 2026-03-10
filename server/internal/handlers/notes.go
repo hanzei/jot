@@ -708,7 +708,7 @@ func (h *NotesHandler) ReorderNotes(w http.ResponseWriter, r *http.Request) (int
 
 	err := h.noteStore.ReorderNotes(user.ID, req.NoteIDs)
 	if err != nil {
-		if strings.Contains(err.Error(), "no access to note") {
+		if errors.Is(err, models.ErrNoteNoAccess) {
 			return http.StatusForbidden, err
 		}
 		return http.StatusInternalServerError, err
