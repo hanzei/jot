@@ -5,9 +5,9 @@ import (
 	"errors"
 	"fmt"
 	"log"
-	"strings"
 	"time"
 
+	sqlite3 "github.com/mattn/go-sqlite3"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -161,7 +161,8 @@ func (s *UserStore) UpdateUsername(id, newUsername string) (*User, error) {
 		&user.ID, &user.Username, &user.Role, &user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
-		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
+		var sqliteErr sqlite3.Error
+		if errors.As(err, &sqliteErr) && sqliteErr.ExtendedCode == sqlite3.ErrConstraintUnique {
 			return nil, ErrUsernameTaken
 		}
 		if errors.Is(err, sql.ErrNoRows) {

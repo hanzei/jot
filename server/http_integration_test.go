@@ -396,6 +396,12 @@ func TestUpdateUserEndpoint(t *testing.T) {
 	other := ts.createTestUser(t, "otheruser", "password123", false)
 
 	t.Run("successful username update", func(t *testing.T) {
+		t.Cleanup(func() {
+			// Restore username for subsequent subtests
+			restoreResp := ts.authRequest(t, user, http.MethodPut, "/api/v1/users/me", map[string]any{"username": "originaluser"})
+			require.Equal(t, http.StatusOK, restoreResp.StatusCode)
+		})
+
 		body := map[string]any{"username": "newusername"}
 		resp := ts.authRequest(t, user, http.MethodPut, "/api/v1/users/me", body)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
@@ -403,12 +409,9 @@ func TestUpdateUserEndpoint(t *testing.T) {
 		var response map[string]any
 		require.NoError(t, resp.UnmarshalBody(&response))
 
-		userResp := response["user"].(map[string]any)
+		userResp, ok := response["user"].(map[string]any)
+		require.True(t, ok, "expected response.user object")
 		assert.Equal(t, "newusername", userResp["username"])
-
-		// Restore username for subsequent subtests
-		restoreResp := ts.authRequest(t, user, http.MethodPut, "/api/v1/users/me", map[string]any{"username": "originaluser"})
-		require.Equal(t, http.StatusOK, restoreResp.StatusCode)
 	})
 
 	t.Run("duplicate username returns 409", func(t *testing.T) {
