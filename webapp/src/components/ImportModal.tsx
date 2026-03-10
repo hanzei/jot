@@ -1,6 +1,7 @@
 import { useState, useRef } from 'react';
 import { Dialog } from '@headlessui/react';
 import { XMarkIcon, ArrowUpTrayIcon } from '@heroicons/react/24/outline';
+import { useTranslation } from 'react-i18next';
 import { notes } from '@/utils/api';
 import { ImportResponse } from '@/types';
 
@@ -11,6 +12,7 @@ interface ImportModalProps {
 }
 
 export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalProps) {
+  const { t } = useTranslation();
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
@@ -31,7 +33,7 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
       const isJson = file.name.endsWith('.json') || file.type === 'application/json';
       const isZip = file.name.endsWith('.zip') || file.type === 'application/zip';
       if (!isJson && !isZip) {
-        setError('Invalid file type. Please select a .json or .zip file.');
+        setError(t('import.invalidFileType'));
         return;
       }
       setSelectedFile(file);
@@ -57,7 +59,7 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
       onSuccess();
     } catch (err: unknown) {
       const axiosError = err as { response?: { data?: string } };
-      setError(axiosError.response?.data || 'Import failed. Please check your file and try again.');
+      setError(axiosError.response?.data || t('import.importFailed'));
     } finally {
       setIsLoading(false);
     }
@@ -82,7 +84,7 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
           <Dialog.Panel className="mx-auto max-w-md w-full rounded bg-white dark:bg-slate-800 p-6 shadow-xl border border-gray-200 dark:border-slate-700">
             <div className="flex items-center justify-between mb-4">
               <Dialog.Title className="text-lg font-medium text-gray-900 dark:text-white">
-                Import from Google Keep
+                {t('import.title')}
               </Dialog.Title>
               <button
                 onClick={handleClose}
@@ -93,10 +95,10 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
             </div>
 
             <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-              Upload a Google Keep export file. Export your notes from{' '}
-              <span className="font-medium">Google Takeout</span> and upload the{' '}
-              <span className="font-mono text-xs bg-gray-100 dark:bg-slate-700 px-1 rounded">.zip</span> archive or an individual{' '}
-              <span className="font-mono text-xs bg-gray-100 dark:bg-slate-700 px-1 rounded">.json</span> note file.
+              {t('import.description')}{' '}
+              <span className="font-medium">{t('import.googleTakeout')}</span> {t('import.descriptionSuffix')}{' '}
+              <span className="font-mono text-xs bg-gray-100 dark:bg-slate-700 px-1 rounded">.zip</span> {t('import.descriptionSuffix2')}{' '}
+              <span className="font-mono text-xs bg-gray-100 dark:bg-slate-700 px-1 rounded">.json</span> {t('import.descriptionSuffix3')}
             </p>
 
             {error && (
@@ -108,9 +110,9 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
             {result && (
               <>
                 <div className={`mb-4 p-3 rounded text-sm ${result.errors?.length ? 'bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 text-yellow-700 dark:text-yellow-400' : 'bg-green-50 dark:bg-green-900/20 border border-green-200 dark:border-green-800 text-green-700 dark:text-green-400'}`}>
-                  Imported {result.imported} note{result.imported !== 1 ? 's' : ''}
-                  {result.skipped > 0 && ` (${result.skipped} skipped)`}
-                  {result.errors?.length ? `, ${result.errors.length} failed` : ''}.
+                  {result.imported === 1 ? t('import.importedNotes_one', { count: result.imported }) : t('import.importedNotes_other', { count: result.imported })}
+                  {result.skipped > 0 && ` ${t('import.skipped', { count: result.skipped })}`}
+                  {result.errors?.length ? `, ${t('import.failed', { count: result.errors.length })}` : ''}.
                 </div>
                 {result.errors && result.errors.length > 0 && (
                   <div className="mb-4 p-3 bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 rounded text-sm text-red-600 dark:text-red-400">
@@ -136,9 +138,9 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
               ) : (
                 <>
                   <p className="text-sm text-gray-500 dark:text-gray-400">
-                    Drop your file here, or <span className="text-blue-600 dark:text-blue-400">browse</span>
+                    {t('import.dropFile')} <span className="text-blue-600 dark:text-blue-400">{t('import.browse')}</span>
                   </p>
-                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">.zip or .json files</p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">{t('import.fileTypes')}</p>
                 </>
               )}
               <input
@@ -155,7 +157,7 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
                 onClick={handleClose}
                 className="px-4 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-md hover:bg-gray-50 dark:hover:bg-slate-600"
               >
-                {result ? 'Close' : 'Cancel'}
+                {result ? t('import.close') : t('import.cancelButton')}
               </button>
               {!result && (
                 <button
@@ -163,7 +165,7 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
                   disabled={!selectedFile || isLoading}
                   className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-md"
                 >
-                  {isLoading ? 'Importing...' : 'Import'}
+                  {isLoading ? t('import.importing') : t('import.importButton')}
                 </button>
               )}
             </div>
