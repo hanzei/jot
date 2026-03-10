@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import i18n from '@/i18n';
 import { auth, users, isAxiosError } from '@/utils/api';
 import { getUser, setUser, removeUser, setSettings } from '@/utils/auth';
-import { getLanguagePreference, resolveLanguage, LanguagePreference } from '@/utils/language';
+import { getLanguagePreference, resolveLanguage, LanguagePreference, SUPPORTED_LANGUAGES } from '@/utils/language';
 import NavigationHeader from '@/components/NavigationHeader';
 import ImportModal from '@/components/ImportModal';
 
