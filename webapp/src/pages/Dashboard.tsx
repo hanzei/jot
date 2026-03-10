@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { PlusIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline';
 import { notes, auth } from '@/utils/api';
 import { removeUser, getUser, isAdmin } from '@/utils/auth';
@@ -43,6 +43,11 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [sharingNote, setSharingNote] = useState<Note | null>(null);
   const user = getUser();
+  const mountedRef = useRef(true);
+  useEffect(() => {
+    mountedRef.current = true;
+    return () => { mountedRef.current = false; };
+  }, []);
 
   const handleViewChange = (archived: boolean) => {
     setShowArchived(archived);
@@ -67,11 +72,13 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const loadNotes = useCallback(async () => {
     try {
       const notesData = await notes.getAll(showArchived, searchQuery);
+      if (!mountedRef.current) return;
       setNotesList(notesData);
     } catch (error) {
+      if (!mountedRef.current) return;
       console.error('Failed to load notes:', error);
     } finally {
-      setLoading(false);
+      if (mountedRef.current) setLoading(false);
     }
   }, [showArchived, searchQuery]);
 
