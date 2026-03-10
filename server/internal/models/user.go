@@ -164,6 +164,9 @@ func (s *UserStore) UpdateUsername(id, newUsername string) (*User, error) {
 		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
 			return nil, ErrUsernameTaken
 		}
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, fmt.Errorf("user not found")
+		}
 		return nil, fmt.Errorf("failed to update username: %w", err)
 	}
 	return &user, nil
