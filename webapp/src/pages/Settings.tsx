@@ -165,8 +165,13 @@ const Settings = ({ onLogout }: SettingsProps) => {
     try {
       const updated = await admin.updateUserRole(targetUser.id, { role: newRole });
       setUserList(prev => prev.map(u => u.id === updated.id ? updated : u));
-    } catch {
-      setUsersError('settings.failedUpdateRole');
+    } catch (err: unknown) {
+      if (isAxiosError(err)) {
+        const msg = typeof err.response?.data === 'string' ? err.response.data.trim() : '';
+        setUsersError(msg || 'settings.failedUpdateRole');
+      } else {
+        setUsersError('settings.failedUpdateRole');
+      }
     } finally {
       setRoleUpdating(prev => {
         const next = new Set(prev);
@@ -400,6 +405,9 @@ const Settings = ({ onLogout }: SettingsProps) => {
                       <button
                         disabled={u.id === currentUser?.id || roleUpdating.has(u.id)}
                         onClick={() => handleRoleToggle(u)}
+                        aria-label={roleUpdating.has(u.id)
+                          ? t('settings.updatingRole')
+                          : `${u.role === 'admin' ? t('settings.removeAdmin') : t('settings.makeAdmin')} for ${u.username}`}
                         className="text-sm px-3 py-1 rounded-md border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 hover:bg-gray-50 dark:hover:bg-slate-600 disabled:opacity-40 disabled:cursor-not-allowed"
                       >
                         {roleUpdating.has(u.id)

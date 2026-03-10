@@ -263,13 +263,13 @@ describe('Settings', () => {
         expect(screen.getByText('other')).toBeInTheDocument()
       })
 
-      await user.click(screen.getByRole('button', { name: 'Make Admin' }))
+      await user.click(screen.getByRole('button', { name: 'Make Admin for other' }))
 
       await waitFor(() => {
         expect(admin.updateUserRole).toHaveBeenCalledWith(otherUser.id, { role: 'admin' })
       })
       await waitFor(() => {
-        expect(screen.queryByRole('button', { name: 'Make Admin' })).not.toBeInTheDocument()
+        expect(screen.queryByRole('button', { name: 'Make Admin for other' })).not.toBeInTheDocument()
       })
     })
 
@@ -283,7 +283,7 @@ describe('Settings', () => {
         expect(screen.getByText('other')).toBeInTheDocument()
       })
 
-      await user.click(screen.getByRole('button', { name: 'Make Admin' }))
+      await user.click(screen.getByRole('button', { name: 'Make Admin for other' }))
 
       await waitFor(() => {
         expect(screen.getByRole('alert')).toHaveTextContent('Failed to update role.')
@@ -300,10 +300,10 @@ describe('Settings', () => {
 
       await waitFor(() => expect(screen.getByText('other')).toBeInTheDocument())
 
-      await user.click(screen.getByRole('button', { name: 'Make Admin' }))
+      await user.click(screen.getByRole('button', { name: 'Make Admin for other' }))
       await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument())
 
-      await user.click(screen.getByRole('button', { name: 'Make Admin' }))
+      await user.click(screen.getByRole('button', { name: 'Make Admin for other' }))
       await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
     })
   })
