@@ -27,8 +27,8 @@ vi.mock('@/utils/auth', () => ({
 }))
 
 vi.mock('@/components/NavigationHeader', () => ({
-  default: ({ onLogout, children }: { onLogout?: () => void; children?: ReactNode; tabs?: unknown[] }) => (
-    <div data-testid="navigation-header">
+  default: ({ onLogout, children, isAdmin, adminLinkActive }: { onLogout?: () => void; children?: ReactNode; tabs?: unknown[]; isAdmin?: boolean; adminLinkActive?: boolean }) => (
+    <div data-testid="navigation-header" data-is-admin={isAdmin} data-admin-link-active={adminLinkActive}>
       <button onClick={onLogout} data-testid="logout-button">Logout</button>
       {children}
     </div>
@@ -73,6 +73,20 @@ describe('Admin', () => {
     vi.mocked(authUtils.isAdmin).mockReturnValue(true)
     vi.mocked(authUtils.getUser).mockReturnValue(currentUser)
     vi.mocked(admin.getUsers).mockResolvedValue({ users: [currentUser, otherUser, otherAdmin] })
+  })
+
+  describe('NavigationHeader props', () => {
+    it('passes isAdmin and adminLinkActive to NavigationHeader', async () => {
+      renderAdmin()
+
+      await waitFor(() => {
+        expect(screen.getByText('regularuser')).toBeInTheDocument()
+      })
+
+      const header = screen.getByTestId('navigation-header')
+      expect(header).toHaveAttribute('data-is-admin', 'true')
+      expect(header).toHaveAttribute('data-admin-link-active', 'true')
+    })
   })
 
   describe('Role toggle - success', () => {
