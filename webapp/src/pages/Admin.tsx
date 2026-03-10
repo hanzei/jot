@@ -74,7 +74,7 @@ const Admin = ({ onLogout }: AdminProps) => {
 
     try {
       const newUser = await admin.createUser(formData);
-      setUsers([newUser, ...users]);
+      setUsers(prev => [newUser, ...prev]);
       setFormData({ username: '', password: '', role: ROLES.USER });
       setShowCreateForm(false);
     } catch (err: unknown) {

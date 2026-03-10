@@ -59,6 +59,7 @@ const NavigationHeader = ({ title = 'Jot', onLogout, tabs, children, username, i
               <Link
                 to="/settings"
                 className={`text-xs ${settingsLinkActive ? 'text-blue-600 dark:text-blue-400 font-medium' : 'text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400'}`}
+                {...(settingsLinkActive ? { 'aria-current': 'page' as const } : {})}
               >
                 {t('nav.settings')}
               </Link>
@@ -66,6 +67,7 @@ const NavigationHeader = ({ title = 'Jot', onLogout, tabs, children, username, i
                 <Link
                   to="/admin"
                   className={`text-xs ${adminLinkActive ? 'text-blue-600 dark:text-blue-400 font-medium' : 'text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400'}`}
+                  {...(adminLinkActive ? { 'aria-current': 'page' as const } : {})}
                 >
                   {t('nav.admin')}
                 </Link>
@@ -91,6 +93,7 @@ const NavigationHeader = ({ title = 'Jot', onLogout, tabs, children, username, i
             <Link
               to="/settings"
               className={`text-sm ${settingsLinkActive ? 'text-blue-600 dark:text-blue-400 font-medium' : 'text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400'}`}
+              {...(settingsLinkActive ? { 'aria-current': 'page' as const } : {})}
             >
               {t('nav.settings')}
             </Link>
@@ -98,6 +101,7 @@ const NavigationHeader = ({ title = 'Jot', onLogout, tabs, children, username, i
               <Link
                 to="/admin"
                 className={`text-sm ${adminLinkActive ? 'text-blue-600 dark:text-blue-400 font-medium' : 'text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400'}`}
+                {...(adminLinkActive ? { 'aria-current': 'page' as const } : {})}
               >
                 {t('nav.admin')}
               </Link>
