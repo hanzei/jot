@@ -119,11 +119,12 @@ const Settings = ({ onLogout }: SettingsProps) => {
   };
 
   const handleLanguageChange = async (pref: LanguagePreference) => {
+    const prev = languagePref;
+    const current = getSettings();
     setLanguagePref(pref);
     i18n.changeLanguage(resolveLanguage(pref));
     // Persist locally first so a refresh keeps the new language even if the
     // server call fails.
-    const current = getSettings();
     if (current) {
       setSettings({ ...current, language: pref });
     }
@@ -131,7 +132,12 @@ const Settings = ({ onLogout }: SettingsProps) => {
       const updatedSettings = await users.updateSettings({ language: pref });
       setSettings(updatedSettings);
     } catch {
-      // local cache already updated above; server will sync on next successful call
+      // Server call failed — roll back to previous state.
+      setLanguagePref(prev);
+      i18n.changeLanguage(resolveLanguage(prev));
+      if (current) {
+        setSettings(current);
+      }
     }
   };
 

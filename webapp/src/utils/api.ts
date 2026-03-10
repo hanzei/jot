@@ -15,6 +15,7 @@ api.interceptors.response.use(
       const isAuthEndpoint = url === '/login' || url === '/register';
       if (!isAuthEndpoint) {
         localStorage.removeItem('user');
+        localStorage.removeItem('settings');
         window.location.href = '/login';
       }
     }

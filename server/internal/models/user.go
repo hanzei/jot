@@ -213,25 +213,19 @@ func NewUserSettingsStore(db *sql.DB) *UserSettingsStore {
 }
 
 // GetOrCreate returns existing settings for the user, or creates a row with
-// defaults and returns those.
+// defaults and returns those. The operation is atomic: if two goroutines race
+// to create the row, one will win the INSERT and both will read consistent data.
 func (s *UserSettingsStore) GetOrCreate(userID string) (*UserSettings, error) {
 	settings := &UserSettings{UserID: userID}
 	err := s.db.QueryRow(
-		`SELECT language, updated_at FROM user_settings WHERE user_id = ?`, userID,
+		`INSERT INTO user_settings (user_id, language) VALUES (?, 'system')
+		 ON CONFLICT(user_id) DO UPDATE SET user_id = excluded.user_id
+		 RETURNING language, updated_at`,
+		userID,
 	).Scan(&settings.Language, &settings.UpdatedAt)
-	if err == nil {
-		return settings, nil
-	}
-	if !errors.Is(err, sql.ErrNoRows) {
-		return nil, fmt.Errorf("failed to get user settings: %w", err)
-	}
-	_, err = s.db.Exec(
-		`INSERT INTO user_settings (user_id, language) VALUES (?, 'system')`, userID,
-	)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create user settings: %w", err)
+		return nil, fmt.Errorf("failed to get or create user settings: %w", err)
 	}
-	settings.Language = "system"
 	return settings, nil
 }
 

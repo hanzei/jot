@@ -190,6 +190,32 @@ describe('Settings', () => {
     })
   })
 
+  describe('Language settings', () => {
+    it('fetches settings from server on mount', async () => {
+      renderSettings()
+      await waitFor(() => {
+        expect(users.getSettings).toHaveBeenCalled()
+      })
+    })
+
+    it('calls updateSettings and setSettings when language is changed', async () => {
+      const user = userEvent.setup()
+      const updatedSettings = { user_id: 'user1', language: 'de', updated_at: '' }
+      vi.mocked(users.updateSettings).mockResolvedValue(updatedSettings)
+
+      renderSettings()
+
+      await user.selectOptions(screen.getByRole('combobox'), 'de')
+
+      await waitFor(() => {
+        expect(users.updateSettings).toHaveBeenCalledWith({ language: 'de' })
+      })
+      await waitFor(() => {
+        expect(authUtils.setSettings).toHaveBeenCalledWith(updatedSettings)
+      })
+    })
+  })
+
   describe('Logout', () => {
     it('calls logout API, removeUser, and onLogout on success', async () => {
       const user = userEvent.setup()

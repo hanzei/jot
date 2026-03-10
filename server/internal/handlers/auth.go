@@ -61,12 +61,12 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) (int, err
 		return http.StatusInternalServerError, err
 	}
 
-	err = h.sessionService.CreateSession(w, user.ID)
+	settings, err := h.userSettingsStore.GetOrCreate(user.ID)
 	if err != nil {
 		return http.StatusInternalServerError, err
 	}
 
-	settings, err := h.userSettingsStore.GetOrCreate(user.ID)
+	err = h.sessionService.CreateSession(w, user.ID)
 	if err != nil {
 		return http.StatusInternalServerError, err
 	}
@@ -103,17 +103,17 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) (int, error)
 		return http.StatusUnauthorized, errors.New("invalid username or password")
 	}
 
+	settings, err := h.userSettingsStore.GetOrCreate(user.ID)
+	if err != nil {
+		return http.StatusInternalServerError, err
+	}
+
 	err = h.sessionService.InvalidateUserSessions(user.ID)
 	if err != nil {
 		return http.StatusInternalServerError, err
 	}
 
 	err = h.sessionService.CreateSession(w, user.ID)
-	if err != nil {
-		return http.StatusInternalServerError, err
-	}
-
-	settings, err := h.userSettingsStore.GetOrCreate(user.ID)
 	if err != nil {
 		return http.StatusInternalServerError, err
 	}
