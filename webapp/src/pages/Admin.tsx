@@ -1,5 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useCallback } from 'react';
 import { User, CreateUserRequest } from '@/types';
+import { useTranslation } from 'react-i18next';
 import { admin, auth } from '@/utils/api';
 import { isAdmin, removeUser } from '@/utils/auth';
 import { ROLES } from '@/constants/roles';
@@ -11,6 +12,7 @@ interface AdminProps {
 }
 
 const Admin = ({ onLogout }: AdminProps) => {
+  const { t, i18n } = useTranslation();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -35,28 +37,28 @@ const Admin = ({ onLogout }: AdminProps) => {
     onLogout();
   };
 
-  useEffect(() => {
-    if (userIsAdmin) {
-      fetchUsers();
-    }
-  }, [userIsAdmin]);
-
-  if (!userIsAdmin) {
-    return <Navigate to="/" />;
-  }
-
-  const fetchUsers = async () => {
+  const fetchUsers = useCallback(async () => {
     try {
       setLoading(true);
       const response = await admin.getUsers();
       setUsers(response.users || []);
     } catch (err) {
-      setError('Failed to load users');
+      setError(t('admin.failedLoadUsers'));
       console.error(err);
     } finally {
       setLoading(false);
     }
-  };
+  }, [t]);
+
+  useEffect(() => {
+    if (userIsAdmin) {
+      fetchUsers();
+    }
+  }, [userIsAdmin, fetchUsers]);
+
+  if (!userIsAdmin) {
+    return <Navigate to="/" />;
+  }
 
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -70,7 +72,7 @@ const Admin = ({ onLogout }: AdminProps) => {
       setShowCreateForm(false);
     } catch (err: unknown) {
       const axiosError = err as { response?: { data?: string } };
-      setCreateError(axiosError.response?.data || 'Failed to create user');
+      setCreateError(axiosError.response?.data || t('admin.failedCreateUser'));
     } finally {
       setCreateLoading(false);
     }
@@ -86,32 +88,32 @@ const Admin = ({ onLogout }: AdminProps) => {
 
   const navigationTabs = [
     {
-      label: 'Notes',
+      label: t('admin.tabNotes'),
       element: (
         <Link
           to="/"
           className="px-3 py-1 rounded-md text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
         >
-          Notes
+          {t('admin.tabNotes')}
         </Link>
       )
     },
     {
-      label: 'Archive',
+      label: t('admin.tabArchive'),
       element: (
         <Link
           to="/?view=archive"
           className="px-3 py-1 rounded-md text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
         >
-          Archive
+          {t('admin.tabArchive')}
         </Link>
       )
     },
     {
-      label: 'Admin',
+      label: t('admin.tabAdmin'),
       element: (
         <span className="px-3 py-1 rounded-md text-sm font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">
-          Admin
+          {t('admin.tabAdmin')}
         </span>
       ),
       isActive: true
@@ -129,24 +131,24 @@ const Admin = ({ onLogout }: AdminProps) => {
         <div className="px-4 py-6 sm:px-0">
           <div className="mb-6">
             <div className="flex justify-between items-center">
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white">User Management</h1>
+              <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{t('admin.title')}</h1>
               <button
                 onClick={() => setShowCreateForm(!showCreateForm)}
                 className="bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium"
               >
-                {showCreateForm ? 'Cancel' : 'Create User'}
+                {showCreateForm ? t('admin.cancel') : t('admin.createUser')}
               </button>
             </div>
           </div>
 
           {showCreateForm && (
             <div className="bg-white dark:bg-slate-800 shadow rounded-lg p-6 mb-6 border border-gray-200 dark:border-slate-700">
-              <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Create New User</h2>
+              <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">{t('admin.createNewUser')}</h2>
               <form onSubmit={handleCreateUser}>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                      Username
+                      {t('admin.usernameLabel')}
                     </label>
                     <input
                       type="text"
@@ -154,12 +156,12 @@ const Admin = ({ onLogout }: AdminProps) => {
                       value={formData.username}
                       onChange={(e) => setFormData({ ...formData, username: e.target.value })}
                       className="mt-1 block w-full border border-gray-300 dark:border-slate-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-                      placeholder="Username (2-30 characters)"
+                      placeholder={t('admin.usernamePlaceholder')}
                     />
                   </div>
                   <div>
                     <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
-                      Password
+                      {t('admin.passwordLabel')}
                     </label>
                     <input
                       type="password"
@@ -179,7 +181,7 @@ const Admin = ({ onLogout }: AdminProps) => {
                       onChange={(e) => setFormData({ ...formData, role: e.target.checked ? ROLES.ADMIN : ROLES.USER })}
                       className="h-4 w-4 text-blue-600 focus:ring-blue-500 border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 rounded"
                     />
-                    <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">Admin user</span>
+                    <span className="ml-2 text-sm text-gray-700 dark:text-gray-300">{t('admin.adminUser')}</span>
                   </label>
                 </div>
                 {createError && (
@@ -191,7 +193,7 @@ const Admin = ({ onLogout }: AdminProps) => {
                     disabled={createLoading}
                     className="bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700 disabled:bg-blue-400 dark:disabled:bg-blue-500 text-white px-4 py-2 rounded-md text-sm font-medium"
                   >
-                    {createLoading ? 'Creating...' : 'Create User'}
+                    {createLoading ? t('admin.creating') : t('admin.createUserButton')}
                   </button>
                 </div>
               </form>
@@ -216,18 +218,18 @@ const Admin = ({ onLogout }: AdminProps) => {
                             {user.username}
                           </p>
                           <p className="text-sm text-gray-500 dark:text-gray-400">
-                            ID: {user.id} • Created: {new Date(user.created_at).toLocaleDateString()}
+                            {t('admin.userIdCreated', { id: user.id, date: new Date(user.created_at).toLocaleDateString(i18n.resolvedLanguage) })}
                           </p>
                         </div>
                       </div>
                       <div className="flex items-center space-x-2">
                         {user.role === ROLES.ADMIN && (
                           <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300">
-                            Admin
+                            {t('admin.adminBadge')}
                           </span>
                         )}
                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300">
-                          Active
+                          {t('admin.activeBadge')}
                         </span>
                       </div>
                     </div>
@@ -239,7 +241,7 @@ const Admin = ({ onLogout }: AdminProps) => {
 
           {(!users || users.length === 0) && !loading && (
             <div className="text-center py-12">
-              <p className="text-gray-500 dark:text-gray-400">No users found.</p>
+              <p className="text-gray-500 dark:text-gray-400">{t('admin.noUsersFound')}</p>
             </div>
           )}
         </div>

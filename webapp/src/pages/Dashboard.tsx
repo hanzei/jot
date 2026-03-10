@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { PlusIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline';
+import { useTranslation } from 'react-i18next';
 import { notes, auth } from '@/utils/api';
 import { removeUser, getUser, isAdmin } from '@/utils/auth';
 import { Note } from '@/types';
@@ -33,6 +34,7 @@ interface DashboardProps {
 }
 
 export default function Dashboard({ onLogout }: DashboardProps) {
+  const { t } = useTranslation();
   const [searchParams, setSearchParams] = useSearchParams();
   const [notesList, setNotesList] = useState<Note[]>([]);
   const [loading, setLoading] = useState(true);
@@ -239,7 +241,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
 
   const navigationTabs = [
     {
-      label: 'Notes',
+      label: t('dashboard.tabNotes'),
       element: (
         <button
           onClick={() => handleViewChange(false)}
@@ -249,13 +251,13 @@ export default function Dashboard({ onLogout }: DashboardProps) {
               : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
             }`}
         >
-          Notes
+          {t('dashboard.tabNotes')}
         </button>
       ),
       isActive: !showArchived
     },
     {
-      label: 'Archive',
+      label: t('dashboard.tabArchive'),
       element: (
         <button
           onClick={() => handleViewChange(true)}
@@ -265,19 +267,19 @@ export default function Dashboard({ onLogout }: DashboardProps) {
               : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
             }`}
         >
-          Archive
+          {t('dashboard.tabArchive')}
         </button>
       ),
       isActive: showArchived
     },
     ...(isAdmin() ? [{
-      label: 'Admin',
+      label: t('dashboard.tabAdmin'),
       element: (
         <Link
           to="/admin"
           className="px-3 py-1 rounded-md text-sm font-medium text-blue-600 dark:text-blue-400 hover:text-blue-800 dark:hover:text-blue-300"
         >
-          Admin
+          {t('dashboard.tabAdmin')}
         </Link>
       )
     }] : [])
@@ -289,8 +291,8 @@ export default function Dashboard({ onLogout }: DashboardProps) {
         <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-gray-400 dark:text-gray-500" />
         <input
           type="text"
-          placeholder="Search notes..."
-          aria-label="Search notes"
+          placeholder={t('dashboard.searchPlaceholder')}
+          aria-label={t('dashboard.searchAriaLabel')}
           className="w-full pl-9 sm:pl-10 pr-4 py-2 text-sm sm:text-base border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
           value={searchQuery}
           onChange={(e) => setSearchQuery(e.target.value)}
@@ -318,7 +320,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
             className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 focus:ring-offset-gray-50 dark:focus:ring-offset-slate-900"
           >
             <PlusIcon className="h-5 w-5 mr-2" />
-            New Note
+            {t('dashboard.newNote')}
           </button>
         </div>
 
@@ -326,10 +328,10 @@ export default function Dashboard({ onLogout }: DashboardProps) {
         {!notesList || notesList.length === 0 ? (
           <div className="text-center py-12">
             <div className="text-gray-500 dark:text-gray-400 text-lg">
-              {showArchived ? 'No archived notes' : 'No notes yet'}
+              {showArchived ? t('dashboard.noArchivedNotes') : t('dashboard.noNotesYet')}
             </div>
             <div className="text-gray-400 dark:text-gray-500 text-sm mt-2">
-              {!showArchived && 'Click "New Note" to create your first note'}
+              {!showArchived && t('dashboard.createFirstNote')}
             </div>
           </div>
         ) : (
@@ -347,7 +349,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                     <svg className="h-4 w-4 text-blue-500 dark:text-blue-400 mr-2" fill="currentColor" viewBox="0 0 24 24">
                       <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z" />
                     </svg>
-                    Pinned
+                    {t('dashboard.pinned')}
                   </h2>
                   <SortableContext
                     items={notesList.filter(note => note.pinned).map(note => note.id)}
@@ -376,7 +378,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                 <div>
                   {notesList.some(note => note.pinned) && (
                     <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
-                      Other Notes
+                      {t('dashboard.otherNotes')}
                     </h2>
                   )}
                   <SortableContext

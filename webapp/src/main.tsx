@@ -2,6 +2,7 @@ import React from 'react';
 import ReactDOM from 'react-dom/client';
 import App from './App.tsx';
 import './index.css';
+import i18n from './i18n';
 
 // Register service worker for PWA functionality
 if ('serviceWorker' in navigator) {
@@ -12,7 +13,7 @@ if ('serviceWorker' in navigator) {
 
       wb.addEventListener('waiting', () => {
         // Show a prompt to user to refresh/update the app
-        if (confirm('New app update is available! Click OK to refresh')) {
+        if (confirm(i18n.t('serviceWorker.updatePrompt'))) {
           wb.messageSkipWaiting();
           window.location.reload();
         }
