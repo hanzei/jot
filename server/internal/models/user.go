@@ -198,6 +198,59 @@ func (s *UserStore) UpdatePassword(id, newPassword string) error {
 	return nil
 }
 
+type UserSettings struct {
+	UserID    string    `json:"user_id"`
+	Language  string    `json:"language"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
+type UserSettingsStore struct {
+	db *sql.DB
+}
+
+func NewUserSettingsStore(db *sql.DB) *UserSettingsStore {
+	return &UserSettingsStore{db: db}
+}
+
+// GetOrCreate returns existing settings for the user, or creates a row with
+// defaults and returns those.
+func (s *UserSettingsStore) GetOrCreate(userID string) (*UserSettings, error) {
+	settings := &UserSettings{UserID: userID}
+	err := s.db.QueryRow(
+		`SELECT language, updated_at FROM user_settings WHERE user_id = ?`, userID,
+	).Scan(&settings.Language, &settings.UpdatedAt)
+	if err == nil {
+		return settings, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("failed to get user settings: %w", err)
+	}
+	_, err = s.db.Exec(
+		`INSERT INTO user_settings (user_id, language) VALUES (?, 'system')`, userID,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to create user settings: %w", err)
+	}
+	settings.Language = "system"
+	return settings, nil
+}
+
+// Update persists the language preference for the given user and returns the
+// updated settings.
+func (s *UserSettingsStore) Update(userID, language string) (*UserSettings, error) {
+	settings := &UserSettings{UserID: userID}
+	err := s.db.QueryRow(
+		`INSERT INTO user_settings (user_id, language) VALUES (?, ?)
+		 ON CONFLICT(user_id) DO UPDATE SET language = excluded.language, updated_at = CURRENT_TIMESTAMP
+		 RETURNING language, updated_at`,
+		userID, language,
+	).Scan(&settings.Language, &settings.UpdatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("failed to update user settings: %w", err)
+	}
+	return settings, nil
+}
+
 func (s *UserStore) CreateByAdmin(username, password string, role string) (*User, error) {
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {

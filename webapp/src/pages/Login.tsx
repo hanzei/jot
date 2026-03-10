@@ -2,7 +2,7 @@ import { useState } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { auth } from '@/utils/api';
-import { setUser } from '@/utils/auth';
+import { setUser, setSettings } from '@/utils/auth';
 
 interface LoginProps {
   onLogin: () => void;
@@ -23,6 +23,7 @@ export default function Login({ onLogin }: LoginProps) {
     try {
       const response = await auth.login({ username, password });
       setUser(response.user);
+      setSettings(response.settings);
       onLogin();
     } catch (err: unknown) {
       const axiosError = err as { response?: { data?: string } };

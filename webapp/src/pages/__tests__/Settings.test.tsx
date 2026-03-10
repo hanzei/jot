@@ -13,6 +13,9 @@ vi.mock('@/utils/api', () => ({
   },
   users: {
     updateMe: vi.fn(),
+    changePassword: vi.fn(),
+    getSettings: vi.fn().mockResolvedValue({ user_id: 'user1', language: 'system', updated_at: '' }),
+    updateSettings: vi.fn().mockResolvedValue({ user_id: 'user1', language: 'system', updated_at: '' }),
   },
   isAxiosError: vi.fn(),
 }))
@@ -21,6 +24,8 @@ vi.mock('@/utils/auth', () => ({
   getUser: vi.fn(),
   setUser: vi.fn(),
   removeUser: vi.fn(),
+  getSettings: vi.fn().mockReturnValue(null),
+  setSettings: vi.fn(),
 }))
 
 vi.mock('@/components/NavigationHeader', () => ({

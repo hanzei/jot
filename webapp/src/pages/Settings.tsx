@@ -1,11 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
 import { MagnifyingGlassIcon, ArrowUpTrayIcon } from '@heroicons/react/24/outline';
 import { useTranslation } from 'react-i18next';
 import i18n from '@/i18n';
 import { auth, users, isAxiosError } from '@/utils/api';
-import { getUser, setUser, removeUser } from '@/utils/auth';
-import { getLanguagePreference, setLanguagePreference, resolveLanguage, LanguagePreference, SUPPORTED_LANGUAGES } from '@/utils/language';
+import { getUser, setUser, removeUser, setSettings } from '@/utils/auth';
+import { getLanguagePreference, resolveLanguage, LanguagePreference } from '@/utils/language';
 import NavigationHeader from '@/components/NavigationHeader';
 import ImportModal from '@/components/ImportModal';
 
@@ -35,6 +35,15 @@ const Settings = ({ onLogout }: SettingsProps) => {
   const [passwordSuccess, setPasswordSuccess] = useState('');
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [languagePref, setLanguagePref] = useState<LanguagePreference>(() => getLanguagePreference());
+
+  useEffect(() => {
+    users.getSettings().then(serverSettings => {
+      setSettings(serverSettings);
+      const pref = serverSettings.language as LanguagePreference;
+      setLanguagePref(pref);
+      i18n.changeLanguage(resolveLanguage(pref));
+    }).catch(() => { /* keep cached/system default */ });
+  }, []);
 
   const handleLogout = async () => {
     try {
@@ -109,10 +118,15 @@ const Settings = ({ onLogout }: SettingsProps) => {
     }
   };
 
-  const handleLanguageChange = (pref: LanguagePreference) => {
+  const handleLanguageChange = async (pref: LanguagePreference) => {
     setLanguagePref(pref);
-    setLanguagePreference(pref);
     i18n.changeLanguage(resolveLanguage(pref));
+    try {
+      const updatedSettings = await users.updateSettings({ language: pref });
+      setSettings(updatedSettings);
+    } catch {
+      // settings saved locally; server sync failed silently
+    }
   };
 
   const navigationTabs = [
