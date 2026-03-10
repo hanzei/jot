@@ -36,7 +36,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [notesList, setNotesList] = useState<Note[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState('');
+  const [searchQuery, setSearchQuery] = useState(searchParams.get('search') ?? '');
   const [showArchived, setShowArchived] = useState(searchParams.get('view') === 'archive');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingNote, setEditingNote] = useState<Note | null>(null);
