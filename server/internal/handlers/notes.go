@@ -584,6 +584,7 @@ func (h *NotesHandler) ImportNotes(w http.ResponseWriter, r *http.Request) (int,
 		return http.StatusUnauthorized, errors.New("unauthorized")
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, 32<<20)
 	if err := r.ParseMultipartForm(32 << 20); err != nil {
 		return http.StatusBadRequest, errors.New("failed to parse form")
 	}
