@@ -14,10 +14,12 @@ interface NavigationHeaderProps {
   onLogout: () => void;
   tabs: NavigationTab[];
   children?: ReactNode; // For content like search bar between title/tabs and user menu
+  username?: string;
 }
 
-const NavigationHeader = ({ title = 'Jot', onLogout, tabs, children }: NavigationHeaderProps) => {
+const NavigationHeader = ({ title = 'Jot', onLogout, tabs, children, username }: NavigationHeaderProps) => {
   const currentUser = getUser();
+  const displayUsername = username ?? currentUser?.username;
 
   const handleLogout = () => {
     onLogout();
@@ -51,8 +53,14 @@ const NavigationHeader = ({ title = 'Jot', onLogout, tabs, children }: Navigatio
             <div className="flex items-center space-x-2 sm:hidden">
               <div className="flex items-center space-x-1 text-xs text-gray-600 dark:text-gray-300">
                 <UserCircleIcon className="h-4 w-4" />
-                <span className="max-w-16 truncate">{currentUser?.username}</span>
+                <span className="max-w-16 truncate">{displayUsername}</span>
               </div>
+              <Link
+                to="/settings"
+                className="text-xs text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400"
+              >
+                Settings
+              </Link>
               <button
                 onClick={handleLogout}
                 className="text-xs text-gray-600 dark:text-gray-300 hover:text-red-600 dark:hover:text-red-400"
@@ -69,8 +77,14 @@ const NavigationHeader = ({ title = 'Jot', onLogout, tabs, children }: Navigatio
           <div className="hidden sm:flex items-center space-x-4">
             <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300">
               <UserCircleIcon className="h-5 w-5" />
-              <span>{currentUser?.username}</span>
+              <span>{displayUsername}</span>
             </div>
+            <Link
+              to="/settings"
+              className="text-sm text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400"
+            >
+              Settings
+            </Link>
             <button
               onClick={handleLogout}
               className="text-sm text-gray-600 dark:text-gray-300 hover:text-red-600 dark:hover:text-red-400"

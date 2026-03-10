@@ -89,6 +89,10 @@ export interface UserListResponse {
   users: User[];
 }
 
+export interface UpdateMeRequest {
+  username: string;
+}
+
 export interface ShareNoteRequest {
   username: string;
 }
