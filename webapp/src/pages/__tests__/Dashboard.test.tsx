@@ -66,6 +66,11 @@ vi.mock('@dnd-kit/modifiers', () => ({
   restrictToWindowEdges: vi.fn(),
 }))
 
+// Mock useSSE to prevent EventSource usage in jsdom environment
+vi.mock('@/utils/useSSE', () => ({
+  useSSE: vi.fn(),
+}))
+
 // Mock child components
 vi.mock('@/components/NavigationHeader', () => ({
   default: ({ title, onLogout, tabs, children }: {

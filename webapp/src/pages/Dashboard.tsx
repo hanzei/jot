@@ -3,6 +3,7 @@ import { PlusIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline';
 import { notes, auth } from '@/utils/api';
 import { removeUser, getUser, isAdmin } from '@/utils/auth';
 import { Note } from '@/types';
+import { useSSE, SSEEvent } from '@/utils/useSSE';
 import { Link, useSearchParams } from 'react-router-dom';
 import NavigationHeader from '@/components/NavigationHeader';
 import SortableNoteCard from '@/components/SortableNoteCard';
@@ -77,6 +78,26 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   useEffect(() => {
     loadNotes();
   }, [loadNotes]);
+
+  const handleSSEEvent = useCallback((event: SSEEvent) => {
+    // Ignore events triggered by this user — local state is already up to date.
+    if (event.source_user_id === user?.id) return;
+
+    // If the open modal's note was deleted or unshared, close the modal.
+    if (editingNote && event.note_id === editingNote.id) {
+      if (event.type === 'note_deleted' || event.type === 'note_unshared') {
+        setIsModalOpen(false);
+        setEditingNote(null);
+      }
+    }
+
+    loadNotes();
+  }, [user?.id, editingNote, loadNotes]);
+
+  useSSE({
+    onEvent: handleSSEEvent,
+    onConnected: loadNotes,
+  });
 
   const handleLogout = async () => {
     try {

@@ -9,18 +9,41 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/hanzei/jot/server/internal/auth"
 	"github.com/hanzei/jot/server/internal/models"
+	"github.com/hanzei/jot/server/internal/sse"
+	"github.com/sirupsen/logrus"
 )
 
 type NotesHandler struct {
 	noteStore *models.NoteStore
 	userStore *models.UserStore
+	hub       *sse.Hub
 }
 
-func NewNotesHandler(noteStore *models.NoteStore, userStore *models.UserStore) *NotesHandler {
+func NewNotesHandler(noteStore *models.NoteStore, userStore *models.UserStore, hub *sse.Hub) *NotesHandler {
 	return &NotesHandler{
 		noteStore: noteStore,
 		userStore: userStore,
+		hub:       hub,
 	}
+}
+
+// publishNoteEvent fetches the note's audience and publishes an SSE event.
+// Errors are logged but never fail the HTTP request.
+func (h *NotesHandler) publishNoteEvent(noteID string, eventType sse.EventType, note any, sourceUserID string) {
+	if h.hub == nil {
+		return
+	}
+	audienceIDs, err := h.noteStore.GetNoteAudienceIDs(noteID)
+	if err != nil {
+		logrus.WithError(err).WithField("note_id", noteID).Error("failed to get note audience for SSE publish")
+		return
+	}
+	h.hub.Publish(audienceIDs, sse.Event{
+		Type:         eventType,
+		NoteID:       noteID,
+		Note:         note,
+		SourceUserID: sourceUserID,
+	})
 }
 
 type CreateNoteRequest struct {
@@ -121,6 +144,7 @@ func (h *NotesHandler) CreateNote(w http.ResponseWriter, r *http.Request) (int, 
 	if err := json.NewEncoder(w).Encode(note); err != nil {
 		return http.StatusInternalServerError, err
 	}
+	h.publishNoteEvent(note.ID, sse.EventNoteCreated, note, user.ID)
 	return 0, nil
 }
 
@@ -224,6 +248,7 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 	if err := json.NewEncoder(w).Encode(note); err != nil {
 		return http.StatusInternalServerError, err
 	}
+	h.publishNoteEvent(id, sse.EventNoteUpdated, note, user.ID)
 	return 0, nil
 }
 
@@ -241,12 +266,24 @@ func (h *NotesHandler) DeleteNote(w http.ResponseWriter, r *http.Request) (int, 
 		return http.StatusBadRequest, errors.New("invalid note ID format")
 	}
 
+	// Fetch audience before deletion so we can notify share targets too.
+	audienceIDs, audienceErr := h.noteStore.GetNoteAudienceIDs(id)
+
 	err := h.noteStore.Delete(id, user.ID)
 	if err != nil {
 		if err.Error() == "note not found or not owned by user" {
 			return http.StatusNotFound, err
 		}
 		return http.StatusInternalServerError, err
+	}
+
+	if audienceErr == nil && h.hub != nil {
+		h.hub.Publish(audienceIDs, sse.Event{
+			Type:         sse.EventNoteDeleted,
+			NoteID:       id,
+			Note:         nil,
+			SourceUserID: user.ID,
+		})
 	}
 
 	w.WriteHeader(http.StatusNoContent)
@@ -320,6 +357,12 @@ func (h *NotesHandler) ShareNote(w http.ResponseWriter, r *http.Request) (int, e
 	}); err != nil {
 		return http.StatusInternalServerError, err
 	}
+
+	// Fetch the note to include in the SSE payload; audience now includes the new target.
+	if sharedNote, err := h.noteStore.GetByID(id, user.ID); err == nil {
+		h.publishNoteEvent(id, sse.EventNoteShared, sharedNote, user.ID)
+	}
+
 	return 0, nil
 }
 
@@ -362,12 +405,24 @@ func (h *NotesHandler) UnshareNote(w http.ResponseWriter, r *http.Request) (int,
 		return http.StatusInternalServerError, err
 	}
 
+	// Fetch audience before unsharing so the target user is still in the list.
+	audienceIDs, audienceErr := h.noteStore.GetNoteAudienceIDs(id)
+
 	err = h.noteStore.UnshareNote(id, targetUser.ID)
 	if err != nil {
 		if err.Error() == "note share not found" {
 			return http.StatusNotFound, err
 		}
 		return http.StatusInternalServerError, err
+	}
+
+	if audienceErr == nil && h.hub != nil {
+		h.hub.Publish(audienceIDs, sse.Event{
+			Type:         sse.EventNoteUnshared,
+			NoteID:       id,
+			Note:         nil,
+			SourceUserID: user.ID,
+		})
 	}
 
 	w.Header().Set("Content-Type", "application/json")
