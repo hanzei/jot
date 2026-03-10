@@ -15,6 +15,7 @@ interface SettingsProps {
 
 const Settings = ({ onLogout }: SettingsProps) => {
   const { t } = useTranslation();
+  useEffect(() => { document.title = t('pageTitle.settings'); }, [t]);
   const displayMsg = (msg: string) => (i18n.exists(msg) ? t(msg) : msg);
   const currentUser = getUser();
   const navigate = useNavigate();

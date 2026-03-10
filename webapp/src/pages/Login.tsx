@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import { useTranslation } from 'react-i18next';
 import { auth } from '@/utils/api';
@@ -10,6 +10,7 @@ interface LoginProps {
 
 export default function Login({ onLogin }: LoginProps) {
   const { t } = useTranslation();
+  useEffect(() => { document.title = t('pageTitle.login'); }, [t]);
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [loading, setLoading] = useState(false);

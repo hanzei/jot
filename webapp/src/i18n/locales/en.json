@@ -170,5 +170,13 @@
   },
   "offline": {
     "message": "You're currently offline. Some features may be limited."
+  },
+  "pageTitle": {
+    "login": "Sign In - Jot",
+    "register": "Create Account - Jot",
+    "notes": "Jot",
+    "archive": "Archive - Jot",
+    "admin": "Admin - Jot",
+    "settings": "Settings - Jot"
   }
 }
