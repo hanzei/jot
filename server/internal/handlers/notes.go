@@ -120,7 +120,7 @@ func (h *NotesHandler) CreateNote(w http.ResponseWriter, r *http.Request) (int, 
 	}
 
 	if req.Color == "" {
-		req.Color = "#ffffff"
+		req.Color = models.DefaultNoteColor
 	}
 
 	note, err := h.noteStore.Create(user.ID, req.Title, req.Content, req.NoteType, req.Color)
@@ -225,7 +225,7 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 	}
 
 	if req.Color == "" {
-		req.Color = "#ffffff"
+		req.Color = models.DefaultNoteColor
 	}
 
 	err := h.noteStore.Update(id, user.ID, req.Title, req.Content, req.Pinned, req.Archived, req.Color, req.CheckedItemsCollapsed)
@@ -549,7 +549,7 @@ func keepColorToHex(color string) string {
 	case "PURPLE", "GRAY", "GREY", "BROWN":
 		return "#9aa0a6"
 	default:
-		return "#ffffff"
+		return models.DefaultNoteColor
 	}
 }
 

@@ -83,14 +83,14 @@ func (d *DB) runMigrations() error {
 
 		if _, err := tx.Exec(string(content)); err != nil {
 			if rollbackErr := tx.Rollback(); rollbackErr != nil {
-				return fmt.Errorf("failed to execute migration %s: %w, rollback failed: %v", file.Name(), err, rollbackErr)
+				return fmt.Errorf("failed to execute migration %s: %w, rollback failed: %w", file.Name(), err, rollbackErr)
 			}
 			return fmt.Errorf("failed to execute migration %s: %w", file.Name(), err)
 		}
 
 		if _, err := tx.Exec("INSERT INTO migrations (filename) VALUES (?)", file.Name()); err != nil {
 			if rollbackErr := tx.Rollback(); rollbackErr != nil {
-				return fmt.Errorf("failed to record migration %s: %w, rollback failed: %v", file.Name(), err, rollbackErr)
+				return fmt.Errorf("failed to record migration %s: %w, rollback failed: %w", file.Name(), err, rollbackErr)
 			}
 			return fmt.Errorf("failed to record migration %s: %w", file.Name(), err)
 		}
