@@ -147,13 +147,9 @@ func (s *Server) setupRoutes() {
 	staticDir = filepath.Clean(staticDir)
 	safeStaticDir := strings.NewReplacer("\n", "", "\r", "").Replace(staticDir)
 
-	if _, err := os.Stat(staticDir); os.IsNotExist(err) {
-		log.Printf("Static directory not found: %s (frontend files not available)", safeStaticDir) // #nosec G706 -- safeStaticDir has newlines stripped
-	} else {
-		log.Printf("Serving static files from: %s", safeStaticDir) // #nosec G706 -- safeStaticDir has newlines stripped
-		filesDir := http.Dir(staticDir)
-		FileServer(s.router, "/", filesDir)
-	}
+	log.Printf("Serving static files from: %s", safeStaticDir) // #nosec G706 -- safeStaticDir has newlines stripped
+	filesDir := http.Dir(staticDir)
+	FileServer(s.router, "/", filesDir)
 }
 
 func FileServer(r chi.Router, path string, root http.FileSystem) {
