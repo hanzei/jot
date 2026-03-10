@@ -1,9 +1,10 @@
 import { useState } from 'react';
 import { Link, useNavigate } from 'react-router-dom';
-import { MagnifyingGlassIcon } from '@heroicons/react/24/outline';
+import { MagnifyingGlassIcon, ArrowUpTrayIcon } from '@heroicons/react/24/outline';
 import { auth, users, isAxiosError } from '@/utils/api';
 import { getUser, setUser, removeUser } from '@/utils/auth';
 import NavigationHeader from '@/components/NavigationHeader';
+import ImportModal from '@/components/ImportModal';
 
 interface SettingsProps {
   onLogout: () => void;
@@ -50,6 +51,7 @@ const Settings = ({ onLogout }: SettingsProps) => {
   const [passwordSaving, setPasswordSaving] = useState(false);
   const [passwordError, setPasswordError] = useState('');
   const [passwordSuccess, setPasswordSuccess] = useState('');
+  const [isImportModalOpen, setIsImportModalOpen] = useState(false);
 
   const handleLogout = async () => {
     try {
@@ -261,8 +263,29 @@ const Settings = ({ onLogout }: SettingsProps) => {
               </div>
             </form>
           </div>
+          <div className="bg-white dark:bg-slate-800 shadow rounded-lg p-6 border border-gray-200 dark:border-slate-700 max-w-md mt-6">
+            <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">Import</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+              Import notes from Google Keep exports.
+            </p>
+            <button
+              onClick={() => setIsImportModalOpen(true)}
+              className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-slate-600 text-sm font-medium rounded-md shadow-sm text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 focus:ring-offset-gray-50 dark:focus:ring-offset-slate-900"
+            >
+              <ArrowUpTrayIcon className="h-5 w-5 mr-2" />
+              Import from Google Keep
+            </button>
+          </div>
         </div>
       </div>
+
+      {isImportModalOpen && (
+        <ImportModal
+          isOpen={isImportModalOpen}
+          onClose={() => setIsImportModalOpen(false)}
+          onSuccess={() => setIsImportModalOpen(false)}
+        />
+      )}
     </div>
   );
 };
