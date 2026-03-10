@@ -95,9 +95,59 @@ jobs:
       - name: Run linters
         run: task lint
 
+  e2e:
+    runs-on: ubuntu-latest
+
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.24"
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "22"
+          cache: "npm"
+          cache-dependency-path: webapp/package-lock.json
+
+      - name: Install Task
+        uses: arduino/setup-task@v2
+        with:
+          version: 3.x
+
+      - name: Cache Go modules
+        uses: actions/cache@v5
+        with:
+          path: ~/go/pkg/mod
+          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
+          restore-keys: |
+            ${{ runner.os }}-go-
+
+      - name: Install webapp dependencies
+        working-directory: ./webapp
+        run: npm ci
+
+      - name: Install Playwright browsers
+        working-directory: ./webapp
+        run: npx playwright install --with-deps chromium
+
+      - name: Run e2e tests
+        run: task test-e2e
+
+      - name: Upload Playwright report
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: webapp/playwright-report/
+          retention-days: 7
+
   docker:
     runs-on: ubuntu-latest
-    needs: [test, lint]
+    needs: [test, lint, e2e]
     if: github.event_name == 'push' || github.event_name == 'pull_request'
     
     steps:
