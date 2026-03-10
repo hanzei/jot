@@ -1,1 +1,2 @@
 - Use any instead of interface{}
+- Use errors.Is instead of == when comparing errors

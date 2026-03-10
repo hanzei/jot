@@ -6,8 +6,10 @@ run:
 linters:
   enable:
     - bodyclose
+    - contextcheck
     - errcheck
     - errorlint
+    - exhaustive
     - goconst
     - gocyclo
     - gosec
@@ -15,7 +17,10 @@ linters:
     - ineffassign
     - misspell
     - nilerr
+    - nilnil
+    - nolintlint
     - revive
+    - rowserrcheck
     - staticcheck
     - sqlclosecheck
     - unconvert

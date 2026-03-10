@@ -93,8 +93,8 @@ func (s *UserStore) GetByUsername(username string) (*User, error) {
 		&user.Role, &user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("user not found")
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrUserNotFound
 		}
 		return nil, fmt.Errorf("failed to get user: %w", err)
 	}
@@ -111,8 +111,8 @@ func (s *UserStore) GetByID(id string) (*User, error) {
 		&user.Role, &user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
-		if err == sql.ErrNoRows {
-			return nil, fmt.Errorf("user not found")
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrUserNotFound
 		}
 		return nil, fmt.Errorf("failed to get user: %w", err)
 	}
@@ -174,7 +174,7 @@ func (s *UserStore) UpdateUsername(id, newUsername string) (*User, error) {
 			return nil, ErrUsernameTaken
 		}
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, fmt.Errorf("user not found")
+			return nil, ErrUserNotFound
 		}
 		return nil, fmt.Errorf("failed to update username: %w", err)
 	}
@@ -200,7 +200,7 @@ func (s *UserStore) UpdatePassword(id, newPassword string) error {
 		return fmt.Errorf("failed to check rows affected: %w", err)
 	}
 	if rows == 0 {
-		return fmt.Errorf("user not found")
+		return ErrUserNotFound
 	}
 
 	return nil

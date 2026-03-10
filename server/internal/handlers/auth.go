@@ -165,7 +165,7 @@ func (h *AuthHandler) UpdateUser(w http.ResponseWriter, r *http.Request) (int, e
 	user, err := h.userStore.UpdateUsername(currentUser.ID, req.Username)
 	if err != nil {
 		if errors.Is(err, models.ErrUsernameTaken) {
-			return http.StatusConflict, errors.New("username already taken")
+			return http.StatusConflict, models.ErrUsernameTaken
 		}
 		return http.StatusInternalServerError, err
 	}

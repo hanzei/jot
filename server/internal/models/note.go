@@ -18,6 +18,8 @@ const (
 	DefaultNoteColor = "#ffffff"
 )
 
+var ErrNoteNoAccess = errors.New("no access to note")
+
 type Note struct {
 	ID                    string      `json:"id"`
 	UserID                string      `json:"user_id"`
@@ -183,21 +185,25 @@ func (s *NoteStore) GetByUserID(userID string, archived bool, search string) ([]
 		}
 
 		if note.NoteType == NoteTypeTodo {
-			items, err := s.getItemsByNoteID(note.ID)
-			if err != nil {
-				return nil, fmt.Errorf("failed to get note items: %w", err)
+			items, itemsErr := s.getItemsByNoteID(note.ID)
+			if itemsErr != nil {
+				return nil, fmt.Errorf("failed to get note items: %w", itemsErr)
 			}
 			note.Items = items
 		}
 
-		shares, err := s.GetNoteShares(note.ID)
-		if err != nil {
-			return nil, fmt.Errorf("failed to get note shares: %w", err)
+		shares, sharesErr := s.GetNoteShares(note.ID)
+		if sharesErr != nil {
+			return nil, fmt.Errorf("failed to get note shares: %w", sharesErr)
 		}
 		note.SharedWith = shares
 		note.IsShared = len(shares) > 0
 
 		notes = append(notes, &note)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate notes: %w", err)
 	}
 
 	return notes, nil
@@ -379,6 +385,10 @@ func (s *NoteStore) getItemsByNoteID(noteID string) ([]NoteItem, error) {
 		items = append(items, item)
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate note items: %w", err)
+	}
+
 	return items, nil
 }
 
@@ -531,6 +541,10 @@ func (s *NoteStore) GetNoteShares(noteID string) ([]NoteShare, error) {
 		shares = append(shares, share)
 	}
 
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate note shares: %w", err)
+	}
+
 	return shares, nil
 }
 
@@ -557,6 +571,10 @@ func (s *NoteStore) HasAccess(noteID string, userID string) (bool, error) {
 			return false, fmt.Errorf("failed to scan count: %w", err)
 		}
 		totalCount += count
+	}
+
+	if err := rows.Err(); err != nil {
+		return false, fmt.Errorf("failed to iterate access rows: %w", err)
 	}
 
 	return totalCount > 0, nil
@@ -599,7 +617,7 @@ func (s *NoteStore) ReorderNotes(userID string, noteIDs []string) error {
 			return fmt.Errorf("failed to check access for note %s: %w", noteID, err)
 		}
 		if !hasAccess {
-			return fmt.Errorf("no access to note %s", noteID)
+			return fmt.Errorf("no access to note %s: %w", noteID, ErrNoteNoAccess)
 		}
 
 		// Update position
