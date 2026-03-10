@@ -93,6 +93,11 @@ export interface UpdateMeRequest {
   username: string;
 }
 
+export interface ChangePasswordRequest {
+  current_password: string;
+  new_password: string;
+}
+
 export interface ShareNoteRequest {
   username: string;
 }

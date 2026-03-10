@@ -432,3 +432,59 @@ func TestUpdateUserEndpoint(t *testing.T) {
 		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 	})
 }
+
+func TestChangePasswordEndpoint(t *testing.T) {
+	ts := setupTestServer(t)
+	user := ts.createTestUser(t, "passuser", "oldpassword", false)
+
+	t.Run("successful password change", func(t *testing.T) {
+		body := map[string]string{
+			"current_password": "oldpassword",
+			"new_password":     "newpassword",
+		}
+		resp := ts.authRequest(t, user, http.MethodPut, "/api/v1/users/me/password", body)
+		assert.Equal(t, http.StatusNoContent, resp.StatusCode)
+
+		// Verify new password works by logging in with the same client so that
+		// the user's session cookie is refreshed for subsequent subtests.
+		loginBody := map[string]string{"username": "passuser", "password": "newpassword"}
+		loginResp := ts.request(t, user.Client, http.MethodPost, "/api/v1/login", loginBody)
+		assert.Equal(t, http.StatusOK, loginResp.StatusCode)
+	})
+
+	t.Run("wrong current password returns 401", func(t *testing.T) {
+		body := map[string]string{
+			"current_password": "wrongpassword",
+			"new_password":     "anotherpass",
+		}
+		resp := ts.authRequest(t, user, http.MethodPut, "/api/v1/users/me/password", body)
+		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	})
+
+	t.Run("short new password returns 400", func(t *testing.T) {
+		body := map[string]string{
+			"current_password": "newpassword",
+			"new_password":     "ab",
+		}
+		resp := ts.authRequest(t, user, http.MethodPut, "/api/v1/users/me/password", body)
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	})
+
+	t.Run("missing fields returns 400", func(t *testing.T) {
+		body := map[string]string{
+			"current_password": "",
+			"new_password":     "",
+		}
+		resp := ts.authRequest(t, user, http.MethodPut, "/api/v1/users/me/password", body)
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	})
+
+	t.Run("unauthenticated request returns 401", func(t *testing.T) {
+		body := map[string]string{
+			"current_password": "newpassword",
+			"new_password":     "hacked",
+		}
+		resp := ts.request(t, nil, http.MethodPut, "/api/v1/users/me/password", body)
+		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	})
+}
