@@ -15,7 +15,7 @@ export class SettingsPage {
   async changePassword(currentPassword: string, newPassword: string) {
     await this.page.getByLabel('Current password').fill(currentPassword);
     await this.page.getByLabel('New password').fill(newPassword);
-    await this.page.getByLabel('Confirm password').fill(newPassword);
+    await this.page.getByLabel('Confirm New Password').fill(newPassword);
     await this.page.getByRole('button', { name: 'Change Password' }).click();
   }
 
