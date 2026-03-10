@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"errors"
+	"fmt"
 	"regexp"
 	"strings"
 )
@@ -32,7 +33,7 @@ func validateUsername(username string) error {
 func validatePassword(password string) error {
 	const minPasswordLength = 4
 	if len(password) < minPasswordLength {
-		return errors.New("password must be at least 4 characters")
+		return fmt.Errorf("password must be at least %d characters", minPasswordLength)
 	}
 	return nil
 }
