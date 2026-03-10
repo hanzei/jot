@@ -15,6 +15,7 @@ interface SettingsProps {
 
 const Settings = ({ onLogout }: SettingsProps) => {
   const { t } = useTranslation();
+  const displayMsg = (msg: string) => (i18n.exists(msg) ? t(msg) : msg);
   const currentUser = getUser();
   const navigate = useNavigate();
   // currentUsername tracks the persisted value shown in the nav header.
@@ -185,12 +186,12 @@ const Settings = ({ onLogout }: SettingsProps) => {
 
               {error && (
                 <div role="alert" className="mt-4 text-red-600 dark:text-red-400 text-sm">
-                  {t(error, { defaultValue: error })}
+                  {displayMsg(error)}
                 </div>
               )}
               {success && (
                 <div aria-live="polite" className="mt-4 text-green-600 dark:text-green-400 text-sm">
-                  {t(success, { defaultValue: success })}
+                  {displayMsg(success)}
                 </div>
               )}
 
@@ -254,12 +255,12 @@ const Settings = ({ onLogout }: SettingsProps) => {
 
               {passwordError && (
                 <div role="alert" className="mt-4 text-red-600 dark:text-red-400 text-sm">
-                  {t(passwordError, { defaultValue: passwordError })}
+                  {displayMsg(passwordError)}
                 </div>
               )}
               {passwordSuccess && (
                 <div aria-live="polite" className="mt-4 text-green-600 dark:text-green-400 text-sm">
-                  {t(passwordSuccess, { defaultValue: passwordSuccess })}
+                  {displayMsg(passwordSuccess)}
                 </div>
               )}
 
