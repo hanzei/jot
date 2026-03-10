@@ -80,9 +80,6 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   }, [loadNotes]);
 
   const handleSSEEvent = useCallback((event: SSEEvent) => {
-    // Ignore events triggered by this user — local state is already up to date.
-    if (event.source_user_id === user?.id) return;
-
     // If the open modal's note was deleted or unshared, close the modal.
     if (editingNote && event.note_id === editingNote.id) {
       if (event.type === 'note_deleted' || event.type === 'note_unshared') {
@@ -92,7 +89,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     }
 
     loadNotes();
-  }, [user?.id, editingNote, loadNotes]);
+  }, [editingNote, loadNotes]);
 
   useSSE({
     onEvent: handleSSEEvent,

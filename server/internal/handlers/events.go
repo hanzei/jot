@@ -35,6 +35,13 @@ func (h *EventsHandler) ServeSSE(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
+	// Disable the server's write deadline for this long-lived SSE connection only.
+	rc := http.NewResponseController(w)
+	if err := rc.SetWriteDeadline(time.Time{}); err != nil {
+		http.Error(w, "Streaming unsupported", http.StatusInternalServerError)
+		return
+	}
+
 	w.Header().Set("Content-Type", "text/event-stream")
 	w.Header().Set("Cache-Control", "no-cache")
 	w.Header().Set("Connection", "keep-alive")

@@ -232,7 +232,7 @@ func (s *Server) Start(addr string) error {
 		Addr:         addr,
 		Handler:      s.router,
 		ReadTimeout:  30 * time.Second,
-		WriteTimeout: 0, // disabled to support long-lived SSE connections
+		WriteTimeout: 30 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
 	return server.ListenAndServe()
