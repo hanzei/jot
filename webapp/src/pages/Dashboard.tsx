@@ -36,7 +36,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const [searchParams, setSearchParams] = useSearchParams();
   const [notesList, setNotesList] = useState<Note[]>([]);
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQuery] = useState(searchParams.get('search') ?? '');
+  const [searchQuery, setSearchQueryState] = useState(searchParams.get('search') ?? '');
   const [showArchived, setShowArchived] = useState(searchParams.get('view') === 'archive');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingNote, setEditingNote] = useState<Note | null>(null);
@@ -49,13 +49,30 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     return () => { isMountedRef.current = false; };
   }, []);
 
+  const setSearchQuery = (query: string) => {
+    setSearchQueryState(query);
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      if (query) {
+        next.set('search', query);
+      } else {
+        next.delete('search');
+      }
+      return next;
+    });
+  };
+
   const handleViewChange = (archived: boolean) => {
     setShowArchived(archived);
-    if (archived) {
-      setSearchParams({ view: 'archive' });
-    } else {
-      setSearchParams({});
-    }
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      if (archived) {
+        next.set('view', 'archive');
+      } else {
+        next.delete('view');
+      }
+      return next;
+    });
   };
 
   const sensors = useSensors(
