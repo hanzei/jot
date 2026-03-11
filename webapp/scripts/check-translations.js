@@ -24,12 +24,18 @@ function flattenKeys(obj, prefix = "") {
 }
 
 function parseJsonFile(filepath) {
+  let result;
   try {
-    return JSON.parse(readFileSync(filepath, "utf8"));
+    result = JSON.parse(readFileSync(filepath, "utf8"));
   } catch (err) {
     console.error(`Failed to parse ${filepath}: ${err.message}`);
     process.exit(1);
   }
+  if (typeof result !== "object" || result === null || Array.isArray(result)) {
+    console.error(`Expected a plain object in ${filepath} (used by flattenKeys), got ${Array.isArray(result) ? "array" : typeof result}`);
+    process.exit(1);
+  }
+  return result;
 }
 
 const files = readdirSync(localesDir).filter((f) => f.endsWith(".json"));
