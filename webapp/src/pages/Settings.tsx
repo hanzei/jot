@@ -9,6 +9,7 @@ import { getLanguagePreference, resolveLanguage, LanguagePreference, SUPPORTED_L
 import { getThemePreference, applyTheme, ThemePreference } from '@/utils/theme';
 import NavigationHeader from '@/components/NavigationHeader';
 import ImportModal from '@/components/ImportModal';
+import AboutModal from '@/components/AboutModal';
 import Sidebar from '@/components/Sidebar';
 import { useNavigationLinkTabs } from '@/hooks/useNavigationTabs';
 
@@ -38,6 +39,7 @@ const Settings = ({ onLogout }: SettingsProps) => {
   const [passwordError, setPasswordError] = useState('');
   const [passwordSuccess, setPasswordSuccess] = useState('');
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isAboutModalOpen, setIsAboutModalOpen] = useState(false);
   const [languagePref, setLanguagePref] = useState<LanguagePreference>(() => getLanguagePreference());
   const [themePref, setThemePref] = useState<ThemePreference>(() => getThemePreference());
 
@@ -366,6 +368,16 @@ const Settings = ({ onLogout }: SettingsProps) => {
             </button>
           </div>
 
+          <div className="bg-white dark:bg-slate-800 shadow rounded-lg p-6 border border-gray-200 dark:border-slate-700 max-w-md mt-6">
+            <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">{t('settings.aboutSection')}</h2>
+            <button
+              onClick={() => setIsAboutModalOpen(true)}
+              className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-slate-600 text-sm font-medium rounded-md shadow-sm text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 focus:ring-offset-gray-50 dark:focus:ring-offset-slate-900"
+            >
+              {t('settings.aboutButton')}
+            </button>
+          </div>
+
         </div>
         </div>
       </div>
@@ -374,6 +386,11 @@ const Settings = ({ onLogout }: SettingsProps) => {
         isOpen={isImportModalOpen}
         onClose={() => setIsImportModalOpen(false)}
         onSuccess={() => {}}
+      />
+
+      <AboutModal
+        isOpen={isAboutModalOpen}
+        onClose={() => setIsAboutModalOpen(false)}
       />
     </div>
   );

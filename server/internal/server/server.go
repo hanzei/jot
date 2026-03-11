@@ -1,9 +1,11 @@
 package server
 
 import (
+	"encoding/json"
+	"fmt"
 	"net/http"
-	"path/filepath"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -16,6 +18,12 @@ import (
 	"github.com/hanzei/jot/server/internal/models"
 	"github.com/hanzei/jot/server/internal/sse"
 	"github.com/sirupsen/logrus"
+)
+
+//nolint:gochecknoglobals
+var (
+	version = "dev"
+	commit  = "unknown"
 )
 
 type Server struct {
@@ -117,6 +125,7 @@ func (s *Server) setupRoutes() {
 
 			r.Get("/events", s.eventsHandler.ServeSSE)
 
+			r.Get("/about", s.wrapHandler(s.handleAbout))
 			r.Get("/me", s.wrapHandler(s.authHandler.Me))
 			r.Put("/users/me", s.wrapHandler(s.authHandler.UpdateUser))
 			r.Put("/users/me/password", s.wrapHandler(s.authHandler.ChangePassword))
@@ -240,6 +249,19 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	if _, err := w.Write([]byte("OK")); err != nil {
 		logrus.WithError(err).Error("Failed to write health check response")
 	}
+}
+
+type aboutResponse struct {
+	Version string `json:"version"`
+	Commit  string `json:"commit"`
+}
+
+func (s *Server) handleAbout(w http.ResponseWriter, _ *http.Request) (int, error) {
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(aboutResponse{Version: version, Commit: commit}); err != nil {
+		return http.StatusInternalServerError, fmt.Errorf("encoding about response: %w", err)
+	}
+	return 0, nil
 }
 
 func (s *Server) GetRouter() chi.Router {

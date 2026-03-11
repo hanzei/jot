@@ -1,3 +1,8 @@
+export interface AboutInfo {
+  version: string;
+  commit: string;
+}
+
 export interface User {
   id: string;
   username: string;

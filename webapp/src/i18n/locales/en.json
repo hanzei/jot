@@ -1,4 +1,7 @@
 {
+  "common": {
+    "close": "Close"
+  },
   "nav": {
     "settings": "Settings",
     "admin": "Admin",
@@ -77,7 +80,22 @@
     "themeLabel": "App theme",
     "themeSystem": "System Default",
     "themeLight": "Light",
-    "themeDark": "Dark"
+    "themeDark": "Dark",
+    "aboutSection": "About",
+    "aboutButton": "About Jot"
+  },
+  "about": {
+    "title": "About Jot",
+    "clientInfo": "Client",
+    "userId": "User ID",
+    "username": "Username",
+    "role": "Role",
+    "accountCreated": "Account Created",
+    "serverInfo": "Server",
+    "appVersion": "Version",
+    "commit": "Commit",
+    "loading": "Loading...",
+    "failedLoad": "Failed to load server info."
   },
   "admin": {
     "title": "User Management",
