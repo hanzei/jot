@@ -142,6 +142,15 @@
     "failedSaveChanges": "Failed to save changes. Please try again.",
     "menuOptions": "Note options"
   },
+  "labels": {
+    "addLabels": "Add labels",
+    "searchPlaceholder": "Search or create label...",
+    "createLabel": "Create \"{{name}}\"",
+    "removeLabel": "Remove label {{name}}",
+    "noLabels": "No labels yet",
+    "newLabelPlaceholder": "Label name...",
+    "createNew": "Create new..."
+  },
   "share": {
     "title": "Share \"{{noteTitle}}\"",
     "untitledNote": "Untitled Note",

@@ -2,6 +2,7 @@ package models
 
 import (
 	"crypto/rand"
+	"strings"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -21,6 +22,14 @@ const (
 
 var ErrNoteNoAccess = errors.New("no access to note")
 
+type Label struct {
+	ID        string    `json:"id"`
+	UserID    string    `json:"user_id"`
+	Name      string    `json:"name"`
+	CreatedAt time.Time `json:"created_at"`
+	UpdatedAt time.Time `json:"updated_at"`
+}
+
 type Note struct {
 	ID                    string      `json:"id"`
 	UserID                string      `json:"user_id"`
@@ -36,6 +45,7 @@ type Note struct {
 	Items                 []NoteItem  `json:"items,omitempty"`
 	SharedWith            []NoteShare `json:"shared_with,omitempty"`
 	IsShared              bool        `json:"is_shared"`
+	Labels                []Label     `json:"labels"`
 	CreatedAt             time.Time   `json:"created_at"`
 	UpdatedAt             time.Time   `json:"updated_at"`
 }
@@ -143,6 +153,7 @@ func (s *NoteStore) Create(userID string, title, content string, noteType NoteTy
 	note.Position = nextPosition
 	note.UnpinnedPosition = &nextPosition
 	note.CheckedItemsCollapsed = false
+	note.Labels = []Label{}
 
 	return &note, nil
 }
@@ -199,12 +210,30 @@ func (s *NoteStore) GetByUserID(userID string, archived bool, search string) ([]
 		}
 		note.SharedWith = shares
 		note.IsShared = len(shares) > 0
+		note.Labels = []Label{}
 
 		notes = append(notes, &note)
 	}
 
 	if err = rows.Err(); err != nil {
 		return nil, fmt.Errorf("failed to iterate notes: %w", err)
+	}
+
+	// Batch-load labels for all notes in a single query.
+	if len(notes) > 0 {
+		noteIDs := make([]string, len(notes))
+		for i, n := range notes {
+			noteIDs[i] = n.ID
+		}
+		labelsMap, labelsErr := s.getLabelsByNoteIDs(noteIDs)
+		if labelsErr != nil {
+			return nil, fmt.Errorf("failed to batch-load note labels: %w", labelsErr)
+		}
+		for _, n := range notes {
+			if lbls, ok := labelsMap[n.ID]; ok {
+				n.Labels = lbls
+			}
+		}
 	}
 
 	return notes, nil
@@ -250,6 +279,12 @@ func (s *NoteStore) GetByID(id string, userID string) (*Note, error) {
 	}
 	note.SharedWith = shares
 	note.IsShared = len(shares) > 0
+
+	labels, err := s.GetNoteLabels(note.ID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get note labels: %w", err)
+	}
+	note.Labels = labels
 
 	return &note, nil
 }
@@ -633,6 +668,173 @@ func (s *NoteStore) ReorderNotes(userID string, noteIDs []string) error {
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
 
+	return nil
+}
+
+// getLabelsByNoteIDs batch-loads labels for a set of note IDs, returning a map of noteID -> []Label.
+func (s *NoteStore) getLabelsByNoteIDs(noteIDs []string) (map[string][]Label, error) {
+	if len(noteIDs) == 0 {
+		return map[string][]Label{}, nil
+	}
+
+	placeholders := make([]string, len(noteIDs))
+	args := make([]any, len(noteIDs))
+	for i, id := range noteIDs {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+
+	query := `SELECT nl.note_id, l.id, l.user_id, l.name, l.created_at, l.updated_at
+			  FROM labels l
+			  JOIN note_labels nl ON l.id = nl.label_id
+			  WHERE nl.note_id IN (` + strings.Join(placeholders, ",") + `)
+			  ORDER BY nl.note_id, l.name ASC` // #nosec G202 -- only "?" placeholders are joined, no user input
+
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to batch-get note labels: %w", err)
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+			logrus.Errorf("Failed to close rows: %v", err)
+		}
+	}()
+
+	result := map[string][]Label{}
+	for rows.Next() {
+		var noteID string
+		var l Label
+		if err := rows.Scan(&noteID, &l.ID, &l.UserID, &l.Name, &l.CreatedAt, &l.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("failed to scan note label: %w", err)
+		}
+		result[noteID] = append(result[noteID], l)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate note labels: %w", err)
+	}
+	return result, nil
+}
+
+// GetLabels returns all labels belonging to a user.
+func (s *NoteStore) GetLabels(userID string) ([]Label, error) {
+	query := `SELECT id, user_id, name, created_at, updated_at FROM labels WHERE user_id = ? ORDER BY name ASC`
+	rows, err := s.db.Query(query, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get labels: %w", err)
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+			logrus.Errorf("Failed to close rows: %v", err)
+		}
+	}()
+
+	labels := []Label{}
+	for rows.Next() {
+		var l Label
+		if err := rows.Scan(&l.ID, &l.UserID, &l.Name, &l.CreatedAt, &l.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("failed to scan label: %w", err)
+		}
+		labels = append(labels, l)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate labels: %w", err)
+	}
+	return labels, nil
+}
+
+// GetNoteLabels returns all labels attached to a note.
+func (s *NoteStore) GetNoteLabels(noteID string) ([]Label, error) {
+	query := `SELECT l.id, l.user_id, l.name, l.created_at, l.updated_at
+			  FROM labels l
+			  JOIN note_labels nl ON l.id = nl.label_id
+			  WHERE nl.note_id = ?
+			  ORDER BY l.name ASC`
+	rows, err := s.db.Query(query, noteID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get note labels: %w", err)
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+			logrus.Errorf("Failed to close rows: %v", err)
+		}
+	}()
+
+	labels := []Label{}
+	for rows.Next() {
+		var l Label
+		if err := rows.Scan(&l.ID, &l.UserID, &l.Name, &l.CreatedAt, &l.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("failed to scan label: %w", err)
+		}
+		labels = append(labels, l)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate note labels: %w", err)
+	}
+	return labels, nil
+}
+
+// GetOrCreateLabel finds an existing label by name for a user or creates a new one.
+// Uses an atomic upsert to avoid race conditions when multiple callers create the same label concurrently.
+func (s *NoteStore) GetOrCreateLabel(userID, name string) (*Label, error) {
+	id, err := generateID()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate label ID: %w", err)
+	}
+
+	var l Label
+	err = s.db.QueryRow(
+		`INSERT INTO labels (id, user_id, name) VALUES (?, ?, ?)
+		 ON CONFLICT(user_id, name) DO UPDATE SET name=excluded.name
+		 RETURNING id, user_id, name, created_at, updated_at`,
+		id, userID, name,
+	).Scan(&l.ID, &l.UserID, &l.Name, &l.CreatedAt, &l.UpdatedAt)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get or create label: %w", err)
+	}
+	return &l, nil
+}
+
+// AddLabelToNote attaches a label to a note (user must have access).
+func (s *NoteStore) AddLabelToNote(noteID, labelID, userID string) error {
+	hasAccess, err := s.HasAccess(noteID, userID)
+	if err != nil {
+		return fmt.Errorf("failed to check access: %w", err)
+	}
+	if !hasAccess {
+		return ErrNoteNoAccess
+	}
+
+	id, err := generateID()
+	if err != nil {
+		return fmt.Errorf("failed to generate note_label ID: %w", err)
+	}
+	_, err = s.db.Exec(
+		`INSERT OR IGNORE INTO note_labels (id, note_id, label_id) VALUES (?, ?, ?)`,
+		id, noteID, labelID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to add label to note: %w", err)
+	}
+	return nil
+}
+
+// RemoveLabelFromNote detaches a label from a note (user must have access).
+func (s *NoteStore) RemoveLabelFromNote(noteID, labelID, userID string) error {
+	hasAccess, err := s.HasAccess(noteID, userID)
+	if err != nil {
+		return fmt.Errorf("failed to check access: %w", err)
+	}
+	if !hasAccess {
+		return ErrNoteNoAccess
+	}
+
+	_, err = s.db.Exec(
+		`DELETE FROM note_labels WHERE note_id = ? AND label_id = ?`,
+		noteID, labelID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to remove label from note: %w", err)
+	}
 	return nil
 }
 

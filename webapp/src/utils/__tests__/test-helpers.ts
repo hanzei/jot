@@ -15,6 +15,7 @@ export const createMockNote = (overrides: Partial<Note> = {}): Note => ({
   updated_at: '2023-01-01T00:00:00Z',
   checked_items_collapsed: false,
   items: [],
+  labels: [],
   position: 0,
   ...overrides,
 })

@@ -35,6 +35,14 @@ export interface RegisterRequest {
   password: string;
 }
 
+export interface Label {
+  id: string;
+  user_id: string;
+  name: string;
+  created_at: string;
+  updated_at: string;
+}
+
 export type NoteType = 'text' | 'todo';
 
 export interface NoteItem {
@@ -72,6 +80,7 @@ export interface Note {
   items?: NoteItem[];
   shared_with?: NoteShare[];
   is_shared: boolean;
+  labels: Label[];
   created_at: string;
   updated_at: string;
 }

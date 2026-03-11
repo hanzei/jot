@@ -1,9 +1,10 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { XMarkIcon, PlusIcon, TrashIcon, ChevronDownIcon, ArchiveBoxIcon, ArchiveBoxXMarkIcon, ShareIcon } from '@heroicons/react/24/outline';
 import { Dialog } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
-import { Note, NoteType, CreateNoteRequest, UpdateNoteRequest } from '@/types';
+import { Note, NoteType, CreateNoteRequest, UpdateNoteRequest, Label } from '@/types';
 import { notes } from '@/utils/api';
+import LabelPicker from '@/components/LabelPicker';
 
 // Constants
 const AUTO_SAVE_TIMEOUT = 1000; // Save 1 second after user stops typing
@@ -164,7 +165,9 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
   const [items, setItems] = useState<TodoItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [checkedItemsCollapsed, setCheckedItemsCollapsed] = useState(false);
+  const [noteLabels, setNoteLabels] = useState<Label[]>(note?.labels ?? []);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [showLabelPicker, setShowLabelPicker] = useState(false);
   
   // Use useRef for timeout management instead of global window property
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
@@ -210,6 +213,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
           position: item.position,
         })) || []
       );
+      setNoteLabels(note.labels ?? []);
     } else {
       setTitle('');
       setContent('');
@@ -218,6 +222,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
       setPinned(false);
       setArchived(false);
       setItems([]);
+      setNoteLabels([]);
     }
   }, [note]);
 
@@ -234,7 +239,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
   }, []);
 
   // Helper function to show error messages with auto-dismiss
-  const showError = (message: string) => {
+  const showError = useCallback((message: string) => {
     setErrorMessage(message);
     
     // Clear any existing error timeout
@@ -246,7 +251,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
     errorTimeoutRef.current = setTimeout(() => {
       setErrorMessage(null);
     }, 5000);
-  };
+  }, []);
 
   // Simplified position restoration logic using Map for position tracking
   const restoreItemPosition = (items: TodoItem[], itemToRestore: TodoItem): TodoItem[] => {
@@ -845,6 +850,33 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
                     )}
                   </div>
                 )}
+              </div>
+            )}
+
+            {/* Labels row: badges + add button with popover */}
+            {note && (
+              <div className="flex flex-wrap items-center gap-1">
+                {noteLabels.map(label => (
+                  <span
+                    key={label.id}
+                    className="inline-flex items-center bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full px-2 py-0.5 text-xs"
+                  >
+                    {label.name}
+                  </span>
+                ))}
+                <div className="relative">
+                  <button
+                    onClick={() => setShowLabelPicker(v => !v)}
+                    className="w-6 h-6 rounded-full border border-dashed border-gray-300 dark:border-slate-600 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors"
+                    title={t('labels.addLabels')}
+                    aria-label={t('labels.addLabels')}
+                  >
+                    <PlusIcon className="h-3 w-3 text-gray-400 dark:text-gray-500" />
+                  </button>
+                  {showLabelPicker && (
+                    <LabelPicker note={{...note, labels: noteLabels}} onRefresh={onRefresh} onNoteUpdate={(n) => setNoteLabels(n.labels ?? [])} onError={showError} onClose={() => setShowLabelPicker(false)} />
+                  )}
+                </div>
               </div>
             )}
 
