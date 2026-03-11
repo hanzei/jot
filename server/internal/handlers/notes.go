@@ -17,6 +17,8 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+const errNoteNotOwnedByUser = "note not found or not owned by user"
+
 type NotesHandler struct {
 	noteStore *models.NoteStore
 	userStore *models.UserStore
@@ -85,10 +87,11 @@ func (h *NotesHandler) GetNotes(w http.ResponseWriter, r *http.Request) (int, er
 		return http.StatusUnauthorized, errors.New("unauthorized")
 	}
 
+	trashed := r.URL.Query().Get("trashed") == "true"
 	archived := r.URL.Query().Get("archived") == "true"
 	search := r.URL.Query().Get("search")
 
-	notes, err := h.noteStore.GetByUserID(user.ID, archived, search)
+	notes, err := h.noteStore.GetByUserID(user.ID, archived, trashed, search)
 	if err != nil {
 		return http.StatusInternalServerError, err
 	}
@@ -270,12 +273,85 @@ func (h *NotesHandler) DeleteNote(w http.ResponseWriter, r *http.Request) (int, 
 		return http.StatusBadRequest, errors.New("invalid note ID format")
 	}
 
+	// Fetch audience before trashing so we can notify share targets too.
+	audienceIDs, audienceErr := h.noteStore.GetNoteAudienceIDs(id)
+
+	err := h.noteStore.MoveToTrash(id, user.ID)
+	if err != nil {
+		if err.Error() == errNoteNotOwnedByUser {
+			return http.StatusNotFound, err
+		}
+		return http.StatusInternalServerError, err
+	}
+
+	if audienceErr == nil && h.hub != nil {
+		h.hub.Publish(audienceIDs, sse.Event{
+			Type:         sse.EventNoteDeleted,
+			NoteID:       id,
+			Note:         nil,
+			SourceUserID: user.ID,
+		})
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+	return 0, nil
+}
+
+func (h *NotesHandler) RestoreNote(w http.ResponseWriter, r *http.Request) (int, error) {
+	user, ok := auth.GetUserFromContext(r.Context())
+	if !ok {
+		return http.StatusUnauthorized, errors.New("unauthorized")
+	}
+
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		return http.StatusBadRequest, errors.New("missing note ID")
+	}
+	if !models.IsValidID(id) {
+		return http.StatusBadRequest, errors.New("invalid note ID format")
+	}
+
+	err := h.noteStore.RestoreFromTrash(id, user.ID)
+	if err != nil {
+		if err.Error() == errNoteNotOwnedByUser || err.Error() == "note not found in trash or not owned by user" {
+			return http.StatusNotFound, err
+		}
+		return http.StatusInternalServerError, err
+	}
+
+	note, err := h.noteStore.GetByID(id, user.ID)
+	if err != nil {
+		return http.StatusInternalServerError, err
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(note); err != nil {
+		return http.StatusInternalServerError, err
+	}
+	h.publishNoteEvent(id, sse.EventNoteUpdated, note, user.ID)
+	return 0, nil
+}
+
+func (h *NotesHandler) PermanentlyDeleteNote(w http.ResponseWriter, r *http.Request) (int, error) {
+	user, ok := auth.GetUserFromContext(r.Context())
+	if !ok {
+		return http.StatusUnauthorized, errors.New("unauthorized")
+	}
+
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		return http.StatusBadRequest, errors.New("missing note ID")
+	}
+	if !models.IsValidID(id) {
+		return http.StatusBadRequest, errors.New("invalid note ID format")
+	}
+
 	// Fetch audience before deletion so we can notify share targets too.
 	audienceIDs, audienceErr := h.noteStore.GetNoteAudienceIDs(id)
 
 	err := h.noteStore.Delete(id, user.ID)
 	if err != nil {
-		if err.Error() == "note not found or not owned by user" {
+		if err.Error() == errNoteNotOwnedByUser {
 			return http.StatusNotFound, err
 		}
 		return http.StatusInternalServerError, err

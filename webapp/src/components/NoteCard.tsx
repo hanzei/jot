@@ -5,7 +5,8 @@ import {
   ArchiveBoxIcon,
   ArchiveBoxXMarkIcon,
   ShareIcon,
-  UserIcon
+  UserIcon,
+  ArrowUturnLeftIcon,
 } from '@heroicons/react/24/outline';
 import { Menu } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
@@ -17,11 +18,14 @@ interface NoteCardProps {
   onEdit: (note: Note) => void;
   onDelete: (noteId: string) => void;
   onShare?: (note: Note) => void;
+  onRestore?: (noteId: string) => void;
+  onPermanentlyDelete?: (noteId: string) => void;
   currentUserId?: string;
+  inBin?: boolean;
   onRefresh?: () => void;
 }
 
-export default function NoteCard({ note, onEdit, onDelete, onShare, currentUserId, onRefresh }: NoteCardProps) {
+export default function NoteCard({ note, onEdit, onDelete, onShare, onRestore, onPermanentlyDelete, currentUserId, inBin = false, onRefresh }: NoteCardProps) {
   const { t } = useTranslation();
   const [isUpdating, setIsUpdating] = useState(false);
 
@@ -85,6 +89,16 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, currentUserI
     }
   };
 
+  const handleRestore = () => {
+    onRestore?.(note.id);
+  };
+
+  const handlePermanentlyDelete = () => {
+    if (window.confirm(t('note.deleteForeverConfirm'))) {
+      onPermanentlyDelete?.(note.id);
+    }
+  };
+
   return (
     <div
       data-testid="note-card"
@@ -122,68 +136,99 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, currentUserI
         </Menu.Button>
         <Menu.Items className="absolute right-0 mt-1 w-48 bg-white dark:bg-slate-800 rounded-md shadow-lg ring-1 ring-black dark:ring-slate-600 ring-opacity-5 focus:outline-none z-10 border border-gray-200 dark:border-slate-600">
           <div className="py-1">
-            {isOwner && onShare && (
-              <Menu.Item>
-                {({ active }) => (
-                  <button
-                    onClick={() => onShare(note)}
-                    className={`${active ? 'bg-gray-100 dark:bg-slate-700' : ''
-                      } flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-200`}
-                  >
-                    <ShareIcon className="h-4 w-4 mr-2" />
-                    {t('note.share')}
-                  </button>
-                )}
-              </Menu.Item>
-            )}
-            <Menu.Item>
-              {({ active }) => (
-                <button
-                  onClick={handleTogglePin}
-                  className={`${active ? 'bg-gray-100 dark:bg-slate-700' : ''
-                    } flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-200`}
-                >
-                  <svg className="h-4 w-4 mr-2" fill={note.pinned ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                    <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z" />
-                  </svg>
-                  {note.pinned ? t('note.unpin') : t('note.pin')}
-                </button>
-              )}
-            </Menu.Item>
-            <Menu.Item>
-              {({ active }) => (
-                <button
-                  onClick={handleToggleArchive}
-                  className={`${active ? 'bg-gray-100 dark:bg-slate-700' : ''
-                    } flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-200`}
-                >
-                  {note.archived ? (
-                    <>
-                      <ArchiveBoxXMarkIcon className="h-4 w-4 mr-2" />
-                      {t('note.unarchive')}
-                    </>
-                  ) : (
-                    <>
-                      <ArchiveBoxIcon className="h-4 w-4 mr-2" />
-                      {t('note.archive')}
-                    </>
+            {inBin ? (
+              <>
+                <Menu.Item>
+                  {({ active }) => (
+                    <button
+                      onClick={handleRestore}
+                      className={`${active ? 'bg-gray-100 dark:bg-slate-700' : ''
+                        } flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-200`}
+                    >
+                      <ArrowUturnLeftIcon className="h-4 w-4 mr-2" />
+                      {t('note.restore')}
+                    </button>
                   )}
-                </button>
-              )}
-            </Menu.Item>
-            {isOwner && (
-              <Menu.Item>
-                {({ active }) => (
-                  <button
-                    onClick={handleDelete}
-                    className={`${active ? 'bg-gray-100' : ''
-                      } flex items-center w-full px-4 py-2 text-sm text-red-600`}
-                  >
-                    <TrashIcon className="h-4 w-4 mr-2" />
-                    {t('note.delete')}
-                  </button>
+                </Menu.Item>
+                <Menu.Item>
+                  {({ active }) => (
+                    <button
+                      onClick={handlePermanentlyDelete}
+                      className={`${active ? 'bg-gray-100' : ''
+                        } flex items-center w-full px-4 py-2 text-sm text-red-600`}
+                    >
+                      <TrashIcon className="h-4 w-4 mr-2" />
+                      {t('note.deleteForever')}
+                    </button>
+                  )}
+                </Menu.Item>
+              </>
+            ) : (
+              <>
+                {isOwner && onShare && (
+                  <Menu.Item>
+                    {({ active }) => (
+                      <button
+                        onClick={() => onShare(note)}
+                        className={`${active ? 'bg-gray-100 dark:bg-slate-700' : ''
+                          } flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-200`}
+                      >
+                        <ShareIcon className="h-4 w-4 mr-2" />
+                        {t('note.share')}
+                      </button>
+                    )}
+                  </Menu.Item>
                 )}
-              </Menu.Item>
+                <Menu.Item>
+                  {({ active }) => (
+                    <button
+                      onClick={handleTogglePin}
+                      className={`${active ? 'bg-gray-100 dark:bg-slate-700' : ''
+                        } flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-200`}
+                    >
+                      <svg className="h-4 w-4 mr-2" fill={note.pinned ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                        <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z" />
+                      </svg>
+                      {note.pinned ? t('note.unpin') : t('note.pin')}
+                    </button>
+                  )}
+                </Menu.Item>
+                <Menu.Item>
+                  {({ active }) => (
+                    <button
+                      onClick={handleToggleArchive}
+                      className={`${active ? 'bg-gray-100 dark:bg-slate-700' : ''
+                        } flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-200`}
+                    >
+                      {note.archived ? (
+                        <>
+                          <ArchiveBoxXMarkIcon className="h-4 w-4 mr-2" />
+                          {t('note.unarchive')}
+                        </>
+                      ) : (
+                        <>
+                          <ArchiveBoxIcon className="h-4 w-4 mr-2" />
+                          {t('note.archive')}
+                        </>
+                      )}
+                    </button>
+                  )}
+                </Menu.Item>
+                {isOwner && (
+                  <Menu.Item>
+                    {({ active }) => (
+                      <button
+                        onClick={handleDelete}
+                        className={`${active ? 'bg-gray-100' : ''
+                          } flex items-center w-full px-4 py-2 text-sm text-red-600`}
+                      >
+                        <TrashIcon className="h-4 w-4 mr-2" />
+                        {t('note.delete')}
+                      </button>
+                    )}
+                  </Menu.Item>
+                )}
+              </>
             )}
           </div>
         </Menu.Items>
@@ -191,8 +236,8 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, currentUserI
 
       {/* Content */}
       <div
-        onClick={() => onEdit(note)}
-        className={`cursor-pointer ${note.is_shared ? 'pt-8' : ''}`}
+        onClick={() => !inBin && onEdit(note)}
+        className={`${inBin ? 'cursor-default' : 'cursor-pointer'} ${note.is_shared ? 'pt-8' : ''}`}
       >
         {note.title && (
           <h3 className="font-medium text-gray-900 dark:text-white mb-2 line-clamp-2">

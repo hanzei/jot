@@ -32,6 +32,7 @@
     "newNote": "New Note",
     "noArchivedNotes": "No archived notes",
     "noNotesYet": "No notes yet",
+    "noBinnedNotes": "Bin is empty",
     "createFirstNote": "Click \"New Note\" to create your first note",
     "pinned": "Pinned",
     "otherNotes": "Other Notes",
@@ -39,7 +40,9 @@
     "searchAriaLabel": "Search notes",
     "tabNotes": "Notes",
     "tabArchive": "Archive",
-    "tabAdmin": "Admin"
+    "tabBin": "Bin",
+    "tabAdmin": "Admin",
+    "binInfo": "Notes in the bin are deleted after 7 days"
   },
   "settings": {
     "title": "Settings",
@@ -113,6 +116,9 @@
     "archive": "Archive",
     "delete": "Delete",
     "deleteConfirm": "Are you sure you want to delete this note?",
+    "deleteForever": "Delete forever",
+    "deleteForeverConfirm": "Permanently delete this note? This cannot be undone.",
+    "restore": "Restore",
     "completedItems": "Completed items ({{count}})",
     "moreCompletedItems": "+{{count}} completed items",
     "editNote": "Edit Note",
@@ -196,6 +202,7 @@
     "register": "Create Account - Jot",
     "notes": "Jot",
     "archive": "Archive - Jot",
+    "bin": "Bin - Jot",
     "admin": "Admin - Jot",
     "settings": "Settings - Jot"
   }

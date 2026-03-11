@@ -11,6 +11,7 @@ export const createMockNote = (overrides: Partial<Note> = {}): Note => ({
   color: '#ffffff',
   user_id: 'user1',
   is_shared: false,
+  deleted_at: null,
   created_at: '2023-01-01T00:00:00Z',
   updated_at: '2023-01-01T00:00:00Z',
   checked_items_collapsed: false,

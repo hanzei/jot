@@ -55,6 +55,17 @@ func New() *Server {
 		}
 	}()
 
+	go func() {
+		if err := noteStore.PurgeOldTrashedNotes(7 * 24 * time.Hour); err != nil {
+			logrus.WithError(err).Error("failed to purge old trashed notes on startup")
+		}
+		for range time.Tick(time.Hour) {
+			if err := noteStore.PurgeOldTrashedNotes(7 * 24 * time.Hour); err != nil {
+				logrus.WithError(err).Error("failed to purge old trashed notes")
+			}
+		}
+	}()
+
 	hub := sse.NewHub()
 
 	authHandler := handlers.NewAuthHandler(userStore, sessionService, userSettingsStore)
@@ -119,6 +130,9 @@ func (s *Server) setupRoutes() {
 			r.Get("/notes/{id}", s.wrapHandler(s.notesHandler.GetNote))
 			r.Put("/notes/{id}", s.wrapHandler(s.notesHandler.UpdateNote))
 			r.Delete("/notes/{id}", s.wrapHandler(s.notesHandler.DeleteNote))
+
+			r.Post("/notes/{id}/restore", s.wrapHandler(s.notesHandler.RestoreNote))
+			r.Delete("/notes/{id}/permanent", s.wrapHandler(s.notesHandler.PermanentlyDeleteNote))
 
 			r.Post("/notes/{id}/share", s.wrapHandler(s.notesHandler.ShareNote))
 			r.Delete("/notes/{id}/share", s.wrapHandler(s.notesHandler.UnshareNote))

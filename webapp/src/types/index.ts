@@ -81,6 +81,7 @@ export interface Note {
   shared_with?: NoteShare[];
   is_shared: boolean;
   labels: Label[];
+  deleted_at: string | null;
   created_at: string;
   updated_at: string;
 }

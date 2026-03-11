@@ -38,8 +38,8 @@ export const auth = {
 };
 
 export const notes = {
-  getAll: (archived = false, search = ''): Promise<Note[]> =>
-    api.get('/notes', { params: { archived, search } }).then(res => res.data),
+  getAll: (archived = false, search = '', trashed = false): Promise<Note[]> =>
+    api.get('/notes', { params: { archived, search, trashed } }).then(res => res.data),
 
   getById: (id: string): Promise<Note> =>
     api.get(`/notes/${id}`).then(res => res.data),
@@ -52,6 +52,12 @@ export const notes = {
 
   delete: (id: string): Promise<void> =>
     api.delete(`/notes/${id}`),
+
+  restore: (id: string): Promise<Note> =>
+    api.post(`/notes/${id}/restore`).then(res => res.data),
+
+  permanentlyDelete: (id: string): Promise<void> =>
+    api.delete(`/notes/${id}/permanent`),
 
   share: (id: string, data: ShareNoteRequest): Promise<ShareNoteResponse> =>
     api.post(`/notes/${id}/share`, data).then(res => res.data),

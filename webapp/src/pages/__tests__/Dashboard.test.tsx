@@ -253,7 +253,7 @@ describe('Dashboard', () => {
       await user.type(searchInput, 'search term')
       
       await waitFor(() => {
-        expect(mockGetAll).toHaveBeenCalledWith(false, 'search term')
+        expect(mockGetAll).toHaveBeenCalledWith(false, 'search term', false)
       })
     })
 
@@ -272,7 +272,7 @@ describe('Dashboard', () => {
       await user.type(searchInput, specialChars)
       
       await waitFor(() => {
-        expect(mockGetAll).toHaveBeenCalledWith(false, specialChars)
+        expect(mockGetAll).toHaveBeenCalledWith(false, specialChars, false)
       })
     })
 
@@ -292,7 +292,7 @@ describe('Dashboard', () => {
       fireEvent.change(searchInput, { target: { value: longQuery } })
 
       await waitFor(() => {
-        expect(mockGetAll).toHaveBeenCalledWith(false, longQuery)
+        expect(mockGetAll).toHaveBeenCalledWith(false, longQuery, false)
       })
     })
 
@@ -313,7 +313,7 @@ describe('Dashboard', () => {
 
       // Should have been called with the final value
       await waitFor(() => {
-        expect(mockGetAll).toHaveBeenCalledWith(false, 'abc')
+        expect(mockGetAll).toHaveBeenCalledWith(false, 'abc', false)
       })
     })
   })
@@ -334,7 +334,7 @@ describe('Dashboard', () => {
       await user.click(archiveButton)
       
       await waitFor(() => {
-        expect(mockGetAll).toHaveBeenCalledWith(true, '')
+        expect(mockGetAll).toHaveBeenCalledWith(true, '', false)
       })
     })
 
@@ -362,7 +362,7 @@ describe('Dashboard', () => {
       renderDashboard(['/dashboard?view=archive'])
       
       await waitFor(() => {
-        expect(mockGetAll).toHaveBeenCalledWith(true, '')
+        expect(mockGetAll).toHaveBeenCalledWith(true, '', false)
       })
     })
 
@@ -372,7 +372,7 @@ describe('Dashboard', () => {
       renderDashboard(['/dashboard?view=invalid'])
       
       await waitFor(() => {
-        expect(mockGetAll).toHaveBeenCalledWith(false, '')
+        expect(mockGetAll).toHaveBeenCalledWith(false, '', false)
       })
     })
   })
