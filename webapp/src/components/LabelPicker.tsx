@@ -86,6 +86,8 @@ export default function LabelPicker({ note, onRefresh, onNoteUpdate, onError, on
       {allLabels.map(label => (
         <button
           key={label.id}
+          role="checkbox"
+          aria-checked={currentLabelIds.has(label.id)}
           onClick={() => toggleLabel(label)}
           className="flex items-center w-full px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-slate-700"
         >
@@ -93,6 +95,8 @@ export default function LabelPicker({ note, onRefresh, onNoteUpdate, onError, on
             type="checkbox"
             checked={currentLabelIds.has(label.id)}
             readOnly
+            aria-hidden="true"
+            tabIndex={-1}
             className="h-3.5 w-3.5 text-blue-600 rounded mr-2 pointer-events-none"
           />
           {label.name}

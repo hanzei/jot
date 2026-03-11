@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { XMarkIcon, PlusIcon, TrashIcon, ChevronDownIcon, ArchiveBoxIcon, ArchiveBoxXMarkIcon, ShareIcon } from '@heroicons/react/24/outline';
 import { Dialog } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
-import { Note, NoteType, CreateNoteRequest, UpdateNoteRequest } from '@/types';
+import { Note, NoteType, CreateNoteRequest, UpdateNoteRequest, Label } from '@/types';
 import { notes } from '@/utils/api';
 import LabelPicker from '@/components/LabelPicker';
 
@@ -165,7 +165,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
   const [items, setItems] = useState<TodoItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [checkedItemsCollapsed, setCheckedItemsCollapsed] = useState(false);
-  const [noteLabels, setNoteLabels] = useState<import('@/types').Label[]>(note?.labels ?? []);
+  const [noteLabels, setNoteLabels] = useState<Label[]>(note?.labels ?? []);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showLabelPicker, setShowLabelPicker] = useState(false);
   
