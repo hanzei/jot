@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { XMarkIcon, PlusIcon, TrashIcon, ChevronDownIcon, ArchiveBoxIcon, ArchiveBoxXMarkIcon, ShareIcon, TagIcon } from '@heroicons/react/24/outline';
 import { Dialog } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
@@ -236,7 +236,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
   }, []);
 
   // Helper function to show error messages with auto-dismiss
-  const showError = (message: string) => {
+  const showError = useCallback((message: string) => {
     setErrorMessage(message);
     
     // Clear any existing error timeout
@@ -248,7 +248,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
     errorTimeoutRef.current = setTimeout(() => {
       setErrorMessage(null);
     }, 5000);
-  };
+  }, []);
 
   // Simplified position restoration logic using Map for position tracking
   const restoreItemPosition = (items: TodoItem[], itemToRestore: TodoItem): TodoItem[] => {
