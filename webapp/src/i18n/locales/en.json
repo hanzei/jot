@@ -32,6 +32,7 @@
     "newNote": "New Note",
     "noArchivedNotes": "No archived notes",
     "noNotesYet": "No notes yet",
+    "noSearchResults": "No notes matching \"{{query}}\"",
     "noBinnedNotes": "Bin is empty",
     "createFirstNote": "Click \"New Note\" to create your first note",
     "pinned": "Pinned",

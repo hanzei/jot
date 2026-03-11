@@ -382,10 +382,12 @@ export default function Dashboard({ onLogout }: DashboardProps) {
         {!notesList || notesList.length === 0 ? (
           <div className="text-center py-12">
             <div className="text-gray-500 dark:text-gray-400 text-lg">
-              {showBin ? t('dashboard.noBinnedNotes') : showArchived ? t('dashboard.noArchivedNotes') : t('dashboard.noNotesYet')}
+              {searchQuery
+                ? t('dashboard.noSearchResults', { query: searchQuery })
+                : showBin ? t('dashboard.noBinnedNotes') : showArchived ? t('dashboard.noArchivedNotes') : t('dashboard.noNotesYet')}
             </div>
             <div className="text-gray-400 dark:text-gray-500 text-sm mt-2">
-              {!showArchived && !showBin && t('dashboard.createFirstNote')}
+              {!showArchived && !showBin && !searchQuery && t('dashboard.createFirstNote')}
             </div>
           </div>
         ) : (

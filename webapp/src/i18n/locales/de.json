@@ -32,6 +32,7 @@
     "newNote": "Neue Notiz",
     "noArchivedNotes": "Keine archivierten Notizen",
     "noNotesYet": "Noch keine Notizen",
+    "noSearchResults": "Keine Notizen für \"{{query}}\"",
     "noBinnedNotes": "Papierkorb ist leer",
     "createFirstNote": "Klicke auf \"Neue Notiz\", um deine erste Notiz zu erstellen",
     "pinned": "Angeheftet",
