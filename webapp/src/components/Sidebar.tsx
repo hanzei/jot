@@ -18,6 +18,7 @@ const Sidebar = ({ tabs }: SidebarProps) => {
       <button
         className="sm:hidden flex items-center px-4 py-3 text-gray-600 dark:text-gray-300"
         aria-label={mobileOpen ? 'Close navigation' : 'Open navigation'}
+        aria-expanded={mobileOpen}
         onClick={() => setMobileOpen(o => !o)}
       >
         {mobileOpen ? (

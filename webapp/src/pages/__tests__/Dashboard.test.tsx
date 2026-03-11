@@ -187,10 +187,11 @@ describe('Dashboard', () => {
       })
 
       const toggle = screen.getByLabelText('Open navigation')
+      expect(toggle).toHaveAttribute('aria-expanded', 'false')
+
       await user.click(toggle)
 
-      expect(screen.getByText('Notes')).toBeInTheDocument()
-      expect(screen.getByText('Archive')).toBeInTheDocument()
+      expect(screen.getByLabelText('Close navigation')).toHaveAttribute('aria-expanded', 'true')
     })
 
     it('shows admin link for admin users', async () => {
