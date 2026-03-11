@@ -75,7 +75,7 @@ func (h *LabelsHandler) AddLabel(w http.ResponseWriter, r *http.Request) (int, e
 		return http.StatusInternalServerError, err
 	}
 
-	if err := h.noteStore.AddLabelToNote(noteID, label.ID, user.ID); err != nil {
+	if err = h.noteStore.AddLabelToNote(noteID, label.ID, user.ID); err != nil {
 		if errors.Is(err, models.ErrNoteNoAccess) {
 			return http.StatusForbidden, errors.New("no access to note")
 		}
