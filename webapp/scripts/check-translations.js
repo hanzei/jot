@@ -23,6 +23,15 @@ function flattenKeys(obj, prefix = "") {
   });
 }
 
+function parseJsonFile(filepath) {
+  try {
+    return JSON.parse(readFileSync(filepath, "utf8"));
+  } catch (err) {
+    console.error(`Failed to parse ${filepath}: ${err.message}`);
+    process.exit(1);
+  }
+}
+
 const files = readdirSync(localesDir).filter((f) => f.endsWith(".json"));
 const reference = "en.json";
 
@@ -32,7 +41,7 @@ if (!files.includes(reference)) {
 }
 
 const referenceKeys = new Set(
-  flattenKeys(JSON.parse(readFileSync(join(localesDir, reference), "utf8")))
+  flattenKeys(parseJsonFile(join(localesDir, reference)))
 );
 
 let hasErrors = false;
@@ -42,7 +51,7 @@ for (const file of files) {
 
   const locale = file.replace(".json", "");
   const keys = new Set(
-    flattenKeys(JSON.parse(readFileSync(join(localesDir, file), "utf8")))
+    flattenKeys(parseJsonFile(join(localesDir, file)))
   );
 
   const missing = [...referenceKeys].filter((k) => !keys.has(k));
