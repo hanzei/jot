@@ -210,6 +210,10 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   };
 
   const handleDragEnd = async (event: DragEndEvent) => {
+    if (showBin) {
+      return;
+    }
+
     const { active, over } = event;
 
     if (!over || active.id === over.id) {

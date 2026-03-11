@@ -17,8 +17,6 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-const errNoteNotOwnedByUser = "note not found or not owned by user"
-
 type NotesHandler struct {
 	noteStore *models.NoteStore
 	userStore *models.UserStore
@@ -278,7 +276,7 @@ func (h *NotesHandler) DeleteNote(w http.ResponseWriter, r *http.Request) (int, 
 
 	err := h.noteStore.MoveToTrash(id, user.ID)
 	if err != nil {
-		if err.Error() == errNoteNotOwnedByUser {
+		if errors.Is(err, models.ErrNoteNotOwnedByUser) {
 			return http.StatusNotFound, err
 		}
 		return http.StatusInternalServerError, err
@@ -313,7 +311,7 @@ func (h *NotesHandler) RestoreNote(w http.ResponseWriter, r *http.Request) (int,
 
 	err := h.noteStore.RestoreFromTrash(id, user.ID)
 	if err != nil {
-		if err.Error() == errNoteNotOwnedByUser || err.Error() == "note not found in trash or not owned by user" {
+		if errors.Is(err, models.ErrNoteNotOwnedByUser) || errors.Is(err, models.ErrNoteNotInTrash) {
 			return http.StatusNotFound, err
 		}
 		return http.StatusInternalServerError, err
@@ -349,9 +347,9 @@ func (h *NotesHandler) PermanentlyDeleteNote(w http.ResponseWriter, r *http.Requ
 	// Fetch audience before deletion so we can notify share targets too.
 	audienceIDs, audienceErr := h.noteStore.GetNoteAudienceIDs(id)
 
-	err := h.noteStore.Delete(id, user.ID)
+	err := h.noteStore.DeleteFromTrash(id, user.ID)
 	if err != nil {
-		if err.Error() == errNoteNotOwnedByUser {
+		if errors.Is(err, models.ErrNoteNotInTrash) {
 			return http.StatusNotFound, err
 		}
 		return http.StatusInternalServerError, err

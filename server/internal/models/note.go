@@ -21,6 +21,8 @@ const (
 )
 
 var ErrNoteNoAccess = errors.New("no access to note")
+var ErrNoteNotOwnedByUser = errors.New("note not found or not owned by user")
+var ErrNoteNotInTrash = errors.New("note not found in trash or not owned by user")
 
 type Label struct {
 	ID        string    `json:"id"`
@@ -388,7 +390,7 @@ func (s *NoteStore) Delete(id string, userID string) error {
 		return fmt.Errorf("failed to check ownership: %w", err)
 	}
 	if !isOwner {
-		return fmt.Errorf("note not found or not owned by user")
+		return ErrNoteNotOwnedByUser
 	}
 
 	result, err := s.db.Exec("DELETE FROM notes WHERE id = ? AND user_id = ?", id, userID)
@@ -402,7 +404,7 @@ func (s *NoteStore) Delete(id string, userID string) error {
 	}
 
 	if rowsAffected == 0 {
-		return fmt.Errorf("note not found or not owned by user")
+		return ErrNoteNotOwnedByUser
 	}
 
 	return nil
@@ -416,7 +418,7 @@ func (s *NoteStore) MoveToTrash(id string, userID string) error {
 		return fmt.Errorf("failed to check ownership: %w", err)
 	}
 	if !isOwner {
-		return fmt.Errorf("note not found or not owned by user")
+		return ErrNoteNotOwnedByUser
 	}
 
 	result, err := s.db.Exec(
@@ -433,24 +435,32 @@ func (s *NoteStore) MoveToTrash(id string, userID string) error {
 		return fmt.Errorf("failed to get rows affected: %w", err)
 	}
 	if rowsAffected == 0 {
-		return fmt.Errorf("note not found or not owned by user")
+		return ErrNoteNotOwnedByUser
 	}
 
 	return nil
 }
 
-// RestoreFromTrash clears deleted_at, bringing the note back to the active notes view.
+// RestoreFromTrash clears deleted_at and places the restored note at position 0
+// of the unpinned active list, shifting existing notes down.
 func (s *NoteStore) RestoreFromTrash(id string, userID string) error {
 	isOwner, err := s.IsOwner(id, userID)
 	if err != nil {
 		return fmt.Errorf("failed to check ownership: %w", err)
 	}
 	if !isOwner {
-		return fmt.Errorf("note not found or not owned by user")
+		return ErrNoteNotOwnedByUser
+	}
+
+	// Shift active unpinned notes down to make room at position 0.
+	shiftQuery := `UPDATE notes SET position = position + 1
+	               WHERE user_id = ? AND pinned = FALSE AND archived = FALSE AND deleted_at IS NULL`
+	if _, err = s.db.Exec(shiftQuery, userID); err != nil {
+		return fmt.Errorf("failed to shift notes before restore: %w", err)
 	}
 
 	result, err := s.db.Exec(
-		`UPDATE notes SET deleted_at = NULL, updated_at = CURRENT_TIMESTAMP
+		`UPDATE notes SET deleted_at = NULL, pinned = FALSE, archived = FALSE, position = 0, updated_at = CURRENT_TIMESTAMP
 		 WHERE id = ? AND user_id = ? AND deleted_at IS NOT NULL`,
 		id, userID,
 	)
@@ -463,7 +473,29 @@ func (s *NoteStore) RestoreFromTrash(id string, userID string) error {
 		return fmt.Errorf("failed to get rows affected: %w", err)
 	}
 	if rowsAffected == 0 {
-		return fmt.Errorf("note not found in trash or not owned by user")
+		return ErrNoteNotInTrash
+	}
+
+	return nil
+}
+
+// DeleteFromTrash permanently removes a note that is already in the trash.
+// It returns ErrNoteNotInTrash if the note is not found in the trash or not owned by the user.
+func (s *NoteStore) DeleteFromTrash(id string, userID string) error {
+	result, err := s.db.Exec(
+		`DELETE FROM notes WHERE id = ? AND user_id = ? AND deleted_at IS NOT NULL`,
+		id, userID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to permanently delete note from trash: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+	if rowsAffected == 0 {
+		return ErrNoteNotInTrash
 	}
 
 	return nil

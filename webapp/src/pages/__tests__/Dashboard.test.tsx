@@ -366,11 +366,21 @@ describe('Dashboard', () => {
       })
     })
 
+    it('loads bin view from URL parameter', async () => {
+      const mockGetAll = vi.mocked(notes.getAll)
+
+      renderDashboard(['/dashboard?view=bin'])
+
+      await waitFor(() => {
+        expect(mockGetAll).toHaveBeenCalledWith(false, '', true)
+      })
+    })
+
     it('handles malformed URL parameters gracefully', async () => {
       const mockGetAll = vi.mocked(notes.getAll)
-      
+
       renderDashboard(['/dashboard?view=invalid'])
-      
+
       await waitFor(() => {
         expect(mockGetAll).toHaveBeenCalledWith(false, '', false)
       })

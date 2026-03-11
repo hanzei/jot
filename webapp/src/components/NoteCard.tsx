@@ -154,8 +154,8 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, onRestore, o
                   {({ active }) => (
                     <button
                       onClick={handlePermanentlyDelete}
-                      className={`${active ? 'bg-gray-100' : ''
-                        } flex items-center w-full px-4 py-2 text-sm text-red-600`}
+                      className={`${active ? 'bg-gray-100 dark:bg-slate-700' : ''
+                        } flex items-center w-full px-4 py-2 text-sm text-red-600 dark:text-red-400`}
                     >
                       <TrashIcon className="h-4 w-4 mr-2" />
                       {t('note.deleteForever')}
