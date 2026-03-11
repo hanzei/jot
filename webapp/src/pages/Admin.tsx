@@ -1,10 +1,11 @@
 import { useState, useEffect, useCallback } from 'react';
 import { User, CreateUserRequest } from '@/types';
 import { useTranslation } from 'react-i18next';
-import { admin, auth } from '@/utils/api';
-import { isAdmin, removeUser } from '@/utils/auth';
+import { MagnifyingGlassIcon } from '@heroicons/react/24/outline';
+import { admin, auth, isAxiosError } from '@/utils/api';
+import { isAdmin, removeUser, getUser } from '@/utils/auth';
 import { ROLES } from '@/constants/roles';
-import { Navigate, Link } from 'react-router-dom';
+import { Navigate, Link, useNavigate } from 'react-router-dom';
 import NavigationHeader from '@/components/NavigationHeader';
 
 interface AdminProps {
@@ -13,6 +14,8 @@ interface AdminProps {
 
 const Admin = ({ onLogout }: AdminProps) => {
   const { t, i18n } = useTranslation();
+  const navigate = useNavigate();
+  const currentUser = getUser();
   const [users, setUsers] = useState<User[]>([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState('');
@@ -24,6 +27,8 @@ const Admin = ({ onLogout }: AdminProps) => {
     password: '',
     role: ROLES.USER,
   });
+  const [searchQuery, setSearchQuery] = useState('');
+  const [roleUpdating, setRoleUpdating] = useState<Set<string>>(new Set());
 
   const userIsAdmin = isAdmin();
 
@@ -69,7 +74,7 @@ const Admin = ({ onLogout }: AdminProps) => {
 
     try {
       const newUser = await admin.createUser(formData);
-      setUsers([newUser, ...users]);
+      setUsers(prev => [newUser, ...prev]);
       setFormData({ username: '', password: '', role: ROLES.USER });
       setShowCreateForm(false);
     } catch (err: unknown) {
@@ -77,6 +82,39 @@ const Admin = ({ onLogout }: AdminProps) => {
       setCreateError(axiosError.response?.data || t('admin.failedCreateUser'));
     } finally {
       setCreateLoading(false);
+    }
+  };
+
+  const handleRoleToggle = async (targetUser: User) => {
+    const newRole = targetUser.role === ROLES.ADMIN ? ROLES.USER : ROLES.ADMIN;
+    setError('');
+    setRoleUpdating(prev => new Set(prev).add(targetUser.id));
+    try {
+      const updated = await admin.updateUserRole(targetUser.id, { role: newRole });
+      setUsers(prev => prev.map(u => u.id === updated.id ? updated : u));
+    } catch (err: unknown) {
+      if (isAxiosError(err)) {
+        const msg = typeof err.response?.data === 'string' ? err.response.data.trim() : '';
+        setError(msg || t('admin.failedUpdateRole'));
+      } else {
+        setError(t('admin.failedUpdateRole'));
+      }
+    } finally {
+      setRoleUpdating(prev => {
+        const next = new Set(prev);
+        next.delete(targetUser.id);
+        return next;
+      });
+    }
+  };
+
+  const handleSearch = (e: React.FormEvent) => {
+    e.preventDefault();
+    const trimmed = searchQuery.trim();
+    if (trimmed) {
+      navigate(`/?search=${encodeURIComponent(trimmed)}`);
+    } else {
+      navigate('/');
     }
   };
 
@@ -110,24 +148,37 @@ const Admin = ({ onLogout }: AdminProps) => {
           {t('admin.tabArchive')}
         </Link>
       )
-    },
-    {
-      label: t('admin.tabAdmin'),
-      element: (
-        <span className="px-3 py-1 rounded-md text-sm font-medium bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300">
-          {t('admin.tabAdmin')}
-        </span>
-      ),
-      isActive: true
     }
   ];
+
+  const searchBar = (
+    <div className="w-full sm:flex-1 sm:max-w-lg sm:mx-4">
+      <form onSubmit={handleSearch}>
+        <div className="relative">
+          <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-gray-400 dark:text-gray-500" />
+          <input
+            type="text"
+            placeholder={t('dashboard.searchPlaceholder')}
+            aria-label={t('dashboard.searchAriaLabel')}
+            className="w-full pl-9 sm:pl-10 pr-4 py-2 text-sm sm:text-base border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            value={searchQuery}
+            onChange={(e) => setSearchQuery(e.target.value)}
+          />
+        </div>
+      </form>
+    </div>
+  );
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-slate-900">
       <NavigationHeader
         onLogout={handleLogout}
         tabs={navigationTabs}
-      />
+        isAdmin={true}
+        adminLinkActive={true}
+      >
+        {searchBar}
+      </NavigationHeader>
 
       <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         <div className="px-4 py-6 sm:px-0">
@@ -203,7 +254,7 @@ const Admin = ({ onLogout }: AdminProps) => {
           )}
 
           {error && (
-            <div className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 px-4 py-3 rounded mb-4">
+            <div role="alert" className="bg-red-50 dark:bg-red-900/20 border border-red-200 dark:border-red-800 text-red-600 dark:text-red-400 px-4 py-3 rounded mb-4">
               {error}
             </div>
           )}
@@ -216,9 +267,14 @@ const Admin = ({ onLogout }: AdminProps) => {
                     <div className="flex items-center justify-between">
                       <div className="flex items-center">
                         <div>
-                          <p className="text-sm font-medium text-gray-900 dark:text-white">
-                            {user.username}
-                          </p>
+                          <div className="flex items-center gap-2">
+                            <p className="text-sm font-medium text-gray-900 dark:text-white">
+                              {user.username}
+                            </p>
+                            {user.id === currentUser?.id && (
+                              <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 dark:bg-slate-700 text-gray-500 dark:text-gray-400">{t('admin.youBadge')}</span>
+                            )}
+                          </div>
                           <p className="text-sm text-gray-500 dark:text-gray-400">
                             {t('admin.userIdCreated', { id: user.id, date: new Date(user.created_at).toLocaleDateString(i18n.resolvedLanguage) })}
                           </p>
@@ -233,6 +289,23 @@ const Admin = ({ onLogout }: AdminProps) => {
                         <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300">
                           {t('admin.activeBadge')}
                         </span>
+                        <button
+                          disabled={user.id === currentUser?.id || roleUpdating.has(user.id)}
+                          onClick={() => handleRoleToggle(user)}
+                          aria-label={roleUpdating.has(user.id)
+                            ? t('admin.updatingRole')
+                            : t('admin.roleToggleLabel', {
+                                action: user.role === ROLES.ADMIN ? t('admin.removeAdmin') : t('admin.makeAdmin'),
+                                username: user.username,
+                              })}
+                          className="text-sm px-3 py-1 rounded-md border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 hover:bg-gray-50 dark:hover:bg-slate-600 disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          {roleUpdating.has(user.id)
+                            ? t('admin.updatingRole')
+                            : user.role === ROLES.ADMIN
+                              ? t('admin.removeAdmin')
+                              : t('admin.makeAdmin')}
+                        </button>
                       </div>
                     </div>
                   </div>
