@@ -162,7 +162,10 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     }
 
     loadNotes();
-    loadLabels();
+    // Only reload labels when a note update could have changed label assignments
+    if (event.type === 'note_updated') {
+      loadLabels();
+    }
   }, [editingNote, sharingNote, loadNotes, loadLabels, user?.id]);
 
   useSSE({

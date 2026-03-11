@@ -130,4 +130,34 @@ export class DashboardPage {
     await this.page.fill('textarea[placeholder="Take a note..."]', newContent);
     await this.page.click('button[aria-label="Close"]');
   }
+
+  /** Opens a note and creates a new label, attaching it to the note. */
+  async addLabelToNote(noteTitle: string, labelName: string) {
+    await this.openNote(noteTitle);
+    await this.page.getByRole('button', { name: 'Add labels' }).waitFor();
+    await this.page.getByRole('button', { name: 'Add labels' }).click();
+    await this.page.getByRole('button', { name: 'Create new...' }).click();
+    await this.page.getByPlaceholder('Label name...').fill(labelName);
+    await this.page.keyboard.press('Enter');
+    // Closing the modal also dismisses the picker (outside-click fires on mousedown)
+    await this.page.locator('button[aria-label="Close"]').click();
+    await expect(this.page.locator('[data-testid="note-card"]').filter({ hasText: noteTitle })).toBeVisible();
+  }
+
+  /** Clicks a label button in the sidebar to toggle the label filter. */
+  async selectSidebarLabel(labelName: string) {
+    await this.page.locator('aside ul').getByRole('button', { name: labelName, exact: true }).click();
+  }
+
+  async expectLabelInSidebar(labelName: string) {
+    await expect(
+      this.page.locator('aside ul').getByRole('button', { name: labelName, exact: true })
+    ).toBeVisible();
+  }
+
+  async expectLabelNotInSidebar(labelName: string) {
+    await expect(
+      this.page.locator('aside ul').getByRole('button', { name: labelName, exact: true })
+    ).toHaveCount(0);
+  }
 }
