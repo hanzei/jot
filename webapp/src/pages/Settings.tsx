@@ -27,6 +27,8 @@ const Settings = ({ onLogout }: SettingsProps) => {
   // draftUsername is the live value bound to the input field.
   const [currentUsername, setCurrentUsername] = useState(currentUser?.username ?? '');
   const [draftUsername, setDraftUsername] = useState(currentUser?.username ?? '');
+  const [draftFirstName, setDraftFirstName] = useState(currentUser?.first_name ?? '');
+  const [draftLastName, setDraftLastName] = useState(currentUser?.last_name ?? '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
   const [success, setSuccess] = useState('');
@@ -101,11 +103,13 @@ const Settings = ({ onLogout }: SettingsProps) => {
     setSuccess('');
 
     try {
-      const updatedUser = await users.updateMe({ username: draftUsername });
+      const updatedUser = await users.updateMe({ username: draftUsername, first_name: draftFirstName, last_name: draftLastName });
       setUser(updatedUser);
       setCurrentUsername(updatedUser.username);
       setDraftUsername(updatedUser.username);
-      setSuccess('settings.usernameUpdated');
+      setDraftFirstName(updatedUser.first_name ?? '');
+      setDraftLastName(updatedUser.last_name ?? '');
+      setSuccess('settings.profileUpdated');
     } catch (err: unknown) {
       if (isAxiosError(err)) {
         const msg = typeof err.response?.data === 'string' ? err.response.data.trim() : '';
@@ -209,7 +213,35 @@ const Settings = ({ onLogout }: SettingsProps) => {
           <div className="bg-white dark:bg-slate-800 shadow rounded-lg p-6 border border-gray-200 dark:border-slate-700 max-w-md">
             <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">{t('settings.accountSection')}</h2>
             <form onSubmit={handleSubmit}>
-              <div>
+              <div className="grid grid-cols-2 gap-4">
+                <div>
+                  <label htmlFor="first-name" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    {t('settings.firstNameLabel')}
+                  </label>
+                  <input
+                    id="first-name"
+                    type="text"
+                    value={draftFirstName}
+                    onChange={(e) => setDraftFirstName(e.target.value)}
+                    className="mt-1 block w-full border border-gray-300 dark:border-slate-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    placeholder={t('settings.namePlaceholder')}
+                  />
+                </div>
+                <div>
+                  <label htmlFor="last-name" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    {t('settings.lastNameLabel')}
+                  </label>
+                  <input
+                    id="last-name"
+                    type="text"
+                    value={draftLastName}
+                    onChange={(e) => setDraftLastName(e.target.value)}
+                    className="mt-1 block w-full border border-gray-300 dark:border-slate-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                    placeholder={t('settings.namePlaceholder')}
+                  />
+                </div>
+              </div>
+              <div className="mt-4">
                 <label htmlFor="username" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                   {t('settings.usernameLabel')}
                 </label>

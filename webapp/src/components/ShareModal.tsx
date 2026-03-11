@@ -47,10 +47,12 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
 
   useEffect(() => {
     if (searchQuery.trim()) {
-      const filtered = users.filter(user => 
-        user.username.toLowerCase().includes(searchQuery.toLowerCase()) &&
-        !shares.some(share => share.shared_with_user_id === user.id)
-      );
+      const q = searchQuery.toLowerCase();
+      const filtered = users.filter(user => {
+        if (shares.some(share => share.shared_with_user_id === user.id)) return false;
+        const fullName = `${user.first_name} ${user.last_name}`.toLowerCase();
+        return user.username.toLowerCase().includes(q) || fullName.includes(q);
+      });
       setFilteredUsers(filtered);
       setShowSuggestions(filtered.length > 0);
       setSelectedUserIndex(-1);
@@ -247,10 +249,15 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
                         onClick={() => handleUserSelect(user)}
                         onMouseEnter={() => setSelectedUserIndex(index)}
                       >
-                        <div className="font-medium">{user.username}</div>
-                        {user.role === ROLES.ADMIN && (
-                          <div className="text-xs text-gray-500 dark:text-gray-400">Admin</div>
-                        )}
+                        <div className="font-medium">
+                          {user.first_name || user.last_name
+                            ? `${user.first_name} ${user.last_name}`.trim()
+                            : user.username}
+                        </div>
+                        <div className="text-xs text-gray-500 dark:text-gray-400">
+                          {user.first_name || user.last_name ? user.username : null}
+                          {user.first_name || user.last_name ? (user.role === ROLES.ADMIN ? ' · Admin' : null) : (user.role === ROLES.ADMIN ? 'Admin' : null)}
+                        </div>
                       </div>
                     ))}
                   </div>
@@ -271,8 +278,17 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
                 </h4>
                 <div className="space-y-2 max-h-40 overflow-y-auto">
                   {shares.map((share) => (
-                    <div key={share.id} className="flex items-center justify-between p-2 bg-gray-50 rounded">
-                      <span className="text-sm text-gray-700">{share.username}</span>
+                    <div key={share.id} className="flex items-center justify-between p-2 bg-gray-50 dark:bg-slate-700 rounded">
+                      <div>
+                        <span className="text-sm text-gray-700 dark:text-gray-200">
+                          {share.first_name || share.last_name
+                            ? `${share.first_name} ${share.last_name}`.trim()
+                            : share.username}
+                        </span>
+                        {(share.first_name || share.last_name) && (
+                          <span className="text-xs text-gray-500 dark:text-gray-400 ml-1">({share.username})</span>
+                        )}
+                      </div>
                       <button
                         onClick={() => handleUnshare(share.username || '')}
                         className="text-red-600 hover:text-red-800 p-1"

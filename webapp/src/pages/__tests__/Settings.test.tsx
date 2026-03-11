@@ -119,10 +119,10 @@ describe('Settings', () => {
       await user.click(screen.getByRole('button', { name: 'Save Changes' }))
 
       await waitFor(() => {
-        expect(users.updateMe).toHaveBeenCalledWith({ username: 'newuser' })
+        expect(users.updateMe).toHaveBeenCalledWith({ username: 'newuser', first_name: '', last_name: '' })
       })
       await waitFor(() => {
-        expect(screen.getByText('Username updated successfully.')).toBeInTheDocument()
+        expect(screen.getByText('Profile updated successfully.')).toBeInTheDocument()
       })
       expect(authUtils.setUser).toHaveBeenCalledWith(updatedUser)
     })

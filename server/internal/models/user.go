@@ -26,6 +26,8 @@ var ErrLastAdmin = errors.New("cannot demote the last admin")
 type User struct {
 	ID           string    `json:"id"`
 	Username     string    `json:"username"`
+	FirstName    string    `json:"first_name"`
+	LastName     string    `json:"last_name"`
 	PasswordHash string    `json:"-"`
 	Role         string    `json:"role"`
 	CreatedAt    time.Time `json:"created_at"`
@@ -85,11 +87,11 @@ func (s *UserStore) Create(username, password string) (*User, error) {
 
 func (s *UserStore) GetByUsername(username string) (*User, error) {
 	var user User
-	query := `SELECT id, username, password_hash, role, created_at, updated_at 
+	query := `SELECT id, username, first_name, last_name, password_hash, role, created_at, updated_at
 			  FROM users WHERE username = ?`
 
 	err := s.db.QueryRow(query, username).Scan(
-		&user.ID, &user.Username, &user.PasswordHash,
+		&user.ID, &user.Username, &user.FirstName, &user.LastName, &user.PasswordHash,
 		&user.Role, &user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
@@ -103,11 +105,11 @@ func (s *UserStore) GetByUsername(username string) (*User, error) {
 
 func (s *UserStore) GetByID(id string) (*User, error) {
 	var user User
-	query := `SELECT id, username, password_hash, role, created_at, updated_at 
+	query := `SELECT id, username, first_name, last_name, password_hash, role, created_at, updated_at
 			  FROM users WHERE id = ?`
 
 	err := s.db.QueryRow(query, id).Scan(
-		&user.ID, &user.Username, &user.PasswordHash,
+		&user.ID, &user.Username, &user.FirstName, &user.LastName, &user.PasswordHash,
 		&user.Role, &user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
@@ -126,7 +128,7 @@ func (u *User) CheckPassword(password string) bool {
 }
 
 func (s *UserStore) GetAll() ([]*User, error) {
-	query := `SELECT id, username, password_hash, role, created_at, updated_at 
+	query := `SELECT id, username, first_name, last_name, password_hash, role, created_at, updated_at
 			  FROM users ORDER BY created_at DESC`
 
 	rows, err := s.db.Query(query)
@@ -143,7 +145,7 @@ func (s *UserStore) GetAll() ([]*User, error) {
 	for rows.Next() {
 		var user User
 		if err = rows.Scan(
-			&user.ID, &user.Username, &user.PasswordHash,
+			&user.ID, &user.Username, &user.FirstName, &user.LastName, &user.PasswordHash,
 			&user.Role, &user.CreatedAt, &user.UpdatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan user: %w", err)
@@ -163,10 +165,10 @@ func (s *UserStore) GetAll() ([]*User, error) {
 // or another error if the id does not exist or the query fails.
 func (s *UserStore) UpdateUsername(id, newUsername string) (*User, error) {
 	query := `UPDATE users SET username = ?, updated_at = CURRENT_TIMESTAMP
-			  WHERE id = ? RETURNING id, username, role, created_at, updated_at`
+			  WHERE id = ? RETURNING id, username, first_name, last_name, role, created_at, updated_at`
 	var user User
 	err := s.db.QueryRow(query, newUsername, id).Scan(
-		&user.ID, &user.Username, &user.Role, &user.CreatedAt, &user.UpdatedAt,
+		&user.ID, &user.Username, &user.FirstName, &user.LastName, &user.Role, &user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
 		var sqliteErr sqlite3.Error
@@ -254,6 +256,22 @@ func (s *UserSettingsStore) Update(userID, language, theme string) (*UserSetting
 	return settings, nil
 }
 
+func (s *UserStore) UpdateName(id, firstName, lastName string) (*User, error) {
+	query := `UPDATE users SET first_name = ?, last_name = ?, updated_at = CURRENT_TIMESTAMP
+			  WHERE id = ? RETURNING id, username, first_name, last_name, role, created_at, updated_at`
+	var user User
+	err := s.db.QueryRow(query, firstName, lastName, id).Scan(
+		&user.ID, &user.Username, &user.FirstName, &user.LastName, &user.Role, &user.CreatedAt, &user.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrUserNotFound
+		}
+		return nil, fmt.Errorf("failed to update name: %w", err)
+	}
+	return &user, nil
+}
+
 func (s *UserStore) UpdateRole(id, role string) (*User, error) {
 	if role != RoleUser && role != RoleAdmin {
 		return nil, fmt.Errorf("invalid role %q: must be %q or %q", role, RoleUser, RoleAdmin)
@@ -289,9 +307,9 @@ func (s *UserStore) UpdateRole(id, role string) (*User, error) {
 	var user User
 	err = tx.QueryRow(
 		`UPDATE users SET role = ?, updated_at = CURRENT_TIMESTAMP
-		 WHERE id = ? RETURNING id, username, role, created_at, updated_at`,
+		 WHERE id = ? RETURNING id, username, first_name, last_name, role, created_at, updated_at`,
 		role, id,
-	).Scan(&user.ID, &user.Username, &user.Role, &user.CreatedAt, &user.UpdatedAt)
+	).Scan(&user.ID, &user.Username, &user.FirstName, &user.LastName, &user.Role, &user.CreatedAt, &user.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("%w", ErrUserNotFound)
 	}

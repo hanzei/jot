@@ -248,8 +248,13 @@ const Admin = ({ onLogout }: AdminProps) => {
                         <div>
                           <div className="flex items-center gap-2">
                             <p className="text-sm font-medium text-gray-900 dark:text-white">
-                              {user.username}
+                              {user.first_name || user.last_name
+                                ? `${user.first_name} ${user.last_name}`.trim()
+                                : user.username}
                             </p>
+                            {(user.first_name || user.last_name) && (
+                              <span className="text-xs text-gray-500 dark:text-gray-400">({user.username})</span>
+                            )}
                             {user.id === currentUser?.id && (
                               <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 dark:bg-slate-700 text-gray-500 dark:text-gray-400">{t('admin.youBadge')}</span>
                             )}
