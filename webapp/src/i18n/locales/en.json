@@ -46,7 +46,6 @@
   },
   "settings": {
     "title": "Settings",
-    "tabNotes": "Notes",
     "accountSection": "Account",
     "usernameLabel": "Username",
     "usernamePlaceholder": "Username (2-30 characters)",
@@ -81,8 +80,6 @@
   },
   "admin": {
     "title": "User Management",
-    "tabNotes": "Notes",
-    "tabArchive": "Archive",
     "tabAdmin": "Admin",
     "createUser": "Create User",
     "cancel": "Cancel",

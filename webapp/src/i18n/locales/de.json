@@ -46,7 +46,6 @@
   },
   "settings": {
     "title": "Einstellungen",
-    "tabNotes": "Notizen",
     "accountSection": "Konto",
     "usernameLabel": "Benutzername",
     "usernamePlaceholder": "Benutzername (2–30 Zeichen)",
@@ -81,8 +80,6 @@
   },
   "admin": {
     "title": "Benutzerverwaltung",
-    "tabNotes": "Notizen",
-    "tabArchive": "Archiv",
     "tabAdmin": "Admin",
     "createUser": "Benutzer erstellen",
     "cancel": "Abbrechen",
