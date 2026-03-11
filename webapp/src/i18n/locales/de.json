@@ -146,6 +146,12 @@
     "failedSaveChanges": "Änderungen konnten nicht gespeichert werden. Bitte erneut versuchen.",
     "menuOptions": "Notizoptionen"
   },
+  "labels": {
+    "addLabels": "Labels hinzufügen",
+    "searchPlaceholder": "Label suchen oder erstellen...",
+    "createLabel": "\"{{name}}\" erstellen",
+    "removeLabel": "Label {{name}} entfernen"
+  },
   "share": {
     "title": "\"{{noteTitle}}\" teilen",
     "untitledNote": "Unbenannte Notiz",

@@ -1,9 +1,10 @@
 import { useState, useEffect, useMemo, useRef } from 'react';
-import { XMarkIcon, PlusIcon, TrashIcon, ChevronDownIcon, ArchiveBoxIcon, ArchiveBoxXMarkIcon, ShareIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon, PlusIcon, TrashIcon, ChevronDownIcon, ArchiveBoxIcon, ArchiveBoxXMarkIcon, ShareIcon, TagIcon } from '@heroicons/react/24/outline';
 import { Dialog } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
 import { Note, NoteType, CreateNoteRequest, UpdateNoteRequest } from '@/types';
 import { notes } from '@/utils/api';
+import LabelPicker from '@/components/LabelPicker';
 
 // Constants
 const AUTO_SAVE_TIMEOUT = 1000; // Save 1 second after user stops typing
@@ -165,6 +166,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
   const [loading, setLoading] = useState(false);
   const [checkedItemsCollapsed, setCheckedItemsCollapsed] = useState(false);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
+  const [showLabelPicker, setShowLabelPicker] = useState(false);
   
   // Use useRef for timeout management instead of global window property
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
@@ -688,6 +690,14 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
                       <ShareIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
                     </button>
                   )}
+                  <button
+                    onClick={() => setShowLabelPicker(v => !v)}
+                    className={`p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors ${showLabelPicker ? 'text-blue-500' : ''}`}
+                    title={t('labels.addLabels')}
+                    aria-label={t('labels.addLabels')}
+                  >
+                    <TagIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+                  </button>
                 </>
               )}
               <button
@@ -861,6 +871,11 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
                 />
               ))}
             </div>
+
+            {/* Label picker (shown when toggled or when note has labels) */}
+            {note && (showLabelPicker || (note.labels && note.labels.length > 0)) && (
+              <LabelPicker note={note} onRefresh={onRefresh} />
+            )}
           </div>
 
           {/* Footer */}

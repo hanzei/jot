@@ -20,13 +20,14 @@ import (
 )
 
 type Server struct {
-	router            chi.Router
-	db                *database.DB
-	sessionService    *auth.SessionService
-	authHandler       *handlers.AuthHandler
-	notesHandler      *handlers.NotesHandler
-	eventsHandler     *handlers.EventsHandler
-	adminHandler      *handlers.AdminHandler
+	router         chi.Router
+	db             *database.DB
+	sessionService *auth.SessionService
+	authHandler    *handlers.AuthHandler
+	notesHandler   *handlers.NotesHandler
+	labelsHandler  *handlers.LabelsHandler
+	eventsHandler  *handlers.EventsHandler
+	adminHandler   *handlers.AdminHandler
 }
 
 func New() *Server {
@@ -59,6 +60,7 @@ func New() *Server {
 
 	authHandler := handlers.NewAuthHandler(userStore, sessionService, userSettingsStore)
 	notesHandler := handlers.NewNotesHandler(noteStore, userStore, hub)
+	labelsHandler := handlers.NewLabelsHandler(noteStore, hub)
 	eventsHandler := handlers.NewEventsHandler(hub)
 	adminHandler := handlers.NewAdminHandler(userStore)
 
@@ -68,6 +70,7 @@ func New() *Server {
 		sessionService: sessionService,
 		authHandler:    authHandler,
 		notesHandler:   notesHandler,
+		labelsHandler:  labelsHandler,
 		eventsHandler:  eventsHandler,
 		adminHandler:   adminHandler,
 	}
@@ -121,6 +124,11 @@ func (s *Server) setupRoutes() {
 			r.Post("/notes/{id}/share", s.wrapHandler(s.notesHandler.ShareNote))
 			r.Delete("/notes/{id}/share", s.wrapHandler(s.notesHandler.UnshareNote))
 			r.Get("/notes/{id}/shares", s.wrapHandler(s.notesHandler.GetNoteShares))
+
+			r.Post("/notes/{id}/labels", s.wrapHandler(s.labelsHandler.AddLabel))
+			r.Delete("/notes/{id}/labels/{label_id}", s.wrapHandler(s.labelsHandler.RemoveLabel))
+
+			r.Get("/labels", s.wrapHandler(s.labelsHandler.GetLabels))
 
 			r.Get("/users", s.wrapHandler(s.notesHandler.SearchUsers))
 		})

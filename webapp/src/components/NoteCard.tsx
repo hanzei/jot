@@ -236,6 +236,23 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, currentUserI
           </div>
         )}
       </div>
+
+      {/* Labels */}
+      {note.labels && note.labels.length > 0 && (
+        <div className="flex flex-wrap gap-1 mt-2">
+          {note.labels.slice(0, 3).map(label => (
+            <span
+              key={label.id}
+              className="text-xs bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full px-2 py-0.5"
+            >
+              {label.name}
+            </span>
+          ))}
+          {note.labels.length > 3 && (
+            <span className="text-xs text-gray-500 dark:text-gray-400">+{note.labels.length - 3}</span>
+          )}
+        </div>
+      )}
     </div>
   );
 }

@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { AuthResponse, LoginRequest, RegisterRequest, Note, CreateNoteRequest, UpdateNoteRequest, User, CreateUserRequest, UserListResponse, ShareNoteRequest, ShareNoteResponse, NoteShare, ImportResponse, UpdateMeRequest, ChangePasswordRequest, UserSettings, UpdateSettingsRequest, UpdateUserRoleRequest } from '@/types';
+import { AuthResponse, LoginRequest, RegisterRequest, Note, CreateNoteRequest, UpdateNoteRequest, User, CreateUserRequest, UserListResponse, ShareNoteRequest, ShareNoteResponse, NoteShare, ImportResponse, UpdateMeRequest, ChangePasswordRequest, UserSettings, UpdateSettingsRequest, UpdateUserRoleRequest, Label } from '@/types';
 
 const api = axios.create({
   baseURL: '/api/v1',
@@ -70,6 +70,17 @@ export const notes = {
     formData.append('file', file);
     return api.post('/notes/import', formData).then(res => res.data);
   },
+
+  addLabel: (noteId: string, name: string): Promise<Note> =>
+    api.post(`/notes/${noteId}/labels`, { name }).then(res => res.data),
+
+  removeLabel: (noteId: string, labelId: string): Promise<Note> =>
+    api.delete(`/notes/${noteId}/labels/${labelId}`).then(res => res.data),
+};
+
+export const labels = {
+  getAll: (): Promise<Label[]> =>
+    api.get('/labels').then(res => res.data),
 };
 
 export const users = {
