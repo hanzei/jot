@@ -604,8 +604,8 @@ func (s *NoteStore) ReorderNotes(userID string, noteIDs []string) error {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() {
-		if err = tx.Rollback(); err != nil {
-			logrus.WithError(err).Error("Failed to rollback transaction")
+		if rollbackErr := tx.Rollback(); rollbackErr != nil && !errors.Is(rollbackErr, sql.ErrTxDone) {
+			logrus.WithError(rollbackErr).Error("Failed to rollback transaction")
 		}
 	}()
 
