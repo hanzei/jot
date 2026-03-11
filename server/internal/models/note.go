@@ -5,8 +5,9 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log"
 	"time"
+
+	"github.com/sirupsen/logrus"
 )
 
 type NoteType string
@@ -168,7 +169,7 @@ func (s *NoteStore) GetByUserID(userID string, archived bool, search string) ([]
 	}
 	defer func() {
 		if err = rows.Close(); err != nil {
-			log.Printf("Failed to close rows: %v", err)
+			logrus.WithError(err).Error("Failed to close rows")
 		}
 	}()
 
@@ -368,7 +369,7 @@ func (s *NoteStore) getItemsByNoteID(noteID string) ([]NoteItem, error) {
 	}
 	defer func() {
 		if err := rows.Close(); err != nil {
-			log.Printf("Failed to close rows: %v", err)
+			logrus.WithError(err).Error("Failed to close rows")
 		}
 	}()
 
@@ -524,7 +525,7 @@ func (s *NoteStore) GetNoteShares(noteID string) ([]NoteShare, error) {
 	}
 	defer func() {
 		if err := rows.Close(); err != nil {
-			log.Printf("Failed to close rows: %v", err)
+			logrus.WithError(err).Error("Failed to close rows")
 		}
 	}()
 
@@ -560,7 +561,7 @@ func (s *NoteStore) HasAccess(noteID string, userID string) (bool, error) {
 	}
 	defer func() {
 		if err := rows.Close(); err != nil {
-			log.Printf("Failed to close rows: %v", err)
+			logrus.WithError(err).Error("Failed to close rows")
 		}
 	}()
 
@@ -603,8 +604,8 @@ func (s *NoteStore) ReorderNotes(userID string, noteIDs []string) error {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() {
-		if err = tx.Rollback(); err != nil {
-			log.Printf("Failed to rollback transaction: %v", err)
+		if rollbackErr := tx.Rollback(); rollbackErr != nil && !errors.Is(rollbackErr, sql.ErrTxDone) {
+			logrus.WithError(rollbackErr).Error("Failed to rollback transaction")
 		}
 	}()
 
@@ -649,7 +650,7 @@ func (s *NoteStore) GetNoteAudienceIDs(noteID string) ([]string, error) {
 	}
 	defer func() {
 		if err := rows.Close(); err != nil {
-			log.Printf("failed to close rows in GetNoteAudienceIDs: %v", err)
+			logrus.WithError(err).Error("Failed to close rows in GetNoteAudienceIDs")
 		}
 	}()
 

@@ -4,10 +4,10 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
-	"log"
 	"time"
 
 	sqlite3 "github.com/mattn/go-sqlite3"
+	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -135,7 +135,7 @@ func (s *UserStore) GetAll() ([]*User, error) {
 	}
 	defer func() {
 		if err = rows.Close(); err != nil {
-			log.Printf("Failed to close rows: %v", err)
+			logrus.WithError(err).Error("Failed to close rows")
 		}
 	}()
 

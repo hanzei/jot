@@ -2,11 +2,11 @@ package main
 
 import (
 	"fmt"
-	"log"
 	"os"
 	"strconv"
 
 	"github.com/hanzei/jot/server/internal/server"
+	"github.com/sirupsen/logrus"
 )
 
 func main() {
@@ -17,8 +17,8 @@ func main() {
 	}
 	portNum, err := strconv.Atoi(port)
 	if err != nil {
-		log.Fatal("Invalid PORT value: must be a number")
+		logrus.Fatal("Invalid PORT value: must be a number")
 	}
-	log.Printf("Starting Jot server on :%d", portNum)
-	log.Fatal(s.Start(fmt.Sprintf(":%d", portNum)))
+	logrus.Infof("Starting Jot server on :%d", portNum)
+	logrus.Fatal(s.Start(fmt.Sprintf(":%d", portNum)))
 }

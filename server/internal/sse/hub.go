@@ -1,8 +1,9 @@
 package sse
 
 import (
-	"log"
 	"sync"
+
+	"github.com/sirupsen/logrus"
 )
 
 // EventType identifies the kind of note mutation that occurred.
@@ -77,7 +78,7 @@ func (h *Hub) Publish(userIDs []string, event Event) {
 			select {
 			case ch <- event:
 			default:
-				log.Printf("sse: dropping event type=%s note_id=%s for user_id=%s: channel full", event.Type, event.NoteID, uid)
+				logrus.WithField("type", event.Type).WithField("note_id", event.NoteID).WithField("user_id", uid).Warn("sse: dropping event, channel full")
 			}
 		}
 	}
