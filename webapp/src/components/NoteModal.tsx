@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { XMarkIcon, PlusIcon, TrashIcon, ChevronDownIcon, ArchiveBoxIcon, ArchiveBoxXMarkIcon, ShareIcon, TagIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon, PlusIcon, TrashIcon, ChevronDownIcon, ArchiveBoxIcon, ArchiveBoxXMarkIcon, ShareIcon } from '@heroicons/react/24/outline';
 import { Dialog } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
 import { Note, NoteType, CreateNoteRequest, UpdateNoteRequest } from '@/types';
@@ -165,6 +165,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
   const [items, setItems] = useState<TodoItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [checkedItemsCollapsed, setCheckedItemsCollapsed] = useState(false);
+  const [noteLabels, setNoteLabels] = useState<import('@/types').Label[]>(note?.labels ?? []);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showLabelPicker, setShowLabelPicker] = useState(false);
   
@@ -212,6 +213,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
           position: item.position,
         })) || []
       );
+      setNoteLabels(note.labels ?? []);
     } else {
       setTitle('');
       setContent('');
@@ -220,6 +222,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
       setPinned(false);
       setArchived(false);
       setItems([]);
+      setNoteLabels([]);
     }
   }, [note]);
 
@@ -690,14 +693,6 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
                       <ShareIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
                     </button>
                   )}
-                  <button
-                    onClick={() => setShowLabelPicker(v => !v)}
-                    className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
-                    title={t('labels.addLabels')}
-                    aria-label={t('labels.addLabels')}
-                  >
-                    <TagIcon className={`h-5 w-5 ${showLabelPicker ? 'text-blue-500' : 'text-gray-600 dark:text-gray-300'}`} />
-                  </button>
                 </>
               )}
               <button
@@ -858,6 +853,33 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
               </div>
             )}
 
+            {/* Labels row: badges + add button with popover */}
+            {note && (
+              <div className="flex flex-wrap items-center gap-1">
+                {noteLabels.map(label => (
+                  <span
+                    key={label.id}
+                    className="inline-flex items-center bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full px-2 py-0.5 text-xs"
+                  >
+                    {label.name}
+                  </span>
+                ))}
+                <div className="relative">
+                  <button
+                    onClick={() => setShowLabelPicker(v => !v)}
+                    className="w-6 h-6 rounded-full border border-dashed border-gray-300 dark:border-slate-600 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors"
+                    title={t('labels.addLabels')}
+                    aria-label={t('labels.addLabels')}
+                  >
+                    <PlusIcon className="h-3 w-3 text-gray-400 dark:text-gray-500" />
+                  </button>
+                  {showLabelPicker && (
+                    <LabelPicker note={{...note, labels: noteLabels}} onRefresh={onRefresh} onNoteUpdate={(n) => setNoteLabels(n.labels ?? [])} onError={showError} onClose={() => setShowLabelPicker(false)} />
+                  )}
+                </div>
+              </div>
+            )}
+
             {/* Color selector */}
             <div className="flex space-x-2">
               {colors.map((colorOption) => (
@@ -871,25 +893,6 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
                 />
               ))}
             </div>
-
-            {/* Label badges preview (always shown when labels exist and picker is closed) */}
-            {note && !showLabelPicker && note.labels && note.labels.length > 0 && (
-              <div className="flex flex-wrap gap-1">
-                {note.labels.map(label => (
-                  <span
-                    key={label.id}
-                    className="inline-flex items-center bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full px-2 py-0.5 text-xs"
-                  >
-                    {label.name}
-                  </span>
-                ))}
-              </div>
-            )}
-
-            {/* Label picker (shown only when toggled) */}
-            {note && showLabelPicker && (
-              <LabelPicker note={note} onRefresh={onRefresh} onError={showError} />
-            )}
           </div>
 
           {/* Footer */}

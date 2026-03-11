@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { XMarkIcon } from '@heroicons/react/24/outline';
+import { PlusIcon } from '@heroicons/react/24/outline';
 import { useTranslation } from 'react-i18next';
 import { Label, Note } from '@/types';
 import { notes as notesApi, labels as labelsApi } from '@/utils/api';
@@ -7,22 +7,20 @@ import { notes as notesApi, labels as labelsApi } from '@/utils/api';
 interface LabelPickerProps {
   note: Note;
   onRefresh?: () => void;
+  onNoteUpdate?: (note: Note) => void;
   onError?: (msg: string) => void;
+  onClose: () => void;
 }
 
-export default function LabelPicker({ note, onRefresh, onError }: LabelPickerProps) {
+export default function LabelPicker({ note, onRefresh, onNoteUpdate, onError, onClose }: LabelPickerProps) {
   const { t } = useTranslation();
-  const [input, setInput] = useState('');
   const [allLabels, setAllLabels] = useState<Label[]>([]);
-  const [showSuggestions, setShowSuggestions] = useState(false);
-  const [currentLabels, setCurrentLabels] = useState<Label[]>(note.labels ?? []);
-  const inputRef = useRef<HTMLInputElement>(null);
+  const [creating, setCreating] = useState(false);
+  const [newName, setNewName] = useState('');
   const containerRef = useRef<HTMLDivElement>(null);
+  const inputRef = useRef<HTMLInputElement>(null);
 
-  // Sync currentLabels when note.labels changes externally
-  useEffect(() => {
-    setCurrentLabels(note.labels ?? []);
-  }, [note.labels]);
+  const currentLabelIds = new Set((note.labels ?? []).map(l => l.id));
 
   useEffect(() => {
     labelsApi.getAll()
@@ -30,130 +28,101 @@ export default function LabelPicker({ note, onRefresh, onError }: LabelPickerPro
       .catch((err: Error) => onError?.(err.message));
   }, [onError]);
 
-  // Close suggestions on outside click
+  // Close on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        setShowSuggestions(false);
+        onClose();
       }
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
-  }, []);
+  }, [onClose]);
 
-  const currentLabelIds = new Set(currentLabels.map(l => l.id));
+  // Focus input when creating
+  useEffect(() => {
+    if (creating) inputRef.current?.focus();
+  }, [creating]);
 
-  const suggestions = allLabels.filter(
-    l => !currentLabelIds.has(l.id) && l.name.toLowerCase().includes(input.toLowerCase())
-  );
-
-  const exactMatch = allLabels.find(l => l.name.toLowerCase() === input.toLowerCase());
-  const showCreate = input.trim() !== '' && !exactMatch;
-
-  const addLabel = async (name: string) => {
+  const toggleLabel = async (label: Label) => {
     try {
-      const updatedNote = await notesApi.addLabel(note.id, name);
-      setCurrentLabels(updatedNote.labels ?? []);
-      labelsApi.getAll().then(setAllLabels).catch((err: Error) => onError?.(err.message));
-      setInput('');
-      setShowSuggestions(false);
-      onRefresh?.();
-    } catch (err) {
-      onError?.((err as Error).message);
-    }
-  };
-
-  const removeLabel = async (labelId: string) => {
-    try {
-      const updatedNote = await notesApi.removeLabel(note.id, labelId);
-      setCurrentLabels(updatedNote.labels ?? []);
-      onRefresh?.();
-    } catch (err) {
-      onError?.((err as Error).message);
-    }
-  };
-
-  const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key === 'Enter') {
-      e.preventDefault();
-      const trimmed = input.trim();
-      if (!trimmed) return;
-      // Prefer exact match if it's not already on the note
-      const exactMatchNotAdded = exactMatch && !currentLabelIds.has(exactMatch.id);
-      if (exactMatchNotAdded) {
-        addLabel(exactMatch.name);
-      } else if (suggestions.length > 0) {
-        addLabel(suggestions[0].name);
-      } else if (showCreate) {
-        addLabel(trimmed);
+      let updatedNote: Note;
+      if (currentLabelIds.has(label.id)) {
+        updatedNote = await notesApi.removeLabel(note.id, label.id);
+      } else {
+        updatedNote = await notesApi.addLabel(note.id, label.name);
       }
-    } else if (e.key === 'Escape') {
-      setShowSuggestions(false);
+      onNoteUpdate?.(updatedNote);
+      onRefresh?.();
+    } catch (err) {
+      onError?.((err as Error).message);
+    }
+  };
+
+  const handleCreate = async () => {
+    const trimmed = newName.trim();
+    if (!trimmed) return;
+    try {
+      const updatedNote = await notesApi.addLabel(note.id, trimmed);
+      labelsApi.getAll().then(setAllLabels).catch((err: Error) => onError?.(err.message));
+      setNewName('');
+      setCreating(false);
+      onNoteUpdate?.(updatedNote);
+      onRefresh?.();
+    } catch (err) {
+      onError?.((err as Error).message);
     }
   };
 
   return (
-    <div ref={containerRef} className="space-y-2">
-      {/* Applied labels */}
-      {currentLabels.length > 0 && (
-        <div className="flex flex-wrap gap-1">
-          {currentLabels.map(label => (
-            <span
-              key={label.id}
-              className="inline-flex items-center gap-1 bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full px-2 py-0.5 text-xs"
-            >
-              {label.name}
-              <button
-                onClick={() => removeLabel(label.id)}
-                aria-label={t('labels.removeLabel', { name: label.name })}
-                className="hover:text-blue-900 dark:hover:text-blue-100"
-              >
-                <XMarkIcon className="h-3 w-3" />
-              </button>
-            </span>
-          ))}
-        </div>
+    <div
+      ref={containerRef}
+      className="absolute z-20 bottom-full mb-1 w-48 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded-md shadow-lg py-1"
+    >
+      {allLabels.length === 0 && !creating && (
+        <p className="px-3 py-2 text-xs text-gray-500 dark:text-gray-400">{t('labels.noLabels')}</p>
       )}
 
-      {/* Input */}
-      <div className="relative">
-        <input
-          ref={inputRef}
-          type="text"
-          value={input}
-          onChange={e => {
-            setInput(e.target.value);
-            setShowSuggestions(true);
-          }}
-          onFocus={() => setShowSuggestions(true)}
-          onKeyDown={handleKeyDown}
-          placeholder={t('labels.searchPlaceholder')}
-          className="w-full text-sm px-3 py-1.5 rounded-md border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
-        />
+      {allLabels.map(label => (
+        <button
+          key={label.id}
+          onClick={() => toggleLabel(label)}
+          className="flex items-center w-full px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-slate-700"
+        >
+          <input
+            type="checkbox"
+            checked={currentLabelIds.has(label.id)}
+            readOnly
+            className="h-3.5 w-3.5 text-blue-600 rounded mr-2 pointer-events-none"
+          />
+          {label.name}
+        </button>
+      ))}
 
-        {showSuggestions && (suggestions.length > 0 || showCreate) && (
-          <ul className="absolute z-20 mt-1 w-full bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded-md shadow-lg max-h-40 overflow-y-auto">
-            {suggestions.map(label => (
-              <li key={label.id}>
-                <button
-                  onMouseDown={e => { e.preventDefault(); addLabel(label.name); }}
-                  className="w-full text-left px-3 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-slate-700"
-                >
-                  {label.name}
-                </button>
-              </li>
-            ))}
-            {showCreate && (
-              <li>
-                <button
-                  onMouseDown={e => { e.preventDefault(); addLabel(input.trim()); }}
-                  className="w-full text-left px-3 py-2 text-sm text-blue-600 dark:text-blue-400 hover:bg-gray-100 dark:hover:bg-slate-700"
-                >
-                  {t('labels.createLabel', { name: input.trim() })}
-                </button>
-              </li>
-            )}
-          </ul>
+      <div className="border-t border-gray-200 dark:border-slate-600 mt-1 pt-1">
+        {creating ? (
+          <div className="px-3 py-1.5 flex items-center gap-1">
+            <input
+              ref={inputRef}
+              type="text"
+              value={newName}
+              onChange={e => setNewName(e.target.value)}
+              onKeyDown={e => {
+                if (e.key === 'Enter') handleCreate();
+                if (e.key === 'Escape') { setCreating(false); setNewName(''); }
+              }}
+              placeholder={t('labels.newLabelPlaceholder')}
+              className="flex-1 text-sm px-2 py-1 rounded border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-1 focus:ring-blue-500"
+            />
+          </div>
+        ) : (
+          <button
+            onClick={() => setCreating(true)}
+            className="flex items-center w-full px-3 py-1.5 text-sm text-blue-600 dark:text-blue-400 hover:bg-gray-100 dark:hover:bg-slate-700"
+          >
+            <PlusIcon className="h-3.5 w-3.5 mr-2" />
+            {t('labels.createNew')}
+          </button>
         )}
       </div>
     </div>
