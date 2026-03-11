@@ -21,6 +21,9 @@ const (
 )
 
 var ErrNoteNoAccess = errors.New("no access to note")
+var ErrNoteNotFound = errors.New("note not found")
+var ErrNoteNotOwnedByUser = errors.New("note not found or not owned by user")
+var ErrNoteNotInTrash = errors.New("note not found in trash or not owned by user")
 
 type Label struct {
 	ID        string    `json:"id"`
@@ -46,6 +49,7 @@ type Note struct {
 	SharedWith            []NoteShare `json:"shared_with,omitempty"`
 	IsShared              bool        `json:"is_shared"`
 	Labels                []Label     `json:"labels"`
+	DeletedAt             *time.Time  `json:"deleted_at"`
 	CreatedAt             time.Time   `json:"created_at"`
 	UpdatedAt             time.Time   `json:"updated_at"`
 }
@@ -123,7 +127,7 @@ func (s *NoteStore) Create(userID string, title, content string, noteType NoteTy
 	}
 
 	// Shift existing unpinned notes down to make room at position 0
-	shiftQuery := `UPDATE notes SET position = position + 1 WHERE user_id = ? AND pinned = FALSE AND archived = FALSE`
+	shiftQuery := `UPDATE notes SET position = position + 1 WHERE user_id = ? AND pinned = FALSE AND archived = FALSE AND deleted_at IS NULL`
 	_, err = s.db.Exec(shiftQuery, userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to shift existing notes: %w", err)
@@ -158,21 +162,34 @@ func (s *NoteStore) Create(userID string, title, content string, noteType NoteTy
 	return &note, nil
 }
 
-func (s *NoteStore) GetByUserID(userID string, archived bool, search string) ([]*Note, error) {
-	query := `SELECT DISTINCT n.id, n.user_id, n.title, n.content, n.note_type, n.color, n.pinned, n.archived, n.position, n.unpinned_position, n.checked_items_collapsed, n.created_at, n.updated_at
-			  FROM notes n
-			  LEFT JOIN note_shares ns ON n.id = ns.note_id
-			  LEFT JOIN note_items ni ON n.id = ni.note_id
-			  WHERE (n.user_id = ? OR ns.shared_with_user_id = ?) AND n.archived = ?`
-	args := []any{userID, userID, archived}
-
+func buildGetByUserIDQuery(userID string, archived bool, trashed bool, search string) (string, []any) {
+	var query string
+	var args []any
+	if trashed {
+		query = `SELECT DISTINCT n.id, n.user_id, n.title, n.content, n.note_type, n.color, n.pinned, n.archived, n.position, n.unpinned_position, n.checked_items_collapsed, n.deleted_at, n.created_at, n.updated_at
+				  FROM notes n
+				  LEFT JOIN note_items ni ON n.id = ni.note_id
+				  WHERE n.user_id = ? AND n.deleted_at IS NOT NULL`
+		args = []any{userID}
+	} else {
+		query = `SELECT DISTINCT n.id, n.user_id, n.title, n.content, n.note_type, n.color, n.pinned, n.archived, n.position, n.unpinned_position, n.checked_items_collapsed, n.deleted_at, n.created_at, n.updated_at
+				  FROM notes n
+				  LEFT JOIN note_shares ns ON n.id = ns.note_id
+				  LEFT JOIN note_items ni ON n.id = ni.note_id
+				  WHERE (n.user_id = ? OR ns.shared_with_user_id = ?) AND n.archived = ? AND n.deleted_at IS NULL`
+		args = []any{userID, userID, archived}
+	}
 	if search != "" {
 		query += ` AND (n.title LIKE ? OR n.content LIKE ? OR ni.text LIKE ?)`
 		searchTerm := "%" + search + "%"
 		args = append(args, searchTerm, searchTerm, searchTerm)
 	}
-
 	query += ` ORDER BY n.pinned DESC, n.position ASC`
+	return query, args
+}
+
+func (s *NoteStore) GetByUserID(userID string, archived bool, trashed bool, search string) ([]*Note, error) {
+	query, args := buildGetByUserIDQuery(userID, archived, trashed, search)
 
 	rows, err := s.db.Query(query, args...)
 	if err != nil {
@@ -190,7 +207,7 @@ func (s *NoteStore) GetByUserID(userID string, archived bool, search string) ([]
 		err = rows.Scan(
 			&note.ID, &note.UserID, &note.Title, &note.Content,
 			&note.NoteType, &note.Color, &note.Pinned, &note.Archived, &note.Position, &note.UnpinnedPosition, &note.CheckedItemsCollapsed,
-			&note.CreatedAt, &note.UpdatedAt,
+			&note.DeletedAt, &note.CreatedAt, &note.UpdatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan note: %w", err)
@@ -245,21 +262,21 @@ func (s *NoteStore) GetByID(id string, userID string) (*Note, error) {
 		return nil, fmt.Errorf("failed to check access: %w", err)
 	}
 	if !hasAccess {
-		return nil, fmt.Errorf("note not found")
+		return nil, ErrNoteNotFound
 	}
 
-	query := `SELECT id, user_id, title, content, note_type, color, pinned, archived, position, unpinned_position, checked_items_collapsed, created_at, updated_at
-			  FROM notes WHERE id = ?`
+	query := `SELECT id, user_id, title, content, note_type, color, pinned, archived, position, unpinned_position, checked_items_collapsed, deleted_at, created_at, updated_at
+			  FROM notes WHERE id = ? AND deleted_at IS NULL`
 
 	var note Note
 	err = s.db.QueryRow(query, id).Scan(
 		&note.ID, &note.UserID, &note.Title, &note.Content,
 		&note.NoteType, &note.Color, &note.Pinned, &note.Archived, &note.Position, &note.UnpinnedPosition, &note.CheckedItemsCollapsed,
-		&note.CreatedAt, &note.UpdatedAt,
+		&note.DeletedAt, &note.CreatedAt, &note.UpdatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, fmt.Errorf("note not found")
+			return nil, ErrNoteNotFound
 		}
 		return nil, fmt.Errorf("failed to get note: %w", err)
 	}
@@ -295,7 +312,7 @@ func (s *NoteStore) Update(id string, userID string, title, content string, pinn
 		return fmt.Errorf("failed to check access: %w", err)
 	}
 	if !hasAccess {
-		return fmt.Errorf("note not found or no access")
+		return ErrNoteNoAccess
 	}
 
 	// Get current note state to check if pinned status is changing
@@ -318,7 +335,7 @@ func (s *NoteStore) Update(id string, userID string, title, content string, pinn
 	}
 
 	if rowsAffected == 0 {
-		return fmt.Errorf("note not found")
+		return ErrNoteNotFound
 	}
 
 	// If pinned status changed, handle position preservation
@@ -326,7 +343,7 @@ func (s *NoteStore) Update(id string, userID string, title, content string, pinn
 		if pinned {
 			// Pinning: Store current position as unpinned_position and move to end of pinned
 			var maxPosition int
-			posQuery := `SELECT COALESCE(MAX(position), -1) FROM notes WHERE user_id = ? AND pinned = ? AND archived = FALSE`
+			posQuery := `SELECT COALESCE(MAX(position), -1) FROM notes WHERE user_id = ? AND pinned = ? AND archived = FALSE AND deleted_at IS NULL`
 			if err = s.db.QueryRow(posQuery, userID, pinned).Scan(&maxPosition); err != nil {
 				return fmt.Errorf("failed to get max position: %w", err)
 			}
@@ -343,15 +360,15 @@ func (s *NoteStore) Update(id string, userID string, title, content string, pinn
 				targetPosition = *currentNote.UnpinnedPosition
 
 				// Shift other unpinned notes to make room
-				shiftQuery := `UPDATE notes SET position = position + 1 
-							   WHERE user_id = ? AND pinned = FALSE AND archived = FALSE AND position >= ?`
+				shiftQuery := `UPDATE notes SET position = position + 1
+							   WHERE user_id = ? AND pinned = FALSE AND archived = FALSE AND deleted_at IS NULL AND position >= ?`
 				if _, err = s.db.Exec(shiftQuery, userID, targetPosition); err != nil {
 					return fmt.Errorf("failed to shift notes: %w", err)
 				}
 			} else {
 				// No saved position, add to end
 				var maxPosition int
-				posQuery := `SELECT COALESCE(MAX(position), -1) FROM notes WHERE user_id = ? AND pinned = ? AND archived = FALSE`
+				posQuery := `SELECT COALESCE(MAX(position), -1) FROM notes WHERE user_id = ? AND pinned = ? AND archived = FALSE AND deleted_at IS NULL`
 				if err = s.db.QueryRow(posQuery, userID, pinned).Scan(&maxPosition); err != nil {
 					return fmt.Errorf("failed to get max position: %w", err)
 				}
@@ -374,7 +391,7 @@ func (s *NoteStore) Delete(id string, userID string) error {
 		return fmt.Errorf("failed to check ownership: %w", err)
 	}
 	if !isOwner {
-		return fmt.Errorf("note not found or not owned by user")
+		return ErrNoteNotOwnedByUser
 	}
 
 	result, err := s.db.Exec("DELETE FROM notes WHERE id = ? AND user_id = ?", id, userID)
@@ -388,9 +405,123 @@ func (s *NoteStore) Delete(id string, userID string) error {
 	}
 
 	if rowsAffected == 0 {
-		return fmt.Errorf("note not found or not owned by user")
+		return ErrNoteNotOwnedByUser
 	}
 
+	return nil
+}
+
+// MoveToTrash soft-deletes a note by setting deleted_at to the current time.
+// The note is unpinned and unarchived so it doesn't appear in those filtered views.
+func (s *NoteStore) MoveToTrash(id string, userID string) error {
+	isOwner, err := s.IsOwner(id, userID)
+	if err != nil {
+		return fmt.Errorf("failed to check ownership: %w", err)
+	}
+	if !isOwner {
+		return ErrNoteNotOwnedByUser
+	}
+
+	result, err := s.db.Exec(
+		`UPDATE notes SET deleted_at = CURRENT_TIMESTAMP, pinned = FALSE, archived = FALSE, updated_at = CURRENT_TIMESTAMP
+		 WHERE id = ? AND user_id = ? AND deleted_at IS NULL`,
+		id, userID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to move note to trash: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+	if rowsAffected == 0 {
+		return ErrNoteNotOwnedByUser
+	}
+
+	return nil
+}
+
+// RestoreFromTrash clears deleted_at and places the restored note at position 0
+// of the unpinned active list, shifting existing notes down.
+func (s *NoteStore) RestoreFromTrash(id string, userID string) error {
+	isOwner, err := s.IsOwner(id, userID)
+	if err != nil {
+		return fmt.Errorf("failed to check ownership: %w", err)
+	}
+	if !isOwner {
+		return ErrNoteNotOwnedByUser
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	// Restore the note first — if it's not actually in the trash we bail out
+	// before shifting any positions.
+	result, err := tx.Exec(
+		`UPDATE notes SET deleted_at = NULL, pinned = FALSE, archived = FALSE, position = 0, updated_at = CURRENT_TIMESTAMP
+		 WHERE id = ? AND user_id = ? AND deleted_at IS NOT NULL`,
+		id, userID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to restore note from trash: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+	if rowsAffected == 0 {
+		return ErrNoteNotInTrash
+	}
+
+	// Shift existing active unpinned notes down to make room at position 0.
+	shiftQuery := `UPDATE notes SET position = position + 1
+	               WHERE user_id = ? AND pinned = FALSE AND archived = FALSE AND deleted_at IS NULL AND id != ?`
+	if _, err = tx.Exec(shiftQuery, userID, id); err != nil {
+		return fmt.Errorf("failed to shift notes after restore: %w", err)
+	}
+
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit restore transaction: %w", err)
+	}
+
+	return nil
+}
+
+// DeleteFromTrash permanently removes a note that is already in the trash.
+// It returns ErrNoteNotInTrash if the note is not found in the trash or not owned by the user.
+func (s *NoteStore) DeleteFromTrash(id string, userID string) error {
+	result, err := s.db.Exec(
+		`DELETE FROM notes WHERE id = ? AND user_id = ? AND deleted_at IS NOT NULL`,
+		id, userID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to permanently delete note from trash: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+	if rowsAffected == 0 {
+		return ErrNoteNotInTrash
+	}
+
+	return nil
+}
+
+// PurgeOldTrashedNotes permanently deletes all notes that have been in the trash
+// longer than the given duration. This is intended to be called periodically.
+func (s *NoteStore) PurgeOldTrashedNotes(olderThan time.Duration) error {
+	cutoff := time.Now().Add(-olderThan)
+	_, err := s.db.Exec(`DELETE FROM notes WHERE deleted_at IS NOT NULL AND deleted_at < ?`, cutoff)
+	if err != nil {
+		return fmt.Errorf("failed to purge old trashed notes: %w", err)
+	}
 	return nil
 }
 
@@ -586,11 +717,12 @@ func (s *NoteStore) GetNoteShares(noteID string) ([]NoteShare, error) {
 
 func (s *NoteStore) HasAccess(noteID string, userID string) (bool, error) {
 	var count int
-	query := `SELECT COUNT(*) FROM notes WHERE id = ? AND user_id = ?
+	query := `SELECT COUNT(*) FROM notes WHERE id = ? AND user_id = ? AND deleted_at IS NULL
 			  UNION ALL
-			  SELECT COUNT(*) FROM note_shares WHERE note_id = ? AND shared_with_user_id = ?`
+			  SELECT COUNT(*) FROM note_shares WHERE note_id = ? AND shared_with_user_id = ?
+			    AND (SELECT deleted_at FROM notes WHERE id = ?) IS NULL`
 
-	rows, err := s.db.Query(query, noteID, userID, noteID, userID)
+	rows, err := s.db.Query(query, noteID, userID, noteID, userID, noteID)
 	if err != nil {
 		return false, fmt.Errorf("failed to check access: %w", err)
 	}

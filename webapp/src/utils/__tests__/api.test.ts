@@ -244,7 +244,7 @@ describe('API Module', () => {
         const result = await notes.getAll()
 
         expect(mockGet).toHaveBeenCalledWith('/notes', { 
-          params: { archived: false, search: '' } 
+          params: { archived: false, search: '', trashed: false }
         })
         expect(result).toEqual(mockNotes)
       })
@@ -256,7 +256,7 @@ describe('API Module', () => {
         const result = await notes.getAll(true)
 
         expect(mockGet).toHaveBeenCalledWith('/notes', { 
-          params: { archived: true, search: '' } 
+          params: { archived: true, search: '', trashed: false }
         })
         expect(result).toEqual(mockNotes)
       })
@@ -268,7 +268,7 @@ describe('API Module', () => {
         const result = await notes.getAll(false, 'test query')
 
         expect(mockGet).toHaveBeenCalledWith('/notes', { 
-          params: { archived: false, search: 'test query' } 
+          params: { archived: false, search: 'test query', trashed: false }
         })
         expect(result).toEqual(mockNotes)
       })
@@ -302,7 +302,7 @@ describe('API Module', () => {
         await notes.getAll(false, specialQuery)
 
         expect(mockGet).toHaveBeenCalledWith('/notes', { 
-          params: { archived: false, search: specialQuery } 
+          params: { archived: false, search: specialQuery, trashed: false }
         })
       })
     })

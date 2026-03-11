@@ -41,6 +41,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQueryState] = useState(searchParams.get('search') ?? '');
   const [showArchived, setShowArchived] = useState(searchParams.get('view') === 'archive');
+  const [showBin, setShowBin] = useState(searchParams.get('view') === 'bin');
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingNote, setEditingNote] = useState<Note | null>(null);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
@@ -65,12 +66,15 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     });
   };
 
-  const handleViewChange = (archived: boolean) => {
-    setShowArchived(archived);
+  const handleViewChange = (view: 'notes' | 'archive' | 'bin') => {
+    setShowArchived(view === 'archive');
+    setShowBin(view === 'bin');
     setSearchParams(prev => {
       const next = new URLSearchParams(prev);
-      if (archived) {
+      if (view === 'archive') {
         next.set('view', 'archive');
+      } else if (view === 'bin') {
+        next.set('view', 'bin');
       } else {
         next.delete('view');
       }
@@ -90,19 +94,25 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   );
 
   useEffect(() => {
-    document.title = t(showArchived ? 'pageTitle.archive' : 'pageTitle.notes');
-  }, [showArchived, t]);
+    if (showBin) {
+      document.title = t('pageTitle.bin');
+    } else if (showArchived) {
+      document.title = t('pageTitle.archive');
+    } else {
+      document.title = t('pageTitle.notes');
+    }
+  }, [showArchived, showBin, t]);
 
   const loadNotes = useCallback(async () => {
     try {
-      const notesData = await notes.getAll(showArchived, searchQuery);
+      const notesData = await notes.getAll(showArchived, searchQuery, showBin);
       if (isMountedRef.current) setNotesList(notesData);
     } catch (error) {
       if (isMountedRef.current) console.error('Failed to load notes:', error);
     } finally {
       if (isMountedRef.current) setLoading(false);
     }
-  }, [showArchived, searchQuery]);
+  }, [showArchived, showBin, searchQuery]);
 
   useEffect(() => {
     loadNotes();
@@ -171,6 +181,24 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     }
   };
 
+  const handleRestoreNote = async (noteId: string) => {
+    try {
+      await notes.restore(noteId);
+      loadNotes();
+    } catch (error) {
+      console.error('Failed to restore note:', error);
+    }
+  };
+
+  const handlePermanentlyDeleteNote = async (noteId: string) => {
+    try {
+      await notes.permanentlyDelete(noteId);
+      loadNotes();
+    } catch (error) {
+      console.error('Failed to permanently delete note:', error);
+    }
+  };
+
   const handleShareNote = (note: Note) => {
     setSharingNote(note);
     setIsShareModalOpen(true);
@@ -183,6 +211,10 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   };
 
   const handleDragEnd = async (event: DragEndEvent) => {
+    if (showBin) {
+      return;
+    }
+
     const { active, over } = event;
 
     if (!over || active.id === over.id) {
@@ -249,9 +281,9 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       label: t('dashboard.tabNotes'),
       element: (
         <button
-          onClick={() => handleViewChange(false)}
-          aria-current={!showArchived ? 'page' : undefined}
-          className={`px-3 py-1 rounded-md text-sm font-medium ${!showArchived
+          onClick={() => handleViewChange('notes')}
+          aria-current={!showArchived && !showBin ? 'page' : undefined}
+          className={`px-3 py-1 rounded-md text-sm font-medium ${!showArchived && !showBin
               ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
               : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
             }`}
@@ -259,13 +291,13 @@ export default function Dashboard({ onLogout }: DashboardProps) {
           {t('dashboard.tabNotes')}
         </button>
       ),
-      isActive: !showArchived
+      isActive: !showArchived && !showBin
     },
     {
       label: t('dashboard.tabArchive'),
       element: (
         <button
-          onClick={() => handleViewChange(true)}
+          onClick={() => handleViewChange('archive')}
           aria-current={showArchived ? 'page' : undefined}
           className={`px-3 py-1 rounded-md text-sm font-medium ${showArchived
               ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
@@ -276,6 +308,22 @@ export default function Dashboard({ onLogout }: DashboardProps) {
         </button>
       ),
       isActive: showArchived
+    },
+    {
+      label: t('dashboard.tabBin'),
+      element: (
+        <button
+          onClick={() => handleViewChange('bin')}
+          aria-current={showBin ? 'page' : undefined}
+          className={`px-3 py-1 rounded-md text-sm font-medium ${showBin
+              ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+              : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
+            }`}
+        >
+          {t('dashboard.tabBin')}
+        </button>
+      ),
+      isActive: showBin
     },
   ];
 
@@ -310,25 +358,34 @@ export default function Dashboard({ onLogout }: DashboardProps) {
 
         {/* Main content */}
         <main className="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
-        {/* Create note button */}
-        <div className="mb-8">
-          <button
-            onClick={handleCreateNote}
-            className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 focus:ring-offset-gray-50 dark:focus:ring-offset-slate-900"
-          >
-            <PlusIcon className="h-5 w-5 mr-2" />
-            {t('dashboard.newNote')}
-          </button>
-        </div>
+        {/* Create note button — hidden in bin view */}
+        {!showBin && (
+          <div className="mb-8">
+            <button
+              onClick={handleCreateNote}
+              className="inline-flex items-center px-4 py-2 border border-transparent text-sm font-medium rounded-md shadow-sm text-white bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 focus:ring-offset-gray-50 dark:focus:ring-offset-slate-900"
+            >
+              <PlusIcon className="h-5 w-5 mr-2" />
+              {t('dashboard.newNote')}
+            </button>
+          </div>
+        )}
+
+        {/* Bin info banner */}
+        {showBin && (
+          <div className="mb-6 px-4 py-2 bg-yellow-50 dark:bg-yellow-900/20 border border-yellow-200 dark:border-yellow-800 rounded-lg text-sm text-yellow-800 dark:text-yellow-300">
+            {t('dashboard.binInfo')}
+          </div>
+        )}
 
         {/* Notes grid */}
         {!notesList || notesList.length === 0 ? (
           <div className="text-center py-12">
             <div className="text-gray-500 dark:text-gray-400 text-lg">
-              {showArchived ? t('dashboard.noArchivedNotes') : t('dashboard.noNotesYet')}
+              {showBin ? t('dashboard.noBinnedNotes') : showArchived ? t('dashboard.noArchivedNotes') : t('dashboard.noNotesYet')}
             </div>
             <div className="text-gray-400 dark:text-gray-500 text-sm mt-2">
-              {!showArchived && t('dashboard.createFirstNote')}
+              {!showArchived && !showBin && t('dashboard.createFirstNote')}
             </div>
           </div>
         ) : (
@@ -360,8 +417,11 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                           onEdit={handleEditNote}
                           onDelete={handleDeleteNote}
                           onShare={handleShareNote}
+                          onRestore={handleRestoreNote}
+                          onPermanentlyDelete={handlePermanentlyDeleteNote}
                           currentUserId={user?.id}
-                          disabled={showArchived}
+                          disabled={showArchived || showBin}
+                          inBin={showBin}
                           onRefresh={loadNotes}
                         />
                       ))}
@@ -390,8 +450,11 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                           onEdit={handleEditNote}
                           onDelete={handleDeleteNote}
                           onShare={handleShareNote}
+                          onRestore={handleRestoreNote}
+                          onPermanentlyDelete={handlePermanentlyDeleteNote}
                           currentUserId={user?.id}
-                          disabled={showArchived}
+                          disabled={showArchived || showBin}
+                          inBin={showBin}
                           onRefresh={loadNotes}
                         />
                       ))}

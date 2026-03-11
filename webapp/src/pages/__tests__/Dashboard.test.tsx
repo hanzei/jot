@@ -15,6 +15,8 @@ vi.mock('@/utils/api', () => ({
     getAll: vi.fn(),
     delete: vi.fn(),
     reorder: vi.fn(),
+    restore: vi.fn(),
+    permanentlyDelete: vi.fn(),
   },
   auth: {
     logout: vi.fn(),
@@ -90,19 +92,31 @@ vi.mock('@/components/NavigationHeader', () => ({
 }))
 
 vi.mock('@/components/SortableNoteCard', () => ({
-  default: ({ note, onEdit, onDelete, onShare, onRefresh }: {
+  default: ({ note, onEdit, onDelete, onShare, onRestore, onPermanentlyDelete, inBin, onRefresh }: {
     note: Note;
     onEdit?: (note: Note) => void;
     onDelete?: (id: string) => void;
     onShare?: (note: Note) => void;
+    onRestore?: (id: string) => void;
+    onPermanentlyDelete?: (id: string) => void;
+    inBin?: boolean;
     onRefresh?: () => void;
   }) => (
     <div data-testid={`note-card-${note.id}`}>
       <h3>{note.title}</h3>
       <p>{note.content}</p>
-      <button onClick={() => onEdit?.(note)} data-testid={`edit-${note.id}`}>Edit</button>
-      <button onClick={() => onDelete?.(note.id)} data-testid={`delete-${note.id}`}>Delete</button>
-      {onShare && <button onClick={() => onShare(note)} data-testid={`share-${note.id}`}>Share</button>}
+      {inBin ? (
+        <>
+          <button onClick={() => onRestore?.(note.id)} data-testid={`restore-${note.id}`}>Restore</button>
+          <button onClick={() => onPermanentlyDelete?.(note.id)} data-testid={`permanently-delete-${note.id}`}>Permanently Delete</button>
+        </>
+      ) : (
+        <>
+          <button onClick={() => onEdit?.(note)} data-testid={`edit-${note.id}`}>Edit</button>
+          <button onClick={() => onDelete?.(note.id)} data-testid={`delete-${note.id}`}>Delete</button>
+          {onShare && <button onClick={() => onShare(note)} data-testid={`share-${note.id}`}>Share</button>}
+        </>
+      )}
       {onRefresh && <button onClick={onRefresh} data-testid={`refresh-${note.id}`}>Refresh</button>}
     </div>
   ),
@@ -253,7 +267,7 @@ describe('Dashboard', () => {
       await user.type(searchInput, 'search term')
       
       await waitFor(() => {
-        expect(mockGetAll).toHaveBeenCalledWith(false, 'search term')
+        expect(mockGetAll).toHaveBeenCalledWith(false, 'search term', false)
       })
     })
 
@@ -272,7 +286,7 @@ describe('Dashboard', () => {
       await user.type(searchInput, specialChars)
       
       await waitFor(() => {
-        expect(mockGetAll).toHaveBeenCalledWith(false, specialChars)
+        expect(mockGetAll).toHaveBeenCalledWith(false, specialChars, false)
       })
     })
 
@@ -292,7 +306,7 @@ describe('Dashboard', () => {
       fireEvent.change(searchInput, { target: { value: longQuery } })
 
       await waitFor(() => {
-        expect(mockGetAll).toHaveBeenCalledWith(false, longQuery)
+        expect(mockGetAll).toHaveBeenCalledWith(false, longQuery, false)
       })
     })
 
@@ -313,7 +327,7 @@ describe('Dashboard', () => {
 
       // Should have been called with the final value
       await waitFor(() => {
-        expect(mockGetAll).toHaveBeenCalledWith(false, 'abc')
+        expect(mockGetAll).toHaveBeenCalledWith(false, 'abc', false)
       })
     })
   })
@@ -334,7 +348,7 @@ describe('Dashboard', () => {
       await user.click(archiveButton)
       
       await waitFor(() => {
-        expect(mockGetAll).toHaveBeenCalledWith(true, '')
+        expect(mockGetAll).toHaveBeenCalledWith(true, '', false)
       })
     })
 
@@ -362,17 +376,51 @@ describe('Dashboard', () => {
       renderDashboard(['/dashboard?view=archive'])
       
       await waitFor(() => {
-        expect(mockGetAll).toHaveBeenCalledWith(true, '')
+        expect(mockGetAll).toHaveBeenCalledWith(true, '', false)
+      })
+    })
+
+    it('loads bin view from URL parameter', async () => {
+      const mockNote = createMockNote({ id: 'bin-note-1', title: 'Binned Note' })
+      const mockGetAll = vi.mocked(notes.getAll)
+      mockGetAll.mockResolvedValue([mockNote])
+      vi.mocked(notes.restore).mockResolvedValue(mockNote)
+      vi.mocked(notes.permanentlyDelete).mockResolvedValue(undefined)
+
+      renderDashboard(['/dashboard?view=bin'])
+
+      await waitFor(() => {
+        expect(mockGetAll).toHaveBeenCalledWith(false, '', true)
+      })
+
+      // Bin-specific controls should be rendered
+      await waitFor(() => {
+        expect(screen.getByTestId('restore-bin-note-1')).toBeInTheDocument()
+        expect(screen.getByTestId('permanently-delete-bin-note-1')).toBeInTheDocument()
+      })
+
+      // Restore handler wires up correctly
+      fireEvent.click(screen.getByTestId('restore-bin-note-1'))
+      await waitFor(() => {
+        expect(vi.mocked(notes.restore)).toHaveBeenCalledWith('bin-note-1')
+      })
+
+      mockGetAll.mockResolvedValue([mockNote])
+
+      // Permanently delete handler wires up correctly
+      fireEvent.click(screen.getByTestId('permanently-delete-bin-note-1'))
+      await waitFor(() => {
+        expect(vi.mocked(notes.permanentlyDelete)).toHaveBeenCalledWith('bin-note-1')
       })
     })
 
     it('handles malformed URL parameters gracefully', async () => {
       const mockGetAll = vi.mocked(notes.getAll)
-      
+
       renderDashboard(['/dashboard?view=invalid'])
-      
+
       await waitFor(() => {
-        expect(mockGetAll).toHaveBeenCalledWith(false, '')
+        expect(mockGetAll).toHaveBeenCalledWith(false, '', false)
       })
     })
   })

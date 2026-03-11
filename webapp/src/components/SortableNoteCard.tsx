@@ -9,8 +9,11 @@ interface SortableNoteCardProps {
   onEdit: (note: Note) => void;
   onDelete: (noteId: string) => void;
   onShare: (note: Note) => void;
+  onRestore?: (noteId: string) => void;
+  onPermanentlyDelete?: (noteId: string) => void;
   currentUserId?: string;
   disabled?: boolean;
+  inBin?: boolean;
   onRefresh?: () => void;
 }
 
@@ -19,8 +22,11 @@ export default function SortableNoteCard({
   onEdit,
   onDelete,
   onShare,
+  onRestore,
+  onPermanentlyDelete,
   currentUserId,
   disabled = false,
+  inBin = false,
   onRefresh,
 }: SortableNoteCardProps) {
   const {
@@ -72,7 +78,10 @@ export default function SortableNoteCard({
           onEdit={onEdit}
           onDelete={onDelete}
           onShare={onShare}
+          onRestore={onRestore}
+          onPermanentlyDelete={onPermanentlyDelete}
           currentUserId={currentUserId}
+          inBin={inBin}
           onRefresh={onRefresh}
         />
       </div>

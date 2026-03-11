@@ -32,6 +32,7 @@
     "newNote": "Neue Notiz",
     "noArchivedNotes": "Keine archivierten Notizen",
     "noNotesYet": "Noch keine Notizen",
+    "noBinnedNotes": "Papierkorb ist leer",
     "createFirstNote": "Klicke auf \"Neue Notiz\", um deine erste Notiz zu erstellen",
     "pinned": "Angeheftet",
     "otherNotes": "Weitere Notizen",
@@ -39,7 +40,9 @@
     "searchAriaLabel": "Notizen suchen",
     "tabNotes": "Notizen",
     "tabArchive": "Archiv",
-    "tabAdmin": "Admin"
+    "tabBin": "Papierkorb",
+    "tabAdmin": "Admin",
+    "binInfo": "Notizen im Papierkorb werden nach 7 Tagen gelöscht"
   },
   "settings": {
     "title": "Einstellungen",
@@ -113,6 +116,9 @@
     "archive": "Archivieren",
     "delete": "Löschen",
     "deleteConfirm": "Möchtest du diese Notiz wirklich löschen?",
+    "deleteForever": "Endgültig löschen",
+    "deleteForeverConfirm": "Notiz endgültig löschen? Dies kann nicht rückgängig gemacht werden.",
+    "restore": "Wiederherstellen",
     "completedItems": "Erledigte Elemente ({{count}})",
     "moreCompletedItems": "+{{count}} erledigte Elemente",
     "editNote": "Notiz bearbeiten",
@@ -196,6 +202,7 @@
     "register": "Konto erstellen - Jot",
     "notes": "Jot",
     "archive": "Archiv - Jot",
+    "bin": "Papierkorb - Jot",
     "admin": "Admin - Jot",
     "settings": "Einstellungen - Jot"
   }
