@@ -2,6 +2,7 @@ package models
 
 import (
 	"crypto/rand"
+	"strings"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -151,6 +152,7 @@ func (s *NoteStore) Create(userID string, title, content string, noteType NoteTy
 	note.Position = nextPosition
 	note.UnpinnedPosition = &nextPosition
 	note.CheckedItemsCollapsed = false
+	note.Labels = []Label{}
 
 	return &note, nil
 }
@@ -207,18 +209,30 @@ func (s *NoteStore) GetByUserID(userID string, archived bool, search string) ([]
 		}
 		note.SharedWith = shares
 		note.IsShared = len(shares) > 0
-
-		labels, labelsErr := s.GetNoteLabels(note.ID)
-		if labelsErr != nil {
-			return nil, fmt.Errorf("failed to get note labels: %w", labelsErr)
-		}
-		note.Labels = labels
+		note.Labels = []Label{}
 
 		notes = append(notes, &note)
 	}
 
 	if err = rows.Err(); err != nil {
 		return nil, fmt.Errorf("failed to iterate notes: %w", err)
+	}
+
+	// Batch-load labels for all notes in a single query.
+	if len(notes) > 0 {
+		noteIDs := make([]string, len(notes))
+		for i, n := range notes {
+			noteIDs[i] = n.ID
+		}
+		labelsMap, labelsErr := s.getLabelsByNoteIDs(noteIDs)
+		if labelsErr != nil {
+			return nil, fmt.Errorf("failed to batch-load note labels: %w", labelsErr)
+		}
+		for _, n := range notes {
+			if lbls, ok := labelsMap[n.ID]; ok {
+				n.Labels = lbls
+			}
+		}
 	}
 
 	return notes, nil
@@ -656,6 +670,50 @@ func (s *NoteStore) ReorderNotes(userID string, noteIDs []string) error {
 	return nil
 }
 
+// getLabelsByNoteIDs batch-loads labels for a set of note IDs, returning a map of noteID -> []Label.
+func (s *NoteStore) getLabelsByNoteIDs(noteIDs []string) (map[string][]Label, error) {
+	if len(noteIDs) == 0 {
+		return map[string][]Label{}, nil
+	}
+
+	placeholders := make([]string, len(noteIDs))
+	args := make([]any, len(noteIDs))
+	for i, id := range noteIDs {
+		placeholders[i] = "?"
+		args[i] = id
+	}
+
+	query := `SELECT nl.note_id, l.id, l.user_id, l.name, l.created_at, l.updated_at
+			  FROM labels l
+			  JOIN note_labels nl ON l.id = nl.label_id
+			  WHERE nl.note_id IN (` + strings.Join(placeholders, ",") + `)
+			  ORDER BY nl.note_id, l.name ASC` // #nosec G202 -- only "?" placeholders are joined, no user input
+
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to batch-get note labels: %w", err)
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+			log.Printf("Failed to close rows: %v", err)
+		}
+	}()
+
+	result := map[string][]Label{}
+	for rows.Next() {
+		var noteID string
+		var l Label
+		if err := rows.Scan(&noteID, &l.ID, &l.UserID, &l.Name, &l.CreatedAt, &l.UpdatedAt); err != nil {
+			return nil, fmt.Errorf("failed to scan note label: %w", err)
+		}
+		result[noteID] = append(result[noteID], l)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate note labels: %w", err)
+	}
+	return result, nil
+}
+
 // GetLabels returns all labels belonging to a user.
 func (s *NoteStore) GetLabels(userID string) ([]Label, error) {
 	query := `SELECT id, user_id, name, created_at, updated_at FROM labels WHERE user_id = ? ORDER BY name ASC`
@@ -669,7 +727,7 @@ func (s *NoteStore) GetLabels(userID string) ([]Label, error) {
 		}
 	}()
 
-	var labels []Label
+	labels := []Label{}
 	for rows.Next() {
 		var l Label
 		if err := rows.Scan(&l.ID, &l.UserID, &l.Name, &l.CreatedAt, &l.UpdatedAt); err != nil {
@@ -700,7 +758,7 @@ func (s *NoteStore) GetNoteLabels(noteID string) ([]Label, error) {
 		}
 	}()
 
-	var labels []Label
+	labels := []Label{}
 	for rows.Next() {
 		var l Label
 		if err := rows.Scan(&l.ID, &l.UserID, &l.Name, &l.CreatedAt, &l.UpdatedAt); err != nil {
@@ -715,30 +773,22 @@ func (s *NoteStore) GetNoteLabels(noteID string) ([]Label, error) {
 }
 
 // GetOrCreateLabel finds an existing label by name for a user or creates a new one.
+// Uses an atomic upsert to avoid race conditions when multiple callers create the same label concurrently.
 func (s *NoteStore) GetOrCreateLabel(userID, name string) (*Label, error) {
-	var l Label
-	err := s.db.QueryRow(
-		`SELECT id, user_id, name, created_at, updated_at FROM labels WHERE user_id = ? AND name = ?`,
-		userID, name,
-	).Scan(&l.ID, &l.UserID, &l.Name, &l.CreatedAt, &l.UpdatedAt)
-	if err == nil {
-		return &l, nil
-	}
-	if !errors.Is(err, sql.ErrNoRows) {
-		return nil, fmt.Errorf("failed to find label: %w", err)
-	}
-
-	// Create new label
 	id, err := generateID()
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate label ID: %w", err)
 	}
+
+	var l Label
 	err = s.db.QueryRow(
-		`INSERT INTO labels (id, user_id, name) VALUES (?, ?, ?) RETURNING id, user_id, name, created_at, updated_at`,
+		`INSERT INTO labels (id, user_id, name) VALUES (?, ?, ?)
+		 ON CONFLICT(user_id, name) DO UPDATE SET name=excluded.name
+		 RETURNING id, user_id, name, created_at, updated_at`,
 		id, userID, name,
 	).Scan(&l.ID, &l.UserID, &l.Name, &l.CreatedAt, &l.UpdatedAt)
 	if err != nil {
-		return nil, fmt.Errorf("failed to create label: %w", err)
+		return nil, fmt.Errorf("failed to get or create label: %w", err)
 	}
 	return &l, nil
 }

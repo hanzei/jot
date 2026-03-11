@@ -872,9 +872,23 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
               ))}
             </div>
 
-            {/* Label picker (shown when toggled or when note has labels) */}
-            {note && (showLabelPicker || (note.labels && note.labels.length > 0)) && (
-              <LabelPicker note={note} onRefresh={onRefresh} />
+            {/* Label badges preview (always shown when labels exist and picker is closed) */}
+            {note && !showLabelPicker && note.labels && note.labels.length > 0 && (
+              <div className="flex flex-wrap gap-1">
+                {note.labels.map(label => (
+                  <span
+                    key={label.id}
+                    className="inline-flex items-center bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full px-2 py-0.5 text-xs"
+                  >
+                    {label.name}
+                  </span>
+                ))}
+              </div>
+            )}
+
+            {/* Label picker (shown only when toggled) */}
+            {note && showLabelPicker && (
+              <LabelPicker note={note} onRefresh={onRefresh} onError={showError} />
             )}
           </div>
 

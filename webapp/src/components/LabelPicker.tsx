@@ -7,9 +7,10 @@ import { notes as notesApi, labels as labelsApi } from '@/utils/api';
 interface LabelPickerProps {
   note: Note;
   onRefresh?: () => void;
+  onError?: (msg: string) => void;
 }
 
-export default function LabelPicker({ note, onRefresh }: LabelPickerProps) {
+export default function LabelPicker({ note, onRefresh, onError }: LabelPickerProps) {
   const { t } = useTranslation();
   const [input, setInput] = useState('');
   const [allLabels, setAllLabels] = useState<Label[]>([]);
@@ -24,8 +25,10 @@ export default function LabelPicker({ note, onRefresh }: LabelPickerProps) {
   }, [note.labels]);
 
   useEffect(() => {
-    labelsApi.getAll().then(setAllLabels).catch(() => {});
-  }, []);
+    labelsApi.getAll()
+      .then(setAllLabels)
+      .catch((err: Error) => onError?.(err.message));
+  }, [onError]);
 
   // Close suggestions on outside click
   useEffect(() => {
@@ -51,13 +54,12 @@ export default function LabelPicker({ note, onRefresh }: LabelPickerProps) {
     try {
       const updatedNote = await notesApi.addLabel(note.id, name);
       setCurrentLabels(updatedNote.labels ?? []);
-      // Refresh allLabels to include any newly created one
-      labelsApi.getAll().then(setAllLabels).catch(() => {});
+      labelsApi.getAll().then(setAllLabels).catch((err: Error) => onError?.(err.message));
       setInput('');
       setShowSuggestions(false);
       onRefresh?.();
-    } catch {
-      // silently ignore
+    } catch (err) {
+      onError?.((err as Error).message);
     }
   };
 
@@ -66,8 +68,8 @@ export default function LabelPicker({ note, onRefresh }: LabelPickerProps) {
       const updatedNote = await notesApi.removeLabel(note.id, labelId);
       setCurrentLabels(updatedNote.labels ?? []);
       onRefresh?.();
-    } catch {
-      // silently ignore
+    } catch (err) {
+      onError?.((err as Error).message);
     }
   };
 
@@ -76,7 +78,11 @@ export default function LabelPicker({ note, onRefresh }: LabelPickerProps) {
       e.preventDefault();
       const trimmed = input.trim();
       if (!trimmed) return;
-      if (suggestions.length > 0) {
+      // Prefer exact match if it's not already on the note
+      const exactMatchNotAdded = exactMatch && !currentLabelIds.has(exactMatch.id);
+      if (exactMatchNotAdded) {
+        addLabel(exactMatch.name);
+      } else if (suggestions.length > 0) {
         addLabel(suggestions[0].name);
       } else if (showCreate) {
         addLabel(trimmed);
