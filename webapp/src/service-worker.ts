@@ -91,13 +91,6 @@ const navigationRoute = new NavigationRoute(
 );
 registerRoute(navigationRoute);
 
-// Listen for messages from the client
-self.addEventListener('message', (event) => {
-  if (event.data && event.data.type === 'SKIP_WAITING') {
-    self.skipWaiting();
-  }
-});
-
 // Background sync route for non-GET API requests
 registerRoute(
   ({ request, url }) => 
@@ -117,11 +110,10 @@ registerRoute(
   }
 );
 
-// Handle install event - do NOT call skipWaiting() here.
-// The 'prompt' registerType relies on the user approving the update first,
-// which sends a SKIP_WAITING message handled above.
+// Activate new service worker immediately on install.
+// The 'controlling' event in the client triggers a page reload.
 self.addEventListener('install', () => {
-  // Precaching happens automatically via precacheAndRoute above
+  self.skipWaiting();
 });
 
 // Handle activate event
