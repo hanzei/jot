@@ -692,11 +692,11 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
                   )}
                   <button
                     onClick={() => setShowLabelPicker(v => !v)}
-                    className={`p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors ${showLabelPicker ? 'text-blue-500' : ''}`}
+                    className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
                     title={t('labels.addLabels')}
                     aria-label={t('labels.addLabels')}
                   >
-                    <TagIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+                    <TagIcon className={`h-5 w-5 ${showLabelPicker ? 'text-blue-500' : 'text-gray-600 dark:text-gray-300'}`} />
                   </button>
                 </>
               )}
