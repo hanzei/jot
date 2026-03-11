@@ -21,6 +21,7 @@ const (
 )
 
 var ErrNoteNoAccess = errors.New("no access to note")
+var ErrNoteNotFound = errors.New("note not found")
 var ErrNoteNotOwnedByUser = errors.New("note not found or not owned by user")
 var ErrNoteNotInTrash = errors.New("note not found in trash or not owned by user")
 
@@ -261,7 +262,7 @@ func (s *NoteStore) GetByID(id string, userID string) (*Note, error) {
 		return nil, fmt.Errorf("failed to check access: %w", err)
 	}
 	if !hasAccess {
-		return nil, fmt.Errorf("note not found")
+		return nil, ErrNoteNotFound
 	}
 
 	query := `SELECT id, user_id, title, content, note_type, color, pinned, archived, position, unpinned_position, checked_items_collapsed, deleted_at, created_at, updated_at
@@ -275,7 +276,7 @@ func (s *NoteStore) GetByID(id string, userID string) (*Note, error) {
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, fmt.Errorf("note not found")
+			return nil, ErrNoteNotFound
 		}
 		return nil, fmt.Errorf("failed to get note: %w", err)
 	}
@@ -334,7 +335,7 @@ func (s *NoteStore) Update(id string, userID string, title, content string, pinn
 	}
 
 	if rowsAffected == 0 {
-		return fmt.Errorf("note not found")
+		return ErrNoteNotFound
 	}
 
 	// If pinned status changed, handle position preservation

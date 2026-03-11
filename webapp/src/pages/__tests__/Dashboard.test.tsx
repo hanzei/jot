@@ -15,6 +15,8 @@ vi.mock('@/utils/api', () => ({
     getAll: vi.fn(),
     delete: vi.fn(),
     reorder: vi.fn(),
+    restore: vi.fn(),
+    permanentlyDelete: vi.fn(),
   },
   auth: {
     logout: vi.fn(),
@@ -97,19 +99,31 @@ vi.mock('@/components/NavigationHeader', () => ({
 }))
 
 vi.mock('@/components/SortableNoteCard', () => ({
-  default: ({ note, onEdit, onDelete, onShare, onRefresh }: {
+  default: ({ note, onEdit, onDelete, onShare, onRestore, onPermanentlyDelete, inBin, onRefresh }: {
     note: Note;
     onEdit?: (note: Note) => void;
     onDelete?: (id: string) => void;
     onShare?: (note: Note) => void;
+    onRestore?: (id: string) => void;
+    onPermanentlyDelete?: (id: string) => void;
+    inBin?: boolean;
     onRefresh?: () => void;
   }) => (
     <div data-testid={`note-card-${note.id}`}>
       <h3>{note.title}</h3>
       <p>{note.content}</p>
-      <button onClick={() => onEdit?.(note)} data-testid={`edit-${note.id}`}>Edit</button>
-      <button onClick={() => onDelete?.(note.id)} data-testid={`delete-${note.id}`}>Delete</button>
-      {onShare && <button onClick={() => onShare(note)} data-testid={`share-${note.id}`}>Share</button>}
+      {inBin ? (
+        <>
+          <button onClick={() => onRestore?.(note.id)} data-testid={`restore-${note.id}`}>Restore</button>
+          <button onClick={() => onPermanentlyDelete?.(note.id)} data-testid={`permanently-delete-${note.id}`}>Permanently Delete</button>
+        </>
+      ) : (
+        <>
+          <button onClick={() => onEdit?.(note)} data-testid={`edit-${note.id}`}>Edit</button>
+          <button onClick={() => onDelete?.(note.id)} data-testid={`delete-${note.id}`}>Delete</button>
+          {onShare && <button onClick={() => onShare(note)} data-testid={`share-${note.id}`}>Share</button>}
+        </>
+      )}
       {onRefresh && <button onClick={onRefresh} data-testid={`refresh-${note.id}`}>Refresh</button>}
     </div>
   ),

@@ -169,7 +169,7 @@ func (h *NotesHandler) GetNote(w http.ResponseWriter, r *http.Request) (int, err
 
 	note, err := h.noteStore.GetByID(id, user.ID)
 	if err != nil {
-		if err.Error() == "note not found" {
+		if errors.Is(err, models.ErrNoteNotFound) {
 			return http.StatusNotFound, err
 		}
 		return http.StatusInternalServerError, err
@@ -231,7 +231,7 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 
 	err := h.noteStore.Update(id, user.ID, req.Title, req.Content, req.Pinned, req.Archived, req.Color, req.CheckedItemsCollapsed)
 	if err != nil {
-		if err.Error() == "note not found or no access" || err.Error() == "note not found" {
+		if errors.Is(err, models.ErrNoteNotFound) || err.Error() == "note not found or no access" {
 			return http.StatusNotFound, err
 		}
 		return http.StatusInternalServerError, err
