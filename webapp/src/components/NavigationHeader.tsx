@@ -4,24 +4,17 @@ import { UserCircleIcon } from '@heroicons/react/24/outline';
 import { Link } from 'react-router-dom';
 import { getUser } from '@/utils/auth';
 
-interface NavigationTab {
-  label: string;
-  element: ReactNode;
-  isActive?: boolean;
-}
-
 interface NavigationHeaderProps {
   title?: string;
   onLogout: () => void;
-  tabs: NavigationTab[];
-  children?: ReactNode; // For content like search bar between title/tabs and user menu
+  children?: ReactNode; // For content like search bar between title and user menu
   username?: string;
   isAdmin?: boolean;
   adminLinkActive?: boolean;
   settingsLinkActive?: boolean;
 }
 
-const NavigationHeader = ({ title = 'Jot', onLogout, tabs, children, username, isAdmin: showAdminLink, adminLinkActive, settingsLinkActive }: NavigationHeaderProps) => {
+const NavigationHeader = ({ title = 'Jot', onLogout, children, username, isAdmin: showAdminLink, adminLinkActive, settingsLinkActive }: NavigationHeaderProps) => {
   const currentUser = getUser();
   const displayUsername = username ?? currentUser?.username;
   const { t } = useTranslation();
@@ -41,13 +34,6 @@ const NavigationHeader = ({ title = 'Jot', onLogout, tabs, children, username, i
               ) : (
                 <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">{title}</h1>
               )}
-              <div className="hidden sm:flex space-x-4">
-                {tabs.map((tab) => (
-                  <div key={tab.label}>
-                    {tab.element}
-                  </div>
-                ))}
-              </div>
             </div>
 
             {/* Mobile user menu */}
@@ -114,14 +100,6 @@ const NavigationHeader = ({ title = 'Jot', onLogout, tabs, children, username, i
             </button>
           </div>
 
-          {/* Mobile tabs */}
-          <div className="flex sm:hidden space-x-4 justify-center">
-            {tabs.map((tab, index) => (
-              <div key={index}>
-                {tab.element}
-              </div>
-            ))}
-          </div>
         </div>
       </div>
     </header>

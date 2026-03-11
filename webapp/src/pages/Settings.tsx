@@ -9,6 +9,7 @@ import { getLanguagePreference, resolveLanguage, LanguagePreference, SUPPORTED_L
 import { getThemePreference, applyTheme, ThemePreference } from '@/utils/theme';
 import NavigationHeader from '@/components/NavigationHeader';
 import ImportModal from '@/components/ImportModal';
+import Sidebar from '@/components/Sidebar';
 
 interface SettingsProps {
   onLogout: () => void;
@@ -213,11 +214,13 @@ const Settings = ({ onLogout }: SettingsProps) => {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-slate-900">
-      <NavigationHeader onLogout={handleLogout} tabs={navigationTabs} username={currentUsername} settingsLinkActive={true} isAdmin={isAdmin()}>
+      <NavigationHeader onLogout={handleLogout} username={currentUsername} settingsLinkActive={true} isAdmin={isAdmin()}>
         {searchBar}
       </NavigationHeader>
 
-      <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+      <div className="flex">
+        <Sidebar tabs={navigationTabs} />
+        <div className="flex-1 max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         <div className="px-4 py-6 sm:px-0">
           <div className="mb-6">
             <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{t('settings.title')}</h1>
@@ -385,6 +388,7 @@ const Settings = ({ onLogout }: SettingsProps) => {
             </div>
           </div>
 
+        </div>
         </div>
       </div>
 
