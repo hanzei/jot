@@ -3,12 +3,12 @@ package handlers
 import (
 	"encoding/json"
 	"fmt"
-	"log"
 	"net/http"
 	"time"
 
 	"github.com/hanzei/jot/server/internal/auth"
 	"github.com/hanzei/jot/server/internal/sse"
+	"github.com/sirupsen/logrus"
 )
 
 // EventsHandler streams SSE events to authenticated clients.
@@ -73,7 +73,7 @@ func (h *EventsHandler) ServeSSE(w http.ResponseWriter, r *http.Request) {
 			}
 			data, err := json.Marshal(event)
 			if err != nil {
-				log.Printf("failed to marshal SSE event (type=%s note_id=%s): %v", event.Type, event.NoteID, err)
+				logrus.WithError(err).WithField("type", event.Type).WithField("note_id", event.NoteID).Error("Failed to marshal SSE event")
 				continue
 			}
 			if _, err := fmt.Fprintf(w, "data: %s\n\n", data); err != nil {

@@ -62,6 +62,7 @@ task lint                  # Run linters
 task lint-server           # Run server linting with golangci-lint
 task lint-webapp           # Run webapp linting
 task check-translations    # Check locale files for missing/extra keys
+task clean               # Remove generated files and node packages
 ```
    
 3. **Access the application**:
