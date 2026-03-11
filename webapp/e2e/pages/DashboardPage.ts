@@ -35,11 +35,13 @@ export class DashboardPage {
   }
 
   async openNote(title: string) {
-    await this.page.locator('[data-testid="note-card"]').filter({ hasText: title }).click();
+    const escaped = title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    await this.page.locator('[data-testid="note-card"]').filter({ hasText: new RegExp(`\\b${escaped}\\b`) }).click();
   }
 
   private async openNoteMenu(title: string) {
-    const card = this.page.locator('[data-testid="note-card"]').filter({ hasText: title });
+    const escaped = title.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+    const card = this.page.locator('[data-testid="note-card"]').filter({ hasText: new RegExp(`\\b${escaped}\\b`) });
     await card.hover();
     await card.locator('button[aria-label="Note options"]').click();
   }

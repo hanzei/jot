@@ -814,39 +814,28 @@ describe('Dashboard', () => {
       })
     })
   })
-})
 
-describe('Label Filtering', () => {
-  const mockLabels: Label[] = [
-    {
-      id: 'label-work',
-      user_id: 'user1',
-      name: 'work',
-      created_at: '2024-01-01T00:00:00Z',
-      updated_at: '2024-01-01T00:00:00Z',
-    },
-    {
-      id: 'label-personal',
-      user_id: 'user1',
-      name: 'personal',
-      created_at: '2024-01-01T00:00:00Z',
-      updated_at: '2024-01-01T00:00:00Z',
-    },
-  ]
+  describe('Label Filtering', () => {
+    const mockLabels: Label[] = [
+      {
+        id: 'label-work',
+        user_id: 'user1',
+        name: 'work',
+        created_at: '2024-01-01T00:00:00Z',
+        updated_at: '2024-01-01T00:00:00Z',
+      },
+      {
+        id: 'label-personal',
+        user_id: 'user1',
+        name: 'personal',
+        created_at: '2024-01-01T00:00:00Z',
+        updated_at: '2024-01-01T00:00:00Z',
+      },
+    ]
 
-  beforeEach(() => {
-    vi.clearAllMocks()
-    vi.mocked(auth.getUser).mockReturnValue({
-      id: 'user1',
-      username: 'testuser',
-      role: 'user',
-      created_at: '2023-01-01T00:00:00Z',
-      updated_at: '2023-01-01T00:00:00Z',
+    beforeEach(() => {
+      vi.mocked(labels.getAll).mockResolvedValue(mockLabels)
     })
-    vi.mocked(auth.isAdmin).mockReturnValue(false)
-    vi.mocked(notes.getAll).mockResolvedValue([])
-    vi.mocked(labels.getAll).mockResolvedValue(mockLabels)
-  })
 
   it('renders label list in sidebar when labels exist', async () => {
     render(
@@ -996,5 +985,6 @@ describe('Label Filtering', () => {
     await waitFor(() => {
       expect(mockGetAll).toHaveBeenCalledWith(true, '', false, '')
     })
+  })
   })
 })
