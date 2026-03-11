@@ -13,6 +13,10 @@ function flattenKeys(obj, prefix = "") {
   return Object.entries(obj).flatMap(([key, value]) => {
     const fullKey = prefix ? `${prefix}.${key}` : key;
     if (value !== null && typeof value === "object") {
+      const isEmpty = Array.isArray(value)
+        ? value.length === 0
+        : Object.keys(value).length === 0;
+      if (isEmpty) return [fullKey];
       return flattenKeys(value, fullKey);
     }
     return [fullKey];
