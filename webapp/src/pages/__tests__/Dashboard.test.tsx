@@ -75,23 +75,16 @@ vi.mock('@/utils/useSSE', () => ({
 
 // Mock child components
 vi.mock('@/components/NavigationHeader', () => ({
-  default: ({ title, onLogout, tabs, children, isAdmin: showAdminLink }: {
+  default: ({ title, onLogout, children, isAdmin: showAdminLink }: {
     title?: string;
     onLogout?: () => void;
-    tabs?: { label: string; element: ReactNode }[];
     children?: ReactNode;
     isAdmin?: boolean;
   }) => (
     <div data-testid="navigation-header">
       <h1>{title}</h1>
       <button onClick={onLogout} data-testid="logout-button">Logout</button>
-      <div data-testid="tabs">
-        {tabs?.map((tab, index) => (
-          <div key={index} data-testid={`tab-${tab.label.toLowerCase()}`}>
-            {tab.element}
-          </div>
-        ))}
-      </div>
+      <div data-testid="tabs" />
       {showAdminLink && <div data-testid="admin-link">Admin</div>}
       <div data-testid="search-bar">{children}</div>
     </div>
@@ -200,12 +193,19 @@ describe('Dashboard', () => {
     })
 
     it('renders navigation tabs correctly', async () => {
+      const user = userEvent.setup()
       renderDashboard()
-      
+
       await waitFor(() => {
-        expect(screen.getByTestId('tab-notes')).toBeInTheDocument()
-        expect(screen.getByTestId('tab-archive')).toBeInTheDocument()
+        expect(screen.getByLabelText('Open navigation')).toBeInTheDocument()
       })
+
+      const toggle = screen.getByLabelText('Open navigation')
+      expect(toggle).toHaveAttribute('aria-expanded', 'false')
+
+      await user.click(toggle)
+
+      expect(screen.getByLabelText('Close navigation')).toHaveAttribute('aria-expanded', 'true')
     })
 
     it('shows admin link for admin users', async () => {

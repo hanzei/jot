@@ -7,6 +7,7 @@ import { isAdmin, removeUser, getUser } from '@/utils/auth';
 import { ROLES } from '@/constants/roles';
 import { Navigate, Link, useNavigate } from 'react-router-dom';
 import NavigationHeader from '@/components/NavigationHeader';
+import Sidebar from '@/components/Sidebar';
 
 interface AdminProps {
   onLogout: () => void;
@@ -173,14 +174,15 @@ const Admin = ({ onLogout }: AdminProps) => {
     <div className="min-h-screen bg-gray-50 dark:bg-slate-900">
       <NavigationHeader
         onLogout={handleLogout}
-        tabs={navigationTabs}
         isAdmin={true}
         adminLinkActive={true}
       >
         {searchBar}
       </NavigationHeader>
 
-      <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+      <div className="flex">
+        <Sidebar tabs={navigationTabs} />
+        <div className="flex-1 max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         <div className="px-4 py-6 sm:px-0">
           <div className="mb-6">
             <div className="flex justify-between items-center">
@@ -319,6 +321,7 @@ const Admin = ({ onLogout }: AdminProps) => {
               <p className="text-gray-500 dark:text-gray-400">{t('admin.noUsersFound')}</p>
             </div>
           )}
+        </div>
         </div>
       </div>
     </div>

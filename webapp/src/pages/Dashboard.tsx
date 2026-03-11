@@ -7,6 +7,7 @@ import { Note } from '@/types';
 import { useSSE, SSEEvent } from '@/utils/useSSE';
 import { useSearchParams } from 'react-router-dom';
 import NavigationHeader from '@/components/NavigationHeader';
+import Sidebar from '@/components/Sidebar';
 import SortableNoteCard from '@/components/SortableNoteCard';
 import NoteModal from '@/components/NoteModal';
 import ShareModal from '@/components/ShareModal';
@@ -347,14 +348,16 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       <NavigationHeader
         title="Jot"
         onLogout={handleLogout}
-        tabs={navigationTabs}
         isAdmin={isAdmin()}
       >
         {searchBar}
       </NavigationHeader>
 
-      {/* Main content */}
-      <main className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <div className="flex">
+        <Sidebar tabs={navigationTabs} />
+
+        {/* Main content */}
+        <main className="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Create note button — hidden in bin view */}
         {!showBin && (
           <div className="mb-8">
@@ -462,29 +465,28 @@ export default function Dashboard({ onLogout }: DashboardProps) {
             </div>
           </DndContext>
         )}
+        {/* Note modal */}
+        {isModalOpen && (
+          <NoteModal
+            note={editingNote}
+            onClose={() => setIsModalOpen(false)}
+            onSave={handleNoteUpdate}
+            onRefresh={handleNoteRefresh}
+            onShare={handleShareNote}
+            isOwner={!editingNote || editingNote.user_id === user?.id}
+          />
+        )}
+
+        {/* Share modal */}
+        {isShareModalOpen && (
+          <ShareModal
+            note={sharingNote}
+            isOpen={isShareModalOpen}
+            onClose={handleShareModalClose}
+          />
+        )}
       </main>
-
-      {/* Note modal */}
-      {isModalOpen && (
-        <NoteModal
-          note={editingNote}
-          onClose={() => setIsModalOpen(false)}
-          onSave={handleNoteUpdate}
-          onRefresh={handleNoteRefresh}
-          onShare={handleShareNote}
-          isOwner={!editingNote || editingNote.user_id === user?.id}
-        />
-      )}
-
-      {/* Share modal */}
-      {isShareModalOpen && (
-        <ShareModal
-          note={sharingNote}
-          isOpen={isShareModalOpen}
-          onClose={handleShareModalClose}
-        />
-      )}
-
+      </div>
     </div>
   );
 }
