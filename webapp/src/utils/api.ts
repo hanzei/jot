@@ -104,6 +104,15 @@ export const users = {
 
   updateSettings: (data: UpdateSettingsRequest): Promise<UserSettings> =>
     api.put('/users/me/settings', data).then(res => res.data),
+
+  uploadProfileIcon: (file: File): Promise<User> => {
+    const formData = new FormData();
+    formData.append('file', file);
+    return api.post('/users/me/profile-icon', formData).then(res => res.data);
+  },
+
+  deleteProfileIcon: (): Promise<void> =>
+    api.delete('/users/me/profile-icon'),
 };
 
 export const about = {

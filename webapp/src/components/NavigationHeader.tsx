@@ -12,11 +12,15 @@ interface NavigationHeaderProps {
   isAdmin?: boolean;
   adminLinkActive?: boolean;
   settingsLinkActive?: boolean;
+  iconVersion?: number;
 }
 
-const NavigationHeader = ({ title = 'Jot', onLogout, children, username, isAdmin: showAdminLink, adminLinkActive, settingsLinkActive }: NavigationHeaderProps) => {
+const NavigationHeader = ({ title = 'Jot', onLogout, children, username, isAdmin: showAdminLink, adminLinkActive, settingsLinkActive, iconVersion = 0 }: NavigationHeaderProps) => {
   const currentUser = getUser();
   const displayUsername = username ?? currentUser?.username;
+  const iconSrc = currentUser?.has_profile_icon
+    ? `/api/v1/users/${currentUser.id}/profile-icon?v=${iconVersion}`
+    : null;
   const { t } = useTranslation();
 
   return (
@@ -39,7 +43,11 @@ const NavigationHeader = ({ title = 'Jot', onLogout, children, username, isAdmin
             {/* Mobile user menu */}
             <div className="flex items-center space-x-2 sm:hidden">
               <div className="flex items-center space-x-1 text-xs text-gray-600 dark:text-gray-300">
-                <UserCircleIcon className="h-4 w-4" />
+                {iconSrc ? (
+                  <img src={iconSrc} alt={displayUsername} className="h-4 w-4 rounded-full object-cover" />
+                ) : (
+                  <UserCircleIcon className="h-4 w-4" />
+                )}
                 <span className="max-w-16 truncate">{displayUsername}</span>
               </div>
               <Link
@@ -73,7 +81,11 @@ const NavigationHeader = ({ title = 'Jot', onLogout, children, username, isAdmin
           {/* Desktop user menu */}
           <div className="hidden sm:flex items-center space-x-4">
             <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300">
-              <UserCircleIcon className="h-5 w-5" />
+              {iconSrc ? (
+                <img src={iconSrc} alt={displayUsername} className="h-5 w-5 rounded-full object-cover" />
+              ) : (
+                <UserCircleIcon className="h-5 w-5" />
+              )}
               <span>{displayUsername}</span>
             </div>
             <Link

@@ -24,12 +24,13 @@ var ErrUserNotFound = errors.New("user not found")
 var ErrLastAdmin = errors.New("cannot demote the last admin")
 
 type User struct {
-	ID           string    `json:"id"`
-	Username     string    `json:"username"`
-	PasswordHash string    `json:"-"`
-	Role         string    `json:"role"`
-	CreatedAt    time.Time `json:"created_at"`
-	UpdatedAt    time.Time `json:"updated_at"`
+	ID             string    `json:"id"`
+	Username       string    `json:"username"`
+	PasswordHash   string    `json:"-"`
+	Role           string    `json:"role"`
+	HasProfileIcon bool      `json:"has_profile_icon"`
+	CreatedAt      time.Time `json:"created_at"`
+	UpdatedAt      time.Time `json:"updated_at"`
 }
 
 type UserStore struct {
@@ -85,12 +86,14 @@ func (s *UserStore) Create(username, password string) (*User, error) {
 
 func (s *UserStore) GetByUsername(username string) (*User, error) {
 	var user User
-	query := `SELECT id, username, password_hash, role, created_at, updated_at 
+	query := `SELECT id, username, password_hash, role,
+			         profile_icon IS NOT NULL AS has_profile_icon,
+			         created_at, updated_at
 			  FROM users WHERE username = ?`
 
 	err := s.db.QueryRow(query, username).Scan(
 		&user.ID, &user.Username, &user.PasswordHash,
-		&user.Role, &user.CreatedAt, &user.UpdatedAt,
+		&user.Role, &user.HasProfileIcon, &user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -103,12 +106,14 @@ func (s *UserStore) GetByUsername(username string) (*User, error) {
 
 func (s *UserStore) GetByID(id string) (*User, error) {
 	var user User
-	query := `SELECT id, username, password_hash, role, created_at, updated_at 
+	query := `SELECT id, username, password_hash, role,
+			         profile_icon IS NOT NULL AS has_profile_icon,
+			         created_at, updated_at
 			  FROM users WHERE id = ?`
 
 	err := s.db.QueryRow(query, id).Scan(
 		&user.ID, &user.Username, &user.PasswordHash,
-		&user.Role, &user.CreatedAt, &user.UpdatedAt,
+		&user.Role, &user.HasProfileIcon, &user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -126,7 +131,9 @@ func (u *User) CheckPassword(password string) bool {
 }
 
 func (s *UserStore) GetAll() ([]*User, error) {
-	query := `SELECT id, username, password_hash, role, created_at, updated_at 
+	query := `SELECT id, username, password_hash, role,
+			         profile_icon IS NOT NULL AS has_profile_icon,
+			         created_at, updated_at
 			  FROM users ORDER BY created_at DESC`
 
 	rows, err := s.db.Query(query)
@@ -144,7 +151,7 @@ func (s *UserStore) GetAll() ([]*User, error) {
 		var user User
 		if err = rows.Scan(
 			&user.ID, &user.Username, &user.PasswordHash,
-			&user.Role, &user.CreatedAt, &user.UpdatedAt,
+			&user.Role, &user.HasProfileIcon, &user.CreatedAt, &user.UpdatedAt,
 		); err != nil {
 			return nil, fmt.Errorf("failed to scan user: %w", err)
 		}
@@ -163,10 +170,12 @@ func (s *UserStore) GetAll() ([]*User, error) {
 // or another error if the id does not exist or the query fails.
 func (s *UserStore) UpdateUsername(id, newUsername string) (*User, error) {
 	query := `UPDATE users SET username = ?, updated_at = CURRENT_TIMESTAMP
-			  WHERE id = ? RETURNING id, username, role, created_at, updated_at`
+			  WHERE id = ? RETURNING id, username, role,
+			  profile_icon IS NOT NULL AS has_profile_icon,
+			  created_at, updated_at`
 	var user User
 	err := s.db.QueryRow(query, newUsername, id).Scan(
-		&user.ID, &user.Username, &user.Role, &user.CreatedAt, &user.UpdatedAt,
+		&user.ID, &user.Username, &user.Role, &user.HasProfileIcon, &user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
 		var sqliteErr sqlite3.Error
@@ -179,6 +188,60 @@ func (s *UserStore) UpdateUsername(id, newUsername string) (*User, error) {
 		return nil, fmt.Errorf("failed to update username: %w", err)
 	}
 	return &user, nil
+}
+
+func (s *UserStore) UpdateProfileIcon(id string, data []byte, contentType string) error {
+	result, err := s.db.Exec(
+		`UPDATE users SET profile_icon = ?, profile_icon_content_type = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+		data, contentType, id,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to update profile icon: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to check rows affected: %w", err)
+	}
+	if rows == 0 {
+		return ErrUserNotFound
+	}
+	return nil
+}
+
+func (s *UserStore) GetProfileIcon(id string) ([]byte, string, error) {
+	var data []byte
+	var contentType sql.NullString
+	err := s.db.QueryRow(
+		`SELECT profile_icon, profile_icon_content_type FROM users WHERE id = ?`, id,
+	).Scan(&data, &contentType)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, "", ErrUserNotFound
+		}
+		return nil, "", fmt.Errorf("failed to get profile icon: %w", err)
+	}
+	if len(data) == 0 {
+		return nil, "", nil
+	}
+	return data, contentType.String, nil
+}
+
+func (s *UserStore) DeleteProfileIcon(id string) error {
+	result, err := s.db.Exec(
+		`UPDATE users SET profile_icon = NULL, profile_icon_content_type = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+		id,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to delete profile icon: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to check rows affected: %w", err)
+	}
+	if rows == 0 {
+		return ErrUserNotFound
+	}
+	return nil
 }
 
 func (s *UserStore) UpdatePassword(id, newPassword string) error {
@@ -289,9 +352,11 @@ func (s *UserStore) UpdateRole(id, role string) (*User, error) {
 	var user User
 	err = tx.QueryRow(
 		`UPDATE users SET role = ?, updated_at = CURRENT_TIMESTAMP
-		 WHERE id = ? RETURNING id, username, role, created_at, updated_at`,
+		 WHERE id = ? RETURNING id, username, role,
+		 profile_icon IS NOT NULL AS has_profile_icon,
+		 created_at, updated_at`,
 		role, id,
-	).Scan(&user.ID, &user.Username, &user.Role, &user.CreatedAt, &user.UpdatedAt)
+	).Scan(&user.ID, &user.Username, &user.Role, &user.HasProfileIcon, &user.CreatedAt, &user.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("%w", ErrUserNotFound)
 	}

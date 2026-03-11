@@ -3,9 +3,12 @@ package handlers
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"strings"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/hanzei/jot/server/internal/auth"
 	"github.com/hanzei/jot/server/internal/models"
 )
@@ -313,6 +316,100 @@ func (h *AuthHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) (in
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(settings); err != nil {
 		return http.StatusInternalServerError, err
+	}
+	return 0, nil
+}
+
+var allowedImageTypes = map[string]bool{
+	"image/jpeg": true,
+	"image/png":  true,
+	"image/gif":  true,
+	"image/webp": true,
+}
+
+// UploadProfileIcon handles POST /api/v1/users/me/profile-icon.
+// It accepts a multipart form with a single "file" field (max 2 MB, images only),
+// stores the image in the database, and returns the updated User.
+func (h *AuthHandler) UploadProfileIcon(w http.ResponseWriter, r *http.Request) (int, error) {
+	currentUser, ok := auth.GetUserFromContext(r.Context())
+	if !ok {
+		return http.StatusUnauthorized, errors.New("unauthorized")
+	}
+
+	if err := r.ParseMultipartForm(2 << 20); err != nil {
+		return http.StatusBadRequest, errors.New("file too large (max 2 MB)")
+	}
+
+	file, header, err := r.FormFile("file")
+	if err != nil {
+		return http.StatusBadRequest, errors.New("file is required")
+	}
+	defer file.Close()
+
+	contentType := header.Header.Get("Content-Type")
+	if !allowedImageTypes[contentType] {
+		return http.StatusBadRequest, errors.New("unsupported file type: must be jpeg, png, gif, or webp")
+	}
+
+	data, err := io.ReadAll(file)
+	if err != nil {
+		return http.StatusInternalServerError, fmt.Errorf("failed to read file: %w", err)
+	}
+
+	if err = h.userStore.UpdateProfileIcon(currentUser.ID, data, contentType); err != nil {
+		return http.StatusInternalServerError, err
+	}
+
+	user, err := h.userStore.GetByID(currentUser.ID)
+	if err != nil {
+		return http.StatusInternalServerError, err
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(user); err != nil {
+		return http.StatusInternalServerError, err
+	}
+	return 0, nil
+}
+
+// DeleteProfileIcon handles DELETE /api/v1/users/me/profile-icon.
+func (h *AuthHandler) DeleteProfileIcon(w http.ResponseWriter, r *http.Request) (int, error) {
+	currentUser, ok := auth.GetUserFromContext(r.Context())
+	if !ok {
+		return http.StatusUnauthorized, errors.New("unauthorized")
+	}
+
+	if err := h.userStore.DeleteProfileIcon(currentUser.ID); err != nil {
+		return http.StatusInternalServerError, err
+	}
+
+	w.WriteHeader(http.StatusNoContent)
+	return 0, nil
+}
+
+// GetUserProfileIcon handles GET /api/v1/users/{id}/profile-icon.
+func (h *AuthHandler) GetUserProfileIcon(w http.ResponseWriter, r *http.Request) (int, error) {
+	id := chi.URLParam(r, "id")
+
+	data, contentType, err := h.userStore.GetProfileIcon(id)
+	if err != nil {
+		if errors.Is(err, models.ErrUserNotFound) {
+			return http.StatusNotFound, errors.New("user not found")
+		}
+		return http.StatusInternalServerError, err
+	}
+	if len(data) == 0 {
+		return http.StatusNotFound, errors.New("no profile icon set")
+	}
+
+	if contentType == "" {
+		contentType = "application/octet-stream"
+	}
+
+	w.Header().Set("Content-Type", contentType)
+	w.Header().Set("Cache-Control", "private, max-age=3600")
+	if _, err := w.Write(data); err != nil {
+		return http.StatusInternalServerError, fmt.Errorf("failed to write response: %w", err)
 	}
 	return 0, nil
 }

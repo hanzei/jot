@@ -1,6 +1,6 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MagnifyingGlassIcon, ArrowUpTrayIcon } from '@heroicons/react/24/outline';
+import { MagnifyingGlassIcon, ArrowUpTrayIcon, UserCircleIcon } from '@heroicons/react/24/outline';
 import { useTranslation } from 'react-i18next';
 import i18n from '@/i18n';
 import { auth, users, isAxiosError } from '@/utils/api';
@@ -40,6 +40,11 @@ const Settings = ({ onLogout }: SettingsProps) => {
   const [passwordSuccess, setPasswordSuccess] = useState('');
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isAboutModalOpen, setIsAboutModalOpen] = useState(false);
+  const [hasProfileIcon, setHasProfileIcon] = useState(currentUser?.has_profile_icon ?? false);
+  const [iconVersion, setIconVersion] = useState(0);
+  const [iconError, setIconError] = useState('');
+  const [iconUploading, setIconUploading] = useState(false);
+  const fileInputRef = useRef<HTMLInputElement>(null);
   const [languagePref, setLanguagePref] = useState<LanguagePreference>(() => getLanguagePreference());
   const [themePref, setThemePref] = useState<ThemePreference>(() => getThemePreference());
 
@@ -172,6 +177,44 @@ const Settings = ({ onLogout }: SettingsProps) => {
     }
   };
 
+  const handleIconUpload = async (e: React.ChangeEvent<HTMLInputElement>) => {
+    const file = e.target.files?.[0];
+    if (!file) return;
+    setIconError('');
+    setIconUploading(true);
+    try {
+      const updatedUser = await users.uploadProfileIcon(file);
+      setUser(updatedUser);
+      setHasProfileIcon(true);
+      setIconVersion(v => v + 1);
+    } catch (err: unknown) {
+      if (isAxiosError(err)) {
+        const msg = typeof err.response?.data === 'string' ? err.response.data.trim() : '';
+        setIconError(msg || t('settings.iconUploadFailed'));
+      } else {
+        setIconError(t('settings.iconUploadFailed'));
+      }
+    } finally {
+      setIconUploading(false);
+      if (fileInputRef.current) fileInputRef.current.value = '';
+    }
+  };
+
+  const handleIconDelete = async () => {
+    setIconError('');
+    try {
+      await users.deleteProfileIcon();
+      const user = getUser();
+      if (user) {
+        setUser({ ...user, has_profile_icon: false });
+      }
+      setHasProfileIcon(false);
+      setIconVersion(v => v + 1);
+    } catch {
+      setIconError(t('settings.iconDeleteFailed'));
+    }
+  };
+
   const navigationTabs = useNavigationLinkTabs();
 
   const searchBar = (
@@ -194,7 +237,7 @@ const Settings = ({ onLogout }: SettingsProps) => {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-slate-900">
-      <NavigationHeader onLogout={handleLogout} username={currentUsername} settingsLinkActive={true} isAdmin={isAdmin()}>
+      <NavigationHeader onLogout={handleLogout} username={currentUsername} settingsLinkActive={true} isAdmin={isAdmin()} iconVersion={iconVersion}>
         {searchBar}
       </NavigationHeader>
 
@@ -207,6 +250,53 @@ const Settings = ({ onLogout }: SettingsProps) => {
           </div>
 
           <div className="bg-white dark:bg-slate-800 shadow rounded-lg p-6 border border-gray-200 dark:border-slate-700 max-w-md">
+            <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">{t('settings.profileIconSection')}</h2>
+            <div className="flex items-center space-x-4">
+              <div className="flex-shrink-0">
+                {hasProfileIcon && currentUser ? (
+                  <img
+                    src={`/api/v1/users/${currentUser.id}/profile-icon?v=${iconVersion}`}
+                    alt={currentUsername}
+                    className="h-16 w-16 rounded-full object-cover border border-gray-200 dark:border-slate-600"
+                  />
+                ) : (
+                  <UserCircleIcon className="h-16 w-16 text-gray-400 dark:text-gray-500" />
+                )}
+              </div>
+              <div className="flex flex-col space-y-2">
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept="image/jpeg,image/png,image/gif,image/webp"
+                  className="hidden"
+                  onChange={handleIconUpload}
+                  aria-label={t('settings.uploadIconButton')}
+                />
+                <button
+                  type="button"
+                  disabled={iconUploading}
+                  onClick={() => fileInputRef.current?.click()}
+                  className="inline-flex items-center px-3 py-1.5 border border-gray-300 dark:border-slate-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 hover:bg-gray-50 dark:hover:bg-slate-600 disabled:opacity-50"
+                >
+                  {iconUploading ? t('settings.iconUploading') : t('settings.uploadIconButton')}
+                </button>
+                {hasProfileIcon && (
+                  <button
+                    type="button"
+                    onClick={handleIconDelete}
+                    className="text-sm text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 text-left"
+                  >
+                    {t('settings.removeIconButton')}
+                  </button>
+                )}
+              </div>
+            </div>
+            {iconError && (
+              <div role="alert" className="mt-3 text-red-600 dark:text-red-400 text-sm">{iconError}</div>
+            )}
+          </div>
+
+          <div className="bg-white dark:bg-slate-800 shadow rounded-lg p-6 border border-gray-200 dark:border-slate-700 max-w-md mt-6">
             <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">{t('settings.accountSection')}</h2>
             <form onSubmit={handleSubmit}>
               <div>

@@ -7,6 +7,7 @@ export interface User {
   id: string;
   username: string;
   role: string;
+  has_profile_icon: boolean;
   created_at: string;
   updated_at: string;
 }

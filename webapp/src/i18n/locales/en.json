@@ -81,6 +81,12 @@
     "themeSystem": "System Default",
     "themeLight": "Light",
     "themeDark": "Dark",
+    "profileIconSection": "Profile Icon",
+    "uploadIconButton": "Upload icon",
+    "removeIconButton": "Remove icon",
+    "iconUploading": "Uploading...",
+    "iconUploadFailed": "Failed to upload profile icon.",
+    "iconDeleteFailed": "Failed to remove profile icon.",
     "aboutSection": "About",
     "aboutButton": "About Jot"
   },
