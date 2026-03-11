@@ -53,6 +53,13 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     return () => { isMountedRef.current = false; };
   }, []);
 
+  // Sync local state from URL when navigating via links (e.g., logo click)
+  useEffect(() => {
+    setSearchQueryState(searchParams.get('search') ?? '');
+    setShowArchived(searchParams.get('view') === 'archive');
+    setShowBin(searchParams.get('view') === 'bin');
+  }, [searchParams]);
+
   const setSearchQuery = (query: string) => {
     setSearchQueryState(query);
     setSearchParams(prev => {
@@ -69,8 +76,10 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const handleViewChange = (view: 'notes' | 'archive' | 'bin') => {
     setShowArchived(view === 'archive');
     setShowBin(view === 'bin');
+    setSearchQueryState('');
     setSearchParams(prev => {
       const next = new URLSearchParams(prev);
+      next.delete('search');
       if (view === 'archive') {
         next.set('view', 'archive');
       } else if (view === 'bin') {

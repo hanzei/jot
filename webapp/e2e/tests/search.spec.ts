@@ -47,4 +47,44 @@ test.describe('Search', () => {
     await dashboardPage.search('typescript');
     await dashboardPage.expectNoteVisible('TypeScript Tutorial');
   });
+
+  test('clicking Notes tab clears search', async ({ dashboardPage }) => {
+    await dashboardPage.search('TypeScript');
+    await dashboardPage.expectNoteNotVisible('Go Programming');
+
+    await dashboardPage.switchToArchived();
+    await dashboardPage.switchToNotes();
+    // Search should have been cleared when switching tabs
+    await dashboardPage.expectSearchValue('');
+    await dashboardPage.expectNoteVisible('TypeScript Tutorial');
+    await dashboardPage.expectNoteVisible('Go Programming');
+    await dashboardPage.expectNoteVisible('React Hooks');
+  });
+
+  test('clicking Archive tab clears search', async ({ dashboardPage }) => {
+    await dashboardPage.search('TypeScript');
+    await dashboardPage.expectNoteNotVisible('Go Programming');
+
+    await dashboardPage.switchToArchived();
+    await dashboardPage.expectSearchValue('');
+  });
+
+  test('clicking Bin tab clears search', async ({ dashboardPage }) => {
+    await dashboardPage.search('TypeScript');
+    await dashboardPage.expectNoteNotVisible('Go Programming');
+
+    await dashboardPage.switchToBin();
+    await dashboardPage.expectSearchValue('');
+  });
+
+  test('clicking Jot logo clears search', async ({ dashboardPage }) => {
+    await dashboardPage.search('TypeScript');
+    await dashboardPage.expectNoteNotVisible('Go Programming');
+
+    await dashboardPage.clickLogo();
+    await dashboardPage.expectSearchValue('');
+    await dashboardPage.expectNoteVisible('TypeScript Tutorial');
+    await dashboardPage.expectNoteVisible('Go Programming');
+    await dashboardPage.expectNoteVisible('React Hooks');
+  });
 });

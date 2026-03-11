@@ -90,6 +90,18 @@ export class DashboardPage {
     await this.page.click('button:has-text("Notes")');
   }
 
+  async switchToBin() {
+    await this.page.click('button:has-text("Bin")');
+  }
+
+  async clickLogo() {
+    await this.page.click('a:has-text("Jot")');
+  }
+
+  async expectSearchValue(value: string) {
+    await expect(this.page.locator('[aria-label="Search notes"]')).toHaveValue(value);
+  }
+
   async expectNoteVisible(title: string) {
     await expect(this.page.locator('[data-testid="note-card"]').filter({ hasText: title })).toBeVisible();
   }
