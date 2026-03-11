@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { MemoryRouter } from 'react-router-dom'
 import { type ReactNode } from 'react'
 import Settings from '../Settings'
-import { users, auth, admin, isAxiosError } from '@/utils/api'
+import { users, auth, isAxiosError } from '@/utils/api'
 import * as authUtils from '@/utils/auth'
 import { type UserSettings } from '@/types'
 import i18n from '@/i18n'
@@ -19,10 +19,6 @@ vi.mock('@/utils/api', () => ({
     getSettings: vi.fn().mockResolvedValue({ user_id: 'user1', language: 'system', theme: 'system', updated_at: '' }),
     updateSettings: vi.fn().mockResolvedValue({ user_id: 'user1', language: 'system', theme: 'system', updated_at: '' }),
   },
-  admin: {
-    getUsers: vi.fn(),
-    updateUserRole: vi.fn(),
-  },
   isAxiosError: vi.fn(),
 }))
 
@@ -36,8 +32,8 @@ vi.mock('@/utils/auth', () => ({
 }))
 
 vi.mock('@/components/NavigationHeader', () => ({
-  default: ({ onLogout, username }: { onLogout?: () => void; username?: string; tabs?: unknown[]; children?: ReactNode }) => (
-    <div data-testid="navigation-header">
+  default: ({ onLogout, username, settingsLinkActive, isAdmin }: { onLogout?: () => void; username?: string; tabs?: unknown[]; children?: ReactNode; settingsLinkActive?: boolean; isAdmin?: boolean }) => (
+    <div data-testid="navigation-header" data-settings-link-active={settingsLinkActive} data-is-admin={isAdmin}>
       <span data-testid="displayed-username">{username}</span>
       <button onClick={onLogout} data-testid="logout-button">Logout</button>
     </div>
@@ -84,6 +80,22 @@ describe('Settings', () => {
     it('passes current username to the navigation header', () => {
       renderSettings()
       expect(screen.getByTestId('displayed-username')).toHaveTextContent('testuser')
+    })
+
+    it('passes settingsLinkActive to NavigationHeader', () => {
+      renderSettings()
+      expect(screen.getByTestId('navigation-header')).toHaveAttribute('data-settings-link-active', 'true')
+    })
+
+    it('passes isAdmin to NavigationHeader for non-admin user', () => {
+      renderSettings()
+      expect(screen.getByTestId('navigation-header')).toHaveAttribute('data-is-admin', 'false')
+    })
+
+    it('passes isAdmin to NavigationHeader for admin user', () => {
+      vi.mocked(authUtils.isAdmin).mockReturnValue(true)
+      renderSettings()
+      expect(screen.getByTestId('navigation-header')).toHaveAttribute('data-is-admin', 'true')
     })
 
     it('renders without errors when user is not logged in', () => {
@@ -241,93 +253,6 @@ describe('Settings', () => {
       await waitFor(() => {
         expect(authUtils.setSettings).toHaveBeenCalledWith(updatedSettings)
       })
-    })
-  })
-
-  describe('User management (admin)', () => {
-    const adminUser = { ...mockUser, role: 'admin' as const }
-    const otherUser = {
-      id: 'user2',
-      username: 'other',
-      role: 'user' as const,
-      created_at: '2023-01-01T00:00:00Z',
-      updated_at: '2023-01-01T00:00:00Z',
-    }
-
-    beforeEach(() => {
-      vi.mocked(authUtils.isAdmin).mockReturnValue(true)
-      vi.mocked(authUtils.getUser).mockReturnValue(adminUser)
-      vi.mocked(admin.getUsers).mockResolvedValue({ users: [adminUser, otherUser] })
-    })
-
-    it('shows the user management section for admins', async () => {
-      renderSettings()
-      await waitFor(() => {
-        expect(screen.getByText('User Management')).toBeInTheDocument()
-      })
-      expect(screen.getByText('other')).toBeInTheDocument()
-    })
-
-    it('does not show the user management section for non-admins', () => {
-      vi.mocked(authUtils.isAdmin).mockReturnValue(false)
-      renderSettings()
-      expect(screen.queryByText('User Management')).not.toBeInTheDocument()
-    })
-
-    it('calls updateUserRole and updates the list when role toggle is clicked', async () => {
-      const user = userEvent.setup()
-      const promoted = { ...otherUser, role: 'admin' as const }
-      vi.mocked(admin.updateUserRole).mockResolvedValue(promoted)
-
-      renderSettings()
-
-      await waitFor(() => {
-        expect(screen.getByText('other')).toBeInTheDocument()
-      })
-
-      await user.click(screen.getByRole('button', { name: 'Make Admin for other' }))
-
-      await waitFor(() => {
-        expect(admin.updateUserRole).toHaveBeenCalledWith(otherUser.id, { role: 'admin' })
-      })
-      await waitFor(() => {
-        expect(screen.queryByRole('button', { name: 'Make Admin for other' })).not.toBeInTheDocument()
-      })
-      expect(screen.getByRole('button', { name: 'Remove Admin for other' })).toBeInTheDocument()
-    })
-
-    it('shows an error when updateUserRole fails', async () => {
-      const user = userEvent.setup()
-      vi.mocked(admin.updateUserRole).mockRejectedValue(new Error('server error'))
-
-      renderSettings()
-
-      await waitFor(() => {
-        expect(screen.getByText('other')).toBeInTheDocument()
-      })
-
-      await user.click(screen.getByRole('button', { name: 'Make Admin for other' }))
-
-      await waitFor(() => {
-        expect(screen.getByRole('alert')).toHaveTextContent('Failed to update role.')
-      })
-    })
-
-    it('clears stale error before a new role toggle attempt', async () => {
-      const user = userEvent.setup()
-      vi.mocked(admin.updateUserRole)
-        .mockRejectedValueOnce(new Error('first error'))
-        .mockResolvedValueOnce({ ...otherUser, role: 'admin' as const })
-
-      renderSettings()
-
-      await waitFor(() => expect(screen.getByText('other')).toBeInTheDocument())
-
-      await user.click(screen.getByRole('button', { name: 'Make Admin for other' }))
-      await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument())
-
-      await user.click(screen.getByRole('button', { name: 'Make Admin for other' }))
-      await waitFor(() => expect(screen.queryByRole('alert')).not.toBeInTheDocument())
     })
   })
 

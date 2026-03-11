@@ -1,6 +1,7 @@
 {
   "nav": {
     "settings": "Einstellungen",
+    "admin": "Admin",
     "logout": "Abmelden"
   },
   "auth": {
@@ -43,7 +44,6 @@
   "settings": {
     "title": "Einstellungen",
     "tabNotes": "Notizen",
-    "tabSettings": "Einstellungen",
     "accountSection": "Konto",
     "usernameLabel": "Benutzername",
     "usernamePlaceholder": "Benutzername (2–30 Zeichen)",
@@ -70,16 +70,6 @@
     "languageSystem": "Systemsprache",
     "language_en": "English",
     "language_de": "Deutsch",
-    "loadingUsers": "Benutzer werden geladen...",
-    "userManagementSection": "Benutzerverwaltung",
-    "userManagementDescription": "Benutzerrollen verwalten.",
-    "makeAdmin": "Zum Admin machen",
-    "removeAdmin": "Admin entfernen",
-    "updatingRole": "Aktualisiere...",
-    "roleToggleLabel": "{{action}} für {{username}}",
-    "failedUpdateRole": "Rolle konnte nicht aktualisiert werden.",
-    "failedLoadUsers": "Benutzer konnten nicht geladen werden.",
-    "youBadge": "Du",
     "themeSection": "Erscheinungsbild",
     "themeLabel": "App-Design",
     "themeSystem": "Systemstandard",
@@ -105,7 +95,13 @@
     "userIdCreated": "ID: {{id}} • Erstellt: {{date}}",
     "adminBadge": "Admin",
     "activeBadge": "Aktiv",
-    "noUsersFound": "Keine Benutzer gefunden."
+    "noUsersFound": "Keine Benutzer gefunden.",
+    "makeAdmin": "Zum Admin machen",
+    "removeAdmin": "Admin entfernen",
+    "updatingRole": "Aktualisiere...",
+    "roleToggleLabel": "{{action}} für {{username}}",
+    "failedUpdateRole": "Rolle konnte nicht aktualisiert werden.",
+    "youBadge": "Du"
   },
   "note": {
     "shared": "Geteilt",
