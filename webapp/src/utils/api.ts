@@ -38,8 +38,8 @@ export const auth = {
 };
 
 export const notes = {
-  getAll: (archived = false, search = '', trashed = false): Promise<Note[]> =>
-    api.get('/notes', { params: { archived, search, trashed } }).then(res => res.data),
+  getAll: (archived = false, search = '', trashed = false, labelId = ''): Promise<Note[]> =>
+    api.get('/notes', { params: { archived, search, trashed, ...(labelId ? { label: labelId } : {}) } }).then(res => res.data),
 
   getById: (id: string): Promise<Note> =>
     api.get(`/notes/${id}`).then(res => res.data),

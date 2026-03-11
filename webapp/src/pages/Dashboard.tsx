@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { PlusIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, MagnifyingGlassIcon, TagIcon } from '@heroicons/react/24/outline';
 import { useTranslation } from 'react-i18next';
-import { notes, auth } from '@/utils/api';
+import { notes, auth, labels as labelsApi } from '@/utils/api';
 import { removeUser, getUser, isAdmin } from '@/utils/auth';
-import { Note } from '@/types';
+import { Note, Label } from '@/types';
 import { useSSE, SSEEvent } from '@/utils/useSSE';
 import { useSearchParams } from 'react-router-dom';
 import NavigationHeader from '@/components/NavigationHeader';
@@ -42,6 +42,8 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const [searchQuery, setSearchQueryState] = useState(searchParams.get('search') ?? '');
   const [showArchived, setShowArchived] = useState(searchParams.get('view') === 'archive');
   const [showBin, setShowBin] = useState(searchParams.get('view') === 'bin');
+  const [labelsList, setLabelsList] = useState<Label[]>([]);
+  const [selectedLabelId, setSelectedLabelId] = useState<string | null>(searchParams.get('label'));
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingNote, setEditingNote] = useState<Note | null>(null);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
@@ -58,6 +60,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     setSearchQueryState(searchParams.get('search') ?? '');
     setShowArchived(searchParams.get('view') === 'archive');
     setShowBin(searchParams.get('view') === 'bin');
+    setSelectedLabelId(searchParams.get('label'));
   }, [searchParams]);
 
   const setSearchQuery = (query: string) => {
@@ -77,9 +80,11 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     setShowArchived(view === 'archive');
     setShowBin(view === 'bin');
     setSearchQueryState('');
+    setSelectedLabelId(null);
     setSearchParams(prev => {
       const next = new URLSearchParams(prev);
       next.delete('search');
+      next.delete('label');
       if (view === 'archive') {
         next.set('view', 'archive');
       } else if (view === 'bin') {
@@ -112,16 +117,29 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     }
   }, [showArchived, showBin, t]);
 
+  const loadLabels = useCallback(async () => {
+    try {
+      const labelsData = await labelsApi.getAll();
+      if (isMountedRef.current) setLabelsList(labelsData);
+    } catch (error) {
+      if (isMountedRef.current) console.error('Failed to load labels:', error);
+    }
+  }, []);
+
   const loadNotes = useCallback(async () => {
     try {
-      const notesData = await notes.getAll(showArchived, searchQuery, showBin);
+      const notesData = await notes.getAll(showArchived, searchQuery, showBin, selectedLabelId ?? '');
       if (isMountedRef.current) setNotesList(notesData);
     } catch (error) {
       if (isMountedRef.current) console.error('Failed to load notes:', error);
     } finally {
       if (isMountedRef.current) setLoading(false);
     }
-  }, [showArchived, showBin, searchQuery]);
+  }, [showArchived, showBin, searchQuery, selectedLabelId]);
+
+  useEffect(() => {
+    loadLabels();
+  }, [loadLabels]);
 
   useEffect(() => {
     loadNotes();
@@ -144,7 +162,8 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     }
 
     loadNotes();
-  }, [editingNote, sharingNote, loadNotes, user?.id]);
+    loadLabels();
+  }, [editingNote, sharingNote, loadNotes, loadLabels, user?.id]);
 
   useSSE({
     onEvent: handleSSEEvent,
@@ -217,6 +236,19 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     setIsShareModalOpen(false);
     setSharingNote(null);
     loadNotes(); // Refresh notes to show updated sharing status
+  };
+
+  const handleLabelSelect = (labelId: string | null) => {
+    setSelectedLabelId(labelId);
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      if (labelId) {
+        next.set('label', labelId);
+      } else {
+        next.delete('label');
+      }
+      return next;
+    });
   };
 
   const handleDragEnd = async (event: DragEndEvent) => {
@@ -363,7 +395,32 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       </NavigationHeader>
 
       <div className="flex">
-        <Sidebar tabs={navigationTabs} />
+        <Sidebar tabs={navigationTabs}>
+          {labelsList.length > 0 && (
+            <div className="px-4 pb-4">
+              <div className="flex items-center gap-1.5 mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
+                <TagIcon className="h-3.5 w-3.5" />
+                {t('labels.title')}
+              </div>
+              <ul className="space-y-0.5">
+                {labelsList.map((label) => (
+                  <li key={label.id}>
+                    <button
+                      onClick={() => handleLabelSelect(selectedLabelId === label.id ? null : label.id)}
+                      className={`w-full text-left px-3 py-1.5 rounded-md text-sm truncate ${
+                        selectedLabelId === label.id
+                          ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium'
+                          : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-slate-700'
+                      }`}
+                    >
+                      {label.name}
+                    </button>
+                  </li>
+                ))}
+              </ul>
+            </div>
+          )}
+        </Sidebar>
 
         {/* Main content */}
         <main className="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
