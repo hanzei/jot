@@ -696,7 +696,7 @@ func (s *NoteStore) getLabelsByNoteIDs(noteIDs []string) (map[string][]Label, er
 	}
 	defer func() {
 		if err := rows.Close(); err != nil {
-			log.Printf("Failed to close rows: %v", err)
+			logrus.Errorf("Failed to close rows: %v", err)
 		}
 	}()
 
@@ -724,7 +724,7 @@ func (s *NoteStore) GetLabels(userID string) ([]Label, error) {
 	}
 	defer func() {
 		if err := rows.Close(); err != nil {
-			log.Printf("Failed to close rows: %v", err)
+			logrus.Errorf("Failed to close rows: %v", err)
 		}
 	}()
 
@@ -755,7 +755,7 @@ func (s *NoteStore) GetNoteLabels(noteID string) ([]Label, error) {
 	}
 	defer func() {
 		if err := rows.Close(); err != nil {
-			log.Printf("Failed to close rows: %v", err)
+			logrus.Errorf("Failed to close rows: %v", err)
 		}
 	}()
 
