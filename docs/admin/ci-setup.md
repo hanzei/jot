@@ -10,7 +10,8 @@ Jot uses GitHub Actions for automated testing, building, and publishing Docker i
 
 1. **Test** - Runs all tests (Go backend and React frontend)
 2. **Lint** - Code quality checks with golangci-lint and ESLint
-3. **Docker** - Builds and publishes Docker images to Docker Hub
+3. **Translations** - Verifies all locale files have the same keys as `en.json`
+4. **Docker** - Builds and publishes Docker images to Docker Hub
 
 ### Docker Hub Integration
 
@@ -80,6 +81,7 @@ task test-server
 task test-webapp
 task lint-server
 task lint-webapp
+task check-translations
 ```
 
 ### Testing Docker Builds Locally

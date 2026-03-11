@@ -58,9 +58,10 @@ task test            # Run all tests
 task test-server     # Run server tests
 task test-webapp     # Run webapp tests
 task coverage        # Run server tests with coverage report
-task lint            # Run linters
-task lint-server     # Run server linting with golangci-lint
-task lint-webapp     # Run webapp linting
+task lint                  # Run linters
+task lint-server           # Run server linting with golangci-lint
+task lint-webapp           # Run webapp linting
+task check-translations    # Check locale files for missing/extra keys
 ```
    
 3. **Access the application**:
