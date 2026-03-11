@@ -1,7 +1,6 @@
 package server
 
 import (
-	"log"
 	"net/http"
 	"path/filepath"
 	"os"
@@ -37,7 +36,7 @@ func New() *Server {
 
 	db, err := database.New(dbPath)
 	if err != nil {
-		log.Fatalf("Failed to initialize database: %v", err)
+		logrus.Fatalf("Failed to initialize database: %v", err)
 	}
 
 	userStore := models.NewUserStore(db.DB)
@@ -77,7 +76,7 @@ func New() *Server {
 }
 
 func (s *Server) setupRoutes() {
-	s.router.Use(middleware.Logger)
+	s.router.Use(logrusRequestLogger)
 	s.router.Use(middleware.Recoverer)
 	allowedOrigin := os.Getenv("CORS_ALLOWED_ORIGIN")
 	if allowedOrigin == "" {
@@ -147,7 +146,7 @@ func (s *Server) setupRoutes() {
 	staticDir = filepath.Clean(staticDir)
 	safeStaticDir := strings.NewReplacer("\n", "", "\r", "").Replace(staticDir)
 
-	log.Printf("Serving static files from: %s", safeStaticDir) // #nosec G706 -- safeStaticDir has newlines stripped
+	logrus.Infof("Serving static files from: %s", safeStaticDir) // #nosec G706 -- safeStaticDir has newlines stripped
 	filesDir := http.Dir(staticDir)
 	FileServer(s.router, "/", filesDir)
 }
@@ -181,7 +180,7 @@ func FileServer(r chi.Router, path string, root http.FileSystem) {
 			}
 			defer func() {
 				if err := indexFile.Close(); err != nil {
-					log.Printf("Failed to close index file: %v", err)
+					logrus.WithError(err).Error("Failed to close index file")
 				}
 			}()
 
@@ -191,7 +190,7 @@ func FileServer(r chi.Router, path string, root http.FileSystem) {
 		}
 		defer func() {
 			if err := file.Close(); err != nil {
-				log.Printf("Failed to close file: %v", err)
+				logrus.WithError(err).Error("Failed to close file")
 			}
 		}()
 
@@ -217,7 +216,7 @@ func (s *Server) wrapHandler(handler func(w http.ResponseWriter, r *http.Request
 func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	if _, err := w.Write([]byte("OK")); err != nil {
-		log.Printf("Failed to write health check response: %v", err)
+		logrus.WithError(err).Error("Failed to write health check response")
 	}
 }
 
@@ -229,8 +228,24 @@ func (s *Server) GetDB() *database.DB {
 	return s.db
 }
 
+func logrusRequestLogger(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		start := time.Now()
+		ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
+		next.ServeHTTP(ww, r)
+		logrus.WithFields(logrus.Fields{
+			"status":   ww.Status(),
+			"bytes":    ww.BytesWritten(),
+			"duration": time.Since(start).String(),
+			"method":   r.Method,
+			"path":     r.URL.Path,
+			"remote":   r.RemoteAddr,
+		}).Info("request completed")
+	})
+}
+
 func (s *Server) Start(addr string) error {
-	log.Printf("Server starting on %s", addr)
+	logrus.Infof("Server starting on %s", addr)
 	server := &http.Server{
 		Addr:         addr,
 		Handler:      s.router,

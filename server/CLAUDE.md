@@ -1,2 +1,3 @@
 - Use any instead of interface{}
 - Use errors.Is instead of == when comparing errors
+- Use logrus instead of the standard log package for all logging
