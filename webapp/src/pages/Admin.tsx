@@ -5,9 +5,10 @@ import { MagnifyingGlassIcon } from '@heroicons/react/24/outline';
 import { admin, auth, isAxiosError } from '@/utils/api';
 import { isAdmin, removeUser, getUser } from '@/utils/auth';
 import { ROLES } from '@/constants/roles';
-import { Navigate, Link, useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router-dom';
 import NavigationHeader from '@/components/NavigationHeader';
 import Sidebar from '@/components/Sidebar';
+import { useNavigationLinkTabs } from '@/hooks/useNavigationTabs';
 
 interface AdminProps {
   onLogout: () => void;
@@ -32,6 +33,7 @@ const Admin = ({ onLogout }: AdminProps) => {
   const [roleUpdating, setRoleUpdating] = useState<Set<string>>(new Set());
 
   const userIsAdmin = isAdmin();
+  const navigationTabs = useNavigationLinkTabs();
 
   useEffect(() => { document.title = t('pageTitle.admin'); }, [t]);
 
@@ -126,31 +128,6 @@ const Admin = ({ onLogout }: AdminProps) => {
       </div>
     );
   }
-
-  const navigationTabs = [
-    {
-      label: t('admin.tabNotes'),
-      element: (
-        <Link
-          to="/"
-          className="px-3 py-1 rounded-md text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
-        >
-          {t('admin.tabNotes')}
-        </Link>
-      )
-    },
-    {
-      label: t('admin.tabArchive'),
-      element: (
-        <Link
-          to="/?view=archive"
-          className="px-3 py-1 rounded-md text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
-        >
-          {t('admin.tabArchive')}
-        </Link>
-      )
-    }
-  ];
 
   const searchBar = (
     <div className="w-full sm:flex-1 sm:max-w-lg sm:mx-4">

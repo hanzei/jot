@@ -1,5 +1,5 @@
 import { useState, useEffect } from 'react';
-import { Link, useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router-dom';
 import { MagnifyingGlassIcon, ArrowUpTrayIcon } from '@heroicons/react/24/outline';
 import { useTranslation } from 'react-i18next';
 import i18n from '@/i18n';
@@ -10,6 +10,7 @@ import { getThemePreference, applyTheme, ThemePreference } from '@/utils/theme';
 import NavigationHeader from '@/components/NavigationHeader';
 import ImportModal from '@/components/ImportModal';
 import Sidebar from '@/components/Sidebar';
+import { useNavigationLinkTabs } from '@/hooks/useNavigationTabs';
 
 interface SettingsProps {
   onLogout: () => void;
@@ -169,30 +170,7 @@ const Settings = ({ onLogout }: SettingsProps) => {
     }
   };
 
-  const navigationTabs = [
-    {
-      label: t('settings.tabNotes'),
-      element: (
-        <Link
-          to="/"
-          className="px-3 py-1 rounded-md text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
-        >
-          {t('settings.tabNotes')}
-        </Link>
-      ),
-    },
-    {
-      label: t('dashboard.tabArchive'),
-      element: (
-        <Link
-          to="/?view=archive"
-          className="px-3 py-1 rounded-md text-sm font-medium text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white"
-        >
-          {t('dashboard.tabArchive')}
-        </Link>
-      ),
-    },
-  ];
+  const navigationTabs = useNavigationLinkTabs();
 
   const searchBar = (
     <div className="w-full sm:flex-1 sm:max-w-lg sm:mx-4">
