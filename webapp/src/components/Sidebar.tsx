@@ -8,9 +8,10 @@ interface SidebarTab {
 
 interface SidebarProps {
   tabs: SidebarTab[];
+  children?: ReactNode;
 }
 
-const Sidebar = ({ tabs }: SidebarProps) => {
+const Sidebar = ({ tabs, children }: SidebarProps) => {
   const [mobileOpen, setMobileOpen] = useState(false);
 
   return (
@@ -34,6 +35,11 @@ const Sidebar = ({ tabs }: SidebarProps) => {
           </div>
         ))}
       </nav>
+      {children && (
+        <div className={`${mobileOpen ? 'block' : 'hidden'} sm:block`}>
+          {children}
+        </div>
+      )}
     </aside>
   );
 };

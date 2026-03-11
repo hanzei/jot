@@ -1,11 +1,11 @@
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, useLocation } from 'react-router-dom'
 import { type ReactNode } from 'react'
 import Dashboard from '../Dashboard'
-import { Note } from '@/types'
-import { notes } from '@/utils/api'
+import { Note, Label } from '@/types'
+import { notes, labels } from '@/utils/api'
 import * as auth from '@/utils/auth'
 import { createMockNote } from '@/utils/__tests__/test-helpers'
 
@@ -20,6 +20,9 @@ vi.mock('@/utils/api', () => ({
   },
   auth: {
     logout: vi.fn(),
+  },
+  labels: {
+    getAll: vi.fn().mockResolvedValue([]),
   },
 }))
 
@@ -267,7 +270,7 @@ describe('Dashboard', () => {
       await user.type(searchInput, 'search term')
       
       await waitFor(() => {
-        expect(mockGetAll).toHaveBeenCalledWith(false, 'search term', false)
+        expect(mockGetAll).toHaveBeenCalledWith(false, 'search term', false, '')
       })
     })
 
@@ -286,7 +289,7 @@ describe('Dashboard', () => {
       await user.type(searchInput, specialChars)
       
       await waitFor(() => {
-        expect(mockGetAll).toHaveBeenCalledWith(false, specialChars, false)
+        expect(mockGetAll).toHaveBeenCalledWith(false, specialChars, false, '')
       })
     })
 
@@ -306,7 +309,7 @@ describe('Dashboard', () => {
       fireEvent.change(searchInput, { target: { value: longQuery } })
 
       await waitFor(() => {
-        expect(mockGetAll).toHaveBeenCalledWith(false, longQuery, false)
+        expect(mockGetAll).toHaveBeenCalledWith(false, longQuery, false, '')
       })
     })
 
@@ -327,7 +330,7 @@ describe('Dashboard', () => {
 
       // Should have been called with the final value
       await waitFor(() => {
-        expect(mockGetAll).toHaveBeenCalledWith(false, 'abc', false)
+        expect(mockGetAll).toHaveBeenCalledWith(false, 'abc', false, '')
       })
     })
   })
@@ -348,7 +351,7 @@ describe('Dashboard', () => {
       await user.click(archiveButton)
       
       await waitFor(() => {
-        expect(mockGetAll).toHaveBeenCalledWith(true, '', false)
+        expect(mockGetAll).toHaveBeenCalledWith(true, '', false, '')
       })
     })
 
@@ -376,7 +379,7 @@ describe('Dashboard', () => {
       renderDashboard(['/dashboard?view=archive'])
       
       await waitFor(() => {
-        expect(mockGetAll).toHaveBeenCalledWith(true, '', false)
+        expect(mockGetAll).toHaveBeenCalledWith(true, '', false, '')
       })
     })
 
@@ -390,7 +393,7 @@ describe('Dashboard', () => {
       renderDashboard(['/dashboard?view=bin'])
 
       await waitFor(() => {
-        expect(mockGetAll).toHaveBeenCalledWith(false, '', true)
+        expect(mockGetAll).toHaveBeenCalledWith(false, '', true, '')
       })
 
       // Bin-specific controls should be rendered
@@ -420,7 +423,7 @@ describe('Dashboard', () => {
       renderDashboard(['/dashboard?view=invalid'])
 
       await waitFor(() => {
-        expect(mockGetAll).toHaveBeenCalledWith(false, '', false)
+        expect(mockGetAll).toHaveBeenCalledWith(false, '', false, '')
       })
     })
   })
@@ -810,5 +813,190 @@ describe('Dashboard', () => {
         expect(screen.queryByTestId('note-modal')).not.toBeInTheDocument()
       })
     })
+  })
+
+  describe('Label Filtering', () => {
+    const mockLabels: Label[] = [
+      {
+        id: 'label-work',
+        user_id: 'user1',
+        name: 'work',
+        created_at: '2024-01-01T00:00:00Z',
+        updated_at: '2024-01-01T00:00:00Z',
+      },
+      {
+        id: 'label-personal',
+        user_id: 'user1',
+        name: 'personal',
+        created_at: '2024-01-01T00:00:00Z',
+        updated_at: '2024-01-01T00:00:00Z',
+      },
+    ]
+
+    beforeEach(() => {
+      vi.mocked(labels.getAll).mockResolvedValue(mockLabels)
+    })
+
+  it('renders label list in sidebar when labels exist', async () => {
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Dashboard onLogout={vi.fn()} />
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'work' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'personal' })).toBeInTheDocument()
+    })
+  })
+
+  it('does not render labels section when no labels exist', async () => {
+    vi.mocked(labels.getAll).mockResolvedValue([])
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Dashboard onLogout={vi.fn()} />
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByText('New Note')).toBeInTheDocument()
+    })
+
+    expect(screen.queryByRole('button', { name: 'work' })).not.toBeInTheDocument()
+  })
+
+  it('clicking a label calls getAll with that labelId', async () => {
+    const user = userEvent.setup()
+    const mockGetAll = vi.mocked(notes.getAll)
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Dashboard onLogout={vi.fn()} />
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'work' })).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('button', { name: 'work' }))
+
+    await waitFor(() => {
+      expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-work')
+    })
+  })
+
+  it('clicking active label again deselects and calls getAll with empty labelId', async () => {
+    const user = userEvent.setup()
+    const mockGetAll = vi.mocked(notes.getAll)
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Dashboard onLogout={vi.fn()} />
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'work' })).toBeInTheDocument()
+    })
+
+    // Select
+    await user.click(screen.getByRole('button', { name: 'work' }))
+    await waitFor(() => {
+      expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-work')
+    })
+
+    // Deselect
+    await user.click(screen.getByRole('button', { name: 'work' }))
+    await waitFor(() => {
+      const calls = mockGetAll.mock.calls
+      expect(calls[calls.length - 1]).toEqual([false, '', false, ''])
+    })
+  })
+
+  it('selecting a label updates search params (verified via getAll arg)', async () => {
+    const LocationProbe = () => {
+      const { search } = useLocation()
+      return <span data-testid="location-search">{search}</span>
+    }
+
+    const user = userEvent.setup()
+    const mockGetAll = vi.mocked(notes.getAll)
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Dashboard onLogout={vi.fn()} />
+        <LocationProbe />
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'personal' })).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('button', { name: 'personal' }))
+
+    // The label id is passed to getAll only after the URL param is set and
+    // the component re-renders with the new selectedLabelId from useSearchParams
+    await waitFor(() => {
+      expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-personal')
+    })
+
+    // Verify the search param was written to the URL
+    await waitFor(() => {
+      expect(screen.getByTestId('location-search').textContent).toContain('label=label-personal')
+    })
+  })
+
+  it('deselecting a label calls getAll with empty labelId', async () => {
+    const user = userEvent.setup()
+    const mockGetAll = vi.mocked(notes.getAll)
+
+    render(
+      <MemoryRouter initialEntries={['/?label=label-work']}>
+        <Dashboard onLogout={vi.fn()} />
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      // Initial load should use the label from URL
+      expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-work')
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'work' })).toBeInTheDocument()
+    })
+
+    // Click to deselect
+    await user.click(screen.getByRole('button', { name: 'work' }))
+
+    await waitFor(() => {
+      expect(mockGetAll).toHaveBeenCalledWith(false, '', false, '')
+    })
+  })
+
+  it('switching view clears label filter and calls getAll without labelId', async () => {
+    const user = userEvent.setup()
+    const mockGetAll = vi.mocked(notes.getAll)
+
+    render(
+      <MemoryRouter initialEntries={['/?label=label-work']}>
+        <Dashboard onLogout={vi.fn()} />
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'work' })).toBeInTheDocument()
+    })
+
+    // Switch to archive view
+    const archiveButton = screen.getByText('Archive')
+    await user.click(archiveButton)
+
+    await waitFor(() => {
+      expect(mockGetAll).toHaveBeenCalledWith(true, '', false, '')
+    })
+  })
   })
 })

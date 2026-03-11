@@ -162,7 +162,7 @@ func (s *NoteStore) Create(userID string, title, content string, noteType NoteTy
 	return &note, nil
 }
 
-func buildGetByUserIDQuery(userID string, archived bool, trashed bool, search string) (string, []any) {
+func buildGetByUserIDQuery(userID string, archived bool, trashed bool, search string, labelID string) (string, []any) {
 	var query string
 	var args []any
 	if trashed {
@@ -184,12 +184,16 @@ func buildGetByUserIDQuery(userID string, archived bool, trashed bool, search st
 		searchTerm := "%" + search + "%"
 		args = append(args, searchTerm, searchTerm, searchTerm)
 	}
+	if labelID != "" {
+		query += ` AND n.id IN (SELECT note_id FROM note_labels WHERE label_id = ?)`
+		args = append(args, labelID)
+	}
 	query += ` ORDER BY n.pinned DESC, n.position ASC`
 	return query, args
 }
 
-func (s *NoteStore) GetByUserID(userID string, archived bool, trashed bool, search string) ([]*Note, error) {
-	query, args := buildGetByUserIDQuery(userID, archived, trashed, search)
+func (s *NoteStore) GetByUserID(userID string, archived bool, trashed bool, search string, labelID string) ([]*Note, error) {
+	query, args := buildGetByUserIDQuery(userID, archived, trashed, search, labelID)
 
 	rows, err := s.db.Query(query, args...)
 	if err != nil {

@@ -165,6 +165,7 @@
     "menuOptions": "Notizoptionen"
   },
   "labels": {
+    "title": "Labels",
     "addLabels": "Labels hinzufügen",
     "searchPlaceholder": "Label suchen oder erstellen...",
     "createLabel": "\"{{name}}\" erstellen",

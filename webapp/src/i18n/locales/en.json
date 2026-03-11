@@ -165,6 +165,7 @@
     "menuOptions": "Note options"
   },
   "labels": {
+    "title": "Labels",
     "addLabels": "Add labels",
     "searchPlaceholder": "Search or create label...",
     "createLabel": "Create \"{{name}}\"",

@@ -88,8 +88,9 @@ func (h *NotesHandler) GetNotes(w http.ResponseWriter, r *http.Request) (int, er
 	trashed := r.URL.Query().Get("trashed") == "true"
 	archived := r.URL.Query().Get("archived") == "true"
 	search := r.URL.Query().Get("search")
+	labelID := r.URL.Query().Get("label")
 
-	notes, err := h.noteStore.GetByUserID(user.ID, archived, trashed, search)
+	notes, err := h.noteStore.GetByUserID(user.ID, archived, trashed, search, labelID)
 	if err != nil {
 		return http.StatusInternalServerError, err
 	}
