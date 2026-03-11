@@ -2,9 +2,10 @@ package server
 
 import (
 	"encoding/json"
+	"fmt"
 	"net/http"
-	"path/filepath"
 	"os"
+	"path/filepath"
 	"strings"
 	"time"
 
@@ -258,7 +259,7 @@ type aboutResponse struct {
 func (s *Server) handleAbout(w http.ResponseWriter, _ *http.Request) (int, error) {
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(aboutResponse{Version: version, Commit: commit}); err != nil {
-		return http.StatusInternalServerError, err
+		return http.StatusInternalServerError, fmt.Errorf("encoding about response: %w", err)
 	}
 	return 0, nil
 }

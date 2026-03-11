@@ -1,4 +1,7 @@
 {
+  "common": {
+    "close": "Schließen"
+  },
   "nav": {
     "settings": "Einstellungen",
     "admin": "Admin",

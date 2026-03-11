@@ -1,4 +1,7 @@
 {
+  "common": {
+    "close": "Close"
+  },
   "nav": {
     "settings": "Settings",
     "admin": "Admin",

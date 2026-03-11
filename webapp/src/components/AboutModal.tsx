@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState, useEffect, useMemo } from 'react';
 import { Dialog } from '@headlessui/react';
 import { XMarkIcon } from '@heroicons/react/24/outline';
 import { useTranslation } from 'react-i18next';
@@ -12,20 +12,22 @@ interface AboutModalProps {
 }
 
 export default function AboutModal({ isOpen, onClose }: AboutModalProps) {
-  const { t } = useTranslation();
-  const user = getUser();
+  const { t, i18n } = useTranslation();
+  const user = useMemo(() => getUser(), []);
   const [serverInfo, setServerInfo] = useState<AboutInfo | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
 
   useEffect(() => {
     if (!isOpen) return;
+    let cancelled = false;
     setIsLoading(true);
     setError('');
     about.get()
-      .then(info => setServerInfo(info))
-      .catch(() => setError(t('about.failedLoad')))
-      .finally(() => setIsLoading(false));
+      .then(info => { if (!cancelled) setServerInfo(info); })
+      .catch(() => { if (!cancelled) setError(t('about.failedLoad')); })
+      .finally(() => { if (!cancelled) setIsLoading(false); });
+    return () => { cancelled = true; };
   }, [isOpen, t]);
 
   const handleClose = () => {
@@ -47,6 +49,7 @@ export default function AboutModal({ isOpen, onClose }: AboutModalProps) {
               </Dialog.Title>
               <button
                 onClick={handleClose}
+                aria-label={t('common.close')}
                 className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
               >
                 <XMarkIcon className="h-5 w-5" />
@@ -74,7 +77,7 @@ export default function AboutModal({ isOpen, onClose }: AboutModalProps) {
                   <div className="flex justify-between text-sm">
                     <dt className="text-gray-500 dark:text-gray-400">{t('about.accountCreated')}</dt>
                     <dd className="text-gray-900 dark:text-white font-mono">
-                      {user?.created_at ? new Date(user.created_at).toLocaleDateString() : '—'}
+                      {user?.created_at ? new Date(user.created_at).toLocaleDateString(i18n.resolvedLanguage) : '—'}
                     </dd>
                   </div>
                 </dl>
