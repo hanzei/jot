@@ -1,4 +1,5 @@
-import { ReactNode } from 'react';
+import { ReactNode, useState } from 'react';
+import { Bars3Icon, XMarkIcon } from '@heroicons/react/24/outline';
 
 interface SidebarTab {
   label: string;
@@ -10,9 +11,22 @@ interface SidebarProps {
 }
 
 const Sidebar = ({ tabs }: SidebarProps) => {
+  const [mobileOpen, setMobileOpen] = useState(false);
+
   return (
-    <aside className="hidden sm:flex flex-col w-48 min-h-screen bg-white dark:bg-slate-800 border-r border-gray-200 dark:border-slate-700 shrink-0">
-      <nav className="flex flex-col space-y-1 p-4">
+    <aside className="flex flex-col sm:w-48 h-full bg-white dark:bg-slate-800 border-b sm:border-b-0 sm:border-r border-gray-200 dark:border-slate-700 shrink-0">
+      <button
+        className="sm:hidden flex items-center px-4 py-3 text-gray-600 dark:text-gray-300"
+        aria-label={mobileOpen ? 'Close navigation' : 'Open navigation'}
+        onClick={() => setMobileOpen(o => !o)}
+      >
+        {mobileOpen ? (
+          <XMarkIcon className="h-5 w-5" />
+        ) : (
+          <Bars3Icon className="h-5 w-5" />
+        )}
+      </button>
+      <nav className={`flex-col space-y-1 p-4 ${mobileOpen ? 'flex' : 'hidden'} sm:flex`}>
         {tabs.map((tab) => (
           <div key={tab.label}>
             {tab.element}

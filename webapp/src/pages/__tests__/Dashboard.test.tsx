@@ -179,12 +179,18 @@ describe('Dashboard', () => {
     })
 
     it('renders navigation tabs correctly', async () => {
+      const user = userEvent.setup()
       renderDashboard()
 
       await waitFor(() => {
-        expect(screen.getByText('Notes')).toBeInTheDocument()
-        expect(screen.getByText('Archive')).toBeInTheDocument()
+        expect(screen.getByLabelText('Open navigation')).toBeInTheDocument()
       })
+
+      const toggle = screen.getByLabelText('Open navigation')
+      await user.click(toggle)
+
+      expect(screen.getByText('Notes')).toBeInTheDocument()
+      expect(screen.getByText('Archive')).toBeInTheDocument()
     })
 
     it('shows admin link for admin users', async () => {
