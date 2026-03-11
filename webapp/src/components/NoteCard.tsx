@@ -138,30 +138,34 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, onRestore, o
           <div className="py-1">
             {inBin ? (
               <>
-                <Menu.Item>
-                  {({ active }) => (
-                    <button
-                      onClick={handleRestore}
-                      className={`${active ? 'bg-gray-100 dark:bg-slate-700' : ''
-                        } flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-200`}
-                    >
-                      <ArrowUturnLeftIcon className="h-4 w-4 mr-2" />
-                      {t('note.restore')}
-                    </button>
-                  )}
-                </Menu.Item>
-                <Menu.Item>
-                  {({ active }) => (
-                    <button
-                      onClick={handlePermanentlyDelete}
-                      className={`${active ? 'bg-gray-100 dark:bg-slate-700' : ''
-                        } flex items-center w-full px-4 py-2 text-sm text-red-600 dark:text-red-400`}
-                    >
-                      <TrashIcon className="h-4 w-4 mr-2" />
-                      {t('note.deleteForever')}
-                    </button>
-                  )}
-                </Menu.Item>
+                {onRestore && (
+                  <Menu.Item>
+                    {({ active }) => (
+                      <button
+                        onClick={handleRestore}
+                        className={`${active ? 'bg-gray-100 dark:bg-slate-700' : ''
+                          } flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-200`}
+                      >
+                        <ArrowUturnLeftIcon className="h-4 w-4 mr-2" />
+                        {t('note.restore')}
+                      </button>
+                    )}
+                  </Menu.Item>
+                )}
+                {onPermanentlyDelete && (
+                  <Menu.Item>
+                    {({ active }) => (
+                      <button
+                        onClick={handlePermanentlyDelete}
+                        className={`${active ? 'bg-gray-100 dark:bg-slate-700' : ''
+                          } flex items-center w-full px-4 py-2 text-sm text-red-600 dark:text-red-400`}
+                      >
+                        <TrashIcon className="h-4 w-4 mr-2" />
+                        {t('note.deleteForever')}
+                      </button>
+                    )}
+                  </Menu.Item>
+                )}
               </>
             ) : (
               <>

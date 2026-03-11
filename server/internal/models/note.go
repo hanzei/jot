@@ -312,7 +312,7 @@ func (s *NoteStore) Update(id string, userID string, title, content string, pinn
 		return fmt.Errorf("failed to check access: %w", err)
 	}
 	if !hasAccess {
-		return fmt.Errorf("note not found or no access")
+		return ErrNoteNoAccess
 	}
 
 	// Get current note state to check if pinned status is changing
@@ -453,14 +453,15 @@ func (s *NoteStore) RestoreFromTrash(id string, userID string) error {
 		return ErrNoteNotOwnedByUser
 	}
 
-	// Shift active unpinned notes down to make room at position 0.
-	shiftQuery := `UPDATE notes SET position = position + 1
-	               WHERE user_id = ? AND pinned = FALSE AND archived = FALSE AND deleted_at IS NULL`
-	if _, err = s.db.Exec(shiftQuery, userID); err != nil {
-		return fmt.Errorf("failed to shift notes before restore: %w", err)
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
+	defer func() { _ = tx.Rollback() }()
 
-	result, err := s.db.Exec(
+	// Restore the note first — if it's not actually in the trash we bail out
+	// before shifting any positions.
+	result, err := tx.Exec(
 		`UPDATE notes SET deleted_at = NULL, pinned = FALSE, archived = FALSE, position = 0, updated_at = CURRENT_TIMESTAMP
 		 WHERE id = ? AND user_id = ? AND deleted_at IS NOT NULL`,
 		id, userID,
@@ -475,6 +476,17 @@ func (s *NoteStore) RestoreFromTrash(id string, userID string) error {
 	}
 	if rowsAffected == 0 {
 		return ErrNoteNotInTrash
+	}
+
+	// Shift existing active unpinned notes down to make room at position 0.
+	shiftQuery := `UPDATE notes SET position = position + 1
+	               WHERE user_id = ? AND pinned = FALSE AND archived = FALSE AND deleted_at IS NULL AND id != ?`
+	if _, err = tx.Exec(shiftQuery, userID, id); err != nil {
+		return fmt.Errorf("failed to shift notes after restore: %w", err)
+	}
+
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit restore transaction: %w", err)
 	}
 
 	return nil

@@ -381,12 +381,36 @@ describe('Dashboard', () => {
     })
 
     it('loads bin view from URL parameter', async () => {
+      const mockNote = createMockNote({ id: 'bin-note-1', title: 'Binned Note' })
       const mockGetAll = vi.mocked(notes.getAll)
+      mockGetAll.mockResolvedValue([mockNote])
+      vi.mocked(notes.restore).mockResolvedValue(mockNote)
+      vi.mocked(notes.permanentlyDelete).mockResolvedValue(undefined)
 
       renderDashboard(['/dashboard?view=bin'])
 
       await waitFor(() => {
         expect(mockGetAll).toHaveBeenCalledWith(false, '', true)
+      })
+
+      // Bin-specific controls should be rendered
+      await waitFor(() => {
+        expect(screen.getByTestId('restore-bin-note-1')).toBeInTheDocument()
+        expect(screen.getByTestId('permanently-delete-bin-note-1')).toBeInTheDocument()
+      })
+
+      // Restore handler wires up correctly
+      fireEvent.click(screen.getByTestId('restore-bin-note-1'))
+      await waitFor(() => {
+        expect(vi.mocked(notes.restore)).toHaveBeenCalledWith('bin-note-1')
+      })
+
+      mockGetAll.mockResolvedValue([mockNote])
+
+      // Permanently delete handler wires up correctly
+      fireEvent.click(screen.getByTestId('permanently-delete-bin-note-1'))
+      await waitFor(() => {
+        expect(vi.mocked(notes.permanentlyDelete)).toHaveBeenCalledWith('bin-note-1')
       })
     })
 

@@ -231,7 +231,7 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 
 	err := h.noteStore.Update(id, user.ID, req.Title, req.Content, req.Pinned, req.Archived, req.Color, req.CheckedItemsCollapsed)
 	if err != nil {
-		if errors.Is(err, models.ErrNoteNotFound) || err.Error() == "note not found or no access" {
+		if errors.Is(err, models.ErrNoteNotFound) || errors.Is(err, models.ErrNoteNoAccess) {
 			return http.StatusNotFound, err
 		}
 		return http.StatusInternalServerError, err
