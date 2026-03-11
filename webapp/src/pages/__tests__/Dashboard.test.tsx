@@ -1,7 +1,7 @@
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { MemoryRouter } from 'react-router-dom'
+import { MemoryRouter, useLocation } from 'react-router-dom'
 import { type ReactNode } from 'react'
 import Dashboard from '../Dashboard'
 import { Note, Label } from '@/types'
@@ -910,17 +910,24 @@ describe('Dashboard', () => {
     // Deselect
     await user.click(screen.getByRole('button', { name: 'work' }))
     await waitFor(() => {
-      expect(mockGetAll).toHaveBeenCalledWith(false, '', false, '')
+      const calls = mockGetAll.mock.calls
+      expect(calls[calls.length - 1]).toEqual([false, '', false, ''])
     })
   })
 
   it('selecting a label updates search params (verified via getAll arg)', async () => {
+    const LocationProbe = () => {
+      const { search } = useLocation()
+      return <span data-testid="location-search">{search}</span>
+    }
+
     const user = userEvent.setup()
     const mockGetAll = vi.mocked(notes.getAll)
 
     render(
       <MemoryRouter initialEntries={['/']}>
         <Dashboard onLogout={vi.fn()} />
+        <LocationProbe />
       </MemoryRouter>
     )
 
@@ -934,6 +941,11 @@ describe('Dashboard', () => {
     // the component re-renders with the new selectedLabelId from useSearchParams
     await waitFor(() => {
       expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-personal')
+    })
+
+    // Verify the search param was written to the URL
+    await waitFor(() => {
+      expect(screen.getByTestId('location-search').textContent).toContain('label=label-personal')
     })
   })
 
