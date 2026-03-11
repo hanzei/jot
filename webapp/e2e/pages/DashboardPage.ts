@@ -143,6 +143,8 @@ export class DashboardPage {
     await this.page.getByRole('button', { name: 'Create new...' }).click();
     await this.page.getByPlaceholder('Label name...').fill(labelName);
     await this.page.keyboard.press('Enter');
+    // Wait for the label to be created and checked before closing the modal
+    await expect(this.page.getByRole('checkbox', { name: labelName })).toBeChecked();
     // Closing the modal also dismisses the picker (outside-click fires on mousedown)
     await this.page.locator('button[aria-label="Close"]').click();
     await expect(this.page.locator('[data-testid="note-card"]').filter({
