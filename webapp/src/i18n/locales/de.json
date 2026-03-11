@@ -44,7 +44,6 @@
   "settings": {
     "title": "Einstellungen",
     "tabNotes": "Notizen",
-    "tabSettings": "Einstellungen",
     "accountSection": "Konto",
     "usernameLabel": "Benutzername",
     "usernamePlaceholder": "Benutzername (2–30 Zeichen)",

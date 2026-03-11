@@ -32,8 +32,8 @@ vi.mock('@/utils/auth', () => ({
 }))
 
 vi.mock('@/components/NavigationHeader', () => ({
-  default: ({ onLogout, username }: { onLogout?: () => void; username?: string; tabs?: unknown[]; children?: ReactNode }) => (
-    <div data-testid="navigation-header">
+  default: ({ onLogout, username, settingsLinkActive, isAdmin }: { onLogout?: () => void; username?: string; tabs?: unknown[]; children?: ReactNode; settingsLinkActive?: boolean; isAdmin?: boolean }) => (
+    <div data-testid="navigation-header" data-settings-link-active={settingsLinkActive} data-is-admin={isAdmin}>
       <span data-testid="displayed-username">{username}</span>
       <button onClick={onLogout} data-testid="logout-button">Logout</button>
     </div>
@@ -80,6 +80,22 @@ describe('Settings', () => {
     it('passes current username to the navigation header', () => {
       renderSettings()
       expect(screen.getByTestId('displayed-username')).toHaveTextContent('testuser')
+    })
+
+    it('passes settingsLinkActive to NavigationHeader', () => {
+      renderSettings()
+      expect(screen.getByTestId('navigation-header')).toHaveAttribute('data-settings-link-active', 'true')
+    })
+
+    it('passes isAdmin to NavigationHeader for non-admin user', () => {
+      renderSettings()
+      expect(screen.getByTestId('navigation-header')).toHaveAttribute('data-is-admin', 'false')
+    })
+
+    it('passes isAdmin to NavigationHeader for admin user', () => {
+      vi.mocked(authUtils.isAdmin).mockReturnValue(true)
+      renderSettings()
+      expect(screen.getByTestId('navigation-header')).toHaveAttribute('data-is-admin', 'true')
     })
 
     it('renders without errors when user is not logged in', () => {
