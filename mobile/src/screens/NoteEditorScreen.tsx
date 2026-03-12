@@ -379,6 +379,9 @@ export default function NoteEditorScreen() {
     () => new Map(items.map((item, i) => [item.id, i])),
     [items],
   );
+  const itemIndexMapRef = useRef(itemIndexMap);
+  itemIndexMapRef.current = itemIndexMap;
+
   const uncheckedItems = useMemo(() => items.filter((item) => !item.completed), [items]);
   const checkedItems = useMemo(() => items.filter((item) => item.completed), [items]);
 
@@ -402,7 +405,7 @@ export default function NoteEditorScreen() {
 
   const renderTodoItem = useCallback(
     ({ item, drag, isActive }: { item: LocalItem; drag: () => void; isActive: boolean }) => {
-      const originalIndex = itemIndexMap.get(item.id);
+      const originalIndex = itemIndexMapRef.current.get(item.id);
       if (originalIndex === undefined) return null;
       return (
         <ScaleDecorator>
@@ -422,7 +425,7 @@ export default function NoteEditorScreen() {
         </ScaleDecorator>
       );
     },
-    [itemIndexMap, handleToggleItem, handleItemTextChange, handleDeleteItem, handleAddItem],
+    [handleToggleItem, handleItemTextChange, handleDeleteItem, handleAddItem],
   );
 
   const noteBackground = color && color !== '#ffffff' ? color : '#fff';

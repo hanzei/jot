@@ -32,6 +32,12 @@ interface NotesListScreenProps {
 type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'MainTabs'>;
 
 const SEARCH_DEBOUNCE_MS = 300;
+const EMPTY_NOTES: Note[] = [];
+
+interface LocalReorderState {
+  pinned: Note[] | null;
+  unpinned: Note[] | null;
+}
 
 export default function NotesListScreen({ variant = 'notes' }: NotesListScreenProps) {
   const [searchText, setSearchText] = useState('');
@@ -39,8 +45,7 @@ export default function NotesListScreen({ variant = 'notes' }: NotesListScreenPr
   const [selectedLabelId, setSelectedLabelId] = useState<string | undefined>(undefined);
   const [contextMenuNote, setContextMenuNote] = useState<Note | null>(null);
   const [colorPickerNote, setColorPickerNote] = useState<Note | null>(null);
-  const [localPinnedOrder, setLocalPinnedOrder] = useState<Note[] | null>(null);
-  const [localUnpinnedOrder, setLocalUnpinnedOrder] = useState<Note[] | null>(null);
+  const [localOrder, setLocalOrder] = useState<LocalReorderState>({ pinned: null, unpinned: null });
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Debounce search input by 300ms
@@ -185,12 +190,11 @@ export default function NotesListScreen({ variant = 'notes' }: NotesListScreenPr
 
   // Clear local order overrides when server data changes
   useEffect(() => {
-    setLocalPinnedOrder(null);
-    setLocalUnpinnedOrder(null);
+    setLocalOrder({ pinned: null, unpinned: null });
   }, [notes]);
 
-  const displayPinned = localPinnedOrder ?? pinnedNotes;
-  const displayUnpinned = localUnpinnedOrder ?? otherNotes;
+  const displayPinned = localOrder.pinned ?? pinnedNotes;
+  const displayUnpinned = localOrder.unpinned ?? otherNotes;
 
   // Refs to avoid stale closures in handleDragEnd
   const displayPinnedRef = useRef(displayPinned);
@@ -200,14 +204,23 @@ export default function NotesListScreen({ variant = 'notes' }: NotesListScreenPr
 
   const hasPinned = variant === 'notes' && pinnedNotes.length > 0;
 
+  const listEmptyComponent = useMemo(
+    () =>
+      debouncedSearch || selectedLabelId ? (
+        <View style={styles.emptySearchContainer}>
+          <Text style={styles.emptySubtext}>No notes match your search</Text>
+        </View>
+      ) : null,
+    [debouncedSearch, selectedLabelId],
+  );
+
   const handleDragEnd = useCallback(
     async (newData: Note[], isPinnedSection: boolean) => {
       // Optimistically update local order
-      if (isPinnedSection) {
-        setLocalPinnedOrder(newData);
-      } else {
-        setLocalUnpinnedOrder(newData);
-      }
+      setLocalOrder(prev => isPinnedSection
+        ? { ...prev, pinned: newData }
+        : { ...prev, unpinned: newData },
+      );
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
 
       // Build full reorder payload: pinned first, then unpinned
@@ -223,15 +236,24 @@ export default function NotesListScreen({ variant = 'notes' }: NotesListScreenPr
         await reorderNotes.mutateAsync(allIds);
       } catch {
         // Revert optimistic update
-        if (isPinnedSection) {
-          setLocalPinnedOrder(null);
-        } else {
-          setLocalUnpinnedOrder(null);
-        }
+        setLocalOrder(prev => isPinnedSection
+          ? { ...prev, pinned: null }
+          : { ...prev, unpinned: null },
+        );
         Alert.alert('Error', 'Failed to reorder notes');
       }
     },
     [reorderNotes],
+  );
+
+  const handleDragEndPinned = useCallback(
+    ({ data }: { data: Note[] }) => handleDragEnd(data, true),
+    [handleDragEnd],
+  );
+
+  const handleDragEndUnpinned = useCallback(
+    ({ data }: { data: Note[] }) => handleDragEnd(data, false),
+    [handleDragEnd],
   );
 
   const handleDragStart = useCallback(() => {
@@ -421,7 +443,7 @@ export default function NotesListScreen({ variant = 'notes' }: NotesListScreenPr
                 keyExtractor={(item) => item.id}
                 renderItem={renderDraggableNoteCard}
                 onDragBegin={handleDragStart}
-                onDragEnd={({ data }) => handleDragEnd(data, true)}
+                onDragEnd={handleDragEndPinned}
                 scrollEnabled={false}
               />
             </>
@@ -434,7 +456,7 @@ export default function NotesListScreen({ variant = 'notes' }: NotesListScreenPr
                 keyExtractor={(item) => item.id}
                 renderItem={renderDraggableNoteCard}
                 onDragBegin={handleDragStart}
-                onDragEnd={({ data }) => handleDragEnd(data, false)}
+                onDragEnd={handleDragEndUnpinned}
                 scrollEnabled={false}
               />
             </>
@@ -451,36 +473,24 @@ export default function NotesListScreen({ variant = 'notes' }: NotesListScreenPr
           keyExtractor={(item) => item.id}
           renderItem={renderDraggableNoteCard}
           onDragBegin={handleDragStart}
-          onDragEnd={({ data }) => handleDragEnd(data, false)}
+          onDragEnd={handleDragEndUnpinned}
           refreshControl={
             <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor="#2563eb" />
           }
           contentContainerStyle={styles.listContent}
-          ListEmptyComponent={
-            debouncedSearch || selectedLabelId ? (
-              <View style={styles.emptySearchContainer}>
-                <Text style={styles.emptySubtext}>No notes match your search</Text>
-              </View>
-            ) : null
-          }
+          ListEmptyComponent={listEmptyComponent}
           testID="notes-flat-list"
         />
       ) : (
         <FlatList
-          data={notes ?? []}
+          data={notes ?? EMPTY_NOTES}
           keyExtractor={(item) => item.id}
           renderItem={renderNonDraggableNoteCard}
           refreshControl={
             <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor="#2563eb" />
           }
           contentContainerStyle={styles.listContent}
-          ListEmptyComponent={
-            debouncedSearch || selectedLabelId ? (
-              <View style={styles.emptySearchContainer}>
-                <Text style={styles.emptySubtext}>No notes match your search</Text>
-              </View>
-            ) : null
-          }
+          ListEmptyComponent={listEmptyComponent}
           testID="notes-flat-list"
         />
       )}
