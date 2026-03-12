@@ -336,9 +336,11 @@ func (h *AuthHandler) UploadProfileIcon(w http.ResponseWriter, r *http.Request) 
 		return http.StatusUnauthorized, errors.New("unauthorized")
 	}
 
-	r.Body = http.MaxBytesReader(w, r.Body, 2<<20)
-	if err := r.ParseMultipartForm(2 << 20); err != nil {
-		return http.StatusBadRequest, errors.New("file too large (max 2 MB)")
+	const fileLimit = int64(2 << 20)
+	const overhead = int64(64 << 10)
+	r.Body = http.MaxBytesReader(w, r.Body, fileLimit+overhead)
+	if err := r.ParseMultipartForm(fileLimit); err != nil {
+		return http.StatusBadRequest, fmt.Errorf("file too large (max %d MB)", fileLimit>>20)
 	}
 
 	file, _, err := r.FormFile("file")
@@ -363,7 +365,7 @@ func (h *AuthHandler) UploadProfileIcon(w http.ResponseWriter, r *http.Request) 
 
 	user, err := h.userStore.GetByID(currentUser.ID)
 	if err != nil {
-		return http.StatusInternalServerError, err
+		return http.StatusInternalServerError, fmt.Errorf("fetch user by id: %w", err)
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -397,7 +399,7 @@ func (h *AuthHandler) GetUserProfileIcon(w http.ResponseWriter, r *http.Request)
 		if errors.Is(err, models.ErrUserNotFound) {
 			return http.StatusNotFound, errors.New("user not found")
 		}
-		return http.StatusInternalServerError, err
+		return http.StatusInternalServerError, fmt.Errorf("fetch profile icon: %w", err)
 	}
 	if len(data) == 0 {
 		return http.StatusNotFound, errors.New("no profile icon set")
