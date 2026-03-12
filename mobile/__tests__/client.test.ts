@@ -23,9 +23,11 @@ jest.mock('axios', () => {
   };
 });
 
-// Get the mock instance that was created
-const mockAxiosInstance = (axios as unknown as { create: jest.Mock }).create.mock.results[0]?.value ||
-  (axios as unknown as { __mockInstance: Record<string, jest.Mock> }).__mockInstance;
+jest.mock('react-native', () => ({
+  Platform: { OS: 'ios' },
+}));
+
+const mockAxiosInstance = (axios as unknown as { __mockInstance: Record<string, jest.Mock> }).__mockInstance;
 
 const mockSecureStore = SecureStore as unknown as {
   getItemAsync: jest.Mock;
@@ -55,6 +57,24 @@ describe('API Client', () => {
       expect(mockSecureStore.setItemAsync).toHaveBeenCalledWith('jot_session', 'abc123');
       expect(result).toEqual(mockResponse.data);
     });
+
+    it('does not store session when set-cookie header is missing', async () => {
+      const mockResponse = {
+        data: { user: { id: '1', username: 'test' }, settings: { theme: 'system' } },
+        headers: {},
+      };
+      mockAxiosInstance.post.mockResolvedValueOnce(mockResponse);
+
+      await auth.login({ username: 'test', password: 'pass' });
+
+      expect(mockSecureStore.setItemAsync).not.toHaveBeenCalled();
+    });
+
+    it('throws on network error', async () => {
+      mockAxiosInstance.post.mockRejectedValueOnce(new Error('Network Error'));
+
+      await expect(auth.login({ username: 'test', password: 'pass' })).rejects.toThrow('Network Error');
+    });
   });
 
   describe('auth.register', () => {
@@ -74,6 +94,12 @@ describe('API Client', () => {
       expect(mockSecureStore.setItemAsync).toHaveBeenCalledWith('jot_session', 'def456');
       expect(result).toEqual(mockResponse.data);
     });
+
+    it('throws on network error', async () => {
+      mockAxiosInstance.post.mockRejectedValueOnce(new Error('Network Error'));
+
+      await expect(auth.register({ username: 'new', password: 'pass' })).rejects.toThrow('Network Error');
+    });
   });
 
   describe('auth.logout', () => {
@@ -83,6 +109,14 @@ describe('API Client', () => {
       await auth.logout();
 
       expect(mockAxiosInstance.post).toHaveBeenCalledWith('/logout');
+      expect(mockSecureStore.deleteItemAsync).toHaveBeenCalledWith('jot_session');
+    });
+
+    it('clears stored session even when server call fails', async () => {
+      mockAxiosInstance.post.mockRejectedValueOnce(new Error('Network Error'));
+
+      await auth.logout();
+
       expect(mockSecureStore.deleteItemAsync).toHaveBeenCalledWith('jot_session');
     });
   });
@@ -98,6 +132,12 @@ describe('API Client', () => {
 
       expect(mockAxiosInstance.get).toHaveBeenCalledWith('/me');
       expect(result).toEqual(mockResponse.data);
+    });
+
+    it('throws on network error', async () => {
+      mockAxiosInstance.get.mockRejectedValueOnce(new Error('Network Error'));
+
+      await expect(auth.me()).rejects.toThrow('Network Error');
     });
   });
 

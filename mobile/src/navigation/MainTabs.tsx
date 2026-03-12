@@ -1,6 +1,6 @@
 import React from 'react';
 import { createBottomTabNavigator } from '@react-navigation/bottom-tabs';
-import { Text } from 'react-native';
+import Ionicons from '@expo/vector-icons/Ionicons';
 import NotesListScreen from '../screens/NotesListScreen';
 
 export type MainTabsParamList = {
@@ -23,21 +23,20 @@ function TrashTab() {
   return <NotesListScreen variant="trash" />;
 }
 
-function TabIcon({ label, color }: { label: string; color: string }) {
-  const icons: Record<string, string> = {
-    Notes: '\u{1F4DD}',
-    Archived: '\u{1F4E6}',
-    Trash: '\u{1F5D1}',
-  };
-  return <Text style={{ fontSize: 20, color }}>{icons[label] || '?'}</Text>;
-}
+const tabIcons: Record<string, keyof typeof Ionicons.glyphMap> = {
+  Notes: 'document-text-outline',
+  Archived: 'archive-outline',
+  Trash: 'trash-outline',
+};
 
 export default function MainTabs() {
   return (
     <Tab.Navigator
       screenOptions={({ route }) => ({
         headerShown: true,
-        tabBarIcon: ({ color }) => <TabIcon label={route.name} color={color} />,
+        tabBarIcon: ({ color, size }) => (
+          <Ionicons name={tabIcons[route.name] || 'help-outline'} size={size} color={color} />
+        ),
         tabBarActiveTintColor: '#2563eb',
         tabBarInactiveTintColor: '#999',
       })}

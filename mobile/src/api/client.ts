@@ -1,11 +1,18 @@
 import axios, { AxiosHeaders } from 'axios';
 import * as SecureStore from 'expo-secure-store';
+import { Platform } from 'react-native';
 import { AuthResponse, LoginRequest, RegisterRequest } from '../types';
 
 const SESSION_KEY = 'jot_session';
 
-// Default to localhost; override via environment or config for real devices.
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL || 'http://10.0.2.2:8080';
+function getDefaultBaseUrl(): string {
+  if (Platform.OS === 'android') {
+    return 'http://10.0.2.2:8080';
+  }
+  return 'http://localhost:8080';
+}
+
+const BASE_URL = process.env.EXPO_PUBLIC_API_URL || getDefaultBaseUrl();
 
 const api = axios.create({
   baseURL: `${BASE_URL}/api/v1`,
@@ -38,7 +45,7 @@ api.interceptors.request.use(async (config) => {
 // On 401, clear stored session (handled by AuthContext for navigation)
 let onUnauthorized: (() => void) | null = null;
 
-export function setOnUnauthorized(cb: () => void): void {
+export function setOnUnauthorized(cb: (() => void) | null): void {
   onUnauthorized = cb;
 }
 
@@ -78,7 +85,11 @@ export const auth = {
   },
 
   logout: async (): Promise<void> => {
-    await api.post('/logout');
+    try {
+      await api.post('/logout');
+    } catch {
+      // Best-effort: always clear local session even if server call fails
+    }
     await SecureStore.deleteItemAsync(SESSION_KEY);
   },
 

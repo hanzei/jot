@@ -30,6 +30,7 @@ export default function RegisterScreen({ navigation }: RegisterScreenProps) {
       return 'Username must be 2-30 characters';
     }
     if (!password.trim()) return 'Password is required';
+    if (password.length < 8) return 'Password must be at least 8 characters';
     return null;
   };
 
@@ -70,6 +71,7 @@ export default function RegisterScreen({ navigation }: RegisterScreenProps) {
           autoCorrect={false}
           value={username}
           onChangeText={setUsername}
+          accessibilityLabel="Username"
           testID="username-input"
         />
 
@@ -79,6 +81,7 @@ export default function RegisterScreen({ navigation }: RegisterScreenProps) {
           secureTextEntry
           value={password}
           onChangeText={setPassword}
+          accessibilityLabel="Password"
           testID="password-input"
         />
 

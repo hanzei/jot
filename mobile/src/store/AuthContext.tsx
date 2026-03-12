@@ -14,6 +14,11 @@ interface AuthState {
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
 
+function isUnauthorizedError(error: unknown): boolean {
+  const status = (error as { response?: { status?: number } })?.response?.status;
+  return status === 401 || status === 403;
+}
+
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [settings, setSettings] = useState<UserSettings | null>(null);
@@ -26,6 +31,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
   useEffect(() => {
     setOnUnauthorized(clearAuth);
+    return () => {
+      setOnUnauthorized(null);
+    };
   }, [clearAuth]);
 
   useEffect(() => {
@@ -42,8 +50,10 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
           setUser(response.user);
           setSettings(response.settings);
         }
-      } catch {
-        await clearStoredSession();
+      } catch (error) {
+        if (isUnauthorizedError(error)) {
+          await clearStoredSession();
+        }
       } finally {
         if (!cancelled) {
           setIsLoading(false);
@@ -70,8 +80,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const logout = useCallback(async () => {
-    await auth.logout();
-    clearAuth();
+    try {
+      await auth.logout();
+    } finally {
+      clearAuth();
+    }
   }, [clearAuth]);
 
   const value = useMemo<AuthState>(
