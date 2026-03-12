@@ -104,6 +104,8 @@
     "serverInfo": "Server",
     "appVersion": "Version",
     "commit": "Commit",
+    "buildTime": "Erstellungszeit",
+    "goVersion": "Go-Version",
     "loading": "Laden...",
     "failedLoad": "Serverinformationen konnten nicht geladen werden."
   },

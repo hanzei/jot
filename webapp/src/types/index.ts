@@ -1,6 +1,8 @@
 export interface AboutInfo {
   version: string;
   commit: string;
+  build_time?: string;
+  go_version?: string;
 }
 
 export interface User {

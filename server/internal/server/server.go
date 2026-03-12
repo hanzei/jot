@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -20,11 +21,44 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-//nolint:gochecknoglobals
-var (
-	version = "dev"
-	commit  = "unknown"
-)
+func buildInfo() (aboutResponse, error) {
+	resp := aboutResponse{
+		Version: "dev",
+		Commit:  "unknown",
+	}
+
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return resp, fmt.Errorf("reading build info")
+	}
+
+	v := info.Main.Version
+	if v != "" && v != "(devel)" && !strings.HasPrefix(v, "v0.0.0-") {
+		resp.Version = v
+	}
+	resp.GoVersion = info.GoVersion
+
+	var foundRevision bool
+	var dirty bool
+	for _, s := range info.Settings {
+		switch s.Key {
+		case "vcs.revision":
+			if len(s.Value) >= 7 {
+				resp.Commit = s.Value[:7]
+				foundRevision = true
+			}
+		case "vcs.modified":
+			dirty = s.Value == "true"
+		case "vcs.time":
+			resp.BuildTime = s.Value
+		}
+	}
+	if foundRevision && dirty {
+		resp.Commit += "-dirty"
+	}
+
+	return resp, nil
+}
 
 type Server struct {
 	router         chi.Router
@@ -256,13 +290,20 @@ func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
 }
 
 type aboutResponse struct {
-	Version string `json:"version"`
-	Commit  string `json:"commit"`
+	Version   string `json:"version"`
+	Commit    string `json:"commit"`
+	BuildTime string `json:"build_time,omitempty"`
+	GoVersion string `json:"go_version,omitempty"`
 }
 
 func (s *Server) handleAbout(w http.ResponseWriter, _ *http.Request) (int, error) {
+	resp, err := buildInfo()
+	if err != nil {
+		logrus.WithError(err).Warn("Failed to read build info")
+	}
+
 	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(aboutResponse{Version: version, Commit: commit}); err != nil {
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		return http.StatusInternalServerError, fmt.Errorf("encoding about response: %w", err)
 	}
 	return 0, nil
