@@ -16,7 +16,11 @@ interface NavigationHeaderProps {
 
 const NavigationHeader = ({ title = 'Jot', onLogout, children, username, isAdmin: showAdminLink, adminLinkActive, settingsLinkActive }: NavigationHeaderProps) => {
   const currentUser = getUser();
-  const displayUsername = username ?? currentUser?.username;
+  const baseUsername = username ?? currentUser?.username;
+  const fullName = currentUser?.first_name || currentUser?.last_name
+    ? `${currentUser.first_name} ${currentUser.last_name}`.trim()
+    : null;
+  const displayUsername = fullName ?? baseUsername;
   const { t } = useTranslation();
 
   return (

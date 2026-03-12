@@ -6,6 +6,8 @@ export interface AboutInfo {
 export interface User {
   id: string;
   username: string;
+  first_name: string;
+  last_name: string;
   role: string;
   created_at: string;
   updated_at: string;
@@ -67,6 +69,8 @@ export interface NoteShare {
   shared_by_user_id: string;
   permission_level: string;
   username?: string;
+  first_name?: string;
+  last_name?: string;
   created_at: string;
   updated_at: string;
 }
@@ -121,6 +125,8 @@ export interface UserListResponse {
 
 export interface UpdateMeRequest {
   username: string;
+  first_name: string;
+  last_name: string;
 }
 
 export interface ChangePasswordRequest {
