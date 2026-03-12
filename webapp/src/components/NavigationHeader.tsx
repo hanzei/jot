@@ -122,27 +122,31 @@ const NavigationHeader = ({ title = 'Jot', onLogout, children, username, isAdmin
   return (
     <header className="bg-white dark:bg-slate-800 shadow-sm border-b border-gray-200 dark:border-slate-700">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center py-4 space-y-3 sm:space-y-0">
-          {/* Top row on mobile: title left, profile icon right; left side on desktop */}
-          <div className="flex items-center justify-between sm:justify-start">
-            <div className="flex items-center space-x-2 sm:space-x-4">
-              {title === 'Jot' ? (
-                <Link to="/" className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400">
-                  {title}
-                </Link>
-              ) : (
-                <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">{title}</h1>
-              )}
-            </div>
-            {/* Profile dropdown — mobile only (right of title) */}
-            <div className="sm:hidden"><ProfileMenu {...profileMenuProps} /></div>
+        {/*
+          flex-wrap + CSS order keeps a single ProfileMenu in the DOM:
+          mobile  — row 1: [title (order-1)] … [profile (order-2)], row 2: [search (order-3, w-full)]
+          desktop — one row: [title (order-1)] [search (sm:order-2, flex-1)] [profile (sm:order-3)]
+        */}
+        <div className="flex flex-wrap items-center justify-between gap-y-3 py-4">
+          <div className="order-1 flex items-center space-x-2 sm:space-x-4">
+            {title === 'Jot' ? (
+              <Link to="/" className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400">
+                {title}
+              </Link>
+            ) : (
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">{title}</h1>
+            )}
           </div>
 
-          {/* Children content (like search bar) */}
-          {children}
+          {/* Single ProfileMenu — right of title on mobile, far right on desktop */}
+          <div className="order-2 sm:order-3">
+            <ProfileMenu {...profileMenuProps} />
+          </div>
 
-          {/* Profile dropdown — desktop only (right-aligned) */}
-          <div className="hidden sm:block"><ProfileMenu {...profileMenuProps} /></div>
+          {/* Search bar — wraps to row 2 on mobile, fills middle on desktop */}
+          <div className="order-3 sm:order-2 w-full sm:w-auto sm:flex-1">
+            {children}
+          </div>
         </div>
       </div>
     </header>

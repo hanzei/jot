@@ -1,7 +1,7 @@
 import { test, expect, uniqueUsername } from '../fixtures';
 
 test.describe('Settings', () => {
-  test('changes username successfully', async ({ page, authenticatedUser, settingsPage }) => {
+  test('changes username successfully', async ({ authenticatedUser, settingsPage, dashboardPage }) => {
     const newUsername = uniqueUsername('renamed');
     await settingsPage.goto();
 
@@ -9,7 +9,7 @@ test.describe('Settings', () => {
     await settingsPage.expectSuccess('Profile updated successfully.');
 
     // Username should be reflected in the profile menu button tooltip
-    await expect(page.getByRole('button', { name: 'Profile menu' }).first()).toHaveAttribute('title', newUsername);
+    await dashboardPage.expectProfileMenuTooltip(newUsername);
     void authenticatedUser;
   });
 
