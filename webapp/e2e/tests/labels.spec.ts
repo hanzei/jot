@@ -67,6 +67,45 @@ test.describe('Label Filtering', () => {
     await expect(page).not.toHaveURL(/label=/);
   });
 
+  test('clicking a label from archive view shows active labeled notes', async ({ page, dashboardPage }) => {
+    await dashboardPage.goto();
+    await dashboardPage.createNote('Active Labeled', 'content');
+    await dashboardPage.createNote('Active Plain', 'content');
+    await dashboardPage.addLabelToNote('Active Labeled', 'fromarchive');
+
+    // Archive a note so archive view has content
+    await dashboardPage.archiveNote('Active Plain');
+
+    await dashboardPage.switchToArchived();
+    await expect(page).toHaveURL(/view=archive/);
+
+    await dashboardPage.expectLabelInSidebar('fromarchive');
+    await dashboardPage.selectSidebarLabel('fromarchive');
+
+    // Should leave archive view and show only the active labeled note
+    await expect(page).not.toHaveURL(/view=archive/);
+    await expect(page).toHaveURL(/label=/);
+    await dashboardPage.expectNoteVisible('Active Labeled');
+    await dashboardPage.expectNoteNotVisible('Active Plain');
+  });
+
+  test('clicking a label from bin view shows active labeled notes', async ({ page, dashboardPage }) => {
+    await dashboardPage.goto();
+    await dashboardPage.createNote('Labeled Note', 'content');
+    await dashboardPage.addLabelToNote('Labeled Note', 'frombin');
+
+    await dashboardPage.switchToBin();
+    await expect(page).toHaveURL(/view=bin/);
+
+    await dashboardPage.expectLabelInSidebar('frombin');
+    await dashboardPage.selectSidebarLabel('frombin');
+
+    // Should leave bin view
+    await expect(page).not.toHaveURL(/view=bin/);
+    await expect(page).toHaveURL(/label=/);
+    await dashboardPage.expectNoteVisible('Labeled Note');
+  });
+
   test('label filter is cleared when switching to archive view', async ({ page, dashboardPage }) => {
     await dashboardPage.goto();
     await dashboardPage.createNote('Note', 'content');

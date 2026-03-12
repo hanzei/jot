@@ -982,6 +982,156 @@ describe('Dashboard', () => {
     })
   })
 
+  it('clicking a label from archive view clears archive and fetches active notes', async () => {
+    const user = userEvent.setup()
+    const mockGetAll = vi.mocked(notes.getAll)
+
+    render(
+      <MemoryRouter initialEntries={['/?view=archive']}>
+        <Dashboard onLogout={vi.fn()} />
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(mockGetAll).toHaveBeenCalledWith(true, '', false, '')
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'work' })).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('button', { name: 'work' }))
+
+    await waitFor(() => {
+      expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-work')
+    })
+  })
+
+  it('clicking a label from bin view clears bin and fetches active notes', async () => {
+    const user = userEvent.setup()
+    const mockGetAll = vi.mocked(notes.getAll)
+
+    render(
+      <MemoryRouter initialEntries={['/?view=bin']}>
+        <Dashboard onLogout={vi.fn()} />
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(mockGetAll).toHaveBeenCalledWith(false, '', true, '')
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'work' })).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('button', { name: 'work' }))
+
+    await waitFor(() => {
+      expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-work')
+    })
+  })
+
+  it('clicking a label clears search query', async () => {
+    const user = userEvent.setup()
+    const mockGetAll = vi.mocked(notes.getAll)
+
+    render(
+      <MemoryRouter initialEntries={['/?search=hello']}>
+        <Dashboard onLogout={vi.fn()} />
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(mockGetAll).toHaveBeenCalledWith(false, 'hello', false, '')
+    })
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'work' })).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('button', { name: 'work' }))
+
+    await waitFor(() => {
+      expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-work')
+    })
+  })
+
+  it('Notes tab is not highlighted when a label is selected', async () => {
+    const user = userEvent.setup()
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <Dashboard onLogout={vi.fn()} />
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: 'work' })).toBeInTheDocument()
+    })
+
+    // Notes tab should initially have aria-current
+    const notesButton = screen.getByText('Notes')
+    expect(notesButton).toHaveAttribute('aria-current', 'page')
+
+    // Select a label
+    await user.click(screen.getByRole('button', { name: 'work' }))
+
+    // Notes tab should no longer have aria-current
+    await waitFor(() => {
+      expect(notesButton).not.toHaveAttribute('aria-current')
+    })
+  })
+
+  it('clicking Notes tab while label is selected clears label and highlights Notes', async () => {
+    const user = userEvent.setup()
+    const mockGetAll = vi.mocked(notes.getAll)
+
+    render(
+      <MemoryRouter initialEntries={['/?label=label-work']}>
+        <Dashboard onLogout={vi.fn()} />
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-work')
+    })
+
+    const notesButton = screen.getByText('Notes')
+    // Notes tab should not be highlighted when label is active
+    expect(notesButton).not.toHaveAttribute('aria-current')
+
+    await user.click(notesButton)
+
+    await waitFor(() => {
+      expect(notesButton).toHaveAttribute('aria-current', 'page')
+      expect(mockGetAll).toHaveBeenCalledWith(false, '', false, '')
+    })
+  })
+
+  it('label param takes precedence over view param in URL', async () => {
+    const mockGetAll = vi.mocked(notes.getAll)
+
+    render(
+      <MemoryRouter initialEntries={['/?view=archive&label=label-work']}>
+        <Dashboard onLogout={vi.fn()} />
+      </MemoryRouter>
+    )
+
+    // Should fetch active notes with label, not archived notes
+    await waitFor(() => {
+      expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-work')
+    })
+
+    // Notes tab should not be highlighted (label is active)
+    const notesButton = screen.getByText('Notes')
+    expect(notesButton).not.toHaveAttribute('aria-current')
+
+    // Archive tab should not be highlighted either
+    const archiveButton = screen.getByText('Archive')
+    expect(archiveButton).not.toHaveAttribute('aria-current')
+  })
+
   it('switching view clears label filter and calls getAll without labelId', async () => {
     const user = userEvent.setup()
     const mockGetAll = vi.mocked(notes.getAll)
