@@ -35,6 +35,10 @@ jobs:
         working-directory: ./webapp
         run: npm ci
 
+      - name: Install mobile dependencies
+        working-directory: ./mobile
+        run: npm ci
+
       - name: Run tests
         run: task test
 
@@ -68,6 +72,10 @@ jobs:
 
       - name: Install webapp dependencies
         working-directory: ./webapp
+        run: npm ci
+
+      - name: Install mobile dependencies
+        working-directory: ./mobile
         run: npm ci
 
       - name: Run linters
