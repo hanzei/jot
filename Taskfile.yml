@@ -59,3 +59,11 @@ tasks:
     cmds:
       - rm -rf webapp/build webapp/node_modules
       - rm -f server/jot server/coverage.out server/coverage.html
+
+  docker-build:
+    desc: Build Docker image locally
+    cmd: |
+      docker build \
+        --build-arg COMMIT_SHA=$(git rev-parse --short HEAD) \
+        --build-arg VERSION=dev \
+        -t jot:dev .
