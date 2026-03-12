@@ -191,6 +191,12 @@ func (s *UserStore) UpdateUsername(id, newUsername string) (*User, error) {
 }
 
 func (s *UserStore) UpdateProfileIcon(id string, data []byte, contentType string) error {
+	if len(data) == 0 {
+		return errors.New("profile icon data must not be empty")
+	}
+	if contentType == "" {
+		return errors.New("profile icon content type must not be empty")
+	}
 	result, err := s.db.Exec(
 		`UPDATE users SET profile_icon = ?, profile_icon_content_type = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
 		data, contentType, id,

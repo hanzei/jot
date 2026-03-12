@@ -41,7 +41,6 @@ const Settings = ({ onLogout }: SettingsProps) => {
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isAboutModalOpen, setIsAboutModalOpen] = useState(false);
   const [hasProfileIcon, setHasProfileIcon] = useState(currentUser?.has_profile_icon ?? false);
-  const [iconVersion, setIconVersion] = useState(0);
   const [iconError, setIconError] = useState('');
   const [iconUploading, setIconUploading] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
@@ -186,7 +185,6 @@ const Settings = ({ onLogout }: SettingsProps) => {
       const updatedUser = await users.uploadProfileIcon(file);
       setUser(updatedUser);
       setHasProfileIcon(true);
-      setIconVersion(v => v + 1);
     } catch (err: unknown) {
       if (isAxiosError(err)) {
         const msg = typeof err.response?.data === 'string' ? err.response.data.trim() : '';
@@ -206,10 +204,9 @@ const Settings = ({ onLogout }: SettingsProps) => {
       await users.deleteProfileIcon();
       const user = getUser();
       if (user) {
-        setUser({ ...user, has_profile_icon: false });
+        setUser({ ...user, has_profile_icon: false, updated_at: new Date().toISOString() });
       }
       setHasProfileIcon(false);
-      setIconVersion(v => v + 1);
     } catch {
       setIconError(t('settings.iconDeleteFailed'));
     }
@@ -237,7 +234,7 @@ const Settings = ({ onLogout }: SettingsProps) => {
 
   return (
     <div className="min-h-screen bg-gray-50 dark:bg-slate-900">
-      <NavigationHeader onLogout={handleLogout} username={currentUsername} settingsLinkActive={true} isAdmin={isAdmin()} iconVersion={iconVersion}>
+      <NavigationHeader onLogout={handleLogout} username={currentUsername} settingsLinkActive={true} isAdmin={isAdmin()}>
         {searchBar}
       </NavigationHeader>
 
@@ -255,7 +252,7 @@ const Settings = ({ onLogout }: SettingsProps) => {
               <div className="flex-shrink-0">
                 {hasProfileIcon && currentUser ? (
                   <img
-                    src={`/api/v1/users/${currentUser.id}/profile-icon?v=${iconVersion}`}
+                    src={`/api/v1/users/${currentUser.id}/profile-icon?v=${currentUser.updated_at}`}
                     alt={currentUsername}
                     className="h-16 w-16 rounded-full object-cover border border-gray-200 dark:border-slate-600"
                   />

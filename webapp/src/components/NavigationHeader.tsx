@@ -12,14 +12,15 @@ interface NavigationHeaderProps {
   isAdmin?: boolean;
   adminLinkActive?: boolean;
   settingsLinkActive?: boolean;
-  iconVersion?: number;
 }
 
-const NavigationHeader = ({ title = 'Jot', onLogout, children, username, isAdmin: showAdminLink, adminLinkActive, settingsLinkActive, iconVersion = 0 }: NavigationHeaderProps) => {
+const NavigationHeader = ({ title = 'Jot', onLogout, children, username, isAdmin: showAdminLink, adminLinkActive, settingsLinkActive }: NavigationHeaderProps) => {
   const currentUser = getUser();
   const displayUsername = username ?? currentUser?.username;
+  // Use updated_at as a cache-buster so the icon refreshes automatically
+  // on any page after an upload or delete without needing a prop.
   const iconSrc = currentUser?.has_profile_icon
-    ? `/api/v1/users/${currentUser.id}/profile-icon?v=${iconVersion}`
+    ? `/api/v1/users/${currentUser.id}/profile-icon?v=${currentUser.updated_at}`
     : null;
   const { t } = useTranslation();
 

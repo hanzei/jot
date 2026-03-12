@@ -336,24 +336,25 @@ func (h *AuthHandler) UploadProfileIcon(w http.ResponseWriter, r *http.Request) 
 		return http.StatusUnauthorized, errors.New("unauthorized")
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, 2<<20)
 	if err := r.ParseMultipartForm(2 << 20); err != nil {
 		return http.StatusBadRequest, errors.New("file too large (max 2 MB)")
 	}
 
-	file, header, err := r.FormFile("file")
+	file, _, err := r.FormFile("file")
 	if err != nil {
 		return http.StatusBadRequest, errors.New("file is required")
 	}
 	defer file.Close()
 
-	contentType := header.Header.Get("Content-Type")
-	if !allowedImageTypes[contentType] {
-		return http.StatusBadRequest, errors.New("unsupported file type: must be jpeg, png, gif, or webp")
-	}
-
 	data, err := io.ReadAll(file)
 	if err != nil {
 		return http.StatusInternalServerError, fmt.Errorf("failed to read file: %w", err)
+	}
+
+	contentType := http.DetectContentType(data)
+	if !allowedImageTypes[contentType] {
+		return http.StatusBadRequest, errors.New("unsupported file type: must be jpeg, png, gif, or webp")
 	}
 
 	if err = h.userStore.UpdateProfileIcon(currentUser.ID, data, contentType); err != nil {
@@ -408,6 +409,7 @@ func (h *AuthHandler) GetUserProfileIcon(w http.ResponseWriter, r *http.Request)
 
 	w.Header().Set("Content-Type", contentType)
 	w.Header().Set("Cache-Control", "private, max-age=3600")
+	w.Header().Set("X-Content-Type-Options", "nosniff")
 	if _, err := w.Write(data); err != nil {
 		return http.StatusInternalServerError, fmt.Errorf("failed to write response: %w", err)
 	}
