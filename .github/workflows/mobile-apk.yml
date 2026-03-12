@@ -39,7 +39,7 @@ jobs:
         working-directory: ./mobile
 
       - name: Write keystore
-        run: echo "$KEYSTORE_BASE64" | base64 -d > ./mobile/android/app/release.keystore
+        run: echo "$KEYSTORE_BASE64" | base64 -d > ./mobile/android/release.keystore
         env:
           KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
 
@@ -47,7 +47,7 @@ jobs:
         run: ./gradlew assembleRelease
         working-directory: ./mobile/android
         env:
-          ANDROID_KEYSTORE_PATH: ../release.keystore
+          ANDROID_KEYSTORE_PATH: release.keystore
           ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
           ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
           ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}

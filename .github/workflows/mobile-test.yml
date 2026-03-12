@@ -30,7 +30,7 @@ jobs:
         working-directory: ./mobile
 
       - name: Upload coverage artifact
-        if: ${{ !cancelled() }}
+        if: ${{ always() }}
         uses: actions/upload-artifact@v4
         with:
           name: coverage
