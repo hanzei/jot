@@ -25,8 +25,13 @@ export function useSSE({ onEvent, onConnected }: UseSSEOptions): void {
   // Store callbacks in refs so updates don't trigger reconnection.
   const onEventRef = useRef(onEvent);
   const onConnectedRef = useRef(onConnected);
-  onEventRef.current = onEvent;
-  onConnectedRef.current = onConnected;
+  // Keep refs in sync after every render. useEffect (no deps) runs after every
+  // render and is guaranteed to fire before the next scheduled effect, so the
+  // EventSource handlers always see the latest callbacks.
+  useEffect(() => {
+    onEventRef.current = onEvent;
+    onConnectedRef.current = onConnected;
+  });
 
   useEffect(() => {
     const es = new EventSource('/api/v1/events', { withCredentials: true });
