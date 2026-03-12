@@ -6,7 +6,13 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"image"
+	"image/color"
+	"image/gif"
+	"image/jpeg"
+	"image/png"
 	"io"
+	"mime/multipart"
 	"net/http"
 	"net/http/cookiejar"
 	"net/http/httptest"
@@ -840,5 +846,137 @@ func TestTodoItemIndentLevel(t *testing.T) {
 		}
 		resp := ts.authRequest(t, user, http.MethodPut, "/api/v1/notes/"+noteID, updateBody)
 		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	})
+}
+
+// Helper to create a multipart form body with an image file.
+func createMultipartImage(t *testing.T, fieldName, fileName string, imgData []byte) (*bytes.Buffer, string) {
+	t.Helper()
+	var buf bytes.Buffer
+	writer := multipart.NewWriter(&buf)
+	part, err := writer.CreateFormFile(fieldName, fileName)
+	require.NoError(t, err)
+	_, err = part.Write(imgData)
+	require.NoError(t, err)
+	require.NoError(t, writer.Close())
+	return &buf, writer.FormDataContentType()
+}
+
+// Helper to encode a Go image as PNG bytes.
+func encodePNG(t *testing.T, img image.Image) []byte {
+	t.Helper()
+	var buf bytes.Buffer
+	require.NoError(t, png.Encode(&buf, img))
+	return buf.Bytes()
+}
+
+// Helper to upload a profile icon via multipart POST.
+func (ts *TestServer) uploadProfileIcon(t *testing.T, user *TestUser, body *bytes.Buffer, contentType string) *TestResponse {
+	t.Helper()
+	req, err := http.NewRequest(http.MethodPost, ts.HTTPServer.URL+"/api/v1/users/me/profile-icon", body)
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", contentType)
+
+	resp, err := user.Client.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	require.NoError(t, err)
+
+	return &TestResponse{
+		StatusCode: resp.StatusCode,
+		Body:       respBody,
+		Headers:    resp.Header,
+		Cookies:    resp.Cookies(),
+	}
+}
+
+func TestUploadProfileIcon(t *testing.T) {
+	ts := setupTestServer(t)
+	user := ts.createTestUser(t, "iconuser", "password123", false)
+
+	t.Run("valid image upload returns 200 with has_profile_icon true", func(t *testing.T) {
+		img := image.NewRGBA(image.Rect(0, 0, 64, 64))
+		for y := range 64 {
+			for x := range 64 {
+				img.Set(x, y, color.RGBA{R: 255, A: 255})
+			}
+		}
+		pngData := encodePNG(t, img)
+		body, ct := createMultipartImage(t, "file", "test.png", pngData)
+
+		resp := ts.uploadProfileIcon(t, user, body, ct)
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+		var userResp models.User
+		require.NoError(t, resp.UnmarshalBody(&userResp))
+		assert.True(t, userResp.HasProfileIcon)
+	})
+
+	t.Run("stored image is JPEG", func(t *testing.T) {
+		// Fetch the profile icon and verify JPEG magic bytes
+		resp := ts.authRequest(t, user, http.MethodGet, "/api/v1/users/"+user.User.ID+"/profile-icon", nil)
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		assert.Equal(t, "image/jpeg", resp.Headers.Get("Content-Type"))
+		require.GreaterOrEqual(t, len(resp.Body), 2)
+		assert.Equal(t, byte(0xFF), resp.Body[0], "JPEG magic byte 1")
+		assert.Equal(t, byte(0xD8), resp.Body[1], "JPEG magic byte 2")
+	})
+
+	t.Run("oversized image is scaled down to fit 256x256", func(t *testing.T) {
+		img := image.NewRGBA(image.Rect(0, 0, 1024, 512))
+		pngData := encodePNG(t, img)
+		body, ct := createMultipartImage(t, "file", "big.png", pngData)
+
+		resp := ts.uploadProfileIcon(t, user, body, ct)
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+		// Fetch and decode the stored icon to check dimensions
+		getResp := ts.authRequest(t, user, http.MethodGet, "/api/v1/users/"+user.User.ID+"/profile-icon", nil)
+		assert.Equal(t, http.StatusOK, getResp.StatusCode)
+
+		decoded, err := jpeg.Decode(bytes.NewReader(getResp.Body))
+		require.NoError(t, err)
+		bounds := decoded.Bounds()
+		assert.LessOrEqual(t, bounds.Dx(), 256)
+		assert.LessOrEqual(t, bounds.Dy(), 256)
+		// 1024x512 → 256x128 (aspect ratio preserved)
+		assert.Equal(t, 256, bounds.Dx())
+		assert.Equal(t, 128, bounds.Dy())
+	})
+
+	t.Run("corrupt file returns 400", func(t *testing.T) {
+		// Starts with PNG header but is truncated/corrupt
+		corruptData := []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00}
+		body, ct := createMultipartImage(t, "file", "corrupt.png", corruptData)
+
+		resp := ts.uploadProfileIcon(t, user, body, ct)
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	})
+
+	t.Run("GIF upload returns 400", func(t *testing.T) {
+		img := image.NewPaletted(image.Rect(0, 0, 1, 1), color.Palette{color.White})
+		var buf bytes.Buffer
+		require.NoError(t, gif.Encode(&buf, img, nil))
+		body, ct := createMultipartImage(t, "file", "test.gif", buf.Bytes())
+
+		resp := ts.uploadProfileIcon(t, user, body, ct)
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	})
+
+	t.Run("unauthenticated request returns 401", func(t *testing.T) {
+		img := image.NewRGBA(image.Rect(0, 0, 1, 1))
+		pngData := encodePNG(t, img)
+		body, ct := createMultipartImage(t, "file", "test.png", pngData)
+
+		req, err := http.NewRequest(http.MethodPost, ts.HTTPServer.URL+"/api/v1/users/me/profile-icon", body)
+		require.NoError(t, err)
+		req.Header.Set("Content-Type", ct)
+
+		resp, err := http.DefaultClient.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 	})
 }
