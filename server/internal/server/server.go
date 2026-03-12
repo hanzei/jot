@@ -6,7 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
-	"runtime/debug"
+	"runtime"
 	"strings"
 	"time"
 
@@ -21,43 +21,17 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-func buildInfo() (aboutResponse, error) {
-	resp := aboutResponse{
-		Version: "dev",
-		Commit:  "unknown",
+func buildInfo() aboutResponse {
+	c := commit
+	if len(c) > 7 {
+		c = c[:7]
 	}
-
-	info, ok := debug.ReadBuildInfo()
-	if !ok {
-		return resp, fmt.Errorf("reading build info")
+	return aboutResponse{
+		Version:   version,
+		Commit:    c,
+		BuildTime: buildTime,
+		GoVersion: runtime.Version(),
 	}
-
-	v := info.Main.Version
-	if v != "" && v != "(devel)" && !strings.HasPrefix(v, "v0.0.0-") {
-		resp.Version = v
-	}
-	resp.GoVersion = info.GoVersion
-
-	var foundRevision bool
-	var dirty bool
-	for _, s := range info.Settings {
-		switch s.Key {
-		case "vcs.revision":
-			if len(s.Value) >= 7 {
-				resp.Commit = s.Value[:7]
-				foundRevision = true
-			}
-		case "vcs.modified":
-			dirty = s.Value == "true"
-		case "vcs.time":
-			resp.BuildTime = s.Value
-		}
-	}
-	if foundRevision && dirty {
-		resp.Commit += "-dirty"
-	}
-
-	return resp, nil
 }
 
 type Server struct {
@@ -297,10 +271,7 @@ type aboutResponse struct {
 }
 
 func (s *Server) handleAbout(w http.ResponseWriter, _ *http.Request) (int, error) {
-	resp, err := buildInfo()
-	if err != nil {
-		logrus.WithError(err).Warn("Failed to read build info")
-	}
+	resp := buildInfo()
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(resp); err != nil {

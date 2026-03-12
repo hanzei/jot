@@ -20,20 +20,28 @@ FROM golang:1.24-alpine AS backend-builder
 
 WORKDIR /src
 
-# Install dependencies for CGO (SQLite) and git for VCS build info
-RUN apk add --no-cache gcc musl-dev sqlite-dev git
+# Install dependencies for CGO (SQLite)
+RUN apk add --no-cache gcc musl-dev sqlite-dev
+
+ARG COMMIT_SHA=unknown
+ARG VERSION=dev
 
 # Copy backend files
 COPY server/go.mod server/go.sum ./server/
-RUN cd server && go mod download
+RUN --mount=type=cache,target=/go/pkg/mod \
+    cd server && go mod download
 
-# Copy .git and backend source code (Go embeds VCS info via debug.ReadBuildInfo)
-COPY .git .git
+# Copy backend source code
 COPY server/ server/
 
 # Build the backend
-RUN cd server && CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo \
-    -ldflags "-s -w" \
+RUN --mount=type=cache,target=/go/pkg/mod \
+    --mount=type=cache,target=/root/.cache/go-build \
+    cd server && CGO_ENABLED=1 GOOS=linux go build \
+    -buildvcs=false \
+    -ldflags "-s -w \
+      -X 'github.com/hanzei/jot/server/internal/server.commit=${COMMIT_SHA}' \
+      -X 'github.com/hanzei/jot/server/internal/server.version=${VERSION}'" \
     -o main .
 
 # Production stage
