@@ -54,8 +54,19 @@ tasks:
     dir: webapp
     cmd: npm run test:e2e
 
+  test-mobile:
+    desc: Run mobile app tests
+    dir: mobile
+    cmd: npm test -- --ci
+
+  lint-mobile:
+    desc: Run mobile app linting
+    dir: mobile
+    cmd: npm run lint && npm run typecheck
+
   clean:
     desc: Remove generated files and node packages
     cmds:
       - rm -rf webapp/build webapp/node_modules
+      - rm -rf mobile/node_modules
       - rm -f server/jot server/coverage.out server/coverage.html
