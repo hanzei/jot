@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { PlusIcon, MagnifyingGlassIcon, TagIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, MagnifyingGlassIcon, TagIcon, DocumentTextIcon, ArchiveBoxIcon, TrashIcon } from '@heroicons/react/24/outline';
 import { useTranslation } from 'react-i18next';
 import { notes, auth, labels as labelsApi } from '@/utils/api';
 import { removeUser, getUser, isAdmin } from '@/utils/auth';
@@ -327,11 +327,12 @@ export default function Dashboard({ onLogout }: DashboardProps) {
         <button
           onClick={() => handleViewChange('notes')}
           aria-current={!showArchived && !showBin ? 'page' : undefined}
-          className={`px-3 py-1 rounded-md text-sm font-medium ${!showArchived && !showBin
+          className={`flex items-center gap-2 px-3 py-1 rounded-md text-sm font-medium ${!showArchived && !showBin
               ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
               : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
             }`}
         >
+          <DocumentTextIcon className="h-4 w-4" />
           {t('dashboard.tabNotes')}
         </button>
       ),
@@ -343,11 +344,12 @@ export default function Dashboard({ onLogout }: DashboardProps) {
         <button
           onClick={() => handleViewChange('archive')}
           aria-current={showArchived ? 'page' : undefined}
-          className={`px-3 py-1 rounded-md text-sm font-medium ${showArchived
+          className={`flex items-center gap-2 px-3 py-1 rounded-md text-sm font-medium ${showArchived
               ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
               : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
             }`}
         >
+          <ArchiveBoxIcon className="h-4 w-4" />
           {t('dashboard.tabArchive')}
         </button>
       ),
@@ -359,11 +361,12 @@ export default function Dashboard({ onLogout }: DashboardProps) {
         <button
           onClick={() => handleViewChange('bin')}
           aria-current={showBin ? 'page' : undefined}
-          className={`px-3 py-1 rounded-md text-sm font-medium ${showBin
+          className={`flex items-center gap-2 px-3 py-1 rounded-md text-sm font-medium ${showBin
               ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
               : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
             }`}
         >
+          <TrashIcon className="h-4 w-4" />
           {t('dashboard.tabBin')}
         </button>
       ),
@@ -401,21 +404,18 @@ export default function Dashboard({ onLogout }: DashboardProps) {
         <Sidebar tabs={navigationTabs}>
           {labelsList.length > 0 && (
             <div className="px-4 pb-4">
-              <div className="flex items-center gap-1.5 mb-2 text-xs font-semibold uppercase tracking-wide text-gray-500 dark:text-gray-400">
-                <TagIcon className="h-3.5 w-3.5" />
-                {t('labels.title')}
-              </div>
               <ul className="space-y-0.5">
                 {labelsList.map((label) => (
                   <li key={label.id}>
                     <button
                       onClick={() => handleLabelSelect(selectedLabelId === label.id ? null : label.id)}
-                      className={`w-full text-left px-3 py-1.5 rounded-md text-sm truncate ${
+                      className={`flex items-center gap-2 w-full text-left px-3 py-1.5 rounded-md text-sm truncate ${
                         selectedLabelId === label.id
                           ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium'
                           : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-slate-700'
                       }`}
                     >
+                      <TagIcon className="h-4 w-4 shrink-0" />
                       {label.name}
                     </button>
                   </li>
