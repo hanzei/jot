@@ -23,6 +23,9 @@ var ErrUserNotFound = errors.New("user not found")
 // admin user, which would leave the system with no administrators.
 var ErrLastAdmin = errors.New("cannot demote the last admin")
 
+// ErrCannotDeleteSelf is returned when an admin tries to delete their own account.
+var ErrCannotDeleteSelf = errors.New("cannot delete your own account")
+
 type User struct {
 	ID           string    `json:"id"`
 	Username     string    `json:"username"`
@@ -355,6 +358,54 @@ func (s *UserStore) UpdateRole(id, role string) (*User, error) {
 		return nil, fmt.Errorf("failed to commit transaction: %w", err)
 	}
 	return &user, nil
+}
+
+func (s *UserStore) Delete(id, requestingUserID string) error {
+	if id == requestingUserID {
+		return fmt.Errorf("%w", ErrCannotDeleteSelf)
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var role string
+	err = tx.QueryRow(`SELECT role FROM users WHERE id = ?`, id).Scan(&role)
+	if errors.Is(err, sql.ErrNoRows) {
+		return fmt.Errorf("%w", ErrUserNotFound)
+	}
+	if err != nil {
+		return fmt.Errorf("failed to query user role: %w", err)
+	}
+
+	if role == RoleAdmin {
+		var adminCount int
+		if err = tx.QueryRow(`SELECT COUNT(*) FROM users WHERE role = 'admin'`).Scan(&adminCount); err != nil {
+			return fmt.Errorf("failed to count admins: %w", err)
+		}
+		if adminCount <= 1 {
+			return fmt.Errorf("%w", ErrLastAdmin)
+		}
+	}
+
+	result, err := tx.Exec(`DELETE FROM users WHERE id = ?`, id)
+	if err != nil {
+		return fmt.Errorf("failed to delete user: %w", err)
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to check rows affected: %w", err)
+	}
+	if rows == 0 {
+		return fmt.Errorf("%w", ErrUserNotFound)
+	}
+
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+	return nil
 }
 
 func (s *UserStore) CreateByAdmin(username, password string, role string) (*User, error) {

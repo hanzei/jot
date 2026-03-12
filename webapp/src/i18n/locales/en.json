@@ -124,7 +124,12 @@
     "updatingRole": "Updating...",
     "roleToggleLabel": "{{action}} for {{username}}",
     "failedUpdateRole": "Failed to update role.",
-    "youBadge": "You"
+    "youBadge": "You",
+    "deleteUser": "Delete",
+    "deleting": "Deleting...",
+    "deleteUserConfirm": "Are you sure you want to permanently delete user \"{{username}}\"? This will also delete all their notes.",
+    "failedDeleteUser": "Failed to delete user.",
+    "deleteUserLabel": "Delete user {{username}}"
   },
   "note": {
     "shared": "Shared",

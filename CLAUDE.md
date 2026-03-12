@@ -22,6 +22,7 @@ Use the following Task commands for development:
 - `task test` - Run all tests
 - `task test-server` - Run server tests
 - `task test-webapp` - Run webapp tests
+- `task test-e2e` - Run Playwright end-to-end tests (`webapp/e2e/`)
 - `task coverage` - Run server tests with coverage report
 - `task lint` - Run linters
 - `task lint-server` - Run server linting with golangci-lint
@@ -231,6 +232,15 @@ Migration files live in `server/migrations/` and are named `NNN_description.sql`
 - Library: `@testing-library/react`
 - Run: `task test-webapp`
 
+### E2E Tests
+
+- Framework: **Playwright** (`webapp/e2e/`)
+- Scope: Test complete user workflows through the browser UI (integration tests focus on backend API contracts)
+- Pattern: Page Object Model — add page classes in `e2e/pages/`, tests in `e2e/tests/`
+- Fixtures: `e2e/fixtures/index.ts` provides `authenticatedUser` and page objects
+- **Add e2e tests for every new user-facing feature** (new pages, workflows, admin actions)
+- Run: `task test-e2e`
+
 ---
 
 ## Build & Deployment
@@ -264,6 +274,7 @@ Persistent data is stored in the `/data` Docker volume. Set `JWT_SECRET` to a se
 
 1. `task test` — all tests pass
 2. `task lint` — no lint errors
+3. `task test-e2e` — e2e tests pass (add new e2e tests for any new user-facing features)
 
 ---
 
