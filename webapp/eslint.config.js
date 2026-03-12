@@ -12,7 +12,7 @@ export default [
   },
   {
     files: ['**/*.{ts,tsx}'],
-    ignores: ['vite.config.ts', 'playwright.config.ts'],
+    ignores: ['vite.config.ts', 'playwright.config.ts', 'scripts/**/*.ts'],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'module',
@@ -48,20 +48,32 @@ export default [
     },
   },
   {
-    files: [
-      'vite.config.ts',
-      'playwright.config.ts',
-      'postcss.config.js',
-      'tailwind.config.js',
-      'eslint.config.js',
-      'scripts/**/*.{js,ts}',
-    ],
+    files: ['vite.config.ts', 'playwright.config.ts', 'scripts/**/*.ts'],
     languageOptions: {
       sourceType: 'module',
       parser: tsparser,
       globals: {
         ...globals.node,
       },
+    },
+    plugins: {
+      '@typescript-eslint': tseslint,
+    },
+    rules: {
+      ...js.configs.recommended.rules,
+      ...tseslint.configs.recommended.rules,
+    },
+  },
+  {
+    files: ['postcss.config.js', 'tailwind.config.js', 'eslint.config.js', 'scripts/**/*.js'],
+    languageOptions: {
+      sourceType: 'module',
+      globals: {
+        ...globals.node,
+      },
+    },
+    rules: {
+      ...js.configs.recommended.rules,
     },
   },
 ]
