@@ -9,13 +9,15 @@ tasks:
         sh: git rev-parse --short HEAD
       BUILD_TIME:
         sh: date -u +%Y-%m-%dT%H:%M:%SZ
-    cmd: >
-      go run
-      -buildvcs=false
-      -ldflags "-X 'github.com/hanzei/jot/server/internal/server.commit={{.COMMIT}}'
-                -X 'github.com/hanzei/jot/server/internal/server.version=dev'
-                -X 'github.com/hanzei/jot/server/internal/server.buildTime={{.BUILD_TIME}}'"
-      .
+    cmds:
+      - >
+        go build
+        -buildvcs=false
+        -ldflags "-X 'github.com/hanzei/jot/server/internal/server.commit={{.COMMIT}}'
+                  -X 'github.com/hanzei/jot/server/internal/server.version=dev'
+                  -X 'github.com/hanzei/jot/server/internal/server.buildTime={{.BUILD_TIME}}'"
+        -o jot .
+      - ./jot
 
   run-webapp:
     desc: Build webapp in watch mode

@@ -187,6 +187,7 @@ jobs:
           build-args: |
             COMMIT_SHA=${{ github.sha }}
             BUILD_DATE=${{ steps.build-date.outputs.value }}
+            VERSION=${{ github.sha }}
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.platform }}
           cache-to: type=gha,mode=max,scope=${{ matrix.platform }}
