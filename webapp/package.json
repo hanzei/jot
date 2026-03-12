@@ -52,7 +52,7 @@
     "dev": "vite",
     "build": "vite build",
     "build:watch": "vite build --mode development --watch",
-    "lint": "eslint . --ext ts,tsx --report-unused-disable-directives --max-warnings 0",
+    "lint": "eslint . --report-unused-disable-directives --max-warnings 0",
     "lint:ts": "tsc --noEmit",
     "test": "vitest",
     "test:run": "vitest run",
