@@ -6,6 +6,7 @@ import { Note, NoteItem } from '../types';
 interface NoteCardProps {
   note: Note;
   onPress: () => void;
+  onLongPress?: () => void;
 }
 
 const MAX_PREVIEW_ITEMS = 4;
@@ -38,7 +39,7 @@ function TodoPreview({ items }: { items: NoteItem[] }) {
   );
 }
 
-function NoteCard({ note, onPress }: NoteCardProps) {
+function NoteCard({ note, onPress, onLongPress }: NoteCardProps) {
   const hasColor = note.color && note.color !== '#ffffff';
   const borderColor = hasColor ? note.color : '#e5e7eb';
 
@@ -46,6 +47,7 @@ function NoteCard({ note, onPress }: NoteCardProps) {
     <TouchableOpacity
       style={[styles.card, { borderLeftColor: borderColor, borderLeftWidth: hasColor ? 4 : 1 }]}
       onPress={onPress}
+      onLongPress={onLongPress}
       activeOpacity={0.7}
       testID={`note-card-${note.id}`}
     >

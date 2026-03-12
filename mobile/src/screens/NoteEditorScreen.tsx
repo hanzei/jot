@@ -14,7 +14,9 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { useNote, useCreateNote, useUpdateNote, useDeleteNote } from '../hooks/useNotes';
 import TodoItem from '../components/TodoItem';
-import { NoteType, NoteItem, UpdateNoteRequest } from '../types';
+import ColorPicker from '../components/ColorPicker';
+import LabelPicker from '../components/LabelPicker';
+import { NoteType, NoteItem, UpdateNoteRequest, Label } from '../types';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 
 type EditorRouteProp = RouteProp<RootStackParamList, 'NoteEditor'>;
@@ -63,8 +65,14 @@ export default function NoteEditorScreen() {
   const [noteType, setNoteType] = useState<NoteType>('text');
   const [items, setItems] = useState<LocalItem[]>([]);
   const [checkedItemsCollapsed, setCheckedItemsCollapsed] = useState(false);
+  const [pinned, setPinned] = useState(false);
+  const [archived, setArchived] = useState(false);
+  const [color, setColor] = useState('#ffffff');
+  const [labels, setLabels] = useState<Label[]>([]);
   const [hasCreated, setHasCreated] = useState(initialNoteId !== null);
   const [saveError, setSaveError] = useState<string | null>(null);
+  const [colorPickerVisible, setColorPickerVisible] = useState(false);
+  const [labelPickerVisible, setLabelPickerVisible] = useState(false);
 
   const { data: existingNote } = useNote(noteId);
   const createMutation = useCreateNote();
@@ -91,6 +99,8 @@ export default function NoteEditorScreen() {
   itemsRef.current = items;
   const checkedItemsCollapsedRef = useRef(checkedItemsCollapsed);
   checkedItemsCollapsedRef.current = checkedItemsCollapsed;
+  const colorRef = useRef(color);
+  colorRef.current = color;
   const createMutateRef = useRef(createMutation.mutateAsync);
   createMutateRef.current = createMutation.mutateAsync;
   const updateMutateRef = useRef(updateMutation.mutateAsync);
@@ -107,12 +117,23 @@ export default function NoteEditorScreen() {
       setContent(existingNote.content);
       setNoteType(existingNote.note_type);
       setCheckedItemsCollapsed(existingNote.checked_items_collapsed);
+      setPinned(existingNote.pinned);
+      setArchived(existingNote.archived);
+      setColor(existingNote.color);
+      setLabels(existingNote.labels ?? []);
       if (existingNote.items) {
         setItems(toLocalItems(existingNote.items));
       }
       isInitializedRef.current = true;
     }
   }, [existingNote]);
+
+  // Keep labels in sync when note data refreshes after label mutations
+  useEffect(() => {
+    if (existingNote && isInitializedRef.current) {
+      setLabels(existingNote.labels ?? []);
+    }
+  }, [existingNote?.labels]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const flushSave = useCallback(async (unmounting = false) => {
     // Skip save if editing an existing note that hasn't hydrated yet
@@ -131,6 +152,7 @@ export default function NoteEditorScreen() {
       const currentItems = itemsRef.current;
       const currentCollapsed = checkedItemsCollapsedRef.current;
       const currentNoteType = noteTypeRef.current;
+      const currentColor = colorRef.current;
 
       if (!currentNoteId) {
         if (!currentTitle && !currentContent && currentItems.length === 0) return;
@@ -138,6 +160,7 @@ export default function NoteEditorScreen() {
           title: currentTitle,
           content: currentContent,
           note_type: currentNoteType,
+          color: currentColor !== '#ffffff' ? currentColor : undefined,
           items: currentNoteType === 'todo' ? serializeItems(currentItems) : undefined,
         });
         if (!isMountedRef.current || unmounting) return;
@@ -283,13 +306,11 @@ export default function NoteEditorScreen() {
         style: 'destructive',
         onPress: async () => {
           try {
-            // Cancel any pending debounce and mark intentional exit
             if (debounceRef.current) {
               clearTimeout(debounceRef.current);
               debounceRef.current = null;
             }
             intentionalExitRef.current = true;
-            // Wait for any in-flight save to finish before deleting
             if (saveInFlightRef.current) {
               try { await saveInFlightRef.current; } catch { /* already handled */ }
             }
@@ -303,6 +324,44 @@ export default function NoteEditorScreen() {
       },
     ]);
   }, [noteId, deleteMutation, navigation]);
+
+  const handleTogglePin = useCallback(async () => {
+    if (!noteId) return;
+    const newPinned = !pinned;
+    setPinned(newPinned);
+    try {
+      await updateMutation.mutateAsync({ id: noteId, data: { pinned: newPinned } });
+    } catch {
+      setPinned(pinned);
+      Alert.alert('Error', 'Failed to update note');
+    }
+  }, [noteId, pinned, updateMutation]);
+
+  const handleToggleArchive = useCallback(async () => {
+    if (!noteId) return;
+    const newArchived = !archived;
+    setArchived(newArchived);
+    try {
+      await updateMutation.mutateAsync({ id: noteId, data: { archived: newArchived } });
+    } catch {
+      setArchived(archived);
+      Alert.alert('Error', 'Failed to update note');
+    }
+  }, [noteId, archived, updateMutation]);
+
+  const handleColorSelect = useCallback(async (selectedColor: string) => {
+    // Update local state regardless; if note not yet saved the color is
+    // included in the next createNote call via flushSave.
+    const prevColor = color;
+    setColor(selectedColor);
+    if (!noteId) return;
+    try {
+      await updateMutation.mutateAsync({ id: noteId, data: { color: selectedColor } });
+    } catch {
+      setColor(prevColor);
+      Alert.alert('Error', 'Failed to update note color');
+    }
+  }, [noteId, color, updateMutation]);
 
   const handleToggleNoteType = useCallback(() => {
     if (hasCreated) return;
@@ -320,13 +379,15 @@ export default function NoteEditorScreen() {
   const uncheckedItems = useMemo(() => items.filter((item) => !item.completed), [items]);
   const checkedItems = useMemo(() => items.filter((item) => item.completed), [items]);
 
+  const noteBackground = color && color !== '#ffffff' ? color : '#fff';
+
   return (
     <KeyboardAvoidingView
-      style={styles.container}
+      style={[styles.container, { backgroundColor: noteBackground }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 0}
     >
-      <View style={styles.header}>
+      <View style={[styles.header, { backgroundColor: noteBackground }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} testID="editor-back">
           <Ionicons name="arrow-back" size={24} color="#1a1a1a" />
         </TouchableOpacity>
@@ -363,7 +424,10 @@ export default function NoteEditorScreen() {
         </TouchableOpacity>
       )}
 
-      <ScrollView style={styles.scrollContent} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        style={styles.scrollContent}
+        keyboardShouldPersistTaps="handled"
+      >
         <TextInput
           style={styles.titleInput}
           value={title}
@@ -451,11 +515,78 @@ export default function NoteEditorScreen() {
         )}
       </ScrollView>
 
-      <View style={styles.toolbar}>
+      <View style={[styles.toolbar, { backgroundColor: noteBackground }]}>
+        {/* Color picker button */}
+        <TouchableOpacity
+          onPress={() => setColorPickerVisible(true)}
+          style={styles.toolbarBtn}
+          testID="toolbar-color-btn"
+          accessibilityLabel="Change color"
+        >
+          <Ionicons name="color-palette-outline" size={22} color="#444" />
+        </TouchableOpacity>
+
+        {/* Label button (only when note exists) */}
+        {noteId && (
+          <TouchableOpacity
+            onPress={() => setLabelPickerVisible(true)}
+            style={styles.toolbarBtn}
+            testID="toolbar-label-btn"
+            accessibilityLabel="Labels"
+          >
+            <Ionicons name="pricetag-outline" size={22} color="#444" />
+          </TouchableOpacity>
+        )}
+
+        {/* Pin / Unpin */}
+        {noteId && (
+          <TouchableOpacity
+            onPress={handleTogglePin}
+            style={styles.toolbarBtn}
+            testID="toolbar-pin-btn"
+            accessibilityLabel={pinned ? 'Unpin note' : 'Pin note'}
+          >
+            <Ionicons name={pinned ? 'pin' : 'pin-outline'} size={22} color={pinned ? '#2563eb' : '#444'} />
+          </TouchableOpacity>
+        )}
+
+        {/* Archive / Unarchive */}
+        {noteId && (
+          <TouchableOpacity
+            onPress={handleToggleArchive}
+            style={styles.toolbarBtn}
+            testID="toolbar-archive-btn"
+            accessibilityLabel={archived ? 'Unarchive note' : 'Archive note'}
+          >
+            <Ionicons
+              name="archive-outline"
+              size={22}
+              color={archived ? '#2563eb' : '#444'}
+            />
+          </TouchableOpacity>
+        )}
+
+        {/* Delete */}
         <TouchableOpacity onPress={handleDelete} style={styles.toolbarBtn} testID="delete-note-btn">
           <Ionicons name="trash-outline" size={22} color="#ef4444" />
         </TouchableOpacity>
       </View>
+
+      <ColorPicker
+        visible={colorPickerVisible}
+        currentColor={color}
+        onSelect={handleColorSelect}
+        onClose={() => setColorPickerVisible(false)}
+      />
+
+      {noteId && (
+        <LabelPicker
+          visible={labelPickerVisible}
+          noteId={noteId}
+          noteLabels={labels}
+          onClose={() => setLabelPickerVisible(false)}
+        />
+      )}
     </KeyboardAvoidingView>
   );
 }
@@ -543,13 +674,14 @@ const styles = StyleSheet.create({
   },
   toolbar: {
     flexDirection: 'row',
-    justifyContent: 'flex-end',
+    alignItems: 'center',
     borderTopWidth: 1,
     borderTopColor: '#f3f4f6',
-    paddingHorizontal: 16,
+    paddingHorizontal: 8,
     paddingVertical: 8,
     paddingBottom: Platform.OS === 'ios' ? 24 : 8,
     backgroundColor: '#fff',
+    gap: 4,
   },
   toolbarBtn: {
     padding: 8,
