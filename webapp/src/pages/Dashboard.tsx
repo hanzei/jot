@@ -332,7 +332,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
               : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
             }`}
         >
-          <DocumentTextIcon className="h-4 w-4" />
+          <DocumentTextIcon className="h-4 w-4 shrink-0" />
           {t('dashboard.tabNotes')}
         </button>
       ),
@@ -349,7 +349,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
               : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
             }`}
         >
-          <ArchiveBoxIcon className="h-4 w-4" />
+          <ArchiveBoxIcon className="h-4 w-4 shrink-0" />
           {t('dashboard.tabArchive')}
         </button>
       ),
@@ -366,7 +366,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
               : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
             }`}
         >
-          <TrashIcon className="h-4 w-4" />
+          <TrashIcon className="h-4 w-4 shrink-0" />
           {t('dashboard.tabBin')}
         </button>
       ),
@@ -409,14 +409,14 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                   <li key={label.id}>
                     <button
                       onClick={() => handleLabelSelect(selectedLabelId === label.id ? null : label.id)}
-                      className={`flex items-center gap-2 w-full text-left px-3 py-1.5 rounded-md text-sm truncate ${
+                      className={`flex items-center gap-2 w-full text-left px-3 py-1.5 rounded-md text-sm ${
                         selectedLabelId === label.id
                           ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium'
                           : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-slate-700'
                       }`}
                     >
                       <TagIcon className="h-4 w-4 shrink-0" />
-                      {label.name}
+                      <span className="truncate">{label.name}</span>
                     </button>
                   </li>
                 ))}
