@@ -416,7 +416,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                       }`}
                     >
                       <TagIcon className="h-4 w-4 shrink-0" />
-                      <span className="truncate">{label.name}</span>
+                      <span className="truncate min-w-0">{label.name}</span>
                     </button>
                   </li>
                 ))}
