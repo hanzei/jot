@@ -26,13 +26,19 @@ jobs:
         with:
           node-version: "24"
           cache: "npm"
-          cache-dependency-path: webapp/package-lock.json
+          cache-dependency-path: |
+            webapp/package-lock.json
+            mobile/package-lock.json
 
       - name: Install Task
         run: sh -c "$(curl -fsSL https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
 
       - name: Install webapp dependencies
         working-directory: ./webapp
+        run: npm ci
+
+      - name: Install mobile dependencies
+        working-directory: ./mobile
         run: npm ci
 
       - name: Run tests
@@ -55,7 +61,9 @@ jobs:
         with:
           node-version: "24"
           cache: "npm"
-          cache-dependency-path: webapp/package-lock.json
+          cache-dependency-path: |
+            webapp/package-lock.json
+            mobile/package-lock.json
 
       - name: Install Task
         run: sh -c "$(curl -fsSL https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
@@ -68,6 +76,10 @@ jobs:
 
       - name: Install webapp dependencies
         working-directory: ./webapp
+        run: npm ci
+
+      - name: Install mobile dependencies
+        working-directory: ./mobile
         run: npm ci
 
       - name: Run linters

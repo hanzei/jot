@@ -1,0 +1,21 @@
+{
+  "expo": {
+    "name": "Jot",
+    "slug": "jot",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "scheme": "jot",
+    "newArchEnabled": true,
+    "platforms": ["ios", "android"],
+    "ios": {
+      "supportsTablet": true,
+      "bundleIdentifier": "com.jot.app"
+    },
+    "android": {
+      "adaptiveIcon": {
+        "backgroundColor": "#ffffff"
+      },
+      "package": "com.jot.app"
+    }
+  }
+}
