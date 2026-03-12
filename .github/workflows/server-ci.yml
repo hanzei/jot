@@ -1,0 +1,51 @@
+name: Server — CI
+
+permissions:
+  contents: read
+
+on:
+  push:
+    paths: ["server/**"]
+  pull_request:
+    paths: ["server/**"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.24"
+          cache-dependency-path: server/go.sum
+
+      - name: Install Task
+        run: sh -c "$(curl -fsSL https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
+
+      - name: Run tests
+        run: task test-server
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.24"
+          cache-dependency-path: server/go.sum
+
+      - name: Install Task
+        run: sh -c "$(curl -fsSL https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
+
+      - name: Install golangci-lint
+        uses: golangci/golangci-lint-action@v9
+        with:
+          version: latest
+          working-directory: ./server
+
+      - name: Run linters
+        run: task lint-server
