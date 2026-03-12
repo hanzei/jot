@@ -344,10 +344,10 @@ const (
 // maxProfileIconDimension x maxProfileIconDimension (preserving aspect ratio),
 // and re-encodes as JPEG. If the image is already small enough it is still
 // re-encoded as JPEG to normalize the format and compress.
-func resizeImage(data []byte) ([]byte, string, error) {
+func resizeImage(data []byte) ([]byte, error) {
 	img, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
-		return nil, "", fmt.Errorf("decode image: %w", err)
+		return nil, fmt.Errorf("decode image: %w", err)
 	}
 
 	bounds := img.Bounds()
@@ -384,10 +384,10 @@ func resizeImage(data []byte) ([]byte, string, error) {
 
 	var buf bytes.Buffer
 	if err := jpeg.Encode(&buf, opaque, &jpeg.Options{Quality: jpegQuality}); err != nil {
-		return nil, "", fmt.Errorf("encode jpeg: %w", err)
+		return nil, fmt.Errorf("encode jpeg: %w", err)
 	}
 
-	return buf.Bytes(), "image/jpeg", nil
+	return buf.Bytes(), nil
 }
 
 // UploadProfileIcon handles POST /api/v1/users/me/profile-icon.
@@ -422,10 +422,11 @@ func (h *AuthHandler) UploadProfileIcon(w http.ResponseWriter, r *http.Request) 
 		return http.StatusBadRequest, errors.New("unsupported file type: must be jpeg, png, or webp")
 	}
 
-	data, contentType, err = resizeImage(data)
+	data, err = resizeImage(data)
 	if err != nil {
-		return http.StatusInternalServerError, fmt.Errorf("resize profile icon: %w", err)
+		return http.StatusBadRequest, fmt.Errorf("unsupported or corrupt image: %w", err)
 	}
+	contentType = "image/jpeg"
 
 	if err = h.userStore.UpdateProfileIcon(currentUser.ID, data, contentType); err != nil {
 		return http.StatusInternalServerError, fmt.Errorf("update profile icon for user %s: %w", currentUser.ID, err)
