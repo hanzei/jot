@@ -376,14 +376,22 @@ func resizeImage(data []byte) ([]byte, error) {
 	}
 
 	// JPEG does not support transparency. Flatten alpha onto a white background
-	// so transparent regions render as white instead of black.
-	b := img.Bounds()
-	opaque := image.NewRGBA(image.Rect(0, 0, b.Dx(), b.Dy()))
-	draw.Draw(opaque, opaque.Bounds(), image.NewUniform(color.White), image.Point{}, draw.Src)
-	draw.Draw(opaque, opaque.Bounds(), img, b.Min, draw.Over)
+	// so transparent regions render as white instead of black. Skip for opaque
+	// color models (e.g. YCbCr from JPEG decode) where no alpha is possible.
+	encImg := img
+	switch img.ColorModel() {
+	case color.YCbCrModel, color.CMYKModel, color.GrayModel, color.Gray16Model:
+		// Already opaque — encode directly.
+	default:
+		b := img.Bounds()
+		opaque := image.NewRGBA(image.Rect(0, 0, b.Dx(), b.Dy()))
+		draw.Draw(opaque, opaque.Bounds(), image.NewUniform(color.White), image.Point{}, draw.Src)
+		draw.Draw(opaque, opaque.Bounds(), img, b.Min, draw.Over)
+		encImg = opaque
+	}
 
 	var buf bytes.Buffer
-	if err := jpeg.Encode(&buf, opaque, &jpeg.Options{Quality: jpegQuality}); err != nil {
+	if err := jpeg.Encode(&buf, encImg, &jpeg.Options{Quality: jpegQuality}); err != nil {
 		return nil, fmt.Errorf("encode jpeg: %w", err)
 	}
 
