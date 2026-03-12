@@ -1,7 +1,7 @@
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Bars3Icon } from '@heroicons/react/24/outline';
-import { Note } from '@/types';
+import { Note, User } from '@/types';
 import NoteCard from './NoteCard';
 
 interface SortableNoteCardProps {
@@ -12,6 +12,7 @@ interface SortableNoteCardProps {
   onRestore?: (noteId: string) => void;
   onPermanentlyDelete?: (noteId: string) => void;
   currentUserId?: string;
+  usersById?: Map<string, User>;
   disabled?: boolean;
   inBin?: boolean;
   onRefresh?: () => void;
@@ -25,6 +26,7 @@ export default function SortableNoteCard({
   onRestore,
   onPermanentlyDelete,
   currentUserId,
+  usersById,
   disabled = false,
   inBin = false,
   onRefresh,
@@ -81,6 +83,7 @@ export default function SortableNoteCard({
           onRestore={onRestore}
           onPermanentlyDelete={onPermanentlyDelete}
           currentUserId={currentUserId}
+          usersById={usersById}
           inBin={inBin}
           onRefresh={onRefresh}
         />

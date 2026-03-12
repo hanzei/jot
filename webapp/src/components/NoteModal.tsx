@@ -2,9 +2,11 @@ import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { XMarkIcon, PlusIcon, TrashIcon, ChevronDownIcon, ArchiveBoxIcon, ArchiveBoxXMarkIcon, ShareIcon } from '@heroicons/react/24/outline';
 import { Dialog } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
-import { Note, NoteType, CreateNoteRequest, UpdateNoteRequest, Label } from '@/types';
+import { Note, NoteType, CreateNoteRequest, UpdateNoteRequest, Label, User } from '@/types';
 import { notes } from '@/utils/api';
 import LabelPicker from '@/components/LabelPicker';
+import LetterAvatar from '@/components/LetterAvatar';
+import { buildShareAvatars } from '@/utils/shareAvatars';
 
 // Constants
 const AUTO_SAVE_TIMEOUT = 1000; // Save 1 second after user stops typing
@@ -64,6 +66,8 @@ interface NoteModalProps {
   onRefresh?: () => void;
   onShare?: (note: Note) => void;
   isOwner?: boolean;
+  usersById?: Map<string, User>;
+  currentUserId?: string;
 }
 
 interface TodoItem {
@@ -164,7 +168,7 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
   );
 }
 
-export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, isOwner = true }: NoteModalProps) {
+export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, isOwner = true, usersById, currentUserId }: NoteModalProps) {
   const { t, i18n } = useTranslation();
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
@@ -935,6 +939,27 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
                 />
               ))}
             </div>
+
+            {/* Sharing info */}
+            {note?.is_shared && (() => {
+              const avatars = buildShareAvatars(note, currentUserId, usersById);
+              if (avatars.length === 0) return null;
+              return (
+                <div className="flex items-center">
+                  {avatars.map((a, index) => (
+                    <div key={a.key} title={a.displayName}>
+                      <LetterAvatar
+                        firstName={a.firstName}
+                        username={a.username}
+                        userId={a.userId}
+                        hasProfileIcon={a.hasProfileIcon}
+                        className={`w-6 h-6 ring-2 ring-white dark:ring-slate-800 ${index > 0 ? '-ml-1' : ''}`}
+                      />
+                    </div>
+                  ))}
+                </div>
+              );
+            })()}
           </div>
 
           {/* Footer */}

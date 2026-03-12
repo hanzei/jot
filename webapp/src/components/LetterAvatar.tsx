@@ -1,3 +1,5 @@
+import { useState, useEffect } from 'react';
+
 const COLORS = [
   '#ef4444', // red-500
   '#f97316', // orange-500
@@ -29,11 +31,27 @@ interface LetterAvatarProps {
   firstName?: string;
   username: string;
   className?: string;
+  userId?: string;
+  hasProfileIcon?: boolean;
 }
 
-const LetterAvatar = ({ firstName, username, className = '' }: LetterAvatarProps) => {
-  const letter = (firstName?.[0] || username[0] || '?').toUpperCase();
+const LetterAvatar = ({ firstName, username, className = '', userId, hasProfileIcon }: LetterAvatarProps) => {
+  const [imgFailed, setImgFailed] = useState(false);
+  useEffect(() => setImgFailed(false), [userId]);
   const accessibleLabel = username || firstName || '?';
+
+  if (hasProfileIcon && userId && !imgFailed) {
+    return (
+      <img
+        src={`/api/v1/users/${userId}/profile-icon`}
+        alt={accessibleLabel}
+        className={`rounded-full object-cover ${className}`}
+        onError={() => setImgFailed(true)}
+      />
+    );
+  }
+
+  const letter = (firstName?.[0] || username[0] || '?').toUpperCase();
   const color = COLORS[hashUsername(username) % COLORS.length];
 
   return (

@@ -582,25 +582,27 @@ func (h *NotesHandler) SearchUsers(w http.ResponseWriter, r *http.Request) (int,
 		return http.StatusInternalServerError, err
 	}
 
-	// Filter out passwords and only return id, username, name, role for sharing purposes
+	// Filter out passwords and only return safe fields for sharing purposes
 	type UserInfo struct {
-		ID        string `json:"id"`
-		Username  string `json:"username"`
-		FirstName string `json:"first_name"`
-		LastName  string `json:"last_name"`
-		Role      string `json:"role"`
+		ID             string `json:"id"`
+		Username       string `json:"username"`
+		FirstName      string `json:"first_name"`
+		LastName       string `json:"last_name"`
+		Role           string `json:"role"`
+		HasProfileIcon bool   `json:"has_profile_icon"`
 	}
 
-	var userInfos []UserInfo
+	userInfos := []UserInfo{}
 	for _, user := range users {
 		// Don't include the current user in the list
 		if user.ID != currentUser.ID {
 			userInfos = append(userInfos, UserInfo{
-				ID:        user.ID,
-				Username:  user.Username,
-				FirstName: user.FirstName,
-				LastName:  user.LastName,
-				Role:      user.Role,
+				ID:             user.ID,
+				Username:       user.Username,
+				FirstName:      user.FirstName,
+				LastName:       user.LastName,
+				Role:           user.Role,
+				HasProfileIcon: user.HasProfileIcon,
 			})
 		}
 	}

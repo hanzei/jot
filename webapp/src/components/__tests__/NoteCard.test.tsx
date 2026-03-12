@@ -288,18 +288,70 @@ describe('NoteCard', () => {
   })
 
   describe('Sharing Functionality', () => {
-    it('shows shared indicator when note is shared', () => {
-      const sharedNote = createMockNote({ is_shared: true })
+    it('shows shared user avatars when note is shared', () => {
+      const sharedNote = createMockNote({
+        is_shared: true,
+        shared_with: [{
+          id: 'share1',
+          note_id: '1',
+          shared_with_user_id: 'user2',
+          shared_by_user_id: 'user1',
+          permission_level: 'edit',
+          username: 'alice',
+          first_name: 'Alice',
+          created_at: '2023-01-01T00:00:00Z',
+          updated_at: '2023-01-01T00:00:00Z',
+        }],
+      })
       render(<NoteCard {...defaultProps} note={sharedNote} />)
 
-      expect(screen.getByText('Shared')).toBeInTheDocument()
+      expect(screen.getByRole('img', { name: 'alice' })).toBeInTheDocument()
     })
 
-    it('shows "Shared with me" when viewing someone elses shared note', () => {
-      const sharedNote = createMockNote({ is_shared: true, user_id: 'other_user' })
+    it('filters out current user from shared avatars', () => {
+      const sharedNote = createMockNote({
+        is_shared: true,
+        user_id: 'other_user',
+        shared_with: [{
+          id: 'share1',
+          note_id: '1',
+          shared_with_user_id: 'user1',
+          shared_by_user_id: 'other_user',
+          permission_level: 'edit',
+          username: 'me',
+          first_name: 'Me',
+          created_at: '2023-01-01T00:00:00Z',
+          updated_at: '2023-01-01T00:00:00Z',
+        }],
+      })
       render(<NoteCard {...defaultProps} note={sharedNote} />)
 
-      expect(screen.getByText('Shared with me')).toBeInTheDocument()
+      expect(screen.queryByRole('img', { name: 'me' })).not.toBeInTheDocument()
+    })
+
+    it('renders profile icon image when user has one', () => {
+      const usersMap = new Map([['user2', { id: 'user2', username: 'alice', first_name: 'Alice', last_name: '', role: 'user', has_profile_icon: true, created_at: '', updated_at: '' }]])
+      const sharedNote = createMockNote({
+        is_shared: true,
+        shared_with: [{
+          id: 'share1',
+          note_id: '1',
+          shared_with_user_id: 'user2',
+          shared_by_user_id: 'user1',
+          permission_level: 'edit',
+          username: 'alice',
+          first_name: 'Alice',
+          has_profile_icon: true,
+          created_at: '2023-01-01T00:00:00Z',
+          updated_at: '2023-01-01T00:00:00Z',
+        }],
+      })
+      render(<NoteCard {...defaultProps} note={sharedNote} usersById={usersMap} />)
+
+      const img = screen.getByAltText('alice')
+      expect(img).toBeInTheDocument()
+      expect(img.tagName).toBe('IMG')
+      expect(img).toHaveAttribute('src', '/api/v1/users/user2/profile-icon')
     })
 
     it('shows share button only for note owners', async () => {

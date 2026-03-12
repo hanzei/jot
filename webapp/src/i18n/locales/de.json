@@ -141,8 +141,6 @@
     "deleteUserLabel": "Benutzer {{username}} löschen"
   },
   "note": {
-    "shared": "Geteilt",
-    "sharedWithMe": "Mit mir geteilt",
     "share": "Teilen",
     "unpin": "Lösen",
     "pin": "Anheften",

@@ -75,6 +75,7 @@ export interface NoteShare {
   username?: string;
   first_name?: string;
   last_name?: string;
+  has_profile_icon?: boolean;
   created_at: string;
   updated_at: string;
 }
