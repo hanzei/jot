@@ -19,6 +19,7 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version: "1.24"
+          cache-dependency-path: server/go.sum
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
@@ -28,17 +29,7 @@ jobs:
           cache-dependency-path: webapp/package-lock.json
 
       - name: Install Task
-        uses: arduino/setup-task@v2
-        with:
-          version: 3.x
-
-      - name: Cache Go modules
-        uses: actions/cache@v5
-        with:
-          path: ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
+        run: sh -c "$(curl -fsSL https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
 
       - name: Install webapp dependencies
         working-directory: ./webapp
@@ -57,6 +48,7 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version: "1.24"
+          cache-dependency-path: server/go.sum
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
@@ -66,9 +58,7 @@ jobs:
           cache-dependency-path: webapp/package-lock.json
 
       - name: Install Task
-        uses: arduino/setup-task@v2
-        with:
-          version: 3.x
+        run: sh -c "$(curl -fsSL https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
 
       - name: Install golangci-lint
         uses: golangci/golangci-lint-action@v9
@@ -97,9 +87,7 @@ jobs:
           cache-dependency-path: webapp/package-lock.json
 
       - name: Install Task
-        uses: arduino/setup-task@v2
-        with:
-          version: 3.x
+        run: sh -c "$(curl -fsSL https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
 
       - name: Install webapp dependencies
         working-directory: ./webapp
@@ -119,6 +107,7 @@ jobs:
         uses: actions/setup-go@v6
         with:
           go-version: "1.24"
+          cache-dependency-path: server/go.sum
 
       - name: Set up Node.js
         uses: actions/setup-node@v6
@@ -128,17 +117,7 @@ jobs:
           cache-dependency-path: webapp/package-lock.json
 
       - name: Install Task
-        uses: arduino/setup-task@v2
-        with:
-          version: 3.x
-
-      - name: Cache Go modules
-        uses: actions/cache@v5
-        with:
-          path: ~/go/pkg/mod
-          key: ${{ runner.os }}-go-${{ hashFiles('**/go.sum') }}
-          restore-keys: |
-            ${{ runner.os }}-go-
+        run: sh -c "$(curl -fsSL https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
 
       - name: Install webapp dependencies
         working-directory: ./webapp
