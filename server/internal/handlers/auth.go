@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"image"
-	_ "image/gif"
 	"image/jpeg"
 	_ "image/png"
 	"io"
@@ -332,7 +331,6 @@ func (h *AuthHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) (in
 var allowedImageTypes = map[string]bool{
 	"image/jpeg": true,
 	"image/png":  true,
-	"image/gif":  true,
 	"image/webp": true,
 }
 
@@ -413,7 +411,7 @@ func (h *AuthHandler) UploadProfileIcon(w http.ResponseWriter, r *http.Request) 
 
 	contentType := http.DetectContentType(data)
 	if !allowedImageTypes[contentType] {
-		return http.StatusBadRequest, errors.New("unsupported file type: must be jpeg, png, gif, or webp")
+		return http.StatusBadRequest, errors.New("unsupported file type: must be jpeg, png, or webp")
 	}
 
 	data, contentType, err = resizeImage(data)
