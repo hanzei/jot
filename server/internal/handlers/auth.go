@@ -1,9 +1,14 @@
 package handlers
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"image"
+	_ "image/gif"
+	"image/jpeg"
+	_ "image/png"
 	"io"
 	"net/http"
 	"strings"
@@ -11,6 +16,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/hanzei/jot/server/internal/auth"
 	"github.com/hanzei/jot/server/internal/models"
+	"golang.org/x/image/draw"
+	_ "golang.org/x/image/webp"
 )
 
 type AuthHandler struct {
@@ -329,6 +336,54 @@ var allowedImageTypes = map[string]bool{
 	"image/webp": true,
 }
 
+const (
+	maxProfileIconDimension = 256
+	jpegQuality             = 85
+)
+
+// resizeImage decodes the given image bytes, resizes to fit within
+// maxProfileIconDimension x maxProfileIconDimension (preserving aspect ratio),
+// and re-encodes as JPEG. If the image is already small enough it is still
+// re-encoded as JPEG to normalize the format and compress.
+func resizeImage(data []byte) ([]byte, string, error) {
+	img, _, err := image.Decode(bytes.NewReader(data))
+	if err != nil {
+		return nil, "", fmt.Errorf("decode image: %w", err)
+	}
+
+	bounds := img.Bounds()
+	srcW := bounds.Dx()
+	srcH := bounds.Dy()
+
+	if srcW > maxProfileIconDimension || srcH > maxProfileIconDimension {
+		var dstW, dstH int
+		if srcW >= srcH {
+			dstW = maxProfileIconDimension
+			dstH = srcH * maxProfileIconDimension / srcW
+		} else {
+			dstH = maxProfileIconDimension
+			dstW = srcW * maxProfileIconDimension / srcH
+		}
+		if dstW < 1 {
+			dstW = 1
+		}
+		if dstH < 1 {
+			dstH = 1
+		}
+
+		dst := image.NewRGBA(image.Rect(0, 0, dstW, dstH))
+		draw.CatmullRom.Scale(dst, dst.Bounds(), img, bounds, draw.Over, nil)
+		img = dst
+	}
+
+	var buf bytes.Buffer
+	if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: jpegQuality}); err != nil {
+		return nil, "", fmt.Errorf("encode jpeg: %w", err)
+	}
+
+	return buf.Bytes(), "image/jpeg", nil
+}
+
 // UploadProfileIcon handles POST /api/v1/users/me/profile-icon.
 // It accepts a multipart form with a single "file" field (max 5 MB, images only),
 // stores the image in the database, and returns the updated User.
@@ -359,6 +414,11 @@ func (h *AuthHandler) UploadProfileIcon(w http.ResponseWriter, r *http.Request) 
 	contentType := http.DetectContentType(data)
 	if !allowedImageTypes[contentType] {
 		return http.StatusBadRequest, errors.New("unsupported file type: must be jpeg, png, gif, or webp")
+	}
+
+	data, contentType, err = resizeImage(data)
+	if err != nil {
+		return http.StatusInternalServerError, fmt.Errorf("resize profile icon: %w", err)
 	}
 
 	if err = h.userStore.UpdateProfileIcon(currentUser.ID, data, contentType); err != nil {
