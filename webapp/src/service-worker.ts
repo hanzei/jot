@@ -91,24 +91,53 @@ const navigationRoute = new NavigationRoute(
 );
 registerRoute(navigationRoute);
 
-// Background sync route for non-GET API requests
-registerRoute(
-  ({ request, url }) => 
-    request.method !== 'GET' && url.pathname.startsWith('/api/v1/'),
-  async ({ request }) => {
-    try {
-      return await fetch(request);
-    } catch {
-      // If network request fails, add to background sync queue
+// Only POST endpoints that are idempotent or have uniqueness constraints are
+// safe to retry via background sync. All other POSTs (e.g., note creation)
+// would create duplicates since the server generates a new random ID per request.
+const retryablePostPaths = new Set([
+  '/api/v1/login',
+  '/api/v1/logout',
+  '/api/v1/notes/reorder',
+]);
+
+// POST paths with dynamic segments that are safe to retry (matched by prefix).
+const retryablePostPrefixes = [
+  '/api/v1/notes/', // covers /notes/{id}/share, /notes/{id}/restore, /notes/{id}/labels
+];
+
+const isRetryablePost = (pathname: string): boolean => {
+  if (retryablePostPaths.has(pathname)) return true;
+  return retryablePostPrefixes.some(prefix => pathname.startsWith(prefix));
+};
+
+// Handle non-GET API requests via fetch event listener directly, since
+// workbox's registerRoute defaults to GET-only matching.
+self.addEventListener('fetch', (event: FetchEvent) => {
+  const { request } = event;
+  if (request.method === 'GET') return;
+
+  const url = new URL(request.url);
+  if (!url.pathname.startsWith('/api/v1/')) return;
+
+  // Only retry POSTs that are explicitly allowlisted as idempotent.
+  // All other POSTs (note creation, import, register, etc.) fall through
+  // to the browser's default fetch so failures propagate to the frontend.
+  if (request.method === 'POST' && !isRetryablePost(url.pathname)) {
+    return;
+  }
+
+  // Idempotent requests (PUT, DELETE, allowlisted POSTs) - queue for
+  // background sync on network failure
+  event.respondWith(
+    fetch(request.clone()).catch(async () => {
       await bgSyncQueue.pushRequest({ request });
-      // Return a response indicating the request was queued
       return new Response('Request queued for background sync', {
         status: 202,
-        statusText: 'Accepted'
+        statusText: 'Accepted',
       });
-    }
-  }
-);
+    })
+  );
+});
 
 // Activate new service worker immediately on install.
 // The 'controlling' event in the client triggers a page reload.
