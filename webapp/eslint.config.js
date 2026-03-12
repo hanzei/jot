@@ -14,6 +14,7 @@ export default [
     files: ['**/*.{ts,tsx}'],
     languageOptions: {
       ecmaVersion: 2022,
+      sourceType: 'module',
       globals: {
         ...globals.browser,
       },
@@ -35,6 +36,8 @@ export default [
         { allowConstantExport: true },
       ],
       'react/react-in-jsx-scope': 'off', // Not needed with React 17+ JSX transform
+      'react/jsx-uses-react': 'off', // Paired with react-in-jsx-scope
+      'react/prop-types': 'off', // TypeScript interfaces handle prop types
       'no-undef': 'off', // TypeScript handles this
     },
     settings: {
@@ -44,8 +47,17 @@ export default [
     },
   },
   {
-    files: ['vite.config.ts', 'vitest.config.ts', 'postcss.config.js', 'tailwind.config.js'],
+    files: [
+      'vite.config.ts',
+      'vitest.config.ts',
+      'playwright.config.ts',
+      'postcss.config.js',
+      'tailwind.config.js',
+      'eslint.config.js',
+      'scripts/**/*.{js,ts}',
+    ],
     languageOptions: {
+      sourceType: 'module',
       globals: {
         ...globals.node,
       },
