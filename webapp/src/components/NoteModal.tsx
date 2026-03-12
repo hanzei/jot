@@ -9,30 +9,24 @@ import LetterAvatar from '@/components/LetterAvatar';
 import { buildShareAvatars } from '@/utils/shareAvatars';
 import { VALIDATION_LIMITS } from '@/constants/validation';
 
-// Constants
-const AUTO_SAVE_TIMEOUT = 1000; // Save 1 second after user stops typing
-const MAX_ITEM_LENGTH = 500; // Maximum length for todo item text
-const MAX_TITLE_LENGTH = 200; // Maximum length for note title
-const MAX_CONTENT_LENGTH = 10000; // Maximum length for note content
-
 // Validation functions
 type TFunction = (key: string, opts?: Record<string, unknown>) => string;
 
 const validateItemText = (text: string, t: TFunction): string | null => {
   const trimmed = text.trim();
   if (trimmed.length === 0) return null; // Allow empty items (will be removed on save)
-  if (trimmed.length > MAX_ITEM_LENGTH) return t('note.itemTooLong', { max: MAX_ITEM_LENGTH });
+  if (trimmed.length > VALIDATION_LIMITS.ITEM_TEXT_MAX_LENGTH) return t('note.itemTooLong', { max: VALIDATION_LIMITS.ITEM_TEXT_MAX_LENGTH });
   if (/[<>]/g.test(trimmed)) return t('note.itemInvalidChars');
   return null;
 };
 
 const validateTitle = (title: string, t: TFunction): string | null => {
-  if (title.length > MAX_TITLE_LENGTH) return t('note.titleTooLong', { max: MAX_TITLE_LENGTH });
+  if (title.length > VALIDATION_LIMITS.TITLE_MAX_LENGTH) return t('note.titleTooLong', { max: VALIDATION_LIMITS.TITLE_MAX_LENGTH });
   return null;
 };
 
 const validateContent = (content: string, t: TFunction): string | null => {
-  if (content.length > MAX_CONTENT_LENGTH) return t('note.contentTooLong', { max: MAX_CONTENT_LENGTH });
+  if (content.length > VALIDATION_LIMITS.CONTENT_MAX_LENGTH) return t('note.contentTooLong', { max: VALIDATION_LIMITS.CONTENT_MAX_LENGTH });
   return null;
 };
 
@@ -466,7 +460,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
       return;
     }
     
-    const textValue = newText.slice(0, MAX_ITEM_LENGTH);
+    const textValue = newText.slice(0, VALIDATION_LIMITS.ITEM_TEXT_MAX_LENGTH);
     const updatedItems = items.map(item => {
       if (item.id === itemId) {
         return { ...item, text: textValue };
@@ -486,7 +480,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
       // Set new timeout to save after user stops typing
       saveTimeoutRef.current = setTimeout(async () => {
         await autoSaveNote(updatedItems);
-      }, AUTO_SAVE_TIMEOUT);
+      }, VALIDATION_LIMITS.AUTO_SAVE_TIMEOUT);
     }
   };
 
