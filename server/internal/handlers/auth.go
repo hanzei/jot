@@ -330,7 +330,7 @@ var allowedImageTypes = map[string]bool{
 }
 
 // UploadProfileIcon handles POST /api/v1/users/me/profile-icon.
-// It accepts a multipart form with a single "file" field (max 2 MB, images only),
+// It accepts a multipart form with a single "file" field (max 5 MB, images only),
 // stores the image in the database, and returns the updated User.
 func (h *AuthHandler) UploadProfileIcon(w http.ResponseWriter, r *http.Request) (int, error) {
 	currentUser, ok := auth.GetUserFromContext(r.Context())
@@ -338,7 +338,7 @@ func (h *AuthHandler) UploadProfileIcon(w http.ResponseWriter, r *http.Request) 
 		return http.StatusUnauthorized, errors.New("unauthorized")
 	}
 
-	const fileLimit = int64(2 << 20)
+	const fileLimit = int64(5 << 20)
 	const overhead = int64(64 << 10)
 	r.Body = http.MaxBytesReader(w, r.Body, fileLimit+overhead)
 	if err := r.ParseMultipartForm(fileLimit); err != nil {
