@@ -12,6 +12,7 @@ export default [
   },
   {
     files: ['**/*.{ts,tsx}'],
+    ignores: ['vite.config.ts', 'vitest.config.ts', 'playwright.config.ts'],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'module',
