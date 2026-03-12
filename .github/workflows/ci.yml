@@ -29,9 +29,7 @@ jobs:
           cache-dependency-path: webapp/package-lock.json
 
       - name: Install Task
-        uses: arduino/setup-task@v2
-        with:
-          version: 3.x
+        run: sh -c "$(curl -fsSL https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
 
       - name: Install webapp dependencies
         working-directory: ./webapp
@@ -60,9 +58,7 @@ jobs:
           cache-dependency-path: webapp/package-lock.json
 
       - name: Install Task
-        uses: arduino/setup-task@v2
-        with:
-          version: 3.x
+        run: sh -c "$(curl -fsSL https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
 
       - name: Install golangci-lint
         uses: golangci/golangci-lint-action@v9
@@ -91,9 +87,7 @@ jobs:
           cache-dependency-path: webapp/package-lock.json
 
       - name: Install Task
-        uses: arduino/setup-task@v2
-        with:
-          version: 3.x
+        run: sh -c "$(curl -fsSL https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
 
       - name: Install webapp dependencies
         working-directory: ./webapp
@@ -123,9 +117,7 @@ jobs:
           cache-dependency-path: webapp/package-lock.json
 
       - name: Install Task
-        uses: arduino/setup-task@v2
-        with:
-          version: 3.x
+        run: sh -c "$(curl -fsSL https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
 
       - name: Install webapp dependencies
         working-directory: ./webapp
