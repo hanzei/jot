@@ -85,6 +85,12 @@
     "themeSystem": "Systemstandard",
     "themeLight": "Hell",
     "themeDark": "Dunkel",
+    "profileIconSection": "Profilbild",
+    "uploadIconButton": "Bild hochladen",
+    "removeIconButton": "Bild entfernen",
+    "iconUploading": "Wird hochgeladen...",
+    "iconUploadFailed": "Profilbild konnte nicht hochgeladen werden.",
+    "iconDeleteFailed": "Profilbild konnte nicht entfernt werden.",
     "aboutSection": "Info",
     "aboutButton": "Info zu Jot"
   },

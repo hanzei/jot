@@ -1,4 +1,8 @@
+import path from 'path';
+import { fileURLToPath } from 'url';
 import { Page, expect } from '@playwright/test';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export class SettingsPage {
   constructor(private page: Page) {}
@@ -37,5 +41,26 @@ export class SettingsPage {
 
   async isDarkMode() {
     return this.page.evaluate(() => document.documentElement.classList.contains('dark'));
+  }
+
+  async uploadProfileIcon(fixtureName = 'test-icon.png') {
+    const filePath = path.join(__dirname, '../fixtures', fixtureName);
+    const fileInput = this.page.locator('input[type="file"][accept]');
+    await fileInput.setInputFiles(filePath);
+  }
+
+  async removeProfileIcon() {
+    await this.page.getByRole('button', { name: 'Remove icon' }).click();
+  }
+
+  profileIconPreview() {
+    // Navigate from the "Profile Icon" heading up to the card div, then find img inside it
+    return this.page.getByRole('heading', { name: 'Profile Icon', exact: true })
+      .locator('..')
+      .locator('img');
+  }
+
+  navProfileIcon() {
+    return this.page.locator('header img[alt]').filter({ visible: true }).first();
   }
 }

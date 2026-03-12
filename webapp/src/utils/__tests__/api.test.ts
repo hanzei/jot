@@ -131,6 +131,7 @@ describe('API Module', () => {
             role: 'user',
             created_at: '2023-01-01T00:00:00Z',
             updated_at: '2023-01-01T00:00:00Z',
+            has_profile_icon: false,
           },
           settings: { user_id: '1', language: 'system', theme: 'system', updated_at: '2023-01-01T00:00:00Z' },
         }
@@ -195,6 +196,7 @@ describe('API Module', () => {
             role: 'user',
             created_at: '2023-01-01T00:00:00Z',
             updated_at: '2023-01-01T00:00:00Z',
+            has_profile_icon: false,
           },
           settings: { user_id: '1', language: 'system', theme: 'system', updated_at: '2023-01-01T00:00:00Z' },
         }
@@ -584,6 +586,7 @@ describe('API Module', () => {
             role: 'user',
             created_at: '2023-01-01T00:00:00Z',
             updated_at: '2023-01-01T00:00:00Z',
+            has_profile_icon: false,
           }
         ]
         mockGet.mockResolvedValue({ data: mockUsers })
@@ -624,6 +627,7 @@ describe('API Module', () => {
               role: 'user',
               created_at: '2023-01-01T00:00:00Z',
               updated_at: '2023-01-01T00:00:00Z',
+              has_profile_icon: false,
             }
           ]
         }
@@ -658,6 +662,7 @@ describe('API Module', () => {
           role: 'user',
           created_at: '2023-01-01T00:00:00Z',
           updated_at: '2023-01-01T00:00:00Z',
+          has_profile_icon: false,
         }
         mockPost.mockResolvedValue({ data: createdUser })
 

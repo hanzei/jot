@@ -9,6 +9,7 @@ export interface User {
   first_name: string;
   last_name: string;
   role: string;
+  has_profile_icon: boolean;
   created_at: string;
   updated_at: string;
 }
