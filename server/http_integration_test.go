@@ -915,6 +915,11 @@ func TestUploadProfileIcon(t *testing.T) {
 	})
 
 	t.Run("stored image is JPEG", func(t *testing.T) {
+		// Upload first so this subtest is self-contained.
+		img := image.NewRGBA(image.Rect(0, 0, 8, 8))
+		body, ct := createMultipartImage(t, "file", "test.png", encodePNG(t, img))
+		require.Equal(t, http.StatusOK, ts.uploadProfileIcon(t, user, body, ct).StatusCode)
+
 		// Fetch the profile icon and verify JPEG magic bytes
 		resp := ts.authRequest(t, user, http.MethodGet, "/api/v1/users/"+user.User.ID+"/profile-icon", nil)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
