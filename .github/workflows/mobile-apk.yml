@@ -34,14 +34,14 @@ jobs:
         env:
           GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
 
-      - name: Write keystore
-        run: echo "$KEYSTORE_BASE64" | base64 -d > mobile/android/app/release.keystore
-        env:
-          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
-
       - name: Generate native Android project
         run: npx expo prebuild --platform android --clean
         working-directory: ./mobile
+
+      - name: Write keystore
+        run: echo "$KEYSTORE_BASE64" | base64 -d > ./mobile/android/app/release.keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
 
       - name: Build release APK
         run: ./gradlew assembleRelease
