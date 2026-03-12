@@ -1,5 +1,8 @@
 import path from 'path';
+import { fileURLToPath } from 'url';
 import { Page, expect } from '@playwright/test';
+
+const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export class SettingsPage {
   constructor(private page: Page) {}
@@ -50,11 +53,11 @@ export class SettingsPage {
     await this.page.getByRole('button', { name: 'Remove icon' }).click();
   }
 
-  async profileIconPreview() {
-    return this.page.locator('section, div').filter({ hasText: 'Profile Icon' }).locator('img');
+  profileIconPreview() {
+    return this.page.locator('div').filter({ hasText: /^Profile Icon$/ }).locator('..').locator('img');
   }
 
-  async navProfileIcon() {
+  navProfileIcon() {
     return this.page.locator('header img[alt]').first();
   }
 }

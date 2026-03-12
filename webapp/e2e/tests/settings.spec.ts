@@ -64,8 +64,7 @@ test.describe('Settings', () => {
 
       // Before upload: no <img> in the Profile Icon section
       await expect(page.getByText('Profile Icon')).toBeVisible();
-      const preview = page.locator('div').filter({ hasText: /^Profile Icon$/ }).locator('..').locator('img');
-      await expect(preview).toHaveCount(0);
+      await expect(settingsPage.profileIconPreview()).toHaveCount(0);
 
       // Upload the icon
       const uploadResponse = page.waitForResponse(
@@ -75,10 +74,10 @@ test.describe('Settings', () => {
       await uploadResponse;
 
       // Icon preview appears in settings
-      await expect(preview).toBeVisible();
+      await expect(settingsPage.profileIconPreview()).toBeVisible();
 
       // Icon appears in nav header
-      await expect(page.locator('header img[alt]').first()).toBeVisible();
+      await expect(settingsPage.navProfileIcon()).toBeVisible();
 
       void authenticatedUser;
     });
@@ -97,8 +96,7 @@ test.describe('Settings', () => {
       await settingsPage.uploadProfileIcon();
       await uploadResponse;
 
-      const preview = page.locator('div').filter({ hasText: /^Profile Icon$/ }).locator('..').locator('img');
-      await expect(preview).toBeVisible();
+      await expect(settingsPage.profileIconPreview()).toBeVisible();
 
       // Now remove
       const deleteResponse = page.waitForResponse(
@@ -108,11 +106,11 @@ test.describe('Settings', () => {
       await deleteResponse;
 
       // Preview img is gone; Remove button is gone
-      await expect(preview).toHaveCount(0);
+      await expect(settingsPage.profileIconPreview()).toHaveCount(0);
       await expect(page.getByRole('button', { name: 'Remove icon' })).toHaveCount(0);
 
       // Nav header no longer shows an <img>
-      await expect(page.locator('header img[alt]')).toHaveCount(0);
+      await expect(settingsPage.navProfileIcon()).toHaveCount(0);
 
       void authenticatedUser;
     });

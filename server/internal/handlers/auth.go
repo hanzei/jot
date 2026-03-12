@@ -358,7 +358,7 @@ func (h *AuthHandler) UploadProfileIcon(w http.ResponseWriter, r *http.Request) 
 	}
 
 	if err = h.userStore.UpdateProfileIcon(currentUser.ID, data, contentType); err != nil {
-		return http.StatusInternalServerError, err
+		return http.StatusInternalServerError, fmt.Errorf("update profile icon for user %s: %w", currentUser.ID, err)
 	}
 
 	user, err := h.userStore.GetByID(currentUser.ID)
@@ -381,7 +381,7 @@ func (h *AuthHandler) DeleteProfileIcon(w http.ResponseWriter, r *http.Request) 
 	}
 
 	if err := h.userStore.DeleteProfileIcon(currentUser.ID); err != nil {
-		return http.StatusInternalServerError, err
+		return http.StatusInternalServerError, fmt.Errorf("delete profile icon for user %s: %w", currentUser.ID, err)
 	}
 
 	w.WriteHeader(http.StatusNoContent)
