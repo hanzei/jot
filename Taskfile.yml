@@ -4,7 +4,20 @@ tasks:
   run-server:
     desc: Start the Jot server
     dir: server
-    cmd: go build -o ./jot . && ./jot
+    vars:
+      COMMIT:
+        sh: git rev-parse --short HEAD
+      BUILD_TIME:
+        sh: date -u +%Y-%m-%dT%H:%M:%SZ
+    cmds:
+      - >
+        go build
+        -buildvcs=false
+        -ldflags "-X 'github.com/hanzei/jot/server/internal/server.commit={{.COMMIT}}'
+                  -X 'github.com/hanzei/jot/server/internal/server.version=dev'
+                  -X 'github.com/hanzei/jot/server/internal/server.buildTime={{.BUILD_TIME}}'"
+        -o jot .
+      - ./jot
 
   run-webapp:
     desc: Build webapp in watch mode

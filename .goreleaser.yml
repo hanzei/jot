@@ -13,6 +13,9 @@ builds:
       - arm64
     ldflags:
       - -s -w
+      - -X 'github.com/hanzei/jot/server/internal/server.version={{.Version}}'
+      - -X 'github.com/hanzei/jot/server/internal/server.commit={{.ShortCommit}}'
+      - -X 'github.com/hanzei/jot/server/internal/server.buildTime={{.Date}}'
     overrides:
       - goos: linux
         goarch: arm64
