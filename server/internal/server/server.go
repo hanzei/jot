@@ -6,6 +6,7 @@ import (
 	"net/http"
 	"os"
 	"path/filepath"
+	"runtime/debug"
 	"strings"
 	"time"
 
@@ -20,11 +21,34 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-//nolint:gochecknoglobals
-var (
+func buildInfo() (version, commit string) {
 	version = "dev"
-	commit  = "unknown"
-)
+	commit = "unknown"
+
+	info, ok := debug.ReadBuildInfo()
+	if !ok {
+		return version, commit
+	}
+
+	if info.Main.Version != "" && info.Main.Version != "(devel)" {
+		version = info.Main.Version
+	}
+
+	for _, s := range info.Settings {
+		switch s.Key {
+		case "vcs.revision":
+			if len(s.Value) >= 7 {
+				commit = s.Value[:7]
+			}
+		case "vcs.modified":
+			if s.Value == "true" {
+				commit += "-dirty"
+			}
+		}
+	}
+
+	return version, commit
+}
 
 type Server struct {
 	router         chi.Router
@@ -258,6 +282,7 @@ type aboutResponse struct {
 }
 
 func (s *Server) handleAbout(w http.ResponseWriter, _ *http.Request) (int, error) {
+	version, commit := buildInfo()
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(aboutResponse{Version: version, Commit: commit}); err != nil {
 		return http.StatusInternalServerError, fmt.Errorf("encoding about response: %w", err)
