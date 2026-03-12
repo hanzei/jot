@@ -1,5 +1,5 @@
 import { useState, useRef } from 'react';
-import { Dialog } from '@headlessui/react';
+import { Dialog, DialogPanel, DialogTitle } from '@headlessui/react';
 import { XMarkIcon, ArrowUpTrayIcon } from '@heroicons/react/24/outline';
 import { useTranslation } from 'react-i18next';
 import { notes } from '@/utils/api';
@@ -81,11 +81,11 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
 
       <div className="fixed inset-0 overflow-y-auto">
         <div className="flex min-h-full items-center justify-center p-4">
-          <Dialog.Panel className="mx-auto max-w-md w-full rounded bg-white dark:bg-slate-800 p-6 shadow-xl border border-gray-200 dark:border-slate-700">
+          <DialogPanel className="mx-auto max-w-md w-full rounded bg-white dark:bg-slate-800 p-6 shadow-xl border border-gray-200 dark:border-slate-700">
             <div className="flex items-center justify-between mb-4">
-              <Dialog.Title className="text-lg font-medium text-gray-900 dark:text-white">
+              <DialogTitle className="text-lg font-medium text-gray-900 dark:text-white">
                 {t('import.title')}
-              </Dialog.Title>
+              </DialogTitle>
               <button
                 onClick={handleClose}
                 className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300"
@@ -166,7 +166,7 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
                 </button>
               )}
             </div>
-          </Dialog.Panel>
+          </DialogPanel>
         </div>
       </div>
     </Dialog>
