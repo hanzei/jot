@@ -7,6 +7,7 @@ interface NoteCardProps {
   note: Note;
   onPress: () => void;
   onLongPress?: () => void;
+  onMenuPress?: () => void;
 }
 
 const MAX_PREVIEW_ITEMS = 4;
@@ -39,7 +40,7 @@ function TodoPreview({ items }: { items: NoteItem[] }) {
   );
 }
 
-function NoteCard({ note, onPress, onLongPress }: NoteCardProps) {
+function NoteCard({ note, onPress, onLongPress, onMenuPress }: NoteCardProps) {
   const hasColor = note.color && note.color !== '#ffffff';
   const borderColor = hasColor ? note.color : '#e5e7eb';
 
@@ -51,11 +52,26 @@ function NoteCard({ note, onPress, onLongPress }: NoteCardProps) {
       activeOpacity={0.7}
       testID={`note-card-${note.id}`}
     >
-      {note.title ? (
-        <Text style={styles.title} numberOfLines={1}>
-          {note.title}
-        </Text>
-      ) : null}
+      <View style={styles.cardHeader}>
+        <View style={styles.cardHeaderContent}>
+          {note.title ? (
+            <Text style={styles.title} numberOfLines={1}>
+              {note.title}
+            </Text>
+          ) : null}
+        </View>
+        {onMenuPress && (
+          <TouchableOpacity
+            onPress={onMenuPress}
+            style={styles.menuButton}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            testID={`note-menu-${note.id}`}
+            accessibilityLabel="Note menu"
+          >
+            <Ionicons name="ellipsis-vertical" size={18} color="#999" />
+          </TouchableOpacity>
+        )}
+      </View>
 
       {note.note_type === 'text' && note.content ? (
         <Text style={styles.content} numberOfLines={3}>
@@ -95,6 +111,18 @@ const styles = StyleSheet.create({
     padding: 12,
     marginHorizontal: 16,
     marginVertical: 4,
+  },
+  cardHeader: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+  },
+  cardHeaderContent: {
+    flex: 1,
+  },
+  menuButton: {
+    padding: 4,
+    marginTop: -4,
+    marginRight: -4,
   },
   title: {
     fontSize: 16,

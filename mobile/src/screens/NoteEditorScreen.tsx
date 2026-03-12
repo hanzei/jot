@@ -10,6 +10,9 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import DraggableFlatList, { ScaleDecorator } from 'react-native-draggable-flatlist';
+import { GestureHandlerRootView } from 'react-native-gesture-handler';
+import * as Haptics from 'expo-haptics';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { useNote, useCreateNote, useUpdateNote, useDeleteNote } from '../hooks/useNotes';
@@ -379,6 +382,49 @@ export default function NoteEditorScreen() {
   const uncheckedItems = useMemo(() => items.filter((item) => !item.completed), [items]);
   const checkedItems = useMemo(() => items.filter((item) => item.completed), [items]);
 
+  // Use ref to avoid recreating handleTodoReorder on every items change
+  const checkedItemsRef = useRef(checkedItems);
+  checkedItemsRef.current = checkedItems;
+
+  const handleTodoReorder = useCallback(
+    (reorderedUnchecked: LocalItem[]) => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+      // Merge reordered unchecked with existing checked items
+      setItems([...reorderedUnchecked, ...checkedItemsRef.current]);
+      scheduleUpdate();
+    },
+    [scheduleUpdate],
+  );
+
+  const handleTodoDragStart = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+  }, []);
+
+  const renderTodoItem = useCallback(
+    ({ item, drag, isActive }: { item: LocalItem; drag: () => void; isActive: boolean }) => {
+      const originalIndex = itemIndexMap.get(item.id);
+      if (originalIndex === undefined) return null;
+      return (
+        <ScaleDecorator>
+          <View style={isActive ? styles.draggingTodoItem : undefined}>
+            <TodoItem
+              text={item.text}
+              completed={item.completed}
+              indentLevel={item.indent_level}
+              showDragHandle
+              onDrag={drag}
+              onToggle={() => handleToggleItem(originalIndex)}
+              onChangeText={(text) => handleItemTextChange(originalIndex, text)}
+              onDelete={() => handleDeleteItem(originalIndex)}
+              onSubmitEditing={handleAddItem}
+            />
+          </View>
+        </ScaleDecorator>
+      );
+    },
+    [itemIndexMap, handleToggleItem, handleItemTextChange, handleDeleteItem, handleAddItem],
+  );
+
   const noteBackground = color && color !== '#ffffff' ? color : '#fff';
 
   return (
@@ -454,22 +500,16 @@ export default function NoteEditorScreen() {
           />
         ) : (
           <View style={styles.todoContainer}>
-            {uncheckedItems.map((item) => {
-              const originalIndex = itemIndexMap.get(item.id);
-              if (originalIndex === undefined) return null;
-              return (
-                <TodoItem
-                  key={item.id}
-                  text={item.text}
-                  completed={item.completed}
-                  indentLevel={item.indent_level}
-                  onToggle={() => handleToggleItem(originalIndex)}
-                  onChangeText={(text) => handleItemTextChange(originalIndex, text)}
-                  onDelete={() => handleDeleteItem(originalIndex)}
-                  onSubmitEditing={handleAddItem}
-                />
-              );
-            })}
+            <GestureHandlerRootView>
+              <DraggableFlatList
+                data={uncheckedItems}
+                keyExtractor={(item) => item.id}
+                scrollEnabled={false}
+                onDragBegin={handleTodoDragStart}
+                onDragEnd={({ data }) => handleTodoReorder(data)}
+                renderItem={renderTodoItem}
+              />
+            </GestureHandlerRootView>
 
             <TouchableOpacity style={styles.addItemRow} onPress={handleAddItem} testID="add-todo-item">
               <Ionicons name="add" size={22} color="#2563eb" />
@@ -697,5 +737,14 @@ const styles = StyleSheet.create({
     color: '#dc2626',
     fontSize: 14,
     textAlign: 'center',
+  },
+  draggingTodoItem: {
+    backgroundColor: '#f0f4ff',
+    borderRadius: 8,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
   },
 });
