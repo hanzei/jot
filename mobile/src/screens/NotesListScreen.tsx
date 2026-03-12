@@ -33,7 +33,7 @@ export default function NotesListScreen({ variant = 'notes' }: NotesListScreenPr
     search: submittedSearch || undefined,
   }), [variant, submittedSearch]);
 
-  const { data: notes, isLoading, refetch, isRefetching } = useNotes(params);
+  const { data: notes, isLoading, isError, refetch, isRefetching } = useNotes(params);
   const navigation = useNavigation<NavigationProp>();
 
   const handleSearch = useCallback(() => {
@@ -72,6 +72,23 @@ export default function NotesListScreen({ variant = 'notes' }: NotesListScreenPr
     ),
     [handleNotePress],
   );
+
+  if (isError) {
+    return (
+      <View style={styles.emptyContainer} testID="notes-error-state">
+        <Ionicons name="cloud-offline-outline" size={64} color="#d1d5db" />
+        <Text style={styles.emptyTitle}>Failed to load notes</Text>
+        <Text style={styles.emptySubtext}>Check your connection and try again</Text>
+        <TouchableOpacity
+          style={styles.retryButton}
+          onPress={() => refetch()}
+          testID="retry-fetch"
+        >
+          <Text style={styles.retryText}>Retry</Text>
+        </TouchableOpacity>
+      </View>
+    );
+  }
 
   const isEmpty = !isLoading && (!notes || notes.length === 0);
 
@@ -233,6 +250,18 @@ const styles = StyleSheet.create({
   },
   listContent: {
     paddingBottom: 80,
+  },
+  retryButton: {
+    marginTop: 16,
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    borderRadius: 8,
+    backgroundColor: '#2563eb',
+  },
+  retryText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
   },
   fab: {
     position: 'absolute',

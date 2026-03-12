@@ -74,6 +74,8 @@ export default function NoteEditorScreen() {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isMountedRef = useRef(true);
   const isInitializedRef = useRef(false);
+  const intentionalExitRef = useRef(false);
+  const saveInFlightRef = useRef<Promise<void> | null>(null);
   const tempIdCounterRef = useRef(0);
 
   // Refs for current state to avoid stale closures in debounced save
@@ -113,16 +115,25 @@ export default function NoteEditorScreen() {
   }, [existingNote]);
 
   const flushSave = useCallback(async (unmounting = false) => {
-    const currentNoteId = noteIdRef.current;
-    const currentTitle = titleRef.current;
-    const currentContent = contentRef.current;
-    const currentItems = itemsRef.current;
-    const currentCollapsed = checkedItemsCollapsedRef.current;
-    const currentNoteType = noteTypeRef.current;
+    // Skip save if editing an existing note that hasn't hydrated yet
+    if (noteIdRef.current && !isInitializedRef.current) return;
 
-    if (!currentNoteId) {
-      if (!currentTitle && !currentContent && currentItems.length === 0) return;
-      try {
+    // Serialize mutations: chain onto any in-flight save to prevent concurrent writes
+    const predecessor = saveInFlightRef.current;
+    const thisPromise = (async () => {
+      if (predecessor) {
+        try { await predecessor; } catch { /* handled by prior caller */ }
+      }
+
+      const currentNoteId = noteIdRef.current;
+      const currentTitle = titleRef.current;
+      const currentContent = contentRef.current;
+      const currentItems = itemsRef.current;
+      const currentCollapsed = checkedItemsCollapsedRef.current;
+      const currentNoteType = noteTypeRef.current;
+
+      if (!currentNoteId) {
+        if (!currentTitle && !currentContent && currentItems.length === 0) return;
         const newNote = await createMutateRef.current({
           title: currentTitle,
           content: currentContent,
@@ -136,14 +147,7 @@ export default function NoteEditorScreen() {
         if (newNote.items) {
           setItems(toLocalItems(newNote.items));
         }
-      } catch (err) {
-        console.error('Failed to create note:', err);
-        if (isMountedRef.current && !unmounting) {
-          setSaveError('Failed to save note. Tap to retry.');
-        }
-      }
-    } else {
-      try {
+      } else {
         const updateData: UpdateNoteRequest = {
           title: currentTitle,
           content: currentContent,
@@ -161,11 +165,20 @@ export default function NoteEditorScreen() {
         if (updated.items) {
           setItems(toLocalItems(updated.items));
         }
-      } catch (err) {
-        console.error('Failed to update note:', err);
-        if (isMountedRef.current && !unmounting) {
-          setSaveError('Failed to save note. Tap to retry.');
-        }
+      }
+    })();
+
+    saveInFlightRef.current = thisPromise;
+    try {
+      await thisPromise;
+    } catch (err) {
+      console.error('Failed to save note:', err);
+      if (isMountedRef.current && !unmounting) {
+        setSaveError('Failed to save note. Tap to retry.');
+      }
+    } finally {
+      if (saveInFlightRef.current === thisPromise) {
+        saveInFlightRef.current = null;
       }
     }
   }, []);
@@ -179,7 +192,7 @@ export default function NoteEditorScreen() {
     }, AUTO_SAVE_DEBOUNCE_MS);
   }, [flushSave]);
 
-  // Flush pending save on unmount (prevent data loss)
+  // Flush pending save on unmount (prevent data loss), skip if intentionally exiting
   useEffect(() => {
     isMountedRef.current = true;
     return () => {
@@ -188,7 +201,9 @@ export default function NoteEditorScreen() {
         clearTimeout(debounceRef.current);
         debounceRef.current = null;
       }
-      flushSave(true);
+      if (!intentionalExitRef.current) {
+        flushSave(true);
+      }
     };
   }, [flushSave]);
 
@@ -257,6 +272,7 @@ export default function NoteEditorScreen() {
 
   const handleDelete = useCallback(() => {
     if (!noteId) {
+      intentionalExitRef.current = true;
       navigation.goBack();
       return;
     }
@@ -267,14 +283,20 @@ export default function NoteEditorScreen() {
         style: 'destructive',
         onPress: async () => {
           try {
-            // Cancel any pending save
+            // Cancel any pending debounce and mark intentional exit
             if (debounceRef.current) {
               clearTimeout(debounceRef.current);
               debounceRef.current = null;
             }
+            intentionalExitRef.current = true;
+            // Wait for any in-flight save to finish before deleting
+            if (saveInFlightRef.current) {
+              try { await saveInFlightRef.current; } catch { /* already handled */ }
+            }
             await deleteMutation.mutateAsync(noteId);
             navigation.goBack();
           } catch {
+            intentionalExitRef.current = false;
             Alert.alert('Error', 'Failed to delete note');
           }
         },
@@ -286,6 +308,9 @@ export default function NoteEditorScreen() {
     if (hasCreated) return;
     setNoteType((prev) => (prev === 'text' ? 'todo' : 'text'));
   }, [hasCreated]);
+
+  // Disable inputs while waiting for existing note to hydrate
+  const isHydrating = initialNoteId !== null && !existingNote;
 
   // Build index lookup for items to avoid O(n) indexOf per item
   const itemIndexMap = useMemo(
@@ -346,6 +371,7 @@ export default function NoteEditorScreen() {
           placeholder="Title"
           placeholderTextColor="#999"
           maxLength={MAX_TITLE_LENGTH}
+          editable={!isHydrating}
           testID="note-title-input"
         />
 
@@ -359,6 +385,7 @@ export default function NoteEditorScreen() {
             multiline
             textAlignVertical="top"
             maxLength={MAX_CONTENT_LENGTH}
+            editable={!isHydrating}
             testID="note-content-input"
           />
         ) : (

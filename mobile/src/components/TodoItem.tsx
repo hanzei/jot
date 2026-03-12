@@ -26,11 +26,11 @@ function TodoItem({
   return (
     <View style={[styles.container, { marginLeft: indentLevel * 24 }]}>
       <TouchableOpacity
-        onPress={onToggle}
+        onPress={editable ? onToggle : undefined}
         style={styles.checkbox}
         testID="todo-item-checkbox"
         accessibilityRole="checkbox"
-        accessibilityState={{ checked: completed }}
+        accessibilityState={{ checked: completed, disabled: !editable }}
         accessibilityLabel={`${text || 'List item'} checkbox`}
       >
         <Ionicons
