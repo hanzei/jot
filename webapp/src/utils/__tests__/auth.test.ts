@@ -26,6 +26,7 @@ const mockUser: User = {
   role: 'user',
   created_at: '2023-01-01T00:00:00Z',
   updated_at: '2023-01-01T00:00:00Z',
+  has_profile_icon: false,
 }
 
 const mockAdminUser: User = {
@@ -34,6 +35,7 @@ const mockAdminUser: User = {
   role: ROLES.ADMIN,
   created_at: '2023-01-01T00:00:00Z',
   updated_at: '2023-01-01T00:00:00Z',
+  has_profile_icon: false,
 }
 
 describe('Auth Utilities', () => {

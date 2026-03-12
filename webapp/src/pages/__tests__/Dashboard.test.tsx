@@ -167,6 +167,7 @@ describe('Dashboard', () => {
       role: 'user',
       created_at: '2023-01-01T00:00:00Z',
       updated_at: '2023-01-01T00:00:00Z',
+      has_profile_icon: false,
     })
     vi.mocked(auth.isAdmin).mockReturnValue(false)
     vi.mocked(notes.getAll).mockResolvedValue([])

@@ -41,6 +41,7 @@ const currentUser: User = {
   role: 'admin',
   created_at: '2023-01-01T00:00:00Z',
   updated_at: '2023-01-01T00:00:00Z',
+  has_profile_icon: false,
 }
 
 const otherUser: User = {
@@ -49,6 +50,7 @@ const otherUser: User = {
   role: 'user',
   created_at: '2023-01-02T00:00:00Z',
   updated_at: '2023-01-02T00:00:00Z',
+  has_profile_icon: false,
 }
 
 const otherAdmin: User = {
@@ -57,6 +59,7 @@ const otherAdmin: User = {
   role: 'admin',
   created_at: '2023-01-03T00:00:00Z',
   updated_at: '2023-01-03T00:00:00Z',
+  has_profile_icon: false,
 }
 
 const renderAdmin = (onLogout = vi.fn()) => {
