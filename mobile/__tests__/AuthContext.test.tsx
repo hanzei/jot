@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, waitFor, act, fireEvent } from '@testing-library/react-native';
+import { render, waitFor, act, fireEvent, cleanup } from '@testing-library/react-native';
 import { Text, TouchableOpacity } from 'react-native';
 import { AuthProvider, useAuth } from '../src/store/AuthContext';
 import { auth, getStoredSession, setOnUnauthorized } from '../src/api/client';
@@ -48,6 +48,7 @@ function LoginTrigger() {
 
   return (
     <>
+      <Text testID="loading">{String(isLoading)}</Text>
       <Text testID="username">{user?.username || 'none'}</Text>
     </>
   );
@@ -62,8 +63,12 @@ describe('AuthContext', () => {
     mockGetStoredSession.mockResolvedValue(null);
   });
 
+  afterEach(() => {
+    cleanup();
+  });
+
   it('starts with isLoading true and no user', async () => {
-    const { getByTestId } = render(
+    const { getByTestId, unmount } = render(
       <AuthProvider>
         <TestConsumer />
       </AuthProvider>,
@@ -77,13 +82,14 @@ describe('AuthContext', () => {
 
     expect(getByTestId('authenticated').props.children).toBe('false');
     expect(getByTestId('username').props.children).toBe('none');
+    unmount();
   });
 
   it('restores session on mount when token exists', async () => {
     mockGetStoredSession.mockResolvedValue('existing-token');
     mockAuth.me.mockResolvedValue({ user: { ...mockUser, username: 'restored' }, settings: mockSettings });
 
-    const { getByTestId } = render(
+    const { getByTestId, unmount } = render(
       <AuthProvider>
         <TestConsumer />
       </AuthProvider>,
@@ -95,22 +101,28 @@ describe('AuthContext', () => {
 
     expect(getByTestId('authenticated').props.children).toBe('true');
     expect(getByTestId('username').props.children).toBe('restored');
+    unmount();
   });
 
   it('login sets user on success', async () => {
     mockAuth.login.mockResolvedValue({ user: mockUser, settings: mockSettings });
 
-    const { getByTestId } = render(
+    const { getByTestId, unmount } = render(
       <AuthProvider>
         <LoginTrigger />
       </AuthProvider>,
     );
 
     await waitFor(() => {
+      expect(getByTestId('loading').props.children).toBe('false');
+    });
+
+    await waitFor(() => {
       expect(getByTestId('username').props.children).toBe('testuser');
     });
 
     expect(mockAuth.login).toHaveBeenCalledWith({ username: 'testuser', password: 'password' });
+    unmount();
   });
 
   it('logout clears user state', async () => {
@@ -118,18 +130,16 @@ describe('AuthContext', () => {
     mockAuth.me.mockResolvedValue({ user: mockUser, settings: mockSettings });
     mockAuth.logout.mockResolvedValue(undefined);
 
-    const { getByTestId } = render(
+    const { getByTestId, unmount } = render(
       <AuthProvider>
         <TestConsumer />
       </AuthProvider>,
     );
 
-    // Wait for session restore to set user
     await waitFor(() => {
       expect(getByTestId('authenticated').props.children).toBe('true');
     });
 
-    // Trigger logout via the button
     await act(async () => {
       fireEvent.press(getByTestId('logout-button'));
     });
@@ -137,6 +147,7 @@ describe('AuthContext', () => {
     expect(mockAuth.logout).toHaveBeenCalled();
     expect(getByTestId('authenticated').props.children).toBe('false');
     expect(getByTestId('username').props.children).toBe('none');
+    unmount();
   });
 
   it('logout clears state even when auth.logout rejects', async () => {
@@ -144,18 +155,16 @@ describe('AuthContext', () => {
     mockAuth.me.mockResolvedValue({ user: mockUser, settings: mockSettings });
     mockAuth.logout.mockRejectedValue(new Error('network error'));
 
-    const { getByTestId } = render(
+    const { getByTestId, unmount } = render(
       <AuthProvider>
         <TestConsumer />
       </AuthProvider>,
     );
 
-    // Wait for session restore
     await waitFor(() => {
       expect(getByTestId('authenticated').props.children).toBe('true');
     });
 
-    // Trigger logout - should clear state despite rejection
     await act(async () => {
       fireEvent.press(getByTestId('logout-button'));
     });
@@ -163,6 +172,7 @@ describe('AuthContext', () => {
     expect(mockAuth.logout).toHaveBeenCalled();
     expect(getByTestId('authenticated').props.children).toBe('false');
     expect(getByTestId('username').props.children).toBe('none');
+    unmount();
   });
 
   it('unauthorized callback clears auth state', async () => {
@@ -174,7 +184,7 @@ describe('AuthContext', () => {
     mockGetStoredSession.mockResolvedValue('token');
     mockAuth.me.mockResolvedValue({ user: mockUser, settings: mockSettings });
 
-    const { getByTestId } = render(
+    const { getByTestId, unmount } = render(
       <AuthProvider>
         <TestConsumer />
       </AuthProvider>,
@@ -184,12 +194,12 @@ describe('AuthContext', () => {
       expect(getByTestId('authenticated').props.children).toBe('true');
     });
 
-    // Simulate a 401 from the interceptor
     await act(async () => {
       unauthorizedCb?.();
     });
 
     expect(getByTestId('authenticated').props.children).toBe('false');
     expect(getByTestId('username').props.children).toBe('none');
+    unmount();
   });
 });

@@ -7,4 +7,7 @@ module.exports = {
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
   },
+  // forceExit required: @testing-library/react-native's waitFor uses setInterval
+  // internally which can outlive tests in the react-native-env.js environment
+  forceExit: true,
 };
