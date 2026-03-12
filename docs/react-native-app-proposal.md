@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document proposes a React Native mobile client for Jot. The app targets **Android** and connects to an existing Jot server via the same REST API the web app uses. Push notification support requires minor additions to the server (device token storage and FCM dispatch); all other backend routes are consumed as-is.
+This document proposes a React Native mobile client for Jot. The app targets **Android** and connects to an existing Jot server via the same REST API the web app uses. The server uses cookie-based sessions (`jot_session`); the mobile app extracts the session token from the login response and stores it in `expo-secure-store`, attaching it as a `Cookie` header on all requests. Push notification support requires minor additions to the server (device token storage and FCM dispatch); all other backend routes are consumed as-is.
 
 The scope of this proposal covers the core note-taking experience. Settings and admin features are explicitly out of scope.
 
@@ -58,7 +58,8 @@ A floating action button (FAB) on the Notes List screen opens the Note Editor to
 - "Sign in" button
 - Link to Register
 - Error message for invalid credentials
-- JWT token stored in `expo-secure-store` (Android Keystore-backed)
+- On success, extract the `jot_session` token from the `Set-Cookie` response header and persist it in `expo-secure-store` (Android Keystore-backed)
+- The axios instance attaches the token as a `Cookie: jot_session=<token>` header on every subsequent request
 - After login, the current FCM device token is registered with the server (`POST /api/v1/devices`)
 
 ### Register
@@ -215,7 +216,7 @@ CREATE TABLE device_tokens (
 | Animations | react-native-reanimated |
 | Drag-and-drop | react-native-draggable-flatlist |
 | SSE | react-native-sse |
-| Secure token storage | expo-secure-store |
+| Session storage | expo-secure-store (persists `jot_session` cookie value) |
 | Push notifications | expo-notifications + Firebase (FCM) |
 | Icons | @expo/vector-icons (Heroicons subset) |
 | Styling | StyleSheet API + a theme context for light/dark |
