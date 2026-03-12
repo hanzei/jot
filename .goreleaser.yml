@@ -1,0 +1,41 @@
+version: 2
+
+project_name: jot
+
+builds:
+  - dir: server
+    env:
+      - CGO_ENABLED=1
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X github.com/hanzei/jot/server/internal/server.version={{.Version}}
+      - -X github.com/hanzei/jot/server/internal/server.commit={{.Commit}}
+    overrides:
+      - goos: linux
+        goarch: arm64
+        env:
+          - CGO_ENABLED=1
+          - CC=aarch64-linux-gnu-gcc
+
+archives:
+  - format: tar.gz
+    files:
+      - src: server/migrations/*
+        dst: migrations
+
+checksum:
+  name_template: checksums.txt
+
+changelog:
+  sort: asc
+  filters:
+    exclude:
+      - "^docs:"
+      - "^test:"
+      - "^ci:"
+      - "^chore:"

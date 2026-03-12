@@ -30,8 +30,13 @@ RUN go mod download
 # Copy backend source code
 COPY server/ ./
 
+ARG VERSION=dev
+ARG COMMIT=unknown
+
 # Build the backend
-RUN CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo -o main .
+RUN CGO_ENABLED=1 GOOS=linux go build -a -installsuffix cgo \
+    -ldflags "-s -w -X github.com/hanzei/jot/server/internal/server.version=${VERSION} -X github.com/hanzei/jot/server/internal/server.commit=${COMMIT}" \
+    -o main .
 
 # Production stage
 FROM alpine:latest
