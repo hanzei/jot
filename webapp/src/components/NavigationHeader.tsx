@@ -15,9 +15,92 @@ interface NavigationHeaderProps {
   settingsLinkActive?: boolean;
 }
 
+interface ProfileMenuProps {
+  iconSrc: string | null;
+  displayUsername: string | undefined;
+  firstName: string | undefined;
+  baseUsername: string;
+  showAdminLink: boolean | undefined;
+  adminLinkActive: boolean | undefined;
+  settingsLinkActive: boolean | undefined;
+  onLogout: () => void;
+}
+
+const ProfileMenu = ({ iconSrc, displayUsername, firstName, baseUsername, showAdminLink, adminLinkActive, settingsLinkActive, onLogout }: ProfileMenuProps) => {
+  const { t } = useTranslation();
+  return (
+    <Menu as="div" className="relative">
+      <Menu.Button
+        title={displayUsername}
+        className="flex items-center rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-slate-800"
+      >
+        {iconSrc ? (
+          <img src={iconSrc} alt={displayUsername} className="h-8 w-8 rounded-full object-cover" />
+        ) : (
+          <LetterAvatar firstName={firstName} username={baseUsername} className="h-8 w-8" />
+        )}
+      </Menu.Button>
+      <Menu.Items className="absolute right-0 mt-2 w-44 bg-white dark:bg-slate-800 rounded-md shadow-lg ring-1 ring-black/5 dark:ring-slate-600/20 focus:outline-none z-10 border border-gray-200 dark:border-slate-600">
+        <div className="py-1">
+          <Menu.Item>
+            {({ active }) => (
+              <Link
+                to="/settings"
+                className={`block px-4 py-2 text-sm ${
+                  settingsLinkActive
+                    ? 'text-blue-600 dark:text-blue-400 font-medium'
+                    : active
+                    ? 'bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-200'
+                    : 'text-gray-700 dark:text-gray-200'
+                }`}
+                {...(settingsLinkActive ? { 'aria-current': 'page' as const } : {})}
+              >
+                {t('nav.settings')}
+              </Link>
+            )}
+          </Menu.Item>
+          {showAdminLink && (
+            <Menu.Item>
+              {({ active }) => (
+                <Link
+                  to="/admin"
+                  className={`block px-4 py-2 text-sm ${
+                    adminLinkActive
+                      ? 'text-blue-600 dark:text-blue-400 font-medium'
+                      : active
+                      ? 'bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-200'
+                      : 'text-gray-700 dark:text-gray-200'
+                  }`}
+                  {...(adminLinkActive ? { 'aria-current': 'page' as const } : {})}
+                >
+                  {t('nav.admin')}
+                </Link>
+              )}
+            </Menu.Item>
+          )}
+          <Menu.Item>
+            {({ active }) => (
+              <button
+                onClick={onLogout}
+                className={`block w-full text-left px-4 py-2 text-sm ${
+                  active
+                    ? 'bg-gray-100 dark:bg-slate-700 text-red-600 dark:text-red-400'
+                    : 'text-gray-700 dark:text-gray-200'
+                }`}
+              >
+                {t('nav.logout')}
+              </button>
+            )}
+          </Menu.Item>
+        </div>
+      </Menu.Items>
+    </Menu>
+  );
+};
+
 const NavigationHeader = ({ title = 'Jot', onLogout, children, username, isAdmin: showAdminLink, adminLinkActive, settingsLinkActive }: NavigationHeaderProps) => {
   const currentUser = getUser();
-  const baseUsername = username ?? currentUser?.username;
+  const baseUsername = username ?? currentUser?.username ?? '';
   const fullName = currentUser?.first_name || currentUser?.last_name
     ? `${currentUser.first_name} ${currentUser.last_name}`.trim()
     : null;
@@ -27,51 +110,17 @@ const NavigationHeader = ({ title = 'Jot', onLogout, children, username, isAdmin
   const iconSrc = currentUser?.has_profile_icon
     ? `/api/v1/users/${currentUser.id}/profile-icon?v=${currentUser.updated_at}`
     : null;
-  const { t } = useTranslation();
 
-  const profileMenu = (
-    <Menu as="div" className="relative">
-      <Menu.Button className="flex items-center rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-slate-800">
-        {iconSrc ? (
-          <img src={iconSrc} alt={displayUsername} className="h-8 w-8 rounded-full object-cover" />
-        ) : (
-          <LetterAvatar firstName={currentUser?.first_name} username={baseUsername ?? ''} className="h-8 w-8" />
-        )}
-      </Menu.Button>
-      <Menu.Items className="absolute right-0 mt-2 w-44 bg-white dark:bg-slate-800 rounded-md shadow-lg ring-1 ring-black dark:ring-slate-600 ring-opacity-5 focus:outline-none z-10 border border-gray-200 dark:border-slate-600">
-        <div className="py-1">
-          <Menu.Item>
-            <Link
-              to="/settings"
-              className={`block px-4 py-2 text-sm ${settingsLinkActive ? 'text-blue-600 dark:text-blue-400 font-medium' : 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-slate-700'}`}
-              {...(settingsLinkActive ? { 'aria-current': 'page' as const } : {})}
-            >
-              {t('nav.settings')}
-            </Link>
-          </Menu.Item>
-          {showAdminLink && (
-            <Menu.Item>
-              <Link
-                to="/admin"
-                className={`block px-4 py-2 text-sm ${adminLinkActive ? 'text-blue-600 dark:text-blue-400 font-medium' : 'text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-slate-700'}`}
-                {...(adminLinkActive ? { 'aria-current': 'page' as const } : {})}
-              >
-                {t('nav.admin')}
-              </Link>
-            </Menu.Item>
-          )}
-          <Menu.Item>
-            <button
-              onClick={onLogout}
-              className="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-slate-700 hover:text-red-600 dark:hover:text-red-400"
-            >
-              {t('nav.logout')}
-            </button>
-          </Menu.Item>
-        </div>
-      </Menu.Items>
-    </Menu>
-  );
+  const profileMenuProps: ProfileMenuProps = {
+    iconSrc,
+    displayUsername,
+    firstName: currentUser?.first_name,
+    baseUsername,
+    showAdminLink,
+    adminLinkActive,
+    settingsLinkActive,
+    onLogout,
+  };
 
   return (
     <header className="bg-white dark:bg-slate-800 shadow-sm border-b border-gray-200 dark:border-slate-700">
@@ -89,14 +138,14 @@ const NavigationHeader = ({ title = 'Jot', onLogout, children, username, isAdmin
               )}
             </div>
             {/* Profile dropdown — mobile only (right of title) */}
-            <div className="sm:hidden">{profileMenu}</div>
+            <div className="sm:hidden"><ProfileMenu {...profileMenuProps} /></div>
           </div>
 
           {/* Children content (like search bar) */}
           {children}
 
           {/* Profile dropdown — desktop only (right-aligned) */}
-          <div className="hidden sm:block">{profileMenu}</div>
+          <div className="hidden sm:block"><ProfileMenu {...profileMenuProps} /></div>
         </div>
       </div>
     </header>
