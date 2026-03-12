@@ -231,6 +231,14 @@ Migration files live in `server/migrations/` and are named `NNN_description.sql`
 - Library: `@testing-library/react`
 - Run: `task test-webapp`
 
+### E2E Tests
+
+- Framework: **Playwright** (`webapp/e2e/`)
+- Pattern: Page Object Model — add page classes in `e2e/pages/`, tests in `e2e/tests/`
+- Fixtures: `e2e/fixtures/index.ts` provides `authenticatedUser` and page objects
+- **Add e2e tests for every new user-facing feature** (new pages, workflows, admin actions)
+- Run: `task test-e2e`
+
 ---
 
 ## Build & Deployment
@@ -264,6 +272,7 @@ Persistent data is stored in the `/data` Docker volume. Set `JWT_SECRET` to a se
 
 1. `task test` — all tests pass
 2. `task lint` — no lint errors
+3. `task test-e2e` — e2e tests pass (add new e2e tests for any new user-facing features)
 
 ---
 
