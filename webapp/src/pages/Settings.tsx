@@ -273,7 +273,7 @@ const Settings = ({ onLogout }: SettingsProps) => {
                 <input
                   ref={fileInputRef}
                   type="file"
-                  accept="image/jpeg,image/png,image/gif,image/webp"
+                  accept="image/jpeg,image/png,image/webp"
                   className="hidden"
                   onChange={handleIconUpload}
                   aria-label={t('settings.uploadIconButton')}

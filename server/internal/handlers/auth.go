@@ -1,9 +1,14 @@
 package handlers
 
 import (
+	"bytes"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"image"
+	"image/color"
+	"image/jpeg"
+	_ "image/png"
 	"io"
 	"net/http"
 	"strings"
@@ -11,6 +16,8 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/hanzei/jot/server/internal/auth"
 	"github.com/hanzei/jot/server/internal/models"
+	"golang.org/x/image/draw"
+	_ "golang.org/x/image/webp"
 )
 
 type AuthHandler struct {
@@ -325,8 +332,107 @@ func (h *AuthHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) (in
 var allowedImageTypes = map[string]bool{
 	"image/jpeg": true,
 	"image/png":  true,
-	"image/gif":  true,
 	"image/webp": true,
+}
+
+const (
+	maxProfileIconDimension = 256
+	jpegQuality             = 85
+	maxSourceDimension      = 4096
+	maxSourcePixels         = 4096 * 4096 // ~16 megapixels
+)
+
+// isOpaqueImage reports whether img is known to have no transparent pixels.
+// It first checks the color model for inherently opaque formats (JPEG, CMYK,
+// grayscale), then falls back to the Opaque() method that standard image types
+// like *image.NRGBA and *image.RGBA implement.
+func isOpaqueImage(model color.Model, img image.Image) bool {
+	switch model {
+	case color.YCbCrModel, color.CMYKModel, color.GrayModel, color.Gray16Model:
+		return true
+	}
+	type opaquer interface{ Opaque() bool }
+	if op, ok := img.(opaquer); ok {
+		return op.Opaque()
+	}
+	return false
+}
+
+// flattenAlpha composites img onto a white background so that transparent
+// regions render as white in the resulting opaque image.
+func flattenAlpha(img image.Image) image.Image {
+	b := img.Bounds()
+	opaque := image.NewRGBA(image.Rect(0, 0, b.Dx(), b.Dy()))
+	draw.Draw(opaque, opaque.Bounds(), image.NewUniform(color.White), image.Point{}, draw.Src)
+	draw.Draw(opaque, opaque.Bounds(), img, b.Min, draw.Over)
+	return opaque
+}
+
+// resizeImage decodes the given image bytes, resizes to fit within
+// maxProfileIconDimension x maxProfileIconDimension (preserving aspect ratio),
+// and re-encodes as JPEG. If the image is already small enough it is still
+// re-encoded as JPEG to normalize the format and compress.
+func resizeImage(data []byte) ([]byte, error) {
+	// Decode only the header to check dimensions before allocating the full image.
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("decode image config: %w", err)
+	}
+	if cfg.Width > maxSourceDimension || cfg.Height > maxSourceDimension {
+		return nil, fmt.Errorf("image dimensions %dx%d exceed maximum %d", cfg.Width, cfg.Height, maxSourceDimension)
+	}
+	if cfg.Width*cfg.Height > maxSourcePixels {
+		return nil, fmt.Errorf("image pixel count %d exceeds maximum %d", cfg.Width*cfg.Height, maxSourcePixels)
+	}
+
+	img, _, err := image.Decode(bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("decode image: %w", err)
+	}
+
+	// Determine opaqueness from the config color model (before a potential
+	// resize converts the image to RGBA and loses the original model info).
+	sourceOpaque := isOpaqueImage(cfg.ColorModel, img)
+
+	bounds := img.Bounds()
+	srcW := bounds.Dx()
+	srcH := bounds.Dy()
+
+	if srcW > maxProfileIconDimension || srcH > maxProfileIconDimension {
+		var dstW, dstH int
+		if srcW >= srcH {
+			dstW = maxProfileIconDimension
+			dstH = srcH * maxProfileIconDimension / srcW
+		} else {
+			dstH = maxProfileIconDimension
+			dstW = srcW * maxProfileIconDimension / srcH
+		}
+		if dstW < 1 {
+			dstW = 1
+		}
+		if dstH < 1 {
+			dstH = 1
+		}
+
+		dst := image.NewRGBA(image.Rect(0, 0, dstW, dstH))
+		draw.CatmullRom.Scale(dst, dst.Bounds(), img, bounds, draw.Src, nil)
+		img = dst
+	}
+
+	// JPEG does not support transparency. Flatten alpha onto a white background
+	// so transparent regions render as white instead of black. Skip when the
+	// original source was opaque (no alpha channel to flatten).
+	encImg := img
+	if !sourceOpaque {
+		encImg = flattenAlpha(img)
+	}
+
+	var buf bytes.Buffer
+	if err := jpeg.Encode(&buf, encImg, &jpeg.Options{Quality: jpegQuality}); err != nil {
+		return nil, fmt.Errorf("encode jpeg: %w", err)
+	}
+
+	return buf.Bytes(), nil
 }
 
 // UploadProfileIcon handles POST /api/v1/users/me/profile-icon.
@@ -358,8 +464,14 @@ func (h *AuthHandler) UploadProfileIcon(w http.ResponseWriter, r *http.Request) 
 
 	contentType := http.DetectContentType(data)
 	if !allowedImageTypes[contentType] {
-		return http.StatusBadRequest, errors.New("unsupported file type: must be jpeg, png, gif, or webp")
+		return http.StatusBadRequest, errors.New("unsupported file type: must be jpeg, png, or webp")
 	}
+
+	data, err = resizeImage(data)
+	if err != nil {
+		return http.StatusBadRequest, fmt.Errorf("unsupported or corrupt image: %w", err)
+	}
+	contentType = "image/jpeg"
 
 	if err = h.userStore.UpdateProfileIcon(currentUser.ID, data, contentType); err != nil {
 		return http.StatusInternalServerError, fmt.Errorf("update profile icon for user %s: %w", currentUser.ID, err)
