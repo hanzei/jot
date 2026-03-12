@@ -120,6 +120,9 @@ export const admin = {
 
   updateUserRole: (id: string, data: UpdateUserRoleRequest): Promise<User> =>
     api.put(`/admin/users/${id}/role`, data).then(res => res.data),
+
+  deleteUser: (id: string): Promise<void> =>
+    api.delete(`/admin/users/${id}`).then(() => undefined),
 };
 
 export { isAxiosError } from 'axios';

@@ -23,6 +23,8 @@ Object.defineProperty(window, 'localStorage', {
 const mockUser: User = {
   id: '1',
   username: 'testuser',
+  first_name: '',
+  last_name: '',
   role: 'user',
   created_at: '2023-01-01T00:00:00Z',
   updated_at: '2023-01-01T00:00:00Z',
@@ -31,6 +33,8 @@ const mockUser: User = {
 const mockAdminUser: User = {
   id: '2',
   username: 'adminuser',
+  first_name: '',
+  last_name: '',
   role: ROLES.ADMIN,
   created_at: '2023-01-01T00:00:00Z',
   updated_at: '2023-01-01T00:00:00Z',

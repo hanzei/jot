@@ -31,6 +31,7 @@ const Admin = ({ onLogout }: AdminProps) => {
   });
   const [searchQuery, setSearchQuery] = useState('');
   const [roleUpdating, setRoleUpdating] = useState<Set<string>>(new Set());
+  const [deleteLoading, setDeleteLoading] = useState<Set<string>>(new Set());
 
   const userIsAdmin = isAdmin();
   const navigationTabs = useNavigationLinkTabs();
@@ -104,6 +105,31 @@ const Admin = ({ onLogout }: AdminProps) => {
       }
     } finally {
       setRoleUpdating(prev => {
+        const next = new Set(prev);
+        next.delete(targetUser.id);
+        return next;
+      });
+    }
+  };
+
+  const handleDeleteUser = async (targetUser: User) => {
+    if (!window.confirm(t('admin.deleteUserConfirm', { username: targetUser.username }))) {
+      return;
+    }
+    setError('');
+    setDeleteLoading(prev => new Set(prev).add(targetUser.id));
+    try {
+      await admin.deleteUser(targetUser.id);
+      setUsers(prev => prev.filter(u => u.id !== targetUser.id));
+    } catch (err: unknown) {
+      if (isAxiosError(err)) {
+        const msg = typeof err.response?.data === 'string' ? err.response.data.trim() : '';
+        setError(msg || t('admin.failedDeleteUser'));
+      } else {
+        setError(t('admin.failedDeleteUser'));
+      }
+    } finally {
+      setDeleteLoading(prev => {
         const next = new Set(prev);
         next.delete(targetUser.id);
         return next;
@@ -248,8 +274,13 @@ const Admin = ({ onLogout }: AdminProps) => {
                         <div>
                           <div className="flex items-center gap-2">
                             <p className="text-sm font-medium text-gray-900 dark:text-white">
-                              {user.username}
+                              {user.first_name || user.last_name
+                                ? `${user.first_name} ${user.last_name}`.trim()
+                                : user.username}
                             </p>
+                            {(user.first_name || user.last_name) && (
+                              <span className="text-xs text-gray-500 dark:text-gray-400">({user.username})</span>
+                            )}
                             {user.id === currentUser?.id && (
                               <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 dark:bg-slate-700 text-gray-500 dark:text-gray-400">{t('admin.youBadge')}</span>
                             )}
@@ -284,6 +315,14 @@ const Admin = ({ onLogout }: AdminProps) => {
                             : user.role === ROLES.ADMIN
                               ? t('admin.removeAdmin')
                               : t('admin.makeAdmin')}
+                        </button>
+                        <button
+                          disabled={user.id === currentUser?.id || deleteLoading.has(user.id)}
+                          onClick={() => handleDeleteUser(user)}
+                          aria-label={t('admin.deleteUserLabel', { username: user.username })}
+                          className="text-sm px-3 py-1 rounded-md border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 bg-white dark:bg-slate-700 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-40 disabled:cursor-not-allowed"
+                        >
+                          {deleteLoading.has(user.id) ? t('admin.deleting') : t('admin.deleteUser')}
                         </button>
                       </div>
                     </div>

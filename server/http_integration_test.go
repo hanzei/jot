@@ -390,6 +390,54 @@ func TestAdminEndpoints(t *testing.T) {
 		resp := ts.authRequest(t, user, http.MethodPost, "/api/v1/admin/users", body)
 		assert.Equal(t, http.StatusForbidden, resp.StatusCode)
 	})
+
+	t.Run("delete user as admin", func(t *testing.T) {
+		// Create a user to delete
+		deleteTarget := ts.createTestUser(t, "todelete", "password123", false)
+
+		resp := ts.authRequest(t, adminUser, http.MethodDelete, fmt.Sprintf("/api/v1/admin/users/%s", deleteTarget.User.ID), nil)
+		assert.Equal(t, http.StatusNoContent, resp.StatusCode)
+
+		// Verify user is gone from list
+		listResp := ts.authRequest(t, adminUser, http.MethodGet, "/api/v1/admin/users", nil)
+		var response map[string]any
+		require.NoError(t, listResp.UnmarshalBody(&response))
+		users := response["users"].([]any)
+		for _, u := range users {
+			uMap := u.(map[string]any)
+			assert.NotEqual(t, deleteTarget.User.ID, uMap["id"])
+		}
+	})
+
+	t.Run("delete user as non-admin returns 403", func(t *testing.T) {
+		// Create a user to attempt deletion
+		deleteTarget := ts.createTestUser(t, "todelete2", "password123", false)
+
+		resp := ts.authRequest(t, user, http.MethodDelete, fmt.Sprintf("/api/v1/admin/users/%s", deleteTarget.User.ID), nil)
+		assert.Equal(t, http.StatusForbidden, resp.StatusCode)
+	})
+
+	t.Run("admin cannot delete themselves", func(t *testing.T) {
+		resp := ts.authRequest(t, adminUser, http.MethodDelete, fmt.Sprintf("/api/v1/admin/users/%s", adminUser.User.ID), nil)
+		assert.Equal(t, http.StatusForbidden, resp.StatusCode)
+	})
+
+
+	t.Run("delete nonexistent user returns 404", func(t *testing.T) {
+		resp := ts.authRequest(t, adminUser, http.MethodDelete, "/api/v1/admin/users/nonexistentid12345678", nil)
+		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+	})
+}
+
+// TestDeleteUserAdminCanDeleteOtherAdmin verifies that an admin can delete another admin
+// when multiple admins exist (the last-admin guard should not trigger).
+func TestDeleteUserAdminCanDeleteOtherAdmin(t *testing.T) {
+	ts := setupTestServer(t)
+	admin1 := ts.createTestUser(t, "admin1", "password123", true)
+	admin2 := ts.createTestUser(t, "admin2", "password123", true)
+
+	resp := ts.authRequest(t, admin1, http.MethodDelete, fmt.Sprintf("/api/v1/admin/users/%s", admin2.User.ID), nil)
+	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
 }
 
 // TestUpdateUserEndpoint tests the PUT /api/v1/users/me endpoint for updating

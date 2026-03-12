@@ -6,7 +6,7 @@ test.describe('Settings', () => {
     await settingsPage.goto();
 
     await settingsPage.changeUsername(newUsername);
-    await settingsPage.expectSuccess('Username updated successfully.');
+    await settingsPage.expectSuccess('Profile updated successfully.');
 
     // Username should be reflected in the nav header
     await expect(page.locator('header')).toContainText(newUsername);

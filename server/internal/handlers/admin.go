@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/hanzei/jot/server/internal/auth"
 	"github.com/hanzei/jot/server/internal/models"
 )
 
@@ -108,6 +109,29 @@ func (h *AdminHandler) UpdateUserRole(w http.ResponseWriter, r *http.Request) (i
 	if err := json.NewEncoder(w).Encode(user); err != nil {
 		return http.StatusInternalServerError, err
 	}
+	return 0, nil
+}
+
+func (h *AdminHandler) DeleteUser(w http.ResponseWriter, r *http.Request) (int, error) {
+	targetID := chi.URLParam(r, "id")
+	requestingUser, ok := auth.GetUserFromContext(r.Context())
+	if !ok {
+		return http.StatusUnauthorized, errors.New("unauthorized")
+	}
+
+	if err := h.userStore.Delete(targetID, requestingUser.ID); err != nil {
+		if errors.Is(err, models.ErrUserNotFound) {
+			return http.StatusNotFound, err
+		}
+		if errors.Is(err, models.ErrLastAdmin) {
+			return http.StatusConflict, err
+		}
+		if errors.Is(err, models.ErrCannotDeleteSelf) {
+			return http.StatusForbidden, err
+		}
+		return http.StatusInternalServerError, err
+	}
+	w.WriteHeader(http.StatusNoContent)
 	return 0, nil
 }
 
