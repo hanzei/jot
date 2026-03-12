@@ -461,11 +461,7 @@ export default function NotesListScreen({ variant = 'notes' }: NotesListScreenPr
               />
             </>
           )}
-          {(debouncedSearch || selectedLabelId) && displayPinned.length === 0 && displayUnpinned.length === 0 && (
-            <View style={styles.emptySearchContainer}>
-              <Text style={styles.emptySubtext}>No notes match your search</Text>
-            </View>
-          )}
+          {displayPinned.length === 0 && displayUnpinned.length === 0 && listEmptyComponent}
         </ScrollView>
       ) : isDraggable ? (
         <DraggableFlatList
