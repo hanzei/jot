@@ -123,9 +123,9 @@ export class DashboardPage {
   }
 
   async logout() {
-    // Open the profile dropdown, then click Logout
+    // Open the profile dropdown, then click Logout (role=menuitem set by headlessui)
     await this.page.getByRole('button', { name: 'Profile menu' }).first().click();
-    await this.page.getByRole('button', { name: 'Logout' }).click();
+    await this.page.getByRole('menuitem', { name: 'Logout' }).click();
   }
 
   async editNote(title: string, newTitle: string, newContent: string) {
