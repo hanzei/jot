@@ -708,9 +708,9 @@ func TestTodoItemIndentLevel(t *testing.T) {
 		items := note["items"].([]any)
 		require.Len(t, items, 3)
 
-		assert.Equal(t, float64(0), items[0].(map[string]any)["indent_level"])
-		assert.Equal(t, float64(1), items[1].(map[string]any)["indent_level"])
-		assert.Equal(t, float64(2), items[2].(map[string]any)["indent_level"])
+		assert.InDelta(t, float64(0), items[0].(map[string]any)["indent_level"], 0)
+		assert.InDelta(t, float64(1), items[1].(map[string]any)["indent_level"], 0)
+		assert.InDelta(t, float64(2), items[2].(map[string]any)["indent_level"], 0)
 	})
 
 	t.Run("indent levels updated via PUT", func(t *testing.T) {
@@ -739,9 +739,9 @@ func TestTodoItemIndentLevel(t *testing.T) {
 		items := note["items"].([]any)
 		require.Len(t, items, 3)
 
-		assert.Equal(t, float64(0), items[0].(map[string]any)["indent_level"])
-		assert.Equal(t, float64(1), items[1].(map[string]any)["indent_level"])
-		assert.Equal(t, float64(0), items[2].(map[string]any)["indent_level"])
+		assert.InDelta(t, float64(0), items[0].(map[string]any)["indent_level"], 0)
+		assert.InDelta(t, float64(1), items[1].(map[string]any)["indent_level"], 0)
+		assert.InDelta(t, float64(0), items[2].(map[string]any)["indent_level"], 0)
 	})
 
 	t.Run("indent level defaults to 0 when omitted", func(t *testing.T) {
@@ -761,6 +761,6 @@ func TestTodoItemIndentLevel(t *testing.T) {
 
 		items := note["items"].([]any)
 		require.Len(t, items, 1)
-		assert.Equal(t, float64(0), items[0].(map[string]any)["indent_level"])
+		assert.InDelta(t, float64(0), items[0].(map[string]any)["indent_level"], 0)
 	})
 }
