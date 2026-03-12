@@ -947,7 +947,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
               return (
                 <div className="flex items-center">
                   {avatars.map((a, index) => (
-                    <div key={a.key} title={a.username}>
+                    <div key={a.key} title={a.displayName}>
                       <LetterAvatar
                         firstName={a.firstName}
                         username={a.username}

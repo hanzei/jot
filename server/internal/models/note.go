@@ -695,7 +695,8 @@ func (s *NoteStore) GetNoteShares(noteID string) ([]NoteShare, error) {
 			  ns.created_at, ns.updated_at
 			  FROM note_shares ns
 			  JOIN users u ON ns.shared_with_user_id = u.id
-			  WHERE ns.note_id = ?`
+			  WHERE ns.note_id = ?
+			  ORDER BY u.username`
 
 	rows, err := s.db.Query(query, noteID)
 	if err != nil {

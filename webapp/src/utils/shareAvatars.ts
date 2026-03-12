@@ -5,7 +5,13 @@ export interface AvatarInfo {
   userId?: string;
   username: string;
   firstName?: string;
+  displayName: string;
   hasProfileIcon?: boolean;
+}
+
+function formatDisplayName(username: string, firstName?: string, lastName?: string): string {
+  const fullName = [firstName, lastName].filter(Boolean).join(' ');
+  return fullName || username;
 }
 
 export function buildShareAvatars(
@@ -19,9 +25,14 @@ export function buildShareAvatars(
   // For non-owners, show the owner
   if (!isOwner) {
     const owner = usersById?.get(note.user_id);
-    if (owner) {
-      avatars.push({ key: 'owner', userId: owner.id, username: owner.username, firstName: owner.first_name, hasProfileIcon: owner.has_profile_icon });
-    }
+    avatars.push({
+      key: 'owner',
+      userId: note.user_id,
+      username: owner?.username || '?',
+      firstName: owner?.first_name,
+      displayName: formatDisplayName(owner?.username || '?', owner?.first_name, owner?.last_name),
+      hasProfileIcon: owner?.has_profile_icon,
+    });
   }
 
   // Show other shared recipients (excluding current user)
@@ -34,6 +45,7 @@ export function buildShareAvatars(
         userId: s.shared_with_user_id,
         username: s.username || '?',
         firstName: s.first_name,
+        displayName: formatDisplayName(s.username || '?', s.first_name, s.last_name),
         hasProfileIcon: s.has_profile_icon ?? u?.has_profile_icon,
       });
     });

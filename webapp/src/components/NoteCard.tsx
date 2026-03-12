@@ -296,7 +296,7 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, onRestore, o
         return (
           <div className="flex items-center mt-2">
             {avatars.map((a, index) => (
-              <div key={a.key} title={a.username}>
+              <div key={a.key} title={a.displayName}>
                 <LetterAvatar
                   firstName={a.firstName}
                   username={a.username}

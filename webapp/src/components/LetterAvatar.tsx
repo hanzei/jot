@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 
 const COLORS = [
   '#ef4444', // red-500
@@ -37,6 +37,7 @@ interface LetterAvatarProps {
 
 const LetterAvatar = ({ firstName, username, className = '', userId, hasProfileIcon }: LetterAvatarProps) => {
   const [imgFailed, setImgFailed] = useState(false);
+  useEffect(() => setImgFailed(false), [userId]);
   const accessibleLabel = username || firstName || '?';
 
   if (hasProfileIcon && userId && !imgFailed) {
