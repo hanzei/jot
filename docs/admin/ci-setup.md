@@ -4,14 +4,19 @@ This guide covers setting up the continuous integration and deployment pipeline 
 
 ## GitHub Actions CI/CD
 
-Jot uses GitHub Actions for automated testing, building, and publishing Docker images. The pipeline is configured in `.github/workflows/ci.yml` and includes:
+Jot uses GitHub Actions for automated testing, building, and publishing. CI is split into per-component workflows in `.github/workflows/`:
 
-### Pipeline Jobs
+### Workflows
 
-1. **Test** - Runs all tests (Go backend and React frontend)
-2. **Lint** - Code quality checks with golangci-lint and ESLint
-3. **Translations** - Verifies all locale files have the same keys as `en.json`
-4. **Docker** - Builds and publishes Docker images to Docker Hub
+| Workflow | File | Triggers | Jobs |
+|----------|------|----------|------|
+| **Server — CI** | `server-ci.yml` | `server/**` push/PR | test, lint |
+| **Webapp — CI** | `webapp-ci.yml` | `webapp/**` push/PR | test, lint, translations, e2e |
+| **Mobile — CI** | `mobile-ci.yml` | `mobile/**` push/PR | lint, test |
+| **Mobile — APK Build** | `mobile-apk.yml` | master push, `v*` tags | build-apk |
+| **Docker** | `ci.yml` | master push, PR | docker, docker-merge |
+
+Each component only triggers CI when its own files change.
 
 ### Docker Hub Integration
 
@@ -29,6 +34,26 @@ To enable Docker Hub publishing, add these secrets to your GitHub repository:
 |-------------|-------------|------------|
 | `DOCKER_HUB_USERNAME` | Your Docker Hub username | Your Docker Hub account username |
 | `DOCKER_HUB_TOKEN` | Docker Hub access token | Create at [Docker Hub Security](https://hub.docker.com/settings/security) |
+
+#### Mobile APK Build Secrets
+
+The mobile APK build workflow requires additional secrets:
+
+| Secret Name | Description | How to Get |
+|-------------|-------------|------------|
+| `GOOGLE_SERVICES_JSON` | Full contents of `google-services.json` | Firebase Console → Project Settings → Android app |
+| `ANDROID_KEYSTORE_BASE64` | Base64-encoded release keystore | `base64 -w0 release.keystore` |
+| `ANDROID_KEY_ALIAS` | Alias of the signing key | Set when generating keystore |
+| `ANDROID_STORE_PASSWORD` | Keystore password | Set when generating keystore |
+| `ANDROID_KEY_PASSWORD` | Key password | Set when generating keystore |
+
+Generate a release keystore:
+```bash
+keytool -genkey -v -keystore release.keystore -alias jot \
+  -keyalg RSA -keysize 2048 -validity 10000
+```
+
+Never commit the keystore or `google-services.json` to the repository.
 
 #### Creating a Docker Hub Access Token
 
@@ -79,8 +104,10 @@ task lint
 # Run individual checks
 task test-server
 task test-webapp
+task test-mobile
 task lint-server
 task lint-webapp
+task lint-mobile
 task check-translations
 ```
 
