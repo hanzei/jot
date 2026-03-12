@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useNavigate } from 'react-router';
 import { MagnifyingGlassIcon, ArrowUpTrayIcon } from '@heroicons/react/24/outline';
 import LetterAvatar from '@/components/LetterAvatar';
 import { useTranslation } from 'react-i18next';

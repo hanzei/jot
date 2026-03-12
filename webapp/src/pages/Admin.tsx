@@ -5,7 +5,7 @@ import { MagnifyingGlassIcon } from '@heroicons/react/24/outline';
 import { admin, auth, isAxiosError } from '@/utils/api';
 import { isAdmin, removeUser, getUser } from '@/utils/auth';
 import { ROLES } from '@/constants/roles';
-import { Navigate, useNavigate } from 'react-router-dom';
+import { Navigate, useNavigate } from 'react-router';
 import NavigationHeader from '@/components/NavigationHeader';
 import Sidebar from '@/components/Sidebar';
 import { useNavigationLinkTabs } from '@/hooks/useNavigationTabs';
