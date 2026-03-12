@@ -54,6 +54,70 @@ test.describe('Settings', () => {
     void authenticatedUser;
   });
 
+  test.describe('Profile Icon', () => {
+    test('uploads a profile icon and shows it in settings and nav header', async ({
+      page,
+      authenticatedUser,
+      settingsPage,
+    }) => {
+      await settingsPage.goto();
+
+      // Before upload: no <img> in the Profile Icon section
+      await expect(page.getByText('Profile Icon')).toBeVisible();
+      const preview = page.locator('div').filter({ hasText: /^Profile Icon$/ }).locator('..').locator('img');
+      await expect(preview).toHaveCount(0);
+
+      // Upload the icon
+      const uploadResponse = page.waitForResponse(
+        resp => resp.url().includes('/api/v1/users/me/profile-icon') && resp.request().method() === 'POST'
+      );
+      await settingsPage.uploadProfileIcon();
+      await uploadResponse;
+
+      // Icon preview appears in settings
+      await expect(preview).toBeVisible();
+
+      // Icon appears in nav header
+      await expect(page.locator('header img[alt]').first()).toBeVisible();
+
+      void authenticatedUser;
+    });
+
+    test('removes a profile icon and falls back to placeholder', async ({
+      page,
+      authenticatedUser,
+      settingsPage,
+    }) => {
+      await settingsPage.goto();
+
+      // Upload first
+      const uploadResponse = page.waitForResponse(
+        resp => resp.url().includes('/api/v1/users/me/profile-icon') && resp.request().method() === 'POST'
+      );
+      await settingsPage.uploadProfileIcon();
+      await uploadResponse;
+
+      const preview = page.locator('div').filter({ hasText: /^Profile Icon$/ }).locator('..').locator('img');
+      await expect(preview).toBeVisible();
+
+      // Now remove
+      const deleteResponse = page.waitForResponse(
+        resp => resp.url().includes('/api/v1/users/me/profile-icon') && resp.request().method() === 'DELETE'
+      );
+      await settingsPage.removeProfileIcon();
+      await deleteResponse;
+
+      // Preview img is gone; Remove button is gone
+      await expect(preview).toHaveCount(0);
+      await expect(page.getByRole('button', { name: 'Remove icon' })).toHaveCount(0);
+
+      // Nav header no longer shows an <img>
+      await expect(page.locator('header img[alt]')).toHaveCount(0);
+
+      void authenticatedUser;
+    });
+  });
+
   test.describe('Theme setting', () => {
     test('shows theme section with system/light/dark options', async ({ authenticatedUser, settingsPage, page }) => {
       await settingsPage.goto();

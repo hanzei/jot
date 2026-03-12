@@ -1,3 +1,4 @@
+import path from 'path';
 import { Page, expect } from '@playwright/test';
 
 export class SettingsPage {
@@ -37,5 +38,23 @@ export class SettingsPage {
 
   async isDarkMode() {
     return this.page.evaluate(() => document.documentElement.classList.contains('dark'));
+  }
+
+  async uploadProfileIcon(fixtureName = 'test-icon.png') {
+    const filePath = path.join(__dirname, '../fixtures', fixtureName);
+    const fileInput = this.page.locator('input[type="file"][accept]');
+    await fileInput.setInputFiles(filePath);
+  }
+
+  async removeProfileIcon() {
+    await this.page.getByRole('button', { name: 'Remove icon' }).click();
+  }
+
+  async profileIconPreview() {
+    return this.page.locator('section, div').filter({ hasText: 'Profile Icon' }).locator('img');
+  }
+
+  async navProfileIcon() {
+    return this.page.locator('header img[alt]').first();
   }
 }
