@@ -24,3 +24,11 @@ export async function updateNote(id: string, data: UpdateNoteRequest): Promise<N
 export async function deleteNote(id: string): Promise<void> {
   await api.delete(`/notes/${id}`);
 }
+
+export async function restoreNote(id: string): Promise<void> {
+  await api.post(`/notes/${id}/restore`);
+}
+
+export async function permanentDeleteNote(id: string): Promise<void> {
+  await api.delete(`/notes/${id}/permanent`);
+}

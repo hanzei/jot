@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getNotes, getNote, createNote, updateNote, deleteNote } from '../api/notes';
+import { getNotes, getNote, createNote, updateNote, deleteNote, restoreNote, permanentDeleteNote } from '../api/notes';
 import { Note, GetNotesParams, CreateNoteRequest, UpdateNoteRequest } from '../types';
 
 export function useNotes(params?: GetNotesParams) {
@@ -42,6 +42,28 @@ export function useDeleteNote() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => deleteNote(id),
+    onSuccess: (_data, id) => {
+      queryClient.removeQueries({ queryKey: ['note', id] });
+      queryClient.invalidateQueries({ queryKey: ['notes'] });
+    },
+  });
+}
+
+export function useRestoreNote() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => restoreNote(id),
+    onSuccess: (_data, id) => {
+      queryClient.removeQueries({ queryKey: ['note', id] });
+      queryClient.invalidateQueries({ queryKey: ['notes'] });
+    },
+  });
+}
+
+export function usePermanentDeleteNote() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (id: string) => permanentDeleteNote(id),
     onSuccess: (_data, id) => {
       queryClient.removeQueries({ queryKey: ['note', id] });
       queryClient.invalidateQueries({ queryKey: ['notes'] });
