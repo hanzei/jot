@@ -32,6 +32,7 @@ const ProfileMenu = ({ iconSrc, displayUsername, firstName, baseUsername, showAd
     <Menu as="div" className="relative">
       <Menu.Button
         title={displayUsername}
+        aria-label={t('nav.profileMenu')}
         className="flex items-center rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-slate-800"
       >
         {iconSrc ? (
@@ -46,11 +47,9 @@ const ProfileMenu = ({ iconSrc, displayUsername, firstName, baseUsername, showAd
             {({ active }) => (
               <Link
                 to="/settings"
-                className={`block px-4 py-2 text-sm ${
+                className={`block px-4 py-2 text-sm ${active ? 'bg-gray-100 dark:bg-slate-700' : ''} ${
                   settingsLinkActive
                     ? 'text-blue-600 dark:text-blue-400 font-medium'
-                    : active
-                    ? 'bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-200'
                     : 'text-gray-700 dark:text-gray-200'
                 }`}
                 {...(settingsLinkActive ? { 'aria-current': 'page' as const } : {})}
@@ -64,11 +63,9 @@ const ProfileMenu = ({ iconSrc, displayUsername, firstName, baseUsername, showAd
               {({ active }) => (
                 <Link
                   to="/admin"
-                  className={`block px-4 py-2 text-sm ${
+                  className={`block px-4 py-2 text-sm ${active ? 'bg-gray-100 dark:bg-slate-700' : ''} ${
                     adminLinkActive
                       ? 'text-blue-600 dark:text-blue-400 font-medium'
-                      : active
-                      ? 'bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-200'
                       : 'text-gray-700 dark:text-gray-200'
                   }`}
                   {...(adminLinkActive ? { 'aria-current': 'page' as const } : {})}

@@ -3,6 +3,7 @@
     "close": "Close"
   },
   "nav": {
+    "profileMenu": "Profile menu",
     "settings": "Settings",
     "admin": "Admin",
     "logout": "Logout"
