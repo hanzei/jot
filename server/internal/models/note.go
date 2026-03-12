@@ -55,13 +55,14 @@ type Note struct {
 }
 
 type NoteItem struct {
-	ID        string    `json:"id"`
-	NoteID    string    `json:"note_id"`
-	Text      string    `json:"text"`
-	Completed bool      `json:"completed"`
-	Position  int       `json:"position"`
-	CreatedAt time.Time `json:"created_at"`
-	UpdatedAt time.Time `json:"updated_at"`
+	ID          string    `json:"id"`
+	NoteID      string    `json:"note_id"`
+	Text        string    `json:"text"`
+	Completed   bool      `json:"completed"`
+	Position    int       `json:"position"`
+	IndentLevel int       `json:"indent_level"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
 
 type NoteShare struct {
@@ -530,7 +531,7 @@ func (s *NoteStore) PurgeOldTrashedNotes(olderThan time.Duration) error {
 }
 
 func (s *NoteStore) getItemsByNoteID(noteID string) ([]NoteItem, error) {
-	query := `SELECT id, note_id, text, completed, position, created_at, updated_at
+	query := `SELECT id, note_id, text, completed, position, indent_level, created_at, updated_at
 			  FROM note_items WHERE note_id = ? ORDER BY position`
 
 	rows, err := s.db.Query(query, noteID)
@@ -548,7 +549,7 @@ func (s *NoteStore) getItemsByNoteID(noteID string) ([]NoteItem, error) {
 		var item NoteItem
 		err := rows.Scan(
 			&item.ID, &item.NoteID, &item.Text, &item.Completed,
-			&item.Position, &item.CreatedAt, &item.UpdatedAt,
+			&item.Position, &item.IndentLevel, &item.CreatedAt, &item.UpdatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan note item: %w", err)
@@ -563,18 +564,18 @@ func (s *NoteStore) getItemsByNoteID(noteID string) ([]NoteItem, error) {
 	return items, nil
 }
 
-func (s *NoteStore) CreateItem(noteID string, text string, position int) (*NoteItem, error) {
+func (s *NoteStore) CreateItem(noteID string, text string, position, indentLevel int) (*NoteItem, error) {
 	// Generate item ID
 	itemID, err := generateID()
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate item ID: %w", err)
 	}
 
-	query := `INSERT INTO note_items (id, note_id, text, position)
-			  VALUES (?, ?, ?, ?) RETURNING completed, created_at, updated_at`
+	query := `INSERT INTO note_items (id, note_id, text, position, indent_level)
+			  VALUES (?, ?, ?, ?, ?) RETURNING completed, created_at, updated_at`
 
 	var item NoteItem
-	err = s.db.QueryRow(query, itemID, noteID, text, position).Scan(
+	err = s.db.QueryRow(query, itemID, noteID, text, position, indentLevel).Scan(
 		&item.Completed, &item.CreatedAt, &item.UpdatedAt,
 	)
 	if err != nil {
@@ -585,15 +586,16 @@ func (s *NoteStore) CreateItem(noteID string, text string, position int) (*NoteI
 	item.NoteID = noteID
 	item.Text = text
 	item.Position = position
+	item.IndentLevel = indentLevel
 
 	return &item, nil
 }
 
-func (s *NoteStore) UpdateItem(id string, text string, completed bool, position int) error {
-	query := `UPDATE note_items SET text = ?, completed = ?, position = ?, updated_at = CURRENT_TIMESTAMP
+func (s *NoteStore) UpdateItem(id string, text string, completed bool, position, indentLevel int) error {
+	query := `UPDATE note_items SET text = ?, completed = ?, position = ?, indent_level = ?, updated_at = CURRENT_TIMESTAMP
 			  WHERE id = ?`
 
-	_, err := s.db.Exec(query, text, completed, position, id)
+	_, err := s.db.Exec(query, text, completed, position, indentLevel, id)
 	if err != nil {
 		return fmt.Errorf("failed to update note item: %w", err)
 	}
@@ -618,17 +620,17 @@ func (s *NoteStore) DeleteItemsByNoteID(noteID string) error {
 	return nil
 }
 
-func (s *NoteStore) CreateItemWithCompleted(noteID string, text string, position int, completed bool) (*NoteItem, error) {
+func (s *NoteStore) CreateItemWithCompleted(noteID string, text string, position int, completed bool, indentLevel int) (*NoteItem, error) {
 	// Generate item ID
 	itemID, err := generateID()
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate item ID: %w", err)
 	}
 
-	query := `INSERT INTO note_items (id, note_id, text, position, completed)
-			  VALUES (?, ?, ?, ?, ?) RETURNING created_at, updated_at`
+	query := `INSERT INTO note_items (id, note_id, text, position, completed, indent_level)
+			  VALUES (?, ?, ?, ?, ?, ?) RETURNING created_at, updated_at`
 	var item NoteItem
-	err = s.db.QueryRow(query, itemID, noteID, text, position, completed).Scan(
+	err = s.db.QueryRow(query, itemID, noteID, text, position, completed, indentLevel).Scan(
 		&item.CreatedAt, &item.UpdatedAt,
 	)
 	if err != nil {
@@ -640,6 +642,7 @@ func (s *NoteStore) CreateItemWithCompleted(noteID string, text string, position
 	item.Text = text
 	item.Position = position
 	item.Completed = completed
+	item.IndentLevel = indentLevel
 
 	return &item, nil
 }

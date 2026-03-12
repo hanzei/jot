@@ -1,0 +1,1 @@
+ALTER TABLE note_items ADD COLUMN indent_level INTEGER NOT NULL DEFAULT 0;

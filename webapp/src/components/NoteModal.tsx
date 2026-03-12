@@ -71,6 +71,7 @@ interface TodoItem {
   text: string;
   completed: boolean;
   position: number;
+  indentLevel: number;
   originalPosition?: number;
 }
 
@@ -83,9 +84,10 @@ interface SortableItemProps {
   isCompleted?: boolean;
   onKeyDown?: (index: number, e: React.KeyboardEvent<HTMLInputElement>) => void;
   inputRef?: React.RefCallback<HTMLInputElement>;
+  onIndentChange?: (itemId: string, delta: 1 | -1) => void;
 }
 
-function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isCompleted = false, onKeyDown, inputRef }: SortableItemProps) {
+function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isCompleted = false, onKeyDown, inputRef, onIndentChange }: SortableItemProps) {
   const { t } = useTranslation();
   const {
     attributes,
@@ -102,6 +104,7 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
+    marginLeft: item.indentLevel * 24,
   };
 
   return (
@@ -141,7 +144,14 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
         }`}
         value={item.text}
         onChange={(e) => onUpdateTodoItem(index, 'text', e.target.value)}
-        onKeyDown={onKeyDown ? (e) => onKeyDown(index, e) : undefined}
+        onKeyDown={(e) => {
+          if (e.key === 'Tab' && onIndentChange && !isCompleted) {
+            e.preventDefault();
+            onIndentChange(item.id, e.shiftKey ? -1 : 1);
+            return;
+          }
+          if (onKeyDown) onKeyDown(index, e);
+        }}
         ref={inputRef}
       />
       <button
@@ -211,6 +221,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
           text: item.text,
           completed: item.completed,
           position: item.position,
+          indentLevel: item.indent_level ?? 0,
         })) || []
       );
       setNoteLabels(note.labels ?? []);
@@ -285,24 +296,48 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
     return [...uncompletedWithRestored, ...completedItems];
   };
 
+  const INDENT_DRAG_THRESHOLD = 50;
+  const MAX_INDENT = 2;
+
+  const indentTodoItem = async (itemId: string, delta: 1 | -1) => {
+    const updatedItems = items.map(item => {
+      if (item.id === itemId) {
+        const newLevel = Math.max(0, Math.min(MAX_INDENT, item.indentLevel + delta));
+        return { ...item, indentLevel: newLevel };
+      }
+      return item;
+    });
+    setItems(updatedItems);
+    await autoSaveNote(updatedItems);
+  };
+
   const handleDragEnd = async (event: DragEndEvent) => {
-    const { active, over } = event;
+    const { active, over, delta } = event;
+
+    // Horizontal drag → indent or unindent
+    if (Math.abs(delta.x) >= INDENT_DRAG_THRESHOLD) {
+      const draggedItem = uncompletedItems.find(item => item.id === active.id);
+      if (draggedItem) {
+        await indentTodoItem(draggedItem.id, delta.x > 0 ? 1 : -1);
+      }
+      return;
+    }
 
     if (over && active.id !== over.id) {
       // Find the active and over items by their IDs
       const activeIndex = uncompletedItems.findIndex(item => item.id === active.id);
       const overIndex = uncompletedItems.findIndex(item => item.id === over.id);
-      
+
       if (activeIndex === -1 || overIndex === -1) return;
-      
+
       const reorderedUncompletedItems = arrayMove(uncompletedItems, activeIndex, overIndex);
-      
+
       // Update uncompleted items and renumber their positions
       const updatedUncompletedItems = reorderedUncompletedItems.map((item, index) => ({
         ...item,
         position: index,
       }));
-      
+
       // Combine with completed items to create new items array
       const newItems = [...updatedUncompletedItems, ...completedItems];
       setItems(newItems);
@@ -318,6 +353,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
       text: '',
       completed: false,
       position: uncompletedItems.length,
+      indentLevel: 0,
     };
     const newItems = [...items, newItem];
     setItems(newItems);
@@ -370,10 +406,11 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
         archived,
         color,
         checked_items_collapsed: checkedItemsCollapsed,
-        items: updatedItems.map((item, idx) => ({ 
-          text: item.text, 
-          position: item.completed ? item.position : idx, 
-          completed: item.completed 
+        items: updatedItems.map((item, idx) => ({
+          text: item.text,
+          position: item.completed ? item.position : idx,
+          completed: item.completed,
+          indent_level: item.indentLevel,
         })),
       };
       await notes.update(note.id, updateData);
@@ -491,10 +528,11 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
           archived,
           color,
           checked_items_collapsed: !checkedItemsCollapsed,
-          items: note.note_type === 'todo' ? items.map((item, idx) => ({ 
-            text: item.text, 
-            position: idx, 
-            completed: item.completed 
+          items: note.note_type === 'todo' ? items.map((item, idx) => ({
+            text: item.text,
+            position: idx,
+            completed: item.completed,
+            indent_level: item.indentLevel,
           })) : undefined,
         };
         await notes.update(note.id, updateData);
@@ -505,7 +543,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
           content,
           note_type: noteType,
           color,
-          items: noteType === 'todo' ? items.map((item, idx) => ({ text: item.text, position: idx })) : undefined,
+          items: noteType === 'todo' ? items.map((item, idx) => ({ text: item.text, position: idx, indent_level: item.indentLevel })) : undefined,
         };
         await notes.create(createData);
       }
@@ -531,10 +569,11 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
         archived,
         color,
         checked_items_collapsed: !checkedItemsCollapsed,
-        items: note.note_type === 'todo' ? items.map((item, idx) => ({ 
-          text: item.text, 
-          position: idx, 
-          completed: item.completed 
+        items: note.note_type === 'todo' ? items.map((item, idx) => ({
+          text: item.text,
+          position: idx,
+          completed: item.completed,
+          indent_level: item.indentLevel,
         })) : undefined,
       };
       await notes.update(note.id, updateData);
@@ -560,10 +599,11 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
         archived: newArchivedState,
         color,
         checked_items_collapsed: !checkedItemsCollapsed,
-        items: note.note_type === 'todo' ? items.map((item, idx) => ({ 
-          text: item.text, 
-          position: idx, 
-          completed: item.completed 
+        items: note.note_type === 'todo' ? items.map((item, idx) => ({
+          text: item.text,
+          position: idx,
+          completed: item.completed,
+          indent_level: item.indentLevel,
         })) : undefined,
       };
       await notes.update(note.id, updateData);
@@ -593,10 +633,11 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
         archived,
         color,
         checked_items_collapsed: newCollapsedState,
-        items: note.note_type === 'todo' ? items.map((item, idx) => ({ 
-          text: item.text, 
-          position: idx, 
-          completed: item.completed 
+        items: note.note_type === 'todo' ? items.map((item, idx) => ({
+          text: item.text,
+          position: idx,
+          completed: item.completed,
+          indent_level: item.indentLevel,
         })) : undefined,
       };
       await notes.update(note.id, updateData);
@@ -803,6 +844,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
                           onRemoveTodoItem={removeTodoItem}
                           isCompleted={false}
                           onKeyDown={handleItemKeyDown}
+                          onIndentChange={indentTodoItem}
                           inputRef={(el) => {
                             if (el) itemInputRefs.current.set(item.id, el);
                             else itemInputRefs.current.delete(item.id);

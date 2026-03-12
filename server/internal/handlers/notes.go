@@ -59,8 +59,9 @@ type CreateNoteRequest struct {
 }
 
 type CreateNoteItem struct {
-	Text     string `json:"text"`
-	Position int    `json:"position"`
+	Text        string `json:"text"`
+	Position    int    `json:"position"`
+	IndentLevel int    `json:"indent_level"`
 }
 
 type UpdateNoteRequest struct {
@@ -74,9 +75,10 @@ type UpdateNoteRequest struct {
 }
 
 type UpdateNoteItem struct {
-	Text      string `json:"text"`
-	Position  int    `json:"position"`
-	Completed bool   `json:"completed"`
+	Text        string `json:"text"`
+	Position    int    `json:"position"`
+	Completed   bool   `json:"completed"`
+	IndentLevel int    `json:"indent_level"`
 }
 
 func (h *NotesHandler) GetNotes(w http.ResponseWriter, r *http.Request) (int, error) {
@@ -132,7 +134,7 @@ func (h *NotesHandler) CreateNote(w http.ResponseWriter, r *http.Request) (int, 
 
 	if req.NoteType == models.NoteTypeTodo && len(req.Items) > 0 {
 		for _, item := range req.Items {
-			_, err := h.noteStore.CreateItem(note.ID, item.Text, item.Position)
+			_, err := h.noteStore.CreateItem(note.ID, item.Text, item.Position, item.IndentLevel)
 			if err != nil {
 				return http.StatusInternalServerError, err
 			}
@@ -198,7 +200,7 @@ func (h *NotesHandler) updateTodoItems(noteID string, userID string, items []Upd
 
 		// Create new items with updated positions
 		for _, item := range items {
-			_, err := h.noteStore.CreateItemWithCompleted(noteID, item.Text, item.Position, item.Completed)
+			_, err := h.noteStore.CreateItemWithCompleted(noteID, item.Text, item.Position, item.Completed, item.IndentLevel)
 			if err != nil {
 				return err
 			}
@@ -643,7 +645,7 @@ func (h *NotesHandler) importKeepNote(userID string, kn keepNote) error {
 
 	if noteType == models.NoteTypeTodo {
 		for i, item := range kn.ListContent {
-			if _, err := h.noteStore.CreateItemWithCompleted(note.ID, item.Text, i, item.IsChecked); err != nil {
+			if _, err := h.noteStore.CreateItemWithCompleted(note.ID, item.Text, i, item.IsChecked, 0); err != nil {
 				return err
 			}
 		}
