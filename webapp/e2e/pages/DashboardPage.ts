@@ -123,7 +123,8 @@ export class DashboardPage {
   }
 
   async logout() {
-    // Click the visible Logout button via accessibility query
+    // Open the profile dropdown, then click Logout
+    await this.page.getByRole('button', { name: 'Profile menu' }).first().click();
     await this.page.getByRole('button', { name: 'Logout' }).click();
   }
 

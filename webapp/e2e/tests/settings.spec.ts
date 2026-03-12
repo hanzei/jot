@@ -8,8 +8,8 @@ test.describe('Settings', () => {
     await settingsPage.changeUsername(newUsername);
     await settingsPage.expectSuccess('Profile updated successfully.');
 
-    // Username should be reflected in the nav header
-    await expect(page.locator('header')).toContainText(newUsername);
+    // Username should be reflected in the profile menu button tooltip
+    await expect(page.getByRole('button', { name: 'Profile menu' }).first()).toHaveAttribute('title', newUsername);
     void authenticatedUser;
   });
 
