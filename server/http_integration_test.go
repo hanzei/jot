@@ -675,3 +675,92 @@ func TestUserSettingsEndpoints(t *testing.T) {
 		assert.Equal(t, "system", settings["language"])
 	})
 }
+
+func TestTodoItemIndentLevel(t *testing.T) {
+	ts := setupTestServer(t)
+	user := ts.createTestUser(t, "indentuser", "password123", false)
+
+	// Create a todo note with items at various indent levels.
+	createBody := map[string]any{
+		"title":     "Indent Test",
+		"note_type": "todo",
+		"content":   "",
+		"items": []map[string]any{
+			{"text": "top level", "position": 0, "indent_level": 0},
+			{"text": "indented once", "position": 1, "indent_level": 1},
+			{"text": "indented twice", "position": 2, "indent_level": 2},
+		},
+	}
+	createResp := ts.authRequest(t, user, http.MethodPost, "/api/v1/notes", createBody)
+	require.Equal(t, http.StatusCreated, createResp.StatusCode)
+
+	var created map[string]any
+	require.NoError(t, createResp.UnmarshalBody(&created))
+	noteID := created["id"].(string)
+
+	t.Run("indent levels persisted on create", func(t *testing.T) {
+		resp := ts.authRequest(t, user, http.MethodGet, "/api/v1/notes/"+noteID, nil)
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+
+		var note map[string]any
+		require.NoError(t, resp.UnmarshalBody(&note))
+
+		items := note["items"].([]any)
+		require.Len(t, items, 3)
+
+		assert.Equal(t, float64(0), items[0].(map[string]any)["indent_level"])
+		assert.Equal(t, float64(1), items[1].(map[string]any)["indent_level"])
+		assert.Equal(t, float64(2), items[2].(map[string]any)["indent_level"])
+	})
+
+	t.Run("indent levels updated via PUT", func(t *testing.T) {
+		updateBody := map[string]any{
+			"title":                  "Indent Test",
+			"content":                "",
+			"pinned":                 false,
+			"archived":               false,
+			"color":                  "#ffffff",
+			"checked_items_collapsed": false,
+			"items": []map[string]any{
+				{"text": "top level", "position": 0, "completed": false, "indent_level": 0},
+				{"text": "indented once", "position": 1, "completed": false, "indent_level": 1},
+				{"text": "promoted to top", "position": 2, "completed": false, "indent_level": 0},
+			},
+		}
+		resp := ts.authRequest(t, user, http.MethodPut, "/api/v1/notes/"+noteID, updateBody)
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+
+		getResp := ts.authRequest(t, user, http.MethodGet, "/api/v1/notes/"+noteID, nil)
+		require.Equal(t, http.StatusOK, getResp.StatusCode)
+
+		var note map[string]any
+		require.NoError(t, getResp.UnmarshalBody(&note))
+
+		items := note["items"].([]any)
+		require.Len(t, items, 3)
+
+		assert.Equal(t, float64(0), items[0].(map[string]any)["indent_level"])
+		assert.Equal(t, float64(1), items[1].(map[string]any)["indent_level"])
+		assert.Equal(t, float64(0), items[2].(map[string]any)["indent_level"])
+	})
+
+	t.Run("indent level defaults to 0 when omitted", func(t *testing.T) {
+		createBody := map[string]any{
+			"title":     "No Indent",
+			"note_type": "todo",
+			"content":   "",
+			"items": []map[string]any{
+				{"text": "item without indent_level", "position": 0},
+			},
+		}
+		resp := ts.authRequest(t, user, http.MethodPost, "/api/v1/notes", createBody)
+		require.Equal(t, http.StatusCreated, resp.StatusCode)
+
+		var note map[string]any
+		require.NoError(t, resp.UnmarshalBody(&note))
+
+		items := note["items"].([]any)
+		require.Len(t, items, 1)
+		assert.Equal(t, float64(0), items[0].(map[string]any)["indent_level"])
+	})
+}
