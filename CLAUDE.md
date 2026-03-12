@@ -13,6 +13,17 @@
 - Don't create commits on the master branch unless specifically asked to do so.
 - Before creating a PR, run all tests and ensure they pass. Also run the linter.
 
+## Code Review Loop
+
+After completing a set of changes, run a sub-agent review loop before finalizing:
+
+1. Launch a sub-agent (use the `simplify` skill or a `general-purpose` agent) to review all changed files for correctness, code quality, and consistency with project conventions.
+2. Address every piece of valid feedback the review returns (fix bugs, improve clarity, align with conventions).
+3. Repeat steps 1–2 until either:
+   - The review returns no valid feedback, **or**
+   - You have completed **4 review rounds** (whichever comes first).
+4. Only proceed to commit/push after the review loop finishes.
+
 ## Development Tasks
 
 Use the following Task commands for development:
