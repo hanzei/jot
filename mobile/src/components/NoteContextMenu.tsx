@@ -73,12 +73,15 @@ export default function NoteContextMenu({
       onPress: () => { onClose(); onChangeColor(note); },
       testId: 'context-color',
     });
-    actions.push({
-      icon: 'share-social-outline',
-      label: 'Share',
-      onPress: () => { onClose(); onShare(note); },
-      testId: 'context-share',
-    });
+    // is_shared means the current user is a recipient, not the owner — hide Share for non-owners
+    if (!note.is_shared) {
+      actions.push({
+        icon: 'share-social-outline',
+        label: 'Share',
+        onPress: () => { onClose(); onShare(note); },
+        testId: 'context-share',
+      });
+    }
     actions.push({
       icon: 'trash-outline',
       label: 'Move to trash',

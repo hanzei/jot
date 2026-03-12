@@ -152,10 +152,9 @@ export default function NotesListScreen({ variant = 'notes' }: NotesListScreenPr
     setColorPickerNote(note);
   }, []);
 
-  const handleShare = useCallback((_note: Note) => {
-    // Share is a Phase 4 feature; show a placeholder for now
-    Alert.alert('Share', 'Note sharing is coming soon.');
-  }, []);
+  const handleShare = useCallback((note: Note) => {
+    navigation.navigate('Share', { noteId: note.id });
+  }, [navigation]);
 
   const handleColorSelect = useCallback(async (color: string) => {
     if (!colorPickerNote) return;

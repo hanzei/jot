@@ -5,10 +5,12 @@ import { useAuth } from '../store/AuthContext';
 import AuthStack from './AuthStack';
 import MainTabs from './MainTabs';
 import NoteEditorScreen from '../screens/NoteEditorScreen';
+import ShareScreen from '../screens/ShareScreen';
 
 export type RootStackParamList = {
   MainTabs: undefined;
   NoteEditor: { noteId: string | null };
+  Share: { noteId: string };
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -20,6 +22,14 @@ function AuthenticatedStack() {
       <Stack.Screen
         name="NoteEditor"
         component={NoteEditorScreen}
+        options={{
+          headerShown: false,
+          presentation: 'modal',
+        }}
+      />
+      <Stack.Screen
+        name="Share"
+        component={ShareScreen}
         options={{
           headerShown: false,
           presentation: 'modal',
