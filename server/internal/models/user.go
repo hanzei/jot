@@ -330,10 +330,12 @@ func (s *UserSettingsStore) Update(userID, language, theme string) (*UserSetting
 
 func (s *UserStore) UpdateName(id, firstName, lastName string) (*User, error) {
 	query := `UPDATE users SET first_name = ?, last_name = ?, updated_at = CURRENT_TIMESTAMP
-			  WHERE id = ? RETURNING id, username, first_name, last_name, role, created_at, updated_at`
+			  WHERE id = ? RETURNING id, username, first_name, last_name, role,
+			  profile_icon IS NOT NULL AS has_profile_icon,
+			  created_at, updated_at`
 	var user User
 	err := s.db.QueryRow(query, firstName, lastName, id).Scan(
-		&user.ID, &user.Username, &user.FirstName, &user.LastName, &user.Role, &user.CreatedAt, &user.UpdatedAt,
+		&user.ID, &user.Username, &user.FirstName, &user.LastName, &user.Role, &user.HasProfileIcon, &user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -358,9 +360,11 @@ func (s *UserStore) UpdateProfile(id, username, firstName, lastName string) (*Us
 	var user User
 	err = tx.QueryRow(
 		`UPDATE users SET username = ?, first_name = ?, last_name = ?, updated_at = CURRENT_TIMESTAMP
-		 WHERE id = ? RETURNING id, username, first_name, last_name, role, created_at, updated_at`,
+		 WHERE id = ? RETURNING id, username, first_name, last_name, role,
+		 profile_icon IS NOT NULL AS has_profile_icon,
+		 created_at, updated_at`,
 		username, firstName, lastName, id,
-	).Scan(&user.ID, &user.Username, &user.FirstName, &user.LastName, &user.Role, &user.CreatedAt, &user.UpdatedAt)
+	).Scan(&user.ID, &user.Username, &user.FirstName, &user.LastName, &user.Role, &user.HasProfileIcon, &user.CreatedAt, &user.UpdatedAt)
 	if err != nil {
 		var sqliteErr sqlite3.Error
 		if errors.As(err, &sqliteErr) && sqliteErr.ExtendedCode == sqlite3.ErrConstraintUnique {

@@ -45,6 +45,7 @@ const Settings = ({ onLogout }: SettingsProps) => {
   const [hasProfileIcon, setHasProfileIcon] = useState(currentUser?.has_profile_icon ?? false);
   const [iconError, setIconError] = useState('');
   const [iconUploading, setIconUploading] = useState(false);
+  const [iconDeleting, setIconDeleting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [languagePref, setLanguagePref] = useState<LanguagePreference>(() => getLanguagePreference());
   const [themePref, setThemePref] = useState<ThemePreference>(() => getThemePreference());
@@ -204,6 +205,7 @@ const Settings = ({ onLogout }: SettingsProps) => {
 
   const handleIconDelete = async () => {
     setIconError('');
+    setIconDeleting(true);
     try {
       await users.deleteProfileIcon();
       const user = getUser();
@@ -213,6 +215,8 @@ const Settings = ({ onLogout }: SettingsProps) => {
       setHasProfileIcon(false);
     } catch {
       setIconError(t('settings.iconDeleteFailed'));
+    } finally {
+      setIconDeleting(false);
     }
   };
 
@@ -275,7 +279,7 @@ const Settings = ({ onLogout }: SettingsProps) => {
                 />
                 <button
                   type="button"
-                  disabled={iconUploading}
+                  disabled={iconUploading || iconDeleting}
                   onClick={() => fileInputRef.current?.click()}
                   className="inline-flex items-center px-3 py-1.5 border border-gray-300 dark:border-slate-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 hover:bg-gray-50 dark:hover:bg-slate-600 disabled:opacity-50"
                 >
@@ -285,6 +289,7 @@ const Settings = ({ onLogout }: SettingsProps) => {
                   <button
                     type="button"
                     onClick={handleIconDelete}
+                    disabled={iconUploading || iconDeleting}
                     className="text-sm text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 text-left"
                   >
                     {t('settings.removeIconButton')}
