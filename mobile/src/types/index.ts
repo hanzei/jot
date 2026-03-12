@@ -68,6 +68,31 @@ export interface NoteShare {
   updated_at: string;
 }
 
+export interface GetNotesParams {
+  archived?: boolean;
+  search?: string;
+  trashed?: boolean;
+  label?: string;
+}
+
+export interface CreateNoteRequest {
+  title: string;
+  content: string;
+  note_type: NoteType;
+  color?: string;
+  items?: { text: string; position: number; completed?: boolean; indent_level?: number }[];
+}
+
+export interface UpdateNoteRequest {
+  title?: string;
+  content?: string;
+  pinned?: boolean;
+  archived?: boolean;
+  color?: string;
+  checked_items_collapsed?: boolean;
+  items?: { text: string; position: number; completed?: boolean; indent_level?: number }[];
+}
+
 export interface Note {
   id: string;
   user_id: string;
