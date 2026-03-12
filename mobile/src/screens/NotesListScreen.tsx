@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useMemo } from 'react';
+import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -9,12 +9,17 @@ import {
   StyleSheet,
   SectionList,
   ActivityIndicator,
+  Alert,
+  ScrollView,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useNotes } from '../hooks/useNotes';
+import { useNotes, useUpdateNote, useDeleteNote, useRestoreNote, usePermanentDeleteNote } from '../hooks/useNotes';
+import { useLabels } from '../hooks/useLabels';
 import NoteCard from '../components/NoteCard';
+import NoteContextMenu, { ContextMenuViewContext } from '../components/NoteContextMenu';
+import ColorPicker from '../components/ColorPicker';
 import { Note } from '../types';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 
@@ -24,38 +29,146 @@ interface NotesListScreenProps {
 
 type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'MainTabs'>;
 
+const SEARCH_DEBOUNCE_MS = 300;
+
 export default function NotesListScreen({ variant = 'notes' }: NotesListScreenProps) {
   const [searchText, setSearchText] = useState('');
-  const [submittedSearch, setSubmittedSearch] = useState('');
+  const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [selectedLabelId, setSelectedLabelId] = useState<string | undefined>(undefined);
+  const [contextMenuNote, setContextMenuNote] = useState<Note | null>(null);
+  const [colorPickerNote, setColorPickerNote] = useState<Note | null>(null);
+  const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  // Debounce search input by 300ms
+  useEffect(() => {
+    if (debounceRef.current) clearTimeout(debounceRef.current);
+    debounceRef.current = setTimeout(() => {
+      setDebouncedSearch(searchText.trim());
+    }, SEARCH_DEBOUNCE_MS);
+    return () => {
+      if (debounceRef.current) clearTimeout(debounceRef.current);
+    };
+  }, [searchText]);
 
   const params = useMemo(() => ({
     archived: variant === 'archived' ? true : undefined,
     trashed: variant === 'trash' ? true : undefined,
-    search: submittedSearch || undefined,
-  }), [variant, submittedSearch]);
+    search: debouncedSearch || undefined,
+    label: variant === 'notes' ? selectedLabelId : undefined,
+  }), [variant, debouncedSearch, selectedLabelId]);
 
   const { data: notes, isLoading, isError, refetch, isRefetching } = useNotes(params);
+  const { data: allLabels } = useLabels();
+  const updateNote = useUpdateNote();
+  const deleteNote = useDeleteNote();
+  const restoreNote = useRestoreNote();
+  const permanentDeleteNote = usePermanentDeleteNote();
   const navigation = useNavigation<NavigationProp>();
-
-  const handleSearch = useCallback(() => {
-    setSubmittedSearch(searchText.trim());
-  }, [searchText]);
 
   const handleClearSearch = useCallback(() => {
     setSearchText('');
-    setSubmittedSearch('');
+    setDebouncedSearch('');
   }, []);
 
   const handleNotePress = useCallback(
     (noteId: string) => {
+      if (variant === 'trash') return; // read-only
       navigation.navigate('NoteEditor', { noteId });
     },
-    [navigation],
+    [navigation, variant],
   );
 
   const handleCreateNote = useCallback(() => {
     navigation.navigate('NoteEditor', { noteId: null });
   }, [navigation]);
+
+  const handleLongPress = useCallback((note: Note) => {
+    setContextMenuNote(note);
+  }, []);
+
+  // Context menu actions
+  const handlePin = useCallback(async (note: Note) => {
+    try {
+      await updateNote.mutateAsync({ id: note.id, data: { pinned: !note.pinned } });
+    } catch {
+      Alert.alert('Error', 'Failed to update note');
+    }
+  }, [updateNote]);
+
+  const handleArchive = useCallback(async (note: Note) => {
+    try {
+      await updateNote.mutateAsync({ id: note.id, data: { archived: true } });
+    } catch {
+      Alert.alert('Error', 'Failed to archive note');
+    }
+  }, [updateNote]);
+
+  const handleUnarchive = useCallback(async (note: Note) => {
+    try {
+      await updateNote.mutateAsync({ id: note.id, data: { archived: false } });
+    } catch {
+      Alert.alert('Error', 'Failed to unarchive note');
+    }
+  }, [updateNote]);
+
+  const handleMoveToTrash = useCallback(async (note: Note) => {
+    try {
+      await deleteNote.mutateAsync(note.id);
+    } catch {
+      Alert.alert('Error', 'Failed to move note to trash');
+    }
+  }, [deleteNote]);
+
+  const handleRestore = useCallback(async (note: Note) => {
+    try {
+      await restoreNote.mutateAsync(note.id);
+    } catch {
+      Alert.alert('Error', 'Failed to restore note');
+    }
+  }, [restoreNote]);
+
+  const handleDeletePermanently = useCallback((note: Note) => {
+    Alert.alert(
+      'Delete permanently',
+      'This note will be deleted forever. This action cannot be undone.',
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await permanentDeleteNote.mutateAsync(note.id);
+            } catch {
+              Alert.alert('Error', 'Failed to delete note');
+            }
+          },
+        },
+      ],
+    );
+  }, [permanentDeleteNote]);
+
+  const handleChangeColor = useCallback((note: Note) => {
+    setColorPickerNote(note);
+  }, []);
+
+  const handleShare = useCallback((_note: Note) => {
+    // Share is a Phase 4 feature; show a placeholder for now
+    Alert.alert('Share', 'Note sharing is coming soon.');
+  }, []);
+
+  const handleColorSelect = useCallback(async (color: string) => {
+    if (!colorPickerNote) return;
+    try {
+      await updateNote.mutateAsync({ id: colorPickerNote.id, data: { color } });
+    } catch {
+      Alert.alert('Error', 'Failed to update note color');
+    }
+  }, [colorPickerNote, updateNote]);
+
+  const handleLabelChipPress = useCallback((labelId: string) => {
+    setSelectedLabelId((prev) => (prev === labelId ? undefined : labelId));
+  }, []);
 
   const { pinnedNotes, otherNotes } = useMemo(() => {
     const pinned: Note[] = [];
@@ -65,13 +178,18 @@ export default function NotesListScreen({ variant = 'notes' }: NotesListScreenPr
     }
     return { pinnedNotes: pinned, otherNotes: other };
   }, [notes]);
-  const hasPinned = pinnedNotes.length > 0;
+
+  const hasPinned = variant === 'notes' && pinnedNotes.length > 0;
 
   const renderNoteCard = useCallback(
     ({ item }: { item: Note }) => (
-      <NoteCard note={item} onPress={() => handleNotePress(item.id)} />
+      <NoteCard
+        note={item}
+        onPress={() => handleNotePress(item.id)}
+        onLongPress={() => handleLongPress(item)}
+      />
     ),
-    [handleNotePress],
+    [handleNotePress, handleLongPress],
   );
 
   if (isLoading && !notes) {
@@ -101,9 +219,16 @@ export default function NotesListScreen({ variant = 'notes' }: NotesListScreenPr
 
   const isEmpty = !isLoading && (!notes || notes.length === 0);
 
-  if (isEmpty && !submittedSearch) {
+  if (isEmpty && !debouncedSearch && !selectedLabelId) {
     return (
       <View style={styles.emptyContainer}>
+        {variant === 'trash' && (
+          <View style={styles.trashBanner}>
+            <Text style={styles.trashBannerText}>
+              Items in Trash are automatically deleted after 7 days
+            </Text>
+          </View>
+        )}
         <Ionicons name="document-text-outline" size={64} color="#d1d5db" />
         <Text style={styles.emptyTitle}>
           {variant === 'notes' && 'No notes yet'}
@@ -137,29 +262,77 @@ export default function NotesListScreen({ variant = 'notes' }: NotesListScreenPr
       ].filter((s) => s.data.length > 0)
     : [{ title: '', data: otherNotes }];
 
+  const listData = hasPinned ? null : (notes ?? []);
+
   return (
     <View style={styles.container}>
-      {variant === 'notes' && (
-        <View style={styles.searchContainer}>
-          <Ionicons name="search" size={18} color="#999" style={styles.searchIcon} />
-          <TextInput
-            style={styles.searchInput}
-            placeholder="Search notes..."
-            placeholderTextColor="#999"
-            value={searchText}
-            onChangeText={setSearchText}
-            onSubmitEditing={handleSearch}
-            returnKeyType="search"
-            testID="search-input"
-          />
-          {searchText.length > 0 && (
-            <TouchableOpacity onPress={handleClearSearch} testID="clear-search">
-              <Ionicons name="close-circle" size={18} color="#999" />
-            </TouchableOpacity>
-          )}
+      {/* Trash banner */}
+      {variant === 'trash' && (
+        <View style={styles.trashBanner}>
+          <Ionicons name="information-circle-outline" size={16} color="#92400e" style={styles.trashBannerIcon} />
+          <Text style={styles.trashBannerText}>
+            Items in Trash are automatically deleted after 7 days
+          </Text>
         </View>
       )}
 
+      {/* Search bar */}
+      <View style={styles.searchContainer}>
+        <Ionicons name="search" size={18} color="#999" style={styles.searchIcon} />
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search notes..."
+          placeholderTextColor="#999"
+          value={searchText}
+          onChangeText={setSearchText}
+          returnKeyType="search"
+          testID="search-input"
+        />
+        {searchText.length > 0 && (
+          <TouchableOpacity onPress={handleClearSearch} testID="clear-search">
+            <Ionicons name="close-circle" size={18} color="#999" />
+          </TouchableOpacity>
+        )}
+      </View>
+
+      {/* Label filter chips (notes only) */}
+      {variant === 'notes' && allLabels && allLabels.length > 0 && (
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.labelChipsRow}
+          testID="label-filter-row"
+        >
+          <TouchableOpacity
+            style={[styles.labelChip, !selectedLabelId && styles.labelChipActive]}
+            onPress={() => setSelectedLabelId(undefined)}
+            testID="label-chip-all"
+          >
+            <Text style={[styles.labelChipText, !selectedLabelId && styles.labelChipTextActive]}>
+              All
+            </Text>
+          </TouchableOpacity>
+          {allLabels.map((label) => (
+            <TouchableOpacity
+              key={label.id}
+              style={[styles.labelChip, selectedLabelId === label.id && styles.labelChipActive]}
+              onPress={() => handleLabelChipPress(label.id)}
+              testID={`label-chip-${label.id}`}
+            >
+              <Text
+                style={[
+                  styles.labelChipText,
+                  selectedLabelId === label.id && styles.labelChipTextActive,
+                ]}
+              >
+                {label.name}
+              </Text>
+            </TouchableOpacity>
+          ))}
+        </ScrollView>
+      )}
+
+      {/* Notes list */}
       {hasPinned ? (
         <SectionList
           sections={sections}
@@ -174,11 +347,18 @@ export default function NotesListScreen({ variant = 'notes' }: NotesListScreenPr
             <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor="#2563eb" />
           }
           contentContainerStyle={styles.listContent}
+          ListEmptyComponent={
+            debouncedSearch || selectedLabelId ? (
+              <View style={styles.emptySearchContainer}>
+                <Text style={styles.emptySubtext}>No notes match your search</Text>
+              </View>
+            ) : null
+          }
           testID="notes-section-list"
         />
       ) : (
         <FlatList
-          data={notes ?? []}
+          data={listData}
           keyExtractor={(item) => item.id}
           renderItem={renderNoteCard}
           refreshControl={
@@ -186,7 +366,7 @@ export default function NotesListScreen({ variant = 'notes' }: NotesListScreenPr
           }
           contentContainerStyle={styles.listContent}
           ListEmptyComponent={
-            submittedSearch ? (
+            debouncedSearch || selectedLabelId ? (
               <View style={styles.emptySearchContainer}>
                 <Text style={styles.emptySubtext}>No notes match your search</Text>
               </View>
@@ -207,6 +387,28 @@ export default function NotesListScreen({ variant = 'notes' }: NotesListScreenPr
           <Ionicons name="add" size={28} color="#fff" />
         </TouchableOpacity>
       )}
+
+      <NoteContextMenu
+        visible={contextMenuNote !== null}
+        note={contextMenuNote}
+        viewContext={variant as ContextMenuViewContext}
+        onClose={() => setContextMenuNote(null)}
+        onPin={handlePin}
+        onArchive={handleArchive}
+        onUnarchive={handleUnarchive}
+        onMoveToTrash={handleMoveToTrash}
+        onRestore={handleRestore}
+        onDeletePermanently={handleDeletePermanently}
+        onChangeColor={handleChangeColor}
+        onShare={handleShare}
+      />
+
+      <ColorPicker
+        visible={colorPickerNote !== null}
+        currentColor={colorPickerNote?.color ?? '#ffffff'}
+        onSelect={handleColorSelect}
+        onClose={() => setColorPickerNote(null)}
+      />
     </View>
   );
 }
@@ -244,6 +446,23 @@ const styles = StyleSheet.create({
     paddingTop: 48,
     alignItems: 'center',
   },
+  trashBanner: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    backgroundColor: '#fef3c7',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+    borderBottomColor: '#fde68a',
+  },
+  trashBannerIcon: {
+    marginRight: 8,
+  },
+  trashBannerText: {
+    fontSize: 13,
+    color: '#92400e',
+    flex: 1,
+  },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
@@ -264,6 +483,31 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#1a1a1a',
     paddingVertical: 0,
+  },
+  labelChipsRow: {
+    paddingHorizontal: 16,
+    paddingBottom: 8,
+    gap: 8,
+  },
+  labelChip: {
+    paddingHorizontal: 14,
+    paddingVertical: 6,
+    borderRadius: 16,
+    backgroundColor: '#fff',
+    borderWidth: 1,
+    borderColor: '#e5e7eb',
+  },
+  labelChipActive: {
+    backgroundColor: '#eff6ff',
+    borderColor: '#2563eb',
+  },
+  labelChipText: {
+    fontSize: 13,
+    color: '#666',
+  },
+  labelChipTextActive: {
+    color: '#2563eb',
+    fontWeight: '600',
   },
   sectionHeader: {
     fontSize: 12,
