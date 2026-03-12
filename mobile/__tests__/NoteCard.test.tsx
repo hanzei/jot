@@ -95,7 +95,11 @@ describe('NoteCard', () => {
     const { getByTestId } = render(<NoteCard note={coloredNote} onPress={jest.fn()} />);
 
     const card = getByTestId('note-card-note-1');
-    expect(card.props.style).toBeDefined();
+    const flatStyle = Array.isArray(card.props.style)
+      ? Object.assign({}, ...card.props.style)
+      : card.props.style;
+    expect(flatStyle.borderLeftColor).toBe('#ff6600');
+    expect(flatStyle.borderLeftWidth).toBe(4);
   });
 
   it('does not render title when empty', () => {

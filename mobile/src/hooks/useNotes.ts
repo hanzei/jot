@@ -42,7 +42,8 @@ export function useDeleteNote() {
   const queryClient = useQueryClient();
   return useMutation({
     mutationFn: (id: string) => deleteNote(id),
-    onSuccess: () => {
+    onSuccess: (_data, id) => {
+      queryClient.removeQueries({ queryKey: ['note', id] });
       queryClient.invalidateQueries({ queryKey: ['notes'] });
     },
   });

@@ -29,6 +29,9 @@ function TodoItem({
         onPress={onToggle}
         style={styles.checkbox}
         testID="todo-item-checkbox"
+        accessibilityRole="checkbox"
+        accessibilityState={{ checked: completed }}
+        accessibilityLabel={`${text || 'List item'} checkbox`}
       >
         <Ionicons
           name={completed ? 'checkbox' : 'square-outline'}

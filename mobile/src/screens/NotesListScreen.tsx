@@ -102,7 +102,7 @@ export default function NotesListScreen({ variant = 'notes' }: NotesListScreenPr
     ? [
         { title: 'Pinned', data: pinnedNotes },
         { title: 'Others', data: otherNotes },
-      ]
+      ].filter((s) => s.data.length > 0)
     : [{ title: '', data: otherNotes }];
 
   return (

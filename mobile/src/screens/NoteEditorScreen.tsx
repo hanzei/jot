@@ -64,6 +64,7 @@ export default function NoteEditorScreen() {
   const [items, setItems] = useState<LocalItem[]>([]);
   const [checkedItemsCollapsed, setCheckedItemsCollapsed] = useState(false);
   const [hasCreated, setHasCreated] = useState(initialNoteId !== null);
+  const [saveError, setSaveError] = useState<string | null>(null);
 
   const { data: existingNote } = useNote(noteId);
   const createMutation = useCreateNote();
@@ -71,6 +72,7 @@ export default function NoteEditorScreen() {
   const deleteMutation = useDeleteNote();
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const isMountedRef = useRef(true);
   const isInitializedRef = useRef(false);
   const tempIdCounterRef = useRef(0);
 
@@ -110,7 +112,7 @@ export default function NoteEditorScreen() {
     }
   }, [existingNote]);
 
-  const flushSave = useCallback(async () => {
+  const flushSave = useCallback(async (unmounting = false) => {
     const currentNoteId = noteIdRef.current;
     const currentTitle = titleRef.current;
     const currentContent = contentRef.current;
@@ -127,13 +129,18 @@ export default function NoteEditorScreen() {
           note_type: currentNoteType,
           items: currentNoteType === 'todo' ? serializeItems(currentItems) : undefined,
         });
+        if (!isMountedRef.current || unmounting) return;
         setNoteId(newNote.id);
         setHasCreated(true);
+        setSaveError(null);
         if (newNote.items) {
           setItems(toLocalItems(newNote.items));
         }
-      } catch {
-        // Creation failed; user can retry
+      } catch (err) {
+        console.error('Failed to create note:', err);
+        if (isMountedRef.current && !unmounting) {
+          setSaveError('Failed to save note. Tap to retry.');
+        }
       }
     } else {
       try {
@@ -149,11 +156,16 @@ export default function NoteEditorScreen() {
           id: currentNoteId,
           data: updateData,
         });
+        if (!isMountedRef.current || unmounting) return;
+        setSaveError(null);
         if (updated.items) {
           setItems(toLocalItems(updated.items));
         }
-      } catch {
-        // Update failed; user can retry
+      } catch (err) {
+        console.error('Failed to update note:', err);
+        if (isMountedRef.current && !unmounting) {
+          setSaveError('Failed to save note. Tap to retry.');
+        }
       }
     }
   }, []);
@@ -169,11 +181,14 @@ export default function NoteEditorScreen() {
 
   // Flush pending save on unmount (prevent data loss)
   useEffect(() => {
+    isMountedRef.current = true;
     return () => {
+      isMountedRef.current = false;
       if (debounceRef.current) {
         clearTimeout(debounceRef.current);
-        flushSave();
+        debounceRef.current = null;
       }
+      flushSave(true);
     };
   }, [flushSave]);
 
@@ -306,6 +321,23 @@ export default function NoteEditorScreen() {
         </View>
       </View>
 
+      {saveError && (
+        <TouchableOpacity
+          style={styles.errorBanner}
+          onPress={() => {
+            setSaveError(null);
+            if (debounceRef.current) {
+              clearTimeout(debounceRef.current);
+              debounceRef.current = null;
+            }
+            flushSave();
+          }}
+          testID="save-error-banner"
+        >
+          <Text style={styles.errorText}>{saveError}</Text>
+        </TouchableOpacity>
+      )}
+
       <ScrollView style={styles.scrollContent} keyboardShouldPersistTaps="handled">
         <TextInput
           style={styles.titleInput}
@@ -332,7 +364,8 @@ export default function NoteEditorScreen() {
         ) : (
           <View style={styles.todoContainer}>
             {uncheckedItems.map((item) => {
-              const originalIndex = itemIndexMap.get(item.id) ?? 0;
+              const originalIndex = itemIndexMap.get(item.id);
+              if (originalIndex === undefined) return null;
               return (
                 <TodoItem
                   key={item.id}
@@ -371,7 +404,8 @@ export default function NoteEditorScreen() {
 
                 {!checkedItemsCollapsed &&
                   checkedItems.map((item) => {
-                    const originalIndex = itemIndexMap.get(item.id) ?? 0;
+                    const originalIndex = itemIndexMap.get(item.id);
+                    if (originalIndex === undefined) return null;
                     return (
                       <TodoItem
                         key={item.id}
@@ -492,5 +526,17 @@ const styles = StyleSheet.create({
   },
   toolbarBtn: {
     padding: 8,
+  },
+  errorBanner: {
+    backgroundColor: '#fef2f2',
+    borderBottomWidth: 1,
+    borderBottomColor: '#fecaca',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  errorText: {
+    color: '#dc2626',
+    fontSize: 14,
+    textAlign: 'center',
   },
 });
