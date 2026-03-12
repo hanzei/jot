@@ -62,21 +62,21 @@ export default function AboutModal({ isOpen, onClose }: AboutModalProps) {
                   {t('about.clientInfo')}
                 </h3>
                 <dl className="space-y-1">
-                  <div className="flex justify-between text-sm">
-                    <dt className="text-gray-500 dark:text-gray-400">{t('about.username')}</dt>
-                    <dd className="text-gray-900 dark:text-white font-mono">{user?.username ?? '—'}</dd>
+                  <div className="flex justify-between text-sm min-w-0 gap-2">
+                    <dt className="shrink-0 text-gray-500 dark:text-gray-400">{t('about.username')}</dt>
+                    <dd className="truncate text-gray-900 dark:text-white font-mono">{user?.username ?? '—'}</dd>
                   </div>
-                  <div className="flex justify-between text-sm">
-                    <dt className="text-gray-500 dark:text-gray-400">{t('about.userId')}</dt>
-                    <dd className="text-gray-900 dark:text-white font-mono">{user?.id ?? '—'}</dd>
+                  <div className="flex justify-between text-sm min-w-0 gap-2">
+                    <dt className="shrink-0 text-gray-500 dark:text-gray-400">{t('about.userId')}</dt>
+                    <dd className="truncate text-gray-900 dark:text-white font-mono">{user?.id ?? '—'}</dd>
                   </div>
-                  <div className="flex justify-between text-sm">
-                    <dt className="text-gray-500 dark:text-gray-400">{t('about.role')}</dt>
-                    <dd className="text-gray-900 dark:text-white font-mono">{user?.role ?? '—'}</dd>
+                  <div className="flex justify-between text-sm min-w-0 gap-2">
+                    <dt className="shrink-0 text-gray-500 dark:text-gray-400">{t('about.role')}</dt>
+                    <dd className="truncate text-gray-900 dark:text-white font-mono">{user?.role ?? '—'}</dd>
                   </div>
-                  <div className="flex justify-between text-sm">
-                    <dt className="text-gray-500 dark:text-gray-400">{t('about.accountCreated')}</dt>
-                    <dd className="text-gray-900 dark:text-white font-mono">
+                  <div className="flex justify-between text-sm min-w-0 gap-2">
+                    <dt className="shrink-0 text-gray-500 dark:text-gray-400">{t('about.accountCreated')}</dt>
+                    <dd className="truncate text-gray-900 dark:text-white font-mono">
                       {user?.created_at ? new Date(user.created_at).toLocaleDateString(i18n.resolvedLanguage) : '—'}
                     </dd>
                   </div>
@@ -95,14 +95,28 @@ export default function AboutModal({ isOpen, onClose }: AboutModalProps) {
                 )}
                 {serverInfo && (
                   <dl className="space-y-1">
-                    <div className="flex justify-between text-sm">
-                      <dt className="text-gray-500 dark:text-gray-400">{t('about.appVersion')}</dt>
-                      <dd className="text-gray-900 dark:text-white font-mono">{serverInfo.version}</dd>
+                    <div className="flex justify-between text-sm min-w-0 gap-2">
+                      <dt className="shrink-0 text-gray-500 dark:text-gray-400">{t('about.appVersion')}</dt>
+                      <dd className="truncate text-gray-900 dark:text-white font-mono">{serverInfo.version}</dd>
                     </div>
-                    <div className="flex justify-between text-sm">
-                      <dt className="text-gray-500 dark:text-gray-400">{t('about.commit')}</dt>
-                      <dd className="text-gray-900 dark:text-white font-mono">{serverInfo.commit}</dd>
+                    <div className="flex justify-between text-sm min-w-0 gap-2">
+                      <dt className="shrink-0 text-gray-500 dark:text-gray-400">{t('about.commit')}</dt>
+                      <dd className="truncate text-gray-900 dark:text-white font-mono">{serverInfo.commit}</dd>
                     </div>
+                    {serverInfo.build_time && (
+                      <div className="flex justify-between text-sm min-w-0 gap-2">
+                        <dt className="shrink-0 text-gray-500 dark:text-gray-400">{t('about.buildTime')}</dt>
+                        <dd className="truncate text-gray-900 dark:text-white font-mono">
+                          {(() => { const dt = new Date(serverInfo.build_time!); return isNaN(dt.getTime()) ? '—' : dt.toLocaleString(i18n.resolvedLanguage); })()}
+                        </dd>
+                      </div>
+                    )}
+                    {serverInfo.go_version && (
+                      <div className="flex justify-between text-sm min-w-0 gap-2">
+                        <dt className="shrink-0 text-gray-500 dark:text-gray-400">{t('about.goVersion')}</dt>
+                        <dd className="truncate text-gray-900 dark:text-white font-mono">{serverInfo.go_version}</dd>
+                      </div>
+                    )}
                   </dl>
                 )}
               </div>
