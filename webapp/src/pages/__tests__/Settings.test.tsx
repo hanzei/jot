@@ -43,6 +43,8 @@ vi.mock('@/components/NavigationHeader', () => ({
 const mockUser = {
   id: 'user1',
   username: 'testuser',
+  first_name: '',
+  last_name: '',
   role: 'user' as const,
   created_at: '2023-01-01T00:00:00Z',
   updated_at: '2023-01-01T00:00:00Z',
@@ -120,10 +122,10 @@ describe('Settings', () => {
       await user.click(screen.getByRole('button', { name: 'Save Changes' }))
 
       await waitFor(() => {
-        expect(users.updateMe).toHaveBeenCalledWith({ username: 'newuser' })
+        expect(users.updateMe).toHaveBeenCalledWith({ username: 'newuser', first_name: '', last_name: '' })
       })
       await waitFor(() => {
-        expect(screen.getByText('Username updated successfully.')).toBeInTheDocument()
+        expect(screen.getByText('Profile updated successfully.')).toBeInTheDocument()
       })
       expect(authUtils.setUser).toHaveBeenCalledWith(updatedUser)
     })

@@ -10,6 +10,7 @@ import (
 	"strings"
 
 	_ "github.com/mattn/go-sqlite3"
+	log "github.com/sirupsen/logrus"
 )
 
 type DB struct {
@@ -99,7 +100,7 @@ func (d *DB) runMigrations() error {
 			return fmt.Errorf("failed to commit migration %s: %w", file.Name(), err)
 		}
 
-		fmt.Printf("Applied migration: %s\n", file.Name())
+		log.WithField("filename", file.Name()).Info("Applied migration")
 	}
 
 	return nil

@@ -38,6 +38,8 @@ vi.mock('@/components/NavigationHeader', () => ({
 const currentUser: User = {
   id: 'user1',
   username: 'admin1',
+  first_name: '',
+  last_name: '',
   role: 'admin',
   created_at: '2023-01-01T00:00:00Z',
   updated_at: '2023-01-01T00:00:00Z',
@@ -47,6 +49,8 @@ const currentUser: User = {
 const otherUser: User = {
   id: 'user2',
   username: 'regularuser',
+  first_name: '',
+  last_name: '',
   role: 'user',
   created_at: '2023-01-02T00:00:00Z',
   updated_at: '2023-01-02T00:00:00Z',
@@ -56,6 +60,8 @@ const otherUser: User = {
 const otherAdmin: User = {
   id: 'user3',
   username: 'otheradmin',
+  first_name: '',
+  last_name: '',
   role: 'admin',
   created_at: '2023-01-03T00:00:00Z',
   updated_at: '2023-01-03T00:00:00Z',
