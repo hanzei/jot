@@ -57,10 +57,12 @@ task run-webapp      # Build webapp in watch mode
 task test            # Run all tests
 task test-server     # Run server tests
 task test-webapp     # Run webapp tests
+task test-mobile     # Run mobile app tests
 task coverage        # Run server tests with coverage report
 task lint                  # Run linters
 task lint-server           # Run server linting with golangci-lint
 task lint-webapp           # Run webapp linting
+task lint-mobile           # Run mobile app linting
 task check-translations    # Check locale files for missing/extra keys
 task clean               # Remove generated files and node packages
 ```
