@@ -33,10 +33,11 @@ interface LetterAvatarProps {
 
 const LetterAvatar = ({ firstName, username, className = '' }: LetterAvatarProps) => {
   const letter = (firstName?.[0] || username[0] || '?').toUpperCase();
+  const accessibleLabel = username || firstName || '?';
   const color = COLORS[hashUsername(username) % COLORS.length];
 
   return (
-    <svg className={`rounded-full ${className}`} viewBox="0 0 40 40" role="img" aria-label={username}>
+    <svg className={`rounded-full ${className}`} viewBox="0 0 40 40" role="img" aria-label={accessibleLabel}>
       <circle cx="20" cy="20" r="20" fill={color} />
       <text x="20" y="20" textAnchor="middle" dy="0.36em" fill="white" fontSize="18" fontWeight="500">
         {letter}
