@@ -209,8 +209,6 @@ describe('Auth Utilities', () => {
       const userWithSpecialChars = {
         ...mockUser,
         username: 'user@domain.com!@#$%^&*()',
-  first_name: '',
-  last_name: '',
       }
       setUser(userWithSpecialChars)
 
@@ -433,8 +431,6 @@ describe('Auth Utilities', () => {
       const maliciousUser = {
         ...mockUser,
         username: '<script>alert("xss")</script>',
-  first_name: '',
-  last_name: '',
         role: 'user<img src=x onerror=alert("xss")>',
       }
 
