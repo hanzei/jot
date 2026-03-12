@@ -23,6 +23,8 @@ Object.defineProperty(window, 'localStorage', {
 const mockUser: User = {
   id: '1',
   username: 'testuser',
+  first_name: '',
+  last_name: '',
   role: 'user',
   created_at: '2023-01-01T00:00:00Z',
   updated_at: '2023-01-01T00:00:00Z',
@@ -31,6 +33,8 @@ const mockUser: User = {
 const mockAdminUser: User = {
   id: '2',
   username: 'adminuser',
+  first_name: '',
+  last_name: '',
   role: ROLES.ADMIN,
   created_at: '2023-01-01T00:00:00Z',
   updated_at: '2023-01-01T00:00:00Z',
@@ -205,6 +209,8 @@ describe('Auth Utilities', () => {
       const userWithSpecialChars = {
         ...mockUser,
         username: 'user@domain.com!@#$%^&*()',
+  first_name: '',
+  last_name: '',
       }
       setUser(userWithSpecialChars)
 
@@ -427,6 +433,8 @@ describe('Auth Utilities', () => {
       const maliciousUser = {
         ...mockUser,
         username: '<script>alert("xss")</script>',
+  first_name: '',
+  last_name: '',
         role: 'user<img src=x onerror=alert("xss")>',
       }
 
