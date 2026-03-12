@@ -3,6 +3,7 @@
     "close": "Schließen"
   },
   "nav": {
+    "profileMenu": "Profilmenü",
     "settings": "Einstellungen",
     "admin": "Admin",
     "logout": "Abmelden"

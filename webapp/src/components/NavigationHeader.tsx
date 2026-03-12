@@ -1,6 +1,7 @@
 import { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
+import { Menu } from '@headlessui/react';
 import LetterAvatar from '@/components/LetterAvatar';
 import { getUser } from '@/utils/auth';
 
@@ -14,9 +15,89 @@ interface NavigationHeaderProps {
   settingsLinkActive?: boolean;
 }
 
+interface ProfileMenuProps {
+  iconSrc: string | null;
+  displayUsername: string | undefined;
+  firstName: string | undefined;
+  baseUsername: string;
+  showAdminLink: boolean | undefined;
+  adminLinkActive: boolean | undefined;
+  settingsLinkActive: boolean | undefined;
+  onLogout: () => void;
+}
+
+const ProfileMenu = ({ iconSrc, displayUsername, firstName, baseUsername, showAdminLink, adminLinkActive, settingsLinkActive, onLogout }: ProfileMenuProps) => {
+  const { t } = useTranslation();
+  return (
+    <Menu as="div" className="relative">
+      <Menu.Button
+        title={displayUsername}
+        aria-label={t('nav.profileMenu')}
+        className="flex items-center rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-slate-800"
+      >
+        {iconSrc ? (
+          <img src={iconSrc} alt={displayUsername} className="h-8 w-8 rounded-full object-cover" />
+        ) : (
+          <LetterAvatar firstName={firstName} username={baseUsername} className="h-8 w-8" />
+        )}
+      </Menu.Button>
+      <Menu.Items className="absolute right-0 mt-2 w-44 bg-white dark:bg-slate-800 rounded-md shadow-lg ring-1 ring-black/5 dark:ring-slate-600/20 focus:outline-none z-10 border border-gray-200 dark:border-slate-600">
+        <div className="py-1">
+          <Menu.Item>
+            {({ active }) => (
+              <Link
+                to="/settings"
+                className={`block px-4 py-2 text-sm ${active ? 'bg-gray-100 dark:bg-slate-700' : ''} ${
+                  settingsLinkActive
+                    ? 'text-blue-600 dark:text-blue-400 font-medium'
+                    : 'text-gray-700 dark:text-gray-200'
+                }`}
+                {...(settingsLinkActive ? { 'aria-current': 'page' as const } : {})}
+              >
+                {t('nav.settings')}
+              </Link>
+            )}
+          </Menu.Item>
+          {showAdminLink && (
+            <Menu.Item>
+              {({ active }) => (
+                <Link
+                  to="/admin"
+                  className={`block px-4 py-2 text-sm ${active ? 'bg-gray-100 dark:bg-slate-700' : ''} ${
+                    adminLinkActive
+                      ? 'text-blue-600 dark:text-blue-400 font-medium'
+                      : 'text-gray-700 dark:text-gray-200'
+                  }`}
+                  {...(adminLinkActive ? { 'aria-current': 'page' as const } : {})}
+                >
+                  {t('nav.admin')}
+                </Link>
+              )}
+            </Menu.Item>
+          )}
+          <Menu.Item>
+            {({ active }) => (
+              <button
+                onClick={onLogout}
+                className={`block w-full text-left px-4 py-2 text-sm ${
+                  active
+                    ? 'bg-gray-100 dark:bg-slate-700 text-red-600 dark:text-red-400'
+                    : 'text-gray-700 dark:text-gray-200'
+                }`}
+              >
+                {t('nav.logout')}
+              </button>
+            )}
+          </Menu.Item>
+        </div>
+      </Menu.Items>
+    </Menu>
+  );
+};
+
 const NavigationHeader = ({ title = 'Jot', onLogout, children, username, isAdmin: showAdminLink, adminLinkActive, settingsLinkActive }: NavigationHeaderProps) => {
   const currentUser = getUser();
-  const baseUsername = username ?? currentUser?.username;
+  const baseUsername = username ?? currentUser?.username ?? '';
   const fullName = currentUser?.first_name || currentUser?.last_name
     ? `${currentUser.first_name} ${currentUser.last_name}`.trim()
     : null;
@@ -26,97 +107,46 @@ const NavigationHeader = ({ title = 'Jot', onLogout, children, username, isAdmin
   const iconSrc = currentUser?.has_profile_icon
     ? `/api/v1/users/${currentUser.id}/profile-icon?v=${currentUser.updated_at}`
     : null;
-  const { t } = useTranslation();
+
+  const profileMenuProps: ProfileMenuProps = {
+    iconSrc,
+    displayUsername,
+    firstName: currentUser?.first_name,
+    baseUsername,
+    showAdminLink,
+    adminLinkActive,
+    settingsLinkActive,
+    onLogout,
+  };
 
   return (
     <header className="bg-white dark:bg-slate-800 shadow-sm border-b border-gray-200 dark:border-slate-700">
       <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
-        {/* Mobile and Desktop Layout */}
-        <div className="flex flex-col sm:flex-row sm:justify-between sm:items-center py-4 space-y-3 sm:space-y-0">
-          {/* Top row on mobile, left side on desktop */}
-          <div className="flex items-center justify-between sm:justify-start">
-            <div className="flex items-center space-x-2 sm:space-x-4">
-              {title === 'Jot' ? (
-                <Link to="/" className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400">
-                  {title}
-                </Link>
-              ) : (
-                <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">{title}</h1>
-              )}
-            </div>
-
-            {/* Mobile user menu */}
-            <div className="flex items-center space-x-2 sm:hidden">
-              <div className="flex items-center space-x-1 text-xs text-gray-600 dark:text-gray-300">
-                {iconSrc ? (
-                  <img src={iconSrc} alt={displayUsername} className="h-4 w-4 rounded-full object-cover" />
-                ) : (
-                  <LetterAvatar firstName={currentUser?.first_name} username={baseUsername ?? ''} className="h-4 w-4" />
-                )}
-                <span className="max-w-16 truncate">{displayUsername}</span>
-              </div>
-              <Link
-                to="/settings"
-                className={`text-xs ${settingsLinkActive ? 'text-blue-600 dark:text-blue-400 font-medium' : 'text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400'}`}
-                {...(settingsLinkActive ? { 'aria-current': 'page' as const } : {})}
-              >
-                {t('nav.settings')}
+        {/*
+          flex-wrap + CSS order keeps a single ProfileMenu in the DOM:
+          mobile  — row 1: [title (order-1)] … [profile (order-2)], row 2: [search (order-3, w-full)]
+          desktop — one row: [title (order-1)] [search (sm:order-2, flex-1)] [profile (sm:order-3)]
+        */}
+        <div className="flex flex-wrap items-center justify-between gap-y-3 py-4">
+          <div className="order-1 flex items-center space-x-2 sm:space-x-4">
+            {title === 'Jot' ? (
+              <Link to="/" className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400">
+                {title}
               </Link>
-              {showAdminLink && (
-                <Link
-                  to="/admin"
-                  className={`text-xs ${adminLinkActive ? 'text-blue-600 dark:text-blue-400 font-medium' : 'text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400'}`}
-                  {...(adminLinkActive ? { 'aria-current': 'page' as const } : {})}
-                >
-                  {t('nav.admin')}
-                </Link>
-              )}
-              <button
-                onClick={onLogout}
-                className="text-xs text-gray-600 dark:text-gray-300 hover:text-red-600 dark:hover:text-red-400"
-              >
-                {t('nav.logout')}
-              </button>
-            </div>
-          </div>
-
-          {/* Children content (like search bar) */}
-          {children}
-
-          {/* Desktop user menu */}
-          <div className="hidden sm:flex items-center space-x-4">
-            <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300">
-              {iconSrc ? (
-                <img src={iconSrc} alt={displayUsername} className="h-5 w-5 rounded-full object-cover" />
-              ) : (
-                <LetterAvatar firstName={currentUser?.first_name} username={baseUsername ?? ''} className="h-5 w-5" />
-              )}
-              <span>{displayUsername}</span>
-            </div>
-            <Link
-              to="/settings"
-              className={`text-sm ${settingsLinkActive ? 'text-blue-600 dark:text-blue-400 font-medium' : 'text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400'}`}
-              {...(settingsLinkActive ? { 'aria-current': 'page' as const } : {})}
-            >
-              {t('nav.settings')}
-            </Link>
-            {showAdminLink && (
-              <Link
-                to="/admin"
-                className={`text-sm ${adminLinkActive ? 'text-blue-600 dark:text-blue-400 font-medium' : 'text-gray-600 dark:text-gray-300 hover:text-blue-600 dark:hover:text-blue-400'}`}
-                {...(adminLinkActive ? { 'aria-current': 'page' as const } : {})}
-              >
-                {t('nav.admin')}
-              </Link>
+            ) : (
+              <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">{title}</h1>
             )}
-            <button
-              onClick={onLogout}
-              className="text-sm text-gray-600 dark:text-gray-300 hover:text-red-600 dark:hover:text-red-400"
-            >
-              {t('nav.logout')}
-            </button>
           </div>
 
+          {/* Single ProfileMenu — right of title on mobile, far right on desktop */}
+          <div className="order-2 sm:order-3">
+            <ProfileMenu {...profileMenuProps} />
+          </div>
+
+          {/* Search bar — wraps to row 2 on mobile, fills middle on desktop */}
+          <div className="order-3 sm:order-2 w-full sm:w-auto sm:flex-1">
+            {children}
+          </div>
         </div>
       </div>
     </header>
