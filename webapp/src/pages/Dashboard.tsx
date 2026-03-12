@@ -40,10 +40,11 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const [notesList, setNotesList] = useState<Note[]>([]);
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQueryState] = useState(searchParams.get('search') ?? '');
-  const [showArchived, setShowArchived] = useState(searchParams.get('view') === 'archive');
-  const [showBin, setShowBin] = useState(searchParams.get('view') === 'bin');
+  const initialLabel = searchParams.get('label');
+  const [showArchived, setShowArchived] = useState(!initialLabel && searchParams.get('view') === 'archive');
+  const [showBin, setShowBin] = useState(!initialLabel && searchParams.get('view') === 'bin');
   const [labelsList, setLabelsList] = useState<Label[]>([]);
-  const [selectedLabelId, setSelectedLabelId] = useState<string | null>(searchParams.get('label'));
+  const [selectedLabelId, setSelectedLabelId] = useState<string | null>(initialLabel);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingNote, setEditingNote] = useState<Note | null>(null);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
@@ -56,12 +57,14 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     return () => { isMountedRef.current = false; };
   }, []);
 
-  // Sync local state from URL when navigating via links (e.g., logo click)
+  // Sync local state from URL when navigating via links (e.g., logo click).
+  // Label takes precedence over view — if both are present, ignore view.
   useEffect(() => {
+    const label = searchParams.get('label');
     setSearchQueryState(searchParams.get('search') ?? '');
-    setShowArchived(searchParams.get('view') === 'archive');
-    setShowBin(searchParams.get('view') === 'bin');
-    setSelectedLabelId(searchParams.get('label'));
+    setShowArchived(!label && searchParams.get('view') === 'archive');
+    setShowBin(!label && searchParams.get('view') === 'bin');
+    setSelectedLabelId(label);
   }, [searchParams]);
 
   const setSearchQuery = (query: string) => {
@@ -258,6 +261,9 @@ export default function Dashboard({ onLogout }: DashboardProps) {
 
   const handleLabelSelect = (labelId: string | null) => {
     setSelectedLabelId(labelId);
+    setShowArchived(false);
+    setShowBin(false);
+    setSearchQueryState('');
     setSearchParams(prev => {
       const next = new URLSearchParams(prev);
       if (labelId) {
@@ -265,6 +271,8 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       } else {
         next.delete('label');
       }
+      next.delete('view');
+      next.delete('search');
       return next;
     });
   };
@@ -341,8 +349,8 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       element: (
         <button
           onClick={() => handleViewChange('notes')}
-          aria-current={!showArchived && !showBin ? 'page' : undefined}
-          className={`flex items-center gap-2 px-3 py-1 rounded-md text-sm font-medium ${!showArchived && !showBin
+          aria-current={!showArchived && !showBin && !selectedLabelId ? 'page' : undefined}
+          className={`flex items-center gap-2 px-3 py-1 rounded-md text-sm font-medium ${!showArchived && !showBin && !selectedLabelId
               ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
               : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
             }`}
@@ -351,7 +359,6 @@ export default function Dashboard({ onLogout }: DashboardProps) {
           {t('dashboard.tabNotes')}
         </button>
       ),
-      isActive: !showArchived && !showBin
     },
     {
       label: t('dashboard.tabArchive'),
@@ -368,7 +375,6 @@ export default function Dashboard({ onLogout }: DashboardProps) {
           {t('dashboard.tabArchive')}
         </button>
       ),
-      isActive: showArchived
     },
     {
       label: t('dashboard.tabBin'),
@@ -385,7 +391,6 @@ export default function Dashboard({ onLogout }: DashboardProps) {
           {t('dashboard.tabBin')}
         </button>
       ),
-      isActive: showBin
     },
   ];
 
