@@ -60,4 +60,6 @@ Thumbs.db
 # Playwright test artifacts
 webapp/playwright-report/
 webapp/test-results/
+test-results/
+playwright-report/
 
