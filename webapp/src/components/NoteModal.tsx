@@ -402,6 +402,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
   // Helper function to auto-save note changes
   const autoSaveNote = async (updatedItems: TodoItem[]) => {
     if (!note) return;
+    if (savingRef.current) return;
     
     try {
       const updateData: UpdateNoteRequest = {
@@ -524,6 +525,12 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
   const handleSave = async () => {
     if (savingRef.current) return;
     savingRef.current = true;
+    // Cancel any pending debounced autosave to avoid a stale write racing
+    // with this immediate save.
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = undefined;
+    }
     setLoading(true);
     try {
       if (note) {

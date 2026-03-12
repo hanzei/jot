@@ -91,16 +91,24 @@ const navigationRoute = new NavigationRoute(
 );
 registerRoute(navigationRoute);
 
-// POST endpoints that create new resources should NOT be retried via background
-// sync, as each retry creates a duplicate (the server generates a new random ID
-// for every request). Idempotent operations (PUT, DELETE, and safe POSTs like
-// reorder/share) are fine to retry.
-const unsafeForBackgroundSync = new Set([
-  '/api/v1/notes',
-  '/api/v1/notes/import',
-  '/api/v1/register',
-  '/api/v1/admin/users',
+// Only POST endpoints that are idempotent or have uniqueness constraints are
+// safe to retry via background sync. All other POSTs (e.g., note creation)
+// would create duplicates since the server generates a new random ID per request.
+const retryablePostPaths = new Set([
+  '/api/v1/login',
+  '/api/v1/logout',
+  '/api/v1/notes/reorder',
 ]);
+
+// POST paths with dynamic segments that are safe to retry (matched by prefix).
+const retryablePostPrefixes = [
+  '/api/v1/notes/', // covers /notes/{id}/share, /notes/{id}/restore, /notes/{id}/labels
+];
+
+const isRetryablePost = (pathname: string): boolean => {
+  if (retryablePostPaths.has(pathname)) return true;
+  return retryablePostPrefixes.some(prefix => pathname.startsWith(prefix));
+};
 
 // Handle non-GET API requests via fetch event listener directly, since
 // workbox's registerRoute defaults to GET-only matching.
@@ -111,14 +119,15 @@ self.addEventListener('fetch', (event: FetchEvent) => {
   const url = new URL(request.url);
   if (!url.pathname.startsWith('/api/v1/')) return;
 
-  // Non-idempotent POST requests (note creation, import, etc.) - let the
-  // browser handle them normally so failures propagate to the frontend
-  if (request.method === 'POST' && unsafeForBackgroundSync.has(url.pathname)) {
+  // Only retry POSTs that are explicitly allowlisted as idempotent.
+  // All other POSTs (note creation, import, register, etc.) fall through
+  // to the browser's default fetch so failures propagate to the frontend.
+  if (request.method === 'POST' && !isRetryablePost(url.pathname)) {
     return;
   }
 
-  // Idempotent requests (PUT, DELETE, safe POSTs) - queue for background
-  // sync on network failure
+  // Idempotent requests (PUT, DELETE, allowlisted POSTs) - queue for
+  // background sync on network failure
   event.respondWith(
     fetch(request.clone()).catch(async () => {
       await bgSyncQueue.pushRequest({ request });
