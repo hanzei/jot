@@ -354,6 +354,14 @@ func resizeImage(data []byte) ([]byte, error) {
 	srcW := bounds.Dx()
 	srcH := bounds.Dy()
 
+	// Check whether the source image is opaque before a potential resize
+	// converts it to RGBA (which would lose the original color model info).
+	sourceOpaque := false
+	switch img.ColorModel() {
+	case color.YCbCrModel, color.CMYKModel, color.GrayModel, color.Gray16Model:
+		sourceOpaque = true
+	}
+
 	if srcW > maxProfileIconDimension || srcH > maxProfileIconDimension {
 		var dstW, dstH int
 		if srcW >= srcH {
@@ -376,13 +384,12 @@ func resizeImage(data []byte) ([]byte, error) {
 	}
 
 	// JPEG does not support transparency. Flatten alpha onto a white background
-	// so transparent regions render as white instead of black. Skip for opaque
-	// color models (e.g. YCbCr from JPEG decode) where no alpha is possible.
+	// so transparent regions render as white instead of black. Skip when the
+	// original source was opaque (no alpha channel to flatten).
 	encImg := img
-	switch img.ColorModel() {
-	case color.YCbCrModel, color.CMYKModel, color.GrayModel, color.Gray16Model:
+	if sourceOpaque {
 		// Already opaque — encode directly.
-	default:
+	} else {
 		b := img.Bounds()
 		opaque := image.NewRGBA(image.Rect(0, 0, b.Dx(), b.Dy()))
 		draw.Draw(opaque, opaque.Bounds(), image.NewUniform(color.White), image.Point{}, draw.Src)
