@@ -23,7 +23,7 @@ function TrashTab() {
   return <NotesListScreen variant="trash" />;
 }
 
-const tabIcons: Record<string, keyof typeof Ionicons.glyphMap> = {
+const tabIcons: Record<keyof MainTabsParamList, keyof typeof Ionicons.glyphMap> = {
   Notes: 'document-text-outline',
   Archived: 'archive-outline',
   Trash: 'trash-outline',

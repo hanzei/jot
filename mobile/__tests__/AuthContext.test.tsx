@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, waitFor, act } from '@testing-library/react-native';
+import { render, waitFor, act, fireEvent } from '@testing-library/react-native';
 import { Text, TouchableOpacity } from 'react-native';
 import { AuthProvider, useAuth } from '../src/store/AuthContext';
 import { auth, getStoredSession, setOnUnauthorized } from '../src/api/client';
@@ -114,47 +114,35 @@ describe('AuthContext', () => {
   });
 
   it('logout clears user state', async () => {
-    mockAuth.login.mockResolvedValue({ user: mockUser, settings: mockSettings });
+    mockGetStoredSession.mockResolvedValue('token');
+    mockAuth.me.mockResolvedValue({ user: mockUser, settings: mockSettings });
     mockAuth.logout.mockResolvedValue(undefined);
 
     const { getByTestId } = render(
       <AuthProvider>
-        <LoginTrigger />
-      </AuthProvider>,
-    );
-
-    // Wait for login to complete
-    await waitFor(() => {
-      expect(getByTestId('username').props.children).toBe('testuser');
-    });
-
-    // Now re-render with TestConsumer to get logout button
-    const { getByTestId: getById2 } = render(
-      <AuthProvider>
         <TestConsumer />
       </AuthProvider>,
     );
 
-    // Wait for loading to finish, then login and logout
+    // Wait for session restore to set user
     await waitFor(() => {
-      expect(getById2('loading').props.children).toBe('false');
+      expect(getByTestId('authenticated').props.children).toBe('true');
     });
 
-    // Directly test that logout calls auth.logout
-    mockAuth.login.mockResolvedValue({ user: mockUser, settings: mockSettings });
+    // Trigger logout via the button
+    await act(async () => {
+      fireEvent.press(getByTestId('logout-button'));
+    });
 
-    // Verify auth.logout was callable
-    expect(mockAuth.logout).toBeDefined();
+    expect(mockAuth.logout).toHaveBeenCalled();
+    expect(getByTestId('authenticated').props.children).toBe('false');
+    expect(getByTestId('username').props.children).toBe('none');
   });
 
   it('logout clears state even when auth.logout rejects', async () => {
+    mockGetStoredSession.mockResolvedValue('token');
+    mockAuth.me.mockResolvedValue({ user: mockUser, settings: mockSettings });
     mockAuth.logout.mockRejectedValue(new Error('network error'));
-
-    // Capture the setOnUnauthorized callback
-    let unauthorizedCb: (() => void) | null = null;
-    mockSetOnUnauthorized.mockImplementation((cb: (() => void) | null) => {
-      unauthorizedCb = cb;
-    });
 
     const { getByTestId } = render(
       <AuthProvider>
@@ -162,13 +150,19 @@ describe('AuthContext', () => {
       </AuthProvider>,
     );
 
+    // Wait for session restore
     await waitFor(() => {
-      expect(getByTestId('loading').props.children).toBe('false');
+      expect(getByTestId('authenticated').props.children).toBe('true');
     });
 
-    // The setOnUnauthorized callback should have been registered
-    expect(mockSetOnUnauthorized).toHaveBeenCalled();
-    expect(unauthorizedCb).not.toBeNull();
+    // Trigger logout - should clear state despite rejection
+    await act(async () => {
+      fireEvent.press(getByTestId('logout-button'));
+    });
+
+    expect(mockAuth.logout).toHaveBeenCalled();
+    expect(getByTestId('authenticated').props.children).toBe('false');
+    expect(getByTestId('username').props.children).toBe('none');
   });
 
   it('unauthorized callback clears auth state', async () => {
