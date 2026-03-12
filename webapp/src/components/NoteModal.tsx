@@ -187,6 +187,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const errorTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const itemInputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
+  const savingRef = useRef(false);
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -521,6 +522,8 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
   };
 
   const handleSave = async () => {
+    if (savingRef.current) return;
+    savingRef.current = true;
     setLoading(true);
     try {
       if (note) {
@@ -554,7 +557,9 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
       onSave();
     } catch (error) {
       console.error('Failed to save note:', error);
+      showError(t('note.failedSaveChanges'));
     } finally {
+      savingRef.current = false;
       setLoading(false);
     }
   };

@@ -91,24 +91,44 @@ const navigationRoute = new NavigationRoute(
 );
 registerRoute(navigationRoute);
 
-// Background sync route for non-GET API requests
-registerRoute(
-  ({ request, url }) => 
-    request.method !== 'GET' && url.pathname.startsWith('/api/v1/'),
-  async ({ request }) => {
-    try {
-      return await fetch(request);
-    } catch {
-      // If network request fails, add to background sync queue
+// POST endpoints that create new resources should NOT be retried via background
+// sync, as each retry creates a duplicate (the server generates a new random ID
+// for every request). Idempotent operations (PUT, DELETE, and safe POSTs like
+// reorder/share) are fine to retry.
+const unsafeForBackgroundSync = new Set([
+  '/api/v1/notes',
+  '/api/v1/notes/import',
+  '/api/v1/register',
+  '/api/v1/admin/users',
+]);
+
+// Handle non-GET API requests via fetch event listener directly, since
+// workbox's registerRoute defaults to GET-only matching.
+self.addEventListener('fetch', (event: FetchEvent) => {
+  const { request } = event;
+  if (request.method === 'GET') return;
+
+  const url = new URL(request.url);
+  if (!url.pathname.startsWith('/api/v1/')) return;
+
+  // Non-idempotent POST requests (note creation, import, etc.) - let the
+  // browser handle them normally so failures propagate to the frontend
+  if (request.method === 'POST' && unsafeForBackgroundSync.has(url.pathname)) {
+    return;
+  }
+
+  // Idempotent requests (PUT, DELETE, safe POSTs) - queue for background
+  // sync on network failure
+  event.respondWith(
+    fetch(request.clone()).catch(async () => {
       await bgSyncQueue.pushRequest({ request });
-      // Return a response indicating the request was queued
       return new Response('Request queued for background sync', {
         status: 202,
-        statusText: 'Accepted'
+        statusText: 'Accepted',
       });
-    }
-  }
-);
+    })
+  );
+});
 
 // Activate new service worker immediately on install.
 // The 'controlling' event in the client triggers a page reload.
