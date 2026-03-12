@@ -1,7 +1,7 @@
 import { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router-dom';
-import { Menu } from '@headlessui/react';
+import { Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/react';
 import LetterAvatar from '@/components/LetterAvatar';
 import { getUser } from '@/utils/auth';
 
@@ -29,8 +29,9 @@ interface ProfileMenuProps {
 const ProfileMenu = ({ iconSrc, displayUsername, firstName, baseUsername, showAdminLink, adminLinkActive, settingsLinkActive, onLogout }: ProfileMenuProps) => {
   const { t } = useTranslation();
   return (
-    <Menu as="div" className="relative">
-      <Menu.Button
+    <div className="relative">
+      <Menu>
+      <MenuButton
         title={displayUsername}
         aria-label={t('nav.profileMenu')}
         className="flex items-center rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-slate-800"
@@ -40,58 +41,49 @@ const ProfileMenu = ({ iconSrc, displayUsername, firstName, baseUsername, showAd
         ) : (
           <LetterAvatar firstName={firstName} username={baseUsername} className="h-8 w-8" />
         )}
-      </Menu.Button>
-      <Menu.Items className="absolute right-0 mt-2 w-44 bg-white dark:bg-slate-800 rounded-md shadow-lg ring-1 ring-black/5 dark:ring-slate-600/20 focus:outline-none z-10 border border-gray-200 dark:border-slate-600">
+      </MenuButton>
+      <MenuItems className="absolute right-0 mt-2 w-44 bg-white dark:bg-slate-800 rounded-md shadow-lg ring-1 ring-black/5 dark:ring-slate-600/20 focus:outline-none z-10 border border-gray-200 dark:border-slate-600">
         <div className="py-1">
-          <Menu.Item>
-            {({ active }) => (
+          <MenuItem>
+            <Link
+              to="/settings"
+              className={`block px-4 py-2 text-sm data-[focus]:bg-gray-100 dark:data-[focus]:bg-slate-700 ${
+                settingsLinkActive
+                  ? 'text-blue-600 dark:text-blue-400 font-medium'
+                  : 'text-gray-700 dark:text-gray-200'
+              }`}
+              {...(settingsLinkActive ? { 'aria-current': 'page' as const } : {})}
+            >
+              {t('nav.settings')}
+            </Link>
+          </MenuItem>
+          {showAdminLink && (
+            <MenuItem>
               <Link
-                to="/settings"
-                className={`block px-4 py-2 text-sm ${active ? 'bg-gray-100 dark:bg-slate-700' : ''} ${
-                  settingsLinkActive
+                to="/admin"
+                className={`block px-4 py-2 text-sm data-[focus]:bg-gray-100 dark:data-[focus]:bg-slate-700 ${
+                  adminLinkActive
                     ? 'text-blue-600 dark:text-blue-400 font-medium'
                     : 'text-gray-700 dark:text-gray-200'
                 }`}
-                {...(settingsLinkActive ? { 'aria-current': 'page' as const } : {})}
+                {...(adminLinkActive ? { 'aria-current': 'page' as const } : {})}
               >
-                {t('nav.settings')}
+                {t('nav.admin')}
               </Link>
-            )}
-          </Menu.Item>
-          {showAdminLink && (
-            <Menu.Item>
-              {({ active }) => (
-                <Link
-                  to="/admin"
-                  className={`block px-4 py-2 text-sm ${active ? 'bg-gray-100 dark:bg-slate-700' : ''} ${
-                    adminLinkActive
-                      ? 'text-blue-600 dark:text-blue-400 font-medium'
-                      : 'text-gray-700 dark:text-gray-200'
-                  }`}
-                  {...(adminLinkActive ? { 'aria-current': 'page' as const } : {})}
-                >
-                  {t('nav.admin')}
-                </Link>
-              )}
-            </Menu.Item>
+            </MenuItem>
           )}
-          <Menu.Item>
-            {({ active }) => (
-              <button
-                onClick={onLogout}
-                className={`block w-full text-left px-4 py-2 text-sm ${
-                  active
-                    ? 'bg-gray-100 dark:bg-slate-700 text-red-600 dark:text-red-400'
-                    : 'text-gray-700 dark:text-gray-200'
-                }`}
-              >
-                {t('nav.logout')}
-              </button>
-            )}
-          </Menu.Item>
+          <MenuItem>
+            <button
+              onClick={onLogout}
+              className="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 data-[focus]:bg-gray-100 dark:data-[focus]:bg-slate-700 data-[focus]:text-red-600 dark:data-[focus]:text-red-400"
+            >
+              {t('nav.logout')}
+            </button>
+          </MenuItem>
         </div>
-      </Menu.Items>
-    </Menu>
+      </MenuItems>
+      </Menu>
+    </div>
   );
 };
 
