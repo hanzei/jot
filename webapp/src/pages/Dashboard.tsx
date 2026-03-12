@@ -258,6 +258,8 @@ export default function Dashboard({ onLogout }: DashboardProps) {
 
   const handleLabelSelect = (labelId: string | null) => {
     setSelectedLabelId(labelId);
+    setShowArchived(false);
+    setShowBin(false);
     setSearchParams(prev => {
       const next = new URLSearchParams(prev);
       if (labelId) {
@@ -265,6 +267,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       } else {
         next.delete('label');
       }
+      next.delete('view');
       return next;
     });
   };
@@ -341,8 +344,8 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       element: (
         <button
           onClick={() => handleViewChange('notes')}
-          aria-current={!showArchived && !showBin ? 'page' : undefined}
-          className={`flex items-center gap-2 px-3 py-1 rounded-md text-sm font-medium ${!showArchived && !showBin
+          aria-current={!showArchived && !showBin && !selectedLabelId ? 'page' : undefined}
+          className={`flex items-center gap-2 px-3 py-1 rounded-md text-sm font-medium ${!showArchived && !showBin && !selectedLabelId
               ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
               : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
             }`}
@@ -351,7 +354,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
           {t('dashboard.tabNotes')}
         </button>
       ),
-      isActive: !showArchived && !showBin
+      isActive: !showArchived && !showBin && !selectedLabelId
     },
     {
       label: t('dashboard.tabArchive'),
