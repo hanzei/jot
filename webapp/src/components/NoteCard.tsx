@@ -5,13 +5,14 @@ import {
   ArchiveBoxIcon,
   ArchiveBoxXMarkIcon,
   ShareIcon,
-  UserIcon,
   ArrowUturnLeftIcon,
 } from '@heroicons/react/24/outline';
 import { Menu } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
-import { Note } from '@/types';
+import { Note, User } from '@/types';
 import { notes } from '@/utils/api';
+import LetterAvatar from '@/components/LetterAvatar';
+import { buildShareAvatars } from '@/utils/shareAvatars';
 
 interface NoteCardProps {
   note: Note;
@@ -21,11 +22,12 @@ interface NoteCardProps {
   onRestore?: (noteId: string) => void;
   onPermanentlyDelete?: (noteId: string) => void;
   currentUserId?: string;
+  usersById?: Map<string, User>;
   inBin?: boolean;
   onRefresh?: () => void;
 }
 
-export default function NoteCard({ note, onEdit, onDelete, onShare, onRestore, onPermanentlyDelete, currentUserId, inBin = false, onRefresh }: NoteCardProps) {
+export default function NoteCard({ note, onEdit, onDelete, onShare, onRestore, onPermanentlyDelete, currentUserId, usersById, inBin = false, onRefresh }: NoteCardProps) {
   const { t } = useTranslation();
   const [isUpdating, setIsUpdating] = useState(false);
 
@@ -105,22 +107,6 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, onRestore, o
       className={`note-card ${getColorClass(note.color)} p-4 relative group ${isUpdating ? 'opacity-50' : ''
         }`}
     >
-      {/* Indicators */}
-      <div className="absolute top-2 left-2 flex gap-1">
-        {note.is_shared && (
-          <div className={`flex items-center rounded-full px-2 py-1 ${isOwner ? 'bg-blue-100 dark:bg-blue-900/50' : 'bg-green-100 dark:bg-green-900/50'}`}>
-            {isOwner ? (
-              <ShareIcon className="h-3 w-3 text-blue-600 dark:text-blue-400" />
-            ) : (
-              <UserIcon className="h-3 w-3 text-green-600 dark:text-green-400" />
-            )}
-            <span className={`text-xs ml-1 ${isOwner ? 'text-blue-600 dark:text-blue-400' : 'text-green-600 dark:text-green-400'}`}>
-              {isOwner ? t('note.shared') : t('note.sharedWithMe')}
-            </span>
-          </div>
-        )}
-      </div>
-
       {note.pinned && (
         <div className="absolute top-2 right-8">
           <svg data-testid="pin-icon" className="h-3 w-3 text-blue-500" fill="currentColor" viewBox="0 0 24 24">
@@ -241,7 +227,7 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, onRestore, o
       {/* Content */}
       <div
         onClick={() => !inBin && onEdit(note)}
-        className={`${inBin ? 'cursor-default' : 'cursor-pointer'} ${note.is_shared ? 'pt-8' : ''}`}
+        className={`${inBin ? 'cursor-default' : 'cursor-pointer'}`}
       >
         {note.title && (
           <h3 className="font-medium text-gray-900 dark:text-white mb-2 line-clamp-2">
@@ -302,6 +288,27 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, onRestore, o
           )}
         </div>
       )}
+
+      {/* Shared user avatars */}
+      {note.is_shared && (() => {
+        const avatars = buildShareAvatars(note, currentUserId, usersById);
+        if (avatars.length === 0) return null;
+        return (
+          <div className="flex items-center mt-2">
+            {avatars.map((a, index) => (
+              <div key={a.key} title={a.username}>
+                <LetterAvatar
+                  firstName={a.firstName}
+                  username={a.username}
+                  userId={a.userId}
+                  hasProfileIcon={a.hasProfileIcon}
+                  className={`w-5 h-5 ring-2 ring-white dark:ring-slate-800 ${index > 0 ? '-ml-1' : ''}`}
+                />
+              </div>
+            ))}
+          </div>
+        );
+      })()}
     </div>
   );
 }

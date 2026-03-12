@@ -24,6 +24,9 @@ vi.mock('@/utils/api', () => ({
   labels: {
     getAll: vi.fn().mockResolvedValue([]),
   },
+  users: {
+    search: vi.fn().mockResolvedValue([]),
+  },
 }))
 
 vi.mock('@/utils/auth', () => ({

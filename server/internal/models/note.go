@@ -74,6 +74,7 @@ type NoteShare struct {
 	Username         string    `json:"username,omitempty"`
 	FirstName        string    `json:"first_name,omitempty"`
 	LastName         string    `json:"last_name,omitempty"`
+	HasProfileIcon   bool      `json:"has_profile_icon"`
 	CreatedAt        time.Time `json:"created_at"`
 	UpdatedAt        time.Time `json:"updated_at"`
 }
@@ -689,7 +690,9 @@ func (s *NoteStore) UnshareNote(noteID string, sharedWithUserID string) error {
 
 func (s *NoteStore) GetNoteShares(noteID string) ([]NoteShare, error) {
 	query := `SELECT ns.id, ns.note_id, ns.shared_with_user_id, ns.shared_by_user_id,
-			  ns.permission_level, u.username, u.first_name, u.last_name, ns.created_at, ns.updated_at
+			  ns.permission_level, u.username, u.first_name, u.last_name,
+			  u.profile_icon IS NOT NULL AS has_profile_icon,
+			  ns.created_at, ns.updated_at
 			  FROM note_shares ns
 			  JOIN users u ON ns.shared_with_user_id = u.id
 			  WHERE ns.note_id = ?`
@@ -709,7 +712,8 @@ func (s *NoteStore) GetNoteShares(noteID string) ([]NoteShare, error) {
 		var share NoteShare
 		err := rows.Scan(
 			&share.ID, &share.NoteID, &share.SharedWithUserID, &share.SharedByUserID,
-			&share.PermissionLevel, &share.Username, &share.FirstName, &share.LastName, &share.CreatedAt, &share.UpdatedAt,
+			&share.PermissionLevel, &share.Username, &share.FirstName, &share.LastName,
+			&share.HasProfileIcon, &share.CreatedAt, &share.UpdatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan note share: %w", err)
