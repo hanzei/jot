@@ -54,10 +54,13 @@ export class SettingsPage {
   }
 
   profileIconPreview() {
-    return this.page.locator('div').filter({ hasText: /^Profile Icon$/ }).locator('..').locator('img');
+    // Navigate from the "Profile Icon" heading up to the card div, then find img inside it
+    return this.page.getByRole('heading', { name: 'Profile Icon', exact: true })
+      .locator('..')
+      .locator('img');
   }
 
   navProfileIcon() {
-    return this.page.locator('header img[alt]').first();
+    return this.page.locator('header img[alt]').filter({ visible: true }).first();
   }
 }
