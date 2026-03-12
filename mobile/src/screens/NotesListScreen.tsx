@@ -8,6 +8,7 @@ import {
   RefreshControl,
   StyleSheet,
   SectionList,
+  ActivityIndicator,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
@@ -73,6 +74,14 @@ export default function NotesListScreen({ variant = 'notes' }: NotesListScreenPr
     [handleNotePress],
   );
 
+  if (isLoading && !notes) {
+    return (
+      <View style={styles.loadingContainer} testID="notes-loading">
+        <ActivityIndicator size="large" color="#2563eb" />
+      </View>
+    );
+  }
+
   if (isError) {
     return (
       <View style={styles.emptyContainer} testID="notes-error-state">
@@ -107,7 +116,13 @@ export default function NotesListScreen({ variant = 'notes' }: NotesListScreenPr
           {variant === 'trash' && 'Deleted notes will appear here'}
         </Text>
         {variant === 'notes' && (
-          <TouchableOpacity style={styles.fab} onPress={handleCreateNote} testID="create-note-fab">
+          <TouchableOpacity
+            style={styles.fab}
+            onPress={handleCreateNote}
+            testID="create-note-fab"
+            accessibilityLabel="Create note"
+            accessibilityRole="button"
+          >
             <Ionicons name="add" size={28} color="#fff" />
           </TouchableOpacity>
         )}
@@ -182,7 +197,13 @@ export default function NotesListScreen({ variant = 'notes' }: NotesListScreenPr
       )}
 
       {variant === 'notes' && (
-        <TouchableOpacity style={styles.fab} onPress={handleCreateNote} testID="create-note-fab">
+        <TouchableOpacity
+          style={styles.fab}
+          onPress={handleCreateNote}
+          testID="create-note-fab"
+          accessibilityLabel="Create note"
+          accessibilityRole="button"
+        >
           <Ionicons name="add" size={28} color="#fff" />
         </TouchableOpacity>
       )}
@@ -193,6 +214,12 @@ export default function NotesListScreen({ variant = 'notes' }: NotesListScreenPr
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+    backgroundColor: '#f9fafb',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
     backgroundColor: '#f9fafb',
   },
   emptyContainer: {
