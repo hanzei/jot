@@ -213,7 +213,7 @@ const Settings = ({ onLogout }: SettingsProps) => {
           <div className="bg-white dark:bg-slate-800 shadow rounded-lg p-6 border border-gray-200 dark:border-slate-700 max-w-md">
             <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">{t('settings.accountSection')}</h2>
             <form onSubmit={handleSubmit}>
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
                 <div>
                   <label htmlFor="first-name" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                     {t('settings.firstNameLabel')}

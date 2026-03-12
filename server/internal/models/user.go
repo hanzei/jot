@@ -272,6 +272,40 @@ func (s *UserStore) UpdateName(id, firstName, lastName string) (*User, error) {
 	return &user, nil
 }
 
+// UpdateProfile atomically updates the username, first name, and last name for
+// the given user in a single transaction. Returns ErrUsernameTaken if the new
+// username conflicts with an existing account, or ErrUserNotFound if the id
+// does not exist.
+func (s *UserStore) UpdateProfile(id, username, firstName, lastName string) (*User, error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var user User
+	err = tx.QueryRow(
+		`UPDATE users SET username = ?, first_name = ?, last_name = ?, updated_at = CURRENT_TIMESTAMP
+		 WHERE id = ? RETURNING id, username, first_name, last_name, role, created_at, updated_at`,
+		username, firstName, lastName, id,
+	).Scan(&user.ID, &user.Username, &user.FirstName, &user.LastName, &user.Role, &user.CreatedAt, &user.UpdatedAt)
+	if err != nil {
+		var sqliteErr sqlite3.Error
+		if errors.As(err, &sqliteErr) && sqliteErr.ExtendedCode == sqlite3.ErrConstraintUnique {
+			return nil, ErrUsernameTaken
+		}
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrUserNotFound
+		}
+		return nil, fmt.Errorf("failed to update profile: %w", err)
+	}
+
+	if err = tx.Commit(); err != nil {
+		return nil, fmt.Errorf("failed to commit transaction: %w", err)
+	}
+	return &user, nil
+}
+
 func (s *UserStore) UpdateRole(id, role string) (*User, error) {
 	if role != RoleUser && role != RoleAdmin {
 		return nil, fmt.Errorf("invalid role %q: must be %q or %q", role, RoleUser, RoleAdmin)

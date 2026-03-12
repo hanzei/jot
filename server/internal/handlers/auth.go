@@ -164,15 +164,11 @@ func (h *AuthHandler) UpdateUser(w http.ResponseWriter, r *http.Request) (int, e
 		return http.StatusBadRequest, err
 	}
 
-	if _, err := h.userStore.UpdateUsername(currentUser.ID, req.Username); err != nil {
+	user, err := h.userStore.UpdateProfile(currentUser.ID, req.Username, req.FirstName, req.LastName)
+	if err != nil {
 		if errors.Is(err, models.ErrUsernameTaken) {
 			return http.StatusConflict, models.ErrUsernameTaken
 		}
-		return http.StatusInternalServerError, err
-	}
-
-	user, err := h.userStore.UpdateName(currentUser.ID, req.FirstName, req.LastName)
-	if err != nil {
 		return http.StatusInternalServerError, err
 	}
 
