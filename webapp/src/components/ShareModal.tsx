@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Dialog } from '@headlessui/react';
+import { Dialog, DialogPanel, DialogTitle } from '@headlessui/react';
 import { XMarkIcon, TrashIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
 import { useTranslation } from 'react-i18next';
 import { Note, NoteShare, User } from '@/types';
@@ -189,11 +189,11 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
       
       <div className="fixed inset-0 overflow-y-auto">
         <div className="flex min-h-full items-center justify-center p-4">
-          <Dialog.Panel className="mx-auto max-w-md rounded bg-white dark:bg-slate-800 p-6 shadow-xl border border-gray-200 dark:border-slate-700">
+          <DialogPanel className="mx-auto max-w-md rounded bg-white dark:bg-slate-800 p-6 shadow-xl border border-gray-200 dark:border-slate-700">
             <div className="flex items-center justify-between mb-4">
-              <Dialog.Title className="text-lg font-medium text-gray-900 dark:text-white">
+              <DialogTitle className="text-lg font-medium text-gray-900 dark:text-white">
                 {t('share.title', { noteTitle: note.title || t('share.untitledNote') })}
-              </Dialog.Title>
+              </DialogTitle>
               <button
                 onClick={handleClose}
                 className="text-gray-400 hover:text-gray-600"
@@ -313,7 +313,7 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
                 {t('share.notSharedYet')}
               </p>
             )}
-          </Dialog.Panel>
+          </DialogPanel>
         </div>
       </div>
     </Dialog>

@@ -25,9 +25,7 @@ vi.mock('@headlessui/react', () => {
     </div>
   )
 
-  Dialog.Panel = DialogPanel
-
-  return { Dialog }
+  return { Dialog, DialogPanel }
 })
 
 // Mock @dnd-kit components

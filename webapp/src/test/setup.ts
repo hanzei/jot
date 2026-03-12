@@ -19,6 +19,15 @@ Object.defineProperty(globalThis, 'EventSource', {
   writable: true,
 });
 
+// ResizeObserver is not available in jsdom. @headlessui/react v2 requires it.
+if (!globalThis.ResizeObserver) {
+  globalThis.ResizeObserver = class ResizeObserver {
+    observe() {}
+    unobserve() {}
+    disconnect() {}
+  };
+}
+
 // window.matchMedia is not available in jsdom. Provide a stub so components
 // that call applyTheme (which reads prefers-color-scheme) do not throw.
 Object.defineProperty(globalThis, 'matchMedia', {

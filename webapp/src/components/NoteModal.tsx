@@ -1,6 +1,6 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { XMarkIcon, PlusIcon, TrashIcon, ChevronDownIcon, ArchiveBoxIcon, ArchiveBoxXMarkIcon, ShareIcon } from '@heroicons/react/24/outline';
-import { Dialog } from '@headlessui/react';
+import { Dialog, DialogPanel } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
 import { Note, NoteType, CreateNoteRequest, UpdateNoteRequest, Label, User } from '@/types';
 import { notes } from '@/utils/api';
@@ -184,8 +184,8 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
   const [showLabelPicker, setShowLabelPicker] = useState(false);
   
   // Use useRef for timeout management instead of global window property
-  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
-  const errorTimeoutRef = useRef<ReturnType<typeof setTimeout>>();
+  const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const errorTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const itemInputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
 
   const sensors = useSensors(
@@ -687,7 +687,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
         <div className="fixed inset-0 bg-black/30 dark:bg-black/50" aria-hidden="true" />
       
       <div className="fixed inset-0 flex items-center justify-center p-2 sm:p-4 overflow-hidden">
-        <Dialog.Panel 
+        <DialogPanel
           className={`mx-auto w-full max-w-md max-h-[90vh] overflow-hidden rounded-lg shadow-xl ${
             colors.find(c => c.value === color)?.class || 'bg-white dark:bg-slate-800 border-gray-300 dark:border-slate-600'
           }`}
@@ -978,7 +978,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
               )}
             </div>
           </div>
-        </Dialog.Panel>
+        </DialogPanel>
       </div>
       </Dialog>
 
