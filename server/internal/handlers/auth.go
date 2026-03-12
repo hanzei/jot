@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"image"
+	"image/color"
 	"image/jpeg"
 	_ "image/png"
 	"io"
@@ -374,8 +375,15 @@ func resizeImage(data []byte) ([]byte, string, error) {
 		img = dst
 	}
 
+	// JPEG does not support transparency. Flatten alpha onto a white background
+	// so transparent regions render as white instead of black.
+	b := img.Bounds()
+	opaque := image.NewRGBA(image.Rect(0, 0, b.Dx(), b.Dy()))
+	draw.Draw(opaque, opaque.Bounds(), image.NewUniform(color.White), image.Point{}, draw.Src)
+	draw.Draw(opaque, opaque.Bounds(), img, b.Min, draw.Over)
+
 	var buf bytes.Buffer
-	if err := jpeg.Encode(&buf, img, &jpeg.Options{Quality: jpegQuality}); err != nil {
+	if err := jpeg.Encode(&buf, opaque, &jpeg.Options{Quality: jpegQuality}); err != nil {
 		return nil, "", fmt.Errorf("encode jpeg: %w", err)
 	}
 
