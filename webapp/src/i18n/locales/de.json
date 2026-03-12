@@ -120,7 +120,12 @@
     "updatingRole": "Aktualisiere...",
     "roleToggleLabel": "{{action}} für {{username}}",
     "failedUpdateRole": "Rolle konnte nicht aktualisiert werden.",
-    "youBadge": "Du"
+    "youBadge": "Du",
+    "deleteUser": "Löschen",
+    "deleting": "Löschen...",
+    "deleteUserConfirm": "Soll der Benutzer \"{{username}}\" wirklich dauerhaft gelöscht werden? Dabei werden auch alle Notizen des Benutzers gelöscht.",
+    "failedDeleteUser": "Benutzer konnte nicht gelöscht werden.",
+    "deleteUserLabel": "Benutzer {{username}} löschen"
   },
   "note": {
     "shared": "Geteilt",

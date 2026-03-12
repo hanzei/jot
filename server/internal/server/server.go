@@ -162,6 +162,7 @@ func (s *Server) setupRoutes() {
 			r.Get("/admin/users", s.wrapHandler(s.adminHandler.GetUsers))
 			r.Post("/admin/users", s.wrapHandler(s.adminHandler.CreateUser))
 			r.Put("/admin/users/{id}/role", s.wrapHandler(s.adminHandler.UpdateUserRole))
+			r.Delete("/admin/users/{id}", s.wrapHandler(s.adminHandler.DeleteUser))
 		})
 	})
 
