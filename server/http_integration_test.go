@@ -914,6 +914,26 @@ func TestUploadProfileIcon(t *testing.T) {
 		assert.True(t, userResp.HasProfileIcon)
 	})
 
+	t.Run("transparent PNG pixels are flattened to white", func(t *testing.T) {
+		// Fully transparent NRGBA image — after compositing onto white the
+		// resulting JPEG pixels should be white (255,255,255).
+		img := image.NewNRGBA(image.Rect(0, 0, 4, 4))
+		// All pixels default to {0,0,0,0} (fully transparent).
+		body, ct := createMultipartImage(t, "file", "transparent.png", encodePNG(t, img))
+		require.Equal(t, http.StatusOK, ts.uploadProfileIcon(t, user, body, ct).StatusCode)
+
+		resp := ts.authRequest(t, user, http.MethodGet, "/api/v1/users/"+user.User.ID+"/profile-icon", nil)
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+
+		decoded, err := jpeg.Decode(bytes.NewReader(resp.Body))
+		require.NoError(t, err)
+		r, g, b, _ := decoded.At(0, 0).RGBA()
+		// JPEG compression may introduce slight variance; allow ±1.
+		assert.InDelta(t, 0xFFFF, r, 256, "red channel should be white")
+		assert.InDelta(t, 0xFFFF, g, 256, "green channel should be white")
+		assert.InDelta(t, 0xFFFF, b, 256, "blue channel should be white")
+	})
+
 	t.Run("stored image is JPEG", func(t *testing.T) {
 		// Upload first so this subtest is self-contained.
 		img := image.NewRGBA(image.Rect(0, 0, 8, 8))

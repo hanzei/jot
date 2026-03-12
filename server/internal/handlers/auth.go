@@ -393,7 +393,7 @@ func resizeImage(data []byte) ([]byte, error) {
 		}
 
 		dst := image.NewRGBA(image.Rect(0, 0, dstW, dstH))
-		draw.CatmullRom.Scale(dst, dst.Bounds(), img, bounds, draw.Over, nil)
+		draw.CatmullRom.Scale(dst, dst.Bounds(), img, bounds, draw.Src, nil)
 		img = dst
 	}
 
