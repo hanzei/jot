@@ -1,6 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router-dom';
-import { MagnifyingGlassIcon, ArrowUpTrayIcon, UserCircleIcon } from '@heroicons/react/24/outline';
+import { MagnifyingGlassIcon, ArrowUpTrayIcon } from '@heroicons/react/24/outline';
+import LetterAvatar from '@/components/LetterAvatar';
 import { useTranslation } from 'react-i18next';
 import i18n from '@/i18n';
 import { auth, users, isAxiosError } from '@/utils/api';
@@ -265,7 +266,7 @@ const Settings = ({ onLogout }: SettingsProps) => {
                     className="h-16 w-16 rounded-full object-cover border border-gray-200 dark:border-slate-600"
                   />
                 ) : (
-                  <UserCircleIcon className="h-16 w-16 text-gray-400 dark:text-gray-500" />
+                  <LetterAvatar firstName={currentUser?.first_name} username={currentUsername} className="h-16 w-16" />
                 )}
               </div>
               <div className="flex flex-col space-y-2">

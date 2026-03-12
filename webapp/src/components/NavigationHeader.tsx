@@ -1,7 +1,7 @@
 import { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
-import { UserCircleIcon } from '@heroicons/react/24/outline';
 import { Link } from 'react-router-dom';
+import LetterAvatar from '@/components/LetterAvatar';
 import { getUser } from '@/utils/auth';
 
 interface NavigationHeaderProps {
@@ -51,7 +51,7 @@ const NavigationHeader = ({ title = 'Jot', onLogout, children, username, isAdmin
                 {iconSrc ? (
                   <img src={iconSrc} alt={displayUsername} className="h-4 w-4 rounded-full object-cover" />
                 ) : (
-                  <UserCircleIcon className="h-4 w-4" />
+                  <LetterAvatar firstName={currentUser?.first_name} username={baseUsername ?? ''} className="h-4 w-4" />
                 )}
                 <span className="max-w-16 truncate">{displayUsername}</span>
               </div>
@@ -89,7 +89,7 @@ const NavigationHeader = ({ title = 'Jot', onLogout, children, username, isAdmin
               {iconSrc ? (
                 <img src={iconSrc} alt={displayUsername} className="h-5 w-5 rounded-full object-cover" />
               ) : (
-                <UserCircleIcon className="h-5 w-5" />
+                <LetterAvatar firstName={currentUser?.first_name} username={baseUsername ?? ''} className="h-5 w-5" />
               )}
               <span>{displayUsername}</span>
             </div>
