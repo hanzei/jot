@@ -26,7 +26,9 @@ jobs:
         with:
           node-version: "24"
           cache: "npm"
-          cache-dependency-path: webapp/package-lock.json
+          cache-dependency-path: |
+            webapp/package-lock.json
+            mobile/package-lock.json
 
       - name: Install Task
         run: sh -c "$(curl -fsSL https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
@@ -59,7 +61,9 @@ jobs:
         with:
           node-version: "24"
           cache: "npm"
-          cache-dependency-path: webapp/package-lock.json
+          cache-dependency-path: |
+            webapp/package-lock.json
+            mobile/package-lock.json
 
       - name: Install Task
         run: sh -c "$(curl -fsSL https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin

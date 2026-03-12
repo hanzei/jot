@@ -54,7 +54,7 @@ api.interceptors.response.use(
   async (error) => {
     if (error.response?.status === 401) {
       const url: string = error.config?.url || '';
-      const isAuthEndpoint = url === '/login' || url === '/register' || url === '/logout';
+      const isAuthEndpoint = url === '/login' || url === '/register' || url === '/logout' || url === '/me';
       if (!isAuthEndpoint) {
         await SecureStore.deleteItemAsync(SESSION_KEY);
         onUnauthorized?.();

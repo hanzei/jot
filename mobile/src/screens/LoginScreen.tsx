@@ -61,6 +61,7 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
           autoCorrect={false}
           value={username}
           onChangeText={setUsername}
+          accessibilityLabel="Username"
           testID="username-input"
         />
 
@@ -70,6 +71,7 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
           secureTextEntry
           value={password}
           onChangeText={setPassword}
+          accessibilityLabel="Password"
           testID="password-input"
         />
 
