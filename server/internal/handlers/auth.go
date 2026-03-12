@@ -342,6 +342,32 @@ const (
 	maxSourcePixels         = 4096 * 4096 // ~16 megapixels
 )
 
+// isOpaqueImage reports whether img is known to have no transparent pixels.
+// It first checks the color model for inherently opaque formats (JPEG, CMYK,
+// grayscale), then falls back to the Opaque() method that standard image types
+// like *image.NRGBA and *image.RGBA implement.
+func isOpaqueImage(model color.Model, img image.Image) bool {
+	switch model {
+	case color.YCbCrModel, color.CMYKModel, color.GrayModel, color.Gray16Model:
+		return true
+	}
+	type opaquer interface{ Opaque() bool }
+	if op, ok := img.(opaquer); ok {
+		return op.Opaque()
+	}
+	return false
+}
+
+// flattenAlpha composites img onto a white background so that transparent
+// regions render as white in the resulting opaque image.
+func flattenAlpha(img image.Image) image.Image {
+	b := img.Bounds()
+	opaque := image.NewRGBA(image.Rect(0, 0, b.Dx(), b.Dy()))
+	draw.Draw(opaque, opaque.Bounds(), image.NewUniform(color.White), image.Point{}, draw.Src)
+	draw.Draw(opaque, opaque.Bounds(), img, b.Min, draw.Over)
+	return opaque
+}
+
 // resizeImage decodes the given image bytes, resizes to fit within
 // maxProfileIconDimension x maxProfileIconDimension (preserving aspect ratio),
 // and re-encodes as JPEG. If the image is already small enough it is still
@@ -359,18 +385,14 @@ func resizeImage(data []byte) ([]byte, error) {
 		return nil, fmt.Errorf("image pixel count %d exceeds maximum %d", cfg.Width*cfg.Height, maxSourcePixels)
 	}
 
-	// Check whether the source is opaque using the config color model (before
-	// a potential resize converts the image to RGBA and loses this info).
-	sourceOpaque := false
-	switch cfg.ColorModel {
-	case color.YCbCrModel, color.CMYKModel, color.GrayModel, color.Gray16Model:
-		sourceOpaque = true
-	}
-
 	img, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
 		return nil, fmt.Errorf("decode image: %w", err)
 	}
+
+	// Determine opaqueness from the config color model (before a potential
+	// resize converts the image to RGBA and loses the original model info).
+	sourceOpaque := isOpaqueImage(cfg.ColorModel, img)
 
 	bounds := img.Bounds()
 	srcW := bounds.Dx()
@@ -401,14 +423,8 @@ func resizeImage(data []byte) ([]byte, error) {
 	// so transparent regions render as white instead of black. Skip when the
 	// original source was opaque (no alpha channel to flatten).
 	encImg := img
-	if sourceOpaque {
-		// Already opaque — encode directly.
-	} else {
-		b := img.Bounds()
-		opaque := image.NewRGBA(image.Rect(0, 0, b.Dx(), b.Dy()))
-		draw.Draw(opaque, opaque.Bounds(), image.NewUniform(color.White), image.Point{}, draw.Src)
-		draw.Draw(opaque, opaque.Bounds(), img, b.Min, draw.Over)
-		encImg = opaque
+	if !sourceOpaque {
+		encImg = flattenAlpha(img)
 	}
 
 	var buf bytes.Buffer
