@@ -69,6 +69,7 @@ type Server struct {
 	labelsHandler  *handlers.LabelsHandler
 	eventsHandler  *handlers.EventsHandler
 	adminHandler   *handlers.AdminHandler
+	devicesHandler *handlers.DevicesHandler
 }
 
 func New() *Server {
@@ -86,6 +87,7 @@ func New() *Server {
 	noteStore := models.NewNoteStore(db.DB)
 	sessionStore := models.NewSessionStore(db.DB)
 	userSettingsStore := models.NewUserSettingsStore(db.DB)
+	deviceTokenStore := models.NewDeviceTokenStore(db.DB)
 
 	sessionService := auth.NewSessionService(sessionStore, userStore)
 
@@ -115,6 +117,7 @@ func New() *Server {
 	labelsHandler := handlers.NewLabelsHandler(noteStore, hub)
 	eventsHandler := handlers.NewEventsHandler(hub)
 	adminHandler := handlers.NewAdminHandler(userStore)
+	devicesHandler := handlers.NewDevicesHandler(deviceTokenStore)
 
 	s := &Server{
 		router:         chi.NewRouter(),
@@ -125,6 +128,7 @@ func New() *Server {
 		labelsHandler:  labelsHandler,
 		eventsHandler:  eventsHandler,
 		adminHandler:   adminHandler,
+		devicesHandler: devicesHandler,
 	}
 
 	s.setupRoutes()
@@ -190,6 +194,9 @@ func (s *Server) setupRoutes() {
 			r.Get("/labels", s.wrapHandler(s.labelsHandler.GetLabels))
 
 			r.Get("/users", s.wrapHandler(s.notesHandler.SearchUsers))
+
+			r.Post("/devices", s.wrapHandler(s.devicesHandler.RegisterDevice))
+			r.Delete("/devices/{token}", s.wrapHandler(s.devicesHandler.UnregisterDevice))
 		})
 
 		r.Group(func(r chi.Router) {
