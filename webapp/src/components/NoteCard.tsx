@@ -13,6 +13,7 @@ import { Note, User } from '@/types';
 import { notes } from '@/utils/api';
 import LetterAvatar from '@/components/LetterAvatar';
 import { buildShareAvatars } from '@/utils/shareAvatars';
+import { VALIDATION_LIMITS } from '@/constants/validation';
 
 interface NoteCardProps {
   note: Note;
@@ -232,7 +233,7 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, onRestore, o
               return (
                 <>
                   {uncompletedItems.map((item) => (
-                    <div key={item.id} className="flex items-center text-sm">
+                    <div key={item.id} className="flex items-center text-sm" style={{ marginLeft: item.indent_level * VALIDATION_LIMITS.INDENT_PX_PER_LEVEL }}>
                       <input
                         type="checkbox"
                         checked={item.completed}

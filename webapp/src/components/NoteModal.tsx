@@ -7,6 +7,7 @@ import { notes } from '@/utils/api';
 import LabelPicker from '@/components/LabelPicker';
 import LetterAvatar from '@/components/LetterAvatar';
 import { buildShareAvatars } from '@/utils/shareAvatars';
+import { VALIDATION_LIMITS } from '@/constants/validation';
 
 // Constants
 const AUTO_SAVE_TIMEOUT = 1000; // Save 1 second after user stops typing
@@ -108,7 +109,7 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
-    marginLeft: item.indentLevel * 24,
+    marginLeft: item.indentLevel * VALIDATION_LIMITS.INDENT_PX_PER_LEVEL,
   };
 
   return (
