@@ -297,7 +297,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
   };
 
   const INDENT_DRAG_THRESHOLD = 50;
-  const MAX_INDENT = 2;
+  const MAX_INDENT = 1;
 
   const indentTodoItem = async (itemId: string, delta: 1 | -1) => {
     const updatedItems = items.map(item => {

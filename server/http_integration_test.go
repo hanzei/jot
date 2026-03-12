@@ -736,7 +736,7 @@ func TestTodoItemIndentLevel(t *testing.T) {
 		"items": []map[string]any{
 			{"text": "top level", "position": 0, "indent_level": 0},
 			{"text": "indented once", "position": 1, "indent_level": 1},
-			{"text": "indented twice", "position": 2, "indent_level": 2},
+			{"text": "also indented", "position": 2, "indent_level": 1},
 		},
 	}
 	createResp := ts.authRequest(t, user, http.MethodPost, "/api/v1/notes", createBody)
@@ -758,7 +758,7 @@ func TestTodoItemIndentLevel(t *testing.T) {
 
 		assert.InDelta(t, float64(0), items[0].(map[string]any)["indent_level"], 0)
 		assert.InDelta(t, float64(1), items[1].(map[string]any)["indent_level"], 0)
-		assert.InDelta(t, float64(2), items[2].(map[string]any)["indent_level"], 0)
+		assert.InDelta(t, float64(1), items[2].(map[string]any)["indent_level"], 0)
 	})
 
 	t.Run("indent levels updated via PUT", func(t *testing.T) {
@@ -810,5 +810,35 @@ func TestTodoItemIndentLevel(t *testing.T) {
 		items := note["items"].([]any)
 		require.Len(t, items, 1)
 		assert.InDelta(t, float64(0), items[0].(map[string]any)["indent_level"], 0)
+	})
+
+	t.Run("indent level > 1 rejected on create", func(t *testing.T) {
+		body := map[string]any{
+			"title":     "Bad Indent",
+			"note_type": "todo",
+			"content":   "",
+			"items": []map[string]any{
+				{"text": "too deep", "position": 0, "indent_level": 2},
+			},
+		}
+		resp := ts.authRequest(t, user, http.MethodPost, "/api/v1/notes", body)
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	})
+
+	t.Run("indent level > 1 rejected on update", func(t *testing.T) {
+		updateBody := map[string]any{
+			"title":                  "Indent Test",
+			"content":                "",
+			"pinned":                 false,
+			"archived":               false,
+			"color":                  "#ffffff",
+			"checked_items_collapsed": false,
+			"items": []map[string]any{
+				{"text": "top level", "position": 0, "completed": false, "indent_level": 0},
+				{"text": "too deep", "position": 1, "completed": false, "indent_level": 2},
+			},
+		}
+		resp := ts.authRequest(t, user, http.MethodPut, "/api/v1/notes/"+noteID, updateBody)
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 	})
 }

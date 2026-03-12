@@ -81,6 +81,18 @@ type UpdateNoteItem struct {
 	IndentLevel int    `json:"indent_level"`
 }
 
+func (h *NotesHandler) createTodoItems(noteID string, items []CreateNoteItem) (int, error) {
+	for _, item := range items {
+		if item.IndentLevel < 0 || item.IndentLevel > 1 {
+			return http.StatusBadRequest, errors.New("indent_level must be 0 or 1")
+		}
+		if _, err := h.noteStore.CreateItem(noteID, item.Text, item.Position, item.IndentLevel); err != nil {
+			return http.StatusInternalServerError, err
+		}
+	}
+	return 0, nil
+}
+
 func (h *NotesHandler) GetNotes(w http.ResponseWriter, r *http.Request) (int, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
@@ -133,11 +145,8 @@ func (h *NotesHandler) CreateNote(w http.ResponseWriter, r *http.Request) (int, 
 	}
 
 	if req.NoteType == models.NoteTypeTodo && len(req.Items) > 0 {
-		for _, item := range req.Items {
-			_, err := h.noteStore.CreateItem(note.ID, item.Text, item.Position, item.IndentLevel)
-			if err != nil {
-				return http.StatusInternalServerError, err
-			}
+		if status, err := h.createTodoItems(note.ID, req.Items); err != nil {
+			return status, err
 		}
 
 		updatedNote, err := h.noteStore.GetByID(note.ID, user.ID)
@@ -183,6 +192,15 @@ func (h *NotesHandler) GetNote(w http.ResponseWriter, r *http.Request) (int, err
 		return http.StatusInternalServerError, err
 	}
 	return 0, nil
+}
+
+func (h *NotesHandler) validateAndUpdateTodoItems(noteID string, userID string, items []UpdateNoteItem) (int, error) {
+	for _, item := range items {
+		if item.IndentLevel < 0 || item.IndentLevel > 1 {
+			return http.StatusBadRequest, errors.New("indent_level must be 0 or 1")
+		}
+	}
+	return 0, h.updateTodoItems(noteID, userID, items)
 }
 
 func (h *NotesHandler) updateTodoItems(noteID string, userID string, items []UpdateNoteItem) error {
@@ -242,8 +260,10 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 
 	// Handle todo items update if provided
 	if len(req.Items) > 0 {
-		if err = h.updateTodoItems(id, user.ID, req.Items); err != nil {
-			return http.StatusInternalServerError, err
+		var status int
+		status, err = h.validateAndUpdateTodoItems(id, user.ID, req.Items)
+		if err != nil {
+			return status, err
 		}
 	}
 
