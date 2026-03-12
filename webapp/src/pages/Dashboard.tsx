@@ -5,7 +5,7 @@ import { notes, auth, labels as labelsApi, users as usersApi } from '@/utils/api
 import { removeUser, getUser, isAdmin } from '@/utils/auth';
 import { Note, Label, User } from '@/types';
 import { useSSE, SSEEvent } from '@/utils/useSSE';
-import { useSearchParams } from 'react-router-dom';
+import { useSearchParams } from 'react-router';
 import NavigationHeader from '@/components/NavigationHeader';
 import Sidebar from '@/components/Sidebar';
 import SortableNoteCard from '@/components/SortableNoteCard';

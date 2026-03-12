@@ -1,4 +1,4 @@
-import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router-dom';
+import { BrowserRouter as Router, Routes, Route, Navigate } from 'react-router';
 import { useState, useEffect } from 'react';
 import Login from '@/pages/Login';
 import Register from '@/pages/Register';
@@ -12,7 +12,8 @@ import { applyTheme, getThemePreference } from '@/utils/theme';
 
 function App() {
   const [isAuth, setIsAuth] = useState(false);
-  const [loading, setLoading] = useState(true);
+  // Start in loading state only when there is a session to validate.
+  const [loading, setLoading] = useState(() => isAuthenticated());
 
   useEffect(() => {
     // Apply theme from cached settings immediately (before server response).
@@ -24,7 +25,7 @@ function App() {
     mediaQuery.addEventListener('change', handleSystemThemeChange);
 
     if (!isAuthenticated()) {
-      setLoading(false);
+      // `loading` was already initialised to false for this path; no setState needed.
       return () => mediaQuery.removeEventListener('change', handleSystemThemeChange);
     }
     // Validate session against server to detect expired sessions

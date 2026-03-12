@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 
 const COLORS = [
   '#ef4444', // red-500
@@ -37,7 +37,13 @@ interface LetterAvatarProps {
 
 const LetterAvatar = ({ firstName, username, className = '', userId, hasProfileIcon }: LetterAvatarProps) => {
   const [imgFailed, setImgFailed] = useState(false);
-  useEffect(() => setImgFailed(false), [userId]);
+  // Reset imgFailed when userId changes using React's "derived state from props"
+  // pattern (https://react.dev/reference/react/useState#storing-information-from-previous-renders).
+  const [prevUserId, setPrevUserId] = useState(userId);
+  if (prevUserId !== userId) {
+    setPrevUserId(userId);
+    setImgFailed(false);
+  }
   const accessibleLabel = username || firstName || '?';
 
   if (hasProfileIcon && userId && !imgFailed) {
