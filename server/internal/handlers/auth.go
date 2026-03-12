@@ -338,6 +338,8 @@ var allowedImageTypes = map[string]bool{
 const (
 	maxProfileIconDimension = 256
 	jpegQuality             = 85
+	maxSourceDimension      = 4096
+	maxSourcePixels         = 4096 * 4096 // ~16 megapixels
 )
 
 // resizeImage decodes the given image bytes, resizes to fit within
@@ -345,6 +347,26 @@ const (
 // and re-encodes as JPEG. If the image is already small enough it is still
 // re-encoded as JPEG to normalize the format and compress.
 func resizeImage(data []byte) ([]byte, error) {
+	// Decode only the header to check dimensions before allocating the full image.
+	cfg, _, err := image.DecodeConfig(bytes.NewReader(data))
+	if err != nil {
+		return nil, fmt.Errorf("decode image config: %w", err)
+	}
+	if cfg.Width > maxSourceDimension || cfg.Height > maxSourceDimension {
+		return nil, fmt.Errorf("image dimensions %dx%d exceed maximum %d", cfg.Width, cfg.Height, maxSourceDimension)
+	}
+	if cfg.Width*cfg.Height > maxSourcePixels {
+		return nil, fmt.Errorf("image pixel count %d exceeds maximum %d", cfg.Width*cfg.Height, maxSourcePixels)
+	}
+
+	// Check whether the source is opaque using the config color model (before
+	// a potential resize converts the image to RGBA and loses this info).
+	sourceOpaque := false
+	switch cfg.ColorModel {
+	case color.YCbCrModel, color.CMYKModel, color.GrayModel, color.Gray16Model:
+		sourceOpaque = true
+	}
+
 	img, _, err := image.Decode(bytes.NewReader(data))
 	if err != nil {
 		return nil, fmt.Errorf("decode image: %w", err)
@@ -353,14 +375,6 @@ func resizeImage(data []byte) ([]byte, error) {
 	bounds := img.Bounds()
 	srcW := bounds.Dx()
 	srcH := bounds.Dy()
-
-	// Check whether the source image is opaque before a potential resize
-	// converts it to RGBA (which would lose the original color model info).
-	sourceOpaque := false
-	switch img.ColorModel() {
-	case color.YCbCrModel, color.CMYKModel, color.GrayModel, color.Gray16Model:
-		sourceOpaque = true
-	}
 
 	if srcW > maxProfileIconDimension || srcH > maxProfileIconDimension {
 		var dstW, dstH int

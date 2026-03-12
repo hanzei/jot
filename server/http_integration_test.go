@@ -960,6 +960,27 @@ func TestUploadProfileIcon(t *testing.T) {
 		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 	})
 
+	t.Run("decompression bomb is rejected", func(t *testing.T) {
+		// Craft a minimal valid PNG IHDR that claims 5000x5000 (exceeds 4096 cap).
+		// PNG signature + IHDR chunk with huge dimensions, then truncated.
+		// This is enough for image.DecodeConfig to read dimensions.
+		pngHeader := []byte{
+			0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, // PNG signature
+			0x00, 0x00, 0x00, 0x0D, // IHDR length (13 bytes)
+			0x49, 0x48, 0x44, 0x52, // "IHDR"
+			0x00, 0x00, 0x13, 0x88, // width: 5000
+			0x00, 0x00, 0x13, 0x88, // height: 5000
+			0x08,                   // bit depth: 8
+			0x02,                   // color type: RGB
+			0x00, 0x00, 0x00,       // compression, filter, interlace
+			0x00, 0x00, 0x00, 0x00, // CRC (invalid but DecodeConfig reads before checking)
+		}
+		body, ct := createMultipartImage(t, "file", "bomb.png", pngHeader)
+
+		resp := ts.uploadProfileIcon(t, user, body, ct)
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	})
+
 	t.Run("GIF upload returns 400", func(t *testing.T) {
 		img := image.NewPaletted(image.Rect(0, 0, 1, 1), color.Palette{color.White})
 		var buf bytes.Buffer
