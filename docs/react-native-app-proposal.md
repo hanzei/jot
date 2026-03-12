@@ -2,7 +2,7 @@
 
 ## Overview
 
-This document proposes a React Native mobile client for Jot. The app targets iOS and Android and connects to an existing Jot server via the same REST API the web app uses. No backend changes are required.
+This document proposes a React Native mobile client for Jot. The app targets **Android** and connects to an existing Jot server via the same REST API the web app uses. Push notification support requires minor additions to the server (device token storage and FCM dispatch); all other backend routes are consumed as-is.
 
 The scope of this proposal covers the core note-taking experience. Settings and admin features are explicitly out of scope.
 
@@ -10,11 +10,12 @@ The scope of this proposal covers the core note-taking experience. Settings and 
 
 ## Goals
 
-- Give users a native mobile experience for creating, editing, and organizing notes
+- Give users a native Android experience for creating, editing, and organizing notes
 - Support both text notes and todo lists
 - Keep the app in sync with the server (and other clients) in real time
 - Work offline with automatic sync when connectivity is restored
 - Match the visual feel of the existing web app (colors, labels, pinning)
+- Deliver push notifications for share and collaboration events via Firebase Cloud Messaging (FCM)
 
 ---
 
@@ -57,7 +58,8 @@ A floating action button (FAB) on the Notes List screen opens the Note Editor to
 - "Sign in" button
 - Link to Register
 - Error message for invalid credentials
-- JWT token stored in `SecureStore` (Expo) or Keychain (bare RN)
+- JWT token stored in `expo-secure-store` (Android Keystore-backed)
+- After login, the current FCM device token is registered with the server (`POST /api/v1/devices`)
 
 ### Register
 - Username, first name, last name, password fields
@@ -133,6 +135,63 @@ On receiving an event, the relevant note is re-fetched or the local cache is upd
 
 ---
 
+## Push Notifications (FCM)
+
+### Overview
+
+Push notifications are delivered via Firebase Cloud Messaging (FCM). The mobile app registers a device token with the Jot server on login; the server calls the FCM HTTP v1 API to push messages when relevant events occur.
+
+### Notification triggers
+
+| Event | Recipient(s) | Notification text |
+|---|---|---|
+| Note shared with you | The invited user | "`{owner}` shared a note with you: `{note title}`" |
+| Shared note edited | All collaborators except the editor | "`{editor}` updated `{note title}`" |
+| Share removed | The removed user | "Your access to `{note title}` was removed" |
+
+Edits are debounced on the server (30 s) so rapid keystrokes don't flood recipients.
+
+### Mobile-side changes
+
+1. On first launch, request the `POST_NOTIFICATIONS` permission (Android 13+).
+2. Call `Notifications.getExpoPushTokenAsync()` / `getDevicePushTokenAsync()` to obtain the FCM token.
+3. After login, `POST /api/v1/devices` with the token and platform (`android`).
+4. On logout, `DELETE /api/v1/devices/{token}` to stop receiving notifications.
+5. A foreground notification handler shows an in-app banner; tapping a notification deep-links to the relevant note.
+
+### Server-side changes required
+
+These are the only backend additions needed:
+
+**New table — `device_tokens`**
+```sql
+CREATE TABLE device_tokens (
+    id          TEXT PRIMARY KEY,
+    user_id     TEXT NOT NULL REFERENCES users(id) ON DELETE CASCADE,
+    token       TEXT NOT NULL UNIQUE,
+    platform    TEXT NOT NULL DEFAULT 'android',
+    created_at  DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+);
+```
+
+**New endpoints**
+
+| Method | Path | Auth | Description |
+|---|---|---|---|
+| POST | `/api/v1/devices` | Yes | Register a device token |
+| DELETE | `/api/v1/devices/{token}` | Yes | Unregister a device token |
+
+**Notification dispatch** — a small internal `notifier` package wraps the FCM HTTP v1 API. It is called from within the existing share and note-update handlers. The server must be configured with a Firebase service account JSON (new environment variable `FIREBASE_CREDENTIALS_FILE`).
+
+### Firebase project setup
+
+1. Create a Firebase project in the Google Firebase Console.
+2. Add an Android app with the app's package name (e.g. `com.example.jot`).
+3. Download `google-services.json` and place it in `mobile/` — Expo picks it up automatically.
+4. Generate a service account key (Project Settings → Service Accounts) and set `FIREBASE_CREDENTIALS_FILE` on the server.
+
+---
+
 ## Offline Support
 
 - All fetched notes are stored in a local SQLite database via `expo-sqlite`
@@ -154,13 +213,14 @@ On receiving an event, the relevant note is re-fetched or the local cache is upd
 | Offline storage | expo-sqlite |
 | Gestures | react-native-gesture-handler |
 | Animations | react-native-reanimated |
-| Drag-and-drop | @shopify/draggable or react-native-draggable-flatlist |
+| Drag-and-drop | react-native-draggable-flatlist |
 | SSE | react-native-sse |
 | Secure token storage | expo-secure-store |
+| Push notifications | expo-notifications + Firebase (FCM) |
 | Icons | @expo/vector-icons (Heroicons subset) |
 | Styling | StyleSheet API + a theme context for light/dark |
 
-Expo is chosen to simplify the build pipeline and OTA updates. The managed workflow is sufficient because there are no unusual native modules.
+Expo is chosen to simplify the build pipeline and OTA updates. The managed workflow supports `expo-notifications` which uses FCM on Android without requiring the full `@react-native-firebase` suite.
 
 ---
 
@@ -174,8 +234,9 @@ The TypeScript interfaces in `webapp/src/types/index.ts` (Note, NoteItem, Label,
 
 - All interactive elements have `accessibilityLabel` and `accessibilityRole` props
 - Color is never the sole indicator of state (labels show text, not just a dot)
-- Minimum touch target size: 44 × 44 pt
-- Dynamic Type support on iOS via `allowFontScaling`
+- Minimum touch target size: 48 × 48 dp (Android Material guideline)
+- Font scaling respects the system text size preference via `allowFontScaling`
+- TalkBack support via standard React Native accessibility props
 
 ---
 
@@ -212,6 +273,151 @@ mobile/
 
 ---
 
+## CI Pipeline
+
+CI runs on GitHub Actions. Three workflows cover the mobile app; they live under `.github/workflows/` alongside the existing server and webapp workflows.
+
+### `mobile-lint.yml` — Lint
+
+Triggers on every push and pull request that touches `mobile/**`.
+
+```yaml
+name: Mobile — Lint
+on:
+  push:
+    paths: ['mobile/**']
+  pull_request:
+    paths: ['mobile/**']
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: mobile/package-lock.json
+      - run: npm ci
+        working-directory: mobile
+      - run: npm run lint        # eslint + typescript-eslint
+        working-directory: mobile
+      - run: npm run typecheck   # tsc --noEmit
+        working-directory: mobile
+```
+
+The `lint` and `typecheck` scripts are defined in `mobile/package.json`.
+
+---
+
+### `mobile-test.yml` — Unit & Integration Tests
+
+Triggers on every push and pull request that touches `mobile/**`.
+
+```yaml
+name: Mobile — Test
+on:
+  push:
+    paths: ['mobile/**']
+  pull_request:
+    paths: ['mobile/**']
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: mobile/package-lock.json
+      - run: npm ci
+        working-directory: mobile
+      - run: npm test -- --ci --coverage
+        working-directory: mobile
+      - uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: mobile/coverage/
+```
+
+---
+
+### `mobile-apk.yml` — Release APK Build
+
+Triggers on pushes to `master` and on tags matching `v*`. Produces a signed release APK as a workflow artifact. The build uses Expo's local Android build (no EAS cloud required for CI), which runs `./gradlew assembleRelease` inside the managed workflow's generated Android project.
+
+```yaml
+name: Mobile — APK Build
+on:
+  push:
+    branches: [master]
+    tags: ['v*']
+jobs:
+  build-apk:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '20'
+          cache: 'npm'
+          cache-dependency-path: mobile/package-lock.json
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: mobile
+
+      - name: Write google-services.json
+        run: echo "$GOOGLE_SERVICES_JSON" > mobile/google-services.json
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+
+      - name: Write keystore
+        run: |
+          echo "$KEYSTORE_BASE64" | base64 -d > mobile/android/app/release.keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+
+      - name: Generate native Android project
+        run: npx expo prebuild --platform android --clean
+        working-directory: mobile
+
+      - name: Build release APK
+        run: ./gradlew assembleRelease
+        working-directory: mobile/android
+        env:
+          ANDROID_KEYSTORE_PATH: ../release.keystore
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+
+      - uses: actions/upload-artifact@v4
+        with:
+          name: jot-release-apk
+          path: mobile/android/app/build/outputs/apk/release/app-release.apk
+```
+
+**Required GitHub secrets**
+
+| Secret | Description |
+|---|---|
+| `GOOGLE_SERVICES_JSON` | Full contents of `google-services.json` from Firebase Console |
+| `ANDROID_KEYSTORE_BASE64` | Base64-encoded release keystore file |
+| `ANDROID_KEY_ALIAS` | Alias of the signing key inside the keystore |
+| `ANDROID_STORE_PASSWORD` | Keystore password |
+| `ANDROID_KEY_PASSWORD` | Key password |
+
+The keystore is generated once (`keytool -genkey -v -keystore release.keystore -alias jot -keyalg RSA -keysize 2048 -validity 10000`) and stored securely — never committed to the repository.
+
+---
+
 ## Testing Plan
 
 | Layer | Tool | Coverage |
@@ -224,7 +430,7 @@ mobile/
 
 ## Open Questions
 
-1. **Biometric auth** — should the app support Face ID / fingerprint unlock as an alternative to typing credentials on re-open?
-2. **Push notifications** — the server has no push infrastructure today; would real-time notifications for shared note edits be in scope for a later phase?
-3. **Minimum OS targets** — iOS 16+ and Android 10+ is a reasonable baseline; confirm with stakeholders.
-4. **Expo Go vs development build** — native modules like `react-native-reanimated` require a development build rather than Expo Go; the team needs the Expo EAS CLI set up.
+1. **Biometric auth** — should the app support fingerprint unlock (Android BiometricPrompt) as an alternative to entering credentials on re-open?
+2. **Notification opt-out granularity** — should users be able to mute notifications per note (e.g. for a busy shared note), or is a global on/off toggle in the OS settings enough?
+3. **Minimum Android version** — Android 10 (API 29) is a reasonable baseline covering ~95% of active devices; confirm with stakeholders. `POST_NOTIFICATIONS` permission is only required from Android 13 (API 33).
+4. **Expo Go vs development build** — `react-native-reanimated` and `expo-notifications` both require a development build rather than Expo Go; the team needs the Expo EAS CLI configured locally for development.
