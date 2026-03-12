@@ -27,7 +27,7 @@ func buildInfo() aboutResponse {
 		c = c[:7]
 	}
 	return aboutResponse{
-		Version:   version,
+		Version:   strings.TrimPrefix(version, "v"),
 		Commit:    c,
 		BuildTime: buildTime,
 		GoVersion: runtime.Version(),

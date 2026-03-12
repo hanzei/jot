@@ -1,3 +1,5 @@
+# syntax=docker/dockerfile:1
+
 # Multi-stage build for Jot application
 FROM node:24-alpine AS frontend-builder
 
@@ -25,23 +27,25 @@ RUN apk add --no-cache gcc musl-dev sqlite-dev
 
 ARG COMMIT_SHA=unknown
 ARG VERSION=dev
+ARG BUILD_DATE=""
 
 # Copy backend files
 COPY server/go.mod server/go.sum ./server/
-RUN --mount=type=cache,target=/go/pkg/mod \
+RUN --mount=type=cache,id=gomodcache,target=/go/pkg/mod \
     cd server && go mod download
 
 # Copy backend source code
 COPY server/ server/
 
 # Build the backend
-RUN --mount=type=cache,target=/go/pkg/mod \
-    --mount=type=cache,target=/root/.cache/go-build \
+RUN --mount=type=cache,id=gomodcache,target=/go/pkg/mod \
+    --mount=type=cache,id=gobuildcache,target=/root/.cache/go-build \
     cd server && CGO_ENABLED=1 GOOS=linux go build \
     -buildvcs=false \
     -ldflags "-s -w \
       -X 'github.com/hanzei/jot/server/internal/server.commit=${COMMIT_SHA}' \
-      -X 'github.com/hanzei/jot/server/internal/server.version=${VERSION}'" \
+      -X 'github.com/hanzei/jot/server/internal/server.version=${VERSION}' \
+      -X 'github.com/hanzei/jot/server/internal/server.buildTime=${BUILD_DATE}'" \
     -o main .
 
 # Production stage

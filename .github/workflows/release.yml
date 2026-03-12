@@ -69,6 +69,10 @@ jobs:
             type=semver,pattern={{major}}
             type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
 
+      - name: Get build date
+        id: build-date
+        run: echo "value=$(date -u +%Y-%m-%dT%H:%M:%SZ)" >> "$GITHUB_OUTPUT"
+
       - name: Build and push by digest
         id: build
         uses: docker/build-push-action@v6
@@ -78,9 +82,10 @@ jobs:
           build-args: |
             COMMIT_SHA=${{ github.sha }}
             VERSION=${{ github.ref_name }}
+            BUILD_DATE=${{ steps.build-date.outputs.value }}
           labels: ${{ steps.meta.outputs.labels }}
-          cache-from: type=gha
-          cache-to: type=gha,mode=max
+          cache-from: type=gha,scope=${{ matrix.platform }}
+          cache-to: type=gha,mode=max,scope=${{ matrix.platform }}
           outputs: type=image,name=hanzei/jot,push-by-digest=true,name-canonical=true,push=true
 
       - name: Export digest
