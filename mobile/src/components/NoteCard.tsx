@@ -18,8 +18,8 @@ function ShareAvatars({ shares }: { shares: NoteShare[] }) {
   const overflow = shares.length - MAX_AVATAR_DISPLAY;
   return (
     <View style={styles.avatarRow}>
-      {visible.map((share) => (
-        <View key={share.id} style={styles.avatarWrapper}>
+      {visible.map((share, index) => (
+        <View key={share.id} style={index === 0 ? styles.avatarFirst : styles.avatarWrapper}>
           <UserAvatar
             userId={share.shared_with_user_id}
             username={share.username ?? share.shared_with_user_id}
@@ -192,6 +192,9 @@ const styles = StyleSheet.create({
   avatarRow: {
     flexDirection: 'row',
     alignItems: 'center',
+  },
+  avatarFirst: {
+    marginLeft: 0,
   },
   avatarWrapper: {
     marginLeft: -4,

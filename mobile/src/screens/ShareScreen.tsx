@@ -36,7 +36,9 @@ export default function ShareScreen() {
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
-  const { data: currentShares, isLoading: isLoadingShares } = useNoteShares(noteId);
+  const [pendingUserIds, setPendingUserIds] = useState<Set<string>>(new Set());
+
+  const { data: currentShares, isLoading: isLoadingShares, isError: isSharesError } = useNoteShares(noteId);
   const shareMutation = useShareNote();
   const unshareMutation = useUnshareNote();
 
@@ -86,8 +88,8 @@ export default function ShareScreen() {
   }, [debouncedQuery]);
 
   const sharedUserIds = useMemo(
-    () => new Set((currentShares ?? []).map((s) => s.shared_with_user_id)),
-    [currentShares],
+    () => new Set((isLoadingShares || isSharesError ? [] : (currentShares ?? [])).map((s) => s.shared_with_user_id)),
+    [currentShares, isLoadingShares, isSharesError],
   );
 
   const filteredResults = useMemo(
@@ -97,13 +99,21 @@ export default function ShareScreen() {
 
   const handleShare = useCallback(
     async (user: User) => {
+      if (pendingUserIds.has(user.id)) return;
+      setPendingUserIds((prev) => new Set(prev).add(user.id));
       try {
         await shareMutateRef.current({ noteId, userId: user.id });
       } catch {
         Alert.alert('Error', 'Failed to share note');
+      } finally {
+        setPendingUserIds((prev) => {
+          const next = new Set(prev);
+          next.delete(user.id);
+          return next;
+        });
       }
     },
-    [noteId],
+    [noteId, pendingUserIds],
   );
 
   const handleUnshare = useCallback(
@@ -124,6 +134,7 @@ export default function ShareScreen() {
       <TouchableOpacity
         style={styles.userRow}
         onPress={() => handleShare(item)}
+        disabled={pendingUserIds.has(item.id)}
         testID={`search-result-${item.id}`}
       >
         <UserAvatar userId={item.id} username={item.username} hasProfileIcon={item.has_profile_icon} size="medium" />
@@ -136,7 +147,7 @@ export default function ShareScreen() {
         <Ionicons name="add-circle-outline" size={22} color="#2563eb" />
       </TouchableOpacity>
     ),
-    [handleShare],
+    [handleShare, pendingUserIds],
   );
 
   const renderSharedUser = useCallback(
@@ -158,6 +169,9 @@ export default function ShareScreen() {
           onPress={() => handleUnshare(item)}
           testID={`remove-share-${item.shared_with_user_id}`}
           disabled={isUnsharing}
+          accessibilityRole="button"
+          accessibilityLabel={`Remove share for ${item.username ?? item.shared_with_user_id}`}
+          accessibilityHint="Removes this shared item"
         >
           <Ionicons name="close-circle-outline" size={22} color="#ef4444" />
         </TouchableOpacity>
@@ -170,7 +184,13 @@ export default function ShareScreen() {
     <SafeAreaView style={styles.container}>
       {/* Header */}
       <View style={styles.header}>
-        <TouchableOpacity onPress={() => navigation.goBack()} testID="share-screen-back">
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          testID="share-screen-back"
+          accessibilityRole="button"
+          accessibilityLabel="Back"
+          accessibilityHint="Goes back to the previous screen"
+        >
           <Ionicons name="arrow-back" size={24} color="#1a1a1a" />
         </TouchableOpacity>
         <Text style={styles.headerTitle}>Share note</Text>
@@ -192,7 +212,13 @@ export default function ShareScreen() {
           testID="share-search-input"
         />
         {searchQuery.length > 0 && (
-          <TouchableOpacity onPress={() => setSearchQuery('')} testID="clear-share-search">
+          <TouchableOpacity
+            onPress={() => setSearchQuery('')}
+            testID="clear-share-search"
+            accessibilityRole="button"
+            accessibilityLabel="Clear search"
+            accessibilityHint="Clears the search input"
+          >
             <Ionicons name="close-circle" size={18} color="#999" />
           </TouchableOpacity>
         )}
@@ -226,6 +252,8 @@ export default function ShareScreen() {
           <Text style={styles.sectionTitle}>Shared with</Text>
           {isLoadingShares ? (
             <ActivityIndicator size="small" color="#2563eb" style={styles.spinner} />
+          ) : isSharesError ? (
+            <Text style={styles.errorText}>Failed to load shares</Text>
           ) : !currentShares || currentShares.length === 0 ? (
             <Text style={styles.emptyText}>Not shared with anyone yet</Text>
           ) : (

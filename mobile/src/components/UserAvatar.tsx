@@ -38,8 +38,9 @@ export default function UserAvatar({ userId, username, hasProfileIcon, size = 'm
   const dimension = SIZE_MAP[size];
   const fontSize = size === 'small' ? 10 : 15;
 
-  const bgColor = getUserColor(username);
-  const letter = username.charAt(0).toUpperCase();
+  const safeUsername = username || 'U';
+  const bgColor = getUserColor(safeUsername);
+  const letter = safeUsername.charAt(0).toUpperCase();
 
   if (hasProfileIcon && !imageError) {
     return (
