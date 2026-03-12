@@ -15,18 +15,17 @@ export default function AboutModal({ isOpen, onClose }: AboutModalProps) {
   const { t, i18n } = useTranslation();
   const user = useMemo(() => getUser(), []);
   const [serverInfo, setServerInfo] = useState<AboutInfo | null>(null);
-  const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
+
+  // Derived: loading while the modal is open but we have no result yet.
+  const isLoading = isOpen && serverInfo === null && error === '';
 
   useEffect(() => {
     if (!isOpen) return;
     let cancelled = false;
-    setIsLoading(true);
-    setError('');
     about.get()
       .then(info => { if (!cancelled) setServerInfo(info); })
-      .catch(() => { if (!cancelled) setError(t('about.failedLoad')); })
-      .finally(() => { if (!cancelled) setIsLoading(false); });
+      .catch(() => { if (!cancelled) setError(t('about.failedLoad')); });
     return () => { cancelled = true; };
   }, [isOpen, t]);
 
