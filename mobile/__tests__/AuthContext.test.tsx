@@ -145,7 +145,9 @@ describe('AuthContext', () => {
     });
 
     expect(mockAuth.logout).toHaveBeenCalled();
-    expect(getByTestId('authenticated').props.children).toBe('false');
+    await waitFor(() => {
+      expect(getByTestId('authenticated').props.children).toBe('false');
+    });
     expect(getByTestId('username').props.children).toBe('none');
     unmount();
   });
@@ -170,7 +172,9 @@ describe('AuthContext', () => {
     });
 
     expect(mockAuth.logout).toHaveBeenCalled();
-    expect(getByTestId('authenticated').props.children).toBe('false');
+    await waitFor(() => {
+      expect(getByTestId('authenticated').props.children).toBe('false');
+    });
     expect(getByTestId('username').props.children).toBe('none');
     unmount();
   });
