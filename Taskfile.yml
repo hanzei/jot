@@ -58,4 +58,4 @@ tasks:
     desc: Remove generated files and node packages
     cmds:
       - rm -rf webapp/build webapp/node_modules
-      - rm -f server/coverage.out server/coverage.html
+      - rm -f server/jot server/coverage.out server/coverage.html

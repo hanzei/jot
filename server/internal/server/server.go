@@ -38,19 +38,23 @@ func buildInfo() (aboutResponse, error) {
 	}
 	resp.GoVersion = info.GoVersion
 
+	var foundRevision bool
+	var dirty bool
 	for _, s := range info.Settings {
 		switch s.Key {
 		case "vcs.revision":
 			if len(s.Value) >= 7 {
 				resp.Commit = s.Value[:7]
+				foundRevision = true
 			}
 		case "vcs.modified":
-			if s.Value == "true" {
-				resp.Commit += "-dirty"
-			}
+			dirty = s.Value == "true"
 		case "vcs.time":
 			resp.BuildTime = s.Value
 		}
+	}
+	if foundRevision && dirty {
+		resp.Commit += "-dirty"
 	}
 
 	return resp, nil

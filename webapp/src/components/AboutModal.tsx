@@ -107,7 +107,7 @@ export default function AboutModal({ isOpen, onClose }: AboutModalProps) {
                       <div className="flex justify-between text-sm min-w-0 gap-2">
                         <dt className="shrink-0 text-gray-500 dark:text-gray-400">{t('about.buildTime')}</dt>
                         <dd className="truncate text-gray-900 dark:text-white font-mono">
-                          {new Date(serverInfo.build_time).toLocaleString(i18n.resolvedLanguage)}
+                          {(() => { const dt = new Date(serverInfo.build_time!); return isNaN(dt.getTime()) ? '—' : dt.toLocaleString(i18n.resolvedLanguage); })()}
                         </dd>
                       </div>
                     )}
