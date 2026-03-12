@@ -12,7 +12,7 @@ export default [
   },
   {
     files: ['**/*.{ts,tsx}'],
-    ignores: ['vite.config.ts', 'vitest.config.ts', 'playwright.config.ts'],
+    ignores: ['vite.config.ts', 'playwright.config.ts'],
     languageOptions: {
       ecmaVersion: 2022,
       sourceType: 'module',
@@ -50,7 +50,6 @@ export default [
   {
     files: [
       'vite.config.ts',
-      'vitest.config.ts',
       'playwright.config.ts',
       'postcss.config.js',
       'tailwind.config.js',
@@ -59,6 +58,7 @@ export default [
     ],
     languageOptions: {
       sourceType: 'module',
+      parser: tsparser,
       globals: {
         ...globals.node,
       },
