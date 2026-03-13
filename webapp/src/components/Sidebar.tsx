@@ -37,11 +37,11 @@ const Sidebar = ({ tabs, children, collapsed, onCollapse }: SidebarProps) => {
   return (
     <aside
       aria-label="Main navigation"
-      className={`flex-col self-stretch bg-white dark:bg-slate-800 border-b sm:border-b-0
-        sm:border-r border-gray-200 dark:border-slate-700 shrink-0 overflow-hidden
+      className={`flex-col bg-white dark:bg-slate-800 border-r border-gray-200 dark:border-slate-700 overflow-hidden
         transition-[width] duration-200
+        absolute inset-y-0 left-0 z-30 shadow-lg
         ${collapsed ? 'hidden' : 'flex'} sm:flex
-        ${isExpanded ? 'sm:w-48' : 'sm:w-12'}`}
+        ${isExpanded ? 'w-48' : 'sm:w-12'}`}
       onMouseEnter={() => collapsed && setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >

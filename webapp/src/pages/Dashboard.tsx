@@ -393,7 +393,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
         {searchBar}
       </NavigationHeader>
 
-      <div className="flex flex-1">
+      <div className="relative flex flex-1">
         <Sidebar tabs={navigationTabs} collapsed={collapsed} onCollapse={collapseSidebar}>
           {labelsList.length > 0 && (
             <div className="px-2 pb-2">

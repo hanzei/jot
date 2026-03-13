@@ -122,16 +122,16 @@ const NavigationHeader = ({ title = 'Jot', onLogout, children, username, isAdmin
           desktop — one row: [title (order-1)] [search (sm:order-2, flex-1)] [profile (sm:order-3)]
         */}
         <div className="flex flex-wrap items-center justify-between gap-y-3 py-4">
+          {onToggleSidebar && (
+            <button
+              onClick={onToggleSidebar}
+              aria-label="Toggle sidebar"
+              className="order-0 p-1 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-white"
+            >
+              <Bars3Icon className="h-7 w-7" />
+            </button>
+          )}
           <div className="order-1 flex items-center space-x-2 sm:space-x-4">
-            {onToggleSidebar && (
-              <button
-                onClick={onToggleSidebar}
-                aria-label="Toggle sidebar"
-                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-white"
-              >
-                <Bars3Icon className="h-5 w-5" />
-              </button>
-            )}
             {title === 'Jot' ? (
               <Link to="/" className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400">
                 {title}
