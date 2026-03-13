@@ -81,15 +81,17 @@ vi.mock('@/utils/useSSE', () => ({
 
 // Mock child components
 vi.mock('@/components/NavigationHeader', () => ({
-  default: ({ title, onLogout, children, isAdmin: showAdminLink }: {
+  default: ({ title, onLogout, children, isAdmin: showAdminLink, onToggleSidebar }: {
     title?: string;
     onLogout?: () => void;
     children?: ReactNode;
     isAdmin?: boolean;
+    onToggleSidebar?: () => void;
   }) => (
     <div data-testid="navigation-header">
       <h1>{title}</h1>
       <button onClick={onLogout} data-testid="logout-button">Logout</button>
+      {onToggleSidebar && <button onClick={onToggleSidebar} data-testid="sidebar-toggle">Toggle sidebar</button>}
       <div data-testid="tabs" />
       {showAdminLink && <div data-testid="admin-link">Admin</div>}
       <div data-testid="search-bar">{children}</div>
@@ -202,19 +204,13 @@ describe('Dashboard', () => {
     })
 
     it('renders navigation tabs correctly', async () => {
-      const user = userEvent.setup()
       renderDashboard()
 
       await waitFor(() => {
-        expect(screen.getByLabelText('Open navigation')).toBeInTheDocument()
+        expect(screen.getByText('Notes')).toBeInTheDocument()
+        expect(screen.getByText('Archive')).toBeInTheDocument()
+        expect(screen.getByText('Bin')).toBeInTheDocument()
       })
-
-      const toggle = screen.getByLabelText('Open navigation')
-      expect(toggle).toHaveAttribute('aria-expanded', 'false')
-
-      await user.click(toggle)
-
-      expect(screen.getByLabelText('Close navigation')).toHaveAttribute('aria-expanded', 'true')
     })
 
     it('shows admin link for admin users', async () => {
@@ -353,7 +349,7 @@ describe('Dashboard', () => {
       })
       
       // Switch to archive view
-      const archiveButton = screen.getByText('Archive')
+      const archiveButton = screen.getByRole('button', { name: 'Archive' })
       await user.click(archiveButton)
       
       await waitFor(() => {
@@ -370,7 +366,7 @@ describe('Dashboard', () => {
         expect(screen.getByText('Archive')).toBeInTheDocument()
       })
       
-      const archiveButton = screen.getByText('Archive')
+      const archiveButton = screen.getByRole('button', { name: 'Archive' })
       await user.click(archiveButton)
       
       // The active tab should have aria-current="page"
@@ -747,8 +743,8 @@ describe('Dashboard', () => {
         expect(screen.getByText('Archive')).toBeInTheDocument()
       })
       
-      const archiveButton = screen.getByText('Archive')
-      const notesButton = screen.getByText('Notes')
+      const archiveButton = screen.getByRole('button', { name: 'Archive' })
+      const notesButton = screen.getByRole('button', { name: 'Notes' })
       
       // Rapid clicking
       await user.click(archiveButton)
@@ -1071,7 +1067,7 @@ describe('Dashboard', () => {
     })
 
     // Notes tab should initially have aria-current
-    const notesButton = screen.getByText('Notes')
+    const notesButton = screen.getByRole('button', { name: 'Notes' })
     expect(notesButton).toHaveAttribute('aria-current', 'page')
 
     // Select a label
@@ -1097,7 +1093,7 @@ describe('Dashboard', () => {
       expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-work')
     })
 
-    const notesButton = screen.getByText('Notes')
+    const notesButton = screen.getByRole('button', { name: 'Notes' })
     // Notes tab should not be highlighted when label is active
     expect(notesButton).not.toHaveAttribute('aria-current')
 
@@ -1124,11 +1120,11 @@ describe('Dashboard', () => {
     })
 
     // Notes tab should not be highlighted (label is active)
-    const notesButton = screen.getByText('Notes')
+    const notesButton = screen.getByRole('button', { name: 'Notes' })
     expect(notesButton).not.toHaveAttribute('aria-current')
 
     // Archive tab should not be highlighted either
-    const archiveButton = screen.getByText('Archive')
+    const archiveButton = screen.getByRole('button', { name: 'Archive' })
     expect(archiveButton).not.toHaveAttribute('aria-current')
   })
 
@@ -1147,7 +1143,7 @@ describe('Dashboard', () => {
     })
 
     // Switch to archive view
-    const archiveButton = screen.getByText('Archive')
+    const archiveButton = screen.getByRole('button', { name: 'Archive' })
     await user.click(archiveButton)
 
     await waitFor(() => {

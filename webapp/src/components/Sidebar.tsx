@@ -1,42 +1,80 @@
 import { ReactNode, useState } from 'react';
-import { Bars3Icon, XMarkIcon } from '@heroicons/react/24/outline';
+import { Link } from 'react-router';
 
 interface SidebarTab {
   label: string;
-  element: ReactNode;
+  icon: ReactNode;
+  isActive?: boolean;
+  href?: string;
+  onClick?: () => void;
 }
 
 interface SidebarProps {
   tabs: SidebarTab[];
   children?: ReactNode;
+  collapsed: boolean;
+  onCollapse?: () => void;
 }
 
-const Sidebar = ({ tabs, children }: SidebarProps) => {
-  const [mobileOpen, setMobileOpen] = useState(false);
+const tabClass = (isActive: boolean | undefined) =>
+  `flex items-center gap-2 px-3 w-full h-8 rounded-md text-sm font-medium whitespace-nowrap ${
+    isActive
+      ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
+      : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
+  }`;
+
+const isMobile = () => window.matchMedia('(max-width: 639px)').matches;
+
+const Sidebar = ({ tabs, children, collapsed, onCollapse }: SidebarProps) => {
+  const [hovered, setHovered] = useState(false);
+  const isExpanded = !collapsed || hovered;
+
+  const handleTabClick = (onClick?: () => void) => {
+    onClick?.();
+    if (isMobile() && onCollapse) onCollapse();
+  };
 
   return (
-    <aside className="flex flex-col sm:w-48 h-full bg-white dark:bg-slate-800 border-b sm:border-b-0 sm:border-r border-gray-200 dark:border-slate-700 shrink-0">
-      <button
-        className="sm:hidden flex items-center px-4 py-3 text-gray-600 dark:text-gray-300"
-        aria-label={mobileOpen ? 'Close navigation' : 'Open navigation'}
-        aria-expanded={mobileOpen}
-        onClick={() => setMobileOpen(o => !o)}
-      >
-        {mobileOpen ? (
-          <XMarkIcon className="h-5 w-5" />
-        ) : (
-          <Bars3Icon className="h-5 w-5" />
+    <aside
+      aria-label="Main navigation"
+      className={`flex-col self-stretch bg-white dark:bg-slate-800 border-b sm:border-b-0
+        sm:border-r border-gray-200 dark:border-slate-700 shrink-0 overflow-hidden
+        transition-[width] duration-200
+        ${collapsed ? 'hidden' : 'flex'} sm:flex
+        ${isExpanded ? 'sm:w-48' : 'sm:w-12'}`}
+      onMouseEnter={() => collapsed && setHovered(true)}
+      onMouseLeave={() => setHovered(false)}
+    >
+      <nav className="flex flex-col space-y-1 p-2">
+        {tabs.map((tab) =>
+          tab.href ? (
+            <Link
+              key={tab.label}
+              to={tab.href}
+              aria-label={tab.label}
+              aria-current={tab.isActive ? 'page' : undefined}
+              className={tabClass(tab.isActive)}
+              onClick={() => handleTabClick()}
+            >
+              {tab.icon}
+              {isExpanded && tab.label}
+            </Link>
+          ) : (
+            <button
+              key={tab.label}
+              onClick={() => handleTabClick(tab.onClick)}
+              aria-label={tab.label}
+              aria-current={tab.isActive ? 'page' : undefined}
+              className={tabClass(tab.isActive)}
+            >
+              {tab.icon}
+              {isExpanded && tab.label}
+            </button>
+          )
         )}
-      </button>
-      <nav className={`flex-col space-y-1 p-4 ${mobileOpen ? 'flex' : 'hidden'} sm:flex`}>
-        {tabs.map((tab) => (
-          <div key={tab.label}>
-            {tab.element}
-          </div>
-        ))}
       </nav>
       {children && (
-        <div className={`${mobileOpen ? 'block' : 'hidden'} sm:block`}>
+        <div className="flex-1 overflow-y-auto">
           {children}
         </div>
       )}

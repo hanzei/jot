@@ -9,6 +9,7 @@ import { Navigate, useNavigate } from 'react-router';
 import NavigationHeader from '@/components/NavigationHeader';
 import Sidebar from '@/components/Sidebar';
 import { useNavigationLinkTabs } from '@/hooks/useNavigationTabs';
+import { useSidebarCollapsed } from '@/hooks/useSidebarCollapsed';
 
 interface AdminProps {
   onLogout: () => void;
@@ -35,6 +36,7 @@ const Admin = ({ onLogout }: AdminProps) => {
 
   const userIsAdmin = isAdmin();
   const navigationTabs = useNavigationLinkTabs();
+  const { collapsed, toggle: toggleSidebar, collapse: collapseSidebar } = useSidebarCollapsed();
 
   useEffect(() => { document.title = t('pageTitle.admin'); }, [t]);
 
@@ -156,7 +158,7 @@ const Admin = ({ onLogout }: AdminProps) => {
   }
 
   const searchBar = (
-    <div className="w-full sm:flex-1 sm:max-w-lg sm:mx-4">
+    <div className="w-full sm:max-w-4xl">
       <form onSubmit={handleSearch}>
         <div className="relative">
           <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-gray-400 dark:text-gray-500" />
@@ -174,17 +176,18 @@ const Admin = ({ onLogout }: AdminProps) => {
   );
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-slate-900">
+    <div className="min-h-screen bg-gray-50 dark:bg-slate-900 flex flex-col">
       <NavigationHeader
         onLogout={handleLogout}
         isAdmin={true}
         adminLinkActive={true}
+        onToggleSidebar={toggleSidebar}
       >
         {searchBar}
       </NavigationHeader>
 
-      <div className="flex">
-        <Sidebar tabs={navigationTabs} />
+      <div className="flex flex-1">
+        <Sidebar tabs={navigationTabs} collapsed={collapsed} onCollapse={collapseSidebar} />
         <div className="flex-1 max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         <div className="px-4 py-6 sm:px-0">
           <div className="mb-6">

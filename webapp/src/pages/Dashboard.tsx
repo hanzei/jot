@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { PlusIcon, MagnifyingGlassIcon, TagIcon, DocumentTextIcon, ArchiveBoxIcon, TrashIcon } from '@heroicons/react/24/outline';
+import { useSidebarCollapsed } from '@/hooks/useSidebarCollapsed';
 import { useTranslation } from 'react-i18next';
 import { notes, auth, labels as labelsApi, users as usersApi } from '@/utils/api';
 import { removeUser, getUser, isAdmin } from '@/utils/auth';
@@ -36,6 +37,7 @@ interface DashboardProps {
 
 export default function Dashboard({ onLogout }: DashboardProps) {
   const { t } = useTranslation();
+  const { collapsed, toggle: toggleSidebar, collapse: collapseSidebar } = useSidebarCollapsed();
   const [searchParams, setSearchParams] = useSearchParams();
   const [notesList, setNotesList] = useState<Note[]>([]);
   const [loading, setLoading] = useState(true);
@@ -346,51 +348,21 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const navigationTabs = [
     {
       label: t('dashboard.tabNotes'),
-      element: (
-        <button
-          onClick={() => handleViewChange('notes')}
-          aria-current={!showArchived && !showBin && !selectedLabelId ? 'page' : undefined}
-          className={`flex items-center gap-2 px-3 py-1 rounded-md text-sm font-medium ${!showArchived && !showBin && !selectedLabelId
-              ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
-              : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
-            }`}
-        >
-          <DocumentTextIcon className="h-4 w-4 shrink-0" />
-          {t('dashboard.tabNotes')}
-        </button>
-      ),
+      icon: <DocumentTextIcon className="h-4 w-4 shrink-0" />,
+      onClick: () => handleViewChange('notes'),
+      isActive: !showArchived && !showBin && !selectedLabelId,
     },
     {
       label: t('dashboard.tabArchive'),
-      element: (
-        <button
-          onClick={() => handleViewChange('archive')}
-          aria-current={showArchived ? 'page' : undefined}
-          className={`flex items-center gap-2 px-3 py-1 rounded-md text-sm font-medium ${showArchived
-              ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
-              : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
-            }`}
-        >
-          <ArchiveBoxIcon className="h-4 w-4 shrink-0" />
-          {t('dashboard.tabArchive')}
-        </button>
-      ),
+      icon: <ArchiveBoxIcon className="h-4 w-4 shrink-0" />,
+      onClick: () => handleViewChange('archive'),
+      isActive: showArchived,
     },
     {
       label: t('dashboard.tabBin'),
-      element: (
-        <button
-          onClick={() => handleViewChange('bin')}
-          aria-current={showBin ? 'page' : undefined}
-          className={`flex items-center gap-2 px-3 py-1 rounded-md text-sm font-medium ${showBin
-              ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
-              : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
-            }`}
-        >
-          <TrashIcon className="h-4 w-4 shrink-0" />
-          {t('dashboard.tabBin')}
-        </button>
-      ),
+      icon: <TrashIcon className="h-4 w-4 shrink-0" />,
+      onClick: () => handleViewChange('bin'),
+      isActive: showBin,
     },
   ];
 
@@ -411,19 +383,20 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   );
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-slate-900">
+    <div className="min-h-screen bg-gray-50 dark:bg-slate-900 flex flex-col">
       <NavigationHeader
         title="Jot"
         onLogout={handleLogout}
         isAdmin={isAdmin()}
+        onToggleSidebar={toggleSidebar}
       >
         {searchBar}
       </NavigationHeader>
 
-      <div className="flex">
-        <Sidebar tabs={navigationTabs}>
+      <div className="flex flex-1">
+        <Sidebar tabs={navigationTabs} collapsed={collapsed} onCollapse={collapseSidebar}>
           {labelsList.length > 0 && (
-            <div className="px-4 pb-4">
+            <div className="px-2 pb-2">
               <ul className="space-y-0.5">
                 {labelsList.map((label) => (
                   <li key={label.id}>

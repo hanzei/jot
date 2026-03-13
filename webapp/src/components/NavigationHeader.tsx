@@ -1,6 +1,7 @@
 import { ReactNode } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
+import { Bars3Icon } from '@heroicons/react/24/outline';
 import { Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/react';
 import LetterAvatar from '@/components/LetterAvatar';
 import { getUser } from '@/utils/auth';
@@ -13,6 +14,7 @@ interface NavigationHeaderProps {
   isAdmin?: boolean;
   adminLinkActive?: boolean;
   settingsLinkActive?: boolean;
+  onToggleSidebar?: () => void;
 }
 
 interface ProfileMenuProps {
@@ -87,7 +89,7 @@ const ProfileMenu = ({ iconSrc, displayUsername, firstName, baseUsername, showAd
   );
 };
 
-const NavigationHeader = ({ title = 'Jot', onLogout, children, username, isAdmin: showAdminLink, adminLinkActive, settingsLinkActive }: NavigationHeaderProps) => {
+const NavigationHeader = ({ title = 'Jot', onLogout, children, username, isAdmin: showAdminLink, adminLinkActive, settingsLinkActive, onToggleSidebar }: NavigationHeaderProps) => {
   const currentUser = getUser();
   const baseUsername = username ?? currentUser?.username ?? '';
   const fullName = currentUser?.first_name || currentUser?.last_name
@@ -113,7 +115,7 @@ const NavigationHeader = ({ title = 'Jot', onLogout, children, username, isAdmin
 
   return (
     <header className="bg-white dark:bg-slate-800 shadow-sm border-b border-gray-200 dark:border-slate-700">
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8">
+      <div className="px-4 sm:px-6 lg:px-8">
         {/*
           flex-wrap + CSS order keeps a single ProfileMenu in the DOM:
           mobile  — row 1: [title (order-1)] … [profile (order-2)], row 2: [search (order-3, w-full)]
@@ -121,6 +123,15 @@ const NavigationHeader = ({ title = 'Jot', onLogout, children, username, isAdmin
         */}
         <div className="flex flex-wrap items-center justify-between gap-y-3 py-4">
           <div className="order-1 flex items-center space-x-2 sm:space-x-4">
+            {onToggleSidebar && (
+              <button
+                onClick={onToggleSidebar}
+                aria-label="Toggle sidebar"
+                className="text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-white"
+              >
+                <Bars3Icon className="h-5 w-5" />
+              </button>
+            )}
             {title === 'Jot' ? (
               <Link to="/" className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400">
                 {title}
