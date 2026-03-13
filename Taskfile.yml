@@ -9,14 +9,9 @@ tasks:
         sh: git rev-parse --short HEAD
       BUILD_TIME:
         sh: date -u +%Y-%m-%dT%H:%M:%SZ
+      LDFLAGS: "-X 'github.com/hanzei/jot/server/internal/server.commit={{.COMMIT}}' -X 'github.com/hanzei/jot/server/internal/server.version=dev' -X 'github.com/hanzei/jot/server/internal/server.buildTime={{.BUILD_TIME}}'"
     cmds:
-      - >
-        go build
-        -buildvcs=false
-        -ldflags "-X 'github.com/hanzei/jot/server/internal/server.commit={{.COMMIT}}'
-                  -X 'github.com/hanzei/jot/server/internal/server.version=dev'
-                  -X 'github.com/hanzei/jot/server/internal/server.buildTime={{.BUILD_TIME}}'"
-        -o jot .
+      - go build -buildvcs=false -ldflags "{{.LDFLAGS}}" -o jot .
       - ./jot
 
   run-webapp:
