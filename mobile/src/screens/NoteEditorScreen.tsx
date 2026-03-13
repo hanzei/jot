@@ -11,7 +11,6 @@ import {
   Platform,
 } from 'react-native';
 import DraggableFlatList, { ScaleDecorator } from 'react-native-draggable-flatlist';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as Haptics from 'expo-haptics';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
@@ -505,16 +504,14 @@ export default function NoteEditorScreen() {
           />
         ) : (
           <View style={styles.todoContainer}>
-            <GestureHandlerRootView>
-              <DraggableFlatList
-                data={uncheckedItems}
-                keyExtractor={(item) => item.id}
-                scrollEnabled={false}
-                onDragBegin={handleTodoDragStart}
-                onDragEnd={({ data }) => handleTodoReorder(data)}
-                renderItem={renderTodoItem}
-              />
-            </GestureHandlerRootView>
+            <DraggableFlatList
+              data={uncheckedItems}
+              keyExtractor={(item) => item.id}
+              scrollEnabled={false}
+              onDragBegin={handleTodoDragStart}
+              onDragEnd={({ data }) => handleTodoReorder(data)}
+              renderItem={renderTodoItem}
+            />
 
             <TouchableOpacity style={styles.addItemRow} onPress={handleAddItem} testID="add-todo-item">
               <Ionicons name="add" size={22} color="#2563eb" />

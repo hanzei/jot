@@ -12,7 +12,6 @@ import {
   ScrollView,
 } from 'react-native';
 import DraggableFlatList, { ScaleDecorator } from 'react-native-draggable-flatlist';
-import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as Haptics from 'expo-haptics';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
@@ -359,7 +358,7 @@ export default function NotesListScreen({ variant = 'notes' }: NotesListScreenPr
   const isDraggable = variant === 'notes';
 
   return (
-    <GestureHandlerRootView style={styles.container}>
+    <View style={styles.container}>
       {/* Trash banner */}
       {variant === 'trash' && (
         <View style={styles.trashBanner}>
@@ -438,6 +437,9 @@ export default function NotesListScreen({ variant = 'notes' }: NotesListScreenPr
           {displayPinned.length > 0 && (
             <>
               <Text style={styles.sectionHeader}>Pinned</Text>
+              {/* scrollEnabled={false}: outer ScrollView handles scroll; this disables
+                  DraggableFlatList's own scroll/virtualization. Acceptable for typical
+                  note counts; for very large lists consider a single-list layout. */}
               <DraggableFlatList
                 data={displayPinned}
                 keyExtractor={(item) => item.id}
@@ -524,7 +526,7 @@ export default function NotesListScreen({ variant = 'notes' }: NotesListScreenPr
         onSelect={handleColorSelect}
         onClose={() => setColorPickerNote(null)}
       />
-    </GestureHandlerRootView>
+    </View>
   );
 }
 
