@@ -306,7 +306,7 @@ describe('NoteModal', () => {
       expect(inputsAfter).toHaveLength(2)
     })
 
-    it('pressing Enter on a non-last uncompleted item does not create a new item', async () => {
+    it('pressing Enter on a non-last uncompleted item inserts a new item below it', async () => {
       render(<NoteModal {...defaultProps} />)
 
       // Switch to todo mode and add two items
@@ -320,9 +320,9 @@ describe('NoteModal', () => {
       // Press Enter on the first (non-last) item
       fireEvent.keyDown(inputs[0], { key: 'Enter', code: 'Enter' })
 
-      // No new item should be created
+      // A new item should be inserted after the first item
       const inputsAfter = screen.getAllByPlaceholderText('List item...')
-      expect(inputsAfter).toHaveLength(2)
+      expect(inputsAfter).toHaveLength(3)
     })
 
     it('pressing a key other than Enter on a todo item does not create a new item', async () => {
