@@ -136,7 +136,7 @@ const NavigationHeader = ({ title = 'Jot', onLogout, children, username, isAdmin
           </div>
 
           {/* Search bar — wraps to row 2 on mobile, fills middle on desktop */}
-          <div className="order-3 sm:order-2 w-full sm:w-auto sm:flex-1">
+          <div className="order-3 sm:order-2 w-full sm:w-auto sm:flex-1 flex justify-center">
             {children}
           </div>
         </div>
