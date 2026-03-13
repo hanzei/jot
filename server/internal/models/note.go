@@ -24,6 +24,7 @@ var ErrNoteNoAccess = errors.New("no access to note")
 var ErrNoteNotFound = errors.New("note not found")
 var ErrNoteNotOwnedByUser = errors.New("note not found or not owned by user")
 var ErrNoteNotInTrash = errors.New("note not found in trash or not owned by user")
+var ErrNoteShareNotFound = errors.New("note share not found")
 
 type Label struct {
 	ID        string    `json:"id"`
@@ -682,7 +683,7 @@ func (s *NoteStore) UnshareNote(noteID string, sharedWithUserID string) error {
 	}
 
 	if rowsAffected == 0 {
-		return fmt.Errorf("note share not found")
+		return ErrNoteShareNotFound
 	}
 
 	return nil

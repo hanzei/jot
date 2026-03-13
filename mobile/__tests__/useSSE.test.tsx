@@ -13,6 +13,12 @@ jest.mock('react-native', () => ({
   },
 }));
 
+jest.mock('expo-sqlite', () => ({
+  useSQLiteContext: jest.fn(() => ({
+    runAsync: jest.fn().mockResolvedValue(undefined),
+  })),
+}));
+
 // Mock SSEConnectionManager
 let capturedCallback: ((event: SSEEvent) => void) | null = null;
 const mockConnect = jest.fn().mockImplementation(async (cb: (event: SSEEvent) => void) => {
@@ -37,6 +43,12 @@ jest.mock('../src/store/AuthContext', () => ({
   }),
 }));
 
+// Mock useNetworkStatus — default connected
+let mockIsConnected = true;
+jest.mock('../src/hooks/useNetworkStatus', () => ({
+  useNetworkStatus: () => ({ isConnected: mockIsConnected }),
+}));
+
 function createWrapper() {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -53,6 +65,7 @@ describe('useSSE', () => {
     jest.clearAllMocks();
     capturedCallback = null;
     mockIsAuthenticated = true;
+    mockIsConnected = true;
   });
 
   it('starts SSE connection when authenticated', () => {
@@ -213,6 +226,35 @@ describe('useSSE', () => {
     });
 
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['notes'] });
+  });
+
+  it('does not start connection when offline', () => {
+    mockIsConnected = false;
+    const { Wrapper } = createWrapper();
+    renderHook(() => useSSE(), { wrapper: Wrapper });
+
+    expect(mockConnect).not.toHaveBeenCalled();
+  });
+
+  it('stops connection when going offline and reconnects when coming back online', () => {
+    const { Wrapper } = createWrapper();
+
+    // Start online
+    mockIsConnected = true;
+    const { rerender } = renderHook(() => useSSE(), { wrapper: Wrapper });
+    expect(mockConnect).toHaveBeenCalledTimes(1);
+
+    // Go offline — re-render with updated mock value
+    mockIsConnected = false;
+    mockDisconnect.mockClear();
+    rerender({});
+    expect(mockDisconnect).toHaveBeenCalled();
+
+    // Come back online — should reconnect
+    mockIsConnected = true;
+    mockConnect.mockClear();
+    rerender({});
+    expect(mockConnect).toHaveBeenCalled();
   });
 
   it('registers AppState listener for foreground/background management', () => {

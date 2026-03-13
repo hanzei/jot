@@ -68,12 +68,17 @@ func (h *Hub) Subscribe(userID string) (<-chan Event, func()) {
 }
 
 // Publish sends an event to all channels registered for each of the given user IDs.
-// Events are dropped (non-blocking) if a channel's buffer is full.
+// Duplicate user IDs are ignored. Events are dropped (non-blocking) if a channel's buffer is full.
 func (h *Hub) Publish(userIDs []string, event Event) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
 
+	seen := make(map[string]struct{}, len(userIDs))
 	for _, uid := range userIDs {
+		if _, ok := seen[uid]; ok {
+			continue
+		}
+		seen[uid] = struct{}{}
 		for _, ch := range h.clients[uid] {
 			select {
 			case ch <- event:

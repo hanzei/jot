@@ -511,7 +511,7 @@ func (h *NotesHandler) UnshareNote(w http.ResponseWriter, r *http.Request) (int,
 
 	err = h.noteStore.UnshareNote(id, targetUser.ID)
 	if err != nil {
-		if err.Error() == "note share not found" {
+		if errors.Is(err, models.ErrNoteShareNotFound) {
 			return http.StatusNotFound, err
 		}
 		return http.StatusInternalServerError, err
