@@ -196,7 +196,7 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
               </DialogTitle>
               <button
                 onClick={handleClose}
-                aria-label={t('share.closeModal')}
+                aria-label={t('common.close')}
                 className="text-gray-400 hover:text-gray-600"
               >
                 <XMarkIcon className="h-5 w-5" />

@@ -12,6 +12,12 @@ vi.mock('@/utils/api', () => ({
 
 import ImportModal from '../ImportModal'
 
+function getFileInput(): HTMLInputElement {
+  const input = document.querySelector('input[type="file"]')
+  if (!input) throw new Error('file input not found in DOM')
+  return input as HTMLInputElement
+}
+
 const defaultProps = {
   isOpen: true,
   onClose: vi.fn(),
@@ -40,7 +46,7 @@ describe('ImportModal', () => {
       const user = userEvent.setup()
       render(<ImportModal {...defaultProps} />)
 
-      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
+      const fileInput = getFileInput()
       const file = new File(['{}'], 'notes.json', { type: 'application/json' })
       await user.upload(fileInput, file)
 
@@ -54,7 +60,7 @@ describe('ImportModal', () => {
       // Import button should be disabled initially.
       expect(screen.getByRole('button', { name: /import/i })).toBeDisabled()
 
-      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
+      const fileInput = getFileInput()
       const file = new File(['{}'], 'export.json', { type: 'application/json' })
       await user.upload(fileInput, file)
 
@@ -68,7 +74,7 @@ describe('ImportModal', () => {
       const user = userEvent.setup()
       render(<ImportModal {...defaultProps} />)
 
-      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
+      const fileInput = getFileInput()
       await user.upload(fileInput, new File(['{}'], 'notes.json', { type: 'application/json' }))
       await user.click(screen.getByRole('button', { name: /import/i }))
 
@@ -83,7 +89,7 @@ describe('ImportModal', () => {
       const user = userEvent.setup()
       render(<ImportModal {...defaultProps} onSuccess={onSuccess} />)
 
-      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
+      const fileInput = getFileInput()
       await user.upload(fileInput, new File(['{}'], 'notes.json', { type: 'application/json' }))
       await user.click(screen.getByRole('button', { name: /import/i }))
 
@@ -95,7 +101,7 @@ describe('ImportModal', () => {
       const user = userEvent.setup()
       render(<ImportModal {...defaultProps} />)
 
-      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
+      const fileInput = getFileInput()
       await user.upload(fileInput, new File(['{}'], 'notes.json', { type: 'application/json' }))
       await user.click(screen.getByRole('button', { name: /import/i }))
 
@@ -114,7 +120,7 @@ describe('ImportModal', () => {
       const user = userEvent.setup()
       render(<ImportModal {...defaultProps} />)
 
-      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
+      const fileInput = getFileInput()
       await user.upload(fileInput, new File(['{}'], 'notes.json', { type: 'application/json' }))
       await user.click(screen.getByRole('button', { name: /import/i }))
 
@@ -132,7 +138,7 @@ describe('ImportModal', () => {
       const user = userEvent.setup()
       render(<ImportModal {...defaultProps} />)
 
-      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
+      const fileInput = getFileInput()
       await user.upload(fileInput, new File(['bad'], 'notes.json', { type: 'application/json' }))
       await user.click(screen.getByRole('button', { name: /import/i }))
 
@@ -146,7 +152,7 @@ describe('ImportModal', () => {
       const user = userEvent.setup()
       render(<ImportModal {...defaultProps} />)
 
-      const fileInput = document.querySelector('input[type="file"]') as HTMLInputElement
+      const fileInput = getFileInput()
       await user.upload(fileInput, new File(['{}'], 'notes.json', { type: 'application/json' }))
       await user.click(screen.getByRole('button', { name: /import/i }))
 
@@ -158,8 +164,7 @@ describe('ImportModal', () => {
 
   describe('drag-and-drop', () => {
     function getDropZone() {
-      // The drop zone is the dashed-border div that wraps the file input.
-      return screen.getByText(/drop file|browse/i).closest('div[class*="border-dashed"]') as HTMLElement
+      return screen.getByTestId('import-dropzone')
     }
 
     function createDragEvent(file: File) {
