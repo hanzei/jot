@@ -37,6 +37,7 @@ export default function ShareScreen() {
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const [pendingUserIds, setPendingUserIds] = useState<Set<string>>(new Set());
+  const pendingUserIdsRef = useRef<Set<string>>(new Set());
 
   const { data: currentShares, isLoading: isLoadingShares, isError: isSharesError } = useNoteShares(noteId);
   const shareMutation = useShareNote();
@@ -88,8 +89,8 @@ export default function ShareScreen() {
   }, [debouncedQuery]);
 
   const sharedUserIds = useMemo(
-    () => new Set((isLoadingShares || isSharesError ? [] : (currentShares ?? [])).map((s) => s.shared_with_user_id)),
-    [currentShares, isLoadingShares, isSharesError],
+    () => new Set((currentShares ?? []).map((s) => s.shared_with_user_id)),
+    [currentShares],
   );
 
   const filteredResults = useMemo(
@@ -99,21 +100,19 @@ export default function ShareScreen() {
 
   const handleShare = useCallback(
     async (user: User) => {
-      if (pendingUserIds.has(user.id)) return;
-      setPendingUserIds((prev) => new Set(prev).add(user.id));
+      if (pendingUserIdsRef.current.has(user.id)) return;
+      pendingUserIdsRef.current.add(user.id);
+      setPendingUserIds(new Set(pendingUserIdsRef.current));
       try {
         await shareMutateRef.current({ noteId, userId: user.id });
       } catch {
         Alert.alert('Error', 'Failed to share note');
       } finally {
-        setPendingUserIds((prev) => {
-          const next = new Set(prev);
-          next.delete(user.id);
-          return next;
-        });
+        pendingUserIdsRef.current.delete(user.id);
+        setPendingUserIds(new Set(pendingUserIdsRef.current));
       }
     },
-    [noteId, pendingUserIds],
+    [noteId],
   );
 
   const handleUnshare = useCallback(
