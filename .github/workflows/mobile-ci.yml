@@ -1,0 +1,61 @@
+name: Mobile — CI
+
+permissions:
+  contents: read
+
+on:
+  push:
+    paths: ["mobile/**"]
+  pull_request:
+    paths: ["mobile/**"]
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: ./mobile
+
+      - name: Run ESLint
+        run: npm run lint
+        working-directory: ./mobile
+
+      - name: Run TypeScript type checking
+        run: npm run typecheck
+        working-directory: ./mobile
+
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: mobile/package-lock.json
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: ./mobile
+
+      - name: Run tests with coverage
+        run: npm test -- --ci --coverage
+        working-directory: ./mobile
+
+      - name: Upload coverage artifact
+        if: ${{ always() }}
+        uses: actions/upload-artifact@v4
+        with:
+          name: coverage
+          path: mobile/coverage/
+          retention-days: 7

@@ -65,7 +65,7 @@ export default [
     },
   },
   {
-    files: ['postcss.config.js', 'tailwind.config.js', 'eslint.config.js', 'scripts/**/*.js'],
+    files: ['eslint.config.js', 'scripts/**/*.js'],
     languageOptions: {
       sourceType: 'module',
       globals: {

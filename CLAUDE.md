@@ -38,6 +38,8 @@ Use the following Task commands for development:
 - `task lint` - Run linters
 - `task lint-server` - Run server linting with golangci-lint
 - `task lint-webapp` - Run webapp linting
+- `task test-mobile` - Run mobile app tests
+- `task lint-mobile` - Run mobile app linting
 
 ---
 
@@ -66,9 +68,19 @@ Jot is a self-hosted note-taking application. The backend is a Go HTTP API and t
 │   │   ├── types/       # Shared TypeScript interfaces
 │   │   └── utils/       # API client, auth helpers
 │   └── package.json
+├── mobile/          # React Native/Expo mobile app
+│   ├── src/
+│   │   ├── components/  # React Native components
+│   │   ├── screens/     # Screen components
+│   │   ├── navigation/  # React Navigation setup
+│   │   ├── hooks/       # Custom hooks (API, auth, sync)
+│   │   ├── types/       # Shared TypeScript interfaces
+│   │   └── utils/       # API client, auth helpers
+│   └── package.json
 ├── docs/
 │   ├── user/        # End-user documentation
-│   └── admin/       # Operator/admin documentation
+│   ├── admin/       # Operator/admin documentation
+│   └── mobile/      # Mobile app phase specs
 ├── Taskfile.yml
 ├── Dockerfile       # Multi-stage production build
 └── docker-compose.yml
@@ -280,6 +292,18 @@ docker compose up -d
 ```
 
 Persistent data is stored in the `/data` Docker volume. Set `JWT_SECRET` to a secure random value in production.
+
+### CI Workflows
+
+CI is split into per-component workflows in `.github/workflows/`:
+
+| Workflow | File | Triggers |
+|----------|------|----------|
+| Server — CI | `server-ci.yml` | `server/**` push/PR |
+| Webapp — CI | `webapp-ci.yml` | `webapp/**` push/PR |
+| Mobile — CI | `mobile-ci.yml` | `mobile/**` push/PR |
+| Mobile — APK Build | `mobile-apk.yml` | master push, `v*` tags |
+| Docker | `docker.yml` | master push, PR |
 
 ### CI Checklist (before opening a PR)
 

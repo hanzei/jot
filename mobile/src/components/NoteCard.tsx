@@ -1,7 +1,8 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Note, NoteItem } from '../types';
+import { Note, NoteItem, NoteShare } from '../types';
+import UserAvatar from './UserAvatar';
 
 interface NoteCardProps {
   note: Note;
@@ -11,6 +12,31 @@ interface NoteCardProps {
 }
 
 const MAX_PREVIEW_ITEMS = 4;
+const MAX_AVATAR_DISPLAY = 3;
+
+function ShareAvatars({ shares }: { shares: NoteShare[] }) {
+  const visible = shares.slice(0, MAX_AVATAR_DISPLAY);
+  const overflow = shares.length - MAX_AVATAR_DISPLAY;
+  return (
+    <View style={styles.avatarRow}>
+      {visible.map((share, index) => (
+        <View key={share.id} style={index === 0 ? styles.avatarFirst : styles.avatarWrapper}>
+          <UserAvatar
+            userId={share.shared_with_user_id}
+            username={share.username ?? share.shared_with_user_id}
+            hasProfileIcon={share.has_profile_icon}
+            size="small"
+          />
+        </View>
+      ))}
+      {overflow > 0 && (
+        <View style={styles.overflowBadge}>
+          <Text style={styles.overflowText}>+{overflow}</Text>
+        </View>
+      )}
+    </View>
+  );
+}
 
 function TodoPreview({ items }: { items: NoteItem[] }) {
   const uncompleted: NoteItem[] = [];
@@ -95,8 +121,13 @@ function NoteCard({ note, onPress, onLongPress, onMenuPress }: NoteCardProps) {
           </View>
         ) : null}
 
-        {note.is_shared || (note.shared_with && note.shared_with.length > 0) ? (
-          <Ionicons name="people-outline" size={14} color="#999" style={styles.shareIcon} />
+        {note.is_shared ? (
+          <View style={styles.sharedWithYouRow}>
+            <Ionicons name="people-outline" size={13} color="#2563eb" />
+            <Text style={styles.sharedWithYouText}>Shared with you</Text>
+          </View>
+        ) : note.shared_with && note.shared_with.length > 0 ? (
+          <ShareAvatars shares={note.shared_with} />
         ) : null}
       </View>
     </TouchableOpacity>
@@ -178,8 +209,38 @@ const styles = StyleSheet.create({
     fontSize: 11,
     color: '#666',
   },
-  shareIcon: {
-    marginLeft: 4,
+  sharedWithYouRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 4,
+  },
+  sharedWithYouText: {
+    fontSize: 11,
+    color: '#2563eb',
+  },
+  avatarRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  avatarFirst: {
+    marginLeft: 0,
+  },
+  avatarWrapper: {
+    marginLeft: -4,
+  },
+  overflowBadge: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#e5e7eb',
+    justifyContent: 'center',
+    alignItems: 'center',
+    marginLeft: -4,
+  },
+  overflowText: {
+    fontSize: 9,
+    color: '#666',
+    fontWeight: '600',
   },
 });
 

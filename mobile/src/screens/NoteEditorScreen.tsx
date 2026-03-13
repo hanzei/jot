@@ -15,6 +15,7 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import * as Haptics from 'expo-haptics';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useNote, useCreateNote, useUpdateNote, useDeleteNote } from '../hooks/useNotes';
 import TodoItem from '../components/TodoItem';
 import ColorPicker from '../components/ColorPicker';
@@ -23,6 +24,7 @@ import { NoteType, NoteItem, UpdateNoteRequest, Label } from '../types';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 
 type EditorRouteProp = RouteProp<RootStackParamList, 'NoteEditor'>;
+type EditorNavProp = NativeStackNavigationProp<RootStackParamList, 'NoteEditor'>;
 
 const MAX_TITLE_LENGTH = 200;
 const MAX_CONTENT_LENGTH = 10000;
@@ -58,7 +60,7 @@ function serializeItems(items: LocalItem[]) {
 }
 
 export default function NoteEditorScreen() {
-  const navigation = useNavigation();
+  const navigation = useNavigation<EditorNavProp>();
   const route = useRoute<EditorRouteProp>();
   const { noteId: initialNoteId } = route.params;
 
@@ -606,6 +608,18 @@ export default function NoteEditorScreen() {
               size={22}
               color={archived ? '#2563eb' : '#444'}
             />
+          </TouchableOpacity>
+        )}
+
+        {/* Share (only when note is saved, hydrated, and owned by current user) */}
+        {noteId && existingNote && !existingNote.is_shared && (
+          <TouchableOpacity
+            onPress={() => navigation.navigate('Share', { noteId })}
+            style={styles.toolbarBtn}
+            testID="toolbar-share-btn"
+            accessibilityLabel="Share note"
+          >
+            <Ionicons name="share-social-outline" size={22} color="#444" />
           </TouchableOpacity>
         )}
 
