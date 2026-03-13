@@ -7,15 +7,16 @@ import {
   TouchableOpacity,
   RefreshControl,
   StyleSheet,
-  SectionList,
   ActivityIndicator,
   Alert,
   ScrollView,
 } from 'react-native';
+import DraggableFlatList, { ScaleDecorator } from 'react-native-draggable-flatlist';
+import * as Haptics from 'expo-haptics';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useNotes, useUpdateNote, useDeleteNote, useRestoreNote, usePermanentDeleteNote } from '../hooks/useNotes';
+import { useNotes, useUpdateNote, useDeleteNote, useRestoreNote, usePermanentDeleteNote, useReorderNotes } from '../hooks/useNotes';
 import { useLabels } from '../hooks/useLabels';
 import NoteCard from '../components/NoteCard';
 import NoteContextMenu, { ContextMenuViewContext } from '../components/NoteContextMenu';
@@ -30,6 +31,12 @@ interface NotesListScreenProps {
 type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'MainTabs'>;
 
 const SEARCH_DEBOUNCE_MS = 300;
+const EMPTY_NOTES: Note[] = [];
+
+interface LocalReorderState {
+  pinned: Note[] | null;
+  unpinned: Note[] | null;
+}
 
 export default function NotesListScreen({ variant = 'notes' }: NotesListScreenProps) {
   const [searchText, setSearchText] = useState('');
@@ -37,6 +44,7 @@ export default function NotesListScreen({ variant = 'notes' }: NotesListScreenPr
   const [selectedLabelId, setSelectedLabelId] = useState<string | undefined>(undefined);
   const [contextMenuNote, setContextMenuNote] = useState<Note | null>(null);
   const [colorPickerNote, setColorPickerNote] = useState<Note | null>(null);
+  const [localOrder, setLocalOrder] = useState<LocalReorderState>({ pinned: null, unpinned: null });
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   // Debounce search input by 300ms
@@ -63,6 +71,7 @@ export default function NotesListScreen({ variant = 'notes' }: NotesListScreenPr
   const deleteNote = useDeleteNote();
   const restoreNote = useRestoreNote();
   const permanentDeleteNote = usePermanentDeleteNote();
+  const reorderNotes = useReorderNotes();
   const navigation = useNavigation<NavigationProp>();
 
   const handleClearSearch = useCallback(() => {
@@ -82,7 +91,7 @@ export default function NotesListScreen({ variant = 'notes' }: NotesListScreenPr
     navigation.navigate('NoteEditor', { noteId: null });
   }, [navigation]);
 
-  const handleLongPress = useCallback((note: Note) => {
+  const handleOpenMenu = useCallback((note: Note) => {
     setContextMenuNote(note);
   }, []);
 
@@ -178,17 +187,108 @@ export default function NotesListScreen({ variant = 'notes' }: NotesListScreenPr
     return { pinnedNotes: pinned, otherNotes: other };
   }, [notes]);
 
+  // Clear local order overrides when server data changes
+  useEffect(() => {
+    setLocalOrder({ pinned: null, unpinned: null });
+  }, [notes]);
+
+  const displayPinned = localOrder.pinned ?? pinnedNotes;
+  const displayUnpinned = localOrder.unpinned ?? otherNotes;
+
+  // Refs to avoid stale closures in handleDragEnd
+  const displayPinnedRef = useRef(displayPinned);
+  displayPinnedRef.current = displayPinned;
+  const displayUnpinnedRef = useRef(displayUnpinned);
+  displayUnpinnedRef.current = displayUnpinned;
+
   const hasPinned = variant === 'notes' && pinnedNotes.length > 0;
 
-  const renderNoteCard = useCallback(
+  const listEmptyComponent = useMemo(
+    () =>
+      debouncedSearch || selectedLabelId ? (
+        <View style={styles.emptySearchContainer}>
+          <Text style={styles.emptySubtext}>No notes match your search</Text>
+        </View>
+      ) : null,
+    [debouncedSearch, selectedLabelId],
+  );
+
+  const handleDragEnd = useCallback(
+    async (newData: Note[], isPinnedSection: boolean) => {
+      // Optimistically update local order
+      setLocalOrder(prev => isPinnedSection
+        ? { ...prev, pinned: newData }
+        : { ...prev, unpinned: newData },
+      );
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+
+      // Build full reorder payload: pinned first, then unpinned
+      const pinnedIds = isPinnedSection
+        ? newData.map((n) => n.id)
+        : displayPinnedRef.current.map((n) => n.id);
+      const unpinnedIds = isPinnedSection
+        ? displayUnpinnedRef.current.map((n) => n.id)
+        : newData.map((n) => n.id);
+      const allIds = [...pinnedIds, ...unpinnedIds];
+
+      try {
+        await reorderNotes.mutateAsync(allIds);
+      } catch {
+        // Revert optimistic update
+        setLocalOrder(prev => isPinnedSection
+          ? { ...prev, pinned: null }
+          : { ...prev, unpinned: null },
+        );
+        Alert.alert('Error', 'Failed to reorder notes');
+      }
+    },
+    [reorderNotes],
+  );
+
+  const handleDragEndPinned = useCallback(
+    ({ data }: { data: Note[] }) => handleDragEnd(data, true),
+    [handleDragEnd],
+  );
+
+  const handleDragEndUnpinned = useCallback(
+    ({ data }: { data: Note[] }) => handleDragEnd(data, false),
+    [handleDragEnd],
+  );
+
+  const handleDragStart = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+  }, []);
+
+  const renderDraggableNoteCard = useCallback(
+    ({ item, drag, isActive }: { item: Note; drag: () => void; isActive: boolean }) => (
+      <ScaleDecorator>
+        <TouchableOpacity
+          onLongPress={drag}
+          disabled={isActive}
+          activeOpacity={0.7}
+          style={isActive ? styles.draggingCard : undefined}
+        >
+          <NoteCard
+            note={item}
+            onPress={() => handleNotePress(item.id)}
+            onMenuPress={() => handleOpenMenu(item)}
+          />
+        </TouchableOpacity>
+      </ScaleDecorator>
+    ),
+    [handleNotePress, handleOpenMenu],
+  );
+
+  const renderNonDraggableNoteCard = useCallback(
     ({ item }: { item: Note }) => (
       <NoteCard
         note={item}
         onPress={() => handleNotePress(item.id)}
-        onLongPress={() => handleLongPress(item)}
+        onMenuPress={variant !== 'trash' ? () => handleOpenMenu(item) : undefined}
+        onLongPress={variant === 'trash' ? () => handleOpenMenu(item) : undefined}
       />
     ),
-    [handleNotePress, handleLongPress],
+    [handleNotePress, handleOpenMenu, variant],
   );
 
   if (isLoading && !notes) {
@@ -254,14 +354,8 @@ export default function NotesListScreen({ variant = 'notes' }: NotesListScreenPr
     );
   }
 
-  const sections = hasPinned
-    ? [
-        { title: 'Pinned', data: pinnedNotes },
-        { title: 'Others', data: otherNotes },
-      ].filter((s) => s.data.length > 0)
-    : [{ title: '', data: otherNotes }];
-
-  const listData = hasPinned ? null : (notes ?? []);
+  // Drag-and-drop is only available in the notes variant (not archived/trash)
+  const isDraggable = variant === 'notes';
 
   return (
     <View style={styles.container}>
@@ -332,45 +426,69 @@ export default function NotesListScreen({ variant = 'notes' }: NotesListScreenPr
       )}
 
       {/* Notes list */}
-      {hasPinned ? (
-        <SectionList
-          sections={sections}
-          keyExtractor={(item) => item.id}
-          renderItem={renderNoteCard}
-          renderSectionHeader={({ section: { title } }) =>
-            title ? (
-              <Text style={styles.sectionHeader}>{title}</Text>
-            ) : null
-          }
+      {isDraggable && hasPinned ? (
+        <ScrollView
           refreshControl={
             <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor="#2563eb" />
           }
           contentContainerStyle={styles.listContent}
-          ListEmptyComponent={
-            debouncedSearch || selectedLabelId ? (
-              <View style={styles.emptySearchContainer}>
-                <Text style={styles.emptySubtext}>No notes match your search</Text>
-              </View>
-            ) : null
-          }
           testID="notes-section-list"
+        >
+          {displayPinned.length > 0 && (
+            <>
+              <Text style={styles.sectionHeader}>Pinned</Text>
+              {/* scrollEnabled={false}: outer ScrollView handles scroll; this disables
+                  DraggableFlatList's own scroll/virtualization. Acceptable for typical
+                  note counts; for very large lists consider a single-list layout. */}
+              <DraggableFlatList
+                data={displayPinned}
+                keyExtractor={(item) => item.id}
+                renderItem={renderDraggableNoteCard}
+                onDragBegin={handleDragStart}
+                onDragEnd={handleDragEndPinned}
+                scrollEnabled={false}
+              />
+            </>
+          )}
+          {displayUnpinned.length > 0 && (
+            <>
+              <Text style={styles.sectionHeader}>Others</Text>
+              <DraggableFlatList
+                data={displayUnpinned}
+                keyExtractor={(item) => item.id}
+                renderItem={renderDraggableNoteCard}
+                onDragBegin={handleDragStart}
+                onDragEnd={handleDragEndUnpinned}
+                scrollEnabled={false}
+              />
+            </>
+          )}
+          {displayPinned.length === 0 && displayUnpinned.length === 0 && listEmptyComponent}
+        </ScrollView>
+      ) : isDraggable ? (
+        <DraggableFlatList
+          data={displayUnpinned}
+          keyExtractor={(item) => item.id}
+          renderItem={renderDraggableNoteCard}
+          onDragBegin={handleDragStart}
+          onDragEnd={handleDragEndUnpinned}
+          refreshControl={
+            <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor="#2563eb" />
+          }
+          contentContainerStyle={styles.listContent}
+          ListEmptyComponent={listEmptyComponent}
+          testID="notes-flat-list"
         />
       ) : (
         <FlatList
-          data={listData}
+          data={notes ?? EMPTY_NOTES}
           keyExtractor={(item) => item.id}
-          renderItem={renderNoteCard}
+          renderItem={renderNonDraggableNoteCard}
           refreshControl={
             <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor="#2563eb" />
           }
           contentContainerStyle={styles.listContent}
-          ListEmptyComponent={
-            debouncedSearch || selectedLabelId ? (
-              <View style={styles.emptySearchContainer}>
-                <Text style={styles.emptySubtext}>No notes match your search</Text>
-              </View>
-            ) : null
-          }
+          ListEmptyComponent={listEmptyComponent}
           testID="notes-flat-list"
         />
       )}
@@ -548,5 +666,13 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.25,
     shadowRadius: 4,
+  },
+  draggingCard: {
+    opacity: 0.9,
+    elevation: 8,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 8,
   },
 });

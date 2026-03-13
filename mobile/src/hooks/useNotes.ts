@@ -1,5 +1,5 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
-import { getNotes, getNote, createNote, updateNote, deleteNote, restoreNote, permanentDeleteNote } from '../api/notes';
+import { getNotes, getNote, createNote, updateNote, deleteNote, restoreNote, permanentDeleteNote, reorderNotes } from '../api/notes';
 import { getNoteShares, shareNote, unshareNote } from '../api/users';
 import { Note, NoteShare, GetNotesParams, CreateNoteRequest, UpdateNoteRequest } from '../types';
 
@@ -67,6 +67,16 @@ export function usePermanentDeleteNote() {
     mutationFn: (id: string) => permanentDeleteNote(id),
     onSuccess: (_data, id) => {
       queryClient.removeQueries({ queryKey: ['note', id] });
+      queryClient.invalidateQueries({ queryKey: ['notes'] });
+    },
+  });
+}
+
+export function useReorderNotes() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: (noteIds: string[]) => reorderNotes(noteIds),
+    onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: ['notes'] });
     },
   });
