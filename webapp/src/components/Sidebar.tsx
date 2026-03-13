@@ -20,7 +20,7 @@ const tabClass = (isActive: boolean | undefined) =>
   `flex items-center gap-2 px-3 w-full h-8 rounded-md text-sm font-medium whitespace-nowrap ${
     isActive
       ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
-      : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
+      : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-slate-700'
   }`;
 
 const isMobile = () => window.matchMedia('(max-width: 639px)').matches;
