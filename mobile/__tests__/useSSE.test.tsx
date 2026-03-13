@@ -37,6 +37,12 @@ jest.mock('../src/store/AuthContext', () => ({
   }),
 }));
 
+// Mock useNetworkStatus — default connected
+let mockIsConnected = true;
+jest.mock('../src/hooks/useNetworkStatus', () => ({
+  useNetworkStatus: () => ({ isConnected: mockIsConnected }),
+}));
+
 function createWrapper() {
   const queryClient = new QueryClient({
     defaultOptions: {
@@ -53,6 +59,7 @@ describe('useSSE', () => {
     jest.clearAllMocks();
     capturedCallback = null;
     mockIsAuthenticated = true;
+    mockIsConnected = true;
   });
 
   it('starts SSE connection when authenticated', () => {

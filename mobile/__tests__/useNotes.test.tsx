@@ -3,6 +3,7 @@ import { renderHook, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useNotes, useNote, useCreateNote, useUpdateNote, useDeleteNote } from '../src/hooks/useNotes';
 import * as notesApi from '../src/api/notes';
+import * as noteQueriesModule from '../src/db/noteQueries';
 
 jest.mock('../src/api/notes');
 
@@ -10,7 +11,28 @@ jest.mock('react-native', () => ({
   Platform: { OS: 'ios' },
 }));
 
+jest.mock('../src/hooks/useNetworkStatus', () => ({
+  useNetworkStatus: () => ({ isConnected: true }),
+}));
+
+jest.mock('../src/db/noteQueries', () => ({
+  saveNote: jest.fn().mockResolvedValue(undefined),
+  saveNotes: jest.fn().mockResolvedValue(undefined),
+  getLocalNote: jest.fn().mockResolvedValue(null),
+  markLocalNoteDeleted: jest.fn().mockResolvedValue(undefined),
+  markLocalNoteRestored: jest.fn().mockResolvedValue(undefined),
+  permanentDeleteLocalNote: jest.fn().mockResolvedValue(undefined),
+  updateLocalNote: jest.fn().mockResolvedValue(undefined),
+  generateLocalId: jest.fn(() => 'local_test_id'),
+  isLocalId: jest.fn((id: string) => id.startsWith('local_')),
+}));
+
+jest.mock('../src/db/syncQueue', () => ({
+  enqueueOperation: jest.fn().mockResolvedValue(undefined),
+}));
+
 const mockNotesApi = notesApi as jest.Mocked<typeof notesApi>;
+const mockNoteQueries = noteQueriesModule as jest.Mocked<typeof noteQueriesModule>;
 
 function createWrapper() {
   const queryClient = new QueryClient({
@@ -75,9 +97,14 @@ describe('useNotes hooks', () => {
     });
   });
 
-  describe('useCreateNote', () => {
-    it('creates a note and returns it', async () => {
-      const newNote = { id: 'new', title: 'Created' };
+  describe('useCreateNote (online)', () => {
+    it('creates a note via API and caches locally', async () => {
+      const newNote = {
+        id: 'server-id', title: 'Created', content: '', note_type: 'text',
+        color: '#ffffff', pinned: false, archived: false, position: 0,
+        checked_items_collapsed: false, is_shared: false, deleted_at: null,
+        user_id: 'u1', created_at: '', updated_at: '', labels: [], shared_with: [],
+      };
       mockNotesApi.createNote.mockResolvedValueOnce(newNote as never);
 
       const { result } = renderHook(() => useCreateNote(), { wrapper: createWrapper() });
@@ -87,12 +114,18 @@ describe('useNotes hooks', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       expect(result.current.data).toEqual(newNote);
+      expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), newNote);
     });
   });
 
-  describe('useUpdateNote', () => {
-    it('updates a note and returns updated data', async () => {
-      const updated = { id: '123', title: 'Updated' };
+  describe('useUpdateNote (online)', () => {
+    it('updates a note via API and caches locally', async () => {
+      const updated = {
+        id: '123', title: 'Updated', content: '', note_type: 'text',
+        color: '#ffffff', pinned: false, archived: false, position: 0,
+        checked_items_collapsed: false, is_shared: false, deleted_at: null,
+        user_id: 'u1', created_at: '', updated_at: '', labels: [], shared_with: [],
+      };
       mockNotesApi.updateNote.mockResolvedValueOnce(updated as never);
 
       const { result } = renderHook(() => useUpdateNote(), { wrapper: createWrapper() });
@@ -103,11 +136,12 @@ describe('useNotes hooks', () => {
 
       expect(result.current.data).toEqual(updated);
       expect(mockNotesApi.updateNote).toHaveBeenCalledWith('123', { title: 'Updated' });
+      expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), updated);
     });
   });
 
-  describe('useDeleteNote', () => {
-    it('deletes a note', async () => {
+  describe('useDeleteNote (online)', () => {
+    it('deletes a note via API and marks it deleted locally', async () => {
       mockNotesApi.deleteNote.mockResolvedValueOnce(undefined);
 
       const { result } = renderHook(() => useDeleteNote(), { wrapper: createWrapper() });
@@ -117,6 +151,7 @@ describe('useNotes hooks', () => {
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       expect(mockNotesApi.deleteNote).toHaveBeenCalledWith('123');
+      expect(mockNoteQueries.markLocalNoteDeleted).toHaveBeenCalledWith(expect.anything(), '123');
     });
   });
 });

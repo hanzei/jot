@@ -4,6 +4,36 @@ jest.mock('expo-secure-store', () => ({
   deleteItemAsync: jest.fn().mockResolvedValue(undefined),
 }));
 
+jest.mock('expo-sqlite', () => ({
+  SQLiteProvider: ({ children, onInit }) => {
+    // Run onInit asynchronously to simulate DB initialization
+    const React = require('react');
+    const [ready, setReady] = React.useState(false);
+    React.useEffect(() => {
+      Promise.resolve(onInit?.(mockDb)).then(() => setReady(true));
+    }, []); // eslint-disable-line react-hooks/exhaustive-deps
+    return ready ? children : null;
+  },
+  useSQLiteContext: () => mockDb,
+}));
+
+const mockDb = {
+  execAsync: jest.fn().mockResolvedValue(undefined),
+  runAsync: jest.fn().mockResolvedValue({ lastInsertRowId: 1, changes: 1 }),
+  getFirstAsync: jest.fn().mockResolvedValue(null),
+  getAllAsync: jest.fn().mockResolvedValue([]),
+};
+
+global.mockDb = mockDb;
+
+jest.mock('@react-native-community/netinfo', () => ({
+  __esModule: true,
+  default: {
+    addEventListener: jest.fn(() => jest.fn()),
+    fetch: jest.fn().mockResolvedValue({ isConnected: true, isInternetReachable: true }),
+  },
+}));
+
 jest.mock('expo-haptics', () => ({
   impactAsync: jest.fn(),
   ImpactFeedbackStyle: { Light: 'light', Medium: 'medium', Heavy: 'heavy' },
