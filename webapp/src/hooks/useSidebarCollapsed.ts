@@ -1,9 +1,10 @@
 import { useState } from 'react';
 
 export function useSidebarCollapsed() {
-  const [collapsed, setCollapsed] = useState(() =>
-    localStorage.getItem('sidebar-collapsed') === 'true'
-  );
+  const [collapsed, setCollapsed] = useState(() => {
+    const stored = localStorage.getItem('sidebar-collapsed');
+    return stored === null ? true : stored === 'true';
+  });
   const toggle = () => setCollapsed(c => {
     const next = !c;
     localStorage.setItem('sidebar-collapsed', String(next));
