@@ -42,7 +42,13 @@ export function restoreServerUrl(url: string): void {
 }
 
 export async function setServerUrl(url: string): Promise<void> {
-  const normalized = applyServerUrl(url);
+  const normalized = url.replace(/\/+$/, '');
+  try {
+    new URL(normalized);
+  } catch {
+    throw new Error(`Invalid server URL: ${normalized}`);
+  }
+  applyServerUrl(url);
   await SecureStore.setItemAsync(SERVER_URL_KEY, normalized);
 }
 

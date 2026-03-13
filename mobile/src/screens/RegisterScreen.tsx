@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   Text,
   TextInput,
@@ -12,7 +12,8 @@ import {
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAuth } from '../store/AuthContext';
 import { AuthStackParamList } from '../navigation/AuthStack';
-import { getBaseUrl, getStoredServerUrl, setServerUrl as configureServerUrl } from '../api/client';
+import { restoreServerUrl, setServerUrl as configureServerUrl } from '../api/client';
+import { useServerUrl } from '../hooks/useServerUrl';
 
 type RegisterScreenProps = {
   navigation: NativeStackNavigationProp<AuthStackParamList, 'Register'>;
@@ -20,21 +21,15 @@ type RegisterScreenProps = {
 
 export default function RegisterScreen({ navigation }: RegisterScreenProps) {
   const { register } = useAuth();
-  const [serverUrl, setServerUrl] = useState('');
+  const { serverUrl, setServerUrl, validateServerUrl } = useServerUrl();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    getStoredServerUrl()
-      .then((stored) => setServerUrl(stored ?? getBaseUrl()))
-      .catch(() => setServerUrl(getBaseUrl()));
-  }, []);
-
   const validate = (): string | null => {
-    if (!serverUrl.trim()) return 'Server URL is required';
-    if (!/^https?:\/\/.+/.test(serverUrl.trim())) return 'Server URL must start with http:// or https://';
+    const urlError = validateServerUrl(serverUrl);
+    if (urlError) return urlError;
     if (!username.trim()) return 'Username is required';
     if (username.trim().length < 2 || username.trim().length > 30) {
       return 'Username must be 2-30 characters';
@@ -54,8 +49,9 @@ export default function RegisterScreen({ navigation }: RegisterScreenProps) {
     setError('');
     setLoading(true);
     try {
-      await configureServerUrl(serverUrl.trim());
+      restoreServerUrl(serverUrl.trim());
       await register(username.trim(), password);
+      await configureServerUrl(serverUrl.trim());
     } catch (err: unknown) {
       const message =
         (err as { response?: { data?: string } })?.response?.data || 'Registration failed';

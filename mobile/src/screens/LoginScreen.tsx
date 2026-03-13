@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState } from 'react';
 import {
   View,
   Text,
@@ -12,7 +12,8 @@ import {
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAuth } from '../store/AuthContext';
 import { AuthStackParamList } from '../navigation/AuthStack';
-import { getBaseUrl, getStoredServerUrl, setServerUrl as configureServerUrl } from '../api/client';
+import { restoreServerUrl, setServerUrl as configureServerUrl } from '../api/client';
+import { useServerUrl } from '../hooks/useServerUrl';
 
 type LoginScreenProps = {
   navigation: NativeStackNavigationProp<AuthStackParamList, 'Login'>;
@@ -20,25 +21,16 @@ type LoginScreenProps = {
 
 export default function LoginScreen({ navigation }: LoginScreenProps) {
   const { login } = useAuth();
-  const [serverUrl, setServerUrl] = useState('');
+  const { serverUrl, setServerUrl, validateServerUrl } = useServerUrl();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
-  useEffect(() => {
-    getStoredServerUrl()
-      .then((stored) => setServerUrl(stored ?? getBaseUrl()))
-      .catch(() => setServerUrl(getBaseUrl()));
-  }, []);
-
   const handleLogin = async () => {
-    if (!serverUrl.trim()) {
-      setError('Server URL is required');
-      return;
-    }
-    if (!/^https?:\/\/.+/.test(serverUrl.trim())) {
-      setError('Server URL must start with http:// or https://');
+    const urlError = validateServerUrl(serverUrl);
+    if (urlError) {
+      setError(urlError);
       return;
     }
     if (!username.trim() || !password.trim()) {
@@ -49,8 +41,9 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
     setError('');
     setLoading(true);
     try {
-      await configureServerUrl(serverUrl.trim());
+      restoreServerUrl(serverUrl.trim());
       await login(username.trim(), password);
+      await configureServerUrl(serverUrl.trim());
     } catch (err: unknown) {
       const message =
         (err as { response?: { data?: string } })?.response?.data || 'Invalid credentials';
