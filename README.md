@@ -53,7 +53,7 @@ go install github.com/go-task/task/v3/cmd/task@latest
 
 # Available commands
 task run-server      # Start the Jot server
-task run-webapp      # Build webapp in watch mode
+task run-webapp      # Start webapp dev server with HMR
 task test            # Run all tests
 task test-server     # Run server tests
 task test-webapp     # Run webapp tests
@@ -74,18 +74,18 @@ task clean               # Remove generated files and node packages
 
 ### Development Options
 
-Access: `http://localhost:8080`
-
-#### Development Build with Watch
-For development builds that automatically rebuild when files change:
+#### Vite Dev Server (recommended)
+Run the Vite dev server for instant hot module replacement:
 
 ```bash
-# Terminal 1: Watch and rebuild frontend automatically (unminified)
-cd webapp && npm install && npm run build:watch
+# Terminal 1: Start the Go backend
+task run-server
 
-# Terminal 2: Run server with hot-reload
-cd server && go run main.go
+# Terminal 2: Start the Vite dev server with HMR
+task run-webapp
 ```
+
+Access: `http://localhost:5173` — API calls are proxied to the Go server automatically.
 
 Access: `http://localhost:8080`
 
@@ -287,8 +287,8 @@ GOMODULE=on go run main.go
 # Frontend development build (separate dev server)
 cd webapp && npm run dev
 
-# Or development build with file watching (integrated with backend)
-cd webapp && npm run build:watch
+# Or start the Vite dev server with HMR
+task run-webapp
 
 # Check database contents
 sqlite3 jot.db "SELECT * FROM users;"

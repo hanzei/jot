@@ -16,9 +16,9 @@ tasks:
       - ./jot
 
   run-webapp:
-    desc: Build webapp in watch mode
+    desc: Start webapp dev server with HMR
     dir: webapp
-    cmd: npm run build:watch
+    cmd: npx vite
 
   test:
     desc: Run all tests

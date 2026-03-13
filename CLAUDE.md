@@ -29,7 +29,7 @@ After completing a set of changes, run a sub-agent review loop before finalizing
 Use the following Task commands for development:
 
 - `task run-server` - Start the Jot server
-- `task run-webapp` - Build webapp in watch mode
+- `task run-webapp` - Start webapp dev server with HMR
 - `task test` - Run all tests
 - `task test-server` - Run server tests
 - `task test-webapp` - Run webapp tests
@@ -274,7 +274,7 @@ Migration files live in `server/migrations/` and are named `NNN_description.sql`
 # Terminal 1 — backend (hot-reload via go run)
 task run-server
 
-# Terminal 2 — frontend (Vite watch mode)
+# Terminal 2 — frontend (Vite dev server with HMR)
 task run-webapp
 ```
 

@@ -110,7 +110,7 @@ func (s *Server) setupRoutes() {
 	s.router.Use(middleware.Recoverer)
 	allowedOrigin := os.Getenv("CORS_ALLOWED_ORIGIN")
 	if allowedOrigin == "" {
-		allowedOrigin = "http://localhost:3000"
+		allowedOrigin = "http://localhost:5173"
 	}
 	s.router.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{allowedOrigin},
