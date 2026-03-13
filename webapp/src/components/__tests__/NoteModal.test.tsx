@@ -317,12 +317,24 @@ describe('NoteModal', () => {
       const inputs = screen.getAllByPlaceholderText('List item...')
       expect(inputs).toHaveLength(2)
 
+      // Give the first item a value so we can identify it after insertion
+      fireEvent.change(inputs[0], { target: { value: 'first' } })
+
       // Press Enter on the first (non-last) item
       fireEvent.keyDown(inputs[0], { key: 'Enter', code: 'Enter' })
 
-      // A new item should be inserted after the first item
+      // Three items total
       const inputsAfter = screen.getAllByPlaceholderText('List item...')
       expect(inputsAfter).toHaveLength(3)
+
+      // Original first item stays at index 0
+      expect(inputsAfter[0]).toHaveValue('first')
+
+      // New empty item is at index 1 (inserted below, not appended)
+      expect(inputsAfter[1]).toHaveValue('')
+
+      // The second item (index 2) remains unchanged
+      expect(inputsAfter[2]).toHaveValue('')
     })
 
     it('pressing a key other than Enter on a todo item does not create a new item', async () => {

@@ -421,9 +421,9 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
         archived,
         color,
         checked_items_collapsed: checkedItemsCollapsed,
-        items: updatedItems.map((item, idx) => ({
+        items: updatedItems.map((item) => ({
           text: item.text,
-          position: item.completed ? item.position : idx,
+          position: item.position,
           completed: item.completed,
           indent_level: item.indentLevel,
         })),
