@@ -93,6 +93,21 @@ export interface UpdateNoteRequest {
   items?: { text: string; position: number; completed?: boolean; indent_level?: number }[];
 }
 
+export type SSEEventType =
+  | 'note_created'
+  | 'note_updated'
+  | 'note_deleted'
+  | 'note_shared'
+  | 'note_unshared';
+
+export interface SSEEvent {
+  type: SSEEventType;
+  note_id: string;
+  note: Note | null;
+  source_user_id: string;
+  target_user_id?: string;
+}
+
 export interface Note {
   id: string;
   user_id: string;

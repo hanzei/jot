@@ -14,6 +14,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useNote, useCreateNote, useUpdateNote, useDeleteNote } from '../hooks/useNotes';
+import { useSSESubscription } from '../store/SSEContext';
 import TodoItem from '../components/TodoItem';
 import ColorPicker from '../components/ColorPicker';
 import LabelPicker from '../components/LabelPicker';
@@ -75,11 +76,24 @@ export default function NoteEditorScreen() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [colorPickerVisible, setColorPickerVisible] = useState(false);
   const [labelPickerVisible, setLabelPickerVisible] = useState(false);
+  const [syncToast, setSyncToast] = useState<string | null>(null);
 
   const { data: existingNote } = useNote(noteId);
   const createMutation = useCreateNote();
   const updateMutation = useUpdateNote();
   const deleteMutation = useDeleteNote();
+
+  // Show a toast when another user updates this note while editor is open
+  useSSESubscription(noteId, useCallback(() => {
+    setSyncToast((prev) => prev ?? 'This note was updated by another user');
+  }, []));
+
+  // Auto-dismiss sync toast after 4 seconds
+  useEffect(() => {
+    if (!syncToast) return;
+    const timer = setTimeout(() => setSyncToast(null), 4000);
+    return () => clearTimeout(timer);
+  }, [syncToast]);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isMountedRef = useRef(true);
@@ -426,6 +440,16 @@ export default function NoteEditorScreen() {
         </TouchableOpacity>
       )}
 
+      {syncToast && (
+        <TouchableOpacity
+          style={styles.syncToast}
+          onPress={() => setSyncToast(null)}
+          testID="sync-toast"
+        >
+          <Text style={styles.syncToastText}>{syncToast}</Text>
+        </TouchableOpacity>
+      )}
+
       <ScrollView
         style={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
@@ -709,6 +733,18 @@ const styles = StyleSheet.create({
   },
   errorText: {
     color: '#dc2626',
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  syncToast: {
+    backgroundColor: '#eff6ff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#bfdbfe',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  syncToastText: {
+    color: '#1d4ed8',
     fontSize: 14,
     textAlign: 'center',
   },
