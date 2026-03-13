@@ -5,6 +5,7 @@ permissions:
 
 on:
   push:
+    branches: ["master"]
     paths: ["webapp/**"]
   pull_request:
     paths: ["webapp/**"]
