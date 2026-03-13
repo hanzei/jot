@@ -11,6 +11,7 @@ interface SidebarTab {
 
 interface SidebarProps {
   tabs: SidebarTab[];
+  bottomTabs?: SidebarTab[];
   children?: ReactNode;
   collapsed: boolean;
   onCollapse?: () => void;
@@ -25,7 +26,7 @@ const tabClass = (isActive: boolean | undefined) =>
 
 const isMobile = () => window.matchMedia('(max-width: 639px)').matches;
 
-const Sidebar = ({ tabs, children, collapsed, onCollapse }: SidebarProps) => {
+const Sidebar = ({ tabs, bottomTabs, children, collapsed, onCollapse }: SidebarProps) => {
   const [hovered, setHovered] = useState(false);
   const isExpanded = !collapsed || hovered;
 
@@ -45,7 +46,7 @@ const Sidebar = ({ tabs, children, collapsed, onCollapse }: SidebarProps) => {
       onMouseEnter={() => collapsed && setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      <nav className="flex flex-col space-y-1 p-2">
+      <nav className="flex flex-col space-y-1.5 pt-4 px-2 pb-2">
         {tabs.map((tab) =>
           tab.href ? (
             <Link
@@ -74,9 +75,39 @@ const Sidebar = ({ tabs, children, collapsed, onCollapse }: SidebarProps) => {
         )}
       </nav>
       {children && (
-        <div className="flex-1 overflow-y-auto">
+        <div className="overflow-y-auto">
           {children}
         </div>
+      )}
+      {bottomTabs && bottomTabs.length > 0 && (
+        <nav className="flex flex-col space-y-1.5 px-2 pb-2">
+          {bottomTabs.map((tab) =>
+            tab.href ? (
+              <Link
+                key={tab.label}
+                to={tab.href}
+                aria-label={tab.label}
+                aria-current={tab.isActive ? 'page' : undefined}
+                className={tabClass(tab.isActive)}
+                onClick={() => handleTabClick()}
+              >
+                {tab.icon}
+                {isExpanded && tab.label}
+              </Link>
+            ) : (
+              <button
+                key={tab.label}
+                onClick={() => handleTabClick(tab.onClick)}
+                aria-label={tab.label}
+                aria-current={tab.isActive ? 'page' : undefined}
+                className={tabClass(tab.isActive)}
+              >
+                {tab.icon}
+                {isExpanded && tab.label}
+              </button>
+            )
+          )}
+        </nav>
       )}
     </aside>
   );

@@ -352,6 +352,9 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       onClick: () => handleViewChange('notes'),
       isActive: !showArchived && !showBin && !selectedLabelId,
     },
+  ];
+
+  const bottomNavigationTabs = [
     {
       label: t('dashboard.tabArchive'),
       icon: <ArchiveBoxIcon className="h-4 w-4 shrink-0" />,
@@ -394,7 +397,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       </NavigationHeader>
 
       <div className="relative flex flex-1">
-        <Sidebar tabs={navigationTabs} collapsed={collapsed} onCollapse={collapseSidebar}>
+        <Sidebar tabs={navigationTabs} bottomTabs={bottomNavigationTabs} collapsed={collapsed} onCollapse={collapseSidebar}>
           {labelsList.length > 0 && (
             <div className="px-2 pb-2">
               <ul className="space-y-0.5">

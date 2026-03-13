@@ -121,12 +121,12 @@ const NavigationHeader = ({ title = 'Jot', onLogout, children, username, isAdmin
           mobile  — row 1: [title (order-1)] … [profile (order-2)], row 2: [search (order-3, w-full)]
           desktop — one row: [title (order-1)] [search (sm:order-2, flex-1)] [profile (sm:order-3)]
         */}
-        <div className="flex flex-wrap items-center justify-between gap-y-3 py-4">
+        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-3 py-4">
           {onToggleSidebar && (
             <button
               onClick={onToggleSidebar}
               aria-label="Toggle sidebar"
-              className="order-0 p-1 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-white"
+              className="order-0 p-1.5 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-white"
             >
               <Bars3Icon className="h-7 w-7" />
             </button>
