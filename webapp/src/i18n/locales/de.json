@@ -205,8 +205,7 @@
     "cannotShareSelf": "Du kannst eine Notiz nicht mit dir selbst teilen.",
     "failedShare": "Notiz konnte nicht geteilt werden. Bitte erneut versuchen.",
     "unsharedSuccess": "Teilen der Notiz erfolgreich aufgehoben!",
-    "failedUnshare": "Teilen der Notiz konnte nicht aufgehoben werden. Bitte erneut versuchen.",
-    "closeModal": "Schließen"
+    "failedUnshare": "Teilen der Notiz konnte nicht aufgehoben werden. Bitte erneut versuchen."
   },
   "serviceWorker": {
     "updatePrompt": "Es ist ein neues App-Update verfügbar! Klicke OK zum Aktualisieren"
