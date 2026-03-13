@@ -32,7 +32,12 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
     if (isDrainingRef.current) return;
     isDrainingRef.current = true;
     try {
-      await drainQueue(db);
+      const { idMappings } = await drainQueue(db);
+      // For each create that was reconciled, update the React Query cache so any
+      // open editor still holding the local ID can transparently switch to the server note.
+      for (const { localId, serverNote } of idMappings) {
+        queryClient.setQueryData(['note-local', localId], serverNote);
+      }
     } catch (err) {
       console.warn('Queue drain failed:', err);
     } finally {
@@ -46,10 +51,15 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
   useEffect(() => {
     // Seed the initial state from the real network status before subscribing to changes,
     // so isConnected is accurate on first render (default useState(true) can be wrong).
+    // If we start online and are already authenticated, drain any queued operations
+    // that accumulated while the app was closed.
     NetInfo.fetch().then((initial) => {
       const connected = initial.isConnected === true && initial.isInternetReachable !== false;
       prevConnectedRef.current = connected;
       setIsConnected(connected);
+      if (connected) {
+        handleReconnect().catch(() => {});
+      }
     }).catch((err) => {
       console.warn('NetInfo.fetch failed, defaulting to online:', err);
     });

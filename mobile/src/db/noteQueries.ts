@@ -27,6 +27,8 @@ interface NoteItemRow {
   completed: number;
   position: number;
   indent_level: number;
+  created_at: string;
+  updated_at: string;
 }
 
 function rowToNote(row: NoteRow, items: NoteItem[] = []): Note {
@@ -63,8 +65,8 @@ function itemRowToNoteItem(row: NoteItemRow): NoteItem {
     completed: row.completed === 1,
     position: row.position,
     indent_level: row.indent_level,
-    created_at: '',
-    updated_at: '',
+    created_at: row.created_at ?? '',
+    updated_at: row.updated_at ?? '',
   };
 }
 
@@ -109,9 +111,9 @@ async function saveNoteInTx(db: SQLiteDatabase, note: Note): Promise<void> {
     await db.runAsync('DELETE FROM note_items WHERE note_id = ?', [note.id]);
     for (const item of note.items) {
       await db.runAsync(
-        `INSERT OR REPLACE INTO note_items (id, note_id, text, completed, position, indent_level)
-         VALUES (?, ?, ?, ?, ?, ?)`,
-        [item.id, note.id, item.text, item.completed ? 1 : 0, item.position, item.indent_level],
+        `INSERT OR REPLACE INTO note_items (id, note_id, text, completed, position, indent_level, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+        [item.id, note.id, item.text, item.completed ? 1 : 0, item.position, item.indent_level, item.created_at ?? '', item.updated_at ?? ''],
       );
     }
   }
@@ -239,6 +241,42 @@ export async function replaceLocalNoteId(
     await db.runAsync('DELETE FROM notes WHERE id = ?', [oldId]);
     await saveNoteInTx(db, newNote);
   });
+}
+
+/**
+ * Remove local (server-synced) notes that match the given query scope but are not
+ * present in the provided server ID set. Local-only notes (id starting with "local_")
+ * are never removed.
+ */
+export async function removeLocalNotesNotIn(
+  db: SQLiteDatabase,
+  serverIds: Set<string>,
+  params?: GetNotesParams,
+): Promise<void> {
+  const args: (string | number | null)[] = [];
+
+  let sql = "DELETE FROM notes WHERE id NOT LIKE 'local_%'";
+
+  if (params?.archived) {
+    sql += ' AND archived = 1 AND deleted_at IS NULL';
+  } else if (params?.trashed) {
+    sql += ' AND deleted_at IS NOT NULL';
+  } else {
+    sql += ' AND archived = 0 AND deleted_at IS NULL';
+  }
+
+  if (params?.search) {
+    sql += ' AND (title LIKE ? OR content LIKE ?)';
+    args.push(`%${params.search}%`, `%${params.search}%`);
+  }
+
+  if (serverIds.size > 0) {
+    const placeholders = Array.from(serverIds).map(() => '?').join(', ');
+    sql += ` AND id NOT IN (${placeholders})`;
+    args.push(...Array.from(serverIds));
+  }
+
+  await db.runAsync(sql, args);
 }
 
 /** Generate a unique local ID for offline-created notes (prefixed so they are identifiable). */

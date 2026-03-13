@@ -35,6 +35,10 @@ jest.mock('../src/db/syncQueue', () => ({
   enqueueOperation: jest.fn().mockResolvedValue(undefined),
 }));
 
+jest.mock('../src/store/AuthContext', () => ({
+  useAuth: jest.fn().mockReturnValue({ user: { id: 'test-user-id', username: 'testuser' }, isAuthenticated: true }),
+}));
+
 const mockNotesApi = notesApi as jest.Mocked<typeof notesApi>;
 const mockNoteQueries = noteQueriesModule as jest.Mocked<typeof noteQueriesModule>;
 

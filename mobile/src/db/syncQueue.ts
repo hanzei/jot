@@ -40,16 +40,34 @@ export async function getPendingCount(db: SQLiteDatabase): Promise<number> {
   return row?.count ?? 0;
 }
 
+function remapValue(value: unknown, idMap: Map<string, string>): unknown {
+  if (typeof value === 'string') {
+    return idMap.get(value) ?? value;
+  }
+  if (Array.isArray(value)) {
+    return value.map((item) => remapValue(item, idMap));
+  }
+  if (value !== null && typeof value === 'object') {
+    const result: Record<string, unknown> = {};
+    for (const [k, v] of Object.entries(value as Record<string, unknown>)) {
+      result[k] = remapValue(v, idMap);
+    }
+    return result;
+  }
+  return value;
+}
+
 function remapIdsInBody(
   body: Record<string, unknown>,
   idMap: Map<string, string>,
 ): Record<string, unknown> {
   if (idMap.size === 0) return body;
-  let serialized = JSON.stringify(body);
-  for (const [localId, serverId] of idMap) {
-    serialized = serialized.split(localId).join(serverId);
-  }
-  return JSON.parse(serialized) as Record<string, unknown>;
+  return remapValue(body, idMap) as Record<string, unknown>;
+}
+
+export interface DrainResult {
+  /** Maps local_* IDs to the server IDs assigned during create operations. */
+  idMappings: Array<{ localId: string; serverNote: Note }>;
 }
 
 /**
@@ -59,14 +77,18 @@ function remapIdsInBody(
  * Handles offline-create ID reconciliation: when a `create` operation succeeds, the
  * server returns a new note ID. Any subsequent queue entries that reference the local
  * temporary ID are remapped to the server-assigned ID before execution.
+ *
+ * Returns an array of {localId, serverNote} pairs for any create operations that
+ * succeeded, so callers can update their caches.
  */
-export async function drainQueue(db: SQLiteDatabase): Promise<void> {
+export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
   const entries = await db.getAllAsync<QueueEntry>(
     'SELECT * FROM sync_queue ORDER BY id ASC',
   );
 
   // Maps local_* IDs → server IDs as creates are processed
   const idMap = new Map<string, string>();
+  const idMappings: Array<{ localId: string; serverNote: Note }> = [];
 
   for (const entry of entries) {
     try {
@@ -87,9 +109,16 @@ export async function drainQueue(db: SQLiteDatabase): Promise<void> {
 
         if (entry.operation === 'create' && body?.local_id) {
           const localId = body.local_id as string;
-          const serverNote = response.data as Note;
-          if (typeof serverNote?.id === 'string' && serverNote.id !== localId) {
+          const data = response?.data;
+          if (
+            data !== null &&
+            typeof data === 'object' &&
+            typeof (data as Note).id === 'string' &&
+            (data as Note).id !== localId
+          ) {
+            const serverNote = data as Note;
             idMap.set(localId, serverNote.id);
+            idMappings.push({ localId, serverNote });
             // Replace local note in DB with server note
             await replaceLocalNoteId(db, localId, serverNote);
           }
@@ -115,6 +144,8 @@ export async function drainQueue(db: SQLiteDatabase): Promise<void> {
       }
     }
   }
+
+  return { idMappings };
 }
 
 /** Persist a note that was returned by the server after a successful sync, updating local DB. */

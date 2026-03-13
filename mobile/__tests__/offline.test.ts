@@ -114,6 +114,20 @@ describe('drainQueue', () => {
     expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [5]);
   });
 
+  it('discards 409 errors and continues processing', async () => {
+    const db = makeMockDb([
+      { id: 4, operation: 'update', endpoint: '/notes/conflict', method: 'PUT', body: '{}', created_at: '' },
+      { id: 5, operation: 'update', endpoint: '/notes/exists', method: 'PUT', body: '{}', created_at: '' },
+    ]);
+    mockApi.put.mockRejectedValueOnce({ response: { status: 409 } });
+    mockApi.put.mockResolvedValueOnce({ data: {} } as never);
+
+    await drainQueue(db as never);
+
+    expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [4]);
+    expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [5]);
+  });
+
   it('stops draining on network errors (non-4xx)', async () => {
     const db = makeMockDb([
       { id: 6, operation: 'update', endpoint: '/notes/abc', method: 'PUT', body: '{}', created_at: '' },

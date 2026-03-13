@@ -31,6 +31,7 @@ import {
 } from '../db/noteQueries';
 import { enqueueOperation } from '../db/syncQueue';
 import { useNetworkStatus } from './useNetworkStatus';
+import { useAuth } from '../store/AuthContext';
 
 export function useNotes(params?: GetNotesParams) {
   return useQuery<Note[]>({
@@ -53,6 +54,7 @@ export function useCreateNote() {
   const { isConnected } = useNetworkStatus();
   const isConnectedRef = useRef(isConnected);
   isConnectedRef.current = isConnected;
+  const { user } = useAuth();
 
   return useMutation({
     mutationFn: async (data: CreateNoteRequest): Promise<Note> => {
@@ -67,7 +69,7 @@ export function useCreateNote() {
       const now = new Date().toISOString();
       const localNote: Note = {
         id: localId,
-        user_id: '',
+        user_id: user?.id ?? '',
         title: data.title,
         content: data.content,
         note_type: data.note_type,
@@ -133,15 +135,16 @@ export function useUpdateNote() {
       let updatedItems = existing?.items;
 
       if (data.items !== undefined && existing) {
-        // Persist item changes to note_items table alongside scalar field updates
+        // Persist item changes to note_items table alongside scalar field updates.
+        // Preserve existing item IDs by position to avoid re-creating stable items.
         updatedItems = data.items.map((item, i) => ({
-          id: generateLocalId(),
+          id: existing.items?.[i]?.id ?? generateLocalId(),
           note_id: id,
           text: item.text,
           completed: item.completed ?? false,
           position: i,
           indent_level: item.indent_level ?? 0,
-          created_at: now,
+          created_at: existing.items?.[i]?.created_at ?? now,
           updated_at: now,
         }));
         await saveNote(db, { ...existing, ...data, items: updatedItems, updated_at: now });
@@ -274,8 +277,10 @@ export function useReorderNotes() {
           await updateLocalNote(db, noteIds[i], { position: i });
         }
       } else {
-        // Update positions locally using raw SQL since updateLocalNote only handles
-        // specific fields; store the ordering via enqueue
+        // Update local positions to reflect the new order immediately, then enqueue
+        for (let i = 0; i < noteIds.length; i++) {
+          await updateLocalNote(db, noteIds[i], { position: i });
+        }
         await enqueueOperation(db, {
           operation: 'reorder',
           endpoint: '/notes/reorder',

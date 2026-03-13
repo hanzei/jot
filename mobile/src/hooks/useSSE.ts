@@ -1,10 +1,12 @@
 import { useEffect, useRef, useCallback } from 'react';
 import { AppState, AppStateStatus } from 'react-native';
 import { useQueryClient } from '@tanstack/react-query';
+import { useSQLiteContext } from 'expo-sqlite';
 import { useAuth } from '../store/AuthContext';
 import { SSEConnectionManager } from '../api/events';
 import { SSEEvent } from '../types';
 import { useNetworkStatus } from './useNetworkStatus';
+import { saveNote, markLocalNoteDeleted } from '../db/noteQueries';
 
 export type SSENotificationCallback = (event: SSEEvent) => void;
 
@@ -12,9 +14,12 @@ export function useSSE(onNoteUpdatedByOther?: SSENotificationCallback): void {
   const { user, isAuthenticated } = useAuth();
   const { isConnected } = useNetworkStatus();
   const queryClient = useQueryClient();
+  const db = useSQLiteContext();
   const managerRef = useRef<SSEConnectionManager | null>(null);
   const onNoteUpdatedRef = useRef(onNoteUpdatedByOther);
   onNoteUpdatedRef.current = onNoteUpdatedByOther;
+  const dbRef = useRef(db);
+  dbRef.current = db;
 
   const userIdRef = useRef(user?.id);
   userIdRef.current = user?.id;
@@ -39,10 +44,16 @@ export function useSSE(onNoteUpdatedByOther?: SSENotificationCallback): void {
 
       // Per-event-type extras
       if (event.type === 'note_updated') {
+        if (event.note) {
+          // Persist the updated note to SQLite so offline reads stay current
+          saveNote(dbRef.current, event.note).catch(() => {});
+        }
         queryClient.invalidateQueries({ queryKey: ['note', event.note_id] });
         queryClient.invalidateQueries({ queryKey: ['note-local', event.note_id] });
         onNoteUpdatedRef.current?.(event);
       } else if (event.type === 'note_deleted') {
+        // Tombstone the note in SQLite so it disappears from offline views
+        markLocalNoteDeleted(dbRef.current, event.note_id).catch(() => {});
         queryClient.removeQueries({ queryKey: ['note', event.note_id] });
         queryClient.removeQueries({ queryKey: ['note-local', event.note_id] });
       }

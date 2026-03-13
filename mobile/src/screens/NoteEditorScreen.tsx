@@ -155,6 +155,16 @@ export default function NoteEditorScreen() {
     }
   }, [existingNote?.labels]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // When the queue drains, OfflineContext sets the React Query cache for the old local
+  // ID to hold the server note. Detect this by checking whether the cached note's id
+  // now differs from the local ID we hold, and update noteId + route params accordingly.
+  useEffect(() => {
+    if (existingNote && noteId && existingNote.id !== noteId) {
+      setNoteId(existingNote.id);
+      navigation.setParams({ noteId: existingNote.id });
+    }
+  }, [existingNote?.id, noteId, navigation]); // eslint-disable-line react-hooks/exhaustive-deps
+
   const flushSave = useCallback(async (unmounting = false) => {
     // Skip save if editing an existing note that hasn't hydrated yet
     if (noteIdRef.current && !isInitializedRef.current) return;

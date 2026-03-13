@@ -1,7 +1,7 @@
 import { useEffect, useCallback, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSQLiteContext } from 'expo-sqlite';
-import { getLocalNotes, getLocalNote, saveNotes, saveNote } from '../db/noteQueries';
+import { getLocalNotes, getLocalNote, saveNotes, saveNote, markLocalNoteDeleted, removeLocalNotesNotIn } from '../db/noteQueries';
 import { getNotes, getNote } from '../api/notes';
 import { GetNotesParams, Note } from '../types';
 import { useNetworkStatus } from './useNetworkStatus';
@@ -25,6 +25,10 @@ export function useOfflineNotes(params?: GetNotesParams) {
     try {
       const serverNotes = await getNotes(paramsRef.current);
       await saveNotes(db, serverNotes);
+      // Remove local notes that matched this scope but are no longer returned by the server
+      // (e.g., archived, deleted, or label-changed on another device).
+      const serverIds = new Set(serverNotes.map((n) => n.id));
+      await removeLocalNotesNotIn(db, serverIds, paramsRef.current);
       queryClient.invalidateQueries({ queryKey: ['notes-local', paramsRef.current] });
     } catch {
       // Silently ignore network errors — local data is used as fallback
@@ -73,8 +77,14 @@ export function useOfflineNote(id: string | null) {
         if (cancelled) return;
         await saveNote(db, serverNote);
         queryClient.invalidateQueries({ queryKey: ['note-local', id] });
-      } catch {
-        // Silently ignore — local cache is used as fallback
+      } catch (err) {
+        const status = (err as { response?: { status?: number } })?.response?.status;
+        if ((status === 404 || status === 410) && !cancelled) {
+          // Note no longer exists on server — tombstone it locally
+          await markLocalNoteDeleted(db, id);
+          queryClient.invalidateQueries({ queryKey: ['note-local', id] });
+        }
+        // Other errors: silently ignore — local cache is used as fallback
       }
     })();
     return () => { cancelled = true; };
