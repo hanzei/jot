@@ -844,12 +844,12 @@ func parseKeepNotesFromZip(zr *zip.Reader) []keepNote {
 		lr := &io.LimitedReader{R: rc, N: keepImportMaxEntrySize + 1}
 		jsonData, err := io.ReadAll(lr)
 		_ = rc.Close()
-		if err != nil || lr.N == 0 {
-			continue // read error or entry exceeded per-entry limit
-		}
 		totalRead += int64(len(jsonData))
 		if totalRead > keepImportMaxTotalSize {
 			break
+		}
+		if err != nil || lr.N == 0 {
+			continue // read error or entry exceeded per-entry limit
 		}
 		var kn keepNote
 		if err := json.Unmarshal(jsonData, &kn); err != nil {

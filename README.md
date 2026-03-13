@@ -64,7 +64,7 @@ task lint-server           # Run server linting with golangci-lint
 task lint-webapp           # Run webapp linting
 task lint-mobile           # Run mobile app linting
 task check-translations    # Check locale files for missing/extra keys
-task gen-docs              # Regenerate Swagger API docs (requires swag CLI)
+task gen-docs              # Regenerate Swagger API docs (install swag first: go install github.com/swaggo/swag/cmd/swag@v1.16.6)
 task clean               # Remove generated files and node packages
 ```
    
