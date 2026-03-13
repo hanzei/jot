@@ -32,6 +32,9 @@ test
 .DS_Store
 Thumbs.db
 
+# Mobile app (not included in Docker image)
+mobile
+
 # Build artifacts
 build
 dist

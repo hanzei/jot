@@ -1,0 +1,118 @@
+name: Webapp — CI
+
+permissions:
+  contents: read
+
+on:
+  push:
+    paths: ["webapp/**"]
+  pull_request:
+    paths: ["webapp/**"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: webapp/package-lock.json
+
+      - name: Install Task
+        run: sh -c "$(curl -fsSL https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
+
+      - name: Install dependencies
+        working-directory: ./webapp
+        run: npm ci
+
+      - name: Run tests
+        run: task test-webapp
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: webapp/package-lock.json
+
+      - name: Install Task
+        run: sh -c "$(curl -fsSL https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
+
+      - name: Install dependencies
+        working-directory: ./webapp
+        run: npm ci
+
+      - name: Run linters
+        run: task lint-webapp
+
+  translations:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: webapp/package-lock.json
+
+      - name: Install Task
+        run: sh -c "$(curl -fsSL https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
+
+      - name: Install dependencies
+        working-directory: ./webapp
+        run: npm ci
+
+      - name: Check translations
+        run: task check-translations
+
+  e2e:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.24"
+          cache-dependency-path: server/go.sum
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: webapp/package-lock.json
+
+      - name: Install Task
+        run: sh -c "$(curl -fsSL https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
+
+      - name: Install dependencies
+        working-directory: ./webapp
+        run: npm ci
+
+      - name: Install Playwright browsers
+        working-directory: ./webapp
+        run: npx playwright install --with-deps chromium
+
+      - name: Run e2e tests
+        run: task test-e2e
+
+      - name: Upload Playwright report
+        uses: actions/upload-artifact@v4
+        if: failure()
+        with:
+          name: playwright-report
+          path: webapp/playwright-report/
+          retention-days: 7

@@ -1,4 +1,4 @@
-name: CI
+name: Docker
 
 permissions:
   contents: read
@@ -9,147 +9,6 @@ on:
   pull_request:
 
 jobs:
-  test:
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Set up Go
-        uses: actions/setup-go@v6
-        with:
-          go-version: "1.24"
-          cache-dependency-path: server/go.sum
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: "24"
-          cache: "npm"
-          cache-dependency-path: |
-            webapp/package-lock.json
-            mobile/package-lock.json
-
-      - name: Install Task
-        run: sh -c "$(curl -fsSL https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
-
-      - name: Install webapp dependencies
-        working-directory: ./webapp
-        run: npm ci
-
-      - name: Install mobile dependencies
-        working-directory: ./mobile
-        run: npm ci
-
-      - name: Run tests
-        run: task test
-
-  lint:
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Set up Go
-        uses: actions/setup-go@v6
-        with:
-          go-version: "1.24"
-          cache-dependency-path: server/go.sum
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: "24"
-          cache: "npm"
-          cache-dependency-path: |
-            webapp/package-lock.json
-            mobile/package-lock.json
-
-      - name: Install Task
-        run: sh -c "$(curl -fsSL https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
-
-      - name: Install golangci-lint
-        uses: golangci/golangci-lint-action@v9
-        with:
-          version: latest
-          working-directory: ./server
-
-      - name: Install webapp dependencies
-        working-directory: ./webapp
-        run: npm ci
-
-      - name: Install mobile dependencies
-        working-directory: ./mobile
-        run: npm ci
-
-      - name: Run linters
-        run: task lint
-
-  translations:
-    runs-on: ubuntu-latest
-
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: "24"
-          cache: "npm"
-          cache-dependency-path: webapp/package-lock.json
-
-      - name: Install Task
-        run: sh -c "$(curl -fsSL https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
-
-      - name: Install webapp dependencies
-        working-directory: ./webapp
-        run: npm ci
-
-      - name: Check translations
-        run: task check-translations
-
-  e2e:
-    runs-on: ubuntu-latest
-    timeout-minutes: 30
-
-    steps:
-      - uses: actions/checkout@v6
-
-      - name: Set up Go
-        uses: actions/setup-go@v6
-        with:
-          go-version: "1.24"
-          cache-dependency-path: server/go.sum
-
-      - name: Set up Node.js
-        uses: actions/setup-node@v6
-        with:
-          node-version: "24"
-          cache: "npm"
-          cache-dependency-path: webapp/package-lock.json
-
-      - name: Install Task
-        run: sh -c "$(curl -fsSL https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
-
-      - name: Install webapp dependencies
-        working-directory: ./webapp
-        run: npm ci
-
-      - name: Install Playwright browsers
-        working-directory: ./webapp
-        run: npx playwright install --with-deps chromium
-
-      - name: Run e2e tests
-        run: task test-e2e
-
-      - name: Upload Playwright report
-        uses: actions/upload-artifact@v4
-        if: failure()
-        with:
-          name: playwright-report
-          path: webapp/playwright-report/
-          retention-days: 7
-
   docker:
     strategy:
       fail-fast: false
@@ -160,7 +19,6 @@ jobs:
           - platform: linux/arm64
             runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
-    needs: [test, lint, translations, e2e]
     if: github.event_name == 'push' || github.event_name == 'pull_request'
 
     steps:

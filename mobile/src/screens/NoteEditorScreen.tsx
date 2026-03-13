@@ -10,9 +10,13 @@ import {
   KeyboardAvoidingView,
   Platform,
 } from 'react-native';
+import DraggableFlatList, { ScaleDecorator } from 'react-native-draggable-flatlist';
+import * as Haptics from 'expo-haptics';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useNote, useCreateNote, useUpdateNote, useDeleteNote } from '../hooks/useNotes';
+import { useSSESubscription } from '../store/SSEContext';
 import TodoItem from '../components/TodoItem';
 import ColorPicker from '../components/ColorPicker';
 import LabelPicker from '../components/LabelPicker';
@@ -20,6 +24,7 @@ import { NoteType, NoteItem, UpdateNoteRequest, Label } from '../types';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 
 type EditorRouteProp = RouteProp<RootStackParamList, 'NoteEditor'>;
+type EditorNavProp = NativeStackNavigationProp<RootStackParamList, 'NoteEditor'>;
 
 const MAX_TITLE_LENGTH = 200;
 const MAX_CONTENT_LENGTH = 10000;
@@ -55,7 +60,7 @@ function serializeItems(items: LocalItem[]) {
 }
 
 export default function NoteEditorScreen() {
-  const navigation = useNavigation();
+  const navigation = useNavigation<EditorNavProp>();
   const route = useRoute<EditorRouteProp>();
   const { noteId: initialNoteId } = route.params;
 
@@ -73,11 +78,24 @@ export default function NoteEditorScreen() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [colorPickerVisible, setColorPickerVisible] = useState(false);
   const [labelPickerVisible, setLabelPickerVisible] = useState(false);
+  const [syncToast, setSyncToast] = useState<string | null>(null);
 
   const { data: existingNote } = useNote(noteId);
   const createMutation = useCreateNote();
   const updateMutation = useUpdateNote();
   const deleteMutation = useDeleteNote();
+
+  // Show a toast when another user updates this note while editor is open
+  useSSESubscription(noteId, useCallback(() => {
+    setSyncToast((prev) => prev ?? 'This note was updated by another user');
+  }, []));
+
+  // Auto-dismiss sync toast after 4 seconds
+  useEffect(() => {
+    if (!syncToast) return;
+    const timer = setTimeout(() => setSyncToast(null), 4000);
+    return () => clearTimeout(timer);
+  }, [syncToast]);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isMountedRef = useRef(true);
@@ -376,8 +394,54 @@ export default function NoteEditorScreen() {
     () => new Map(items.map((item, i) => [item.id, i])),
     [items],
   );
+  const itemIndexMapRef = useRef(itemIndexMap);
+  itemIndexMapRef.current = itemIndexMap;
+
   const uncheckedItems = useMemo(() => items.filter((item) => !item.completed), [items]);
   const checkedItems = useMemo(() => items.filter((item) => item.completed), [items]);
+
+  // Use ref to avoid recreating handleTodoReorder on every items change
+  const checkedItemsRef = useRef(checkedItems);
+  checkedItemsRef.current = checkedItems;
+
+  const handleTodoReorder = useCallback(
+    (reorderedUnchecked: LocalItem[]) => {
+      Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
+      // Merge reordered unchecked with existing checked items
+      setItems([...reorderedUnchecked, ...checkedItemsRef.current]);
+      scheduleUpdate();
+    },
+    [scheduleUpdate],
+  );
+
+  const handleTodoDragStart = useCallback(() => {
+    Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+  }, []);
+
+  const renderTodoItem = useCallback(
+    ({ item, drag, isActive }: { item: LocalItem; drag: () => void; isActive: boolean }) => {
+      const originalIndex = itemIndexMapRef.current.get(item.id);
+      if (originalIndex === undefined) return null;
+      return (
+        <ScaleDecorator>
+          <View style={isActive ? styles.draggingTodoItem : undefined}>
+            <TodoItem
+              text={item.text}
+              completed={item.completed}
+              indentLevel={item.indent_level}
+              showDragHandle
+              onDrag={drag}
+              onToggle={() => handleToggleItem(originalIndex)}
+              onChangeText={(text) => handleItemTextChange(originalIndex, text)}
+              onDelete={() => handleDeleteItem(originalIndex)}
+              onSubmitEditing={handleAddItem}
+            />
+          </View>
+        </ScaleDecorator>
+      );
+    },
+    [handleToggleItem, handleItemTextChange, handleDeleteItem, handleAddItem],
+  );
 
   const noteBackground = color && color !== '#ffffff' ? color : '#fff';
 
@@ -424,6 +488,16 @@ export default function NoteEditorScreen() {
         </TouchableOpacity>
       )}
 
+      {syncToast && (
+        <TouchableOpacity
+          style={styles.syncToast}
+          onPress={() => setSyncToast(null)}
+          testID="sync-toast"
+        >
+          <Text style={styles.syncToastText}>{syncToast}</Text>
+        </TouchableOpacity>
+      )}
+
       <ScrollView
         style={styles.scrollContent}
         keyboardShouldPersistTaps="handled"
@@ -454,22 +528,14 @@ export default function NoteEditorScreen() {
           />
         ) : (
           <View style={styles.todoContainer}>
-            {uncheckedItems.map((item) => {
-              const originalIndex = itemIndexMap.get(item.id);
-              if (originalIndex === undefined) return null;
-              return (
-                <TodoItem
-                  key={item.id}
-                  text={item.text}
-                  completed={item.completed}
-                  indentLevel={item.indent_level}
-                  onToggle={() => handleToggleItem(originalIndex)}
-                  onChangeText={(text) => handleItemTextChange(originalIndex, text)}
-                  onDelete={() => handleDeleteItem(originalIndex)}
-                  onSubmitEditing={handleAddItem}
-                />
-              );
-            })}
+            <DraggableFlatList
+              data={uncheckedItems}
+              keyExtractor={(item) => item.id}
+              scrollEnabled={false}
+              onDragBegin={handleTodoDragStart}
+              onDragEnd={({ data }) => handleTodoReorder(data)}
+              renderItem={renderTodoItem}
+            />
 
             <TouchableOpacity style={styles.addItemRow} onPress={handleAddItem} testID="add-todo-item">
               <Ionicons name="add" size={22} color="#2563eb" />
@@ -563,6 +629,18 @@ export default function NoteEditorScreen() {
               size={22}
               color={archived ? '#2563eb' : '#444'}
             />
+          </TouchableOpacity>
+        )}
+
+        {/* Share (only when note is saved, hydrated, and owned by current user) */}
+        {noteId && existingNote && !existingNote.is_shared && (
+          <TouchableOpacity
+            onPress={() => navigation.navigate('Share', { noteId })}
+            style={styles.toolbarBtn}
+            testID="toolbar-share-btn"
+            accessibilityLabel="Share note"
+          >
+            <Ionicons name="share-social-outline" size={22} color="#444" />
           </TouchableOpacity>
         )}
 
@@ -697,5 +775,26 @@ const styles = StyleSheet.create({
     color: '#dc2626',
     fontSize: 14,
     textAlign: 'center',
+  },
+  syncToast: {
+    backgroundColor: '#eff6ff',
+    borderBottomWidth: 1,
+    borderBottomColor: '#bfdbfe',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  syncToastText: {
+    color: '#1d4ed8',
+    fontSize: 14,
+    textAlign: 'center',
+  },
+  draggingTodoItem: {
+    backgroundColor: '#f0f4ff',
+    borderRadius: 8,
+    elevation: 4,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 2 },
+    shadowOpacity: 0.15,
+    shadowRadius: 4,
   },
 });
