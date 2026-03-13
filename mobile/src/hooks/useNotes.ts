@@ -1,6 +1,7 @@
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { getNotes, getNote, createNote, updateNote, deleteNote, restoreNote, permanentDeleteNote } from '../api/notes';
-import { Note, GetNotesParams, CreateNoteRequest, UpdateNoteRequest } from '../types';
+import { getNoteShares, shareNote, unshareNote } from '../api/users';
+import { Note, NoteShare, GetNotesParams, CreateNoteRequest, UpdateNoteRequest } from '../types';
 
 export function useNotes(params?: GetNotesParams) {
   return useQuery<Note[]>({
@@ -66,6 +67,40 @@ export function usePermanentDeleteNote() {
     mutationFn: (id: string) => permanentDeleteNote(id),
     onSuccess: (_data, id) => {
       queryClient.removeQueries({ queryKey: ['note', id] });
+      queryClient.invalidateQueries({ queryKey: ['notes'] });
+    },
+  });
+}
+
+export function useNoteShares(noteId: string | null) {
+  return useQuery<NoteShare[]>({
+    queryKey: ['noteShares', noteId],
+    queryFn: () => getNoteShares(noteId!),
+    enabled: noteId !== null,
+  });
+}
+
+export function useShareNote() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ noteId, userId }: { noteId: string; userId: string }) =>
+      shareNote(noteId, userId),
+    onSuccess: (_data, { noteId }) => {
+      queryClient.invalidateQueries({ queryKey: ['noteShares', noteId] });
+      queryClient.invalidateQueries({ queryKey: ['note', noteId] });
+      queryClient.invalidateQueries({ queryKey: ['notes'] });
+    },
+  });
+}
+
+export function useUnshareNote() {
+  const queryClient = useQueryClient();
+  return useMutation({
+    mutationFn: ({ noteId, userId }: { noteId: string; userId: string }) =>
+      unshareNote(noteId, userId),
+    onSuccess: (_data, { noteId }) => {
+      queryClient.invalidateQueries({ queryKey: ['noteShares', noteId] });
+      queryClient.invalidateQueries({ queryKey: ['note', noteId] });
       queryClient.invalidateQueries({ queryKey: ['notes'] });
     },
   });

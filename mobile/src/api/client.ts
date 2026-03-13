@@ -12,7 +12,7 @@ function getDefaultBaseUrl(): string {
   return 'http://localhost:8080';
 }
 
-const BASE_URL = process.env.EXPO_PUBLIC_API_URL || getDefaultBaseUrl();
+export const BASE_URL = process.env.EXPO_PUBLIC_API_URL || getDefaultBaseUrl();
 
 const api = axios.create({
   baseURL: `${BASE_URL}/api/v1`,
