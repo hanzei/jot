@@ -85,6 +85,7 @@ describe('useSSE', () => {
     const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
 
     renderHook(() => useSSE(), { wrapper: Wrapper });
+    invalidateSpy.mockClear();
 
     act(() => {
       capturedCallback?.({
@@ -103,6 +104,7 @@ describe('useSSE', () => {
     const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
 
     renderHook(() => useSSE(), { wrapper: Wrapper });
+    invalidateSpy.mockClear();
 
     act(() => {
       capturedCallback?.({
@@ -123,6 +125,7 @@ describe('useSSE', () => {
     const removeSpy = jest.spyOn(queryClient, 'removeQueries');
 
     renderHook(() => useSSE(), { wrapper: Wrapper });
+    invalidateSpy.mockClear();
 
     act(() => {
       capturedCallback?.({
