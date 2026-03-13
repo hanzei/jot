@@ -303,7 +303,7 @@ CI is split into per-component workflows in `.github/workflows/`:
 | Webapp — CI | `webapp-ci.yml` | `webapp/**` push/PR |
 | Mobile — CI | `mobile-ci.yml` | `mobile/**` push/PR |
 | Mobile — APK Build | `mobile-apk.yml` | master push, `v*` tags |
-| Docker | `ci.yml` | master push, PR |
+| Docker | `docker.yml` | master push, PR |
 
 ### CI Checklist (before opening a PR)
 
