@@ -76,7 +76,9 @@ async function getItemsForNote(db: SQLiteDatabase, noteId: string): Promise<Note
   return rows.map(itemRowToNoteItem);
 }
 
-export async function saveNote(db: SQLiteDatabase, note: Note): Promise<void> {
+// Writes a single note (and its items if provided) without wrapping in a transaction.
+// Must only be called from within an existing transaction context.
+async function saveNoteInTx(db: SQLiteDatabase, note: Note): Promise<void> {
   await db.runAsync(
     `INSERT OR REPLACE INTO notes
        (id, user_id, title, content, note_type, color, pinned, archived, position,
@@ -115,10 +117,16 @@ export async function saveNote(db: SQLiteDatabase, note: Note): Promise<void> {
   }
 }
 
+export async function saveNote(db: SQLiteDatabase, note: Note): Promise<void> {
+  await db.withTransactionAsync(() => saveNoteInTx(db, note));
+}
+
 export async function saveNotes(db: SQLiteDatabase, notes: Note[]): Promise<void> {
-  for (const note of notes) {
-    await saveNote(db, note);
-  }
+  await db.withTransactionAsync(async () => {
+    for (const note of notes) {
+      await saveNoteInTx(db, note);
+    }
+  });
 }
 
 export async function getLocalNotes(db: SQLiteDatabase, params?: GetNotesParams): Promise<Note[]> {

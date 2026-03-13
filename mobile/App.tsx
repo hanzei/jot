@@ -22,13 +22,13 @@ export default function App() {
     <GestureHandlerRootView style={{ flex: 1 }}>
       <QueryClientProvider client={queryClient}>
         <SQLiteProvider databaseName="jot.db" onInit={migrateDatabase}>
-          <OfflineProvider>
-            <AuthProvider>
+          <AuthProvider>
+            <OfflineProvider>
               <NavigationContainer>
                 <RootNavigator />
               </NavigationContainer>
-            </AuthProvider>
-          </OfflineProvider>
+            </OfflineProvider>
+          </AuthProvider>
         </SQLiteProvider>
       </QueryClientProvider>
     </GestureHandlerRootView>

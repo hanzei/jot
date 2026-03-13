@@ -88,7 +88,7 @@ export async function drainQueue(db: SQLiteDatabase): Promise<void> {
         if (entry.operation === 'create' && body?.local_id) {
           const localId = body.local_id as string;
           const serverNote = response.data as Note;
-          if (serverNote?.id && serverNote.id !== localId) {
+          if (typeof serverNote?.id === 'string' && serverNote.id !== localId) {
             idMap.set(localId, serverNote.id);
             // Replace local note in DB with server note
             await replaceLocalNoteId(db, localId, serverNote);

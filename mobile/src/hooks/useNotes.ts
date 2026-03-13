@@ -153,11 +153,11 @@ export function useUpdateNote() {
         body: data as Record<string, unknown>,
       });
 
+      if (!existing) {
+        throw new Error(`Note ${id} not found in local DB`);
+      }
       // Build optimistic return from the data we already have (no second DB read)
-      const optimistic: Note = existing
-        ? { ...existing, ...data, updated_at: now, items: updatedItems }
-        : ({ id } as Note);
-      return optimistic;
+      return { ...existing, ...data, updated_at: now, items: updatedItems };
     },
     onSuccess: (updatedNote) => {
       queryClient.setQueryData(['note', updatedNote.id], updatedNote);

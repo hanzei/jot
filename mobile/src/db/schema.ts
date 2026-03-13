@@ -34,6 +34,12 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
       FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE
     );
 
+    CREATE INDEX IF NOT EXISTS idx_notes_list
+      ON notes (archived, deleted_at, pinned DESC, position ASC);
+
+    CREATE INDEX IF NOT EXISTS idx_note_items_note_id
+      ON note_items (note_id);
+
     CREATE TABLE IF NOT EXISTS sync_queue (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       operation TEXT NOT NULL,
