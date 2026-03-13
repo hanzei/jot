@@ -282,7 +282,9 @@ export async function removeLocalNotesNotIn(
 /** Generate a unique local ID for offline-created notes (prefixed so they are identifiable). */
 export function generateLocalId(): string {
   const timestamp = Date.now().toString(36);
-  const random = Math.random().toString(36).slice(2, 9);
+  const bytes = new Uint8Array(8);
+  globalThis.crypto.getRandomValues(bytes);
+  const random = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
   return `local_${timestamp}_${random}`;
 }
 

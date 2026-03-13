@@ -66,7 +66,7 @@ describe('drainQueue', () => {
 
   it('processes POST operations and removes them from queue', async () => {
     const db = makeMockDb([
-      { id: 1, operation: 'update', endpoint: '/notes/abc', method: 'POST', body: '{"title":"hi"}', created_at: '' },
+      { id: 1, operation: 'create', endpoint: '/notes/abc', method: 'POST', body: '{"title":"hi"}', created_at: '' },
     ]);
     mockApi.post.mockResolvedValueOnce({ data: {} } as never);
 
