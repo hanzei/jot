@@ -123,6 +123,15 @@ func TestBinPermanentDeleteRemovesNote(t *testing.T) {
 	for _, n := range trashedNotes {
 		assert.NotEqual(t, note.ID, n.ID)
 	}
+
+	// Note must also not appear in the active list (confirm it was not restored).
+	activeResp := ts.authRequest(t, user, http.MethodGet, "/api/v1/notes", nil)
+	require.Equal(t, http.StatusOK, activeResp.StatusCode)
+	var activeNotes []models.Note
+	require.NoError(t, activeResp.UnmarshalBody(&activeNotes))
+	for _, n := range activeNotes {
+		assert.NotEqual(t, note.ID, n.ID)
+	}
 }
 
 func TestBinRestoreNonTrashedReturns404(t *testing.T) {

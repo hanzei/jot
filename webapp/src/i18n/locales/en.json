@@ -205,7 +205,8 @@
     "cannotShareSelf": "You cannot share a note with yourself.",
     "failedShare": "Failed to share note. Please try again.",
     "unsharedSuccess": "Note unshared successfully!",
-    "failedUnshare": "Failed to unshare note. Please try again."
+    "failedUnshare": "Failed to unshare note. Please try again.",
+    "closeModal": "Close"
   },
   "serviceWorker": {
     "updatePrompt": "New app update is available! Click OK to refresh"

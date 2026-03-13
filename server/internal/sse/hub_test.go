@@ -3,6 +3,7 @@ package sse
 import (
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -170,13 +171,27 @@ func TestHub_Publish(t *testing.T) {
 			close(done)
 		}()
 
+		// Wait for the goroutine with a timeout; drain one buffered event first
+		// to give Publish room to proceed if it ended up in the default branch.
 		select {
 		case <-done:
 			// good — did not block
+		case <-time.After(2 * time.Second):
+			t.Fatal("Publish blocked: channel was not full or took too long to return")
 		default:
-			// Drain one event and retry to give the goroutine a chance.
-			<-ch
-			<-done
+			// The goroutine has not finished yet; drain one buffered slot and
+			// wait again with a generous timeout so the goroutine can proceed.
+			select {
+			case <-ch:
+			case <-time.After(2 * time.Second):
+				t.Fatal("timed out draining event from full channel")
+			}
+			select {
+			case <-done:
+				// good
+			case <-time.After(2 * time.Second):
+				t.Fatal("Publish did not return after draining a slot from the full channel")
+			}
 		}
 	})
 }

@@ -1,5 +1,5 @@
 import { describe, it, expect, vi, beforeEach } from 'vitest'
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
 const mockImportKeep = vi.hoisted(() => vi.fn())
@@ -153,6 +153,65 @@ describe('ImportModal', () => {
       await waitFor(() => {
         expect(screen.getByText(/Import failed/i)).toBeInTheDocument()
       })
+    })
+  })
+
+  describe('drag-and-drop', () => {
+    function getDropZone() {
+      // The drop zone is the dashed-border div that wraps the file input.
+      return screen.getByText(/drop file|browse/i).closest('div[class*="border-dashed"]') as HTMLElement
+    }
+
+    function createDragEvent(file: File) {
+      return {
+        dataTransfer: {
+          files: [file],
+        },
+        preventDefault: vi.fn(),
+      }
+    }
+
+    it('accepts a .json file dropped onto the drop zone', () => {
+      render(<ImportModal {...defaultProps} />)
+      const dropZone = getDropZone()
+      const file = new File(['{}'], 'notes.json', { type: 'application/json' })
+
+      act(() => { fireEvent.drop(dropZone, createDragEvent(file)) })
+
+      expect(screen.getByText('notes.json')).toBeInTheDocument()
+    })
+
+    it('accepts a .zip file dropped onto the drop zone', () => {
+      render(<ImportModal {...defaultProps} />)
+      const dropZone = getDropZone()
+      const file = new File(['PK'], 'export.zip', { type: 'application/zip' })
+
+      act(() => { fireEvent.drop(dropZone, createDragEvent(file)) })
+
+      expect(screen.getByText('export.zip')).toBeInTheDocument()
+    })
+
+    it('rejects files with an invalid extension and shows an error', () => {
+      render(<ImportModal {...defaultProps} />)
+      const dropZone = getDropZone()
+      const file = new File(['data'], 'notes.txt', { type: 'text/plain' })
+
+      act(() => { fireEvent.drop(dropZone, createDragEvent(file)) })
+
+      // Should not show the filename.
+      expect(screen.queryByText('notes.txt')).not.toBeInTheDocument()
+      // Should show an error about the file type.
+      expect(screen.getByText(/invalid file type|only.*json.*zip/i)).toBeInTheDocument()
+    })
+
+    it('enables the Import button after a valid file is dropped', () => {
+      render(<ImportModal {...defaultProps} />)
+      const dropZone = getDropZone()
+      expect(screen.getByRole('button', { name: /import/i })).toBeDisabled()
+
+      act(() => { fireEvent.drop(dropZone, createDragEvent(new File(['{}'], 'notes.json', { type: 'application/json' }))) })
+
+      expect(screen.getByRole('button', { name: /import/i })).not.toBeDisabled()
     })
   })
 

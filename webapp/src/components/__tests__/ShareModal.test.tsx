@@ -230,6 +230,25 @@ describe('ShareModal', () => {
         expect(screen.getByText(/already shared/i)).toBeInTheDocument()
       })
     })
+
+    it('shows error message on 400 (cannot share with yourself)', async () => {
+      mockUsersSearch.mockResolvedValue([mockUser2])
+      // The source checks status === 400 && data?.includes('yourself')
+      mockShare.mockRejectedValue({ response: { status: 400, data: 'cannot share note with yourself' } })
+      const user = userEvent.setup()
+      render(<ShareModal {...defaultProps} />)
+
+      await waitFor(() => expect(mockUsersSearch).toHaveBeenCalled())
+
+      const input = screen.getByRole('textbox')
+      await user.type(input, 'ali')
+      await waitFor(() => expect(screen.getByText('Alice Smith')).toBeInTheDocument())
+      await user.click(screen.getByText('Alice Smith'))
+
+      await waitFor(() => {
+        expect(screen.getByText(/cannot share.*yourself/i)).toBeInTheDocument()
+      })
+    })
   })
 
   describe('unsharing', () => {
@@ -301,11 +320,9 @@ describe('ShareModal', () => {
 
       await waitFor(() => expect(screen.getByRole('dialog')).toBeInTheDocument())
 
-      // X button is aria-label-less; find by its role within the dialog header area.
       const dialog = screen.getByRole('dialog')
-      const buttons = within(dialog).getAllByRole('button')
-      // The X button is the first one (top-right close icon).
-      await user.click(buttons[0])
+      const closeBtn = within(dialog).getByRole('button', { name: /close/i })
+      await user.click(closeBtn)
 
       expect(onClose).toHaveBeenCalledTimes(1)
     })
