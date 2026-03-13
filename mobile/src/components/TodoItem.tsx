@@ -7,6 +7,8 @@ interface TodoItemProps {
   completed: boolean;
   indentLevel?: number;
   editable?: boolean;
+  showDragHandle?: boolean;
+  onDrag?: () => void;
   onToggle?: () => void;
   onChangeText?: (text: string) => void;
   onDelete?: () => void;
@@ -18,6 +20,8 @@ function TodoItem({
   completed,
   indentLevel = 0,
   editable = true,
+  showDragHandle = false,
+  onDrag,
   onToggle,
   onChangeText,
   onDelete,
@@ -25,6 +29,16 @@ function TodoItem({
 }: TodoItemProps) {
   return (
     <View style={[styles.container, { marginLeft: indentLevel * 24 }]}>
+      {showDragHandle && onDrag && (
+        <TouchableOpacity
+          onPressIn={onDrag}
+          style={styles.dragHandle}
+          testID="todo-item-drag-handle"
+          accessibilityLabel="Drag to reorder"
+        >
+          <Ionicons name="reorder-three" size={20} color="#999" />
+        </TouchableOpacity>
+      )}
       <TouchableOpacity
         onPress={editable ? onToggle : undefined}
         style={styles.checkbox}
@@ -65,6 +79,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 4,
     minHeight: 40,
+  },
+  dragHandle: {
+    padding: 4,
+    marginRight: 4,
   },
   checkbox: {
     padding: 4,
