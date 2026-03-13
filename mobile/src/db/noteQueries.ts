@@ -233,8 +233,12 @@ export async function replaceLocalNoteId(
   oldId: string,
   newNote: Note,
 ): Promise<void> {
-  await db.runAsync('DELETE FROM notes WHERE id = ?', [oldId]);
-  await saveNote(db, newNote);
+  // Wrap DELETE + INSERT in a single transaction so a mid-operation crash cannot
+  // leave the note permanently deleted without the new server ID being written.
+  await db.withTransactionAsync(async () => {
+    await db.runAsync('DELETE FROM notes WHERE id = ?', [oldId]);
+    await saveNoteInTx(db, newNote);
+  });
 }
 
 /** Generate a unique local ID for offline-created notes (prefixed so they are identifiable). */

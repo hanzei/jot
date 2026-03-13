@@ -126,6 +126,9 @@ export function useUpdateNote() {
 
       // Offline: update local DB and queue the server operation
       const existing = await getLocalNote(db, id);
+      if (!existing) {
+        throw new Error(`Note ${id} not found in local DB`);
+      }
       const now = new Date().toISOString();
       let updatedItems = existing?.items;
 
@@ -153,9 +156,6 @@ export function useUpdateNote() {
         body: data as Record<string, unknown>,
       });
 
-      if (!existing) {
-        throw new Error(`Note ${id} not found in local DB`);
-      }
       // Build optimistic return from the data we already have (no second DB read)
       return { ...existing, ...data, updated_at: now, items: updatedItems };
     },

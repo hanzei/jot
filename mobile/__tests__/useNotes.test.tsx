@@ -12,8 +12,12 @@ jest.mock('react-native', () => ({
 }));
 
 jest.mock('../src/hooks/useNetworkStatus', () => ({
-  useNetworkStatus: () => ({ isConnected: true }),
+  useNetworkStatus: jest.fn().mockReturnValue({ isConnected: true }),
 }));
+
+const mockUseNetworkStatus = (
+  jest.requireMock('../src/hooks/useNetworkStatus') as { useNetworkStatus: jest.Mock }
+).useNetworkStatus;
 
 jest.mock('../src/db/noteQueries', () => ({
   saveNote: jest.fn().mockResolvedValue(undefined),
@@ -49,6 +53,8 @@ function createWrapper() {
 describe('useNotes hooks', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    // Restore default online state after any test that changed it
+    mockUseNetworkStatus.mockReturnValue({ isConnected: true });
   });
 
   describe('useNotes', () => {
@@ -137,6 +143,26 @@ describe('useNotes hooks', () => {
       expect(result.current.data).toEqual(updated);
       expect(mockNotesApi.updateNote).toHaveBeenCalledWith('123', { title: 'Updated' });
       expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), updated);
+    });
+  });
+
+  describe('useUpdateNote (offline)', () => {
+    it('rejects and does not enqueue or write to DB when note is missing from local cache', async () => {
+      mockUseNetworkStatus.mockReturnValue({ isConnected: false });
+      mockNoteQueries.getLocalNote.mockResolvedValueOnce(null);
+
+      const { result } = renderHook(() => useUpdateNote(), { wrapper: createWrapper() });
+
+      await result.current.mutateAsync({ id: 'missing-id', data: { title: 'X' } }).catch(() => {});
+
+      await waitFor(() => expect(result.current.isError).toBe(true));
+
+      const { enqueueOperation } = jest.requireMock('../src/db/syncQueue') as { enqueueOperation: jest.Mock };
+      expect(result.current.error).toBeInstanceOf(Error);
+      expect((result.current.error as Error).message).toMatch(/not found in local DB/);
+      expect(enqueueOperation).not.toHaveBeenCalled();
+      expect(mockNoteQueries.updateLocalNote).not.toHaveBeenCalled();
+      expect(mockNoteQueries.saveNote).not.toHaveBeenCalled();
     });
   });
 

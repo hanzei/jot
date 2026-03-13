@@ -50,7 +50,9 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
       const connected = initial.isConnected === true && initial.isInternetReachable !== false;
       prevConnectedRef.current = connected;
       setIsConnected(connected);
-    }).catch(() => {});
+    }).catch((err) => {
+      console.warn('NetInfo.fetch failed, defaulting to online:', err);
+    });
 
     const unsubscribe = NetInfo.addEventListener((state) => {
       const connected = state.isConnected === true && state.isInternetReachable !== false;
