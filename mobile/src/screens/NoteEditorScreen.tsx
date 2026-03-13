@@ -15,7 +15,9 @@ import * as Haptics from 'expo-haptics';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useNote, useCreateNote, useUpdateNote, useDeleteNote } from '../hooks/useNotes';
+import { useCreateNote, useUpdateNote, useDeleteNote } from '../hooks/useNotes';
+import { useOfflineNote } from '../hooks/useOfflineNotes';
+import { isLocalId } from '../db/noteQueries';
 import { useSSESubscription } from '../store/SSEContext';
 import TodoItem from '../components/TodoItem';
 import ColorPicker from '../components/ColorPicker';
@@ -80,7 +82,7 @@ export default function NoteEditorScreen() {
   const [labelPickerVisible, setLabelPickerVisible] = useState(false);
   const [syncToast, setSyncToast] = useState<string | null>(null);
 
-  const { data: existingNote } = useNote(noteId);
+  const { data: existingNote } = useOfflineNote(noteId);
   const createMutation = useCreateNote();
   const updateMutation = useUpdateNote();
   const deleteMutation = useDeleteNote();
@@ -152,6 +154,16 @@ export default function NoteEditorScreen() {
       setLabels(existingNote.labels ?? []);
     }
   }, [existingNote?.labels]); // eslint-disable-line react-hooks/exhaustive-deps
+
+  // When the queue drains, OfflineContext sets the React Query cache for the old local
+  // ID to hold the server note. Detect this by checking whether the cached note's id
+  // now differs from the local ID we hold, and update noteId + route params accordingly.
+  useEffect(() => {
+    if (existingNote && noteId && existingNote.id !== noteId) {
+      setNoteId(existingNote.id);
+      navigation.setParams({ noteId: existingNote.id });
+    }
+  }, [existingNote?.id, noteId, navigation]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const flushSave = useCallback(async (unmounting = false) => {
     // Skip save if editing an existing note that hasn't hydrated yet
@@ -592,8 +604,8 @@ export default function NoteEditorScreen() {
           <Ionicons name="color-palette-outline" size={22} color="#444" />
         </TouchableOpacity>
 
-        {/* Label button (only when note exists) */}
-        {noteId && (
+        {/* Label button (only when note is saved and synced to server) */}
+        {noteId && !isLocalId(noteId) && (
           <TouchableOpacity
             onPress={() => setLabelPickerVisible(true)}
             style={styles.toolbarBtn}
@@ -604,7 +616,7 @@ export default function NoteEditorScreen() {
           </TouchableOpacity>
         )}
 
-        {/* Pin / Unpin */}
+        {/* Pin / Unpin (works offline via local DB + queue) */}
         {noteId && (
           <TouchableOpacity
             onPress={handleTogglePin}
@@ -616,7 +628,7 @@ export default function NoteEditorScreen() {
           </TouchableOpacity>
         )}
 
-        {/* Archive / Unarchive */}
+        {/* Archive / Unarchive (works offline via local DB + queue) */}
         {noteId && (
           <TouchableOpacity
             onPress={handleToggleArchive}
@@ -632,8 +644,8 @@ export default function NoteEditorScreen() {
           </TouchableOpacity>
         )}
 
-        {/* Share (only when note is saved, hydrated, and owned by current user) */}
-        {noteId && existingNote && !existingNote.is_shared && (
+        {/* Share (only when note is saved, synced, hydrated, and owned by current user) */}
+        {noteId && !isLocalId(noteId) && existingNote && !existingNote.is_shared && (
           <TouchableOpacity
             onPress={() => navigation.navigate('Share', { noteId })}
             style={styles.toolbarBtn}

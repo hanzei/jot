@@ -16,7 +16,8 @@ import * as Haptics from 'expo-haptics';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useNotes, useUpdateNote, useDeleteNote, useRestoreNote, usePermanentDeleteNote, useReorderNotes } from '../hooks/useNotes';
+import { useUpdateNote, useDeleteNote, useRestoreNote, usePermanentDeleteNote, useReorderNotes } from '../hooks/useNotes';
+import { useOfflineNotes } from '../hooks/useOfflineNotes';
 import { useLabels } from '../hooks/useLabels';
 import NoteCard from '../components/NoteCard';
 import NoteContextMenu, { ContextMenuViewContext } from '../components/NoteContextMenu';
@@ -65,7 +66,7 @@ export default function NotesListScreen({ variant = 'notes' }: NotesListScreenPr
     label: variant === 'notes' ? selectedLabelId : undefined,
   }), [variant, debouncedSearch, selectedLabelId]);
 
-  const { data: notes, isLoading, isError, refetch, isRefetching } = useNotes(params);
+  const { data: notes, isLoading, isError, refetch, isRefetching } = useOfflineNotes(params);
   const { data: allLabels } = useLabels();
   const updateNote = useUpdateNote();
   const deleteNote = useDeleteNote();
