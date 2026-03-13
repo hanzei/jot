@@ -12,6 +12,8 @@ import {
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAuth } from '../store/AuthContext';
 import { AuthStackParamList } from '../navigation/AuthStack';
+import { restoreServerUrl, setServerUrl as configureServerUrl } from '../api/client';
+import { useServerUrl } from '../hooks/useServerUrl';
 
 type LoginScreenProps = {
   navigation: NativeStackNavigationProp<AuthStackParamList, 'Login'>;
@@ -19,12 +21,18 @@ type LoginScreenProps = {
 
 export default function LoginScreen({ navigation }: LoginScreenProps) {
   const { login } = useAuth();
+  const { serverUrl, setServerUrl, validateServerUrl } = useServerUrl();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
+    const urlError = validateServerUrl(serverUrl);
+    if (urlError) {
+      setError(urlError);
+      return;
+    }
     if (!username.trim() || !password.trim()) {
       setError('Username and password are required');
       return;
@@ -33,7 +41,9 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
     setError('');
     setLoading(true);
     try {
+      restoreServerUrl(serverUrl.trim());
       await login(username.trim(), password);
+      await configureServerUrl(serverUrl.trim());
     } catch (err: unknown) {
       const message =
         (err as { response?: { data?: string } })?.response?.data || 'Invalid credentials';
@@ -53,6 +63,18 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
         <Text style={styles.subtitle}>Sign in to your account</Text>
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
+
+        <TextInput
+          style={styles.input}
+          placeholder="Server URL"
+          autoCapitalize="none"
+          autoCorrect={false}
+          keyboardType="url"
+          value={serverUrl}
+          onChangeText={setServerUrl}
+          accessibilityLabel="Server URL"
+          testID="server-url-input"
+        />
 
         <TextInput
           style={styles.input}

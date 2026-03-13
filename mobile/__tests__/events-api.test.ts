@@ -4,10 +4,10 @@ jest.mock('react-native', () => ({
   Platform: { OS: 'ios' },
 }));
 
-// Mock the client module to provide getStoredSession and BASE_URL
+// Mock the client module to provide getStoredSession and getBaseUrl
 jest.mock('../src/api/client', () => ({
   getStoredSession: jest.fn(),
-  BASE_URL: 'http://localhost:8080',
+  getBaseUrl: jest.fn().mockReturnValue('http://localhost:8080'),
 }));
 
 import { getStoredSession } from '../src/api/client';

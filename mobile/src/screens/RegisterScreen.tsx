@@ -12,6 +12,8 @@ import {
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAuth } from '../store/AuthContext';
 import { AuthStackParamList } from '../navigation/AuthStack';
+import { restoreServerUrl, setServerUrl as configureServerUrl } from '../api/client';
+import { useServerUrl } from '../hooks/useServerUrl';
 
 type RegisterScreenProps = {
   navigation: NativeStackNavigationProp<AuthStackParamList, 'Register'>;
@@ -19,12 +21,15 @@ type RegisterScreenProps = {
 
 export default function RegisterScreen({ navigation }: RegisterScreenProps) {
   const { register } = useAuth();
+  const { serverUrl, setServerUrl, validateServerUrl } = useServerUrl();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
   const validate = (): string | null => {
+    const urlError = validateServerUrl(serverUrl);
+    if (urlError) return urlError;
     if (!username.trim()) return 'Username is required';
     if (username.trim().length < 2 || username.trim().length > 30) {
       return 'Username must be 2-30 characters';
@@ -44,7 +49,9 @@ export default function RegisterScreen({ navigation }: RegisterScreenProps) {
     setError('');
     setLoading(true);
     try {
+      restoreServerUrl(serverUrl.trim());
       await register(username.trim(), password);
+      await configureServerUrl(serverUrl.trim());
     } catch (err: unknown) {
       const message =
         (err as { response?: { data?: string } })?.response?.data || 'Registration failed';
@@ -63,6 +70,18 @@ export default function RegisterScreen({ navigation }: RegisterScreenProps) {
         <Text style={styles.title}>Create Account</Text>
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
+
+        <TextInput
+          style={styles.input}
+          placeholder="Server URL"
+          autoCapitalize="none"
+          autoCorrect={false}
+          keyboardType="url"
+          value={serverUrl}
+          onChangeText={setServerUrl}
+          accessibilityLabel="Server URL"
+          testID="server-url-input"
+        />
 
         <TextInput
           style={styles.input}
