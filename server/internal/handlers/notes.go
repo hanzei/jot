@@ -166,7 +166,9 @@ func (h *NotesHandler) CreateNote(w http.ResponseWriter, r *http.Request) (int, 
 		return http.StatusBadRequest, errors.New("empty note")
 	}
 
-	if req.NoteType == "" {
+	if len(req.Items) > 0 {
+		req.NoteType = models.NoteTypeTodo
+	} else if req.NoteType == "" {
 		req.NoteType = models.NoteTypeText
 	}
 
@@ -556,7 +558,7 @@ func (h *NotesHandler) ShareNote(w http.ResponseWriter, r *http.Request) (int, e
 
 	err = h.noteStore.ShareNote(id, user.ID, targetUser.ID)
 	if err != nil {
-		if strings.Contains(err.Error(), "UNIQUE constraint failed: note_shares.note_id, note_shares.shared_with_user_id") {
+		if errors.Is(err, models.ErrNoteAlreadyShared) {
 			return http.StatusConflict, err
 		}
 		return http.StatusInternalServerError, err
@@ -823,8 +825,14 @@ func (h *NotesHandler) importKeepNote(userID string, kn keepNote) error {
 	return nil
 }
 
+const (
+	keepImportMaxEntrySize = 1 << 20  // 1 MB per zip entry
+	keepImportMaxTotalSize = 64 << 20 // 64 MB total decompressed
+)
+
 func parseKeepNotesFromZip(zr *zip.Reader) []keepNote {
 	var notes []keepNote
+	var totalRead int64
 	for _, f := range zr.File {
 		if !strings.HasSuffix(strings.ToLower(f.Name), ".json") {
 			continue
@@ -833,10 +841,15 @@ func parseKeepNotesFromZip(zr *zip.Reader) []keepNote {
 		if err != nil {
 			continue
 		}
-		jsonData, err := io.ReadAll(rc)
+		lr := &io.LimitedReader{R: rc, N: keepImportMaxEntrySize + 1}
+		jsonData, err := io.ReadAll(lr)
 		_ = rc.Close()
-		if err != nil {
-			continue
+		if err != nil || lr.N == 0 {
+			continue // read error or entry exceeded per-entry limit
+		}
+		totalRead += int64(len(jsonData))
+		if totalRead > keepImportMaxTotalSize {
+			break
 		}
 		var kn keepNote
 		if err := json.Unmarshal(jsonData, &kn); err != nil {

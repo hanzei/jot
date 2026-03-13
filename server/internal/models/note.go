@@ -2,12 +2,13 @@ package models
 
 import (
 	"crypto/rand"
-	"strings"
 	"database/sql"
 	"errors"
 	"fmt"
+	"strings"
 	"time"
 
+	sqlite3 "github.com/mattn/go-sqlite3"
 	"github.com/sirupsen/logrus"
 )
 
@@ -25,6 +26,7 @@ var ErrNoteNotFound = errors.New("note not found")
 var ErrNoteNotOwnedByUser = errors.New("note not found or not owned by user")
 var ErrNoteNotInTrash = errors.New("note not found in trash or not owned by user")
 var ErrNoteShareNotFound = errors.New("note share not found")
+var ErrNoteAlreadyShared = errors.New("note already shared with user")
 
 type Label struct {
 	ID        string    `json:"id"`
@@ -663,6 +665,10 @@ func (s *NoteStore) ShareNote(noteID string, sharedByUserID, sharedWithUserID st
 
 	_, err = s.db.Exec(query, shareID, noteID, sharedWithUserID, sharedByUserID)
 	if err != nil {
+		var sqliteErr sqlite3.Error
+		if errors.As(err, &sqliteErr) && sqliteErr.ExtendedCode == sqlite3.ErrConstraintUnique {
+			return ErrNoteAlreadyShared
+		}
 		return fmt.Errorf("failed to share note: %w", err)
 	}
 
