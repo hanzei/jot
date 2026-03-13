@@ -57,6 +57,12 @@ Thumbs.db
 *.sqlite
 *.sqlite3
 
+# Mobile build artifacts
+mobile/android/
+mobile/ios/
+google-services.json
+release.keystore
+
 # Playwright test artifacts
 webapp/playwright-report/
 webapp/test-results/
