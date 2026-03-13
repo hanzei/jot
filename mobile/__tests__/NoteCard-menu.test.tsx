@@ -41,14 +41,16 @@ describe('NoteCard menu button', () => {
     expect(queryByTestId('note-menu-note-1')).toBeNull();
   });
 
-  it('calls onMenuPress when menu button is pressed', () => {
+  it('calls onMenuPress when menu button is pressed (not onPress)', () => {
+    const onPress = jest.fn();
     const onMenuPress = jest.fn();
     const { getByTestId } = render(
-      <NoteCard note={baseNote} onPress={jest.fn()} onMenuPress={onMenuPress} />,
+      <NoteCard note={baseNote} onPress={onPress} onMenuPress={onMenuPress} />,
     );
 
     fireEvent.press(getByTestId('note-menu-note-1'));
     expect(onMenuPress).toHaveBeenCalledTimes(1);
+    expect(onPress).not.toHaveBeenCalled();
   });
 
   it('calls onPress when card is tapped (not the menu)', () => {

@@ -67,6 +67,7 @@ function NoteCard({ note, onPress, onLongPress, onMenuPress }: NoteCardProps) {
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             testID={`note-menu-${note.id}`}
             accessibilityLabel="Note menu"
+            accessibilityRole="button"
           >
             <Ionicons name="ellipsis-vertical" size={18} color="#999" />
           </TouchableOpacity>
