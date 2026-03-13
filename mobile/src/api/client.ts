@@ -48,7 +48,7 @@ export async function setServerUrl(url: string): Promise<void> {
   } catch {
     throw new Error(`Invalid server URL: ${normalized}`);
   }
-  applyServerUrl(url);
+  applyServerUrl(normalized);
   await SecureStore.setItemAsync(SERVER_URL_KEY, normalized);
 }
 
