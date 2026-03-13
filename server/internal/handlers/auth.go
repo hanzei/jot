@@ -49,6 +49,17 @@ type AuthResponse struct {
 	Settings *models.UserSettings `json:"settings"`
 }
 
+// Register godoc
+//
+//	@Summary	Register a new user
+//	@Tags		auth
+//	@Accept		json
+//	@Produce	json
+//	@Param		body	body		RegisterRequest	true	"Registration credentials"
+//	@Success	201		{object}	AuthResponse
+//	@Failure	400		{string}	string	"bad request"
+//	@Failure	409		{string}	string	"username already taken"
+//	@Router		/register [post]
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) (int, error) {
 	var req RegisterRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -94,6 +105,17 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) (int, err
 	return 0, nil
 }
 
+// Login godoc
+//
+//	@Summary	Authenticate a user
+//	@Tags		auth
+//	@Accept		json
+//	@Produce	json
+//	@Param		body	body		LoginRequest	true	"Login credentials"
+//	@Success	200		{object}	AuthResponse
+//	@Failure	400		{string}	string	"missing username or password"
+//	@Failure	401		{string}	string	"invalid username or password"
+//	@Router		/login [post]
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) (int, error) {
 	var req LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
@@ -140,6 +162,14 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) (int, error)
 	return 0, nil
 }
 
+// Logout godoc
+//
+//	@Summary	Log out the current user
+//	@Tags		auth
+//	@Security	CookieAuth
+//	@Success	204	"no content"
+//	@Failure	500	{string}	string	"internal server error"
+//	@Router		/logout [post]
 func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) (int, error) {
 	if err := h.sessionService.DeleteSession(w, r); err != nil {
 		return http.StatusInternalServerError, err
@@ -155,10 +185,19 @@ type UpdateUserRequest struct {
 	LastName  string `json:"last_name"`
 }
 
-// UpdateUser handles PUT /api/v1/users/me. It validates the requested username,
-// updates it in the database, and returns the updated user object. Returns 400
-// for invalid format, 409 when the username is already taken, and 401 when the
-// caller is not authenticated.
+// UpdateUser godoc
+//
+//	@Summary	Update the current user's profile
+//	@Tags		auth
+//	@Security	CookieAuth
+//	@Accept		json
+//	@Produce	json
+//	@Param		body	body		UpdateUserRequest	true	"Profile update"
+//	@Success	200		{object}	AuthResponse
+//	@Failure	400		{string}	string	"bad request"
+//	@Failure	401		{string}	string	"unauthorized"
+//	@Failure	409		{string}	string	"username already taken"
+//	@Router		/users/me [put]
 func (h *AuthHandler) UpdateUser(w http.ResponseWriter, r *http.Request) (int, error) {
 	currentUser, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
@@ -196,6 +235,18 @@ type ChangePasswordRequest struct {
 	NewPassword     string `json:"new_password"`
 }
 
+// ChangePassword godoc
+//
+//	@Summary	Change the current user's password
+//	@Tags		auth
+//	@Security	CookieAuth
+//	@Accept		json
+//	@Param		body	body	ChangePasswordRequest	true	"Password change"
+//	@Success	204		"no content"
+//	@Failure	400		{string}	string	"bad request"
+//	@Failure	401		{string}	string	"unauthorized"
+//	@Failure	403		{string}	string	"current password is incorrect"
+//	@Router		/users/me/password [put]
 func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) (int, error) {
 	currentUser, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
@@ -244,6 +295,15 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) (in
 	return 0, nil
 }
 
+// Me godoc
+//
+//	@Summary	Get the current authenticated user
+//	@Tags		auth
+//	@Security	CookieAuth
+//	@Produce	json
+//	@Success	200	{object}	AuthResponse
+//	@Failure	401	{string}	string	"unauthorized"
+//	@Router		/me [get]
 func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) (int, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
@@ -275,7 +335,15 @@ type UpdateSettingsRequest struct {
 var validLanguages = map[string]bool{"system": true, "en": true, "de": true}
 var validThemes = map[string]bool{"system": true, "light": true, "dark": true}
 
-// GetSettings handles GET /api/v1/users/me/settings.
+// GetSettings godoc
+//
+//	@Summary	Get the current user's settings
+//	@Tags		auth
+//	@Security	CookieAuth
+//	@Produce	json
+//	@Success	200	{object}	models.UserSettings
+//	@Failure	401	{string}	string	"unauthorized"
+//	@Router		/users/me/settings [get]
 func (h *AuthHandler) GetSettings(w http.ResponseWriter, r *http.Request) (int, error) {
 	currentUser, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
@@ -294,7 +362,18 @@ func (h *AuthHandler) GetSettings(w http.ResponseWriter, r *http.Request) (int, 
 	return 0, nil
 }
 
-// UpdateSettings handles PUT /api/v1/users/me/settings.
+// UpdateSettings godoc
+//
+//	@Summary	Update the current user's settings
+//	@Tags		auth
+//	@Security	CookieAuth
+//	@Accept		json
+//	@Produce	json
+//	@Param		body	body		UpdateSettingsRequest	true	"Settings update"
+//	@Success	200		{object}	models.UserSettings
+//	@Failure	400		{string}	string	"bad request"
+//	@Failure	401		{string}	string	"unauthorized"
+//	@Router		/users/me/settings [put]
 func (h *AuthHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) (int, error) {
 	currentUser, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
@@ -435,9 +514,18 @@ func resizeImage(data []byte) ([]byte, error) {
 	return buf.Bytes(), nil
 }
 
-// UploadProfileIcon handles POST /api/v1/users/me/profile-icon.
-// It accepts a multipart form with a single "file" field (max 5 MB, images only),
-// stores the image in the database, and returns the updated User.
+// UploadProfileIcon godoc
+//
+//	@Summary	Upload a profile icon for the current user
+//	@Tags		auth
+//	@Security	CookieAuth
+//	@Accept		multipart/form-data
+//	@Produce	json
+//	@Param		file	formData	file			true	"Profile icon image (JPEG, PNG or WebP, max 5 MB)"
+//	@Success	200		{object}	models.User
+//	@Failure	400		{string}	string	"bad request"
+//	@Failure	401		{string}	string	"unauthorized"
+//	@Router		/users/me/profile-icon [post]
 func (h *AuthHandler) UploadProfileIcon(w http.ResponseWriter, r *http.Request) (int, error) {
 	currentUser, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
@@ -489,7 +577,14 @@ func (h *AuthHandler) UploadProfileIcon(w http.ResponseWriter, r *http.Request) 
 	return 0, nil
 }
 
-// DeleteProfileIcon handles DELETE /api/v1/users/me/profile-icon.
+// DeleteProfileIcon godoc
+//
+//	@Summary	Delete the current user's profile icon
+//	@Tags		auth
+//	@Security	CookieAuth
+//	@Success	204	"no content"
+//	@Failure	401	{string}	string	"unauthorized"
+//	@Router		/users/me/profile-icon [delete]
 func (h *AuthHandler) DeleteProfileIcon(w http.ResponseWriter, r *http.Request) (int, error) {
 	currentUser, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
@@ -504,7 +599,17 @@ func (h *AuthHandler) DeleteProfileIcon(w http.ResponseWriter, r *http.Request) 
 	return 0, nil
 }
 
-// GetUserProfileIcon handles GET /api/v1/users/{id}/profile-icon.
+// GetUserProfileIcon godoc
+//
+//	@Summary	Get a user's profile icon
+//	@Tags		users
+//	@Security	CookieAuth
+//	@Produce	image/jpeg
+//	@Param		id	path		string	true	"User ID"
+//	@Success	200	{file}		binary	"JPEG image"
+//	@Failure	401	{string}	string	"unauthorized"
+//	@Failure	404	{string}	string	"not found"
+//	@Router		/users/{id}/profile-icon [get]
 func (h *AuthHandler) GetUserProfileIcon(w http.ResponseWriter, r *http.Request) (int, error) {
 	id := chi.URLParam(r, "id")
 

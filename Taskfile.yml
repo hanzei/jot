@@ -75,9 +75,15 @@ tasks:
     dir: mobile
     cmd: npm run lint && npm run typecheck
 
+  gen-docs:
+    desc: Regenerate Swagger API docs (requires swag CLI)
+    dir: server
+    cmd: swag init --generalInfo main.go --output docs --parseDependency --parseInternal
+
   clean:
     desc: Remove generated files and node packages
     cmds:
       - rm -rf webapp/build webapp/node_modules
       - rm -rf mobile/node_modules
       - rm -f server/jot server/coverage.out server/coverage.html
+      - rm -rf server/docs

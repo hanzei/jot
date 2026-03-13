@@ -19,6 +19,7 @@ import (
 	"github.com/hanzei/jot/server/internal/models"
 	"github.com/hanzei/jot/server/internal/sse"
 	"github.com/sirupsen/logrus"
+	httpSwagger "github.com/swaggo/http-swagger/v2"
 )
 
 func buildInfo() aboutResponse {
@@ -177,6 +178,9 @@ func (s *Server) setupRoutes() {
 		})
 	})
 
+	// Swagger UI at /api/docs/
+	s.router.Get("/api/docs/*", httpSwagger.WrapHandler)
+
 	// Serve static files from webapp build directory
 	staticDir := os.Getenv("STATIC_DIR")
 	if staticDir == "" {
@@ -270,6 +274,14 @@ type aboutResponse struct {
 	GoVersion string `json:"go_version,omitempty"`
 }
 
+// handleAbout godoc
+//
+//	@Summary	Get server version and build info
+//	@Tags		system
+//	@Security	CookieAuth
+//	@Produce	json
+//	@Success	200	{object}	aboutResponse
+//	@Router		/about [get]
 func (s *Server) handleAbout(w http.ResponseWriter, _ *http.Request) (int, error) {
 	resp := buildInfo()
 
