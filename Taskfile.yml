@@ -86,4 +86,3 @@ tasks:
       - rm -rf webapp/build webapp/node_modules
       - rm -rf mobile/node_modules
       - rm -f server/jot server/coverage.out server/coverage.html
-      - rm -rf server/docs
