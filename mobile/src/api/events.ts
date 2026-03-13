@@ -1,5 +1,5 @@
 import EventSource from 'react-native-sse';
-import { BASE_URL, getStoredSession } from './client';
+import { getBaseUrl, getStoredSession } from './client';
 import { SSEEvent } from '../types';
 
 const BASE_RECONNECT_DELAY_MS = 3000;
@@ -32,7 +32,7 @@ export class SSEConnectionManager {
       // Re-check after async gap — disconnect() may have been called
       if (this.closed || !token) return;
 
-      const url = `${BASE_URL}/api/v1/events`;
+      const url = `${getBaseUrl()}/api/v1/events`;
       this.es = new EventSource(url, {
         headers: {
           Cookie: `jot_session=${token}`,

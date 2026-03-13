@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAuth } from '../store/AuthContext';
 import { AuthStackParamList } from '../navigation/AuthStack';
+import { getBaseUrl, getStoredServerUrl, setServerUrl as configureServerUrl } from '../api/client';
 
 type LoginScreenProps = {
   navigation: NativeStackNavigationProp<AuthStackParamList, 'Login'>;
@@ -19,12 +20,27 @@ type LoginScreenProps = {
 
 export default function LoginScreen({ navigation }: LoginScreenProps) {
   const { login } = useAuth();
+  const [serverUrl, setServerUrl] = useState('');
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
+  useEffect(() => {
+    getStoredServerUrl()
+      .then((stored) => setServerUrl(stored ?? getBaseUrl()))
+      .catch(() => setServerUrl(getBaseUrl()));
+  }, []);
+
   const handleLogin = async () => {
+    if (!serverUrl.trim()) {
+      setError('Server URL is required');
+      return;
+    }
+    if (!/^https?:\/\/.+/.test(serverUrl.trim())) {
+      setError('Server URL must start with http:// or https://');
+      return;
+    }
     if (!username.trim() || !password.trim()) {
       setError('Username and password are required');
       return;
@@ -33,6 +49,7 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
     setError('');
     setLoading(true);
     try {
+      await configureServerUrl(serverUrl.trim());
       await login(username.trim(), password);
     } catch (err: unknown) {
       const message =
@@ -53,6 +70,18 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
         <Text style={styles.subtitle}>Sign in to your account</Text>
 
         {error ? <Text style={styles.error}>{error}</Text> : null}
+
+        <TextInput
+          style={styles.input}
+          placeholder="Server URL"
+          autoCapitalize="none"
+          autoCorrect={false}
+          keyboardType="url"
+          value={serverUrl}
+          onChangeText={setServerUrl}
+          accessibilityLabel="Server URL"
+          testID="server-url-input"
+        />
 
         <TextInput
           style={styles.input}

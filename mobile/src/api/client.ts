@@ -4,6 +4,7 @@ import { Platform } from 'react-native';
 import { AuthResponse, LoginRequest, RegisterRequest } from '../types';
 
 const SESSION_KEY = 'jot_session';
+const SERVER_URL_KEY = 'jot_server_url';
 
 function getDefaultBaseUrl(): string {
   if (Platform.OS === 'android') {
@@ -12,13 +13,38 @@ function getDefaultBaseUrl(): string {
   return 'http://localhost:8080';
 }
 
-export const BASE_URL = process.env.EXPO_PUBLIC_API_URL || getDefaultBaseUrl();
+let currentBaseUrl = process.env.EXPO_PUBLIC_API_URL || getDefaultBaseUrl();
+
+export function getBaseUrl(): string {
+  return currentBaseUrl;
+}
+
+export async function getStoredServerUrl(): Promise<string | null> {
+  return SecureStore.getItemAsync(SERVER_URL_KEY);
+}
 
 const api = axios.create({
-  baseURL: `${BASE_URL}/api/v1`,
+  baseURL: `${currentBaseUrl}/api/v1`,
   timeout: 15000,
   headers: { 'Content-Type': 'application/json' },
 });
+
+function applyServerUrl(url: string): string {
+  const normalized = url.replace(/\/+$/, '');
+  currentBaseUrl = normalized;
+  api.defaults.baseURL = `${normalized}/api/v1`;
+  return normalized;
+}
+
+/** Updates the in-memory base URL without writing to storage (used on session restore). */
+export function restoreServerUrl(url: string): void {
+  applyServerUrl(url);
+}
+
+export async function setServerUrl(url: string): Promise<void> {
+  const normalized = applyServerUrl(url);
+  await SecureStore.setItemAsync(SERVER_URL_KEY, normalized);
+}
 
 function extractSessionCookie(setCookieHeader: string | string[] | undefined): string | null {
   if (!setCookieHeader) return null;

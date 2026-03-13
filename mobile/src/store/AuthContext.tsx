@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import { User, UserSettings } from '../types';
-import { auth, getStoredSession, clearStoredSession, setOnUnauthorized } from '../api/client';
+import { auth, getStoredSession, clearStoredSession, setOnUnauthorized, getStoredServerUrl, restoreServerUrl } from '../api/client';
 
 interface AuthState {
   user: User | null;
@@ -41,6 +41,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     async function restoreSession() {
       try {
+        const storedUrl = await getStoredServerUrl();
+        if (storedUrl) restoreServerUrl(storedUrl);
         const token = await getStoredSession();
         if (!token) {
           return;

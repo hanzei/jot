@@ -1,6 +1,6 @@
 import React, { useState } from 'react';
 import { View, Text, Image, StyleSheet } from 'react-native';
-import { BASE_URL } from '../api/client';
+import { getBaseUrl } from '../api/client';
 
 const AVATAR_COLORS = [
   '#f28b82',
@@ -45,7 +45,7 @@ export default function UserAvatar({ userId, username, hasProfileIcon, size = 'm
   if (hasProfileIcon && !imageError) {
     return (
       <Image
-        source={{ uri: `${BASE_URL}/api/v1/users/${userId}/profile-icon` }}
+        source={{ uri: `${getBaseUrl()}/api/v1/users/${userId}/profile-icon` }}
         style={[styles.avatar, { width: dimension, height: dimension, borderRadius: dimension / 2 }]}
         onError={() => setImageError(true)}
       />
