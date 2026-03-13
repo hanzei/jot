@@ -64,6 +64,7 @@ task lint-server           # Run server linting with golangci-lint
 task lint-webapp           # Run webapp linting
 task lint-mobile           # Run mobile app linting
 task check-translations    # Check locale files for missing/extra keys
+task gen-docs              # Regenerate Swagger API docs (requires swag CLI)
 task clean               # Remove generated files and node packages
 ```
    
@@ -104,24 +105,54 @@ STATIC_DIR=../webapp/build/         # Frontend build directory (optional)
 
 ## API Endpoints
 
-All API endpoints are prefixed with `/api/v1/`:
+All API endpoints are prefixed with `/api/v1/`. The full interactive API reference is available via Swagger UI at `http://localhost:8080/api/docs/index.html` when the server is running.
 
 ### Authentication
 - `POST /api/v1/register` - Register new user (sets session cookie)
 - `POST /api/v1/login` - Login user (sets session cookie)
 - `POST /api/v1/logout` - Logout and invalidate session
 - `GET /api/v1/me` - Get current authenticated user
+- `PUT /api/v1/users/me` - Update profile (username, first/last name)
+- `PUT /api/v1/users/me/password` - Change password
+- `GET /api/v1/users/me/settings` - Get user settings
+- `PUT /api/v1/users/me/settings` - Update user settings
+- `POST /api/v1/users/me/profile-icon` - Upload profile icon
+- `DELETE /api/v1/users/me/profile-icon` - Delete profile icon
+- `GET /api/v1/users/{id}/profile-icon` - Get a user's profile icon
 
 ### Notes (Requires Authentication)
-- `GET /api/v1/notes` - List user's notes
-  - Query params: `archived=true/false`, `search=query`
+- `GET /api/v1/notes` - List user's notes (query params: `archived`, `trashed`, `search`, `label`)
 - `POST /api/v1/notes` - Create new note
 - `GET /api/v1/notes/{id}` - Get specific note
 - `PUT /api/v1/notes/{id}` - Update note (title, content, pin, archive, color)
-- `DELETE /api/v1/notes/{id}` - Delete note
+- `DELETE /api/v1/notes/{id}` - Move note to trash
+- `POST /api/v1/notes/{id}/restore` - Restore note from trash
+- `DELETE /api/v1/notes/{id}/permanent` - Permanently delete note from trash
+- `POST /api/v1/notes/reorder` - Reorder notes
+- `POST /api/v1/notes/import` - Import from Google Keep export
+
+### Sharing (Requires Authentication)
+- `POST /api/v1/notes/{id}/share` - Share note with a user
+- `DELETE /api/v1/notes/{id}/share` - Remove a share
+- `GET /api/v1/notes/{id}/shares` - List users a note is shared with
+
+### Labels (Requires Authentication)
+- `GET /api/v1/labels` - List all labels
+- `POST /api/v1/notes/{id}/labels` - Add label to note
+- `DELETE /api/v1/notes/{id}/labels/{label_id}` - Remove label from note
+
+### Users (Requires Authentication)
+- `GET /api/v1/users` - List users (for share target search)
+
+### Admin (Requires Admin Role)
+- `GET /api/v1/admin/users` - List all users
+- `POST /api/v1/admin/users` - Create a user
+- `PUT /api/v1/admin/users/{id}/role` - Update user role
+- `DELETE /api/v1/admin/users/{id}` - Delete a user
 
 ### System
 - `GET /health` - Server health check
+- `GET /api/v1/about` - Server version and build info
 
 ### Example API Usage
 
