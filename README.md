@@ -103,73 +103,9 @@ PORT=8080                           # Server port (optional)
 STATIC_DIR=../webapp/build/         # Frontend build directory (optional)
 ```
 
-## API Endpoints
+## API Reference
 
-All API endpoints are prefixed with `/api/v1/`. The full interactive API reference is available via Swagger UI at `http://localhost:8080/api/docs/index.html` when the server is running.
-
-### Authentication
-- `POST /api/v1/register` - Register new user (sets session cookie)
-- `POST /api/v1/login` - Login user (sets session cookie)
-- `POST /api/v1/logout` - Logout and invalidate session
-- `GET /api/v1/me` - Get current authenticated user
-- `PUT /api/v1/users/me` - Update profile (username, first/last name)
-- `PUT /api/v1/users/me/password` - Change password
-- `GET /api/v1/users/me/settings` - Get user settings
-- `PUT /api/v1/users/me/settings` - Update user settings
-- `POST /api/v1/users/me/profile-icon` - Upload profile icon
-- `DELETE /api/v1/users/me/profile-icon` - Delete profile icon
-- `GET /api/v1/users/{id}/profile-icon` - Get a user's profile icon
-
-### Notes (Requires Authentication)
-- `GET /api/v1/notes` - List user's notes (query params: `archived`, `trashed`, `search`, `label`)
-- `POST /api/v1/notes` - Create new note
-- `GET /api/v1/notes/{id}` - Get specific note
-- `PUT /api/v1/notes/{id}` - Update note (title, content, pin, archive, color)
-- `DELETE /api/v1/notes/{id}` - Move note to trash
-- `POST /api/v1/notes/{id}/restore` - Restore note from trash
-- `DELETE /api/v1/notes/{id}/permanent` - Permanently delete note from trash
-- `POST /api/v1/notes/reorder` - Reorder notes
-- `POST /api/v1/notes/import` - Import from Google Keep export
-
-### Sharing (Requires Authentication)
-- `POST /api/v1/notes/{id}/share` - Share note with a user
-- `DELETE /api/v1/notes/{id}/share` - Remove a share
-- `GET /api/v1/notes/{id}/shares` - List users a note is shared with
-
-### Labels (Requires Authentication)
-- `GET /api/v1/labels` - List all labels
-- `POST /api/v1/notes/{id}/labels` - Add label to note
-- `DELETE /api/v1/notes/{id}/labels/{label_id}` - Remove label from note
-
-### Users (Requires Authentication)
-- `GET /api/v1/users` - List users (for share target search)
-
-### Admin (Requires Admin Role)
-- `GET /api/v1/admin/users` - List all users
-- `POST /api/v1/admin/users` - Create a user
-- `PUT /api/v1/admin/users/{id}/role` - Update user role
-- `DELETE /api/v1/admin/users/{id}` - Delete a user
-
-### System
-- `GET /health` - Server health check
-- `GET /api/v1/about` - Server version and build info
-
-### Example API Usage
-
-```bash
-# Register user (session cookie is set automatically)
-curl -c cookies.txt -X POST http://localhost:8080/api/v1/register \
-  -H "Content-Type: application/json" \
-  -d '{"username":"myuser","password":"password123"}'
-
-# Create note (using session cookie)
-curl -b cookies.txt -X POST http://localhost:8080/api/v1/notes \
-  -H "Content-Type: application/json" \
-  -d '{"title":"My Note","content":"Note content","note_type":"text"}'
-
-# Logout
-curl -b cookies.txt -X POST http://localhost:8080/api/v1/logout
-```
+The full interactive API reference is available via Swagger UI at `http://localhost:8080/api/docs/index.html` when the server is running.
 
 ## Building for Production
 
