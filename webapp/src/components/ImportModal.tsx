@@ -124,6 +124,7 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
             )}
 
             <div
+              data-testid="import-dropzone"
               className="border-2 border-dashed border-gray-300 dark:border-slate-600 rounded-lg p-6 text-center cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 transition-colors"
               onClick={() => fileInputRef.current?.click()}
               onDrop={handleDrop}
