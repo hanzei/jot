@@ -49,3 +49,26 @@ jobs:
 
       - name: Run linters
         run: task lint-server
+
+  docs:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Go
+        uses: actions/setup-go@v6
+        with:
+          go-version: "1.24"
+          cache-dependency-path: server/go.sum
+
+      - name: Install swag
+        run: go install github.com/swaggo/swag/cmd/swag@latest
+
+      - name: Install Task
+        run: sh -c "$(curl -fsSL https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
+
+      - name: Regenerate docs
+        run: task gen-docs
+
+      - name: Check docs are up to date
+        run: git diff --exit-code server/docs/
