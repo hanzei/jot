@@ -25,7 +25,7 @@
     "expo-sqlite": "~55.0.0",
     "@react-native-community/netinfo": "~12.0.0",
     "react": "19.2.3",
-    "react-native": "0.84.1",
+    "react-native": "0.83.2",
     "react-native-draggable-flatlist": "^4.0.3",
     "react-native-gesture-handler": "~2.30.0",
     "react-native-reanimated": "~4.2.0",
