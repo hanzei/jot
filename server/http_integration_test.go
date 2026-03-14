@@ -163,10 +163,11 @@ func (ts *TestServer) authRequest(t *testing.T, user *TestUser, method, path str
 func TestProbeEndpoints(t *testing.T) {
 	ts := setupTestServer(t)
 
-	t.Run("health endpoint removed", func(t *testing.T) {
+	t.Run("health path falls back to spa", func(t *testing.T) {
 		resp := ts.request(t, nil, http.MethodGet, "/health", nil)
 
-		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		assert.Contains(t, resp.GetString(), "jot test app")
 	})
 
 	t.Run("livez endpoint", func(t *testing.T) {

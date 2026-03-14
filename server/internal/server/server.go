@@ -225,8 +225,8 @@ func FileServer(r chi.Router, path string, root http.FileSystem) {
 			requestedFile = "/"
 		}
 		trimmedPath := strings.TrimSuffix(requestedFile, "/")
-		// Probe paths intentionally do not exist under /api/v1 or /health.
-		if trimmedPath == "/health" || trimmedPath == "/api/v1/livez" || trimmedPath == "/api/v1/readyz" {
+		// Probe paths intentionally do not exist under /api/v1.
+		if trimmedPath == "/api/v1/livez" || trimmedPath == "/api/v1/readyz" {
 			http.NotFound(w, req)
 			return
 		}
