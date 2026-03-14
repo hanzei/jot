@@ -47,9 +47,9 @@ func TestReorderNotesEndpoint(t *testing.T) {
 		assert.Equal(t, note3, notes[0]["id"])
 		assert.Equal(t, note1, notes[1]["id"])
 		assert.Equal(t, note2, notes[2]["id"])
-		assert.Equal(t, float64(0), notes[0]["position"])
-		assert.Equal(t, float64(1), notes[1]["position"])
-		assert.Equal(t, float64(2), notes[2]["position"])
+		assert.Equal(t, 0, int(notes[0]["position"].(float64)))
+		assert.Equal(t, 1, int(notes[1]["position"].(float64)))
+		assert.Equal(t, 2, int(notes[2]["position"].(float64)))
 	})
 
 	t.Run("empty note ID list returns 400", func(t *testing.T) {
