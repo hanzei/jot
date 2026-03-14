@@ -91,17 +91,19 @@ func TestRemoveLabelEndpoint(t *testing.T) {
 	user := ts.createTestUser(t, "label-remove-user", "password123", false)
 	other := ts.createTestUser(t, "label-remove-other", "password123", false)
 
-	createResp := ts.authRequest(t, user, http.MethodPost, "/api/v1/notes", map[string]any{
-		"title":   "Labeled note",
-		"content": "content",
-	})
-	require.Equal(t, http.StatusCreated, createResp.StatusCode)
+	createNote := func(title string) string {
+		createResp := ts.authRequest(t, user, http.MethodPost, "/api/v1/notes", map[string]any{
+			"title":   title,
+			"content": "content",
+		})
+		require.Equal(t, http.StatusCreated, createResp.StatusCode)
 
-	var created map[string]any
-	require.NoError(t, createResp.UnmarshalBody(&created))
-	noteID := created["id"].(string)
+		var created map[string]any
+		require.NoError(t, createResp.UnmarshalBody(&created))
+		return created["id"].(string)
+	}
 
-	addLabel := func(name string) string {
+	addLabel := func(noteID string, name string) string {
 		addResp := ts.authRequest(t, user, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/labels", noteID), map[string]any{
 			"name": name,
 		})
@@ -111,12 +113,20 @@ func TestRemoveLabelEndpoint(t *testing.T) {
 		require.NoError(t, addResp.UnmarshalBody(&labeledNote))
 		labels := labeledNote["labels"].([]any)
 		require.NotEmpty(t, labels)
-		return labels[len(labels)-1].(map[string]any)["id"].(string)
+		for _, label := range labels {
+			labelMap := label.(map[string]any)
+			if labelMap["name"] == name {
+				return labelMap["id"].(string)
+			}
+		}
+		require.FailNow(t, "expected label not found on note", "name=%s", name)
+		return ""
 	}
 
-	labelID := addLabel("work")
-
 	t.Run("removes label from note and unfilters from label query", func(t *testing.T) {
+		noteID := createNote("Labeled note")
+		labelID := addLabel(noteID, "work")
+
 		removeResp := ts.authRequest(t, user, http.MethodDelete, fmt.Sprintf("/api/v1/notes/%s/labels/%s", noteID, labelID), nil)
 		require.Equal(t, http.StatusOK, removeResp.StatusCode)
 
@@ -133,7 +143,8 @@ func TestRemoveLabelEndpoint(t *testing.T) {
 	})
 
 	t.Run("user without note access cannot remove label", func(t *testing.T) {
-		restrictedLabelID := addLabel("restricted")
+		noteID := createNote("Restricted note")
+		restrictedLabelID := addLabel(noteID, "restricted")
 
 		otherResp := ts.authRequest(t, other, http.MethodDelete, fmt.Sprintf("/api/v1/notes/%s/labels/%s", noteID, restrictedLabelID), nil)
 		assert.Equal(t, http.StatusForbidden, otherResp.StatusCode)
