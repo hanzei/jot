@@ -340,7 +340,6 @@ describe('NoteModal', () => {
 
       // Focus moves to the newly inserted item
       expect(inputsAfter[1]).toHaveFocus()
-      expect(document.activeElement).toBe(inputsAfter[1])
     })
 
     it('pressing a key other than Enter on a todo item does not create a new item', async () => {
@@ -350,7 +349,7 @@ describe('NoteModal', () => {
       fireEvent.click(screen.getByText('Add item'))
 
       const inputs = screen.getAllByPlaceholderText('List item...')
-      fireEvent.keyDown(inputs[0], { key: 'Tab', code: 'Tab' })
+      fireEvent.keyDown(inputs[0], { key: 'Escape', code: 'Escape' })
 
       expect(screen.getAllByPlaceholderText('List item...')).toHaveLength(1)
     })
