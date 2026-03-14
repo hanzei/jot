@@ -104,7 +104,7 @@ export default function ShareScreen() {
       pendingUserIdsRef.current.add(user.id);
       setPendingUserIds(new Set(pendingUserIdsRef.current));
       try {
-        await shareMutateRef.current({ noteId, userId: user.id });
+        await shareMutateRef.current({ noteId, username: user.username });
       } catch {
         Alert.alert('Error', 'Failed to share note');
       } finally {
@@ -117,8 +117,12 @@ export default function ShareScreen() {
 
   const handleUnshare = useCallback(
     async (share: NoteShare) => {
+      if (!share.username) {
+        Alert.alert('Error', 'Missing username for shared user');
+        return;
+      }
       try {
-        await unshareMutateRef.current({ noteId, userId: share.shared_with_user_id });
+        await unshareMutateRef.current({ noteId, username: share.username });
       } catch {
         Alert.alert('Error', 'Failed to remove share');
       }

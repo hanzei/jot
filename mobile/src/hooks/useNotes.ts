@@ -307,8 +307,8 @@ export function useNoteShares(noteId: string | null) {
 export function useShareNote() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ noteId, userId }: { noteId: string; userId: string }) =>
-      shareNote(noteId, userId),
+    mutationFn: ({ noteId, username }: { noteId: string; username: string }) =>
+      shareNote(noteId, username),
     onSuccess: (_data, { noteId }) => {
       queryClient.invalidateQueries({ queryKey: ['noteShares', noteId] });
       queryClient.invalidateQueries({ queryKey: ['note', noteId] });
@@ -320,8 +320,8 @@ export function useShareNote() {
 export function useUnshareNote() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ noteId, userId }: { noteId: string; userId: string }) =>
-      unshareNote(noteId, userId),
+    mutationFn: ({ noteId, username }: { noteId: string; username: string }) =>
+      unshareNote(noteId, username),
     onSuccess: (_data, { noteId }) => {
       queryClient.invalidateQueries({ queryKey: ['noteShares', noteId] });
       queryClient.invalidateQueries({ queryKey: ['note', noteId] });

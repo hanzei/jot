@@ -183,6 +183,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
   const errorTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const itemInputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
   const savingRef = useRef(false);
+  const autoSaveInFlightRef = useRef<Promise<void> | null>(null);
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -408,31 +409,62 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
     setItems(updatedItems);
   };
 
+  const buildTodoItemsPayload = useCallback(
+    (sourceItems: TodoItem[]) => sourceItems.map((item, idx) => ({
+      text: item.text,
+      position: idx,
+      completed: item.completed,
+      indent_level: item.indentLevel,
+    })),
+    [],
+  );
+
+  const buildUpdateData = useCallback(
+    (overrides: Partial<UpdateNoteRequest> = {}, sourceItems: TodoItem[] = items): UpdateNoteRequest => ({
+      title,
+      content,
+      pinned,
+      archived,
+      color,
+      checked_items_collapsed: checkedItemsCollapsed,
+      items: note?.note_type === 'todo' ? buildTodoItemsPayload(sourceItems) : undefined,
+      ...overrides,
+    }),
+    [archived, buildTodoItemsPayload, checkedItemsCollapsed, color, content, items, note?.note_type, pinned, title],
+  );
+
   // Helper function to auto-save note changes
   const autoSaveNote = async (updatedItems: TodoItem[]) => {
     if (!note) return;
     if (savingRef.current) return;
-    
+
+    const previousSave = autoSaveInFlightRef.current;
+    const currentSave = (async () => {
+      if (previousSave) {
+        try {
+          await previousSave;
+        } catch {
+          // Prior autosave failure is surfaced by that call site.
+        }
+      }
+
+      try {
+        const updateData = buildUpdateData({}, updatedItems);
+        await notes.update(note.id, updateData);
+        onRefresh?.(); // Refresh the notes list to reflect the changes
+      } catch (error) {
+        console.error('Failed to auto-save note:', error);
+        showError(t('note.failedSaveChanges'));
+      }
+    })();
+
+    autoSaveInFlightRef.current = currentSave;
     try {
-      const updateData: UpdateNoteRequest = {
-        title,
-        content,
-        pinned,
-        archived,
-        color,
-        checked_items_collapsed: checkedItemsCollapsed,
-        items: updatedItems.map((item) => ({
-          text: item.text,
-          position: item.position,
-          completed: item.completed,
-          indent_level: item.indentLevel,
-        })),
-      };
-      await notes.update(note.id, updateData);
-      onRefresh?.(); // Refresh the notes list to reflect the changes
-    } catch (error) {
-      console.error('Failed to auto-save note:', error);
-      showError(t('note.failedSaveChanges'));
+      await currentSave;
+    } finally {
+      if (autoSaveInFlightRef.current === currentSave) {
+        autoSaveInFlightRef.current = null;
+      }
     }
   };
 
@@ -540,24 +572,18 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
       clearTimeout(saveTimeoutRef.current);
       saveTimeoutRef.current = undefined;
     }
+    if (autoSaveInFlightRef.current) {
+      try {
+        await autoSaveInFlightRef.current;
+      } catch {
+        // Autosave failure is already surfaced; proceed with explicit save.
+      }
+    }
     setLoading(true);
     try {
       if (note) {
         // Update existing note
-        const updateData: UpdateNoteRequest = {
-          title,
-          content,
-          pinned,
-          archived,
-          color,
-          checked_items_collapsed: !checkedItemsCollapsed,
-          items: note.note_type === 'todo' ? items.map((item, idx) => ({
-            text: item.text,
-            position: idx,
-            completed: item.completed,
-            indent_level: item.indentLevel,
-          })) : undefined,
-        };
+        const updateData = buildUpdateData();
         await notes.update(note.id, updateData);
       } else {
         // Create new note
@@ -587,22 +613,9 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
     setPinned(newPinnedState);
     
     try {
-      const updateData: UpdateNoteRequest = {
-        title,
-        content,
-        pinned: newPinnedState,
-        archived,
-        color,
-        checked_items_collapsed: !checkedItemsCollapsed,
-        items: note.note_type === 'todo' ? items.map((item, idx) => ({
-          text: item.text,
-          position: idx,
-          completed: item.completed,
-          indent_level: item.indentLevel,
-        })) : undefined,
-      };
+      const updateData = buildUpdateData({ pinned: newPinnedState });
       await notes.update(note.id, updateData);
-      onSave(); // Refresh the notes list to show updated pin status
+      onRefresh?.(); // Refresh list while keeping modal open
     } catch (error) {
       console.error('Failed to update pin status:', error);
       // Revert the pin state on error
@@ -617,22 +630,9 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
     setArchived(newArchivedState);
     
     try {
-      const updateData: UpdateNoteRequest = {
-        title,
-        content,
-        pinned,
-        archived: newArchivedState,
-        color,
-        checked_items_collapsed: !checkedItemsCollapsed,
-        items: note.note_type === 'todo' ? items.map((item, idx) => ({
-          text: item.text,
-          position: idx,
-          completed: item.completed,
-          indent_level: item.indentLevel,
-        })) : undefined,
-      };
+      const updateData = buildUpdateData({ archived: newArchivedState });
       await notes.update(note.id, updateData);
-      onSave(); // Refresh the notes list to show updated archive status
+      onRefresh?.(); // Refresh list while keeping modal open
     } catch (error) {
       console.error('Failed to update archive status:', error);
       // Revert the archive state on error
@@ -651,20 +651,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
     setCheckedItemsCollapsed(newCollapsedState);
     
     try {
-      const updateData: UpdateNoteRequest = {
-        title,
-        content,
-        pinned,
-        archived,
-        color,
-        checked_items_collapsed: newCollapsedState,
-        items: note.note_type === 'todo' ? items.map((item, idx) => ({
-          text: item.text,
-          position: idx,
-          completed: item.completed,
-          indent_level: item.indentLevel,
-        })) : undefined,
-      };
+      const updateData = buildUpdateData({ checked_items_collapsed: newCollapsedState });
       await notes.update(note.id, updateData);
       onRefresh?.(); // Refresh the notes list to reflect the changes
     } catch (error) {
@@ -676,13 +663,29 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
 
   const hasUnsavedChanges = () => {
     if (note) {
-      return (
+      const baseChanges = (
         title !== note.title ||
         content !== note.content ||
         color !== note.color ||
         pinned !== note.pinned ||
-        archived !== note.archived
+        archived !== note.archived ||
+        checkedItemsCollapsed !== note.checked_items_collapsed
       );
+      if (note.note_type !== 'todo') {
+        return baseChanges;
+      }
+
+      const currentItems = buildTodoItemsPayload(items);
+      const originalItems = buildTodoItemsPayload(
+        (note.items ?? []).map((item) => ({
+          id: item.id,
+          text: item.text,
+          completed: item.completed,
+          position: item.position,
+          indentLevel: item.indent_level,
+        })),
+      );
+      return baseChanges || JSON.stringify(currentItems) !== JSON.stringify(originalItems);
     } else {
       return (
         title.trim() !== '' ||

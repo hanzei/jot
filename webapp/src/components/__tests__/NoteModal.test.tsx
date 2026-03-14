@@ -1,9 +1,10 @@
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, waitFor } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { type ReactNode } from 'react'
 import NoteModal from '../NoteModal'
 import { Note, NoteItem } from '@/types'
 import { createMockNote } from '@/utils/__tests__/test-helpers'
+import { notes } from '@/utils/api'
 
 // Mock the API module
 vi.mock('@/utils/api', () => ({
@@ -389,6 +390,27 @@ describe('NoteModal', () => {
       render(<NoteModal {...defaultProps} note={incompleteNote} />)
 
       expect(screen.getByDisplayValue('Test')).toBeInTheDocument()
+    })
+
+    it('keeps checked-items collapse state on save payload', async () => {
+      const note = createMockNote({
+        note_type: 'todo',
+        checked_items_collapsed: true,
+        items: createMockTodoItems(),
+      })
+      vi.mocked(notes.update).mockResolvedValue(note)
+
+      render(<NoteModal {...defaultProps} note={note} />)
+
+      fireEvent.change(screen.getByDisplayValue('Test Note'), { target: { value: 'Updated title' } })
+      fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+
+      await waitFor(() => {
+        expect(notes.update).toHaveBeenCalledWith(
+          note.id,
+          expect.objectContaining({ checked_items_collapsed: true }),
+        )
+      })
     })
   })
 })

@@ -1,11 +1,25 @@
 import React from 'react';
 import { renderHook, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useNotes, useNote, useCreateNote, useUpdateNote, useDeleteNote } from '../src/hooks/useNotes';
+import {
+  useNotes,
+  useNote,
+  useCreateNote,
+  useUpdateNote,
+  useDeleteNote,
+  useShareNote,
+  useUnshareNote,
+} from '../src/hooks/useNotes';
 import * as notesApi from '../src/api/notes';
+import * as usersApi from '../src/api/users';
 import * as noteQueriesModule from '../src/db/noteQueries';
 
 jest.mock('../src/api/notes');
+jest.mock('../src/api/users', () => ({
+  getNoteShares: jest.fn(),
+  shareNote: jest.fn().mockResolvedValue(undefined),
+  unshareNote: jest.fn().mockResolvedValue(undefined),
+}));
 
 jest.mock('react-native', () => ({
   Platform: { OS: 'ios' },
@@ -40,6 +54,7 @@ jest.mock('../src/store/AuthContext', () => ({
 }));
 
 const mockNotesApi = notesApi as jest.Mocked<typeof notesApi>;
+const mockUsersApi = usersApi as jest.Mocked<typeof usersApi>;
 const mockNoteQueries = noteQueriesModule as jest.Mocked<typeof noteQueriesModule>;
 
 function createWrapper() {
@@ -182,6 +197,24 @@ describe('useNotes hooks', () => {
 
       expect(mockNotesApi.deleteNote).toHaveBeenCalledWith('123');
       expect(mockNoteQueries.markLocalNoteDeleted).toHaveBeenCalledWith(expect.anything(), '123');
+    });
+  });
+
+  describe('share hooks', () => {
+    it('shares a note by username', async () => {
+      const { result } = renderHook(() => useShareNote(), { wrapper: createWrapper() });
+
+      await result.current.mutateAsync({ noteId: 'note-1', username: 'alice' });
+
+      expect(mockUsersApi.shareNote).toHaveBeenCalledWith('note-1', 'alice');
+    });
+
+    it('unshares a note by username', async () => {
+      const { result } = renderHook(() => useUnshareNote(), { wrapper: createWrapper() });
+
+      await result.current.mutateAsync({ noteId: 'note-1', username: 'alice' });
+
+      expect(mockUsersApi.unshareNote).toHaveBeenCalledWith('note-1', 'alice');
     });
   });
 });
