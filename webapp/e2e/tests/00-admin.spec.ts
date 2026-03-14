@@ -1,7 +1,5 @@
 import { test, expect, uniqueUsername } from '../fixtures';
 import type { Page } from '@playwright/test';
-import type { DashboardPage } from '../pages/DashboardPage';
-import type { LoginPage } from '../pages/LoginPage';
 
 type MeResponse = {
   user?: {
@@ -9,59 +7,15 @@ type MeResponse = {
   };
 };
 
-type SearchUserResponse = {
-  username: string;
-  role: string;
-};
-
-const ADMIN_LOGIN_CANDIDATE_PASSWORDS = [
-  'testpass123',
-  'password123',
-  'securepass',
-  'correctpassword',
-  'newpass456',
-];
-
-async function ensureAdminSession(
-  page: Page,
-  dashboardPage: DashboardPage,
-  loginPage: LoginPage,
-) {
+async function ensureAdminSession(page: Page) {
   const meResponse = await page.request.get('/api/v1/me');
   expect(meResponse.ok()).toBeTruthy();
   const meData = await meResponse.json() as MeResponse;
-  if (meData.user?.role === 'admin') {
-    return;
+  if (meData.user?.role !== 'admin') {
+    throw new Error(
+      'Expected authenticated test user to be admin. Run this spec first in a fresh e2e DB.'
+    );
   }
-
-  const usersResponse = await page.request.get('/api/v1/users');
-  expect(usersResponse.ok()).toBeTruthy();
-  const users = await usersResponse.json() as SearchUserResponse[];
-  const adminCandidates = users
-    .filter(user => user.role === 'admin')
-    .map(user => user.username);
-
-  await dashboardPage.goto();
-  await dashboardPage.logout();
-  await expect(page).toHaveURL('/login');
-
-  for (const adminUsername of adminCandidates) {
-    for (const candidatePassword of ADMIN_LOGIN_CANDIDATE_PASSWORDS) {
-      await loginPage.login(adminUsername, candidatePassword);
-      await page.waitForURL(url => url.pathname !== '/login', { timeout: 3_000 }).catch(() => {});
-
-      if (new URL(page.url()).pathname === '/') {
-        await page.goto('/admin');
-        if (new URL(page.url()).pathname === '/admin') {
-          return;
-        }
-        await dashboardPage.logout();
-        await expect(page).toHaveURL('/login');
-      }
-    }
-  }
-
-  throw new Error('Failed to establish an admin session for admin e2e tests');
 }
 
 test.describe('Admin', () => {
@@ -70,15 +24,11 @@ test.describe('Admin', () => {
     void authenticatedUser;
   });
 
-  test('admin can create, update role, and delete a user', async ({
-    page,
-    dashboardPage,
-    loginPage,
-  }) => {
+  test('admin can create, update role, and delete a user', async ({ page }) => {
     const managedUsername = uniqueUsername('managed');
     const managedPassword = 'testpass123';
 
-    await ensureAdminSession(page, dashboardPage, loginPage);
+    await ensureAdminSession(page);
     await page.goto('/admin');
     await expect(page).toHaveURL('/admin');
     await expect(page.getByRole('heading', { name: 'User Management' })).toBeVisible();

@@ -44,8 +44,7 @@ export class DashboardPage {
     const card = this.page.locator('[data-testid="note-card"]').filter({
       has: this.page.locator('h3').getByText(title, { exact: true }),
     });
-    await card.hover();
-    await card.locator('button[aria-label="Note options"]').click();
+    await card.locator('button[aria-label="Note options"]').click({ force: true });
   }
 
   async deleteNote(title: string) {
