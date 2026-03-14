@@ -20,8 +20,7 @@ The webapp must be built first (`cd webapp && npm run build`) so the server can 
 
 ### Key dev commands
 
-All `task` commands are documented in `CLAUDE.md` and `Taskfile.yml`. Key ones:
-
+All `task` commands are documented in `README.md`, `CLAUDE.md`, and `Taskfile.yml`. Key ones:
 | Task | What it does |
 |------|-------------|
 | `task test-server` | Go unit/integration tests |
