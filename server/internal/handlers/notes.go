@@ -525,8 +525,7 @@ func (h *NotesHandler) PermanentlyDeleteNote(w http.ResponseWriter, r *http.Requ
 }
 
 type ShareNoteRequest struct {
-	Username string `json:"username,omitempty"`
-	UserID   string `json:"user_id,omitempty"`
+	UserID string `json:"user_id,omitempty"`
 }
 
 type ShareNoteResponse struct {
@@ -542,7 +541,7 @@ type ShareNoteResponse struct {
 //	@Accept		json
 //	@Produce	json
 //	@Param		id		path		string				true	"Note ID"
-//	@Param		body	body		ShareNoteRequest	true	"User to share with (user_id or username)"
+//	@Param		body	body		ShareNoteRequest	true	"User to share with (user_id)"
 //	@Success	200		{object}	ShareNoteResponse
 //	@Failure	400		{string}	string	"bad request"
 //	@Failure	401		{string}	string	"unauthorized"
@@ -627,7 +626,7 @@ func (h *NotesHandler) ShareNote(w http.ResponseWriter, r *http.Request) (int, e
 //	@Accept		json
 //	@Produce	json
 //	@Param		id		path		string				true	"Note ID"
-//	@Param		body	body		ShareNoteRequest	true	"User to unshare with (user_id or username)"
+//	@Param		body	body		ShareNoteRequest	true	"User to unshare with (user_id)"
 //	@Success	200		{object}	ShareNoteResponse
 //	@Failure	400		{string}	string	"bad request"
 //	@Failure	401		{string}	string	"unauthorized"
@@ -707,28 +706,17 @@ func (h *NotesHandler) UnshareNote(w http.ResponseWriter, r *http.Request) (int,
 }
 
 func (h *NotesHandler) resolveShareTargetUser(req ShareNoteRequest) (*models.User, int, error) {
-	username := strings.TrimSpace(req.Username)
 	userID := strings.TrimSpace(req.UserID)
 
-	if userID == "" && username == "" {
-		return nil, http.StatusBadRequest, errors.New("either user_id or username is required")
+	if userID == "" {
+		return nil, http.StatusBadRequest, errors.New("user_id is required")
 	}
 
-	if userID != "" {
-		if !models.IsValidID(userID) {
-			return nil, http.StatusBadRequest, errors.New("invalid user_id format")
-		}
-		targetUser, err := h.userStore.GetByID(userID)
-		if err != nil {
-			if errors.Is(err, models.ErrUserNotFound) {
-				return nil, http.StatusNotFound, err
-			}
-			return nil, http.StatusInternalServerError, err
-		}
-		return targetUser, 0, nil
+	if !models.IsValidID(userID) {
+		return nil, http.StatusBadRequest, errors.New("invalid user_id format")
 	}
 
-	targetUser, err := h.userStore.GetByUsername(username)
+	targetUser, err := h.userStore.GetByID(userID)
 	if err != nil {
 		if errors.Is(err, models.ErrUserNotFound) {
 			return nil, http.StatusNotFound, err

@@ -149,8 +149,7 @@ export interface ChangePasswordRequest {
 }
 
 export interface ShareNoteRequest {
-  user_id?: string;
-  username?: string;
+  user_id: string;
 }
 
 export interface ShareNoteResponse {

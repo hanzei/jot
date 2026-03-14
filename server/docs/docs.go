@@ -996,7 +996,7 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "User to share with (user_id or username)",
+                        "description": "User to share with (user_id)",
                         "name": "body",
                         "in": "body",
                         "required": true,
@@ -1069,7 +1069,7 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "User to unshare with (user_id or username)",
+                        "description": "User to unshare with (user_id)",
                         "name": "body",
                         "in": "body",
                         "required": true,
@@ -1686,9 +1686,6 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "user_id": {
-                    "type": "string"
-                },
-                "username": {
                     "type": "string"
                 }
             }

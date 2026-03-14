@@ -26,6 +26,7 @@ func TestNoteSharingEndpoints(t *testing.T) {
 	require.NoError(t, createResp.UnmarshalBody(&createdNote))
 	noteID := createdNote["id"].(string)
 	missingNoteID := "abcdefghijklmnopqrstuv"
+	missingUserID := "bcdefghijklmnopqrstuvw"
 
 	t.Run("share note with user_id", func(t *testing.T) {
 		shareBody := map[string]string{
@@ -43,7 +44,7 @@ func TestNoteSharingEndpoints(t *testing.T) {
 	t.Run("share with duplicate user returns conflict", func(t *testing.T) {
 		// First share with other user
 		shareBody := map[string]string{
-			"username": "other",
+			"user_id": other.User.ID,
 		}
 		resp1 := ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/share", noteID), shareBody)
 		assert.Equal(t, http.StatusOK, resp1.StatusCode)
@@ -62,9 +63,9 @@ func TestNoteSharingEndpoints(t *testing.T) {
 		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 	})
 
-	t.Run("share with nonexistent username returns not found", func(t *testing.T) {
+	t.Run("share with nonexistent user_id returns not found", func(t *testing.T) {
 		shareBody := map[string]string{
-			"username": "nonexistent",
+			"user_id": missingUserID,
 		}
 
 		resp := ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/share", noteID), shareBody)
@@ -72,13 +73,21 @@ func TestNoteSharingEndpoints(t *testing.T) {
 	})
 
 	t.Run("share with empty payload returns bad request", func(t *testing.T) {
+		shareBody := map[string]string{}
+
+		resp := ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/share", noteID), shareBody)
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+		assert.Contains(t, resp.GetString(), "user_id is required")
+	})
+
+	t.Run("share with username-only payload returns bad request", func(t *testing.T) {
 		shareBody := map[string]string{
-			"username": "",
+			"username": "other",
 		}
 
 		resp := ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/share", noteID), shareBody)
 		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
-		assert.Contains(t, resp.GetString(), "either user_id or username is required")
+		assert.Contains(t, resp.GetString(), "user_id is required")
 	})
 
 	t.Run("share with invalid user_id returns bad request", func(t *testing.T) {
@@ -93,7 +102,7 @@ func TestNoteSharingEndpoints(t *testing.T) {
 
 	t.Run("share with self returns bad request", func(t *testing.T) {
 		shareBody := map[string]string{
-			"username": "owner",
+			"user_id": owner.User.ID,
 		}
 
 		resp := ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/share", noteID), shareBody)
@@ -103,7 +112,7 @@ func TestNoteSharingEndpoints(t *testing.T) {
 
 	t.Run("share by non-owner returns forbidden", func(t *testing.T) {
 		shareBody := map[string]string{
-			"username": "other",
+			"user_id": owner.User.ID,
 		}
 
 		resp := ts.authRequest(t, other, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/share", noteID), shareBody)
