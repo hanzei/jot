@@ -64,10 +64,8 @@ COPY --from=backend-builder /src/server/migrations ./migrations/
 # Copy the built frontend files
 COPY --from=frontend-builder /app/webapp/build ./webapp/build/
 
-# Create non-root runtime user and writable data directory
-RUN addgroup -S jot && adduser -S -G jot jot && \
-    mkdir -p /data && \
-    chown -R jot:jot /app /data
+# Create data directory for SQLite database
+RUN mkdir -p /data
 
 # Expose port
 EXPOSE 8080
@@ -75,8 +73,6 @@ EXPOSE 8080
 # Set environment variables
 ENV DB_PATH=/data/jot.db
 ENV STATIC_DIR=/app/webapp/build
-
-USER jot
 
 # Run the application
 CMD ["./main"]

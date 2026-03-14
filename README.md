@@ -155,6 +155,7 @@ docker run -d \
 
 # Or use docker-compose
 curl -O https://raw.githubusercontent.com/hanzei/jot/master/docker-compose.yml
+# add COOKIE_SECURE=false under jot.environment for local HTTP use
 docker-compose up -d
 ```
 
@@ -174,12 +175,11 @@ The Docker image uses multi-stage build:
 2. **Go stage**: Builds the backend binary
 3. **Alpine stage**: Combines everything in minimal production image
 
-The runtime container runs as a non-root `jot` user. Ensure the mounted data directory is writable by that user.
 For production HTTPS, keep the default secure cookie behavior.
 
 For local HTTP-only testing, override with:
 ```bash
-docker run -p 8080:8080 -e COOKIE_SECURE=false -v ./data:/data hanzei/jot:latest
+docker run -p 8080:8080 -e COOKIE_SECURE=false -v ./data:/data jot
 ```
 
 ### Available Tags
@@ -220,8 +220,7 @@ services:
 2. **Database permissions**:
    ```bash
    # Fix SQLite file permissions
-   chmod 644 jot.db
-   chown jot:jot jot.db
+   chmod 664 jot.db
    ```
 
 3. **Port conflicts**:
