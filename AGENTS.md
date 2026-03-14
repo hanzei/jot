@@ -36,3 +36,4 @@ All `task` commands are documented in `README.md`, `CLAUDE.md`, and `Taskfile.ym
 - **Playwright e2e tests** require `npx playwright install --with-deps chromium` before first run. The Playwright config auto-starts the Go server and uses a temp DB, so no manual server startup is needed for e2e.
 - **Auth is session-cookie based** (not JWT). The first registered user becomes admin.
 - The mobile app (`mobile/`) uses Expo and requires emulator/device access; it is not testable in a headless cloud environment for GUI flows.
+- **Some e2e tests may fail** due to stale selectors for "Archive"/"Bin" sidebar navigation in the page objects (`e2e/pages/DashboardPage.ts`). These are pre-existing test issues, not environment problems.
