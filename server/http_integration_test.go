@@ -164,14 +164,27 @@ func (ts *TestServer) authRequest(t *testing.T, user *TestUser, method, path str
 func TestProbeEndpoints(t *testing.T) {
 	ts := setupTestServer(t)
 
-	t.Run("health path returns not found", func(t *testing.T) {
+	t.Run("health path falls back to spa", func(t *testing.T) {
 		resp := ts.request(t, nil, http.MethodGet, "/health", nil)
+
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		assert.Contains(t, resp.GetString(), "jot test app")
+	})
+
+	t.Run("unknown api route still returns not found", func(t *testing.T) {
+		resp := ts.request(t, nil, http.MethodGet, "/api/v1/nonexistent", nil)
 
 		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 	})
 
-	t.Run("health path under api prefix returns not found", func(t *testing.T) {
-		resp := ts.request(t, nil, http.MethodGet, "/api/v1/health", nil)
+	t.Run("unknown api namespace returns not found", func(t *testing.T) {
+		resp := ts.request(t, nil, http.MethodGet, "/api/v2/nonexistent", nil)
+
+		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+	})
+
+	t.Run("bare api path returns not found", func(t *testing.T) {
+		resp := ts.request(t, nil, http.MethodGet, "/api", nil)
 
 		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 	})
@@ -181,12 +194,6 @@ func TestProbeEndpoints(t *testing.T) {
 
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 		assert.Equal(t, "OK", resp.GetString())
-	})
-
-	t.Run("livez endpoint not available under api prefix", func(t *testing.T) {
-		resp := ts.request(t, nil, http.MethodGet, "/api/v1/livez", nil)
-
-		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 	})
 
 	t.Run("readyz endpoint", func(t *testing.T) {
@@ -201,12 +208,6 @@ func TestProbeEndpoints(t *testing.T) {
 		resp := ts.request(t, nil, http.MethodGet, "/readyz", nil)
 		assert.Equal(t, http.StatusServiceUnavailable, resp.StatusCode)
 		assert.Contains(t, resp.GetString(), "NOT READY")
-	})
-
-	t.Run("readyz endpoint not available under api prefix", func(t *testing.T) {
-		resp := ts.request(t, nil, http.MethodGet, "/api/v1/readyz", nil)
-
-		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 	})
 
 	t.Run("readyz returns 503 when database is unavailable", func(t *testing.T) {

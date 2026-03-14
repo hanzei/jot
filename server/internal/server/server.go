@@ -193,6 +193,12 @@ func (s *Server) setupRoutes() {
 
 	// Swagger UI at /api/docs/
 	s.router.Get("/api/docs/*", httpSwagger.WrapHandler)
+	s.router.Get("/api", func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r)
+	})
+	s.router.Get("/api/*", func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r)
+	})
 
 	// Serve static files from webapp build directory
 	staticDir := os.Getenv("STATIC_DIR")
@@ -227,14 +233,6 @@ func FileServer(r chi.Router, path string, root http.FileSystem) {
 		requestedFile := strings.TrimPrefix(req.URL.Path, pathPrefix)
 		if requestedFile == "" {
 			requestedFile = "/"
-		}
-		// Probe paths intentionally do not exist under /api/v1, and legacy /health should not resolve to SPA.
-		if strings.TrimSuffix(requestedFile, "/") == "/health" ||
-			strings.TrimSuffix(requestedFile, "/") == "/api/v1/health" ||
-			strings.TrimSuffix(requestedFile, "/") == "/api/v1/livez" ||
-			strings.TrimSuffix(requestedFile, "/") == "/api/v1/readyz" {
-			http.NotFound(w, req)
-			return
 		}
 
 		// Check if file exists
