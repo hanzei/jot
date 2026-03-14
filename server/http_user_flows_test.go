@@ -15,7 +15,7 @@ func TestReorderNotesEndpoint(t *testing.T) {
 	user := ts.createTestUser(t, "reorder-user", "password123", false)
 	other := ts.createTestUser(t, "reorder-other", "password123", false)
 
-	createNote := func(title string, owner *TestUser) string {
+	createNote := func(t *testing.T, title string, owner *TestUser) string {
 		resp := ts.authRequest(t, owner, http.MethodPost, "/api/v1/notes", map[string]any{
 			"title":   title,
 			"content": "content",
@@ -27,10 +27,10 @@ func TestReorderNotesEndpoint(t *testing.T) {
 		return note["id"].(string)
 	}
 
-	note1 := createNote("First", user)
-	note2 := createNote("Second", user)
-	note3 := createNote("Third", user)
-	otherNote := createNote("Other", other)
+	note1 := createNote(t, "First", user)
+	note2 := createNote(t, "Second", user)
+	note3 := createNote(t, "Third", user)
+	otherNote := createNote(t, "Other", other)
 
 	t.Run("reorders notes and updates returned order", func(t *testing.T) {
 		reorderResp := ts.authRequest(t, user, http.MethodPost, "/api/v1/notes/reorder", map[string]any{
