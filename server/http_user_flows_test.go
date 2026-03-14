@@ -163,10 +163,15 @@ func TestRemoveLabelEndpoint(t *testing.T) {
 func TestAdminUpdateUserRoleEndpoint(t *testing.T) {
 	ts := setupTestServer(t)
 	admin := ts.createTestUser(t, "role-admin", "password123", true)
-	target := ts.createTestUser(t, "role-target", "password123", false)
 	regular := ts.createTestUser(t, "role-regular", "password123", false)
 
 	t.Run("admin can promote user and promoted user gains admin access", func(t *testing.T) {
+		target := ts.createTestUser(t, "role-target-promote", "password123", false)
+
+		// Baseline: target user is not admin yet.
+		prePromotionResp := ts.authRequest(t, target, http.MethodGet, "/api/v1/admin/users", nil)
+		assert.Equal(t, http.StatusForbidden, prePromotionResp.StatusCode)
+
 		resp := ts.authRequest(t, admin, http.MethodPut, fmt.Sprintf("/api/v1/admin/users/%s/role", target.User.ID), map[string]any{
 			"role": "admin",
 		})
@@ -181,6 +186,12 @@ func TestAdminUpdateUserRoleEndpoint(t *testing.T) {
 	})
 
 	t.Run("non-admin cannot update roles", func(t *testing.T) {
+		target := ts.createTestUser(t, "role-target-no-admin", "password123", false)
+
+		// Baseline: target user cannot access admin listing.
+		preUpdateResp := ts.authRequest(t, target, http.MethodGet, "/api/v1/admin/users", nil)
+		assert.Equal(t, http.StatusForbidden, preUpdateResp.StatusCode)
+
 		resp := ts.authRequest(t, regular, http.MethodPut, fmt.Sprintf("/api/v1/admin/users/%s/role", target.User.ID), map[string]any{
 			"role": "user",
 		})
