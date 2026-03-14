@@ -176,11 +176,10 @@ func TestProbeEndpoints(t *testing.T) {
 		assert.Equal(t, "OK", resp.GetString())
 	})
 
-	t.Run("livez endpoint under api prefix", func(t *testing.T) {
+	t.Run("livez endpoint not available under api prefix", func(t *testing.T) {
 		resp := ts.request(t, nil, http.MethodGet, "/api/v1/livez", nil)
 
-		assert.Equal(t, http.StatusOK, resp.StatusCode)
-		assert.Equal(t, "OK", resp.GetString())
+		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 	})
 
 	t.Run("readyz endpoint", func(t *testing.T) {
@@ -190,11 +189,10 @@ func TestProbeEndpoints(t *testing.T) {
 		assert.Equal(t, "OK", resp.GetString())
 	})
 
-	t.Run("readyz endpoint under api prefix", func(t *testing.T) {
+	t.Run("readyz endpoint not available under api prefix", func(t *testing.T) {
 		resp := ts.request(t, nil, http.MethodGet, "/api/v1/readyz", nil)
 
-		assert.Equal(t, http.StatusOK, resp.StatusCode)
-		assert.Equal(t, "OK", resp.GetString())
+		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 	})
 
 	t.Run("readyz returns 503 when database is unavailable", func(t *testing.T) {

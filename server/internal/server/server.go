@@ -134,9 +134,6 @@ func (s *Server) setupRoutes() {
 	s.router.Get("/readyz", s.handleReady)
 
 	s.router.Route("/api/v1", func(r chi.Router) {
-		r.Get("/livez", s.handleLive)
-		r.Get("/readyz", s.handleReady)
-
 		r.Post("/register", s.wrapHandler(s.authHandler.Register))
 		r.Post("/login", s.wrapHandler(s.authHandler.Login))
 		r.Post("/logout", s.wrapHandler(s.authHandler.Logout))
@@ -227,8 +224,9 @@ func FileServer(r chi.Router, path string, root http.FileSystem) {
 		if requestedFile == "" {
 			requestedFile = "/"
 		}
-		// /health was intentionally removed; do not treat it as a SPA route.
-		if strings.TrimSuffix(requestedFile, "/") == "/health" {
+		trimmedPath := strings.TrimSuffix(requestedFile, "/")
+		// Probe paths intentionally do not exist under /api/v1 or /health.
+		if trimmedPath == "/health" || trimmedPath == "/api/v1/livez" || trimmedPath == "/api/v1/readyz" {
 			http.NotFound(w, req)
 			return
 		}
