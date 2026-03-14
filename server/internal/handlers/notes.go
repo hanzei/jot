@@ -313,6 +313,7 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 
 	replaceItems := req.Items != nil
 	items := []models.NoteItemUpdateInput(nil)
+	var err error
 	if replaceItems {
 		items, err = mapAndValidateTodoItems(req.Items)
 		if err != nil {
