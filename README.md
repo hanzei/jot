@@ -105,12 +105,6 @@ STATIC_DIR=../webapp/build/         # Frontend build directory (optional)
 
 The full interactive API reference is available via Swagger UI at `http://localhost:8080/api/docs/index.html` when the server is running.
 
-### Health and Probe Endpoints
-
-- `GET /livez` — liveness probe (process is running)
-- `GET /readyz` — readiness probe (server can reach the database)
-- `GET /health` — legacy compatibility endpoint (same response as liveness)
-
 ## Building for Production
 
 ### Single Binary Deployment (Recommended)
@@ -252,7 +246,7 @@ services:
 ### Development Tips
 
 - **Frontend changes**: Rebuild with `npm run build` after React changes
-- **Backend changes**: Go has hot-reload when using `go run`
+- **Backend changes**: Restart the server after code changes
 - **Database inspection**: Use SQLite browser or `sqlite3 jot.db`
 - **Logs**: Check console output for detailed error messages
 - **API testing**: Use browser dev tools or curl/Postman
@@ -260,8 +254,8 @@ services:
 ### Debugging
 
 ```bash
-# Enable Go module debugging
-GOMODULE=on go run main.go
+# Run the server directly
+COOKIE_SECURE=false go run main.go
 
 # Frontend development build (separate dev server)
 cd webapp && npm run dev
