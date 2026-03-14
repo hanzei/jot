@@ -131,9 +131,6 @@ Do not maintain endpoint tables in this file. Use the generated OpenAPI spec as 
 
 If handler annotations or request/response types change, regenerate docs with `task gen-docs`.
 
-`GET /livez` — unauthenticated liveness check.  
-`GET /readyz` — unauthenticated readiness check.
-
 ### Database Schema
 
 **users**
