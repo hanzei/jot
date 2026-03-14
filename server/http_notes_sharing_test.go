@@ -160,6 +160,34 @@ func TestNoteSharingEndpoints(t *testing.T) {
 		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 	})
 
+	t.Run("unshare with empty payload returns bad request", func(t *testing.T) {
+		unshareBody := map[string]string{}
+
+		resp := ts.authRequest(t, owner, http.MethodDelete, fmt.Sprintf("/api/v1/notes/%s/share", noteID), unshareBody)
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+		assert.Contains(t, resp.GetString(), "user_id is required")
+	})
+
+	t.Run("unshare with username-only payload returns bad request", func(t *testing.T) {
+		unshareBody := map[string]string{
+			"username": "other",
+		}
+
+		resp := ts.authRequest(t, owner, http.MethodDelete, fmt.Sprintf("/api/v1/notes/%s/share", noteID), unshareBody)
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+		assert.Contains(t, resp.GetString(), "user_id is required")
+	})
+
+	t.Run("unshare with invalid user_id returns bad request", func(t *testing.T) {
+		unshareBody := map[string]string{
+			"user_id": "invalid-id",
+		}
+
+		resp := ts.authRequest(t, owner, http.MethodDelete, fmt.Sprintf("/api/v1/notes/%s/share", noteID), unshareBody)
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+		assert.Contains(t, resp.GetString(), "invalid user_id format")
+	})
+
 	t.Run("unshare nonexistent note returns not found", func(t *testing.T) {
 		unshareBody := map[string]string{
 			"user_id": sharedUser.User.ID,
