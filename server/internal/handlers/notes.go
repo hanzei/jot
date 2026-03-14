@@ -131,7 +131,13 @@ func (h *NotesHandler) CreateNote(w http.ResponseWriter, r *http.Request) (int, 
 		return http.StatusBadRequest, errors.New("empty note")
 	}
 
-	if req.NoteType == "" {
+	if len(req.Items) > 0 {
+		if req.NoteType == "" {
+			req.NoteType = models.NoteTypeTodo
+		} else if req.NoteType != models.NoteTypeTodo {
+			return http.StatusBadRequest, errors.New("note_type must be 'todo' when items are provided")
+		}
+	} else if req.NoteType == "" {
 		req.NoteType = models.NoteTypeText
 	}
 
@@ -571,6 +577,8 @@ func (h *NotesHandler) GetNoteShares(w http.ResponseWriter, r *http.Request) (in
 	return 0, nil
 }
 
+// SearchUsers godoc
+// @Summary List users (excluding current user)
 func (h *NotesHandler) SearchUsers(w http.ResponseWriter, r *http.Request) (int, error) {
 	currentUser, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
