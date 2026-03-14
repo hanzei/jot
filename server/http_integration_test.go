@@ -53,7 +53,8 @@ type TestServer struct {
 }
 
 func setupTestServer(t *testing.T) *TestServer {
-	tmpDB := fmt.Sprintf("/tmp/test_%s.db", t.Name())
+	safeTestName := strings.NewReplacer("/", "_", "\\", "_").Replace(t.Name())
+	tmpDB := fmt.Sprintf("/tmp/test_%s.db", safeTestName)
 	_ = os.Remove(tmpDB)
 	staticDir := t.TempDir()
 	require.NoError(t, os.WriteFile(staticDir+"/index.html", []byte("<html><body>jot test app</body></html>"), 0o600))
@@ -196,10 +197,8 @@ func TestProbeEndpoints(t *testing.T) {
 	})
 
 	t.Run("readyz returns 503 when shutting down", func(t *testing.T) {
-		tsDuringShutdown := setupTestServer(t)
-		tsDuringShutdown.Server.BeginShutdown()
-
-		resp := tsDuringShutdown.request(t, nil, http.MethodGet, "/readyz", nil)
+		ts.Server.BeginShutdown()
+		resp := ts.request(t, nil, http.MethodGet, "/readyz", nil)
 		assert.Equal(t, http.StatusServiceUnavailable, resp.StatusCode)
 		assert.Contains(t, resp.GetString(), "NOT READY")
 	})
@@ -211,9 +210,10 @@ func TestProbeEndpoints(t *testing.T) {
 	})
 
 	t.Run("readyz returns 503 when database is unavailable", func(t *testing.T) {
-		require.NoError(t, ts.Server.GetDB().Close())
+		tsWithClosedDB := setupTestServer(t)
+		require.NoError(t, tsWithClosedDB.Server.GetDB().Close())
 
-		resp := ts.request(t, nil, http.MethodGet, "/readyz", nil)
+		resp := tsWithClosedDB.request(t, nil, http.MethodGet, "/readyz", nil)
 		assert.Equal(t, http.StatusServiceUnavailable, resp.StatusCode)
 		assert.Contains(t, resp.GetString(), "NOT READY")
 	})
