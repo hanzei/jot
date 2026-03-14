@@ -319,9 +319,11 @@ describe('NoteModal', () => {
 
       // Give the first item a value so we can identify it after insertion
       fireEvent.change(inputs[0], { target: { value: 'first' } })
+      fireEvent.change(inputs[1], { target: { value: 'second' } })
 
       // Press Enter on the first (non-last) item
       fireEvent.keyDown(inputs[0], { key: 'Enter', code: 'Enter' })
+      await vi.runAllTimersAsync()
 
       // Three items total
       const inputsAfter = screen.getAllByPlaceholderText('List item...')
@@ -334,7 +336,10 @@ describe('NoteModal', () => {
       expect(inputsAfter[1]).toHaveValue('')
 
       // The second item (index 2) remains unchanged
-      expect(inputsAfter[2]).toHaveValue('')
+      expect(inputsAfter[2]).toHaveValue('second')
+
+      // Focus moves to the newly inserted item
+      expect(inputsAfter[1]).toHaveFocus()
     })
 
     it('pressing a key other than Enter on a todo item does not create a new item', async () => {
@@ -344,7 +349,7 @@ describe('NoteModal', () => {
       fireEvent.click(screen.getByText('Add item'))
 
       const inputs = screen.getAllByPlaceholderText('List item...')
-      fireEvent.keyDown(inputs[0], { key: 'Tab', code: 'Tab' })
+      fireEvent.keyDown(inputs[0], { key: 'Escape', code: 'Escape' })
 
       expect(screen.getAllByPlaceholderText('List item...')).toHaveLength(1)
     })

@@ -91,6 +91,28 @@ type UpdateNoteItem struct {
 	IndentLevel int    `json:"indent_level"`
 }
 
+func normalizeCreateNoteRequest(req *CreateNoteRequest) (int, error) {
+	if req.Title == "" && req.Content == "" && len(req.Items) == 0 {
+		return http.StatusBadRequest, errors.New("empty note")
+	}
+
+	if len(req.Items) > 0 {
+		if req.NoteType == "" {
+			req.NoteType = models.NoteTypeTodo
+		} else if req.NoteType != models.NoteTypeTodo {
+			return http.StatusBadRequest, errors.New("note_type must be 'todo' when items are provided")
+		}
+	} else if req.NoteType == "" {
+		req.NoteType = models.NoteTypeText
+	}
+
+	if req.Color == "" {
+		req.Color = models.DefaultNoteColor
+	}
+
+	return 0, nil
+}
+
 func (h *NotesHandler) createTodoItems(noteID string, items []CreateNoteItem) (int, error) {
 	for _, item := range items {
 		if item.IndentLevel < 0 || item.IndentLevel > 1 {
@@ -162,18 +184,8 @@ func (h *NotesHandler) CreateNote(w http.ResponseWriter, r *http.Request) (int, 
 		return http.StatusBadRequest, err
 	}
 
-	if req.Title == "" && req.Content == "" && len(req.Items) == 0 {
-		return http.StatusBadRequest, errors.New("empty note")
-	}
-
-	if len(req.Items) > 0 {
-		req.NoteType = models.NoteTypeTodo
-	} else if req.NoteType == "" {
-		req.NoteType = models.NoteTypeText
-	}
-
-	if req.Color == "" {
-		req.Color = models.DefaultNoteColor
+	if status, err := normalizeCreateNoteRequest(&req); err != nil {
+		return status, err
 	}
 
 	note, err := h.noteStore.Create(user.ID, req.Title, req.Content, req.NoteType, req.Color)
@@ -713,7 +725,7 @@ func (h *NotesHandler) GetNoteShares(w http.ResponseWriter, r *http.Request) (in
 
 // SearchUsers godoc
 //
-//	@Summary	List all users (for share target search)
+//	@Summary	List users (excluding current user)
 //	@Tags		users
 //	@Security	CookieAuth
 //	@Produce	json
@@ -765,13 +777,13 @@ type keepNoteItem struct {
 }
 
 type keepNote struct {
-	Title                    string         `json:"title"`
-	TextContent              string         `json:"textContent"`
-	ListContent              []keepNoteItem `json:"listContent"`
-	Color                    string         `json:"color"`
-	IsTrashed                bool           `json:"isTrashed"`
-	IsArchived               bool           `json:"isArchived"`
-	IsPinned                 bool           `json:"isPinned"`
+	Title       string         `json:"title"`
+	TextContent string         `json:"textContent"`
+	ListContent []keepNoteItem `json:"listContent"`
+	Color       string         `json:"color"`
+	IsTrashed   bool           `json:"isTrashed"`
+	IsArchived  bool           `json:"isArchived"`
+	IsPinned    bool           `json:"isPinned"`
 }
 
 func (kn keepNote) isEmpty() bool {

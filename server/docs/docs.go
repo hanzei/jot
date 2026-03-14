@@ -1268,7 +1268,7 @@ const docTemplate = `{
                 "tags": [
                     "users"
                 ],
-                "summary": "List all users (for share target search)",
+                "summary": "List users (excluding current user)",
                 "responses": {
                     "200": {
                         "description": "OK",

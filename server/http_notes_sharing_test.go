@@ -209,6 +209,41 @@ func TestEdgeCases(t *testing.T) {
 		assert.Equal(t, "todo", note["note_type"])
 	})
 
+	t.Run("create note with items defaults note_type to todo", func(t *testing.T) {
+		body := map[string]any{
+			"title":   "Implicit Todo",
+			"content": "",
+			"items": []map[string]any{
+				{"text": "Item 1", "position": 0},
+			},
+		}
+
+		resp := ts.authRequest(t, user, http.MethodPost, "/api/v1/notes", body)
+		assert.Equal(t, http.StatusCreated, resp.StatusCode)
+
+		var note map[string]any
+		require.NoError(t, resp.UnmarshalBody(&note))
+		assert.Equal(t, "todo", note["note_type"])
+		items, ok := note["items"].([]any)
+		require.True(t, ok)
+		assert.Len(t, items, 1)
+	})
+
+	t.Run("create note rejects non-todo note_type when items are provided", func(t *testing.T) {
+		body := map[string]any{
+			"title":     "Conflicting Note Type",
+			"content":   "",
+			"note_type": "text",
+			"items": []map[string]any{
+				{"text": "Item 1", "position": 0},
+			},
+		}
+
+		resp := ts.authRequest(t, user, http.MethodPost, "/api/v1/notes", body)
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+		assert.Contains(t, resp.GetString(), "note_type must be 'todo' when items are provided")
+	})
+
 	t.Run("update note with default color", func(t *testing.T) {
 		// Create note first
 		createBody := map[string]any{
