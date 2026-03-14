@@ -12,7 +12,7 @@ func validateUsername(username string) error {
 		return errors.New("username must be at least 2 characters")
 	}
 	if len(username) > 30 {
-		return errors.New("username must be less than 30 characters")
+		return errors.New("username must be at most 30 characters")
 	}
 
 	// Username can only contain letters, numbers, underscores, and hyphens
@@ -31,9 +31,22 @@ func validateUsername(username string) error {
 }
 
 func validatePassword(password string) error {
-	const minPasswordLength = 4
+	const minPasswordLength = 8
 	if len(password) < minPasswordLength {
 		return fmt.Errorf("password must be at least %d characters", minPasswordLength)
+	}
+	hasLetter := false
+	hasDigit := false
+	for _, char := range password {
+		if char >= '0' && char <= '9' {
+			hasDigit = true
+		}
+		if (char >= 'a' && char <= 'z') || (char >= 'A' && char <= 'Z') {
+			hasLetter = true
+		}
+	}
+	if !hasLetter || !hasDigit {
+		return errors.New("password must include at least one letter and one number")
 	}
 	return nil
 }

@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"runtime"
+	"strconv"
 	"strings"
 	"time"
 
@@ -124,9 +125,35 @@ func (s *Server) setupRoutes() {
 
 	s.router.Get("/health", s.handleHealth)
 
+	authRateLimitPerMinute := 30
+	if configuredLimit := os.Getenv("AUTH_RATE_LIMIT_PER_MINUTE"); configuredLimit != "" {
+		parsedLimit, err := strconv.Atoi(configuredLimit)
+		if err != nil || parsedLimit < 0 {
+			logrus.WithField("AUTH_RATE_LIMIT_PER_MINUTE", configuredLimit).Warn("invalid auth rate limit value, using default")
+		} else {
+			authRateLimitPerMinute = parsedLimit
+		}
+	}
+
+	trustProxyHeaders := strings.EqualFold(os.Getenv("TRUST_PROXY_HEADERS"), "true")
+
+	var authRateLimitMiddleware func(http.Handler) http.Handler
+	if authRateLimitPerMinute > 0 {
+		authRateLimitMiddleware = newIPRateLimiter(authRateLimitPerMinute, time.Minute, trustProxyHeaders)
+		logrus.WithFields(logrus.Fields{
+			"auth_rate_limit_per_minute": authRateLimitPerMinute,
+			"trust_proxy_headers":        trustProxyHeaders,
+		}).Info("auth rate limiting enabled")
+	}
+
 	s.router.Route("/api/v1", func(r chi.Router) {
-		r.Post("/register", s.wrapHandler(s.authHandler.Register))
-		r.Post("/login", s.wrapHandler(s.authHandler.Login))
+		if authRateLimitMiddleware != nil {
+			r.With(authRateLimitMiddleware).Post("/register", s.wrapHandler(s.authHandler.Register))
+			r.With(authRateLimitMiddleware).Post("/login", s.wrapHandler(s.authHandler.Login))
+		} else {
+			r.Post("/register", s.wrapHandler(s.authHandler.Register))
+			r.Post("/login", s.wrapHandler(s.authHandler.Login))
+		}
 		r.Post("/logout", s.wrapHandler(s.authHandler.Logout))
 
 		r.Group(func(r chi.Router) {

@@ -153,6 +153,16 @@ func TestSearchUsersEndpoint(t *testing.T) {
 		}
 	})
 
+	t.Run("search users query filters results", func(t *testing.T) {
+		resp := ts.authRequest(t, user1, http.MethodGet, "/api/v1/users?search=adm", nil)
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+		var users []map[string]any
+		require.NoError(t, resp.UnmarshalBody(&users))
+		require.Len(t, users, 1)
+		assert.Equal(t, "admin", users[0]["username"])
+	})
+
 	t.Run("search users without auth returns unauthorized", func(t *testing.T) {
 		resp := ts.request(t, nil, http.MethodGet, "/api/v1/users", nil)
 		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)

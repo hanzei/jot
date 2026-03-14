@@ -195,6 +195,9 @@ func (h *NotesHandler) CreateNote(w http.ResponseWriter, r *http.Request) (int, 
 
 	if req.NoteType == models.NoteTypeTodo && len(req.Items) > 0 {
 		if status, err := h.createTodoItems(note.ID, req.Items); err != nil {
+			if deleteErr := h.noteStore.Delete(note.ID, user.ID); deleteErr != nil {
+				logrus.WithError(deleteErr).WithField("note_id", note.ID).Error("failed to cleanup note after todo item creation failure")
+			}
 			return status, err
 		}
 
@@ -255,37 +258,20 @@ func (h *NotesHandler) GetNote(w http.ResponseWriter, r *http.Request) (int, err
 	return 0, nil
 }
 
-func (h *NotesHandler) validateAndUpdateTodoItems(noteID string, userID string, items []UpdateNoteItem) (int, error) {
+func mapAndValidateTodoItems(items []UpdateNoteItem) ([]models.NoteItemUpdateInput, error) {
+	noteItems := make([]models.NoteItemUpdateInput, 0, len(items))
 	for _, item := range items {
 		if item.IndentLevel < 0 || item.IndentLevel > 1 {
-			return http.StatusBadRequest, errors.New("indent_level must be 0 or 1")
+			return nil, errors.New("indent_level must be 0 or 1")
 		}
+		noteItems = append(noteItems, models.NoteItemUpdateInput{
+			Text:        item.Text,
+			Position:    item.Position,
+			Completed:   item.Completed,
+			IndentLevel: item.IndentLevel,
+		})
 	}
-	return 0, h.updateTodoItems(noteID, userID, items)
-}
-
-func (h *NotesHandler) updateTodoItems(noteID string, userID string, items []UpdateNoteItem) error {
-	// Get current note to check if it's a todo type
-	currentNote, err := h.noteStore.GetByID(noteID, userID)
-	if err != nil {
-		return err
-	}
-
-	if currentNote.NoteType == models.NoteTypeTodo {
-		// Delete all existing items (we'll recreate them)
-		if err := h.noteStore.DeleteItemsByNoteID(noteID); err != nil {
-			return err
-		}
-
-		// Create new items with updated positions
-		for _, item := range items {
-			_, err := h.noteStore.CreateItemWithCompleted(noteID, item.Text, item.Position, item.Completed, item.IndentLevel)
-			if err != nil {
-				return err
-			}
-		}
-	}
-	return nil
+	return noteItems, nil
 }
 
 // UpdateNote godoc
@@ -325,21 +311,32 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 		req.Color = models.DefaultNoteColor
 	}
 
-	err := h.noteStore.Update(id, user.ID, req.Title, req.Content, req.Pinned, req.Archived, req.Color, req.CheckedItemsCollapsed)
+	replaceItems := req.Items != nil
+	items := []models.NoteItemUpdateInput(nil)
+	if replaceItems {
+		items, err = mapAndValidateTodoItems(req.Items)
+		if err != nil {
+			return http.StatusBadRequest, err
+		}
+	}
+
+	err := h.noteStore.UpdateWithItems(
+		id,
+		user.ID,
+		req.Title,
+		req.Content,
+		req.Pinned,
+		req.Archived,
+		req.Color,
+		req.CheckedItemsCollapsed,
+		items,
+		replaceItems,
+	)
 	if err != nil {
 		if errors.Is(err, models.ErrNoteNotFound) || errors.Is(err, models.ErrNoteNoAccess) {
 			return http.StatusNotFound, err
 		}
 		return http.StatusInternalServerError, err
-	}
-
-	// Handle todo items update if provided
-	if len(req.Items) > 0 {
-		var status int
-		status, err = h.validateAndUpdateTodoItems(id, user.ID, req.Items)
-		if err != nil {
-			return status, err
-		}
 	}
 
 	note, err := h.noteStore.GetByID(id, user.ID)
@@ -737,6 +734,7 @@ func (h *NotesHandler) SearchUsers(w http.ResponseWriter, r *http.Request) (int,
 	if !ok {
 		return http.StatusUnauthorized, errors.New("unauthorized")
 	}
+	search := strings.ToLower(strings.TrimSpace(r.URL.Query().Get("search")))
 
 	users, err := h.userStore.GetAll()
 	if err != nil {
@@ -746,16 +744,24 @@ func (h *NotesHandler) SearchUsers(w http.ResponseWriter, r *http.Request) (int,
 	userInfos := []UserInfo{}
 	for _, user := range users {
 		// Don't include the current user in the list
-		if user.ID != currentUser.ID {
-			userInfos = append(userInfos, UserInfo{
-				ID:             user.ID,
-				Username:       user.Username,
-				FirstName:      user.FirstName,
-				LastName:       user.LastName,
-				Role:           user.Role,
-				HasProfileIcon: user.HasProfileIcon,
-			})
+		if user.ID == currentUser.ID {
+			continue
 		}
+		if search != "" {
+			fullName := strings.ToLower(strings.TrimSpace(user.FirstName + " " + user.LastName))
+			if !strings.Contains(strings.ToLower(user.Username), search) && !strings.Contains(fullName, search) {
+				continue
+			}
+		}
+
+		userInfos = append(userInfos, UserInfo{
+			ID:             user.ID,
+			Username:       user.Username,
+			FirstName:      user.FirstName,
+			LastName:       user.LastName,
+			Role:           user.Role,
+			HasProfileIcon: user.HasProfileIcon,
+		})
 	}
 
 	w.Header().Set("Content-Type", "application/json")

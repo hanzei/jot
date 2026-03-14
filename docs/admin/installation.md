@@ -56,9 +56,9 @@ docker run -p 8080:8080 -v ./data:/data jot
 
 ### Environment Variables
 
-#### Required Configuration
+#### Database Configuration
 ```bash
-# Database file path
+# Database file path (default: ./jot.db)
 DB_PATH=/var/lib/jot/jot.db
 ```
 
@@ -70,9 +70,6 @@ PORT=8080
 # Frontend static files directory (default: ../webapp/build/)
 STATIC_DIR=/var/lib/jot/webapp
 
-# Log level (default: info)
-LOG_LEVEL=info
-
 # Allowed CORS origin for the frontend (default: http://localhost:5173)
 # Set this to the exact URL your frontend is served from (e.g. https://jot.example.com)
 # Wildcards are not supported — must be an exact origin
@@ -82,4 +79,12 @@ CORS_ALLOWED_ORIGIN=https://jot.example.com
 # Set to "false" only for local development over plain HTTP
 # Must remain "true" in production (requires HTTPS)
 COOKIE_SECURE=true
+
+# Per-IP auth request limit for /register and /login (default: 30 requests/min)
+# Set to 0 to disable rate limiting.
+AUTH_RATE_LIMIT_PER_MINUTE=30
+
+# Trust X-Forwarded-For header for auth rate limiting (default: false)
+# Enable only behind a trusted reverse proxy that sanitizes this header.
+TRUST_PROXY_HEADERS=false
 ```

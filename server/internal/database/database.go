@@ -18,13 +18,16 @@ type DB struct {
 }
 
 func New(dbPath string) (*DB, error) {
-	db, err := sql.Open("sqlite3", dbPath)
+	db, err := sql.Open("sqlite3", sqliteDSNWithForeignKeys(dbPath))
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
 
 	if err := db.Ping(); err != nil {
 		return nil, fmt.Errorf("failed to ping database: %w", err)
+	}
+	if err := enableForeignKeys(db); err != nil {
+		return nil, fmt.Errorf("failed to enable foreign keys: %w", err)
 	}
 
 	d := &DB{DB: db}
@@ -33,6 +36,34 @@ func New(dbPath string) (*DB, error) {
 	}
 
 	return d, nil
+}
+
+func enableForeignKeys(db *sql.DB) error {
+	if _, err := db.Exec(`PRAGMA foreign_keys = ON`); err != nil {
+		return fmt.Errorf("set foreign_keys pragma: %w", err)
+	}
+
+	var enabled int
+	if err := db.QueryRow(`PRAGMA foreign_keys`).Scan(&enabled); err != nil {
+		return fmt.Errorf("read foreign_keys pragma: %w", err)
+	}
+	if enabled != 1 {
+		return fmt.Errorf("sqlite foreign key enforcement is disabled")
+	}
+
+	return nil
+}
+
+func sqliteDSNWithForeignKeys(dbPath string) string {
+	if strings.Contains(dbPath, "_foreign_keys=") {
+		return dbPath
+	}
+
+	separator := "?"
+	if strings.Contains(dbPath, "?") {
+		separator = "&"
+	}
+	return dbPath + separator + "_foreign_keys=on"
 }
 
 func (d *DB) runMigrations() error {

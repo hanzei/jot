@@ -96,6 +96,7 @@ func (ts *TestServer) createTestUser(t *testing.T, username, password string, is
 	resp, err := client.Post(ts.HTTPServer.URL+"/api/v1/register", "application/json", bytes.NewBuffer(jsonBody))
 	require.NoError(t, err)
 	defer resp.Body.Close()
+	require.Equal(t, http.StatusCreated, resp.StatusCode)
 
 	var authResp struct {
 		User *models.User `json:"user"`
@@ -205,6 +206,17 @@ func TestRegisterEndpoint(t *testing.T) {
 		resp := ts.request(t, newCookieClient(t), http.MethodPost, "/api/v1/register", body)
 		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 	})
+
+	t.Run("weak password is rejected", func(t *testing.T) {
+		body := map[string]string{
+			"username": "weakpassuser",
+			"password": "12345678",
+		}
+
+		resp := ts.request(t, newCookieClient(t), http.MethodPost, "/api/v1/register", body)
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+		assert.Contains(t, resp.GetString(), "at least one letter and one number")
+	})
 }
 
 func TestLoginEndpoint(t *testing.T) {
@@ -245,6 +257,42 @@ func TestLoginEndpoint(t *testing.T) {
 		resp := ts.request(t, newCookieClient(t), http.MethodPost, "/api/v1/login", body)
 		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 	})
+}
+
+func TestAuthRateLimiting(t *testing.T) {
+	tmpDB := fmt.Sprintf("/tmp/test_rate_limit_%s.db", t.Name())
+	_ = os.Remove(tmpDB)
+
+	t.Setenv("DB_PATH", tmpDB)
+	t.Setenv("COOKIE_SECURE", "false")
+	t.Setenv("AUTH_RATE_LIMIT_PER_MINUTE", "1")
+
+	s := server.New()
+	httpServer := httptest.NewServer(s.GetRouter())
+	ts := &TestServer{
+		Server:     s,
+		HTTPServer: httpServer,
+	}
+
+	t.Cleanup(func() {
+		httpServer.Close()
+		_ = s.GetDB().Close()
+		_ = os.Remove(tmpDB)
+	})
+
+	registerBody := map[string]string{
+		"username": "ratelimit_user",
+		"password": "password123",
+	}
+
+	firstResp := ts.request(t, newCookieClient(t), http.MethodPost, "/api/v1/register", registerBody)
+	assert.Equal(t, http.StatusCreated, firstResp.StatusCode)
+
+	secondResp := ts.request(t, newCookieClient(t), http.MethodPost, "/api/v1/register", map[string]string{
+		"username": "ratelimit_user2",
+		"password": "password123",
+	})
+	assert.Equal(t, http.StatusTooManyRequests, secondResp.StatusCode)
 }
 
 func TestLogoutEndpoint(t *testing.T) {
@@ -428,7 +476,6 @@ func TestAdminEndpoints(t *testing.T) {
 		assert.Equal(t, http.StatusForbidden, resp.StatusCode)
 	})
 
-
 	t.Run("delete nonexistent user returns 404", func(t *testing.T) {
 		resp := ts.authRequest(t, adminUser, http.MethodDelete, "/api/v1/admin/users/nonexistentid12345678", nil)
 		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
@@ -590,19 +637,19 @@ func TestSSEEndpoint(t *testing.T) {
 
 func TestChangePasswordEndpoint(t *testing.T) {
 	ts := setupTestServer(t)
-	user := ts.createTestUser(t, "passuser", "oldpassword", false)
+	user := ts.createTestUser(t, "passuser", "oldpassword1", false)
 
 	t.Run("successful password change", func(t *testing.T) {
 		body := map[string]string{
-			"current_password": "oldpassword",
-			"new_password":     "newpassword",
+			"current_password": "oldpassword1",
+			"new_password":     "newpassword1",
 		}
 		resp := ts.authRequest(t, user, http.MethodPut, "/api/v1/users/me/password", body)
 		assert.Equal(t, http.StatusNoContent, resp.StatusCode)
 
 		// The handler invalidates old sessions and issues a fresh one, so
 		// verify the new password works with a separate login.
-		loginBody := map[string]string{"username": "passuser", "password": "newpassword"}
+		loginBody := map[string]string{"username": "passuser", "password": "newpassword1"}
 		loginResp := ts.request(t, user.Client, http.MethodPost, "/api/v1/login", loginBody)
 		assert.Equal(t, http.StatusOK, loginResp.StatusCode)
 	})
@@ -610,7 +657,7 @@ func TestChangePasswordEndpoint(t *testing.T) {
 	t.Run("wrong current password returns 403", func(t *testing.T) {
 		body := map[string]string{
 			"current_password": "wrongpassword",
-			"new_password":     "anotherpass",
+			"new_password":     "anotherpass1",
 		}
 		resp := ts.authRequest(t, user, http.MethodPut, "/api/v1/users/me/password", body)
 		assert.Equal(t, http.StatusForbidden, resp.StatusCode)
@@ -618,7 +665,7 @@ func TestChangePasswordEndpoint(t *testing.T) {
 
 	t.Run("short new password returns 400", func(t *testing.T) {
 		body := map[string]string{
-			"current_password": "newpassword",
+			"current_password": "newpassword1",
 			"new_password":     "ab",
 		}
 		resp := ts.authRequest(t, user, http.MethodPut, "/api/v1/users/me/password", body)
@@ -769,11 +816,11 @@ func TestTodoItemIndentLevel(t *testing.T) {
 
 	t.Run("indent levels updated via PUT", func(t *testing.T) {
 		updateBody := map[string]any{
-			"title":                  "Indent Test",
-			"content":                "",
-			"pinned":                 false,
-			"archived":               false,
-			"color":                  "#ffffff",
+			"title":                   "Indent Test",
+			"content":                 "",
+			"pinned":                  false,
+			"archived":                false,
+			"color":                   "#ffffff",
 			"checked_items_collapsed": false,
 			"items": []map[string]any{
 				{"text": "top level", "position": 0, "completed": false, "indent_level": 0},
@@ -833,11 +880,11 @@ func TestTodoItemIndentLevel(t *testing.T) {
 
 	t.Run("indent level > 1 rejected on update", func(t *testing.T) {
 		updateBody := map[string]any{
-			"title":                  "Indent Test",
-			"content":                "",
-			"pinned":                 false,
-			"archived":               false,
-			"color":                  "#ffffff",
+			"title":                   "Indent Test",
+			"content":                 "",
+			"pinned":                  false,
+			"archived":                false,
+			"color":                   "#ffffff",
 			"checked_items_collapsed": false,
 			"items": []map[string]any{
 				{"text": "top level", "position": 0, "completed": false, "indent_level": 0},
@@ -990,9 +1037,9 @@ func TestUploadProfileIcon(t *testing.T) {
 			0x49, 0x48, 0x44, 0x52, // "IHDR"
 			0x00, 0x00, 0x13, 0x88, // width: 5000
 			0x00, 0x00, 0x13, 0x88, // height: 5000
-			0x08,                   // bit depth: 8
-			0x02,                   // color type: RGB
-			0x00, 0x00, 0x00,       // compression, filter, interlace
+			0x08,             // bit depth: 8
+			0x02,             // color type: RGB
+			0x00, 0x00, 0x00, // compression, filter, interlace
 			0x00, 0x00, 0x00, 0x00, // CRC (invalid but DecodeConfig reads before checking)
 		}
 		body, ct := createMultipartImage(t, "file", "bomb.png", pngHeader)

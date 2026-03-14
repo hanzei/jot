@@ -10,7 +10,7 @@ Welcome to Jot, your self-hosted note-taking application! This guide will help y
 2. **Click "Create Account"** on the login page
 3. **Enter your details**:
    - Username (minimum 2 characters)
-   - Password (minimum 4 characters)
+   - Password (minimum 8 characters, with at least one letter and one number)
    - Confirm your password
 4. **Click "Create Account"**
 
@@ -32,7 +32,7 @@ After logging in, you'll see your dashboard with:
 3. **Add a title** (optional but recommended)
 4. **Write your content** in the text area
 5. **Choose a color** (optional) by clicking the color circles
-6. **Click "Save"**
+6. **Close the editor** (changes are saved automatically)
 
 ### Todo Lists
 
@@ -41,7 +41,7 @@ After logging in, you'll see your dashboard with:
 3. **Add a title** for your list
 4. **Add items** by typing in the text fields
 5. **Click "+ Add item"** to add more items
-6. **Click "Save"**
+6. **Close the editor** (changes are saved automatically)
 
 ## Managing Your Notes
 
@@ -56,7 +56,7 @@ After logging in, you'll see your dashboard with:
 1. **Click on any note** to open the edit modal
 2. **Make your changes** to title, content, or items
 3. **Change colors** using the color picker
-4. **Click "Save"** to keep your changes
+4. **Close the editor** to keep your changes
 
 ### Organizing Notes
 
@@ -73,7 +73,7 @@ After logging in, you'll see your dashboard with:
 #### Deleting Notes
 - **Click the three dots (⋮)** on any note
 - **Select "Delete"** and confirm
-- **Deleted notes cannot be recovered**, so be careful!
+- **Deleted notes move to Bin** where you can restore or permanently delete them
 
 ## Searching and Filtering
 
