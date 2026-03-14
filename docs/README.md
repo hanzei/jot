@@ -1,14 +1,8 @@
 # Jot Documentation
 
-Welcome to the Jot documentation! This directory contains comprehensive guides for both users and administrators.
+Welcome to the Jot documentation! This directory contains guides for system administrators.
 
 ## Documentation Structure
-
-### 📖 User Documentation
-Documentation for end users of the Jot note-taking application.
-
-- **[Getting Started](user/getting-started.md)** - First-time setup, creating accounts, and basic usage
-- **[Features Guide](user/features.md)** - Complete guide to all Jot features and functionality
 
 ### ⚙️ Admin Documentation  
 Documentation for system administrators managing Jot installations.
@@ -18,10 +12,6 @@ Documentation for system administrators managing Jot installations.
 - **[Maintenance Guide](admin/maintenance.md)** - Ongoing maintenance, monitoring, and troubleshooting
 
 ## Quick Links
-
-### For New Users
-1. Start with [Getting Started](user/getting-started.md) to create your account and first notes
-2. Explore the [Features Guide](user/features.md) to learn about all available functionality
 
 ### For System Administrators
 1. Follow the [Installation Guide](admin/installation.md) to deploy Jot
@@ -41,11 +31,9 @@ Documentation for system administrators managing Jot installations.
 4. **Test configuration** - Verify environment variables and file permissions
 
 ### Getting Additional Help
-1. **Users**: Contact your system administrator
-2. **Administrators**: 
-   - Check the troubleshooting sections in the admin guides
-   - Review the main project documentation
-   - Check GitHub issues for known problems
+- Check the troubleshooting sections in the admin guides
+- Review the main project documentation
+- Check GitHub issues for known problems
 
 ## Contributing to Documentation
 
@@ -66,8 +54,6 @@ Documentation for system administrators managing Jot installations.
 
 | Document | Audience | Purpose |
 |----------|----------|---------|
-| [Getting Started](user/getting-started.md) | End Users | First-time setup and basic usage |
-| [Features Guide](user/features.md) | End Users | Complete feature documentation |
 | [Installation Guide](admin/installation.md) | Administrators | Installation and deployment |
 | [Configuration Guide](admin/configuration.md) | Administrators | System configuration and security |
 | [Maintenance Guide](admin/maintenance.md) | Administrators | Ongoing maintenance and monitoring |
