@@ -17,6 +17,16 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+// UserInfo contains safe public fields returned when listing users for share-target search.
+type UserInfo struct {
+	ID             string `json:"id"`
+	Username       string `json:"username"`
+	FirstName      string `json:"first_name"`
+	LastName       string `json:"last_name"`
+	Role           string `json:"role"`
+	HasProfileIcon bool   `json:"has_profile_icon"`
+}
+
 type NotesHandler struct {
 	noteStore *models.NoteStore
 	userStore *models.UserStore
@@ -115,6 +125,19 @@ func (h *NotesHandler) createTodoItems(noteID string, items []CreateNoteItem) (i
 	return 0, nil
 }
 
+// GetNotes godoc
+//
+//	@Summary	List notes for the current user
+//	@Tags		notes
+//	@Security	CookieAuth
+//	@Produce	json
+//	@Param		archived	query		boolean	false	"Return archived notes"
+//	@Param		trashed		query		boolean	false	"Return trashed notes"
+//	@Param		search		query		string	false	"Full-text search query"
+//	@Param		label		query		string	false	"Filter by label ID"
+//	@Success	200			{array}		models.Note
+//	@Failure	401			{string}	string	"unauthorized"
+//	@Router		/notes [get]
 func (h *NotesHandler) GetNotes(w http.ResponseWriter, r *http.Request) (int, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
@@ -138,6 +161,18 @@ func (h *NotesHandler) GetNotes(w http.ResponseWriter, r *http.Request) (int, er
 	return 0, nil
 }
 
+// CreateNote godoc
+//
+//	@Summary	Create a new note
+//	@Tags		notes
+//	@Security	CookieAuth
+//	@Accept		json
+//	@Produce	json
+//	@Param		body	body		CreateNoteRequest	true	"Note to create"
+//	@Success	201		{object}	models.Note
+//	@Failure	400		{string}	string	"bad request"
+//	@Failure	401		{string}	string	"unauthorized"
+//	@Router		/notes [post]
 func (h *NotesHandler) CreateNote(w http.ResponseWriter, r *http.Request) (int, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
@@ -179,6 +214,18 @@ func (h *NotesHandler) CreateNote(w http.ResponseWriter, r *http.Request) (int, 
 	return 0, nil
 }
 
+// GetNote godoc
+//
+//	@Summary	Get a single note by ID
+//	@Tags		notes
+//	@Security	CookieAuth
+//	@Produce	json
+//	@Param		id	path		string	true	"Note ID"
+//	@Success	200	{object}	models.Note
+//	@Failure	400	{string}	string	"bad request"
+//	@Failure	401	{string}	string	"unauthorized"
+//	@Failure	404	{string}	string	"not found"
+//	@Router		/notes/{id} [get]
 func (h *NotesHandler) GetNote(w http.ResponseWriter, r *http.Request) (int, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
@@ -241,6 +288,20 @@ func (h *NotesHandler) updateTodoItems(noteID string, userID string, items []Upd
 	return nil
 }
 
+// UpdateNote godoc
+//
+//	@Summary	Update a note
+//	@Tags		notes
+//	@Security	CookieAuth
+//	@Accept		json
+//	@Produce	json
+//	@Param		id		path		string				true	"Note ID"
+//	@Param		body	body		UpdateNoteRequest	true	"Fields to update"
+//	@Success	200		{object}	models.Note
+//	@Failure	400		{string}	string	"bad request"
+//	@Failure	401		{string}	string	"unauthorized"
+//	@Failure	404		{string}	string	"not found"
+//	@Router		/notes/{id} [put]
 func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
@@ -294,6 +355,17 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 	return 0, nil
 }
 
+// DeleteNote godoc
+//
+//	@Summary	Move a note to trash
+//	@Tags		notes
+//	@Security	CookieAuth
+//	@Param		id	path		string	true	"Note ID"
+//	@Success	204	"no content"
+//	@Failure	400	{string}	string	"bad request"
+//	@Failure	401	{string}	string	"unauthorized"
+//	@Failure	404	{string}	string	"not found"
+//	@Router		/notes/{id} [delete]
 func (h *NotesHandler) DeleteNote(w http.ResponseWriter, r *http.Request) (int, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
@@ -332,6 +404,18 @@ func (h *NotesHandler) DeleteNote(w http.ResponseWriter, r *http.Request) (int, 
 	return 0, nil
 }
 
+// RestoreNote godoc
+//
+//	@Summary	Restore a note from trash
+//	@Tags		notes
+//	@Security	CookieAuth
+//	@Produce	json
+//	@Param		id	path		string	true	"Note ID"
+//	@Success	200	{object}	models.Note
+//	@Failure	400	{string}	string	"bad request"
+//	@Failure	401	{string}	string	"unauthorized"
+//	@Failure	404	{string}	string	"not found"
+//	@Router		/notes/{id}/restore [post]
 func (h *NotesHandler) RestoreNote(w http.ResponseWriter, r *http.Request) (int, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
@@ -367,6 +451,17 @@ func (h *NotesHandler) RestoreNote(w http.ResponseWriter, r *http.Request) (int,
 	return 0, nil
 }
 
+// PermanentlyDeleteNote godoc
+//
+//	@Summary	Permanently delete a note from trash
+//	@Tags		notes
+//	@Security	CookieAuth
+//	@Param		id	path		string	true	"Note ID"
+//	@Success	204	"no content"
+//	@Failure	400	{string}	string	"bad request"
+//	@Failure	401	{string}	string	"unauthorized"
+//	@Failure	404	{string}	string	"not found"
+//	@Router		/notes/{id}/permanent [delete]
 func (h *NotesHandler) PermanentlyDeleteNote(w http.ResponseWriter, r *http.Request) (int, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
@@ -414,6 +509,22 @@ type ShareNoteResponse struct {
 	Message string `json:"message"`
 }
 
+// ShareNote godoc
+//
+//	@Summary	Share a note with another user
+//	@Tags		sharing
+//	@Security	CookieAuth
+//	@Accept		json
+//	@Produce	json
+//	@Param		id		path		string				true	"Note ID"
+//	@Param		body	body		ShareNoteRequest	true	"Username to share with"
+//	@Success	200		{object}	ShareNoteResponse
+//	@Failure	400		{string}	string	"bad request"
+//	@Failure	401		{string}	string	"unauthorized"
+//	@Failure	403		{string}	string	"not owner"
+//	@Failure	404		{string}	string	"not found"
+//	@Failure	409		{string}	string	"already shared"
+//	@Router		/notes/{id}/share [post]
 func (h *NotesHandler) ShareNote(w http.ResponseWriter, r *http.Request) (int, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
@@ -459,7 +570,7 @@ func (h *NotesHandler) ShareNote(w http.ResponseWriter, r *http.Request) (int, e
 
 	err = h.noteStore.ShareNote(id, user.ID, targetUser.ID)
 	if err != nil {
-		if strings.Contains(err.Error(), "UNIQUE constraint failed: note_shares.note_id, note_shares.shared_with_user_id") {
+		if errors.Is(err, models.ErrNoteAlreadyShared) {
 			return http.StatusConflict, err
 		}
 		return http.StatusInternalServerError, err
@@ -481,6 +592,21 @@ func (h *NotesHandler) ShareNote(w http.ResponseWriter, r *http.Request) (int, e
 	return 0, nil
 }
 
+// UnshareNote godoc
+//
+//	@Summary	Remove a share from a note
+//	@Tags		sharing
+//	@Security	CookieAuth
+//	@Accept		json
+//	@Produce	json
+//	@Param		id		path		string				true	"Note ID"
+//	@Param		body	body		ShareNoteRequest	true	"Username to unshare with"
+//	@Success	200		{object}	ShareNoteResponse
+//	@Failure	400		{string}	string	"bad request"
+//	@Failure	401		{string}	string	"unauthorized"
+//	@Failure	403		{string}	string	"not owner"
+//	@Failure	404		{string}	string	"not found"
+//	@Router		/notes/{id}/share [delete]
 func (h *NotesHandler) UnshareNote(w http.ResponseWriter, r *http.Request) (int, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
@@ -551,6 +677,18 @@ func (h *NotesHandler) UnshareNote(w http.ResponseWriter, r *http.Request) (int,
 	return 0, nil
 }
 
+// GetNoteShares godoc
+//
+//	@Summary	List users a note is shared with
+//	@Tags		sharing
+//	@Security	CookieAuth
+//	@Produce	json
+//	@Param		id	path		string	true	"Note ID"
+//	@Success	200	{array}		models.NoteShare
+//	@Failure	400	{string}	string	"bad request"
+//	@Failure	401	{string}	string	"unauthorized"
+//	@Failure	403	{string}	string	"not owner"
+//	@Router		/notes/{id}/shares [get]
 func (h *NotesHandler) GetNoteShares(w http.ResponseWriter, r *http.Request) (int, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
@@ -586,7 +724,14 @@ func (h *NotesHandler) GetNoteShares(w http.ResponseWriter, r *http.Request) (in
 }
 
 // SearchUsers godoc
-// @Summary List users (excluding current user)
+//
+//	@Summary	List users (excluding current user)
+//	@Tags		users
+//	@Security	CookieAuth
+//	@Produce	json
+//	@Success	200	{array}		UserInfo
+//	@Failure	401	{string}	string	"unauthorized"
+//	@Router		/users [get]
 func (h *NotesHandler) SearchUsers(w http.ResponseWriter, r *http.Request) (int, error) {
 	currentUser, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
@@ -596,16 +741,6 @@ func (h *NotesHandler) SearchUsers(w http.ResponseWriter, r *http.Request) (int,
 	users, err := h.userStore.GetAll()
 	if err != nil {
 		return http.StatusInternalServerError, err
-	}
-
-	// Filter out passwords and only return safe fields for sharing purposes
-	type UserInfo struct {
-		ID             string `json:"id"`
-		Username       string `json:"username"`
-		FirstName      string `json:"first_name"`
-		LastName       string `json:"last_name"`
-		Role           string `json:"role"`
-		HasProfileIcon bool   `json:"has_profile_icon"`
 	}
 
 	userInfos := []UserInfo{}
@@ -702,8 +837,14 @@ func (h *NotesHandler) importKeepNote(userID string, kn keepNote) error {
 	return nil
 }
 
+const (
+	keepImportMaxEntrySize = 1 << 20  // 1 MB per zip entry
+	keepImportMaxTotalSize = 64 << 20 // 64 MB total decompressed
+)
+
 func parseKeepNotesFromZip(zr *zip.Reader) []keepNote {
 	var notes []keepNote
+	var totalRead int64
 	for _, f := range zr.File {
 		if !strings.HasSuffix(strings.ToLower(f.Name), ".json") {
 			continue
@@ -712,10 +853,15 @@ func parseKeepNotesFromZip(zr *zip.Reader) []keepNote {
 		if err != nil {
 			continue
 		}
-		jsonData, err := io.ReadAll(rc)
+		lr := &io.LimitedReader{R: rc, N: keepImportMaxEntrySize + 1}
+		jsonData, err := io.ReadAll(lr)
 		_ = rc.Close()
-		if err != nil {
-			continue
+		totalRead += int64(len(jsonData))
+		if totalRead > keepImportMaxTotalSize {
+			break
+		}
+		if err != nil || lr.N == 0 {
+			continue // read error or entry exceeded per-entry limit
 		}
 		var kn keepNote
 		if err := json.Unmarshal(jsonData, &kn); err != nil {
@@ -770,6 +916,18 @@ func (h *NotesHandler) importKeepNotes(userID string, keepNotes []keepNote) (imp
 	return imported, skipped, importErrors
 }
 
+// ImportNotes godoc
+//
+//	@Summary	Import notes from a Google Keep export
+//	@Tags		notes
+//	@Security	CookieAuth
+//	@Accept		multipart/form-data
+//	@Produce	json
+//	@Param		file	formData	file			true	"Google Keep JSON or ZIP export file"
+//	@Success	200		{object}	ImportResponse
+//	@Failure	400		{string}	string	"bad request"
+//	@Failure	401		{string}	string	"unauthorized"
+//	@Router		/notes/import [post]
 func (h *NotesHandler) ImportNotes(w http.ResponseWriter, r *http.Request) (int, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
@@ -810,6 +968,18 @@ type ReorderNotesRequest struct {
 	NoteIDs []string `json:"note_ids"`
 }
 
+// ReorderNotes godoc
+//
+//	@Summary	Reorder notes by providing an ordered list of IDs
+//	@Tags		notes
+//	@Security	CookieAuth
+//	@Accept		json
+//	@Param		body	body		ReorderNotesRequest	true	"Ordered note IDs"
+//	@Success	204		"no content"
+//	@Failure	400		{string}	string	"bad request"
+//	@Failure	401		{string}	string	"unauthorized"
+//	@Failure	403		{string}	string	"forbidden"
+//	@Router		/notes/reorder [post]
 func (h *NotesHandler) ReorderNotes(w http.ResponseWriter, r *http.Request) (int, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
