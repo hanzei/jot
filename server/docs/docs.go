@@ -2047,8 +2047,8 @@ const docTemplate = `{
     "securityDefinitions": {
         "CookieAuth": {
             "type": "apiKey",
-            "name": "session_token",
-            "in": "cookie"
+            "name": "jot_session",
+            "in": "header"
         }
     }
 }`
@@ -2060,7 +2060,7 @@ var SwaggerInfo = &swag.Spec{
 	BasePath:         "/api/v1",
 	Schemes:          []string{},
 	Title:            "Jot API",
-	Description:      "Self-hosted note-taking application API.",
+	Description:      "Self-hosted note-taking application API. Health probes are available at root paths `/livez` and `/readyz` (outside `/api/v1`).",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
 	LeftDelim:        "{{",

@@ -27,10 +27,22 @@ mkdir jot && cd jot
 # 2. Download docker-compose.yml
 curl -O https://raw.githubusercontent.com/hanzei/jot/master/docker-compose.yml
 
-# 3. Start the application
+# 3. Add COOKIE_SECURE=false under jot.environment for local HTTP use
+# 4. Start the application
 docker-compose up -d
 
 # 5. Access at http://localhost:8080
+```
+
+For local HTTP-only testing (no HTTPS), set `COOKIE_SECURE=false`:
+
+```bash
+docker run -d \
+  --name jot \
+  -p 8080:8080 \
+  -e COOKIE_SECURE=false \
+  -v ./data:/data \
+  hanzei/jot:latest
 ```
 
 ### Available Docker Images
@@ -52,6 +64,12 @@ docker build -t jot .
 docker run -p 8080:8080 -v ./data:/data jot
 ```
 
+For local HTTP-only testing, set `COOKIE_SECURE=false` explicitly:
+
+```bash
+docker run -p 8080:8080 -e COOKIE_SECURE=false -v ./data:/data jot
+```
+
 ## Configuration
 
 ### Environment Variables
@@ -59,7 +77,7 @@ docker run -p 8080:8080 -v ./data:/data jot
 #### Required Configuration
 ```bash
 # Database file path
-DB_PATH=/var/lib/jot/jot.db
+DB_PATH=/data/jot.db
 ```
 
 #### Optional Configuration
@@ -67,11 +85,8 @@ DB_PATH=/var/lib/jot/jot.db
 # Server port (default: 8080)
 PORT=8080
 
-# Frontend static files directory (default: ../webapp/build/)
-STATIC_DIR=/var/lib/jot/webapp
-
-# Log level (default: info)
-LOG_LEVEL=info
+# Frontend static files directory (default: /app/webapp/build in Docker image)
+STATIC_DIR=/app/webapp/build
 
 # Allowed CORS origin for the frontend (default: http://localhost:5173)
 # Set this to the exact URL your frontend is served from (e.g. https://jot.example.com)
@@ -83,3 +98,11 @@ CORS_ALLOWED_ORIGIN=https://jot.example.com
 # Must remain "true" in production (requires HTTPS)
 COOKIE_SECURE=true
 ```
+
+### Health and Probe Endpoints
+
+Use these endpoints for container and Kubernetes probing:
+
+- `GET /livez` — liveness check
+- `GET /readyz` — readiness check (includes database connectivity check)
+
