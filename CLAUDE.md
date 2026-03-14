@@ -131,8 +131,6 @@ Do not maintain endpoint tables in this file. Use the generated OpenAPI spec as 
 
 If handler annotations or request/response types change, regenerate docs with `task gen-docs`.
 
-`GET /health` — unauthenticated health check.
-
 ### Database Schema
 
 **users**

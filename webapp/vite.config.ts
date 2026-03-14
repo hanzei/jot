@@ -60,7 +60,11 @@ export default defineConfig(({ mode }) => ({
         target: 'http://localhost:8080',
         changeOrigin: true,
       },
-      '/health': {
+      '/livez': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+      },
+      '/readyz': {
         target: 'http://localhost:8080',
         changeOrigin: true,
       },

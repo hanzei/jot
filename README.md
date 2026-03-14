@@ -40,7 +40,7 @@ A self-hosted note-taking application built with Go backend and React frontend. 
    # Start the server (serves both API and frontend)
    cd server
    go mod tidy
-   go run main.go
+   COOKIE_SECURE=false go run main.go
    ```
 
 ### Task Automation
@@ -80,15 +80,13 @@ Run the Vite dev server for instant hot module replacement:
 
 ```bash
 # Terminal 1: Start the Go backend
-task run-server
+COOKIE_SECURE=false task run-server
 
 # Terminal 2: Start the Vite dev server with HMR
 task run-webapp
 ```
 
 Access: `http://localhost:5173` — API calls are proxied to the Go server automatically.
-
-Access: `http://localhost:8080`
 
 ## Environment Variables
 
@@ -157,6 +155,7 @@ docker run -d \
 
 # Or use docker-compose
 curl -O https://raw.githubusercontent.com/hanzei/jot/master/docker-compose.yml
+# add COOKIE_SECURE=false under jot.environment for local HTTP use
 docker-compose up -d
 ```
 
@@ -175,6 +174,13 @@ The Docker image uses multi-stage build:
 1. **Node.js stage**: Builds the React frontend
 2. **Go stage**: Builds the backend binary
 3. **Alpine stage**: Combines everything in minimal production image
+
+For production HTTPS, keep the default secure cookie behavior.
+
+For local HTTP-only testing, override with:
+```bash
+docker run -p 8080:8080 -e COOKIE_SECURE=false -v ./data:/data jot
+```
 
 ### Available Tags
 
@@ -214,8 +220,7 @@ services:
 2. **Database permissions**:
    ```bash
    # Fix SQLite file permissions
-   chmod 644 jot.db
-   chown app:app jot.db
+   chmod 664 jot.db
    ```
 
 3. **Port conflicts**:
@@ -240,7 +245,7 @@ services:
 ### Development Tips
 
 - **Frontend changes**: Rebuild with `npm run build` after React changes
-- **Backend changes**: Go has hot-reload when using `go run`
+- **Backend changes**: Restart the server after code changes
 - **Database inspection**: Use SQLite browser or `sqlite3 jot.db`
 - **Logs**: Check console output for detailed error messages
 - **API testing**: Use browser dev tools or curl/Postman
@@ -248,8 +253,8 @@ services:
 ### Debugging
 
 ```bash
-# Enable Go module debugging
-GOMODULE=on go run main.go
+# Run the server directly
+COOKIE_SECURE=false go run main.go
 
 # Frontend development build (separate dev server)
 cd webapp && npm run dev
