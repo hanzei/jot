@@ -87,15 +87,24 @@ export class DashboardPage {
   }
 
   async switchToArchived() {
-    await this.page.click('button:has-text("Archive")');
+    await this.page
+      .locator('aside[aria-label="Main navigation"]')
+      .getByRole('button', { name: 'Archive', exact: true })
+      .click();
   }
 
   async switchToNotes() {
-    await this.page.click('button:has-text("Notes")');
+    await this.page
+      .locator('aside[aria-label="Main navigation"]')
+      .getByRole('button', { name: 'Notes', exact: true })
+      .click();
   }
 
   async switchToBin() {
-    await this.page.click('button:has-text("Bin")');
+    await this.page
+      .locator('aside[aria-label="Main navigation"]')
+      .getByRole('button', { name: 'Bin', exact: true })
+      .click();
   }
 
   async clickLogo() {
