@@ -8,6 +8,14 @@
 - Preserve compatibility for existing installations whenever possible (startup behavior, migrations, and existing data).
 - If a change must break existing installations, explicitly call out the impact and migration steps in the PR description and communicate it clearly to users.
 
+## Threat Model
+
+- Logged-in users are generally treated as trustworthy collaborators.
+- Baseline authentication and authorization guarantees remain mandatory (ownership/share checks, role checks, and normal access boundaries).
+- Prioritize protections against unintentional internal overloads (for example: accidental high-frequency requests, runaway sync loops, and expensive repeated operations).
+- For internal-load safety, prefer practical controls such as rate limiting, retry/backoff, loop detection, and caps on expensive operations.
+- Defenses aimed specifically at malicious authenticated insiders are not a primary requirement at this stage, unless they are needed to preserve baseline auth/authz guarantees.
+
 ## Documentation Maintenance
 
 - When development instructions change (build scripts, dev setup, etc.), update the README.md to reflect the changes
