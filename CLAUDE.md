@@ -3,8 +3,8 @@
 ## Development Status Notice
 
 - Jot is under heavy initial development.
-- The API is currently unstable, and breaking API changes are acceptable when needed.
-- Call out every API breaking change in the PR description with expected client impact and upgrade guidance.
+- The API is currently unstable, and API-breaking changes are acceptable when needed.
+- Call out every API-breaking change in the PR description with expected client impact and upgrade guidance.
 - Preserve compatibility for existing installations whenever possible (startup behavior, migrations, and existing data).
 - If a change must break existing installations, explicitly call out the impact and migration steps in the PR description and communicate it clearly to users.
 
@@ -25,8 +25,7 @@
 
 ## Git Workflow
 
-- Don't commit to master unless specifically asked. Use a separate feature branch instead.
-- Don't create commits on the master branch unless specifically asked to do so.
+- Don't commit to `master` unless specifically asked; always use a separate feature branch.
 - Before creating a PR, run all tests and ensure they pass. Also run the linter.
 
 ## Code Review Loop
