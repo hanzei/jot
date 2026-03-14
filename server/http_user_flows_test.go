@@ -1,0 +1,168 @@
+package main
+
+import (
+	"fmt"
+	"net/http"
+	"testing"
+
+	"github.com/stretchr/testify/assert"
+	"github.com/stretchr/testify/require"
+)
+
+func TestReorderNotesEndpoint(t *testing.T) {
+	ts := setupTestServer(t)
+	user := ts.createTestUser(t, "reorder-user", "password123", false)
+	other := ts.createTestUser(t, "reorder-other", "password123", false)
+
+	createNote := func(title string, owner *TestUser) string {
+		resp := ts.authRequest(t, owner, http.MethodPost, "/api/v1/notes", map[string]any{
+			"title":   title,
+			"content": "content",
+		})
+		require.Equal(t, http.StatusCreated, resp.StatusCode)
+
+		var note map[string]any
+		require.NoError(t, resp.UnmarshalBody(&note))
+		return note["id"].(string)
+	}
+
+	note1 := createNote("First", user)
+	note2 := createNote("Second", user)
+	note3 := createNote("Third", user)
+	otherNote := createNote("Other", other)
+
+	t.Run("reorders notes and updates returned order", func(t *testing.T) {
+		reorderResp := ts.authRequest(t, user, http.MethodPost, "/api/v1/notes/reorder", map[string]any{
+			"note_ids": []string{note3, note1, note2},
+		})
+		require.Equal(t, http.StatusNoContent, reorderResp.StatusCode)
+
+		listResp := ts.authRequest(t, user, http.MethodGet, "/api/v1/notes", nil)
+		require.Equal(t, http.StatusOK, listResp.StatusCode)
+
+		var notes []map[string]any
+		require.NoError(t, listResp.UnmarshalBody(&notes))
+		require.Len(t, notes, 3)
+
+		assert.Equal(t, note3, notes[0]["id"])
+		assert.Equal(t, note1, notes[1]["id"])
+		assert.Equal(t, note2, notes[2]["id"])
+		assert.Equal(t, float64(0), notes[0]["position"])
+		assert.Equal(t, float64(1), notes[1]["position"])
+		assert.Equal(t, float64(2), notes[2]["position"])
+	})
+
+	t.Run("empty note ID list returns 400", func(t *testing.T) {
+		resp := ts.authRequest(t, user, http.MethodPost, "/api/v1/notes/reorder", map[string]any{
+			"note_ids": []string{},
+		})
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	})
+
+	t.Run("including note without access returns 403", func(t *testing.T) {
+		resp := ts.authRequest(t, user, http.MethodPost, "/api/v1/notes/reorder", map[string]any{
+			"note_ids": []string{note1, otherNote},
+		})
+		assert.Equal(t, http.StatusForbidden, resp.StatusCode)
+	})
+}
+
+func TestRemoveLabelEndpoint(t *testing.T) {
+	ts := setupTestServer(t)
+	user := ts.createTestUser(t, "label-remove-user", "password123", false)
+	other := ts.createTestUser(t, "label-remove-other", "password123", false)
+
+	createResp := ts.authRequest(t, user, http.MethodPost, "/api/v1/notes", map[string]any{
+		"title":   "Labeled note",
+		"content": "content",
+	})
+	require.Equal(t, http.StatusCreated, createResp.StatusCode)
+
+	var created map[string]any
+	require.NoError(t, createResp.UnmarshalBody(&created))
+	noteID := created["id"].(string)
+
+	addResp := ts.authRequest(t, user, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/labels", noteID), map[string]any{
+		"name": "work",
+	})
+	require.Equal(t, http.StatusOK, addResp.StatusCode)
+
+	var labeledNote map[string]any
+	require.NoError(t, addResp.UnmarshalBody(&labeledNote))
+	labels := labeledNote["labels"].([]any)
+	require.Len(t, labels, 1)
+	labelID := labels[0].(map[string]any)["id"].(string)
+
+	t.Run("removes label from note and unfilters from label query", func(t *testing.T) {
+		removeResp := ts.authRequest(t, user, http.MethodDelete, fmt.Sprintf("/api/v1/notes/%s/labels/%s", noteID, labelID), nil)
+		require.Equal(t, http.StatusOK, removeResp.StatusCode)
+
+		var updated map[string]any
+		require.NoError(t, removeResp.UnmarshalBody(&updated))
+		require.Empty(t, updated["labels"].([]any))
+
+		filterResp := ts.authRequest(t, user, http.MethodGet, fmt.Sprintf("/api/v1/notes?label=%s", labelID), nil)
+		require.Equal(t, http.StatusOK, filterResp.StatusCode)
+
+		var filtered []map[string]any
+		require.NoError(t, filterResp.UnmarshalBody(&filtered))
+		assert.Empty(t, filtered)
+	})
+
+	t.Run("user without note access cannot remove label", func(t *testing.T) {
+		otherResp := ts.authRequest(t, other, http.MethodDelete, fmt.Sprintf("/api/v1/notes/%s/labels/%s", noteID, labelID), nil)
+		assert.Equal(t, http.StatusForbidden, otherResp.StatusCode)
+	})
+}
+
+func TestAdminUpdateUserRoleEndpoint(t *testing.T) {
+	ts := setupTestServer(t)
+	admin := ts.createTestUser(t, "role-admin", "password123", true)
+	target := ts.createTestUser(t, "role-target", "password123", false)
+	regular := ts.createTestUser(t, "role-regular", "password123", false)
+
+	t.Run("admin can promote user and promoted user gains admin access", func(t *testing.T) {
+		resp := ts.authRequest(t, admin, http.MethodPut, fmt.Sprintf("/api/v1/admin/users/%s/role", target.User.ID), map[string]any{
+			"role": "admin",
+		})
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+
+		var updated map[string]any
+		require.NoError(t, resp.UnmarshalBody(&updated))
+		assert.Equal(t, "admin", updated["role"])
+
+		adminListResp := ts.authRequest(t, target, http.MethodGet, "/api/v1/admin/users", nil)
+		assert.Equal(t, http.StatusOK, adminListResp.StatusCode)
+	})
+
+	t.Run("non-admin cannot update roles", func(t *testing.T) {
+		resp := ts.authRequest(t, regular, http.MethodPut, fmt.Sprintf("/api/v1/admin/users/%s/role", target.User.ID), map[string]any{
+			"role": "user",
+		})
+		assert.Equal(t, http.StatusForbidden, resp.StatusCode)
+	})
+
+	t.Run("invalid role returns 400", func(t *testing.T) {
+		resp := ts.authRequest(t, admin, http.MethodPut, fmt.Sprintf("/api/v1/admin/users/%s/role", regular.User.ID), map[string]any{
+			"role": "super-admin",
+		})
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	})
+
+	t.Run("unknown user returns 404", func(t *testing.T) {
+		resp := ts.authRequest(t, admin, http.MethodPut, "/api/v1/admin/users/nonexistentid12345678/role", map[string]any{
+			"role": "user",
+		})
+		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+	})
+}
+
+func TestAdminUpdateUserRolePreventsDemotingLastAdmin(t *testing.T) {
+	ts := setupTestServer(t)
+	admin := ts.createTestUser(t, "last-admin", "password123", true)
+
+	resp := ts.authRequest(t, admin, http.MethodPut, fmt.Sprintf("/api/v1/admin/users/%s/role", admin.User.ID), map[string]any{
+		"role": "user",
+	})
+	assert.Equal(t, http.StatusConflict, resp.StatusCode)
+}
