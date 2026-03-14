@@ -311,17 +311,3 @@ CI is split into per-component workflows in `.github/workflows/`:
 2. `task lint` — no lint errors
 3. `task test-e2e` — e2e tests pass (add new e2e tests for any new user-facing features)
 
----
-
-## Note Features Summary
-
-| Feature | Details |
-|---------|---------|
-| Note types | `text` (title + content) or `todo` (checklist items) |
-| Pinning | Pinned notes appear first; unpinned position is saved and restored |
-| Archiving | Archived notes shown in a separate view |
-| Colors | Per-note hex color |
-| Search | Full-text search across title, content, and todo item text |
-| Sharing | Share with other users by username; `edit` permission |
-| Reordering | Drag-and-drop via `@dnd-kit`; position persisted to DB |
-| Offline | PWA service worker with Workbox caching |
