@@ -134,6 +134,9 @@ func (s *Server) setupRoutes() {
 	s.router.Get("/readyz", s.handleReady)
 
 	s.router.Route("/api/v1", func(r chi.Router) {
+		r.Get("/livez", s.handleLive)
+		r.Get("/readyz", s.handleReady)
+
 		r.Post("/register", s.wrapHandler(s.authHandler.Register))
 		r.Post("/login", s.wrapHandler(s.authHandler.Login))
 		r.Post("/logout", s.wrapHandler(s.authHandler.Logout))
@@ -274,6 +277,13 @@ func (s *Server) wrapHandler(handler func(w http.ResponseWriter, r *http.Request
 	}
 }
 
+// handleLive godoc
+//
+//	@Summary	Liveness probe
+//	@Tags		system
+//	@Produce	plain
+//	@Success	200	{string}	string	"OK"
+//	@Router		/livez [get]
 func (s *Server) handleLive(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	if _, err := w.Write([]byte("OK")); err != nil {
@@ -281,6 +291,14 @@ func (s *Server) handleLive(w http.ResponseWriter, _ *http.Request) {
 	}
 }
 
+// handleReady godoc
+//
+//	@Summary	Readiness probe
+//	@Tags		system
+//	@Produce	plain
+//	@Success	200	{string}	string	"OK"
+//	@Failure	503	{string}	string	"NOT READY"
+//	@Router		/readyz [get]
 func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()

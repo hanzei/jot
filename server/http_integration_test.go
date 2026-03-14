@@ -176,8 +176,22 @@ func TestProbeEndpoints(t *testing.T) {
 		assert.Equal(t, "OK", resp.GetString())
 	})
 
+	t.Run("livez endpoint under api prefix", func(t *testing.T) {
+		resp := ts.request(t, nil, http.MethodGet, "/api/v1/livez", nil)
+
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		assert.Equal(t, "OK", resp.GetString())
+	})
+
 	t.Run("readyz endpoint", func(t *testing.T) {
 		resp := ts.request(t, nil, http.MethodGet, "/readyz", nil)
+
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		assert.Equal(t, "OK", resp.GetString())
+	})
+
+	t.Run("readyz endpoint under api prefix", func(t *testing.T) {
+		resp := ts.request(t, nil, http.MethodGet, "/api/v1/readyz", nil)
 
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 		assert.Equal(t, "OK", resp.GetString())
