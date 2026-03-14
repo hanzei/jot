@@ -33,6 +33,17 @@ docker-compose up -d
 # 5. Access at http://localhost:8080
 ```
 
+For local HTTP-only testing (no HTTPS), set `COOKIE_SECURE=false`:
+
+```bash
+docker run -d \
+  --name jot \
+  -p 8080:8080 \
+  -e COOKIE_SECURE=false \
+  -v ./data:/data \
+  hanzei/jot:latest
+```
+
 ### Available Docker Images
 
 The official images are automatically built and published to Docker Hub:
@@ -52,6 +63,12 @@ docker build -t jot .
 docker run -p 8080:8080 -v ./data:/data jot
 ```
 
+For local HTTP-only testing, set `COOKIE_SECURE=false` explicitly:
+
+```bash
+docker run -p 8080:8080 -e COOKIE_SECURE=false -v ./data:/data hanzei/jot:latest
+```
+
 ## Configuration
 
 ### Environment Variables
@@ -67,11 +84,8 @@ DB_PATH=/var/lib/jot/jot.db
 # Server port (default: 8080)
 PORT=8080
 
-# Frontend static files directory (default: ../webapp/build/)
-STATIC_DIR=/var/lib/jot/webapp
-
-# Log level (default: info)
-LOG_LEVEL=info
+# Frontend static files directory (default: /app/webapp/build in Docker image)
+STATIC_DIR=/app/webapp/build
 
 # Allowed CORS origin for the frontend (default: http://localhost:5173)
 # Set this to the exact URL your frontend is served from (e.g. https://jot.example.com)

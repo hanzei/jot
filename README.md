@@ -40,7 +40,7 @@ A self-hosted note-taking application built with Go backend and React frontend. 
    # Start the server (serves both API and frontend)
    cd server
    go mod tidy
-   go run main.go
+   COOKIE_SECURE=false go run main.go
    ```
 
 ### Task Automation
@@ -80,15 +80,13 @@ Run the Vite dev server for instant hot module replacement:
 
 ```bash
 # Terminal 1: Start the Go backend
-task run-server
+COOKIE_SECURE=false task run-server
 
 # Terminal 2: Start the Vite dev server with HMR
 task run-webapp
 ```
 
 Access: `http://localhost:5173` — API calls are proxied to the Go server automatically.
-
-Access: `http://localhost:8080`
 
 ## Environment Variables
 
@@ -183,6 +181,12 @@ The Docker image uses multi-stage build:
 3. **Alpine stage**: Combines everything in minimal production image
 
 The runtime container runs as a non-root `jot` user. Ensure the mounted data directory is writable by that user.
+For production HTTPS, keep the default secure cookie behavior.
+
+For local HTTP-only testing, override with:
+```bash
+docker run -p 8080:8080 -e COOKIE_SECURE=false -v ./data:/data hanzei/jot:latest
+```
 
 ### Available Tags
 
@@ -223,7 +227,7 @@ services:
    ```bash
    # Fix SQLite file permissions
    chmod 644 jot.db
-   chown app:app jot.db
+   chown jot:jot jot.db
    ```
 
 3. **Port conflicts**:

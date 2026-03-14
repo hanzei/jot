@@ -1283,7 +1283,7 @@ paths:
       - auth
 securityDefinitions:
   CookieAuth:
-    in: cookie
-    name: session_token
+    in: header
+    name: Cookie
     type: apiKey
 swagger: "2.0"

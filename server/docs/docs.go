@@ -2038,8 +2038,8 @@ const docTemplate = `{
     "securityDefinitions": {
         "CookieAuth": {
             "type": "apiKey",
-            "name": "session_token",
-            "in": "cookie"
+            "name": "Cookie",
+            "in": "header"
         }
     }
 }`

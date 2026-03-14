@@ -42,6 +42,8 @@ type Server struct {
 	router         chi.Router
 	db             *database.DB
 	httpServer     *http.Server
+	startReady     chan struct{}
+	startReadyOnce sync.Once
 	serverMu       sync.RWMutex
 	sessionService *auth.SessionService
 	authHandler    *handlers.AuthHandler
@@ -99,6 +101,7 @@ func New() *Server {
 	s := &Server{
 		router:         chi.NewRouter(),
 		db:             db,
+		startReady:     make(chan struct{}),
 		sessionService: sessionService,
 		authHandler:    authHandler,
 		notesHandler:   notesHandler,
@@ -357,6 +360,9 @@ func (s *Server) Start(addr string) error {
 	s.serverMu.Lock()
 	s.httpServer = httpServer
 	s.serverMu.Unlock()
+	s.startReadyOnce.Do(func() {
+		close(s.startReady)
+	})
 
 	err := httpServer.ListenAndServe()
 	if errors.Is(err, http.ErrServerClosed) {
@@ -366,6 +372,10 @@ func (s *Server) Start(addr string) error {
 }
 
 func (s *Server) Shutdown(ctx context.Context) error {
+	if err := s.WaitUntilStarted(ctx); err != nil {
+		return err
+	}
+
 	s.serverMu.RLock()
 	httpServer := s.httpServer
 	s.serverMu.RUnlock()
@@ -385,4 +395,13 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	s.serverMu.Unlock()
 
 	return nil
+}
+
+func (s *Server) WaitUntilStarted(ctx context.Context) error {
+	select {
+	case <-s.startReady:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err()
+	}
 }

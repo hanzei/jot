@@ -12,8 +12,8 @@
 //	@BasePath	/api/v1
 //
 //	@securityDefinitions.apikey	CookieAuth
-//	@in							cookie
-//	@name						session_token
+//	@in							header
+//	@name						Cookie
 //
 //	@tag.name			auth
 //	@tag.description	Registration, login, logout and profile management
