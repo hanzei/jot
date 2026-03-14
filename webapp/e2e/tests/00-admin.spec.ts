@@ -38,8 +38,8 @@ test.describe('Admin', () => {
     await page.locator('input[type="password"]').fill(managedPassword);
     await page.getByRole('button', { name: 'Create User' }).click();
 
-    const usersList = page.locator('ul.divide-y').first();
-    const managedUserRow = usersList.locator('li').filter({ hasText: managedUsername });
+    const usersList = page.getByTestId('users-list');
+    const managedUserRow = usersList.getByTestId(`user-row-${managedUsername}`);
     await expect(managedUserRow).toBeVisible();
 
     await managedUserRow.getByRole('button', { name: 'Make Admin' }).click();
@@ -51,7 +51,7 @@ test.describe('Admin', () => {
 
     page.once('dialog', dialog => dialog.accept());
     await managedUserRow.getByRole('button', { name: `Delete user ${managedUsername}` }).click();
-    await expect(usersList.locator('li').filter({ hasText: managedUsername })).toHaveCount(0);
+    await expect(usersList.getByTestId(`user-row-${managedUsername}`)).toHaveCount(0);
   });
 
   test('non-admin users are redirected away from admin page', async ({
