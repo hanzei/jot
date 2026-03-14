@@ -177,25 +177,25 @@ While editing notes:
 ## Security and Privacy
 
 ### Authentication
-- JWT tokens for session management
-- 24-hour token expiration
-- Automatic logout on expiration
+- Secure session cookies for authentication
+- 30-day default session duration
+- Automatic session extension when less than 7 days remain for active users
 
 ### Account Management
 - Change your username from the Settings page
 - Change your password by providing your current password and a new one (minimum 4 characters)
 
 ### Data Protection
-- All notes are private to your account
-- No sharing between users (privacy-first)
+- Notes are private by default to your account
+- Optional note sharing with specific users
 - Secure password hashing
 - Local SQLite database storage
 
 ### Session Management
-- Automatic logout after token expires
+- Automatic logout after 30 days without authenticated API activity
 - Manual logout available anytime
 - Session survives browser refresh
-- Secure token storage in browser
+- Secure HttpOnly cookie storage in browser
 
 ## Mobile and Responsive Design
 
@@ -228,7 +228,7 @@ While editing notes:
 ## Limitations and Considerations
 
 ### Current Limitations
-- No note sharing between users
+- Shared notes currently support edit permission only (no view-only mode)
 - No collaborative editing
 - No file attachments
 - No note history/versioning

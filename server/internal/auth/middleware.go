@@ -5,6 +5,7 @@ import (
 	"net/http"
 
 	"github.com/hanzei/jot/server/internal/models"
+	"github.com/sirupsen/logrus"
 )
 
 type contextKey string
@@ -13,10 +14,13 @@ const UserContextKey contextKey = "user"
 
 func (s *SessionService) AuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		user, err := s.GetSessionUser(r)
+		session, user, err := s.GetSessionAndUser(r)
 		if err != nil {
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
+		}
+		if err := s.RenewSessionIfExpiringSoon(w, session); err != nil {
+			logrus.WithError(err).Warn("failed to renew session")
 		}
 
 		ctx := context.WithValue(r.Context(), UserContextKey, user)
