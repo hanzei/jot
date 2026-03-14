@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
@@ -364,6 +365,11 @@ func logrusRequestLogger(next http.Handler) http.Handler {
 
 func (s *Server) Start(addr string) error {
 	logrus.Infof("Server starting on %s", addr)
+	listener, err := net.Listen("tcp", addr)
+	if err != nil {
+		return fmt.Errorf("listen: %w", err)
+	}
+
 	httpServer := &http.Server{
 		Addr:         addr,
 		Handler:      s.router,
@@ -379,16 +385,16 @@ func (s *Server) Start(addr string) error {
 		close(s.startReady)
 	})
 
-	err := httpServer.ListenAndServe()
+	err = httpServer.Serve(listener)
 	if errors.Is(err, http.ErrServerClosed) {
 		return nil
 	}
-	return err
+	return fmt.Errorf("serving: %w", err)
 }
 
 func (s *Server) Shutdown(ctx context.Context) error {
 	if err := s.WaitUntilStarted(ctx); err != nil {
-		return err
+		return fmt.Errorf("wait until started: %w", err)
 	}
 
 	s.serverMu.RLock()
@@ -400,7 +406,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	}
 
 	if err := httpServer.Shutdown(ctx); err != nil {
-		return err
+		return fmt.Errorf("shutdown: %w", err)
 	}
 
 	s.serverMu.Lock()
