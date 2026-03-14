@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -57,13 +58,31 @@ func TestReorderNotesEndpoint(t *testing.T) {
 			"note_ids": []string{},
 		})
 		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+		assert.Contains(t, strings.ToLower(resp.GetString()), "empty note ids list")
 	})
 
 	t.Run("including note without access returns 403", func(t *testing.T) {
+		beforeResp := ts.authRequest(t, user, http.MethodGet, "/api/v1/notes", nil)
+		require.Equal(t, http.StatusOK, beforeResp.StatusCode)
+		var beforeNotes []map[string]any
+		require.NoError(t, beforeResp.UnmarshalBody(&beforeNotes))
+		require.Len(t, beforeNotes, 3)
+
 		resp := ts.authRequest(t, user, http.MethodPost, "/api/v1/notes/reorder", map[string]any{
 			"note_ids": []string{note1, otherNote},
 		})
 		assert.Equal(t, http.StatusForbidden, resp.StatusCode)
+
+		afterResp := ts.authRequest(t, user, http.MethodGet, "/api/v1/notes", nil)
+		require.Equal(t, http.StatusOK, afterResp.StatusCode)
+		var afterNotes []map[string]any
+		require.NoError(t, afterResp.UnmarshalBody(&afterNotes))
+		require.Len(t, afterNotes, 3)
+
+		for i := range beforeNotes {
+			assert.Equal(t, beforeNotes[i]["id"], afterNotes[i]["id"])
+			assert.Equal(t, int(beforeNotes[i]["position"].(float64)), int(afterNotes[i]["position"].(float64)))
+		}
 	})
 }
 
@@ -82,16 +101,20 @@ func TestRemoveLabelEndpoint(t *testing.T) {
 	require.NoError(t, createResp.UnmarshalBody(&created))
 	noteID := created["id"].(string)
 
-	addResp := ts.authRequest(t, user, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/labels", noteID), map[string]any{
-		"name": "work",
-	})
-	require.Equal(t, http.StatusOK, addResp.StatusCode)
+	addLabel := func(name string) string {
+		addResp := ts.authRequest(t, user, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/labels", noteID), map[string]any{
+			"name": name,
+		})
+		require.Equal(t, http.StatusOK, addResp.StatusCode)
 
-	var labeledNote map[string]any
-	require.NoError(t, addResp.UnmarshalBody(&labeledNote))
-	labels := labeledNote["labels"].([]any)
-	require.Len(t, labels, 1)
-	labelID := labels[0].(map[string]any)["id"].(string)
+		var labeledNote map[string]any
+		require.NoError(t, addResp.UnmarshalBody(&labeledNote))
+		labels := labeledNote["labels"].([]any)
+		require.NotEmpty(t, labels)
+		return labels[len(labels)-1].(map[string]any)["id"].(string)
+	}
+
+	labelID := addLabel("work")
 
 	t.Run("removes label from note and unfilters from label query", func(t *testing.T) {
 		removeResp := ts.authRequest(t, user, http.MethodDelete, fmt.Sprintf("/api/v1/notes/%s/labels/%s", noteID, labelID), nil)
@@ -110,8 +133,19 @@ func TestRemoveLabelEndpoint(t *testing.T) {
 	})
 
 	t.Run("user without note access cannot remove label", func(t *testing.T) {
-		otherResp := ts.authRequest(t, other, http.MethodDelete, fmt.Sprintf("/api/v1/notes/%s/labels/%s", noteID, labelID), nil)
+		restrictedLabelID := addLabel("restricted")
+
+		otherResp := ts.authRequest(t, other, http.MethodDelete, fmt.Sprintf("/api/v1/notes/%s/labels/%s", noteID, restrictedLabelID), nil)
 		assert.Equal(t, http.StatusForbidden, otherResp.StatusCode)
+
+		ownerResp := ts.authRequest(t, user, http.MethodGet, fmt.Sprintf("/api/v1/notes/%s", noteID), nil)
+		require.Equal(t, http.StatusOK, ownerResp.StatusCode)
+
+		var note map[string]any
+		require.NoError(t, ownerResp.UnmarshalBody(&note))
+		currentLabels := note["labels"].([]any)
+		require.Len(t, currentLabels, 1)
+		assert.Equal(t, restrictedLabelID, currentLabels[0].(map[string]any)["id"])
 	})
 }
 
@@ -147,6 +181,7 @@ func TestAdminUpdateUserRoleEndpoint(t *testing.T) {
 			"role": "super-admin",
 		})
 		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+		assert.Contains(t, strings.ToLower(resp.GetString()), "invalid role")
 	})
 
 	t.Run("unknown user returns 404", func(t *testing.T) {
@@ -165,4 +200,11 @@ func TestAdminUpdateUserRolePreventsDemotingLastAdmin(t *testing.T) {
 		"role": "user",
 	})
 	assert.Equal(t, http.StatusConflict, resp.StatusCode)
+
+	meResp := ts.authRequest(t, admin, http.MethodGet, "/api/v1/me", nil)
+	require.Equal(t, http.StatusOK, meResp.StatusCode)
+	var me map[string]any
+	require.NoError(t, meResp.UnmarshalBody(&me))
+	userData := me["user"].(map[string]any)
+	assert.Equal(t, "admin", userData["role"])
 }
