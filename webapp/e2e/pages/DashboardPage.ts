@@ -54,6 +54,17 @@ export class DashboardPage {
     await this.page.getByRole('menuitem', { name: 'Delete' }).click();
   }
 
+  async restoreNoteFromBin(title: string) {
+    await this.openNoteMenu(title);
+    await this.page.getByRole('menuitem', { name: 'Restore' }).click();
+  }
+
+  async permanentlyDeleteNoteFromBin(title: string) {
+    await this.openNoteMenu(title);
+    this.page.once('dialog', dialog => dialog.accept());
+    await this.page.getByRole('menuitem', { name: 'Delete forever' }).click();
+  }
+
   async pinNote(title: string) {
     await this.openNoteMenu(title);
     await this.page.getByRole('menuitem', { name: 'Pin' }).click();
