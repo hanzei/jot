@@ -75,13 +75,13 @@ type CreateNoteItem struct {
 }
 
 type UpdateNoteRequest struct {
-	Title                 string            `json:"title"`
-	Content               string            `json:"content"`
-	Pinned                bool              `json:"pinned"`
-	Archived              bool              `json:"archived"`
-	Color                 string            `json:"color"`
-	CheckedItemsCollapsed bool              `json:"checked_items_collapsed"`
-	Items                 *[]UpdateNoteItem `json:"items,omitempty"`
+	Title                 string           `json:"title"`
+	Content               string           `json:"content"`
+	Pinned                bool             `json:"pinned"`
+	Archived              bool             `json:"archived"`
+	Color                 string           `json:"color"`
+	CheckedItemsCollapsed bool             `json:"checked_items_collapsed"`
+	Items                 []UpdateNoteItem `json:"items,omitempty"`
 }
 
 type UpdateNoteItem struct {
@@ -302,7 +302,7 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 	}
 
 	if req.Items != nil {
-		for _, item := range *req.Items {
+		for _, item := range req.Items {
 			if item.IndentLevel < 0 || item.IndentLevel > 1 {
 				return http.StatusBadRequest, errors.New("indent_level must be 0 or 1")
 			}
@@ -311,8 +311,8 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 
 	var err error
 	if req.Items != nil {
-		todoItems := make([]models.UpdateNoteItemInput, 0, len(*req.Items))
-		for _, item := range *req.Items {
+		todoItems := make([]models.UpdateNoteItemInput, 0, len(req.Items))
+		for _, item := range req.Items {
 			todoItems = append(todoItems, models.UpdateNoteItemInput{
 				Text:        item.Text,
 				Position:    item.Position,
