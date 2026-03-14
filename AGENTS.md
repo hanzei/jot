@@ -33,7 +33,7 @@ All `task` commands are documented in `README.md`, `CLAUDE.md`, and `Taskfile.ym
 
 - **Go 1.24+** is required (the `go.mod` specifies `go 1.24.7`). CGO must be enabled for the `go-sqlite3` driver, so `gcc` is needed.
 - **Node 24+** is used (matching the Dockerfile). Install via `nvm install 24 && nvm alias default 24`.
-- **Playwright e2e tests** require `npx playwright install --with-deps chromium` before first run. The Playwright config auto-starts the Go server and uses a temp DB, so no manual server startup is needed for e2e.
+- **Playwright e2e tests**: Chromium is preinstalled by the VM update script (`npx playwright install chromium`), and webapp deps are preinstalled via `npm ci`. The Playwright config auto-starts the Go server and uses a temp DB, so no manual server startup is needed — just run `npm run test:e2e` from `webapp/`. If Chromium is missing for some reason, run `npx playwright install --with-deps chromium` in `webapp/`.
 - **Auth is session-cookie based** (not JWT). The first registered user becomes admin.
 - The mobile app (`mobile/`) uses Expo and requires emulator/device access; it is not testable in a headless cloud environment for GUI flows.
 - **Some e2e tests may fail** due to stale selectors for "Archive"/"Bin" sidebar navigation in the page objects (`e2e/pages/DashboardPage.ts`). These are pre-existing test issues, not environment problems.
