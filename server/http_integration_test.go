@@ -56,7 +56,7 @@ func setupTestServer(t *testing.T) *TestServer {
 	tmpDB := fmt.Sprintf("/tmp/test_%s.db", t.Name())
 	_ = os.Remove(tmpDB)
 	staticDir := t.TempDir()
-	require.NoError(t, os.WriteFile(staticDir+"/index.html", []byte("<html><body>jot test app</body></html>"), 0o644))
+	require.NoError(t, os.WriteFile(staticDir+"/index.html", []byte("<html><body>jot test app</body></html>"), 0o600))
 
 	t.Setenv("DB_PATH", tmpDB)
 	t.Setenv("COOKIE_SECURE", "false")
