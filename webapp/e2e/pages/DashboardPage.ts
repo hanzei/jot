@@ -88,22 +88,25 @@ export class DashboardPage {
 
   async switchToArchived() {
     await this.page
-      .locator('aside[aria-label="Main navigation"]')
-      .getByRole('button', { name: 'Archive', exact: true })
+      .locator('aside[aria-label="Main navigation"] nav')
+      .nth(1)
+      .locator('[aria-label="Archive"]')
       .click();
   }
 
   async switchToNotes() {
     await this.page
-      .locator('aside[aria-label="Main navigation"]')
-      .getByRole('button', { name: 'Notes', exact: true })
+      .locator('aside[aria-label="Main navigation"] nav')
+      .nth(0)
+      .locator('[aria-label="Notes"]')
       .click();
   }
 
   async switchToBin() {
     await this.page
-      .locator('aside[aria-label="Main navigation"]')
-      .getByRole('button', { name: 'Bin', exact: true })
+      .locator('aside[aria-label="Main navigation"] nav')
+      .nth(1)
+      .locator('[aria-label="Bin"]')
       .click();
   }
 
