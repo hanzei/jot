@@ -87,15 +87,21 @@ export class DashboardPage {
   }
 
   async switchToArchived() {
-    await this.page.click('button:has-text("Archive")');
+    await this.page
+      .locator('aside[aria-label="Main navigation"] nav [aria-label="Archive"]')
+      .click();
   }
 
   async switchToNotes() {
-    await this.page.click('button:has-text("Notes")');
+    await this.page
+      .locator('aside[aria-label="Main navigation"] nav [aria-label="Notes"]')
+      .click();
   }
 
   async switchToBin() {
-    await this.page.click('button:has-text("Bin")');
+    await this.page
+      .locator('aside[aria-label="Main navigation"] nav [aria-label="Bin"]')
+      .click();
   }
 
   async clickLogo() {
