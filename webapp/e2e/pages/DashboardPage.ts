@@ -44,14 +44,26 @@ export class DashboardPage {
     const card = this.page.locator('[data-testid="note-card"]').filter({
       has: this.page.locator('h3').getByText(title, { exact: true }),
     });
-    await card.hover();
-    await card.locator('button[aria-label="Note options"]').click();
+    // force is intentional: hover/waitFor-based approaches were flaky in CI when sidebar overlays intercepted pointer events.
+    // TODO: remove force when note-card menu is reliably actionability-safe without hover timing dependence.
+    await card.locator('button[aria-label="Note options"]').click({ force: true });
   }
 
   async deleteNote(title: string) {
     await this.openNoteMenu(title);
     this.page.once('dialog', dialog => dialog.accept());
     await this.page.getByRole('menuitem', { name: 'Delete' }).click();
+  }
+
+  async restoreNoteFromBin(title: string) {
+    await this.openNoteMenu(title);
+    await this.page.getByRole('menuitem', { name: 'Restore' }).click();
+  }
+
+  async permanentlyDeleteNoteFromBin(title: string) {
+    await this.openNoteMenu(title);
+    this.page.once('dialog', dialog => dialog.accept());
+    await this.page.getByRole('menuitem', { name: 'Delete forever' }).click();
   }
 
   async pinNote(title: string) {

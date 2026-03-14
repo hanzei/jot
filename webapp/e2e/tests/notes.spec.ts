@@ -37,6 +37,36 @@ test.describe('Notes', () => {
     await dashboardPage.expectNoteNotVisible('Note to Delete');
   });
 
+  test('restores a deleted note from bin', async ({ dashboardPage }) => {
+    await dashboardPage.goto();
+    await dashboardPage.createNote('Restore Me');
+
+    await dashboardPage.deleteNote('Restore Me');
+    await dashboardPage.switchToBin();
+    await dashboardPage.expectNoteVisible('Restore Me');
+
+    await dashboardPage.restoreNoteFromBin('Restore Me');
+    await dashboardPage.expectNoteNotVisible('Restore Me');
+
+    await dashboardPage.switchToNotes();
+    await dashboardPage.expectNoteVisible('Restore Me');
+  });
+
+  test('permanently deletes a note from bin', async ({ dashboardPage }) => {
+    await dashboardPage.goto();
+    await dashboardPage.createNote('Delete Forever');
+
+    await dashboardPage.deleteNote('Delete Forever');
+    await dashboardPage.switchToBin();
+    await dashboardPage.expectNoteVisible('Delete Forever');
+
+    await dashboardPage.permanentlyDeleteNoteFromBin('Delete Forever');
+    await dashboardPage.expectNoteNotVisible('Delete Forever');
+
+    await dashboardPage.switchToNotes();
+    await dashboardPage.expectNoteNotVisible('Delete Forever');
+  });
+
   test('pins a note and it appears in the pinned section', async ({ page, dashboardPage }) => {
     await dashboardPage.goto();
     await dashboardPage.createNote('Note to Pin');
@@ -106,7 +136,7 @@ test.describe('Notes', () => {
     await dashboardPage.expectEmptyState('No notes yet');
   });
 
-  test('pressing Enter on a todo item jumps to the next item', async ({ page, dashboardPage }) => {
+  test('pressing Enter on a non-last todo item inserts a new item below it', async ({ page, dashboardPage }) => {
     await dashboardPage.goto();
     await page.click('button:has-text("New Note")');
     await page.click('button:has-text("Todo List")');
@@ -121,8 +151,12 @@ test.describe('Notes', () => {
     await page.locator('input[placeholder="List item..."]').first().focus();
     await page.keyboard.press('Enter');
 
-    // The second item should now be focused
+    // A new empty item should be inserted between the existing two items and focused
+    await expect(page.locator('input[placeholder="List item..."]')).toHaveCount(3);
+    await expect(page.locator('input[placeholder="List item..."]').first()).toHaveValue('First item');
     await expect(page.locator('input[placeholder="List item..."]').nth(1)).toBeFocused();
+    await expect(page.locator('input[placeholder="List item..."]').nth(1)).toHaveValue('');
+    await expect(page.locator('input[placeholder="List item..."]').nth(2)).toHaveValue('Second item');
   });
 
   test('pressing Enter on the last todo item creates a new item', async ({ page, dashboardPage }) => {
