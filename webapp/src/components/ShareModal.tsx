@@ -106,14 +106,32 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
       setSuccess(t('share.sharedSuccess'));
       await loadShares();
     } catch (error: unknown) {
-      const axiosError = error as { response?: { status?: number; data?: string } };
+      const axiosError = error as { response?: { status?: number; data?: unknown } };
+      const responseData = axiosError.response?.data;
+      let errorText = '';
+      if (typeof responseData === 'string') {
+        errorText = responseData;
+      } else if (responseData && typeof responseData === 'object') {
+        const maybeError = responseData as { error?: unknown; message?: unknown };
+        if (typeof maybeError.error === 'string') {
+          errorText = maybeError.error;
+        } else if (typeof maybeError.message === 'string') {
+          errorText = maybeError.message;
+        } else {
+          errorText = JSON.stringify(responseData);
+        }
+      } else if (responseData != null) {
+        errorText = String(responseData);
+      }
+      const normalizedErrorText = errorText.toLowerCase();
+
       if (axiosError.response?.status === 404) {
         setError(t('share.userNotFound'));
       } else if (axiosError.response?.status === 409) {
         setError(t('share.alreadyShared'));
       } else if (
         axiosError.response?.status === 400 &&
-        (axiosError.response?.data?.includes('yourself') || axiosError.response?.data?.includes('self'))
+        (normalizedErrorText.includes('yourself') || normalizedErrorText.includes('self'))
       ) {
         setError(t('share.cannotShareSelf'));
       } else {
