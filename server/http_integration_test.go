@@ -55,9 +55,12 @@ type TestServer struct {
 func setupTestServer(t *testing.T) *TestServer {
 	tmpDB := fmt.Sprintf("/tmp/test_%s.db", t.Name())
 	_ = os.Remove(tmpDB)
+	staticDir := t.TempDir()
+	require.NoError(t, os.WriteFile(staticDir+"/index.html", []byte("<html><body>jot test app</body></html>"), 0o644))
 
 	t.Setenv("DB_PATH", tmpDB)
 	t.Setenv("COOKIE_SECURE", "false")
+	t.Setenv("STATIC_DIR", staticDir)
 
 	s := server.New()
 	httpServer := httptest.NewServer(s.GetRouter())
@@ -159,6 +162,12 @@ func (ts *TestServer) authRequest(t *testing.T, user *TestUser, method, path str
 // Probe endpoint tests
 func TestProbeEndpoints(t *testing.T) {
 	ts := setupTestServer(t)
+
+	t.Run("health endpoint removed", func(t *testing.T) {
+		resp := ts.request(t, nil, http.MethodGet, "/health", nil)
+
+		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+	})
 
 	t.Run("livez endpoint", func(t *testing.T) {
 		resp := ts.request(t, nil, http.MethodGet, "/livez", nil)

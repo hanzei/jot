@@ -224,6 +224,11 @@ func FileServer(r chi.Router, path string, root http.FileSystem) {
 		if requestedFile == "" {
 			requestedFile = "/"
 		}
+		// /health was intentionally removed; do not treat it as a SPA route.
+		if strings.TrimSuffix(requestedFile, "/") == "/health" {
+			http.NotFound(w, req)
+			return
+		}
 
 		// Check if file exists
 		file, err := root.Open(requestedFile)
