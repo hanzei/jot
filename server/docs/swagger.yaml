@@ -86,8 +86,10 @@ definitions:
     type: object
   handlers.ShareNoteRequest:
     properties:
-      username:
+      user_id:
         type: string
+    required:
+    - user_id
     type: object
   handlers.ShareNoteResponse:
     properties:
@@ -872,7 +874,7 @@ paths:
         name: id
         required: true
         type: string
-      - description: Username to unshare with
+      - description: User to unshare with (user_id)
         in: body
         name: body
         required: true
@@ -915,7 +917,7 @@ paths:
         name: id
         required: true
         type: string
-      - description: Username to share with
+      - description: User to share with (user_id)
         in: body
         name: body
         required: true
@@ -980,6 +982,10 @@ paths:
             type: string
         "403":
           description: not owner
+          schema:
+            type: string
+        "404":
+          description: not found
           schema:
             type: string
       security:

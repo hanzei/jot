@@ -989,7 +989,7 @@
                         "required": true
                     },
                     {
-                        "description": "Username to share with",
+                        "description": "User to share with (user_id)",
                         "name": "body",
                         "in": "body",
                         "required": true,
@@ -1062,7 +1062,7 @@
                         "required": true
                     },
                     {
-                        "description": "Username to unshare with",
+                        "description": "User to unshare with (user_id)",
                         "name": "body",
                         "in": "body",
                         "required": true,
@@ -1152,6 +1152,12 @@
                     },
                     "403": {
                         "description": "not owner",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "not found",
                         "schema": {
                             "type": "string"
                         }
@@ -1671,8 +1677,11 @@
         },
         "handlers.ShareNoteRequest": {
             "type": "object",
+            "required": [
+                "user_id"
+            ],
             "properties": {
-                "username": {
+                "user_id": {
                     "type": "string"
                 }
             }

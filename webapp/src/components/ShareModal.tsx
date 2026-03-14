@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Dialog, DialogPanel, DialogTitle } from '@headlessui/react';
 import { XMarkIcon, TrashIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
 import { useTranslation } from 'react-i18next';
-import { Note, NoteShare, User } from '@/types';
+import { Note, NoteShare, ShareUser } from '@/types';
 import { notes, users as usersApi } from '@/utils/api';
 import { ROLES } from '@/constants/roles';
 
@@ -16,8 +16,8 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
   const { t } = useTranslation();
   const [searchQuery, setSearchQuery] = useState('');
   const [shares, setShares] = useState<NoteShare[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
-  const [filteredUsers, setFilteredUsers] = useState<User[]>([]);
+  const [users, setUsers] = useState<ShareUser[]>([]);
+  const [filteredUsers, setFilteredUsers] = useState<ShareUser[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedUserIndex, setSelectedUserIndex] = useState(-1);
   const [isLoading, setIsLoading] = useState(false);
@@ -93,25 +93,46 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
     }
   };
 
-  const handleShare = async (username: string) => {
-    if (!note || !username.trim()) return;
+  const handleShare = async (targetUser: ShareUser) => {
+    if (!note) return;
 
     setIsLoading(true);
     setError('');
     setSuccess('');
 
     try {
-      await notes.share(note.id, { username: username.trim() });
+      await notes.share(note.id, { user_id: targetUser.id });
       setSearchQuery('');
       setSuccess(t('share.sharedSuccess'));
       await loadShares();
     } catch (error: unknown) {
-      const axiosError = error as { response?: { status?: number; data?: string } };
+      const axiosError = error as { response?: { status?: number; data?: unknown } };
+      const responseData = axiosError.response?.data;
+      let errorText = '';
+      if (typeof responseData === 'string') {
+        errorText = responseData;
+      } else if (responseData && typeof responseData === 'object') {
+        const maybeError = responseData as { error?: unknown; message?: unknown };
+        if (typeof maybeError.error === 'string') {
+          errorText = maybeError.error;
+        } else if (typeof maybeError.message === 'string') {
+          errorText = maybeError.message;
+        } else {
+          errorText = JSON.stringify(responseData);
+        }
+      } else if (responseData != null) {
+        errorText = String(responseData);
+      }
+      const normalizedErrorText = errorText.toLowerCase();
+
       if (axiosError.response?.status === 404) {
         setError(t('share.userNotFound'));
       } else if (axiosError.response?.status === 409) {
         setError(t('share.alreadyShared'));
-      } else if (axiosError.response?.status === 400 && axiosError.response?.data?.includes('yourself')) {
+      } else if (
+        axiosError.response?.status === 400 &&
+        (normalizedErrorText.includes('yourself') || normalizedErrorText.includes('self'))
+      ) {
         setError(t('share.cannotShareSelf'));
       } else {
         setError(t('share.failedShare'));
@@ -121,11 +142,11 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
     }
   };
 
-  const handleUnshare = async (shareUsername: string) => {
+  const handleUnshare = async (sharedWithUserID: string) => {
     if (!note) return;
 
     try {
-      await notes.unshare(note.id, { username: shareUsername });
+      await notes.unshare(note.id, { user_id: sharedWithUserID });
       setSuccess(t('share.unsharedSuccess'));
       await loadShares();
     } catch {
@@ -133,8 +154,8 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
     }
   };
 
-  const handleUserSelect = (user: User) => {
-    handleShare(user.username);
+  const handleUserSelect = (user: ShareUser) => {
+    handleShare(user);
     setShowSuggestions(false);
   };
 
@@ -296,7 +317,7 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
                         )}
                       </div>
                       <button
-                        onClick={() => handleUnshare(share.username || '')}
+                        onClick={() => handleUnshare(share.shared_with_user_id)}
                         className="text-red-600 hover:text-red-800 p-1"
                         title={t('share.removeAccess')}
                         aria-label={t('share.removeAccess')}

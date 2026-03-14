@@ -86,6 +86,19 @@ type NoteStore struct {
 	db *sql.DB
 }
 
+type UpdateNoteItemInput struct {
+	Text        string
+	Position    int
+	Completed   bool
+	IndentLevel int
+}
+
+type CreateNoteItemInput struct {
+	Text        string
+	Position    int
+	IndentLevel int
+}
+
 func NewNoteStore(db *sql.DB) *NoteStore {
 	return &NoteStore{db: db}
 }
@@ -160,6 +173,69 @@ func (s *NoteStore) Create(userID string, title, content string, noteType NoteTy
 	note.Title = title
 	note.Content = content
 	note.NoteType = noteType
+	note.Color = color
+	note.Position = nextPosition
+	note.UnpinnedPosition = &nextPosition
+	note.CheckedItemsCollapsed = false
+	note.Labels = []Label{}
+
+	return &note, nil
+}
+
+func (s *NoteStore) CreateWithTodoItems(userID string, title, content string, color string, items []CreateNoteItemInput) (*Note, error) {
+	noteID, err := generateID()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate note ID: %w", err)
+	}
+
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() {
+		if rollbackErr := tx.Rollback(); rollbackErr != nil && !errors.Is(rollbackErr, sql.ErrTxDone) {
+			logrus.WithError(rollbackErr).Error("Failed to rollback transaction")
+		}
+	}()
+
+	shiftQuery := `UPDATE notes SET position = position + 1 WHERE user_id = ? AND pinned = FALSE AND archived = FALSE AND deleted_at IS NULL`
+	if _, err = tx.Exec(shiftQuery, userID); err != nil {
+		return nil, fmt.Errorf("failed to shift existing notes: %w", err)
+	}
+
+	nextPosition := 0
+	query := `INSERT INTO notes (id, user_id, title, content, note_type, color, position, unpinned_position, checked_items_collapsed)
+			  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING pinned, archived, created_at, updated_at`
+
+	var note Note
+	if err = tx.QueryRow(query, noteID, userID, title, content, NoteTypeTodo, color, nextPosition, nextPosition, false).Scan(
+		&note.Pinned, &note.Archived, &note.CreatedAt, &note.UpdatedAt,
+	); err != nil {
+		return nil, fmt.Errorf("failed to create note: %w", err)
+	}
+
+	for _, item := range items {
+		itemID, itemIDErr := generateID()
+		if itemIDErr != nil {
+			return nil, fmt.Errorf("failed to generate item ID: %w", itemIDErr)
+		}
+		if _, err = tx.Exec(
+			`INSERT INTO note_items (id, note_id, text, position, completed, indent_level) VALUES (?, ?, ?, ?, ?, ?)`,
+			itemID, noteID, item.Text, item.Position, false, item.IndentLevel,
+		); err != nil {
+			return nil, fmt.Errorf("failed to create note item: %w", err)
+		}
+	}
+
+	if err = tx.Commit(); err != nil {
+		return nil, fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	note.ID = noteID
+	note.UserID = userID
+	note.Title = title
+	note.Content = content
+	note.NoteType = NoteTypeTodo
 	note.Color = color
 	note.Position = nextPosition
 	note.UnpinnedPosition = &nextPosition
@@ -318,7 +394,32 @@ func (s *NoteStore) GetByID(id string, userID string) (*Note, error) {
 }
 
 func (s *NoteStore) Update(id string, userID string, title, content string, pinned, archived bool, color string, checkedItemsCollapsed bool) error {
-	hasAccess, err := s.HasAccess(id, userID)
+	return s.updateWithOptionalItems(id, userID, title, content, pinned, archived, color, checkedItemsCollapsed, nil, false)
+}
+
+func (s *NoteStore) UpdateWithTodoItems(id string, userID string, title, content string, pinned, archived bool, color string, checkedItemsCollapsed bool, items []UpdateNoteItemInput) error {
+	return s.updateWithOptionalItems(id, userID, title, content, pinned, archived, color, checkedItemsCollapsed, items, true)
+}
+
+type noteUpdateState struct {
+	Pinned           bool
+	Position         int
+	UnpinnedPosition sql.NullInt64
+	NoteType         NoteType
+}
+
+func (s *NoteStore) updateWithOptionalItems(id string, userID string, title, content string, pinned, archived bool, color string, checkedItemsCollapsed bool, items []UpdateNoteItemInput, replaceTodoItems bool) error {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() {
+		if rollbackErr := tx.Rollback(); rollbackErr != nil && !errors.Is(rollbackErr, sql.ErrTxDone) {
+			logrus.WithError(rollbackErr).Error("Failed to rollback transaction")
+		}
+	}()
+
+	hasAccess, err := hasAccessTx(tx, id, userID)
 	if err != nil {
 		return fmt.Errorf("failed to check access: %w", err)
 	}
@@ -326,16 +427,52 @@ func (s *NoteStore) Update(id string, userID string, title, content string, pinn
 		return ErrNoteNoAccess
 	}
 
-	// Get current note state to check if pinned status is changing
-	currentNote, err := s.GetByID(id, userID)
+	state, err := loadNoteUpdateStateTx(tx, id)
 	if err != nil {
-		return fmt.Errorf("failed to get current note: %w", err)
+		return err
 	}
 
-	query := `UPDATE notes SET title = ?, content = ?, pinned = ?, archived = ?, color = ?, checked_items_collapsed = ?, updated_at = CURRENT_TIMESTAMP
-			  WHERE id = ?`
+	if err = updateNoteFieldsTx(tx, id, title, content, pinned, archived, color, checkedItemsCollapsed); err != nil {
+		return err
+	}
 
-	result, err := s.db.Exec(query, title, content, pinned, archived, color, checkedItemsCollapsed, id)
+	if err = applyPinnedTransitionTx(tx, id, userID, pinned, state); err != nil {
+		return err
+	}
+
+	if replaceTodoItems && state.NoteType == NoteTypeTodo {
+		if err = replaceTodoItemsTx(tx, id, items); err != nil {
+			return err
+		}
+	}
+
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit transaction: %w", err)
+	}
+
+	return nil
+}
+
+func loadNoteUpdateStateTx(tx *sql.Tx, noteID string) (noteUpdateState, error) {
+	var state noteUpdateState
+	if err := tx.QueryRow(
+		`SELECT pinned, position, unpinned_position, note_type FROM notes WHERE id = ? AND deleted_at IS NULL`,
+		noteID,
+	).Scan(&state.Pinned, &state.Position, &state.UnpinnedPosition, &state.NoteType); err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return noteUpdateState{}, ErrNoteNotFound
+		}
+		return noteUpdateState{}, fmt.Errorf("failed to get current note state: %w", err)
+	}
+	return state, nil
+}
+
+func updateNoteFieldsTx(tx *sql.Tx, noteID, title, content string, pinned, archived bool, color string, checkedItemsCollapsed bool) error {
+	result, err := tx.Exec(
+		`UPDATE notes SET title = ?, content = ?, pinned = ?, archived = ?, color = ?, checked_items_collapsed = ?, updated_at = CURRENT_TIMESTAMP
+		 WHERE id = ?`,
+		title, content, pinned, archived, color, checkedItemsCollapsed, noteID,
+	)
 	if err != nil {
 		return fmt.Errorf("failed to update note: %w", err)
 	}
@@ -344,56 +481,108 @@ func (s *NoteStore) Update(id string, userID string, title, content string, pinn
 	if err != nil {
 		return fmt.Errorf("failed to get rows affected: %w", err)
 	}
-
 	if rowsAffected == 0 {
 		return ErrNoteNotFound
 	}
 
-	// If pinned status changed, handle position preservation
-	if currentNote.Pinned != pinned {
-		if pinned {
-			// Pinning: Store current position as unpinned_position and move to end of pinned
-			var maxPosition int
-			posQuery := `SELECT COALESCE(MAX(position), -1) FROM notes WHERE user_id = ? AND pinned = ? AND archived = FALSE AND deleted_at IS NULL`
-			if err = s.db.QueryRow(posQuery, userID, pinned).Scan(&maxPosition); err != nil {
-				return fmt.Errorf("failed to get max position: %w", err)
-			}
-			newPosition := maxPosition + 1
+	return nil
+}
 
-			posUpdateQuery := `UPDATE notes SET position = ?, unpinned_position = ? WHERE id = ?`
-			if _, err = s.db.Exec(posUpdateQuery, newPosition, currentNote.Position, id); err != nil {
-				return fmt.Errorf("failed to update position: %w", err)
-			}
-		} else {
-			// Unpinning: Restore to unpinned_position if available, otherwise add to end
-			var targetPosition int
-			if currentNote.UnpinnedPosition != nil {
-				targetPosition = *currentNote.UnpinnedPosition
-
-				// Shift other unpinned notes to make room
-				shiftQuery := `UPDATE notes SET position = position + 1
-							   WHERE user_id = ? AND pinned = FALSE AND archived = FALSE AND deleted_at IS NULL AND position >= ?`
-				if _, err = s.db.Exec(shiftQuery, userID, targetPosition); err != nil {
-					return fmt.Errorf("failed to shift notes: %w", err)
-				}
-			} else {
-				// No saved position, add to end
-				var maxPosition int
-				posQuery := `SELECT COALESCE(MAX(position), -1) FROM notes WHERE user_id = ? AND pinned = ? AND archived = FALSE AND deleted_at IS NULL`
-				if err = s.db.QueryRow(posQuery, userID, pinned).Scan(&maxPosition); err != nil {
-					return fmt.Errorf("failed to get max position: %w", err)
-				}
-				targetPosition = maxPosition + 1
-			}
-
-			posUpdateQuery := `UPDATE notes SET position = ?, unpinned_position = NULL WHERE id = ?`
-			if _, err = s.db.Exec(posUpdateQuery, targetPosition, id); err != nil {
-				return fmt.Errorf("failed to update position: %w", err)
-			}
-		}
+func applyPinnedTransitionTx(tx *sql.Tx, noteID, userID string, pinned bool, state noteUpdateState) error {
+	if state.Pinned == pinned {
+		return nil
 	}
 
+	if pinned {
+		return applyPinningTransitionTx(tx, noteID, userID, state.Position)
+	}
+	return applyUnpinningTransitionTx(tx, noteID, userID, state.UnpinnedPosition)
+}
+
+func applyPinningTransitionTx(tx *sql.Tx, noteID, userID string, currentPosition int) error {
+	var maxPosition int
+	posQuery := `SELECT COALESCE(MAX(position), -1) FROM notes WHERE user_id = ? AND pinned = TRUE AND archived = FALSE AND deleted_at IS NULL AND id != ?`
+	if err := tx.QueryRow(posQuery, userID, noteID).Scan(&maxPosition); err != nil {
+		return fmt.Errorf("failed to get max position: %w", err)
+	}
+	newPosition := maxPosition + 1
+	if _, err := tx.Exec(`UPDATE notes SET position = ?, unpinned_position = ? WHERE id = ?`, newPosition, currentPosition, noteID); err != nil {
+		return fmt.Errorf("failed to update position: %w", err)
+	}
 	return nil
+}
+
+func applyUnpinningTransitionTx(tx *sql.Tx, noteID, userID string, unpinnedPosition sql.NullInt64) error {
+	var targetPosition int
+	if unpinnedPosition.Valid {
+		targetPosition = int(unpinnedPosition.Int64)
+		shiftQuery := `UPDATE notes SET position = position + 1
+					   WHERE user_id = ? AND pinned = FALSE AND archived = FALSE AND deleted_at IS NULL AND position >= ? AND id != ?`
+		if _, err := tx.Exec(shiftQuery, userID, targetPosition, noteID); err != nil {
+			return fmt.Errorf("failed to shift notes: %w", err)
+		}
+	} else {
+		var maxPosition int
+		posQuery := `SELECT COALESCE(MAX(position), -1) FROM notes WHERE user_id = ? AND pinned = FALSE AND archived = FALSE AND deleted_at IS NULL`
+		if err := tx.QueryRow(posQuery, userID).Scan(&maxPosition); err != nil {
+			return fmt.Errorf("failed to get max position: %w", err)
+		}
+		targetPosition = maxPosition + 1
+	}
+
+	if _, err := tx.Exec(`UPDATE notes SET position = ?, unpinned_position = NULL WHERE id = ?`, targetPosition, noteID); err != nil {
+		return fmt.Errorf("failed to update position: %w", err)
+	}
+	return nil
+}
+
+func replaceTodoItemsTx(tx *sql.Tx, noteID string, items []UpdateNoteItemInput) error {
+	if _, err := tx.Exec("DELETE FROM note_items WHERE note_id = ?", noteID); err != nil {
+		return fmt.Errorf("failed to delete note items: %w", err)
+	}
+	for _, item := range items {
+		itemID, itemIDErr := generateID()
+		if itemIDErr != nil {
+			return fmt.Errorf("failed to generate item ID: %w", itemIDErr)
+		}
+		if _, err := tx.Exec(
+			`INSERT INTO note_items (id, note_id, text, position, completed, indent_level) VALUES (?, ?, ?, ?, ?, ?)`,
+			itemID, noteID, item.Text, item.Position, item.Completed, item.IndentLevel,
+		); err != nil {
+			return fmt.Errorf("failed to create note item: %w", err)
+		}
+	}
+	return nil
+}
+
+func hasAccessTx(tx *sql.Tx, noteID string, userID string) (bool, error) {
+	query := `SELECT COUNT(*) FROM notes WHERE id = ? AND user_id = ? AND deleted_at IS NULL
+			  UNION ALL
+			  SELECT COUNT(*) FROM note_shares WHERE note_id = ? AND shared_with_user_id = ?
+			    AND (SELECT deleted_at FROM notes WHERE id = ?) IS NULL`
+
+	rows, err := tx.Query(query, noteID, userID, noteID, userID, noteID)
+	if err != nil {
+		return false, fmt.Errorf("failed to check access: %w", err)
+	}
+	defer func() {
+		if err := rows.Close(); err != nil {
+			logrus.WithError(err).Error("Failed to close rows")
+		}
+	}()
+
+	totalCount := 0
+	for rows.Next() {
+		var count int
+		if err := rows.Scan(&count); err != nil {
+			return false, fmt.Errorf("failed to scan count: %w", err)
+		}
+		totalCount += count
+	}
+	if err := rows.Err(); err != nil {
+		return false, fmt.Errorf("failed to iterate access rows: %w", err)
+	}
+	return totalCount > 0, nil
 }
 
 func (s *NoteStore) Delete(id string, userID string) error {
@@ -778,6 +967,31 @@ func (s *NoteStore) IsOwner(noteID string, userID string) (bool, error) {
 		return false, fmt.Errorf("failed to check ownership: %w", err)
 	}
 
+	return count > 0, nil
+}
+
+func (s *NoteStore) Exists(noteID string) (bool, error) {
+	var count int
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM notes WHERE id = ?`, noteID).Scan(&count); err != nil {
+		return false, fmt.Errorf("failed to check note existence: %w", err)
+	}
+	return count > 0, nil
+}
+
+func (s *NoteStore) IsOwnerActive(noteID string, userID string) (bool, error) {
+	var count int
+	query := `SELECT COUNT(*) FROM notes WHERE id = ? AND user_id = ? AND deleted_at IS NULL`
+	if err := s.db.QueryRow(query, noteID, userID).Scan(&count); err != nil {
+		return false, fmt.Errorf("failed to check ownership: %w", err)
+	}
+	return count > 0, nil
+}
+
+func (s *NoteStore) ExistsActive(noteID string) (bool, error) {
+	var count int
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM notes WHERE id = ? AND deleted_at IS NULL`, noteID).Scan(&count); err != nil {
+		return false, fmt.Errorf("failed to check active note existence: %w", err)
+	}
 	return count > 0, nil
 }
 

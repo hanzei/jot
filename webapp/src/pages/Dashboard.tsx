@@ -4,7 +4,7 @@ import { useSidebarCollapsed } from '@/hooks/useSidebarCollapsed';
 import { useTranslation } from 'react-i18next';
 import { notes, auth, labels as labelsApi, users as usersApi } from '@/utils/api';
 import { removeUser, getUser, isAdmin } from '@/utils/auth';
-import { Note, Label, User } from '@/types';
+import { Note, Label, ShareUser } from '@/types';
 import { useSSE, SSEEvent } from '@/utils/useSSE';
 import { useSearchParams } from 'react-router';
 import NavigationHeader from '@/components/NavigationHeader';
@@ -51,7 +51,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const [editingNote, setEditingNote] = useState<Note | null>(null);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [sharingNote, setSharingNote] = useState<Note | null>(null);
-  const [usersById, setUsersById] = useState<Map<string, User>>(new Map());
+  const [usersById, setUsersById] = useState<Map<string, ShareUser>>(new Map());
   const user = getUser();
   const isMountedRef = useRef(true);
   useEffect(() => {
@@ -136,7 +136,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     try {
       const usersData = await usersApi.search();
       if (isMountedRef.current) {
-        const map = new Map<string, User>();
+        const map = new Map<string, ShareUser>();
         for (const u of usersData) map.set(u.id, u);
         setUsersById(map);
       }

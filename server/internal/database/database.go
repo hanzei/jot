@@ -18,7 +18,7 @@ type DB struct {
 }
 
 func New(dbPath string) (*DB, error) {
-	db, err := sql.Open("sqlite3", dbPath)
+	db, err := sql.Open("sqlite3", sqliteDSNWithForeignKeys(dbPath))
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
@@ -33,6 +33,35 @@ func New(dbPath string) (*DB, error) {
 	}
 
 	return d, nil
+}
+
+func sqliteDSNWithForeignKeys(dbPath string) string {
+	if strings.Contains(dbPath, "_foreign_keys=") {
+		parts := strings.SplitN(dbPath, "?", 2)
+		if len(parts) < 2 {
+			return dbPath
+		}
+
+		params := strings.Split(parts[1], "&")
+		found := false
+		for i, param := range params {
+			if strings.HasPrefix(param, "_foreign_keys=") {
+				params[i] = "_foreign_keys=1"
+				found = true
+			}
+		}
+		if !found {
+			params = append(params, "_foreign_keys=1")
+		}
+		return parts[0] + "?" + strings.Join(params, "&")
+	}
+
+	separator := "?"
+	if strings.Contains(dbPath, "?") {
+		separator = "&"
+	}
+
+	return dbPath + separator + "_foreign_keys=1"
 }
 
 func (d *DB) runMigrations() error {

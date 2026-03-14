@@ -9,7 +9,7 @@ import {
 } from '@heroicons/react/24/outline';
 import { Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
-import { Note, User } from '@/types';
+import { Note, ShareUser } from '@/types';
 import { notes } from '@/utils/api';
 import LetterAvatar from '@/components/LetterAvatar';
 import { buildShareAvatars } from '@/utils/shareAvatars';
@@ -23,7 +23,7 @@ interface NoteCardProps {
   onRestore?: (noteId: string) => void;
   onPermanentlyDelete?: (noteId: string) => void;
   currentUserId?: string;
-  usersById?: Map<string, User>;
+  usersById?: Map<string, ShareUser>;
   inBin?: boolean;
   onRefresh?: () => void;
 }

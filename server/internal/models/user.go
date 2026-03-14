@@ -46,7 +46,6 @@ func NewUserStore(db *sql.DB) *UserStore {
 	return &UserStore{db: db}
 }
 
-
 func (s *UserStore) Create(username, password string) (*User, error) {
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
@@ -58,25 +57,13 @@ func (s *UserStore) Create(username, password string) (*User, error) {
 		return nil, fmt.Errorf("failed to generate user ID: %w", err)
 	}
 
-	var isFirstUser bool
-	var count int
-	err = s.db.QueryRow("SELECT COUNT(*) FROM users").Scan(&count)
-	if err != nil {
-		return nil, fmt.Errorf("failed to count users: %w", err)
-	}
-	isFirstUser = count == 0
-
-	role := RoleUser
-	if isFirstUser {
-		role = RoleAdmin
-	}
-
 	query := `INSERT INTO users (id, username, password_hash, role) 
-			  VALUES (?, ?, ?, ?) RETURNING created_at, updated_at`
+			  VALUES (?, ?, ?, CASE WHEN EXISTS(SELECT 1 FROM users) THEN ? ELSE ? END)
+			  RETURNING role, created_at, updated_at`
 
 	var user User
-	err = s.db.QueryRow(query, userID, username, string(hashedPassword), role).Scan(
-		&user.CreatedAt, &user.UpdatedAt,
+	err = s.db.QueryRow(query, userID, username, string(hashedPassword), RoleUser, RoleAdmin).Scan(
+		&user.Role, &user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
 		return nil, fmt.Errorf("failed to create user: %w", err)
@@ -84,7 +71,6 @@ func (s *UserStore) Create(username, password string) (*User, error) {
 
 	user.ID = userID
 	user.Username = username
-	user.Role = role
 
 	return &user, nil
 }
@@ -511,4 +497,3 @@ func (s *UserStore) CreateByAdmin(username, password string, role string) (*User
 
 	return &user, nil
 }
-
