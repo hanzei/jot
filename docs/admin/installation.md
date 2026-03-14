@@ -83,3 +83,15 @@ CORS_ALLOWED_ORIGIN=https://jot.example.com
 # Must remain "true" in production (requires HTTPS)
 COOKIE_SECURE=true
 ```
+
+### Health and Probe Endpoints
+
+Use these endpoints for container and Kubernetes probing:
+
+- `GET /livez` — liveness check
+- `GET /readyz` — readiness check (includes database connectivity check)
+- `GET /health` — compatibility liveness endpoint
+
+### Container Security Notes
+
+The official Docker image runs as a non-root `jot` user. Ensure your mounted data directory is writable by the container user.

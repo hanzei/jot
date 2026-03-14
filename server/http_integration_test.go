@@ -156,14 +156,38 @@ func (ts *TestServer) authRequest(t *testing.T, user *TestUser, method, path str
 	return ts.request(t, user.Client, method, path, body)
 }
 
-// Health endpoint tests
-func TestHealthEndpoint(t *testing.T) {
+// Probe endpoint tests
+func TestProbeEndpoints(t *testing.T) {
 	ts := setupTestServer(t)
 
-	resp := ts.request(t, nil, http.MethodGet, "/health", nil)
+	t.Run("health compatibility endpoint", func(t *testing.T) {
+		resp := ts.request(t, nil, http.MethodGet, "/health", nil)
 
-	assert.Equal(t, http.StatusOK, resp.StatusCode)
-	assert.Equal(t, "OK", resp.GetString())
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		assert.Equal(t, "OK", resp.GetString())
+	})
+
+	t.Run("livez endpoint", func(t *testing.T) {
+		resp := ts.request(t, nil, http.MethodGet, "/livez", nil)
+
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		assert.Equal(t, "OK", resp.GetString())
+	})
+
+	t.Run("readyz endpoint", func(t *testing.T) {
+		resp := ts.request(t, nil, http.MethodGet, "/readyz", nil)
+
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+		assert.Equal(t, "OK", resp.GetString())
+	})
+
+	t.Run("readyz returns 503 when database is unavailable", func(t *testing.T) {
+		require.NoError(t, ts.Server.GetDB().Close())
+
+		resp := ts.request(t, nil, http.MethodGet, "/readyz", nil)
+		assert.Equal(t, http.StatusServiceUnavailable, resp.StatusCode)
+		assert.Contains(t, resp.GetString(), "NOT READY")
+	})
 }
 
 // Auth endpoint tests
@@ -427,7 +451,6 @@ func TestAdminEndpoints(t *testing.T) {
 		resp := ts.authRequest(t, adminUser, http.MethodDelete, fmt.Sprintf("/api/v1/admin/users/%s", adminUser.User.ID), nil)
 		assert.Equal(t, http.StatusForbidden, resp.StatusCode)
 	})
-
 
 	t.Run("delete nonexistent user returns 404", func(t *testing.T) {
 		resp := ts.authRequest(t, adminUser, http.MethodDelete, "/api/v1/admin/users/nonexistentid12345678", nil)
@@ -769,11 +792,11 @@ func TestTodoItemIndentLevel(t *testing.T) {
 
 	t.Run("indent levels updated via PUT", func(t *testing.T) {
 		updateBody := map[string]any{
-			"title":                  "Indent Test",
-			"content":                "",
-			"pinned":                 false,
-			"archived":               false,
-			"color":                  "#ffffff",
+			"title":                   "Indent Test",
+			"content":                 "",
+			"pinned":                  false,
+			"archived":                false,
+			"color":                   "#ffffff",
 			"checked_items_collapsed": false,
 			"items": []map[string]any{
 				{"text": "top level", "position": 0, "completed": false, "indent_level": 0},
@@ -833,11 +856,11 @@ func TestTodoItemIndentLevel(t *testing.T) {
 
 	t.Run("indent level > 1 rejected on update", func(t *testing.T) {
 		updateBody := map[string]any{
-			"title":                  "Indent Test",
-			"content":                "",
-			"pinned":                 false,
-			"archived":               false,
-			"color":                  "#ffffff",
+			"title":                   "Indent Test",
+			"content":                 "",
+			"pinned":                  false,
+			"archived":                false,
+			"color":                   "#ffffff",
 			"checked_items_collapsed": false,
 			"items": []map[string]any{
 				{"text": "top level", "position": 0, "completed": false, "indent_level": 0},
@@ -990,9 +1013,9 @@ func TestUploadProfileIcon(t *testing.T) {
 			0x49, 0x48, 0x44, 0x52, // "IHDR"
 			0x00, 0x00, 0x13, 0x88, // width: 5000
 			0x00, 0x00, 0x13, 0x88, // height: 5000
-			0x08,                   // bit depth: 8
-			0x02,                   // color type: RGB
-			0x00, 0x00, 0x00,       // compression, filter, interlace
+			0x08,             // bit depth: 8
+			0x02,             // color type: RGB
+			0x00, 0x00, 0x00, // compression, filter, interlace
 			0x00, 0x00, 0x00, 0x00, // CRC (invalid but DecodeConfig reads before checking)
 		}
 		body, ct := createMultipartImage(t, "file", "bomb.png", pngHeader)

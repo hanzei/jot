@@ -38,9 +38,13 @@
 package main
 
 import (
+	"context"
 	"fmt"
 	"os"
+	"os/signal"
 	"strconv"
+	"syscall"
+	"time"
 
 	_ "github.com/hanzei/jot/server/docs"
 	"github.com/hanzei/jot/server/internal/server"
@@ -57,6 +61,34 @@ func main() {
 	if err != nil {
 		logrus.Fatal("Invalid PORT value: must be a number")
 	}
-	logrus.Infof("Starting Jot server on :%d", portNum)
-	logrus.Fatal(s.Start(fmt.Sprintf(":%d", portNum)))
+	addr := fmt.Sprintf(":%d", portNum)
+	logrus.Infof("Starting Jot server on %s", addr)
+
+	serverErrCh := make(chan error, 1)
+	go func() {
+		serverErrCh <- s.Start(addr)
+	}()
+
+	signalCh := make(chan os.Signal, 1)
+	signal.Notify(signalCh, os.Interrupt, syscall.SIGTERM)
+	defer signal.Stop(signalCh)
+
+	select {
+	case err := <-serverErrCh:
+		if err != nil {
+			logrus.WithError(err).Fatal("Server stopped unexpectedly")
+		}
+		logrus.Info("Server shutdown complete")
+	case sig := <-signalCh:
+		logrus.WithField("signal", sig.String()).Info("Shutdown signal received")
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		if err := s.Shutdown(ctx); err != nil {
+			logrus.WithError(err).Fatal("Graceful shutdown failed")
+		}
+		if err := <-serverErrCh; err != nil {
+			logrus.WithError(err).Fatal("Server stopped with error after shutdown")
+		}
+		logrus.Info("Server shutdown complete")
+	}
 }

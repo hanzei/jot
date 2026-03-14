@@ -1,13 +1,16 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -38,6 +41,8 @@ func buildInfo() aboutResponse {
 type Server struct {
 	router         chi.Router
 	db             *database.DB
+	httpServer     *http.Server
+	serverMu       sync.RWMutex
 	sessionService *auth.SessionService
 	authHandler    *handlers.AuthHandler
 	notesHandler   *handlers.NotesHandler
@@ -122,6 +127,9 @@ func (s *Server) setupRoutes() {
 		MaxAge:           300,
 	}))
 
+	s.router.Get("/livez", s.handleLive)
+	s.router.Get("/readyz", s.handleReady)
+	// Keep /health for backward compatibility with older deploys.
 	s.router.Get("/health", s.handleHealth)
 
 	s.router.Route("/api/v1", func(r chi.Router) {
@@ -261,9 +269,29 @@ func (s *Server) wrapHandler(handler func(w http.ResponseWriter, r *http.Request
 }
 
 func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
+	s.handleLive(w, nil)
+}
+
+func (s *Server) handleLive(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	if _, err := w.Write([]byte("OK")); err != nil {
 		logrus.WithError(err).Error("Failed to write health check response")
+	}
+}
+
+func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+	defer cancel()
+
+	if err := s.db.PingContext(ctx); err != nil {
+		logrus.WithError(err).Warn("Readiness check failed")
+		http.Error(w, "NOT READY", http.StatusServiceUnavailable)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	if _, err := w.Write([]byte("OK")); err != nil {
+		logrus.WithError(err).Error("Failed to write readiness response")
 	}
 }
 
@@ -318,12 +346,43 @@ func logrusRequestLogger(next http.Handler) http.Handler {
 
 func (s *Server) Start(addr string) error {
 	logrus.Infof("Server starting on %s", addr)
-	server := &http.Server{
+	httpServer := &http.Server{
 		Addr:         addr,
 		Handler:      s.router,
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 30 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
-	return server.ListenAndServe()
+
+	s.serverMu.Lock()
+	s.httpServer = httpServer
+	s.serverMu.Unlock()
+
+	err := httpServer.ListenAndServe()
+	if errors.Is(err, http.ErrServerClosed) {
+		return nil
+	}
+	return err
+}
+
+func (s *Server) Shutdown(ctx context.Context) error {
+	s.serverMu.RLock()
+	httpServer := s.httpServer
+	s.serverMu.RUnlock()
+
+	if httpServer == nil {
+		return nil
+	}
+
+	if err := httpServer.Shutdown(ctx); err != nil {
+		return err
+	}
+
+	s.serverMu.Lock()
+	if s.httpServer == httpServer {
+		s.httpServer = nil
+	}
+	s.serverMu.Unlock()
+
+	return nil
 }

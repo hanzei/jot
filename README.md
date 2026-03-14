@@ -107,6 +107,12 @@ STATIC_DIR=../webapp/build/         # Frontend build directory (optional)
 
 The full interactive API reference is available via Swagger UI at `http://localhost:8080/api/docs/index.html` when the server is running.
 
+### Health and Probe Endpoints
+
+- `GET /livez` — liveness probe (process is running)
+- `GET /readyz` — readiness probe (server can reach the database)
+- `GET /health` — legacy compatibility endpoint (same response as liveness)
+
 ## Building for Production
 
 ### Single Binary Deployment (Recommended)
@@ -175,6 +181,8 @@ The Docker image uses multi-stage build:
 1. **Node.js stage**: Builds the React frontend
 2. **Go stage**: Builds the backend binary
 3. **Alpine stage**: Combines everything in minimal production image
+
+The runtime container runs as a non-root `jot` user. Ensure the mounted data directory is writable by that user.
 
 ### Available Tags
 
