@@ -64,6 +64,7 @@ task lint-server           # Run server linting with golangci-lint
 task lint-webapp           # Run webapp linting
 task lint-mobile           # Run mobile app linting
 task check-translations    # Check locale files for missing/extra keys
+task gen-docs              # Regenerate Swagger API docs (install swag first: go install github.com/swaggo/swag/cmd/swag@v1.16.6)
 task clean               # Remove generated files and node packages
 ```
    
@@ -102,43 +103,9 @@ PORT=8080                           # Server port (optional)
 STATIC_DIR=../webapp/build/         # Frontend build directory (optional)
 ```
 
-## API Endpoints
+## API Reference
 
-All API endpoints are prefixed with `/api/v1/`:
-
-### Authentication
-- `POST /api/v1/register` - Register new user (sets session cookie)
-- `POST /api/v1/login` - Login user (sets session cookie)
-- `POST /api/v1/logout` - Logout and invalidate session
-- `GET /api/v1/me` - Get current authenticated user
-
-### Notes (Requires Authentication)
-- `GET /api/v1/notes` - List user's notes
-  - Query params: `archived=true/false`, `search=query`
-- `POST /api/v1/notes` - Create new note
-- `GET /api/v1/notes/{id}` - Get specific note
-- `PUT /api/v1/notes/{id}` - Update note (title, content, pin, archive, color)
-- `DELETE /api/v1/notes/{id}` - Delete note
-
-### System
-- `GET /health` - Server health check
-
-### Example API Usage
-
-```bash
-# Register user (session cookie is set automatically)
-curl -c cookies.txt -X POST http://localhost:8080/api/v1/register \
-  -H "Content-Type: application/json" \
-  -d '{"username":"myuser","password":"password123"}'
-
-# Create note (using session cookie)
-curl -b cookies.txt -X POST http://localhost:8080/api/v1/notes \
-  -H "Content-Type: application/json" \
-  -d '{"title":"My Note","content":"Note content","note_type":"text"}'
-
-# Logout
-curl -b cookies.txt -X POST http://localhost:8080/api/v1/logout
-```
+The full interactive API reference is available via Swagger UI at `http://localhost:8080/api/docs/index.html` when the server is running.
 
 ## Building for Production
 
