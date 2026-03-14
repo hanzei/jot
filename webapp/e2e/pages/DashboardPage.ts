@@ -88,25 +88,22 @@ export class DashboardPage {
 
   async switchToArchived() {
     await this.page
-      .locator('aside[aria-label="Main navigation"] nav')
-      .nth(1)
-      .locator('[aria-label="Archive"]')
+      .locator('aside[aria-label="Main navigation"] nav [aria-label="Archive"]')
+      .first()
       .click();
   }
 
   async switchToNotes() {
     await this.page
-      .locator('aside[aria-label="Main navigation"] nav')
-      .nth(0)
-      .locator('[aria-label="Notes"]')
+      .locator('aside[aria-label="Main navigation"] nav [aria-label="Notes"]')
+      .first()
       .click();
   }
 
   async switchToBin() {
     await this.page
-      .locator('aside[aria-label="Main navigation"] nav')
-      .nth(1)
-      .locator('[aria-label="Bin"]')
+      .locator('aside[aria-label="Main navigation"] nav [aria-label="Bin"]')
+      .first()
       .click();
   }
 
