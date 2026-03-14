@@ -268,9 +268,9 @@ const Admin = ({ onLogout }: AdminProps) => {
           )}
 
           <div className="bg-white dark:bg-slate-800 shadow overflow-hidden sm:rounded-md border border-gray-200 dark:border-slate-700">
-            <ul className="divide-y divide-gray-200 dark:divide-slate-700">
+            <ul data-testid="users-list" className="divide-y divide-gray-200 dark:divide-slate-700">
               {(users || []).map((user) => (
-                <li key={user.id}>
+                <li key={user.id} data-testid={`user-row-${user.username}`}>
                   <div className="px-4 py-4 sm:px-6">
                     <div className="flex items-center justify-between">
                       <div className="flex items-center">
