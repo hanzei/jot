@@ -311,8 +311,6 @@ Jot uses GitHub Actions for automated testing and Docker image publishing:
 - **Docker publishing**: Master branch builds are published to `hanzei/jot` on Docker Hub
 - **Multi-platform**: Images support both AMD64 and ARM64 architectures
 
-For setup instructions, see [CI/CD Setup Guide](docs/admin/ci-setup.md).
-
 ## License
 
 [Add your license here - e.g., MIT, GPL-3.0, etc.]

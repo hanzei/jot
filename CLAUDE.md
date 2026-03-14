@@ -19,8 +19,7 @@
 ## Documentation Maintenance
 
 - When development instructions change (build scripts, dev setup, etc.), update the README.md to reflect the changes
-- When functionality changes (API endpoints, features, configuration options, etc.), update the documentation in docs/ directory:
- - docs/admin/ - Update admin documentation for configuration, installation, or maintenance changes
+- When functionality changes (API endpoints, features, configuration options, etc.), update relevant documentation.
 
 ## Git Workflow
 
@@ -98,7 +97,7 @@ Jot is a self-hosted note-taking application. The backend is a Go HTTP API and t
 │   │   ├── types/       # Shared TypeScript interfaces
 │   └── package.json
 ├── docs/
-│   └── admin/       # Operator/admin documentation
+│   └── images/      # Documentation images
 ├── Taskfile.yml
 ├── Dockerfile       # Multi-stage production build
 └── docker-compose.yml
