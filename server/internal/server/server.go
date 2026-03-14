@@ -132,8 +132,6 @@ func (s *Server) setupRoutes() {
 
 	s.router.Get("/livez", s.handleLive)
 	s.router.Get("/readyz", s.handleReady)
-	// Keep /health for backward compatibility with older deploys.
-	s.router.Get("/health", s.handleHealth)
 
 	s.router.Route("/api/v1", func(r chi.Router) {
 		r.Post("/register", s.wrapHandler(s.authHandler.Register))
@@ -269,10 +267,6 @@ func (s *Server) wrapHandler(handler func(w http.ResponseWriter, r *http.Request
 			http.Error(w, msg, statusCode)
 		}
 	}
-}
-
-func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
-	s.handleLive(w, nil)
 }
 
 func (s *Server) handleLive(w http.ResponseWriter, _ *http.Request) {

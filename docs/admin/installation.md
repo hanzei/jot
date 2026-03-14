@@ -104,7 +104,6 @@ Use these endpoints for container and Kubernetes probing:
 
 - `GET /livez` — liveness check
 - `GET /readyz` — readiness check (includes database connectivity check)
-- `GET /health` — compatibility liveness endpoint
 
 ### Container Security Notes
 

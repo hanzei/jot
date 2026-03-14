@@ -136,7 +136,8 @@ All endpoints are prefixed with `/api/v1/`.
 | GET | `/admin/users` | Admin | List all users |
 | POST | `/admin/users` | Admin | Create a user |
 
-`GET /health` — unauthenticated health check.
+`GET /livez` — unauthenticated liveness check.  
+`GET /readyz` — unauthenticated readiness check.
 
 ### Database Schema
 

@@ -32,7 +32,7 @@ export default defineConfig({
   webServer: {
     command: `go run main.go`,
     cwd: path.resolve(__dirname, '../server'),
-    url: 'http://localhost:8080/health',
+    url: 'http://localhost:8080/livez',
     reuseExistingServer: false,
     timeout: 60_000,
     env: {
