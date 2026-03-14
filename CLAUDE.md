@@ -1,5 +1,13 @@
 # Jot Project Instructions
 
+## Development Status Notice
+
+- Jot is under heavy initial development.
+- The API is currently unstable, and breaking API changes are acceptable when needed.
+- Call out every API breaking change in the PR description with expected client impact and upgrade guidance.
+- Preserve compatibility for existing installations whenever possible (startup behavior, migrations, and existing data).
+- If a change must break existing installations, explicitly call out the impact and migration steps in the PR description and communicate it clearly to users.
+
 ## Documentation Maintenance
 
 - When development instructions change (build scripts, dev setup, etc.), update the README.md to reflect the changes
