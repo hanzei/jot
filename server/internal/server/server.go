@@ -12,6 +12,7 @@ import (
 	"runtime"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -43,8 +44,10 @@ type Server struct {
 	router         chi.Router
 	db             *database.DB
 	httpServer     *http.Server
+	startErr       error
 	startReady     chan struct{}
 	startReadyOnce sync.Once
+	shuttingDown   atomic.Bool
 	serverMu       sync.RWMutex
 	sessionService *auth.SessionService
 	authHandler    *handlers.AuthHandler
@@ -226,8 +229,8 @@ func FileServer(r chi.Router, path string, root http.FileSystem) {
 			requestedFile = "/"
 		}
 		trimmedPath := strings.TrimSuffix(requestedFile, "/")
-		// Probe paths intentionally do not exist under /api/v1.
-		if trimmedPath == "/api/v1/livez" || trimmedPath == "/api/v1/readyz" {
+		// Probe paths intentionally do not exist under /api/v1, and legacy /health should not resolve to SPA.
+		if trimmedPath == "/health" || trimmedPath == "/api/v1/health" || trimmedPath == "/api/v1/livez" || trimmedPath == "/api/v1/readyz" {
 			http.NotFound(w, req)
 			return
 		}
@@ -286,6 +289,11 @@ func (s *Server) handleLive(w http.ResponseWriter, _ *http.Request) {
 
 // handleReady serves the readiness probe response.
 func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
+	if s.shuttingDown.Load() {
+		http.Error(w, "NOT READY", http.StatusServiceUnavailable)
+		return
+	}
+
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()
 
@@ -354,7 +362,9 @@ func (s *Server) Start(addr string) error {
 	logrus.Infof("Server starting on %s", addr)
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
-		return fmt.Errorf("listen: %w", err)
+		startErr := fmt.Errorf("listen: %w", err)
+		s.setStartResult(startErr)
+		return startErr
 	}
 
 	httpServer := &http.Server{
@@ -368,9 +378,7 @@ func (s *Server) Start(addr string) error {
 	s.serverMu.Lock()
 	s.httpServer = httpServer
 	s.serverMu.Unlock()
-	s.startReadyOnce.Do(func() {
-		close(s.startReady)
-	})
+	s.setStartResult(nil)
 
 	err = httpServer.Serve(listener)
 	if errors.Is(err, http.ErrServerClosed) {
@@ -408,8 +416,25 @@ func (s *Server) Shutdown(ctx context.Context) error {
 func (s *Server) WaitUntilStarted(ctx context.Context) error {
 	select {
 	case <-s.startReady:
-		return nil
+		s.serverMu.RLock()
+		startErr := s.startErr
+		s.serverMu.RUnlock()
+		return startErr
 	case <-ctx.Done():
 		return ctx.Err()
 	}
+}
+
+func (s *Server) setStartResult(startErr error) {
+	s.serverMu.Lock()
+	s.startErr = startErr
+	s.serverMu.Unlock()
+
+	s.startReadyOnce.Do(func() {
+		close(s.startReady)
+	})
+}
+
+func (s *Server) BeginShutdown() {
+	s.shuttingDown.Store(true)
 }

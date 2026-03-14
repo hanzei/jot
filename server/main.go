@@ -13,7 +13,7 @@
 //
 //	@securityDefinitions.apikey	CookieAuth
 //	@in							header
-//	@name						Cookie
+//	@name						jot_session
 //
 //	@tag.name			auth
 //	@tag.description	Registration, login, logout and profile management
@@ -81,6 +81,10 @@ func main() {
 		logrus.Info("Server shutdown complete")
 	case sig := <-signalCh:
 		logrus.WithField("signal", sig.String()).Info("Shutdown signal received")
+		s.BeginShutdown()
+		const readinessDrainInterval = 2 * time.Second
+		logrus.WithField("drain_interval", readinessDrainInterval.String()).Info("Marked server not ready, waiting before shutdown")
+		<-time.After(readinessDrainInterval)
 		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
 		defer cancel()
 		if err := s.Shutdown(ctx); err != nil {

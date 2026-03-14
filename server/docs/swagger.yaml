@@ -1285,6 +1285,6 @@ paths:
 securityDefinitions:
   CookieAuth:
     in: header
-    name: Cookie
+    name: jot_session
     type: apiKey
 swagger: "2.0"

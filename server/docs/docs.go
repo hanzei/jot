@@ -2038,7 +2038,7 @@ const docTemplate = `{
     "securityDefinitions": {
         "CookieAuth": {
             "type": "apiKey",
-            "name": "Cookie",
+            "name": "jot_session",
             "in": "header"
         }
     }
