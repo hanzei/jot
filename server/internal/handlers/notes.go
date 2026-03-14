@@ -321,7 +321,7 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 		}
 	}
 
-	err := h.noteStore.UpdateWithItems(
+	err = h.noteStore.UpdateWithItems(
 		id,
 		user.ID,
 		req.Title,
