@@ -917,7 +917,7 @@ func TestTodoItemIndentLevel(t *testing.T) {
 		require.NoError(t, getResp.UnmarshalBody(&note))
 		items, hasItems := note["items"].([]any)
 		if hasItems {
-			assert.Len(t, items, 0)
+			assert.Empty(t, items)
 		}
 	})
 

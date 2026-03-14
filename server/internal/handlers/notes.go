@@ -91,6 +91,8 @@ type UpdateNoteItem struct {
 	IndentLevel int    `json:"indent_level"`
 }
 
+var errInvalidIndentLevel = errors.New("indent_level must be 0 or 1")
+
 func normalizeCreateNoteRequest(req *CreateNoteRequest) (int, error) {
 	if req.Title == "" && req.Content == "" && len(req.Items) == 0 {
 		return http.StatusBadRequest, errors.New("empty note")
@@ -111,6 +113,91 @@ func normalizeCreateNoteRequest(req *CreateNoteRequest) (int, error) {
 	}
 
 	return 0, nil
+}
+
+func buildCreateTodoItems(items []CreateNoteItem) ([]models.CreateNoteItemInput, error) {
+	todoItems := make([]models.CreateNoteItemInput, 0, len(items))
+	for _, item := range items {
+		if item.IndentLevel < 0 || item.IndentLevel > 1 {
+			return nil, errInvalidIndentLevel
+		}
+		todoItems = append(todoItems, models.CreateNoteItemInput{
+			Text:        item.Text,
+			Position:    item.Position,
+			IndentLevel: item.IndentLevel,
+		})
+	}
+	return todoItems, nil
+}
+
+func buildUpdateTodoItems(items []UpdateNoteItem) []models.UpdateNoteItemInput {
+	todoItems := make([]models.UpdateNoteItemInput, 0, len(items))
+	for _, item := range items {
+		todoItems = append(todoItems, models.UpdateNoteItemInput{
+			Text:        item.Text,
+			Position:    item.Position,
+			Completed:   item.Completed,
+			IndentLevel: item.IndentLevel,
+		})
+	}
+	return todoItems
+}
+
+func validateUpdateTodoItems(items []UpdateNoteItem) error {
+	for _, item := range items {
+		if item.IndentLevel < 0 || item.IndentLevel > 1 {
+			return errInvalidIndentLevel
+		}
+	}
+	return nil
+}
+
+func (h *NotesHandler) createNoteForRequest(userID string, req CreateNoteRequest) (*models.Note, int, error) {
+	if req.NoteType != models.NoteTypeTodo || len(req.Items) == 0 {
+		note, err := h.noteStore.Create(userID, req.Title, req.Content, req.NoteType, req.Color)
+		if err != nil {
+			return nil, http.StatusInternalServerError, err
+		}
+		return note, 0, nil
+	}
+
+	todoItems, err := buildCreateTodoItems(req.Items)
+	if err != nil {
+		return nil, http.StatusBadRequest, err
+	}
+
+	note, err := h.noteStore.CreateWithTodoItems(userID, req.Title, req.Content, req.Color, todoItems)
+	if err != nil {
+		return nil, http.StatusInternalServerError, err
+	}
+
+	updatedNote, err := h.noteStore.GetByID(note.ID, userID)
+	if err != nil {
+		return nil, http.StatusInternalServerError, err
+	}
+	return updatedNote, 0, nil
+}
+
+func (h *NotesHandler) updateNoteForRequest(noteID, userID string, req UpdateNoteRequest) error {
+	if req.Items == nil {
+		return h.noteStore.Update(noteID, userID, req.Title, req.Content, req.Pinned, req.Archived, req.Color, req.CheckedItemsCollapsed)
+	}
+
+	if err := validateUpdateTodoItems(req.Items); err != nil {
+		return err
+	}
+
+	return h.noteStore.UpdateWithTodoItems(
+		noteID,
+		userID,
+		req.Title,
+		req.Content,
+		req.Pinned,
+		req.Archived,
+		req.Color,
+		req.CheckedItemsCollapsed,
+		buildUpdateTodoItems(req.Items),
+	)
 }
 
 // GetNotes godoc
@@ -176,42 +263,9 @@ func (h *NotesHandler) CreateNote(w http.ResponseWriter, r *http.Request) (int, 
 		return status, err
 	}
 
-	var note *models.Note
-	if req.NoteType == models.NoteTypeTodo && len(req.Items) > 0 {
-		for _, item := range req.Items {
-			if item.IndentLevel < 0 || item.IndentLevel > 1 {
-				return http.StatusBadRequest, errors.New("indent_level must be 0 or 1")
-			}
-		}
-
-		todoItems := make([]models.CreateNoteItemInput, 0, len(req.Items))
-		for _, item := range req.Items {
-			todoItems = append(todoItems, models.CreateNoteItemInput{
-				Text:        item.Text,
-				Position:    item.Position,
-				IndentLevel: item.IndentLevel,
-			})
-		}
-
-		createdNote, err := h.noteStore.CreateWithTodoItems(user.ID, req.Title, req.Content, req.Color, todoItems)
-		if err != nil {
-			return http.StatusInternalServerError, err
-		}
-		note = createdNote
-	} else {
-		createdNote, err := h.noteStore.Create(user.ID, req.Title, req.Content, req.NoteType, req.Color)
-		if err != nil {
-			return http.StatusInternalServerError, err
-		}
-		note = createdNote
-	}
-
-	if req.NoteType == models.NoteTypeTodo && len(req.Items) > 0 {
-		updatedNote, err := h.noteStore.GetByID(note.ID, user.ID)
-		if err != nil {
-			return http.StatusInternalServerError, err
-		}
-		note = updatedNote
+	note, status, err := h.createNoteForRequest(user.ID, req)
+	if err != nil {
+		return status, err
 	}
 
 	w.Header().Set("Content-Type", "application/json")
@@ -301,32 +355,13 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 		req.Color = models.DefaultNoteColor
 	}
 
-	if req.Items != nil {
-		for _, item := range req.Items {
-			if item.IndentLevel < 0 || item.IndentLevel > 1 {
-				return http.StatusBadRequest, errors.New("indent_level must be 0 or 1")
-			}
-		}
-	}
-
-	var err error
-	if req.Items != nil {
-		todoItems := make([]models.UpdateNoteItemInput, 0, len(req.Items))
-		for _, item := range req.Items {
-			todoItems = append(todoItems, models.UpdateNoteItemInput{
-				Text:        item.Text,
-				Position:    item.Position,
-				Completed:   item.Completed,
-				IndentLevel: item.IndentLevel,
-			})
-		}
-		err = h.noteStore.UpdateWithTodoItems(id, user.ID, req.Title, req.Content, req.Pinned, req.Archived, req.Color, req.CheckedItemsCollapsed, todoItems)
-	} else {
-		err = h.noteStore.Update(id, user.ID, req.Title, req.Content, req.Pinned, req.Archived, req.Color, req.CheckedItemsCollapsed)
-	}
+	err := h.updateNoteForRequest(id, user.ID, req)
 	if err != nil {
 		if errors.Is(err, models.ErrNoteNotFound) || errors.Is(err, models.ErrNoteNoAccess) {
 			return http.StatusNotFound, err
+		}
+		if errors.Is(err, errInvalidIndentLevel) {
+			return http.StatusBadRequest, err
 		}
 		return http.StatusInternalServerError, err
 	}
@@ -538,8 +573,9 @@ func (h *NotesHandler) ShareNote(w http.ResponseWriter, r *http.Request) (int, e
 	}
 
 	var req ShareNoteRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		return http.StatusBadRequest, err
+	decodeErr := json.NewDecoder(r.Body).Decode(&req)
+	if decodeErr != nil {
+		return http.StatusBadRequest, decodeErr
 	}
 
 	isOwner, err := h.noteStore.IsOwnerActive(id, user.ID)
@@ -621,8 +657,9 @@ func (h *NotesHandler) UnshareNote(w http.ResponseWriter, r *http.Request) (int,
 	}
 
 	var req ShareNoteRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		return http.StatusBadRequest, err
+	decodeErr := json.NewDecoder(r.Body).Decode(&req)
+	if decodeErr != nil {
+		return http.StatusBadRequest, decodeErr
 	}
 
 	isOwner, err := h.noteStore.IsOwnerActive(id, user.ID)
