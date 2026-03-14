@@ -228,9 +228,11 @@ func FileServer(r chi.Router, path string, root http.FileSystem) {
 		if requestedFile == "" {
 			requestedFile = "/"
 		}
-		trimmedPath := strings.TrimSuffix(requestedFile, "/")
 		// Probe paths intentionally do not exist under /api/v1, and legacy /health should not resolve to SPA.
-		if trimmedPath == "/health" || trimmedPath == "/api/v1/health" || trimmedPath == "/api/v1/livez" || trimmedPath == "/api/v1/readyz" {
+		if strings.TrimSuffix(requestedFile, "/") == "/health" ||
+			strings.TrimSuffix(requestedFile, "/") == "/api/v1/health" ||
+			strings.TrimSuffix(requestedFile, "/") == "/api/v1/livez" ||
+			strings.TrimSuffix(requestedFile, "/") == "/api/v1/readyz" {
 			http.NotFound(w, req)
 			return
 		}
