@@ -162,10 +162,9 @@ func TestRemoveLabelEndpoint(t *testing.T) {
 
 func TestAdminUpdateUserRoleEndpoint(t *testing.T) {
 	ts := setupTestServer(t)
-	admin := ts.createTestUser(t, "role-admin", "password123", true)
-	regular := ts.createTestUser(t, "role-regular", "password123", false)
 
 	t.Run("admin can promote user and promoted user gains admin access", func(t *testing.T) {
+		admin := ts.createTestUser(t, "role-admin-promote", "password123", true)
 		target := ts.createTestUser(t, "role-target-promote", "password123", false)
 
 		// Baseline: target user is not admin yet.
@@ -186,6 +185,8 @@ func TestAdminUpdateUserRoleEndpoint(t *testing.T) {
 	})
 
 	t.Run("non-admin cannot update roles", func(t *testing.T) {
+		admin := ts.createTestUser(t, "role-admin-check", "password123", true)
+		regular := ts.createTestUser(t, "role-regular-check", "password123", false)
 		target := ts.createTestUser(t, "role-target-no-admin", "password123", false)
 
 		// Baseline: target user cannot access admin listing.
@@ -196,9 +197,28 @@ func TestAdminUpdateUserRoleEndpoint(t *testing.T) {
 			"role": "user",
 		})
 		assert.Equal(t, http.StatusForbidden, resp.StatusCode)
+
+		adminListResp := ts.authRequest(t, admin, http.MethodGet, "/api/v1/admin/users", nil)
+		require.Equal(t, http.StatusOK, adminListResp.StatusCode)
+		var payload map[string]any
+		require.NoError(t, adminListResp.UnmarshalBody(&payload))
+		users := payload["users"].([]any)
+
+		foundTarget := false
+		for _, u := range users {
+			userMap := u.(map[string]any)
+			if userMap["id"] == target.User.ID {
+				foundTarget = true
+				assert.Equal(t, "user", userMap["role"])
+				break
+			}
+		}
+		assert.True(t, foundTarget)
 	})
 
 	t.Run("invalid role returns 400", func(t *testing.T) {
+		admin := ts.createTestUser(t, "role-admin-invalid", "password123", true)
+		regular := ts.createTestUser(t, "role-regular-invalid", "password123", false)
 		resp := ts.authRequest(t, admin, http.MethodPut, fmt.Sprintf("/api/v1/admin/users/%s/role", regular.User.ID), map[string]any{
 			"role": "super-admin",
 		})
@@ -207,6 +227,7 @@ func TestAdminUpdateUserRoleEndpoint(t *testing.T) {
 	})
 
 	t.Run("unknown user returns 404", func(t *testing.T) {
+		admin := ts.createTestUser(t, "role-admin-unknown", "password123", true)
 		resp := ts.authRequest(t, admin, http.MethodPut, "/api/v1/admin/users/nonexistentid12345678/role", map[string]any{
 			"role": "user",
 		})
