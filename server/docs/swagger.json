@@ -1,7 +1,7 @@
 {
     "swagger": "2.0",
     "info": {
-        "description": "Self-hosted note-taking application API.",
+        "description": "Self-hosted note-taking application API. Health probes are available at root paths `/livez` and `/readyz` (outside `/api/v1`).",
         "title": "Jot API",
         "contact": {
             "name": "Jot Project",
@@ -286,25 +286,6 @@
                     },
                     "401": {
                         "description": "unauthorized",
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                }
-            }
-        },
-        "/livez": {
-            "get": {
-                "produces": [
-                    "text/plain"
-                ],
-                "tags": [
-                    "system"
-                ],
-                "summary": "Liveness probe",
-                "responses": {
-                    "200": {
-                        "description": "OK",
                         "schema": {
                             "type": "string"
                         }
@@ -1171,31 +1152,6 @@
                     },
                     "403": {
                         "description": "not owner",
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                }
-            }
-        },
-        "/readyz": {
-            "get": {
-                "produces": [
-                    "text/plain"
-                ],
-                "tags": [
-                    "system"
-                ],
-                "summary": "Readiness probe",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    "503": {
-                        "description": "NOT READY",
                         "schema": {
                             "type": "string"
                         }

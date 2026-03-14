@@ -300,25 +300,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/livez": {
-            "get": {
-                "produces": [
-                    "text/plain"
-                ],
-                "tags": [
-                    "system"
-                ],
-                "summary": "Liveness probe",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                }
-            }
-        },
         "/login": {
             "post": {
                 "consumes": [
@@ -1178,31 +1159,6 @@ const docTemplate = `{
                     },
                     "403": {
                         "description": "not owner",
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                }
-            }
-        },
-        "/readyz": {
-            "get": {
-                "produces": [
-                    "text/plain"
-                ],
-                "tags": [
-                    "system"
-                ],
-                "summary": "Readiness probe",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    "503": {
-                        "description": "NOT READY",
                         "schema": {
                             "type": "string"
                         }
@@ -2095,7 +2051,7 @@ var SwaggerInfo = &swag.Spec{
 	BasePath:         "/api/v1",
 	Schemes:          []string{},
 	Title:            "Jot API",
-	Description:      "Self-hosted note-taking application API.",
+	Description:      "Self-hosted note-taking application API. Health probes are available at root paths `/livez` and `/readyz` (outside `/api/v1`).",
 	InfoInstanceName: "swagger",
 	SwaggerTemplate:  docTemplate,
 	LeftDelim:        "{{",

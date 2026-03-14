@@ -2,7 +2,7 @@
 //
 //	@title			Jot API
 //	@version		1.0
-//	@description	Self-hosted note-taking application API.
+//	@description	Self-hosted note-taking application API. Health probes are available at root paths `/livez` and `/readyz` (outside `/api/v1`).
 //
 //	@contact.name	Jot Project
 //	@contact.url	https://github.com/hanzei/jot

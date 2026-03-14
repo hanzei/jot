@@ -276,13 +276,7 @@ func (s *Server) wrapHandler(handler func(w http.ResponseWriter, r *http.Request
 	}
 }
 
-// handleLive godoc
-//
-//	@Summary	Liveness probe
-//	@Tags		system
-//	@Produce	plain
-//	@Success	200	{string}	string	"OK"
-//	@Router		/livez [get]
+// handleLive serves the liveness probe response.
 func (s *Server) handleLive(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	if _, err := w.Write([]byte("OK")); err != nil {
@@ -290,14 +284,7 @@ func (s *Server) handleLive(w http.ResponseWriter, _ *http.Request) {
 	}
 }
 
-// handleReady godoc
-//
-//	@Summary	Readiness probe
-//	@Tags		system
-//	@Produce	plain
-//	@Success	200	{string}	string	"OK"
-//	@Failure	503	{string}	string	"NOT READY"
-//	@Router		/readyz [get]
+// handleReady serves the readiness probe response.
 func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
 	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
 	defer cancel()

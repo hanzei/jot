@@ -322,7 +322,8 @@ info:
   contact:
     name: Jot Project
     url: https://github.com/hanzei/jot
-  description: Self-hosted note-taking application API.
+  description: Self-hosted note-taking application API. Health probes are available
+    at root paths `/livez` and `/readyz` (outside `/api/v1`).
   license:
     name: MIT
   title: Jot API
@@ -502,18 +503,6 @@ paths:
       summary: List all labels for the current user
       tags:
       - labels
-  /livez:
-    get:
-      produces:
-      - text/plain
-      responses:
-        "200":
-          description: OK
-          schema:
-            type: string
-      summary: Liveness probe
-      tags:
-      - system
   /login:
     post:
       consumes:
@@ -1059,22 +1048,6 @@ paths:
       summary: Reorder notes by providing an ordered list of IDs
       tags:
       - notes
-  /readyz:
-    get:
-      produces:
-      - text/plain
-      responses:
-        "200":
-          description: OK
-          schema:
-            type: string
-        "503":
-          description: NOT READY
-          schema:
-            type: string
-      summary: Readiness probe
-      tags:
-      - system
   /register:
     post:
       consumes:
