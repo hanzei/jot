@@ -74,6 +74,7 @@ task run-webapp      # Start webapp dev server with HMR
 task test            # Run all tests
 task test-server     # Run server tests
 task test-webapp     # Run webapp tests
+task test-e2e        # Run Playwright end-to-end tests
 task test-mobile     # Run mobile app tests
 task coverage        # Run server tests with coverage report
 task lint                  # Run linters
