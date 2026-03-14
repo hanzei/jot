@@ -16,19 +16,19 @@ A self-hosted note-taking application built with Go backend and React frontend. 
 ## Screenshots
 
 ### Dashboard overview
-![Dashboard overview](docs/images/readme/feature-dashboard-overview.png)
+![Dashboard overview](images/feature-dashboard-overview.png)
 
 ### Search and filter
-![Search and filter](docs/images/readme/feature-search-filter.png)
+![Search and filter](images/feature-search-filter.png)
 
 ### Todo note editor
-![Todo note editor](docs/images/readme/feature-todo-note-editor.png)
+![Todo note editor](images/feature-todo-note-editor.png)
 
 ### Archive view
-![Archive view](docs/images/readme/feature-archive-view.png)
+![Archive view](images/feature-archive-view.png)
 
 ### Settings and theme
-![Settings and theme](docs/images/readme/feature-settings-theme.png)
+![Settings and theme](images/feature-settings-theme.png)
 
 ## Development Setup
 
