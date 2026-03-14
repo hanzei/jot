@@ -89,21 +89,18 @@ export class DashboardPage {
   async switchToArchived() {
     await this.page
       .locator('aside[aria-label="Main navigation"] nav [aria-label="Archive"]')
-      .first()
       .click();
   }
 
   async switchToNotes() {
     await this.page
       .locator('aside[aria-label="Main navigation"] nav [aria-label="Notes"]')
-      .first()
       .click();
   }
 
   async switchToBin() {
     await this.page
       .locator('aside[aria-label="Main navigation"] nav [aria-label="Bin"]')
-      .first()
       .click();
   }
 
