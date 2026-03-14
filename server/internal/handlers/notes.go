@@ -525,7 +525,7 @@ func (h *NotesHandler) PermanentlyDeleteNote(w http.ResponseWriter, r *http.Requ
 }
 
 type ShareNoteRequest struct {
-	UserID string `json:"user_id"`
+	UserID string `json:"user_id" binding:"required"`
 }
 
 type ShareNoteResponse struct {

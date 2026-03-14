@@ -1684,6 +1684,9 @@ const docTemplate = `{
         },
         "handlers.ShareNoteRequest": {
             "type": "object",
+            "required": [
+                "user_id"
+            ],
             "properties": {
                 "user_id": {
                     "type": "string"
