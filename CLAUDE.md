@@ -19,9 +19,7 @@
 ## Documentation Maintenance
 
 - When development instructions change (build scripts, dev setup, etc.), update the README.md to reflect the changes
-- When functionality changes (API endpoints, features, configuration options, etc.), update the documentation in docs/ directory:
-  - docs/user/ - Update user-facing documentation for new features or workflow changes
-  - docs/admin/ - Update admin documentation for configuration, installation, or maintenance changes
+- When functionality changes (API endpoints, features, configuration options, etc.), update relevant documentation.
 
 ## Git Workflow
 
@@ -98,10 +96,7 @@ Jot is a self-hosted note-taking application. The backend is a Go HTTP API and t
 │   │   ├── store/       # Context/state providers
 │   │   ├── types/       # Shared TypeScript interfaces
 │   └── package.json
-├── docs/
-│   ├── user/        # End-user documentation
-│   ├── admin/       # Operator/admin documentation
-│   └── mobile/      # Mobile app phase specs
+├── images/          # Documentation images
 ├── Taskfile.yml
 ├── Dockerfile       # Multi-stage production build
 └── docker-compose.yml
@@ -228,7 +223,8 @@ Migration files live in `server/migrations/` and are named `NNN_description.sql`
 ### Authentication
 
 - Auth is session-based using an HttpOnly `jot_session` cookie.
-- Sessions are persisted in the `sessions` table with 24-hour expiry.
+- Sessions are persisted in the `sessions` table with 30-day expiry by default.
+- Sessions are automatically extended to 30 days again when less than 7 days remain.
 - Browser clients send credentialed requests (`withCredentials: true`).
 - The first registered user automatically becomes admin.
 - Note access is granted if the requester is the owner **or** the note is shared with them.
