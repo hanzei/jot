@@ -9,7 +9,12 @@ import (
 	"time"
 )
 
-const SessionDuration = 24 * time.Hour
+const (
+	SessionDuration    = 30 * 24 * time.Hour
+	SessionRenewWindow = 7 * 24 * time.Hour
+)
+
+var ErrSessionNotFoundOrExpired = errors.New("session not found or expired")
 
 type Session struct {
 	Token     string    `json:"token"`
@@ -65,7 +70,7 @@ func (s *SessionStore) GetByToken(token string) (*Session, error) {
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
-			return nil, fmt.Errorf("session not found or expired")
+			return nil, fmt.Errorf("get session by token: %w", ErrSessionNotFoundOrExpired)
 		}
 		return nil, fmt.Errorf("failed to get session: %w", err)
 	}
@@ -94,5 +99,23 @@ func (s *SessionStore) DeleteExpired() error {
 	if _, err := s.db.Exec(query, time.Now()); err != nil {
 		return fmt.Errorf("failed to delete expired sessions: %w", err)
 	}
+	return nil
+}
+
+func (s *SessionStore) UpdateExpiry(token string, expiresAt time.Time) error {
+	query := `UPDATE sessions SET expires_at = ? WHERE token = ? AND expires_at > ?`
+	result, err := s.db.Exec(query, expiresAt, token, time.Now())
+	if err != nil {
+		return fmt.Errorf("failed to update session expiry: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to read updated sessions: %w", err)
+	}
+	if rowsAffected == 0 {
+		return fmt.Errorf("update session expiry: %w", ErrSessionNotFoundOrExpired)
+	}
+
 	return nil
 }
