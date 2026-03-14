@@ -13,6 +13,23 @@ A self-hosted note-taking application built with Go backend and React frontend. 
 - **Admin Support**: First registered user becomes admin
 - **Single Binary**: Frontend and backend served from one Go binary
 
+## Screenshots
+
+### Dashboard overview
+![Dashboard overview](images/feature-dashboard-overview.png)
+
+### Search and filter
+![Search and filter](images/feature-search-filter.png)
+
+### Todo note editor
+![Todo note editor](images/feature-todo-note-editor.png)
+
+### Archive view
+![Archive view](images/feature-archive-view.png)
+
+### Settings and theme
+![Settings and theme](images/feature-settings-theme.png)
+
 ## Development Setup
 
 ### Prerequisites
@@ -57,6 +74,7 @@ task run-webapp      # Start webapp dev server with HMR
 task test            # Run all tests
 task test-server     # Run server tests
 task test-webapp     # Run webapp tests
+task test-e2e        # Run Playwright end-to-end tests
 task test-mobile     # Run mobile app tests
 task coverage        # Run server tests with coverage report
 task lint                  # Run linters
@@ -292,8 +310,6 @@ Jot uses GitHub Actions for automated testing and Docker image publishing:
 - **Automated testing**: All PRs trigger test and lint jobs
 - **Docker publishing**: Master branch builds are published to `hanzei/jot` on Docker Hub
 - **Multi-platform**: Images support both AMD64 and ARM64 architectures
-
-For setup instructions, see [CI/CD Setup Guide](docs/admin/ci-setup.md).
 
 ## License
 

@@ -1,16 +1,29 @@
 # Jot Project Instructions
 
+## Development Status Notice
+
+- Jot is under heavy initial development.
+- The API is currently unstable, and API-breaking changes are acceptable when needed.
+- Call out every API-breaking change in the PR description with expected client impact and upgrade guidance.
+- Preserve compatibility for existing installations whenever possible (startup behavior, migrations, and existing data).
+- If a change must break existing installations, explicitly call out the impact and migration steps in the PR description and communicate it clearly to users.
+
+## Threat Model
+
+- Logged-in users are generally treated as trustworthy collaborators.
+- Baseline authentication and authorization guarantees remain mandatory (ownership/share checks, role checks, and normal access boundaries).
+- Prioritize protections against unintentional internal overloads (for example: accidental high-frequency requests, runaway sync loops, and expensive repeated operations).
+- For internal-load safety, prefer practical controls such as rate limiting, retry/backoff, loop detection, and caps on expensive operations.
+- Defenses aimed specifically at malicious authenticated insiders are not a primary requirement at this stage, unless they are needed to preserve baseline auth/authz guarantees.
+
 ## Documentation Maintenance
 
 - When development instructions change (build scripts, dev setup, etc.), update the README.md to reflect the changes
-- When functionality changes (API endpoints, features, configuration options, etc.), update the documentation in docs/ directory:
-  - docs/user/ - Update user-facing documentation for new features or workflow changes
-  - docs/admin/ - Update admin documentation for configuration, installation, or maintenance changes
+- When functionality changes (API endpoints, features, configuration options, etc.), update relevant documentation.
 
 ## Git Workflow
 
-- Don't commit to master unless specifically asked. Use a separate feature branch instead.
-- Don't create commits on the master branch unless specifically asked to do so.
+- Don't commit to `master` unless specifically asked; always use a separate feature branch.
 - Before creating a PR, run all tests and ensure they pass. Also run the linter.
 
 ## Code Review Loop
@@ -83,10 +96,7 @@ Jot is a self-hosted note-taking application. The backend is a Go HTTP API and t
 │   │   ├── store/       # Context/state providers
 │   │   ├── types/       # Shared TypeScript interfaces
 │   └── package.json
-├── docs/
-│   ├── user/        # End-user documentation
-│   ├── admin/       # Operator/admin documentation
-│   └── mobile/      # Mobile app phase specs
+├── images/          # Documentation images
 ├── Taskfile.yml
 ├── Dockerfile       # Multi-stage production build
 └── docker-compose.yml
