@@ -13,7 +13,7 @@ import (
 func TestNoteSharingEndpoints(t *testing.T) {
 	ts := setupTestServer(t)
 	owner := ts.createTestUser(t, "owner", "password123", false)
-	_ = ts.createTestUser(t, "user", "password123", false)
+	sharedUser := ts.createTestUser(t, "user", "password123", false)
 	other := ts.createTestUser(t, "other", "password123", false)
 
 	// Create a note to share
@@ -25,10 +25,11 @@ func TestNoteSharingEndpoints(t *testing.T) {
 	var createdNote map[string]any
 	require.NoError(t, createResp.UnmarshalBody(&createdNote))
 	noteID := createdNote["id"].(string)
+	missingNoteID := "abcdefghijklmnopqrstuv"
 
-	t.Run("share note with user", func(t *testing.T) {
+	t.Run("share note with user_id", func(t *testing.T) {
 		shareBody := map[string]string{
-			"username": "user",
+			"user_id": sharedUser.User.ID,
 		}
 
 		resp := ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/share", noteID), shareBody)
@@ -52,6 +53,15 @@ func TestNoteSharingEndpoints(t *testing.T) {
 		assert.Equal(t, http.StatusConflict, resp.StatusCode)
 	})
 
+	t.Run("share nonexistent note returns not found", func(t *testing.T) {
+		shareBody := map[string]string{
+			"user_id": sharedUser.User.ID,
+		}
+
+		resp := ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/share", missingNoteID), shareBody)
+		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+	})
+
 	t.Run("share with nonexistent username returns not found", func(t *testing.T) {
 		shareBody := map[string]string{
 			"username": "nonexistent",
@@ -61,14 +71,24 @@ func TestNoteSharingEndpoints(t *testing.T) {
 		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 	})
 
-	t.Run("share with empty username returns bad request", func(t *testing.T) {
+	t.Run("share with empty payload returns bad request", func(t *testing.T) {
 		shareBody := map[string]string{
 			"username": "",
 		}
 
 		resp := ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/share", noteID), shareBody)
 		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
-		assert.Contains(t, resp.GetString(), "empty username")
+		assert.Contains(t, resp.GetString(), "either user_id or username is required")
+	})
+
+	t.Run("share with invalid user_id returns bad request", func(t *testing.T) {
+		shareBody := map[string]string{
+			"user_id": "invalid-id",
+		}
+
+		resp := ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/share", noteID), shareBody)
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+		assert.Contains(t, resp.GetString(), "invalid user_id format")
 	})
 
 	t.Run("share with self returns bad request", func(t *testing.T) {
@@ -104,9 +124,14 @@ func TestNoteSharingEndpoints(t *testing.T) {
 		assert.Equal(t, http.StatusForbidden, resp.StatusCode)
 	})
 
-	t.Run("unshare note", func(t *testing.T) {
+	t.Run("get shares for nonexistent note returns not found", func(t *testing.T) {
+		resp := ts.authRequest(t, owner, http.MethodGet, fmt.Sprintf("/api/v1/notes/%s/shares", missingNoteID), nil)
+		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+	})
+
+	t.Run("unshare note by user_id", func(t *testing.T) {
 		unshareBody := map[string]string{
-			"username": "user",
+			"user_id": sharedUser.User.ID,
 		}
 
 		resp := ts.authRequest(t, owner, http.MethodDelete, fmt.Sprintf("/api/v1/notes/%s/share", noteID), unshareBody)
@@ -119,10 +144,19 @@ func TestNoteSharingEndpoints(t *testing.T) {
 
 	t.Run("unshare non-shared user returns not found", func(t *testing.T) {
 		unshareBody := map[string]string{
-			"username": "user", // Already unshared
+			"user_id": sharedUser.User.ID, // Already unshared
 		}
 
 		resp := ts.authRequest(t, owner, http.MethodDelete, fmt.Sprintf("/api/v1/notes/%s/share", noteID), unshareBody)
+		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+	})
+
+	t.Run("unshare nonexistent note returns not found", func(t *testing.T) {
+		unshareBody := map[string]string{
+			"user_id": sharedUser.User.ID,
+		}
+
+		resp := ts.authRequest(t, owner, http.MethodDelete, fmt.Sprintf("/api/v1/notes/%s/share", missingNoteID), unshareBody)
 		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 	})
 }

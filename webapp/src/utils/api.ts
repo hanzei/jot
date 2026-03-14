@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { AboutInfo, AuthResponse, LoginRequest, RegisterRequest, Note, CreateNoteRequest, UpdateNoteRequest, User, CreateUserRequest, UserListResponse, ShareNoteRequest, ShareNoteResponse, NoteShare, ImportResponse, UpdateMeRequest, ChangePasswordRequest, UserSettings, UpdateSettingsRequest, UpdateUserRoleRequest, Label } from '@/types';
+import { AboutInfo, AuthResponse, LoginRequest, RegisterRequest, Note, CreateNoteRequest, UpdateNoteRequest, User, CreateUserRequest, UserListResponse, ShareNoteRequest, ShareNoteResponse, NoteShare, ImportResponse, UpdateMeRequest, ChangePasswordRequest, UserSettings, UpdateSettingsRequest, UpdateUserRoleRequest, Label, ShareUser } from '@/types';
 
 const api = axios.create({
   baseURL: '/api/v1',
@@ -90,7 +90,7 @@ export const labels = {
 };
 
 export const users = {
-  search: (): Promise<User[]> =>
+  search: (): Promise<ShareUser[]> =>
     api.get('/users').then(res => res.data),
 
   updateMe: (data: UpdateMeRequest): Promise<User> =>

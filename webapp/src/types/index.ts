@@ -16,6 +16,15 @@ export interface User {
   updated_at: string;
 }
 
+export interface ShareUser {
+  id: string;
+  username: string;
+  first_name: string;
+  last_name: string;
+  role: string;
+  has_profile_icon: boolean;
+}
+
 export type ThemePreference = 'system' | 'light' | 'dark';
 
 export interface UserSettings {
@@ -140,7 +149,8 @@ export interface ChangePasswordRequest {
 }
 
 export interface ShareNoteRequest {
-  username: string;
+  user_id?: string;
+  username?: string;
 }
 
 export interface ShareNoteResponse {

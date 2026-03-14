@@ -207,6 +207,52 @@ func TestRegisterEndpoint(t *testing.T) {
 	})
 }
 
+func TestRegisterAssignsOnlyFirstUserAdmin(t *testing.T) {
+	ts := setupTestServer(t)
+
+	firstResp := ts.request(t, newCookieClient(t), http.MethodPost, "/api/v1/register", map[string]string{
+		"username": "firstadmin",
+		"password": "password123",
+	})
+	require.Equal(t, http.StatusCreated, firstResp.StatusCode)
+	var firstBody map[string]any
+	require.NoError(t, firstResp.UnmarshalBody(&firstBody))
+	firstUser, ok := firstBody["user"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, models.RoleAdmin, firstUser["role"])
+
+	secondResp := ts.request(t, newCookieClient(t), http.MethodPost, "/api/v1/register", map[string]string{
+		"username": "seconduser",
+		"password": "password123",
+	})
+	require.Equal(t, http.StatusCreated, secondResp.StatusCode)
+	var secondBody map[string]any
+	require.NoError(t, secondResp.UnmarshalBody(&secondBody))
+	secondUser, ok := secondBody["user"].(map[string]any)
+	require.True(t, ok)
+	assert.Equal(t, models.RoleUser, secondUser["role"])
+}
+
+func TestSQLiteForeignKeysAreEnabled(t *testing.T) {
+	ts := setupTestServer(t)
+
+	var foreignKeysEnabled int
+	err := ts.Server.GetDB().QueryRow("PRAGMA foreign_keys").Scan(&foreignKeysEnabled)
+	require.NoError(t, err)
+	assert.Equal(t, 1, foreignKeysEnabled)
+
+	_, err = ts.Server.GetDB().Exec(
+		`INSERT INTO note_shares (id, note_id, shared_with_user_id, shared_by_user_id, permission_level)
+		 VALUES (?, ?, ?, ?, 'edit')`,
+		"shareabcdefghijklmnopq1",
+		"noteabcdefghijklmnopq12",
+		"userabcdefghijklmnopq12",
+		"userabcdefghijklmnopq34",
+	)
+	require.Error(t, err)
+	assert.Contains(t, err.Error(), "FOREIGN KEY constraint failed")
+}
+
 func TestLoginEndpoint(t *testing.T) {
 	ts := setupTestServer(t)
 
@@ -427,7 +473,6 @@ func TestAdminEndpoints(t *testing.T) {
 		resp := ts.authRequest(t, adminUser, http.MethodDelete, fmt.Sprintf("/api/v1/admin/users/%s", adminUser.User.ID), nil)
 		assert.Equal(t, http.StatusForbidden, resp.StatusCode)
 	})
-
 
 	t.Run("delete nonexistent user returns 404", func(t *testing.T) {
 		resp := ts.authRequest(t, adminUser, http.MethodDelete, "/api/v1/admin/users/nonexistentid12345678", nil)
@@ -769,11 +814,11 @@ func TestTodoItemIndentLevel(t *testing.T) {
 
 	t.Run("indent levels updated via PUT", func(t *testing.T) {
 		updateBody := map[string]any{
-			"title":                  "Indent Test",
-			"content":                "",
-			"pinned":                 false,
-			"archived":               false,
-			"color":                  "#ffffff",
+			"title":                   "Indent Test",
+			"content":                 "",
+			"pinned":                  false,
+			"archived":                false,
+			"color":                   "#ffffff",
 			"checked_items_collapsed": false,
 			"items": []map[string]any{
 				{"text": "top level", "position": 0, "completed": false, "indent_level": 0},
@@ -798,6 +843,30 @@ func TestTodoItemIndentLevel(t *testing.T) {
 		assert.InDelta(t, float64(0), items[2].(map[string]any)["indent_level"], 0)
 	})
 
+	t.Run("explicit empty items clears todo items", func(t *testing.T) {
+		updateBody := map[string]any{
+			"title":                   "Indent Test",
+			"content":                 "",
+			"pinned":                  false,
+			"archived":                false,
+			"color":                   "#ffffff",
+			"checked_items_collapsed": false,
+			"items":                   []map[string]any{},
+		}
+		resp := ts.authRequest(t, user, http.MethodPut, "/api/v1/notes/"+noteID, updateBody)
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+
+		getResp := ts.authRequest(t, user, http.MethodGet, "/api/v1/notes/"+noteID, nil)
+		require.Equal(t, http.StatusOK, getResp.StatusCode)
+
+		var note map[string]any
+		require.NoError(t, getResp.UnmarshalBody(&note))
+		items, hasItems := note["items"].([]any)
+		if hasItems {
+			assert.Len(t, items, 0)
+		}
+	})
+
 	t.Run("indent level defaults to 0 when omitted", func(t *testing.T) {
 		createBody := map[string]any{
 			"title":     "No Indent",
@@ -819,6 +888,11 @@ func TestTodoItemIndentLevel(t *testing.T) {
 	})
 
 	t.Run("indent level > 1 rejected on create", func(t *testing.T) {
+		beforeResp := ts.authRequest(t, user, http.MethodGet, "/api/v1/notes", nil)
+		require.Equal(t, http.StatusOK, beforeResp.StatusCode)
+		var beforeNotes []map[string]any
+		require.NoError(t, beforeResp.UnmarshalBody(&beforeNotes))
+
 		body := map[string]any{
 			"title":     "Bad Indent",
 			"note_type": "todo",
@@ -829,15 +903,21 @@ func TestTodoItemIndentLevel(t *testing.T) {
 		}
 		resp := ts.authRequest(t, user, http.MethodPost, "/api/v1/notes", body)
 		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+
+		afterResp := ts.authRequest(t, user, http.MethodGet, "/api/v1/notes", nil)
+		require.Equal(t, http.StatusOK, afterResp.StatusCode)
+		var afterNotes []map[string]any
+		require.NoError(t, afterResp.UnmarshalBody(&afterNotes))
+		assert.Len(t, afterNotes, len(beforeNotes))
 	})
 
 	t.Run("indent level > 1 rejected on update", func(t *testing.T) {
 		updateBody := map[string]any{
-			"title":                  "Indent Test",
-			"content":                "",
-			"pinned":                 false,
-			"archived":               false,
-			"color":                  "#ffffff",
+			"title":                   "Should Not Persist",
+			"content":                 "",
+			"pinned":                  false,
+			"archived":                false,
+			"color":                   "#ffffff",
 			"checked_items_collapsed": false,
 			"items": []map[string]any{
 				{"text": "top level", "position": 0, "completed": false, "indent_level": 0},
@@ -846,6 +926,12 @@ func TestTodoItemIndentLevel(t *testing.T) {
 		}
 		resp := ts.authRequest(t, user, http.MethodPut, "/api/v1/notes/"+noteID, updateBody)
 		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+
+		getResp := ts.authRequest(t, user, http.MethodGet, "/api/v1/notes/"+noteID, nil)
+		require.Equal(t, http.StatusOK, getResp.StatusCode)
+		var note map[string]any
+		require.NoError(t, getResp.UnmarshalBody(&note))
+		assert.Equal(t, "Indent Test", note["title"])
 	})
 }
 
@@ -990,9 +1076,9 @@ func TestUploadProfileIcon(t *testing.T) {
 			0x49, 0x48, 0x44, 0x52, // "IHDR"
 			0x00, 0x00, 0x13, 0x88, // width: 5000
 			0x00, 0x00, 0x13, 0x88, // height: 5000
-			0x08,                   // bit depth: 8
-			0x02,                   // color type: RGB
-			0x00, 0x00, 0x00,       // compression, filter, interlace
+			0x08,             // bit depth: 8
+			0x02,             // color type: RGB
+			0x00, 0x00, 0x00, // compression, filter, interlace
 			0x00, 0x00, 0x00, 0x00, // CRC (invalid but DecodeConfig reads before checking)
 		}
 		body, ct := createMultipartImage(t, "file", "bomb.png", pngHeader)
