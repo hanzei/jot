@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { type ReactNode } from 'react'
 import NoteModal from '../NoteModal'
@@ -339,10 +339,8 @@ describe('NoteModal', () => {
       expect(inputsAfter[2]).toHaveValue('second')
 
       // Focus moves to the newly inserted item
-      await waitFor(() => {
-        expect(inputsAfter[1]).toHaveFocus()
-        expect(document.activeElement).toBe(inputsAfter[1])
-      })
+      expect(inputsAfter[1]).toHaveFocus()
+      expect(document.activeElement).toBe(inputsAfter[1])
     })
 
     it('pressing a key other than Enter on a todo item does not create a new item', async () => {
