@@ -40,6 +40,7 @@ Use the following Task commands for development:
 - `task lint-webapp` - Run webapp linting
 - `task test-mobile` - Run mobile app tests
 - `task lint-mobile` - Run mobile app linting
+- `task gen-docs` - Regenerate Swagger API docs from handler annotations (requires `swag` CLI)
 
 ---
 
