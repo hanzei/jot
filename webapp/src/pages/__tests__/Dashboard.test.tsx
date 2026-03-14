@@ -166,6 +166,7 @@ const renderDashboard = (initialEntries = ['/']) => {
 describe('Dashboard', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    localStorage.setItem('sidebar-collapsed', 'false')
     vi.mocked(auth.getUser).mockReturnValue({
       id: 'user1',
       username: 'testuser',
@@ -182,6 +183,7 @@ describe('Dashboard', () => {
 
   afterEach(() => {
     mockConsoleError.mockClear()
+    localStorage.clear()
   })
 
   describe('Basic Rendering', () => {

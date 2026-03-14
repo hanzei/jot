@@ -361,22 +361,36 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
     return newItem.id;
   };
 
+  const insertTodoItemAfter = (afterIndex: number) => {
+    const newItem: TodoItem = {
+      id: generateItemId(),
+      text: '',
+      completed: false,
+      position: 0,
+      indentLevel: 0,
+    };
+    const afterItemId = uncompletedItems[afterIndex]?.id;
+    const afterItemPos = items.findIndex(item => item.id === afterItemId);
+    const newItems = [...items];
+    newItems.splice(afterItemPos + 1, 0, newItem);
+    let pos = 0;
+    const renumbered = newItems.map(item =>
+      item.completed ? item : { ...item, position: pos++ }
+    );
+    setItems(renumbered);
+    autoSaveNote(renumbered);
+    return newItem.id;
+  };
+
   const handleItemKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key !== 'Enter') return;
     if (e.repeat) return;
     if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
     e.preventDefault();
-    if (index < uncompletedItems.length - 1) {
-      // Focus next item
-      const nextItem = uncompletedItems[index + 1];
-      itemInputRefs.current.get(nextItem.id)?.focus();
-    } else {
-      // Add a new item and focus it
-      const newId = addTodoItem();
-      setTimeout(() => {
-        itemInputRefs.current.get(newId)?.focus();
-      }, 0);
-    }
+    const newId = insertTodoItemAfter(index);
+    setTimeout(() => {
+      itemInputRefs.current.get(newId)?.focus();
+    }, 0);
   };
 
   const removeTodoItem = (itemId: string) => {
@@ -407,9 +421,9 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
         archived,
         color,
         checked_items_collapsed: checkedItemsCollapsed,
-        items: updatedItems.map((item, idx) => ({
+        items: updatedItems.map((item) => ({
           text: item.text,
-          position: item.completed ? item.position : idx,
+          position: item.position,
           completed: item.completed,
           indent_level: item.indentLevel,
         })),
