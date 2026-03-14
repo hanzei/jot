@@ -37,7 +37,23 @@ func New(dbPath string) (*DB, error) {
 
 func sqliteDSNWithForeignKeys(dbPath string) string {
 	if strings.Contains(dbPath, "_foreign_keys=") {
-		return dbPath
+		parts := strings.SplitN(dbPath, "?", 2)
+		if len(parts) < 2 {
+			return dbPath
+		}
+
+		params := strings.Split(parts[1], "&")
+		found := false
+		for i, param := range params {
+			if strings.HasPrefix(param, "_foreign_keys=") {
+				params[i] = "_foreign_keys=1"
+				found = true
+			}
+		}
+		if !found {
+			params = append(params, "_foreign_keys=1")
+		}
+		return parts[0] + "?" + strings.Join(params, "&")
 	}
 
 	separator := "?"

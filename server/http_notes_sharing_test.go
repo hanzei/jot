@@ -159,6 +159,28 @@ func TestNoteSharingEndpoints(t *testing.T) {
 		resp := ts.authRequest(t, owner, http.MethodDelete, fmt.Sprintf("/api/v1/notes/%s/share", missingNoteID), unshareBody)
 		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 	})
+
+	t.Run("share trashed note returns not found", func(t *testing.T) {
+		createBody := map[string]any{
+			"title":   "Will be trashed",
+			"content": "trashed",
+		}
+		createResp := ts.authRequest(t, owner, http.MethodPost, "/api/v1/notes", createBody)
+		require.Equal(t, http.StatusCreated, createResp.StatusCode)
+
+		var trashedNote map[string]any
+		require.NoError(t, createResp.UnmarshalBody(&trashedNote))
+		trashedNoteID := trashedNote["id"].(string)
+
+		deleteResp := ts.authRequest(t, owner, http.MethodDelete, fmt.Sprintf("/api/v1/notes/%s", trashedNoteID), nil)
+		require.Equal(t, http.StatusNoContent, deleteResp.StatusCode)
+
+		shareBody := map[string]string{
+			"user_id": sharedUser.User.ID,
+		}
+		shareResp := ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/share", trashedNoteID), shareBody)
+		assert.Equal(t, http.StatusNotFound, shareResp.StatusCode)
+	})
 }
 
 func TestSearchUsersEndpoint(t *testing.T) {

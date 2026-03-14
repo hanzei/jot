@@ -529,7 +529,7 @@ func (h *NotesHandler) ShareNote(w http.ResponseWriter, r *http.Request) (int, e
 		return http.StatusBadRequest, errors.New("invalid note ID format")
 	}
 
-	noteExists, err := h.noteStore.Exists(id)
+	noteExists, err := h.noteStore.ExistsActive(id)
 	if err != nil {
 		return http.StatusInternalServerError, err
 	}
@@ -542,7 +542,7 @@ func (h *NotesHandler) ShareNote(w http.ResponseWriter, r *http.Request) (int, e
 		return http.StatusBadRequest, err
 	}
 
-	isOwner, err := h.noteStore.IsOwner(id, user.ID)
+	isOwner, err := h.noteStore.IsOwnerActive(id, user.ID)
 	if err != nil {
 		return http.StatusInternalServerError, err
 	}
@@ -612,7 +612,7 @@ func (h *NotesHandler) UnshareNote(w http.ResponseWriter, r *http.Request) (int,
 		return http.StatusBadRequest, errors.New("invalid note ID format")
 	}
 
-	noteExists, err := h.noteStore.Exists(id)
+	noteExists, err := h.noteStore.ExistsActive(id)
 	if err != nil {
 		return http.StatusInternalServerError, err
 	}
@@ -625,7 +625,7 @@ func (h *NotesHandler) UnshareNote(w http.ResponseWriter, r *http.Request) (int,
 		return http.StatusBadRequest, err
 	}
 
-	isOwner, err := h.noteStore.IsOwner(id, user.ID)
+	isOwner, err := h.noteStore.IsOwnerActive(id, user.ID)
 	if err != nil {
 		return http.StatusInternalServerError, err
 	}
@@ -712,6 +712,7 @@ func (h *NotesHandler) resolveShareTargetUser(req ShareNoteRequest) (*models.Use
 //	@Failure	400	{string}	string	"bad request"
 //	@Failure	401	{string}	string	"unauthorized"
 //	@Failure	403	{string}	string	"not owner"
+//	@Failure	404	{string}	string	"not found"
 //	@Router		/notes/{id}/shares [get]
 func (h *NotesHandler) GetNoteShares(w http.ResponseWriter, r *http.Request) (int, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
@@ -727,7 +728,7 @@ func (h *NotesHandler) GetNoteShares(w http.ResponseWriter, r *http.Request) (in
 		return http.StatusBadRequest, errors.New("invalid note ID format")
 	}
 
-	noteExists, err := h.noteStore.Exists(id)
+	noteExists, err := h.noteStore.ExistsActive(id)
 	if err != nil {
 		return http.StatusInternalServerError, err
 	}
@@ -735,7 +736,7 @@ func (h *NotesHandler) GetNoteShares(w http.ResponseWriter, r *http.Request) (in
 		return http.StatusNotFound, models.ErrNoteNotFound
 	}
 
-	isOwner, err := h.noteStore.IsOwner(id, user.ID)
+	isOwner, err := h.noteStore.IsOwnerActive(id, user.ID)
 	if err != nil {
 		return http.StatusInternalServerError, err
 	}

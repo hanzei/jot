@@ -996,7 +996,7 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "Username to share with",
+                        "description": "User to share with (user_id or username)",
                         "name": "body",
                         "in": "body",
                         "required": true,
@@ -1069,7 +1069,7 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "Username to unshare with",
+                        "description": "User to unshare with (user_id or username)",
                         "name": "body",
                         "in": "body",
                         "required": true,
@@ -1159,6 +1159,12 @@ const docTemplate = `{
                     },
                     "403": {
                         "description": "not owner",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "not found",
                         "schema": {
                             "type": "string"
                         }
@@ -1679,6 +1685,9 @@ const docTemplate = `{
         "handlers.ShareNoteRequest": {
             "type": "object",
             "properties": {
+                "user_id": {
+                    "type": "string"
+                },
                 "username": {
                     "type": "string"
                 }

@@ -932,6 +932,23 @@ func (s *NoteStore) Exists(noteID string) (bool, error) {
 	return count > 0, nil
 }
 
+func (s *NoteStore) IsOwnerActive(noteID string, userID string) (bool, error) {
+	var count int
+	query := `SELECT COUNT(*) FROM notes WHERE id = ? AND user_id = ? AND deleted_at IS NULL`
+	if err := s.db.QueryRow(query, noteID, userID).Scan(&count); err != nil {
+		return false, fmt.Errorf("failed to check ownership: %w", err)
+	}
+	return count > 0, nil
+}
+
+func (s *NoteStore) ExistsActive(noteID string) (bool, error) {
+	var count int
+	if err := s.db.QueryRow(`SELECT COUNT(*) FROM notes WHERE id = ? AND deleted_at IS NULL`, noteID).Scan(&count); err != nil {
+		return false, fmt.Errorf("failed to check active note existence: %w", err)
+	}
+	return count > 0, nil
+}
+
 func (s *NoteStore) ReorderNotes(userID string, noteIDs []string) error {
 	if len(noteIDs) == 0 {
 		return nil

@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { XMarkIcon, PlusIcon, TrashIcon, ChevronDownIcon, ArchiveBoxIcon, ArchiveBoxXMarkIcon, ShareIcon } from '@heroicons/react/24/outline';
 import { Dialog, DialogPanel } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
-import { Note, NoteType, CreateNoteRequest, UpdateNoteRequest, Label, User } from '@/types';
+import { Note, NoteType, CreateNoteRequest, UpdateNoteRequest, Label, ShareUser } from '@/types';
 import { notes } from '@/utils/api';
 import LabelPicker from '@/components/LabelPicker';
 import LetterAvatar from '@/components/LetterAvatar';
@@ -61,7 +61,7 @@ interface NoteModalProps {
   onRefresh?: () => void;
   onShare?: (note: Note) => void;
   isOwner?: boolean;
-  usersById?: Map<string, User>;
+  usersById?: Map<string, ShareUser>;
   currentUserId?: string;
 }
 
@@ -393,7 +393,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
     }, 0);
   };
 
-  const removeTodoItem = (itemId: string) => {
+  const removeTodoItem = async (itemId: string) => {
     const newItems = items.filter(item => item.id !== itemId);
     
     // Renumber positions for remaining uncompleted items
@@ -406,6 +406,9 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
     });
     
     setItems(updatedItems);
+    if (note) {
+      await autoSaveNote(updatedItems);
+    }
   };
 
   // Helper function to auto-save note changes
@@ -550,7 +553,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
           pinned,
           archived,
           color,
-          checked_items_collapsed: !checkedItemsCollapsed,
+          checked_items_collapsed: checkedItemsCollapsed,
           items: note.note_type === 'todo' ? items.map((item, idx) => ({
             text: item.text,
             position: idx,
@@ -593,7 +596,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
         pinned: newPinnedState,
         archived,
         color,
-        checked_items_collapsed: !checkedItemsCollapsed,
+        checked_items_collapsed: checkedItemsCollapsed,
         items: note.note_type === 'todo' ? items.map((item, idx) => ({
           text: item.text,
           position: idx,
@@ -623,7 +626,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
         pinned,
         archived: newArchivedState,
         color,
-        checked_items_collapsed: !checkedItemsCollapsed,
+        checked_items_collapsed: checkedItemsCollapsed,
         items: note.note_type === 'todo' ? items.map((item, idx) => ({
           text: item.text,
           position: idx,
