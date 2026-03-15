@@ -175,7 +175,7 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
               onClick={() => setShowAssigneePicker(true)}
               title={t('note.assignedTo', { name: assigneeDisplayName })}
               aria-label={t('note.assignedTo', { name: assigneeDisplayName })}
-              className={`rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 ${isCompleted ? 'cursor-default' : 'cursor-pointer'}`}
+              className={`rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-800 ${isCompleted ? 'cursor-default' : 'cursor-pointer'}`}
               disabled={isCompleted}
             >
               <LetterAvatar
@@ -190,7 +190,7 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
             !isCompleted && (
               <button
                 onClick={() => setShowAssigneePicker(true)}
-                className="w-5 h-5 rounded-full border border-dashed border-gray-300 dark:border-slate-600 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors opacity-0 group-hover/item:opacity-100 focus:opacity-100 focus:ring-2 focus:ring-blue-500 touch-visible"
+                className="w-5 h-5 rounded-full border border-dashed border-gray-300 dark:border-slate-600 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors opacity-0 group-hover/item:opacity-100 focus:opacity-100 focus-visible:ring-2 focus-visible:ring-blue-500 touch-visible"
                 title={t('note.assignItem')}
                 aria-label={t('note.assignItem')}
               >

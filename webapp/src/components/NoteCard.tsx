@@ -247,9 +247,10 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, onRestore, o
                         </span>
                         {item.assigned_to && (
                           <div
+                            role="img"
                             className="flex-shrink-0 ml-1"
                             title={assignedUser ? [assignedUser.first_name, assignedUser.last_name].filter(Boolean).join(' ') || assignedUser.username : undefined}
-                            aria-label={assignedUser ? t('note.assignedTo', { name: [assignedUser.first_name, assignedUser.last_name].filter(Boolean).join(' ') || assignedUser.username }) : undefined}
+                            aria-label={t('note.assignedTo', { name: assignedUser ? [assignedUser.first_name, assignedUser.last_name].filter(Boolean).join(' ') || assignedUser.username : '?' })}
                           >
                             <LetterAvatar
                               firstName={assignedUser?.first_name}

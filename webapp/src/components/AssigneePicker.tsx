@@ -1,4 +1,4 @@
-import { useEffect, useRef, useState, useCallback } from 'react';
+import { useEffect, useRef, useState, useCallback, useId } from 'react';
 import { XMarkIcon } from '@heroicons/react/24/outline';
 import { useTranslation } from 'react-i18next';
 import LetterAvatar from '@/components/LetterAvatar';
@@ -15,6 +15,8 @@ export default function AssigneePicker({ collaborators, currentAssigneeId, onAss
   const { t } = useTranslation();
   const containerRef = useRef<HTMLDivElement>(null);
   const listRef = useRef<HTMLDivElement>(null);
+  const instanceId = useId();
+  const labelId = `${instanceId}-label`;
 
   const totalOptions = currentAssigneeId ? collaborators.length + 1 : collaborators.length;
 
@@ -22,6 +24,10 @@ export default function AssigneePicker({ collaborators, currentAssigneeId, onAss
     ? collaborators.findIndex(c => c.userId === currentAssigneeId)
     : 0;
   const [focusedIndex, setFocusedIndex] = useState(initialIndex >= 0 ? initialIndex : 0);
+
+  useEffect(() => {
+    listRef.current?.focus();
+  }, []);
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
@@ -44,7 +50,7 @@ export default function AssigneePicker({ collaborators, currentAssigneeId, onAss
     onClose();
   }, [collaborators, currentAssigneeId, onAssign, onClose]);
 
-  const handleKeyDown = useCallback((e: KeyboardEvent) => {
+  const handleKeyDown = useCallback((e: React.KeyboardEvent) => {
     switch (e.key) {
       case 'Escape':
         e.preventDefault();
@@ -57,6 +63,14 @@ export default function AssigneePicker({ collaborators, currentAssigneeId, onAss
       case 'ArrowUp':
         e.preventDefault();
         setFocusedIndex(prev => (prev > 0 ? prev - 1 : prev));
+        break;
+      case 'Home':
+        e.preventDefault();
+        setFocusedIndex(0);
+        break;
+      case 'End':
+        e.preventDefault();
+        setFocusedIndex(totalOptions - 1);
         break;
       case 'Enter':
       case ' ':
@@ -71,11 +85,6 @@ export default function AssigneePicker({ collaborators, currentAssigneeId, onAss
   }, [onClose, totalOptions, focusedIndex, handleSelect]);
 
   useEffect(() => {
-    document.addEventListener('keydown', handleKeyDown);
-    return () => document.removeEventListener('keydown', handleKeyDown);
-  }, [handleKeyDown]);
-
-  useEffect(() => {
     if (listRef.current) {
       const focused = listRef.current.querySelector('[data-focused="true"]');
       focused?.scrollIntoView({ block: 'nearest' });
@@ -85,12 +94,10 @@ export default function AssigneePicker({ collaborators, currentAssigneeId, onAss
   return (
     <div
       ref={containerRef}
-      role="dialog"
-      aria-label={t('note.assignItem')}
       className="absolute z-30 right-0 mt-1 w-52 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded-md shadow-lg py-1"
     >
       <div className="flex items-center justify-between px-3 py-1.5 border-b border-gray-200 dark:border-slate-600">
-        <span className="text-sm font-medium text-gray-700 dark:text-gray-200" id="assignee-picker-label">
+        <span className="text-sm font-medium text-gray-700 dark:text-gray-200" id={labelId}>
           {t('note.assignItem')}
         </span>
         <button
@@ -106,9 +113,11 @@ export default function AssigneePicker({ collaborators, currentAssigneeId, onAss
       <div
         ref={listRef}
         role="listbox"
-        aria-labelledby="assignee-picker-label"
-        className="max-h-48 overflow-y-auto py-1"
+        aria-labelledby={labelId}
+        aria-activedescendant={`${instanceId}-option-${focusedIndex}`}
+        className="max-h-48 overflow-y-auto py-1 focus:outline-none"
         tabIndex={0}
+        onKeyDown={handleKeyDown}
       >
         {collaborators.map((c, index) => {
           const isSelected = c.userId === currentAssigneeId;
@@ -116,14 +125,17 @@ export default function AssigneePicker({ collaborators, currentAssigneeId, onAss
           return (
             <div
               key={c.userId}
+              id={`${instanceId}-option-${index}`}
               role="option"
               aria-selected={isSelected}
               data-focused={isFocused}
               onClick={() => handleSelect(index)}
               onMouseEnter={() => setFocusedIndex(index)}
               className={`flex items-center w-full px-3 py-1.5 text-sm cursor-pointer ${
-                isFocused ? 'bg-gray-100 dark:bg-slate-700' : ''
-              } ${isSelected ? 'bg-blue-50 dark:bg-blue-900/20' : ''}`}
+                isFocused && isSelected ? 'bg-blue-100 dark:bg-blue-900/40' :
+                isFocused ? 'bg-gray-100 dark:bg-slate-700' :
+                isSelected ? 'bg-blue-50 dark:bg-blue-900/20' : ''
+              }`}
             >
               <LetterAvatar
                 firstName={c.firstName}
@@ -143,17 +155,16 @@ export default function AssigneePicker({ collaborators, currentAssigneeId, onAss
             </div>
           );
         })}
-      </div>
 
-      {currentAssigneeId && (
-        <div className="border-t border-gray-200 dark:border-slate-600 pt-1">
+        {currentAssigneeId && (
           <div
+            id={`${instanceId}-option-${collaborators.length}`}
             role="option"
             aria-selected={false}
             data-focused={focusedIndex === collaborators.length}
             onClick={() => handleSelect(collaborators.length)}
             onMouseEnter={() => setFocusedIndex(collaborators.length)}
-            className={`flex items-center w-full px-3 py-1.5 text-sm text-red-600 dark:text-red-400 cursor-pointer ${
+            className={`flex items-center w-full px-3 py-1.5 text-sm text-red-600 dark:text-red-400 cursor-pointer border-t border-gray-200 dark:border-slate-600 mt-1 pt-2.5 ${
               focusedIndex === collaborators.length ? 'bg-gray-100 dark:bg-slate-700' : ''
             }`}
           >
@@ -162,8 +173,8 @@ export default function AssigneePicker({ collaborators, currentAssigneeId, onAss
             </svg>
             {t('note.unassign')}
           </div>
-        </div>
-      )}
+        )}
+      </div>
     </div>
   );
 }
