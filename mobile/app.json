@@ -4,6 +4,7 @@
     "slug": "jot",
     "version": "0.1.0",
     "orientation": "portrait",
+    "icon": "./assets/icon.png",
     "scheme": "jot",
     "newArchEnabled": true,
     "platforms": ["ios", "android"],
@@ -13,6 +14,7 @@
     },
     "android": {
       "adaptiveIcon": {
+        "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
       "package": "com.jot.app"
