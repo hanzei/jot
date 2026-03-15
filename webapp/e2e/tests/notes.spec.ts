@@ -120,7 +120,7 @@ test.describe('Notes', () => {
     await dashboardPage.expectNoteVisible('To Unarchive');
   });
 
-  test('creates a todo note with items', async ({ page, dashboardPage }) => {
+  test('creates a todo note with items', async ({ dashboardPage }) => {
     await dashboardPage.goto();
     await dashboardPage.createTodoNote('Shopping List', ['Apples', 'Bread', 'Milk']);
 
@@ -128,7 +128,6 @@ test.describe('Notes', () => {
     await expect(card.getByText('Apples')).toBeVisible();
     await expect(card.getByText('Bread')).toBeVisible();
     await expect(card.getByText('Milk')).toBeVisible();
-    void page;
   });
 
   test('shows empty state when no notes exist', async ({ dashboardPage }) => {
