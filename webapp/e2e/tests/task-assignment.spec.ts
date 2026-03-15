@@ -95,9 +95,10 @@ test.describe('Task Assignment', () => {
     // Close the modal
     await page.click('button[aria-label="Close"]');
 
-    // Verify the assignment avatar appears on the dashboard card
+    // Verify the assignment avatar appears next to the assigned item on the card
     const card = dashboardPage.noteCard('Card Avatar Test');
-    await expect(card.locator('[data-testid="note-card"]').or(card).locator('svg[role="img"], img[alt]').first()).toBeVisible();
+    const assignedItemRow = card.locator('div.flex.items-center', { hasText: 'Item A' });
+    await expect(assignedItemRow.locator('svg[role="img"], img[alt]')).toBeVisible();
   });
 
   test('unsharing a user clears their assignment', async ({
