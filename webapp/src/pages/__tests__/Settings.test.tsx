@@ -235,7 +235,7 @@ describe('Settings', () => {
       await user.selectOptions(screen.getByLabelText('App language'), 'de')
 
       await waitFor(() => {
-        expect(users.updateMe).toHaveBeenCalledWith({ language: 'de', theme: 'system' })
+        expect(users.updateMe).toHaveBeenCalledWith({ language: 'de' })
       })
       await waitFor(() => {
         expect(authUtils.setSettings).toHaveBeenCalledWith(updatedSettings)
@@ -254,7 +254,7 @@ describe('Settings', () => {
       await user.selectOptions(screen.getByLabelText('App theme'), 'dark')
 
       await waitFor(() => {
-        expect(users.updateMe).toHaveBeenCalledWith({ language: 'system', theme: 'dark' })
+        expect(users.updateMe).toHaveBeenCalledWith({ theme: 'dark' })
       })
       await waitFor(() => {
         expect(authUtils.setSettings).toHaveBeenCalledWith(updatedSettings)

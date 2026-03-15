@@ -149,7 +149,7 @@ const Settings = ({ onLogout }: SettingsProps) => {
       setSettings({ ...current, language: pref });
     }
     try {
-      const { settings: updatedSettings } = await users.updateMe({ language: pref, theme: themePref });
+      const { settings: updatedSettings } = await users.updateMe({ language: pref });
       if (updatedSettings) setSettings(updatedSettings);
     } catch {
       setLanguagePref(prev);
@@ -169,7 +169,7 @@ const Settings = ({ onLogout }: SettingsProps) => {
       setSettings({ ...current, theme: pref });
     }
     try {
-      const { settings: updatedSettings } = await users.updateMe({ language: languagePref, theme: pref });
+      const { settings: updatedSettings } = await users.updateMe({ theme: pref });
       if (updatedSettings) setSettings(updatedSettings);
     } catch {
       setThemePref(prev);
