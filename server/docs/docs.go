@@ -1578,9 +1578,6 @@ const docTemplate = `{
         "handlers.CreateNoteItem": {
             "type": "object",
             "properties": {
-                "assigned_to": {
-                    "type": "string"
-                },
                 "indent_level": {
                     "type": "integer"
                 },

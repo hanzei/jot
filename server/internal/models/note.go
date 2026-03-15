@@ -730,16 +730,35 @@ func (s *NoteStore) UnshareNote(noteID string, sharedWithUserID string) error {
 	return nil
 }
 
-// ClearUserAssignments removes all item assignments for a user across all notes.
-// Called when a user account is deleted.
-func (s *NoteStore) ClearUserAssignments(userID string) error {
-	_, err := s.db.Exec(
+// ClearUserAssignmentsTx clears all item assignments related to a deleted user
+// within an existing transaction. It:
+//  1. Removes the user's note_shares rows (SQLite FK cascades are not enforced).
+//  2. Clears items directly assigned to the deleted user.
+//  3. Clears all remaining assignments on notes that no longer have any shares,
+//     enforcing the invariant that unshared notes cannot have assignments.
+func (s *NoteStore) ClearUserAssignmentsTx(tx *sql.Tx, userID string) error {
+	if _, err := tx.Exec(
+		`DELETE FROM note_shares WHERE shared_with_user_id = ?`,
+		userID,
+	); err != nil {
+		return fmt.Errorf("failed to remove deleted user shares: %w", err)
+	}
+
+	if _, err := tx.Exec(
 		`UPDATE note_items SET assigned_to = '' WHERE assigned_to = ?`,
 		userID,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to clear user assignments: %w", err)
+	); err != nil {
+		return fmt.Errorf("failed to clear deleted user assignments: %w", err)
 	}
+
+	if _, err := tx.Exec(
+		`UPDATE note_items SET assigned_to = ''
+		 WHERE assigned_to != ''
+		   AND note_id NOT IN (SELECT DISTINCT note_id FROM note_shares)`,
+	); err != nil {
+		return fmt.Errorf("failed to clear assignments on unshared notes: %w", err)
+	}
+
 	return nil
 }
 

@@ -21,8 +21,6 @@ definitions:
     type: object
   handlers.CreateNoteItem:
     properties:
-      assigned_to:
-        type: string
       indent_level:
         type: integer
       position:

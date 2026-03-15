@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -173,7 +174,10 @@ func (h *AdminHandler) DeleteUser(w http.ResponseWriter, r *http.Request) (int, 
 		return http.StatusUnauthorized, errors.New("unauthorized")
 	}
 
-	if err := h.userStore.Delete(targetID, requestingUser.ID); err != nil {
+	err := h.userStore.DeleteWithCleanup(targetID, requestingUser.ID, func(tx *sql.Tx) error {
+		return h.noteStore.ClearUserAssignmentsTx(tx, targetID)
+	})
+	if err != nil {
 		if errors.Is(err, models.ErrUserNotFound) {
 			return http.StatusNotFound, err
 		}
@@ -183,10 +187,6 @@ func (h *AdminHandler) DeleteUser(w http.ResponseWriter, r *http.Request) (int, 
 		if errors.Is(err, models.ErrCannotDeleteSelf) {
 			return http.StatusForbidden, err
 		}
-		return http.StatusInternalServerError, err
-	}
-
-	if err := h.noteStore.ClearUserAssignments(targetID); err != nil {
 		return http.StatusInternalServerError, err
 	}
 

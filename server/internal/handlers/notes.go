@@ -69,10 +69,9 @@ type CreateNoteRequest struct {
 }
 
 type CreateNoteItem struct {
-	Text             string `json:"text"`
-	Position         int    `json:"position"`
-	IndentLevel      int    `json:"indent_level"`
-	AssignedTo string `json:"assigned_to"`
+	Text        string `json:"text"`
+	Position    int    `json:"position"`
+	IndentLevel int    `json:"indent_level"`
 }
 
 type UpdateNoteRequest struct {
@@ -119,9 +118,6 @@ func (h *NotesHandler) createTodoItems(noteID string, items []CreateNoteItem) (i
 	for _, item := range items {
 		if item.IndentLevel < 0 || item.IndentLevel > 1 {
 			return http.StatusBadRequest, errors.New("indent_level must be 0 or 1")
-		}
-		if item.AssignedTo != "" {
-			return http.StatusBadRequest, errors.New("cannot assign items on note creation; save and share the note first")
 		}
 		if _, err := h.noteStore.CreateItem(noteID, item.Text, item.Position, item.IndentLevel, ""); err != nil {
 			return http.StatusInternalServerError, err

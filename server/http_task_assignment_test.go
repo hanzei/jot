@@ -71,7 +71,7 @@ func TestTaskAssignment(t *testing.T) {
 		assert.Empty(t, item["assigned_to"])
 	})
 
-	t.Run("reject assignment on note creation", func(t *testing.T) {
+	t.Run("assigned_to is ignored on note creation", func(t *testing.T) {
 		ts := setupTestServer(t)
 		user := ts.createTestUser(t, "user1", "password123", false)
 
@@ -83,8 +83,13 @@ func TestTaskAssignment(t *testing.T) {
 			},
 		}
 		resp := ts.authRequest(t, user, http.MethodPost, "/api/v1/notes", body)
-		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
-		assert.Contains(t, resp.GetString(), "cannot assign items on note creation")
+		require.Equal(t, http.StatusCreated, resp.StatusCode)
+
+		var note map[string]any
+		require.NoError(t, resp.UnmarshalBody(&note))
+		items := note["items"].([]any)
+		item := items[0].(map[string]any)
+		assert.Empty(t, item["assigned_to"], "assigned_to should be ignored on create")
 	})
 
 	t.Run("assign item to shared user on update", func(t *testing.T) {
@@ -348,28 +353,72 @@ func TestTaskAssignmentUserDeletion(t *testing.T) {
 		ts := setupTestServer(t)
 		admin := ts.createTestUser(t, "admin", "password123", true)
 		owner := ts.createTestUser(t, "owner", "password123", false)
-		collab := ts.createTestUser(t, "collab", "password123", false)
+		collab1 := ts.createTestUser(t, "collab1", "password123", false)
+		collab2 := ts.createTestUser(t, "collab2", "password123", false)
 
-		noteID, collabID := createSharedTodoNote(t, ts, owner, collab)
+		body := map[string]any{
+			"title":     "Shared Todo",
+			"note_type": "todo",
+			"items": []map[string]any{
+				{"text": "Item 1", "position": 0, "indent_level": 0},
+				{"text": "Item 2", "position": 1, "indent_level": 0},
+			},
+		}
+		createResp := ts.authRequest(t, owner, http.MethodPost, "/api/v1/notes", body)
+		require.Equal(t, http.StatusCreated, createResp.StatusCode)
+		var note map[string]any
+		require.NoError(t, createResp.UnmarshalBody(&note))
+		noteID := note["id"].(string)
 
-		// Assign collab to an item
+		// Share with both collaborators so the note stays shared after one is deleted
+		ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/share", noteID), map[string]string{"username": "collab1"})
+		ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/share", noteID), map[string]string{"username": "collab2"})
+
+		// Assign collab1 to item 1, collab2 to item 2
 		updateBody := map[string]any{
 			"title": "Shared Todo",
 			"items": []map[string]any{
-				{"text": "Item 1", "position": 0, "indent_level": 0, "assigned_to": collabID},
-				{"text": "Item 2", "position": 1, "indent_level": 0},
+				{"text": "Item 1", "position": 0, "indent_level": 0, "assigned_to": collab1.User.ID},
+				{"text": "Item 2", "position": 1, "indent_level": 0, "assigned_to": collab2.User.ID},
 			},
 		}
 		resp := ts.authRequest(t, owner, http.MethodPut, fmt.Sprintf("/api/v1/notes/%s", noteID), updateBody)
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 
-		// Delete the collab user via admin API
+		// Delete collab1 — only collab1's assignment cleared; note still shared with collab2
+		deleteResp := ts.authRequest(t, admin, http.MethodDelete, fmt.Sprintf("/api/v1/admin/users/%s", collab1.User.ID), nil)
+		require.Equal(t, http.StatusNoContent, deleteResp.StatusCode)
+
+		items := getNoteItems(t, ts, owner, noteID)
+		assert.Empty(t, items[0]["assigned_to"], "deleted user's assignment should be cleared")
+		assert.Equal(t, collab2.User.ID, items[1]["assigned_to"], "other collab's assignment should remain")
+	})
+
+	t.Run("deleting last collaborator clears all assignments including owner self-assignment", func(t *testing.T) {
+		ts := setupTestServer(t)
+		admin := ts.createTestUser(t, "admin", "password123", true)
+		owner := ts.createTestUser(t, "owner", "password123", false)
+		collab := ts.createTestUser(t, "collab", "password123", false)
+
+		noteID, collabID := createSharedTodoNote(t, ts, owner, collab)
+
+		// Assign owner to item 1, collab to item 2
+		updateBody := map[string]any{
+			"title": "Shared Todo",
+			"items": []map[string]any{
+				{"text": "Item 1", "position": 0, "indent_level": 0, "assigned_to": owner.User.ID},
+				{"text": "Item 2", "position": 1, "indent_level": 0, "assigned_to": collabID},
+			},
+		}
+		resp := ts.authRequest(t, owner, http.MethodPut, fmt.Sprintf("/api/v1/notes/%s", noteID), updateBody)
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+
+		// Delete the only collaborator — note becomes unshared, all assignments must be cleared
 		deleteResp := ts.authRequest(t, admin, http.MethodDelete, fmt.Sprintf("/api/v1/admin/users/%s", collabID), nil)
 		require.Equal(t, http.StatusNoContent, deleteResp.StatusCode)
 
-		// Verify assignments are cleared
 		items := getNoteItems(t, ts, owner, noteID)
-		assert.Empty(t, items[0]["assigned_to"], "deleted user's assignment should be cleared")
-		assert.Empty(t, items[1]["assigned_to"])
+		assert.Empty(t, items[0]["assigned_to"], "owner's self-assignment should be cleared when note becomes unshared")
+		assert.Empty(t, items[1]["assigned_to"], "deleted collab's assignment should be cleared")
 	})
 }
