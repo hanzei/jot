@@ -49,13 +49,15 @@ Shared to-do notes currently let multiple people see and edit items, but there i
 ALTER TABLE note_items ADD COLUMN assigned_to_user_id TEXT NOT NULL DEFAULT '';
 
 CREATE INDEX idx_note_items_assigned_to ON note_items(assigned_to_user_id);
+CREATE INDEX idx_note_items_note_assigned ON note_items(note_id, assigned_to_user_id);
 ```
 
 **Rationale:**
 
 - A `TEXT NOT NULL DEFAULT ''` column on `note_items` keeps things simple: an empty string means "unassigned", a valid user ID means "assigned". No nullable pointers needed in Go or TypeScript.
 - A junction table (`note_item_assignments`) was considered for multi-assign but rejected for V1 — single assignment covers the typical use case. Upgrading to a junction table later is straightforward.
-- An index on `assigned_to_user_id` supports a future "assigned to me" query efficiently.
+- `idx_note_items_assigned_to` on `(assigned_to_user_id)` supports a future "assigned to me" query efficiently.
+- `idx_note_items_note_assigned` on `(note_id, assigned_to_user_id)` covers the unshare cleanup query (`WHERE note_id = ? AND assigned_to_user_id = ?`) without relying on the existing `idx_note_items_note_id` plus a row-level filter.
 - Because the column is `NOT NULL DEFAULT ''` (not a FK), there is no `ON DELETE SET NULL` cascade. When a user account is deleted, the application must clear stale assignments explicitly (see "Clearing assignments on unshare/delete" below).
 
 #### Clearing assignments on unshare / user deletion
@@ -199,15 +201,15 @@ No new endpoints. Assignments flow through the existing note create/update paylo
 
 #### Create note (POST `/api/v1/notes`)
 
-Request body items gain a field (empty string = unassigned):
+Assignments are **not allowed on create** — a note must be saved and shared before items can be assigned. The `assigned_to_user_id` field is accepted but must be empty; any non-empty value is rejected with `400 Bad Request` because the note has no shares yet.
 
 ```json
 {
   "title": "Groceries",
   "note_type": "todo",
   "items": [
-    { "text": "Milk", "position": 0, "indent_level": 0, "assigned_to_user_id": "abc123..." },
-    { "text": "Eggs", "position": 1, "indent_level": 0, "assigned_to_user_id": "" }
+    { "text": "Milk", "position": 0, "indent_level": 0 },
+    { "text": "Eggs", "position": 1, "indent_level": 0 }
   ]
 }
 ```
@@ -259,7 +261,7 @@ No new event types. The existing `note_updated` event carries the full note payl
 | Unshared note (no collaborators) | Assignments rejected by backend (`400`); UI hidden |
 | Delete-and-recreate item update cycle | Assignment data in the update payload survives the cycle |
 | Concurrent edits by two users | Last-write-wins (accepted limitation, consistent with current behavior) |
-| `assigned_to_user_id` references a user not in `usersById` | Display fallback to `assigned_username` from API response, or "Unknown" if empty |
+| `assigned_to_user_id` references a user not in `usersById` | Display "Unknown" — the API returns only the raw user ID; the client resolves display info via `usersById` from `usersApi.search()` |
 
 ---
 
@@ -277,7 +279,7 @@ No new event types. The existing `note_updated` event carries the full note payl
 
 #### Current item layout
 
-```
+```text
 ┌──────────────────────────────────────────────────────┐
 │  ⠿  ☐  Item text here...                        🗑  │
 │ drag    checkbox    text input                 delete │
@@ -288,7 +290,7 @@ No new event types. The existing `note_updated` event carries the full note payl
 
 The assign button appears only on hover, between the text and the delete button — matching the existing interaction density.
 
-```
+```text
 ┌──────────────────────────────────────────────────────────┐
 │  ⠿  ☐  Item text here...                   [+]      🗑  │
 │ drag    checkbox    text input          assign(hover) del │
@@ -303,7 +305,7 @@ The assign button appears only on hover, between the text and the delete button 
 
 When assigned, the avatar replaces the `[+]` button and is always visible:
 
-```
+```text
 ┌──────────────────────────────────────────────────────────┐
 │  ⠿  ☐  Item text here...                   (A)      🗑  │
 │ drag    checkbox    text input           avatar      del  │
@@ -318,7 +320,7 @@ When assigned, the avatar replaces the `[+]` button and is always visible:
 
 Clicking `[+]` or the avatar opens a small absolute-positioned popover below the button.
 
-```
+```text
 ┌──────────────────────────────┐
 │  ╳  Assign                   │
 ├──────────────────────────────┤
@@ -348,7 +350,7 @@ Clicking `[+]` or the avatar opens a small absolute-positioned popover below the
 
 On the dashboard card, show a tiny avatar next to each uncompleted item that has an assignment:
 
-```
+```text
 ┌─────────────────────────┐
 │  Groceries              │
 │  ☐ Milk            (A)  │
@@ -372,7 +374,7 @@ On the dashboard card, show a tiny avatar next to each uncompleted item that has
 
 No assignment UI is shown. The item rows look exactly as they do today.
 
-```
+```text
 ┌──────────────────────────────────────────────────────┐
 │  ⠿  ☐  Item text here...                        🗑  │
 └──────────────────────────────────────────────────────┘
@@ -384,7 +386,7 @@ No assignment UI is shown. The item rows look exactly as they do today.
 
 The `[+]` button appears on hover for uncompleted items:
 
-```
+```text
 Default state:
 ┌──────────────────────────────────────────────────────┐
 │  ⠿  ☐  Buy groceries                            🗑  │
@@ -400,7 +402,7 @@ On hover:
 
 Avatar always visible; hovering shows tooltip, clicking opens picker:
 
-```
+```text
 ┌──────────────────────────────────────────────────────────┐
 │  ⠿  ☐  Buy groceries                       (A)      🗑  │
 └──────────────────────────────────────────────────────────┘
@@ -411,7 +413,7 @@ Avatar always visible; hovering shows tooltip, clicking opens picker:
 
 Completed items retain their assigned avatar (dimmed like the rest of the row) but the assignment is not editable:
 
-```
+```text
 ┌──────────────────────────────────────────────────────────┐
 │       ☑  Buy groceries  [strikethrough]     (A)          │
 │       (dimmed, no drag, no delete, no assign change)     │
@@ -426,7 +428,7 @@ The mobile item row is already dense: drag handle, checkbox, text input, and del
 
 **Reference — current mobile layout:**
 
-```
+```text
 ┌──────────────────────────────────────┐
 │  ⠿  ☐  Brot                     🗑  │   ← full-width, no room for hover targets
 │  ⠿  ☐  und                      🗑  │
