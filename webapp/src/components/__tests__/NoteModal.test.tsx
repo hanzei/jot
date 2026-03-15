@@ -499,8 +499,8 @@ describe('NoteModal', () => {
       const todoNote = createMockNote({
         note_type: 'todo',
         items: [
-          { id: 'item1', note_id: '1', text: 'First', completed: false, position: 0, indent_level: 0, created_at: '', updated_at: '' },
-          { id: 'item2', note_id: '1', text: '', completed: false, position: 1, indent_level: 0, created_at: '', updated_at: '' },
+          { id: 'item1', note_id: '1', text: 'First', completed: false, position: 0, indent_level: 0, assigned_to: '', created_at: '', updated_at: '' },
+          { id: 'item2', note_id: '1', text: '', completed: false, position: 1, indent_level: 0, assigned_to: '', created_at: '', updated_at: '' },
         ],
       })
       mockNotesUpdate.mockClear()
