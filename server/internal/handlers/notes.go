@@ -745,12 +745,13 @@ func (h *NotesHandler) GetNoteShares(w http.ResponseWriter, r *http.Request) (in
 
 // SearchUsers godoc
 //
-//	@Summary	List users (excluding current user)
+//	@Summary	Search or list users (excluding current user)
 //	@Tags		users
 //	@Security	CookieAuth
 //	@Produce	json
-//	@Success	200	{array}		UserInfo
-//	@Failure	401	{string}	string	"unauthorized"
+//	@Param		search	query		string	false	"Filter by username, first name, or last name (case-insensitive substring match)"
+//	@Success	200		{array}		UserInfo
+//	@Failure	401		{string}	string	"unauthorized"
 //	@Router		/users [get]
 func (h *NotesHandler) SearchUsers(w http.ResponseWriter, r *http.Request) (int, error) {
 	currentUser, ok := auth.GetUserFromContext(r.Context())
@@ -758,14 +759,21 @@ func (h *NotesHandler) SearchUsers(w http.ResponseWriter, r *http.Request) (int,
 		return http.StatusUnauthorized, errors.New("unauthorized")
 	}
 
-	users, err := h.userStore.GetAll()
+	search := r.URL.Query().Get("search")
+
+	var users []*models.User
+	var err error
+	if search != "" {
+		users, err = h.userStore.Search(search)
+	} else {
+		users, err = h.userStore.GetAll()
+	}
 	if err != nil {
 		return http.StatusInternalServerError, err
 	}
 
 	userInfos := []UserInfo{}
 	for _, user := range users {
-		// Don't include the current user in the list
 		if user.ID != currentUser.ID {
 			userInfos = append(userInfos, UserInfo{
 				ID:             user.ID,

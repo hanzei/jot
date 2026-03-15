@@ -129,11 +129,21 @@ func TestNoteSharingEndpoints(t *testing.T) {
 
 func TestSearchUsersEndpoint(t *testing.T) {
 	ts := setupTestServer(t)
-	user1 := ts.createTestUser(t, "user1", "password123", false)
-	_ = ts.createTestUser(t, "user2", "password123", false)
-	_ = ts.createTestUser(t, "admin", "password123", true)
+	user1 := ts.createTestUser(t, "alice", "password123", false)
+	bob := ts.createTestUser(t, "bob", "password123", false)
+	_ = ts.createTestUser(t, "charlie", "password123", true)
 
-	t.Run("search users returns all except current user", func(t *testing.T) {
+	// Set display names so we can test searching by first/last name.
+	resp := ts.authRequest(t, user1, http.MethodPut, "/api/v1/users/me", map[string]any{
+		"username": "alice", "first_name": "Alice", "last_name": "Smith",
+	})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	resp = ts.authRequest(t, bob, http.MethodPut, "/api/v1/users/me", map[string]any{
+		"username": "bob", "first_name": "Robert", "last_name": "Jones",
+	})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	t.Run("no search param returns all except current user", func(t *testing.T) {
 		resp := ts.authRequest(t, user1, http.MethodGet, "/api/v1/users", nil)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 
@@ -141,19 +151,75 @@ func TestSearchUsersEndpoint(t *testing.T) {
 		require.NoError(t, resp.UnmarshalBody(&users))
 		assert.Len(t, users, 2)
 
-		// Check that current user is not in results
 		for _, user := range users {
-			assert.NotEqual(t, "user1", user["username"], "Should not include current user in results")
+			assert.NotEqual(t, "alice", user["username"], "Should not include current user in results")
 		}
 
-		// Check that response doesn't include passwords
 		for _, user := range users {
 			assert.NotContains(t, user, "password", "User response should not include password")
 			assert.NotContains(t, user, "password_hash", "User response should not include password_hash")
 		}
 	})
 
-	t.Run("search users without auth returns unauthorized", func(t *testing.T) {
+	t.Run("search filters by username", func(t *testing.T) {
+		resp := ts.authRequest(t, user1, http.MethodGet, "/api/v1/users?search=bob", nil)
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+		var users []map[string]any
+		require.NoError(t, resp.UnmarshalBody(&users))
+		require.Len(t, users, 1)
+		assert.Equal(t, "bob", users[0]["username"])
+	})
+
+	t.Run("search is case insensitive", func(t *testing.T) {
+		resp := ts.authRequest(t, user1, http.MethodGet, "/api/v1/users?search=BOB", nil)
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+		var users []map[string]any
+		require.NoError(t, resp.UnmarshalBody(&users))
+		require.Len(t, users, 1)
+		assert.Equal(t, "bob", users[0]["username"])
+	})
+
+	t.Run("search filters by first name", func(t *testing.T) {
+		resp := ts.authRequest(t, user1, http.MethodGet, "/api/v1/users?search=Robert", nil)
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+		var users []map[string]any
+		require.NoError(t, resp.UnmarshalBody(&users))
+		require.Len(t, users, 1)
+		assert.Equal(t, "bob", users[0]["username"])
+	})
+
+	t.Run("search filters by last name", func(t *testing.T) {
+		resp := ts.authRequest(t, user1, http.MethodGet, "/api/v1/users?search=Jones", nil)
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+		var users []map[string]any
+		require.NoError(t, resp.UnmarshalBody(&users))
+		require.Len(t, users, 1)
+		assert.Equal(t, "bob", users[0]["username"])
+	})
+
+	t.Run("search with no matches returns empty list", func(t *testing.T) {
+		resp := ts.authRequest(t, user1, http.MethodGet, "/api/v1/users?search=nonexistent", nil)
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+		var users []map[string]any
+		require.NoError(t, resp.UnmarshalBody(&users))
+		assert.Empty(t, users)
+	})
+
+	t.Run("search excludes current user from results", func(t *testing.T) {
+		resp := ts.authRequest(t, user1, http.MethodGet, "/api/v1/users?search=alice", nil)
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+		var users []map[string]any
+		require.NoError(t, resp.UnmarshalBody(&users))
+		assert.Empty(t, users, "Current user should not appear in search results")
+	})
+
+	t.Run("search without auth returns unauthorized", func(t *testing.T) {
 		resp := ts.request(t, nil, http.MethodGet, "/api/v1/users", nil)
 		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 	})
