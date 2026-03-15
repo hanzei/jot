@@ -6,7 +6,7 @@ import { type ReactNode } from 'react'
 import Settings from '../Settings'
 import { users, auth, isAxiosError } from '@/utils/api'
 import * as authUtils from '@/utils/auth'
-import { type UserSettings } from '@/types'
+import type { UserSettings } from '@jot/shared'
 import i18n from '@/i18n'
 
 vi.mock('@/utils/api', () => ({

@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { AboutInfo, AuthResponse, LoginRequest, RegisterRequest, Note, CreateNoteRequest, UpdateNoteRequest, User, CreateUserRequest, UserListResponse, ShareNoteRequest, ShareNoteResponse, NoteShare, ImportResponse, UpdateMeRequest, ChangePasswordRequest, UserSettings, UpdateSettingsRequest, UpdateUserRoleRequest, Label } from '@/types';
+import type { AboutInfo, AuthResponse, LoginRequest, RegisterRequest, Note, CreateNoteRequest, UpdateNoteRequest, User, CreateUserRequest, UserListResponse, ShareNoteRequest, ShareNoteResponse, NoteShare, ImportResponse, UpdateMeRequest, ChangePasswordRequest, UserSettings, UpdateSettingsRequest, UpdateUserRoleRequest, Label } from '@jot/shared';
 
 const api = axios.create({
   baseURL: '/api/v1',

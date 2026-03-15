@@ -8,7 +8,7 @@ import type {
   User,
   CreateUserRequest,
   ShareNoteRequest
-} from '@/types'
+} from '@jot/shared'
 
 // Create mocked functions that will be hoisted
 const mockPost = vi.hoisted(() => vi.fn())

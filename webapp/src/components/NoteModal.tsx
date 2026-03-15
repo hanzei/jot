@@ -2,14 +2,13 @@ import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { XMarkIcon, PlusIcon, TrashIcon, ChevronDownIcon, ArchiveBoxIcon, ArchiveBoxXMarkIcon, ShareIcon, UserPlusIcon } from '@heroicons/react/24/outline';
 import { Dialog, DialogPanel } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
-import { Note, NoteType, CreateNoteRequest, UpdateNoteRequest, Label, User } from '@/types';
+import { VALIDATION, type Note, type NoteType, type CreateNoteRequest, type UpdateNoteRequest, type Label, type User } from '@jot/shared';
+import { type Collaborator, buildCollaborators } from '@jot/shared';
 import { notes } from '@/utils/api';
 import LabelPicker from '@/components/LabelPicker';
 import LetterAvatar from '@/components/LetterAvatar';
 import AssigneePicker from '@/components/AssigneePicker';
-import { Collaborator, buildCollaborators } from '@/utils/collaborators';
 import { buildShareAvatars } from '@/utils/shareAvatars';
-import { VALIDATION_LIMITS } from '@/constants/validation';
 
 // Validation functions
 type TFunction = (key: string, opts?: Record<string, unknown>) => string;
@@ -17,18 +16,18 @@ type TFunction = (key: string, opts?: Record<string, unknown>) => string;
 const validateItemText = (text: string, t: TFunction): string | null => {
   const trimmed = text.trim();
   if (trimmed.length === 0) return null; // Allow empty items (will be removed on save)
-  if (trimmed.length > VALIDATION_LIMITS.ITEM_TEXT_MAX_LENGTH) return t('note.itemTooLong', { max: VALIDATION_LIMITS.ITEM_TEXT_MAX_LENGTH });
+  if (trimmed.length > VALIDATION.ITEM_TEXT_MAX_LENGTH) return t('note.itemTooLong', { max: VALIDATION.ITEM_TEXT_MAX_LENGTH });
   if (/[<>]/g.test(trimmed)) return t('note.itemInvalidChars');
   return null;
 };
 
 const validateTitle = (title: string, t: TFunction): string | null => {
-  if (title.length > VALIDATION_LIMITS.TITLE_MAX_LENGTH) return t('note.titleTooLong', { max: VALIDATION_LIMITS.TITLE_MAX_LENGTH });
+  if (title.length > VALIDATION.TITLE_MAX_LENGTH) return t('note.titleTooLong', { max: VALIDATION.TITLE_MAX_LENGTH });
   return null;
 };
 
 const validateContent = (content: string, t: TFunction): string | null => {
-  if (content.length > VALIDATION_LIMITS.CONTENT_MAX_LENGTH) return t('note.contentTooLong', { max: VALIDATION_LIMITS.CONTENT_MAX_LENGTH });
+  if (content.length > VALIDATION.CONTENT_MAX_LENGTH) return t('note.contentTooLong', { max: VALIDATION.CONTENT_MAX_LENGTH });
   return null;
 };
 
@@ -112,7 +111,7 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
-    marginLeft: item.indentLevel * VALIDATION_LIMITS.INDENT_PX_PER_LEVEL,
+    marginLeft: item.indentLevel * VALIDATION.INDENT_PX_PER_LEVEL,
   };
 
   const assignedUser = item.assignedTo ? usersById?.get(item.assignedTo) : undefined;
@@ -587,7 +586,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
       return;
     }
     
-    const textValue = newText.slice(0, VALIDATION_LIMITS.ITEM_TEXT_MAX_LENGTH);
+    const textValue = newText.slice(0, VALIDATION.ITEM_TEXT_MAX_LENGTH);
     const updatedItems = items.map(item => {
       if (item.id === itemId) {
         return { ...item, text: textValue };
@@ -607,7 +606,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
       // Set new timeout to save after user stops typing
       saveTimeoutRef.current = setTimeout(async () => {
         await autoSaveNote(updatedItems);
-      }, VALIDATION_LIMITS.AUTO_SAVE_TIMEOUT);
+      }, VALIDATION.AUTO_SAVE_TIMEOUT_MS);
     }
   };
 

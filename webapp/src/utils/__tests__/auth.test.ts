@@ -6,8 +6,7 @@ import {
   isAuthenticated,
   isAdmin
 } from '../auth'
-import { User } from '@/types'
-import { ROLES } from '@/constants/roles'
+import { ROLES, type User } from '@jot/shared'
 
 // Mock localStorage
 const mockLocalStorage = {

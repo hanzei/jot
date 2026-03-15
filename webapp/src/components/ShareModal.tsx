@@ -2,9 +2,8 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Dialog, DialogPanel, DialogTitle } from '@headlessui/react';
 import { XMarkIcon, TrashIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
 import { useTranslation } from 'react-i18next';
-import { Note, NoteShare, User } from '@/types';
+import { ROLES, type Note, type NoteShare, type User } from '@jot/shared';
 import { notes, users as usersApi } from '@/utils/api';
-import { ROLES } from '@/constants/roles';
 
 interface ShareModalProps {
   note: Note | null;
