@@ -495,6 +495,68 @@ describe('NoteModal', () => {
       expect(inputsAfter[0]).toHaveFocus()
     })
 
+    it('pressing ArrowDown moves focus to the next item', async () => {
+      render(<NoteModal {...defaultProps} />)
+
+      fireEvent.click(screen.getByText('Todo List'))
+      fireEvent.click(screen.getByText('Add item'))
+      fireEvent.click(screen.getByText('Add item'))
+
+      const inputs = screen.getAllByPlaceholderText('List item...')
+      fireEvent.change(inputs[0], { target: { value: 'first' } })
+      fireEvent.change(inputs[1], { target: { value: 'second' } })
+
+      inputs[0].focus()
+      fireEvent.keyDown(inputs[0], { key: 'ArrowDown', code: 'ArrowDown' })
+
+      expect(inputs[1]).toHaveFocus()
+    })
+
+    it('pressing ArrowUp moves focus to the previous item', async () => {
+      render(<NoteModal {...defaultProps} />)
+
+      fireEvent.click(screen.getByText('Todo List'))
+      fireEvent.click(screen.getByText('Add item'))
+      fireEvent.click(screen.getByText('Add item'))
+
+      const inputs = screen.getAllByPlaceholderText('List item...')
+      fireEvent.change(inputs[0], { target: { value: 'first' } })
+      fireEvent.change(inputs[1], { target: { value: 'second' } })
+
+      inputs[1].focus()
+      fireEvent.keyDown(inputs[1], { key: 'ArrowUp', code: 'ArrowUp' })
+
+      expect(inputs[0]).toHaveFocus()
+    })
+
+    it('pressing ArrowUp on the first item does not change focus', async () => {
+      render(<NoteModal {...defaultProps} />)
+
+      fireEvent.click(screen.getByText('Todo List'))
+      fireEvent.click(screen.getByText('Add item'))
+      fireEvent.click(screen.getByText('Add item'))
+
+      const inputs = screen.getAllByPlaceholderText('List item...')
+      inputs[0].focus()
+      fireEvent.keyDown(inputs[0], { key: 'ArrowUp', code: 'ArrowUp' })
+
+      expect(inputs).toHaveLength(2)
+    })
+
+    it('pressing ArrowDown on the last item does not change focus', async () => {
+      render(<NoteModal {...defaultProps} />)
+
+      fireEvent.click(screen.getByText('Todo List'))
+      fireEvent.click(screen.getByText('Add item'))
+      fireEvent.click(screen.getByText('Add item'))
+
+      const inputs = screen.getAllByPlaceholderText('List item...')
+      inputs[1].focus()
+      fireEvent.keyDown(inputs[1], { key: 'ArrowDown', code: 'ArrowDown' })
+
+      expect(inputs).toHaveLength(2)
+    })
+
     it('removing a todo item from an existing note triggers auto-save', async () => {
       const todoNote = createMockNote({
         note_type: 'todo',
