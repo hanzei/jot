@@ -600,6 +600,9 @@ func (s *NoteStore) CreateItem(noteID string, text string, position, indentLevel
 	return &item, nil
 }
 
+// UpdateItem updates text, completed, position, and indent_level for a note item.
+// It does NOT update assigned_to_user_id. The current update flow uses delete-and-recreate
+// via CreateItemWithCompleted which preserves assignments via the caller-supplied value.
 func (s *NoteStore) UpdateItem(id string, text string, completed bool, position, indentLevel int) error {
 	query := `UPDATE note_items SET text = ?, completed = ?, position = ?, indent_level = ?, updated_at = CURRENT_TIMESTAMP
 			  WHERE id = ?`
@@ -724,30 +727,6 @@ func (s *NoteStore) UnshareNote(noteID string, sharedWithUserID string) error {
 		return fmt.Errorf("failed to commit unshare transaction: %w", err)
 	}
 
-	return nil
-}
-
-// ClearAssignmentsForUser removes all item assignments for a specific user within a note.
-func (s *NoteStore) ClearAssignmentsForUser(noteID, userID string) error {
-	_, err := s.db.Exec(
-		`UPDATE note_items SET assigned_to_user_id = '' WHERE note_id = ? AND assigned_to_user_id = ?`,
-		noteID, userID,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to clear assignments for user: %w", err)
-	}
-	return nil
-}
-
-// ClearAllAssignments removes all item assignments for a note.
-func (s *NoteStore) ClearAllAssignments(noteID string) error {
-	_, err := s.db.Exec(
-		`UPDATE note_items SET assigned_to_user_id = '' WHERE note_id = ? AND assigned_to_user_id != ''`,
-		noteID,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to clear all assignments: %w", err)
-	}
 	return nil
 }
 

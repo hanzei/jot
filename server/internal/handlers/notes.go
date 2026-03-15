@@ -271,7 +271,10 @@ func (h *NotesHandler) validateAndUpdateTodoItems(noteID string, userID string, 
 		return status, err
 	}
 
-	return 0, h.updateTodoItems(noteID, userID, items)
+	if err := h.updateTodoItems(noteID, userID, items); err != nil {
+		return http.StatusInternalServerError, err
+	}
+	return 0, nil
 }
 
 // validateItemAssignments checks that all assigned user IDs are valid and have access to the note.
@@ -314,13 +317,12 @@ func (h *NotesHandler) validateItemAssignments(noteID string, items []UpdateNote
 			return http.StatusBadRequest, errors.New("invalid assigned_to_user_id format")
 		}
 		if _, ok := accessSet[item.AssignedToUserID]; !ok {
-			return http.StatusBadRequest, fmt.Errorf("user %s does not have access to this note", item.AssignedToUserID)
+			return http.StatusBadRequest, errors.New("assigned user does not have access to this note")
 		}
 	}
 
 	return 0, nil
 }
-
 
 func (h *NotesHandler) updateTodoItems(noteID string, userID string, items []UpdateNoteItem) error {
 	currentNote, err := h.noteStore.GetByID(noteID, userID)

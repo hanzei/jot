@@ -173,10 +173,6 @@ func (h *AdminHandler) DeleteUser(w http.ResponseWriter, r *http.Request) (int, 
 		return http.StatusUnauthorized, errors.New("unauthorized")
 	}
 
-	if err := h.noteStore.ClearUserAssignments(targetID); err != nil {
-		return http.StatusInternalServerError, err
-	}
-
 	if err := h.userStore.Delete(targetID, requestingUser.ID); err != nil {
 		if errors.Is(err, models.ErrUserNotFound) {
 			return http.StatusNotFound, err
@@ -189,6 +185,11 @@ func (h *AdminHandler) DeleteUser(w http.ResponseWriter, r *http.Request) (int, 
 		}
 		return http.StatusInternalServerError, err
 	}
+
+	if err := h.noteStore.ClearUserAssignments(targetID); err != nil {
+		return http.StatusInternalServerError, err
+	}
+
 	w.WriteHeader(http.StatusNoContent)
 	return 0, nil
 }
