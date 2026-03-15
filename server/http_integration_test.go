@@ -701,12 +701,14 @@ func TestUserSettingsEndpoints(t *testing.T) {
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "settingsuser", "password123", false)
 
-	t.Run("GET settings returns defaults for new user", func(t *testing.T) {
-		resp := ts.authRequest(t, user, http.MethodGet, "/api/v1/users/me/settings", nil)
+	t.Run("me response includes default settings for new user", func(t *testing.T) {
+		resp := ts.authRequest(t, user, http.MethodGet, "/api/v1/me", nil)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 
-		var settings map[string]any
-		require.NoError(t, resp.UnmarshalBody(&settings))
+		var response map[string]any
+		require.NoError(t, resp.UnmarshalBody(&response))
+		settings, ok := response["settings"].(map[string]any)
+		require.True(t, ok)
 		assert.Equal(t, "system", settings["language"])
 		assert.Equal(t, user.User.ID, settings["user_id"])
 	})
@@ -721,12 +723,14 @@ func TestUserSettingsEndpoints(t *testing.T) {
 		assert.Equal(t, "de", settings["language"])
 	})
 
-	t.Run("GET settings returns updated language", func(t *testing.T) {
-		resp := ts.authRequest(t, user, http.MethodGet, "/api/v1/users/me/settings", nil)
+	t.Run("me response reflects updated language", func(t *testing.T) {
+		resp := ts.authRequest(t, user, http.MethodGet, "/api/v1/me", nil)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 
-		var settings map[string]any
-		require.NoError(t, resp.UnmarshalBody(&settings))
+		var response map[string]any
+		require.NoError(t, resp.UnmarshalBody(&response))
+		settings, ok := response["settings"].(map[string]any)
+		require.True(t, ok)
 		assert.Equal(t, "de", settings["language"])
 	})
 
@@ -734,11 +738,6 @@ func TestUserSettingsEndpoints(t *testing.T) {
 		body := map[string]string{"language": "fr"}
 		resp := ts.authRequest(t, user, http.MethodPut, "/api/v1/users/me/settings", body)
 		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
-	})
-
-	t.Run("unauthenticated GET returns 401", func(t *testing.T) {
-		resp := ts.request(t, nil, http.MethodGet, "/api/v1/users/me/settings", nil)
-		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 	})
 
 	t.Run("unauthenticated PUT returns 401", func(t *testing.T) {

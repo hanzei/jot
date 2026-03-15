@@ -335,33 +335,6 @@ type UpdateSettingsRequest struct {
 var validLanguages = map[string]bool{"system": true, "en": true, "de": true}
 var validThemes = map[string]bool{"system": true, "light": true, "dark": true}
 
-// GetSettings godoc
-//
-//	@Summary	Get the current user's settings
-//	@Tags		auth
-//	@Security	CookieAuth
-//	@Produce	json
-//	@Success	200	{object}	models.UserSettings
-//	@Failure	401	{string}	string	"unauthorized"
-//	@Router		/users/me/settings [get]
-func (h *AuthHandler) GetSettings(w http.ResponseWriter, r *http.Request) (int, error) {
-	currentUser, ok := auth.GetUserFromContext(r.Context())
-	if !ok {
-		return http.StatusUnauthorized, errors.New("unauthorized")
-	}
-
-	settings, err := h.userSettingsStore.GetOrCreate(currentUser.ID)
-	if err != nil {
-		return http.StatusInternalServerError, err
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(settings); err != nil {
-		return http.StatusInternalServerError, err
-	}
-	return 0, nil
-}
-
 // UpdateSettings godoc
 //
 //	@Summary	Update the current user's settings

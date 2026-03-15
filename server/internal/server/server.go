@@ -151,7 +151,6 @@ func (s *Server) setupRoutes() {
 			r.Get("/me", s.wrapHandler(s.authHandler.Me))
 			r.Put("/users/me", s.wrapHandler(s.authHandler.UpdateUser))
 			r.Put("/users/me/password", s.wrapHandler(s.authHandler.ChangePassword))
-			r.Get("/users/me/settings", s.wrapHandler(s.authHandler.GetSettings))
 			r.Put("/users/me/settings", s.wrapHandler(s.authHandler.UpdateSettings))
 			r.Post("/users/me/profile-icon", s.wrapHandler(s.authHandler.UploadProfileIcon))
 			r.Delete("/users/me/profile-icon", s.wrapHandler(s.authHandler.DeleteProfileIcon))
@@ -166,7 +165,6 @@ func (s *Server) setupRoutes() {
 			r.Delete("/notes/{id}", s.wrapHandler(s.notesHandler.DeleteNote))
 
 			r.Post("/notes/{id}/restore", s.wrapHandler(s.notesHandler.RestoreNote))
-			r.Delete("/notes/{id}/permanent", s.wrapHandler(s.notesHandler.PermanentlyDeleteNote))
 
 			r.Post("/notes/{id}/share", s.wrapHandler(s.notesHandler.ShareNote))
 			r.Delete("/notes/{id}/share", s.wrapHandler(s.notesHandler.UnshareNote))

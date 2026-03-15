@@ -643,6 +643,10 @@ paths:
         name: id
         required: true
         type: string
+      - description: Permanently delete from trash instead of soft-deleting
+        in: query
+        name: permanent
+        type: boolean
       responses:
         "204":
           description: no content
@@ -660,7 +664,7 @@ paths:
             type: string
       security:
       - CookieAuth: []
-      summary: Move a note to trash
+      summary: Delete a note (move to trash, or permanently delete)
       tags:
       - notes
     get:
@@ -806,34 +810,6 @@ paths:
       summary: Remove a label from a note
       tags:
       - labels
-  /notes/{id}/permanent:
-    delete:
-      parameters:
-      - description: Note ID
-        in: path
-        name: id
-        required: true
-        type: string
-      responses:
-        "204":
-          description: no content
-        "400":
-          description: bad request
-          schema:
-            type: string
-        "401":
-          description: unauthorized
-          schema:
-            type: string
-        "404":
-          description: not found
-          schema:
-            type: string
-      security:
-      - CookieAuth: []
-      summary: Permanently delete a note from trash
-      tags:
-      - notes
   /notes/{id}/restore:
     post:
       parameters:
@@ -1239,23 +1215,6 @@ paths:
       tags:
       - auth
   /users/me/settings:
-    get:
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.UserSettings'
-        "401":
-          description: unauthorized
-          schema:
-            type: string
-      security:
-      - CookieAuth: []
-      summary: Get the current user's settings
-      tags:
-      - auth
     put:
       consumes:
       - application/json

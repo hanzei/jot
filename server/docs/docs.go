@@ -724,7 +724,7 @@ const docTemplate = `{
                 "tags": [
                     "notes"
                 ],
-                "summary": "Move a note to trash",
+                "summary": "Delete a note (move to trash, or permanently delete)",
                 "parameters": [
                     {
                         "type": "string",
@@ -732,6 +732,12 @@ const docTemplate = `{
                         "name": "id",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Permanently delete from trash instead of soft-deleting",
+                        "name": "permanent",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -867,51 +873,6 @@ const docTemplate = `{
                     },
                     "403": {
                         "description": "no access to note",
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                }
-            }
-        },
-        "/notes/{id}/permanent": {
-            "delete": {
-                "security": [
-                    {
-                        "CookieAuth": []
-                    }
-                ],
-                "tags": [
-                    "notes"
-                ],
-                "summary": "Permanently delete a note from trash",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Note ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "204": {
-                        "description": "no content"
-                    },
-                    "400": {
-                        "description": "bad request",
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    "401": {
-                        "description": "unauthorized",
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    "404": {
-                        "description": "not found",
                         "schema": {
                             "type": "string"
                         }
@@ -1421,34 +1382,6 @@ const docTemplate = `{
             }
         },
         "/users/me/settings": {
-            "get": {
-                "security": [
-                    {
-                        "CookieAuth": []
-                    }
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "auth"
-                ],
-                "summary": "Get the current user's settings",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/models.UserSettings"
-                        }
-                    },
-                    "401": {
-                        "description": "unauthorized",
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                }
-            },
             "put": {
                 "security": [
                     {

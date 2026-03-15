@@ -245,7 +245,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
 
   const handlePermanentlyDeleteNote = async (noteId: string) => {
     try {
-      await notes.permanentlyDelete(noteId);
+      await notes.delete(noteId, { permanent: true });
       loadNotes();
     } catch (error) {
       console.error('Failed to permanently delete note:', error);

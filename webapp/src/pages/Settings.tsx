@@ -53,7 +53,7 @@ const Settings = ({ onLogout }: SettingsProps) => {
   const [themePref, setThemePref] = useState<ThemePreference>(() => getThemePreference());
 
   useEffect(() => {
-    users.getSettings().then(serverSettings => {
+    auth.me().then(({ settings: serverSettings }) => {
       setSettings(serverSettings);
       const langPref = serverSettings.language as LanguagePreference;
       setLanguagePref(langPref);

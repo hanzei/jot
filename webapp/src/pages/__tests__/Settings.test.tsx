@@ -12,11 +12,11 @@ import i18n from '@/i18n'
 vi.mock('@/utils/api', () => ({
   auth: {
     logout: vi.fn(),
+    me: vi.fn().mockResolvedValue({ user: { id: 'user1', username: 'testuser', role: 'user' }, settings: { user_id: 'user1', language: 'system', theme: 'system', updated_at: '' } }),
   },
   users: {
     updateMe: vi.fn(),
     changePassword: vi.fn(),
-    getSettings: vi.fn().mockResolvedValue({ user_id: 'user1', language: 'system', theme: 'system', updated_at: '' }),
     updateSettings: vi.fn().mockResolvedValue({ user_id: 'user1', language: 'system', theme: 'system', updated_at: '' }),
   },
   isAxiosError: vi.fn(),
@@ -218,7 +218,7 @@ describe('Settings', () => {
     it('fetches settings from server on mount', async () => {
       renderSettings()
       await waitFor(() => {
-        expect(users.getSettings).toHaveBeenCalled()
+        expect(auth.me).toHaveBeenCalled()
       })
     })
 
