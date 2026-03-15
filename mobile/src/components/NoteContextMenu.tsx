@@ -11,7 +11,7 @@ import {
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { Note } from '../types';
 
-export type ContextMenuViewContext = 'notes' | 'archived' | 'trash';
+export type ContextMenuViewContext = 'notes' | 'archived' | 'trash' | 'my-todo';
 
 interface NoteContextMenuProps {
   visible: boolean;
@@ -54,7 +54,7 @@ export default function NoteContextMenu({
 
   const actions: Action[] = [];
 
-  if (viewContext === 'notes') {
+  if (viewContext === 'notes' || viewContext === 'my-todo') {
     actions.push({
       icon: note.pinned ? 'pin' : 'pin-outline',
       label: note.pinned ? 'Unpin' : 'Pin',

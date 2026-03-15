@@ -17,6 +17,7 @@ interface NavItem {
 
 const TOP_ITEMS: NavItem[] = [
   { name: 'Notes', label: 'Notes', icon: 'document-text-outline', activeIcon: 'document-text' },
+  { name: 'MyTodo', label: 'My Todo', icon: 'clipboard-outline', activeIcon: 'clipboard' },
 ];
 
 const BOTTOM_ITEMS: NavItem[] = [
@@ -89,27 +90,32 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
         <View style={styles.divider} />
 
         <View style={styles.navSection}>
-          {/* Notes item */}
-          {TOP_ITEMS.map((item) => (
-            <TouchableOpacity
-              key={item.name}
-              style={[styles.navItem, isNotesActiveWithoutLabel && styles.navItemActive]}
-              onPress={() => handleNavPress(item.name)}
-              testID={`drawer-item-${item.name.toLowerCase()}`}
-              accessibilityLabel={item.label}
-              accessibilityRole="button"
-              accessibilityState={{ selected: isNotesActiveWithoutLabel }}
-            >
-              <Ionicons
-                name={isNotesActiveWithoutLabel ? item.activeIcon : item.icon}
-                size={22}
-                color={isNotesActiveWithoutLabel ? '#2563eb' : '#444'}
-              />
-              <Text style={[styles.navItemText, isNotesActiveWithoutLabel && styles.navItemTextActive]}>
-                {item.label}
-              </Text>
-            </TouchableOpacity>
-          ))}
+          {/* Top nav items (Notes, My Todo) */}
+          {TOP_ITEMS.map((item) => {
+            const isActive = item.name === 'Notes'
+              ? isNotesActiveWithoutLabel
+              : activeRoute === item.name;
+            return (
+              <TouchableOpacity
+                key={item.name}
+                style={[styles.navItem, isActive && styles.navItemActive]}
+                onPress={() => handleNavPress(item.name)}
+                testID={`drawer-item-${item.name.toLowerCase()}`}
+                accessibilityLabel={item.label}
+                accessibilityRole="button"
+                accessibilityState={{ selected: isActive }}
+              >
+                <Ionicons
+                  name={isActive ? item.activeIcon : item.icon}
+                  size={22}
+                  color={isActive ? '#2563eb' : '#444'}
+                />
+                <Text style={[styles.navItemText, isActive && styles.navItemTextActive]}>
+                  {item.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
 
           {/* Labels */}
           {labels && labels.length > 0 && labels.map((label) => {

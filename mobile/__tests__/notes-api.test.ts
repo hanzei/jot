@@ -53,6 +53,16 @@ describe('Notes API', () => {
       expect(mockAxiosInstance.get).toHaveBeenCalledWith('/notes', { params: undefined });
     });
 
+    it('passes my_todo param to GET /notes', async () => {
+      mockAxiosInstance.get.mockResolvedValueOnce({ data: [] });
+
+      await getNotes({ my_todo: true });
+
+      expect(mockAxiosInstance.get).toHaveBeenCalledWith('/notes', {
+        params: { my_todo: true },
+      });
+    });
+
     it('throws on network error', async () => {
       mockAxiosInstance.get.mockRejectedValueOnce(new Error('Network Error'));
 

@@ -74,6 +74,7 @@ export interface GetNotesParams {
   search?: string;
   trashed?: boolean;
   label?: string;
+  my_todo?: boolean;
 }
 
 export interface CreateNoteRequest {

@@ -84,6 +84,17 @@ describe('useNotes hooks', () => {
 
       expect(mockNotesApi.getNotes).toHaveBeenCalledWith(params);
     });
+
+    it('passes my_todo param to getNotes', async () => {
+      mockNotesApi.getNotes.mockResolvedValueOnce([] as never);
+
+      const params = { my_todo: true };
+      const { result } = renderHook(() => useNotes(params), { wrapper: createWrapper() });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      expect(mockNotesApi.getNotes).toHaveBeenCalledWith(params);
+    });
   });
 
   describe('useNote', () => {

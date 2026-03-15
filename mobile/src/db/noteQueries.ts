@@ -137,7 +137,10 @@ export async function getLocalNotes(db: SQLiteDatabase, params?: GetNotesParams)
   let sql = 'SELECT * FROM notes WHERE 1=1';
   const args: (string | number | null)[] = [];
 
-  if (params?.archived) {
+  if (params?.my_todo) {
+    sql += ' AND deleted_at IS NULL AND note_type = ?';
+    args.push('todo');
+  } else if (params?.archived) {
     sql += ' AND archived = 1 AND deleted_at IS NULL';
   } else if (params?.trashed) {
     sql += ' AND deleted_at IS NOT NULL';
@@ -259,7 +262,10 @@ export async function removeLocalNotesNotIn(
 
   let sql = "DELETE FROM notes WHERE id NOT LIKE 'local_%'";
 
-  if (params?.archived) {
+  if (params?.my_todo) {
+    sql += ' AND deleted_at IS NULL AND note_type = ?';
+    args.push('todo');
+  } else if (params?.archived) {
     sql += ' AND archived = 1 AND deleted_at IS NULL';
   } else if (params?.trashed) {
     sql += ' AND deleted_at IS NOT NULL';
