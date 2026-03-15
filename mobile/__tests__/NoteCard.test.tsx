@@ -92,16 +92,26 @@ describe('NoteCard', () => {
     expect(onPress).toHaveBeenCalledTimes(1);
   });
 
-  it('shows colored left border for notes with color', () => {
-    const coloredNote: Note = { ...baseNote, color: '#ff6600' };
+  it('uses note color as background for colored notes', () => {
+    const coloredNote: Note = { ...baseNote, color: '#fbbc04' };
     const { getByTestId } = render(<NoteCard note={coloredNote} onPress={jest.fn()} />);
 
     const card = getByTestId('note-card-note-1');
     const flatStyle = Array.isArray(card.props.style)
       ? Object.assign({}, ...card.props.style)
       : card.props.style;
-    expect(flatStyle.borderLeftColor).toBe('#ff6600');
-    expect(flatStyle.borderLeftWidth).toBe(4);
+    expect(flatStyle.backgroundColor).toBe('#fbbc04');
+    expect(flatStyle.borderColor).toBe('#fbbc04');
+  });
+
+  it('uses default white background for notes without color', () => {
+    const { getByTestId } = render(<NoteCard note={baseNote} onPress={jest.fn()} />);
+
+    const card = getByTestId('note-card-note-1');
+    const flatStyle = Array.isArray(card.props.style)
+      ? Object.assign({}, ...card.props.style)
+      : card.props.style;
+    expect(flatStyle.backgroundColor).toBe('#fff');
   });
 
   it('does not render title when empty', () => {
