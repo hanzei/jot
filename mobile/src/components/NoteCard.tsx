@@ -88,7 +88,7 @@ function NoteCard({ note, usersById, onPress, onLongPress, onMenuPress }: NoteCa
     <TouchableOpacity
       style={[
         styles.card,
-        hasColor && { backgroundColor: note.color, borderColor: note.color },
+        hasColor && { backgroundColor: note.color },
       ]}
       onPress={onPress}
       onLongPress={onLongPress}

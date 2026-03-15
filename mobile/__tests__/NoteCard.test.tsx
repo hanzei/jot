@@ -101,7 +101,6 @@ describe('NoteCard', () => {
       ? Object.assign({}, ...card.props.style)
       : card.props.style;
     expect(flatStyle.backgroundColor).toBe('#fbbc04');
-    expect(flatStyle.borderColor).toBe('#fbbc04');
   });
 
   it('uses default white background for notes without color', () => {
