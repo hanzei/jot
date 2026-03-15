@@ -245,7 +245,7 @@ func (h *AuthHandler) applySettingsUpdate(userID string, current *models.UserSet
 //	@Failure	400		{string}	string	"bad request"
 //	@Failure	401		{string}	string	"unauthorized"
 //	@Failure	409		{string}	string	"username already taken"
-//	@Router		/users/me [put]
+//	@Router		/users/me [patch]
 func (h *AuthHandler) UpdateUser(w http.ResponseWriter, r *http.Request) (int, error) {
 	currentUser, ok := auth.GetUserFromContext(r.Context())
 	if !ok {

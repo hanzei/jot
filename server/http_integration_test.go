@@ -508,12 +508,12 @@ func TestUpdateUserEndpoint(t *testing.T) {
 
 	t.Run("successful username update", func(t *testing.T) {
 		t.Cleanup(func() {
-			restoreResp := ts.authRequest(t, user, http.MethodPut, "/api/v1/users/me", map[string]any{"username": "originaluser"})
+			restoreResp := ts.authRequest(t, user, http.MethodPatch, "/api/v1/users/me", map[string]any{"username": "originaluser"})
 			require.Equal(t, http.StatusOK, restoreResp.StatusCode)
 		})
 
 		body := map[string]any{"username": "newusername"}
-		resp := ts.authRequest(t, user, http.MethodPut, "/api/v1/users/me", body)
+		resp := ts.authRequest(t, user, http.MethodPatch, "/api/v1/users/me", body)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 		var response map[string]any
@@ -527,24 +527,24 @@ func TestUpdateUserEndpoint(t *testing.T) {
 
 	t.Run("duplicate username returns 409", func(t *testing.T) {
 		body := map[string]any{"username": other.User.Username}
-		resp := ts.authRequest(t, user, http.MethodPut, "/api/v1/users/me", body)
+		resp := ts.authRequest(t, user, http.MethodPatch, "/api/v1/users/me", body)
 		assert.Equal(t, http.StatusConflict, resp.StatusCode)
 	})
 
 	t.Run("invalid username format returns 400", func(t *testing.T) {
 		body := map[string]any{"username": "a"}
-		resp := ts.authRequest(t, user, http.MethodPut, "/api/v1/users/me", body)
+		resp := ts.authRequest(t, user, http.MethodPatch, "/api/v1/users/me", body)
 		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 	})
 
 	t.Run("unauthenticated request returns 401", func(t *testing.T) {
 		body := map[string]any{"username": "hacker"}
-		resp := ts.request(t, nil, http.MethodPut, "/api/v1/users/me", body)
+		resp := ts.request(t, nil, http.MethodPatch, "/api/v1/users/me", body)
 		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 	})
 
 	t.Run("partial update preserves unchanged fields", func(t *testing.T) {
-		resp := ts.authRequest(t, user, http.MethodPut, "/api/v1/users/me", map[string]any{"first_name": "Updated"})
+		resp := ts.authRequest(t, user, http.MethodPatch, "/api/v1/users/me", map[string]any{"first_name": "Updated"})
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 		var response map[string]any
@@ -556,7 +556,7 @@ func TestUpdateUserEndpoint(t *testing.T) {
 	})
 
 	t.Run("empty body updates nothing and returns current state", func(t *testing.T) {
-		resp := ts.authRequest(t, user, http.MethodPut, "/api/v1/users/me", map[string]any{})
+		resp := ts.authRequest(t, user, http.MethodPatch, "/api/v1/users/me", map[string]any{})
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 		var response map[string]any
@@ -737,9 +737,9 @@ func TestUserSettingsEndpoints(t *testing.T) {
 		assert.Equal(t, user.User.ID, settings["user_id"])
 	})
 
-	t.Run("PUT /users/me updates language via unified endpoint", func(t *testing.T) {
+	t.Run("PATCH /users/me updates language via unified endpoint", func(t *testing.T) {
 		body := map[string]string{"language": "de"}
-		resp := ts.authRequest(t, user, http.MethodPut, "/api/v1/users/me", body)
+		resp := ts.authRequest(t, user, http.MethodPatch, "/api/v1/users/me", body)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 		var response map[string]any
@@ -760,16 +760,16 @@ func TestUserSettingsEndpoints(t *testing.T) {
 		assert.Equal(t, "de", settings["language"])
 	})
 
-	t.Run("PUT /users/me with invalid language returns 400", func(t *testing.T) {
+	t.Run("PATCH /users/me with invalid language returns 400", func(t *testing.T) {
 		body := map[string]string{"language": "fr"}
-		resp := ts.authRequest(t, user, http.MethodPut, "/api/v1/users/me", body)
+		resp := ts.authRequest(t, user, http.MethodPatch, "/api/v1/users/me", body)
 		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 	})
 
 	t.Run("invalid settings with valid profile does not commit profile (atomic validation)", func(t *testing.T) {
 		// Send valid profile change + invalid language; profile must not be updated
 		body := map[string]any{"first_name": "ShouldNotPersist", "language": "invalid"}
-		resp := ts.authRequest(t, user, http.MethodPut, "/api/v1/users/me", body)
+		resp := ts.authRequest(t, user, http.MethodPatch, "/api/v1/users/me", body)
 		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 
 		// Verify profile was not updated
@@ -782,9 +782,9 @@ func TestUserSettingsEndpoints(t *testing.T) {
 		assert.NotEqual(t, "ShouldNotPersist", userResp["first_name"])
 	})
 
-	t.Run("PUT /users/me updates both profile and settings", func(t *testing.T) {
+	t.Run("PATCH /users/me updates both profile and settings", func(t *testing.T) {
 		body := map[string]any{"first_name": "Jane", "theme": "dark"}
-		resp := ts.authRequest(t, user, http.MethodPut, "/api/v1/users/me", body)
+		resp := ts.authRequest(t, user, http.MethodPatch, "/api/v1/users/me", body)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 		var response map[string]any

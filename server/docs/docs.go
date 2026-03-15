@@ -1206,7 +1206,7 @@ const docTemplate = `{
             }
         },
         "/users/me": {
-            "put": {
+            "patch": {
                 "security": [
                     {
                         "CookieAuth": []

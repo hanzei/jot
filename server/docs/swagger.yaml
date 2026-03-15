@@ -1103,7 +1103,7 @@ paths:
       tags:
       - users
   /users/me:
-    put:
+    patch:
       consumes:
       - application/json
       parameters:

@@ -1199,7 +1199,7 @@
             }
         },
         "/users/me": {
-            "put": {
+            "patch": {
                 "security": [
                     {
                         "CookieAuth": []

@@ -93,7 +93,7 @@ export const users = {
     api.get('/users').then(res => res.data),
 
   updateMe: (data: UpdateMeRequest): Promise<AuthResponse> =>
-    api.put('/users/me', data).then(res => res.data),
+    api.patch('/users/me', data).then(res => res.data),
 
   changePassword: (data: ChangePasswordRequest): Promise<void> =>
     api.put('/users/me/password', data),
