@@ -75,6 +75,8 @@ export interface GetNotesParams {
   trashed?: boolean;
   label?: string;
   my_todo?: boolean;
+  /** Used locally to filter my-todo notes by assigned_to; not sent to the server. */
+  user_id?: string;
 }
 
 export interface CreateNoteRequest {

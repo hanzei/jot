@@ -20,6 +20,7 @@ import { useUpdateNote, useDeleteNote, useRestoreNote, usePermanentDeleteNote, u
 import { useOfflineNotes } from '../hooks/useOfflineNotes';
 import { useLabels } from '../hooks/useLabels';
 import { useUsers } from '../store/UsersContext';
+import { useAuth } from '../store/AuthContext';
 import NoteCard from '../components/NoteCard';
 import NoteContextMenu, { ContextMenuViewContext } from '../components/NoteContextMenu';
 import ColorPicker from '../components/ColorPicker';
@@ -45,6 +46,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   const [searchText, setSearchText] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedLabelId, setSelectedLabelId] = useState<string | undefined>(undefined);
+  const { user } = useAuth();
 
   // Sync drawer-level label filter into local state
   useEffect(() => {
@@ -73,7 +75,8 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     search: debouncedSearch || undefined,
     label: variant === 'notes' ? selectedLabelId : undefined,
     my_todo: variant === 'my-todo' ? true : undefined,
-  }), [variant, debouncedSearch, selectedLabelId]);
+    user_id: variant === 'my-todo' ? user?.id : undefined,
+  }), [variant, debouncedSearch, selectedLabelId, user?.id]);
 
   const { data: notes, isLoading, isError, refetch, isRefetching } = useOfflineNotes(params);
   const { data: allLabels } = useLabels();

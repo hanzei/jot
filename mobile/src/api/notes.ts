@@ -2,7 +2,9 @@ import api from './client';
 import { Note, GetNotesParams, CreateNoteRequest, UpdateNoteRequest } from '../types';
 
 export async function getNotes(params?: GetNotesParams): Promise<Note[]> {
-  const res = await api.get('/notes', { params });
+  // eslint-disable-next-line @typescript-eslint/no-unused-vars
+  const { user_id, ...serverParams } = params ?? {};
+  const res = await api.get('/notes', { params: params ? serverParams : undefined });
   return res.data;
 }
 

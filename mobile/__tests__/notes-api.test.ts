@@ -63,6 +63,16 @@ describe('Notes API', () => {
       });
     });
 
+    it('strips user_id from server request params', async () => {
+      mockAxiosInstance.get.mockResolvedValueOnce({ data: [] });
+
+      await getNotes({ my_todo: true, user_id: 'user-123' });
+
+      expect(mockAxiosInstance.get).toHaveBeenCalledWith('/notes', {
+        params: { my_todo: true },
+      });
+    });
+
     it('throws on network error', async () => {
       mockAxiosInstance.get.mockRejectedValueOnce(new Error('Network Error'));
 
