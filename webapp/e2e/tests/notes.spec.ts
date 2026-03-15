@@ -136,81 +136,70 @@ test.describe('Notes', () => {
     await dashboardPage.expectEmptyState('No notes yet');
   });
 
-  test('pressing Enter on a non-last todo item inserts a new item below it', async ({ page, dashboardPage }) => {
+  test('pressing Enter on a non-last todo item inserts a new item below it', async ({ dashboardPage }) => {
     await dashboardPage.goto();
-    await page.click('button:has-text("New Note")');
-    await page.click('button:has-text("Todo List")');
+    await dashboardPage.clickNewNote();
+    await dashboardPage.selectTodoType();
 
-    // Add two items via the button
-    await page.click('button:has-text("Add item")');
-    await page.locator('input[placeholder="List item..."]').last().fill('First item');
-    await page.click('button:has-text("Add item")');
-    await page.locator('input[placeholder="List item..."]').last().fill('Second item');
+    await dashboardPage.addTodoItem('First item');
+    await dashboardPage.addTodoItem('Second item');
 
-    // Focus the first item and press Enter
-    await page.locator('input[placeholder="List item..."]').first().focus();
-    await page.keyboard.press('Enter');
+    await dashboardPage.focusTodoItem(0);
+    await dashboardPage.pressKey('Enter');
 
-    // A new empty item should be inserted between the existing two items and focused
-    await expect(page.locator('input[placeholder="List item..."]')).toHaveCount(3);
-    await expect(page.locator('input[placeholder="List item..."]').first()).toHaveValue('First item');
-    await expect(page.locator('input[placeholder="List item..."]').nth(1)).toBeFocused();
-    await expect(page.locator('input[placeholder="List item..."]').nth(1)).toHaveValue('');
-    await expect(page.locator('input[placeholder="List item..."]').nth(2)).toHaveValue('Second item');
+    await dashboardPage.expectTodoItemCount(3);
+    await dashboardPage.expectTodoItemValue(0, 'First item');
+    await dashboardPage.expectTodoItemFocused(1);
+    await dashboardPage.expectTodoItemValue(1, '');
+    await dashboardPage.expectTodoItemValue(2, 'Second item');
   });
 
-  test('arrow keys navigate between todo items', async ({ page, dashboardPage }) => {
+  test('arrow keys navigate between todo items', async ({ dashboardPage }) => {
     await dashboardPage.goto();
-    await page.click('button:has-text("New Note")');
-    await page.click('button:has-text("Todo List")');
+    await dashboardPage.clickNewNote();
+    await dashboardPage.selectTodoType();
 
-    // Add three items
     for (const text of ['Alpha', 'Beta', 'Gamma']) {
-      await page.click('button:has-text("Add item")');
-      await page.locator('input[placeholder="List item..."]').last().fill(text);
+      await dashboardPage.addTodoItem(text);
     }
 
-    // Focus the first item and press ArrowDown
-    await page.locator('input[placeholder="List item..."]').first().focus();
-    await expect(page.locator('input[placeholder="List item..."]').first()).toBeFocused();
+    await dashboardPage.focusTodoItem(0);
+    await dashboardPage.expectTodoItemFocused(0);
 
-    await page.keyboard.press('ArrowDown');
-    await expect(page.locator('input[placeholder="List item..."]').nth(1)).toBeFocused();
+    await dashboardPage.pressKey('ArrowDown');
+    await dashboardPage.expectTodoItemFocused(1);
 
-    await page.keyboard.press('ArrowDown');
-    await expect(page.locator('input[placeholder="List item..."]').nth(2)).toBeFocused();
+    await dashboardPage.pressKey('ArrowDown');
+    await dashboardPage.expectTodoItemFocused(2);
 
     // ArrowDown on last item should keep focus there
-    await page.keyboard.press('ArrowDown');
-    await expect(page.locator('input[placeholder="List item..."]').nth(2)).toBeFocused();
+    await dashboardPage.pressKey('ArrowDown');
+    await dashboardPage.expectTodoItemFocused(2);
 
     // ArrowUp back to second item
-    await page.keyboard.press('ArrowUp');
-    await expect(page.locator('input[placeholder="List item..."]').nth(1)).toBeFocused();
+    await dashboardPage.pressKey('ArrowUp');
+    await dashboardPage.expectTodoItemFocused(1);
 
     // ArrowUp back to first item
-    await page.keyboard.press('ArrowUp');
-    await expect(page.locator('input[placeholder="List item..."]').first()).toBeFocused();
+    await dashboardPage.pressKey('ArrowUp');
+    await dashboardPage.expectTodoItemFocused(0);
 
     // ArrowUp on first item should keep focus there
-    await page.keyboard.press('ArrowUp');
-    await expect(page.locator('input[placeholder="List item..."]').first()).toBeFocused();
+    await dashboardPage.pressKey('ArrowUp');
+    await dashboardPage.expectTodoItemFocused(0);
   });
 
-  test('pressing Enter on the last todo item creates a new item', async ({ page, dashboardPage }) => {
+  test('pressing Enter on the last todo item creates a new item', async ({ dashboardPage }) => {
     await dashboardPage.goto();
-    await page.click('button:has-text("New Note")');
-    await page.click('button:has-text("Todo List")');
+    await dashboardPage.clickNewNote();
+    await dashboardPage.selectTodoType();
 
-    // Add one item
-    await page.click('button:has-text("Add item")');
-    await page.locator('input[placeholder="List item..."]').last().fill('Only item');
+    await dashboardPage.addTodoItem('Only item');
 
-    // Press Enter on the only (last) item
-    await page.locator('input[placeholder="List item..."]').last().press('Enter');
+    await dashboardPage.focusTodoItem(0);
+    await dashboardPage.pressKey('Enter');
 
-    // A new empty input should appear and be focused
-    await expect(page.locator('input[placeholder="List item..."]')).toHaveCount(2);
-    await expect(page.locator('input[placeholder="List item..."]').nth(1)).toBeFocused();
+    await dashboardPage.expectTodoItemCount(2);
+    await dashboardPage.expectTodoItemFocused(1);
   });
 });
