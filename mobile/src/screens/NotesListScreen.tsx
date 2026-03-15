@@ -48,7 +48,7 @@ export default function NotesListScreen({ variant = 'notes' }: NotesListScreenPr
   const [colorPickerNote, setColorPickerNote] = useState<Note | null>(null);
   const [localOrder, setLocalOrder] = useState<LocalReorderState>({ pinned: null, unpinned: null });
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const { usersById } = useUsers();
+  const { usersById, refreshUsers } = useUsers();
 
   // Debounce search input by 300ms
   useEffect(() => {
@@ -81,6 +81,11 @@ export default function NotesListScreen({ variant = 'notes' }: NotesListScreenPr
     setSearchText('');
     setDebouncedSearch('');
   }, []);
+
+  const handleRefresh = useCallback(() => {
+    refetch();
+    refreshUsers();
+  }, [refetch, refreshUsers]);
 
   const handleNotePress = useCallback(
     (noteId: string) => {
@@ -434,7 +439,7 @@ export default function NotesListScreen({ variant = 'notes' }: NotesListScreenPr
       {isDraggable && hasPinned ? (
         <ScrollView
           refreshControl={
-            <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor="#2563eb" />
+            <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor="#2563eb" />
           }
           contentContainerStyle={styles.listContent}
           testID="notes-section-list"
@@ -478,7 +483,7 @@ export default function NotesListScreen({ variant = 'notes' }: NotesListScreenPr
           onDragBegin={handleDragStart}
           onDragEnd={handleDragEndUnpinned}
           refreshControl={
-            <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor="#2563eb" />
+            <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor="#2563eb" />
           }
           contentContainerStyle={styles.listContent}
           ListEmptyComponent={listEmptyComponent}
@@ -490,7 +495,7 @@ export default function NotesListScreen({ variant = 'notes' }: NotesListScreenPr
           keyExtractor={(item) => item.id}
           renderItem={renderNonDraggableNoteCard}
           refreshControl={
-            <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor="#2563eb" />
+            <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor="#2563eb" />
           }
           contentContainerStyle={styles.listContent}
           ListEmptyComponent={listEmptyComponent}
