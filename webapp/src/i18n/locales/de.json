@@ -178,7 +178,10 @@
     "titleTooLong": "Titel darf höchstens {{max}} Zeichen lang sein",
     "contentTooLong": "Inhalt darf höchstens {{max}} Zeichen lang sein",
     "failedSaveChanges": "Änderungen konnten nicht gespeichert werden. Bitte erneut versuchen.",
-    "menuOptions": "Notizoptionen"
+    "menuOptions": "Notizoptionen",
+    "assignItem": "Element zuweisen",
+    "unassign": "Zuweisung aufheben",
+    "assignedTo": "Zugewiesen an {{name}}"
   },
   "labels": {
     "title": "Labels",

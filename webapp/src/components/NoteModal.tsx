@@ -1,11 +1,13 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { XMarkIcon, PlusIcon, TrashIcon, ChevronDownIcon, ArchiveBoxIcon, ArchiveBoxXMarkIcon, ShareIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon, PlusIcon, TrashIcon, ChevronDownIcon, ArchiveBoxIcon, ArchiveBoxXMarkIcon, ShareIcon, UserPlusIcon } from '@heroicons/react/24/outline';
 import { Dialog, DialogPanel } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
 import { Note, NoteType, CreateNoteRequest, UpdateNoteRequest, Label, User } from '@/types';
 import { notes } from '@/utils/api';
 import LabelPicker from '@/components/LabelPicker';
 import LetterAvatar from '@/components/LetterAvatar';
+import AssigneePicker from '@/components/AssigneePicker';
+import { Collaborator, buildCollaborators } from '@/utils/collaborators';
 import { buildShareAvatars } from '@/utils/shareAvatars';
 import { VALIDATION_LIMITS } from '@/constants/validation';
 
@@ -66,11 +68,12 @@ interface NoteModalProps {
 }
 
 interface TodoItem {
-  id: string; // Add unique ID for reliable tracking
+  id: string;
   text: string;
   completed: boolean;
   position: number;
   indentLevel: number;
+  assignedTo: string;
   originalPosition?: number;
 }
 
@@ -84,10 +87,15 @@ interface SortableItemProps {
   onKeyDown?: (index: number, e: React.KeyboardEvent<HTMLInputElement>) => void;
   inputRef?: React.RefCallback<HTMLInputElement>;
   onIndentChange?: (itemId: string, delta: 1 | -1) => void;
+  isShared?: boolean;
+  collaborators?: Collaborator[];
+  usersById?: Map<string, User>;
+  onAssignItem?: (itemId: string, userId: string) => void;
 }
 
-function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isCompleted = false, onKeyDown, inputRef, onIndentChange }: SortableItemProps) {
+function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isCompleted = false, onKeyDown, inputRef, onIndentChange, isShared, collaborators, usersById, onAssignItem }: SortableItemProps) {
   const { t } = useTranslation();
+  const [showAssigneePicker, setShowAssigneePicker] = useState(false);
   const {
     attributes,
     listeners,
@@ -97,7 +105,7 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
     isDragging,
   } = useSortable({
     id,
-    disabled: isCompleted // Disable dragging for completed items
+    disabled: isCompleted
   });
 
   const style = {
@@ -106,16 +114,18 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
     marginLeft: item.indentLevel * VALIDATION_LIMITS.INDENT_PX_PER_LEVEL,
   };
 
+  const assignedUser = item.assignedTo ? usersById?.get(item.assignedTo) : undefined;
+  const showAssignUI = isShared && collaborators && collaborators.length > 0 && onAssignItem;
+
   return (
     <div
       ref={setNodeRef}
       style={style}
-      className={`flex items-center space-x-2 ${isDragging ? 'opacity-50' : ''} ${
+      className={`group/item flex items-center space-x-2 ${isDragging ? 'opacity-50' : ''} ${
         isCompleted ? 'opacity-60' : ''
       }`}
       {...attributes}
     >
-      {/* Only show drag handle for uncompleted items */}
       {!isCompleted && (
         <div
           {...listeners}
@@ -126,7 +136,6 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
           </svg>
         </div>
       )}
-      {/* Add spacing for completed items to align with uncompleted items */}
       {isCompleted && <div className="w-6 h-4"></div>}
       
       <input
@@ -153,6 +162,47 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
         }}
         ref={inputRef}
       />
+
+      {showAssignUI && (
+        <div className="relative flex-shrink-0">
+          {item.assignedTo ? (
+            <button
+              onClick={() => !isCompleted && setShowAssigneePicker(true)}
+              title={t('note.assignedTo', { name: assignedUser ? [assignedUser.first_name, assignedUser.last_name].filter(Boolean).join(' ') || assignedUser.username : item.assignedTo })}
+              aria-label={t('note.assignedTo', { name: assignedUser?.username || item.assignedTo })}
+              className={isCompleted ? 'cursor-default' : 'cursor-pointer'}
+            >
+              <LetterAvatar
+                firstName={assignedUser?.first_name}
+                username={assignedUser?.username || '?'}
+                userId={item.assignedTo}
+                hasProfileIcon={assignedUser?.has_profile_icon}
+                className="w-5 h-5"
+              />
+            </button>
+          ) : (
+            !isCompleted && (
+              <button
+                onClick={() => setShowAssigneePicker(true)}
+                className="w-5 h-5 rounded-full border border-dashed border-gray-300 dark:border-slate-600 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors opacity-0 group-hover/item:opacity-100"
+                title={t('note.assignItem')}
+                aria-label={t('note.assignItem')}
+              >
+                <UserPlusIcon className="h-3 w-3 text-gray-400 dark:text-gray-500" />
+              </button>
+            )
+          )}
+          {showAssigneePicker && (
+            <AssigneePicker
+              collaborators={collaborators}
+              currentAssigneeId={item.assignedTo}
+              onAssign={(userId) => onAssignItem(item.id, userId)}
+              onClose={() => setShowAssigneePicker(false)}
+            />
+          )}
+        </div>
+      )}
+
       <button
         onClick={() => onRemoveTodoItem(item.id)}
         className="p-1 text-gray-400 hover:text-gray-600"
@@ -217,11 +267,12 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
       setCheckedItemsCollapsed(note.checked_items_collapsed);
       setItems(
         note.items?.map((item, index) => ({
-          id: item.id || `existing_${item.position}_${index}`, // Use existing ID or generate fallback
+          id: item.id || `existing_${item.position}_${index}`,
           text: item.text,
           completed: item.completed,
           position: item.position,
           indentLevel: item.indent_level ?? 0,
+          assignedTo: item.assigned_to ?? '',
         })) || []
       );
       setNoteLabels(note.labels ?? []);
@@ -354,6 +405,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
       completed: false,
       position: uncompletedItems.length,
       indentLevel: 0,
+      assignedTo: '',
     };
     const newItems = [...items, newItem];
     setItems(newItems);
@@ -368,6 +420,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
       completed: false,
       position: 0,
       indentLevel: 0,
+      assignedTo: '',
     };
     const afterItemId = uncompletedItems[afterIndex]?.id;
     const afterItemPos = items.findIndex(item => item.id === afterItemId);
@@ -426,10 +479,11 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
           position: item.position,
           completed: item.completed,
           indent_level: item.indentLevel,
+          assigned_to: item.assignedTo,
         })),
       };
       await notes.update(note.id, updateData);
-      onRefresh?.(); // Refresh the notes list to reflect the changes
+      onRefresh?.();
     } catch (error) {
       console.error('Failed to auto-save note:', error);
       showError(t('note.failedSaveChanges'));
@@ -531,6 +585,19 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
     }
   };
 
+  const collaborators = useMemo<Collaborator[]>(() => {
+    if (!note?.is_shared) return [];
+    return buildCollaborators(note.user_id, note.shared_with, usersById);
+  }, [note?.is_shared, note?.user_id, note?.shared_with, usersById]);
+
+  const assignItem = async (itemId: string, userId: string) => {
+    const updatedItems = items.map(item =>
+      item.id === itemId ? { ...item, assignedTo: userId } : item,
+    );
+    setItems(updatedItems);
+    await autoSaveNote(updatedItems);
+  };
+
   const handleSave = async () => {
     if (savingRef.current) return;
     savingRef.current = true;
@@ -543,7 +610,6 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
     setLoading(true);
     try {
       if (note) {
-        // Update existing note
         const updateData: UpdateNoteRequest = {
           title,
           content,
@@ -556,11 +622,11 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
             position: idx,
             completed: item.completed,
             indent_level: item.indentLevel,
+            assigned_to: item.assignedTo,
           })) : undefined,
         };
         await notes.update(note.id, updateData);
       } else {
-        // Create new note
         const createData: CreateNoteRequest = {
           title,
           content,
@@ -599,6 +665,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
           position: idx,
           completed: item.completed,
           indent_level: item.indentLevel,
+          assigned_to: item.assignedTo,
         })) : undefined,
       };
       await notes.update(note.id, updateData);
@@ -629,6 +696,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
           position: idx,
           completed: item.completed,
           indent_level: item.indentLevel,
+          assigned_to: item.assignedTo,
         })) : undefined,
       };
       await notes.update(note.id, updateData);
@@ -663,10 +731,11 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
           position: idx,
           completed: item.completed,
           indent_level: item.indentLevel,
+          assigned_to: item.assignedTo,
         })) : undefined,
       };
       await notes.update(note.id, updateData);
-      onRefresh?.(); // Refresh the notes list to reflect the changes
+      onRefresh?.();
     } catch (error) {
       console.error('Failed to update collapse state:', error);
       // Revert the state on error
@@ -874,6 +943,10 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
                             if (el) itemInputRefs.current.set(item.id, el);
                             else itemInputRefs.current.delete(item.id);
                           }}
+                          isShared={note?.is_shared}
+                          collaborators={collaborators}
+                          usersById={usersById}
+                          onAssignItem={assignItem}
                         />
                       ))}
                     </SortableContext>
@@ -906,11 +979,15 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
                           <SortableItem
                             key={item.id}
                             id={item.id}
-                            index={index + uncompletedItems.length} // Adjust index for completed items
+                            index={index + uncompletedItems.length}
                             item={item}
                             onUpdateTodoItem={(idx, field, value) => updateTodoItem(idx, field, value)}
                             onRemoveTodoItem={removeTodoItem}
                             isCompleted={true}
+                            isShared={note?.is_shared}
+                            collaborators={collaborators}
+                            usersById={usersById}
+                            onAssignItem={assignItem}
                           />
                         ))}
                       </div>
