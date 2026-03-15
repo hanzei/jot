@@ -22,6 +22,9 @@ import { useSSESubscription } from '../store/SSEContext';
 import TodoItem from '../components/TodoItem';
 import ColorPicker from '../components/ColorPicker';
 import LabelPicker from '../components/LabelPicker';
+import AssigneePicker from '../components/AssigneePicker';
+import { buildCollaborators, Collaborator } from '../utils/collaborators';
+import { useAuth } from '../store/AuthContext';
 import { NoteType, NoteItem, UpdateNoteRequest, Label } from '../types';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 
@@ -38,6 +41,7 @@ interface LocalItem {
   completed: boolean;
   position: number;
   indent_level: number;
+  assigned_to: string;
 }
 
 function toLocalItems(serverItems: NoteItem[]): LocalItem[] {
@@ -49,6 +53,7 @@ function toLocalItems(serverItems: NoteItem[]): LocalItem[] {
       completed: item.completed,
       position: item.position,
       indent_level: item.indent_level,
+      assigned_to: item.assigned_to ?? '',
     }));
 }
 
@@ -58,6 +63,7 @@ function serializeItems(items: LocalItem[]) {
     position: i,
     completed: item.completed,
     indent_level: item.indent_level,
+    assigned_to: item.assigned_to,
   }));
 }
 
@@ -80,7 +86,10 @@ export default function NoteEditorScreen() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [colorPickerVisible, setColorPickerVisible] = useState(false);
   const [labelPickerVisible, setLabelPickerVisible] = useState(false);
+  const [assigneePickerVisible, setAssigneePickerVisible] = useState(false);
+  const [assigningItemId, setAssigningItemId] = useState<string | null>(null);
   const [syncToast, setSyncToast] = useState<string | null>(null);
+  const { user } = useAuth();
 
   const { data: existingNote } = useOfflineNote(noteId);
   const createMutation = useCreateNote();
@@ -313,6 +322,7 @@ export default function NoteEditorScreen() {
         completed: false,
         position: prev.length,
         indent_level: 0,
+        assigned_to: '',
       },
     ]);
     scheduleUpdate();
@@ -322,6 +332,33 @@ export default function NoteEditorScreen() {
     setCheckedItemsCollapsed((prev) => !prev);
     scheduleUpdate();
   }, [scheduleUpdate]);
+
+  const collaborators = useMemo<Collaborator[]>(() => {
+    if (!existingNote?.shared_with || existingNote.shared_with.length === 0) return [];
+    const ownerUsername = existingNote.is_shared
+      ? undefined
+      : user?.username;
+    return buildCollaborators(existingNote.user_id, existingNote.shared_with, ownerUsername);
+  }, [existingNote?.shared_with, existingNote?.user_id, existingNote?.is_shared, user?.username]);
+
+  const isNoteShared = useMemo(() => {
+    return (existingNote?.shared_with && existingNote.shared_with.length > 0) || existingNote?.is_shared;
+  }, [existingNote?.shared_with, existingNote?.is_shared]);
+
+  const handleAssignItem = useCallback(
+    (itemId: string, userId: string) => {
+      setItems((prev) =>
+        prev.map((item) => (item.id === itemId ? { ...item, assigned_to: userId } : item)),
+      );
+      scheduleUpdate();
+    },
+    [scheduleUpdate],
+  );
+
+  const openAssigneePicker = useCallback((itemId: string) => {
+    setAssigningItemId(itemId);
+    setAssigneePickerVisible(true);
+  }, []);
 
   const handleDelete = useCallback(() => {
     if (!noteId) {
@@ -442,17 +479,21 @@ export default function NoteEditorScreen() {
               completed={item.completed}
               indentLevel={item.indent_level}
               showDragHandle
+              assignedTo={item.assigned_to}
+              isShared={!!isNoteShared}
+              collaborators={collaborators}
               onDrag={drag}
               onToggle={() => handleToggleItem(originalIndex)}
               onChangeText={(text) => handleItemTextChange(originalIndex, text)}
               onDelete={() => handleDeleteItem(originalIndex)}
               onSubmitEditing={handleAddItem}
+              onAssignPress={() => openAssigneePicker(item.id)}
             />
           </View>
         </ScaleDecorator>
       );
     },
-    [handleToggleItem, handleItemTextChange, handleDeleteItem, handleAddItem],
+    [handleToggleItem, handleItemTextChange, handleDeleteItem, handleAddItem, isNoteShared, collaborators, openAssigneePicker],
   );
 
   const noteBackground = color && color !== '#ffffff' ? color : '#fff';
@@ -581,9 +622,13 @@ export default function NoteEditorScreen() {
                         text={item.text}
                         completed={item.completed}
                         indentLevel={item.indent_level}
+                        assignedTo={item.assigned_to}
+                        isShared={!!isNoteShared}
+                        collaborators={collaborators}
                         onToggle={() => handleToggleItem(originalIndex)}
                         onChangeText={(text) => handleItemTextChange(originalIndex, text)}
                         onDelete={() => handleDeleteItem(originalIndex)}
+                        onAssignPress={() => openAssigneePicker(item.id)}
                       />
                     );
                   })}
@@ -677,6 +722,25 @@ export default function NoteEditorScreen() {
           onClose={() => setLabelPickerVisible(false)}
         />
       )}
+
+      <AssigneePicker
+        visible={assigneePickerVisible}
+        collaborators={collaborators}
+        currentAssigneeId={
+          assigningItemId
+            ? items.find((i) => i.id === assigningItemId)?.assigned_to ?? ''
+            : ''
+        }
+        onAssign={(userId) => {
+          if (assigningItemId) {
+            handleAssignItem(assigningItemId, userId);
+          }
+        }}
+        onClose={() => {
+          setAssigneePickerVisible(false);
+          setAssigningItemId(null);
+        }}
+      />
     </KeyboardAvoidingView>
   );
 }

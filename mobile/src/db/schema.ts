@@ -31,6 +31,7 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
       completed INTEGER NOT NULL DEFAULT 0,
       position INTEGER NOT NULL DEFAULT 0,
       indent_level INTEGER NOT NULL DEFAULT 0,
+      assigned_to TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL DEFAULT '',
       updated_at TEXT NOT NULL DEFAULT '',
       FOREIGN KEY (note_id) REFERENCES notes(id) ON DELETE CASCADE
@@ -52,9 +53,9 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
     );
   `);
 
-  // Add created_at / updated_at to note_items for existing databases that pre-date this column.
+  // Add columns to note_items for existing databases that pre-date them.
   // SQLite throws if the column already exists, so we ignore that specific error.
-  for (const col of ['created_at', 'updated_at']) {
+  for (const col of ['created_at', 'updated_at', 'assigned_to']) {
     try {
       await db.runAsync(`ALTER TABLE note_items ADD COLUMN ${col} TEXT NOT NULL DEFAULT ''`);
     } catch {

@@ -38,7 +38,7 @@ function ShareAvatars({ shares }: { shares: NoteShare[] }) {
   );
 }
 
-function TodoPreview({ items }: { items: NoteItem[] }) {
+function TodoPreview({ items, sharedWith }: { items: NoteItem[]; sharedWith?: NoteShare[] }) {
   const uncompleted: NoteItem[] = [];
   let completedCount = 0;
   for (const item of items) {
@@ -51,14 +51,27 @@ function TodoPreview({ items }: { items: NoteItem[] }) {
 
   return (
     <View style={styles.todoPreview}>
-      {uncompleted.map((item) => (
-        <View key={item.id} style={styles.todoRow}>
-          <Ionicons name="square-outline" size={14} color="#999" />
-          <Text style={styles.todoText} numberOfLines={1}>
-            {item.text}
-          </Text>
-        </View>
-      ))}
+      {uncompleted.map((item) => {
+        const assignedShare = item.assigned_to
+          ? sharedWith?.find((s) => s.shared_with_user_id === item.assigned_to)
+          : undefined;
+        return (
+          <View key={item.id} style={styles.todoRow}>
+            <Ionicons name="square-outline" size={14} color="#999" />
+            <Text style={styles.todoText} numberOfLines={1}>
+              {item.text}
+            </Text>
+            {item.assigned_to ? (
+              <UserAvatar
+                userId={item.assigned_to}
+                username={assignedShare?.username ?? '?'}
+                hasProfileIcon={assignedShare?.has_profile_icon}
+                size="small"
+              />
+            ) : null}
+          </View>
+        );
+      })}
       {completedCount > 0 && (
         <Text style={styles.completedCount}>+{completedCount} checked</Text>
       )}
@@ -107,7 +120,7 @@ function NoteCard({ note, onPress, onLongPress, onMenuPress }: NoteCardProps) {
       ) : null}
 
       {note.note_type === 'todo' && note.items && note.items.length > 0 ? (
-        <TodoPreview items={note.items} />
+        <TodoPreview items={note.items} sharedWith={note.shared_with} />
       ) : null}
 
       <View style={styles.footer}>

@@ -1,6 +1,8 @@
 import React from 'react';
 import { View, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import UserAvatar from './UserAvatar';
+import type { Collaborator } from '../utils/collaborators';
 
 interface TodoItemProps {
   text: string;
@@ -8,11 +10,15 @@ interface TodoItemProps {
   indentLevel?: number;
   editable?: boolean;
   showDragHandle?: boolean;
+  assignedTo?: string;
+  isShared?: boolean;
+  collaborators?: Collaborator[];
   onDrag?: () => void;
   onToggle?: () => void;
   onChangeText?: (text: string) => void;
   onDelete?: () => void;
   onSubmitEditing?: () => void;
+  onAssignPress?: () => void;
 }
 
 function TodoItem({
@@ -21,12 +27,19 @@ function TodoItem({
   indentLevel = 0,
   editable = true,
   showDragHandle = false,
+  assignedTo,
+  isShared,
+  collaborators,
   onDrag,
   onToggle,
   onChangeText,
   onDelete,
   onSubmitEditing,
+  onAssignPress,
 }: TodoItemProps) {
+  const showAssignUI = isShared && collaborators && collaborators.length > 0 && onAssignPress;
+  const assignedUser = assignedTo ? collaborators?.find((c) => c.userId === assignedTo) : undefined;
+
   return (
     <View style={[styles.container, { marginLeft: indentLevel * 24 }]}>
       {showDragHandle && onDrag && (
@@ -64,6 +77,36 @@ function TodoItem({
         blurOnSubmit={false}
         testID="todo-item-text"
       />
+      {showAssignUI && (
+        assignedTo ? (
+          <TouchableOpacity
+            onPress={!completed ? onAssignPress : undefined}
+            style={styles.assignBtn}
+            testID="todo-item-assignee"
+            accessibilityLabel={`Assigned to ${assignedUser?.username ?? 'user'}`}
+          >
+            <UserAvatar
+              userId={assignedTo}
+              username={assignedUser?.username ?? '?'}
+              hasProfileIcon={assignedUser?.hasProfileIcon}
+              size="small"
+            />
+          </TouchableOpacity>
+        ) : (
+          !completed && (
+            <TouchableOpacity
+              onPress={onAssignPress}
+              style={styles.assignBtn}
+              testID="todo-item-assign"
+              accessibilityLabel="Assign item"
+            >
+              <View style={styles.assignPlaceholder}>
+                <Ionicons name="person-add-outline" size={12} color="#999" />
+              </View>
+            </TouchableOpacity>
+          )
+        )
+      )}
       {editable && onDelete && (
         <TouchableOpacity onPress={onDelete} style={styles.deleteBtn} testID="todo-item-delete">
           <Ionicons name="close" size={18} color="#999" />
@@ -101,6 +144,20 @@ const styles = StyleSheet.create({
   deleteBtn: {
     padding: 4,
     marginLeft: 4,
+  },
+  assignBtn: {
+    padding: 4,
+    marginLeft: 4,
+  },
+  assignPlaceholder: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    borderColor: '#ccc',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
 
