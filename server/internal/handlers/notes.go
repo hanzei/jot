@@ -288,7 +288,10 @@ func (h *NotesHandler) validateAndUpdateTodoItems(noteID string, userID string, 
 		}
 	}
 
-	return 0, h.updateTodoItems(noteID, userID, items)
+	if err := h.updateTodoItems(noteID, userID, items); err != nil {
+		return http.StatusInternalServerError, err
+	}
+	return 0, nil
 }
 
 func (h *NotesHandler) validateItemAssignments(noteID string, items []UpdateNoteItem) (int, error) {
