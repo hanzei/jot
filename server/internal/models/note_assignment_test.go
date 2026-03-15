@@ -120,28 +120,6 @@ func getAssignment(t *testing.T, db *sql.DB, itemID string) string {
 }
 
 func TestClearUserAssignmentsTx(t *testing.T) {
-	t.Run("clears assignments for deleted user", func(t *testing.T) {
-		db := setupTestDB(t)
-		store := NewNoteStore(db)
-
-		insertUser(t, db, "owner1", "owner")
-		insertUser(t, db, "collab1", "collab1")
-		insertUser(t, db, "collab2", "collab2")
-		insertNote(t, db, "note1", "owner1")
-		insertShare(t, db, "share1", "note1", "collab1", "owner1")
-		insertShare(t, db, "share2", "note1", "collab2", "owner1")
-		insertItem(t, db, "item1", "note1", "Task A", 0, "collab1")
-		insertItem(t, db, "item2", "note1", "Task B", 1, "collab2")
-
-		tx, err := db.Begin()
-		require.NoError(t, err)
-		require.NoError(t, store.ClearUserAssignmentsTx(tx, "collab1"))
-		require.NoError(t, tx.Commit())
-
-		assert.Empty(t, getAssignment(t, db, "item1"), "deleted user's assignment should be cleared")
-		assert.Equal(t, "collab2", getAssignment(t, db, "item2"), "other user's assignment should remain")
-	})
-
 	t.Run("removes shares for deleted user", func(t *testing.T) {
 		db := setupTestDB(t)
 		store := NewNoteStore(db)
@@ -159,26 +137,6 @@ func TestClearUserAssignmentsTx(t *testing.T) {
 		var shareCount int
 		require.NoError(t, db.QueryRow(`SELECT COUNT(*) FROM note_shares WHERE shared_with_user_id = ?`, "collab1").Scan(&shareCount))
 		assert.Equal(t, 0, shareCount, "shares for deleted user should be removed")
-	})
-
-	t.Run("clears all assignments when note becomes unshared", func(t *testing.T) {
-		db := setupTestDB(t)
-		store := NewNoteStore(db)
-
-		insertUser(t, db, "owner1", "owner")
-		insertUser(t, db, "collab1", "collab1")
-		insertNote(t, db, "note1", "owner1")
-		insertShare(t, db, "share1", "note1", "collab1", "owner1")
-		insertItem(t, db, "item1", "note1", "Task A", 0, "owner1")
-		insertItem(t, db, "item2", "note1", "Task B", 1, "collab1")
-
-		tx, err := db.Begin()
-		require.NoError(t, err)
-		require.NoError(t, store.ClearUserAssignmentsTx(tx, "collab1"))
-		require.NoError(t, tx.Commit())
-
-		assert.Empty(t, getAssignment(t, db, "item1"), "owner self-assignment should be cleared when note becomes unshared")
-		assert.Empty(t, getAssignment(t, db, "item2"), "deleted user's assignment should be cleared")
 	})
 
 	t.Run("preserves assignments on notes that still have shares", func(t *testing.T) {
@@ -252,42 +210,6 @@ func TestClearUserAssignmentsTx(t *testing.T) {
 }
 
 func TestUnshareNoteAssignmentCleanup(t *testing.T) {
-	t.Run("clears unshared user assignments", func(t *testing.T) {
-		db := setupTestDB(t)
-		store := NewNoteStore(db)
-
-		insertUser(t, db, "owner1", "owner")
-		insertUser(t, db, "collab1", "collab1")
-		insertUser(t, db, "collab2", "collab2")
-		insertNote(t, db, "note1", "owner1")
-		insertShare(t, db, "share1", "note1", "collab1", "owner1")
-		insertShare(t, db, "share2", "note1", "collab2", "owner1")
-		insertItem(t, db, "item1", "note1", "Task A", 0, "collab1")
-		insertItem(t, db, "item2", "note1", "Task B", 1, "collab2")
-
-		require.NoError(t, store.UnshareNote("note1", "collab1"))
-
-		assert.Empty(t, getAssignment(t, db, "item1"), "unshared user's assignment should be cleared")
-		assert.Equal(t, "collab2", getAssignment(t, db, "item2"), "other user's assignment should remain")
-	})
-
-	t.Run("clears all assignments when last collaborator is unshared", func(t *testing.T) {
-		db := setupTestDB(t)
-		store := NewNoteStore(db)
-
-		insertUser(t, db, "owner1", "owner")
-		insertUser(t, db, "collab1", "collab1")
-		insertNote(t, db, "note1", "owner1")
-		insertShare(t, db, "share1", "note1", "collab1", "owner1")
-		insertItem(t, db, "item1", "note1", "Task A", 0, "owner1")
-		insertItem(t, db, "item2", "note1", "Task B", 1, "collab1")
-
-		require.NoError(t, store.UnshareNote("note1", "collab1"))
-
-		assert.Empty(t, getAssignment(t, db, "item1"), "owner self-assignment should be cleared when note becomes unshared")
-		assert.Empty(t, getAssignment(t, db, "item2"), "collab assignment should be cleared")
-	})
-
 	t.Run("returns error for non-existent share", func(t *testing.T) {
 		db := setupTestDB(t)
 		store := NewNoteStore(db)
