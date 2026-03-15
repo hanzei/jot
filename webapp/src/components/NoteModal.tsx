@@ -882,7 +882,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
               <span>{errorMessage}</span>
               <button
                 onClick={() => setErrorMessage(null)}
-                className="ml-2 text-red-500 hover:text-red-700"
+                className="ml-2 text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
               >
                 ×
               </button>
@@ -1105,7 +1105,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
             )}
             <div className="flex items-center ml-auto">
               {loading && (
-                <div className="flex items-center space-x-2 text-sm text-gray-600">
+                <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300">
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600"></div>
                   <span>{t('note.saving')}</span>
                 </div>
