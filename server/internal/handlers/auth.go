@@ -187,6 +187,42 @@ type UpdateUserRequest struct {
 	Theme     *string `json:"theme,omitempty"`
 }
 
+var validLanguages = map[string]bool{"system": true, "en": true, "de": true}
+var validThemes = map[string]bool{"system": true, "light": true, "dark": true}
+
+// applySettingsUpdate validates and persists language/theme changes.
+// If neither field is set the current settings are returned unchanged.
+func (h *AuthHandler) applySettingsUpdate(userID string, current *models.UserSettings, language, theme *string) (*models.UserSettings, int, error) {
+	if language == nil && theme == nil {
+		return current, 0, nil
+	}
+
+	lang := current.Language
+	if language != nil {
+		lang = *language
+	}
+	if !validLanguages[lang] {
+		return nil, http.StatusBadRequest, errors.New("invalid language: must be 'system', 'en', or 'de'")
+	}
+
+	th := current.Theme
+	if theme != nil {
+		th = *theme
+	}
+	if th == "" {
+		th = "system"
+	}
+	if !validThemes[th] {
+		return nil, http.StatusBadRequest, errors.New("invalid theme: must be 'system', 'light', or 'dark'")
+	}
+
+	updated, err := h.userSettingsStore.Update(userID, lang, th)
+	if err != nil {
+		return nil, http.StatusInternalServerError, err
+	}
+	return updated, 0, nil
+}
+
 // UpdateUser godoc
 //
 //	@Summary	Update the current user's profile and/or settings
@@ -241,30 +277,9 @@ func (h *AuthHandler) UpdateUser(w http.ResponseWriter, r *http.Request) (int, e
 		return http.StatusInternalServerError, err
 	}
 
-	if req.Language != nil || req.Theme != nil {
-		language := settings.Language
-		if req.Language != nil {
-			language = *req.Language
-		}
-		if !validLanguages[language] {
-			return http.StatusBadRequest, errors.New("invalid language: must be 'system', 'en', or 'de'")
-		}
-
-		theme := settings.Theme
-		if req.Theme != nil {
-			theme = *req.Theme
-		}
-		if theme == "" {
-			theme = "system"
-		}
-		if !validThemes[theme] {
-			return http.StatusBadRequest, errors.New("invalid theme: must be 'system', 'light', or 'dark'")
-		}
-
-		settings, err = h.userSettingsStore.Update(currentUser.ID, language, theme)
-		if err != nil {
-			return http.StatusInternalServerError, err
-		}
+	settings, status, settingsErr := h.applySettingsUpdate(currentUser.ID, settings, req.Language, req.Theme)
+	if settingsErr != nil {
+		return status, settingsErr
 	}
 
 	response := AuthResponse{User: user, Settings: settings}

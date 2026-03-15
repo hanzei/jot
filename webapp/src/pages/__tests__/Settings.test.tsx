@@ -200,9 +200,10 @@ describe('Settings', () => {
     it('clears previous error/success messages on a new submission', async () => {
       const user = userEvent.setup()
       vi.mocked(isAxiosError).mockReturnValue(false)
+      const mockSettings = { user_id: 'user1', language: 'system', theme: 'system' as const, updated_at: '' }
       vi.mocked(users.updateMe)
         .mockRejectedValueOnce(new Error('first failure'))
-        .mockResolvedValueOnce(mockUser)
+        .mockResolvedValueOnce({ user: mockUser, settings: mockSettings })
 
       renderSettings()
 
