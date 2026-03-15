@@ -432,15 +432,30 @@ Completed items retain their assigned avatar (dimmed like the rest of the row) b
 
 ---
 
-### 3.4 Mobile Considerations (Future)
+### 3.4 Mobile / Narrow-Screen Considerations (Future)
 
-On mobile, the hover pattern doesn't apply. Instead:
+The mobile item row is already dense: drag handle, checkbox, text input, and delete button fill the full width edge-to-edge (see reference screenshot below). The hover-based `[+]` pattern does not apply on touch devices.
 
-- Always show the avatar (or a small "assign" icon) for shared notes.
-- Tap to open a bottom sheet with the collaborator list.
-- Swipe actions could also include "Assign".
+**Reference — current mobile layout:**
 
-This is out of scope for V1 but the API design supports it.
+```
+┌──────────────────────────────────────┐
+│  ⠿  ☐  Brot                     🗑  │   ← full-width, no room for hover targets
+│  ⠿  ☐  und                      🗑  │
+│  ⠿  ☐  was Anderes              🗑  │
+│  + Element hinzufügen                │
+│  [Besorgungen] [+]                   │
+└──────────────────────────────────────┘
+```
+
+**Recommended mobile adaptations:**
+
+- **Assigned items:** Always show a small (18px) avatar between the text and delete button. The text input shrinks slightly to accommodate it.
+- **Unassigned items:** No visible assign button in the default state (keeps rows clean). Instead, use a **long-press context menu** on the item row with an "Assign" action, or place a small person-plus icon that is always visible but unobtrusive.
+- **Assignee picker:** Use a **bottom sheet** (not a popover) listing collaborators, consistent with mobile OS conventions.
+- **Alternative:** A swipe-to-reveal action (swipe left reveals "Assign" button) avoids adding any visible elements to the row.
+
+These are out of scope for V1 but the API and data model are designed to support them without changes.
 
 ---
 
