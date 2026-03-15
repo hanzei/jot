@@ -600,6 +600,9 @@ func (s *NoteStore) CreateItem(noteID string, text string, position, indentLevel
 	return &item, nil
 }
 
+// UpdateItem updates basic item fields. It does not modify assigned_to_user_id because
+// the canonical update path (updateTodoItems) deletes all items and recreates them via
+// CreateItemWithCompleted, which handles assignments.
 func (s *NoteStore) UpdateItem(id string, text string, completed bool, position, indentLevel int) error {
 	query := `UPDATE note_items SET text = ?, completed = ?, position = ?, indent_level = ?, updated_at = CURRENT_TIMESTAMP
 			  WHERE id = ?`
@@ -659,7 +662,7 @@ func (s *NoteStore) CreateItemWithCompleted(noteID string, text string, position
 // ClearAssignmentsForUser removes all item assignments for a specific user within a note.
 func (s *NoteStore) ClearAssignmentsForUser(noteID, userID string) error {
 	_, err := s.db.Exec(
-		`UPDATE note_items SET assigned_to_user_id = ''
+		`UPDATE note_items SET assigned_to_user_id = '', updated_at = CURRENT_TIMESTAMP
 		 WHERE note_id = ? AND assigned_to_user_id = ?`,
 		noteID, userID,
 	)
@@ -672,26 +675,12 @@ func (s *NoteStore) ClearAssignmentsForUser(noteID, userID string) error {
 // ClearAllAssignments removes all item assignments within a note.
 func (s *NoteStore) ClearAllAssignments(noteID string) error {
 	_, err := s.db.Exec(
-		`UPDATE note_items SET assigned_to_user_id = ''
+		`UPDATE note_items SET assigned_to_user_id = '', updated_at = CURRENT_TIMESTAMP
 		 WHERE note_id = ? AND assigned_to_user_id != ''`,
 		noteID,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to clear all assignments: %w", err)
-	}
-	return nil
-}
-
-// ClearAllAssignmentsByUserID removes all item assignments for a user across all notes.
-// Used when a user account is deleted.
-func (s *NoteStore) ClearAllAssignmentsByUserID(userID string) error {
-	_, err := s.db.Exec(
-		`UPDATE note_items SET assigned_to_user_id = ''
-		 WHERE assigned_to_user_id = ?`,
-		userID,
-	)
-	if err != nil {
-		return fmt.Errorf("failed to clear all assignments by user: %w", err)
 	}
 	return nil
 }

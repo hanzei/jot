@@ -300,8 +300,12 @@ func (h *NotesHandler) validateItemAssignments(noteID string, items []UpdateNote
 		return http.StatusBadRequest, errors.New("assignments are not allowed on unshared notes")
 	}
 
+	validated := make(map[string]struct{})
 	for _, item := range items {
 		if item.AssignedToUserID == "" {
+			continue
+		}
+		if _, ok := validated[item.AssignedToUserID]; ok {
 			continue
 		}
 		if !models.IsValidID(item.AssignedToUserID) {
@@ -320,6 +324,7 @@ func (h *NotesHandler) validateItemAssignments(noteID string, items []UpdateNote
 		if !hasAccess {
 			return http.StatusBadRequest, fmt.Errorf("assigned user %q does not have access to this note", item.AssignedToUserID)
 		}
+		validated[item.AssignedToUserID] = struct{}{}
 	}
 	return 0, nil
 }
