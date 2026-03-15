@@ -27,6 +27,8 @@ type UserInfo struct {
 	HasProfileIcon bool   `json:"has_profile_icon"`
 }
 
+const queryTrue = "true"
+
 type NotesHandler struct {
 	noteStore *models.NoteStore
 	userStore *models.UserStore
@@ -146,11 +148,12 @@ func (h *NotesHandler) GetNotes(w http.ResponseWriter, r *http.Request) (int, er
 		return http.StatusUnauthorized, errors.New("unauthorized")
 	}
 
-	trashed := r.URL.Query().Get("trashed") == "true"
-	archived := r.URL.Query().Get("archived") == "true"
-	search := r.URL.Query().Get("search")
-	labelID := r.URL.Query().Get("label")
-	myTodo := r.URL.Query().Get("my_todo") == "true"
+	q := r.URL.Query()
+	trashed := q.Get("trashed") == queryTrue
+	archived := q.Get("archived") == queryTrue
+	search := q.Get("search")
+	labelID := q.Get("label")
+	myTodo := q.Get("my_todo") == queryTrue
 
 	notes, err := h.noteStore.GetByUserID(user.ID, archived, trashed, search, labelID, myTodo)
 	if err != nil {
