@@ -46,30 +46,35 @@ Shared to-do notes currently let multiple people see and edit items, but there i
 #### Migration `014_add_item_assignment.sql`
 
 ```sql
-ALTER TABLE note_items ADD COLUMN assigned_to_user_id TEXT DEFAULT NULL
-    REFERENCES users(id) ON DELETE SET NULL;
+ALTER TABLE note_items ADD COLUMN assigned_to_user_id TEXT NOT NULL DEFAULT '';
 
 CREATE INDEX idx_note_items_assigned_to ON note_items(assigned_to_user_id);
 ```
 
 **Rationale:**
 
-- A nullable FK column on `note_items` is the simplest change. `ON DELETE SET NULL` means if a user account is deleted, assignments become unassigned rather than cascading item deletion.
+- A `TEXT NOT NULL DEFAULT ''` column on `note_items` keeps things simple: an empty string means "unassigned", a valid user ID means "assigned". No nullable pointers needed in Go or TypeScript.
 - A junction table (`note_item_assignments`) was considered for multi-assign but rejected for V1 — single assignment covers the typical use case. Upgrading to a junction table later is straightforward.
 - An index on `assigned_to_user_id` supports a future "assigned to me" query efficiently.
+- Because the column is `NOT NULL DEFAULT ''` (not a FK), there is no `ON DELETE SET NULL` cascade. When a user account is deleted, the application must clear stale assignments explicitly (see "Clearing assignments on unshare/delete" below).
 
-**Prerequisite:** SQLite foreign key enforcement must be enabled (`PRAGMA foreign_keys = ON`) for `ON DELETE SET NULL` to take effect. Verify the database bootstrap enables this pragma; if not, add it to `internal/database` initialization.
-
-#### Clearing assignments on unshare
+#### Clearing assignments on unshare / user deletion
 
 When a user is unshared from a note, all their item assignments within that note must be cleared:
 
 ```sql
-UPDATE note_items SET assigned_to_user_id = NULL
+UPDATE note_items SET assigned_to_user_id = ''
 WHERE note_id = ? AND assigned_to_user_id = ?;
 ```
 
-This query runs inside `NoteStore.UnshareNote` or as a follow-up call from the handler, within the same request.
+When a user account is deleted, all their assignments across all notes must be cleared:
+
+```sql
+UPDATE note_items SET assigned_to_user_id = ''
+WHERE assigned_to_user_id = ?;
+```
+
+These queries run inside `NoteStore.UnshareNote` / user deletion handler or as follow-up calls from the respective handlers.
 
 ---
 
@@ -85,14 +90,14 @@ type NoteItem struct {
     Completed        bool      `json:"completed"`
     Position         int       `json:"position"`
     IndentLevel      int       `json:"indent_level"`
-    AssignedToUserID *string   `json:"assigned_to_user_id"`
+    AssignedToUserID string    `json:"assigned_to_user_id"`
     CreatedAt        time.Time `json:"created_at"`
     UpdatedAt        time.Time `json:"updated_at"`
 }
 ```
 
-- `AssignedToUserID` is a `*string` (nullable) — `nil` means unassigned.
-- JSON serializes to `"assigned_to_user_id": null` or `"assigned_to_user_id": "abc..."`.
+- `AssignedToUserID` is a plain `string` — `""` (empty string) means unassigned.
+- JSON serializes to `"assigned_to_user_id": ""` or `"assigned_to_user_id": "abc..."`.
 
 #### Enriched assignment info (response only)
 
@@ -103,10 +108,10 @@ To avoid N+1 queries on the client, the API should return basic assignee info al
 ```go
 type NoteItem struct {
     // ... existing fields ...
-    AssignedToUserID *string `json:"assigned_to_user_id"`
-    AssignedUsername  string  `json:"assigned_username,omitempty"`
-    AssignedFirstName string `json:"assigned_first_name,omitempty"`
-    AssignedHasIcon   bool   `json:"assigned_has_profile_icon,omitempty"`
+    AssignedToUserID  string `json:"assigned_to_user_id"`
+    AssignedUsername   string `json:"assigned_username,omitempty"`
+    AssignedFirstName  string `json:"assigned_first_name,omitempty"`
+    AssignedHasIcon    bool   `json:"assigned_has_profile_icon,omitempty"`
 }
 ```
 
@@ -115,16 +120,17 @@ Populated via a LEFT JOIN when fetching items:
 ```sql
 SELECT ni.id, ni.note_id, ni.text, ni.completed, ni.position,
        ni.indent_level, ni.assigned_to_user_id,
-       u.username, u.first_name,
-       u.profile_icon IS NOT NULL AS has_profile_icon,
+       COALESCE(u.username, ''), COALESCE(u.first_name, ''),
+       COALESCE(u.profile_icon IS NOT NULL, FALSE) AS has_profile_icon,
        ni.created_at, ni.updated_at
 FROM note_items ni
 LEFT JOIN users u ON ni.assigned_to_user_id = u.id
+  AND ni.assigned_to_user_id != ''
 WHERE ni.note_id = ?
 ORDER BY ni.position;
 ```
 
-**Go scanning note:** When `assigned_to_user_id` is NULL, the joined user columns are also NULL. Use `sql.NullString` / `sql.NullBool` for scanning, then map to the struct's string/bool fields (empty string and `false` for NULL rows). This matches how other nullable fields (e.g., `UnpinnedPosition`) are already handled in the codebase.
+**Go scanning note:** The `COALESCE` wrappers ensure the joined columns are never SQL NULL, so they scan directly into plain `string` / `bool` fields — no `sql.NullString` needed. The `AND ni.assigned_to_user_id != ''` clause skips the join for unassigned items.
 
 **Option B — Separate map on the note response:**
 
@@ -145,24 +151,24 @@ Option A is recommended because it keeps the data co-located with the item it be
 
 ```go
 type CreateNoteItem struct {
-    Text             string  `json:"text"`
-    Position         int     `json:"position"`
-    IndentLevel      int     `json:"indent_level"`
-    AssignedToUserID *string `json:"assigned_to_user_id,omitempty"`
+    Text             string `json:"text"`
+    Position         int    `json:"position"`
+    IndentLevel      int    `json:"indent_level"`
+    AssignedToUserID string `json:"assigned_to_user_id"`
 }
 
 type UpdateNoteItem struct {
-    Text             string  `json:"text"`
-    Position         int     `json:"position"`
-    Completed        bool    `json:"completed"`
-    IndentLevel      int     `json:"indent_level"`
-    AssignedToUserID *string `json:"assigned_to_user_id,omitempty"`
+    Text             string `json:"text"`
+    Position         int    `json:"position"`
+    Completed        bool   `json:"completed"`
+    IndentLevel      int    `json:"indent_level"`
+    AssignedToUserID string `json:"assigned_to_user_id"`
 }
 ```
 
 #### Validation (in handler)
 
-When `assigned_to_user_id` is non-nil:
+When `assigned_to_user_id` is non-empty:
 
 1. Verify the user ID format is valid (`IsValidID`).
 2. Verify the user exists.
@@ -174,7 +180,7 @@ If validation fails, return `400 Bad Request` with a descriptive message.
 
 **`CreateItem` and `CreateItemWithCompleted`:**
 
-Add `assignedToUserID *string` parameter. The INSERT query adds the column:
+Add `assignedToUserID string` parameter. The INSERT query adds the column:
 
 ```sql
 INSERT INTO note_items (id, note_id, text, position, completed, indent_level, assigned_to_user_id)
@@ -190,7 +196,7 @@ Extend the SELECT with a LEFT JOIN on `users` (as shown above) and scan the new 
 ```go
 func (s *NoteStore) ClearAssignmentsForUser(noteID, userID string) error {
     _, err := s.db.Exec(
-        `UPDATE note_items SET assigned_to_user_id = NULL
+        `UPDATE note_items SET assigned_to_user_id = ''
          WHERE note_id = ? AND assigned_to_user_id = ?`,
         noteID, userID,
     )
@@ -208,7 +214,7 @@ No new endpoints. Assignments flow through the existing note create/update paylo
 
 #### Create note (POST `/api/v1/notes`)
 
-Request body items gain an optional field:
+Request body items gain a field (empty string = unassigned):
 
 ```json
 {
@@ -216,7 +222,7 @@ Request body items gain an optional field:
   "note_type": "todo",
   "items": [
     { "text": "Milk", "position": 0, "indent_level": 0, "assigned_to_user_id": "abc123..." },
-    { "text": "Eggs", "position": 1, "indent_level": 0 }
+    { "text": "Eggs", "position": 1, "indent_level": 0, "assigned_to_user_id": "" }
   ]
 }
 ```
@@ -261,7 +267,7 @@ No new event types. The existing `note_updated` event carries the full note payl
 | Scenario | Behavior |
 |----------|----------|
 | Assigned user is unshared from note | Assignments cleared (see `ClearAssignmentsForUser`); next `note_updated` SSE event reflects the change |
-| Assigned user account is deleted | `ON DELETE SET NULL` clears the FK (requires `PRAGMA foreign_keys = ON`) |
+| Assigned user account is deleted | Application clears assignments (`SET assigned_to_user_id = ''`) in the user deletion handler |
 | Item is completed | Assignment preserved (shows who completed it) |
 | Item is uncompleted | Assignment preserved |
 | Note is moved to trash | No change to assignments (they persist) |
