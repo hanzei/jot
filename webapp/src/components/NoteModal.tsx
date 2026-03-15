@@ -145,70 +145,72 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
         onChange={(e) => onUpdateTodoItem(index, 'completed', e.target.checked)}
         className="h-4 w-4 text-blue-600 rounded"
       />
-      <input
-        type="text"
-        placeholder={t('note.itemPlaceholder')}
-        className={`flex-1 p-1 bg-transparent border-none outline-none placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white ${
-          isCompleted ? 'line-through text-gray-500 dark:text-gray-400' : ''
-        }`}
-        value={item.text}
-        onChange={(e) => onUpdateTodoItem(index, 'text', e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Tab' && onIndentChange && !isCompleted) {
-            e.preventDefault();
-            onIndentChange(item.id, e.shiftKey ? -1 : 1);
-            return;
-          }
-          if (onKeyDown) onKeyDown(index, e);
-        }}
-        ref={inputRef}
-      />
+      <div className="flex-1 flex items-center gap-1 min-w-0">
+        <input
+          type="text"
+          placeholder={t('note.itemPlaceholder')}
+          className={`field-sizing-content min-w-24 p-1 bg-transparent border-none outline-none placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white ${
+            isCompleted ? 'line-through text-gray-500 dark:text-gray-400' : ''
+          }`}
+          value={item.text}
+          onChange={(e) => onUpdateTodoItem(index, 'text', e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Tab' && onIndentChange && !isCompleted) {
+              e.preventDefault();
+              onIndentChange(item.id, e.shiftKey ? -1 : 1);
+              return;
+            }
+            if (onKeyDown) onKeyDown(index, e);
+          }}
+          ref={inputRef}
+        />
 
-      {showAssignUI && (() => {
-        const assigneeDisplayName = assignedUser
-          ? [assignedUser.first_name, assignedUser.last_name].filter(Boolean).join(' ') || assignedUser.username
-          : '?';
-        return (
-        <div className="relative flex-shrink-0">
-          {item.assignedTo ? (
-            <button
-              onClick={() => setShowAssigneePicker(true)}
-              title={t('note.assignedTo', { name: assigneeDisplayName })}
-              aria-label={t('note.assignedTo', { name: assigneeDisplayName })}
-              className={`rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-800 ${isCompleted ? 'cursor-default' : 'cursor-pointer'}`}
-              disabled={isCompleted}
-            >
-              <LetterAvatar
-                firstName={assignedUser?.first_name}
-                username={assignedUser?.username || '?'}
-                userId={item.assignedTo}
-                hasProfileIcon={assignedUser?.has_profile_icon}
-                className="w-5 h-5"
-              />
-            </button>
-          ) : (
-            !isCompleted && (
+        {showAssignUI && (() => {
+          const assigneeDisplayName = assignedUser
+            ? [assignedUser.first_name, assignedUser.last_name].filter(Boolean).join(' ') || assignedUser.username
+            : '?';
+          return (
+          <div className="relative flex-shrink-0">
+            {item.assignedTo ? (
               <button
                 onClick={() => setShowAssigneePicker(true)}
-                className="w-5 h-5 rounded-full border border-dashed border-gray-300 dark:border-slate-600 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors opacity-0 group-hover/item:opacity-100 focus:opacity-100 focus-visible:ring-2 focus-visible:ring-blue-500 touch-visible"
-                title={t('note.assignItem')}
-                aria-label={t('note.assignItem')}
+                title={t('note.assignedTo', { name: assigneeDisplayName })}
+                aria-label={t('note.assignedTo', { name: assigneeDisplayName })}
+                className={`rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-800 ${isCompleted ? 'cursor-default' : 'cursor-pointer'}`}
+                disabled={isCompleted}
               >
-                <UserPlusIcon className="h-3 w-3 text-gray-400 dark:text-gray-500" aria-hidden="true" />
+                <LetterAvatar
+                  firstName={assignedUser?.first_name}
+                  username={assignedUser?.username || '?'}
+                  userId={item.assignedTo}
+                  hasProfileIcon={assignedUser?.has_profile_icon}
+                  className="w-5 h-5"
+                />
               </button>
-            )
-          )}
-          {showAssigneePicker && (
-            <AssigneePicker
-              collaborators={collaborators}
-              currentAssigneeId={item.assignedTo}
-              onAssign={(userId) => onAssignItem(item.id, userId)}
-              onClose={closeAssigneePicker}
-            />
-          )}
-        </div>
-        );
-      })()}
+            ) : (
+              !isCompleted && (
+                <button
+                  onClick={() => setShowAssigneePicker(true)}
+                  className="w-5 h-5 rounded-full border border-dashed border-gray-300 dark:border-slate-600 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors opacity-0 group-hover/item:opacity-100 focus:opacity-100 focus-visible:ring-2 focus-visible:ring-blue-500 touch-visible"
+                  title={t('note.assignItem')}
+                  aria-label={t('note.assignItem')}
+                >
+                  <UserPlusIcon className="h-3 w-3 text-gray-400 dark:text-gray-500" aria-hidden="true" />
+                </button>
+              )
+            )}
+            {showAssigneePicker && (
+              <AssigneePicker
+                collaborators={collaborators}
+                currentAssigneeId={item.assignedTo}
+                onAssign={(userId) => onAssignItem(item.id, userId)}
+                onClose={closeAssigneePicker}
+              />
+            )}
+          </div>
+          );
+        })()}
+      </div>
 
       <button
         onClick={() => onRemoveTodoItem(item.id)}
