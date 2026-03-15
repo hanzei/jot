@@ -1,12 +1,11 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Note, NoteItem, NoteShare, User } from '../types';
+import { Note, NoteItem, NoteShare } from '../types';
 import UserAvatar from './UserAvatar';
 
 interface NoteCardProps {
   note: Note;
-  usersById?: Map<string, User>;
   onPress: () => void;
   onLongPress?: () => void;
   onMenuPress?: () => void;
@@ -39,10 +38,7 @@ function ShareAvatars({ shares }: { shares: NoteShare[] }) {
   );
 }
 
-function TodoPreview({ items, usersById }: {
-  items: NoteItem[];
-  usersById?: Map<string, User>;
-}) {
+function TodoPreview({ items }: { items: NoteItem[] }) {
   const uncompleted: NoteItem[] = [];
   let completedCount = 0;
   for (const item of items) {
@@ -55,25 +51,14 @@ function TodoPreview({ items, usersById }: {
 
   return (
     <View style={styles.todoPreview}>
-      {uncompleted.map((item) => {
-        const assignedUser = item.assigned_to ? usersById?.get(item.assigned_to) : undefined;
-        return (
-          <View key={item.id} style={styles.todoRow}>
-            <Ionicons name="square-outline" size={14} color="#999" />
-            <Text style={styles.todoText} numberOfLines={1}>
-              {item.text}
-            </Text>
-            {item.assigned_to ? (
-              <UserAvatar
-                userId={item.assigned_to}
-                username={assignedUser?.username ?? '?'}
-                hasProfileIcon={assignedUser?.has_profile_icon}
-                size="small"
-              />
-            ) : null}
-          </View>
-        );
-      })}
+      {uncompleted.map((item) => (
+        <View key={item.id} style={styles.todoRow}>
+          <Ionicons name="square-outline" size={14} color="#999" />
+          <Text style={styles.todoText} numberOfLines={1}>
+            {item.text}
+          </Text>
+        </View>
+      ))}
       {completedCount > 0 && (
         <Text style={styles.completedCount}>+{completedCount} checked</Text>
       )}
@@ -81,7 +66,7 @@ function TodoPreview({ items, usersById }: {
   );
 }
 
-function NoteCard({ note, usersById, onPress, onLongPress, onMenuPress }: NoteCardProps) {
+function NoteCard({ note, onPress, onLongPress, onMenuPress }: NoteCardProps) {
   const hasColor = note.color && note.color !== '#ffffff';
 
   return (
@@ -124,7 +109,7 @@ function NoteCard({ note, usersById, onPress, onLongPress, onMenuPress }: NoteCa
       ) : null}
 
       {note.note_type === 'todo' && note.items && note.items.length > 0 ? (
-        <TodoPreview items={note.items} usersById={usersById} />
+        <TodoPreview items={note.items} />
       ) : null}
 
       <View style={styles.footer}>
