@@ -140,9 +140,10 @@ type UpdateNoteItem struct {
 
 When `assigned_to_user_id` is non-empty:
 
-1. Verify the user ID format is valid (`IsValidID`).
-2. Verify the user exists.
-3. Verify the user has access to the note (is owner or in `note_shares`).
+1. Verify the note is shared (has at least one entry in `note_shares`). Reject with `400 Bad Request` if the note is not shared — unshared notes cannot have assignments.
+2. Verify the user ID format is valid (`IsValidID`).
+3. Verify the user exists.
+4. Verify the user has access to the note (is owner or in `note_shares`).
 
 If validation fails, return `400 Bad Request` with a descriptive message.
 
@@ -241,7 +242,7 @@ No new event types. The existing `note_updated` event carries the full note payl
 | Note is restored from trash | Assignments still present |
 | Assigning to a user without note access | `400 Bad Request` — rejected by validation |
 | Self-assignment (owner assigns to self) | Allowed |
-| Unshared note (no collaborators) | Assignment UI hidden; no one to assign to |
+| Unshared note (no collaborators) | Assignments rejected by backend (`400`); UI hidden |
 | Delete-and-recreate item update cycle | Assignment data in the update payload survives the cycle |
 | Concurrent edits by two users | Last-write-wins (accepted limitation, consistent with current behavior) |
 | `assigned_to_user_id` references a user not in `usersById` | Display fallback to `assigned_username` from API response, or "Unknown" if empty |
@@ -363,7 +364,7 @@ No assignment UI is shown. The item rows look exactly as they do today.
 └──────────────────────────────────────────────────────┘
 ```
 
-**Why?** Assigning items to yourself on a non-shared note has no practical value. Hiding the UI keeps the experience clean.
+**Why?** Unshared notes cannot have assignments (enforced by the backend). Hiding the UI reflects this constraint and keeps the experience clean.
 
 #### Shared note, no items assigned
 
