@@ -4,26 +4,35 @@ import { DrawerContentScrollView, DrawerContentComponentProps } from '@react-nav
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useAuth } from '../store/AuthContext';
+import { useLabels } from '../hooks/useLabels';
 
 import type { MainDrawerParamList } from '../navigation/MainDrawer';
 
-interface DrawerItem {
+interface NavItem {
   name: keyof MainDrawerParamList;
   label: string;
   icon: keyof typeof Ionicons.glyphMap;
   activeIcon: keyof typeof Ionicons.glyphMap;
 }
 
-const DRAWER_ITEMS: DrawerItem[] = [
+const TOP_ITEMS: NavItem[] = [
   { name: 'Notes', label: 'Notes', icon: 'document-text-outline', activeIcon: 'document-text' },
-  { name: 'Archived', label: 'Archived', icon: 'archive-outline', activeIcon: 'archive' },
+];
+
+const BOTTOM_ITEMS: NavItem[] = [
+  { name: 'Archived', label: 'Archive', icon: 'archive-outline', activeIcon: 'archive' },
   { name: 'Trash', label: 'Trash', icon: 'trash-outline', activeIcon: 'trash' },
 ];
 
 export default function DrawerContent(props: DrawerContentComponentProps) {
   const { user, logout } = useAuth();
+  const { data: labels } = useLabels();
   const insets = useSafeAreaInsets();
+
   const activeRoute = props.state.routes[props.state.index]?.name;
+  const activeParams = props.state.routes[props.state.index]?.params as
+    | { labelId?: string } | undefined;
+  const activeLabelId = activeRoute === 'Notes' ? activeParams?.labelId : undefined;
 
   const handleLogout = useCallback(() => {
     Alert.alert('Log out', 'Are you sure you want to log out?', [
@@ -36,6 +45,20 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
     ]);
   }, [logout]);
 
+  const handleNavPress = useCallback((name: keyof MainDrawerParamList) => {
+    if (name === 'Notes') {
+      props.navigation.navigate('Notes', { labelId: undefined, labelName: undefined });
+    } else {
+      props.navigation.navigate(name);
+    }
+    props.navigation.closeDrawer();
+  }, [props.navigation]);
+
+  const handleLabelPress = useCallback((labelId: string, labelName: string) => {
+    props.navigation.navigate('Notes', { labelId, labelName });
+    props.navigation.closeDrawer();
+  }, [props.navigation]);
+
   const displayName = user
     ? [user.first_name, user.last_name].filter(Boolean).join(' ') || user.username
     : '';
@@ -43,6 +66,8 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
   const initials = user
     ? (user.first_name?.[0] ?? user.username?.[0] ?? '').toUpperCase()
     : '';
+
+  const isNotesActiveWithoutLabel = activeRoute === 'Notes' && !activeLabelId;
 
   return (
     <View style={styles.container}>
@@ -63,18 +88,65 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
 
         <View style={styles.divider} />
 
-        {/* Navigation items */}
         <View style={styles.navSection}>
-          {DRAWER_ITEMS.map((item) => {
+          {/* Notes item */}
+          {TOP_ITEMS.map((item) => (
+            <TouchableOpacity
+              key={item.name}
+              style={[styles.navItem, isNotesActiveWithoutLabel && styles.navItemActive]}
+              onPress={() => handleNavPress(item.name)}
+              testID={`drawer-item-${item.name.toLowerCase()}`}
+              accessibilityLabel={item.label}
+              accessibilityRole="button"
+              accessibilityState={{ selected: isNotesActiveWithoutLabel }}
+            >
+              <Ionicons
+                name={isNotesActiveWithoutLabel ? item.activeIcon : item.icon}
+                size={22}
+                color={isNotesActiveWithoutLabel ? '#2563eb' : '#444'}
+              />
+              <Text style={[styles.navItemText, isNotesActiveWithoutLabel && styles.navItemTextActive]}>
+                {item.label}
+              </Text>
+            </TouchableOpacity>
+          ))}
+
+          {/* Labels */}
+          {labels && labels.length > 0 && labels.map((label) => {
+            const isActive = activeLabelId === label.id;
+            return (
+              <TouchableOpacity
+                key={label.id}
+                style={[styles.navItem, isActive && styles.navItemActive]}
+                onPress={() => handleLabelPress(label.id, label.name)}
+                testID={`drawer-label-${label.id}`}
+                accessibilityLabel={label.name}
+                accessibilityRole="button"
+                accessibilityState={{ selected: isActive }}
+              >
+                <Ionicons
+                  name={isActive ? 'pricetag' : 'pricetag-outline'}
+                  size={22}
+                  color={isActive ? '#2563eb' : '#444'}
+                />
+                <Text
+                  style={[styles.navItemText, isActive && styles.navItemTextActive]}
+                  numberOfLines={1}
+                >
+                  {label.name}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+
+          {/* Archive & Trash */}
+          {BOTTOM_ITEMS.map((item) => {
             const isActive = activeRoute === item.name;
             return (
               <TouchableOpacity
                 key={item.name}
                 style={[styles.navItem, isActive && styles.navItemActive]}
-                onPress={() => {
-                  props.navigation.navigate(item.name);
-                  props.navigation.closeDrawer();
-                }}
+                onPress={() => handleNavPress(item.name)}
                 testID={`drawer-item-${item.name.toLowerCase()}`}
                 accessibilityLabel={item.label}
                 accessibilityRole="button"
@@ -172,6 +244,7 @@ const styles = StyleSheet.create({
     fontSize: 15,
     color: '#444',
     fontWeight: '400',
+    flexShrink: 1,
   },
   navItemTextActive: {
     color: '#2563eb',

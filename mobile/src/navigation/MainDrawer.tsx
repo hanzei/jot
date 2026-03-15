@@ -1,12 +1,13 @@
 import React from 'react';
 import { TouchableOpacity, StyleSheet } from 'react-native';
 import { createDrawerNavigator } from '@react-navigation/drawer';
+import { useRoute, RouteProp } from '@react-navigation/native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import NotesListScreen from '../screens/NotesListScreen';
 import DrawerContent from '../components/DrawerContent';
 
 export type MainDrawerParamList = {
-  Notes: undefined;
+  Notes: { labelId?: string; labelName?: string } | undefined;
   Archived: undefined;
   Trash: undefined;
 };
@@ -14,7 +15,9 @@ export type MainDrawerParamList = {
 const Drawer = createDrawerNavigator<MainDrawerParamList>();
 
 function NotesScreen() {
-  return <NotesListScreen variant="notes" />;
+  const route = useRoute<RouteProp<MainDrawerParamList, 'Notes'>>();
+  const labelId = route.params?.labelId;
+  return <NotesListScreen variant="notes" labelId={labelId} />;
 }
 
 function ArchivedScreen() {
@@ -48,7 +51,13 @@ export default function MainDrawer() {
         ),
       })}
     >
-      <Drawer.Screen name="Notes" component={NotesScreen} />
+      <Drawer.Screen
+        name="Notes"
+        component={NotesScreen}
+        options={({ route }) => ({
+          title: route.params?.labelName ?? 'Notes',
+        })}
+      />
       <Drawer.Screen name="Archived" component={ArchivedScreen} />
       <Drawer.Screen name="Trash" component={TrashScreen} />
     </Drawer.Navigator>
