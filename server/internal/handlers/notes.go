@@ -136,6 +136,7 @@ func (h *NotesHandler) createTodoItems(noteID string, items []CreateNoteItem) (i
 //	@Param		trashed		query		boolean	false	"Return trashed notes"
 //	@Param		search		query		string	false	"Full-text search query"
 //	@Param		label		query		string	false	"Filter by label ID"
+//	@Param		my_todo		query		boolean	false	"Return only notes with todos assigned to current user"
 //	@Success	200			{array}		models.Note
 //	@Failure	401			{string}	string	"unauthorized"
 //	@Router		/notes [get]
@@ -149,8 +150,9 @@ func (h *NotesHandler) GetNotes(w http.ResponseWriter, r *http.Request) (int, er
 	archived := r.URL.Query().Get("archived") == "true"
 	search := r.URL.Query().Get("search")
 	labelID := r.URL.Query().Get("label")
+	myTodo := r.URL.Query().Get("my_todo") == "true"
 
-	notes, err := h.noteStore.GetByUserID(user.ID, archived, trashed, search, labelID)
+	notes, err := h.noteStore.GetByUserID(user.ID, archived, trashed, search, labelID, myTodo)
 	if err != nil {
 		return http.StatusInternalServerError, err
 	}

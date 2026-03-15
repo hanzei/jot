@@ -44,9 +44,11 @@
     "searchPlaceholder": "Search notes...",
     "searchAriaLabel": "Search notes",
     "tabNotes": "Notes",
+    "tabMyTodo": "My Todo",
     "tabArchive": "Archive",
     "tabBin": "Bin",
     "tabAdmin": "Admin",
+    "noMyTodoNotes": "No notes with todos assigned to you",
     "binInfo": "Notes in the bin are deleted after 7 days"
   },
   "settings": {
@@ -237,6 +239,7 @@
     "login": "Sign In - Jot",
     "register": "Create Account - Jot",
     "notes": "Jot",
+    "myTodo": "My Todo - Jot",
     "archive": "Archive - Jot",
     "bin": "Bin - Jot",
     "admin": "Admin - Jot",
