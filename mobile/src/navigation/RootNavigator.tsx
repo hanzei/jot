@@ -5,12 +5,12 @@ import { useAuth } from '../store/AuthContext';
 import { SSEProvider } from '../store/SSEContext';
 import OfflineBanner from '../components/OfflineBanner';
 import AuthStack from './AuthStack';
-import MainTabs from './MainTabs';
+import MainDrawer from './MainDrawer';
 import NoteEditorScreen from '../screens/NoteEditorScreen';
 import ShareScreen from '../screens/ShareScreen';
 
 export type RootStackParamList = {
-  MainTabs: undefined;
+  MainDrawer: undefined;
   NoteEditor: { noteId: string | null };
   Share: { noteId: string };
 };
@@ -23,7 +23,7 @@ function AuthenticatedStack() {
       <View style={styles.flex}>
         <OfflineBanner />
         <Stack.Navigator>
-          <Stack.Screen name="MainTabs" component={MainTabs} options={{ headerShown: false }} />
+          <Stack.Screen name="MainDrawer" component={MainDrawer} options={{ headerShown: false }} />
           <Stack.Screen
             name="NoteEditor"
             component={NoteEditorScreen}

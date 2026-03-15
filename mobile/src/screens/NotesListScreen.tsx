@@ -30,7 +30,7 @@ interface NotesListScreenProps {
   variant?: 'notes' | 'archived' | 'trash';
 }
 
-type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'MainTabs'>;
+type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'MainDrawer'>;
 
 const SEARCH_DEBOUNCE_MS = 300;
 const EMPTY_NOTES: Note[] = [];
