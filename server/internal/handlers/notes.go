@@ -72,7 +72,7 @@ type CreateNoteItem struct {
 	Text             string `json:"text"`
 	Position         int    `json:"position"`
 	IndentLevel      int    `json:"indent_level"`
-	AssignedToUserID string `json:"assigned_to_user_id"`
+	AssignedTo string `json:"assigned_to"`
 }
 
 type UpdateNoteRequest struct {
@@ -90,7 +90,7 @@ type UpdateNoteItem struct {
 	Position         int    `json:"position"`
 	Completed        bool   `json:"completed"`
 	IndentLevel      int    `json:"indent_level"`
-	AssignedToUserID string `json:"assigned_to_user_id"`
+	AssignedTo string `json:"assigned_to"`
 }
 
 func normalizeCreateNoteRequest(req *CreateNoteRequest) (int, error) {
@@ -120,7 +120,7 @@ func (h *NotesHandler) createTodoItems(noteID string, items []CreateNoteItem) (i
 		if item.IndentLevel < 0 || item.IndentLevel > 1 {
 			return http.StatusBadRequest, errors.New("indent_level must be 0 or 1")
 		}
-		if item.AssignedToUserID != "" {
+		if item.AssignedTo != "" {
 			return http.StatusBadRequest, errors.New("cannot assign items on note creation; save and share the note first")
 		}
 		if _, err := h.noteStore.CreateItem(noteID, item.Text, item.Position, item.IndentLevel, ""); err != nil {
@@ -281,7 +281,7 @@ func (h *NotesHandler) validateAndUpdateTodoItems(noteID string, userID string, 
 func (h *NotesHandler) validateItemAssignments(noteID string, items []UpdateNoteItem) (int, error) {
 	hasAssignment := false
 	for _, item := range items {
-		if item.AssignedToUserID != "" {
+		if item.AssignedTo != "" {
 			hasAssignment = true
 			break
 		}
@@ -310,13 +310,13 @@ func (h *NotesHandler) validateItemAssignments(noteID string, items []UpdateNote
 	}
 
 	for _, item := range items {
-		if item.AssignedToUserID == "" {
+		if item.AssignedTo == "" {
 			continue
 		}
-		if !models.IsValidID(item.AssignedToUserID) {
-			return http.StatusBadRequest, errors.New("invalid assigned_to_user_id format")
+		if !models.IsValidID(item.AssignedTo) {
+			return http.StatusBadRequest, errors.New("invalid assigned_to format")
 		}
-		if _, ok := accessSet[item.AssignedToUserID]; !ok {
+		if _, ok := accessSet[item.AssignedTo]; !ok {
 			return http.StatusBadRequest, errors.New("assigned user does not have access to this note")
 		}
 	}
@@ -336,7 +336,7 @@ func (h *NotesHandler) updateTodoItems(noteID string, userID string, items []Upd
 		}
 
 		for _, item := range items {
-			_, err := h.noteStore.CreateItemWithCompleted(noteID, item.Text, item.Position, item.Completed, item.IndentLevel, item.AssignedToUserID)
+			_, err := h.noteStore.CreateItemWithCompleted(noteID, item.Text, item.Position, item.Completed, item.IndentLevel, item.AssignedTo)
 			if err != nil {
 				return err
 			}

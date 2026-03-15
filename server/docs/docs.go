@@ -1578,7 +1578,7 @@ const docTemplate = `{
         "handlers.CreateNoteItem": {
             "type": "object",
             "properties": {
-                "assigned_to_user_id": {
+                "assigned_to": {
                     "type": "string"
                 },
                 "indent_level": {
@@ -1701,7 +1701,7 @@ const docTemplate = `{
         "handlers.UpdateNoteItem": {
             "type": "object",
             "properties": {
-                "assigned_to_user_id": {
+                "assigned_to": {
                     "type": "string"
                 },
                 "completed": {
@@ -1902,7 +1902,7 @@ const docTemplate = `{
         "models.NoteItem": {
             "type": "object",
             "properties": {
-                "assigned_to_user_id": {
+                "assigned_to": {
                     "type": "string"
                 },
                 "completed": {

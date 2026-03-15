@@ -50,7 +50,7 @@ func getNoteItems(t *testing.T, ts *TestServer, user *TestUser, noteID string) [
 }
 
 func TestTaskAssignment(t *testing.T) {
-	t.Run("create note items have empty assigned_to_user_id", func(t *testing.T) {
+	t.Run("create note items have empty assigned_to", func(t *testing.T) {
 		ts := setupTestServer(t)
 		user := ts.createTestUser(t, "user1", "password123", false)
 
@@ -68,7 +68,7 @@ func TestTaskAssignment(t *testing.T) {
 		require.NoError(t, resp.UnmarshalBody(&note))
 		items := note["items"].([]any)
 		item := items[0].(map[string]any)
-		assert.Empty(t, item["assigned_to_user_id"])
+		assert.Empty(t, item["assigned_to"])
 	})
 
 	t.Run("reject assignment on note creation", func(t *testing.T) {
@@ -79,7 +79,7 @@ func TestTaskAssignment(t *testing.T) {
 			"title":     "Todo",
 			"note_type": "todo",
 			"items": []map[string]any{
-				{"text": "Buy milk", "position": 0, "indent_level": 0, "assigned_to_user_id": "someuser1234567890abcd"},
+				{"text": "Buy milk", "position": 0, "indent_level": 0, "assigned_to": "someuser1234567890abcd"},
 			},
 		}
 		resp := ts.authRequest(t, user, http.MethodPost, "/api/v1/notes", body)
@@ -98,7 +98,7 @@ func TestTaskAssignment(t *testing.T) {
 			"title":     "Shared Todo",
 			"note_type": "todo",
 			"items": []map[string]any{
-				{"text": "Item 1", "position": 0, "indent_level": 0, "assigned_to_user_id": collabID},
+				{"text": "Item 1", "position": 0, "indent_level": 0, "assigned_to": collabID},
 				{"text": "Item 2", "position": 1, "indent_level": 0},
 			},
 		}
@@ -106,8 +106,8 @@ func TestTaskAssignment(t *testing.T) {
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 
 		items := getNoteItems(t, ts, owner, noteID)
-		assert.Equal(t, collabID, items[0]["assigned_to_user_id"])
-		assert.Empty(t, items[1]["assigned_to_user_id"])
+		assert.Equal(t, collabID, items[0]["assigned_to"])
+		assert.Empty(t, items[1]["assigned_to"])
 	})
 
 	t.Run("self-assignment by owner", func(t *testing.T) {
@@ -120,14 +120,14 @@ func TestTaskAssignment(t *testing.T) {
 		updateBody := map[string]any{
 			"title": "Shared Todo",
 			"items": []map[string]any{
-				{"text": "Item 1", "position": 0, "indent_level": 0, "assigned_to_user_id": owner.User.ID},
+				{"text": "Item 1", "position": 0, "indent_level": 0, "assigned_to": owner.User.ID},
 			},
 		}
 		resp := ts.authRequest(t, owner, http.MethodPut, fmt.Sprintf("/api/v1/notes/%s", noteID), updateBody)
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 
 		items := getNoteItems(t, ts, owner, noteID)
-		assert.Equal(t, owner.User.ID, items[0]["assigned_to_user_id"])
+		assert.Equal(t, owner.User.ID, items[0]["assigned_to"])
 	})
 
 	t.Run("reject assignment on unshared note", func(t *testing.T) {
@@ -150,7 +150,7 @@ func TestTaskAssignment(t *testing.T) {
 		updateBody := map[string]any{
 			"title": "Solo Todo",
 			"items": []map[string]any{
-				{"text": "Item 1", "position": 0, "indent_level": 0, "assigned_to_user_id": owner.User.ID},
+				{"text": "Item 1", "position": 0, "indent_level": 0, "assigned_to": owner.User.ID},
 			},
 		}
 		resp := ts.authRequest(t, owner, http.MethodPut, fmt.Sprintf("/api/v1/notes/%s", noteID), updateBody)
@@ -169,7 +169,7 @@ func TestTaskAssignment(t *testing.T) {
 		updateBody := map[string]any{
 			"title": "Shared Todo",
 			"items": []map[string]any{
-				{"text": "Item 1", "position": 0, "indent_level": 0, "assigned_to_user_id": outsider.User.ID},
+				{"text": "Item 1", "position": 0, "indent_level": 0, "assigned_to": outsider.User.ID},
 			},
 		}
 		resp := ts.authRequest(t, owner, http.MethodPut, fmt.Sprintf("/api/v1/notes/%s", noteID), updateBody)
@@ -187,12 +187,12 @@ func TestTaskAssignment(t *testing.T) {
 		updateBody := map[string]any{
 			"title": "Shared Todo",
 			"items": []map[string]any{
-				{"text": "Item 1", "position": 0, "indent_level": 0, "assigned_to_user_id": "short"},
+				{"text": "Item 1", "position": 0, "indent_level": 0, "assigned_to": "short"},
 			},
 		}
 		resp := ts.authRequest(t, owner, http.MethodPut, fmt.Sprintf("/api/v1/notes/%s", noteID), updateBody)
 		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
-		assert.Contains(t, resp.GetString(), "invalid assigned_to_user_id format")
+		assert.Contains(t, resp.GetString(), "invalid assigned_to format")
 	})
 
 	t.Run("collaborator can assign items", func(t *testing.T) {
@@ -205,7 +205,7 @@ func TestTaskAssignment(t *testing.T) {
 		updateBody := map[string]any{
 			"title": "Shared Todo",
 			"items": []map[string]any{
-				{"text": "Item 1", "position": 0, "indent_level": 0, "assigned_to_user_id": owner.User.ID},
+				{"text": "Item 1", "position": 0, "indent_level": 0, "assigned_to": owner.User.ID},
 				{"text": "Item 2", "position": 1, "indent_level": 0},
 			},
 		}
@@ -213,10 +213,10 @@ func TestTaskAssignment(t *testing.T) {
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 
 		items := getNoteItems(t, ts, owner, noteID)
-		assert.Equal(t, owner.User.ID, items[0]["assigned_to_user_id"])
+		assert.Equal(t, owner.User.ID, items[0]["assigned_to"])
 	})
 
-	t.Run("unassign item by setting empty assigned_to_user_id", func(t *testing.T) {
+	t.Run("unassign item by setting empty assigned_to", func(t *testing.T) {
 		ts := setupTestServer(t)
 		owner := ts.createTestUser(t, "owner", "password123", false)
 		collaborator := ts.createTestUser(t, "collab", "password123", false)
@@ -227,27 +227,27 @@ func TestTaskAssignment(t *testing.T) {
 		updateBody := map[string]any{
 			"title": "Shared Todo",
 			"items": []map[string]any{
-				{"text": "Item 1", "position": 0, "indent_level": 0, "assigned_to_user_id": collabID},
+				{"text": "Item 1", "position": 0, "indent_level": 0, "assigned_to": collabID},
 			},
 		}
 		resp := ts.authRequest(t, owner, http.MethodPut, fmt.Sprintf("/api/v1/notes/%s", noteID), updateBody)
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 
 		items := getNoteItems(t, ts, owner, noteID)
-		assert.Equal(t, collabID, items[0]["assigned_to_user_id"])
+		assert.Equal(t, collabID, items[0]["assigned_to"])
 
 		// Now unassign
 		unassignBody := map[string]any{
 			"title": "Shared Todo",
 			"items": []map[string]any{
-				{"text": "Item 1", "position": 0, "indent_level": 0, "assigned_to_user_id": ""},
+				{"text": "Item 1", "position": 0, "indent_level": 0, "assigned_to": ""},
 			},
 		}
 		resp = ts.authRequest(t, owner, http.MethodPut, fmt.Sprintf("/api/v1/notes/%s", noteID), unassignBody)
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 
 		items = getNoteItems(t, ts, owner, noteID)
-		assert.Empty(t, items[0]["assigned_to_user_id"])
+		assert.Empty(t, items[0]["assigned_to"])
 	})
 
 	t.Run("completed items retain assignment", func(t *testing.T) {
@@ -260,7 +260,7 @@ func TestTaskAssignment(t *testing.T) {
 		updateBody := map[string]any{
 			"title": "Shared Todo",
 			"items": []map[string]any{
-				{"text": "Item 1", "position": 0, "indent_level": 0, "completed": true, "assigned_to_user_id": collabID},
+				{"text": "Item 1", "position": 0, "indent_level": 0, "completed": true, "assigned_to": collabID},
 			},
 		}
 		resp := ts.authRequest(t, owner, http.MethodPut, fmt.Sprintf("/api/v1/notes/%s", noteID), updateBody)
@@ -268,7 +268,7 @@ func TestTaskAssignment(t *testing.T) {
 
 		items := getNoteItems(t, ts, owner, noteID)
 		assert.True(t, items[0]["completed"].(bool))
-		assert.Equal(t, collabID, items[0]["assigned_to_user_id"])
+		assert.Equal(t, collabID, items[0]["assigned_to"])
 	})
 }
 
@@ -301,8 +301,8 @@ func TestTaskAssignmentUnshareCleanup(t *testing.T) {
 		updateBody := map[string]any{
 			"title": "Shared Todo",
 			"items": []map[string]any{
-				{"text": "Item 1", "position": 0, "indent_level": 0, "assigned_to_user_id": collab1.User.ID},
-				{"text": "Item 2", "position": 1, "indent_level": 0, "assigned_to_user_id": collab2.User.ID},
+				{"text": "Item 1", "position": 0, "indent_level": 0, "assigned_to": collab1.User.ID},
+				{"text": "Item 2", "position": 1, "indent_level": 0, "assigned_to": collab2.User.ID},
 			},
 		}
 		resp := ts.authRequest(t, owner, http.MethodPut, fmt.Sprintf("/api/v1/notes/%s", noteID), updateBody)
@@ -312,8 +312,8 @@ func TestTaskAssignmentUnshareCleanup(t *testing.T) {
 		ts.authRequest(t, owner, http.MethodDelete, fmt.Sprintf("/api/v1/notes/%s/share", noteID), map[string]string{"username": "collab1"})
 
 		items := getNoteItems(t, ts, owner, noteID)
-		assert.Empty(t, items[0]["assigned_to_user_id"], "collab1's assignment should be cleared")
-		assert.Equal(t, collab2.User.ID, items[1]["assigned_to_user_id"], "collab2's assignment should remain")
+		assert.Empty(t, items[0]["assigned_to"], "collab1's assignment should be cleared")
+		assert.Equal(t, collab2.User.ID, items[1]["assigned_to"], "collab2's assignment should remain")
 	})
 
 	t.Run("unshare last collaborator clears all assignments including owner", func(t *testing.T) {
@@ -327,8 +327,8 @@ func TestTaskAssignmentUnshareCleanup(t *testing.T) {
 		updateBody := map[string]any{
 			"title": "Shared Todo",
 			"items": []map[string]any{
-				{"text": "Item 1", "position": 0, "indent_level": 0, "assigned_to_user_id": owner.User.ID},
-				{"text": "Item 2", "position": 1, "indent_level": 0, "assigned_to_user_id": collab.User.ID},
+				{"text": "Item 1", "position": 0, "indent_level": 0, "assigned_to": owner.User.ID},
+				{"text": "Item 2", "position": 1, "indent_level": 0, "assigned_to": collab.User.ID},
 			},
 		}
 		resp := ts.authRequest(t, owner, http.MethodPut, fmt.Sprintf("/api/v1/notes/%s", noteID), updateBody)
@@ -338,8 +338,8 @@ func TestTaskAssignmentUnshareCleanup(t *testing.T) {
 		ts.authRequest(t, owner, http.MethodDelete, fmt.Sprintf("/api/v1/notes/%s/share", noteID), map[string]string{"username": "collab"})
 
 		items := getNoteItems(t, ts, owner, noteID)
-		assert.Empty(t, items[0]["assigned_to_user_id"], "owner's self-assignment should be cleared")
-		assert.Empty(t, items[1]["assigned_to_user_id"], "collab's assignment should be cleared")
+		assert.Empty(t, items[0]["assigned_to"], "owner's self-assignment should be cleared")
+		assert.Empty(t, items[1]["assigned_to"], "collab's assignment should be cleared")
 	})
 }
 
@@ -356,7 +356,7 @@ func TestTaskAssignmentUserDeletion(t *testing.T) {
 		updateBody := map[string]any{
 			"title": "Shared Todo",
 			"items": []map[string]any{
-				{"text": "Item 1", "position": 0, "indent_level": 0, "assigned_to_user_id": collabID},
+				{"text": "Item 1", "position": 0, "indent_level": 0, "assigned_to": collabID},
 				{"text": "Item 2", "position": 1, "indent_level": 0},
 			},
 		}
@@ -369,7 +369,7 @@ func TestTaskAssignmentUserDeletion(t *testing.T) {
 
 		// Verify assignments are cleared
 		items := getNoteItems(t, ts, owner, noteID)
-		assert.Empty(t, items[0]["assigned_to_user_id"], "deleted user's assignment should be cleared")
-		assert.Empty(t, items[1]["assigned_to_user_id"])
+		assert.Empty(t, items[0]["assigned_to"], "deleted user's assignment should be cleared")
+		assert.Empty(t, items[1]["assigned_to"])
 	})
 }

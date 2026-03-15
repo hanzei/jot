@@ -21,7 +21,7 @@ definitions:
     type: object
   handlers.CreateNoteItem:
     properties:
-      assigned_to_user_id:
+      assigned_to:
         type: string
       indent_level:
         type: integer
@@ -100,7 +100,7 @@ definitions:
     type: object
   handlers.UpdateNoteItem:
     properties:
-      assigned_to_user_id:
+      assigned_to:
         type: string
       completed:
         type: boolean
@@ -231,7 +231,7 @@ definitions:
     type: object
   models.NoteItem:
     properties:
-      assigned_to_user_id:
+      assigned_to:
         type: string
       completed:
         type: boolean
