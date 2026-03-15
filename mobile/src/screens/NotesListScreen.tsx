@@ -28,9 +28,10 @@ import type { RootStackParamList } from '../navigation/RootNavigator';
 
 interface NotesListScreenProps {
   variant?: 'notes' | 'archived' | 'trash';
+  labelId?: string;
 }
 
-type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'MainTabs'>;
+type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'MainDrawer'>;
 
 const SEARCH_DEBOUNCE_MS = 300;
 const EMPTY_NOTES: Note[] = [];
@@ -40,10 +41,15 @@ interface LocalReorderState {
   unpinned: Note[] | null;
 }
 
-export default function NotesListScreen({ variant = 'notes' }: NotesListScreenProps) {
+export default function NotesListScreen({ variant = 'notes', labelId }: NotesListScreenProps) {
   const [searchText, setSearchText] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedLabelId, setSelectedLabelId] = useState<string | undefined>(undefined);
+
+  // Sync drawer-level label filter into local state
+  useEffect(() => {
+    setSelectedLabelId(labelId);
+  }, [labelId]);
   const [contextMenuNote, setContextMenuNote] = useState<Note | null>(null);
   const [colorPickerNote, setColorPickerNote] = useState<Note | null>(null);
   const [localOrder, setLocalOrder] = useState<LocalReorderState>({ pinned: null, unpinned: null });
@@ -438,8 +444,8 @@ export default function NotesListScreen({ variant = 'notes' }: NotesListScreenPr
         )}
       </View>
 
-      {/* Label filter chips (notes only) */}
-      {variant === 'notes' && allLabels && allLabels.length > 0 && (
+      {/* Label filter chips (notes only, hidden when filtered via drawer sidebar) */}
+      {variant === 'notes' && !labelId && allLabels && allLabels.length > 0 && (
         <ScrollView
           horizontal
           showsHorizontalScrollIndicator={false}
