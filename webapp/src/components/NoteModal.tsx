@@ -145,11 +145,11 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
         onChange={(e) => onUpdateTodoItem(index, 'completed', e.target.checked)}
         className="h-4 w-4 text-blue-600 rounded"
       />
-      <div className="flex-1 flex items-center gap-1 min-w-0">
+      <div className="flex-1 flex items-center min-w-0">
         <input
           type="text"
           placeholder={t('note.itemPlaceholder')}
-          className={`field-sizing-content min-w-24 p-1 bg-transparent border-none outline-none placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white ${
+          className={`field-sizing-content p-1 bg-transparent border-none outline-none placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white ${
             isCompleted ? 'line-through text-gray-500 dark:text-gray-400' : ''
           }`}
           value={item.text}
