@@ -128,6 +128,10 @@ export default function NoteEditorScreen() {
   itemsRef.current = items;
   const checkedItemsCollapsedRef = useRef(checkedItemsCollapsed);
   checkedItemsCollapsedRef.current = checkedItemsCollapsed;
+  const pinnedRef = useRef(pinned);
+  pinnedRef.current = pinned;
+  const archivedRef = useRef(archived);
+  archivedRef.current = archived;
   const colorRef = useRef(color);
   colorRef.current = color;
   const createMutateRef = useRef(createMutation.mutateAsync);
@@ -213,6 +217,9 @@ export default function NoteEditorScreen() {
         const updateData: UpdateNoteRequest = {
           title: currentTitle,
           content: currentContent,
+          pinned: pinnedRef.current,
+          archived: archivedRef.current,
+          color: currentColor,
           checked_items_collapsed: currentCollapsed,
         };
         if (currentNoteType === 'todo') {
@@ -393,41 +400,69 @@ export default function NoteEditorScreen() {
 
   const handleTogglePin = useCallback(async () => {
     if (!noteId) return;
-    const newPinned = !pinned;
+    const newPinned = !pinnedRef.current;
     setPinned(newPinned);
     try {
-      await updateMutation.mutateAsync({ id: noteId, data: { pinned: newPinned } });
+      await updateMutation.mutateAsync({
+        id: noteId,
+        data: {
+          title: titleRef.current,
+          content: contentRef.current,
+          pinned: newPinned,
+          archived: archivedRef.current,
+          color: colorRef.current,
+          checked_items_collapsed: checkedItemsCollapsedRef.current,
+        },
+      });
     } catch {
-      setPinned(pinned);
+      setPinned(!newPinned);
       Alert.alert('Error', 'Failed to update note');
     }
-  }, [noteId, pinned, updateMutation]);
+  }, [noteId, updateMutation]);
 
   const handleToggleArchive = useCallback(async () => {
     if (!noteId) return;
-    const newArchived = !archived;
+    const newArchived = !archivedRef.current;
     setArchived(newArchived);
     try {
-      await updateMutation.mutateAsync({ id: noteId, data: { archived: newArchived } });
+      await updateMutation.mutateAsync({
+        id: noteId,
+        data: {
+          title: titleRef.current,
+          content: contentRef.current,
+          pinned: pinnedRef.current,
+          archived: newArchived,
+          color: colorRef.current,
+          checked_items_collapsed: checkedItemsCollapsedRef.current,
+        },
+      });
     } catch {
-      setArchived(archived);
+      setArchived(!newArchived);
       Alert.alert('Error', 'Failed to update note');
     }
-  }, [noteId, archived, updateMutation]);
+  }, [noteId, updateMutation]);
 
   const handleColorSelect = useCallback(async (selectedColor: string) => {
-    // Update local state regardless; if note not yet saved the color is
-    // included in the next createNote call via flushSave.
-    const prevColor = color;
+    const prevColor = colorRef.current;
     setColor(selectedColor);
     if (!noteId) return;
     try {
-      await updateMutation.mutateAsync({ id: noteId, data: { color: selectedColor } });
+      await updateMutation.mutateAsync({
+        id: noteId,
+        data: {
+          title: titleRef.current,
+          content: contentRef.current,
+          pinned: pinnedRef.current,
+          archived: archivedRef.current,
+          color: selectedColor,
+          checked_items_collapsed: checkedItemsCollapsedRef.current,
+        },
+      });
     } catch {
       setColor(prevColor);
       Alert.alert('Error', 'Failed to update note color');
     }
-  }, [noteId, color, updateMutation]);
+  }, [noteId, updateMutation]);
 
   const handleToggleNoteType = useCallback(() => {
     if (hasCreated) return;
