@@ -443,6 +443,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
 
   const handleItemKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
       const targetIndex = e.key === 'ArrowUp' ? index - 1 : index + 1;
       if (targetIndex < 0 || targetIndex >= uncompletedItems.length) return;
 
