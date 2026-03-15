@@ -430,6 +430,10 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
     });
     
     setItems(updatedItems);
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = undefined;
+    }
     autoSaveNote(updatedItems);
   };
 
