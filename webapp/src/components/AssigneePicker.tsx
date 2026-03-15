@@ -87,7 +87,9 @@ export default function AssigneePicker({ collaborators, currentAssigneeId, onAss
   useEffect(() => {
     if (listRef.current) {
       const focused = listRef.current.querySelector('[data-focused="true"]');
-      focused?.scrollIntoView({ block: 'nearest' });
+      if (focused && typeof focused.scrollIntoView === 'function') {
+        focused.scrollIntoView({ block: 'nearest' });
+      }
     }
   }, [focusedIndex]);
 
