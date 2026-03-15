@@ -124,6 +124,8 @@ export interface Note {
   shared_with?: NoteShare[];
   is_shared: boolean;
   labels: Label[];
+  owner_username?: string;
+  owner_has_profile_icon?: boolean;
   deleted_at: string | null;
   created_at: string;
   updated_at: string;

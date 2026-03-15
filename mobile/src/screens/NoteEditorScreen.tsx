@@ -337,8 +337,12 @@ export default function NoteEditorScreen() {
     if (!existingNote) return [];
     const hasShares = existingNote.shared_with && existingNote.shared_with.length > 0;
     if (!existingNote.is_shared && !hasShares) return [];
-    const ownerUsername = existingNote.is_shared ? undefined : user?.username;
-    return buildCollaborators(existingNote.user_id, existingNote.shared_with, ownerUsername);
+    return buildCollaborators(
+      existingNote.user_id,
+      existingNote.shared_with,
+      existingNote.owner_username ?? user?.username,
+      existingNote.owner_has_profile_icon,
+    );
   }, [existingNote, user?.username]);
 
   const isNoteShared = useMemo(() => {

@@ -17,6 +17,7 @@ export function buildCollaborators(
   noteUserId: string,
   sharedWith: NoteShare[] | undefined,
   ownerUsername?: string,
+  ownerHasProfileIcon?: boolean,
 ): Collaborator[] {
   const result: Collaborator[] = [];
   const seen = new Set<string>();
@@ -24,6 +25,7 @@ export function buildCollaborators(
   result.push({
     userId: noteUserId,
     username: ownerUsername || '?',
+    hasProfileIcon: ownerHasProfileIcon,
   });
   seen.add(noteUserId);
 

@@ -116,6 +116,7 @@ describe('NoteCard', () => {
       ...baseNote,
       note_type: 'todo',
       content: '',
+      is_shared: true,
       shared_with: [
         {
           id: 's1',
@@ -123,8 +124,8 @@ describe('NoteCard', () => {
           shared_with_user_id: 'user-2',
           shared_by_user_id: 'user-1',
           permission_level: 'edit',
-          username: 'alice',
-          first_name: 'Alice',
+          username: 'bob',
+          first_name: 'Bob',
           has_profile_icon: false,
           created_at: '',
           updated_at: '',
@@ -145,13 +146,12 @@ describe('NoteCard', () => {
       ],
     };
 
-    const { getByText, getAllByText } = render(
+    const { getByText } = render(
       <NoteCard note={sharedTodo} onPress={jest.fn()} />,
     );
 
     expect(getByText('Assigned task')).toBeTruthy();
-    // The avatar letter 'A' (for 'alice') should be rendered alongside the task text
-    const aElements = getAllByText('A');
-    expect(aElements.length).toBeGreaterThanOrEqual(2);
+    // Avatar for 'bob' renders letter 'B'
+    expect(getByText('B')).toBeTruthy();
   });
 });

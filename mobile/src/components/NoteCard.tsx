@@ -6,8 +6,6 @@ import UserAvatar from './UserAvatar';
 
 interface NoteCardProps {
   note: Note;
-  currentUserId?: string;
-  currentUsername?: string;
   onPress: () => void;
   onLongPress?: () => void;
   onMenuPress?: () => void;
@@ -40,12 +38,12 @@ function ShareAvatars({ shares }: { shares: NoteShare[] }) {
   );
 }
 
-function TodoPreview({ items, sharedWith, noteUserId, currentUserId, currentUsername }: {
+function TodoPreview({ items, sharedWith, noteUserId, ownerUsername, ownerHasProfileIcon }: {
   items: NoteItem[];
   sharedWith?: NoteShare[];
   noteUserId: string;
-  currentUserId?: string;
-  currentUsername?: string;
+  ownerUsername?: string;
+  ownerHasProfileIcon?: boolean;
 }) {
   const uncompleted: NoteItem[] = [];
   let completedCount = 0;
@@ -63,10 +61,9 @@ function TodoPreview({ items, sharedWith, noteUserId, currentUserId, currentUser
         let assigneeUsername = '?';
         let assigneeHasIcon: boolean | undefined;
         if (item.assigned_to) {
-          if (item.assigned_to === currentUserId && currentUsername) {
-            assigneeUsername = currentUsername;
-          } else if (item.assigned_to === noteUserId && currentUserId === noteUserId && currentUsername) {
-            assigneeUsername = currentUsername;
+          if (item.assigned_to === noteUserId && ownerUsername) {
+            assigneeUsername = ownerUsername;
+            assigneeHasIcon = ownerHasProfileIcon;
           } else {
             const share = sharedWith?.find((s) => s.shared_with_user_id === item.assigned_to);
             if (share) {
@@ -99,7 +96,7 @@ function TodoPreview({ items, sharedWith, noteUserId, currentUserId, currentUser
   );
 }
 
-function NoteCard({ note, currentUserId, currentUsername, onPress, onLongPress, onMenuPress }: NoteCardProps) {
+function NoteCard({ note, onPress, onLongPress, onMenuPress }: NoteCardProps) {
   const hasColor = note.color && note.color !== '#ffffff';
   const borderColor = hasColor ? note.color : '#e5e7eb';
 
@@ -144,8 +141,8 @@ function NoteCard({ note, currentUserId, currentUsername, onPress, onLongPress, 
           items={note.items}
           sharedWith={note.shared_with}
           noteUserId={note.user_id}
-          currentUserId={currentUserId}
-          currentUsername={currentUsername}
+          ownerUsername={note.owner_username}
+          ownerHasProfileIcon={note.owner_has_profile_icon}
         />
       ) : null}
 

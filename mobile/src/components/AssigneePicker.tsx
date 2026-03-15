@@ -63,6 +63,9 @@ export default function AssigneePicker({
                     onClose();
                   }}
                   testID={`assignee-option-${c.userId}`}
+                  accessibilityRole="button"
+                  accessibilityLabel={`Assign to ${displayName(c)}`}
+                  accessibilityState={{ selected: isSelected }}
                 >
                   <UserAvatar
                     userId={c.userId}
@@ -90,6 +93,9 @@ export default function AssigneePicker({
                   onClose();
                 }}
                 testID="assignee-unassign"
+                accessibilityRole="button"
+                accessibilityLabel="Unassign item"
+                accessibilityState={{ selected: false }}
               >
                 <View style={styles.unassignIcon}>
                   <Ionicons name="person-remove-outline" size={16} color="#ef4444" />

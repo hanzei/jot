@@ -13,6 +13,8 @@ interface NoteRow {
   position: number;
   checked_items_collapsed: number;
   is_shared: number;
+  owner_username: string;
+  owner_has_profile_icon: number;
   deleted_at: string | null;
   created_at: string;
   updated_at: string;
@@ -49,6 +51,8 @@ function rowToNote(row: NoteRow, items: NoteItem[] = []): Note {
     position: row.position,
     checked_items_collapsed: row.checked_items_collapsed === 1,
     is_shared: row.is_shared === 1,
+    owner_username: row.owner_username || undefined,
+    owner_has_profile_icon: row.owner_has_profile_icon === 1 || undefined,
     deleted_at: row.deleted_at,
     created_at: row.created_at,
     updated_at: row.updated_at,
@@ -86,9 +90,9 @@ async function saveNoteInTx(db: SQLiteDatabase, note: Note): Promise<void> {
   await db.runAsync(
     `INSERT OR REPLACE INTO notes
        (id, user_id, title, content, note_type, color, pinned, archived, position,
-        checked_items_collapsed, is_shared, deleted_at, created_at, updated_at,
-        labels_json, shared_with_json)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        checked_items_collapsed, is_shared, owner_username, owner_has_profile_icon,
+        deleted_at, created_at, updated_at, labels_json, shared_with_json)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       note.id,
       note.user_id,
@@ -101,6 +105,8 @@ async function saveNoteInTx(db: SQLiteDatabase, note: Note): Promise<void> {
       note.position,
       note.checked_items_collapsed ? 1 : 0,
       note.is_shared ? 1 : 0,
+      note.owner_username ?? '',
+      note.owner_has_profile_icon ? 1 : 0,
       note.deleted_at ?? null,
       note.created_at,
       note.updated_at,

@@ -23,7 +23,13 @@ describe('collaborators', () => {
     it('returns owner as first collaborator', () => {
       const result = buildCollaborators('owner-id', [], 'owneruser');
       expect(result).toHaveLength(1);
-      expect(result[0]).toEqual({ userId: 'owner-id', username: 'owneruser' });
+      expect(result[0]).toEqual({ userId: 'owner-id', username: 'owneruser', hasProfileIcon: undefined });
+    });
+
+    it('returns owner with profile icon when provided', () => {
+      const result = buildCollaborators('owner-id', [], 'owneruser', true);
+      expect(result).toHaveLength(1);
+      expect(result[0]).toEqual({ userId: 'owner-id', username: 'owneruser', hasProfileIcon: true });
     });
 
     it('includes shared users', () => {

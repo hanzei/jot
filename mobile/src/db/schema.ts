@@ -17,6 +17,8 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
       position INTEGER NOT NULL DEFAULT 0,
       checked_items_collapsed INTEGER NOT NULL DEFAULT 0,
       is_shared INTEGER NOT NULL DEFAULT 0,
+      owner_username TEXT NOT NULL DEFAULT '',
+      owner_has_profile_icon INTEGER NOT NULL DEFAULT 0,
       deleted_at TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
@@ -53,13 +55,22 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
     );
   `);
 
-  // Add columns to note_items for existing databases that pre-date them.
-  // SQLite throws if the column already exists, so we ignore that specific error.
+  // Migrate existing databases that pre-date newer columns.
+  // Check which columns exist via PRAGMA, then ALTER TABLE only for missing ones.
+  const noteItemCols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(note_items)');
+  const noteItemColNames = new Set(noteItemCols.map((c) => c.name));
   for (const col of ['created_at', 'updated_at', 'assigned_to']) {
-    try {
+    if (!noteItemColNames.has(col)) {
       await db.runAsync(`ALTER TABLE note_items ADD COLUMN ${col} TEXT NOT NULL DEFAULT ''`);
-    } catch {
-      // Column already exists — ignore
     }
+  }
+
+  const noteCols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(notes)');
+  const noteColNames = new Set(noteCols.map((c) => c.name));
+  if (!noteColNames.has('owner_username')) {
+    await db.runAsync(`ALTER TABLE notes ADD COLUMN owner_username TEXT NOT NULL DEFAULT ''`);
+  }
+  if (!noteColNames.has('owner_has_profile_icon')) {
+    await db.runAsync(`ALTER TABLE notes ADD COLUMN owner_has_profile_icon INTEGER NOT NULL DEFAULT 0`);
   }
 }

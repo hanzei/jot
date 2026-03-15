@@ -19,7 +19,6 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useUpdateNote, useDeleteNote, useRestoreNote, usePermanentDeleteNote, useReorderNotes } from '../hooks/useNotes';
 import { useOfflineNotes } from '../hooks/useOfflineNotes';
 import { useLabels } from '../hooks/useLabels';
-import { useAuth } from '../store/AuthContext';
 import NoteCard from '../components/NoteCard';
 import NoteContextMenu, { ContextMenuViewContext } from '../components/NoteContextMenu';
 import ColorPicker from '../components/ColorPicker';
@@ -48,7 +47,6 @@ export default function NotesListScreen({ variant = 'notes' }: NotesListScreenPr
   const [colorPickerNote, setColorPickerNote] = useState<Note | null>(null);
   const [localOrder, setLocalOrder] = useState<LocalReorderState>({ pinned: null, unpinned: null });
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const { user } = useAuth();
 
   // Debounce search input by 300ms
   useEffect(() => {
@@ -273,29 +271,25 @@ export default function NotesListScreen({ variant = 'notes' }: NotesListScreenPr
         >
           <NoteCard
             note={item}
-            currentUserId={user?.id}
-            currentUsername={user?.username}
             onPress={() => handleNotePress(item.id)}
             onMenuPress={() => handleOpenMenu(item)}
           />
         </TouchableOpacity>
       </ScaleDecorator>
     ),
-    [handleNotePress, handleOpenMenu, user?.id, user?.username],
+    [handleNotePress, handleOpenMenu],
   );
 
   const renderNonDraggableNoteCard = useCallback(
     ({ item }: { item: Note }) => (
       <NoteCard
         note={item}
-        currentUserId={user?.id}
-        currentUsername={user?.username}
         onPress={() => handleNotePress(item.id)}
         onMenuPress={variant !== 'trash' ? () => handleOpenMenu(item) : undefined}
         onLongPress={variant === 'trash' ? () => handleOpenMenu(item) : undefined}
       />
     ),
-    [handleNotePress, handleOpenMenu, variant, user?.id, user?.username],
+    [handleNotePress, handleOpenMenu, variant],
   );
 
   if (isLoading && !notes) {
