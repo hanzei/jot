@@ -137,13 +137,14 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       const usersData = await usersApi.search();
       if (isMountedRef.current) {
         const map = new Map<string, User>();
+        if (user) map.set(user.id, user as User);
         for (const u of usersData) map.set(u.id, u);
         setUsersById(map);
       }
     } catch (error) {
       if (isMountedRef.current) console.error('Failed to load users:', error);
     }
-  }, []);
+  }, [user]);
 
   const loadNotes = useCallback(async () => {
     try {
