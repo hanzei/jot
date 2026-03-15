@@ -232,19 +232,36 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, onRestore, o
 
               return (
                 <>
-                  {uncompletedItems.map((item) => (
-                    <div key={item.id} className="flex items-center text-sm" style={{ marginLeft: item.indent_level * VALIDATION_LIMITS.INDENT_PX_PER_LEVEL }}>
-                      <input
-                        type="checkbox"
-                        checked={item.completed}
-                        readOnly
-                        className="h-4 w-4 text-blue-600 rounded mr-2"
-                      />
-                      <span className="text-gray-700 dark:text-gray-200">
-                        {item.text}
-                      </span>
-                    </div>
-                  ))}
+                  {uncompletedItems.map((item) => {
+                    const assignedUser = item.assigned_to ? usersById?.get(item.assigned_to) : undefined;
+                    return (
+                      <div key={item.id} className="flex items-center text-sm" style={{ marginLeft: item.indent_level * VALIDATION_LIMITS.INDENT_PX_PER_LEVEL }}>
+                        <input
+                          type="checkbox"
+                          checked={item.completed}
+                          readOnly
+                          className="h-4 w-4 text-blue-600 rounded mr-2"
+                        />
+                        <span className="text-gray-700 dark:text-gray-200">
+                          {item.text}
+                        </span>
+                        {item.assigned_to && (
+                          <div
+                            className="flex-shrink-0 ml-1"
+                            title={assignedUser ? [assignedUser.first_name, assignedUser.last_name].filter(Boolean).join(' ') || assignedUser.username : undefined}
+                          >
+                            <LetterAvatar
+                              firstName={assignedUser?.first_name}
+                              username={assignedUser?.username || '?'}
+                              userId={item.assigned_to}
+                              hasProfileIcon={assignedUser?.has_profile_icon}
+                              className="w-4 h-4"
+                            />
+                          </div>
+                        )}
+                      </div>
+                    );
+                  })}
                   {completedItems.length > 0 && (
                     <div className="text-xs text-gray-500 dark:text-gray-400 mt-2">
                       {t('note.moreCompletedItems', { count: completedItems.length })}

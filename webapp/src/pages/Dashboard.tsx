@@ -137,6 +137,8 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       const usersData = await usersApi.search();
       if (isMountedRef.current) {
         const map = new Map<string, User>();
+        const currentUser = getUser();
+        if (currentUser) map.set(currentUser.id, currentUser);
         for (const u of usersData) map.set(u.id, u);
         setUsersById(map);
       }

@@ -178,7 +178,10 @@
     "titleTooLong": "Title must be {{max}} characters or less",
     "contentTooLong": "Content must be {{max}} characters or less",
     "failedSaveChanges": "Failed to save changes. Please try again.",
-    "menuOptions": "Note options"
+    "menuOptions": "Note options",
+    "assignItem": "Assign item",
+    "unassign": "Unassign",
+    "assignedTo": "Assigned to {{name}}"
   },
   "labels": {
     "title": "Labels",
