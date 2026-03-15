@@ -96,6 +96,7 @@ interface SortableItemProps {
 function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isCompleted = false, onKeyDown, inputRef, onIndentChange, isShared, collaborators, usersById, onAssignItem }: SortableItemProps) {
   const { t } = useTranslation();
   const [showAssigneePicker, setShowAssigneePicker] = useState(false);
+  const closeAssigneePicker = useCallback(() => setShowAssigneePicker(false), []);
   const {
     attributes,
     listeners,
@@ -163,13 +164,17 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
         ref={inputRef}
       />
 
-      {showAssignUI && (
+      {showAssignUI && (() => {
+        const assigneeDisplayName = assignedUser
+          ? [assignedUser.first_name, assignedUser.last_name].filter(Boolean).join(' ') || assignedUser.username
+          : '?';
+        return (
         <div className="relative flex-shrink-0">
           {item.assignedTo ? (
             <button
               onClick={() => !isCompleted && setShowAssigneePicker(true)}
-              title={t('note.assignedTo', { name: assignedUser ? [assignedUser.first_name, assignedUser.last_name].filter(Boolean).join(' ') || assignedUser.username : '?' })}
-              aria-label={t('note.assignedTo', { name: assignedUser?.username || '?' })}
+              title={t('note.assignedTo', { name: assigneeDisplayName })}
+              aria-label={t('note.assignedTo', { name: assigneeDisplayName })}
               className={isCompleted ? 'cursor-default' : 'cursor-pointer'}
             >
               <LetterAvatar
@@ -197,11 +202,12 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
               collaborators={collaborators}
               currentAssigneeId={item.assignedTo}
               onAssign={(userId) => onAssignItem(item.id, userId)}
-              onClose={() => setShowAssigneePicker(false)}
+              onClose={closeAssigneePicker}
             />
           )}
         </div>
-      )}
+        );
+      })()}
 
       <button
         onClick={() => onRemoveTodoItem(item.id)}

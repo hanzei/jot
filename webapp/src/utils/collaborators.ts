@@ -22,16 +22,14 @@ export function buildCollaborators(
   const seen = new Set<string>();
 
   const owner = usersById?.get(noteUserId);
-  if (owner) {
-    result.push({
-      userId: owner.id,
-      username: owner.username,
-      firstName: owner.first_name,
-      lastName: owner.last_name,
-      hasProfileIcon: owner.has_profile_icon,
-    });
-    seen.add(owner.id);
-  }
+  result.push({
+    userId: noteUserId,
+    username: owner?.username || '?',
+    firstName: owner?.first_name,
+    lastName: owner?.last_name,
+    hasProfileIcon: owner?.has_profile_icon,
+  });
+  seen.add(noteUserId);
 
   sharedWith?.forEach(s => {
     if (seen.has(s.shared_with_user_id)) return;
