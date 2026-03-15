@@ -137,7 +137,8 @@ export async function getLocalNotes(db: SQLiteDatabase, params?: GetNotesParams)
   let sql = 'SELECT * FROM notes WHERE 1=1';
   const args: (string | number | null)[] = [];
 
-  if (params?.my_todo && params?.user_id) {
+  if (params?.my_todo) {
+    if (!params.user_id) return [];
     sql += ' AND deleted_at IS NULL AND id IN (SELECT note_id FROM note_items WHERE assigned_to = ?)';
     args.push(params.user_id);
   } else if (params?.archived) {
