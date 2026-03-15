@@ -465,6 +465,10 @@ func (s *UserStore) Delete(id, requestingUserID string) error {
 		}
 	}
 
+	if _, err = tx.Exec(`UPDATE note_items SET assigned_to_user_id = '' WHERE assigned_to_user_id = ?`, id); err != nil {
+		return fmt.Errorf("failed to clear user assignments: %w", err)
+	}
+
 	result, err := tx.Exec(`DELETE FROM users WHERE id = ?`, id)
 	if err != nil {
 		return fmt.Errorf("failed to delete user: %w", err)
