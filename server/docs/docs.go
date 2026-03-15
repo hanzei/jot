@@ -382,7 +382,7 @@ const docTemplate = `{
                 "tags": [
                     "auth"
                 ],
-                "summary": "Get the current authenticated user",
+                "summary": "Get the current authenticated user and settings",
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -1219,12 +1219,12 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "auth"
+                    "users"
                 ],
-                "summary": "Update the current user's profile",
+                "summary": "Update the current user's profile and/or settings",
                 "parameters": [
                     {
-                        "description": "Profile update",
+                        "description": "Fields to update (all optional)",
                         "name": "body",
                         "in": "body",
                         "required": true,
@@ -1272,7 +1272,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "auth"
+                    "users"
                 ],
                 "summary": "Change the current user's password",
                 "parameters": [
@@ -1325,7 +1325,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "auth"
+                    "users"
                 ],
                 "summary": "Upload a profile icon for the current user",
                 "parameters": [
@@ -1365,62 +1365,12 @@ const docTemplate = `{
                     }
                 ],
                 "tags": [
-                    "auth"
+                    "users"
                 ],
                 "summary": "Delete the current user's profile icon",
                 "responses": {
                     "204": {
                         "description": "no content"
-                    },
-                    "401": {
-                        "description": "unauthorized",
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                }
-            }
-        },
-        "/users/me/settings": {
-            "put": {
-                "security": [
-                    {
-                        "CookieAuth": []
-                    }
-                ],
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "auth"
-                ],
-                "summary": "Update the current user's settings",
-                "parameters": [
-                    {
-                        "description": "Settings update",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/handlers.UpdateSettingsRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/models.UserSettings"
-                        }
-                    },
-                    "400": {
-                        "description": "bad request",
-                        "schema": {
-                            "type": "string"
-                        }
                     },
                     "401": {
                         "description": "unauthorized",
@@ -1677,24 +1627,19 @@ const docTemplate = `{
                 }
             }
         },
-        "handlers.UpdateSettingsRequest": {
-            "type": "object",
-            "properties": {
-                "language": {
-                    "type": "string"
-                },
-                "theme": {
-                    "type": "string"
-                }
-            }
-        },
         "handlers.UpdateUserRequest": {
             "type": "object",
             "properties": {
                 "first_name": {
                     "type": "string"
                 },
+                "language": {
+                    "type": "string"
+                },
                 "last_name": {
+                    "type": "string"
+                },
+                "theme": {
                     "type": "string"
                 },
                 "username": {

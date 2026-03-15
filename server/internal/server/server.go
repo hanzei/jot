@@ -151,7 +151,6 @@ func (s *Server) setupRoutes() {
 			r.Get("/me", s.wrapHandler(s.authHandler.Me))
 			r.Put("/users/me", s.wrapHandler(s.authHandler.UpdateUser))
 			r.Put("/users/me/password", s.wrapHandler(s.authHandler.ChangePassword))
-			r.Put("/users/me/settings", s.wrapHandler(s.authHandler.UpdateSettings))
 			r.Post("/users/me/profile-icon", s.wrapHandler(s.authHandler.UploadProfileIcon))
 			r.Delete("/users/me/profile-icon", s.wrapHandler(s.authHandler.DeleteProfileIcon))
 			r.Get("/users/{id}/profile-icon", s.wrapHandler(s.authHandler.GetUserProfileIcon))

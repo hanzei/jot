@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { AboutInfo, AuthResponse, LoginRequest, RegisterRequest, Note, CreateNoteRequest, UpdateNoteRequest, User, CreateUserRequest, UserListResponse, ShareNoteRequest, ShareNoteResponse, NoteShare, ImportResponse, UpdateMeRequest, ChangePasswordRequest, UserSettings, UpdateSettingsRequest, UpdateUserRoleRequest, Label } from '@/types';
+import { AboutInfo, AuthResponse, LoginRequest, RegisterRequest, Note, CreateNoteRequest, UpdateNoteRequest, User, CreateUserRequest, UserListResponse, ShareNoteRequest, ShareNoteResponse, NoteShare, ImportResponse, UpdateMeRequest, ChangePasswordRequest, UpdateUserRoleRequest, Label } from '@/types';
 
 const api = axios.create({
   baseURL: '/api/v1',
@@ -92,14 +92,11 @@ export const users = {
   search: (): Promise<User[]> =>
     api.get('/users').then(res => res.data),
 
-  updateMe: (data: UpdateMeRequest): Promise<User> =>
-    api.put('/users/me', data).then(res => res.data.user),
+  updateMe: (data: UpdateMeRequest): Promise<AuthResponse> =>
+    api.put('/users/me', data).then(res => res.data),
 
   changePassword: (data: ChangePasswordRequest): Promise<void> =>
     api.put('/users/me/password', data),
-
-  updateSettings: (data: UpdateSettingsRequest): Promise<UserSettings> =>
-    api.put('/users/me/settings', data).then(res => res.data),
 
   uploadProfileIcon: (file: File): Promise<User> => {
     const formData = new FormData();

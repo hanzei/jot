@@ -180,19 +180,21 @@ func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) (int, error
 }
 
 type UpdateUserRequest struct {
-	Username  string `json:"username"`
-	FirstName string `json:"first_name"`
-	LastName  string `json:"last_name"`
+	Username  *string `json:"username,omitempty"`
+	FirstName *string `json:"first_name,omitempty"`
+	LastName  *string `json:"last_name,omitempty"`
+	Language  *string `json:"language,omitempty"`
+	Theme     *string `json:"theme,omitempty"`
 }
 
 // UpdateUser godoc
 //
-//	@Summary	Update the current user's profile
-//	@Tags		auth
+//	@Summary	Update the current user's profile and/or settings
+//	@Tags		users
 //	@Security	CookieAuth
 //	@Accept		json
 //	@Produce	json
-//	@Param		body	body		UpdateUserRequest	true	"Profile update"
+//	@Param		body	body		UpdateUserRequest	true	"Fields to update (all optional)"
 //	@Success	200		{object}	AuthResponse
 //	@Failure	400		{string}	string	"bad request"
 //	@Failure	401		{string}	string	"unauthorized"
@@ -209,11 +211,24 @@ func (h *AuthHandler) UpdateUser(w http.ResponseWriter, r *http.Request) (int, e
 		return http.StatusBadRequest, err
 	}
 
-	if err := validateUsername(req.Username); err != nil {
+	username := currentUser.Username
+	if req.Username != nil {
+		username = *req.Username
+	}
+	if err := validateUsername(username); err != nil {
 		return http.StatusBadRequest, err
 	}
 
-	user, err := h.userStore.UpdateProfile(currentUser.ID, req.Username, req.FirstName, req.LastName)
+	firstName := currentUser.FirstName
+	if req.FirstName != nil {
+		firstName = *req.FirstName
+	}
+	lastName := currentUser.LastName
+	if req.LastName != nil {
+		lastName = *req.LastName
+	}
+
+	user, err := h.userStore.UpdateProfile(currentUser.ID, username, firstName, lastName)
 	if err != nil {
 		if errors.Is(err, models.ErrUsernameTaken) {
 			return http.StatusConflict, models.ErrUsernameTaken
@@ -221,7 +236,38 @@ func (h *AuthHandler) UpdateUser(w http.ResponseWriter, r *http.Request) (int, e
 		return http.StatusInternalServerError, err
 	}
 
-	response := AuthResponse{User: user}
+	settings, err := h.userSettingsStore.GetOrCreate(currentUser.ID)
+	if err != nil {
+		return http.StatusInternalServerError, err
+	}
+
+	if req.Language != nil || req.Theme != nil {
+		language := settings.Language
+		if req.Language != nil {
+			language = *req.Language
+		}
+		if !validLanguages[language] {
+			return http.StatusBadRequest, errors.New("invalid language: must be 'system', 'en', or 'de'")
+		}
+
+		theme := settings.Theme
+		if req.Theme != nil {
+			theme = *req.Theme
+		}
+		if theme == "" {
+			theme = "system"
+		}
+		if !validThemes[theme] {
+			return http.StatusBadRequest, errors.New("invalid theme: must be 'system', 'light', or 'dark'")
+		}
+
+		settings, err = h.userSettingsStore.Update(currentUser.ID, language, theme)
+		if err != nil {
+			return http.StatusInternalServerError, err
+		}
+	}
+
+	response := AuthResponse{User: user, Settings: settings}
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(response); err != nil {
@@ -238,7 +284,7 @@ type ChangePasswordRequest struct {
 // ChangePassword godoc
 //
 //	@Summary	Change the current user's password
-//	@Tags		auth
+//	@Tags		users
 //	@Security	CookieAuth
 //	@Accept		json
 //	@Param		body	body	ChangePasswordRequest	true	"Password change"
@@ -297,7 +343,7 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) (in
 
 // Me godoc
 //
-//	@Summary	Get the current authenticated user
+//	@Summary	Get the current authenticated user and settings
 //	@Tags		auth
 //	@Security	CookieAuth
 //	@Produce	json
@@ -322,60 +368,6 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) (int, error) {
 
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(response); err != nil {
-		return http.StatusInternalServerError, err
-	}
-	return 0, nil
-}
-
-type UpdateSettingsRequest struct {
-	Language string `json:"language"`
-	Theme    string `json:"theme"`
-}
-
-var validLanguages = map[string]bool{"system": true, "en": true, "de": true}
-var validThemes = map[string]bool{"system": true, "light": true, "dark": true}
-
-// UpdateSettings godoc
-//
-//	@Summary	Update the current user's settings
-//	@Tags		auth
-//	@Security	CookieAuth
-//	@Accept		json
-//	@Produce	json
-//	@Param		body	body		UpdateSettingsRequest	true	"Settings update"
-//	@Success	200		{object}	models.UserSettings
-//	@Failure	400		{string}	string	"bad request"
-//	@Failure	401		{string}	string	"unauthorized"
-//	@Router		/users/me/settings [put]
-func (h *AuthHandler) UpdateSettings(w http.ResponseWriter, r *http.Request) (int, error) {
-	currentUser, ok := auth.GetUserFromContext(r.Context())
-	if !ok {
-		return http.StatusUnauthorized, errors.New("unauthorized")
-	}
-
-	var req UpdateSettingsRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		return http.StatusBadRequest, err
-	}
-
-	if !validLanguages[req.Language] {
-		return http.StatusBadRequest, errors.New("invalid language: must be 'system', 'en', or 'de'")
-	}
-
-	if req.Theme == "" {
-		req.Theme = "system"
-	}
-	if !validThemes[req.Theme] {
-		return http.StatusBadRequest, errors.New("invalid theme: must be 'system', 'light', or 'dark'")
-	}
-
-	settings, err := h.userSettingsStore.Update(currentUser.ID, req.Language, req.Theme)
-	if err != nil {
-		return http.StatusInternalServerError, err
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(settings); err != nil {
 		return http.StatusInternalServerError, err
 	}
 	return 0, nil
@@ -490,7 +482,7 @@ func resizeImage(data []byte) ([]byte, error) {
 // UploadProfileIcon godoc
 //
 //	@Summary	Upload a profile icon for the current user
-//	@Tags		auth
+//	@Tags		users
 //	@Security	CookieAuth
 //	@Accept		multipart/form-data
 //	@Produce	json
@@ -553,7 +545,7 @@ func (h *AuthHandler) UploadProfileIcon(w http.ResponseWriter, r *http.Request) 
 // DeleteProfileIcon godoc
 //
 //	@Summary	Delete the current user's profile icon
-//	@Tags		auth
+//	@Tags		users
 //	@Security	CookieAuth
 //	@Success	204	"no content"
 //	@Failure	401	{string}	string	"unauthorized"

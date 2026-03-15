@@ -128,18 +128,15 @@ definitions:
       title:
         type: string
     type: object
-  handlers.UpdateSettingsRequest:
-    properties:
-      language:
-        type: string
-      theme:
-        type: string
-    type: object
   handlers.UpdateUserRequest:
     properties:
       first_name:
         type: string
+      language:
+        type: string
       last_name:
+        type: string
+      theme:
         type: string
       username:
         type: string
@@ -565,7 +562,7 @@ paths:
             type: string
       security:
       - CookieAuth: []
-      summary: Get the current authenticated user
+      summary: Get the current authenticated user and settings
       tags:
       - auth
   /notes:
@@ -1110,7 +1107,7 @@ paths:
       consumes:
       - application/json
       parameters:
-      - description: Profile update
+      - description: Fields to update (all optional)
         in: body
         name: body
         required: true
@@ -1137,9 +1134,9 @@ paths:
             type: string
       security:
       - CookieAuth: []
-      summary: Update the current user's profile
+      summary: Update the current user's profile and/or settings
       tags:
-      - auth
+      - users
   /users/me/password:
     put:
       consumes:
@@ -1170,7 +1167,7 @@ paths:
       - CookieAuth: []
       summary: Change the current user's password
       tags:
-      - auth
+      - users
   /users/me/profile-icon:
     delete:
       responses:
@@ -1184,7 +1181,7 @@ paths:
       - CookieAuth: []
       summary: Delete the current user's profile icon
       tags:
-      - auth
+      - users
     post:
       consumes:
       - multipart/form-data
@@ -1213,38 +1210,7 @@ paths:
       - CookieAuth: []
       summary: Upload a profile icon for the current user
       tags:
-      - auth
-  /users/me/settings:
-    put:
-      consumes:
-      - application/json
-      parameters:
-      - description: Settings update
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/handlers.UpdateSettingsRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/models.UserSettings'
-        "400":
-          description: bad request
-          schema:
-            type: string
-        "401":
-          description: unauthorized
-          schema:
-            type: string
-      security:
-      - CookieAuth: []
-      summary: Update the current user's settings
-      tags:
-      - auth
+      - users
 securityDefinitions:
   CookieAuth:
     in: header
