@@ -1691,6 +1691,9 @@
         "handlers.UpdateNoteItem": {
             "type": "object",
             "properties": {
+                "assigned_to": {
+                    "type": "string"
+                },
                 "completed": {
                     "type": "boolean"
                 },
@@ -1889,6 +1892,9 @@
         "models.NoteItem": {
             "type": "object",
             "properties": {
+                "assigned_to": {
+                    "type": "string"
+                },
                 "completed": {
                     "type": "boolean"
                 },

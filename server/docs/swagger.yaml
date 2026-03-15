@@ -98,6 +98,8 @@ definitions:
     type: object
   handlers.UpdateNoteItem:
     properties:
+      assigned_to:
+        type: string
       completed:
         type: boolean
       indent_level:
@@ -227,6 +229,8 @@ definitions:
     type: object
   models.NoteItem:
     properties:
+      assigned_to:
+        type: string
       completed:
         type: boolean
       created_at:

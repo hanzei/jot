@@ -58,14 +58,15 @@ type Note struct {
 }
 
 type NoteItem struct {
-	ID          string    `json:"id"`
-	NoteID      string    `json:"note_id"`
-	Text        string    `json:"text"`
-	Completed   bool      `json:"completed"`
-	Position    int       `json:"position"`
-	IndentLevel int       `json:"indent_level"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID               string    `json:"id"`
+	NoteID           string    `json:"note_id"`
+	Text             string    `json:"text"`
+	Completed        bool      `json:"completed"`
+	Position         int       `json:"position"`
+	IndentLevel      int       `json:"indent_level"`
+	AssignedTo       string    `json:"assigned_to"`
+	CreatedAt        time.Time `json:"created_at"`
+	UpdatedAt        time.Time `json:"updated_at"`
 }
 
 type NoteShare struct {
@@ -537,7 +538,8 @@ func (s *NoteStore) PurgeOldTrashedNotes(olderThan time.Duration) error {
 }
 
 func (s *NoteStore) getItemsByNoteID(noteID string) ([]NoteItem, error) {
-	query := `SELECT id, note_id, text, completed, position, indent_level, created_at, updated_at
+	query := `SELECT id, note_id, text, completed, position, indent_level,
+			  assigned_to, created_at, updated_at
 			  FROM note_items WHERE note_id = ? ORDER BY position`
 
 	rows, err := s.db.Query(query, noteID)
@@ -555,7 +557,8 @@ func (s *NoteStore) getItemsByNoteID(noteID string) ([]NoteItem, error) {
 		var item NoteItem
 		err := rows.Scan(
 			&item.ID, &item.NoteID, &item.Text, &item.Completed,
-			&item.Position, &item.IndentLevel, &item.CreatedAt, &item.UpdatedAt,
+			&item.Position, &item.IndentLevel, &item.AssignedTo,
+			&item.CreatedAt, &item.UpdatedAt,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan note item: %w", err)
@@ -570,18 +573,17 @@ func (s *NoteStore) getItemsByNoteID(noteID string) ([]NoteItem, error) {
 	return items, nil
 }
 
-func (s *NoteStore) CreateItem(noteID string, text string, position, indentLevel int) (*NoteItem, error) {
-	// Generate item ID
+func (s *NoteStore) CreateItem(noteID string, text string, position, indentLevel int, assignedTo string) (*NoteItem, error) {
 	itemID, err := generateID()
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate item ID: %w", err)
 	}
 
-	query := `INSERT INTO note_items (id, note_id, text, position, indent_level)
-			  VALUES (?, ?, ?, ?, ?) RETURNING completed, created_at, updated_at`
+	query := `INSERT INTO note_items (id, note_id, text, position, indent_level, assigned_to)
+			  VALUES (?, ?, ?, ?, ?, ?) RETURNING completed, created_at, updated_at`
 
 	var item NoteItem
-	err = s.db.QueryRow(query, itemID, noteID, text, position, indentLevel).Scan(
+	err = s.db.QueryRow(query, itemID, noteID, text, position, indentLevel, assignedTo).Scan(
 		&item.Completed, &item.CreatedAt, &item.UpdatedAt,
 	)
 	if err != nil {
@@ -593,10 +595,14 @@ func (s *NoteStore) CreateItem(noteID string, text string, position, indentLevel
 	item.Text = text
 	item.Position = position
 	item.IndentLevel = indentLevel
+	item.AssignedTo = assignedTo
 
 	return &item, nil
 }
 
+// UpdateItem updates text, completed, position, and indent_level for a note item.
+// It does NOT update assigned_to. The current update flow uses delete-and-recreate
+// via CreateItemWithCompleted which preserves assignments via the caller-supplied value.
 func (s *NoteStore) UpdateItem(id string, text string, completed bool, position, indentLevel int) error {
 	query := `UPDATE note_items SET text = ?, completed = ?, position = ?, indent_level = ?, updated_at = CURRENT_TIMESTAMP
 			  WHERE id = ?`
@@ -626,17 +632,16 @@ func (s *NoteStore) DeleteItemsByNoteID(noteID string) error {
 	return nil
 }
 
-func (s *NoteStore) CreateItemWithCompleted(noteID string, text string, position int, completed bool, indentLevel int) (*NoteItem, error) {
-	// Generate item ID
+func (s *NoteStore) CreateItemWithCompleted(noteID string, text string, position int, completed bool, indentLevel int, assignedTo string) (*NoteItem, error) {
 	itemID, err := generateID()
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate item ID: %w", err)
 	}
 
-	query := `INSERT INTO note_items (id, note_id, text, position, completed, indent_level)
-			  VALUES (?, ?, ?, ?, ?, ?) RETURNING created_at, updated_at`
+	query := `INSERT INTO note_items (id, note_id, text, position, completed, indent_level, assigned_to)
+			  VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING created_at, updated_at`
 	var item NoteItem
-	err = s.db.QueryRow(query, itemID, noteID, text, position, completed, indentLevel).Scan(
+	err = s.db.QueryRow(query, itemID, noteID, text, position, completed, indentLevel, assignedTo).Scan(
 		&item.CreatedAt, &item.UpdatedAt,
 	)
 	if err != nil {
@@ -649,6 +654,7 @@ func (s *NoteStore) CreateItemWithCompleted(noteID string, text string, position
 	item.Position = position
 	item.Completed = completed
 	item.IndentLevel = indentLevel
+	item.AssignedTo = assignedTo
 
 	return &item, nil
 }
@@ -676,9 +682,13 @@ func (s *NoteStore) ShareNote(noteID string, sharedByUserID, sharedWithUserID st
 }
 
 func (s *NoteStore) UnshareNote(noteID string, sharedWithUserID string) error {
-	query := `DELETE FROM note_shares WHERE note_id = ? AND shared_with_user_id = ?`
+	tx, err := s.db.Begin()
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
 
-	result, err := s.db.Exec(query, noteID, sharedWithUserID)
+	result, err := tx.Exec(`DELETE FROM note_shares WHERE note_id = ? AND shared_with_user_id = ?`, noteID, sharedWithUserID)
 	if err != nil {
 		return fmt.Errorf("failed to unshare note: %w", err)
 	}
@@ -690,6 +700,63 @@ func (s *NoteStore) UnshareNote(noteID string, sharedWithUserID string) error {
 
 	if rowsAffected == 0 {
 		return ErrNoteShareNotFound
+	}
+
+	if _, err = tx.Exec(
+		`UPDATE note_items SET assigned_to = '' WHERE note_id = ? AND assigned_to = ?`,
+		noteID, sharedWithUserID,
+	); err != nil {
+		return fmt.Errorf("failed to clear assignments for unshared user: %w", err)
+	}
+
+	var remainingShares int
+	if err = tx.QueryRow(`SELECT COUNT(*) FROM note_shares WHERE note_id = ?`, noteID).Scan(&remainingShares); err != nil {
+		return fmt.Errorf("failed to count remaining shares: %w", err)
+	}
+
+	if remainingShares == 0 {
+		if _, err = tx.Exec(
+			`UPDATE note_items SET assigned_to = '' WHERE note_id = ? AND assigned_to != ''`,
+			noteID,
+		); err != nil {
+			return fmt.Errorf("failed to clear all assignments: %w", err)
+		}
+	}
+
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit unshare transaction: %w", err)
+	}
+
+	return nil
+}
+
+// ClearUserAssignmentsTx clears all item assignments related to a deleted user
+// within an existing transaction. It:
+//  1. Removes the user's note_shares rows (SQLite FK cascades are not enforced).
+//  2. Clears items directly assigned to the deleted user.
+//  3. Clears all remaining assignments on notes that no longer have any shares,
+//     enforcing the invariant that unshared notes cannot have assignments.
+func (s *NoteStore) ClearUserAssignmentsTx(tx *sql.Tx, userID string) error {
+	if _, err := tx.Exec(
+		`DELETE FROM note_shares WHERE shared_with_user_id = ?`,
+		userID,
+	); err != nil {
+		return fmt.Errorf("failed to remove deleted user shares: %w", err)
+	}
+
+	if _, err := tx.Exec(
+		`UPDATE note_items SET assigned_to = '' WHERE assigned_to = ?`,
+		userID,
+	); err != nil {
+		return fmt.Errorf("failed to clear deleted user assignments: %w", err)
+	}
+
+	if _, err := tx.Exec(
+		`UPDATE note_items SET assigned_to = ''
+		 WHERE assigned_to != ''
+		   AND note_id NOT IN (SELECT DISTINCT note_id FROM note_shares)`,
+	); err != nil {
+		return fmt.Errorf("failed to clear assignments on unshared notes: %w", err)
 	}
 
 	return nil
@@ -779,6 +846,19 @@ func (s *NoteStore) IsOwner(noteID string, userID string) (bool, error) {
 	}
 
 	return count > 0, nil
+}
+
+// GetOwnerID returns the owner user ID for a note.
+func (s *NoteStore) GetOwnerID(noteID string) (string, error) {
+	var ownerID string
+	err := s.db.QueryRow(`SELECT user_id FROM notes WHERE id = ?`, noteID).Scan(&ownerID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return "", ErrNoteNotFound
+		}
+		return "", fmt.Errorf("failed to get note owner: %w", err)
+	}
+	return ownerID, nil
 }
 
 func (s *NoteStore) ReorderNotes(userID string, noteIDs []string) error {

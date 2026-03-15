@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"database/sql"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -13,11 +14,13 @@ import (
 
 type AdminHandler struct {
 	userStore *models.UserStore
+	noteStore *models.NoteStore
 }
 
-func NewAdminHandler(userStore *models.UserStore) *AdminHandler {
+func NewAdminHandler(userStore *models.UserStore, noteStore *models.NoteStore) *AdminHandler {
 	return &AdminHandler{
 		userStore: userStore,
+		noteStore: noteStore,
 	}
 }
 
@@ -171,7 +174,10 @@ func (h *AdminHandler) DeleteUser(w http.ResponseWriter, r *http.Request) (int, 
 		return http.StatusUnauthorized, errors.New("unauthorized")
 	}
 
-	if err := h.userStore.Delete(targetID, requestingUser.ID); err != nil {
+	err := h.userStore.DeleteWithCleanup(targetID, requestingUser.ID, func(tx *sql.Tx) error {
+		return h.noteStore.ClearUserAssignmentsTx(tx, targetID)
+	})
+	if err != nil {
 		if errors.Is(err, models.ErrUserNotFound) {
 			return http.StatusNotFound, err
 		}
@@ -183,6 +189,7 @@ func (h *AdminHandler) DeleteUser(w http.ResponseWriter, r *http.Request) (int, 
 		}
 		return http.StatusInternalServerError, err
 	}
+
 	w.WriteHeader(http.StatusNoContent)
 	return 0, nil
 }
