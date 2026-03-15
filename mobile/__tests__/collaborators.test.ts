@@ -1,5 +1,4 @@
-import { buildCollaborators, displayName, Collaborator } from '../src/utils/collaborators';
-import { NoteShare, User } from '../src/types';
+import { buildCollaborators, displayName, type Collaborator, type NoteShare, type User } from '@jot/shared';
 
 function makeUser(overrides: Partial<User> & { id: string; username: string }): User {
   return {

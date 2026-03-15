@@ -1,4 +1,4 @@
-import { User, NoteShare } from '../types';
+import type { User, NoteShare } from '@jot/shared';
 
 export interface Collaborator {
   userId: string;

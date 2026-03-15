@@ -1,5 +1,5 @@
 import api from './client';
-import { Note, GetNotesParams, CreateNoteRequest, UpdateNoteRequest } from '../types';
+import type { Note, GetNotesParams, CreateNoteRequest, UpdateNoteRequest } from '@jot/shared';
 
 export async function getNotes(params?: GetNotesParams): Promise<Note[]> {
   const res = await api.get('/notes', { params });

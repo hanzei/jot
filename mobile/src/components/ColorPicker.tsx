@@ -10,12 +10,7 @@ import {
   Pressable,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-
-export const COLOR_PALETTE = [
-  '#ffffff', '#f28b82', '#fbbc04', '#fff475', '#ccff90',
-  '#a7ffeb', '#cbf0f8', '#aecbfa', '#d7aefb', '#fdcfe8',
-  '#e6c9a8', '#e8eaed',
-];
+import { NOTE_COLORS_EXTENDED } from '@jot/shared';
 
 interface ColorPickerProps {
   visible: boolean;
@@ -42,7 +37,7 @@ export default function ColorPicker({ visible, currentColor, onSelect, onClose }
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.palette}
             >
-              {COLOR_PALETTE.map((color) => (
+              {NOTE_COLORS_EXTENDED.map((color) => (
                 <TouchableOpacity
                   key={color}
                   style={[

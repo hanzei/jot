@@ -1,7 +1,7 @@
 import axios, { AxiosHeaders } from 'axios';
 import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
-import { AuthResponse, LoginRequest, RegisterRequest } from '../types';
+import type { AuthResponse, LoginRequest, RegisterRequest } from '@jot/shared';
 
 const SESSION_KEY = 'jot_session';
 const SERVER_URL_KEY = 'jot_server_url';

@@ -9,7 +9,7 @@ import {
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import UserAvatar from './UserAvatar';
-import { Collaborator, displayName } from '../utils/collaborators';
+import { displayName, type Collaborator } from '@jot/shared';
 
 interface AssigneePickerProps {
   visible: boolean;

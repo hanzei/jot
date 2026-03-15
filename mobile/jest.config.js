@@ -6,6 +6,7 @@ module.exports = {
   setupFiles: ['./jest.setup.js'],
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
+    '^@jot/shared$': '<rootDir>/../shared/src',
   },
   // forceExit required: @testing-library/react-native's waitFor uses setInterval
   // internally which can outlive tests in the react-native-env.js environment
