@@ -69,9 +69,10 @@ type CreateNoteRequest struct {
 }
 
 type CreateNoteItem struct {
-	Text        string `json:"text"`
-	Position    int    `json:"position"`
-	IndentLevel int    `json:"indent_level"`
+	Text             string `json:"text"`
+	Position         int    `json:"position"`
+	IndentLevel      int    `json:"indent_level"`
+	AssignedToUserID string `json:"assigned_to_user_id"`
 }
 
 type UpdateNoteRequest struct {
@@ -85,10 +86,11 @@ type UpdateNoteRequest struct {
 }
 
 type UpdateNoteItem struct {
-	Text        string `json:"text"`
-	Position    int    `json:"position"`
-	Completed   bool   `json:"completed"`
-	IndentLevel int    `json:"indent_level"`
+	Text             string `json:"text"`
+	Position         int    `json:"position"`
+	Completed        bool   `json:"completed"`
+	IndentLevel      int    `json:"indent_level"`
+	AssignedToUserID string `json:"assigned_to_user_id"`
 }
 
 func normalizeCreateNoteRequest(req *CreateNoteRequest) (int, error) {
@@ -118,7 +120,10 @@ func (h *NotesHandler) createTodoItems(noteID string, items []CreateNoteItem) (i
 		if item.IndentLevel < 0 || item.IndentLevel > 1 {
 			return http.StatusBadRequest, errors.New("indent_level must be 0 or 1")
 		}
-		if _, err := h.noteStore.CreateItem(noteID, item.Text, item.Position, item.IndentLevel); err != nil {
+		if item.AssignedToUserID != "" {
+			return http.StatusBadRequest, errors.New("cannot assign items on note creation; save and share the note first")
+		}
+		if _, err := h.noteStore.CreateItem(noteID, item.Text, item.Position, item.IndentLevel, ""); err != nil {
 			return http.StatusInternalServerError, err
 		}
 	}
@@ -261,25 +266,75 @@ func (h *NotesHandler) validateAndUpdateTodoItems(noteID string, userID string, 
 			return http.StatusBadRequest, errors.New("indent_level must be 0 or 1")
 		}
 	}
+
+	if status, err := h.validateItemAssignments(noteID, items); err != nil {
+		return status, err
+	}
+
 	return 0, h.updateTodoItems(noteID, userID, items)
 }
 
+// validateItemAssignments checks that all assigned user IDs are valid and have access to the note.
+func (h *NotesHandler) validateItemAssignments(noteID string, items []UpdateNoteItem) (int, error) {
+	hasAssignment := false
+	for _, item := range items {
+		if item.AssignedToUserID != "" {
+			hasAssignment = true
+			break
+		}
+	}
+	if !hasAssignment {
+		return 0, nil
+	}
+
+	shares, err := h.noteStore.GetNoteShares(noteID)
+	if err != nil {
+		return http.StatusInternalServerError, fmt.Errorf("failed to check note shares: %w", err)
+	}
+	if len(shares) == 0 {
+		return http.StatusBadRequest, errors.New("cannot assign items on an unshared note")
+	}
+
+	ownerID, err := h.noteStore.GetOwnerID(noteID)
+	if err != nil {
+		return http.StatusInternalServerError, fmt.Errorf("failed to get note owner: %w", err)
+	}
+
+	accessSet := make(map[string]struct{})
+	accessSet[ownerID] = struct{}{}
+	for _, share := range shares {
+		accessSet[share.SharedWithUserID] = struct{}{}
+	}
+
+	for _, item := range items {
+		if item.AssignedToUserID == "" {
+			continue
+		}
+		if !models.IsValidID(item.AssignedToUserID) {
+			return http.StatusBadRequest, errors.New("invalid assigned_to_user_id format")
+		}
+		if _, ok := accessSet[item.AssignedToUserID]; !ok {
+			return http.StatusBadRequest, fmt.Errorf("user %s does not have access to this note", item.AssignedToUserID)
+		}
+	}
+
+	return 0, nil
+}
+
+
 func (h *NotesHandler) updateTodoItems(noteID string, userID string, items []UpdateNoteItem) error {
-	// Get current note to check if it's a todo type
 	currentNote, err := h.noteStore.GetByID(noteID, userID)
 	if err != nil {
 		return err
 	}
 
 	if currentNote.NoteType == models.NoteTypeTodo {
-		// Delete all existing items (we'll recreate them)
 		if err := h.noteStore.DeleteItemsByNoteID(noteID); err != nil {
 			return err
 		}
 
-		// Create new items with updated positions
 		for _, item := range items {
-			_, err := h.noteStore.CreateItemWithCompleted(noteID, item.Text, item.Position, item.Completed, item.IndentLevel)
+			_, err := h.noteStore.CreateItemWithCompleted(noteID, item.Text, item.Position, item.Completed, item.IndentLevel, item.AssignedToUserID)
 			if err != nil {
 				return err
 			}
@@ -822,7 +877,7 @@ func (h *NotesHandler) importKeepNote(userID string, kn keepNote) error {
 
 	if noteType == models.NoteTypeTodo {
 		for i, item := range kn.ListContent {
-			if _, err := h.noteStore.CreateItemWithCompleted(note.ID, item.Text, i, item.IsChecked, 0); err != nil {
+			if _, err := h.noteStore.CreateItemWithCompleted(note.ID, item.Text, i, item.IsChecked, 0, ""); err != nil {
 				return err
 			}
 		}

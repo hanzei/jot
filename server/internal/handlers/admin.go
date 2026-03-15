@@ -13,11 +13,13 @@ import (
 
 type AdminHandler struct {
 	userStore *models.UserStore
+	noteStore *models.NoteStore
 }
 
-func NewAdminHandler(userStore *models.UserStore) *AdminHandler {
+func NewAdminHandler(userStore *models.UserStore, noteStore *models.NoteStore) *AdminHandler {
 	return &AdminHandler{
 		userStore: userStore,
+		noteStore: noteStore,
 	}
 }
 
@@ -169,6 +171,10 @@ func (h *AdminHandler) DeleteUser(w http.ResponseWriter, r *http.Request) (int, 
 	requestingUser, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
 		return http.StatusUnauthorized, errors.New("unauthorized")
+	}
+
+	if err := h.noteStore.ClearUserAssignments(targetID); err != nil {
+		return http.StatusInternalServerError, err
 	}
 
 	if err := h.userStore.Delete(targetID, requestingUser.ID); err != nil {

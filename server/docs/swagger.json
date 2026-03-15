@@ -1571,6 +1571,9 @@
         "handlers.CreateNoteItem": {
             "type": "object",
             "properties": {
+                "assigned_to_user_id": {
+                    "type": "string"
+                },
                 "indent_level": {
                     "type": "integer"
                 },
@@ -1691,6 +1694,9 @@
         "handlers.UpdateNoteItem": {
             "type": "object",
             "properties": {
+                "assigned_to_user_id": {
+                    "type": "string"
+                },
                 "completed": {
                     "type": "boolean"
                 },
@@ -1889,6 +1895,9 @@
         "models.NoteItem": {
             "type": "object",
             "properties": {
+                "assigned_to_user_id": {
+                    "type": "string"
+                },
                 "completed": {
                     "type": "boolean"
                 },
