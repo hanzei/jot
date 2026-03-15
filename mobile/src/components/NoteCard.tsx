@@ -83,11 +83,13 @@ function TodoPreview({ items, usersById }: {
 
 function NoteCard({ note, usersById, onPress, onLongPress, onMenuPress }: NoteCardProps) {
   const hasColor = note.color && note.color !== '#ffffff';
-  const borderColor = hasColor ? note.color : '#e5e7eb';
 
   return (
     <TouchableOpacity
-      style={[styles.card, { borderLeftColor: borderColor, borderLeftWidth: hasColor ? 4 : 1 }]}
+      style={[
+        styles.card,
+        hasColor && { backgroundColor: note.color },
+      ]}
       onPress={onPress}
       onLongPress={onLongPress}
       activeOpacity={0.7}
