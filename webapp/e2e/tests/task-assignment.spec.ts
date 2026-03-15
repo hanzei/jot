@@ -11,22 +11,14 @@ test.describe('Task Assignment', () => {
     const user2Name = uniqueUsername('collab');
     const user2Pass = 'testpass123';
 
-    await request.post('/api/v1/register', {
+    const registerResp = await request.post('/api/v1/register', {
       data: { username: user2Name, password: user2Pass },
     });
+    expect(registerResp.ok()).toBeTruthy();
 
-    // Create a todo note
     await dashboardPage.goto();
     await dashboardPage.createTodoNote('Assignment Test', ['Buy milk', 'Buy eggs']);
-
-    // Share the note with user2 via the card context menu
-    const noteCard = dashboardPage.noteCard('Assignment Test');
-    await noteCard.hover();
-    await noteCard.getByRole('button', { name: /note options/i }).click({ force: true });
-    await page.getByRole('menuitem', { name: /share/i }).click();
-    await page.getByPlaceholder(/search users/i).fill(user2Name);
-    await page.getByText(user2Name).click();
-    await page.keyboard.press('Escape');
+    await dashboardPage.shareNoteWithUser('Assignment Test', user2Name);
 
     // Open the note modal
     await dashboardPage.openNote('Assignment Test');
@@ -80,21 +72,14 @@ test.describe('Task Assignment', () => {
     const user2Name = uniqueUsername('collab');
     const user2Pass = 'testpass123';
 
-    await request.post('/api/v1/register', {
+    const registerResp = await request.post('/api/v1/register', {
       data: { username: user2Name, password: user2Pass },
     });
+    expect(registerResp.ok()).toBeTruthy();
 
-    // Create and share a todo note
     await dashboardPage.goto();
     await dashboardPage.createTodoNote('Card Avatar Test', ['Item A', 'Item B']);
-
-    const noteCard = dashboardPage.noteCard('Card Avatar Test');
-    await noteCard.hover();
-    await noteCard.getByRole('button', { name: /note options/i }).click({ force: true });
-    await page.getByRole('menuitem', { name: /share/i }).click();
-    await page.getByPlaceholder(/search users/i).fill(user2Name);
-    await page.getByText(user2Name).click();
-    await page.keyboard.press('Escape');
+    await dashboardPage.shareNoteWithUser('Card Avatar Test', user2Name);
 
     // Open and assign the first item
     await dashboardPage.openNote('Card Avatar Test');
@@ -124,21 +109,14 @@ test.describe('Task Assignment', () => {
     const user2Name = uniqueUsername('collab');
     const user2Pass = 'testpass123';
 
-    await request.post('/api/v1/register', {
+    const registerResp = await request.post('/api/v1/register', {
       data: { username: user2Name, password: user2Pass },
     });
+    expect(registerResp.ok()).toBeTruthy();
 
-    // Create a shared todo note and assign an item
     await dashboardPage.goto();
     await dashboardPage.createTodoNote('Unshare Cleanup', ['Task 1']);
-
-    const noteCard = dashboardPage.noteCard('Unshare Cleanup');
-    await noteCard.hover();
-    await noteCard.getByRole('button', { name: /note options/i }).click({ force: true });
-    await page.getByRole('menuitem', { name: /share/i }).click();
-    await page.getByPlaceholder(/search users/i).fill(user2Name);
-    await page.getByText(user2Name).click();
-    await page.keyboard.press('Escape');
+    await dashboardPage.shareNoteWithUser('Unshare Cleanup', user2Name);
 
     // Open the note and assign the item
     await dashboardPage.openNote('Unshare Cleanup');
@@ -155,21 +133,21 @@ test.describe('Task Assignment', () => {
     await expect(itemRow.locator('svg[role="img"], img[alt]').first()).toBeVisible();
     await page.click('button[aria-label="Close"]');
 
-    // Now unshare the note via API (simpler than UI flow for this test)
-    // First get our session cookie from the page context
+    // Unshare via API
     const cookies = await page.context().cookies();
     const sessionCookie = cookies.find(c => c.name === 'jot_session');
+    expect(sessionCookie, 'session cookie must exist').toBeDefined();
 
-    // Get the note ID from the API
     const notesResp = await request.get('/api/v1/notes', {
-      headers: { Cookie: `jot_session=${sessionCookie?.value}` },
+      headers: { Cookie: `jot_session=${sessionCookie!.value}` },
     });
+    expect(notesResp.ok()).toBeTruthy();
     const notes = await notesResp.json();
     const note = notes.find((n: { title: string }) => n.title === 'Unshare Cleanup');
+    expect(note, 'note "Unshare Cleanup" must exist in API response').toBeDefined();
 
-    // Unshare the user
     const unshareResp = await request.delete(`/api/v1/notes/${note.id}/share`, {
-      headers: { Cookie: `jot_session=${sessionCookie?.value}` },
+      headers: { Cookie: `jot_session=${sessionCookie!.value}` },
       data: { username: user2Name },
     });
     expect(unshareResp.ok()).toBeTruthy();
@@ -195,21 +173,14 @@ test.describe('Task Assignment', () => {
     const user2Name = uniqueUsername('viewer');
     const user2Pass = 'testpass123';
 
-    await request.post('/api/v1/register', {
+    const registerResp = await request.post('/api/v1/register', {
       data: { username: user2Name, password: user2Pass },
     });
+    expect(registerResp.ok()).toBeTruthy();
 
-    // Create a shared todo note and assign the owner to an item
     await dashboardPage.goto();
     await dashboardPage.createTodoNote('Collab View', ['Shared Task']);
-
-    const noteCard = dashboardPage.noteCard('Collab View');
-    await noteCard.hover();
-    await noteCard.getByRole('button', { name: /note options/i }).click({ force: true });
-    await page.getByRole('menuitem', { name: /share/i }).click();
-    await page.getByPlaceholder(/search users/i).fill(user2Name);
-    await page.getByText(user2Name).click();
-    await page.keyboard.press('Escape');
+    await dashboardPage.shareNoteWithUser('Collab View', user2Name);
 
     // Open the note and assign the first item to the owner (self-assign)
     await dashboardPage.openNote('Collab View');
@@ -223,7 +194,6 @@ test.describe('Task Assignment', () => {
 
     // Click the owner in the assignee picker
     await expect(page.getByText('Assign item')).toBeVisible();
-    // The picker buttons are inside the popover; scope to it to avoid matching sortable item buttons
     const pickerPopover = page.locator('.max-h-48');
     await pickerPopover.getByText(ownerName).click();
 

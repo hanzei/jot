@@ -191,4 +191,13 @@ export class DashboardPage {
       this.page.locator('aside ul').getByRole('button', { name: labelName, exact: true })
     ).toHaveCount(0);
   }
+
+  /** Shares a note with a user via the card context menu and share modal. */
+  async shareNoteWithUser(noteTitle: string, username: string) {
+    await this.openNoteMenu(noteTitle);
+    await this.page.getByRole('menuitem', { name: /share/i }).click();
+    await this.page.getByPlaceholder(/search users/i).fill(username);
+    await this.page.getByText(username).click();
+    await this.page.keyboard.press('Escape');
+  }
 }
