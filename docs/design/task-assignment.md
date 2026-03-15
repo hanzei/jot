@@ -58,6 +58,8 @@ CREATE INDEX idx_note_items_assigned_to ON note_items(assigned_to_user_id);
 - A junction table (`note_item_assignments`) was considered for multi-assign but rejected for V1 — single assignment covers the typical use case. Upgrading to a junction table later is straightforward.
 - An index on `assigned_to_user_id` supports a future "assigned to me" query efficiently.
 
+**Prerequisite:** SQLite foreign key enforcement must be enabled (`PRAGMA foreign_keys = ON`) for `ON DELETE SET NULL` to take effect. Verify the database bootstrap enables this pragma; if not, add it to `internal/database` initialization.
+
 #### Clearing assignments on unshare
 
 When a user is unshared from a note, all their item assignments within that note must be cleared:
@@ -121,6 +123,8 @@ LEFT JOIN users u ON ni.assigned_to_user_id = u.id
 WHERE ni.note_id = ?
 ORDER BY ni.position;
 ```
+
+**Go scanning note:** When `assigned_to_user_id` is NULL, the joined user columns are also NULL. Use `sql.NullString` / `sql.NullBool` for scanning, then map to the struct's string/bool fields (empty string and `false` for NULL rows). This matches how other nullable fields (e.g., `UnpinnedPosition`) are already handled in the codebase.
 
 **Option B — Separate map on the note response:**
 
@@ -194,7 +198,7 @@ func (s *NoteStore) ClearAssignmentsForUser(noteID, userID string) error {
 }
 ```
 
-Called from `NotesHandler.UnshareNote` after successfully removing the share.
+Called from `NotesHandler.UnshareNote` after successfully removing the share. For atomicity, consider wrapping `UnshareNote` and `ClearAssignmentsForUser` in a single database transaction so that if either operation fails, both are rolled back.
 
 ---
 
@@ -256,8 +260,8 @@ No new event types. The existing `note_updated` event carries the full note payl
 
 | Scenario | Behavior |
 |----------|----------|
-| Assigned user is unshared from note | Assignments cleared (see `ClearAssignmentsForUser`) |
-| Assigned user account is deleted | `ON DELETE SET NULL` clears the FK |
+| Assigned user is unshared from note | Assignments cleared (see `ClearAssignmentsForUser`); next `note_updated` SSE event reflects the change |
+| Assigned user account is deleted | `ON DELETE SET NULL` clears the FK (requires `PRAGMA foreign_keys = ON`) |
 | Item is completed | Assignment preserved (shows who completed it) |
 | Item is uncompleted | Assignment preserved |
 | Note is moved to trash | No change to assignments (they persist) |
@@ -266,6 +270,8 @@ No new event types. The existing `note_updated` event carries the full note payl
 | Self-assignment (owner assigns to self) | Allowed |
 | Unshared note (no collaborators) | Assignment UI hidden; no one to assign to |
 | Delete-and-recreate item update cycle | Assignment data in the update payload survives the cycle |
+| Concurrent edits by two users | Last-write-wins (accepted limitation, consistent with current behavior) |
+| `assigned_to_user_id` references a user not in `usersById` | Display fallback to `assigned_username` from API response, or "Unknown" if empty |
 
 ---
 
@@ -485,8 +491,8 @@ All new elements follow the existing dark mode patterns:
 3. Build `AssigneePicker` component (popover with user list).
 4. Update `SortableItem` in `NoteModal.tsx` to show assign button/avatar.
 5. Update `NoteCard.tsx` to show avatars on assigned items.
-6. Add i18n keys for assignment UI strings.
-7. Pass collaborator list through to `SortableItem`.
+6. Add i18n keys: `note.assignItem`, `note.unassign`, `note.assignedTo`, `note.noCollaborators`.
+7. Pass collaborator list to `SortableItem`. Build the list from the note owner (`note.user_id` resolved via `usersById`) plus all entries in `note.shared_with`, producing an array of `{ userId, username, firstName, hasProfileIcon }`. This reuses the same `usersById` map already passed through for share avatars.
 
 ### Phase 3 — Tests (estimated: ~2-3 hours)
 
