@@ -436,6 +436,14 @@ func (s *UserStore) UpdateRole(id, role string) (*User, error) {
 }
 
 func (s *UserStore) Delete(id, requestingUserID string) error {
+	return s.DeleteWithCleanup(id, requestingUserID, nil)
+}
+
+// DeleteWithCleanup deletes a user and runs an optional postDelete callback
+// inside the same transaction. The callback executes after the user row is
+// deleted (and cascade effects like note_shares removal have taken place) but
+// before the transaction commits, so any cleanup is atomic with the delete.
+func (s *UserStore) DeleteWithCleanup(id, requestingUserID string, postDelete func(tx *sql.Tx) error) error {
 	if id == requestingUserID {
 		return fmt.Errorf("%w", ErrCannotDeleteSelf)
 	}
@@ -475,6 +483,12 @@ func (s *UserStore) Delete(id, requestingUserID string) error {
 	}
 	if rows == 0 {
 		return fmt.Errorf("%w", ErrUserNotFound)
+	}
+
+	if postDelete != nil {
+		if err = postDelete(tx); err != nil {
+			return fmt.Errorf("post-delete cleanup failed: %w", err)
+		}
 	}
 
 	if err = tx.Commit(); err != nil {

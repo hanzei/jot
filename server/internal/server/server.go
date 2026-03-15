@@ -100,7 +100,7 @@ func New() *Server {
 	notesHandler := handlers.NewNotesHandler(noteStore, userStore, hub)
 	labelsHandler := handlers.NewLabelsHandler(noteStore, hub)
 	eventsHandler := handlers.NewEventsHandler(hub)
-	adminHandler := handlers.NewAdminHandler(userStore)
+	adminHandler := handlers.NewAdminHandler(userStore, noteStore)
 
 	s := &Server{
 		router:         chi.NewRouter(),

@@ -89,6 +89,7 @@ type UpdateNoteItem struct {
 	Position    int    `json:"position"`
 	Completed   bool   `json:"completed"`
 	IndentLevel int    `json:"indent_level"`
+	AssignedTo  string `json:"assigned_to"`
 }
 
 func normalizeCreateNoteRequest(req *CreateNoteRequest) (int, error) {
@@ -118,7 +119,7 @@ func (h *NotesHandler) createTodoItems(noteID string, items []CreateNoteItem) (i
 		if item.IndentLevel < 0 || item.IndentLevel > 1 {
 			return http.StatusBadRequest, errors.New("indent_level must be 0 or 1")
 		}
-		if _, err := h.noteStore.CreateItem(noteID, item.Text, item.Position, item.IndentLevel); err != nil {
+		if _, err := h.noteStore.CreateItem(noteID, item.Text, item.Position, item.IndentLevel, ""); err != nil {
 			return http.StatusInternalServerError, err
 		}
 	}
@@ -255,31 +256,80 @@ func (h *NotesHandler) GetNote(w http.ResponseWriter, r *http.Request) (int, err
 	return 0, nil
 }
 
-func (h *NotesHandler) validateAndUpdateTodoItems(noteID string, userID string, items []UpdateNoteItem) (int, error) {
+func (h *NotesHandler) validateTodoItems(noteID string, items []UpdateNoteItem) (int, error) {
 	for _, item := range items {
 		if item.IndentLevel < 0 || item.IndentLevel > 1 {
 			return http.StatusBadRequest, errors.New("indent_level must be 0 or 1")
 		}
 	}
-	return 0, h.updateTodoItems(noteID, userID, items)
+
+	if status, err := h.validateItemAssignments(noteID, items); err != nil {
+		return status, err
+	}
+
+	return 0, nil
+}
+
+// validateItemAssignments checks that all assigned user IDs are valid and have access to the note.
+func (h *NotesHandler) validateItemAssignments(noteID string, items []UpdateNoteItem) (int, error) {
+	hasAssignment := false
+	for _, item := range items {
+		if item.AssignedTo != "" {
+			hasAssignment = true
+			break
+		}
+	}
+	if !hasAssignment {
+		return 0, nil
+	}
+
+	shares, err := h.noteStore.GetNoteShares(noteID)
+	if err != nil {
+		return http.StatusInternalServerError, fmt.Errorf("failed to check note shares: %w", err)
+	}
+	if len(shares) == 0 {
+		return http.StatusBadRequest, errors.New("cannot assign items on an unshared note")
+	}
+
+	ownerID, err := h.noteStore.GetOwnerID(noteID)
+	if err != nil {
+		return http.StatusInternalServerError, fmt.Errorf("failed to get note owner: %w", err)
+	}
+
+	accessSet := make(map[string]struct{})
+	accessSet[ownerID] = struct{}{}
+	for _, share := range shares {
+		accessSet[share.SharedWithUserID] = struct{}{}
+	}
+
+	for _, item := range items {
+		if item.AssignedTo == "" {
+			continue
+		}
+		if !models.IsValidID(item.AssignedTo) {
+			return http.StatusBadRequest, errors.New("invalid assigned_to format")
+		}
+		if _, ok := accessSet[item.AssignedTo]; !ok {
+			return http.StatusBadRequest, errors.New("assigned user does not have access to this note")
+		}
+	}
+
+	return 0, nil
 }
 
 func (h *NotesHandler) updateTodoItems(noteID string, userID string, items []UpdateNoteItem) error {
-	// Get current note to check if it's a todo type
 	currentNote, err := h.noteStore.GetByID(noteID, userID)
 	if err != nil {
 		return err
 	}
 
 	if currentNote.NoteType == models.NoteTypeTodo {
-		// Delete all existing items (we'll recreate them)
 		if err := h.noteStore.DeleteItemsByNoteID(noteID); err != nil {
 			return err
 		}
 
-		// Create new items with updated positions
 		for _, item := range items {
-			_, err := h.noteStore.CreateItemWithCompleted(noteID, item.Text, item.Position, item.Completed, item.IndentLevel)
+			_, err := h.noteStore.CreateItemWithCompleted(noteID, item.Text, item.Position, item.Completed, item.IndentLevel, item.AssignedTo)
 			if err != nil {
 				return err
 			}
@@ -325,6 +375,14 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 		req.Color = models.DefaultNoteColor
 	}
 
+	// Validate items before persisting any changes so invalid assigned_to
+	// values are rejected before note metadata is committed.
+	if len(req.Items) > 0 {
+		if status, err := h.validateTodoItems(id, req.Items); err != nil {
+			return status, err
+		}
+	}
+
 	err := h.noteStore.Update(id, user.ID, req.Title, req.Content, req.Pinned, req.Archived, req.Color, req.CheckedItemsCollapsed)
 	if err != nil {
 		if errors.Is(err, models.ErrNoteNotFound) || errors.Is(err, models.ErrNoteNoAccess) {
@@ -333,12 +391,9 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 		return http.StatusInternalServerError, err
 	}
 
-	// Handle todo items update if provided
 	if len(req.Items) > 0 {
-		var status int
-		status, err = h.validateAndUpdateTodoItems(id, user.ID, req.Items)
-		if err != nil {
-			return status, err
+		if updateErr := h.updateTodoItems(id, user.ID, req.Items); updateErr != nil {
+			return http.StatusInternalServerError, updateErr
 		}
 	}
 
@@ -822,7 +877,7 @@ func (h *NotesHandler) importKeepNote(userID string, kn keepNote) error {
 
 	if noteType == models.NoteTypeTodo {
 		for i, item := range kn.ListContent {
-			if _, err := h.noteStore.CreateItemWithCompleted(note.ID, item.Text, i, item.IsChecked, 0); err != nil {
+			if _, err := h.noteStore.CreateItemWithCompleted(note.ID, item.Text, i, item.IsChecked, 0, ""); err != nil {
 				return err
 			}
 		}
