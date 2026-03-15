@@ -256,7 +256,7 @@ func (h *NotesHandler) GetNote(w http.ResponseWriter, r *http.Request) (int, err
 	return 0, nil
 }
 
-func (h *NotesHandler) validateAndUpdateTodoItems(noteID string, userID string, items []UpdateNoteItem) (int, error) {
+func (h *NotesHandler) validateTodoItems(noteID string, items []UpdateNoteItem) (int, error) {
 	for _, item := range items {
 		if item.IndentLevel < 0 || item.IndentLevel > 1 {
 			return http.StatusBadRequest, errors.New("indent_level must be 0 or 1")
@@ -267,9 +267,6 @@ func (h *NotesHandler) validateAndUpdateTodoItems(noteID string, userID string, 
 		return status, err
 	}
 
-	if err := h.updateTodoItems(noteID, userID, items); err != nil {
-		return http.StatusInternalServerError, err
-	}
 	return 0, nil
 }
 
@@ -378,6 +375,14 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 		req.Color = models.DefaultNoteColor
 	}
 
+	// Validate items before persisting any changes so invalid assigned_to
+	// values are rejected before note metadata is committed.
+	if len(req.Items) > 0 {
+		if status, err := h.validateTodoItems(id, req.Items); err != nil {
+			return status, err
+		}
+	}
+
 	err := h.noteStore.Update(id, user.ID, req.Title, req.Content, req.Pinned, req.Archived, req.Color, req.CheckedItemsCollapsed)
 	if err != nil {
 		if errors.Is(err, models.ErrNoteNotFound) || errors.Is(err, models.ErrNoteNoAccess) {
@@ -386,12 +391,9 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 		return http.StatusInternalServerError, err
 	}
 
-	// Handle todo items update if provided
 	if len(req.Items) > 0 {
-		var status int
-		status, err = h.validateAndUpdateTodoItems(id, user.ID, req.Items)
-		if err != nil {
-			return status, err
+		if updateErr := h.updateTodoItems(id, user.ID, req.Items); updateErr != nil {
+			return http.StatusInternalServerError, updateErr
 		}
 	}
 
