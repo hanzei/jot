@@ -524,6 +524,6 @@ All new elements follow the existing dark mode patterns:
 
 ## Open Questions
 
-1. **Should completed items retain assignment?** (Proposed: yes — it serves as a record of who did what.)
+1. ~~**Should completed items retain assignment?**~~ **Decided: yes** — serves as a record of who did what.
 2. **Should the assign button be visible on new (unsaved) notes?** (Proposed: no — the note must be saved and shared first, because item IDs and the collaborator list don't exist yet.)
 3. **Maximum collaborators before the picker needs search?** (Proposed: add search if the list exceeds 8 users. For V1, no search is needed since shared notes rarely have many collaborators.)
