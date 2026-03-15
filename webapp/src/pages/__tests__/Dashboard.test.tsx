@@ -1153,4 +1153,107 @@ describe('Dashboard', () => {
     })
   })
   })
+
+  describe('My Todo Filtering', () => {
+    it('renders My Todo tab in sidebar', async () => {
+      renderDashboard()
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'My Todo' })).toBeInTheDocument()
+      })
+    })
+
+    it('clicking My Todo tab calls getAll with myTodo=true', async () => {
+      const user = userEvent.setup()
+      const mockGetAll = vi.mocked(notes.getAll)
+
+      renderDashboard()
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'My Todo' })).toBeInTheDocument()
+      })
+
+      await user.click(screen.getByRole('button', { name: 'My Todo' }))
+
+      await waitFor(() => {
+        expect(mockGetAll).toHaveBeenCalledWith(false, '', false, '', true)
+      })
+    })
+
+    it('loads My Todo view from URL parameter', async () => {
+      const mockGetAll = vi.mocked(notes.getAll)
+
+      renderDashboard(['/dashboard?view=my-todo'])
+
+      await waitFor(() => {
+        expect(mockGetAll).toHaveBeenCalledWith(false, '', false, '', true)
+      })
+    })
+
+    it('shows empty state for My Todo with no assigned notes', async () => {
+      const user = userEvent.setup()
+      vi.mocked(notes.getAll).mockResolvedValue([])
+
+      renderDashboard()
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'My Todo' })).toBeInTheDocument()
+      })
+
+      await user.click(screen.getByRole('button', { name: 'My Todo' }))
+
+      await waitFor(() => {
+        expect(screen.getByText('No notes with todos assigned to you')).toBeInTheDocument()
+      })
+    })
+
+    it('switching from My Todo to Notes clears my_todo filter', async () => {
+      const user = userEvent.setup()
+      const mockGetAll = vi.mocked(notes.getAll)
+
+      renderDashboard(['/dashboard?view=my-todo'])
+
+      await waitFor(() => {
+        expect(mockGetAll).toHaveBeenCalledWith(false, '', false, '', true)
+      })
+
+      await user.click(screen.getByRole('button', { name: 'Notes' }))
+
+      await waitFor(() => {
+        expect(mockGetAll).toHaveBeenCalledWith(false, '', false, '', false)
+      })
+    })
+
+    it('clicking a label from My Todo view clears my_todo and filters by label', async () => {
+      const user = userEvent.setup()
+      const mockGetAll = vi.mocked(notes.getAll)
+
+      const mockLabels: Label[] = [
+        {
+          id: 'label-work',
+          user_id: 'user1',
+          name: 'work',
+          created_at: '2024-01-01T00:00:00Z',
+          updated_at: '2024-01-01T00:00:00Z',
+        },
+      ]
+      vi.mocked(labels.getAll).mockResolvedValue(mockLabels)
+
+      renderDashboard(['/dashboard?view=my-todo'])
+
+      await waitFor(() => {
+        expect(mockGetAll).toHaveBeenCalledWith(false, '', false, '', true)
+      })
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'work' })).toBeInTheDocument()
+      })
+
+      await user.click(screen.getByRole('button', { name: 'work' }))
+
+      await waitFor(() => {
+        expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-work', false)
+      })
+    })
+  })
 })
