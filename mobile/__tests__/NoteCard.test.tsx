@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 import NoteCard from '../src/components/NoteCard';
-import { Note } from '../src/types';
+import { Note, User } from '../src/types';
 
 const baseNote: Note = {
   id: 'note-1',
@@ -44,6 +44,7 @@ describe('NoteCard', () => {
           completed: false,
           position: 0,
           indent_level: 0,
+          assigned_to: '',
           created_at: '2024-01-01T00:00:00Z',
           updated_at: '2024-01-01T00:00:00Z',
         },
@@ -54,6 +55,7 @@ describe('NoteCard', () => {
           completed: true,
           position: 1,
           indent_level: 0,
+          assigned_to: '',
           created_at: '2024-01-01T00:00:00Z',
           updated_at: '2024-01-01T00:00:00Z',
         },
@@ -107,5 +109,55 @@ describe('NoteCard', () => {
     const { queryByText } = render(<NoteCard note={noTitleNote} onPress={jest.fn()} />);
 
     expect(queryByText('Test Note')).toBeNull();
+  });
+
+  it('shows assignee avatar for assigned todo items', () => {
+    const sharedTodo: Note = {
+      ...baseNote,
+      note_type: 'todo',
+      content: '',
+      is_shared: true,
+      shared_with: [
+        {
+          id: 's1',
+          note_id: 'note-1',
+          shared_with_user_id: 'user-2',
+          shared_by_user_id: 'user-1',
+          permission_level: 'edit',
+          username: 'bob',
+          first_name: 'Bob',
+          has_profile_icon: false,
+          created_at: '',
+          updated_at: '',
+        },
+      ],
+      items: [
+        {
+          id: 'item-1',
+          note_id: 'note-1',
+          text: 'Assigned task',
+          completed: false,
+          position: 0,
+          indent_level: 0,
+          assigned_to: 'user-2',
+          created_at: '2024-01-01T00:00:00Z',
+          updated_at: '2024-01-01T00:00:00Z',
+        },
+      ],
+    };
+
+    const usersById = new Map<string, User>();
+    usersById.set('user-2', {
+      id: 'user-2', username: 'bob', first_name: 'Bob', last_name: '',
+      role: 'user', has_profile_icon: false, created_at: '', updated_at: '',
+    });
+
+    const { getByText } = render(
+      <NoteCard note={sharedTodo} usersById={usersById} onPress={jest.fn()} />,
+    );
+
+    expect(getByText('Assigned task')).toBeTruthy();
+    // Avatar for 'bob' renders letter 'B'
+    expect(getByText('B')).toBeTruthy();
   });
 });

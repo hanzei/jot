@@ -1,6 +1,11 @@
 import api from './client';
 import { User, NoteShare } from '../types';
 
+export async function getUsers(): Promise<User[]> {
+  const res = await api.get('/users');
+  return res.data;
+}
+
 export async function searchUsers(query: string): Promise<User[]> {
   const res = await api.get('/users', { params: { search: query } });
   return res.data;

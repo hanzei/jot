@@ -193,7 +193,6 @@ func (h *NotesHandler) CreateNote(w http.ResponseWriter, r *http.Request) (int, 
 	if err != nil {
 		return http.StatusInternalServerError, err
 	}
-
 	if req.NoteType == models.NoteTypeTodo && len(req.Items) > 0 {
 		if status, err := h.createTodoItems(note.ID, req.Items); err != nil {
 			return status, err

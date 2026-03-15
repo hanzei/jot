@@ -27,6 +27,7 @@ interface NoteItemRow {
   completed: number;
   position: number;
   indent_level: number;
+  assigned_to: string;
   created_at: string;
   updated_at: string;
 }
@@ -65,6 +66,7 @@ function itemRowToNoteItem(row: NoteItemRow): NoteItem {
     completed: row.completed === 1,
     position: row.position,
     indent_level: row.indent_level,
+    assigned_to: row.assigned_to ?? '',
     created_at: row.created_at ?? '',
     updated_at: row.updated_at ?? '',
   };
@@ -111,9 +113,9 @@ async function saveNoteInTx(db: SQLiteDatabase, note: Note): Promise<void> {
     await db.runAsync('DELETE FROM note_items WHERE note_id = ?', [note.id]);
     for (const item of note.items) {
       await db.runAsync(
-        `INSERT OR REPLACE INTO note_items (id, note_id, text, completed, position, indent_level, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [item.id, note.id, item.text, item.completed ? 1 : 0, item.position, item.indent_level, item.created_at ?? '', item.updated_at ?? ''],
+        `INSERT OR REPLACE INTO note_items (id, note_id, text, completed, position, indent_level, assigned_to, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [item.id, note.id, item.text, item.completed ? 1 : 0, item.position, item.indent_level, item.assigned_to ?? '', item.created_at ?? '', item.updated_at ?? ''],
       );
     }
   }

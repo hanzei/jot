@@ -91,6 +91,7 @@ export function useCreateNote() {
           completed: item.completed ?? false,
           position: i,
           indent_level: item.indent_level ?? 0,
+          assigned_to: item.assigned_to ?? '',
           created_at: now,
           updated_at: now,
         })),
@@ -144,6 +145,7 @@ export function useUpdateNote() {
           completed: item.completed ?? false,
           position: i,
           indent_level: item.indent_level ?? 0,
+          assigned_to: item.assigned_to ?? existing.items?.[i]?.assigned_to ?? '',
           created_at: existing.items?.[i]?.created_at ?? now,
           updated_at: now,
         }));

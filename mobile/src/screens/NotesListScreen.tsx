@@ -19,6 +19,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useUpdateNote, useDeleteNote, useRestoreNote, usePermanentDeleteNote, useReorderNotes } from '../hooks/useNotes';
 import { useOfflineNotes } from '../hooks/useOfflineNotes';
 import { useLabels } from '../hooks/useLabels';
+import { useUsers } from '../store/UsersContext';
 import NoteCard from '../components/NoteCard';
 import NoteContextMenu, { ContextMenuViewContext } from '../components/NoteContextMenu';
 import ColorPicker from '../components/ColorPicker';
@@ -47,6 +48,7 @@ export default function NotesListScreen({ variant = 'notes' }: NotesListScreenPr
   const [colorPickerNote, setColorPickerNote] = useState<Note | null>(null);
   const [localOrder, setLocalOrder] = useState<LocalReorderState>({ pinned: null, unpinned: null });
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const { usersById, refreshUsers } = useUsers();
 
   // Debounce search input by 300ms
   useEffect(() => {
@@ -79,6 +81,11 @@ export default function NotesListScreen({ variant = 'notes' }: NotesListScreenPr
     setSearchText('');
     setDebouncedSearch('');
   }, []);
+
+  const handleRefresh = useCallback(() => {
+    refetch();
+    refreshUsers();
+  }, [refetch, refreshUsers]);
 
   const handleNotePress = useCallback(
     (noteId: string) => {
@@ -271,25 +278,27 @@ export default function NotesListScreen({ variant = 'notes' }: NotesListScreenPr
         >
           <NoteCard
             note={item}
+            usersById={usersById}
             onPress={() => handleNotePress(item.id)}
             onMenuPress={() => handleOpenMenu(item)}
           />
         </TouchableOpacity>
       </ScaleDecorator>
     ),
-    [handleNotePress, handleOpenMenu],
+    [handleNotePress, handleOpenMenu, usersById],
   );
 
   const renderNonDraggableNoteCard = useCallback(
     ({ item }: { item: Note }) => (
       <NoteCard
         note={item}
+        usersById={usersById}
         onPress={() => handleNotePress(item.id)}
         onMenuPress={variant !== 'trash' ? () => handleOpenMenu(item) : undefined}
         onLongPress={variant === 'trash' ? () => handleOpenMenu(item) : undefined}
       />
     ),
-    [handleNotePress, handleOpenMenu, variant],
+    [handleNotePress, handleOpenMenu, variant, usersById],
   );
 
   if (isLoading && !notes) {
@@ -430,7 +439,7 @@ export default function NotesListScreen({ variant = 'notes' }: NotesListScreenPr
       {isDraggable && hasPinned ? (
         <ScrollView
           refreshControl={
-            <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor="#2563eb" />
+            <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor="#2563eb" />
           }
           contentContainerStyle={styles.listContent}
           testID="notes-section-list"
@@ -474,7 +483,7 @@ export default function NotesListScreen({ variant = 'notes' }: NotesListScreenPr
           onDragBegin={handleDragStart}
           onDragEnd={handleDragEndUnpinned}
           refreshControl={
-            <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor="#2563eb" />
+            <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor="#2563eb" />
           }
           contentContainerStyle={styles.listContent}
           ListEmptyComponent={listEmptyComponent}
@@ -486,7 +495,7 @@ export default function NotesListScreen({ variant = 'notes' }: NotesListScreenPr
           keyExtractor={(item) => item.id}
           renderItem={renderNonDraggableNoteCard}
           refreshControl={
-            <RefreshControl refreshing={isRefetching} onRefresh={refetch} tintColor="#2563eb" />
+            <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor="#2563eb" />
           }
           contentContainerStyle={styles.listContent}
           ListEmptyComponent={listEmptyComponent}
