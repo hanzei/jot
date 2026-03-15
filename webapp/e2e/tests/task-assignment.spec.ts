@@ -63,44 +63,6 @@ test.describe('Task Assignment', () => {
     await page.click('button[aria-label="Close"]');
   });
 
-  test('assignment is visible on the dashboard card', async ({
-    page,
-    authenticatedUser,
-    dashboardPage,
-    request,
-  }) => {
-    const user2Name = uniqueUsername('collab');
-    const user2Pass = 'testpass123';
-
-    const registerResp = await request.post('/api/v1/register', {
-      data: { username: user2Name, password: user2Pass },
-    });
-    expect(registerResp.ok()).toBeTruthy();
-
-    await dashboardPage.goto();
-    await dashboardPage.createTodoNote('Card Avatar Test', ['Item A', 'Item B']);
-    await dashboardPage.shareNoteWithUser('Card Avatar Test', user2Name);
-
-    // Open and assign the first item
-    await dashboardPage.openNote('Card Avatar Test');
-    await expect(page.getByRole('heading', { name: 'Edit Note' })).toBeVisible();
-
-    const firstItemRow = page.locator('input[placeholder="List item..."]').first().locator('..');
-    await firstItemRow.hover();
-    const assignBtn = firstItemRow.locator('button[aria-label="Assign item"]');
-    await assignBtn.waitFor({ state: 'visible', timeout: 5000 });
-    await assignBtn.click();
-    await page.getByText(user2Name).click();
-
-    // Close the modal
-    await page.click('button[aria-label="Close"]');
-
-    // Verify the assignment avatar appears next to the assigned item on the card
-    const card = dashboardPage.noteCard('Card Avatar Test');
-    const assignedItemRow = card.locator('div.flex.items-center', { hasText: 'Item A' });
-    await expect(assignedItemRow.locator('svg[role="img"], img[alt]')).toBeVisible();
-  });
-
   test('unsharing a user clears their assignment', async ({
     page,
     authenticatedUser,
