@@ -99,49 +99,19 @@ type NoteItem struct {
 - `AssignedToUserID` is a plain `string` — `""` (empty string) means unassigned.
 - JSON serializes to `"assigned_to_user_id": ""` or `"assigned_to_user_id": "abc..."`.
 
-#### Enriched assignment info (response only)
+#### No enriched assignment info needed on the API
 
-To avoid N+1 queries on the client, the API should return basic assignee info alongside items. Two approaches:
+The webapp already fetches all users on Dashboard mount via `usersApi.search()` and stores them in a `usersById: Map<string, User>` that is passed down to `NoteModal`, `NoteCard`, etc. This map contains `username`, `first_name`, `last_name`, `has_profile_icon` — everything needed to render an assignee avatar.
 
-**Option A — Inline on the item (recommended):**
+The client simply looks up `assigned_to_user_id` in `usersById` to get display info. No extra fields, no LEFT JOIN, no server-side enrichment required.
 
-```go
-type NoteItem struct {
-    // ... existing fields ...
-    AssignedToUserID  string `json:"assigned_to_user_id"`
-    AssignedUsername   string `json:"assigned_username,omitempty"`
-    AssignedFirstName  string `json:"assigned_first_name,omitempty"`
-    AssignedHasIcon    bool   `json:"assigned_has_profile_icon,omitempty"`
-}
-```
-
-Populated via a LEFT JOIN when fetching items:
+The `getItemsByNoteID` query stays simple — just add the new column to the existing SELECT:
 
 ```sql
-SELECT ni.id, ni.note_id, ni.text, ni.completed, ni.position,
-       ni.indent_level, ni.assigned_to_user_id,
-       COALESCE(u.username, ''), COALESCE(u.first_name, ''),
-       COALESCE(u.profile_icon IS NOT NULL, FALSE) AS has_profile_icon,
-       ni.created_at, ni.updated_at
-FROM note_items ni
-LEFT JOIN users u ON ni.assigned_to_user_id = u.id
-  AND ni.assigned_to_user_id != ''
-WHERE ni.note_id = ?
-ORDER BY ni.position;
+SELECT id, note_id, text, completed, position, indent_level,
+       assigned_to_user_id, created_at, updated_at
+FROM note_items WHERE note_id = ? ORDER BY position;
 ```
-
-**Go scanning note:** The `COALESCE` wrappers ensure the joined columns are never SQL NULL, so they scan directly into plain `string` / `bool` fields — no `sql.NullString` needed. The `AND ni.assigned_to_user_id != ''` clause skips the join for unassigned items.
-
-**Option B — Separate map on the note response:**
-
-```go
-type Note struct {
-    // ... existing fields ...
-    ItemAssignees map[string]AssigneeInfo `json:"item_assignees,omitempty"`
-}
-```
-
-Option A is recommended because it keeps the data co-located with the item it belongs to, and the LEFT JOIN is efficient (indexed FK, bounded by the small number of items per note).
 
 ---
 
@@ -189,7 +159,7 @@ VALUES (?, ?, ?, ?, ?, ?, ?);
 
 **`getItemsByNoteID`:**
 
-Extend the SELECT with a LEFT JOIN on `users` (as shown above) and scan the new fields.
+Add `assigned_to_user_id` to the existing SELECT and scan it into the new struct field. No JOIN needed.
 
 **`UnshareNote` extension:**
 
@@ -233,7 +203,7 @@ Same pattern — items carry `assigned_to_user_id`.
 
 #### Response payload
 
-Items in the response include enriched assignee info:
+Items in the response include `assigned_to_user_id` (empty string if unassigned). The client resolves display info from its local `usersById` map:
 
 ```json
 {
@@ -246,9 +216,6 @@ Items in the response include enriched assignee info:
       "position": 0,
       "indent_level": 0,
       "assigned_to_user_id": "user123",
-      "assigned_username": "alice",
-      "assigned_first_name": "Alice",
-      "assigned_has_profile_icon": true,
       "created_at": "...",
       "updated_at": "..."
     }
@@ -496,8 +463,8 @@ All new elements follow the existing dark mode patterns:
 ### Phase 1 — Backend (estimated: ~2-3 hours)
 
 1. Add migration `014_add_item_assignment.sql`.
-2. Update `NoteItem` struct with assignment fields.
-3. Update `getItemsByNoteID` query with LEFT JOIN.
+2. Update `NoteItem` struct with `AssignedToUserID string` field.
+3. Update `getItemsByNoteID` query to select the new column.
 4. Update `CreateItem`, `CreateItemWithCompleted` to accept and store `assignedToUserID`.
 5. Add `ClearAssignmentsForUser` method.
 6. Update `UnshareNote` handler to call `ClearAssignmentsForUser`.
