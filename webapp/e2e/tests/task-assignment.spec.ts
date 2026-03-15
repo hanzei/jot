@@ -20,30 +20,9 @@ test.describe('Task Assignment', () => {
     await dashboardPage.createTodoNote('Assignment Test', ['Buy milk', 'Buy eggs']);
     await dashboardPage.shareNoteWithUser('Assignment Test', user2Name);
 
-    // Open the note modal
-    await dashboardPage.openNote('Assignment Test');
-    await expect(page.getByRole('heading', { name: 'Edit Note' })).toBeVisible();
+    await dashboardPage.assignTodoItemToUser('Assignment Test', 0, user2Name);
 
-    // Hover over the first todo item row to reveal the assign button
-    const firstItemRow = page.locator('input[placeholder="List item..."]').first().locator('..');
-    await firstItemRow.hover();
-
-    // Click the assign button (UserPlusIcon button)
-    const assignButton = firstItemRow.locator('button[aria-label="Assign item"]');
-    await assignButton.waitFor({ state: 'visible', timeout: 5000 });
-    await assignButton.click();
-
-    // The assignee picker popover should appear
-    await expect(page.getByText('Assign item')).toBeVisible();
-
-    // Click on the collaborator to assign them
-    await page.getByText(user2Name).click();
-
-    // The avatar should now be visible on the item row (picker closes automatically)
-    await expect(firstItemRow.locator('svg[role="img"], img[alt]').first()).toBeVisible();
-
-    // Close and reopen the note to verify persistence
-    await page.click('button[aria-label="Close"]');
+    // Reopen the note to verify persistence
     await dashboardPage.openNote('Assignment Test');
     await expect(page.getByRole('heading', { name: 'Edit Note' })).toBeVisible();
 
@@ -81,20 +60,7 @@ test.describe('Task Assignment', () => {
     await dashboardPage.createTodoNote('Unshare Cleanup', ['Task 1']);
     await dashboardPage.shareNoteWithUser('Unshare Cleanup', user2Name);
 
-    // Open the note and assign the item
-    await dashboardPage.openNote('Unshare Cleanup');
-    await expect(page.getByRole('heading', { name: 'Edit Note' })).toBeVisible();
-
-    const itemRow = page.locator('input[placeholder="List item..."]').first().locator('..');
-    await itemRow.hover();
-    const assignBtn = itemRow.locator('button[aria-label="Assign item"]');
-    await assignBtn.waitFor({ state: 'visible', timeout: 5000 });
-    await assignBtn.click();
-    await page.getByText(user2Name).click();
-
-    // Confirm the avatar is visible
-    await expect(itemRow.locator('svg[role="img"], img[alt]').first()).toBeVisible();
-    await page.click('button[aria-label="Close"]');
+    await dashboardPage.assignTodoItemToUser('Unshare Cleanup', 0, user2Name);
 
     // Unshare via API
     const cookies = await page.context().cookies();
@@ -147,21 +113,7 @@ test.describe('Task Assignment', () => {
 
     await dashboardPage.shareNoteWithUser('Assigned Todo', user2Name);
 
-    // Open the note and self-assign the first item
-    await dashboardPage.openNote('Assigned Todo');
-    await expect(page.getByRole('heading', { name: 'Edit Note' })).toBeVisible();
-
-    const itemRow = page.locator('input[placeholder="List item..."]').first().locator('..');
-    await itemRow.hover();
-    const assignBtn = itemRow.locator('button[aria-label="Assign item"]');
-    await assignBtn.waitFor({ state: 'visible', timeout: 5000 });
-    await assignBtn.click();
-
-    await expect(page.getByText('Assign item')).toBeVisible();
-    const pickerPopover = page.locator('.max-h-48');
-    await pickerPopover.getByText(authenticatedUser.username).click();
-
-    await page.click('button[aria-label="Close"]');
+    await dashboardPage.assignTodoItemToUser('Assigned Todo', 0, authenticatedUser.username);
 
     // Switch to My Todo view
     await dashboardPage.switchToMyTodo();
@@ -208,22 +160,7 @@ test.describe('Task Assignment', () => {
     await dashboardPage.createTodoNote('Collab View', ['Shared Task']);
     await dashboardPage.shareNoteWithUser('Collab View', user2Name);
 
-    // Open the note and assign the first item to the owner (self-assign)
-    await dashboardPage.openNote('Collab View');
-    await expect(page.getByRole('heading', { name: 'Edit Note' })).toBeVisible();
-
-    const itemRow = page.locator('input[placeholder="List item..."]').first().locator('..');
-    await itemRow.hover();
-    const assignBtn = itemRow.locator('button[aria-label="Assign item"]');
-    await assignBtn.waitFor({ state: 'visible', timeout: 5000 });
-    await assignBtn.click();
-
-    // Click the owner in the assignee picker
-    await expect(page.getByText('Assign item')).toBeVisible();
-    const pickerPopover = page.locator('.max-h-48');
-    await pickerPopover.getByText(ownerName).click();
-
-    await page.click('button[aria-label="Close"]');
+    await dashboardPage.assignTodoItemToUser('Collab View', 0, ownerName);
 
     // Log out and log in as user2
     await dashboardPage.logout();
