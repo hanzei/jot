@@ -130,7 +130,7 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
       {!isCompleted && (
         <div
           {...listeners}
-          className="cursor-grab active:cursor-grabbing p-1 text-gray-400 hover:text-gray-600"
+          className="cursor-grab active:cursor-grabbing p-1 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
         >
           <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
             <path d="M7 2a2 2 0 1 1 .001 4.001A2 2 0 0 1 7 2zm0 6a2 2 0 1 1 .001 4.001A2 2 0 0 1 7 8zm0 6a2 2 0 1 1 .001 4.001A2 2 0 0 1 7 14zm6-8a2 2 0 1 1-.001-4.001A2 2 0 0 1 13 6zm0 2a2 2 0 1 1 .001 4.001A2 2 0 0 1 13 8zm0 6a2 2 0 1 1 .001 4.001A2 2 0 0 1 13 14z" />
@@ -145,73 +145,76 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
         onChange={(e) => onUpdateTodoItem(index, 'completed', e.target.checked)}
         className="h-4 w-4 text-blue-600 rounded"
       />
-      <input
-        type="text"
-        placeholder={t('note.itemPlaceholder')}
-        className={`flex-1 p-1 bg-transparent border-none outline-none placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white ${
-          isCompleted ? 'line-through text-gray-500 dark:text-gray-400' : ''
-        }`}
-        value={item.text}
-        onChange={(e) => onUpdateTodoItem(index, 'text', e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Tab' && onIndentChange && !isCompleted) {
-            e.preventDefault();
-            onIndentChange(item.id, e.shiftKey ? -1 : 1);
-            return;
-          }
-          if (onKeyDown) onKeyDown(index, e);
-        }}
-        ref={inputRef}
-      />
+      <div className="flex-1 flex items-center min-w-0">
+        <input
+          type="text"
+          placeholder={t('note.itemPlaceholder')}
+          className={`field-sizing-content p-1 bg-transparent border-none outline-none placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white ${
+            isCompleted ? 'line-through text-gray-500 dark:text-gray-400' : ''
+          }`}
+          value={item.text}
+          onChange={(e) => onUpdateTodoItem(index, 'text', e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Tab' && onIndentChange && !isCompleted) {
+              e.preventDefault();
+              onIndentChange(item.id, e.shiftKey ? -1 : 1);
+              return;
+            }
+            if (onKeyDown) onKeyDown(index, e);
+          }}
+          ref={inputRef}
+        />
 
-      {showAssignUI && (() => {
-        const assigneeDisplayName = assignedUser
-          ? [assignedUser.first_name, assignedUser.last_name].filter(Boolean).join(' ') || assignedUser.username
-          : '?';
-        return (
-        <div className="relative flex-shrink-0">
-          {item.assignedTo ? (
-            <button
-              onClick={() => !isCompleted && setShowAssigneePicker(true)}
-              title={t('note.assignedTo', { name: assigneeDisplayName })}
-              aria-label={t('note.assignedTo', { name: assigneeDisplayName })}
-              className={isCompleted ? 'cursor-default' : 'cursor-pointer'}
-            >
-              <LetterAvatar
-                firstName={assignedUser?.first_name}
-                username={assignedUser?.username || '?'}
-                userId={item.assignedTo}
-                hasProfileIcon={assignedUser?.has_profile_icon}
-                className="w-5 h-5"
-              />
-            </button>
-          ) : (
-            !isCompleted && (
+        {showAssignUI && (() => {
+          const assigneeDisplayName = assignedUser
+            ? [assignedUser.first_name, assignedUser.last_name].filter(Boolean).join(' ') || assignedUser.username
+            : '?';
+          return (
+          <div className="relative flex-shrink-0">
+            {item.assignedTo ? (
               <button
                 onClick={() => setShowAssigneePicker(true)}
-                className="w-5 h-5 rounded-full border border-dashed border-gray-300 dark:border-slate-600 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors opacity-0 group-hover/item:opacity-100"
-                title={t('note.assignItem')}
-                aria-label={t('note.assignItem')}
+                title={t('note.assignedTo', { name: assigneeDisplayName })}
+                aria-label={t('note.assignedTo', { name: assigneeDisplayName })}
+                className={`rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-800 ${isCompleted ? 'cursor-default' : 'cursor-pointer'}`}
+                disabled={isCompleted}
               >
-                <UserPlusIcon className="h-3 w-3 text-gray-400 dark:text-gray-500" />
+                <LetterAvatar
+                  firstName={assignedUser?.first_name}
+                  username={assignedUser?.username || '?'}
+                  userId={item.assignedTo}
+                  hasProfileIcon={assignedUser?.has_profile_icon}
+                  className="w-5 h-5"
+                />
               </button>
-            )
-          )}
-          {showAssigneePicker && (
-            <AssigneePicker
-              collaborators={collaborators}
-              currentAssigneeId={item.assignedTo}
-              onAssign={(userId) => onAssignItem(item.id, userId)}
-              onClose={closeAssigneePicker}
-            />
-          )}
-        </div>
-        );
-      })()}
+            ) : (
+              !isCompleted && (
+                <button
+                  onClick={() => setShowAssigneePicker(true)}
+                  className="w-5 h-5 rounded-full border border-dashed border-gray-300 dark:border-slate-600 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors opacity-0 group-hover/item:opacity-100 focus:opacity-100 focus-visible:ring-2 focus-visible:ring-blue-500 touch-visible"
+                  title={t('note.assignItem')}
+                  aria-label={t('note.assignItem')}
+                >
+                  <UserPlusIcon className="h-3 w-3 text-gray-400 dark:text-gray-500" aria-hidden="true" />
+                </button>
+              )
+            )}
+            {showAssigneePicker && (
+              <AssigneePicker
+                collaborators={collaborators}
+                currentAssigneeId={item.assignedTo}
+                onAssign={(userId) => onAssignItem(item.id, userId)}
+                onClose={closeAssigneePicker}
+              />
+            )}
+          </div>
+          );
+        })()}
+      </div>
 
       <button
         onClick={() => onRemoveTodoItem(item.id)}
-        className="p-1 text-gray-400 hover:text-gray-600"
+        className="p-1 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
       >
         <TrashIcon className="h-4 w-4" />
       </button>
@@ -900,7 +903,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
               <span>{errorMessage}</span>
               <button
                 onClick={() => setErrorMessage(null)}
-                className="ml-2 text-red-500 hover:text-red-700"
+                className="ml-2 text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
               >
                 ×
               </button>
@@ -1123,7 +1126,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
             )}
             <div className="flex items-center ml-auto">
               {loading && (
-                <div className="flex items-center space-x-2 text-sm text-gray-600">
+                <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300">
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600"></div>
                   <span>{t('note.saving')}</span>
                 </div>

@@ -60,11 +60,11 @@ describe('AssigneePicker', () => {
       />
     )
 
-    const bobButton = screen.getByText('Bob Martinez').closest('button')!
-    expect(bobButton.className).toContain('bg-blue-50')
+    const bobOption = screen.getByText('Bob Martinez').closest('[role="option"]')!
+    expect(bobOption.className).toContain('bg-blue')
 
-    const aliceButton = screen.getByText('Alice Williams').closest('button')!
-    expect(aliceButton.className).not.toContain('bg-blue-50')
+    const aliceOption = screen.getByText('Alice Williams').closest('[role="option"]')!
+    expect(aliceOption.className).not.toContain('bg-blue')
   })
 
   it('shows checkmark on the currently assigned user', () => {
@@ -77,12 +77,12 @@ describe('AssigneePicker', () => {
       />
     )
 
-    const aliceButton = screen.getByText('Alice Williams').closest('button')!
-    const checkmark = aliceButton.querySelector('svg path[d="M5 13l4 4L19 7"]')
+    const aliceOption = screen.getByText('Alice Williams').closest('[role="option"]')!
+    const checkmark = aliceOption.querySelector('svg path[d="M5 13l4 4L19 7"]')
     expect(checkmark).not.toBeNull()
 
-    const bobButton = screen.getByText('Bob Martinez').closest('button')!
-    const bobCheckmark = bobButton.querySelector('svg path[d="M5 13l4 4L19 7"]')
+    const bobOption = screen.getByText('Bob Martinez').closest('[role="option"]')!
+    const bobCheckmark = bobOption.querySelector('svg path[d="M5 13l4 4L19 7"]')
     expect(bobCheckmark).toBeNull()
   })
 
@@ -170,7 +170,8 @@ describe('AssigneePicker', () => {
       />
     )
 
-    fireEvent.keyDown(document, { key: 'Escape' })
+    const listbox = screen.getByRole('listbox')
+    fireEvent.keyDown(listbox, { key: 'Escape' })
 
     expect(onClose).toHaveBeenCalled()
   })
