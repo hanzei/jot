@@ -130,7 +130,7 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
       {!isCompleted && (
         <div
           {...listeners}
-          className="cursor-grab active:cursor-grabbing p-1 text-gray-400 hover:text-gray-600"
+          className="cursor-grab active:cursor-grabbing p-1 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
         >
           <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
             <path d="M7 2a2 2 0 1 1 .001 4.001A2 2 0 0 1 7 2zm0 6a2 2 0 1 1 .001 4.001A2 2 0 0 1 7 8zm0 6a2 2 0 1 1 .001 4.001A2 2 0 0 1 7 14zm6-8a2 2 0 1 1-.001-4.001A2 2 0 0 1 13 6zm0 2a2 2 0 1 1 .001 4.001A2 2 0 0 1 13 8zm0 6a2 2 0 1 1 .001 4.001A2 2 0 0 1 13 14z" />
@@ -172,10 +172,11 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
         <div className="relative flex-shrink-0">
           {item.assignedTo ? (
             <button
-              onClick={() => !isCompleted && setShowAssigneePicker(true)}
+              onClick={() => setShowAssigneePicker(true)}
               title={t('note.assignedTo', { name: assigneeDisplayName })}
               aria-label={t('note.assignedTo', { name: assigneeDisplayName })}
-              className={isCompleted ? 'cursor-default' : 'cursor-pointer'}
+              className={`rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-1 ${isCompleted ? 'cursor-default' : 'cursor-pointer'}`}
+              disabled={isCompleted}
             >
               <LetterAvatar
                 firstName={assignedUser?.first_name}
@@ -189,11 +190,11 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
             !isCompleted && (
               <button
                 onClick={() => setShowAssigneePicker(true)}
-                className="w-5 h-5 rounded-full border border-dashed border-gray-300 dark:border-slate-600 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors opacity-0 group-hover/item:opacity-100"
+                className="w-5 h-5 rounded-full border border-dashed border-gray-300 dark:border-slate-600 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors opacity-0 group-hover/item:opacity-100 focus:opacity-100 focus:ring-2 focus:ring-blue-500 touch-visible"
                 title={t('note.assignItem')}
                 aria-label={t('note.assignItem')}
               >
-                <UserPlusIcon className="h-3 w-3 text-gray-400 dark:text-gray-500" />
+                <UserPlusIcon className="h-3 w-3 text-gray-400 dark:text-gray-500" aria-hidden="true" />
               </button>
             )
           )}
@@ -211,7 +212,7 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
 
       <button
         onClick={() => onRemoveTodoItem(item.id)}
-        className="p-1 text-gray-400 hover:text-gray-600"
+        className="p-1 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
       >
         <TrashIcon className="h-4 w-4" />
       </button>
