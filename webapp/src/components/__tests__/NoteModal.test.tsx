@@ -6,10 +6,13 @@ import { Note, NoteItem } from '@/types'
 import { createMockNote } from '@/utils/__tests__/test-helpers'
 
 // Mock the API module
+const { mockNotesUpdate } = vi.hoisted(() => ({
+  mockNotesUpdate: vi.fn().mockResolvedValue({}),
+}))
 vi.mock('@/utils/api', () => ({
   notes: {
     create: vi.fn(),
-    update: vi.fn(),
+    update: mockNotesUpdate,
   },
 }))
 
@@ -409,6 +412,49 @@ describe('NoteModal', () => {
       expect(screen.getByDisplayValue('has text')).toBeInTheDocument()
     })
 
+    it('pressing Delete on a non-empty todo item does not delete it', async () => {
+      render(<NoteModal {...defaultProps} />)
+
+      fireEvent.click(screen.getByText('Todo List'))
+      fireEvent.click(screen.getByText('Add item'))
+
+      const inputs = screen.getAllByPlaceholderText('List item...')
+      fireEvent.change(inputs[0], { target: { value: 'has text' } })
+
+      fireEvent.keyDown(inputs[0], { key: 'Delete', code: 'Delete' })
+
+      expect(screen.getAllByPlaceholderText('List item...')).toHaveLength(1)
+      expect(screen.getByDisplayValue('has text')).toBeInTheDocument()
+    })
+
+    it('pressing Backspace on the only empty todo item deletes it without error', async () => {
+      render(<NoteModal {...defaultProps} />)
+
+      fireEvent.click(screen.getByText('Todo List'))
+      fireEvent.click(screen.getByText('Add item'))
+
+      const inputs = screen.getAllByPlaceholderText('List item...')
+      expect(inputs).toHaveLength(1)
+
+      fireEvent.keyDown(inputs[0], { key: 'Backspace', code: 'Backspace' })
+
+      expect(screen.queryAllByPlaceholderText('List item...')).toHaveLength(0)
+    })
+
+    it('pressing Backspace on a whitespace-only todo item deletes it', async () => {
+      render(<NoteModal {...defaultProps} />)
+
+      fireEvent.click(screen.getByText('Todo List'))
+      fireEvent.click(screen.getByText('Add item'))
+
+      const inputs = screen.getAllByPlaceholderText('List item...')
+      fireEvent.change(inputs[0], { target: { value: '   ' } })
+
+      fireEvent.keyDown(inputs[0], { key: 'Backspace', code: 'Backspace' })
+
+      expect(screen.queryAllByPlaceholderText('List item...')).toHaveLength(0)
+    })
+
     it('pressing Backspace on an empty item focuses the previous item', async () => {
       render(<NoteModal {...defaultProps} />)
 
@@ -445,6 +491,29 @@ describe('NoteModal', () => {
       const inputsAfter = screen.getAllByPlaceholderText('List item...')
       expect(inputsAfter).toHaveLength(1)
       expect(inputsAfter[0]).toHaveFocus()
+    })
+
+    it('removing a todo item from an existing note triggers auto-save', async () => {
+      const todoNote = createMockNote({
+        note_type: 'todo',
+        items: [
+          { id: 'item1', note_id: '1', text: 'First', completed: false, position: 0, indent_level: 0, created_at: '', updated_at: '' },
+          { id: 'item2', note_id: '1', text: '', completed: false, position: 1, indent_level: 0, created_at: '', updated_at: '' },
+        ],
+      })
+      mockNotesUpdate.mockClear()
+      render(<NoteModal {...defaultProps} note={todoNote} />)
+
+      const inputs = screen.getAllByPlaceholderText('List item...')
+      expect(inputs).toHaveLength(2)
+
+      // Press Backspace on the empty second item
+      fireEvent.keyDown(inputs[1], { key: 'Backspace', code: 'Backspace' })
+
+      expect(screen.getAllByPlaceholderText('List item...')).toHaveLength(1)
+      expect(mockNotesUpdate).toHaveBeenCalledWith('1', expect.objectContaining({
+        items: [expect.objectContaining({ text: 'First', position: 0 })],
+      }))
     })
   })
 

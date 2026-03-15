@@ -397,7 +397,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
 
     if (e.key === 'Backspace' || e.key === 'Delete') {
       const currentItem = uncompletedItems[index];
-      if (!currentItem || currentItem.text !== '') return;
+      if (!currentItem || currentItem.text.trim() !== '') return;
 
       e.preventDefault();
       const focusTarget = e.key === 'Backspace'
