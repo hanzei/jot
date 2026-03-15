@@ -170,6 +170,47 @@ func (s *UserStore) GetAll() ([]*User, error) {
 	return users, nil
 }
 
+// Search returns users whose username, first name, or last name contain the
+// given search term (case-insensitive). Results are ordered by creation date
+// descending.
+func (s *UserStore) Search(term string) ([]*User, error) {
+	like := "%" + term + "%"
+	query := `SELECT id, username, first_name, last_name, password_hash, role,
+			         profile_icon IS NOT NULL AS has_profile_icon,
+			         created_at, updated_at
+			  FROM users
+			  WHERE username LIKE ? OR first_name LIKE ? OR last_name LIKE ?
+			  ORDER BY created_at DESC`
+
+	rows, err := s.db.Query(query, like, like, like)
+	if err != nil {
+		return nil, fmt.Errorf("failed to search users: %w", err)
+	}
+	defer func() {
+		if err = rows.Close(); err != nil {
+			logrus.WithError(err).Error("Failed to close rows")
+		}
+	}()
+
+	var users []*User
+	for rows.Next() {
+		var user User
+		if err = rows.Scan(
+			&user.ID, &user.Username, &user.FirstName, &user.LastName, &user.PasswordHash,
+			&user.Role, &user.HasProfileIcon, &user.CreatedAt, &user.UpdatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan user: %w", err)
+		}
+		users = append(users, &user)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating users: %w", err)
+	}
+
+	return users, nil
+}
+
 // UpdateUsername sets a new username for the user with the given id and returns
 // the updated user. Returns ErrUsernameTaken if the username is already in use,
 // or another error if the id does not exist or the query fails.
