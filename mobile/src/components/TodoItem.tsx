@@ -77,36 +77,32 @@ function TodoItem({
         blurOnSubmit={false}
         testID="todo-item-text"
       />
-      {showAssignUI && (
-        assignedTo ? (
-          <TouchableOpacity
-            onPress={!completed ? onAssignPress : undefined}
-            style={styles.assignBtn}
-            testID="todo-item-assignee"
-            accessibilityLabel={`Assigned to ${assignedUser?.username ?? 'user'}`}
-          >
-            <UserAvatar
-              userId={assignedTo}
-              username={assignedUser?.username ?? '?'}
-              hasProfileIcon={assignedUser?.hasProfileIcon}
-              size="small"
-            />
-          </TouchableOpacity>
-        ) : (
-          !completed && (
-            <TouchableOpacity
-              onPress={onAssignPress}
-              style={styles.assignBtn}
-              testID="todo-item-assign"
-              accessibilityLabel="Assign item"
-            >
-              <View style={styles.assignPlaceholder}>
-                <Ionicons name="person-add-outline" size={12} color="#999" />
-              </View>
-            </TouchableOpacity>
-          )
-        )
-      )}
+      {showAssignUI && assignedTo ? (
+        <TouchableOpacity
+          onPress={!completed ? onAssignPress : undefined}
+          style={styles.assignBtn}
+          testID="todo-item-assignee"
+          accessibilityLabel={`Assigned to ${assignedUser?.username ?? 'unknown'}`}
+        >
+          <UserAvatar
+            userId={assignedTo}
+            username={assignedUser?.username ?? '?'}
+            hasProfileIcon={assignedUser?.hasProfileIcon}
+            size="small"
+          />
+        </TouchableOpacity>
+      ) : showAssignUI && !completed ? (
+        <TouchableOpacity
+          onPress={onAssignPress}
+          style={styles.assignBtn}
+          testID="todo-item-assign"
+          accessibilityLabel="Assign item"
+        >
+          <View style={styles.assignPlaceholder}>
+            <Ionicons name="person-add-outline" size={12} color="#999" />
+          </View>
+        </TouchableOpacity>
+      ) : null}
       {editable && onDelete && (
         <TouchableOpacity onPress={onDelete} style={styles.deleteBtn} testID="todo-item-delete">
           <Ionicons name="close" size={18} color="#999" />

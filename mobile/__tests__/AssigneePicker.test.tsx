@@ -107,4 +107,19 @@ describe('AssigneePicker', () => {
     fireEvent.press(getByTestId('assignee-picker-close'));
     expect(onClose).toHaveBeenCalled();
   });
+
+  it('renders without crashing when collaborators is empty', () => {
+    const { getByText, queryByTestId } = render(
+      <AssigneePicker
+        visible={true}
+        collaborators={[]}
+        currentAssigneeId=""
+        onAssign={jest.fn()}
+        onClose={jest.fn()}
+      />,
+    );
+
+    expect(getByText('Assign item')).toBeTruthy();
+    expect(queryByTestId('assignee-option-u1')).toBeNull();
+  });
 });

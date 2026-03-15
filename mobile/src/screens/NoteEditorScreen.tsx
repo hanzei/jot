@@ -334,12 +334,12 @@ export default function NoteEditorScreen() {
   }, [scheduleUpdate]);
 
   const collaborators = useMemo<Collaborator[]>(() => {
-    if (!existingNote?.shared_with || existingNote.shared_with.length === 0) return [];
-    const ownerUsername = existingNote.is_shared
-      ? undefined
-      : user?.username;
+    if (!existingNote) return [];
+    const hasShares = existingNote.shared_with && existingNote.shared_with.length > 0;
+    if (!existingNote.is_shared && !hasShares) return [];
+    const ownerUsername = existingNote.is_shared ? undefined : user?.username;
     return buildCollaborators(existingNote.user_id, existingNote.shared_with, ownerUsername);
-  }, [existingNote?.shared_with, existingNote?.user_id, existingNote?.is_shared, user?.username]);
+  }, [existingNote, user?.username]);
 
   const isNoteShared = useMemo(() => {
     return (existingNote?.shared_with && existingNote.shared_with.length > 0) || existingNote?.is_shared;
