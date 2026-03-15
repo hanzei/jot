@@ -232,9 +232,7 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, onRestore, o
 
               return (
                 <>
-                  {uncompletedItems.map((item) => {
-                    const assignedUser = item.assigned_to ? usersById?.get(item.assigned_to) : undefined;
-                    return (
+                  {uncompletedItems.map((item) => (
                       <div key={item.id} className="flex items-center text-sm" style={{ marginLeft: item.indent_level * VALIDATION_LIMITS.INDENT_PX_PER_LEVEL }}>
                         <input
                           type="checkbox"
@@ -245,25 +243,8 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, onRestore, o
                         <span className="text-gray-700 dark:text-gray-200">
                           {item.text}
                         </span>
-                        {item.assigned_to && (
-                          <div
-                            role="img"
-                            className="flex-shrink-0 ml-1"
-                            title={assignedUser ? [assignedUser.first_name, assignedUser.last_name].filter(Boolean).join(' ') || assignedUser.username : undefined}
-                            aria-label={t('note.assignedTo', { name: assignedUser ? [assignedUser.first_name, assignedUser.last_name].filter(Boolean).join(' ') || assignedUser.username : '?' })}
-                          >
-                            <LetterAvatar
-                              firstName={assignedUser?.first_name}
-                              username={assignedUser?.username || '?'}
-                              userId={item.assigned_to}
-                              hasProfileIcon={assignedUser?.has_profile_icon}
-                              className="w-4 h-4"
-                            />
-                          </div>
-                        )}
                       </div>
-                    );
-                  })}
+                  ))}
                   {completedItems.length > 0 && (
                     <div className="text-xs text-gray-500 dark:text-gray-400 mt-2">
                       {t('note.moreCompletedItems', { count: completedItems.length })}
