@@ -85,11 +85,11 @@ type UpdateNoteRequest struct {
 }
 
 type UpdateNoteItem struct {
-	Text             string `json:"text"`
-	Position         int    `json:"position"`
-	Completed        bool   `json:"completed"`
-	IndentLevel      int    `json:"indent_level"`
-	AssignedTo string `json:"assigned_to"`
+	Text        string `json:"text"`
+	Position    int    `json:"position"`
+	Completed   bool   `json:"completed"`
+	IndentLevel int    `json:"indent_level"`
+	AssignedTo  string `json:"assigned_to"`
 }
 
 func normalizeCreateNoteRequest(req *CreateNoteRequest) (int, error) {
