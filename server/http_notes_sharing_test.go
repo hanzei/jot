@@ -134,11 +134,11 @@ func TestSearchUsersEndpoint(t *testing.T) {
 	_ = ts.createTestUser(t, "charlie", "password123", true)
 
 	// Set display names so we can test searching by first/last name.
-	resp := ts.authRequest(t, user1, http.MethodPut, "/api/v1/users/me", map[string]any{
+	resp := ts.authRequest(t, user1, http.MethodPatch, "/api/v1/users/me", map[string]any{
 		"username": "alice", "first_name": "Alice", "last_name": "Smith",
 	})
 	require.Equal(t, http.StatusOK, resp.StatusCode)
-	resp = ts.authRequest(t, bob, http.MethodPut, "/api/v1/users/me", map[string]any{
+	resp = ts.authRequest(t, bob, http.MethodPatch, "/api/v1/users/me", map[string]any{
 		"username": "bob", "first_name": "Robert", "last_name": "Jones",
 	})
 	require.Equal(t, http.StatusOK, resp.StatusCode)
