@@ -106,7 +106,17 @@ export default function NotesListScreen({ variant = 'notes' }: NotesListScreenPr
   // Context menu actions
   const handlePin = useCallback(async (note: Note) => {
     try {
-      await updateNote.mutateAsync({ id: note.id, data: { pinned: !note.pinned } });
+      await updateNote.mutateAsync({
+        id: note.id,
+        data: {
+          title: note.title,
+          content: note.content,
+          pinned: !note.pinned,
+          archived: note.archived,
+          color: note.color,
+          checked_items_collapsed: note.checked_items_collapsed,
+        },
+      });
     } catch {
       Alert.alert('Error', 'Failed to update note');
     }
@@ -114,7 +124,17 @@ export default function NotesListScreen({ variant = 'notes' }: NotesListScreenPr
 
   const handleArchive = useCallback(async (note: Note) => {
     try {
-      await updateNote.mutateAsync({ id: note.id, data: { archived: true } });
+      await updateNote.mutateAsync({
+        id: note.id,
+        data: {
+          title: note.title,
+          content: note.content,
+          pinned: note.pinned,
+          archived: true,
+          color: note.color,
+          checked_items_collapsed: note.checked_items_collapsed,
+        },
+      });
     } catch {
       Alert.alert('Error', 'Failed to archive note');
     }
@@ -122,7 +142,17 @@ export default function NotesListScreen({ variant = 'notes' }: NotesListScreenPr
 
   const handleUnarchive = useCallback(async (note: Note) => {
     try {
-      await updateNote.mutateAsync({ id: note.id, data: { archived: false } });
+      await updateNote.mutateAsync({
+        id: note.id,
+        data: {
+          title: note.title,
+          content: note.content,
+          pinned: note.pinned,
+          archived: false,
+          color: note.color,
+          checked_items_collapsed: note.checked_items_collapsed,
+        },
+      });
     } catch {
       Alert.alert('Error', 'Failed to unarchive note');
     }
@@ -176,7 +206,17 @@ export default function NotesListScreen({ variant = 'notes' }: NotesListScreenPr
   const handleColorSelect = useCallback(async (color: string) => {
     if (!colorPickerNote) return;
     try {
-      await updateNote.mutateAsync({ id: colorPickerNote.id, data: { color } });
+      await updateNote.mutateAsync({
+        id: colorPickerNote.id,
+        data: {
+          title: colorPickerNote.title,
+          content: colorPickerNote.content,
+          pinned: colorPickerNote.pinned,
+          archived: colorPickerNote.archived,
+          color,
+          checked_items_collapsed: colorPickerNote.checked_items_collapsed,
+        },
+      });
     } catch {
       Alert.alert('Error', 'Failed to update note color');
     }
