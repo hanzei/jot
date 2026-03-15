@@ -52,7 +52,7 @@ function rowToNote(row: NoteRow, items: NoteItem[] = []): Note {
     checked_items_collapsed: row.checked_items_collapsed === 1,
     is_shared: row.is_shared === 1,
     owner_username: row.owner_username || undefined,
-    owner_has_profile_icon: row.owner_has_profile_icon === 1 || undefined,
+    owner_has_profile_icon: row.owner_has_profile_icon === 1,
     deleted_at: row.deleted_at,
     created_at: row.created_at,
     updated_at: row.updated_at,
