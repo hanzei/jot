@@ -52,8 +52,6 @@ type Note struct {
 	SharedWith            []NoteShare `json:"shared_with,omitempty"`
 	IsShared              bool        `json:"is_shared"`
 	Labels                []Label     `json:"labels"`
-	OwnerUsername         string      `json:"owner_username,omitempty"`
-	OwnerHasProfileIcon   bool        `json:"owner_has_profile_icon,omitempty"`
 	DeletedAt             *time.Time  `json:"deleted_at"`
 	CreatedAt             time.Time   `json:"created_at"`
 	UpdatedAt             time.Time   `json:"updated_at"`
@@ -176,16 +174,14 @@ func buildGetByUserIDQuery(userID string, archived bool, trashed bool, search st
 	var query string
 	var args []any
 	if trashed {
-		query = `SELECT DISTINCT n.id, n.user_id, n.title, n.content, n.note_type, n.color, n.pinned, n.archived, n.position, n.unpinned_position, n.checked_items_collapsed, n.deleted_at, n.created_at, n.updated_at, u.username, u.profile_icon IS NOT NULL
+		query = `SELECT DISTINCT n.id, n.user_id, n.title, n.content, n.note_type, n.color, n.pinned, n.archived, n.position, n.unpinned_position, n.checked_items_collapsed, n.deleted_at, n.created_at, n.updated_at
 				  FROM notes n
-				  JOIN users u ON n.user_id = u.id
 				  LEFT JOIN note_items ni ON n.id = ni.note_id
 				  WHERE n.user_id = ? AND n.deleted_at IS NOT NULL`
 		args = []any{userID}
 	} else {
-		query = `SELECT DISTINCT n.id, n.user_id, n.title, n.content, n.note_type, n.color, n.pinned, n.archived, n.position, n.unpinned_position, n.checked_items_collapsed, n.deleted_at, n.created_at, n.updated_at, u.username, u.profile_icon IS NOT NULL
+		query = `SELECT DISTINCT n.id, n.user_id, n.title, n.content, n.note_type, n.color, n.pinned, n.archived, n.position, n.unpinned_position, n.checked_items_collapsed, n.deleted_at, n.created_at, n.updated_at
 				  FROM notes n
-				  JOIN users u ON n.user_id = u.id
 				  LEFT JOIN note_shares ns ON n.id = ns.note_id
 				  LEFT JOIN note_items ni ON n.id = ni.note_id
 				  WHERE (n.user_id = ? OR ns.shared_with_user_id = ?) AND n.archived = ? AND n.deleted_at IS NULL`
@@ -224,7 +220,6 @@ func (s *NoteStore) GetByUserID(userID string, archived bool, trashed bool, sear
 			&note.ID, &note.UserID, &note.Title, &note.Content,
 			&note.NoteType, &note.Color, &note.Pinned, &note.Archived, &note.Position, &note.UnpinnedPosition, &note.CheckedItemsCollapsed,
 			&note.DeletedAt, &note.CreatedAt, &note.UpdatedAt,
-			&note.OwnerUsername, &note.OwnerHasProfileIcon,
 		)
 		if err != nil {
 			return nil, fmt.Errorf("failed to scan note: %w", err)
@@ -282,15 +277,14 @@ func (s *NoteStore) GetByID(id string, userID string) (*Note, error) {
 		return nil, ErrNoteNotFound
 	}
 
-	query := `SELECT n.id, n.user_id, n.title, n.content, n.note_type, n.color, n.pinned, n.archived, n.position, n.unpinned_position, n.checked_items_collapsed, n.deleted_at, n.created_at, n.updated_at, u.username, u.profile_icon IS NOT NULL
-			  FROM notes n JOIN users u ON n.user_id = u.id WHERE n.id = ? AND n.deleted_at IS NULL`
+	query := `SELECT id, user_id, title, content, note_type, color, pinned, archived, position, unpinned_position, checked_items_collapsed, deleted_at, created_at, updated_at
+			  FROM notes WHERE id = ? AND deleted_at IS NULL`
 
 	var note Note
 	err = s.db.QueryRow(query, id).Scan(
 		&note.ID, &note.UserID, &note.Title, &note.Content,
 		&note.NoteType, &note.Color, &note.Pinned, &note.Archived, &note.Position, &note.UnpinnedPosition, &note.CheckedItemsCollapsed,
 		&note.DeletedAt, &note.CreatedAt, &note.UpdatedAt,
-		&note.OwnerUsername, &note.OwnerHasProfileIcon,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {

@@ -17,8 +17,6 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
       position INTEGER NOT NULL DEFAULT 0,
       checked_items_collapsed INTEGER NOT NULL DEFAULT 0,
       is_shared INTEGER NOT NULL DEFAULT 0,
-      owner_username TEXT NOT NULL DEFAULT '',
-      owner_has_profile_icon INTEGER NOT NULL DEFAULT 0,
       deleted_at TEXT,
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
@@ -65,12 +63,4 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
     }
   }
 
-  const noteCols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(notes)');
-  const noteColNames = new Set(noteCols.map((c) => c.name));
-  if (!noteColNames.has('owner_username')) {
-    await db.runAsync(`ALTER TABLE notes ADD COLUMN owner_username TEXT NOT NULL DEFAULT ''`);
-  }
-  if (!noteColNames.has('owner_has_profile_icon')) {
-    await db.runAsync(`ALTER TABLE notes ADD COLUMN owner_has_profile_icon INTEGER NOT NULL DEFAULT 0`);
-  }
 }

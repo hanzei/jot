@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 import NoteCard from '../src/components/NoteCard';
-import { Note } from '../src/types';
+import { Note, User } from '../src/types';
 
 const baseNote: Note = {
   id: 'note-1',
@@ -146,8 +146,14 @@ describe('NoteCard', () => {
       ],
     };
 
+    const usersById = new Map<string, User>();
+    usersById.set('user-2', {
+      id: 'user-2', username: 'bob', first_name: 'Bob', last_name: '',
+      role: 'user', has_profile_icon: false, created_at: '', updated_at: '',
+    });
+
     const { getByText } = render(
-      <NoteCard note={sharedTodo} onPress={jest.fn()} />,
+      <NoteCard note={sharedTodo} usersById={usersById} onPress={jest.fn()} />,
     );
 
     expect(getByText('Assigned task')).toBeTruthy();

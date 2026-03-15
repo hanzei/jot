@@ -24,7 +24,7 @@ import ColorPicker from '../components/ColorPicker';
 import LabelPicker from '../components/LabelPicker';
 import AssigneePicker from '../components/AssigneePicker';
 import { buildCollaborators, Collaborator } from '../utils/collaborators';
-import { useAuth } from '../store/AuthContext';
+import { useUsers } from '../store/UsersContext';
 import { NoteType, NoteItem, UpdateNoteRequest, Label } from '../types';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 
@@ -89,7 +89,7 @@ export default function NoteEditorScreen() {
   const [assigneePickerVisible, setAssigneePickerVisible] = useState(false);
   const [assigningItemId, setAssigningItemId] = useState<string | null>(null);
   const [syncToast, setSyncToast] = useState<string | null>(null);
-  const { user } = useAuth();
+  const { usersById } = useUsers();
 
   const { data: existingNote } = useOfflineNote(noteId);
   const createMutation = useCreateNote();
@@ -337,13 +337,8 @@ export default function NoteEditorScreen() {
     if (!existingNote) return [];
     const hasShares = existingNote.shared_with && existingNote.shared_with.length > 0;
     if (!existingNote.is_shared && !hasShares) return [];
-    return buildCollaborators(
-      existingNote.user_id,
-      existingNote.shared_with,
-      existingNote.owner_username ?? user?.username,
-      existingNote.owner_has_profile_icon,
-    );
-  }, [existingNote, user?.username]);
+    return buildCollaborators(existingNote.user_id, existingNote.shared_with, usersById);
+  }, [existingNote, usersById]);
 
   const isNoteShared = useMemo(() => {
     return (existingNote?.shared_with && existingNote.shared_with.length > 0) || existingNote?.is_shared;

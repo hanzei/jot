@@ -1,11 +1,12 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Note, NoteItem, NoteShare } from '../types';
+import { Note, NoteItem, NoteShare, User } from '../types';
 import UserAvatar from './UserAvatar';
 
 interface NoteCardProps {
   note: Note;
+  usersById?: Map<string, User>;
   onPress: () => void;
   onLongPress?: () => void;
   onMenuPress?: () => void;
@@ -38,12 +39,9 @@ function ShareAvatars({ shares }: { shares: NoteShare[] }) {
   );
 }
 
-function TodoPreview({ items, sharedWith, noteUserId, ownerUsername, ownerHasProfileIcon }: {
+function TodoPreview({ items, usersById }: {
   items: NoteItem[];
-  sharedWith?: NoteShare[];
-  noteUserId: string;
-  ownerUsername?: string;
-  ownerHasProfileIcon?: boolean;
+  usersById?: Map<string, User>;
 }) {
   const uncompleted: NoteItem[] = [];
   let completedCount = 0;
@@ -58,20 +56,7 @@ function TodoPreview({ items, sharedWith, noteUserId, ownerUsername, ownerHasPro
   return (
     <View style={styles.todoPreview}>
       {uncompleted.map((item) => {
-        let assigneeUsername = '?';
-        let assigneeHasIcon: boolean | undefined;
-        if (item.assigned_to) {
-          if (item.assigned_to === noteUserId && ownerUsername) {
-            assigneeUsername = ownerUsername;
-            assigneeHasIcon = ownerHasProfileIcon;
-          } else {
-            const share = sharedWith?.find((s) => s.shared_with_user_id === item.assigned_to);
-            if (share) {
-              assigneeUsername = share.username ?? '?';
-              assigneeHasIcon = share.has_profile_icon;
-            }
-          }
-        }
+        const assignedUser = item.assigned_to ? usersById?.get(item.assigned_to) : undefined;
         return (
           <View key={item.id} style={styles.todoRow}>
             <Ionicons name="square-outline" size={14} color="#999" />
@@ -81,8 +66,8 @@ function TodoPreview({ items, sharedWith, noteUserId, ownerUsername, ownerHasPro
             {item.assigned_to ? (
               <UserAvatar
                 userId={item.assigned_to}
-                username={assigneeUsername}
-                hasProfileIcon={assigneeHasIcon}
+                username={assignedUser?.username ?? '?'}
+                hasProfileIcon={assignedUser?.has_profile_icon}
                 size="small"
               />
             ) : null}
@@ -96,7 +81,7 @@ function TodoPreview({ items, sharedWith, noteUserId, ownerUsername, ownerHasPro
   );
 }
 
-function NoteCard({ note, onPress, onLongPress, onMenuPress }: NoteCardProps) {
+function NoteCard({ note, usersById, onPress, onLongPress, onMenuPress }: NoteCardProps) {
   const hasColor = note.color && note.color !== '#ffffff';
   const borderColor = hasColor ? note.color : '#e5e7eb';
 
@@ -137,13 +122,7 @@ function NoteCard({ note, onPress, onLongPress, onMenuPress }: NoteCardProps) {
       ) : null}
 
       {note.note_type === 'todo' && note.items && note.items.length > 0 ? (
-        <TodoPreview
-          items={note.items}
-          sharedWith={note.shared_with}
-          noteUserId={note.user_id}
-          ownerUsername={note.owner_username}
-          ownerHasProfileIcon={note.owner_has_profile_icon}
-        />
+        <TodoPreview items={note.items} usersById={usersById} />
       ) : null}
 
       <View style={styles.footer}>

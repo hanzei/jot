@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SQLiteProvider } from 'expo-sqlite';
 import { AuthProvider } from './src/store/AuthContext';
+import { UsersProvider } from './src/store/UsersContext';
 import { OfflineProvider } from './src/store/OfflineContext';
 import RootNavigator from './src/navigation/RootNavigator';
 import { migrateDatabase } from './src/db/schema';
@@ -23,11 +24,13 @@ export default function App() {
       <QueryClientProvider client={queryClient}>
         <SQLiteProvider databaseName="jot.db" onInit={migrateDatabase}>
           <AuthProvider>
-            <OfflineProvider>
-              <NavigationContainer>
-                <RootNavigator />
-              </NavigationContainer>
-            </OfflineProvider>
+            <UsersProvider>
+              <OfflineProvider>
+                <NavigationContainer>
+                  <RootNavigator />
+                </NavigationContainer>
+              </OfflineProvider>
+            </UsersProvider>
           </AuthProvider>
         </SQLiteProvider>
       </QueryClientProvider>

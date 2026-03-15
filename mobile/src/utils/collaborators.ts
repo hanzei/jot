@@ -1,4 +1,4 @@
-import { NoteShare } from '../types';
+import { User, NoteShare } from '../types';
 
 export interface Collaborator {
   userId: string;
@@ -16,28 +16,31 @@ export function displayName(c: Collaborator): string {
 export function buildCollaborators(
   noteUserId: string,
   sharedWith: NoteShare[] | undefined,
-  ownerUsername?: string,
-  ownerHasProfileIcon?: boolean,
+  usersById: Map<string, User>,
 ): Collaborator[] {
   const result: Collaborator[] = [];
   const seen = new Set<string>();
 
+  const owner = usersById.get(noteUserId);
   result.push({
     userId: noteUserId,
-    username: ownerUsername || '?',
-    hasProfileIcon: ownerHasProfileIcon,
+    username: owner?.username || '?',
+    firstName: owner?.first_name,
+    lastName: owner?.last_name,
+    hasProfileIcon: owner?.has_profile_icon,
   });
   seen.add(noteUserId);
 
   sharedWith?.forEach((s) => {
     if (seen.has(s.shared_with_user_id)) return;
     seen.add(s.shared_with_user_id);
+    const u = usersById.get(s.shared_with_user_id);
     result.push({
       userId: s.shared_with_user_id,
-      username: s.username || '?',
-      firstName: s.first_name,
-      lastName: s.last_name,
-      hasProfileIcon: s.has_profile_icon,
+      username: u?.username || s.username || '?',
+      firstName: u?.first_name || s.first_name,
+      lastName: u?.last_name || s.last_name,
+      hasProfileIcon: u?.has_profile_icon ?? s.has_profile_icon,
     });
   });
 
