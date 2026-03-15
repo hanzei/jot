@@ -442,6 +442,25 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
   };
 
   const handleItemKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+    if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
+      const targetIndex = e.key === 'ArrowUp' ? index - 1 : index + 1;
+      if (targetIndex < 0 || targetIndex >= uncompletedItems.length) return;
+
+      e.preventDefault();
+      const targetItem = uncompletedItems[targetIndex];
+      const el = itemInputRefs.current.get(targetItem.id);
+      if (el) {
+        const cursorPos = Math.min(
+          (e.target as HTMLInputElement).selectionStart ?? 0,
+          el.value.length
+        );
+        el.focus();
+        el.setSelectionRange(cursorPos, cursorPos);
+      }
+      return;
+    }
+
     if (e.repeat) return;
     if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
 
