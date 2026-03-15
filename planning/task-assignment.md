@@ -173,9 +173,23 @@ func (s *NoteStore) ClearAssignmentsForUser(noteID, userID string) error {
     )
     return err
 }
+
+func (s *NoteStore) ClearAllAssignments(noteID string) error {
+    _, err := s.db.Exec(
+        `UPDATE note_items SET assigned_to_user_id = ''
+         WHERE note_id = ? AND assigned_to_user_id != ''`,
+        noteID,
+    )
+    return err
+}
 ```
 
-Called from `NotesHandler.UnshareNote` after successfully removing the share. For atomicity, consider wrapping `UnshareNote` and `ClearAssignmentsForUser` in a single database transaction so that if either operation fails, both are rolled back.
+Called from `NotesHandler.UnshareNote` after successfully removing the share:
+
+1. Always call `ClearAssignmentsForUser` to remove the unshared user's assignments.
+2. Then check if the note has any remaining shares. If not (the note is now fully unshared), call `ClearAllAssignments` to remove all assignments — including the owner's self-assignments. This enforces the rule that unshared notes cannot have assignments.
+
+For atomicity, wrap the unshare, assignment cleanup, and remaining-share check in a single database transaction.
 
 ---
 
@@ -234,7 +248,7 @@ No new event types. The existing `note_updated` event carries the full note payl
 
 | Scenario | Behavior |
 |----------|----------|
-| Assigned user is unshared from note | Assignments cleared (see `ClearAssignmentsForUser`); next `note_updated` SSE event reflects the change |
+| Assigned user is unshared from note | That user's assignments cleared. If the note becomes fully unshared (last share removed), **all** assignments are cleared — including the owner's self-assignments. Next `note_updated` SSE event reflects the change |
 | Assigned user account is deleted | Application clears assignments (`SET assigned_to_user_id = ''`) in the user deletion handler |
 | Item is completed | Assignment preserved (shows who completed it) |
 | Item is uncompleted | Assignment preserved |
