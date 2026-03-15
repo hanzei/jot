@@ -1083,6 +1083,12 @@ paths:
       - auth
   /users:
     get:
+      parameters:
+      - description: Filter by username, first name, or last name (case-insensitive
+          substring match)
+        in: query
+        name: search
+        type: string
       produces:
       - application/json
       responses:
@@ -1098,7 +1104,7 @@ paths:
             type: string
       security:
       - CookieAuth: []
-      summary: List users (excluding current user)
+      summary: Search or list users (excluding current user)
       tags:
       - users
   /users/{id}/profile-icon:
