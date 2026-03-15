@@ -110,4 +110,48 @@ describe('NoteCard', () => {
 
     expect(queryByText('Test Note')).toBeNull();
   });
+
+  it('shows assignee avatar for assigned todo items', () => {
+    const sharedTodo: Note = {
+      ...baseNote,
+      note_type: 'todo',
+      content: '',
+      shared_with: [
+        {
+          id: 's1',
+          note_id: 'note-1',
+          shared_with_user_id: 'user-2',
+          shared_by_user_id: 'user-1',
+          permission_level: 'edit',
+          username: 'alice',
+          first_name: 'Alice',
+          has_profile_icon: false,
+          created_at: '',
+          updated_at: '',
+        },
+      ],
+      items: [
+        {
+          id: 'item-1',
+          note_id: 'note-1',
+          text: 'Assigned task',
+          completed: false,
+          position: 0,
+          indent_level: 0,
+          assigned_to: 'user-2',
+          created_at: '2024-01-01T00:00:00Z',
+          updated_at: '2024-01-01T00:00:00Z',
+        },
+      ],
+    };
+
+    const { getByText, getAllByText } = render(
+      <NoteCard note={sharedTodo} onPress={jest.fn()} />,
+    );
+
+    expect(getByText('Assigned task')).toBeTruthy();
+    // The avatar letter 'A' (for 'alice') should be rendered alongside the task text
+    const aElements = getAllByText('A');
+    expect(aElements.length).toBeGreaterThanOrEqual(2);
+  });
 });
