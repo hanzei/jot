@@ -242,9 +242,12 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, onRestore, o
                           readOnly
                           className="h-4 w-4 text-blue-600 rounded mr-2"
                         />
+                        <span className="text-gray-700 dark:text-gray-200">
+                          {item.text}
+                        </span>
                         {item.assigned_to && (
                           <div
-                            className="flex-shrink-0 mr-1"
+                            className="flex-shrink-0 ml-1"
                             title={assignedUser ? [assignedUser.first_name, assignedUser.last_name].filter(Boolean).join(' ') || assignedUser.username : undefined}
                           >
                             <LetterAvatar
@@ -256,9 +259,6 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, onRestore, o
                             />
                           </div>
                         )}
-                        <span className="text-gray-700 dark:text-gray-200 flex-1">
-                          {item.text}
-                        </span>
                       </div>
                     );
                   })}
