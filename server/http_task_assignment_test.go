@@ -277,6 +277,133 @@ func TestTaskAssignment(t *testing.T) {
 	})
 }
 
+func TestMyTodoFilter(t *testing.T) {
+	t.Run("returns notes with items assigned to current user", func(t *testing.T) {
+		ts := setupTestServer(t)
+		owner := ts.createTestUser(t, "owner", "password123", false)
+		collaborator := ts.createTestUser(t, "collab", "password123", false)
+
+		noteID, collabID := createSharedTodoNote(t, ts, owner, collaborator)
+
+		updateBody := map[string]any{
+			"title": "Shared Todo",
+			"items": []map[string]any{
+				{"text": "Item 1", "position": 0, "indent_level": 0, "assigned_to": collabID},
+				{"text": "Item 2", "position": 1, "indent_level": 0},
+			},
+		}
+		resp := ts.authRequest(t, owner, http.MethodPut, fmt.Sprintf("/api/v1/notes/%s", noteID), updateBody)
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+
+		resp = ts.authRequest(t, collaborator, http.MethodGet, "/api/v1/notes?my_todo=true", nil)
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+
+		var notes []map[string]any
+		require.NoError(t, resp.UnmarshalBody(&notes))
+		require.Len(t, notes, 1)
+		assert.Equal(t, noteID, notes[0]["id"])
+	})
+
+	t.Run("does not return notes without assignments to current user", func(t *testing.T) {
+		ts := setupTestServer(t)
+		owner := ts.createTestUser(t, "owner", "password123", false)
+		collaborator := ts.createTestUser(t, "collab", "password123", false)
+
+		noteID, _ := createSharedTodoNote(t, ts, owner, collaborator)
+
+		updateBody := map[string]any{
+			"title": "Shared Todo",
+			"items": []map[string]any{
+				{"text": "Item 1", "position": 0, "indent_level": 0, "assigned_to": owner.User.ID},
+				{"text": "Item 2", "position": 1, "indent_level": 0},
+			},
+		}
+		resp := ts.authRequest(t, owner, http.MethodPut, fmt.Sprintf("/api/v1/notes/%s", noteID), updateBody)
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+
+		resp = ts.authRequest(t, collaborator, http.MethodGet, "/api/v1/notes?my_todo=true", nil)
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+
+		var notes []map[string]any
+		require.NoError(t, resp.UnmarshalBody(&notes))
+		assert.Empty(t, notes)
+	})
+
+	t.Run("returns empty list when no assignments exist", func(t *testing.T) {
+		ts := setupTestServer(t)
+		owner := ts.createTestUser(t, "owner", "password123", false)
+
+		body := map[string]any{
+			"title":     "Solo Todo",
+			"note_type": "todo",
+			"items": []map[string]any{
+				{"text": "Item 1", "position": 0, "indent_level": 0},
+			},
+		}
+		resp := ts.authRequest(t, owner, http.MethodPost, "/api/v1/notes", body)
+		require.Equal(t, http.StatusCreated, resp.StatusCode)
+
+		resp = ts.authRequest(t, owner, http.MethodGet, "/api/v1/notes?my_todo=true", nil)
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+
+		var notes []map[string]any
+		require.NoError(t, resp.UnmarshalBody(&notes))
+		assert.Empty(t, notes)
+	})
+
+	t.Run("owner sees own assignments in my_todo filter", func(t *testing.T) {
+		ts := setupTestServer(t)
+		owner := ts.createTestUser(t, "owner", "password123", false)
+		collaborator := ts.createTestUser(t, "collab", "password123", false)
+
+		noteID, _ := createSharedTodoNote(t, ts, owner, collaborator)
+
+		updateBody := map[string]any{
+			"title": "Shared Todo",
+			"items": []map[string]any{
+				{"text": "Item 1", "position": 0, "indent_level": 0, "assigned_to": owner.User.ID},
+			},
+		}
+		resp := ts.authRequest(t, owner, http.MethodPut, fmt.Sprintf("/api/v1/notes/%s", noteID), updateBody)
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+
+		resp = ts.authRequest(t, owner, http.MethodGet, "/api/v1/notes?my_todo=true", nil)
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+
+		var notes []map[string]any
+		require.NoError(t, resp.UnmarshalBody(&notes))
+		require.Len(t, notes, 1)
+		assert.Equal(t, noteID, notes[0]["id"])
+	})
+
+	t.Run("excludes trashed notes from my_todo filter", func(t *testing.T) {
+		ts := setupTestServer(t)
+		owner := ts.createTestUser(t, "owner", "password123", false)
+		collaborator := ts.createTestUser(t, "collab", "password123", false)
+
+		noteID, collabID := createSharedTodoNote(t, ts, owner, collaborator)
+
+		updateBody := map[string]any{
+			"title": "Shared Todo",
+			"items": []map[string]any{
+				{"text": "Item 1", "position": 0, "indent_level": 0, "assigned_to": collabID},
+			},
+		}
+		resp := ts.authRequest(t, owner, http.MethodPut, fmt.Sprintf("/api/v1/notes/%s", noteID), updateBody)
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+
+		resp = ts.authRequest(t, owner, http.MethodDelete, fmt.Sprintf("/api/v1/notes/%s", noteID), nil)
+		require.Equal(t, http.StatusNoContent, resp.StatusCode)
+
+		resp = ts.authRequest(t, collaborator, http.MethodGet, "/api/v1/notes?my_todo=true", nil)
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+
+		var notes []map[string]any
+		require.NoError(t, resp.UnmarshalBody(&notes))
+		assert.Empty(t, notes)
+	})
+}
+
 func TestTaskAssignmentUnshareCleanup(t *testing.T) {
 	t.Run("unshare clears unshared users assignments", func(t *testing.T) {
 		ts := setupTestServer(t)

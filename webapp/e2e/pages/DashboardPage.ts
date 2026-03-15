@@ -148,6 +148,12 @@ export class DashboardPage {
       .click();
   }
 
+  async switchToMyTodo() {
+    await this.page
+      .locator('aside[aria-label="Main navigation"] nav [aria-label="My Todo"]')
+      .click();
+  }
+
   async clickLogo() {
     await this.page.click('a:has-text("Jot")');
   }

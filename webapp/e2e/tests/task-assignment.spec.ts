@@ -126,6 +126,69 @@ test.describe('Task Assignment', () => {
     await page.click('button[aria-label="Close"]');
   });
 
+  test('My Todo filter shows only notes with items assigned to current user', async ({
+    page,
+    authenticatedUser,
+    dashboardPage,
+    request,
+  }) => {
+    const user2Name = uniqueUsername('collab');
+    const user2Pass = 'testpass123';
+
+    const registerResp = await request.post('/api/v1/register', {
+      data: { username: user2Name, password: user2Pass },
+    });
+    expect(registerResp.ok()).toBeTruthy();
+
+    await dashboardPage.goto();
+
+    await dashboardPage.createTodoNote('Assigned Todo', ['Task for me']);
+    await dashboardPage.createNote('Plain Note', 'No todos here');
+
+    await dashboardPage.shareNoteWithUser('Assigned Todo', user2Name);
+
+    // Open the note and self-assign the first item
+    await dashboardPage.openNote('Assigned Todo');
+    await expect(page.getByRole('heading', { name: 'Edit Note' })).toBeVisible();
+
+    const itemRow = page.locator('input[placeholder="List item..."]').first().locator('..');
+    await itemRow.hover();
+    const assignBtn = itemRow.locator('button[aria-label="Assign item"]');
+    await assignBtn.waitFor({ state: 'visible', timeout: 5000 });
+    await assignBtn.click();
+
+    await expect(page.getByText('Assign item')).toBeVisible();
+    const pickerPopover = page.locator('.max-h-48');
+    await pickerPopover.getByText(authenticatedUser.username).click();
+
+    await page.click('button[aria-label="Close"]');
+
+    // Switch to My Todo view
+    await dashboardPage.switchToMyTodo();
+
+    // Should see the assigned note
+    await dashboardPage.expectNoteVisible('Assigned Todo');
+    // Should not see the plain note
+    await dashboardPage.expectNoteNotVisible('Plain Note');
+
+    // Switch back to Notes view
+    await dashboardPage.switchToNotes();
+    await dashboardPage.expectNoteVisible('Assigned Todo');
+    await dashboardPage.expectNoteVisible('Plain Note');
+  });
+
+  test('My Todo filter shows empty state when no assignments', async ({
+    page,
+    authenticatedUser,
+    dashboardPage,
+  }) => {
+    await dashboardPage.goto();
+    await dashboardPage.createNote('Regular Note', 'Just a note');
+
+    await dashboardPage.switchToMyTodo();
+    await dashboardPage.expectEmptyState('No notes with todos assigned to you');
+  });
+
   test('collaborator sees the assignment on a shared note', async ({
     page,
     authenticatedUser,
