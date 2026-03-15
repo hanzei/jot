@@ -49,9 +49,11 @@ A self-hosted note-taking application built with Go backend and React frontend. 
 
 2. **Build and run** (recommended for most development):
    ```bash
+   # Install all dependencies (webapp, mobile, and shared package)
+   npm install
+   
    # Build the frontend
    cd webapp
-   npm install
    npm run build
    cd ..
    

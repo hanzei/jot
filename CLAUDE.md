@@ -66,6 +66,14 @@ Jot is a self-hosted note-taking application. The backend is a Go HTTP API and t
 
 ```
 /
+├── shared/          # @jot/shared — types, constants, and utilities shared by webapp & mobile
+│   ├── src/
+│   │   ├── types.ts          # All TypeScript interfaces (single source of truth)
+│   │   ├── constants.ts      # Validation limits, roles, defaults
+│   │   ├── collaborators.ts  # buildCollaborators, displayName
+│   │   ├── colors.ts         # Avatar colors, note color palettes, hash function
+│   │   └── index.ts          # Barrel export
+│   └── package.json
 ├── server/          # Go backend
 │   ├── main.go
 │   ├── go.mod
@@ -82,7 +90,6 @@ Jot is a self-hosted note-taking application. The backend is a Go HTTP API and t
 │   ├── src/
 │   │   ├── components/  # React components
 │   │   ├── pages/       # Route-level page components
-│   │   ├── types/       # Shared TypeScript interfaces
 │   │   └── utils/       # API client, auth helpers
 │   └── package.json
 ├── mobile/          # React Native/Expo mobile app
@@ -94,8 +101,8 @@ Jot is a self-hosted note-taking application. The backend is a Go HTTP API and t
 │   │   ├── api/         # API client modules
 │   │   ├── db/          # Local SQLite/offline persistence
 │   │   ├── store/       # Context/state providers
-│   │   ├── types/       # Shared TypeScript interfaces
 │   └── package.json
+├── package.json     # Root workspace config (npm workspaces)
 ├── images/          # Documentation images
 ├── Taskfile.yml
 ├── Dockerfile       # Multi-stage production build
