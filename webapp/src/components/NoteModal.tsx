@@ -436,20 +436,44 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
   };
 
   const handleItemKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key !== 'Enter') return;
     if (e.repeat) return;
     if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
-    e.preventDefault();
-    const newId = insertTodoItemAfter(index);
-    setTimeout(() => {
-      itemInputRefs.current.get(newId)?.focus();
-    }, 0);
+
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const newId = insertTodoItemAfter(index);
+      setTimeout(() => {
+        itemInputRefs.current.get(newId)?.focus();
+      }, 0);
+      return;
+    }
+
+    if (e.key === 'Backspace' || e.key === 'Delete') {
+      const currentItem = uncompletedItems[index];
+      if (!currentItem || currentItem.text.trim() !== '') return;
+
+      e.preventDefault();
+      const focusTarget = e.key === 'Backspace'
+        ? uncompletedItems[index - 1]
+        : uncompletedItems[index + 1];
+
+      removeTodoItem(currentItem.id);
+
+      if (focusTarget) {
+        setTimeout(() => {
+          const el = itemInputRefs.current.get(focusTarget.id);
+          if (el) {
+            el.focus();
+            el.setSelectionRange(el.value.length, el.value.length);
+          }
+        }, 0);
+      }
+    }
   };
 
   const removeTodoItem = (itemId: string) => {
     const newItems = items.filter(item => item.id !== itemId);
     
-    // Renumber positions for remaining uncompleted items
     let uncompletedCount = 0;
     const updatedItems = newItems.map((item) => {
       if (!item.completed) {
@@ -459,6 +483,11 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
     });
     
     setItems(updatedItems);
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = undefined;
+    }
+    autoSaveNote(updatedItems);
   };
 
   // Helper function to auto-save note changes
