@@ -17,6 +17,8 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+const queryTrue = "true"
+
 // UserInfo contains safe public fields returned when listing users for share-target search.
 type UserInfo struct {
 	ID             string `json:"id"`
@@ -145,8 +147,8 @@ func (h *NotesHandler) GetNotes(w http.ResponseWriter, r *http.Request) (int, er
 		return http.StatusUnauthorized, errors.New("unauthorized")
 	}
 
-	trashed := r.URL.Query().Get("trashed") == "true"
-	archived := r.URL.Query().Get("archived") == "true"
+	trashed := r.URL.Query().Get("trashed") == queryTrue
+	archived := r.URL.Query().Get("archived") == queryTrue
 	search := r.URL.Query().Get("search")
 	labelID := r.URL.Query().Get("label")
 
@@ -435,7 +437,7 @@ func (h *NotesHandler) DeleteNote(w http.ResponseWriter, r *http.Request) (int, 
 		return http.StatusBadRequest, errors.New("invalid note ID format")
 	}
 
-	permanent := r.URL.Query().Get("permanent") == "true"
+	permanent := r.URL.Query().Get("permanent") == queryTrue
 
 	// Fetch audience before deleting so we can notify share targets too.
 	audienceIDs, audienceErr := h.noteStore.GetNoteAudienceIDs(id)

@@ -51,7 +51,9 @@ export const notes = {
     api.put(`/notes/${id}`, data).then(res => res.data),
 
   delete: (id: string, opts?: { permanent?: boolean }): Promise<void> =>
-    api.delete(`/notes/${id}`, { params: opts?.permanent ? { permanent: true } : undefined }),
+    opts?.permanent
+      ? api.delete(`/notes/${id}`, { params: { permanent: true } })
+      : api.delete(`/notes/${id}`),
 
   restore: (id: string): Promise<Note> =>
     api.post(`/notes/${id}/restore`).then(res => res.data),
