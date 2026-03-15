@@ -130,12 +130,16 @@ func TestNoteSharingEndpoints(t *testing.T) {
 func TestSearchUsersEndpoint(t *testing.T) {
 	ts := setupTestServer(t)
 	user1 := ts.createTestUser(t, "alice", "password123", false)
-	_ = ts.createTestUser(t, "bob", "password123", false)
+	bob := ts.createTestUser(t, "bob", "password123", false)
 	_ = ts.createTestUser(t, "charlie", "password123", true)
 
 	// Set display names so we can test searching by first/last name.
 	resp := ts.authRequest(t, user1, http.MethodPut, "/api/v1/users/me", map[string]any{
 		"username": "alice", "first_name": "Alice", "last_name": "Smith",
+	})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	resp = ts.authRequest(t, bob, http.MethodPut, "/api/v1/users/me", map[string]any{
+		"username": "bob", "first_name": "Robert", "last_name": "Jones",
 	})
 	require.Equal(t, http.StatusOK, resp.StatusCode)
 
@@ -169,6 +173,26 @@ func TestSearchUsersEndpoint(t *testing.T) {
 
 	t.Run("search is case insensitive", func(t *testing.T) {
 		resp := ts.authRequest(t, user1, http.MethodGet, "/api/v1/users?search=BOB", nil)
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+		var users []map[string]any
+		require.NoError(t, resp.UnmarshalBody(&users))
+		require.Len(t, users, 1)
+		assert.Equal(t, "bob", users[0]["username"])
+	})
+
+	t.Run("search filters by first name", func(t *testing.T) {
+		resp := ts.authRequest(t, user1, http.MethodGet, "/api/v1/users?search=Robert", nil)
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+		var users []map[string]any
+		require.NoError(t, resp.UnmarshalBody(&users))
+		require.Len(t, users, 1)
+		assert.Equal(t, "bob", users[0]["username"])
+	})
+
+	t.Run("search filters by last name", func(t *testing.T) {
+		resp := ts.authRequest(t, user1, http.MethodGet, "/api/v1/users?search=Jones", nil)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 		var users []map[string]any

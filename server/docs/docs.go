@@ -1224,7 +1224,15 @@ const docTemplate = `{
                 "tags": [
                     "users"
                 ],
-                "summary": "List users (excluding current user)",
+                "summary": "Search or list users (excluding current user)",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Filter by username, first name, or last name (case-insensitive substring match)",
+                        "name": "search",
+                        "in": "query"
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
