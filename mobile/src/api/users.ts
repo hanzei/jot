@@ -11,12 +11,12 @@ export async function searchUsers(query: string): Promise<User[]> {
   return res.data;
 }
 
-export async function shareNote(noteId: string, userId: string): Promise<void> {
-  await api.post(`/notes/${noteId}/share`, { user_id: userId });
+export async function shareNote(noteId: string, username: string): Promise<void> {
+  await api.post(`/notes/${noteId}/share`, { username });
 }
 
-export async function unshareNote(noteId: string, userId: string): Promise<void> {
-  await api.delete(`/notes/${noteId}/share`, { data: { user_id: userId } });
+export async function unshareNote(noteId: string, username: string): Promise<void> {
+  await api.delete(`/notes/${noteId}/share`, { data: { username } });
 }
 
 export async function getNoteShares(noteId: string): Promise<NoteShare[]> {
