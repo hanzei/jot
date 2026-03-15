@@ -144,24 +144,6 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
         onChange={(e) => onUpdateTodoItem(index, 'completed', e.target.checked)}
         className="h-4 w-4 text-blue-600 rounded"
       />
-      <input
-        type="text"
-        placeholder={t('note.itemPlaceholder')}
-        className={`flex-1 p-1 bg-transparent border-none outline-none placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white ${
-          isCompleted ? 'line-through text-gray-500 dark:text-gray-400' : ''
-        }`}
-        value={item.text}
-        onChange={(e) => onUpdateTodoItem(index, 'text', e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Tab' && onIndentChange && !isCompleted) {
-            e.preventDefault();
-            onIndentChange(item.id, e.shiftKey ? -1 : 1);
-            return;
-          }
-          if (onKeyDown) onKeyDown(index, e);
-        }}
-        ref={inputRef}
-      />
 
       {showAssignUI && (
         <div className="relative flex-shrink-0">
@@ -202,6 +184,25 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
           )}
         </div>
       )}
+
+      <input
+        type="text"
+        placeholder={t('note.itemPlaceholder')}
+        className={`flex-1 p-1 bg-transparent border-none outline-none placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white ${
+          isCompleted ? 'line-through text-gray-500 dark:text-gray-400' : ''
+        }`}
+        value={item.text}
+        onChange={(e) => onUpdateTodoItem(index, 'text', e.target.value)}
+        onKeyDown={(e) => {
+          if (e.key === 'Tab' && onIndentChange && !isCompleted) {
+            e.preventDefault();
+            onIndentChange(item.id, e.shiftKey ? -1 : 1);
+            return;
+          }
+          if (onKeyDown) onKeyDown(index, e);
+        }}
+        ref={inputRef}
+      />
 
       <button
         onClick={() => onRemoveTodoItem(item.id)}
