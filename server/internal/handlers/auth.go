@@ -190,22 +190,20 @@ type UpdateUserRequest struct {
 var validLanguages = map[string]bool{"system": true, "en": true, "de": true}
 var validThemes = map[string]bool{"system": true, "light": true, "dark": true}
 
-// applySettingsUpdate validates and persists language/theme changes.
-// If neither field is set the current settings are returned unchanged.
-func (h *AuthHandler) applySettingsUpdate(userID string, current *models.UserSettings, language, theme *string) (*models.UserSettings, int, error) {
+// validateSettingsFields validates language and theme. Returns (lang, theme, needUpdate).
+// If both are nil, needUpdate is false. If validation fails, returns a non-nil error.
+func validateSettingsFields(current *models.UserSettings, language, theme *string) (lang, th string, needUpdate bool, err error) {
 	if language == nil && theme == nil {
-		return current, 0, nil
+		return "", "", false, nil
 	}
-
-	lang := current.Language
+	lang = current.Language
 	if language != nil {
 		lang = *language
 	}
 	if !validLanguages[lang] {
-		return nil, http.StatusBadRequest, errors.New("invalid language: must be 'system', 'en', or 'de'")
+		return "", "", false, errors.New("invalid language: must be 'system', 'en', or 'de'")
 	}
-
-	th := current.Theme
+	th = current.Theme
 	if theme != nil {
 		th = *theme
 	}
@@ -213,9 +211,21 @@ func (h *AuthHandler) applySettingsUpdate(userID string, current *models.UserSet
 		th = "system"
 	}
 	if !validThemes[th] {
-		return nil, http.StatusBadRequest, errors.New("invalid theme: must be 'system', 'light', or 'dark'")
+		return "", "", false, errors.New("invalid theme: must be 'system', 'light', or 'dark'")
 	}
+	return lang, th, true, nil
+}
 
+// applySettingsUpdate validates and persists language/theme changes.
+// If neither field is set the current settings are returned unchanged.
+func (h *AuthHandler) applySettingsUpdate(userID string, current *models.UserSettings, language, theme *string) (*models.UserSettings, int, error) {
+	lang, th, needUpdate, err := validateSettingsFields(current, language, theme)
+	if err != nil {
+		return nil, http.StatusBadRequest, err
+	}
+	if !needUpdate {
+		return current, 0, nil
+	}
 	updated, err := h.userSettingsStore.Update(userID, lang, th)
 	if err != nil {
 		return nil, http.StatusInternalServerError, err
@@ -264,16 +274,20 @@ func (h *AuthHandler) UpdateUser(w http.ResponseWriter, r *http.Request) (int, e
 		lastName = *req.LastName
 	}
 
+	// Validate settings before committing any changes so we fail atomically.
+	settings, err := h.userSettingsStore.GetOrCreate(currentUser.ID)
+	if err != nil {
+		return http.StatusInternalServerError, err
+	}
+	if _, _, _, validateErr := validateSettingsFields(settings, req.Language, req.Theme); validateErr != nil {
+		return http.StatusBadRequest, validateErr
+	}
+
 	user, err := h.userStore.UpdateProfile(currentUser.ID, username, firstName, lastName)
 	if err != nil {
 		if errors.Is(err, models.ErrUsernameTaken) {
 			return http.StatusConflict, models.ErrUsernameTaken
 		}
-		return http.StatusInternalServerError, err
-	}
-
-	settings, err := h.userSettingsStore.GetOrCreate(currentUser.ID)
-	if err != nil {
 		return http.StatusInternalServerError, err
 	}
 

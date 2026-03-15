@@ -554,6 +554,18 @@ func TestUpdateUserEndpoint(t *testing.T) {
 		assert.Equal(t, "Updated", userResp["first_name"])
 		assert.Equal(t, "originaluser", userResp["username"])
 	})
+
+	t.Run("empty body updates nothing and returns current state", func(t *testing.T) {
+		resp := ts.authRequest(t, user, http.MethodPut, "/api/v1/users/me", map[string]any{})
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+		var response map[string]any
+		require.NoError(t, resp.UnmarshalBody(&response))
+		userResp, ok := response["user"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "originaluser", userResp["username"])
+		assert.NotNil(t, response["settings"])
+	})
 }
 
 // SSE endpoint tests
@@ -752,6 +764,22 @@ func TestUserSettingsEndpoints(t *testing.T) {
 		body := map[string]string{"language": "fr"}
 		resp := ts.authRequest(t, user, http.MethodPut, "/api/v1/users/me", body)
 		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	})
+
+	t.Run("invalid settings with valid profile does not commit profile (atomic validation)", func(t *testing.T) {
+		// Send valid profile change + invalid language; profile must not be updated
+		body := map[string]any{"first_name": "ShouldNotPersist", "language": "invalid"}
+		resp := ts.authRequest(t, user, http.MethodPut, "/api/v1/users/me", body)
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+
+		// Verify profile was not updated
+		meResp := ts.authRequest(t, user, http.MethodGet, "/api/v1/me", nil)
+		require.Equal(t, http.StatusOK, meResp.StatusCode)
+		var meData map[string]any
+		require.NoError(t, meResp.UnmarshalBody(&meData))
+		userResp, ok := meData["user"].(map[string]any)
+		require.True(t, ok)
+		assert.NotEqual(t, "ShouldNotPersist", userResp["first_name"])
 	})
 
 	t.Run("PUT /users/me updates both profile and settings", func(t *testing.T) {
