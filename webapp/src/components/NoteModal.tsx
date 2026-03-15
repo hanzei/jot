@@ -168,8 +168,8 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
           {item.assignedTo ? (
             <button
               onClick={() => !isCompleted && setShowAssigneePicker(true)}
-              title={t('note.assignedTo', { name: assignedUser ? [assignedUser.first_name, assignedUser.last_name].filter(Boolean).join(' ') || assignedUser.username : item.assignedTo })}
-              aria-label={t('note.assignedTo', { name: assignedUser?.username || item.assignedTo })}
+              title={t('note.assignedTo', { name: assignedUser ? [assignedUser.first_name, assignedUser.last_name].filter(Boolean).join(' ') || assignedUser.username : '?' })}
+              aria-label={t('note.assignedTo', { name: assignedUser?.username || '?' })}
               className={isCompleted ? 'cursor-default' : 'cursor-pointer'}
             >
               <LetterAvatar
