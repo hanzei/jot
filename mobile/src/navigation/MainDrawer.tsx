@@ -8,6 +8,7 @@ import DrawerContent from '../components/DrawerContent';
 
 export type MainDrawerParamList = {
   Notes: { labelId?: string; labelName?: string } | undefined;
+  MyTodo: undefined;
   Archived: undefined;
   Trash: undefined;
 };
@@ -18,6 +19,10 @@ function NotesScreen() {
   const route = useRoute<RouteProp<MainDrawerParamList, 'Notes'>>();
   const labelId = route.params?.labelId;
   return <NotesListScreen variant="notes" labelId={labelId} />;
+}
+
+function MyTodoScreen() {
+  return <NotesListScreen variant="my-todo" />;
 }
 
 function ArchivedScreen() {
@@ -57,6 +62,11 @@ export default function MainDrawer() {
         options={({ route }) => ({
           title: route.params?.labelName ?? 'Notes',
         })}
+      />
+      <Drawer.Screen
+        name="MyTodo"
+        component={MyTodoScreen}
+        options={{ title: 'My Todo' }}
       />
       <Drawer.Screen name="Archived" component={ArchivedScreen} />
       <Drawer.Screen name="Trash" component={TrashScreen} />
