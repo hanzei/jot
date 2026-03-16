@@ -69,7 +69,7 @@ function TodoItem({
         />
       </TouchableOpacity>
       <TextInput
-        style={[styles.textInput, { color: colors.text }, completed && { textDecorationLine: 'line-through', color: colors.textMuted }]}
+        style={[styles.textInput, { color: completed ? colors.textMuted : colors.text }, completed && styles.completedText]}
         value={text}
         onChangeText={onChangeText}
         editable={editable}
@@ -133,6 +133,9 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 16,
     paddingVertical: 4,
+  },
+  completedText: {
+    textDecorationLine: 'line-through' as const,
   },
   deleteBtn: {
     padding: 4,
