@@ -558,6 +558,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
             onSave={handleNoteUpdate}
             onRefresh={handleNoteRefresh}
             onShare={handleShareNote}
+            onDelete={handleDeleteNote}
             isOwner={!editingNote || editingNote.user_id === user?.id}
             usersById={usersById}
             currentUserId={user?.id}
