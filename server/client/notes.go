@@ -66,16 +66,14 @@ func (c *Client) GetNote(ctx context.Context, id string) (*Note, error) {
 	return &note, nil
 }
 
-// UpdateNote replaces a note's metadata and items.
-// The request is a full replacement; all fields are sent and overwrite
-// the server-side state. For partial updates, GET the note first, modify
-// the desired fields, then call UpdateNote with the complete request.
+// UpdateNote partially updates a note. Only non-nil fields are changed;
+// omitted (nil) fields keep their current server-side values.
 func (c *Client) UpdateNote(ctx context.Context, id string, req *UpdateNoteRequest) (*Note, error) {
 	if req == nil {
 		return nil, errors.New("request must not be nil")
 	}
 	var note Note
-	if err := c.doJSON(ctx, http.MethodPut, fmt.Sprintf("/api/v1/notes/%s", id), req, &note); err != nil {
+	if err := c.doJSON(ctx, http.MethodPatch, fmt.Sprintf("/api/v1/notes/%s", id), req, &note); err != nil {
 		return nil, err
 	}
 	return &note, nil

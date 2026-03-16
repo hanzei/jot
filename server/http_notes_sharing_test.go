@@ -218,8 +218,8 @@ func TestEdgeCases(t *testing.T) {
 		require.NoError(t, err)
 
 		updated, err := user.Client.UpdateNote(t.Context(), created.ID, &client.UpdateNoteRequest{
-			Title:   "Updated",
-			Content: "Updated",
+			Title:   client.Ptr("Updated"),
+			Content: client.Ptr("Updated"),
 		})
 		require.NoError(t, err)
 		assert.Equal(t, "#ffffff", updated.Color)

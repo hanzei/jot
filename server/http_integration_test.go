@@ -284,10 +284,10 @@ func TestNotesEndpoints(t *testing.T) {
 
 	t.Run("update note", func(t *testing.T) {
 		updated, err := user.Client.UpdateNote(t.Context(), created.ID, &client.UpdateNoteRequest{
-			Title:   "Updated Title",
-			Content: "Updated Content",
-			Pinned:  true,
-			Color:   "#ff0000",
+			Title:   client.Ptr("Updated Title"),
+			Content: client.Ptr("Updated Content"),
+			Pinned:  client.Ptr(true),
+			Color:   client.Ptr("#ff0000"),
 		})
 		require.NoError(t, err)
 		assert.Equal(t, "Updated Title", updated.Title)
@@ -639,8 +639,8 @@ func TestTodoItemIndentLevel(t *testing.T) {
 
 	t.Run("indent levels updated via PUT", func(t *testing.T) {
 		_, err := user.Client.UpdateNote(t.Context(), created.ID, &client.UpdateNoteRequest{
-			Title: "Indent Test",
-			Color: "#ffffff",
+			Title: client.Ptr("Indent Test"),
+			Color: client.Ptr("#ffffff"),
 			Items: []client.UpdateNoteItem{
 				{Text: "top level", Position: 0, IndentLevel: 0},
 				{Text: "indented once", Position: 1, IndentLevel: 1},
@@ -683,8 +683,8 @@ func TestTodoItemIndentLevel(t *testing.T) {
 
 	t.Run("indent level > 1 rejected on update", func(t *testing.T) {
 		_, err := user.Client.UpdateNote(t.Context(), created.ID, &client.UpdateNoteRequest{
-			Title: "Indent Test",
-			Color: "#ffffff",
+			Title: client.Ptr("Indent Test"),
+			Color: client.Ptr("#ffffff"),
 			Items: []client.UpdateNoteItem{
 				{Text: "top level", Position: 0, IndentLevel: 0},
 				{Text: "too deep", Position: 1, IndentLevel: 2},

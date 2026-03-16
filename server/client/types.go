@@ -129,14 +129,15 @@ type CreateNoteItem struct {
 	IndentLevel int    `json:"indent_level"`
 }
 
-// UpdateNoteRequest is the body for PUT /api/v1/notes/{id}.
+// UpdateNoteRequest is the body for PATCH /api/v1/notes/{id}.
+// Nil pointer fields are omitted and keep their server-side values.
 type UpdateNoteRequest struct {
-	Title                 string           `json:"title"`
-	Content               string           `json:"content"`
-	Pinned                bool             `json:"pinned"`
-	Archived              bool             `json:"archived"`
-	Color                 string           `json:"color"`
-	CheckedItemsCollapsed bool             `json:"checked_items_collapsed"`
+	Title                 *string          `json:"title,omitempty"`
+	Content               *string          `json:"content,omitempty"`
+	Pinned                *bool            `json:"pinned,omitempty"`
+	Archived              *bool            `json:"archived,omitempty"`
+	Color                 *string          `json:"color,omitempty"`
+	CheckedItemsCollapsed *bool            `json:"checked_items_collapsed,omitempty"`
 	Items                 []UpdateNoteItem `json:"items,omitempty"`
 }
 
