@@ -258,7 +258,7 @@ export function usePermanentDeleteNote() {
         await permanentDeleteLocalNote(db, id);
         await enqueueOperation(db, {
           operation: 'permanentDelete',
-          endpoint: `/notes/${id}/permanent`,
+          endpoint: `/notes/${id}?permanent=true`,
           method: 'DELETE',
         });
       }

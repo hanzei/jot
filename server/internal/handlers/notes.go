@@ -17,6 +17,8 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+const queryTrue = "true"
+
 // UserInfo contains safe public fields returned when listing users for share-target search.
 type UserInfo struct {
 	ID             string `json:"id"`
@@ -26,8 +28,6 @@ type UserInfo struct {
 	Role           string `json:"role"`
 	HasProfileIcon bool   `json:"has_profile_icon"`
 }
-
-const queryTrue = "true"
 
 type NotesHandler struct {
 	noteStore *models.NoteStore
@@ -416,14 +416,15 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 
 // DeleteNote godoc
 //
-//	@Summary	Move a note to trash
+//	@Summary	Delete a note (move to trash, or permanently delete)
 //	@Tags		notes
 //	@Security	CookieAuth
-//	@Param		id	path		string	true	"Note ID"
-//	@Success	204	"no content"
-//	@Failure	400	{string}	string	"bad request"
-//	@Failure	401	{string}	string	"unauthorized"
-//	@Failure	404	{string}	string	"not found"
+//	@Param		id			path		string	true	"Note ID"
+//	@Param		permanent	query		boolean	false	"Permanently delete from trash instead of soft-deleting"
+//	@Success	204			"no content"
+//	@Failure	400			{string}	string	"bad request"
+//	@Failure	401			{string}	string	"unauthorized"
+//	@Failure	404			{string}	string	"not found"
 //	@Router		/notes/{id} [delete]
 func (h *NotesHandler) DeleteNote(w http.ResponseWriter, r *http.Request) (int, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
@@ -439,15 +440,27 @@ func (h *NotesHandler) DeleteNote(w http.ResponseWriter, r *http.Request) (int, 
 		return http.StatusBadRequest, errors.New("invalid note ID format")
 	}
 
-	// Fetch audience before trashing so we can notify share targets too.
+	permanent := r.URL.Query().Get("permanent") == queryTrue
+
+	// Fetch audience before deleting so we can notify share targets too.
 	audienceIDs, audienceErr := h.noteStore.GetNoteAudienceIDs(id)
 
-	err := h.noteStore.MoveToTrash(id, user.ID)
-	if err != nil {
-		if errors.Is(err, models.ErrNoteNotOwnedByUser) {
-			return http.StatusNotFound, err
+	if permanent {
+		err := h.noteStore.DeleteFromTrash(id, user.ID)
+		if err != nil {
+			if errors.Is(err, models.ErrNoteNotInTrash) {
+				return http.StatusNotFound, err
+			}
+			return http.StatusInternalServerError, err
 		}
-		return http.StatusInternalServerError, err
+	} else {
+		err := h.noteStore.MoveToTrash(id, user.ID)
+		if err != nil {
+			if errors.Is(err, models.ErrNoteNotOwnedByUser) {
+				return http.StatusNotFound, err
+			}
+			return http.StatusInternalServerError, err
+		}
 	}
 
 	if audienceErr == nil && h.hub != nil {
@@ -507,55 +520,6 @@ func (h *NotesHandler) RestoreNote(w http.ResponseWriter, r *http.Request) (int,
 		return http.StatusInternalServerError, err
 	}
 	h.publishNoteEvent(id, sse.EventNoteUpdated, note, user.ID)
-	return 0, nil
-}
-
-// PermanentlyDeleteNote godoc
-//
-//	@Summary	Permanently delete a note from trash
-//	@Tags		notes
-//	@Security	CookieAuth
-//	@Param		id	path		string	true	"Note ID"
-//	@Success	204	"no content"
-//	@Failure	400	{string}	string	"bad request"
-//	@Failure	401	{string}	string	"unauthorized"
-//	@Failure	404	{string}	string	"not found"
-//	@Router		/notes/{id}/permanent [delete]
-func (h *NotesHandler) PermanentlyDeleteNote(w http.ResponseWriter, r *http.Request) (int, error) {
-	user, ok := auth.GetUserFromContext(r.Context())
-	if !ok {
-		return http.StatusUnauthorized, errors.New("unauthorized")
-	}
-
-	id := chi.URLParam(r, "id")
-	if id == "" {
-		return http.StatusBadRequest, errors.New("missing note ID")
-	}
-	if !models.IsValidID(id) {
-		return http.StatusBadRequest, errors.New("invalid note ID format")
-	}
-
-	// Fetch audience before deletion so we can notify share targets too.
-	audienceIDs, audienceErr := h.noteStore.GetNoteAudienceIDs(id)
-
-	err := h.noteStore.DeleteFromTrash(id, user.ID)
-	if err != nil {
-		if errors.Is(err, models.ErrNoteNotInTrash) {
-			return http.StatusNotFound, err
-		}
-		return http.StatusInternalServerError, err
-	}
-
-	if audienceErr == nil && h.hub != nil {
-		h.hub.Publish(audienceIDs, sse.Event{
-			Type:         sse.EventNoteDeleted,
-			NoteID:       id,
-			Note:         nil,
-			SourceUserID: user.ID,
-		})
-	}
-
-	w.WriteHeader(http.StatusNoContent)
 	return 0, nil
 }
 

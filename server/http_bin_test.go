@@ -112,7 +112,7 @@ func TestBinPermanentDeleteRemovesNote(t *testing.T) {
 	user := ts.createTestUser(t, "binuser4", "password123", false)
 	note := createAndTrashNote(t, ts, user, "Delete Me Permanently")
 
-	permDelResp := ts.authRequest(t, user, http.MethodDelete, "/api/v1/notes/"+note.ID+"/permanent", nil)
+	permDelResp := ts.authRequest(t, user, http.MethodDelete, "/api/v1/notes/"+note.ID+"?permanent=true", nil)
 	assert.Equal(t, http.StatusNoContent, permDelResp.StatusCode)
 
 	// Note should not appear in trash.
@@ -160,7 +160,7 @@ func TestBinPermanentDeleteNonTrashedReturns404(t *testing.T) {
 	var note models.Note
 	require.NoError(t, createResp.UnmarshalBody(&note))
 
-	resp := ts.authRequest(t, user, http.MethodDelete, "/api/v1/notes/"+note.ID+"/permanent", nil)
+	resp := ts.authRequest(t, user, http.MethodDelete, "/api/v1/notes/"+note.ID+"?permanent=true", nil)
 	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 }
 
@@ -182,6 +182,6 @@ func TestBinNonOwnerCannotPermanentDelete(t *testing.T) {
 
 	note := createAndTrashNote(t, ts, owner, "Owner Note 2")
 
-	resp := ts.authRequest(t, other, http.MethodDelete, "/api/v1/notes/"+note.ID+"/permanent", nil)
+	resp := ts.authRequest(t, other, http.MethodDelete, "/api/v1/notes/"+note.ID+"?permanent=true", nil)
 	assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 }

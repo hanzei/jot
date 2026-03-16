@@ -500,7 +500,7 @@ func TestDeleteUserAdminCanDeleteOtherAdmin(t *testing.T) {
 }
 
 // TestUpdateUserEndpoint tests the PUT /api/v1/users/me endpoint for updating
-// the authenticated user's username.
+// the authenticated user's profile and settings.
 func TestUpdateUserEndpoint(t *testing.T) {
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "originaluser", "password123", false)
@@ -508,13 +508,12 @@ func TestUpdateUserEndpoint(t *testing.T) {
 
 	t.Run("successful username update", func(t *testing.T) {
 		t.Cleanup(func() {
-			// Restore username for subsequent subtests
-			restoreResp := ts.authRequest(t, user, http.MethodPut, "/api/v1/users/me", map[string]any{"username": "originaluser"})
+			restoreResp := ts.authRequest(t, user, http.MethodPatch, "/api/v1/users/me", map[string]any{"username": "originaluser"})
 			require.Equal(t, http.StatusOK, restoreResp.StatusCode)
 		})
 
 		body := map[string]any{"username": "newusername"}
-		resp := ts.authRequest(t, user, http.MethodPut, "/api/v1/users/me", body)
+		resp := ts.authRequest(t, user, http.MethodPatch, "/api/v1/users/me", body)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 		var response map[string]any
@@ -523,24 +522,49 @@ func TestUpdateUserEndpoint(t *testing.T) {
 		userResp, ok := response["user"].(map[string]any)
 		require.True(t, ok, "expected response.user object")
 		assert.Equal(t, "newusername", userResp["username"])
+		assert.NotNil(t, response["settings"], "response should include settings")
 	})
 
 	t.Run("duplicate username returns 409", func(t *testing.T) {
 		body := map[string]any{"username": other.User.Username}
-		resp := ts.authRequest(t, user, http.MethodPut, "/api/v1/users/me", body)
+		resp := ts.authRequest(t, user, http.MethodPatch, "/api/v1/users/me", body)
 		assert.Equal(t, http.StatusConflict, resp.StatusCode)
 	})
 
 	t.Run("invalid username format returns 400", func(t *testing.T) {
-		body := map[string]any{"username": "a"} // too short (< 2 chars)
-		resp := ts.authRequest(t, user, http.MethodPut, "/api/v1/users/me", body)
+		body := map[string]any{"username": "a"}
+		resp := ts.authRequest(t, user, http.MethodPatch, "/api/v1/users/me", body)
 		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 	})
 
 	t.Run("unauthenticated request returns 401", func(t *testing.T) {
 		body := map[string]any{"username": "hacker"}
-		resp := ts.request(t, nil, http.MethodPut, "/api/v1/users/me", body)
+		resp := ts.request(t, nil, http.MethodPatch, "/api/v1/users/me", body)
 		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	})
+
+	t.Run("partial update preserves unchanged fields", func(t *testing.T) {
+		resp := ts.authRequest(t, user, http.MethodPatch, "/api/v1/users/me", map[string]any{"first_name": "Updated"})
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+		var response map[string]any
+		require.NoError(t, resp.UnmarshalBody(&response))
+		userResp, ok := response["user"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "Updated", userResp["first_name"])
+		assert.Equal(t, "originaluser", userResp["username"])
+	})
+
+	t.Run("empty body updates nothing and returns current state", func(t *testing.T) {
+		resp := ts.authRequest(t, user, http.MethodPatch, "/api/v1/users/me", map[string]any{})
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+		var response map[string]any
+		require.NoError(t, resp.UnmarshalBody(&response))
+		userResp, ok := response["user"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "originaluser", userResp["username"])
+		assert.NotNil(t, response["settings"])
 	})
 }
 
@@ -701,50 +725,79 @@ func TestUserSettingsEndpoints(t *testing.T) {
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "settingsuser", "password123", false)
 
-	t.Run("GET settings returns defaults for new user", func(t *testing.T) {
-		resp := ts.authRequest(t, user, http.MethodGet, "/api/v1/users/me/settings", nil)
+	t.Run("me response includes default settings for new user", func(t *testing.T) {
+		resp := ts.authRequest(t, user, http.MethodGet, "/api/v1/me", nil)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 
-		var settings map[string]any
-		require.NoError(t, resp.UnmarshalBody(&settings))
+		var response map[string]any
+		require.NoError(t, resp.UnmarshalBody(&response))
+		settings, ok := response["settings"].(map[string]any)
+		require.True(t, ok)
 		assert.Equal(t, "system", settings["language"])
 		assert.Equal(t, user.User.ID, settings["user_id"])
 	})
 
-	t.Run("PUT settings updates language", func(t *testing.T) {
+	t.Run("PATCH /users/me updates language via unified endpoint", func(t *testing.T) {
 		body := map[string]string{"language": "de"}
-		resp := ts.authRequest(t, user, http.MethodPut, "/api/v1/users/me/settings", body)
+		resp := ts.authRequest(t, user, http.MethodPatch, "/api/v1/users/me", body)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 
-		var settings map[string]any
-		require.NoError(t, resp.UnmarshalBody(&settings))
+		var response map[string]any
+		require.NoError(t, resp.UnmarshalBody(&response))
+		settings, ok := response["settings"].(map[string]any)
+		require.True(t, ok)
 		assert.Equal(t, "de", settings["language"])
 	})
 
-	t.Run("GET settings returns updated language", func(t *testing.T) {
-		resp := ts.authRequest(t, user, http.MethodGet, "/api/v1/users/me/settings", nil)
+	t.Run("me response reflects updated language", func(t *testing.T) {
+		resp := ts.authRequest(t, user, http.MethodGet, "/api/v1/me", nil)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 
-		var settings map[string]any
-		require.NoError(t, resp.UnmarshalBody(&settings))
+		var response map[string]any
+		require.NoError(t, resp.UnmarshalBody(&response))
+		settings, ok := response["settings"].(map[string]any)
+		require.True(t, ok)
 		assert.Equal(t, "de", settings["language"])
 	})
 
-	t.Run("PUT settings with invalid language returns 400", func(t *testing.T) {
+	t.Run("PATCH /users/me with invalid language returns 400", func(t *testing.T) {
 		body := map[string]string{"language": "fr"}
-		resp := ts.authRequest(t, user, http.MethodPut, "/api/v1/users/me/settings", body)
+		resp := ts.authRequest(t, user, http.MethodPatch, "/api/v1/users/me", body)
 		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 	})
 
-	t.Run("unauthenticated GET returns 401", func(t *testing.T) {
-		resp := ts.request(t, nil, http.MethodGet, "/api/v1/users/me/settings", nil)
-		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	t.Run("invalid settings with valid profile does not commit profile (atomic validation)", func(t *testing.T) {
+		// Send valid profile change + invalid language; profile must not be updated
+		body := map[string]any{"first_name": "ShouldNotPersist", "language": "invalid"}
+		resp := ts.authRequest(t, user, http.MethodPatch, "/api/v1/users/me", body)
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+
+		// Verify profile was not updated
+		meResp := ts.authRequest(t, user, http.MethodGet, "/api/v1/me", nil)
+		require.Equal(t, http.StatusOK, meResp.StatusCode)
+		var meData map[string]any
+		require.NoError(t, meResp.UnmarshalBody(&meData))
+		userResp, ok := meData["user"].(map[string]any)
+		require.True(t, ok)
+		assert.NotEqual(t, "ShouldNotPersist", userResp["first_name"])
 	})
 
-	t.Run("unauthenticated PUT returns 401", func(t *testing.T) {
-		body := map[string]string{"language": "en"}
-		resp := ts.request(t, nil, http.MethodPut, "/api/v1/users/me/settings", body)
-		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	t.Run("PATCH /users/me updates both profile and settings", func(t *testing.T) {
+		body := map[string]any{"first_name": "Jane", "theme": "dark"}
+		resp := ts.authRequest(t, user, http.MethodPatch, "/api/v1/users/me", body)
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+		var response map[string]any
+		require.NoError(t, resp.UnmarshalBody(&response))
+
+		userResp, ok := response["user"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "Jane", userResp["first_name"])
+
+		settings, ok := response["settings"].(map[string]any)
+		require.True(t, ok)
+		assert.Equal(t, "dark", settings["theme"])
+		assert.Equal(t, "de", settings["language"])
 	})
 
 	t.Run("me response includes settings", func(t *testing.T) {
