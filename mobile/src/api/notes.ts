@@ -35,7 +35,7 @@ export async function restoreNote(id: string): Promise<void> {
 }
 
 export async function permanentDeleteNote(id: string): Promise<void> {
-  await api.delete(`/notes/${id}/permanent`);
+  await api.delete(`/notes/${id}`, { params: { permanent: true } });
 }
 
 export async function reorderNotes(noteIds: string[]): Promise<void> {
