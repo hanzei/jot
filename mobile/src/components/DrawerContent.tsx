@@ -1,6 +1,7 @@
 import React, { useCallback } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Alert, Platform } from 'react-native';
 import { DrawerContentScrollView, DrawerContentComponentProps } from '@react-navigation/drawer';
+import { CommonActions } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useAuth } from '../store/AuthContext';
@@ -172,9 +173,24 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
         </View>
       </DrawerContentScrollView>
 
-      {/* Logout button pinned to bottom */}
+      {/* Settings & Logout pinned to bottom */}
       <View style={[styles.bottomSection, { paddingBottom: Math.max(insets.bottom, 16) }]}>
         <View style={styles.divider} />
+        <TouchableOpacity
+          style={styles.settingsButton}
+          onPress={() => {
+            props.navigation.dispatch(
+              CommonActions.navigate({ name: 'Settings' }),
+            );
+            props.navigation.closeDrawer();
+          }}
+          testID="drawer-settings"
+          accessibilityLabel="Settings"
+          accessibilityRole="button"
+        >
+          <Ionicons name="settings-outline" size={22} color="#444" />
+          <Text style={styles.settingsText}>Settings</Text>
+        </TouchableOpacity>
         <TouchableOpacity
           style={styles.logoutButton}
           onPress={handleLogout}
@@ -258,6 +274,18 @@ const styles = StyleSheet.create({
   },
   bottomSection: {
     paddingTop: 0,
+  },
+  settingsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    gap: 14,
+  },
+  settingsText: {
+    fontSize: 15,
+    color: '#444',
+    fontWeight: '500',
   },
   logoutButton: {
     flexDirection: 'row',

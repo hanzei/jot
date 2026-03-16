@@ -10,6 +10,8 @@ interface AuthState {
   login: (username: string, password: string) => Promise<void>;
   register: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  setUser: (user: User) => void;
+  setSettings: (settings: UserSettings) => void;
 }
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
@@ -98,6 +100,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       login,
       register,
       logout,
+      setUser,
+      setSettings,
     }),
     [user, settings, isLoading, login, register, logout],
   );

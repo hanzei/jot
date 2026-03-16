@@ -33,6 +33,29 @@ export interface RegisterRequest {
   password: string;
 }
 
+export interface UpdateMeRequest {
+  username: string;
+  first_name: string;
+  last_name: string;
+}
+
+export interface ChangePasswordRequest {
+  current_password: string;
+  new_password: string;
+}
+
+export interface UpdateSettingsRequest {
+  language: string;
+  theme: ThemePreference;
+}
+
+export interface AboutInfo {
+  version: string;
+  commit: string;
+  build_time?: string;
+  go_version?: string;
+}
+
 export interface Label {
   id: string;
   user_id: string;
