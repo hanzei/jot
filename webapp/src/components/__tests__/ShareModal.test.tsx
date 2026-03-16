@@ -174,7 +174,7 @@ describe('ShareModal', () => {
       await user.click(screen.getByText('Alice Smith'))
 
       await waitFor(() => {
-        expect(mockShare).toHaveBeenCalledWith('note1', { username: 'alice' })
+        expect(mockShare).toHaveBeenCalledWith('note1', { user_id: 'user2' })
       })
     })
 
@@ -264,7 +264,7 @@ describe('ShareModal', () => {
       await user.click(removeBtn)
 
       await waitFor(() => {
-        expect(mockUnshare).toHaveBeenCalledWith('note1', { username: 'alice' })
+        expect(mockUnshare).toHaveBeenCalledWith('note1', { user_id: 'user2' })
       })
     })
   })
@@ -289,7 +289,7 @@ describe('ShareModal', () => {
       await user.keyboard('{Enter}')
 
       await waitFor(() => {
-        expect(mockShare).toHaveBeenCalledWith('note1', { username: 'bob' })
+        expect(mockShare).toHaveBeenCalledWith('note1', { user_id: 'user3' })
       })
     })
 
