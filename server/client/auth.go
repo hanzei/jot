@@ -73,6 +73,9 @@ func (c *Client) ChangePassword(ctx context.Context, currentPassword, newPasswor
 // UploadProfileIcon uploads an image as the current user's profile icon.
 // data is read fully; filename is used only for the multipart header.
 func (c *Client) UploadProfileIcon(ctx context.Context, filename string, data io.Reader) (*User, error) {
+	if data == nil {
+		return nil, fmt.Errorf("data reader must not be nil")
+	}
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)
 	part, err := mw.CreateFormFile("file", filename)

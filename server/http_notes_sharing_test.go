@@ -54,7 +54,7 @@ func TestNoteSharingEndpoints(t *testing.T) {
 	})
 
 	t.Run("share by non-owner returns forbidden", func(t *testing.T) {
-		err := other.Client.ShareNote(t.Context(), note.ID, other.User.ID)
+		err := other.Client.ShareNote(t.Context(), note.ID, sharedUser.User.ID)
 		assert.Equal(t, http.StatusForbidden, client.StatusCode(err))
 	})
 

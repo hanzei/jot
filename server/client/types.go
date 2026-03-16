@@ -10,10 +10,12 @@ const (
 	NoteTypeTodo NoteType = "todo"
 )
 
-// Role constants for user accounts.
+// Role distinguishes user permission levels.
+type Role string
+
 const (
-	RoleUser  = "user"
-	RoleAdmin = "admin"
+	RoleUser  Role = "user"
+	RoleAdmin Role = "admin"
 )
 
 // User represents a Jot user account.
@@ -22,7 +24,7 @@ type User struct {
 	Username       string    `json:"username"`
 	FirstName      string    `json:"first_name"`
 	LastName       string    `json:"last_name"`
-	Role           string    `json:"role"`
+	Role           Role      `json:"role"`
 	HasProfileIcon bool      `json:"has_profile_icon"`
 	CreatedAt      time.Time `json:"created_at"`
 	UpdatedAt      time.Time `json:"updated_at"`

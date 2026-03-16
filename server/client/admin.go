@@ -16,12 +16,12 @@ func (c *Client) AdminListUsers(ctx context.Context) ([]*User, error) {
 }
 
 // AdminCreateUser creates a user account (admin only).
-func (c *Client) AdminCreateUser(ctx context.Context, username, password, role string) (*User, error) {
+func (c *Client) AdminCreateUser(ctx context.Context, username, password string, role Role) (*User, error) {
 	var user User
 	if err := c.doJSON(ctx, http.MethodPost, "/api/v1/admin/users", map[string]string{
 		"username": username,
 		"password": password,
-		"role":     role,
+		"role":     string(role),
 	}, &user); err != nil {
 		return nil, err
 	}
@@ -29,10 +29,10 @@ func (c *Client) AdminCreateUser(ctx context.Context, username, password, role s
 }
 
 // AdminUpdateUserRole changes a user's role (admin only).
-func (c *Client) AdminUpdateUserRole(ctx context.Context, userID, role string) (*User, error) {
+func (c *Client) AdminUpdateUserRole(ctx context.Context, userID string, role Role) (*User, error) {
 	var user User
 	if err := c.doJSON(ctx, http.MethodPut, fmt.Sprintf("/api/v1/admin/users/%s/role", userID), map[string]string{
-		"role": role,
+		"role": string(role),
 	}, &user); err != nil {
 		return nil, err
 	}

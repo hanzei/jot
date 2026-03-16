@@ -52,7 +52,7 @@ func WithHTTPClient(c *http.Client) Option {
 // The default HTTP client has no timeout; callers should use context deadlines or
 // [WithHTTPClient] with a configured Timeout for production use.
 func New(baseURL string, opts ...Option) *Client {
-	jar, _ := cookiejar.New(nil)
+	jar, _ := cookiejar.New(nil) // nil options never produces an error in the standard library
 	c := &Client{
 		baseURL:    strings.TrimRight(baseURL, "/"),
 		httpClient: &http.Client{Jar: jar},

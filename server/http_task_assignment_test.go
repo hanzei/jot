@@ -1,6 +1,9 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
+	"io"
 	"net/http"
 	"testing"
 
@@ -52,17 +55,30 @@ func TestTaskAssignment(t *testing.T) {
 
 	t.Run("assigned_to is ignored on note creation", func(t *testing.T) {
 		ts := setupTestServer(t)
-		
 		user := ts.createTestUser(t, "user1", "password123", false)
 
-		note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-			Title:    "Todo",
-			NoteType: client.NoteTypeTodo,
-			Items: []client.CreateNoteItem{
-				{Text: "Buy milk", Position: 0, IndentLevel: 0},
+		body, err := json.Marshal(map[string]any{
+			"title":     "Todo",
+			"note_type": "todo",
+			"items": []map[string]any{
+				{"text": "Buy milk", "position": 0, "indent_level": 0, "assigned_to": "someuser1234567890abcd"},
 			},
 		})
 		require.NoError(t, err)
+
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, ts.HTTPServer.URL+"/api/v1/notes", bytes.NewReader(body))
+		require.NoError(t, err)
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := user.Client.HTTPClient().Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		require.Equal(t, http.StatusCreated, resp.StatusCode)
+
+		respBody, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		var note client.Note
+		require.NoError(t, json.Unmarshal(respBody, &note))
 		assert.Empty(t, note.Items[0].AssignedTo, "assigned_to should be ignored on create")
 	})
 
