@@ -62,17 +62,18 @@ export default function SettingsScreen() {
 
   const [aboutInfo, setAboutInfo] = useState<AboutInfo | null>(null);
   const [aboutLoading, setAboutLoading] = useState(false);
+  const [aboutError, setAboutError] = useState('');
   const [aboutExpanded, setAboutExpanded] = useState(false);
 
   useEffect(() => {
-    if (aboutExpanded && !aboutInfo) {
+    if (aboutExpanded && !aboutInfo && !aboutError) {
       setAboutLoading(true);
       getAboutInfo()
         .then(setAboutInfo)
-        .catch(() => {})
+        .catch(() => setAboutError('Failed to load server info'))
         .finally(() => setAboutLoading(false));
     }
-  }, [aboutExpanded, aboutInfo]);
+  }, [aboutExpanded, aboutInfo, aboutError]);
 
   const handleSaveProfile = useCallback(async () => {
     setProfileError('');
@@ -94,6 +95,10 @@ export default function SettingsScreen() {
     setPasswordError('');
     setPasswordSuccess('');
 
+    if (!currentPassword) {
+      setPasswordError('Current password is required');
+      return;
+    }
     if (newPassword !== confirmPassword) {
       setPasswordError('Passwords do not match');
       return;
@@ -180,6 +185,7 @@ export default function SettingsScreen() {
         <TouchableOpacity
           onPress={() => navigation.goBack()}
           style={styles.backButton}
+          testID="settings-back"
           accessibilityLabel="Go back"
           accessibilityRole="button"
         >
@@ -202,7 +208,7 @@ export default function SettingsScreen() {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Profile Icon</Text>
             <View style={styles.profileIconRow}>
-              <View style={styles.avatarContainer}>
+              <View>
                 {hasProfileIcon && user ? (
                   <Image
                     source={{ uri: `${getBaseUrl()}/api/v1/users/${user.id}/profile-icon?v=${iconVersion}` }}
@@ -219,6 +225,7 @@ export default function SettingsScreen() {
                   style={styles.uploadButton}
                   onPress={handleUploadIcon}
                   disabled={iconUploading || iconDeleting}
+                  testID="settings-upload-icon"
                   accessibilityLabel="Upload icon"
                   accessibilityRole="button"
                 >
@@ -230,8 +237,10 @@ export default function SettingsScreen() {
                 </TouchableOpacity>
                 {hasProfileIcon && (
                   <TouchableOpacity
+                    style={styles.removeIconButton}
                     onPress={handleDeleteIcon}
                     disabled={iconUploading || iconDeleting}
+                    testID="settings-remove-icon"
                     accessibilityLabel="Remove icon"
                     accessibilityRole="button"
                   >
@@ -381,7 +390,10 @@ export default function SettingsScreen() {
             <Text style={styles.sectionTitle}>About</Text>
             <TouchableOpacity
               style={styles.aboutToggle}
-              onPress={() => setAboutExpanded(!aboutExpanded)}
+              onPress={() => {
+                if (aboutExpanded) setAboutError('');
+                setAboutExpanded(!aboutExpanded);
+              }}
               testID="settings-about-toggle"
               accessibilityLabel="About Jot"
               accessibilityRole="button"
@@ -411,6 +423,7 @@ export default function SettingsScreen() {
                 <View style={styles.aboutSection}>
                   <Text style={styles.aboutSectionTitle}>Server Info</Text>
                   {aboutLoading && <ActivityIndicator size="small" color="#2563eb" />}
+                  {aboutError !== '' && <Text style={styles.errorText}>{aboutError}</Text>}
                   {aboutInfo && (
                     <>
                       <AboutRow label="Version" value={aboutInfo.version} />
@@ -418,10 +431,7 @@ export default function SettingsScreen() {
                       {aboutInfo.build_time && (
                         <AboutRow
                           label="Build Time"
-                          value={(() => {
-                            const dt = new Date(aboutInfo.build_time!);
-                            return isNaN(dt.getTime()) ? '—' : dt.toLocaleString();
-                          })()}
+                          value={formatDate(aboutInfo.build_time)}
                         />
                       )}
                       {aboutInfo.go_version && (
@@ -437,6 +447,11 @@ export default function SettingsScreen() {
       </KeyboardAvoidingView>
     </View>
   );
+}
+
+function formatDate(iso: string): string {
+  const dt = new Date(iso);
+  return isNaN(dt.getTime()) ? '—' : dt.toLocaleString();
 }
 
 function AboutRow({ label, value }: { label: string; value: string }) {
@@ -542,7 +557,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     gap: 16,
   },
-  avatarContainer: {},
   profileAvatar: {
     width: 64,
     height: 64,
@@ -577,6 +591,9 @@ const styles = StyleSheet.create({
     color: '#fff',
     fontSize: 14,
     fontWeight: '500',
+  },
+  removeIconButton: {
+    paddingVertical: 4,
   },
   removeIconText: {
     color: '#ef4444',

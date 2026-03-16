@@ -61,6 +61,13 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
     props.navigation.closeDrawer();
   }, [props.navigation]);
 
+  const handleSettingsPress = useCallback(() => {
+    props.navigation.dispatch(
+      CommonActions.navigate({ name: 'Settings' }),
+    );
+    props.navigation.closeDrawer();
+  }, [props.navigation]);
+
   const displayName = user
     ? [user.first_name, user.last_name].filter(Boolean).join(' ') || user.username
     : '';
@@ -178,12 +185,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
         <View style={styles.divider} />
         <TouchableOpacity
           style={styles.settingsButton}
-          onPress={() => {
-            props.navigation.dispatch(
-              CommonActions.navigate({ name: 'Settings' }),
-            );
-            props.navigation.closeDrawer();
-          }}
+          onPress={handleSettingsPress}
           testID="drawer-settings"
           accessibilityLabel="Settings"
           accessibilityRole="button"
