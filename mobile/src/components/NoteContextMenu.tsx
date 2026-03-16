@@ -10,6 +10,7 @@ import {
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import type { Note } from '@jot/shared';
+import { useTheme } from '../theme/ThemeContext';
 
 export type ContextMenuViewContext = 'notes' | 'archived' | 'trash' | 'my-todo';
 
@@ -50,6 +51,8 @@ export default function NoteContextMenu({
   onChangeColor,
   onShare,
 }: NoteContextMenuProps) {
+  const { colors } = useTheme();
+
   if (!note) return null;
 
   const actions: Action[] = [];
@@ -126,28 +129,28 @@ export default function NoteContextMenu({
       animationType="slide"
       onRequestClose={onClose}
     >
-      <Pressable style={styles.overlay} onPress={onClose}>
-        <SafeAreaView style={styles.sheet}>
+      <Pressable style={[styles.overlay, { backgroundColor: colors.overlay }]} onPress={onClose}>
+        <SafeAreaView style={[styles.sheet, { backgroundColor: colors.sheetBackground }]}>
           <Pressable>
-            <View style={styles.handle} />
+            <View style={[styles.handle, { backgroundColor: colors.handleColor }]} />
             {note.title ? (
-              <Text style={styles.noteTitle} numberOfLines={1}>
+              <Text style={[styles.noteTitle, { color: colors.text, borderBottomColor: colors.borderLight }]} numberOfLines={1}>
                 {note.title}
               </Text>
             ) : null}
             {actions.map((action) => (
               <TouchableOpacity
                 key={action.testId}
-                style={styles.actionRow}
+                style={[styles.actionRow, { borderBottomColor: colors.borderLight }]}
                 onPress={action.onPress}
                 testID={action.testId}
               >
                 <Ionicons
                   name={action.icon}
                   size={22}
-                  color={action.destructive ? '#ef4444' : '#1a1a1a'}
+                  color={action.destructive ? colors.error : colors.text}
                 />
-                <Text style={[styles.actionLabel, action.destructive && styles.destructiveLabel]}>
+                <Text style={[styles.actionLabel, { color: colors.text }, action.destructive && { color: colors.error }]}>
                   {action.label}
                 </Text>
               </TouchableOpacity>
@@ -162,11 +165,9 @@ export default function NoteContextMenu({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
     justifyContent: 'flex-end',
   },
   sheet: {
-    backgroundColor: '#fff',
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     padding: 16,
@@ -174,7 +175,6 @@ const styles = StyleSheet.create({
   handle: {
     width: 36,
     height: 4,
-    backgroundColor: '#d1d5db',
     borderRadius: 2,
     alignSelf: 'center',
     marginBottom: 16,
@@ -182,11 +182,9 @@ const styles = StyleSheet.create({
   noteTitle: {
     fontSize: 15,
     fontWeight: '600',
-    color: '#1a1a1a',
     marginBottom: 12,
     paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
   },
   actionRow: {
     flexDirection: 'row',
@@ -194,13 +192,8 @@ const styles = StyleSheet.create({
     paddingVertical: 14,
     gap: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#f9fafb',
   },
   actionLabel: {
     fontSize: 16,
-    color: '#1a1a1a',
-  },
-  destructiveLabel: {
-    color: '#ef4444',
   },
 });

@@ -5,6 +5,7 @@ import { useRoute, RouteProp } from '@react-navigation/native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import NotesListScreen from '../screens/NotesListScreen';
 import DrawerContent from '../components/DrawerContent';
+import { useTheme } from '../theme/ThemeContext';
 
 export type MainDrawerParamList = {
   Notes: { labelId?: string; labelName?: string } | undefined;
@@ -34,14 +35,20 @@ function TrashScreen() {
 }
 
 export default function MainDrawer() {
+  const { colors } = useTheme();
+
   return (
     <Drawer.Navigator
       drawerContent={(props) => <DrawerContent {...props} />}
       screenOptions={({ navigation }) => ({
         headerShown: true,
-        headerTitleStyle: styles.headerTitle,
+        headerTitleStyle: [styles.headerTitle, { color: colors.text }],
         headerShadowVisible: false,
-        headerStyle: styles.header,
+        headerStyle: {
+          backgroundColor: colors.background,
+          borderBottomWidth: 1,
+          borderBottomColor: colors.borderLight,
+        },
         drawerType: 'front',
         headerLeft: () => (
           <TouchableOpacity
@@ -51,7 +58,7 @@ export default function MainDrawer() {
             accessibilityLabel="Open menu"
             accessibilityRole="button"
           >
-            <Ionicons name="menu" size={24} color="#1a1a1a" />
+            <Ionicons name="menu" size={24} color={colors.text} />
           </TouchableOpacity>
         ),
       })}
@@ -75,15 +82,9 @@ export default function MainDrawer() {
 }
 
 const styles = StyleSheet.create({
-  header: {
-    backgroundColor: '#f9fafb',
-    borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
-  },
   headerTitle: {
     fontSize: 18,
     fontWeight: '600',
-    color: '#1a1a1a',
   },
   menuButton: {
     paddingHorizontal: 16,

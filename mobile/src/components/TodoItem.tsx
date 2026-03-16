@@ -2,6 +2,7 @@ import React from 'react';
 import { View, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import UserAvatar from './UserAvatar';
+import { useTheme } from '../theme/ThemeContext';
 import type { Collaborator } from '@jot/shared';
 
 interface TodoItemProps {
@@ -37,6 +38,7 @@ function TodoItem({
   onSubmitEditing,
   onAssignPress,
 }: TodoItemProps) {
+  const { colors } = useTheme();
   const showAssignUI = isShared && collaborators && collaborators.length > 0 && onAssignPress;
   const assignedUser = assignedTo ? collaborators?.find((c) => c.userId === assignedTo) : undefined;
 
@@ -49,7 +51,7 @@ function TodoItem({
           testID="todo-item-drag-handle"
           accessibilityLabel="Drag to reorder"
         >
-          <Ionicons name="reorder-three" size={20} color="#999" />
+          <Ionicons name="reorder-three" size={20} color={colors.iconMuted} />
         </TouchableOpacity>
       )}
       <TouchableOpacity
@@ -63,16 +65,16 @@ function TodoItem({
         <Ionicons
           name={completed ? 'checkbox' : 'square-outline'}
           size={22}
-          color={completed ? '#2563eb' : '#999'}
+          color={completed ? colors.primary : colors.iconMuted}
         />
       </TouchableOpacity>
       <TextInput
-        style={[styles.textInput, completed && styles.completedText]}
+        style={[styles.textInput, { color: completed ? colors.textMuted : colors.text }, completed && styles.completedText]}
         value={text}
         onChangeText={onChangeText}
         editable={editable}
         placeholder="List item"
-        placeholderTextColor="#999"
+        placeholderTextColor={colors.placeholder}
         onSubmitEditing={onSubmitEditing}
         blurOnSubmit={false}
         testID="todo-item-text"
@@ -98,14 +100,14 @@ function TodoItem({
           testID="todo-item-assign"
           accessibilityLabel="Assign item"
         >
-          <View style={styles.assignPlaceholder}>
-            <Ionicons name="person-add-outline" size={12} color="#999" />
+          <View style={[styles.assignPlaceholder, { borderColor: colors.border }]}>
+            <Ionicons name="person-add-outline" size={12} color={colors.iconMuted} />
           </View>
         </TouchableOpacity>
       ) : null}
       {editable && onDelete && (
         <TouchableOpacity onPress={onDelete} style={styles.deleteBtn} testID="todo-item-delete">
-          <Ionicons name="close" size={18} color="#999" />
+          <Ionicons name="close" size={18} color={colors.iconMuted} />
         </TouchableOpacity>
       )}
     </View>
@@ -130,12 +132,10 @@ const styles = StyleSheet.create({
   textInput: {
     flex: 1,
     fontSize: 16,
-    color: '#1a1a1a',
     paddingVertical: 4,
   },
   completedText: {
-    textDecorationLine: 'line-through',
-    color: '#999',
+    textDecorationLine: 'line-through' as const,
   },
   deleteBtn: {
     padding: 4,
@@ -151,7 +151,6 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     borderWidth: 1,
     borderStyle: 'dashed',
-    borderColor: '#ccc',
     justifyContent: 'center',
     alignItems: 'center',
   },
