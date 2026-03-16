@@ -3,26 +3,22 @@
 # Multi-stage build for Jot application
 FROM node:24-alpine AS frontend-builder
 
-WORKDIR /app
+WORKDIR /app/webapp
 
-# Copy root workspace config and lock file
-COPY package.json package-lock.json ./
+# Copy shared package (dependency of webapp)
+COPY shared/ ../shared/
 
-# Copy shared package (needed by webapp)
-COPY shared/ ./shared/
+# Copy frontend package files
+COPY webapp/package*.json ./
 
-# Copy workspace package files
-COPY webapp/package.json ./webapp/
-COPY mobile/package.json ./mobile/
-
-# Install all workspace dependencies
+# Install frontend dependencies (including dev dependencies for build)
 RUN npm ci
 
-# Copy webapp source code
-COPY webapp/ ./webapp/
+# Copy frontend source code
+COPY webapp/ ./
 
 # Build the frontend
-RUN cd webapp && npm run build
+RUN npm run build
 
 # Backend build stage
 FROM golang:1.24-alpine AS backend-builder

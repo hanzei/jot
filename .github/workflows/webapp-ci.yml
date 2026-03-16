@@ -7,7 +7,7 @@ on:
   push:
     branches: ["master"]
   pull_request:
-    paths: ["webapp/**", "shared/**", "package.json", "package-lock.json"]
+    paths: ["webapp/**", "shared/**"]
 
 jobs:
   test:
@@ -20,11 +20,13 @@ jobs:
         with:
           node-version: "24"
           cache: "npm"
+          cache-dependency-path: webapp/package-lock.json
 
       - name: Install Task
         run: sh -c "$(curl -fsSL https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
 
       - name: Install dependencies
+        working-directory: ./webapp
         run: npm ci
 
       - name: Run tests
@@ -40,11 +42,13 @@ jobs:
         with:
           node-version: "24"
           cache: "npm"
+          cache-dependency-path: webapp/package-lock.json
 
       - name: Install Task
         run: sh -c "$(curl -fsSL https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
 
       - name: Install dependencies
+        working-directory: ./webapp
         run: npm ci
 
       - name: Run linters
@@ -60,11 +64,13 @@ jobs:
         with:
           node-version: "24"
           cache: "npm"
+          cache-dependency-path: webapp/package-lock.json
 
       - name: Install Task
         run: sh -c "$(curl -fsSL https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
 
       - name: Install dependencies
+        working-directory: ./webapp
         run: npm ci
 
       - name: Check translations
@@ -87,11 +93,13 @@ jobs:
         with:
           node-version: "24"
           cache: "npm"
+          cache-dependency-path: webapp/package-lock.json
 
       - name: Install Task
         run: sh -c "$(curl -fsSL https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
 
       - name: Install dependencies
+        working-directory: ./webapp
         run: npm ci
 
       - name: Install Playwright browsers

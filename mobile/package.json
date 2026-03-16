@@ -12,7 +12,7 @@
     "test": "jest"
   },
   "dependencies": {
-    "@jot/shared": "*",
+    "@jot/shared": "file:../shared",
     "@expo/vector-icons": "^15.0.0",
     "@react-navigation/bottom-tabs": "^7.0.0",
     "@react-navigation/native": "^7.0.0",
