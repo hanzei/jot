@@ -126,7 +126,7 @@ export default function LabelPicker({
                 <Ionicons
                   name="add"
                   size={22}
-                  color={newLabelText.trim() ? colors.primary : colors.handleColor}
+                  color={newLabelText.trim() ? colors.primary : colors.iconMuted}
                 />
               </TouchableOpacity>
             </View>
