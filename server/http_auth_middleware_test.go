@@ -1,34 +1,37 @@
 package main
 
 import (
+	"context"
 	"net/http"
 	"testing"
 	"time"
 
 	"github.com/hanzei/jot/server/internal/models"
+	"github.com/hanzei/jot/server/jotclient"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 func TestAuthMiddlewareUnauthenticated(t *testing.T) {
 	ts := setupTestServer(t)
-	resp := ts.request(t, nil, http.MethodGet, "/api/v1/me", nil)
-	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	c := ts.newClient()
+	_, err := c.Me(context.Background())
+	assert.Equal(t, http.StatusUnauthorized, jotclient.StatusCode(err))
 }
 
 func TestAuthMiddlewareAuthenticated(t *testing.T) {
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "authmwuser", "password123", false)
-	resp := ts.authRequest(t, user, http.MethodGet, "/api/v1/me", nil)
-	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	_, err := user.Client.Me(context.Background())
+	require.NoError(t, err)
 }
 
 func TestAuthMiddlewareInvalidCookie(t *testing.T) {
 	ts := setupTestServer(t)
-	client := newCookieClient(t)
+	c := ts.newClient()
 	req, _ := http.NewRequest(http.MethodGet, ts.HTTPServer.URL+"/api/v1/me", nil)
 	req.AddCookie(&http.Cookie{Name: "jot_session", Value: "not-a-real-token"})
-	resp, err := client.Do(req)
+	resp, err := c.HTTPClient().Do(req)
 	if err == nil {
 		defer resp.Body.Close()
 	}
@@ -38,54 +41,53 @@ func TestAuthMiddlewareInvalidCookie(t *testing.T) {
 
 func TestAuthMiddlewareSessionClearedAfterLogout(t *testing.T) {
 	ts := setupTestServer(t)
+	ctx := context.Background()
 	user := ts.createTestUser(t, "logoutuser", "password123", false)
 
-	// Verify authenticated.
-	resp := ts.authRequest(t, user, http.MethodGet, "/api/v1/me", nil)
-	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	_, err := user.Client.Me(ctx)
+	require.NoError(t, err)
 
-	// Log out.
-	resp = ts.authRequest(t, user, http.MethodPost, "/api/v1/logout", nil)
-	assert.Equal(t, http.StatusNoContent, resp.StatusCode)
+	require.NoError(t, user.Client.Logout(ctx))
 
-	// Same client (same cookie jar) should now be rejected.
-	resp = ts.authRequest(t, user, http.MethodGet, "/api/v1/me", nil)
-	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	_, err = user.Client.Me(ctx)
+	assert.Equal(t, http.StatusUnauthorized, jotclient.StatusCode(err))
 }
 
 func TestAdminMiddlewareNonAdminForbidden(t *testing.T) {
 	ts := setupTestServer(t)
-	// First registered user becomes admin automatically, so create it first.
 	_ = ts.createTestUser(t, "adminuser", "password123", true)
 	regularUser := ts.createTestUser(t, "regularuser", "password123", false)
-	resp := ts.authRequest(t, regularUser, http.MethodGet, "/api/v1/admin/users", nil)
-	assert.Equal(t, http.StatusForbidden, resp.StatusCode)
+	_, err := regularUser.Client.AdminListUsers(context.Background())
+	assert.Equal(t, http.StatusForbidden, jotclient.StatusCode(err))
 }
 
 func TestAdminMiddlewareAdminAllowed(t *testing.T) {
 	ts := setupTestServer(t)
 	adminUser := ts.createTestUser(t, "adminuser2", "password123", true)
-	resp := ts.authRequest(t, adminUser, http.MethodGet, "/api/v1/admin/users", nil)
-	assert.Equal(t, http.StatusOK, resp.StatusCode)
+	_, err := adminUser.Client.AdminListUsers(context.Background())
+	require.NoError(t, err)
 }
 
 func TestAdminMiddlewareUnauthenticated(t *testing.T) {
 	ts := setupTestServer(t)
-	resp := ts.request(t, nil, http.MethodGet, "/api/v1/admin/users", nil)
-	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	c := ts.newClient()
+	_, err := c.AdminListUsers(context.Background())
+	assert.Equal(t, http.StatusUnauthorized, jotclient.StatusCode(err))
 }
 
 func TestSessionPersistsAcrossRequests(t *testing.T) {
 	ts := setupTestServer(t)
+	ctx := context.Background()
 	user := ts.createTestUser(t, "sessionuser", "password123", false)
-	resp1 := ts.authRequest(t, user, http.MethodGet, "/api/v1/me", nil)
-	resp2 := ts.authRequest(t, user, http.MethodGet, "/api/v1/me", nil)
-	assert.Equal(t, http.StatusOK, resp1.StatusCode)
-	assert.Equal(t, http.StatusOK, resp2.StatusCode)
+	_, err := user.Client.Me(ctx)
+	require.NoError(t, err)
+	_, err = user.Client.Me(ctx)
+	require.NoError(t, err)
 }
 
 func TestSessionRenewedWhenLessThanSevenDaysLeft(t *testing.T) {
 	ts := setupTestServer(t)
+	ctx := context.Background()
 	user := ts.createTestUser(t, "renewuser", "password123", false)
 
 	token, err := getSessionTokenByUserID(ts, user.User.ID)
@@ -95,7 +97,11 @@ func TestSessionRenewedWhenLessThanSevenDaysLeft(t *testing.T) {
 	_, err = ts.Server.GetDB().Exec("UPDATE sessions SET expires_at = ? WHERE token = ?", nearExpiry, token)
 	require.NoError(t, err)
 
-	resp := ts.authRequest(t, user, http.MethodGet, "/api/v1/me", nil)
+	// Make an API call so the middleware can renew the session
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, ts.HTTPServer.URL+"/api/v1/me", nil)
+	resp, err := user.Client.HTTPClient().Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 	renewedExpiry, err := getSessionExpiryByToken(ts, token)
@@ -110,6 +116,7 @@ func TestSessionRenewedWhenLessThanSevenDaysLeft(t *testing.T) {
 
 func TestSessionNotRenewedWhenAtLeastSevenDaysLeft(t *testing.T) {
 	ts := setupTestServer(t)
+	ctx := context.Background()
 	user := ts.createTestUser(t, "noreneweuser", "password123", false)
 
 	token, err := getSessionTokenByUserID(ts, user.User.ID)
@@ -119,7 +126,10 @@ func TestSessionNotRenewedWhenAtLeastSevenDaysLeft(t *testing.T) {
 	_, err = ts.Server.GetDB().Exec("UPDATE sessions SET expires_at = ? WHERE token = ?", farExpiry, token)
 	require.NoError(t, err)
 
-	resp := ts.authRequest(t, user, http.MethodGet, "/api/v1/me", nil)
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, ts.HTTPServer.URL+"/api/v1/me", nil)
+	resp, err := user.Client.HTTPClient().Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 	expiryAfterRequest, err := getSessionExpiryByToken(ts, token)
@@ -130,6 +140,7 @@ func TestSessionNotRenewedWhenAtLeastSevenDaysLeft(t *testing.T) {
 
 func TestSessionNotRenewedWhenSlightlyAboveSevenDaysLeft(t *testing.T) {
 	ts := setupTestServer(t)
+	ctx := context.Background()
 	user := ts.createTestUser(t, "seven-days-user", "password123", false)
 
 	token, err := getSessionTokenByUserID(ts, user.User.ID)
@@ -139,7 +150,10 @@ func TestSessionNotRenewedWhenSlightlyAboveSevenDaysLeft(t *testing.T) {
 	_, err = ts.Server.GetDB().Exec("UPDATE sessions SET expires_at = ? WHERE token = ?", justAboveThreshold, token)
 	require.NoError(t, err)
 
-	resp := ts.authRequest(t, user, http.MethodGet, "/api/v1/me", nil)
+	req, _ := http.NewRequestWithContext(ctx, http.MethodGet, ts.HTTPServer.URL+"/api/v1/me", nil)
+	resp, err := user.Client.HTTPClient().Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
 	assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 	expiryAfterRequest, err := getSessionExpiryByToken(ts, token)
@@ -160,8 +174,8 @@ func getSessionExpiryByToken(ts *TestServer, token string) (time.Time, error) {
 	return expiresAt, err
 }
 
-func findCookie(resp *TestResponse, name string) *http.Cookie {
-	for _, cookie := range resp.Cookies {
+func findCookie(resp *http.Response, name string) *http.Cookie {
+	for _, cookie := range resp.Cookies() {
 		if cookie.Name == name {
 			return cookie
 		}

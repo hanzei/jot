@@ -1,0 +1,132 @@
+package jotclient
+
+import (
+	"bytes"
+	"context"
+	"encoding/json"
+	"fmt"
+	"io"
+	"net/http"
+	"net/http/cookiejar"
+	"strings"
+)
+
+// Error is an API error with the HTTP status code and response body.
+type Error struct {
+	StatusCode int
+	Body       string
+}
+
+func (e *Error) Error() string {
+	return fmt.Sprintf("jot api: %d %s", e.StatusCode, strings.TrimSpace(e.Body))
+}
+
+// StatusCode extracts the HTTP status code from an [Error].
+// If err is nil or not an *Error it returns 0.
+func StatusCode(err error) int {
+	if err == nil {
+		return 0
+	}
+	if apiErr, ok := err.(*Error); ok {
+		return apiErr.StatusCode
+	}
+	return 0
+}
+
+// Client is a typed HTTP client for the Jot API.
+// It maintains session cookies automatically after Register or Login.
+type Client struct {
+	baseURL    string
+	httpClient *http.Client
+}
+
+// Option configures a [Client].
+type Option func(*Client)
+
+// WithHTTPClient overrides the default HTTP client.
+// The provided client must have a cookie jar if session persistence is desired.
+func WithHTTPClient(c *http.Client) Option {
+	return func(cl *Client) { cl.httpClient = c }
+}
+
+// New creates a new Jot API client pointed at baseURL (e.g. "http://localhost:8080").
+func New(baseURL string, opts ...Option) *Client {
+	jar, _ := cookiejar.New(nil)
+	c := &Client{
+		baseURL:    strings.TrimRight(baseURL, "/"),
+		httpClient: &http.Client{Jar: jar},
+	}
+	for _, o := range opts {
+		o(c)
+	}
+	return c
+}
+
+// HTTPClient returns the underlying *http.Client.
+// This is useful for tests that need low-level HTTP access (e.g. SSE streams,
+// raw multipart uploads, or cookie manipulation).
+func (c *Client) HTTPClient() *http.Client {
+	return c.httpClient
+}
+
+// BaseURL returns the server base URL the client is configured for.
+func (c *Client) BaseURL() string {
+	return c.baseURL
+}
+
+func (c *Client) url(path string) string {
+	return c.baseURL + path
+}
+
+func (c *Client) doJSON(ctx context.Context, method, path string, body any, result any) error {
+	var reqBody io.Reader
+	if body != nil {
+		data, err := json.Marshal(body)
+		if err != nil {
+			return fmt.Errorf("marshal request body: %w", err)
+		}
+		reqBody = bytes.NewReader(data)
+	}
+
+	req, err := http.NewRequestWithContext(ctx, method, c.url(path), reqBody)
+	if err != nil {
+		return fmt.Errorf("create request: %w", err)
+	}
+	if body != nil {
+		req.Header.Set("Content-Type", "application/json")
+	}
+
+	resp, err := c.httpClient.Do(req)
+	if err != nil {
+		return fmt.Errorf("execute request: %w", err)
+	}
+	defer resp.Body.Close()
+
+	respBody, err := io.ReadAll(resp.Body)
+	if err != nil {
+		return fmt.Errorf("read response body: %w", err)
+	}
+
+	if resp.StatusCode >= 400 {
+		return &Error{StatusCode: resp.StatusCode, Body: string(respBody)}
+	}
+
+	if result != nil && len(respBody) > 0 {
+		if err := json.Unmarshal(respBody, result); err != nil {
+			return fmt.Errorf("unmarshal response: %w", err)
+		}
+	}
+
+	return nil
+}
+
+func (c *Client) doNoContent(ctx context.Context, method, path string, body any) error {
+	return c.doJSON(ctx, method, path, body, nil)
+}
+
+func unmarshalJSON(data []byte, v any) error {
+	if err := json.Unmarshal(data, v); err != nil {
+		return fmt.Errorf("unmarshal response: %w", err)
+	}
+	return nil
+}
