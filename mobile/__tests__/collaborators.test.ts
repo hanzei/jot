@@ -1,10 +1,10 @@
-import { buildCollaborators, displayName, type Collaborator, type NoteShare, type User } from '@jot/shared';
+import { buildCollaborators, displayName, ROLES, type Collaborator, type NoteShare, type User } from '@jot/shared';
 
 function makeUser(overrides: Partial<User> & { id: string; username: string }): User {
   return {
     first_name: '',
     last_name: '',
-    role: 'user',
+    role: ROLES.USER,
     has_profile_icon: false,
     created_at: '',
     updated_at: '',

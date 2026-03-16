@@ -104,7 +104,6 @@ Jot is a self-hosted note-taking application. The backend is a Go HTTP API and t
 │   │   ├── db/          # Local SQLite/offline persistence
 │   │   ├── store/       # Context/state providers
 │   └── package.json
-├── package.json     # Root workspace config (npm workspaces)
 ├── images/          # Documentation images
 ├── Taskfile.yml
 ├── Dockerfile       # Multi-stage production build

@@ -43,7 +43,7 @@ export default function ColorPicker({ visible, currentColor, onSelect, onClose }
                   style={[
                     styles.colorCircle,
                     { backgroundColor: color },
-                    color === '#ffffff' && styles.colorCircleWhite,
+                    (color === '#ffffff' || color === '#e8eaed') && styles.colorCircleLight,
                   ]}
                   onPress={() => {
                     onSelect(color);
@@ -56,7 +56,7 @@ export default function ColorPicker({ visible, currentColor, onSelect, onClose }
                     <Ionicons
                       name="checkmark"
                       size={18}
-                      color={color === '#ffffff' ? '#999' : '#333'}
+                      color={color === '#ffffff' || color === '#e8eaed' ? '#999' : '#333'}
                     />
                   )}
                 </TouchableOpacity>
@@ -106,7 +106,7 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
-  colorCircleWhite: {
+  colorCircleLight: {
     borderWidth: 1,
     borderColor: '#e5e7eb',
   },
