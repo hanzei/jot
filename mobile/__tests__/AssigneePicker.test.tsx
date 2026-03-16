@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 import AssigneePicker from '../src/components/AssigneePicker';
-import { Collaborator } from '../src/utils/collaborators';
+import type { Collaborator } from '@jot/shared';
 
 const collaborators: Collaborator[] = [
   { userId: 'u1', username: 'alice', firstName: 'Alice', lastName: 'Smith' },

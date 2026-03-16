@@ -1,6 +1,6 @@
 import { SQLiteDatabase } from 'expo-sqlite';
 import api from '../api/client';
-import { Note } from '../types';
+import type { Note } from '@jot/shared';
 import { replaceLocalNoteId, saveNote } from './noteQueries';
 
 export type QueueOperation = 'create' | 'update' | 'delete' | 'restore' | 'permanentDelete' | 'reorder';

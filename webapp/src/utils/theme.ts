@@ -1,5 +1,5 @@
 import { getSettings } from './auth';
-import { ThemePreference } from '@/types';
+import type { ThemePreference } from '@jot/shared';
 
 export type { ThemePreference };
 

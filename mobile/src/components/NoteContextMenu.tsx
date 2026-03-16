@@ -9,7 +9,7 @@ import {
   Pressable,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Note } from '../types';
+import type { Note } from '@jot/shared';
 
 export type ContextMenuViewContext = 'notes' | 'archived' | 'trash' | 'my-todo';
 

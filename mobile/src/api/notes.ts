@@ -1,5 +1,5 @@
 import api from './client';
-import { Note, GetNotesParams, CreateNoteRequest, UpdateNoteRequest } from '../types';
+import type { Note, GetNotesParams, CreateNoteRequest, UpdateNoteRequest } from '@jot/shared';
 
 function stripClientOnlyParams(params: GetNotesParams): Omit<GetNotesParams, 'user_id'> {
   const { archived, search, trashed, label, my_todo } = params;

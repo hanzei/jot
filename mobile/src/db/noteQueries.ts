@@ -1,5 +1,5 @@
 import { SQLiteDatabase } from 'expo-sqlite';
-import { Note, NoteItem, GetNotesParams, Label, NoteShare } from '../types';
+import type { Note, NoteItem, GetNotesParams, Label, NoteShare } from '@jot/shared';
 
 interface NoteRow {
   id: string;

@@ -1,7 +1,7 @@
 import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Note, NoteItem, NoteShare } from '../types';
+import type { Note, NoteItem, NoteShare } from '@jot/shared';
 import UserAvatar from './UserAvatar';
 
 interface NoteCardProps {

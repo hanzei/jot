@@ -1,7 +1,7 @@
 import { render, screen, fireEvent } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import AssigneePicker from '../AssigneePicker'
-import { Collaborator } from '@/utils/collaborators'
+import type { Collaborator } from '@jot/shared'
 
 const collaborators: Collaborator[] = [
   { userId: 'user1', username: 'alice', firstName: 'Alice', lastName: 'Williams' },
