@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"net/http"
@@ -24,10 +25,8 @@ func (e *Error) Error() string {
 // StatusCode extracts the HTTP status code from an [Error].
 // If err is nil or not an *Error it returns 0.
 func StatusCode(err error) int {
-	if err == nil {
-		return 0
-	}
-	if apiErr, ok := err.(*Error); ok {
+	var apiErr *Error
+	if errors.As(err, &apiErr) {
 		return apiErr.StatusCode
 	}
 	return 0

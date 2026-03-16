@@ -11,7 +11,7 @@ import (
 )
 
 // createAndTrashNote creates a note and moves it to trash.
-func createAndTrashNote(t *testing.T, ts *TestServer, user *TestUser, title string) *jotclient.Note {
+func createAndTrashNote(t *testing.T, _ *TestServer, user *TestUser, title string) *jotclient.Note {
 	t.Helper()
 	ctx := context.Background()
 	note, err := user.Client.CreateNote(ctx, &jotclient.CreateNoteRequest{

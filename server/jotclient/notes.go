@@ -104,10 +104,10 @@ func (c *Client) ImportNotes(ctx context.Context, filename string, data io.Reade
 	if err != nil {
 		return nil, fmt.Errorf("create form file: %w", err)
 	}
-	if _, err := io.Copy(part, data); err != nil {
+	if _, err = io.Copy(part, data); err != nil {
 		return nil, fmt.Errorf("copy file data: %w", err)
 	}
-	if err := mw.Close(); err != nil {
+	if err = mw.Close(); err != nil {
 		return nil, fmt.Errorf("close multipart writer: %w", err)
 	}
 
@@ -132,7 +132,7 @@ func (c *Client) ImportNotes(ctx context.Context, filename string, data io.Reade
 	}
 
 	var result ImportResponse
-	if err := unmarshalJSON(respBody, &result); err != nil {
+	if err = unmarshalJSON(respBody, &result); err != nil {
 		return nil, err
 	}
 	return &result, nil

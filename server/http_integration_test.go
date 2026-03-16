@@ -74,8 +74,12 @@ func (ts *TestServer) newClient() *jotclient.Client {
 
 func (ts *TestServer) createTestUser(t *testing.T, username, password string, isAdmin bool) *TestUser {
 	t.Helper()
+	return ts.createTestUserCtx(context.Background(), t, username, password, isAdmin)
+}
+
+func (ts *TestServer) createTestUserCtx(ctx context.Context, t *testing.T, username, password string, isAdmin bool) *TestUser {
+	t.Helper()
 	c := ts.newClient()
-	ctx := context.Background()
 
 	auth, err := c.Register(ctx, username, password)
 	require.NoError(t, err)
@@ -339,7 +343,7 @@ func TestAdminEndpoints(t *testing.T) {
 	})
 
 	t.Run("delete user as admin", func(t *testing.T) {
-		deleteTarget := ts.createTestUser(t, "todelete", "password123", false)
+		deleteTarget := ts.createTestUserCtx(ctx, t, "todelete", "password123", false)
 		require.NoError(t, adminUser.Client.AdminDeleteUser(ctx, deleteTarget.User.ID))
 
 		users, err := adminUser.Client.AdminListUsers(ctx)
@@ -350,7 +354,7 @@ func TestAdminEndpoints(t *testing.T) {
 	})
 
 	t.Run("delete user as non-admin returns 403", func(t *testing.T) {
-		deleteTarget := ts.createTestUser(t, "todelete2", "password123", false)
+		deleteTarget := ts.createTestUserCtx(ctx, t, "todelete2", "password123", false)
 		err := user.Client.AdminDeleteUser(ctx, deleteTarget.User.ID)
 		assert.Equal(t, http.StatusForbidden, jotclient.StatusCode(err))
 	})

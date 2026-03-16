@@ -28,7 +28,7 @@ func createSharedTodoNote(t *testing.T, ts *TestServer, owner *TestUser, sharedW
 	return note.ID, sharedWith.User.ID
 }
 
-func getNoteItems(t *testing.T, ts *TestServer, user *TestUser, noteID string) []jotclient.NoteItem {
+func getNoteItems(t *testing.T, _ *TestServer, user *TestUser, noteID string) []jotclient.NoteItem {
 	t.Helper()
 	note, err := user.Client.GetNote(context.Background(), noteID)
 	require.NoError(t, err)

@@ -69,7 +69,7 @@ func TestGetNotesByLabel(t *testing.T) {
 	})
 
 	t.Run("label from another user is not accessible", func(t *testing.T) {
-		other := ts.createTestUser(t, "otheruser", "password123", false)
+		other := ts.createTestUserCtx(ctx, t, "otheruser", "password123", false)
 		otherNote, err := other.Client.CreateNote(ctx, &jotclient.CreateNoteRequest{
 			Title: "Other Note", Content: "content",
 		})

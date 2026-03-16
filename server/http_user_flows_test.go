@@ -130,8 +130,8 @@ func TestAdminUpdateUserRoleEndpoint(t *testing.T) {
 	ctx := context.Background()
 
 	t.Run("admin can promote user and promoted user gains admin access", func(t *testing.T) {
-		admin := ts.createTestUser(t, "role-admin-promote", "password123", true)
-		target := ts.createTestUser(t, "role-target-promote", "password123", false)
+		admin := ts.createTestUserCtx(ctx, t, "role-admin-promote", "password123", true)
+		target := ts.createTestUserCtx(ctx, t, "role-target-promote", "password123", false)
 
 		_, err := target.Client.AdminListUsers(ctx)
 		assert.Equal(t, http.StatusForbidden, jotclient.StatusCode(err))
@@ -145,9 +145,9 @@ func TestAdminUpdateUserRoleEndpoint(t *testing.T) {
 	})
 
 	t.Run("non-admin cannot update roles", func(t *testing.T) {
-		admin := ts.createTestUser(t, "role-admin-check", "password123", true)
-		regular := ts.createTestUser(t, "role-regular-check", "password123", false)
-		target := ts.createTestUser(t, "role-target-no-admin", "password123", false)
+		admin := ts.createTestUserCtx(ctx, t, "role-admin-check", "password123", true)
+		regular := ts.createTestUserCtx(ctx, t, "role-regular-check", "password123", false)
+		target := ts.createTestUserCtx(ctx, t, "role-target-no-admin", "password123", false)
 
 		_, err := target.Client.AdminListUsers(ctx)
 		assert.Equal(t, http.StatusForbidden, jotclient.StatusCode(err))
@@ -169,14 +169,14 @@ func TestAdminUpdateUserRoleEndpoint(t *testing.T) {
 	})
 
 	t.Run("invalid role returns 400", func(t *testing.T) {
-		admin := ts.createTestUser(t, "role-admin-invalid", "password123", true)
-		regular := ts.createTestUser(t, "role-regular-invalid", "password123", false)
+		admin := ts.createTestUserCtx(ctx, t, "role-admin-invalid", "password123", true)
+		regular := ts.createTestUserCtx(ctx, t, "role-regular-invalid", "password123", false)
 		_, err := admin.Client.AdminUpdateUserRole(ctx, regular.User.ID, "super-admin")
 		assert.Equal(t, http.StatusBadRequest, jotclient.StatusCode(err))
 	})
 
 	t.Run("unknown user returns 404", func(t *testing.T) {
-		admin := ts.createTestUser(t, "role-admin-unknown", "password123", true)
+		admin := ts.createTestUserCtx(ctx, t, "role-admin-unknown", "password123", true)
 		_, err := admin.Client.AdminUpdateUserRole(ctx, "nonexistentid12345678", jotclient.RoleUser)
 		assert.Equal(t, http.StatusNotFound, jotclient.StatusCode(err))
 	})

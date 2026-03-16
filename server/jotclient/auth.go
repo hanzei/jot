@@ -75,10 +75,10 @@ func (c *Client) UploadProfileIcon(ctx context.Context, filename string, data io
 	if err != nil {
 		return nil, fmt.Errorf("create form file: %w", err)
 	}
-	if _, err := io.Copy(part, data); err != nil {
+	if _, err = io.Copy(part, data); err != nil {
 		return nil, fmt.Errorf("copy file data: %w", err)
 	}
-	if err := mw.Close(); err != nil {
+	if err = mw.Close(); err != nil {
 		return nil, fmt.Errorf("close multipart writer: %w", err)
 	}
 
@@ -103,7 +103,7 @@ func (c *Client) UploadProfileIcon(ctx context.Context, filename string, data io
 	}
 
 	var user User
-	if err := unmarshalJSON(respBody, &user); err != nil {
+	if err = unmarshalJSON(respBody, &user); err != nil {
 		return nil, err
 	}
 	return &user, nil
