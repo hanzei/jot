@@ -241,6 +241,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const errorTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const itemInputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
+  const contentRef = useRef<HTMLTextAreaElement>(null);
   const savingRef = useRef(false);
 
   const sensors = useSensors(
@@ -953,11 +954,38 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
                 }
                 setTitle(newTitle);
               }}
+              onKeyDown={(e) => {
+                if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
+                if (e.repeat) return;
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  if (noteType === 'text') {
+                    const textarea = contentRef.current;
+                    if (textarea) {
+                      textarea.focus();
+                      textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+                    }
+                  } else {
+                    const firstItem = uncompletedItems[0];
+                    if (firstItem) {
+                      const input = itemInputRefs.current.get(firstItem.id);
+                      if (input) {
+                        input.focus();
+                        input.setSelectionRange(input.value.length, input.value.length);
+                      }
+                    } else {
+                      const newId = addTodoItem();
+                      setTimeout(() => itemInputRefs.current.get(newId)?.focus(), 0);
+                    }
+                  }
+                }
+              }}
             />
 
             {/* Content based on type */}
             {noteType === 'text' ? (
               <textarea
+                ref={contentRef}
                 placeholder={t('note.contentPlaceholder')}
                 rows={4}
                 className="w-full p-2 bg-transparent border-none outline-none resize-none placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white min-h-[6rem]"
