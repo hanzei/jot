@@ -52,6 +52,9 @@ func (c *Client) Me(ctx context.Context) (*AuthResponse, error) {
 
 // UpdateUser updates the authenticated user's profile and/or settings.
 func (c *Client) UpdateUser(ctx context.Context, req *UpdateUserRequest) (*AuthResponse, error) {
+	if req == nil {
+		return nil, fmt.Errorf("request must not be nil")
+	}
 	var resp AuthResponse
 	if err := c.doJSON(ctx, http.MethodPatch, "/api/v1/users/me", req, &resp); err != nil {
 		return nil, err

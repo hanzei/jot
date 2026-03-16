@@ -49,6 +49,8 @@ func WithHTTPClient(c *http.Client) Option {
 }
 
 // New creates a new Jot API client pointed at baseURL (e.g. "http://localhost:8080").
+// The default HTTP client has no timeout; callers should use context deadlines or
+// [WithHTTPClient] with a configured Timeout for production use.
 func New(baseURL string, opts ...Option) *Client {
 	jar, _ := cookiejar.New(nil)
 	c := &Client{

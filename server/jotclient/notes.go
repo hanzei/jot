@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -46,6 +47,9 @@ func (c *Client) ListNotes(ctx context.Context, opts *ListNotesOptions) ([]Note,
 
 // CreateNote creates a new note.
 func (c *Client) CreateNote(ctx context.Context, req *CreateNoteRequest) (*Note, error) {
+	if req == nil {
+		return nil, errors.New("request must not be nil")
+	}
 	var note Note
 	if err := c.doJSON(ctx, http.MethodPost, "/api/v1/notes", req, &note); err != nil {
 		return nil, err
@@ -62,8 +66,14 @@ func (c *Client) GetNote(ctx context.Context, id string) (*Note, error) {
 	return &note, nil
 }
 
-// UpdateNote updates a note's content, pinning, archive, color, and items.
+// UpdateNote replaces a note's metadata and items.
+// The request is a full replacement; all fields are sent and overwrite
+// the server-side state. For partial updates, GET the note first, modify
+// the desired fields, then call UpdateNote with the complete request.
 func (c *Client) UpdateNote(ctx context.Context, id string, req *UpdateNoteRequest) (*Note, error) {
+	if req == nil {
+		return nil, errors.New("request must not be nil")
+	}
 	var note Note
 	if err := c.doJSON(ctx, http.MethodPut, fmt.Sprintf("/api/v1/notes/%s", id), req, &note); err != nil {
 		return nil, err
