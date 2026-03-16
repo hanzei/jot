@@ -34,19 +34,16 @@ export interface RegisterRequest {
 }
 
 export interface UpdateMeRequest {
-  username: string;
-  first_name: string;
-  last_name: string;
+  username?: string;
+  first_name?: string;
+  last_name?: string;
+  language?: string;
+  theme?: ThemePreference;
 }
 
 export interface ChangePasswordRequest {
   current_password: string;
   new_password: string;
-}
-
-export interface UpdateSettingsRequest {
-  language: string;
-  theme: ThemePreference;
 }
 
 export interface AboutInfo {

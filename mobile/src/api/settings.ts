@@ -1,24 +1,14 @@
 import { Platform } from 'react-native';
 import api from './client';
-import { User, UserSettings, UpdateMeRequest, ChangePasswordRequest, UpdateSettingsRequest, AboutInfo } from '../types';
+import { User, AuthResponse, UpdateMeRequest, ChangePasswordRequest, AboutInfo } from '../types';
 
-export async function updateMe(data: UpdateMeRequest): Promise<User> {
-  const res = await api.put('/users/me', data);
-  return res.data.user;
+export async function updateMe(data: UpdateMeRequest): Promise<AuthResponse> {
+  const res = await api.patch('/users/me', data);
+  return res.data;
 }
 
 export async function changePassword(data: ChangePasswordRequest): Promise<void> {
   await api.put('/users/me/password', data);
-}
-
-export async function getSettings(): Promise<UserSettings> {
-  const res = await api.get('/users/me/settings');
-  return res.data;
-}
-
-export async function updateSettings(data: UpdateSettingsRequest): Promise<UserSettings> {
-  const res = await api.put('/users/me/settings', data);
-  return res.data;
 }
 
 export async function uploadProfileIcon(uri: string): Promise<User> {

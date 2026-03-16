@@ -20,7 +20,6 @@ import { getBaseUrl } from '../api/client';
 import {
   updateMe,
   changePassword,
-  updateSettings,
   uploadProfileIcon,
   deleteProfileIcon,
   getAboutInfo,
@@ -80,8 +79,11 @@ export default function SettingsScreen() {
     setProfileSuccess('');
     setProfileSaving(true);
     try {
-      const updatedUser = await updateMe({ username, first_name: firstName, last_name: lastName });
+      const { user: updatedUser, settings: updatedSettings } = await updateMe({
+        username, first_name: firstName, last_name: lastName,
+      });
       setUser(updatedUser);
+      setSettings(updatedSettings);
       setProfileSuccess('Profile updated');
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: string } })?.response?.data;
@@ -89,7 +91,7 @@ export default function SettingsScreen() {
     } finally {
       setProfileSaving(false);
     }
-  }, [username, firstName, lastName, setUser]);
+  }, [username, firstName, lastName, setUser, setSettings]);
 
   const handleChangePassword = useCallback(async () => {
     setPasswordError('');
@@ -127,12 +129,12 @@ export default function SettingsScreen() {
     const prev = themePref;
     setThemePref(theme);
     try {
-      const updated = await updateSettings({ language: settings?.language ?? 'system', theme });
-      setSettings(updated);
+      const { settings: updatedSettings } = await updateMe({ theme });
+      setSettings(updatedSettings);
     } catch {
       setThemePref(prev);
     }
-  }, [themePref, settings, setSettings]);
+  }, [themePref, setSettings]);
 
   const handleUploadIcon = useCallback(async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
