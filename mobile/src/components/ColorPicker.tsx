@@ -11,12 +11,7 @@ import {
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useTheme } from '../theme/ThemeContext';
-
-export const COLOR_PALETTE = [
-  '#ffffff', '#f28b82', '#fbbc04', '#fff475', '#ccff90',
-  '#a7ffeb', '#cbf0f8', '#aecbfa', '#d7aefb', '#fdcfe8',
-  '#e6c9a8', '#e8eaed',
-];
+import { NOTE_COLORS, LIGHT_NOTE_COLORS } from '@jot/shared';
 
 interface ColorPickerProps {
   visible: boolean;
@@ -45,13 +40,13 @@ export default function ColorPicker({ visible, currentColor, onSelect, onClose }
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.palette}
             >
-              {COLOR_PALETTE.map((color) => (
+              {NOTE_COLORS.map((color) => (
                 <TouchableOpacity
                   key={color}
                   style={[
                     styles.colorCircle,
                     { backgroundColor: color },
-                    color === '#ffffff' && { borderWidth: 1, borderColor: colors.border },
+                    LIGHT_NOTE_COLORS.has(color) && { borderWidth: 1, borderColor: colors.border },
                   ]}
                   onPress={() => {
                     onSelect(color);
@@ -64,7 +59,7 @@ export default function ColorPicker({ visible, currentColor, onSelect, onClose }
                     <Ionicons
                       name="checkmark"
                       size={18}
-                      color={color === '#ffffff' ? '#999' : '#333'}
+                      color={LIGHT_NOTE_COLORS.has(color) ? '#999' : '#333'}
                     />
                   )}
                 </TouchableOpacity>

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { User, UserSettings } from '../types';
+import type { User, UserSettings } from '@jot/shared';
 import { auth, getStoredSession, clearStoredSession, setOnUnauthorized, getStoredServerUrl, restoreServerUrl } from '../api/client';
 
 interface AuthState {

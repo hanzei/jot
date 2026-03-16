@@ -9,11 +9,10 @@ import {
 } from '@heroicons/react/24/outline';
 import { Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
-import { Note, User } from '@/types';
+import { VALIDATION, type Note, type User } from '@jot/shared';
 import { notes } from '@/utils/api';
 import LetterAvatar from '@/components/LetterAvatar';
 import { buildShareAvatars } from '@/utils/shareAvatars';
-import { VALIDATION_LIMITS } from '@/constants/validation';
 
 interface NoteCardProps {
   note: Note;
@@ -35,14 +34,19 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, onRestore, o
   const isOwner = note.user_id === currentUserId;
 
   const getColorClass = (color: string) => {
-    const colorMap: { [key: string]: string } = {
+    const colorMap: Record<string, string> = {
       '#ffffff': '',
+      '#f28b82': 'coral',
       '#fbbc04': 'yellow',
-      '#34a853': 'green',
-      '#4285f4': 'blue',
-      '#ea4335': 'red',
-      '#9aa0a6': 'purple',
-      '#8b5cf6': 'purple',
+      '#fff475': 'lemon',
+      '#ccff90': 'lime',
+      '#a7ffeb': 'teal',
+      '#cbf0f8': 'sky',
+      '#aecbfa': 'periwinkle',
+      '#d7aefb': 'lavender',
+      '#fdcfe8': 'pink',
+      '#e6c9a8': 'sand',
+      '#e8eaed': 'gray',
     };
     return colorMap[color] || '';
   };
@@ -233,7 +237,7 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, onRestore, o
               return (
                 <>
                   {uncompletedItems.map((item) => (
-                      <div key={item.id} className="flex items-center text-sm" style={{ marginLeft: item.indent_level * VALIDATION_LIMITS.INDENT_PX_PER_LEVEL }}>
+                      <div key={item.id} className="flex items-center text-sm" style={{ marginLeft: item.indent_level * VALIDATION.INDENT_PX_PER_LEVEL }}>
                         <input
                           type="checkbox"
                           checked={item.completed}

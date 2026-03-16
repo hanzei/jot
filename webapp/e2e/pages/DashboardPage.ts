@@ -178,6 +178,18 @@ export class DashboardPage {
     return this.page.locator('[data-testid="note-card"]').filter({ hasText: title });
   }
 
+  /** Returns the nth note card (0-based) visible on the page. */
+  nthNoteCard(index: number): Locator {
+    return this.page.locator('[data-testid="note-card"]').nth(index);
+  }
+
+  /** Asserts that the nth note card (0-based) has the given title. */
+  async expectNoteAtPosition(index: number, title: string) {
+    await expect(
+      this.nthNoteCard(index).locator('h3')
+    ).toHaveText(title);
+  }
+
   async logout() {
     // Open the profile dropdown, then click Logout (role=menuitem set by headlessui)
     await this.page.getByRole('button', { name: 'Profile menu' }).click();

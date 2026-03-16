@@ -17,7 +17,7 @@ import { searchUsers } from '../api/users';
 import { useNoteShares, useShareNote, useUnshareNote } from '../hooks/useNotes';
 import UserAvatar from '../components/UserAvatar';
 import { useTheme } from '../theme/ThemeContext';
-import { User, NoteShare } from '../types';
+import type { User, NoteShare } from '@jot/shared';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 
 type ShareRouteProp = RouteProp<RootStackParamList, 'Share'>;

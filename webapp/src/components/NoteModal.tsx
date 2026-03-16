@@ -2,14 +2,12 @@ import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { XMarkIcon, PlusIcon, TrashIcon, ChevronDownIcon, ArchiveBoxIcon, ArchiveBoxXMarkIcon, ShareIcon, UserPlusIcon } from '@heroicons/react/24/outline';
 import { Dialog, DialogPanel } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
-import { Note, NoteType, CreateNoteRequest, UpdateNoteRequest, Label, User } from '@/types';
+import { VALIDATION, NOTE_COLORS, buildCollaborators, type Note, type NoteType, type CreateNoteRequest, type UpdateNoteRequest, type Label, type User, type Collaborator } from '@jot/shared';
 import { notes } from '@/utils/api';
 import LabelPicker from '@/components/LabelPicker';
 import LetterAvatar from '@/components/LetterAvatar';
 import AssigneePicker from '@/components/AssigneePicker';
-import { Collaborator, buildCollaborators } from '@/utils/collaborators';
 import { buildShareAvatars } from '@/utils/shareAvatars';
-import { VALIDATION_LIMITS } from '@/constants/validation';
 
 // Validation functions
 type TFunction = (key: string, opts?: Record<string, unknown>) => string;
@@ -17,18 +15,18 @@ type TFunction = (key: string, opts?: Record<string, unknown>) => string;
 const validateItemText = (text: string, t: TFunction): string | null => {
   const trimmed = text.trim();
   if (trimmed.length === 0) return null; // Allow empty items (will be removed on save)
-  if (trimmed.length > VALIDATION_LIMITS.ITEM_TEXT_MAX_LENGTH) return t('note.itemTooLong', { max: VALIDATION_LIMITS.ITEM_TEXT_MAX_LENGTH });
+  if (trimmed.length > VALIDATION.ITEM_TEXT_MAX_LENGTH) return t('note.itemTooLong', { max: VALIDATION.ITEM_TEXT_MAX_LENGTH });
   if (/[<>]/g.test(trimmed)) return t('note.itemInvalidChars');
   return null;
 };
 
 const validateTitle = (title: string, t: TFunction): string | null => {
-  if (title.length > VALIDATION_LIMITS.TITLE_MAX_LENGTH) return t('note.titleTooLong', { max: VALIDATION_LIMITS.TITLE_MAX_LENGTH });
+  if (title.length > VALIDATION.TITLE_MAX_LENGTH) return t('note.titleTooLong', { max: VALIDATION.TITLE_MAX_LENGTH });
   return null;
 };
 
 const validateContent = (content: string, t: TFunction): string | null => {
-  if (content.length > VALIDATION_LIMITS.CONTENT_MAX_LENGTH) return t('note.contentTooLong', { max: VALIDATION_LIMITS.CONTENT_MAX_LENGTH });
+  if (content.length > VALIDATION.CONTENT_MAX_LENGTH) return t('note.contentTooLong', { max: VALIDATION.CONTENT_MAX_LENGTH });
   return null;
 };
 
@@ -62,6 +60,7 @@ interface NoteModalProps {
   onSave: () => void;
   onRefresh?: () => void;
   onShare?: (note: Note) => void;
+  onDelete?: (noteId: string) => void;
   isOwner?: boolean;
   usersById?: Map<string, User>;
   currentUserId?: string;
@@ -112,7 +111,7 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
-    marginLeft: item.indentLevel * VALIDATION_LIMITS.INDENT_PX_PER_LEVEL,
+    marginLeft: item.indentLevel * VALIDATION.INDENT_PX_PER_LEVEL,
   };
 
   const assignedUser = item.assignedTo ? usersById?.get(item.assignedTo) : undefined;
@@ -222,7 +221,7 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
   );
 }
 
-export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, isOwner = true, usersById, currentUserId }: NoteModalProps) {
+export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, onDelete, isOwner = true, usersById, currentUserId }: NoteModalProps) {
   const { t, i18n } = useTranslation();
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
@@ -257,14 +256,25 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
     completedItems: items.filter(item => item.completed)
   }), [items]);
 
-  const colors = [
-    { value: '#ffffff', name: t('note.colorWhite'), class: 'bg-white dark:bg-slate-800 border-gray-300 dark:border-slate-600' },
-    { value: '#fbbc04', name: t('note.colorYellow'), class: 'bg-yellow-100 dark:bg-yellow-900 border-yellow-300 dark:border-yellow-700' },
-    { value: '#34a853', name: t('note.colorGreen'), class: 'bg-green-100 dark:bg-green-900 border-green-300 dark:border-green-700' },
-    { value: '#4285f4', name: t('note.colorBlue'), class: 'bg-blue-100 dark:bg-blue-900 border-blue-300 dark:border-blue-700' },
-    { value: '#ea4335', name: t('note.colorRed'), class: 'bg-red-100 dark:bg-red-900 border-red-300 dark:border-red-700' },
-    { value: '#8b5cf6', name: t('note.colorPurple'), class: 'bg-purple-100 dark:bg-purple-900 border-purple-300 dark:border-purple-700' },
-  ];
+  const colorMeta: Record<string, { name: string; class: string }> = {
+    '#ffffff': { name: t('note.colorWhite'), class: 'bg-white dark:bg-slate-800 border-gray-300 dark:border-slate-600' },
+    '#f28b82': { name: t('note.colorCoral'), class: 'bg-red-200 dark:bg-red-900 border-red-300 dark:border-red-700' },
+    '#fbbc04': { name: t('note.colorYellow'), class: 'bg-yellow-100 dark:bg-yellow-900 border-yellow-300 dark:border-yellow-700' },
+    '#fff475': { name: t('note.colorLemon'), class: 'bg-yellow-50 dark:bg-yellow-900/60 border-yellow-200 dark:border-yellow-700' },
+    '#ccff90': { name: t('note.colorLime'), class: 'bg-lime-100 dark:bg-lime-900 border-lime-300 dark:border-lime-700' },
+    '#a7ffeb': { name: t('note.colorTeal'), class: 'bg-teal-100 dark:bg-teal-900 border-teal-300 dark:border-teal-700' },
+    '#cbf0f8': { name: t('note.colorSky'), class: 'bg-sky-100 dark:bg-sky-900 border-sky-300 dark:border-sky-700' },
+    '#aecbfa': { name: t('note.colorPeriwinkle'), class: 'bg-blue-100 dark:bg-blue-900 border-blue-300 dark:border-blue-700' },
+    '#d7aefb': { name: t('note.colorLavender'), class: 'bg-purple-100 dark:bg-purple-900 border-purple-300 dark:border-purple-700' },
+    '#fdcfe8': { name: t('note.colorPink'), class: 'bg-pink-100 dark:bg-pink-900 border-pink-300 dark:border-pink-700' },
+    '#e6c9a8': { name: t('note.colorSand'), class: 'bg-amber-100 dark:bg-amber-900 border-amber-300 dark:border-amber-700' },
+    '#e8eaed': { name: t('note.colorGray'), class: 'bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-600' },
+  };
+  const colors = NOTE_COLORS.map(value => ({
+    value,
+    name: colorMeta[value]?.name ?? value,
+    class: colorMeta[value]?.class ?? '',
+  }));
 
   useEffect(() => {
     if (note) {
@@ -588,7 +598,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
       return;
     }
     
-    const textValue = newText.slice(0, VALIDATION_LIMITS.ITEM_TEXT_MAX_LENGTH);
+    const textValue = newText.slice(0, VALIDATION.ITEM_TEXT_MAX_LENGTH);
     const updatedItems = items.map(item => {
       if (item.id === itemId) {
         return { ...item, text: textValue };
@@ -608,7 +618,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
       // Set new timeout to save after user stops typing
       saveTimeoutRef.current = setTimeout(async () => {
         await autoSaveNote(updatedItems);
-      }, VALIDATION_LIMITS.AUTO_SAVE_TIMEOUT);
+      }, VALIDATION.AUTO_SAVE_TIMEOUT_MS);
     }
   };
 
@@ -766,6 +776,14 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
     }
   };
 
+  const handleDelete = () => {
+    if (!note || !onDelete) return;
+    if (window.confirm(t('note.deleteConfirm'))) {
+      onDelete(note.id);
+      onClose();
+    }
+  };
+
   const handleToggleCompleted = async () => {
     if (!note) {
       // If creating a new note, just toggle local state
@@ -848,6 +866,16 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
             <div className="flex items-center space-x-2">
               {note && (
                 <>
+                  {isOwner && onShare && (
+                    <button
+                      onClick={() => onShare(note)}
+                      className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                      title={t('note.share')}
+                      aria-label={t('note.share')}
+                    >
+                      <ShareIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+                    </button>
+                  )}
                   <button
                     onClick={handlePinToggle}
                     className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
@@ -876,14 +904,14 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
                       <ArchiveBoxIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
                     )}
                   </button>
-                  {isOwner && onShare && (
+                  {isOwner && onDelete && (
                     <button
-                      onClick={() => onShare(note)}
+                      onClick={handleDelete}
                       className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
-                      title={t('note.share')}
-                      aria-label={t('note.share')}
+                      title={t('note.delete')}
+                      aria-label={t('note.delete')}
                     >
-                      <ShareIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+                      <TrashIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
                     </button>
                   )}
                 </>

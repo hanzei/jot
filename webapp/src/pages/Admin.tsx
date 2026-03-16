@@ -1,10 +1,9 @@
 import { useState, useEffect, useCallback } from 'react';
-import { User, CreateUserRequest } from '@/types';
+import { ROLES, type User, type CreateUserRequest } from '@jot/shared';
 import { useTranslation } from 'react-i18next';
 import { MagnifyingGlassIcon } from '@heroicons/react/24/outline';
 import { admin, auth, isAxiosError } from '@/utils/api';
 import { isAdmin, removeUser, getUser } from '@/utils/auth';
-import { ROLES } from '@/constants/roles';
 import { Navigate, useNavigate } from 'react-router';
 import NavigationHeader from '@/components/NavigationHeader';
 import Sidebar from '@/components/Sidebar';

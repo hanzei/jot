@@ -24,7 +24,7 @@ import { useTheme } from '../theme/ThemeContext';
 import NoteCard from '../components/NoteCard';
 import NoteContextMenu, { ContextMenuViewContext } from '../components/NoteContextMenu';
 import ColorPicker from '../components/ColorPicker';
-import { Note } from '../types';
+import type { Note } from '@jot/shared';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 
 interface NotesListScreenProps {

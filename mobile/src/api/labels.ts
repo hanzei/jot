@@ -1,5 +1,5 @@
 import api from './client';
-import { Label } from '../types';
+import type { Label } from '@jot/shared';
 
 export async function getLabels(): Promise<Label[]> {
   const res = await api.get('/labels');

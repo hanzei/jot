@@ -3,7 +3,7 @@ import { View, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import UserAvatar from './UserAvatar';
 import { useTheme } from '../theme/ThemeContext';
-import type { Collaborator } from '../utils/collaborators';
+import type { Collaborator } from '@jot/shared';
 
 interface TodoItemProps {
   text: string;

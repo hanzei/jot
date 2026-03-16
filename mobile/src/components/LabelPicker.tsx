@@ -13,7 +13,7 @@ import {
   Alert,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { Label } from '../types';
+import type { Label } from '@jot/shared';
 import { useTheme } from '../theme/ThemeContext';
 import { useLabels, useAddLabelToNote, useRemoveLabelFromNote } from '../hooks/useLabels';
 

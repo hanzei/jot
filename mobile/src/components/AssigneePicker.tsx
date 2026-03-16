@@ -10,7 +10,7 @@ import {
 import Ionicons from '@expo/vector-icons/Ionicons';
 import UserAvatar from './UserAvatar';
 import { useTheme } from '../theme/ThemeContext';
-import { Collaborator, displayName } from '../utils/collaborators';
+import { displayName, type Collaborator } from '@jot/shared';
 
 interface AssigneePickerProps {
   visible: boolean;

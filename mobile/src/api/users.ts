@@ -1,5 +1,5 @@
 import api from './client';
-import { User, NoteShare, UserSettings } from '../types';
+import type { User, NoteShare, UserSettings } from '@jot/shared';
 
 export async function getUsers(): Promise<User[]> {
   const res = await api.get('/users');
