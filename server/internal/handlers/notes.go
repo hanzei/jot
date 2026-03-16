@@ -27,6 +27,8 @@ type UserInfo struct {
 	HasProfileIcon bool   `json:"has_profile_icon"`
 }
 
+const queryTrue = "true"
+
 type NotesHandler struct {
 	noteStore *models.NoteStore
 	userStore *models.UserStore
@@ -136,6 +138,7 @@ func (h *NotesHandler) createTodoItems(noteID string, items []CreateNoteItem) (i
 //	@Param		trashed		query		boolean	false	"Return trashed notes"
 //	@Param		search		query		string	false	"Full-text search query"
 //	@Param		label		query		string	false	"Filter by label ID"
+//	@Param		my_todo		query		boolean	false	"Return only notes with todos assigned to current user"
 //	@Success	200			{array}		models.Note
 //	@Failure	401			{string}	string	"unauthorized"
 //	@Router		/notes [get]
@@ -145,12 +148,14 @@ func (h *NotesHandler) GetNotes(w http.ResponseWriter, r *http.Request) (int, er
 		return http.StatusUnauthorized, errors.New("unauthorized")
 	}
 
-	trashed := r.URL.Query().Get("trashed") == "true"
-	archived := r.URL.Query().Get("archived") == "true"
-	search := r.URL.Query().Get("search")
-	labelID := r.URL.Query().Get("label")
+	q := r.URL.Query()
+	trashed := q.Get("trashed") == queryTrue
+	archived := q.Get("archived") == queryTrue
+	search := q.Get("search")
+	labelID := q.Get("label")
+	myTodo := q.Get("my_todo") == queryTrue
 
-	notes, err := h.noteStore.GetByUserID(user.ID, archived, trashed, search, labelID)
+	notes, err := h.noteStore.GetByUserID(user.ID, archived, trashed, search, labelID, myTodo)
 	if err != nil {
 		return http.StatusInternalServerError, err
 	}

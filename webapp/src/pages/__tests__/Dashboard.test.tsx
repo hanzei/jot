@@ -274,7 +274,7 @@ describe('Dashboard', () => {
       await user.type(searchInput, 'search term')
       
       await waitFor(() => {
-        expect(mockGetAll).toHaveBeenCalledWith(false, 'search term', false, '')
+        expect(mockGetAll).toHaveBeenCalledWith(false, 'search term', false, '', false)
       })
     })
 
@@ -293,7 +293,7 @@ describe('Dashboard', () => {
       await user.type(searchInput, specialChars)
       
       await waitFor(() => {
-        expect(mockGetAll).toHaveBeenCalledWith(false, specialChars, false, '')
+        expect(mockGetAll).toHaveBeenCalledWith(false, specialChars, false, '', false)
       })
     })
 
@@ -313,7 +313,7 @@ describe('Dashboard', () => {
       fireEvent.change(searchInput, { target: { value: longQuery } })
 
       await waitFor(() => {
-        expect(mockGetAll).toHaveBeenCalledWith(false, longQuery, false, '')
+        expect(mockGetAll).toHaveBeenCalledWith(false, longQuery, false, '', false)
       })
     })
 
@@ -334,7 +334,7 @@ describe('Dashboard', () => {
 
       // Should have been called with the final value
       await waitFor(() => {
-        expect(mockGetAll).toHaveBeenCalledWith(false, 'abc', false, '')
+        expect(mockGetAll).toHaveBeenCalledWith(false, 'abc', false, '', false)
       })
     })
   })
@@ -355,7 +355,7 @@ describe('Dashboard', () => {
       await user.click(archiveButton)
       
       await waitFor(() => {
-        expect(mockGetAll).toHaveBeenCalledWith(true, '', false, '')
+        expect(mockGetAll).toHaveBeenCalledWith(true, '', false, '', false)
       })
     })
 
@@ -383,7 +383,7 @@ describe('Dashboard', () => {
       renderDashboard(['/dashboard?view=archive'])
       
       await waitFor(() => {
-        expect(mockGetAll).toHaveBeenCalledWith(true, '', false, '')
+        expect(mockGetAll).toHaveBeenCalledWith(true, '', false, '', false)
       })
     })
 
@@ -397,7 +397,7 @@ describe('Dashboard', () => {
       renderDashboard(['/dashboard?view=bin'])
 
       await waitFor(() => {
-        expect(mockGetAll).toHaveBeenCalledWith(false, '', true, '')
+        expect(mockGetAll).toHaveBeenCalledWith(false, '', true, '', false)
       })
 
       // Bin-specific controls should be rendered
@@ -427,7 +427,7 @@ describe('Dashboard', () => {
       renderDashboard(['/dashboard?view=invalid'])
 
       await waitFor(() => {
-        expect(mockGetAll).toHaveBeenCalledWith(false, '', false, '')
+        expect(mockGetAll).toHaveBeenCalledWith(false, '', false, '', false)
       })
     })
   })
@@ -887,7 +887,7 @@ describe('Dashboard', () => {
     await user.click(screen.getByRole('button', { name: 'work' }))
 
     await waitFor(() => {
-      expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-work')
+      expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-work', false)
     })
   })
 
@@ -908,14 +908,14 @@ describe('Dashboard', () => {
     // Select
     await user.click(screen.getByRole('button', { name: 'work' }))
     await waitFor(() => {
-      expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-work')
+      expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-work', false)
     })
 
     // Deselect
     await user.click(screen.getByRole('button', { name: 'work' }))
     await waitFor(() => {
       const calls = mockGetAll.mock.calls
-      expect(calls[calls.length - 1]).toEqual([false, '', false, ''])
+      expect(calls[calls.length - 1]).toEqual([false, '', false, '', false])
     })
   })
 
@@ -944,7 +944,7 @@ describe('Dashboard', () => {
     // The label id is passed to getAll only after the URL param is set and
     // the component re-renders with the new selectedLabelId from useSearchParams
     await waitFor(() => {
-      expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-personal')
+      expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-personal', false)
     })
 
     // Verify the search param was written to the URL
@@ -965,7 +965,7 @@ describe('Dashboard', () => {
 
     await waitFor(() => {
       // Initial load should use the label from URL
-      expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-work')
+      expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-work', false)
     })
 
     await waitFor(() => {
@@ -976,7 +976,7 @@ describe('Dashboard', () => {
     await user.click(screen.getByRole('button', { name: 'work' }))
 
     await waitFor(() => {
-      expect(mockGetAll).toHaveBeenCalledWith(false, '', false, '')
+      expect(mockGetAll).toHaveBeenCalledWith(false, '', false, '', false)
     })
   })
 
@@ -991,7 +991,7 @@ describe('Dashboard', () => {
     )
 
     await waitFor(() => {
-      expect(mockGetAll).toHaveBeenCalledWith(true, '', false, '')
+      expect(mockGetAll).toHaveBeenCalledWith(true, '', false, '', false)
     })
 
     await waitFor(() => {
@@ -1001,7 +1001,7 @@ describe('Dashboard', () => {
     await user.click(screen.getByRole('button', { name: 'work' }))
 
     await waitFor(() => {
-      expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-work')
+      expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-work', false)
     })
   })
 
@@ -1016,7 +1016,7 @@ describe('Dashboard', () => {
     )
 
     await waitFor(() => {
-      expect(mockGetAll).toHaveBeenCalledWith(false, '', true, '')
+      expect(mockGetAll).toHaveBeenCalledWith(false, '', true, '', false)
     })
 
     await waitFor(() => {
@@ -1026,7 +1026,7 @@ describe('Dashboard', () => {
     await user.click(screen.getByRole('button', { name: 'work' }))
 
     await waitFor(() => {
-      expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-work')
+      expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-work', false)
     })
   })
 
@@ -1041,7 +1041,7 @@ describe('Dashboard', () => {
     )
 
     await waitFor(() => {
-      expect(mockGetAll).toHaveBeenCalledWith(false, 'hello', false, '')
+      expect(mockGetAll).toHaveBeenCalledWith(false, 'hello', false, '', false)
     })
 
     await waitFor(() => {
@@ -1051,7 +1051,7 @@ describe('Dashboard', () => {
     await user.click(screen.getByRole('button', { name: 'work' }))
 
     await waitFor(() => {
-      expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-work')
+      expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-work', false)
     })
   })
 
@@ -1092,7 +1092,7 @@ describe('Dashboard', () => {
     )
 
     await waitFor(() => {
-      expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-work')
+      expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-work', false)
     })
 
     const notesButton = screen.getByRole('button', { name: 'Notes' })
@@ -1103,7 +1103,7 @@ describe('Dashboard', () => {
 
     await waitFor(() => {
       expect(notesButton).toHaveAttribute('aria-current', 'page')
-      expect(mockGetAll).toHaveBeenCalledWith(false, '', false, '')
+      expect(mockGetAll).toHaveBeenCalledWith(false, '', false, '', false)
     })
   })
 
@@ -1118,7 +1118,7 @@ describe('Dashboard', () => {
 
     // Should fetch active notes with label, not archived notes
     await waitFor(() => {
-      expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-work')
+      expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-work', false)
     })
 
     // Notes tab should not be highlighted (label is active)
@@ -1149,8 +1149,111 @@ describe('Dashboard', () => {
     await user.click(archiveButton)
 
     await waitFor(() => {
-      expect(mockGetAll).toHaveBeenCalledWith(true, '', false, '')
+      expect(mockGetAll).toHaveBeenCalledWith(true, '', false, '', false)
     })
   })
+  })
+
+  describe('My Todo Filtering', () => {
+    it('renders My Todo tab in sidebar', async () => {
+      renderDashboard()
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'My Todo' })).toBeInTheDocument()
+      })
+    })
+
+    it('clicking My Todo tab calls getAll with myTodo=true', async () => {
+      const user = userEvent.setup()
+      const mockGetAll = vi.mocked(notes.getAll)
+
+      renderDashboard()
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'My Todo' })).toBeInTheDocument()
+      })
+
+      await user.click(screen.getByRole('button', { name: 'My Todo' }))
+
+      await waitFor(() => {
+        expect(mockGetAll).toHaveBeenCalledWith(false, '', false, '', true)
+      })
+    })
+
+    it('loads My Todo view from URL parameter', async () => {
+      const mockGetAll = vi.mocked(notes.getAll)
+
+      renderDashboard(['/dashboard?view=my-todo'])
+
+      await waitFor(() => {
+        expect(mockGetAll).toHaveBeenCalledWith(false, '', false, '', true)
+      })
+    })
+
+    it('shows empty state for My Todo with no assigned notes', async () => {
+      const user = userEvent.setup()
+      vi.mocked(notes.getAll).mockResolvedValue([])
+
+      renderDashboard()
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'My Todo' })).toBeInTheDocument()
+      })
+
+      await user.click(screen.getByRole('button', { name: 'My Todo' }))
+
+      await waitFor(() => {
+        expect(screen.getByText('No notes with todos assigned to you')).toBeInTheDocument()
+      })
+    })
+
+    it('switching from My Todo to Notes clears my_todo filter', async () => {
+      const user = userEvent.setup()
+      const mockGetAll = vi.mocked(notes.getAll)
+
+      renderDashboard(['/dashboard?view=my-todo'])
+
+      await waitFor(() => {
+        expect(mockGetAll).toHaveBeenCalledWith(false, '', false, '', true)
+      })
+
+      await user.click(screen.getByRole('button', { name: 'Notes' }))
+
+      await waitFor(() => {
+        expect(mockGetAll).toHaveBeenCalledWith(false, '', false, '', false)
+      })
+    })
+
+    it('clicking a label from My Todo view clears my_todo and filters by label', async () => {
+      const user = userEvent.setup()
+      const mockGetAll = vi.mocked(notes.getAll)
+
+      const mockLabels: Label[] = [
+        {
+          id: 'label-work',
+          user_id: 'user1',
+          name: 'work',
+          created_at: '2024-01-01T00:00:00Z',
+          updated_at: '2024-01-01T00:00:00Z',
+        },
+      ]
+      vi.mocked(labels.getAll).mockResolvedValue(mockLabels)
+
+      renderDashboard(['/dashboard?view=my-todo'])
+
+      await waitFor(() => {
+        expect(mockGetAll).toHaveBeenCalledWith(false, '', false, '', true)
+      })
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'work' })).toBeInTheDocument()
+      })
+
+      await user.click(screen.getByRole('button', { name: 'work' }))
+
+      await waitFor(() => {
+        expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-work', false)
+      })
+    })
   })
 })

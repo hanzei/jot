@@ -44,9 +44,11 @@
     "searchPlaceholder": "Notizen suchen...",
     "searchAriaLabel": "Notizen suchen",
     "tabNotes": "Notizen",
+    "tabMyTodo": "Meine Aufgaben",
     "tabArchive": "Archiv",
     "tabBin": "Papierkorb",
     "tabAdmin": "Admin",
+    "noMyTodoNotes": "Keine Notizen mit dir zugewiesenen Aufgaben",
     "binInfo": "Notizen im Papierkorb werden nach 7 Tagen gelöscht"
   },
   "settings": {
@@ -237,6 +239,7 @@
     "login": "Anmelden - Jot",
     "register": "Konto erstellen - Jot",
     "notes": "Jot",
+    "myTodo": "Meine Aufgaben - Jot",
     "archive": "Archiv - Jot",
     "bin": "Papierkorb - Jot",
     "admin": "Admin - Jot",

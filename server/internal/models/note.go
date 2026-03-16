@@ -170,7 +170,7 @@ func (s *NoteStore) Create(userID string, title, content string, noteType NoteTy
 	return &note, nil
 }
 
-func buildGetByUserIDQuery(userID string, archived bool, trashed bool, search string, labelID string) (string, []any) {
+func buildGetByUserIDQuery(userID string, archived bool, trashed bool, search string, labelID string, myTodo bool) (string, []any) {
 	var query string
 	var args []any
 	if trashed {
@@ -179,6 +179,13 @@ func buildGetByUserIDQuery(userID string, archived bool, trashed bool, search st
 				  LEFT JOIN note_items ni ON n.id = ni.note_id
 				  WHERE n.user_id = ? AND n.deleted_at IS NOT NULL`
 		args = []any{userID}
+	} else if myTodo {
+		query = `SELECT DISTINCT n.id, n.user_id, n.title, n.content, n.note_type, n.color, n.pinned, n.archived, n.position, n.unpinned_position, n.checked_items_collapsed, n.deleted_at, n.created_at, n.updated_at
+				  FROM notes n
+				  INNER JOIN note_items ni ON n.id = ni.note_id
+				  LEFT JOIN note_shares ns ON n.id = ns.note_id
+				  WHERE (n.user_id = ? OR ns.shared_with_user_id = ?) AND ni.assigned_to = ? AND n.deleted_at IS NULL`
+		args = []any{userID, userID, userID}
 	} else {
 		query = `SELECT DISTINCT n.id, n.user_id, n.title, n.content, n.note_type, n.color, n.pinned, n.archived, n.position, n.unpinned_position, n.checked_items_collapsed, n.deleted_at, n.created_at, n.updated_at
 				  FROM notes n
@@ -200,8 +207,8 @@ func buildGetByUserIDQuery(userID string, archived bool, trashed bool, search st
 	return query, args
 }
 
-func (s *NoteStore) GetByUserID(userID string, archived bool, trashed bool, search string, labelID string) ([]*Note, error) {
-	query, args := buildGetByUserIDQuery(userID, archived, trashed, search, labelID)
+func (s *NoteStore) GetByUserID(userID string, archived bool, trashed bool, search string, labelID string, myTodo bool) ([]*Note, error) {
+	query, args := buildGetByUserIDQuery(userID, archived, trashed, search, labelID, myTodo)
 
 	rows, err := s.db.Query(query, args...)
 	if err != nil {
