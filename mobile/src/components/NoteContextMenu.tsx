@@ -59,18 +59,6 @@ export default function NoteContextMenu({
 
   if (viewContext === 'notes' || viewContext === 'my-todo') {
     actions.push({
-      icon: note.pinned ? 'pin' : 'pin-outline',
-      label: note.pinned ? 'Unpin' : 'Pin',
-      onPress: () => { onClose(); onPin(note); },
-      testId: 'context-pin',
-    });
-    actions.push({
-      icon: 'archive-outline',
-      label: 'Archive',
-      onPress: () => { onClose(); onArchive(note); },
-      testId: 'context-archive',
-    });
-    actions.push({
       icon: 'color-palette-outline',
       label: 'Change color',
       onPress: () => { onClose(); onChangeColor(note); },
@@ -85,6 +73,18 @@ export default function NoteContextMenu({
         testId: 'context-share',
       });
     }
+    actions.push({
+      icon: note.pinned ? 'pin' : 'pin-outline',
+      label: note.pinned ? 'Unpin' : 'Pin',
+      onPress: () => { onClose(); onPin(note); },
+      testId: 'context-pin',
+    });
+    actions.push({
+      icon: 'archive-outline',
+      label: 'Archive',
+      onPress: () => { onClose(); onArchive(note); },
+      testId: 'context-archive',
+    });
     actions.push({
       icon: 'trash-outline',
       label: 'Move to trash',
