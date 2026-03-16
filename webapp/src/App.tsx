@@ -6,29 +6,24 @@ import Dashboard from '@/pages/Dashboard';
 import Admin from '@/pages/Admin';
 import Settings from '@/pages/Settings';
 import { OfflineNotification } from '@/components/OfflineNotification';
-import { isAuthenticated, isAdmin, setUser, setSettings, removeUser } from '@/utils/auth';
+import { isAdmin, setUser, setSettings, removeUser } from '@/utils/auth';
 import { auth } from '@/utils/api';
 import { applyTheme, getThemePreference } from '@/utils/theme';
 
 function App() {
   const [isAuth, setIsAuth] = useState(false);
-  // Start in loading state only when there is a session to validate.
-  const [loading, setLoading] = useState(() => isAuthenticated());
+  const [loading, setLoading] = useState(true);
 
   useEffect(() => {
-    // Apply theme from cached settings immediately (before server response).
     applyTheme(getThemePreference());
 
-    // Listen for OS-level dark mode changes when the user has system theme.
     const mediaQuery = window.matchMedia('(prefers-color-scheme: dark)');
     const handleSystemThemeChange = () => applyTheme(getThemePreference());
     mediaQuery.addEventListener('change', handleSystemThemeChange);
 
-    if (!isAuthenticated()) {
-      // `loading` was already initialised to false for this path; no setState needed.
-      return () => mediaQuery.removeEventListener('change', handleSystemThemeChange);
-    }
-    // Validate session against server to detect expired sessions
+    // Always validate session against the server — the cookie is the source
+    // of truth. localStorage may have been cleared while the session is still
+    // valid (e.g. storage eviction, browser updates, cross-tab logout race).
     auth.me()
       .then((response) => {
         setUser(response.user);
@@ -37,8 +32,6 @@ function App() {
         setIsAuth(true);
       })
       .catch(() => {
-        // 401 is handled by the axios interceptor (clears user, redirects to /login)
-        // For other errors, also treat as unauthenticated
         removeUser();
         setIsAuth(false);
       })

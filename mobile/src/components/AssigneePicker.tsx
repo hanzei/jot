@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import UserAvatar from './UserAvatar';
+import { useTheme } from '../theme/ThemeContext';
 import { displayName, type Collaborator } from '@jot/shared';
 
 interface AssigneePickerProps {
@@ -26,6 +27,8 @@ export default function AssigneePicker({
   onAssign,
   onClose,
 }: AssigneePickerProps) {
+  const { colors } = useTheme();
+
   return (
     <Modal
       visible={visible}
@@ -35,19 +38,19 @@ export default function AssigneePicker({
       testID="assignee-picker-modal"
     >
       <TouchableOpacity
-        style={styles.overlay}
+        style={[styles.overlay, { backgroundColor: colors.overlay }]}
         activeOpacity={1}
         onPress={onClose}
       >
-        <View style={styles.sheet} onStartShouldSetResponder={() => true}>
-          <View style={styles.header}>
-            <Text style={styles.headerTitle}>Assign item</Text>
+        <View style={[styles.sheet, { backgroundColor: colors.sheetBackground }]} onStartShouldSetResponder={() => true}>
+          <View style={[styles.header, { borderBottomColor: colors.borderLight }]}>
+            <Text style={[styles.headerTitle, { color: colors.text }]}>Assign item</Text>
             <TouchableOpacity
               onPress={onClose}
               testID="assignee-picker-close"
               accessibilityLabel="Close"
             >
-              <Ionicons name="close" size={22} color="#666" />
+              <Ionicons name="close" size={22} color={colors.textSecondary} />
             </TouchableOpacity>
           </View>
 
@@ -57,7 +60,7 @@ export default function AssigneePicker({
               return (
                 <TouchableOpacity
                   key={c.userId}
-                  style={[styles.row, isSelected && styles.rowSelected]}
+                  style={[styles.row, { borderBottomColor: colors.borderLight }, isSelected && { backgroundColor: colors.primaryLight }]}
                   onPress={() => {
                     onAssign(isSelected ? '' : c.userId);
                     onClose();
@@ -73,11 +76,11 @@ export default function AssigneePicker({
                     hasProfileIcon={c.hasProfileIcon}
                     size="small"
                   />
-                  <Text style={styles.rowText} numberOfLines={1}>
+                  <Text style={[styles.rowText, { color: colors.text }]} numberOfLines={1}>
                     {displayName(c)}
                   </Text>
                   {isSelected && (
-                    <Ionicons name="checkmark" size={20} color="#2563eb" />
+                    <Ionicons name="checkmark" size={20} color={colors.primary} />
                   )}
                 </TouchableOpacity>
               );
@@ -85,7 +88,7 @@ export default function AssigneePicker({
           </ScrollView>
 
           {currentAssigneeId !== '' && (
-            <View style={styles.unassignSection}>
+            <View style={[styles.unassignSection, { borderTopColor: colors.borderLight }]}>
               <TouchableOpacity
                 style={styles.unassignRow}
                 onPress={() => {
@@ -98,9 +101,9 @@ export default function AssigneePicker({
                 accessibilityState={{ selected: false }}
               >
                 <View style={styles.unassignIcon}>
-                  <Ionicons name="person-remove-outline" size={16} color="#ef4444" />
+                  <Ionicons name="person-remove-outline" size={16} color={colors.error} />
                 </View>
-                <Text style={styles.unassignText}>Unassign</Text>
+                <Text style={[styles.unassignText, { color: colors.error }]}>Unassign</Text>
               </TouchableOpacity>
             </View>
           )}
@@ -113,11 +116,9 @@ export default function AssigneePicker({
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.3)',
     justifyContent: 'flex-end',
   },
   sheet: {
-    backgroundColor: '#fff',
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     paddingBottom: 32,
@@ -130,12 +131,10 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 14,
     borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
   },
   headerTitle: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1a1a1a',
   },
   list: {
     paddingHorizontal: 16,
@@ -146,19 +145,13 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     gap: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#f9fafb',
-  },
-  rowSelected: {
-    backgroundColor: '#eff6ff',
   },
   rowText: {
     flex: 1,
     fontSize: 15,
-    color: '#1a1a1a',
   },
   unassignSection: {
     borderTopWidth: 1,
-    borderTopColor: '#f3f4f6',
     paddingHorizontal: 16,
     paddingTop: 4,
   },
@@ -176,6 +169,5 @@ const styles = StyleSheet.create({
   },
   unassignText: {
     fontSize: 15,
-    color: '#ef4444',
   },
 });

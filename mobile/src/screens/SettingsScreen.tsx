@@ -16,6 +16,7 @@ import { useNavigation } from '@react-navigation/native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as ImagePicker from 'expo-image-picker';
 import { useAuth } from '../store/AuthContext';
+import { useTheme } from '../theme/ThemeContext';
 import { getBaseUrl } from '../api/client';
 import {
   updateMe,
@@ -36,6 +37,7 @@ export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const { user, settings, setUser, setSettings } = useAuth();
+  const { colors } = useTheme();
 
   const [firstName, setFirstName] = useState(user?.first_name ?? '');
   const [lastName, setLastName] = useState(user?.last_name ?? '');
@@ -184,8 +186,8 @@ export default function SettingsScreen() {
     : '';
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top }]}>
-      <View style={styles.header}>
+    <View style={[styles.container, { paddingTop: insets.top, backgroundColor: colors.background }]}>
+      <View style={[styles.header, { borderBottomColor: colors.borderLight, backgroundColor: colors.background }]}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
           style={styles.backButton}
@@ -193,9 +195,9 @@ export default function SettingsScreen() {
           accessibilityLabel="Go back"
           accessibilityRole="button"
         >
-          <Ionicons name="arrow-back" size={24} color="#1a1a1a" />
+          <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Settings</Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Settings</Text>
         <View style={styles.headerSpacer} />
       </View>
 
@@ -209,8 +211,8 @@ export default function SettingsScreen() {
           keyboardShouldPersistTaps="handled"
         >
           {/* Profile Icon */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Profile Icon</Text>
+          <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Profile Icon</Text>
             <View style={styles.profileIconRow}>
               <View>
                 {hasProfileIcon && user ? (
@@ -219,14 +221,14 @@ export default function SettingsScreen() {
                     style={styles.profileAvatar}
                   />
                 ) : (
-                  <View style={styles.profileAvatarFallback}>
+                  <View style={[styles.profileAvatarFallback, { backgroundColor: colors.primary }]}>
                     <Text style={styles.profileAvatarText}>{initials}</Text>
                   </View>
                 )}
               </View>
               <View style={styles.profileIconActions}>
                 <TouchableOpacity
-                  style={styles.uploadButton}
+                  style={[styles.uploadButton, { backgroundColor: colors.primary }]}
                   onPress={handleUploadIcon}
                   disabled={iconUploading || iconDeleting}
                   testID="settings-upload-icon"
@@ -248,57 +250,57 @@ export default function SettingsScreen() {
                     accessibilityLabel="Remove icon"
                     accessibilityRole="button"
                   >
-                    <Text style={styles.removeIconText}>
+                    <Text style={[styles.removeIconText, { color: colors.error }]}>
                       {iconDeleting ? 'Removing...' : 'Remove icon'}
                     </Text>
                   </TouchableOpacity>
                 )}
               </View>
             </View>
-            {iconError !== '' && <Text style={styles.errorText}>{iconError}</Text>}
+            {iconError !== '' && <Text style={[styles.errorText, { color: colors.error }]}>{iconError}</Text>}
           </View>
 
           {/* Account */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Account</Text>
-            <Text style={styles.label}>First Name</Text>
+          <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Account</Text>
+            <Text style={[styles.label, { color: colors.icon }]}>First Name</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.inputBackground }]}
               value={firstName}
               onChangeText={setFirstName}
               placeholder="First name"
-              placeholderTextColor="#999"
+              placeholderTextColor={colors.placeholder}
               autoCapitalize="words"
               accessibilityLabel="First Name"
               testID="settings-first-name"
             />
-            <Text style={styles.label}>Last Name</Text>
+            <Text style={[styles.label, { color: colors.icon }]}>Last Name</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.inputBackground }]}
               value={lastName}
               onChangeText={setLastName}
               placeholder="Last name"
-              placeholderTextColor="#999"
+              placeholderTextColor={colors.placeholder}
               autoCapitalize="words"
               accessibilityLabel="Last Name"
               testID="settings-last-name"
             />
-            <Text style={styles.label}>Username</Text>
+            <Text style={[styles.label, { color: colors.icon }]}>Username</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.inputBackground }]}
               value={username}
               onChangeText={setUsername}
               placeholder="Username"
-              placeholderTextColor="#999"
+              placeholderTextColor={colors.placeholder}
               autoCapitalize="none"
               autoCorrect={false}
               accessibilityLabel="Username"
               testID="settings-username"
             />
-            {profileError !== '' && <Text style={styles.errorText}>{profileError}</Text>}
+            {profileError !== '' && <Text style={[styles.errorText, { color: colors.error }]}>{profileError}</Text>}
             {profileSuccess !== '' && <Text style={styles.successText}>{profileSuccess}</Text>}
             <TouchableOpacity
-              style={[styles.primaryButton, profileSaving && styles.buttonDisabled]}
+              style={[styles.primaryButton, { backgroundColor: colors.primary }, profileSaving && styles.buttonDisabled]}
               onPress={handleSaveProfile}
               disabled={profileSaving}
               testID="settings-save-profile"
@@ -312,11 +314,11 @@ export default function SettingsScreen() {
           </View>
 
           {/* Change Password */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Change Password</Text>
-            <Text style={styles.label}>Current Password</Text>
+          <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Change Password</Text>
+            <Text style={[styles.label, { color: colors.icon }]}>Current Password</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.inputBackground }]}
               value={currentPassword}
               onChangeText={setCurrentPassword}
               placeholder=""
@@ -325,21 +327,21 @@ export default function SettingsScreen() {
               accessibilityLabel="Current Password"
               testID="settings-current-password"
             />
-            <Text style={styles.label}>New Password</Text>
+            <Text style={[styles.label, { color: colors.icon }]}>New Password</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.inputBackground }]}
               value={newPassword}
               onChangeText={setNewPassword}
               placeholder="At least 4 characters"
-              placeholderTextColor="#999"
+              placeholderTextColor={colors.placeholder}
               secureTextEntry
               autoCapitalize="none"
               accessibilityLabel="New Password"
               testID="settings-new-password"
             />
-            <Text style={styles.label}>Confirm New Password</Text>
+            <Text style={[styles.label, { color: colors.icon }]}>Confirm New Password</Text>
             <TextInput
-              style={styles.input}
+              style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.inputBackground }]}
               value={confirmPassword}
               onChangeText={setConfirmPassword}
               placeholder=""
@@ -348,10 +350,10 @@ export default function SettingsScreen() {
               accessibilityLabel="Confirm New Password"
               testID="settings-confirm-password"
             />
-            {passwordError !== '' && <Text style={styles.errorText}>{passwordError}</Text>}
+            {passwordError !== '' && <Text style={[styles.errorText, { color: colors.error }]}>{passwordError}</Text>}
             {passwordSuccess !== '' && <Text style={styles.successText}>{passwordSuccess}</Text>}
             <TouchableOpacity
-              style={[styles.primaryButton, passwordSaving && styles.buttonDisabled]}
+              style={[styles.primaryButton, { backgroundColor: colors.primary }, passwordSaving && styles.buttonDisabled]}
               onPress={handleChangePassword}
               disabled={passwordSaving}
               testID="settings-change-password"
@@ -365,40 +367,44 @@ export default function SettingsScreen() {
           </View>
 
           {/* Appearance */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Appearance</Text>
-            <Text style={styles.label}>App theme</Text>
+          <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Appearance</Text>
+            <Text style={[styles.label, { color: colors.icon }]}>App theme</Text>
             <View style={styles.themeOptions} accessibilityRole="radiogroup" accessibilityLabel="Theme">
-              {THEME_OPTIONS.map((option) => (
-                <TouchableOpacity
-                  key={option.value}
-                  style={[
-                    styles.themeOption,
-                    themePref === option.value && styles.themeOptionActive,
-                  ]}
-                  onPress={() => handleThemeChange(option.value)}
-                  testID={`settings-theme-${option.value}`}
-                  accessibilityLabel={option.label}
-                  accessibilityRole="radio"
-                  accessibilityState={{ checked: themePref === option.value }}
-                >
-                  <Text
+              {THEME_OPTIONS.map((option) => {
+                const isActive = themePref === option.value;
+                return (
+                  <TouchableOpacity
+                    key={option.value}
                     style={[
-                      styles.themeOptionText,
-                      themePref === option.value && styles.themeOptionTextActive,
+                      styles.themeOption,
+                      { borderColor: colors.border, backgroundColor: colors.inputBackground },
+                      isActive && { borderColor: colors.primary, backgroundColor: colors.primaryLight },
                     ]}
+                    onPress={() => handleThemeChange(option.value)}
+                    testID={`settings-theme-${option.value}`}
+                    accessibilityLabel={option.label}
+                    accessibilityRole="radio"
+                    accessibilityState={{ checked: isActive }}
                   >
-                    {option.label}
-                  </Text>
-                </TouchableOpacity>
-              ))}
+                    <Text
+                      style={[
+                        styles.themeOptionText, { color: colors.icon },
+                        isActive && { color: colors.primary, fontWeight: '600' },
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
             </View>
-            {themeError !== '' && <Text style={styles.errorText}>{themeError}</Text>}
+            {themeError !== '' && <Text style={[styles.errorText, { color: colors.error }]}>{themeError}</Text>}
           </View>
 
           {/* About */}
-          <View style={styles.section}>
-            <Text style={styles.sectionTitle}>About</Text>
+          <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>About</Text>
             <TouchableOpacity
               style={styles.aboutToggle}
               onPress={() => {
@@ -409,18 +415,18 @@ export default function SettingsScreen() {
               accessibilityLabel="About Jot"
               accessibilityRole="button"
             >
-              <Text style={styles.aboutToggleText}>About Jot</Text>
+              <Text style={[styles.aboutToggleText, { color: colors.icon }]}>About Jot</Text>
               <Ionicons
                 name={aboutExpanded ? 'chevron-up' : 'chevron-down'}
                 size={20}
-                color="#666"
+                color={colors.textSecondary}
               />
             </TouchableOpacity>
             {aboutExpanded && (
               <View style={styles.aboutContent}>
                 {user && (
                   <View style={styles.aboutSection}>
-                    <Text style={styles.aboutSectionTitle}>Client Info</Text>
+                    <Text style={[styles.aboutSectionTitle, { color: colors.textMuted }]}>Client Info</Text>
                     <AboutRow label="Username" value={user.username} />
                     <AboutRow label="User ID" value={user.id} />
                     <AboutRow label="Role" value={user.role} />
@@ -430,11 +436,11 @@ export default function SettingsScreen() {
                     />
                   </View>
                 )}
-                <View style={styles.aboutDivider} />
+                <View style={[styles.aboutDivider, { backgroundColor: colors.divider }]} />
                 <View style={styles.aboutSection}>
-                  <Text style={styles.aboutSectionTitle}>Server Info</Text>
-                  {aboutLoading && <ActivityIndicator size="small" color="#2563eb" />}
-                  {aboutError !== '' && <Text style={styles.errorText}>{aboutError}</Text>}
+                  <Text style={[styles.aboutSectionTitle, { color: colors.textMuted }]}>Server Info</Text>
+                  {aboutLoading && <ActivityIndicator size="small" color={colors.primary} />}
+                  {aboutError !== '' && <Text style={[styles.errorText, { color: colors.error }]}>{aboutError}</Text>}
                   {aboutInfo && (
                     <>
                       <AboutRow label="Version" value={aboutInfo.version} />
@@ -466,10 +472,11 @@ function formatDate(iso: string): string {
 }
 
 function AboutRow({ label, value }: { label: string; value: string }) {
+  const { colors } = useTheme();
   return (
     <View style={styles.aboutRow}>
-      <Text style={styles.aboutLabel}>{label}</Text>
-      <Text style={styles.aboutValue} numberOfLines={1}>{value}</Text>
+      <Text style={[styles.aboutLabel, { color: colors.textMuted }]}>{label}</Text>
+      <Text style={[styles.aboutValue, { color: colors.text }]} numberOfLines={1}>{value}</Text>
     </View>
   );
 }
@@ -477,7 +484,6 @@ function AboutRow({ label, value }: { label: string; value: string }) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
   },
   flex: {
     flex: 1,
@@ -488,8 +494,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 8,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
-    backgroundColor: '#f9fafb',
   },
   backButton: {
     padding: 8,
@@ -498,7 +502,6 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 18,
     fontWeight: '600',
-    color: '#1a1a1a',
     textAlign: 'center',
   },
   headerSpacer: {
@@ -509,37 +512,29 @@ const styles = StyleSheet.create({
     gap: 16,
   },
   section: {
-    backgroundColor: '#fff',
     borderRadius: 12,
     padding: 16,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
   },
   sectionTitle: {
     fontSize: 17,
     fontWeight: '600',
-    color: '#1a1a1a',
     marginBottom: 16,
   },
   label: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#444',
     marginBottom: 6,
     marginTop: 12,
   },
   input: {
     borderWidth: 1,
-    borderColor: '#e5e7eb',
     borderRadius: 8,
     paddingHorizontal: 12,
     paddingVertical: 10,
     fontSize: 15,
-    color: '#1a1a1a',
-    backgroundColor: '#f9fafb',
   },
   primaryButton: {
-    backgroundColor: '#2563eb',
     borderRadius: 8,
     paddingVertical: 12,
     alignItems: 'center',
@@ -554,7 +549,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   errorText: {
-    color: '#ef4444',
     fontSize: 13,
     marginTop: 8,
   },
@@ -572,14 +566,11 @@ const styles = StyleSheet.create({
     width: 64,
     height: 64,
     borderRadius: 32,
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
   },
   profileAvatarFallback: {
     width: 64,
     height: 64,
     borderRadius: 32,
-    backgroundColor: '#2563eb',
     justifyContent: 'center',
     alignItems: 'center',
   },
@@ -592,7 +583,6 @@ const styles = StyleSheet.create({
     gap: 8,
   },
   uploadButton: {
-    backgroundColor: '#2563eb',
     borderRadius: 8,
     paddingHorizontal: 16,
     paddingVertical: 8,
@@ -607,7 +597,6 @@ const styles = StyleSheet.create({
     paddingVertical: 4,
   },
   removeIconText: {
-    color: '#ef4444',
     fontSize: 14,
     fontWeight: '500',
   },
@@ -618,24 +607,13 @@ const styles = StyleSheet.create({
   },
   themeOption: {
     borderWidth: 1,
-    borderColor: '#e5e7eb',
     borderRadius: 8,
     paddingHorizontal: 16,
     paddingVertical: 10,
-    backgroundColor: '#f9fafb',
-  },
-  themeOptionActive: {
-    borderColor: '#2563eb',
-    backgroundColor: '#eff6ff',
   },
   themeOptionText: {
     fontSize: 14,
-    color: '#444',
     fontWeight: '500',
-  },
-  themeOptionTextActive: {
-    color: '#2563eb',
-    fontWeight: '600',
   },
   aboutToggle: {
     flexDirection: 'row',
@@ -645,7 +623,6 @@ const styles = StyleSheet.create({
   },
   aboutToggleText: {
     fontSize: 15,
-    color: '#444',
     fontWeight: '500',
   },
   aboutContent: {
@@ -657,14 +634,12 @@ const styles = StyleSheet.create({
   aboutSectionTitle: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#999',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginBottom: 4,
   },
   aboutDivider: {
     height: 1,
-    backgroundColor: '#f3f4f6',
     marginVertical: 12,
   },
   aboutRow: {
@@ -675,12 +650,10 @@ const styles = StyleSheet.create({
   },
   aboutLabel: {
     fontSize: 13,
-    color: '#999',
     flexShrink: 0,
   },
   aboutValue: {
     fontSize: 13,
-    color: '#1a1a1a',
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
     flexShrink: 1,
     textAlign: 'right',

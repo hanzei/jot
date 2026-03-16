@@ -12,7 +12,7 @@ api.interceptors.response.use(
   (error) => {
     if (error.response?.status === 401) {
       const url = error.config?.url || '';
-      const isAuthEndpoint = url === '/login' || url === '/register';
+      const isAuthEndpoint = url === '/login' || url === '/register' || url === '/me';
       if (!isAuthEndpoint) {
         localStorage.removeItem('user');
         localStorage.removeItem('settings');
