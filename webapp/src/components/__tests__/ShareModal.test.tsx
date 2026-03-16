@@ -234,7 +234,7 @@ describe('ShareModal', () => {
     it('shows error message on 400 (cannot share with yourself)', async () => {
       mockUsersSearch.mockResolvedValue([mockUser2])
       // The source checks status === 400 && data?.includes('yourself')
-      mockShare.mockRejectedValue({ response: { status: 400, data: 'cannot share note with yourself' } })
+      mockShare.mockRejectedValue({ response: { status: 400, data: 'cannot share with self' } })
       const user = userEvent.setup()
       render(<ShareModal {...defaultProps} />)
 

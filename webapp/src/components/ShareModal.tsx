@@ -111,7 +111,7 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
         setError(t('share.userNotFound'));
       } else if (axiosError.response?.status === 409) {
         setError(t('share.alreadyShared'));
-      } else if (axiosError.response?.status === 400 && axiosError.response?.data?.includes('yourself')) {
+      } else if (axiosError.response?.status === 400 && axiosError.response?.data?.includes('self')) {
         setError(t('share.cannotShareSelf'));
       } else {
         setError(t('share.failedShare'));
