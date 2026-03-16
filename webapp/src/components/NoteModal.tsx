@@ -62,6 +62,7 @@ interface NoteModalProps {
   onSave: () => void;
   onRefresh?: () => void;
   onShare?: (note: Note) => void;
+  onDelete?: (noteId: string) => void;
   isOwner?: boolean;
   usersById?: Map<string, User>;
   currentUserId?: string;
@@ -222,7 +223,7 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
   );
 }
 
-export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, isOwner = true, usersById, currentUserId }: NoteModalProps) {
+export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, onDelete, isOwner = true, usersById, currentUserId }: NoteModalProps) {
   const { t, i18n } = useTranslation();
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
@@ -766,6 +767,14 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
     }
   };
 
+  const handleDelete = () => {
+    if (!note || !onDelete) return;
+    if (window.confirm(t('note.deleteConfirm'))) {
+      onDelete(note.id);
+      onClose();
+    }
+  };
+
   const handleToggleCompleted = async () => {
     if (!note) {
       // If creating a new note, just toggle local state
@@ -848,6 +857,16 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
             <div className="flex items-center space-x-2">
               {note && (
                 <>
+                  {isOwner && onShare && (
+                    <button
+                      onClick={() => onShare(note)}
+                      className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                      title={t('note.share')}
+                      aria-label={t('note.share')}
+                    >
+                      <ShareIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+                    </button>
+                  )}
                   <button
                     onClick={handlePinToggle}
                     className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
@@ -876,14 +895,14 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
                       <ArchiveBoxIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
                     )}
                   </button>
-                  {isOwner && onShare && (
+                  {isOwner && onDelete && (
                     <button
-                      onClick={() => onShare(note)}
+                      onClick={handleDelete}
                       className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
-                      title={t('note.share')}
-                      aria-label={t('note.share')}
+                      title={t('note.delete')}
+                      aria-label={t('note.delete')}
                     >
-                      <ShareIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+                      <TrashIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
                     </button>
                   )}
                 </>
