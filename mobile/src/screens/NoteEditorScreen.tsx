@@ -210,9 +210,6 @@ export default function NoteEditorScreen() {
         setNoteId(newNote.id);
         setHasCreated(true);
         setSaveError(null);
-        if (newNote.items) {
-          setItems(toLocalItems(newNote.items));
-        }
       } else {
         const updateData: UpdateNoteRequest = {
           title: currentTitle,
@@ -225,15 +222,12 @@ export default function NoteEditorScreen() {
         if (currentNoteType === 'todo') {
           updateData.items = serializeItems(currentItems);
         }
-        const updated = await updateMutateRef.current({
+        await updateMutateRef.current({
           id: currentNoteId,
           data: updateData,
         });
         if (!isMountedRef.current || unmounting) return;
         setSaveError(null);
-        if (updated.items) {
-          setItems(toLocalItems(updated.items));
-        }
       }
     })();
 
