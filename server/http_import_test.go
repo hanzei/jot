@@ -3,7 +3,6 @@ package main
 import (
 	"archive/zip"
 	"bytes"
-	"context"
 	"encoding/json"
 	"mime/multipart"
 	"net/http"
@@ -45,11 +44,10 @@ func buildZip(t *testing.T, files map[string][]byte) []byte {
 
 func TestImportSingleJSONFile(t *testing.T) {
 	ts := setupTestServer(t)
-	ctx := context.Background()
 	user := ts.createTestUser(t, "importuser1", "password123", false)
 
 	noteData := marshalKeepNote(t, keepNoteJSON{Title: "Imported Note", TextContent: "some content"})
-	result, err := user.Client.ImportNotes(ctx, "note.json", bytes.NewReader(noteData))
+	result, err := user.Client.ImportNotes(t.Context(), "note.json", bytes.NewReader(noteData))
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.Imported)
 	assert.Equal(t, 0, result.Skipped)
@@ -57,7 +55,6 @@ func TestImportSingleJSONFile(t *testing.T) {
 
 func TestImportZIPWithMultipleFiles(t *testing.T) {
 	ts := setupTestServer(t)
-	ctx := context.Background()
 	user := ts.createTestUser(t, "importuser2", "password123", false)
 
 	note1 := marshalKeepNote(t, keepNoteJSON{Title: "Note One", TextContent: "content one"})
@@ -67,14 +64,13 @@ func TestImportZIPWithMultipleFiles(t *testing.T) {
 		"note2.json": note2,
 	})
 
-	result, err := user.Client.ImportNotes(ctx, "export.zip", bytes.NewReader(zipData))
+	result, err := user.Client.ImportNotes(t.Context(), "export.zip", bytes.NewReader(zipData))
 	require.NoError(t, err)
 	assert.Equal(t, 2, result.Imported)
 }
 
 func TestImportTrashedNoteSkipped(t *testing.T) {
 	ts := setupTestServer(t)
-	ctx := context.Background()
 	user := ts.createTestUser(t, "importuser3", "password123", false)
 
 	active := marshalKeepNote(t, keepNoteJSON{Title: "Keep Me", TextContent: "keep"})
@@ -84,7 +80,7 @@ func TestImportTrashedNoteSkipped(t *testing.T) {
 		"trashed.json": trashed,
 	})
 
-	result, err := user.Client.ImportNotes(ctx, "export.zip", bytes.NewReader(zipData))
+	result, err := user.Client.ImportNotes(t.Context(), "export.zip", bytes.NewReader(zipData))
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.Imported)
 	assert.Equal(t, 1, result.Skipped)
@@ -110,20 +106,18 @@ func TestImportMissingFileFieldReturns400(t *testing.T) {
 
 func TestImportInvalidJSONReturns400(t *testing.T) {
 	ts := setupTestServer(t)
-	ctx := context.Background()
 	user := ts.createTestUser(t, "importuser5", "password123", false)
 
-	_, err := user.Client.ImportNotes(ctx, "bad.json", bytes.NewReader([]byte("not valid json")))
+	_, err := user.Client.ImportNotes(t.Context(), "bad.json", bytes.NewReader([]byte("not valid json")))
 	assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 }
 
 func TestImportCorruptZIPReturns400(t *testing.T) {
 	ts := setupTestServer(t)
-	ctx := context.Background()
 	user := ts.createTestUser(t, "importuser6", "password123", false)
 
 	corrupt := []byte{'P', 'K', 0x03, 0x04, 0xDE, 0xAD, 0xBE, 0xEF}
-	_, err := user.Client.ImportNotes(ctx, "bad.zip", bytes.NewReader(corrupt))
+	_, err := user.Client.ImportNotes(t.Context(), "bad.zip", bytes.NewReader(corrupt))
 	assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 }
 
@@ -152,14 +146,13 @@ func TestImportUnauthenticatedReturns401(t *testing.T) {
 
 func TestImportNotesAppearInNotesList(t *testing.T) {
 	ts := setupTestServer(t)
-	ctx := context.Background()
 	user := ts.createTestUser(t, "importuser7", "password123", false)
 
 	noteData := marshalKeepNote(t, keepNoteJSON{Title: "Findable Import", TextContent: "unique text"})
-	_, err := user.Client.ImportNotes(ctx, "note.json", bytes.NewReader(noteData))
+	_, err := user.Client.ImportNotes(t.Context(), "note.json", bytes.NewReader(noteData))
 	require.NoError(t, err)
 
-	notes, err := user.Client.ListNotes(ctx, nil)
+	notes, err := user.Client.ListNotes(t.Context(), nil)
 	require.NoError(t, err)
 
 	found := false

@@ -1,7 +1,6 @@
 package main
 
 import (
-	"context"
 	"net/http"
 	"testing"
 
@@ -13,29 +12,27 @@ import (
 // createAndTrashNote creates a note and moves it to trash.
 func createAndTrashNote(t *testing.T, _ *TestServer, user *TestUser, title string) *client.Note {
 	t.Helper()
-	ctx := context.Background()
-	note, err := user.Client.CreateNote(ctx, &client.CreateNoteRequest{
+	note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
 		Title:    title,
 		NoteType: client.NoteTypeText,
 	})
 	require.NoError(t, err)
-	require.NoError(t, user.Client.DeleteNote(ctx, note.ID))
+	require.NoError(t, user.Client.DeleteNote(t.Context(), note.ID))
 	return note
 }
 
 func TestBinDeleteMovesToTrash(t *testing.T) {
 	ts := setupTestServer(t)
-	ctx := context.Background()
 	user := ts.createTestUser(t, "binuser1", "password123", false)
 
-	note, err := user.Client.CreateNote(ctx, &client.CreateNoteRequest{
+	note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
 		Title: "Bin Test Note", Content: "some content", NoteType: client.NoteTypeText,
 	})
 	require.NoError(t, err)
 
-	require.NoError(t, user.Client.DeleteNote(ctx, note.ID))
+	require.NoError(t, user.Client.DeleteNote(t.Context(), note.ID))
 
-	activeNotes, err := user.Client.ListNotes(ctx, nil)
+	activeNotes, err := user.Client.ListNotes(t.Context(), nil)
 	require.NoError(t, err)
 	for _, n := range activeNotes {
 		assert.NotEqual(t, note.ID, n.ID, "deleted note should not appear in active list")
@@ -44,11 +41,10 @@ func TestBinDeleteMovesToTrash(t *testing.T) {
 
 func TestBinTrashedNotesAppearInTrashList(t *testing.T) {
 	ts := setupTestServer(t)
-	ctx := context.Background()
 	user := ts.createTestUser(t, "binuser2", "password123", false)
 	note := createAndTrashNote(t, ts, user, "Trashed Note")
 
-	trashedNotes, err := user.Client.ListNotes(ctx, &client.ListNotesOptions{Trashed: true})
+	trashedNotes, err := user.Client.ListNotes(t.Context(), &client.ListNotesOptions{Trashed: true})
 	require.NoError(t, err)
 
 	found := false
@@ -64,15 +60,14 @@ func TestBinTrashedNotesAppearInTrashList(t *testing.T) {
 
 func TestBinRestoreMovesToActiveList(t *testing.T) {
 	ts := setupTestServer(t)
-	ctx := context.Background()
 	user := ts.createTestUser(t, "binuser3", "password123", false)
 	note := createAndTrashNote(t, ts, user, "Restore Me")
 
-	restored, err := user.Client.RestoreNote(ctx, note.ID)
+	restored, err := user.Client.RestoreNote(t.Context(), note.ID)
 	require.NoError(t, err)
 	assert.Nil(t, restored.DeletedAt, "deleted_at should be cleared after restore")
 
-	activeNotes, err := user.Client.ListNotes(ctx, nil)
+	activeNotes, err := user.Client.ListNotes(t.Context(), nil)
 	require.NoError(t, err)
 	found := false
 	for _, n := range activeNotes {
@@ -83,7 +78,7 @@ func TestBinRestoreMovesToActiveList(t *testing.T) {
 	}
 	assert.True(t, found, "restored note should appear in active list")
 
-	trashedNotes, err := user.Client.ListNotes(ctx, &client.ListNotesOptions{Trashed: true})
+	trashedNotes, err := user.Client.ListNotes(t.Context(), &client.ListNotesOptions{Trashed: true})
 	require.NoError(t, err)
 	for _, n := range trashedNotes {
 		assert.NotEqual(t, note.ID, n.ID, "restored note should not appear in trash")
@@ -92,19 +87,18 @@ func TestBinRestoreMovesToActiveList(t *testing.T) {
 
 func TestBinPermanentDeleteRemovesNote(t *testing.T) {
 	ts := setupTestServer(t)
-	ctx := context.Background()
 	user := ts.createTestUser(t, "binuser4", "password123", false)
 	note := createAndTrashNote(t, ts, user, "Delete Me Permanently")
 
-	require.NoError(t, user.Client.DeleteNotePermanently(ctx, note.ID))
+	require.NoError(t, user.Client.DeleteNotePermanently(t.Context(), note.ID))
 
-	trashedNotes, err := user.Client.ListNotes(ctx, &client.ListNotesOptions{Trashed: true})
+	trashedNotes, err := user.Client.ListNotes(t.Context(), &client.ListNotesOptions{Trashed: true})
 	require.NoError(t, err)
 	for _, n := range trashedNotes {
 		assert.NotEqual(t, note.ID, n.ID)
 	}
 
-	activeNotes, err := user.Client.ListNotes(ctx, nil)
+	activeNotes, err := user.Client.ListNotes(t.Context(), nil)
 	require.NoError(t, err)
 	for _, n := range activeNotes {
 		assert.NotEqual(t, note.ID, n.ID)
@@ -113,52 +107,48 @@ func TestBinPermanentDeleteRemovesNote(t *testing.T) {
 
 func TestBinRestoreNonTrashedReturns404(t *testing.T) {
 	ts := setupTestServer(t)
-	ctx := context.Background()
 	user := ts.createTestUser(t, "binuser5", "password123", false)
 
-	note, err := user.Client.CreateNote(ctx, &client.CreateNoteRequest{
+	note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
 		Title: "Active Note", NoteType: client.NoteTypeText,
 	})
 	require.NoError(t, err)
 
-	_, err = user.Client.RestoreNote(ctx, note.ID)
+	_, err = user.Client.RestoreNote(t.Context(), note.ID)
 	assert.Equal(t, http.StatusNotFound, client.StatusCode(err))
 }
 
 func TestBinPermanentDeleteNonTrashedReturns404(t *testing.T) {
 	ts := setupTestServer(t)
-	ctx := context.Background()
 	user := ts.createTestUser(t, "binuser6", "password123", false)
 
-	note, err := user.Client.CreateNote(ctx, &client.CreateNoteRequest{
+	note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
 		Title: "Active Note 2", NoteType: client.NoteTypeText,
 	})
 	require.NoError(t, err)
 
-	err = user.Client.DeleteNotePermanently(ctx, note.ID)
+	err = user.Client.DeleteNotePermanently(t.Context(), note.ID)
 	assert.Equal(t, http.StatusNotFound, client.StatusCode(err))
 }
 
 func TestBinNonOwnerCannotRestore(t *testing.T) {
 	ts := setupTestServer(t)
-	ctx := context.Background()
 	owner := ts.createTestUser(t, "binowner", "password123", false)
 	other := ts.createTestUser(t, "binother", "password123", false)
 
 	note := createAndTrashNote(t, ts, owner, "Owner Note")
 
-	_, err := other.Client.RestoreNote(ctx, note.ID)
+	_, err := other.Client.RestoreNote(t.Context(), note.ID)
 	assert.Equal(t, http.StatusNotFound, client.StatusCode(err))
 }
 
 func TestBinNonOwnerCannotPermanentDelete(t *testing.T) {
 	ts := setupTestServer(t)
-	ctx := context.Background()
 	owner := ts.createTestUser(t, "binowner2", "password123", false)
 	other := ts.createTestUser(t, "binother2", "password123", false)
 
 	note := createAndTrashNote(t, ts, owner, "Owner Note 2")
 
-	err := other.Client.DeleteNotePermanently(ctx, note.ID)
+	err := other.Client.DeleteNotePermanently(t.Context(), note.ID)
 	assert.Equal(t, http.StatusNotFound, client.StatusCode(err))
 }

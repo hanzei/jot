@@ -20,9 +20,9 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hanzei/jot/server/client"
 	"github.com/hanzei/jot/server/internal/models"
 	"github.com/hanzei/jot/server/internal/server"
-	"github.com/hanzei/jot/server/client"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -74,14 +74,9 @@ func (ts *TestServer) newClient() *client.Client {
 
 func (ts *TestServer) createTestUser(t *testing.T, username, password string, isAdmin bool) *TestUser {
 	t.Helper()
-	return ts.createTestUserCtx(context.Background(), t, username, password, isAdmin)
-}
-
-func (ts *TestServer) createTestUserCtx(ctx context.Context, t *testing.T, username, password string, isAdmin bool) *TestUser {
-	t.Helper()
 	c := ts.newClient()
 
-	auth, err := c.Register(ctx, username, password)
+	auth, err := c.Register(t.Context(), username, password)
 	require.NoError(t, err)
 
 	if isAdmin {
@@ -99,11 +94,10 @@ func (ts *TestServer) createTestUserCtx(ctx context.Context, t *testing.T, usern
 // Probe endpoint tests
 func TestProbeEndpoints(t *testing.T) {
 	ts := setupTestServer(t)
-	ctx := context.Background()
 	c := ts.newClient()
 
 	t.Run("health path falls back to spa", func(t *testing.T) {
-		req, err := http.NewRequestWithContext(ctx, http.MethodGet, ts.HTTPServer.URL+"/health", nil)
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, ts.HTTPServer.URL+"/health", nil)
 		require.NoError(t, err)
 		resp, err := c.HTTPClient().Do(req)
 		require.NoError(t, err)
@@ -114,7 +108,7 @@ func TestProbeEndpoints(t *testing.T) {
 	})
 
 	t.Run("unknown api route still returns not found", func(t *testing.T) {
-		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, ts.HTTPServer.URL+"/api/v1/nonexistent", nil)
+		req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, ts.HTTPServer.URL+"/api/v1/nonexistent", nil)
 		resp, err := c.HTTPClient().Do(req)
 		require.NoError(t, err)
 		defer resp.Body.Close()
@@ -122,7 +116,7 @@ func TestProbeEndpoints(t *testing.T) {
 	})
 
 	t.Run("unknown api namespace returns not found", func(t *testing.T) {
-		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, ts.HTTPServer.URL+"/api/v2/nonexistent", nil)
+		req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, ts.HTTPServer.URL+"/api/v2/nonexistent", nil)
 		resp, err := c.HTTPClient().Do(req)
 		require.NoError(t, err)
 		defer resp.Body.Close()
@@ -130,7 +124,7 @@ func TestProbeEndpoints(t *testing.T) {
 	})
 
 	t.Run("bare api path returns not found", func(t *testing.T) {
-		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, ts.HTTPServer.URL+"/api", nil)
+		req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, ts.HTTPServer.URL+"/api", nil)
 		resp, err := c.HTTPClient().Do(req)
 		require.NoError(t, err)
 		defer resp.Body.Close()
@@ -138,7 +132,7 @@ func TestProbeEndpoints(t *testing.T) {
 	})
 
 	t.Run("livez endpoint", func(t *testing.T) {
-		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, ts.HTTPServer.URL+"/livez", nil)
+		req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, ts.HTTPServer.URL+"/livez", nil)
 		resp, err := c.HTTPClient().Do(req)
 		require.NoError(t, err)
 		defer resp.Body.Close()
@@ -148,7 +142,7 @@ func TestProbeEndpoints(t *testing.T) {
 	})
 
 	t.Run("readyz endpoint", func(t *testing.T) {
-		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, ts.HTTPServer.URL+"/readyz", nil)
+		req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, ts.HTTPServer.URL+"/readyz", nil)
 		resp, err := c.HTTPClient().Do(req)
 		require.NoError(t, err)
 		defer resp.Body.Close()
@@ -159,7 +153,7 @@ func TestProbeEndpoints(t *testing.T) {
 
 	t.Run("readyz returns 503 when shutting down", func(t *testing.T) {
 		ts.Server.BeginShutdown()
-		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, ts.HTTPServer.URL+"/readyz", nil)
+		req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, ts.HTTPServer.URL+"/readyz", nil)
 		resp, err := c.HTTPClient().Do(req)
 		require.NoError(t, err)
 		defer resp.Body.Close()
@@ -172,7 +166,7 @@ func TestProbeEndpoints(t *testing.T) {
 		tsWithClosedDB := setupTestServer(t)
 		require.NoError(t, tsWithClosedDB.Server.GetDB().Close())
 
-		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, tsWithClosedDB.HTTPServer.URL+"/readyz", nil)
+		req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, tsWithClosedDB.HTTPServer.URL+"/readyz", nil)
 		resp, err := tsWithClosedDB.newClient().HTTPClient().Do(req)
 		require.NoError(t, err)
 		defer resp.Body.Close()
@@ -185,93 +179,88 @@ func TestProbeEndpoints(t *testing.T) {
 // Auth endpoint tests
 func TestRegisterEndpoint(t *testing.T) {
 	ts := setupTestServer(t)
-	ctx := context.Background()
 
 	t.Run("valid registration", func(t *testing.T) {
 		c := ts.newClient()
-		auth, err := c.Register(ctx, "testuser", "password123")
+		auth, err := c.Register(t.Context(), "testuser", "password123")
 		require.NoError(t, err)
 		assert.NotNil(t, auth.User)
 	})
 
 	t.Run("duplicate username", func(t *testing.T) {
 		c1 := ts.newClient()
-		_, err := c1.Register(ctx, "duplicate", "password123")
+		_, err := c1.Register(t.Context(), "duplicate", "password123")
 		require.NoError(t, err)
 
 		c2 := ts.newClient()
-		_, err = c2.Register(ctx, "duplicate", "password123")
+		_, err = c2.Register(t.Context(), "duplicate", "password123")
 		assert.Equal(t, http.StatusConflict, client.StatusCode(err))
 	})
 
 	t.Run("invalid username", func(t *testing.T) {
 		c := ts.newClient()
-		_, err := c.Register(ctx, "x", "password123")
+		_, err := c.Register(t.Context(), "x", "password123")
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 }
 
 func TestLoginEndpoint(t *testing.T) {
 	ts := setupTestServer(t)
-	ctx := context.Background()
 
-	// Register a user first
 	c := ts.newClient()
-	_, err := c.Register(ctx, "loginuser", "password123")
+	_, err := c.Register(t.Context(), "loginuser", "password123")
 	require.NoError(t, err)
 
 	t.Run("valid login", func(t *testing.T) {
 		loginClient := ts.newClient()
-		auth, err := loginClient.Login(ctx, "loginuser", "password123")
+		auth, err := loginClient.Login(t.Context(), "loginuser", "password123")
 		require.NoError(t, err)
 		assert.NotNil(t, auth.User)
 
-		me, err := loginClient.Me(ctx)
+		me, err := loginClient.Me(t.Context())
 		require.NoError(t, err)
 		assert.Equal(t, auth.User.ID, me.User.ID)
 	})
 
 	t.Run("invalid credentials", func(t *testing.T) {
 		loginClient := ts.newClient()
-		_, err := loginClient.Login(ctx, "loginuser", "wrongpassword")
+		_, err := loginClient.Login(t.Context(), "loginuser", "wrongpassword")
 		assert.Equal(t, http.StatusUnauthorized, client.StatusCode(err))
 	})
 }
 
 func TestLogoutEndpoint(t *testing.T) {
 	ts := setupTestServer(t)
-	ctx := context.Background()
 	user := ts.createTestUser(t, "logoutuser", "password123", false)
 
-	_, err := user.Client.Me(ctx)
+	_, err := user.Client.Me(t.Context())
 	require.NoError(t, err)
 
-	require.NoError(t, user.Client.Logout(ctx))
+	require.NoError(t, user.Client.Logout(t.Context()))
 
-	_, err = user.Client.Me(ctx)
+	_, err = user.Client.Me(t.Context())
 	assert.Equal(t, http.StatusUnauthorized, client.StatusCode(err))
 }
 
 // Notes endpoint tests
 func TestNotesEndpoints(t *testing.T) {
 	ts := setupTestServer(t)
-	ctx := context.Background()
 	user := ts.createTestUser(t, "user", "password123", false)
 
 	t.Run("unauthorized access", func(t *testing.T) {
 		c := ts.newClient()
-		_, err := c.ListNotes(ctx, nil)
+		_, err := c.ListNotes(t.Context(), nil)
 		assert.Equal(t, http.StatusUnauthorized, client.StatusCode(err))
 	})
 
 	t.Run("get empty notes list", func(t *testing.T) {
-		notes, err := user.Client.ListNotes(ctx, nil)
+		notes, err := user.Client.ListNotes(t.Context(), nil)
 		require.NoError(t, err)
 		assert.Empty(t, notes)
 	})
 
 	t.Run("create note", func(t *testing.T) {
-		note, err := user.Client.CreateNote(ctx, &client.CreateNoteRequest{
+		note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
 			Title:    "Test Note",
 			Content:  "This is a test note",
 			NoteType: client.NoteTypeText,
@@ -281,21 +270,20 @@ func TestNotesEndpoints(t *testing.T) {
 		assert.Equal(t, "Test Note", note.Title)
 	})
 
-	// Create a note for further tests
-	created, err := user.Client.CreateNote(ctx, &client.CreateNoteRequest{
+	created, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
 		Title:   "Test Note",
 		Content: "Test Content",
 	})
 	require.NoError(t, err)
 
 	t.Run("get specific note", func(t *testing.T) {
-		note, err := user.Client.GetNote(ctx, created.ID)
+		note, err := user.Client.GetNote(t.Context(), created.ID)
 		require.NoError(t, err)
 		assert.Equal(t, "Test Note", note.Title)
 	})
 
 	t.Run("update note", func(t *testing.T) {
-		updated, err := user.Client.UpdateNote(ctx, created.ID, &client.UpdateNoteRequest{
+		updated, err := user.Client.UpdateNote(t.Context(), created.ID, &client.UpdateNoteRequest{
 			Title:   "Updated Title",
 			Content: "Updated Content",
 			Pinned:  true,
@@ -306,9 +294,9 @@ func TestNotesEndpoints(t *testing.T) {
 	})
 
 	t.Run("delete note", func(t *testing.T) {
-		require.NoError(t, user.Client.DeleteNote(ctx, created.ID))
+		require.NoError(t, user.Client.DeleteNote(t.Context(), created.ID))
 
-		_, err := user.Client.GetNote(ctx, created.ID)
+		_, err := user.Client.GetNote(t.Context(), created.ID)
 		assert.Equal(t, http.StatusNotFound, client.StatusCode(err))
 	})
 }
@@ -316,37 +304,36 @@ func TestNotesEndpoints(t *testing.T) {
 // Admin endpoint tests
 func TestAdminEndpoints(t *testing.T) {
 	ts := setupTestServer(t)
-	ctx := context.Background()
 	adminUser := ts.createTestUser(t, "admin", "password123", true)
 	user := ts.createTestUser(t, "user", "password123", false)
 
 	t.Run("get users as admin", func(t *testing.T) {
-		users, err := adminUser.Client.AdminListUsers(ctx)
+		users, err := adminUser.Client.AdminListUsers(t.Context())
 		require.NoError(t, err)
 		assert.Len(t, users, 2)
 	})
 
 	t.Run("get users as non-admin", func(t *testing.T) {
-		_, err := user.Client.AdminListUsers(ctx)
+		_, err := user.Client.AdminListUsers(t.Context())
 		assert.Equal(t, http.StatusForbidden, client.StatusCode(err))
 	})
 
 	t.Run("create user as admin", func(t *testing.T) {
-		created, err := adminUser.Client.AdminCreateUser(ctx, "newuser", "password123", client.RoleUser)
+		created, err := adminUser.Client.AdminCreateUser(t.Context(), "newuser", "password123", client.RoleUser)
 		require.NoError(t, err)
 		assert.Equal(t, "newuser", created.Username)
 	})
 
 	t.Run("create user as non-admin", func(t *testing.T) {
-		_, err := user.Client.AdminCreateUser(ctx, "hacker", "password123", client.RoleAdmin)
+		_, err := user.Client.AdminCreateUser(t.Context(), "hacker", "password123", client.RoleAdmin)
 		assert.Equal(t, http.StatusForbidden, client.StatusCode(err))
 	})
 
 	t.Run("delete user as admin", func(t *testing.T) {
-		deleteTarget := ts.createTestUserCtx(ctx, t, "todelete", "password123", false)
-		require.NoError(t, adminUser.Client.AdminDeleteUser(ctx, deleteTarget.User.ID))
+		deleteTarget := ts.createTestUser(t, "todelete", "password123", false)
+		require.NoError(t, adminUser.Client.AdminDeleteUser(t.Context(), deleteTarget.User.ID))
 
-		users, err := adminUser.Client.AdminListUsers(ctx)
+		users, err := adminUser.Client.AdminListUsers(t.Context())
 		require.NoError(t, err)
 		for _, u := range users {
 			assert.NotEqual(t, deleteTarget.User.ID, u.ID)
@@ -354,74 +341,73 @@ func TestAdminEndpoints(t *testing.T) {
 	})
 
 	t.Run("delete user as non-admin returns 403", func(t *testing.T) {
-		deleteTarget := ts.createTestUserCtx(ctx, t, "todelete2", "password123", false)
-		err := user.Client.AdminDeleteUser(ctx, deleteTarget.User.ID)
+		deleteTarget := ts.createTestUser(t, "todelete2", "password123", false)
+		err := user.Client.AdminDeleteUser(t.Context(), deleteTarget.User.ID)
 		assert.Equal(t, http.StatusForbidden, client.StatusCode(err))
 	})
 
 	t.Run("admin cannot delete themselves", func(t *testing.T) {
-		err := adminUser.Client.AdminDeleteUser(ctx, adminUser.User.ID)
+		err := adminUser.Client.AdminDeleteUser(t.Context(), adminUser.User.ID)
 		assert.Equal(t, http.StatusForbidden, client.StatusCode(err))
 	})
 
 	t.Run("delete nonexistent user returns 404", func(t *testing.T) {
-		err := adminUser.Client.AdminDeleteUser(ctx, "nonexistentid12345678")
+		err := adminUser.Client.AdminDeleteUser(t.Context(), "nonexistentid12345678")
 		assert.Equal(t, http.StatusNotFound, client.StatusCode(err))
 	})
 }
 
 func TestDeleteUserAdminCanDeleteOtherAdmin(t *testing.T) {
 	ts := setupTestServer(t)
-	ctx := context.Background()
 	admin1 := ts.createTestUser(t, "admin1", "password123", true)
 	admin2 := ts.createTestUser(t, "admin2", "password123", true)
 
-	require.NoError(t, admin1.Client.AdminDeleteUser(ctx, admin2.User.ID))
+	require.NoError(t, admin1.Client.AdminDeleteUser(t.Context(), admin2.User.ID))
 }
 
 func TestUpdateUserEndpoint(t *testing.T) {
 	ts := setupTestServer(t)
-	ctx := context.Background()
 	user := ts.createTestUser(t, "originaluser", "password123", false)
 	other := ts.createTestUser(t, "otheruser", "password123", false)
 
 	t.Run("successful username update", func(t *testing.T) {
 		t.Cleanup(func() {
-			_, err := user.Client.UpdateUser(ctx, &client.UpdateUserRequest{Username: client.Ptr("originaluser")})
+			// t.Context() is already canceled when cleanup runs; use a fresh context.
+			_, err := user.Client.UpdateUser(context.Background(), &client.UpdateUserRequest{Username: client.Ptr("originaluser")})
 			require.NoError(t, err)
 		})
 
-		resp, err := user.Client.UpdateUser(ctx, &client.UpdateUserRequest{Username: client.Ptr("newusername")})
+		resp, err := user.Client.UpdateUser(t.Context(), &client.UpdateUserRequest{Username: client.Ptr("newusername")})
 		require.NoError(t, err)
 		assert.Equal(t, "newusername", resp.User.Username)
 		assert.NotNil(t, resp.Settings)
 	})
 
 	t.Run("duplicate username returns 409", func(t *testing.T) {
-		_, err := user.Client.UpdateUser(ctx, &client.UpdateUserRequest{Username: &other.User.Username})
+		_, err := user.Client.UpdateUser(t.Context(), &client.UpdateUserRequest{Username: &other.User.Username})
 		assert.Equal(t, http.StatusConflict, client.StatusCode(err))
 	})
 
 	t.Run("invalid username format returns 400", func(t *testing.T) {
-		_, err := user.Client.UpdateUser(ctx, &client.UpdateUserRequest{Username: client.Ptr("a")})
+		_, err := user.Client.UpdateUser(t.Context(), &client.UpdateUserRequest{Username: client.Ptr("a")})
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 
 	t.Run("unauthenticated request returns 401", func(t *testing.T) {
 		c := ts.newClient()
-		_, err := c.UpdateUser(ctx, &client.UpdateUserRequest{Username: client.Ptr("hacker")})
+		_, err := c.UpdateUser(t.Context(), &client.UpdateUserRequest{Username: client.Ptr("hacker")})
 		assert.Equal(t, http.StatusUnauthorized, client.StatusCode(err))
 	})
 
 	t.Run("partial update preserves unchanged fields", func(t *testing.T) {
-		resp, err := user.Client.UpdateUser(ctx, &client.UpdateUserRequest{FirstName: client.Ptr("Updated")})
+		resp, err := user.Client.UpdateUser(t.Context(), &client.UpdateUserRequest{FirstName: client.Ptr("Updated")})
 		require.NoError(t, err)
 		assert.Equal(t, "Updated", resp.User.FirstName)
 		assert.Equal(t, "originaluser", resp.User.Username)
 	})
 
 	t.Run("empty body updates nothing and returns current state", func(t *testing.T) {
-		resp, err := user.Client.UpdateUser(ctx, &client.UpdateUserRequest{})
+		resp, err := user.Client.UpdateUser(t.Context(), &client.UpdateUserRequest{})
 		require.NoError(t, err)
 		assert.Equal(t, "originaluser", resp.User.Username)
 		assert.NotNil(t, resp.Settings)
@@ -432,12 +418,11 @@ func TestUpdateUserEndpoint(t *testing.T) {
 
 func TestSSEEndpoint(t *testing.T) {
 	ts := setupTestServer(t)
-	ctx := context.Background()
 	user := ts.createTestUser(t, "sseuser", "password123", false)
 
 	t.Run("unauthenticated returns 401", func(t *testing.T) {
 		c := ts.newClient()
-		req, _ := http.NewRequestWithContext(ctx, http.MethodGet, ts.HTTPServer.URL+"/api/v1/events", nil)
+		req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, ts.HTTPServer.URL+"/api/v1/events", nil)
 		resp, err := c.HTTPClient().Do(req)
 		require.NoError(t, err)
 		defer resp.Body.Close()
@@ -445,7 +430,7 @@ func TestSSEEndpoint(t *testing.T) {
 	})
 
 	t.Run("authenticated receives SSE headers and connected comment", func(t *testing.T) {
-		sseCtx, cancel := context.WithTimeout(ctx, 3*time.Second)
+		sseCtx, cancel := context.WithTimeout(t.Context(), 3*time.Second)
 		defer cancel()
 
 		req, err := http.NewRequestWithContext(sseCtx, http.MethodGet, ts.HTTPServer.URL+"/api/v1/events", nil)
@@ -465,7 +450,7 @@ func TestSSEEndpoint(t *testing.T) {
 	})
 
 	t.Run("note creation triggers note_created event", func(t *testing.T) {
-		sseCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+		sseCtx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
 		defer cancel()
 
 		req, err := http.NewRequestWithContext(sseCtx, http.MethodGet, ts.HTTPServer.URL+"/api/v1/events", nil)
@@ -503,7 +488,7 @@ func TestSSEEndpoint(t *testing.T) {
 			t.Fatal("timed out waiting for SSE connection")
 		}
 
-		note, err := user.Client.CreateNote(ctx, &client.CreateNoteRequest{
+		note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
 			Title:    "SSE Test Note",
 			Content:  "test content",
 			NoteType: client.NoteTypeText,
@@ -523,81 +508,79 @@ func TestSSEEndpoint(t *testing.T) {
 
 func TestChangePasswordEndpoint(t *testing.T) {
 	ts := setupTestServer(t)
-	ctx := context.Background()
 	user := ts.createTestUser(t, "passuser", "oldpassword", false)
 
 	t.Run("successful password change", func(t *testing.T) {
-		require.NoError(t, user.Client.ChangePassword(ctx, "oldpassword", "newpassword"))
+		require.NoError(t, user.Client.ChangePassword(t.Context(), "oldpassword", "newpassword"))
 
-		_, err := user.Client.Login(ctx, "passuser", "newpassword")
+		_, err := user.Client.Login(t.Context(), "passuser", "newpassword")
 		require.NoError(t, err)
 	})
 
 	t.Run("wrong current password returns 403", func(t *testing.T) {
-		err := user.Client.ChangePassword(ctx, "wrongpassword", "anotherpass")
+		err := user.Client.ChangePassword(t.Context(), "wrongpassword", "anotherpass")
 		assert.Equal(t, http.StatusForbidden, client.StatusCode(err))
 	})
 
 	t.Run("short new password returns 400", func(t *testing.T) {
-		err := user.Client.ChangePassword(ctx, "newpassword", "ab")
+		err := user.Client.ChangePassword(t.Context(), "newpassword", "ab")
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 
 	t.Run("missing fields returns 400", func(t *testing.T) {
-		err := user.Client.ChangePassword(ctx, "", "")
+		err := user.Client.ChangePassword(t.Context(), "", "")
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 
 	t.Run("unauthenticated request returns 401", func(t *testing.T) {
 		c := ts.newClient()
-		err := c.ChangePassword(ctx, "newpassword", "hacked")
+		err := c.ChangePassword(t.Context(), "newpassword", "hacked")
 		assert.Equal(t, http.StatusUnauthorized, client.StatusCode(err))
 	})
 }
 
 func TestUserSettingsEndpoints(t *testing.T) {
 	ts := setupTestServer(t)
-	ctx := context.Background()
 	user := ts.createTestUser(t, "settingsuser", "password123", false)
 
 	t.Run("me response includes default settings for new user", func(t *testing.T) {
-		me, err := user.Client.Me(ctx)
+		me, err := user.Client.Me(t.Context())
 		require.NoError(t, err)
 		assert.Equal(t, "system", me.Settings.Language)
 		assert.Equal(t, user.User.ID, me.Settings.UserID)
 	})
 
 	t.Run("PATCH /users/me updates language via unified endpoint", func(t *testing.T) {
-		resp, err := user.Client.UpdateUser(ctx, &client.UpdateUserRequest{Language: client.Ptr("de")})
+		resp, err := user.Client.UpdateUser(t.Context(), &client.UpdateUserRequest{Language: client.Ptr("de")})
 		require.NoError(t, err)
 		assert.Equal(t, "de", resp.Settings.Language)
 	})
 
 	t.Run("me response reflects updated language", func(t *testing.T) {
-		me, err := user.Client.Me(ctx)
+		me, err := user.Client.Me(t.Context())
 		require.NoError(t, err)
 		assert.Equal(t, "de", me.Settings.Language)
 	})
 
 	t.Run("PATCH /users/me with invalid language returns 400", func(t *testing.T) {
-		_, err := user.Client.UpdateUser(ctx, &client.UpdateUserRequest{Language: client.Ptr("fr")})
+		_, err := user.Client.UpdateUser(t.Context(), &client.UpdateUserRequest{Language: client.Ptr("fr")})
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 
 	t.Run("invalid settings with valid profile does not commit profile (atomic validation)", func(t *testing.T) {
-		_, err := user.Client.UpdateUser(ctx, &client.UpdateUserRequest{
+		_, err := user.Client.UpdateUser(t.Context(), &client.UpdateUserRequest{
 			FirstName: client.Ptr("ShouldNotPersist"),
 			Language:  client.Ptr("invalid"),
 		})
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 
-		me, err := user.Client.Me(ctx)
+		me, err := user.Client.Me(t.Context())
 		require.NoError(t, err)
 		assert.NotEqual(t, "ShouldNotPersist", me.User.FirstName)
 	})
 
 	t.Run("PATCH /users/me updates both profile and settings", func(t *testing.T) {
-		resp, err := user.Client.UpdateUser(ctx, &client.UpdateUserRequest{
+		resp, err := user.Client.UpdateUser(t.Context(), &client.UpdateUserRequest{
 			FirstName: client.Ptr("Jane"),
 			Theme:     client.Ptr("dark"),
 		})
@@ -608,14 +591,14 @@ func TestUserSettingsEndpoints(t *testing.T) {
 	})
 
 	t.Run("me response includes settings", func(t *testing.T) {
-		me, err := user.Client.Me(ctx)
+		me, err := user.Client.Me(t.Context())
 		require.NoError(t, err)
 		assert.NotNil(t, me.Settings)
 	})
 
 	t.Run("login response includes settings", func(t *testing.T) {
 		loginClient := ts.newClient()
-		auth, err := loginClient.Login(ctx, "settingsuser", "password123")
+		auth, err := loginClient.Login(t.Context(), "settingsuser", "password123")
 		require.NoError(t, err)
 		assert.NotNil(t, auth.Settings)
 		assert.Equal(t, "de", auth.Settings.Language)
@@ -623,7 +606,7 @@ func TestUserSettingsEndpoints(t *testing.T) {
 
 	t.Run("register response includes settings", func(t *testing.T) {
 		regClient := ts.newClient()
-		auth, err := regClient.Register(ctx, "newsettings", "password123")
+		auth, err := regClient.Register(t.Context(), "newsettings", "password123")
 		require.NoError(t, err)
 		assert.NotNil(t, auth.Settings)
 		assert.Equal(t, "system", auth.Settings.Language)
@@ -632,10 +615,9 @@ func TestUserSettingsEndpoints(t *testing.T) {
 
 func TestTodoItemIndentLevel(t *testing.T) {
 	ts := setupTestServer(t)
-	ctx := context.Background()
 	user := ts.createTestUser(t, "indentuser", "password123", false)
 
-	created, err := user.Client.CreateNote(ctx, &client.CreateNoteRequest{
+	created, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
 		Title:    "Indent Test",
 		NoteType: client.NoteTypeTodo,
 		Items: []client.CreateNoteItem{
@@ -647,7 +629,7 @@ func TestTodoItemIndentLevel(t *testing.T) {
 	require.NoError(t, err)
 
 	t.Run("indent levels persisted on create", func(t *testing.T) {
-		note, err := user.Client.GetNote(ctx, created.ID)
+		note, err := user.Client.GetNote(t.Context(), created.ID)
 		require.NoError(t, err)
 		require.Len(t, note.Items, 3)
 		assert.Equal(t, 0, note.Items[0].IndentLevel)
@@ -656,7 +638,7 @@ func TestTodoItemIndentLevel(t *testing.T) {
 	})
 
 	t.Run("indent levels updated via PUT", func(t *testing.T) {
-		_, err := user.Client.UpdateNote(ctx, created.ID, &client.UpdateNoteRequest{
+		_, err := user.Client.UpdateNote(t.Context(), created.ID, &client.UpdateNoteRequest{
 			Title: "Indent Test",
 			Color: "#ffffff",
 			Items: []client.UpdateNoteItem{
@@ -667,7 +649,7 @@ func TestTodoItemIndentLevel(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		note, err := user.Client.GetNote(ctx, created.ID)
+		note, err := user.Client.GetNote(t.Context(), created.ID)
 		require.NoError(t, err)
 		require.Len(t, note.Items, 3)
 		assert.Equal(t, 0, note.Items[0].IndentLevel)
@@ -676,7 +658,7 @@ func TestTodoItemIndentLevel(t *testing.T) {
 	})
 
 	t.Run("indent level defaults to 0 when omitted", func(t *testing.T) {
-		note, err := user.Client.CreateNote(ctx, &client.CreateNoteRequest{
+		note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
 			Title:    "No Indent",
 			NoteType: client.NoteTypeTodo,
 			Items: []client.CreateNoteItem{
@@ -689,7 +671,7 @@ func TestTodoItemIndentLevel(t *testing.T) {
 	})
 
 	t.Run("indent level > 1 rejected on create", func(t *testing.T) {
-		_, err := user.Client.CreateNote(ctx, &client.CreateNoteRequest{
+		_, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
 			Title:    "Bad Indent",
 			NoteType: client.NoteTypeTodo,
 			Items: []client.CreateNoteItem{
@@ -700,7 +682,7 @@ func TestTodoItemIndentLevel(t *testing.T) {
 	})
 
 	t.Run("indent level > 1 rejected on update", func(t *testing.T) {
-		_, err := user.Client.UpdateNote(ctx, created.ID, &client.UpdateNoteRequest{
+		_, err := user.Client.UpdateNote(t.Context(), created.ID, &client.UpdateNoteRequest{
 			Title: "Indent Test",
 			Color: "#ffffff",
 			Items: []client.UpdateNoteItem{
@@ -735,7 +717,6 @@ func encodePNG(t *testing.T, img image.Image) []byte {
 
 func TestUploadProfileIcon(t *testing.T) {
 	ts := setupTestServer(t)
-	ctx := context.Background()
 	user := ts.createTestUser(t, "iconuser", "password123", false)
 
 	t.Run("valid image upload returns 200 with has_profile_icon true", func(t *testing.T) {
@@ -746,7 +727,7 @@ func TestUploadProfileIcon(t *testing.T) {
 			}
 		}
 		pngData := encodePNG(t, img)
-		u, err := user.Client.UploadProfileIcon(ctx, "test.png", bytes.NewReader(pngData))
+		u, err := user.Client.UploadProfileIcon(t.Context(), "test.png", bytes.NewReader(pngData))
 		require.NoError(t, err)
 		assert.True(t, u.HasProfileIcon)
 	})
@@ -754,10 +735,10 @@ func TestUploadProfileIcon(t *testing.T) {
 	t.Run("transparent PNG pixels are flattened to white", func(t *testing.T) {
 		img := image.NewNRGBA(image.Rect(0, 0, 4, 4))
 		pngData := encodePNG(t, img)
-		_, err := user.Client.UploadProfileIcon(ctx, "transparent.png", bytes.NewReader(pngData))
+		_, err := user.Client.UploadProfileIcon(t.Context(), "transparent.png", bytes.NewReader(pngData))
 		require.NoError(t, err)
 
-		body, _, err := user.Client.GetProfileIcon(ctx, user.User.ID)
+		body, _, err := user.Client.GetProfileIcon(t.Context(), user.User.ID)
 		require.NoError(t, err)
 
 		decoded, err := jpeg.Decode(bytes.NewReader(body))
@@ -771,10 +752,10 @@ func TestUploadProfileIcon(t *testing.T) {
 	t.Run("stored image is JPEG", func(t *testing.T) {
 		img := image.NewRGBA(image.Rect(0, 0, 8, 8))
 		pngData := encodePNG(t, img)
-		_, err := user.Client.UploadProfileIcon(ctx, "test.png", bytes.NewReader(pngData))
+		_, err := user.Client.UploadProfileIcon(t.Context(), "test.png", bytes.NewReader(pngData))
 		require.NoError(t, err)
 
-		body, contentType, err := user.Client.GetProfileIcon(ctx, user.User.ID)
+		body, contentType, err := user.Client.GetProfileIcon(t.Context(), user.User.ID)
 		require.NoError(t, err)
 		assert.Equal(t, "image/jpeg", contentType)
 		require.GreaterOrEqual(t, len(body), 2)
@@ -785,10 +766,10 @@ func TestUploadProfileIcon(t *testing.T) {
 	t.Run("oversized image is scaled down to fit 256x256", func(t *testing.T) {
 		img := image.NewRGBA(image.Rect(0, 0, 1024, 512))
 		pngData := encodePNG(t, img)
-		_, err := user.Client.UploadProfileIcon(ctx, "big.png", bytes.NewReader(pngData))
+		_, err := user.Client.UploadProfileIcon(t.Context(), "big.png", bytes.NewReader(pngData))
 		require.NoError(t, err)
 
-		body, _, err := user.Client.GetProfileIcon(ctx, user.User.ID)
+		body, _, err := user.Client.GetProfileIcon(t.Context(), user.User.ID)
 		require.NoError(t, err)
 
 		decoded, err := jpeg.Decode(bytes.NewReader(body))
@@ -802,7 +783,7 @@ func TestUploadProfileIcon(t *testing.T) {
 
 	t.Run("corrupt file returns 400", func(t *testing.T) {
 		corruptData := []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00}
-		_, err := user.Client.UploadProfileIcon(ctx, "corrupt.png", bytes.NewReader(corruptData))
+		_, err := user.Client.UploadProfileIcon(t.Context(), "corrupt.png", bytes.NewReader(corruptData))
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 
@@ -818,7 +799,7 @@ func TestUploadProfileIcon(t *testing.T) {
 			0x00, 0x00, 0x00,
 			0x00, 0x00, 0x00, 0x00,
 		}
-		_, err := user.Client.UploadProfileIcon(ctx, "bomb.png", bytes.NewReader(pngHeader))
+		_, err := user.Client.UploadProfileIcon(t.Context(), "bomb.png", bytes.NewReader(pngHeader))
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 
@@ -826,7 +807,7 @@ func TestUploadProfileIcon(t *testing.T) {
 		img := image.NewPaletted(image.Rect(0, 0, 1, 1), color.Palette{color.White})
 		var buf bytes.Buffer
 		require.NoError(t, gif.Encode(&buf, img, nil))
-		_, err := user.Client.UploadProfileIcon(ctx, "test.gif", &buf)
+		_, err := user.Client.UploadProfileIcon(t.Context(), "test.gif", &buf)
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 
