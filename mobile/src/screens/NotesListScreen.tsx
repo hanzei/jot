@@ -21,6 +21,7 @@ import { useOfflineNotes } from '../hooks/useOfflineNotes';
 import { useLabels } from '../hooks/useLabels';
 import { useUsers } from '../store/UsersContext';
 import { useAuth } from '../store/AuthContext';
+import { useTheme } from '../theme/ThemeContext';
 import NoteCard from '../components/NoteCard';
 import NoteContextMenu, { ContextMenuViewContext } from '../components/NoteContextMenu';
 import ColorPicker from '../components/ColorPicker';
@@ -47,6 +48,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedLabelId, setSelectedLabelId] = useState<string | undefined>(undefined);
   const { user } = useAuth();
+  const { colors } = useTheme();
 
   // Sync drawer-level label filter into local state
   useEffect(() => {
@@ -265,10 +267,10 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     () =>
       debouncedSearch || selectedLabelId ? (
         <View style={styles.emptySearchContainer}>
-          <Text style={styles.emptySubtext}>No notes match your search</Text>
+          <Text style={[styles.emptySubtext, { color: colors.textMuted }]}>No notes match your search</Text>
         </View>
       ) : null,
-    [debouncedSearch, selectedLabelId],
+    [debouncedSearch, selectedLabelId, colors],
   );
 
   const handleDragEnd = useCallback(
@@ -347,20 +349,20 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
 
   if (isLoading && !notes) {
     return (
-      <View style={styles.loadingContainer} testID="notes-loading">
-        <ActivityIndicator size="large" color="#2563eb" />
+      <View style={[styles.loadingContainer, { backgroundColor: colors.background }]} testID="notes-loading">
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
 
   if (isError) {
     return (
-      <View style={styles.emptyContainer} testID="notes-error-state">
-        <Ionicons name="cloud-offline-outline" size={64} color="#d1d5db" />
-        <Text style={styles.emptyTitle}>Failed to load notes</Text>
-        <Text style={styles.emptySubtext}>Check your connection and try again</Text>
+      <View style={[styles.emptyContainer, { backgroundColor: colors.background }]} testID="notes-error-state">
+        <Ionicons name="cloud-offline-outline" size={64} color={colors.handleColor} />
+        <Text style={[styles.emptyTitle, { color: colors.text }]}>Failed to load notes</Text>
+        <Text style={[styles.emptySubtext, { color: colors.textMuted }]}>Check your connection and try again</Text>
         <TouchableOpacity
-          style={styles.retryButton}
+          style={[styles.retryButton, { backgroundColor: colors.primary }]}
           onPress={() => refetch()}
           testID="retry-fetch"
         >
@@ -374,10 +376,10 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
 
   if (isEmpty && !debouncedSearch && !selectedLabelId) {
     return (
-      <View style={styles.emptyContainer}>
+      <View style={[styles.emptyContainer, { backgroundColor: colors.background }]}>
         {variant === 'trash' && (
-          <View style={styles.trashBanner}>
-            <Text style={styles.trashBannerText}>
+          <View style={[styles.trashBanner, { backgroundColor: colors.warning, borderBottomColor: colors.warningBorder }]}>
+            <Text style={[styles.trashBannerText, { color: colors.warningText }]}>
               Items in Trash are automatically deleted after 7 days
             </Text>
           </View>
@@ -385,15 +387,15 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
         <Ionicons
           name={variant === 'my-todo' ? 'clipboard-outline' : 'document-text-outline'}
           size={64}
-          color="#d1d5db"
+          color={colors.handleColor}
         />
-        <Text style={styles.emptyTitle}>
+        <Text style={[styles.emptyTitle, { color: colors.text }]}>
           {variant === 'notes' && 'No notes yet'}
           {variant === 'my-todo' && 'No assigned todos'}
           {variant === 'archived' && 'No archived notes'}
           {variant === 'trash' && 'Trash is empty'}
         </Text>
-        <Text style={styles.emptySubtext}>
+        <Text style={[styles.emptySubtext, { color: colors.textMuted }]}>
           {variant === 'notes' && 'Tap + to create your first note'}
           {variant === 'my-todo' && 'No notes with todos assigned to you'}
           {variant === 'archived' && 'Archived notes will appear here'}
@@ -401,7 +403,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
         </Text>
         {variant === 'notes' && (
           <TouchableOpacity
-            style={styles.fab}
+            style={[styles.fab, { backgroundColor: colors.primary }]}
             onPress={handleCreateNote}
             testID="create-note-fab"
             accessibilityLabel="Create note"
@@ -418,24 +420,24 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   const isDraggable = variant === 'notes';
 
   return (
-    <View style={styles.container}>
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Trash banner */}
       {variant === 'trash' && (
-        <View style={styles.trashBanner}>
-          <Ionicons name="information-circle-outline" size={16} color="#92400e" style={styles.trashBannerIcon} />
-          <Text style={styles.trashBannerText}>
+        <View style={[styles.trashBanner, { backgroundColor: colors.warning, borderBottomColor: colors.warningBorder }]}>
+          <Ionicons name="information-circle-outline" size={16} color={colors.warningText} style={styles.trashBannerIcon} />
+          <Text style={[styles.trashBannerText, { color: colors.warningText }]}>
             Items in Trash are automatically deleted after 7 days
           </Text>
         </View>
       )}
 
       {/* Search bar */}
-      <View style={styles.searchContainer}>
-        <Ionicons name="search" size={18} color="#999" style={styles.searchIcon} />
+      <View style={[styles.searchContainer, { backgroundColor: colors.searchBackground, borderColor: colors.searchBorder }]}>
+        <Ionicons name="search" size={18} color={colors.iconMuted} style={styles.searchIcon} />
         <TextInput
-          style={styles.searchInput}
+          style={[styles.searchInput, { color: colors.text }]}
           placeholder="Search notes..."
-          placeholderTextColor="#999"
+          placeholderTextColor={colors.placeholder}
           value={searchText}
           onChangeText={setSearchText}
           returnKeyType="search"
@@ -443,7 +445,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
         />
         {searchText.length > 0 && (
           <TouchableOpacity onPress={handleClearSearch} testID="clear-search">
-            <Ionicons name="close-circle" size={18} color="#999" />
+            <Ionicons name="close-circle" size={18} color={colors.iconMuted} />
           </TouchableOpacity>
         )}
       </View>
@@ -457,25 +459,25 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
           testID="label-filter-row"
         >
           <TouchableOpacity
-            style={[styles.labelChip, !selectedLabelId && styles.labelChipActive]}
+            style={[styles.labelChip, { backgroundColor: colors.surface, borderColor: colors.border }, !selectedLabelId && { backgroundColor: colors.primaryLight, borderColor: colors.primary }]}
             onPress={() => setSelectedLabelId(undefined)}
             testID="label-chip-all"
           >
-            <Text style={[styles.labelChipText, !selectedLabelId && styles.labelChipTextActive]}>
+            <Text style={[styles.labelChipText, { color: colors.textSecondary }, !selectedLabelId && { color: colors.primary, fontWeight: '600' }]}>
               All
             </Text>
           </TouchableOpacity>
           {allLabels.map((label) => (
             <TouchableOpacity
               key={label.id}
-              style={[styles.labelChip, selectedLabelId === label.id && styles.labelChipActive]}
+              style={[styles.labelChip, { backgroundColor: colors.surface, borderColor: colors.border }, selectedLabelId === label.id && { backgroundColor: colors.primaryLight, borderColor: colors.primary }]}
               onPress={() => handleLabelChipPress(label.id)}
               testID={`label-chip-${label.id}`}
             >
               <Text
                 style={[
-                  styles.labelChipText,
-                  selectedLabelId === label.id && styles.labelChipTextActive,
+                  styles.labelChipText, { color: colors.textSecondary },
+                  selectedLabelId === label.id && { color: colors.primary, fontWeight: '600' },
                 ]}
               >
                 {label.name}
@@ -489,17 +491,14 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
       {isDraggable && hasPinned ? (
         <ScrollView
           refreshControl={
-            <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor="#2563eb" />
+            <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={colors.primary} />
           }
           contentContainerStyle={styles.listContent}
           testID="notes-section-list"
         >
           {displayPinned.length > 0 && (
             <>
-              <Text style={styles.sectionHeader}>Pinned</Text>
-              {/* scrollEnabled={false}: outer ScrollView handles scroll; this disables
-                  DraggableFlatList's own scroll/virtualization. Acceptable for typical
-                  note counts; for very large lists consider a single-list layout. */}
+              <Text style={[styles.sectionHeader, { color: colors.textMuted }]}>Pinned</Text>
               <DraggableFlatList
                 data={displayPinned}
                 keyExtractor={(item) => item.id}
@@ -512,7 +511,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
           )}
           {displayUnpinned.length > 0 && (
             <>
-              <Text style={styles.sectionHeader}>Others</Text>
+              <Text style={[styles.sectionHeader, { color: colors.textMuted }]}>Others</Text>
               <DraggableFlatList
                 data={displayUnpinned}
                 keyExtractor={(item) => item.id}
@@ -533,7 +532,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
           onDragBegin={handleDragStart}
           onDragEnd={handleDragEndUnpinned}
           refreshControl={
-            <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor="#2563eb" />
+            <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={colors.primary} />
           }
           contentContainerStyle={styles.listContent}
           ListEmptyComponent={listEmptyComponent}
@@ -545,7 +544,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
           keyExtractor={(item) => item.id}
           renderItem={renderNonDraggableNoteCard}
           refreshControl={
-            <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor="#2563eb" />
+            <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={colors.primary} />
           }
           contentContainerStyle={styles.listContent}
           ListEmptyComponent={listEmptyComponent}
@@ -555,7 +554,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
 
       {variant === 'notes' && (
         <TouchableOpacity
-          style={styles.fab}
+          style={[styles.fab, { backgroundColor: colors.primary }]}
           onPress={handleCreateNote}
           testID="create-note-fab"
           accessibilityLabel="Create note"
@@ -593,30 +592,25 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f9fafb',
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f9fafb',
   },
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#f9fafb',
     padding: 32,
   },
   emptyTitle: {
     fontSize: 20,
     fontWeight: '600',
-    color: '#1a1a1a',
     marginTop: 16,
   },
   emptySubtext: {
     fontSize: 14,
-    color: '#999',
     marginTop: 8,
   },
   emptySearchContainer: {
@@ -626,29 +620,24 @@ const styles = StyleSheet.create({
   trashBanner: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fef3c7',
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderBottomWidth: 1,
-    borderBottomColor: '#fde68a',
   },
   trashBannerIcon: {
     marginRight: 8,
   },
   trashBannerText: {
     fontSize: 13,
-    color: '#92400e',
     flex: 1,
   },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#fff',
     margin: 16,
     marginBottom: 8,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
     paddingHorizontal: 12,
     height: 40,
   },
@@ -658,7 +647,6 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: 15,
-    color: '#1a1a1a',
     paddingVertical: 0,
   },
   labelChipsRow: {
@@ -670,26 +658,14 @@ const styles = StyleSheet.create({
     paddingHorizontal: 14,
     paddingVertical: 6,
     borderRadius: 16,
-    backgroundColor: '#fff',
     borderWidth: 1,
-    borderColor: '#e5e7eb',
-  },
-  labelChipActive: {
-    backgroundColor: '#eff6ff',
-    borderColor: '#2563eb',
   },
   labelChipText: {
     fontSize: 13,
-    color: '#666',
-  },
-  labelChipTextActive: {
-    color: '#2563eb',
-    fontWeight: '600',
   },
   sectionHeader: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#999',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     paddingHorizontal: 16,
@@ -704,7 +680,6 @@ const styles = StyleSheet.create({
     paddingHorizontal: 24,
     paddingVertical: 10,
     borderRadius: 8,
-    backgroundColor: '#2563eb',
   },
   retryText: {
     color: '#fff',
@@ -718,7 +693,6 @@ const styles = StyleSheet.create({
     width: 56,
     height: 56,
     borderRadius: 28,
-    backgroundColor: '#2563eb',
     justifyContent: 'center',
     alignItems: 'center',
     elevation: 4,

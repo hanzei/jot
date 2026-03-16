@@ -16,6 +16,7 @@ import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { searchUsers } from '../api/users';
 import { useNoteShares, useShareNote, useUnshareNote } from '../hooks/useNotes';
 import UserAvatar from '../components/UserAvatar';
+import { useTheme } from '../theme/ThemeContext';
 import { User, NoteShare } from '../types';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 
@@ -27,6 +28,7 @@ export default function ShareScreen() {
   const navigation = useNavigation();
   const route = useRoute<ShareRouteProp>();
   const { noteId } = route.params;
+  const { colors } = useTheme();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
@@ -131,7 +133,7 @@ export default function ShareScreen() {
   const renderSearchResult = useCallback(
     ({ item }: { item: User }) => (
       <TouchableOpacity
-        style={styles.userRow}
+        style={[styles.userRow, { borderBottomColor: colors.borderLight }]}
         onPress={() => handleShare(item)}
         disabled={pendingUserIds.has(item.id)}
         testID={`search-result-${item.id}`}
@@ -139,19 +141,19 @@ export default function ShareScreen() {
         <UserAvatar userId={item.id} username={item.username} hasProfileIcon={item.has_profile_icon} size="medium" />
         <View style={styles.userInfo}>
           {(item.first_name || item.last_name) && (
-            <Text style={styles.userName}>{[item.first_name, item.last_name].filter(Boolean).join(' ')}</Text>
+            <Text style={[styles.userName, { color: colors.text }]}>{[item.first_name, item.last_name].filter(Boolean).join(' ')}</Text>
           )}
-          <Text style={styles.userHandle}>@{item.username}</Text>
+          <Text style={[styles.userHandle, { color: colors.textSecondary }]}>@{item.username}</Text>
         </View>
-        <Ionicons name="add-circle-outline" size={22} color="#2563eb" />
+        <Ionicons name="add-circle-outline" size={22} color={colors.primary} />
       </TouchableOpacity>
     ),
-    [handleShare, pendingUserIds],
+    [handleShare, pendingUserIds, colors],
   );
 
   const renderSharedUser = useCallback(
     ({ item }: { item: NoteShare }) => (
-      <View style={styles.userRow} testID={`shared-user-${item.shared_with_user_id}`}>
+      <View style={[styles.userRow, { borderBottomColor: colors.borderLight }]} testID={`shared-user-${item.shared_with_user_id}`}>
         <UserAvatar
           userId={item.shared_with_user_id}
           username={item.username ?? item.shared_with_user_id}
@@ -160,9 +162,9 @@ export default function ShareScreen() {
         />
         <View style={styles.userInfo}>
           {(item.first_name || item.last_name) && (
-            <Text style={styles.userName}>{[item.first_name, item.last_name].filter(Boolean).join(' ')}</Text>
+            <Text style={[styles.userName, { color: colors.text }]}>{[item.first_name, item.last_name].filter(Boolean).join(' ')}</Text>
           )}
-          <Text style={styles.userHandle}>@{item.username ?? item.shared_with_user_id}</Text>
+          <Text style={[styles.userHandle, { color: colors.textSecondary }]}>@{item.username ?? item.shared_with_user_id}</Text>
         </View>
         <TouchableOpacity
           onPress={() => handleUnshare(item)}
@@ -172,17 +174,16 @@ export default function ShareScreen() {
           accessibilityLabel={`Remove share for ${item.username ?? item.shared_with_user_id}`}
           accessibilityHint="Removes this shared item"
         >
-          <Ionicons name="close-circle-outline" size={22} color="#ef4444" />
+          <Ionicons name="close-circle-outline" size={22} color={colors.error} />
         </TouchableOpacity>
       </View>
     ),
-    [handleUnshare, isUnsharing],
+    [handleUnshare, isUnsharing, colors],
   );
 
   return (
-    <SafeAreaView style={styles.container}>
-      {/* Header */}
-      <View style={styles.header}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.surface }]}>
+      <View style={[styles.header, { borderBottomColor: colors.borderLight }]}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
           testID="share-screen-back"
@@ -190,19 +191,18 @@ export default function ShareScreen() {
           accessibilityLabel="Back"
           accessibilityHint="Goes back to the previous screen"
         >
-          <Ionicons name="arrow-back" size={24} color="#1a1a1a" />
+          <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={styles.headerTitle}>Share note</Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Share note</Text>
         <View style={styles.headerSpacer} />
       </View>
 
-      {/* Search field */}
-      <View style={styles.searchContainer}>
-        <Ionicons name="search" size={18} color="#999" style={styles.searchIcon} />
+      <View style={[styles.searchContainer, { backgroundColor: colors.inputBackground, borderColor: colors.searchBorder }]}>
+        <Ionicons name="search" size={18} color={colors.iconMuted} style={styles.searchIcon} />
         <TextInput
-          style={styles.searchInput}
+          style={[styles.searchInput, { color: colors.text }]}
           placeholder="Search by username..."
-          placeholderTextColor="#999"
+          placeholderTextColor={colors.placeholder}
           value={searchQuery}
           onChangeText={setSearchQuery}
           autoCapitalize="none"
@@ -218,22 +218,21 @@ export default function ShareScreen() {
             accessibilityLabel="Clear search"
             accessibilityHint="Clears the search input"
           >
-            <Ionicons name="close-circle" size={18} color="#999" />
+            <Ionicons name="close-circle" size={18} color={colors.iconMuted} />
           </TouchableOpacity>
         )}
       </View>
 
       <ScrollView keyboardShouldPersistTaps="handled">
-        {/* Search results */}
         {debouncedQuery.length > 0 && (
           <View style={styles.section}>
-            <Text style={styles.sectionTitle}>Results</Text>
+            <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>Results</Text>
             {isSearching ? (
-              <ActivityIndicator size="small" color="#2563eb" style={styles.spinner} />
+              <ActivityIndicator size="small" color={colors.primary} style={styles.spinner} />
             ) : searchError ? (
-              <Text style={styles.errorText}>Search failed. Please try again.</Text>
+              <Text style={[styles.errorText, { color: colors.error }]}>Search failed. Please try again.</Text>
             ) : filteredResults.length === 0 ? (
-              <Text style={styles.emptyText}>No users found</Text>
+              <Text style={[styles.emptyText, { color: colors.textMuted }]}>No users found</Text>
             ) : (
               <FlatList
                 data={filteredResults}
@@ -246,15 +245,14 @@ export default function ShareScreen() {
           </View>
         )}
 
-        {/* Shared with section */}
         <View style={styles.section}>
-          <Text style={styles.sectionTitle}>Shared with</Text>
+          <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>Shared with</Text>
           {isLoadingShares ? (
-            <ActivityIndicator size="small" color="#2563eb" style={styles.spinner} />
+            <ActivityIndicator size="small" color={colors.primary} style={styles.spinner} />
           ) : isSharesError ? (
-            <Text style={styles.errorText}>Failed to load shares</Text>
+            <Text style={[styles.errorText, { color: colors.error }]}>Failed to load shares</Text>
           ) : !currentShares || currentShares.length === 0 ? (
-            <Text style={styles.emptyText}>Not shared with anyone yet</Text>
+            <Text style={[styles.emptyText, { color: colors.textMuted }]}>Not shared with anyone yet</Text>
           ) : (
             <FlatList
               data={currentShares}
@@ -273,7 +271,6 @@ export default function ShareScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
   },
   header: {
     flexDirection: 'row',
@@ -281,13 +278,11 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
   },
   headerTitle: {
     flex: 1,
     fontSize: 18,
     fontWeight: '600',
-    color: '#1a1a1a',
     textAlign: 'center',
   },
   headerSpacer: {
@@ -296,12 +291,10 @@ const styles = StyleSheet.create({
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f9fafb',
     margin: 16,
     marginBottom: 8,
     borderRadius: 8,
     borderWidth: 1,
-    borderColor: '#e5e7eb',
     paddingHorizontal: 12,
     height: 44,
   },
@@ -311,7 +304,6 @@ const styles = StyleSheet.create({
   searchInput: {
     flex: 1,
     fontSize: 15,
-    color: '#1a1a1a',
     paddingVertical: 0,
   },
   section: {
@@ -321,7 +313,6 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 12,
     fontWeight: '600',
-    color: '#999',
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     marginBottom: 8,
@@ -332,7 +323,6 @@ const styles = StyleSheet.create({
     paddingVertical: 10,
     gap: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#f9fafb',
   },
   userInfo: {
     flex: 1,
@@ -340,20 +330,16 @@ const styles = StyleSheet.create({
   userName: {
     fontSize: 15,
     fontWeight: '500',
-    color: '#1a1a1a',
   },
   userHandle: {
     fontSize: 13,
-    color: '#666',
   },
   emptyText: {
     fontSize: 14,
-    color: '#999',
     paddingVertical: 8,
   },
   errorText: {
     fontSize: 14,
-    color: '#ef4444',
     paddingVertical: 8,
   },
   spinner: {

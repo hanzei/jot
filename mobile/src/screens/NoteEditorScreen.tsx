@@ -25,6 +25,7 @@ import LabelPicker from '../components/LabelPicker';
 import AssigneePicker from '../components/AssigneePicker';
 import { buildCollaborators, Collaborator } from '../utils/collaborators';
 import { useUsers } from '../store/UsersContext';
+import { useTheme } from '../theme/ThemeContext';
 import { NoteType, NoteItem, UpdateNoteRequest, Label } from '../types';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 
@@ -91,6 +92,7 @@ export default function NoteEditorScreen() {
   const [syncToast, setSyncToast] = useState<string | null>(null);
   const { usersById } = useUsers();
 
+  const { colors, isDark } = useTheme();
   const { data: existingNote } = useOfflineNote(noteId);
   const createMutation = useCreateNote();
   const updateMutation = useUpdateNote();
@@ -530,7 +532,8 @@ export default function NoteEditorScreen() {
     [handleToggleItem, handleItemTextChange, handleDeleteItem, handleAddItem, isNoteShared, collaborators, openAssigneePicker],
   );
 
-  const noteBackground = color && color !== '#ffffff' ? color : '#fff';
+  const hasNoteColor = color && color !== '#ffffff';
+  const noteBackground = hasNoteColor ? color : colors.surface;
 
   return (
     <KeyboardAvoidingView
@@ -538,19 +541,19 @@ export default function NoteEditorScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 0}
     >
-      <View style={[styles.header, { backgroundColor: noteBackground }]}>
+      <View style={[styles.header, { backgroundColor: noteBackground, borderBottomColor: hasNoteColor ? 'transparent' : colors.borderLight }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} testID="editor-back">
-          <Ionicons name="arrow-back" size={24} color="#1a1a1a" />
+          <Ionicons name="arrow-back" size={24} color={hasNoteColor ? '#1a1a1a' : colors.text} />
         </TouchableOpacity>
         <View style={styles.headerRight}>
           {!hasCreated && (
-            <TouchableOpacity onPress={handleToggleNoteType} style={styles.typeToggle} testID="toggle-note-type">
+            <TouchableOpacity onPress={handleToggleNoteType} style={[styles.typeToggle, { backgroundColor: colors.primaryLight }]} testID="toggle-note-type">
               <Ionicons
                 name={noteType === 'text' ? 'list' : 'document-text-outline'}
                 size={22}
-                color="#2563eb"
+                color={colors.primary}
               />
-              <Text style={styles.typeToggleText}>
+              <Text style={[styles.typeToggleText, { color: colors.primary }]}>
                 {noteType === 'text' ? 'Todo' : 'Text'}
               </Text>
             </TouchableOpacity>
@@ -560,7 +563,7 @@ export default function NoteEditorScreen() {
 
       {saveError && (
         <TouchableOpacity
-          style={styles.errorBanner}
+          style={[styles.errorBanner, { backgroundColor: colors.errorLight }]}
           onPress={() => {
             setSaveError(null);
             if (debounceRef.current) {
@@ -571,17 +574,17 @@ export default function NoteEditorScreen() {
           }}
           testID="save-error-banner"
         >
-          <Text style={styles.errorText}>{saveError}</Text>
+          <Text style={[styles.errorText, { color: colors.error }]}>{saveError}</Text>
         </TouchableOpacity>
       )}
 
       {syncToast && (
         <TouchableOpacity
-          style={styles.syncToast}
+          style={[styles.syncToast, { backgroundColor: colors.primaryLight }]}
           onPress={() => setSyncToast(null)}
           testID="sync-toast"
         >
-          <Text style={styles.syncToastText}>{syncToast}</Text>
+          <Text style={[styles.syncToastText, { color: colors.primary }]}>{syncToast}</Text>
         </TouchableOpacity>
       )}
 
@@ -590,11 +593,11 @@ export default function NoteEditorScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <TextInput
-          style={styles.titleInput}
+          style={[styles.titleInput, { color: hasNoteColor ? '#1a1a1a' : colors.text }]}
           value={title}
           onChangeText={handleTitleChange}
           placeholder="Title"
-          placeholderTextColor="#999"
+          placeholderTextColor={hasNoteColor ? '#999' : colors.placeholder}
           maxLength={MAX_TITLE_LENGTH}
           editable={!isHydrating}
           testID="note-title-input"
@@ -602,11 +605,11 @@ export default function NoteEditorScreen() {
 
         {noteType === 'text' ? (
           <TextInput
-            style={styles.contentInput}
+            style={[styles.contentInput, { color: hasNoteColor ? '#1a1a1a' : colors.text }]}
             value={content}
             onChangeText={handleContentChange}
             placeholder="Note"
-            placeholderTextColor="#999"
+            placeholderTextColor={hasNoteColor ? '#999' : colors.placeholder}
             multiline
             textAlignVertical="top"
             maxLength={MAX_CONTENT_LENGTH}
@@ -625,12 +628,12 @@ export default function NoteEditorScreen() {
             />
 
             <TouchableOpacity style={styles.addItemRow} onPress={handleAddItem} testID="add-todo-item">
-              <Ionicons name="add" size={22} color="#2563eb" />
-              <Text style={styles.addItemText}>Add item</Text>
+              <Ionicons name="add" size={22} color={colors.primary} />
+              <Text style={[styles.addItemText, { color: colors.primary }]}>Add item</Text>
             </TouchableOpacity>
 
             {checkedItems.length > 0 && (
-              <View style={styles.checkedSection}>
+              <View style={[styles.checkedSection, { borderTopColor: colors.borderLight }]}>
                 <TouchableOpacity
                   style={styles.checkedHeader}
                   onPress={handleToggleCollapsed}
@@ -639,9 +642,9 @@ export default function NoteEditorScreen() {
                   <Ionicons
                     name={checkedItemsCollapsed ? 'chevron-forward' : 'chevron-down'}
                     size={18}
-                    color="#999"
+                    color={colors.iconMuted}
                   />
-                  <Text style={styles.checkedHeaderText}>
+                  <Text style={[styles.checkedHeaderText, { color: colors.textMuted }]}>
                     {checkedItems.length} checked {checkedItems.length === 1 ? 'item' : 'items'}
                   </Text>
                 </TouchableOpacity>
@@ -672,18 +675,16 @@ export default function NoteEditorScreen() {
         )}
       </ScrollView>
 
-      <View style={[styles.toolbar, { backgroundColor: noteBackground }]}>
-        {/* Color picker button */}
+      <View style={[styles.toolbar, { backgroundColor: noteBackground, borderTopColor: hasNoteColor ? 'transparent' : colors.borderLight }]}>
         <TouchableOpacity
           onPress={() => setColorPickerVisible(true)}
           style={styles.toolbarBtn}
           testID="toolbar-color-btn"
           accessibilityLabel="Change color"
         >
-          <Ionicons name="color-palette-outline" size={22} color="#444" />
+          <Ionicons name="color-palette-outline" size={22} color={hasNoteColor ? '#444' : colors.icon} />
         </TouchableOpacity>
 
-        {/* Label button (only when note is saved and synced to server) */}
         {noteId && !isLocalId(noteId) && (
           <TouchableOpacity
             onPress={() => setLabelPickerVisible(true)}
@@ -691,11 +692,10 @@ export default function NoteEditorScreen() {
             testID="toolbar-label-btn"
             accessibilityLabel="Labels"
           >
-            <Ionicons name="pricetag-outline" size={22} color="#444" />
+            <Ionicons name="pricetag-outline" size={22} color={hasNoteColor ? '#444' : colors.icon} />
           </TouchableOpacity>
         )}
 
-        {/* Pin / Unpin (works offline via local DB + queue) */}
         {noteId && (
           <TouchableOpacity
             onPress={handleTogglePin}
@@ -703,11 +703,10 @@ export default function NoteEditorScreen() {
             testID="toolbar-pin-btn"
             accessibilityLabel={pinned ? 'Unpin note' : 'Pin note'}
           >
-            <Ionicons name={pinned ? 'pin' : 'pin-outline'} size={22} color={pinned ? '#2563eb' : '#444'} />
+            <Ionicons name={pinned ? 'pin' : 'pin-outline'} size={22} color={pinned ? colors.primary : (hasNoteColor ? '#444' : colors.icon)} />
           </TouchableOpacity>
         )}
 
-        {/* Archive / Unarchive (works offline via local DB + queue) */}
         {noteId && (
           <TouchableOpacity
             onPress={handleToggleArchive}
@@ -718,12 +717,11 @@ export default function NoteEditorScreen() {
             <Ionicons
               name="archive-outline"
               size={22}
-              color={archived ? '#2563eb' : '#444'}
+              color={archived ? colors.primary : (hasNoteColor ? '#444' : colors.icon)}
             />
           </TouchableOpacity>
         )}
 
-        {/* Share (only when note is saved, synced, hydrated, and owned by current user) */}
         {noteId && !isLocalId(noteId) && existingNote && !existingNote.is_shared && (
           <TouchableOpacity
             onPress={() => navigation.navigate('Share', { noteId })}
@@ -731,13 +729,12 @@ export default function NoteEditorScreen() {
             testID="toolbar-share-btn"
             accessibilityLabel="Share note"
           >
-            <Ionicons name="share-social-outline" size={22} color="#444" />
+            <Ionicons name="share-social-outline" size={22} color={hasNoteColor ? '#444' : colors.icon} />
           </TouchableOpacity>
         )}
 
-        {/* Delete */}
         <TouchableOpacity onPress={handleDelete} style={styles.toolbarBtn} testID="delete-note-btn">
-          <Ionicons name="trash-outline" size={22} color="#ef4444" />
+          <Ionicons name="trash-outline" size={22} color={colors.error} />
         </TouchableOpacity>
       </View>
 
@@ -782,7 +779,6 @@ export default function NoteEditorScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
   },
   header: {
     flexDirection: 'row',
@@ -792,7 +788,6 @@ const styles = StyleSheet.create({
     paddingTop: Platform.OS === 'ios' ? 56 : 16,
     paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
   },
   headerRight: {
     flexDirection: 'row',
@@ -806,11 +801,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
-    backgroundColor: '#eff6ff',
   },
   typeToggleText: {
     fontSize: 14,
-    color: '#2563eb',
     fontWeight: '500',
   },
   scrollContent: {
@@ -820,13 +813,11 @@ const styles = StyleSheet.create({
   titleInput: {
     fontSize: 22,
     fontWeight: '600',
-    color: '#1a1a1a',
     paddingVertical: 16,
     paddingHorizontal: 0,
   },
   contentInput: {
     fontSize: 16,
-    color: '#1a1a1a',
     lineHeight: 24,
     minHeight: 200,
     paddingHorizontal: 0,
@@ -842,12 +833,10 @@ const styles = StyleSheet.create({
   },
   addItemText: {
     fontSize: 16,
-    color: '#2563eb',
   },
   checkedSection: {
     marginTop: 16,
     borderTopWidth: 1,
-    borderTopColor: '#f3f4f6',
     paddingTop: 8,
   },
   checkedHeader: {
@@ -858,48 +847,40 @@ const styles = StyleSheet.create({
   },
   checkedHeaderText: {
     fontSize: 14,
-    color: '#999',
   },
   toolbar: {
     flexDirection: 'row',
     alignItems: 'center',
     borderTopWidth: 1,
-    borderTopColor: '#f3f4f6',
     paddingHorizontal: 8,
     paddingVertical: 8,
     paddingBottom: Platform.OS === 'ios' ? 24 : 8,
-    backgroundColor: '#fff',
     gap: 4,
   },
   toolbarBtn: {
     padding: 8,
   },
   errorBanner: {
-    backgroundColor: '#fef2f2',
     borderBottomWidth: 1,
     borderBottomColor: '#fecaca',
     paddingHorizontal: 16,
     paddingVertical: 10,
   },
   errorText: {
-    color: '#dc2626',
     fontSize: 14,
     textAlign: 'center',
   },
   syncToast: {
-    backgroundColor: '#eff6ff',
     borderBottomWidth: 1,
     borderBottomColor: '#bfdbfe',
     paddingHorizontal: 16,
     paddingVertical: 10,
   },
   syncToastText: {
-    color: '#1d4ed8',
     fontSize: 14,
     textAlign: 'center',
   },
   draggingTodoItem: {
-    backgroundColor: '#f0f4ff',
     borderRadius: 8,
     elevation: 4,
     shadowColor: '#000',
