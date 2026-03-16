@@ -3,7 +3,7 @@ import { Dialog, DialogPanel, DialogTitle } from '@headlessui/react';
 import { XMarkIcon, ArrowUpTrayIcon } from '@heroicons/react/24/outline';
 import { useTranslation } from 'react-i18next';
 import { notes } from '@/utils/api';
-import { ImportResponse } from '@/types';
+import type { ImportResponse } from '@jot/shared';
 
 interface ImportModalProps {
   isOpen: boolean;

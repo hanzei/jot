@@ -54,6 +54,8 @@ Use the following Task commands for development:
 - `task check-translations` - Verify locale files stay in sync with `en.json`
 - `task test-mobile` - Run mobile app tests
 - `task lint-mobile` - Run mobile app linting
+- `task test-shared` - Run shared package tests
+- `task lint-shared` - Run shared package linting
 - `task gen-docs` - Regenerate Swagger API docs from handler annotations (requires `swag` CLI)
 
 ---
@@ -66,6 +68,14 @@ Jot is a self-hosted note-taking application. The backend is a Go HTTP API and t
 
 ```
 /
+├── shared/          # @jot/shared — types, constants, and utilities shared by webapp & mobile
+│   ├── src/
+│   │   ├── types.ts          # All TypeScript interfaces (single source of truth)
+│   │   ├── constants.ts      # Validation limits, roles, defaults
+│   │   ├── collaborators.ts  # buildCollaborators, displayName
+│   │   ├── colors.ts         # Avatar colors, note color palettes, hash function
+│   │   └── index.ts          # Barrel export
+│   └── package.json
 ├── server/          # Go backend
 │   ├── main.go
 │   ├── go.mod
@@ -82,7 +92,6 @@ Jot is a self-hosted note-taking application. The backend is a Go HTTP API and t
 │   ├── src/
 │   │   ├── components/  # React components
 │   │   ├── pages/       # Route-level page components
-│   │   ├── types/       # Shared TypeScript interfaces
 │   │   └── utils/       # API client, auth helpers
 │   └── package.json
 ├── mobile/          # React Native/Expo mobile app
@@ -94,7 +103,6 @@ Jot is a self-hosted note-taking application. The backend is a Go HTTP API and t
 │   │   ├── api/         # API client modules
 │   │   ├── db/          # Local SQLite/offline persistence
 │   │   ├── store/       # Context/state providers
-│   │   ├── types/       # Shared TypeScript interfaces
 │   └── package.json
 ├── images/          # Documentation images
 ├── Taskfile.yml
@@ -328,9 +336,10 @@ CI is split into per-component workflows in `.github/workflows/`:
 | Workflow | File | Triggers |
 |----------|------|----------|
 | Server — CI | `server-ci.yml` | push to `master`; PRs touching `server/**` |
-| Webapp — CI | `webapp-ci.yml` | push to `master`; PRs touching `webapp/**` |
-| Mobile — CI | `mobile-ci.yml` | push to `master`; PRs touching `mobile/**` |
-| Mobile — APK Build | `mobile-apk.yml` | push to `master` and `v*` tags; PRs touching `mobile/**` |
+| Shared — CI | `shared-ci.yml` | push to `master`; PRs touching `shared/**` |
+| Webapp — CI | `webapp-ci.yml` | push to `master`; PRs touching `webapp/**` or `shared/**` |
+| Mobile — CI | `mobile-ci.yml` | push to `master`; PRs touching `mobile/**` or `shared/**` |
+| Mobile — APK Build | `mobile-apk.yml` | push to `master` and `v*` tags; PRs touching `mobile/**` or `shared/**` |
 | Docker | `docker.yml` | push to `master`; all PRs |
 | Release | `release.yml` | push tags `v*` |
 | Claude Code | `claude.yml` | issue/PR comment and review events, plus issues opened/assigned, when `@claude` is mentioned |

@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { User } from '../types';
+import type { User } from '@jot/shared';
 import { getUsers } from '../api/users';
 import { useAuth } from './AuthContext';
 

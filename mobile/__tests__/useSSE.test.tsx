@@ -4,7 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AppState, AppStateStatus } from 'react-native';
 import { useSSE } from '../src/hooks/useSSE';
 import { SSEConnectionManager } from '../src/api/events';
-import { SSEEvent } from '../src/types';
+import type { SSEEvent } from '@jot/shared';
 
 jest.mock('react-native', () => ({
   Platform: { OS: 'ios' },

@@ -4,7 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useAuth } from '../store/AuthContext';
 import { SSEConnectionManager } from '../api/events';
-import { SSEEvent } from '../types';
+import type { SSEEvent } from '@jot/shared';
 import { useNetworkStatus } from './useNetworkStatus';
 import { saveNote, markLocalNoteDeleted } from '../db/noteQueries';
 

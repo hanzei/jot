@@ -30,7 +30,6 @@ export interface AuthResponse {
   settings: UserSettings;
 }
 
-
 export interface LoginRequest {
   username: string;
   password: string;
@@ -97,6 +96,16 @@ export interface Note {
   updated_at: string;
 }
 
+export interface GetNotesParams {
+  archived?: boolean;
+  search?: string;
+  trashed?: boolean;
+  label?: string;
+  my_todo?: boolean;
+  /** Used locally to filter my-todo notes by assigned_to; not sent to the server. */
+  user_id?: string;
+}
+
 export interface CreateNoteRequest {
   title: string;
   content: string;
@@ -106,12 +115,12 @@ export interface CreateNoteRequest {
 }
 
 export interface UpdateNoteRequest {
-  title: string;
-  content: string;
-  pinned: boolean;
-  archived: boolean;
-  color: string;
-  checked_items_collapsed: boolean;
+  title?: string;
+  content?: string;
+  pinned?: boolean;
+  archived?: boolean;
+  color?: string;
+  checked_items_collapsed?: boolean;
   items?: { text: string; position: number; completed?: boolean; indent_level?: number; assigned_to?: string }[];
 }
 
@@ -155,4 +164,19 @@ export interface ImportResponse {
 
 export interface UpdateUserRoleRequest {
   role: string;
+}
+
+export type SSEEventType =
+  | 'note_created'
+  | 'note_updated'
+  | 'note_deleted'
+  | 'note_shared'
+  | 'note_unshared';
+
+export interface SSEEvent {
+  type: SSEEventType;
+  note_id: string;
+  note: Note | null;
+  source_user_id: string;
+  target_user_id?: string;
 }

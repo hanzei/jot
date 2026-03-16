@@ -1,4 +1,4 @@
-import { User, NoteShare } from '../types';
+import type { User } from './types';
 
 export interface Collaborator {
   userId: string;
@@ -15,13 +15,13 @@ export function displayName(c: Collaborator): string {
 
 export function buildCollaborators(
   noteUserId: string,
-  sharedWith: NoteShare[] | undefined,
-  usersById: Map<string, User>,
+  sharedWith: { shared_with_user_id: string; username?: string; first_name?: string; last_name?: string; has_profile_icon?: boolean }[] | undefined,
+  usersById: Map<string, User> | undefined,
 ): Collaborator[] {
   const result: Collaborator[] = [];
   const seen = new Set<string>();
 
-  const owner = usersById.get(noteUserId);
+  const owner = usersById?.get(noteUserId);
   result.push({
     userId: noteUserId,
     username: owner?.username || '?',
@@ -31,10 +31,10 @@ export function buildCollaborators(
   });
   seen.add(noteUserId);
 
-  sharedWith?.forEach((s) => {
+  sharedWith?.forEach(s => {
     if (seen.has(s.shared_with_user_id)) return;
     seen.add(s.shared_with_user_id);
-    const u = usersById.get(s.shared_with_user_id);
+    const u = usersById?.get(s.shared_with_user_id);
     result.push({
       userId: s.shared_with_user_id,
       username: u?.username || s.username || '?',

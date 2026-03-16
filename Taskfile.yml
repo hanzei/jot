@@ -22,7 +22,7 @@ tasks:
 
   test:
     desc: Run all tests
-    deps: [test-server, test-webapp, test-mobile]
+    deps: [test-server, test-webapp, test-mobile, test-shared]
 
   test-server:
     desc: Run server tests
@@ -43,7 +43,7 @@ tasks:
 
   lint:
     desc: Run linters
-    deps: [lint-server, lint-webapp, lint-mobile]
+    deps: [lint-server, lint-webapp, lint-mobile, lint-shared]
 
   lint-server:
     desc: Run server linting with golangci-lint
@@ -80,9 +80,20 @@ tasks:
     dir: server
     cmd: swag init --generalInfo main.go --output docs --parseDependency --parseInternal
 
+  test-shared:
+    desc: Run shared package tests
+    dir: shared
+    cmd: npm run test:run
+
+  lint-shared:
+    desc: Run shared package linting
+    dir: shared
+    cmd: npm run lint && npm run typecheck
+
   clean:
     desc: Remove generated files and node packages
     cmds:
       - rm -rf webapp/build webapp/node_modules
       - rm -rf mobile/node_modules
+      - rm -rf shared/node_modules
       - rm -f server/jot server/coverage.out server/coverage.html
