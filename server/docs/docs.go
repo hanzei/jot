@@ -1002,7 +1002,7 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "Username to share with",
+                        "description": "User ID to share with",
                         "name": "body",
                         "in": "body",
                         "required": true,
@@ -1075,7 +1075,7 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "Username to unshare with",
+                        "description": "User ID to unshare with",
                         "name": "body",
                         "in": "body",
                         "required": true,
@@ -1693,7 +1693,7 @@ const docTemplate = `{
         "handlers.ShareNoteRequest": {
             "type": "object",
             "properties": {
-                "username": {
+                "user_id": {
                     "type": "string"
                 }
             }
