@@ -8,7 +8,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/hanzei/jot/server/jotclient"
+	"github.com/hanzei/jot/server/client"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -18,7 +18,7 @@ func TestGetProfileIconNoIconReturns404(t *testing.T) {
 	ctx := context.Background()
 	user := ts.createTestUser(t, "noiconuser", "password123", false)
 	_, _, err := user.Client.GetProfileIcon(ctx, user.User.ID)
-	assert.Equal(t, http.StatusNotFound, jotclient.StatusCode(err))
+	assert.Equal(t, http.StatusNotFound, client.StatusCode(err))
 }
 
 func TestGetProfileIconUnknownUserReturns404(t *testing.T) {
@@ -26,7 +26,7 @@ func TestGetProfileIconUnknownUserReturns404(t *testing.T) {
 	ctx := context.Background()
 	user := ts.createTestUser(t, "iconrequester", "password123", false)
 	_, _, err := user.Client.GetProfileIcon(ctx, "unknownuser1234567890ab")
-	assert.Equal(t, http.StatusNotFound, jotclient.StatusCode(err))
+	assert.Equal(t, http.StatusNotFound, client.StatusCode(err))
 }
 
 func TestGetProfileIconUnauthenticatedReturns401(t *testing.T) {
@@ -45,7 +45,7 @@ func TestGetProfileIconUnauthenticatedReturns401(t *testing.T) {
 
 	c := ts.newClient()
 	_, _, err = c.GetProfileIcon(ctx, user.User.ID)
-	assert.Equal(t, http.StatusUnauthorized, jotclient.StatusCode(err))
+	assert.Equal(t, http.StatusUnauthorized, client.StatusCode(err))
 }
 
 func TestGetProfileIconOtherUserCanFetch(t *testing.T) {
@@ -87,7 +87,7 @@ func TestDeleteProfileIconMakesIconInaccessible(t *testing.T) {
 	require.NoError(t, user.Client.DeleteProfileIcon(ctx))
 
 	_, _, err = user.Client.GetProfileIcon(ctx, user.User.ID)
-	assert.Equal(t, http.StatusNotFound, jotclient.StatusCode(err))
+	assert.Equal(t, http.StatusNotFound, client.StatusCode(err))
 }
 
 func TestDeleteProfileIconIdempotent(t *testing.T) {
@@ -100,5 +100,5 @@ func TestDeleteProfileIconUnauthenticatedReturns401(t *testing.T) {
 	ts := setupTestServer(t)
 	c := ts.newClient()
 	err := c.DeleteProfileIcon(context.Background())
-	assert.Equal(t, http.StatusUnauthorized, jotclient.StatusCode(err))
+	assert.Equal(t, http.StatusUnauthorized, client.StatusCode(err))
 }

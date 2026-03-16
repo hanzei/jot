@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/hanzei/jot/server/jotclient"
+	"github.com/hanzei/jot/server/client"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -18,7 +18,7 @@ func TestNoteSharingEndpoints(t *testing.T) {
 	sharedUser := ts.createTestUser(t, "user", "password123", false)
 	other := ts.createTestUser(t, "other", "password123", false)
 
-	note, err := owner.Client.CreateNote(ctx, &jotclient.CreateNoteRequest{
+	note, err := owner.Client.CreateNote(ctx, &client.CreateNoteRequest{
 		Title:   "Shared Note",
 		Content: "This will be shared",
 	})
@@ -32,32 +32,32 @@ func TestNoteSharingEndpoints(t *testing.T) {
 		require.NoError(t, owner.Client.ShareNote(ctx, note.ID, other.User.ID))
 
 		err := owner.Client.ShareNote(ctx, note.ID, other.User.ID)
-		assert.Equal(t, http.StatusConflict, jotclient.StatusCode(err))
+		assert.Equal(t, http.StatusConflict, client.StatusCode(err))
 	})
 
 	t.Run("share with nonexistent user_id returns not found", func(t *testing.T) {
 		err := owner.Client.ShareNote(ctx, note.ID, "abcdefghijklmnopqrstuv")
-		assert.Equal(t, http.StatusNotFound, jotclient.StatusCode(err))
+		assert.Equal(t, http.StatusNotFound, client.StatusCode(err))
 	})
 
 	t.Run("share with empty user_id returns bad request", func(t *testing.T) {
 		err := owner.Client.ShareNote(ctx, note.ID, "")
-		assert.Equal(t, http.StatusBadRequest, jotclient.StatusCode(err))
+		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 
 	t.Run("share with invalid user_id format returns bad request", func(t *testing.T) {
 		err := owner.Client.ShareNote(ctx, note.ID, "invalid")
-		assert.Equal(t, http.StatusBadRequest, jotclient.StatusCode(err))
+		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 
 	t.Run("share with self returns bad request", func(t *testing.T) {
 		err := owner.Client.ShareNote(ctx, note.ID, owner.User.ID)
-		assert.Equal(t, http.StatusBadRequest, jotclient.StatusCode(err))
+		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 
 	t.Run("share by non-owner returns forbidden", func(t *testing.T) {
 		err := other.Client.ShareNote(ctx, note.ID, other.User.ID)
-		assert.Equal(t, http.StatusForbidden, jotclient.StatusCode(err))
+		assert.Equal(t, http.StatusForbidden, client.StatusCode(err))
 	})
 
 	t.Run("get note shares", func(t *testing.T) {
@@ -68,7 +68,7 @@ func TestNoteSharingEndpoints(t *testing.T) {
 
 	t.Run("get note shares by non-owner returns forbidden", func(t *testing.T) {
 		_, err := other.Client.GetNoteShares(ctx, note.ID)
-		assert.Equal(t, http.StatusForbidden, jotclient.StatusCode(err))
+		assert.Equal(t, http.StatusForbidden, client.StatusCode(err))
 	})
 
 	t.Run("unshare note", func(t *testing.T) {
@@ -77,7 +77,7 @@ func TestNoteSharingEndpoints(t *testing.T) {
 
 	t.Run("unshare non-shared user returns not found", func(t *testing.T) {
 		err := owner.Client.UnshareNote(ctx, note.ID, sharedUser.User.ID)
-		assert.Equal(t, http.StatusNotFound, jotclient.StatusCode(err))
+		assert.Equal(t, http.StatusNotFound, client.StatusCode(err))
 	})
 }
 
@@ -88,12 +88,12 @@ func TestSearchUsersEndpoint(t *testing.T) {
 	bob := ts.createTestUser(t, "bob", "password123", false)
 	_ = ts.createTestUser(t, "charlie", "password123", true)
 
-	_, err := user1.Client.UpdateUser(ctx, &jotclient.UpdateUserRequest{
-		Username: jotclient.Ptr("alice"), FirstName: jotclient.Ptr("Alice"), LastName: jotclient.Ptr("Smith"),
+	_, err := user1.Client.UpdateUser(ctx, &client.UpdateUserRequest{
+		Username: client.Ptr("alice"), FirstName: client.Ptr("Alice"), LastName: client.Ptr("Smith"),
 	})
 	require.NoError(t, err)
-	_, err = bob.Client.UpdateUser(ctx, &jotclient.UpdateUserRequest{
-		Username: jotclient.Ptr("bob"), FirstName: jotclient.Ptr("Robert"), LastName: jotclient.Ptr("Jones"),
+	_, err = bob.Client.UpdateUser(ctx, &client.UpdateUserRequest{
+		Username: client.Ptr("bob"), FirstName: client.Ptr("Robert"), LastName: client.Ptr("Jones"),
 	})
 	require.NoError(t, err)
 
@@ -149,7 +149,7 @@ func TestSearchUsersEndpoint(t *testing.T) {
 	t.Run("search without auth returns unauthorized", func(t *testing.T) {
 		c := ts.newClient()
 		_, err := c.SearchUsers(ctx, "")
-		assert.Equal(t, http.StatusUnauthorized, jotclient.StatusCode(err))
+		assert.Equal(t, http.StatusUnauthorized, client.StatusCode(err))
 	})
 }
 
@@ -160,68 +160,68 @@ func TestEdgeCases(t *testing.T) {
 
 	t.Run("invalid note ID returns bad request", func(t *testing.T) {
 		_, err := user.Client.GetNote(ctx, "invalid")
-		assert.Equal(t, http.StatusBadRequest, jotclient.StatusCode(err))
+		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 
 	t.Run("nonexistent note ID returns bad request", func(t *testing.T) {
 		_, err := user.Client.GetNote(ctx, "999")
-		assert.Equal(t, http.StatusBadRequest, jotclient.StatusCode(err))
+		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 
 	t.Run("valid but nonexistent note ID returns not found", func(t *testing.T) {
 		_, err := user.Client.GetNote(ctx, "abcdefghijklmnopqrstuv")
-		assert.Equal(t, http.StatusNotFound, jotclient.StatusCode(err))
+		assert.Equal(t, http.StatusNotFound, client.StatusCode(err))
 	})
 
 	t.Run("create note with empty fields", func(t *testing.T) {
-		_, err := user.Client.CreateNote(ctx, &jotclient.CreateNoteRequest{})
-		assert.Equal(t, http.StatusBadRequest, jotclient.StatusCode(err))
+		_, err := user.Client.CreateNote(ctx, &client.CreateNoteRequest{})
+		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 
 	t.Run("create note with todo items", func(t *testing.T) {
-		note, err := user.Client.CreateNote(ctx, &jotclient.CreateNoteRequest{
+		note, err := user.Client.CreateNote(ctx, &client.CreateNoteRequest{
 			Title:    "Todo List",
-			NoteType: jotclient.NoteTypeTodo,
-			Items: []jotclient.CreateNoteItem{
+			NoteType: client.NoteTypeTodo,
+			Items: []client.CreateNoteItem{
 				{Text: "Item 1", Position: 0},
 				{Text: "Item 2", Position: 1},
 			},
 		})
 		require.NoError(t, err)
-		assert.Equal(t, jotclient.NoteTypeTodo, note.NoteType)
+		assert.Equal(t, client.NoteTypeTodo, note.NoteType)
 	})
 
 	t.Run("create note with items defaults note_type to todo", func(t *testing.T) {
-		note, err := user.Client.CreateNote(ctx, &jotclient.CreateNoteRequest{
+		note, err := user.Client.CreateNote(ctx, &client.CreateNoteRequest{
 			Title: "Implicit Todo",
-			Items: []jotclient.CreateNoteItem{
+			Items: []client.CreateNoteItem{
 				{Text: "Item 1", Position: 0},
 			},
 		})
 		require.NoError(t, err)
-		assert.Equal(t, jotclient.NoteTypeTodo, note.NoteType)
+		assert.Equal(t, client.NoteTypeTodo, note.NoteType)
 		assert.Len(t, note.Items, 1)
 	})
 
 	t.Run("create note rejects non-todo note_type when items are provided", func(t *testing.T) {
-		_, err := user.Client.CreateNote(ctx, &jotclient.CreateNoteRequest{
+		_, err := user.Client.CreateNote(ctx, &client.CreateNoteRequest{
 			Title:    "Conflicting Note Type",
-			NoteType: jotclient.NoteTypeText,
-			Items: []jotclient.CreateNoteItem{
+			NoteType: client.NoteTypeText,
+			Items: []client.CreateNoteItem{
 				{Text: "Item 1", Position: 0},
 			},
 		})
-		assert.Equal(t, http.StatusBadRequest, jotclient.StatusCode(err))
+		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 
 	t.Run("update note with default color", func(t *testing.T) {
-		created, err := user.Client.CreateNote(ctx, &jotclient.CreateNoteRequest{
+		created, err := user.Client.CreateNote(ctx, &client.CreateNoteRequest{
 			Title:   "Test Note",
 			Content: "Content",
 		})
 		require.NoError(t, err)
 
-		updated, err := user.Client.UpdateNote(ctx, created.ID, &jotclient.UpdateNoteRequest{
+		updated, err := user.Client.UpdateNote(ctx, created.ID, &client.UpdateNoteRequest{
 			Title:   "Updated",
 			Content: "Updated",
 		})

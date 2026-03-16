@@ -22,15 +22,15 @@ import (
 
 	"github.com/hanzei/jot/server/internal/models"
 	"github.com/hanzei/jot/server/internal/server"
-	"github.com/hanzei/jot/server/jotclient"
+	"github.com/hanzei/jot/server/client"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 // TestUser bundles a user model with a typed API client.
 type TestUser struct {
-	User   *jotclient.User
-	Client *jotclient.Client
+	User   *client.User
+	Client *client.Client
 }
 
 // TestServer wraps a test HTTP server with helpers for creating users.
@@ -67,9 +67,9 @@ func setupTestServer(t *testing.T) *TestServer {
 	return ts
 }
 
-// newClient creates a new [jotclient.Client] pointed at the test server.
-func (ts *TestServer) newClient() *jotclient.Client {
-	return jotclient.New(ts.HTTPServer.URL)
+// newClient creates a new [client.Client] pointed at the test server.
+func (ts *TestServer) newClient() *client.Client {
+	return client.New(ts.HTTPServer.URL)
 }
 
 func (ts *TestServer) createTestUser(t *testing.T, username, password string, isAdmin bool) *TestUser {
@@ -87,7 +87,7 @@ func (ts *TestServer) createTestUserCtx(ctx context.Context, t *testing.T, usern
 	if isAdmin {
 		_, err = ts.Server.GetDB().Exec("UPDATE users SET role = ? WHERE id = ?", models.RoleAdmin, auth.User.ID)
 		require.NoError(t, err)
-		auth.User.Role = jotclient.RoleAdmin
+		auth.User.Role = client.RoleAdmin
 	}
 
 	return &TestUser{
@@ -201,13 +201,13 @@ func TestRegisterEndpoint(t *testing.T) {
 
 		c2 := ts.newClient()
 		_, err = c2.Register(ctx, "duplicate", "password123")
-		assert.Equal(t, http.StatusConflict, jotclient.StatusCode(err))
+		assert.Equal(t, http.StatusConflict, client.StatusCode(err))
 	})
 
 	t.Run("invalid username", func(t *testing.T) {
 		c := ts.newClient()
 		_, err := c.Register(ctx, "x", "password123")
-		assert.Equal(t, http.StatusBadRequest, jotclient.StatusCode(err))
+		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 }
 
@@ -234,7 +234,7 @@ func TestLoginEndpoint(t *testing.T) {
 	t.Run("invalid credentials", func(t *testing.T) {
 		loginClient := ts.newClient()
 		_, err := loginClient.Login(ctx, "loginuser", "wrongpassword")
-		assert.Equal(t, http.StatusUnauthorized, jotclient.StatusCode(err))
+		assert.Equal(t, http.StatusUnauthorized, client.StatusCode(err))
 	})
 }
 
@@ -249,7 +249,7 @@ func TestLogoutEndpoint(t *testing.T) {
 	require.NoError(t, user.Client.Logout(ctx))
 
 	_, err = user.Client.Me(ctx)
-	assert.Equal(t, http.StatusUnauthorized, jotclient.StatusCode(err))
+	assert.Equal(t, http.StatusUnauthorized, client.StatusCode(err))
 }
 
 // Notes endpoint tests
@@ -261,7 +261,7 @@ func TestNotesEndpoints(t *testing.T) {
 	t.Run("unauthorized access", func(t *testing.T) {
 		c := ts.newClient()
 		_, err := c.ListNotes(ctx, nil)
-		assert.Equal(t, http.StatusUnauthorized, jotclient.StatusCode(err))
+		assert.Equal(t, http.StatusUnauthorized, client.StatusCode(err))
 	})
 
 	t.Run("get empty notes list", func(t *testing.T) {
@@ -271,10 +271,10 @@ func TestNotesEndpoints(t *testing.T) {
 	})
 
 	t.Run("create note", func(t *testing.T) {
-		note, err := user.Client.CreateNote(ctx, &jotclient.CreateNoteRequest{
+		note, err := user.Client.CreateNote(ctx, &client.CreateNoteRequest{
 			Title:    "Test Note",
 			Content:  "This is a test note",
-			NoteType: jotclient.NoteTypeText,
+			NoteType: client.NoteTypeText,
 			Color:    "#ffeb3b",
 		})
 		require.NoError(t, err)
@@ -282,7 +282,7 @@ func TestNotesEndpoints(t *testing.T) {
 	})
 
 	// Create a note for further tests
-	created, err := user.Client.CreateNote(ctx, &jotclient.CreateNoteRequest{
+	created, err := user.Client.CreateNote(ctx, &client.CreateNoteRequest{
 		Title:   "Test Note",
 		Content: "Test Content",
 	})
@@ -295,7 +295,7 @@ func TestNotesEndpoints(t *testing.T) {
 	})
 
 	t.Run("update note", func(t *testing.T) {
-		updated, err := user.Client.UpdateNote(ctx, created.ID, &jotclient.UpdateNoteRequest{
+		updated, err := user.Client.UpdateNote(ctx, created.ID, &client.UpdateNoteRequest{
 			Title:   "Updated Title",
 			Content: "Updated Content",
 			Pinned:  true,
@@ -309,7 +309,7 @@ func TestNotesEndpoints(t *testing.T) {
 		require.NoError(t, user.Client.DeleteNote(ctx, created.ID))
 
 		_, err := user.Client.GetNote(ctx, created.ID)
-		assert.Equal(t, http.StatusNotFound, jotclient.StatusCode(err))
+		assert.Equal(t, http.StatusNotFound, client.StatusCode(err))
 	})
 }
 
@@ -328,18 +328,18 @@ func TestAdminEndpoints(t *testing.T) {
 
 	t.Run("get users as non-admin", func(t *testing.T) {
 		_, err := user.Client.AdminListUsers(ctx)
-		assert.Equal(t, http.StatusForbidden, jotclient.StatusCode(err))
+		assert.Equal(t, http.StatusForbidden, client.StatusCode(err))
 	})
 
 	t.Run("create user as admin", func(t *testing.T) {
-		created, err := adminUser.Client.AdminCreateUser(ctx, "newuser", "password123", jotclient.RoleUser)
+		created, err := adminUser.Client.AdminCreateUser(ctx, "newuser", "password123", client.RoleUser)
 		require.NoError(t, err)
 		assert.Equal(t, "newuser", created.Username)
 	})
 
 	t.Run("create user as non-admin", func(t *testing.T) {
-		_, err := user.Client.AdminCreateUser(ctx, "hacker", "password123", jotclient.RoleAdmin)
-		assert.Equal(t, http.StatusForbidden, jotclient.StatusCode(err))
+		_, err := user.Client.AdminCreateUser(ctx, "hacker", "password123", client.RoleAdmin)
+		assert.Equal(t, http.StatusForbidden, client.StatusCode(err))
 	})
 
 	t.Run("delete user as admin", func(t *testing.T) {
@@ -356,17 +356,17 @@ func TestAdminEndpoints(t *testing.T) {
 	t.Run("delete user as non-admin returns 403", func(t *testing.T) {
 		deleteTarget := ts.createTestUserCtx(ctx, t, "todelete2", "password123", false)
 		err := user.Client.AdminDeleteUser(ctx, deleteTarget.User.ID)
-		assert.Equal(t, http.StatusForbidden, jotclient.StatusCode(err))
+		assert.Equal(t, http.StatusForbidden, client.StatusCode(err))
 	})
 
 	t.Run("admin cannot delete themselves", func(t *testing.T) {
 		err := adminUser.Client.AdminDeleteUser(ctx, adminUser.User.ID)
-		assert.Equal(t, http.StatusForbidden, jotclient.StatusCode(err))
+		assert.Equal(t, http.StatusForbidden, client.StatusCode(err))
 	})
 
 	t.Run("delete nonexistent user returns 404", func(t *testing.T) {
 		err := adminUser.Client.AdminDeleteUser(ctx, "nonexistentid12345678")
-		assert.Equal(t, http.StatusNotFound, jotclient.StatusCode(err))
+		assert.Equal(t, http.StatusNotFound, client.StatusCode(err))
 	})
 }
 
@@ -387,41 +387,41 @@ func TestUpdateUserEndpoint(t *testing.T) {
 
 	t.Run("successful username update", func(t *testing.T) {
 		t.Cleanup(func() {
-			_, err := user.Client.UpdateUser(ctx, &jotclient.UpdateUserRequest{Username: jotclient.Ptr("originaluser")})
+			_, err := user.Client.UpdateUser(ctx, &client.UpdateUserRequest{Username: client.Ptr("originaluser")})
 			require.NoError(t, err)
 		})
 
-		resp, err := user.Client.UpdateUser(ctx, &jotclient.UpdateUserRequest{Username: jotclient.Ptr("newusername")})
+		resp, err := user.Client.UpdateUser(ctx, &client.UpdateUserRequest{Username: client.Ptr("newusername")})
 		require.NoError(t, err)
 		assert.Equal(t, "newusername", resp.User.Username)
 		assert.NotNil(t, resp.Settings)
 	})
 
 	t.Run("duplicate username returns 409", func(t *testing.T) {
-		_, err := user.Client.UpdateUser(ctx, &jotclient.UpdateUserRequest{Username: &other.User.Username})
-		assert.Equal(t, http.StatusConflict, jotclient.StatusCode(err))
+		_, err := user.Client.UpdateUser(ctx, &client.UpdateUserRequest{Username: &other.User.Username})
+		assert.Equal(t, http.StatusConflict, client.StatusCode(err))
 	})
 
 	t.Run("invalid username format returns 400", func(t *testing.T) {
-		_, err := user.Client.UpdateUser(ctx, &jotclient.UpdateUserRequest{Username: jotclient.Ptr("a")})
-		assert.Equal(t, http.StatusBadRequest, jotclient.StatusCode(err))
+		_, err := user.Client.UpdateUser(ctx, &client.UpdateUserRequest{Username: client.Ptr("a")})
+		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 
 	t.Run("unauthenticated request returns 401", func(t *testing.T) {
 		c := ts.newClient()
-		_, err := c.UpdateUser(ctx, &jotclient.UpdateUserRequest{Username: jotclient.Ptr("hacker")})
-		assert.Equal(t, http.StatusUnauthorized, jotclient.StatusCode(err))
+		_, err := c.UpdateUser(ctx, &client.UpdateUserRequest{Username: client.Ptr("hacker")})
+		assert.Equal(t, http.StatusUnauthorized, client.StatusCode(err))
 	})
 
 	t.Run("partial update preserves unchanged fields", func(t *testing.T) {
-		resp, err := user.Client.UpdateUser(ctx, &jotclient.UpdateUserRequest{FirstName: jotclient.Ptr("Updated")})
+		resp, err := user.Client.UpdateUser(ctx, &client.UpdateUserRequest{FirstName: client.Ptr("Updated")})
 		require.NoError(t, err)
 		assert.Equal(t, "Updated", resp.User.FirstName)
 		assert.Equal(t, "originaluser", resp.User.Username)
 	})
 
 	t.Run("empty body updates nothing and returns current state", func(t *testing.T) {
-		resp, err := user.Client.UpdateUser(ctx, &jotclient.UpdateUserRequest{})
+		resp, err := user.Client.UpdateUser(ctx, &client.UpdateUserRequest{})
 		require.NoError(t, err)
 		assert.Equal(t, "originaluser", resp.User.Username)
 		assert.NotNil(t, resp.Settings)
@@ -503,10 +503,10 @@ func TestSSEEndpoint(t *testing.T) {
 			t.Fatal("timed out waiting for SSE connection")
 		}
 
-		note, err := user.Client.CreateNote(ctx, &jotclient.CreateNoteRequest{
+		note, err := user.Client.CreateNote(ctx, &client.CreateNoteRequest{
 			Title:    "SSE Test Note",
 			Content:  "test content",
-			NoteType: jotclient.NoteTypeText,
+			NoteType: client.NoteTypeText,
 		})
 		require.NoError(t, err)
 
@@ -535,23 +535,23 @@ func TestChangePasswordEndpoint(t *testing.T) {
 
 	t.Run("wrong current password returns 403", func(t *testing.T) {
 		err := user.Client.ChangePassword(ctx, "wrongpassword", "anotherpass")
-		assert.Equal(t, http.StatusForbidden, jotclient.StatusCode(err))
+		assert.Equal(t, http.StatusForbidden, client.StatusCode(err))
 	})
 
 	t.Run("short new password returns 400", func(t *testing.T) {
 		err := user.Client.ChangePassword(ctx, "newpassword", "ab")
-		assert.Equal(t, http.StatusBadRequest, jotclient.StatusCode(err))
+		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 
 	t.Run("missing fields returns 400", func(t *testing.T) {
 		err := user.Client.ChangePassword(ctx, "", "")
-		assert.Equal(t, http.StatusBadRequest, jotclient.StatusCode(err))
+		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 
 	t.Run("unauthenticated request returns 401", func(t *testing.T) {
 		c := ts.newClient()
 		err := c.ChangePassword(ctx, "newpassword", "hacked")
-		assert.Equal(t, http.StatusUnauthorized, jotclient.StatusCode(err))
+		assert.Equal(t, http.StatusUnauthorized, client.StatusCode(err))
 	})
 }
 
@@ -568,7 +568,7 @@ func TestUserSettingsEndpoints(t *testing.T) {
 	})
 
 	t.Run("PATCH /users/me updates language via unified endpoint", func(t *testing.T) {
-		resp, err := user.Client.UpdateUser(ctx, &jotclient.UpdateUserRequest{Language: jotclient.Ptr("de")})
+		resp, err := user.Client.UpdateUser(ctx, &client.UpdateUserRequest{Language: client.Ptr("de")})
 		require.NoError(t, err)
 		assert.Equal(t, "de", resp.Settings.Language)
 	})
@@ -580,16 +580,16 @@ func TestUserSettingsEndpoints(t *testing.T) {
 	})
 
 	t.Run("PATCH /users/me with invalid language returns 400", func(t *testing.T) {
-		_, err := user.Client.UpdateUser(ctx, &jotclient.UpdateUserRequest{Language: jotclient.Ptr("fr")})
-		assert.Equal(t, http.StatusBadRequest, jotclient.StatusCode(err))
+		_, err := user.Client.UpdateUser(ctx, &client.UpdateUserRequest{Language: client.Ptr("fr")})
+		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 
 	t.Run("invalid settings with valid profile does not commit profile (atomic validation)", func(t *testing.T) {
-		_, err := user.Client.UpdateUser(ctx, &jotclient.UpdateUserRequest{
-			FirstName: jotclient.Ptr("ShouldNotPersist"),
-			Language:  jotclient.Ptr("invalid"),
+		_, err := user.Client.UpdateUser(ctx, &client.UpdateUserRequest{
+			FirstName: client.Ptr("ShouldNotPersist"),
+			Language:  client.Ptr("invalid"),
 		})
-		assert.Equal(t, http.StatusBadRequest, jotclient.StatusCode(err))
+		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 
 		me, err := user.Client.Me(ctx)
 		require.NoError(t, err)
@@ -597,9 +597,9 @@ func TestUserSettingsEndpoints(t *testing.T) {
 	})
 
 	t.Run("PATCH /users/me updates both profile and settings", func(t *testing.T) {
-		resp, err := user.Client.UpdateUser(ctx, &jotclient.UpdateUserRequest{
-			FirstName: jotclient.Ptr("Jane"),
-			Theme:     jotclient.Ptr("dark"),
+		resp, err := user.Client.UpdateUser(ctx, &client.UpdateUserRequest{
+			FirstName: client.Ptr("Jane"),
+			Theme:     client.Ptr("dark"),
 		})
 		require.NoError(t, err)
 		assert.Equal(t, "Jane", resp.User.FirstName)
@@ -635,10 +635,10 @@ func TestTodoItemIndentLevel(t *testing.T) {
 	ctx := context.Background()
 	user := ts.createTestUser(t, "indentuser", "password123", false)
 
-	created, err := user.Client.CreateNote(ctx, &jotclient.CreateNoteRequest{
+	created, err := user.Client.CreateNote(ctx, &client.CreateNoteRequest{
 		Title:    "Indent Test",
-		NoteType: jotclient.NoteTypeTodo,
-		Items: []jotclient.CreateNoteItem{
+		NoteType: client.NoteTypeTodo,
+		Items: []client.CreateNoteItem{
 			{Text: "top level", Position: 0, IndentLevel: 0},
 			{Text: "indented once", Position: 1, IndentLevel: 1},
 			{Text: "also indented", Position: 2, IndentLevel: 1},
@@ -656,10 +656,10 @@ func TestTodoItemIndentLevel(t *testing.T) {
 	})
 
 	t.Run("indent levels updated via PUT", func(t *testing.T) {
-		_, err := user.Client.UpdateNote(ctx, created.ID, &jotclient.UpdateNoteRequest{
+		_, err := user.Client.UpdateNote(ctx, created.ID, &client.UpdateNoteRequest{
 			Title: "Indent Test",
 			Color: "#ffffff",
-			Items: []jotclient.UpdateNoteItem{
+			Items: []client.UpdateNoteItem{
 				{Text: "top level", Position: 0, IndentLevel: 0},
 				{Text: "indented once", Position: 1, IndentLevel: 1},
 				{Text: "promoted to top", Position: 2, IndentLevel: 0},
@@ -676,10 +676,10 @@ func TestTodoItemIndentLevel(t *testing.T) {
 	})
 
 	t.Run("indent level defaults to 0 when omitted", func(t *testing.T) {
-		note, err := user.Client.CreateNote(ctx, &jotclient.CreateNoteRequest{
+		note, err := user.Client.CreateNote(ctx, &client.CreateNoteRequest{
 			Title:    "No Indent",
-			NoteType: jotclient.NoteTypeTodo,
-			Items: []jotclient.CreateNoteItem{
+			NoteType: client.NoteTypeTodo,
+			Items: []client.CreateNoteItem{
 				{Text: "item without indent_level", Position: 0},
 			},
 		})
@@ -689,26 +689,26 @@ func TestTodoItemIndentLevel(t *testing.T) {
 	})
 
 	t.Run("indent level > 1 rejected on create", func(t *testing.T) {
-		_, err := user.Client.CreateNote(ctx, &jotclient.CreateNoteRequest{
+		_, err := user.Client.CreateNote(ctx, &client.CreateNoteRequest{
 			Title:    "Bad Indent",
-			NoteType: jotclient.NoteTypeTodo,
-			Items: []jotclient.CreateNoteItem{
+			NoteType: client.NoteTypeTodo,
+			Items: []client.CreateNoteItem{
 				{Text: "too deep", Position: 0, IndentLevel: 2},
 			},
 		})
-		assert.Equal(t, http.StatusBadRequest, jotclient.StatusCode(err))
+		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 
 	t.Run("indent level > 1 rejected on update", func(t *testing.T) {
-		_, err := user.Client.UpdateNote(ctx, created.ID, &jotclient.UpdateNoteRequest{
+		_, err := user.Client.UpdateNote(ctx, created.ID, &client.UpdateNoteRequest{
 			Title: "Indent Test",
 			Color: "#ffffff",
-			Items: []jotclient.UpdateNoteItem{
+			Items: []client.UpdateNoteItem{
 				{Text: "top level", Position: 0, IndentLevel: 0},
 				{Text: "too deep", Position: 1, IndentLevel: 2},
 			},
 		})
-		assert.Equal(t, http.StatusBadRequest, jotclient.StatusCode(err))
+		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 }
 
@@ -803,7 +803,7 @@ func TestUploadProfileIcon(t *testing.T) {
 	t.Run("corrupt file returns 400", func(t *testing.T) {
 		corruptData := []byte{0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 0x00, 0x00}
 		_, err := user.Client.UploadProfileIcon(ctx, "corrupt.png", bytes.NewReader(corruptData))
-		assert.Equal(t, http.StatusBadRequest, jotclient.StatusCode(err))
+		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 
 	t.Run("decompression bomb is rejected", func(t *testing.T) {
@@ -819,7 +819,7 @@ func TestUploadProfileIcon(t *testing.T) {
 			0x00, 0x00, 0x00, 0x00,
 		}
 		_, err := user.Client.UploadProfileIcon(ctx, "bomb.png", bytes.NewReader(pngHeader))
-		assert.Equal(t, http.StatusBadRequest, jotclient.StatusCode(err))
+		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 
 	t.Run("GIF upload returns 400", func(t *testing.T) {
@@ -827,7 +827,7 @@ func TestUploadProfileIcon(t *testing.T) {
 		var buf bytes.Buffer
 		require.NoError(t, gif.Encode(&buf, img, nil))
 		_, err := user.Client.UploadProfileIcon(ctx, "test.gif", &buf)
-		assert.Equal(t, http.StatusBadRequest, jotclient.StatusCode(err))
+		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 
 	t.Run("unauthenticated request returns 401", func(t *testing.T) {

@@ -9,7 +9,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/hanzei/jot/server/jotclient"
+	"github.com/hanzei/jot/server/client"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -114,7 +114,7 @@ func TestImportInvalidJSONReturns400(t *testing.T) {
 	user := ts.createTestUser(t, "importuser5", "password123", false)
 
 	_, err := user.Client.ImportNotes(ctx, "bad.json", bytes.NewReader([]byte("not valid json")))
-	assert.Equal(t, http.StatusBadRequest, jotclient.StatusCode(err))
+	assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 }
 
 func TestImportCorruptZIPReturns400(t *testing.T) {
@@ -124,7 +124,7 @@ func TestImportCorruptZIPReturns400(t *testing.T) {
 
 	corrupt := []byte{'P', 'K', 0x03, 0x04, 0xDE, 0xAD, 0xBE, 0xEF}
 	_, err := user.Client.ImportNotes(ctx, "bad.zip", bytes.NewReader(corrupt))
-	assert.Equal(t, http.StatusBadRequest, jotclient.StatusCode(err))
+	assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 }
 
 func TestImportUnauthenticatedReturns401(t *testing.T) {

@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"testing"
 
-	"github.com/hanzei/jot/server/jotclient"
+	"github.com/hanzei/jot/server/client"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -18,7 +18,7 @@ func TestReorderNotesEndpoint(t *testing.T) {
 
 	createNote := func(t *testing.T, title string, owner *TestUser) string {
 		t.Helper()
-		note, err := owner.Client.CreateNote(ctx, &jotclient.CreateNoteRequest{
+		note, err := owner.Client.CreateNote(ctx, &client.CreateNoteRequest{
 			Title: title, Content: "content",
 		})
 		require.NoError(t, err)
@@ -47,7 +47,7 @@ func TestReorderNotesEndpoint(t *testing.T) {
 
 	t.Run("empty note ID list returns 400", func(t *testing.T) {
 		err := user.Client.ReorderNotes(ctx, []string{})
-		assert.Equal(t, http.StatusBadRequest, jotclient.StatusCode(err))
+		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 
 	t.Run("including note without access returns 403", func(t *testing.T) {
@@ -56,7 +56,7 @@ func TestReorderNotesEndpoint(t *testing.T) {
 		require.Len(t, beforeNotes, 3)
 
 		err = user.Client.ReorderNotes(ctx, []string{note1, otherNote})
-		assert.Equal(t, http.StatusForbidden, jotclient.StatusCode(err))
+		assert.Equal(t, http.StatusForbidden, client.StatusCode(err))
 
 		afterNotes, err := user.Client.ListNotes(ctx, nil)
 		require.NoError(t, err)
@@ -77,7 +77,7 @@ func TestRemoveLabelEndpoint(t *testing.T) {
 
 	createNote := func(t *testing.T, title string) string {
 		t.Helper()
-		note, err := user.Client.CreateNote(ctx, &jotclient.CreateNoteRequest{
+		note, err := user.Client.CreateNote(ctx, &client.CreateNoteRequest{
 			Title: title, Content: "content",
 		})
 		require.NoError(t, err)
@@ -106,7 +106,7 @@ func TestRemoveLabelEndpoint(t *testing.T) {
 		require.NoError(t, err)
 		assert.Empty(t, updated.Labels)
 
-		notes, err := user.Client.ListNotes(ctx, &jotclient.ListNotesOptions{Label: labelID})
+		notes, err := user.Client.ListNotes(ctx, &client.ListNotesOptions{Label: labelID})
 		require.NoError(t, err)
 		assert.Empty(t, notes)
 	})
@@ -116,7 +116,7 @@ func TestRemoveLabelEndpoint(t *testing.T) {
 		restrictedLabelID := addLabel(t, noteID, "restricted")
 
 		_, err := other.Client.RemoveLabel(ctx, noteID, restrictedLabelID)
-		assert.Equal(t, http.StatusForbidden, jotclient.StatusCode(err))
+		assert.Equal(t, http.StatusForbidden, client.StatusCode(err))
 
 		note, err := user.Client.GetNote(ctx, noteID)
 		require.NoError(t, err)
@@ -134,11 +134,11 @@ func TestAdminUpdateUserRoleEndpoint(t *testing.T) {
 		target := ts.createTestUserCtx(ctx, t, "role-target-promote", "password123", false)
 
 		_, err := target.Client.AdminListUsers(ctx)
-		assert.Equal(t, http.StatusForbidden, jotclient.StatusCode(err))
+		assert.Equal(t, http.StatusForbidden, client.StatusCode(err))
 
-		updated, err := admin.Client.AdminUpdateUserRole(ctx, target.User.ID, jotclient.RoleAdmin)
+		updated, err := admin.Client.AdminUpdateUserRole(ctx, target.User.ID, client.RoleAdmin)
 		require.NoError(t, err)
-		assert.Equal(t, jotclient.RoleAdmin, updated.Role)
+		assert.Equal(t, client.RoleAdmin, updated.Role)
 
 		_, err = target.Client.AdminListUsers(ctx)
 		require.NoError(t, err)
@@ -150,10 +150,10 @@ func TestAdminUpdateUserRoleEndpoint(t *testing.T) {
 		target := ts.createTestUserCtx(ctx, t, "role-target-no-admin", "password123", false)
 
 		_, err := target.Client.AdminListUsers(ctx)
-		assert.Equal(t, http.StatusForbidden, jotclient.StatusCode(err))
+		assert.Equal(t, http.StatusForbidden, client.StatusCode(err))
 
-		_, err = regular.Client.AdminUpdateUserRole(ctx, target.User.ID, jotclient.RoleUser)
-		assert.Equal(t, http.StatusForbidden, jotclient.StatusCode(err))
+		_, err = regular.Client.AdminUpdateUserRole(ctx, target.User.ID, client.RoleUser)
+		assert.Equal(t, http.StatusForbidden, client.StatusCode(err))
 
 		users, err := admin.Client.AdminListUsers(ctx)
 		require.NoError(t, err)
@@ -161,7 +161,7 @@ func TestAdminUpdateUserRoleEndpoint(t *testing.T) {
 		for _, u := range users {
 			if u.ID == target.User.ID {
 				foundTarget = true
-				assert.Equal(t, jotclient.RoleUser, u.Role)
+				assert.Equal(t, client.RoleUser, u.Role)
 				break
 			}
 		}
@@ -172,13 +172,13 @@ func TestAdminUpdateUserRoleEndpoint(t *testing.T) {
 		admin := ts.createTestUserCtx(ctx, t, "role-admin-invalid", "password123", true)
 		regular := ts.createTestUserCtx(ctx, t, "role-regular-invalid", "password123", false)
 		_, err := admin.Client.AdminUpdateUserRole(ctx, regular.User.ID, "super-admin")
-		assert.Equal(t, http.StatusBadRequest, jotclient.StatusCode(err))
+		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 
 	t.Run("unknown user returns 404", func(t *testing.T) {
 		admin := ts.createTestUserCtx(ctx, t, "role-admin-unknown", "password123", true)
-		_, err := admin.Client.AdminUpdateUserRole(ctx, "nonexistentid12345678", jotclient.RoleUser)
-		assert.Equal(t, http.StatusNotFound, jotclient.StatusCode(err))
+		_, err := admin.Client.AdminUpdateUserRole(ctx, "nonexistentid12345678", client.RoleUser)
+		assert.Equal(t, http.StatusNotFound, client.StatusCode(err))
 	})
 }
 
@@ -187,10 +187,10 @@ func TestAdminUpdateUserRolePreventsDemotingLastAdmin(t *testing.T) {
 	ctx := context.Background()
 	admin := ts.createTestUser(t, "last-admin", "password123", true)
 
-	_, err := admin.Client.AdminUpdateUserRole(ctx, admin.User.ID, jotclient.RoleUser)
-	assert.Equal(t, http.StatusConflict, jotclient.StatusCode(err))
+	_, err := admin.Client.AdminUpdateUserRole(ctx, admin.User.ID, client.RoleUser)
+	assert.Equal(t, http.StatusConflict, client.StatusCode(err))
 
 	me, err := admin.Client.Me(ctx)
 	require.NoError(t, err)
-	assert.Equal(t, jotclient.RoleAdmin, me.User.Role)
+	assert.Equal(t, client.RoleAdmin, me.User.Role)
 }

@@ -7,7 +7,7 @@ import (
 	"time"
 
 	"github.com/hanzei/jot/server/internal/models"
-	"github.com/hanzei/jot/server/jotclient"
+	"github.com/hanzei/jot/server/client"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -16,7 +16,7 @@ func TestAuthMiddlewareUnauthenticated(t *testing.T) {
 	ts := setupTestServer(t)
 	c := ts.newClient()
 	_, err := c.Me(context.Background())
-	assert.Equal(t, http.StatusUnauthorized, jotclient.StatusCode(err))
+	assert.Equal(t, http.StatusUnauthorized, client.StatusCode(err))
 }
 
 func TestAuthMiddlewareAuthenticated(t *testing.T) {
@@ -50,7 +50,7 @@ func TestAuthMiddlewareSessionClearedAfterLogout(t *testing.T) {
 	require.NoError(t, user.Client.Logout(ctx))
 
 	_, err = user.Client.Me(ctx)
-	assert.Equal(t, http.StatusUnauthorized, jotclient.StatusCode(err))
+	assert.Equal(t, http.StatusUnauthorized, client.StatusCode(err))
 }
 
 func TestAdminMiddlewareNonAdminForbidden(t *testing.T) {
@@ -58,7 +58,7 @@ func TestAdminMiddlewareNonAdminForbidden(t *testing.T) {
 	_ = ts.createTestUser(t, "adminuser", "password123", true)
 	regularUser := ts.createTestUser(t, "regularuser", "password123", false)
 	_, err := regularUser.Client.AdminListUsers(context.Background())
-	assert.Equal(t, http.StatusForbidden, jotclient.StatusCode(err))
+	assert.Equal(t, http.StatusForbidden, client.StatusCode(err))
 }
 
 func TestAdminMiddlewareAdminAllowed(t *testing.T) {
@@ -72,7 +72,7 @@ func TestAdminMiddlewareUnauthenticated(t *testing.T) {
 	ts := setupTestServer(t)
 	c := ts.newClient()
 	_, err := c.AdminListUsers(context.Background())
-	assert.Equal(t, http.StatusUnauthorized, jotclient.StatusCode(err))
+	assert.Equal(t, http.StatusUnauthorized, client.StatusCode(err))
 }
 
 func TestSessionPersistsAcrossRequests(t *testing.T) {

@@ -1,4 +1,4 @@
-package jotclient
+package client
 
 import "time"
 
