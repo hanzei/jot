@@ -29,6 +29,9 @@ export function getAvatarColor(username: string): string {
   return AVATAR_COLORS[hashUsername(username) % AVATAR_COLORS.length];
 }
 
+/** Colors light enough to need a visible border on white backgrounds. */
+export const LIGHT_NOTE_COLORS: ReadonlySet<string> = new Set(['#ffffff', '#e8eaed']);
+
 export const NOTE_COLORS = [
   '#ffffff',
   '#f28b82',

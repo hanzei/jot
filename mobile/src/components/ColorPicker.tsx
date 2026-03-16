@@ -10,7 +10,7 @@ import {
   Pressable,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { NOTE_COLORS } from '@jot/shared';
+import { NOTE_COLORS, LIGHT_NOTE_COLORS } from '@jot/shared';
 
 interface ColorPickerProps {
   visible: boolean;
@@ -43,7 +43,7 @@ export default function ColorPicker({ visible, currentColor, onSelect, onClose }
                   style={[
                     styles.colorCircle,
                     { backgroundColor: color },
-                    (color === '#ffffff' || color === '#e8eaed') && styles.colorCircleLight,
+                    LIGHT_NOTE_COLORS.has(color) && styles.colorCircleLight,
                   ]}
                   onPress={() => {
                     onSelect(color);
@@ -56,7 +56,7 @@ export default function ColorPicker({ visible, currentColor, onSelect, onClose }
                     <Ionicons
                       name="checkmark"
                       size={18}
-                      color={color === '#ffffff' || color === '#e8eaed' ? '#999' : '#333'}
+                      color={LIGHT_NOTE_COLORS.has(color) ? '#999' : '#333'}
                     />
                   )}
                 </TouchableOpacity>
