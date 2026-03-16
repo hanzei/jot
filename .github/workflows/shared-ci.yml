@@ -1,0 +1,55 @@
+name: Shared — CI
+
+permissions:
+  contents: read
+
+on:
+  push:
+    branches: ["master"]
+  pull_request:
+    paths: ["shared/**"]
+
+jobs:
+  test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: shared/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ./shared
+        run: npm ci
+
+      - name: Run tests
+        working-directory: ./shared
+        run: npm run test:run
+
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Set up Node.js
+        uses: actions/setup-node@v6
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: shared/package-lock.json
+
+      - name: Install dependencies
+        working-directory: ./shared
+        run: npm ci
+
+      - name: Run ESLint
+        working-directory: ./shared
+        run: npm run lint
+
+      - name: Run TypeScript type checking
+        working-directory: ./shared
+        run: npm run typecheck

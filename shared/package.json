@@ -2,6 +2,20 @@
   "name": "@jot/shared",
   "version": "0.1.0",
   "private": true,
+  "type": "module",
   "main": "src/index.ts",
-  "types": "src/index.ts"
+  "types": "src/index.ts",
+  "scripts": {
+    "test": "vitest",
+    "test:run": "vitest run",
+    "lint": "eslint . --report-unused-disable-directives --max-warnings 0",
+    "typecheck": "tsc --noEmit"
+  },
+  "devDependencies": {
+    "@typescript-eslint/eslint-plugin": "^8.57.0",
+    "@typescript-eslint/parser": "^8.57.0",
+    "eslint": "^9.39.4",
+    "typescript": "^5.9.3",
+    "vitest": "^3.2.4"
+  }
 }
