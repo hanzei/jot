@@ -487,7 +487,7 @@ describe('API Module', () => {
 
     describe('sharing functionality', () => {
       it('shares note with user', async () => {
-        const shareData: ShareNoteRequest = { username: 'testuser' }
+        const shareData: ShareNoteRequest = { user_id: 'abcdefghijklmnopqrstuv' }
         const shareResponse = { success: true, message: 'Note shared' }
         mockPost.mockResolvedValue({ data: shareResponse })
 
@@ -498,7 +498,7 @@ describe('API Module', () => {
       })
 
       it('unshares note', async () => {
-        const unshareData: ShareNoteRequest = { username: 'testuser' }
+        const unshareData: ShareNoteRequest = { user_id: 'abcdefghijklmnopqrstuv' }
         const unshareResponse = { success: true, message: 'Note unshared' }
         mockDelete.mockResolvedValue({ data: unshareResponse })
 
@@ -535,7 +535,7 @@ describe('API Module', () => {
         const error = new Error('User not found')
         mockPost.mockRejectedValue(error)
 
-        const shareData: ShareNoteRequest = { username: 'nonexistent' }
+        const shareData: ShareNoteRequest = { user_id: 'abcdefghijklmnopqrstuv' }
 
         await expect(notes.share('1', shareData)).rejects.toThrow('User not found')
       })

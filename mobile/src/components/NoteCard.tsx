@@ -11,7 +11,7 @@ interface NoteCardProps {
   onMenuPress?: () => void;
 }
 
-const MAX_PREVIEW_ITEMS = 4;
+const MAX_PREVIEW_ITEMS = 10;
 const MAX_AVATAR_DISPLAY = 3;
 
 function ShareAvatars({ shares }: { shares: NoteShare[] }) {

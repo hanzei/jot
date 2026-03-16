@@ -55,6 +55,8 @@ test.describe('Task Assignment', () => {
       data: { username: user2Name, password: user2Pass },
     });
     expect(registerResp.ok()).toBeTruthy();
+    const registerData = await registerResp.json();
+    const user2Id = registerData.user.id;
 
     await dashboardPage.goto();
     await dashboardPage.createTodoNote('Unshare Cleanup', ['Task 1']);
@@ -77,7 +79,7 @@ test.describe('Task Assignment', () => {
 
     const unshareResp = await request.delete(`/api/v1/notes/${note.id}/share`, {
       headers: { Cookie: `jot_session=${sessionCookie!.value}` },
-      data: { username: user2Name },
+      data: { user_id: user2Id },
     });
     expect(unshareResp.ok()).toBeTruthy();
 

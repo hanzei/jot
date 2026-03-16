@@ -86,7 +86,7 @@ definitions:
     type: object
   handlers.ShareNoteRequest:
     properties:
-      username:
+      user_id:
         type: string
     type: object
   handlers.ShareNoteResponse:
@@ -853,7 +853,7 @@ paths:
         name: id
         required: true
         type: string
-      - description: Username to unshare with
+      - description: User ID to unshare with
         in: body
         name: body
         required: true
@@ -896,7 +896,7 @@ paths:
         name: id
         required: true
         type: string
-      - description: Username to share with
+      - description: User ID to share with
         in: body
         name: body
         required: true

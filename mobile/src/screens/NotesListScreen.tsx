@@ -320,18 +320,14 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   const renderDraggableNoteCard = useCallback(
     ({ item, drag, isActive }: { item: Note; drag: () => void; isActive: boolean }) => (
       <ScaleDecorator>
-        <TouchableOpacity
-          onLongPress={drag}
-          disabled={isActive}
-          activeOpacity={0.7}
-          style={isActive ? styles.draggingCard : undefined}
-        >
+        <View style={isActive ? styles.draggingCard : undefined}>
           <NoteCard
             note={item}
             onPress={() => handleNotePress(item.id)}
+            onLongPress={drag}
             onMenuPress={() => handleOpenMenu(item)}
           />
-        </TouchableOpacity>
+        </View>
       </ScaleDecorator>
     ),
     [handleNotePress, handleOpenMenu],
