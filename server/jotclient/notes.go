@@ -3,6 +3,7 @@ package jotclient
 import (
 	"bytes"
 	"context"
+	"encoding/json"
 	"fmt"
 	"io"
 	"mime/multipart"
@@ -107,6 +108,7 @@ func (c *Client) ImportNotes(ctx context.Context, filename string, data io.Reade
 	if _, err = io.Copy(part, data); err != nil {
 		return nil, fmt.Errorf("copy file data: %w", err)
 	}
+	contentType := mw.FormDataContentType()
 	if err = mw.Close(); err != nil {
 		return nil, fmt.Errorf("close multipart writer: %w", err)
 	}
@@ -115,7 +117,7 @@ func (c *Client) ImportNotes(ctx context.Context, filename string, data io.Reade
 	if err != nil {
 		return nil, fmt.Errorf("create request: %w", err)
 	}
-	req.Header.Set("Content-Type", mw.FormDataContentType())
+	req.Header.Set("Content-Type", contentType)
 
 	resp, err := c.httpClient.Do(req)
 	if err != nil {
@@ -132,8 +134,8 @@ func (c *Client) ImportNotes(ctx context.Context, filename string, data io.Reade
 	}
 
 	var result ImportResponse
-	if err = unmarshalJSON(respBody, &result); err != nil {
-		return nil, err
+	if err = json.Unmarshal(respBody, &result); err != nil {
+		return nil, fmt.Errorf("unmarshal response: %w", err)
 	}
 	return &result, nil
 }

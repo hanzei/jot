@@ -122,10 +122,3 @@ func (c *Client) doJSON(ctx context.Context, method, path string, body any, resu
 func (c *Client) doNoContent(ctx context.Context, method, path string, body any) error {
 	return c.doJSON(ctx, method, path, body, nil)
 }
-
-func unmarshalJSON(data []byte, v any) error {
-	if err := json.Unmarshal(data, v); err != nil {
-		return fmt.Errorf("unmarshal response: %w", err)
-	}
-	return nil
-}

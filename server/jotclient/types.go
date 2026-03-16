@@ -120,6 +120,7 @@ type CreateNoteRequest struct {
 }
 
 // CreateNoteItem describes a checklist item to create with a new todo note.
+// Assignment (AssignedTo) is only supported on update, not creation.
 type CreateNoteItem struct {
 	Text        string `json:"text"`
 	Position    int    `json:"position"`
@@ -160,7 +161,7 @@ type ListNotesOptions struct {
 	Archived bool
 	Trashed  bool
 	Search   string
-	Label    string
+	Label    string // label ID (not name) to filter by
 	MyTodo   bool
 }
 
