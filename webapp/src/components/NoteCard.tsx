@@ -34,14 +34,19 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, onRestore, o
   const isOwner = note.user_id === currentUserId;
 
   const getColorClass = (color: string) => {
-    const colorMap: { [key: string]: string } = {
+    const colorMap: Record<string, string> = {
       '#ffffff': '',
+      '#f28b82': 'coral',
       '#fbbc04': 'yellow',
-      '#34a853': 'green',
-      '#4285f4': 'blue',
-      '#ea4335': 'red',
-      '#9aa0a6': 'purple',
-      '#8b5cf6': 'purple',
+      '#fff475': 'lemon',
+      '#ccff90': 'lime',
+      '#a7ffeb': 'teal',
+      '#cbf0f8': 'sky',
+      '#aecbfa': 'periwinkle',
+      '#d7aefb': 'lavender',
+      '#fdcfe8': 'pink',
+      '#e6c9a8': 'sand',
+      '#e8eaed': 'gray',
     };
     return colorMap[color] || '';
   };

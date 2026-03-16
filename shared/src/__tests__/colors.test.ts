@@ -4,7 +4,6 @@ import {
   getAvatarColor,
   AVATAR_COLORS,
   NOTE_COLORS,
-  NOTE_COLORS_EXTENDED,
 } from '../colors';
 
 describe('hashUsername', () => {
@@ -51,14 +50,9 @@ describe('color palettes', () => {
     expect(AVATAR_COLORS).toHaveLength(16);
   });
 
-  it('NOTE_COLORS has 6 entries starting with white', () => {
-    expect(NOTE_COLORS).toHaveLength(6);
+  it('NOTE_COLORS has 12 entries starting with white', () => {
+    expect(NOTE_COLORS).toHaveLength(12);
     expect(NOTE_COLORS[0]).toBe('#ffffff');
-  });
-
-  it('NOTE_COLORS_EXTENDED has 12 entries starting with white', () => {
-    expect(NOTE_COLORS_EXTENDED).toHaveLength(12);
-    expect(NOTE_COLORS_EXTENDED[0]).toBe('#ffffff');
   });
 
   it('all AVATAR_COLORS are valid hex colors', () => {
@@ -73,9 +67,4 @@ describe('color palettes', () => {
     }
   });
 
-  it('all NOTE_COLORS_EXTENDED are valid hex colors', () => {
-    for (const color of NOTE_COLORS_EXTENDED) {
-      expect(color).toMatch(/^#[0-9a-f]{6}$/);
-    }
-  });
 });

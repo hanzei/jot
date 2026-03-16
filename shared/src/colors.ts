@@ -29,18 +29,7 @@ export function getAvatarColor(username: string): string {
   return AVATAR_COLORS[hashUsername(username) % AVATAR_COLORS.length];
 }
 
-/** Core note colors used in the webapp color picker and NoteCard styling. */
 export const NOTE_COLORS = [
-  '#ffffff',
-  '#fbbc04',
-  '#34a853',
-  '#4285f4',
-  '#ea4335',
-  '#8b5cf6',
-] as const;
-
-/** Extended Google Keep-style palette used in the mobile color picker. */
-export const NOTE_COLORS_EXTENDED = [
   '#ffffff',
   '#f28b82',
   '#fbbc04',
