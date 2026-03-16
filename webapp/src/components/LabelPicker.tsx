@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef } from 'react';
 import { PlusIcon } from '@heroicons/react/24/outline';
 import { useTranslation } from 'react-i18next';
-import { Label, Note } from '@/types';
+import type { Label, Note } from '@jot/shared';
 import { notes as notesApi, labels as labelsApi } from '@/utils/api';
 
 interface LabelPickerProps {

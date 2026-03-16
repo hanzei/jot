@@ -1,4 +1,4 @@
-import { Note, User } from '@/types';
+import type { Note, User } from '@jot/shared';
 
 export interface AvatarInfo {
   key: string;

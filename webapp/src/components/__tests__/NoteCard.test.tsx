@@ -2,7 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import NoteCard from '../NoteCard'
-import { Note, NoteItem } from '@/types'
+import type { Note, NoteItem } from '@jot/shared'
 import { notes } from '@/utils/api'
 import { createMockNote } from '@/utils/__tests__/test-helpers'
 

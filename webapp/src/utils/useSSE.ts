@@ -1,20 +1,7 @@
 import { useEffect, useRef } from 'react';
-import { Note } from '@/types';
+import type { SSEEventType, SSEEvent } from '@jot/shared';
 
-export type SSEEventType =
-  | 'note_created'
-  | 'note_updated'
-  | 'note_deleted'
-  | 'note_shared'
-  | 'note_unshared';
-
-export interface SSEEvent {
-  type: SSEEventType;
-  note_id: string;
-  note: Note | null;
-  source_user_id: string;
-  target_user_id?: string;
-}
+export type { SSEEventType, SSEEvent };
 
 interface UseSSEOptions {
   onEvent: (event: SSEEvent) => void;

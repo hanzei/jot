@@ -2,7 +2,7 @@ import { useEffect, useRef, useState, useCallback, useId } from 'react';
 import { XMarkIcon } from '@heroicons/react/24/outline';
 import { useTranslation } from 'react-i18next';
 import LetterAvatar from '@/components/LetterAvatar';
-import { Collaborator, displayName } from '@/utils/collaborators';
+import { type Collaborator, displayName } from '@jot/shared';
 
 interface AssigneePickerProps {
   collaborators: Collaborator[];

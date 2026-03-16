@@ -24,7 +24,7 @@ import {
   deleteProfileIcon,
   getAboutInfo,
 } from '../api/settings';
-import type { ThemePreference, AboutInfo } from '../types';
+import type { ThemePreference, AboutInfo } from '@jot/shared';
 
 const THEME_OPTIONS: { value: ThemePreference; label: string }[] = [
   { value: 'system', label: 'System Default' },

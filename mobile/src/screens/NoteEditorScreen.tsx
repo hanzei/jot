@@ -23,17 +23,12 @@ import TodoItem from '../components/TodoItem';
 import ColorPicker from '../components/ColorPicker';
 import LabelPicker from '../components/LabelPicker';
 import AssigneePicker from '../components/AssigneePicker';
-import { buildCollaborators, Collaborator } from '../utils/collaborators';
+import { buildCollaborators, VALIDATION, type Collaborator, type NoteType, type NoteItem, type UpdateNoteRequest, type Label } from '@jot/shared';
 import { useUsers } from '../store/UsersContext';
-import { NoteType, NoteItem, UpdateNoteRequest, Label } from '../types';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 
 type EditorRouteProp = RouteProp<RootStackParamList, 'NoteEditor'>;
 type EditorNavProp = NativeStackNavigationProp<RootStackParamList, 'NoteEditor'>;
-
-const MAX_TITLE_LENGTH = 200;
-const MAX_CONTENT_LENGTH = 10000;
-const AUTO_SAVE_DEBOUNCE_MS = 1000;
 
 interface LocalItem {
   id: string;
@@ -210,9 +205,6 @@ export default function NoteEditorScreen() {
         setNoteId(newNote.id);
         setHasCreated(true);
         setSaveError(null);
-        if (newNote.items) {
-          setItems(toLocalItems(newNote.items));
-        }
       } else {
         const updateData: UpdateNoteRequest = {
           title: currentTitle,
@@ -225,15 +217,12 @@ export default function NoteEditorScreen() {
         if (currentNoteType === 'todo') {
           updateData.items = serializeItems(currentItems);
         }
-        const updated = await updateMutateRef.current({
+        await updateMutateRef.current({
           id: currentNoteId,
           data: updateData,
         });
         if (!isMountedRef.current || unmounting) return;
         setSaveError(null);
-        if (updated.items) {
-          setItems(toLocalItems(updated.items));
-        }
       }
     })();
 
@@ -258,7 +247,7 @@ export default function NoteEditorScreen() {
     }
     debounceRef.current = setTimeout(() => {
       flushSave();
-    }, AUTO_SAVE_DEBOUNCE_MS);
+    }, VALIDATION.AUTO_SAVE_TIMEOUT_MS);
   }, [flushSave]);
 
   // Flush pending save on unmount (prevent data loss), skip if intentionally exiting
@@ -278,7 +267,7 @@ export default function NoteEditorScreen() {
 
   const handleTitleChange = useCallback(
     (newTitle: string) => {
-      if (newTitle.length > MAX_TITLE_LENGTH) return;
+      if (newTitle.length > VALIDATION.TITLE_MAX_LENGTH) return;
       setTitle(newTitle);
       scheduleUpdate();
     },
@@ -287,7 +276,7 @@ export default function NoteEditorScreen() {
 
   const handleContentChange = useCallback(
     (newContent: string) => {
-      if (newContent.length > MAX_CONTENT_LENGTH) return;
+      if (newContent.length > VALIDATION.CONTENT_MAX_LENGTH) return;
       setContent(newContent);
       scheduleUpdate();
     },
@@ -595,7 +584,7 @@ export default function NoteEditorScreen() {
           onChangeText={handleTitleChange}
           placeholder="Title"
           placeholderTextColor="#999"
-          maxLength={MAX_TITLE_LENGTH}
+          maxLength={VALIDATION.TITLE_MAX_LENGTH}
           editable={!isHydrating}
           testID="note-title-input"
         />
@@ -609,7 +598,7 @@ export default function NoteEditorScreen() {
             placeholderTextColor="#999"
             multiline
             textAlignVertical="top"
-            maxLength={MAX_CONTENT_LENGTH}
+            maxLength={VALIDATION.CONTENT_MAX_LENGTH}
             editable={!isHydrating}
             testID="note-content-input"
           />

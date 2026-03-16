@@ -1,7 +1,7 @@
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
 import { Bars3Icon } from '@heroicons/react/24/outline';
-import { Note, User } from '@/types';
+import type { Note, User } from '@jot/shared';
 import NoteCard from './NoteCard';
 
 interface SortableNoteCardProps {

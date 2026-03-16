@@ -1,3 +1,10 @@
+export interface AboutInfo {
+  version: string;
+  commit: string;
+  build_time?: string;
+  go_version?: string;
+}
+
 export interface User {
   id: string;
   username: string;
@@ -31,26 +38,6 @@ export interface LoginRequest {
 export interface RegisterRequest {
   username: string;
   password: string;
-}
-
-export interface UpdateMeRequest {
-  username?: string;
-  first_name?: string;
-  last_name?: string;
-  language?: string;
-  theme?: ThemePreference;
-}
-
-export interface ChangePasswordRequest {
-  current_password: string;
-  new_password: string;
-}
-
-export interface AboutInfo {
-  version: string;
-  commit: string;
-  build_time?: string;
-  go_version?: string;
 }
 
 export interface Label {
@@ -89,6 +76,26 @@ export interface NoteShare {
   updated_at: string;
 }
 
+export interface Note {
+  id: string;
+  user_id: string;
+  title: string;
+  content: string;
+  note_type: NoteType;
+  color: string;
+  pinned: boolean;
+  archived: boolean;
+  position: number;
+  checked_items_collapsed: boolean;
+  items?: NoteItem[];
+  shared_with?: NoteShare[];
+  is_shared: boolean;
+  labels: Label[];
+  deleted_at: string | null;
+  created_at: string;
+  updated_at: string;
+}
+
 export interface GetNotesParams {
   archived?: boolean;
   search?: string;
@@ -117,6 +124,48 @@ export interface UpdateNoteRequest {
   items?: { text: string; position: number; completed?: boolean; indent_level?: number; assigned_to?: string }[];
 }
 
+export interface CreateUserRequest {
+  username: string;
+  password: string;
+  role: string;
+}
+
+export interface UserListResponse {
+  users: User[];
+}
+
+export interface UpdateMeRequest {
+  username?: string;
+  first_name?: string;
+  last_name?: string;
+  language?: string;
+  theme?: ThemePreference;
+}
+
+export interface ChangePasswordRequest {
+  current_password: string;
+  new_password: string;
+}
+
+export interface ShareNoteRequest {
+  user_id: string;
+}
+
+export interface ShareNoteResponse {
+  success: boolean;
+  message: string;
+}
+
+export interface ImportResponse {
+  imported: number;
+  skipped: number;
+  errors?: string[];
+}
+
+export interface UpdateUserRoleRequest {
+  role: string;
+}
+
 export type SSEEventType =
   | 'note_created'
   | 'note_updated'
@@ -130,24 +179,4 @@ export interface SSEEvent {
   note: Note | null;
   source_user_id: string;
   target_user_id?: string;
-}
-
-export interface Note {
-  id: string;
-  user_id: string;
-  title: string;
-  content: string;
-  note_type: NoteType;
-  color: string;
-  pinned: boolean;
-  archived: boolean;
-  position: number;
-  checked_items_collapsed: boolean;
-  items?: NoteItem[];
-  shared_with?: NoteShare[];
-  is_shared: boolean;
-  labels: Label[];
-  deleted_at: string | null;
-  created_at: string;
-  updated_at: string;
 }

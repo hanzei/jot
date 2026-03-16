@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
 import api from './client';
-import { User, AuthResponse, UpdateMeRequest, ChangePasswordRequest, AboutInfo } from '../types';
+import type { User, AuthResponse, UpdateMeRequest, ChangePasswordRequest, AboutInfo } from '@jot/shared';
 
 export async function updateMe(data: UpdateMeRequest): Promise<AuthResponse> {
   const res = await api.patch('/users/me', data);

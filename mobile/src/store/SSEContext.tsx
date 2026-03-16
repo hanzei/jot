@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useRef, useCallback, useMemo } from 'react';
 import { useSSE, SSENotificationCallback } from '../hooks/useSSE';
-import { SSEEvent } from '../types';
+import type { SSEEvent } from '@jot/shared';
 
 interface SSEContextValue {
   subscribe: (listener: (event: SSEEvent) => void) => () => void;

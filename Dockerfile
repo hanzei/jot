@@ -5,6 +5,9 @@ FROM node:24-alpine AS frontend-builder
 
 WORKDIR /app/webapp
 
+# Copy shared package (dependency of webapp)
+COPY shared/ ../shared/
+
 # Copy frontend package files
 COPY webapp/package*.json ./
 

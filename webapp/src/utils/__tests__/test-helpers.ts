@@ -1,5 +1,4 @@
-import { Note } from '@/types'
-import { VALIDATION_LIMITS } from '@/constants/validation'
+import { VALIDATION, type Note } from '@jot/shared'
 
 export const createMockNote = (overrides: Partial<Note> = {}): Note => ({
   id: '1',
@@ -22,9 +21,9 @@ export const createMockNote = (overrides: Partial<Note> = {}): Note => ({
 })
 
 export const TEST_CONSTANTS = {
-  LONG_TITLE: 'a'.repeat(VALIDATION_LIMITS.TITLE_MAX_LENGTH + 1),
-  LONG_CONTENT: 'a'.repeat(VALIDATION_LIMITS.CONTENT_MAX_LENGTH + 1),
-  LONG_ITEM_TEXT: 'a'.repeat(VALIDATION_LIMITS.ITEM_TEXT_MAX_LENGTH + 1),
+  LONG_TITLE: 'a'.repeat(VALIDATION.TITLE_MAX_LENGTH + 1),
+  LONG_CONTENT: 'a'.repeat(VALIDATION.CONTENT_MAX_LENGTH + 1),
+  LONG_ITEM_TEXT: 'a'.repeat(VALIDATION.ITEM_TEXT_MAX_LENGTH + 1),
   VERY_LONG_STRING: 'x'.repeat(10000),
   XSS_ATTEMPT: '<script>alert("xss")</script>',
   MALICIOUS_HTML: '<img src=x onerror=alert("xss")>',
