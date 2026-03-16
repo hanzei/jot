@@ -8,7 +8,7 @@ on:
     branches: [master]
     tags: ["v*"]
   pull_request:
-    paths: ["mobile/**"]
+    paths: ["mobile/**", "shared/**", "package.json", "package-lock.json"]
 
 jobs:
   build-apk:
@@ -21,7 +21,6 @@ jobs:
         with:
           node-version: "24"
           cache: "npm"
-          cache-dependency-path: mobile/package-lock.json
 
       - uses: actions/setup-java@v5
         with:
@@ -30,7 +29,6 @@ jobs:
 
       - name: Install dependencies
         run: npm ci
-        working-directory: ./mobile
 
       - name: Write google-services.json
         run: echo "$GOOGLE_SERVICES_JSON" > mobile/google-services.json
