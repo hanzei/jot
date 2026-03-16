@@ -10,7 +10,7 @@ interface AuthState {
   login: (username: string, password: string) => Promise<void>;
   register: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
-  setUser: (user: User) => void;
+  setUser: React.Dispatch<React.SetStateAction<User | null>>;
   setSettings: (settings: UserSettings) => void;
 }
 

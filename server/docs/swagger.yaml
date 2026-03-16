@@ -133,10 +133,18 @@ definitions:
       first_name:
         type: string
       language:
+        enum:
+        - system
+        - en
+        - de
         type: string
       last_name:
         type: string
       theme:
+        enum:
+        - system
+        - light
+        - dark
         type: string
       username:
         type: string

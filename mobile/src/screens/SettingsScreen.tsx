@@ -169,15 +169,15 @@ export default function SettingsScreen() {
     setIconDeleting(true);
     try {
       await deleteProfileIcon();
-      if (user) {
-        setUser({ ...user, has_profile_icon: false, updated_at: new Date().toISOString() });
-      }
+      setUser(prev =>
+        prev ? { ...prev, has_profile_icon: false, updated_at: new Date().toISOString() } : prev,
+      );
     } catch {
       setIconError('Failed to remove icon');
     } finally {
       setIconDeleting(false);
     }
-  }, [user, setUser]);
+  }, [setUser]);
 
   const initials = user
     ? (user.first_name?.[0] ?? user.username?.[0] ?? '').toUpperCase()
