@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 import TodoItem from '../src/components/TodoItem';
-import { Collaborator } from '../src/utils/collaborators';
+import type { Collaborator } from '@jot/shared';
 
 const collaborators: Collaborator[] = [
   { userId: 'u1', username: 'alice', firstName: 'Alice' },

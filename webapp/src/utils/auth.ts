@@ -1,5 +1,4 @@
-import { User, UserSettings } from '@/types';
-import { ROLES } from '@/constants/roles';
+import { ROLES, type User, type UserSettings } from '@jot/shared';
 
 export const getUser = (): User | null => {
   const userStr = localStorage.getItem('user');

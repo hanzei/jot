@@ -4,10 +4,6 @@
 
 @theme {
   --color-keep-yellow: #fbbc04;
-  --color-keep-red: #ea4335;
-  --color-keep-green: #34a853;
-  --color-keep-blue: #4285f4;
-  --color-keep-purple: #9aa0a6;
 }
 
 body {
@@ -47,23 +43,47 @@ body {
     margin-bottom: 1rem;
   }
 
+  .note-card.coral {
+    @apply bg-red-100 dark:bg-red-900/40 border-red-200 dark:border-red-800;
+  }
+
   .note-card.yellow {
     @apply bg-yellow-100 dark:bg-yellow-900/40 border-yellow-200 dark:border-yellow-800;
   }
 
-  .note-card.green {
-    @apply bg-green-100 dark:bg-green-900/40 border-green-200 dark:border-green-800;
+  .note-card.lemon {
+    @apply bg-yellow-50 dark:bg-yellow-900/30 border-yellow-100 dark:border-yellow-800;
   }
 
-  .note-card.blue {
+  .note-card.lime {
+    @apply bg-lime-100 dark:bg-lime-900/40 border-lime-200 dark:border-lime-800;
+  }
+
+  .note-card.teal {
+    @apply bg-teal-100 dark:bg-teal-900/40 border-teal-200 dark:border-teal-800;
+  }
+
+  .note-card.sky {
+    @apply bg-sky-100 dark:bg-sky-900/40 border-sky-200 dark:border-sky-800;
+  }
+
+  .note-card.periwinkle {
     @apply bg-blue-100 dark:bg-blue-900/40 border-blue-200 dark:border-blue-800;
   }
 
-  .note-card.red {
-    @apply bg-red-100 dark:bg-red-900/40 border-red-200 dark:border-red-800;
+  .note-card.lavender {
+    @apply bg-purple-100 dark:bg-purple-900/40 border-purple-200 dark:border-purple-800;
   }
 
-  .note-card.purple {
-    @apply bg-purple-100 dark:bg-purple-900/40 border-purple-200 dark:border-purple-800;
+  .note-card.pink {
+    @apply bg-pink-100 dark:bg-pink-900/40 border-pink-200 dark:border-pink-800;
+  }
+
+  .note-card.sand {
+    @apply bg-amber-100 dark:bg-amber-900/40 border-amber-200 dark:border-amber-800;
+  }
+
+  .note-card.gray {
+    @apply bg-gray-100 dark:bg-gray-800/60 border-gray-200 dark:border-gray-700;
   }
 }

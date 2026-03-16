@@ -12,13 +12,13 @@ import {
   reorderNotes,
 } from '../api/notes';
 import { getNoteShares, shareNote, unshareNote } from '../api/users';
-import {
+import type {
   Note,
   NoteShare,
   GetNotesParams,
   CreateNoteRequest,
   UpdateNoteRequest,
-} from '../types';
+} from '@jot/shared';
 import {
   saveNote,
   saveNotes,

@@ -13,6 +13,7 @@
   },
   "dependencies": {
     "@expo/vector-icons": "^15.0.0",
+    "@jot/shared": "file:../shared",
     "@react-native-community/netinfo": "~12.0.0",
     "@react-navigation/drawer": "^7.9.4",
     "@react-navigation/native": "^7.0.0",

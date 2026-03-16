@@ -6,7 +6,7 @@ import { type ReactNode } from 'react'
 import Admin from '../Admin'
 import { admin, isAxiosError } from '@/utils/api'
 import * as authUtils from '@/utils/auth'
-import { User } from '@/types'
+import type { User } from '@jot/shared'
 
 vi.mock('@/utils/api', () => ({
   admin: {
