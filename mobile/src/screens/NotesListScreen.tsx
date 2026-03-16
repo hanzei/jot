@@ -254,7 +254,9 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     () =>
       debouncedSearch || labelId ? (
         <View style={styles.emptySearchContainer}>
-          <Text style={styles.emptySubtext}>No notes match your search</Text>
+          <Text style={styles.emptySubtext}>
+            {debouncedSearch ? 'No notes match your search' : 'No notes for this label'}
+          </Text>
         </View>
       ) : null,
     [debouncedSearch, labelId],
@@ -361,7 +363,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
 
   const isEmpty = !isLoading && (!notes || notes.length === 0);
 
-  if (isEmpty && !debouncedSearch && !labelId) {
+  if (isEmpty && !debouncedSearch && (variant !== 'notes' || !labelId)) {
     return (
       <View style={styles.emptyContainer}>
         {variant === 'trash' && (
