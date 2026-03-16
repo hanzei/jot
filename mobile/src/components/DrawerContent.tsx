@@ -2,15 +2,12 @@ import React, { useCallback } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Alert, Platform } from 'react-native';
 import { DrawerContentScrollView, DrawerContentComponentProps } from '@react-navigation/drawer';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
-import { useNavigation } from '@react-navigation/native';
-import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useAuth } from '../store/AuthContext';
 import { useLabels } from '../hooks/useLabels';
 import { useTheme } from '../theme/ThemeContext';
 
 import type { MainDrawerParamList } from '../navigation/MainDrawer';
-import type { RootStackParamList } from '../navigation/RootNavigator';
 
 interface NavItem {
   name: keyof MainDrawerParamList;
@@ -34,7 +31,6 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
   const { data: labels } = useLabels();
   const { colors } = useTheme();
   const insets = useSafeAreaInsets();
-  const rootNavigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   const activeRoute = props.state.routes[props.state.index]?.name;
   const activeParams = props.state.routes[props.state.index]?.params as
@@ -65,11 +61,6 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
     props.navigation.navigate('Notes', { labelId, labelName });
     props.navigation.closeDrawer();
   }, [props.navigation]);
-
-  const handleSettings = useCallback(() => {
-    props.navigation.closeDrawer();
-    rootNavigation.navigate('Settings');
-  }, [props.navigation, rootNavigation]);
 
   const displayName = user
     ? [user.first_name, user.last_name].filter(Boolean).join(' ') || user.username
@@ -183,16 +174,6 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
       <View style={[styles.bottomSection, { paddingBottom: Math.max(insets.bottom, 16) }]}>
         <View style={[styles.divider, { backgroundColor: colors.divider }]} />
         <TouchableOpacity
-          style={styles.settingsButton}
-          onPress={handleSettings}
-          testID="drawer-settings"
-          accessibilityLabel="Settings"
-          accessibilityRole="button"
-        >
-          <Ionicons name="settings-outline" size={22} color={colors.icon} />
-          <Text style={[styles.settingsText, { color: colors.icon }]}>Settings</Text>
-        </TouchableOpacity>
-        <TouchableOpacity
           style={styles.logoutButton}
           onPress={handleLogout}
           testID="drawer-logout"
@@ -262,17 +243,6 @@ const styles = StyleSheet.create({
   },
   bottomSection: {
     paddingTop: 0,
-  },
-  settingsButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 14,
-    paddingHorizontal: 24,
-    gap: 14,
-  },
-  settingsText: {
-    fontSize: 15,
-    fontWeight: '500',
   },
   logoutButton: {
     flexDirection: 'row',

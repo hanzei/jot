@@ -102,8 +102,6 @@ jest.mock('./src/theme/ThemeContext', () => {
     useTheme: () => ({
       colors: lightColors,
       isDark: false,
-      themePreference: 'system',
-      updateTheme: jest.fn(),
     }),
     ThemeProvider: ({ children }) => children,
   };

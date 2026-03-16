@@ -10,7 +10,6 @@ interface AuthState {
   login: (username: string, password: string) => Promise<void>;
   register: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
-  setSettings: (settings: UserSettings) => void;
 }
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
@@ -90,10 +89,6 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [clearAuth]);
 
-  const handleSetSettings = useCallback((newSettings: UserSettings) => {
-    setSettings(newSettings);
-  }, []);
-
   const value = useMemo<AuthState>(
     () => ({
       user,
@@ -103,9 +98,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       login,
       register,
       logout,
-      setSettings: handleSetSettings,
     }),
-    [user, settings, isLoading, login, register, logout, handleSetSettings],
+    [user, settings, isLoading, login, register, logout],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

@@ -1,15 +1,12 @@
-import React, { createContext, useContext, useMemo, useCallback, useState, useEffect, useRef } from 'react';
+import React, { createContext, useContext, useMemo } from 'react';
 import { useColorScheme, StatusBar, ColorSchemeName } from 'react-native';
 import { ThemeColors, lightColors, darkColors } from './colors';
-import { ThemePreference, UpdateSettingsRequest } from '../types';
+import { ThemePreference } from '../types';
 import { useAuth } from '../store/AuthContext';
-import { updateSettings as apiUpdateSettings } from '../api/users';
 
 interface ThemeState {
   colors: ThemeColors;
   isDark: boolean;
-  themePreference: ThemePreference;
-  updateTheme: (pref: ThemePreference) => Promise<void>;
 }
 
 const ThemeContext = createContext<ThemeState | undefined>(undefined);
@@ -25,45 +22,16 @@ function resolveColorScheme(
 
 export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const systemScheme = useColorScheme();
-  const { settings, setSettings: setAuthSettings } = useAuth();
-  const [themePreference, setThemePreference] = useState<ThemePreference>(
-    settings?.theme ?? 'system',
-  );
-  const serverThemeRef = useRef<ThemePreference>(settings?.theme ?? 'system');
+  const { settings } = useAuth();
 
-  useEffect(() => {
-    if (settings?.theme) {
-      setThemePreference(settings.theme);
-      serverThemeRef.current = settings.theme;
-    }
-  }, [settings?.theme]);
-
+  const themePreference: ThemePreference = settings?.theme ?? 'system';
   const resolved = resolveColorScheme(themePreference, systemScheme);
   const isDark = resolved === 'dark';
   const colors = isDark ? darkColors : lightColors;
 
-  const updateTheme = useCallback(
-    async (pref: ThemePreference) => {
-      setThemePreference(pref);
-
-      try {
-        const body: UpdateSettingsRequest = {
-          language: settings?.language ?? 'system',
-          theme: pref,
-        };
-        const updated = await apiUpdateSettings(body);
-        serverThemeRef.current = updated.theme;
-        setAuthSettings(updated);
-      } catch {
-        setThemePreference(serverThemeRef.current);
-      }
-    },
-    [settings, setAuthSettings],
-  );
-
   const value = useMemo<ThemeState>(
-    () => ({ colors, isDark, themePreference, updateTheme }),
-    [colors, isDark, themePreference, updateTheme],
+    () => ({ colors, isDark }),
+    [colors, isDark],
   );
 
   return (

@@ -9,13 +9,11 @@ import AuthStack from './AuthStack';
 import MainDrawer from './MainDrawer';
 import NoteEditorScreen from '../screens/NoteEditorScreen';
 import ShareScreen from '../screens/ShareScreen';
-import SettingsScreen from '../screens/SettingsScreen';
 
 export type RootStackParamList = {
   MainDrawer: undefined;
   NoteEditor: { noteId: string | null };
   Share: { noteId: string };
-  Settings: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -38,14 +36,6 @@ function AuthenticatedStack() {
           <Stack.Screen
             name="Share"
             component={ShareScreen}
-            options={{
-              headerShown: false,
-              presentation: 'modal',
-            }}
-          />
-          <Stack.Screen
-            name="Settings"
-            component={SettingsScreen}
             options={{
               headerShown: false,
               presentation: 'modal',

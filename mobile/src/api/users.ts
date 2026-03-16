@@ -1,5 +1,5 @@
 import api from './client';
-import { User, NoteShare, UserSettings, UpdateSettingsRequest } from '../types';
+import { User, NoteShare, UserSettings } from '../types';
 
 export async function getUsers(): Promise<User[]> {
   const res = await api.get('/users');
@@ -26,10 +26,5 @@ export async function getNoteShares(noteId: string): Promise<NoteShare[]> {
 
 export async function getSettings(): Promise<UserSettings> {
   const res = await api.get('/users/me/settings');
-  return res.data;
-}
-
-export async function updateSettings(data: UpdateSettingsRequest): Promise<UserSettings> {
-  const res = await api.put('/users/me/settings', data);
   return res.data;
 }

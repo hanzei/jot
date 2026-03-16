@@ -33,11 +33,6 @@ export interface RegisterRequest {
   password: string;
 }
 
-export interface UpdateSettingsRequest {
-  language: string;
-  theme: ThemePreference;
-}
-
 export interface Label {
   id: string;
   user_id: string;
