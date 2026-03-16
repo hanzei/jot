@@ -174,7 +174,7 @@ describe('ShareModal', () => {
       await user.click(screen.getByText('Alice Smith'))
 
       await waitFor(() => {
-        expect(mockShare).toHaveBeenCalledWith('note1', { username: 'alice' })
+        expect(mockShare).toHaveBeenCalledWith('note1', { user_id: 'user2' })
       })
     })
 
@@ -234,7 +234,7 @@ describe('ShareModal', () => {
     it('shows error message on 400 (cannot share with yourself)', async () => {
       mockUsersSearch.mockResolvedValue([mockUser2])
       // The source checks status === 400 && data?.includes('yourself')
-      mockShare.mockRejectedValue({ response: { status: 400, data: 'cannot share note with yourself' } })
+      mockShare.mockRejectedValue({ response: { status: 400, data: 'cannot share with self' } })
       const user = userEvent.setup()
       render(<ShareModal {...defaultProps} />)
 
@@ -264,7 +264,7 @@ describe('ShareModal', () => {
       await user.click(removeBtn)
 
       await waitFor(() => {
-        expect(mockUnshare).toHaveBeenCalledWith('note1', { username: 'alice' })
+        expect(mockUnshare).toHaveBeenCalledWith('note1', { user_id: 'user2' })
       })
     })
   })
@@ -289,7 +289,7 @@ describe('ShareModal', () => {
       await user.keyboard('{Enter}')
 
       await waitFor(() => {
-        expect(mockShare).toHaveBeenCalledWith('note1', { username: 'bob' })
+        expect(mockShare).toHaveBeenCalledWith('note1', { user_id: 'user3' })
       })
     })
 

@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 import NoteCard from '../src/components/NoteCard';
-import type { Note, User } from '@jot/shared';
+import type { Note } from '@jot/shared';
 
 const baseNote: Note = {
   id: 'note-1',
@@ -92,16 +92,25 @@ describe('NoteCard', () => {
     expect(onPress).toHaveBeenCalledTimes(1);
   });
 
-  it('shows colored left border for notes with color', () => {
-    const coloredNote: Note = { ...baseNote, color: '#ff6600' };
+  it('uses note color as background for colored notes', () => {
+    const coloredNote: Note = { ...baseNote, color: '#fbbc04' };
     const { getByTestId } = render(<NoteCard note={coloredNote} onPress={jest.fn()} />);
 
     const card = getByTestId('note-card-note-1');
     const flatStyle = Array.isArray(card.props.style)
       ? Object.assign({}, ...card.props.style)
       : card.props.style;
-    expect(flatStyle.borderLeftColor).toBe('#ff6600');
-    expect(flatStyle.borderLeftWidth).toBe(4);
+    expect(flatStyle.backgroundColor).toBe('#fbbc04');
+  });
+
+  it('uses default white background for notes without color', () => {
+    const { getByTestId } = render(<NoteCard note={baseNote} onPress={jest.fn()} />);
+
+    const card = getByTestId('note-card-note-1');
+    const flatStyle = Array.isArray(card.props.style)
+      ? Object.assign({}, ...card.props.style)
+      : card.props.style;
+    expect(flatStyle.backgroundColor).toBe('#fff');
   });
 
   it('does not render title when empty', () => {
@@ -111,26 +120,12 @@ describe('NoteCard', () => {
     expect(queryByText('Test Note')).toBeNull();
   });
 
-  it('shows assignee avatar for assigned todo items', () => {
+  it('does not show assignee avatar for assigned todo items', () => {
     const sharedTodo: Note = {
       ...baseNote,
       note_type: 'todo',
       content: '',
       is_shared: true,
-      shared_with: [
-        {
-          id: 's1',
-          note_id: 'note-1',
-          shared_with_user_id: 'user-2',
-          shared_by_user_id: 'user-1',
-          permission_level: 'edit',
-          username: 'bob',
-          first_name: 'Bob',
-          has_profile_icon: false,
-          created_at: '',
-          updated_at: '',
-        },
-      ],
       items: [
         {
           id: 'item-1',
@@ -146,18 +141,11 @@ describe('NoteCard', () => {
       ],
     };
 
-    const usersById = new Map<string, User>();
-    usersById.set('user-2', {
-      id: 'user-2', username: 'bob', first_name: 'Bob', last_name: '',
-      role: 'user', has_profile_icon: false, created_at: '', updated_at: '',
-    });
-
-    const { getByText } = render(
-      <NoteCard note={sharedTodo} usersById={usersById} onPress={jest.fn()} />,
+    const { getByText, queryByText } = render(
+      <NoteCard note={sharedTodo} onPress={jest.fn()} />,
     );
 
     expect(getByText('Assigned task')).toBeTruthy();
-    // Avatar for 'bob' renders letter 'B'
-    expect(getByText('B')).toBeTruthy();
+    expect(queryByText('B')).toBeNull();
   });
 });

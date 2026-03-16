@@ -17,6 +17,8 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+const queryTrue = "true"
+
 // UserInfo contains safe public fields returned when listing users for share-target search.
 type UserInfo struct {
 	ID             string `json:"id"`
@@ -136,6 +138,7 @@ func (h *NotesHandler) createTodoItems(noteID string, items []CreateNoteItem) (i
 //	@Param		trashed		query		boolean	false	"Return trashed notes"
 //	@Param		search		query		string	false	"Full-text search query"
 //	@Param		label		query		string	false	"Filter by label ID"
+//	@Param		my_todo		query		boolean	false	"Return only notes with todos assigned to current user"
 //	@Success	200			{array}		models.Note
 //	@Failure	401			{string}	string	"unauthorized"
 //	@Router		/notes [get]
@@ -145,12 +148,14 @@ func (h *NotesHandler) GetNotes(w http.ResponseWriter, r *http.Request) (int, er
 		return http.StatusUnauthorized, errors.New("unauthorized")
 	}
 
-	trashed := r.URL.Query().Get("trashed") == "true"
-	archived := r.URL.Query().Get("archived") == "true"
-	search := r.URL.Query().Get("search")
-	labelID := r.URL.Query().Get("label")
+	q := r.URL.Query()
+	trashed := q.Get("trashed") == queryTrue
+	archived := q.Get("archived") == queryTrue
+	search := q.Get("search")
+	labelID := q.Get("label")
+	myTodo := q.Get("my_todo") == queryTrue
 
-	notes, err := h.noteStore.GetByUserID(user.ID, archived, trashed, search, labelID)
+	notes, err := h.noteStore.GetByUserID(user.ID, archived, trashed, search, labelID, myTodo)
 	if err != nil {
 		return http.StatusInternalServerError, err
 	}
@@ -411,14 +416,15 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 
 // DeleteNote godoc
 //
-//	@Summary	Move a note to trash
+//	@Summary	Delete a note (move to trash, or permanently delete)
 //	@Tags		notes
 //	@Security	CookieAuth
-//	@Param		id	path		string	true	"Note ID"
-//	@Success	204	"no content"
-//	@Failure	400	{string}	string	"bad request"
-//	@Failure	401	{string}	string	"unauthorized"
-//	@Failure	404	{string}	string	"not found"
+//	@Param		id			path		string	true	"Note ID"
+//	@Param		permanent	query		boolean	false	"Permanently delete from trash instead of soft-deleting"
+//	@Success	204			"no content"
+//	@Failure	400			{string}	string	"bad request"
+//	@Failure	401			{string}	string	"unauthorized"
+//	@Failure	404			{string}	string	"not found"
 //	@Router		/notes/{id} [delete]
 func (h *NotesHandler) DeleteNote(w http.ResponseWriter, r *http.Request) (int, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
@@ -434,15 +440,27 @@ func (h *NotesHandler) DeleteNote(w http.ResponseWriter, r *http.Request) (int, 
 		return http.StatusBadRequest, errors.New("invalid note ID format")
 	}
 
-	// Fetch audience before trashing so we can notify share targets too.
+	permanent := r.URL.Query().Get("permanent") == queryTrue
+
+	// Fetch audience before deleting so we can notify share targets too.
 	audienceIDs, audienceErr := h.noteStore.GetNoteAudienceIDs(id)
 
-	err := h.noteStore.MoveToTrash(id, user.ID)
-	if err != nil {
-		if errors.Is(err, models.ErrNoteNotOwnedByUser) {
-			return http.StatusNotFound, err
+	if permanent {
+		err := h.noteStore.DeleteFromTrash(id, user.ID)
+		if err != nil {
+			if errors.Is(err, models.ErrNoteNotInTrash) {
+				return http.StatusNotFound, err
+			}
+			return http.StatusInternalServerError, err
 		}
-		return http.StatusInternalServerError, err
+	} else {
+		err := h.noteStore.MoveToTrash(id, user.ID)
+		if err != nil {
+			if errors.Is(err, models.ErrNoteNotOwnedByUser) {
+				return http.StatusNotFound, err
+			}
+			return http.StatusInternalServerError, err
+		}
 	}
 
 	if audienceErr == nil && h.hub != nil {
@@ -505,57 +523,8 @@ func (h *NotesHandler) RestoreNote(w http.ResponseWriter, r *http.Request) (int,
 	return 0, nil
 }
 
-// PermanentlyDeleteNote godoc
-//
-//	@Summary	Permanently delete a note from trash
-//	@Tags		notes
-//	@Security	CookieAuth
-//	@Param		id	path		string	true	"Note ID"
-//	@Success	204	"no content"
-//	@Failure	400	{string}	string	"bad request"
-//	@Failure	401	{string}	string	"unauthorized"
-//	@Failure	404	{string}	string	"not found"
-//	@Router		/notes/{id}/permanent [delete]
-func (h *NotesHandler) PermanentlyDeleteNote(w http.ResponseWriter, r *http.Request) (int, error) {
-	user, ok := auth.GetUserFromContext(r.Context())
-	if !ok {
-		return http.StatusUnauthorized, errors.New("unauthorized")
-	}
-
-	id := chi.URLParam(r, "id")
-	if id == "" {
-		return http.StatusBadRequest, errors.New("missing note ID")
-	}
-	if !models.IsValidID(id) {
-		return http.StatusBadRequest, errors.New("invalid note ID format")
-	}
-
-	// Fetch audience before deletion so we can notify share targets too.
-	audienceIDs, audienceErr := h.noteStore.GetNoteAudienceIDs(id)
-
-	err := h.noteStore.DeleteFromTrash(id, user.ID)
-	if err != nil {
-		if errors.Is(err, models.ErrNoteNotInTrash) {
-			return http.StatusNotFound, err
-		}
-		return http.StatusInternalServerError, err
-	}
-
-	if audienceErr == nil && h.hub != nil {
-		h.hub.Publish(audienceIDs, sse.Event{
-			Type:         sse.EventNoteDeleted,
-			NoteID:       id,
-			Note:         nil,
-			SourceUserID: user.ID,
-		})
-	}
-
-	w.WriteHeader(http.StatusNoContent)
-	return 0, nil
-}
-
 type ShareNoteRequest struct {
-	Username string `json:"username"`
+	UserID string `json:"user_id"`
 }
 
 type ShareNoteResponse struct {
@@ -571,7 +540,7 @@ type ShareNoteResponse struct {
 //	@Accept		json
 //	@Produce	json
 //	@Param		id		path		string				true	"Note ID"
-//	@Param		body	body		ShareNoteRequest	true	"Username to share with"
+//	@Param		body	body		ShareNoteRequest	true	"User ID to share with"
 //	@Success	200		{object}	ShareNoteResponse
 //	@Failure	400		{string}	string	"bad request"
 //	@Failure	401		{string}	string	"unauthorized"
@@ -598,8 +567,8 @@ func (h *NotesHandler) ShareNote(w http.ResponseWriter, r *http.Request) (int, e
 		return http.StatusBadRequest, err
 	}
 
-	if req.Username == "" {
-		return http.StatusBadRequest, errors.New("empty username")
+	if !models.IsValidID(req.UserID) {
+		return http.StatusBadRequest, errors.New("invalid user_id")
 	}
 
 	isOwner, err := h.noteStore.IsOwner(id, user.ID)
@@ -610,19 +579,18 @@ func (h *NotesHandler) ShareNote(w http.ResponseWriter, r *http.Request) (int, e
 		return http.StatusForbidden, errors.New("not owner")
 	}
 
-	targetUser, err := h.userStore.GetByUsername(req.Username)
-	if err != nil {
-		if errors.Is(err, models.ErrUserNotFound) {
-			return http.StatusNotFound, err
-		}
-		return http.StatusInternalServerError, err
-	}
-
-	if targetUser.ID == user.ID {
+	if req.UserID == user.ID {
 		return http.StatusBadRequest, errors.New("cannot share with self")
 	}
 
-	err = h.noteStore.ShareNote(id, user.ID, targetUser.ID)
+	if _, lookupErr := h.userStore.GetByID(req.UserID); lookupErr != nil {
+		if errors.Is(lookupErr, models.ErrUserNotFound) {
+			return http.StatusNotFound, lookupErr
+		}
+		return http.StatusInternalServerError, lookupErr
+	}
+
+	err = h.noteStore.ShareNote(id, user.ID, req.UserID)
 	if err != nil {
 		if errors.Is(err, models.ErrNoteAlreadyShared) {
 			return http.StatusConflict, err
@@ -654,7 +622,7 @@ func (h *NotesHandler) ShareNote(w http.ResponseWriter, r *http.Request) (int, e
 //	@Accept		json
 //	@Produce	json
 //	@Param		id		path		string				true	"Note ID"
-//	@Param		body	body		ShareNoteRequest	true	"Username to unshare with"
+//	@Param		body	body		ShareNoteRequest	true	"User ID to unshare with"
 //	@Success	200		{object}	ShareNoteResponse
 //	@Failure	400		{string}	string	"bad request"
 //	@Failure	401		{string}	string	"unauthorized"
@@ -680,8 +648,8 @@ func (h *NotesHandler) UnshareNote(w http.ResponseWriter, r *http.Request) (int,
 		return http.StatusBadRequest, err
 	}
 
-	if req.Username == "" {
-		return http.StatusBadRequest, errors.New("empty username")
+	if !models.IsValidID(req.UserID) {
+		return http.StatusBadRequest, errors.New("invalid user_id")
 	}
 
 	isOwner, err := h.noteStore.IsOwner(id, user.ID)
@@ -692,18 +660,10 @@ func (h *NotesHandler) UnshareNote(w http.ResponseWriter, r *http.Request) (int,
 		return http.StatusForbidden, errors.New("not owner")
 	}
 
-	targetUser, err := h.userStore.GetByUsername(req.Username)
-	if err != nil {
-		if errors.Is(err, models.ErrUserNotFound) {
-			return http.StatusNotFound, err
-		}
-		return http.StatusInternalServerError, err
-	}
-
 	// Fetch audience before unsharing so the target user is still in the list.
 	audienceIDs, audienceErr := h.noteStore.GetNoteAudienceIDs(id)
 
-	err = h.noteStore.UnshareNote(id, targetUser.ID)
+	err = h.noteStore.UnshareNote(id, req.UserID)
 	if err != nil {
 		if errors.Is(err, models.ErrNoteShareNotFound) {
 			return http.StatusNotFound, err
@@ -717,7 +677,7 @@ func (h *NotesHandler) UnshareNote(w http.ResponseWriter, r *http.Request) (int,
 			NoteID:       id,
 			Note:         nil,
 			SourceUserID: user.ID,
-			TargetUserID: targetUser.ID,
+			TargetUserID: req.UserID,
 		})
 	}
 
@@ -779,12 +739,13 @@ func (h *NotesHandler) GetNoteShares(w http.ResponseWriter, r *http.Request) (in
 
 // SearchUsers godoc
 //
-//	@Summary	List users (excluding current user)
+//	@Summary	Search or list users (excluding current user)
 //	@Tags		users
 //	@Security	CookieAuth
 //	@Produce	json
-//	@Success	200	{array}		UserInfo
-//	@Failure	401	{string}	string	"unauthorized"
+//	@Param		search	query		string	false	"Filter by username, first name, or last name (case-insensitive substring match)"
+//	@Success	200		{array}		UserInfo
+//	@Failure	401		{string}	string	"unauthorized"
 //	@Router		/users [get]
 func (h *NotesHandler) SearchUsers(w http.ResponseWriter, r *http.Request) (int, error) {
 	currentUser, ok := auth.GetUserFromContext(r.Context())
@@ -792,14 +753,21 @@ func (h *NotesHandler) SearchUsers(w http.ResponseWriter, r *http.Request) (int,
 		return http.StatusUnauthorized, errors.New("unauthorized")
 	}
 
-	users, err := h.userStore.GetAll()
+	search := r.URL.Query().Get("search")
+
+	var users []*models.User
+	var err error
+	if search != "" {
+		users, err = h.userStore.Search(search)
+	} else {
+		users, err = h.userStore.GetAll()
+	}
 	if err != nil {
 		return http.StatusInternalServerError, err
 	}
 
 	userInfos := []UserInfo{}
 	for _, user := range users {
-		// Don't include the current user in the list
 		if user.ID != currentUser.ID {
 			userInfos = append(userInfos, UserInfo{
 				ID:             user.ID,

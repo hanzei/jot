@@ -137,7 +137,11 @@ export async function getLocalNotes(db: SQLiteDatabase, params?: GetNotesParams)
   let sql = 'SELECT * FROM notes WHERE 1=1';
   const args: (string | number | null)[] = [];
 
-  if (params?.archived) {
+  if (params?.my_todo) {
+    if (!params.user_id) return [];
+    sql += ' AND deleted_at IS NULL AND id IN (SELECT note_id FROM note_items WHERE assigned_to = ?)';
+    args.push(params.user_id);
+  } else if (params?.archived) {
     sql += ' AND archived = 1 AND deleted_at IS NULL';
   } else if (params?.trashed) {
     sql += ' AND deleted_at IS NOT NULL';
@@ -256,6 +260,10 @@ export async function removeLocalNotesNotIn(
   params?: GetNotesParams,
 ): Promise<void> {
   const args: (string | number | null)[] = [];
+
+  // my_todo is a cross-cutting filter (overlaps with the main "notes" scope),
+  // so we must not remove notes that may still belong in other views.
+  if (params?.my_todo) return;
 
   let sql = "DELETE FROM notes WHERE id NOT LIKE 'local_%'";
 

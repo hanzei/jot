@@ -13,7 +13,7 @@ import (
 func TestNoteSharingEndpoints(t *testing.T) {
 	ts := setupTestServer(t)
 	owner := ts.createTestUser(t, "owner", "password123", false)
-	_ = ts.createTestUser(t, "user", "password123", false)
+	sharedUser := ts.createTestUser(t, "user", "password123", false)
 	other := ts.createTestUser(t, "other", "password123", false)
 
 	// Create a note to share
@@ -28,7 +28,7 @@ func TestNoteSharingEndpoints(t *testing.T) {
 
 	t.Run("share note with user", func(t *testing.T) {
 		shareBody := map[string]string{
-			"username": "user",
+			"user_id": sharedUser.User.ID,
 		}
 
 		resp := ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/share", noteID), shareBody)
@@ -40,9 +40,8 @@ func TestNoteSharingEndpoints(t *testing.T) {
 	})
 
 	t.Run("share with duplicate user returns conflict", func(t *testing.T) {
-		// First share with other user
 		shareBody := map[string]string{
-			"username": "other",
+			"user_id": other.User.ID,
 		}
 		resp1 := ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/share", noteID), shareBody)
 		assert.Equal(t, http.StatusOK, resp1.StatusCode)
@@ -52,28 +51,38 @@ func TestNoteSharingEndpoints(t *testing.T) {
 		assert.Equal(t, http.StatusConflict, resp.StatusCode)
 	})
 
-	t.Run("share with nonexistent username returns not found", func(t *testing.T) {
+	t.Run("share with nonexistent user_id returns not found", func(t *testing.T) {
 		shareBody := map[string]string{
-			"username": "nonexistent",
+			"user_id": "abcdefghijklmnopqrstuv",
 		}
 
 		resp := ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/share", noteID), shareBody)
 		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 	})
 
-	t.Run("share with empty username returns bad request", func(t *testing.T) {
+	t.Run("share with empty user_id returns bad request", func(t *testing.T) {
 		shareBody := map[string]string{
-			"username": "",
+			"user_id": "",
 		}
 
 		resp := ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/share", noteID), shareBody)
 		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
-		assert.Contains(t, resp.GetString(), "empty username")
+		assert.Contains(t, resp.GetString(), "invalid user_id")
+	})
+
+	t.Run("share with invalid user_id format returns bad request", func(t *testing.T) {
+		shareBody := map[string]string{
+			"user_id": "invalid",
+		}
+
+		resp := ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/share", noteID), shareBody)
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+		assert.Contains(t, resp.GetString(), "invalid user_id")
 	})
 
 	t.Run("share with self returns bad request", func(t *testing.T) {
 		shareBody := map[string]string{
-			"username": "owner",
+			"user_id": owner.User.ID,
 		}
 
 		resp := ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/share", noteID), shareBody)
@@ -83,7 +92,7 @@ func TestNoteSharingEndpoints(t *testing.T) {
 
 	t.Run("share by non-owner returns forbidden", func(t *testing.T) {
 		shareBody := map[string]string{
-			"username": "other",
+			"user_id": other.User.ID,
 		}
 
 		resp := ts.authRequest(t, other, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/share", noteID), shareBody)
@@ -106,7 +115,7 @@ func TestNoteSharingEndpoints(t *testing.T) {
 
 	t.Run("unshare note", func(t *testing.T) {
 		unshareBody := map[string]string{
-			"username": "user",
+			"user_id": sharedUser.User.ID,
 		}
 
 		resp := ts.authRequest(t, owner, http.MethodDelete, fmt.Sprintf("/api/v1/notes/%s/share", noteID), unshareBody)
@@ -119,7 +128,7 @@ func TestNoteSharingEndpoints(t *testing.T) {
 
 	t.Run("unshare non-shared user returns not found", func(t *testing.T) {
 		unshareBody := map[string]string{
-			"username": "user", // Already unshared
+			"user_id": sharedUser.User.ID, // Already unshared
 		}
 
 		resp := ts.authRequest(t, owner, http.MethodDelete, fmt.Sprintf("/api/v1/notes/%s/share", noteID), unshareBody)
@@ -129,11 +138,21 @@ func TestNoteSharingEndpoints(t *testing.T) {
 
 func TestSearchUsersEndpoint(t *testing.T) {
 	ts := setupTestServer(t)
-	user1 := ts.createTestUser(t, "user1", "password123", false)
-	_ = ts.createTestUser(t, "user2", "password123", false)
-	_ = ts.createTestUser(t, "admin", "password123", true)
+	user1 := ts.createTestUser(t, "alice", "password123", false)
+	bob := ts.createTestUser(t, "bob", "password123", false)
+	_ = ts.createTestUser(t, "charlie", "password123", true)
 
-	t.Run("search users returns all except current user", func(t *testing.T) {
+	// Set display names so we can test searching by first/last name.
+	resp := ts.authRequest(t, user1, http.MethodPatch, "/api/v1/users/me", map[string]any{
+		"username": "alice", "first_name": "Alice", "last_name": "Smith",
+	})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+	resp = ts.authRequest(t, bob, http.MethodPatch, "/api/v1/users/me", map[string]any{
+		"username": "bob", "first_name": "Robert", "last_name": "Jones",
+	})
+	require.Equal(t, http.StatusOK, resp.StatusCode)
+
+	t.Run("no search param returns all except current user", func(t *testing.T) {
 		resp := ts.authRequest(t, user1, http.MethodGet, "/api/v1/users", nil)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 
@@ -141,19 +160,75 @@ func TestSearchUsersEndpoint(t *testing.T) {
 		require.NoError(t, resp.UnmarshalBody(&users))
 		assert.Len(t, users, 2)
 
-		// Check that current user is not in results
 		for _, user := range users {
-			assert.NotEqual(t, "user1", user["username"], "Should not include current user in results")
+			assert.NotEqual(t, "alice", user["username"], "Should not include current user in results")
 		}
 
-		// Check that response doesn't include passwords
 		for _, user := range users {
 			assert.NotContains(t, user, "password", "User response should not include password")
 			assert.NotContains(t, user, "password_hash", "User response should not include password_hash")
 		}
 	})
 
-	t.Run("search users without auth returns unauthorized", func(t *testing.T) {
+	t.Run("search filters by username", func(t *testing.T) {
+		resp := ts.authRequest(t, user1, http.MethodGet, "/api/v1/users?search=bob", nil)
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+		var users []map[string]any
+		require.NoError(t, resp.UnmarshalBody(&users))
+		require.Len(t, users, 1)
+		assert.Equal(t, "bob", users[0]["username"])
+	})
+
+	t.Run("search is case insensitive", func(t *testing.T) {
+		resp := ts.authRequest(t, user1, http.MethodGet, "/api/v1/users?search=BOB", nil)
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+		var users []map[string]any
+		require.NoError(t, resp.UnmarshalBody(&users))
+		require.Len(t, users, 1)
+		assert.Equal(t, "bob", users[0]["username"])
+	})
+
+	t.Run("search filters by first name", func(t *testing.T) {
+		resp := ts.authRequest(t, user1, http.MethodGet, "/api/v1/users?search=Robert", nil)
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+		var users []map[string]any
+		require.NoError(t, resp.UnmarshalBody(&users))
+		require.Len(t, users, 1)
+		assert.Equal(t, "bob", users[0]["username"])
+	})
+
+	t.Run("search filters by last name", func(t *testing.T) {
+		resp := ts.authRequest(t, user1, http.MethodGet, "/api/v1/users?search=Jones", nil)
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+		var users []map[string]any
+		require.NoError(t, resp.UnmarshalBody(&users))
+		require.Len(t, users, 1)
+		assert.Equal(t, "bob", users[0]["username"])
+	})
+
+	t.Run("search with no matches returns empty list", func(t *testing.T) {
+		resp := ts.authRequest(t, user1, http.MethodGet, "/api/v1/users?search=nonexistent", nil)
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+		var users []map[string]any
+		require.NoError(t, resp.UnmarshalBody(&users))
+		assert.Empty(t, users)
+	})
+
+	t.Run("search excludes current user from results", func(t *testing.T) {
+		resp := ts.authRequest(t, user1, http.MethodGet, "/api/v1/users?search=alice", nil)
+		assert.Equal(t, http.StatusOK, resp.StatusCode)
+
+		var users []map[string]any
+		require.NoError(t, resp.UnmarshalBody(&users))
+		assert.Empty(t, users, "Current user should not appear in search results")
+	})
+
+	t.Run("search without auth returns unauthorized", func(t *testing.T) {
 		resp := ts.request(t, nil, http.MethodGet, "/api/v1/users", nil)
 		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
 	})

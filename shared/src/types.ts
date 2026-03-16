@@ -30,11 +30,6 @@ export interface AuthResponse {
   settings: UserSettings;
 }
 
-export interface UpdateSettingsRequest {
-  language: string;
-  theme: ThemePreference;
-}
-
 export interface LoginRequest {
   username: string;
   password: string;
@@ -106,6 +101,9 @@ export interface GetNotesParams {
   search?: string;
   trashed?: boolean;
   label?: string;
+  my_todo?: boolean;
+  /** Used locally to filter my-todo notes by assigned_to; not sent to the server. */
+  user_id?: string;
 }
 
 export interface CreateNoteRequest {
@@ -137,9 +135,11 @@ export interface UserListResponse {
 }
 
 export interface UpdateMeRequest {
-  username: string;
-  first_name: string;
-  last_name: string;
+  username?: string;
+  first_name?: string;
+  last_name?: string;
+  language?: string;
+  theme?: ThemePreference;
 }
 
 export interface ChangePasswordRequest {
@@ -148,7 +148,7 @@ export interface ChangePasswordRequest {
 }
 
 export interface ShareNoteRequest {
-  username: string;
+  user_id: string;
 }
 
 export interface ShareNoteResponse {

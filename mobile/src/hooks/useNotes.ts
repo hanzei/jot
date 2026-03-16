@@ -154,11 +154,20 @@ export function useUpdateNote() {
         await updateLocalNote(db, id, data);
       }
 
+      const fullData: UpdateNoteRequest = {
+        title: data.title ?? existing.title,
+        content: data.content ?? existing.content,
+        pinned: data.pinned ?? existing.pinned,
+        archived: data.archived ?? existing.archived,
+        color: data.color ?? existing.color,
+        checked_items_collapsed: data.checked_items_collapsed ?? existing.checked_items_collapsed,
+        items: data.items,
+      };
       await enqueueOperation(db, {
         operation: 'update',
         endpoint: `/notes/${id}`,
         method: 'PUT',
-        body: data as Record<string, unknown>,
+        body: fullData as Record<string, unknown>,
       });
 
       // Build optimistic return from the data we already have (no second DB read)
@@ -249,7 +258,7 @@ export function usePermanentDeleteNote() {
         await permanentDeleteLocalNote(db, id);
         await enqueueOperation(db, {
           operation: 'permanentDelete',
-          endpoint: `/notes/${id}/permanent`,
+          endpoint: `/notes/${id}?permanent=true`,
           method: 'DELETE',
         });
       }
@@ -309,8 +318,8 @@ export function useNoteShares(noteId: string | null) {
 export function useShareNote() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ noteId, username }: { noteId: string; username: string }) =>
-      shareNote(noteId, username),
+    mutationFn: ({ noteId, userId }: { noteId: string; userId: string }) =>
+      shareNote(noteId, userId),
     onSuccess: (_data, { noteId }) => {
       queryClient.invalidateQueries({ queryKey: ['noteShares', noteId] });
       queryClient.invalidateQueries({ queryKey: ['note', noteId] });
@@ -322,8 +331,8 @@ export function useShareNote() {
 export function useUnshareNote() {
   const queryClient = useQueryClient();
   return useMutation({
-    mutationFn: ({ noteId, username }: { noteId: string; username: string }) =>
-      unshareNote(noteId, username),
+    mutationFn: ({ noteId, userId }: { noteId: string; userId: string }) =>
+      unshareNote(noteId, userId),
     onSuccess: (_data, { noteId }) => {
       queryClient.invalidateQueries({ queryKey: ['noteShares', noteId] });
       queryClient.invalidateQueries({ queryKey: ['note', noteId] });
