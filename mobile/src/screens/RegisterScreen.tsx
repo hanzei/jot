@@ -11,6 +11,7 @@ import {
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useAuth } from '../store/AuthContext';
+import { useTheme } from '../theme/ThemeContext';
 import { AuthStackParamList } from '../navigation/AuthStack';
 import { restoreServerUrl, setServerUrl as configureServerUrl } from '../api/client';
 import { useServerUrl } from '../hooks/useServerUrl';
@@ -21,6 +22,7 @@ type RegisterScreenProps = {
 
 export default function RegisterScreen({ navigation }: RegisterScreenProps) {
   const { register } = useAuth();
+  const { colors } = useTheme();
   const { serverUrl, setServerUrl, validateServerUrl } = useServerUrl();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -63,17 +65,18 @@ export default function RegisterScreen({ navigation }: RegisterScreenProps) {
 
   return (
     <KeyboardAvoidingView
-      style={styles.container}
+      style={[styles.container, { backgroundColor: colors.surface }]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <ScrollView contentContainerStyle={styles.inner} keyboardShouldPersistTaps="handled">
-        <Text style={styles.title}>Create Account</Text>
+        <Text style={[styles.title, { color: colors.text }]}>Create Account</Text>
 
-        {error ? <Text style={styles.error}>{error}</Text> : null}
+        {error ? <Text style={[styles.error, { color: colors.error }]}>{error}</Text> : null}
 
         <TextInput
-          style={styles.input}
+          style={[styles.input, { backgroundColor: colors.inputBackground, borderColor: colors.inputBorder, color: colors.text }]}
           placeholder="Server URL"
+          placeholderTextColor={colors.placeholder}
           autoCapitalize="none"
           autoCorrect={false}
           keyboardType="url"
@@ -84,8 +87,9 @@ export default function RegisterScreen({ navigation }: RegisterScreenProps) {
         />
 
         <TextInput
-          style={styles.input}
+          style={[styles.input, { backgroundColor: colors.inputBackground, borderColor: colors.inputBorder, color: colors.text }]}
           placeholder="Username"
+          placeholderTextColor={colors.placeholder}
           autoCapitalize="none"
           autoCorrect={false}
           value={username}
@@ -95,8 +99,9 @@ export default function RegisterScreen({ navigation }: RegisterScreenProps) {
         />
 
         <TextInput
-          style={styles.input}
+          style={[styles.input, { backgroundColor: colors.inputBackground, borderColor: colors.inputBorder, color: colors.text }]}
           placeholder="Password"
+          placeholderTextColor={colors.placeholder}
           secureTextEntry
           value={password}
           onChangeText={setPassword}
@@ -105,7 +110,7 @@ export default function RegisterScreen({ navigation }: RegisterScreenProps) {
         />
 
         <TouchableOpacity
-          style={[styles.button, loading && styles.buttonDisabled]}
+          style={[styles.button, { backgroundColor: colors.primary }, loading && styles.buttonDisabled]}
           onPress={handleRegister}
           disabled={loading}
           testID="register-button"
@@ -122,7 +127,7 @@ export default function RegisterScreen({ navigation }: RegisterScreenProps) {
           style={styles.link}
           testID="login-link"
         >
-          <Text style={styles.linkText}>Already have an account? Sign in</Text>
+          <Text style={[styles.linkText, { color: colors.primary }]}>Already have an account? Sign in</Text>
         </TouchableOpacity>
       </ScrollView>
     </KeyboardAvoidingView>
@@ -132,7 +137,6 @@ export default function RegisterScreen({ navigation }: RegisterScreenProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
   },
   inner: {
     flexGrow: 1,
@@ -144,20 +148,16 @@ const styles = StyleSheet.create({
     fontWeight: '700',
     textAlign: 'center',
     marginBottom: 32,
-    color: '#1a1a1a',
   },
   input: {
     borderWidth: 1,
-    borderColor: '#ddd',
     borderRadius: 8,
     paddingHorizontal: 16,
     paddingVertical: 12,
     fontSize: 16,
     marginBottom: 12,
-    backgroundColor: '#fafafa',
   },
   button: {
-    backgroundColor: '#2563eb',
     borderRadius: 8,
     paddingVertical: 14,
     alignItems: 'center',
@@ -172,7 +172,6 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   error: {
-    color: '#dc2626',
     textAlign: 'center',
     marginBottom: 16,
     fontSize: 14,
@@ -182,7 +181,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   linkText: {
-    color: '#2563eb',
     fontSize: 14,
   },
 });

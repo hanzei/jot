@@ -62,7 +62,6 @@ WORKDIR /app
 
 # Copy the backend binary
 COPY --from=backend-builder /src/server/main ./
-COPY --from=backend-builder /src/server/migrations ./migrations/
 
 # Copy the built frontend files
 COPY --from=frontend-builder /app/webapp/build ./webapp/build/

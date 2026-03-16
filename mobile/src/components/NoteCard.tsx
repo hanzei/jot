@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import type { Note, NoteItem, NoteShare } from '@jot/shared';
+import { useTheme } from '../theme/ThemeContext';
 import UserAvatar from './UserAvatar';
 
 interface NoteCardProps {
@@ -15,6 +16,7 @@ const MAX_PREVIEW_ITEMS = 10;
 const MAX_AVATAR_DISPLAY = 3;
 
 function ShareAvatars({ shares }: { shares: NoteShare[] }) {
+  const { colors } = useTheme();
   const visible = shares.slice(0, MAX_AVATAR_DISPLAY);
   const overflow = shares.length - MAX_AVATAR_DISPLAY;
   return (
@@ -30,15 +32,16 @@ function ShareAvatars({ shares }: { shares: NoteShare[] }) {
         </View>
       ))}
       {overflow > 0 && (
-        <View style={styles.overflowBadge}>
-          <Text style={styles.overflowText}>+{overflow}</Text>
+        <View style={[styles.overflowBadge, { backgroundColor: colors.border }]}>
+          <Text style={[styles.overflowText, { color: colors.textSecondary }]}>+{overflow}</Text>
         </View>
       )}
     </View>
   );
 }
 
-function TodoPreview({ items }: { items: NoteItem[] }) {
+function TodoPreview({ items, hasColor }: { items: NoteItem[]; hasColor?: boolean }) {
+  const { colors } = useTheme();
   const uncompleted: NoteItem[] = [];
   let completedCount = 0;
   for (const item of items) {
@@ -53,27 +56,29 @@ function TodoPreview({ items }: { items: NoteItem[] }) {
     <View style={styles.todoPreview}>
       {uncompleted.map((item) => (
         <View key={item.id} style={styles.todoRow}>
-          <Ionicons name="square-outline" size={14} color="#999" />
-          <Text style={styles.todoText} numberOfLines={1}>
+          <Ionicons name="square-outline" size={14} color={hasColor ? '#999' : colors.iconMuted} />
+          <Text style={[styles.todoText, { color: hasColor ? '#666' : colors.textSecondary }]} numberOfLines={1}>
             {item.text}
           </Text>
         </View>
       ))}
       {completedCount > 0 && (
-        <Text style={styles.completedCount}>+{completedCount} checked</Text>
+        <Text style={[styles.completedCount, { color: hasColor ? '#999' : colors.textMuted }]}>+{completedCount} checked</Text>
       )}
     </View>
   );
 }
 
 function NoteCard({ note, onPress, onLongPress, onMenuPress }: NoteCardProps) {
-  const hasColor = note.color && note.color !== '#ffffff';
+  const { colors } = useTheme();
+  const hasColor = !!(note.color && note.color !== '#ffffff');
 
   return (
     <TouchableOpacity
       style={[
         styles.card,
-        hasColor && { backgroundColor: note.color },
+        { backgroundColor: colors.cardBackground, borderColor: colors.cardBorder },
+        hasColor && { backgroundColor: note.color, borderColor: note.color },
       ]}
       onPress={onPress}
       onLongPress={onLongPress}
@@ -83,7 +88,7 @@ function NoteCard({ note, onPress, onLongPress, onMenuPress }: NoteCardProps) {
       <View style={styles.cardHeader}>
         <View style={styles.cardHeaderContent}>
           {note.title ? (
-            <Text style={styles.title} numberOfLines={1}>
+            <Text style={[styles.title, { color: hasColor ? '#1a1a1a' : colors.text }]} numberOfLines={1}>
               {note.title}
             </Text>
           ) : null}
@@ -97,27 +102,27 @@ function NoteCard({ note, onPress, onLongPress, onMenuPress }: NoteCardProps) {
             accessibilityLabel="Note menu"
             accessibilityRole="button"
           >
-            <Ionicons name="ellipsis-vertical" size={18} color="#999" />
+            <Ionicons name="ellipsis-vertical" size={18} color={hasColor ? '#999' : colors.iconMuted} />
           </TouchableOpacity>
         )}
       </View>
 
       {note.note_type === 'text' && note.content ? (
-        <Text style={styles.content} numberOfLines={3}>
+        <Text style={[styles.content, { color: hasColor ? '#666' : colors.textSecondary }]} numberOfLines={3}>
           {note.content}
         </Text>
       ) : null}
 
       {note.note_type === 'todo' && note.items && note.items.length > 0 ? (
-        <TodoPreview items={note.items} />
+        <TodoPreview items={note.items} hasColor={hasColor} />
       ) : null}
 
       <View style={styles.footer}>
         {note.labels && note.labels.length > 0 ? (
           <View style={styles.labels}>
             {note.labels.map((label) => (
-              <View key={label.id} style={styles.labelChip}>
-                <Text style={styles.labelText}>{label.name}</Text>
+              <View key={label.id} style={[styles.labelChip, { backgroundColor: hasColor ? 'rgba(0,0,0,0.08)' : colors.borderLight }]}>
+                <Text style={[styles.labelText, { color: hasColor ? '#666' : colors.textSecondary }]}>{label.name}</Text>
               </View>
             ))}
           </View>
@@ -125,8 +130,8 @@ function NoteCard({ note, onPress, onLongPress, onMenuPress }: NoteCardProps) {
 
         {note.is_shared ? (
           <View style={styles.sharedWithYouRow}>
-            <Ionicons name="people-outline" size={13} color="#2563eb" />
-            <Text style={styles.sharedWithYouText}>Shared with you</Text>
+            <Ionicons name="people-outline" size={13} color={colors.primary} />
+            <Text style={[styles.sharedWithYouText, { color: colors.primary }]}>Shared with you</Text>
           </View>
         ) : note.shared_with && note.shared_with.length > 0 ? (
           <ShareAvatars shares={note.shared_with} />
@@ -138,9 +143,7 @@ function NoteCard({ note, onPress, onLongPress, onMenuPress }: NoteCardProps) {
 
 const styles = StyleSheet.create({
   card: {
-    backgroundColor: '#fff',
     borderWidth: 1,
-    borderColor: '#e5e7eb',
     borderRadius: 8,
     padding: 12,
     marginHorizontal: 16,
@@ -161,12 +164,10 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1a1a1a',
     marginBottom: 4,
   },
   content: {
     fontSize: 14,
-    color: '#666',
     lineHeight: 20,
   },
   todoPreview: {
@@ -180,12 +181,10 @@ const styles = StyleSheet.create({
   },
   todoText: {
     fontSize: 13,
-    color: '#666',
     flex: 1,
   },
   completedCount: {
     fontSize: 12,
-    color: '#999',
     marginTop: 2,
   },
   footer: {
@@ -202,14 +201,12 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   labelChip: {
-    backgroundColor: '#f3f4f6',
     borderRadius: 12,
     paddingHorizontal: 8,
     paddingVertical: 2,
   },
   labelText: {
     fontSize: 11,
-    color: '#666',
   },
   sharedWithYouRow: {
     flexDirection: 'row',
@@ -218,7 +215,6 @@ const styles = StyleSheet.create({
   },
   sharedWithYouText: {
     fontSize: 11,
-    color: '#2563eb',
   },
   avatarRow: {
     flexDirection: 'row',
@@ -234,14 +230,12 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: '#e5e7eb',
     justifyContent: 'center',
     alignItems: 'center',
     marginLeft: -4,
   },
   overflowText: {
     fontSize: 9,
-    color: '#666',
     fontWeight: '600',
   },
 });
