@@ -360,7 +360,7 @@ export default function SettingsScreen() {
           <View style={styles.section}>
             <Text style={styles.sectionTitle}>Appearance</Text>
             <Text style={styles.label}>App theme</Text>
-            <View style={styles.themeOptions}>
+            <View style={styles.themeOptions} accessibilityRole="radiogroup" accessibilityLabel="Theme">
               {THEME_OPTIONS.map((option) => (
                 <TouchableOpacity
                   key={option.value}
@@ -371,8 +371,8 @@ export default function SettingsScreen() {
                   onPress={() => handleThemeChange(option.value)}
                   testID={`settings-theme-${option.value}`}
                   accessibilityLabel={option.label}
-                  accessibilityRole="button"
-                  accessibilityState={{ selected: themePref === option.value }}
+                  accessibilityRole="radio"
+                  accessibilityState={{ checked: themePref === option.value }}
                 >
                   <Text
                     style={[
