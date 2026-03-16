@@ -130,6 +130,19 @@ test.describe('Notes', () => {
     await expect(card.getByText('Milk')).toBeVisible();
   });
 
+  test('newly created notes appear at the first position', async ({ dashboardPage }) => {
+    await dashboardPage.goto();
+
+    await dashboardPage.createNote('First Note');
+    await dashboardPage.createNote('Second Note');
+    await dashboardPage.createNote('Third Note');
+
+    // Most recently created note should be first
+    await dashboardPage.expectNoteAtPosition(0, 'Third Note');
+    await dashboardPage.expectNoteAtPosition(1, 'Second Note');
+    await dashboardPage.expectNoteAtPosition(2, 'First Note');
+  });
+
   test('shows empty state when no notes exist', async ({ dashboardPage }) => {
     await dashboardPage.goto();
     await dashboardPage.expectEmptyState('No notes yet');
