@@ -87,7 +87,9 @@ Jot is a self-hosted note-taking application. The backend is a Go HTTP API and t
 │   │   ├── sse/         # Server-sent event hub and event types
 │   │   └── server/      # Server setup, routing, middleware wiring
 │   ├── docs/            # Generated OpenAPI docs (swagger)
-│   └── migrations/      # Sequential SQL migration files
+│   └── internal/
+│   │   └── database/
+│   │   │   └── migrations/  # Sequential SQL migration files (embedded into binary)
 ├── webapp/          # React/TypeScript frontend
 │   ├── src/
 │   │   ├── components/  # React components
@@ -216,7 +218,7 @@ If handler annotations or request/response types change, regenerate docs with `t
 
 ### Database Migrations
 
-Migration files live in `server/migrations/` and are named `NNN_description.sql`. They are applied automatically at startup in sequential order. To add a new migration, create the next numbered file.
+Migration files live in `server/internal/database/migrations/` and are named `NNN_description.sql`. They are embedded into the binary at compile time via `embed.FS` and applied automatically at startup in sequential order. To add a new migration, create the next numbered file.
 
 ### Configuration (Environment Variables)
 
@@ -321,7 +323,7 @@ The server at `localhost:8080` serves the API. Vite is configured with a proxy t
 Multi-stage `Dockerfile`:
 1. **Node 24 Alpine** — builds the React app (`npm ci && npm run build`)
 2. **Go 1.24 Alpine** — compiles the Go binary (CGO enabled for SQLite)
-3. **Alpine runtime** — copies binary, migrations, and frontend build; exposes port 8080
+3. **Alpine runtime** — copies binary and frontend build; exposes port 8080
 
 ```bash
 docker compose up -d

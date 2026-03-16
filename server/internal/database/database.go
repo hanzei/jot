@@ -2,16 +2,15 @@ package database
 
 import (
 	"database/sql"
+	"embed"
 	"fmt"
-	"io/fs"
-	"os"
-	"path/filepath"
-	"sort"
-	"strings"
 
 	_ "github.com/mattn/go-sqlite3"
 	log "github.com/sirupsen/logrus"
 )
+
+//go:embed migrations/*.sql
+var migrationsFS embed.FS
 
 type DB struct {
 	*sql.DB
@@ -44,24 +43,12 @@ func (d *DB) runMigrations() error {
 		return fmt.Errorf("failed to create migrations table: %w", err)
 	}
 
-	migrationsDir := "migrations"
-	files, err := os.ReadDir(migrationsDir)
+	files, err := migrationsFS.ReadDir("migrations")
 	if err != nil {
 		return fmt.Errorf("failed to read migrations directory: %w", err)
 	}
 
-	var sqlFiles []fs.DirEntry
 	for _, file := range files {
-		if strings.HasSuffix(file.Name(), ".sql") {
-			sqlFiles = append(sqlFiles, file)
-		}
-	}
-
-	sort.Slice(sqlFiles, func(i, j int) bool {
-		return sqlFiles[i].Name() < sqlFiles[j].Name()
-	})
-
-	for _, file := range sqlFiles {
 		var count int
 		err := d.QueryRow("SELECT COUNT(*) FROM migrations WHERE filename = ?", file.Name()).Scan(&count)
 		if err != nil {
@@ -72,7 +59,7 @@ func (d *DB) runMigrations() error {
 			continue
 		}
 
-		content, err := os.ReadFile(filepath.Join(migrationsDir, file.Name()))
+		content, err := migrationsFS.ReadFile("migrations/" + file.Name())
 		if err != nil {
 			return fmt.Errorf("failed to read migration file %s: %w", file.Name(), err)
 		}
