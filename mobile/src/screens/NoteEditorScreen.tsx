@@ -662,25 +662,15 @@ export default function NoteEditorScreen() {
       </ScrollView>
 
       <View style={[styles.toolbar, { backgroundColor: noteBackground }]}>
-        {/* Color picker button */}
-        <TouchableOpacity
-          onPress={() => setColorPickerVisible(true)}
-          style={styles.toolbarBtn}
-          testID="toolbar-color-btn"
-          accessibilityLabel="Change color"
-        >
-          <Ionicons name="color-palette-outline" size={22} color="#444" />
-        </TouchableOpacity>
-
-        {/* Label button (only when note is saved and synced to server) */}
-        {noteId && !isLocalId(noteId) && (
+        {/* Share (only when note is saved, synced, hydrated, and owned by current user) */}
+        {noteId && !isLocalId(noteId) && existingNote && !existingNote.is_shared && (
           <TouchableOpacity
-            onPress={() => setLabelPickerVisible(true)}
+            onPress={() => navigation.navigate('Share', { noteId })}
             style={styles.toolbarBtn}
-            testID="toolbar-label-btn"
-            accessibilityLabel="Labels"
+            testID="toolbar-share-btn"
+            accessibilityLabel="Share note"
           >
-            <Ionicons name="pricetag-outline" size={22} color="#444" />
+            <Ionicons name="share-social-outline" size={22} color="#444" />
           </TouchableOpacity>
         )}
 
@@ -712,15 +702,25 @@ export default function NoteEditorScreen() {
           </TouchableOpacity>
         )}
 
-        {/* Share (only when note is saved, synced, hydrated, and owned by current user) */}
-        {noteId && !isLocalId(noteId) && existingNote && !existingNote.is_shared && (
+        {/* Color picker button */}
+        <TouchableOpacity
+          onPress={() => setColorPickerVisible(true)}
+          style={styles.toolbarBtn}
+          testID="toolbar-color-btn"
+          accessibilityLabel="Change color"
+        >
+          <Ionicons name="color-palette-outline" size={22} color="#444" />
+        </TouchableOpacity>
+
+        {/* Label button (only when note is saved and synced to server) */}
+        {noteId && !isLocalId(noteId) && (
           <TouchableOpacity
-            onPress={() => navigation.navigate('Share', { noteId })}
+            onPress={() => setLabelPickerVisible(true)}
             style={styles.toolbarBtn}
-            testID="toolbar-share-btn"
-            accessibilityLabel="Share note"
+            testID="toolbar-label-btn"
+            accessibilityLabel="Labels"
           >
-            <Ionicons name="share-social-outline" size={22} color="#444" />
+            <Ionicons name="pricetag-outline" size={22} color="#444" />
           </TouchableOpacity>
         )}
 

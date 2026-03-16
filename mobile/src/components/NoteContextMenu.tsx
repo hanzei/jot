@@ -55,6 +55,15 @@ export default function NoteContextMenu({
   const actions: Action[] = [];
 
   if (viewContext === 'notes' || viewContext === 'my-todo') {
+    // is_shared means the current user is a recipient, not the owner — hide Share for non-owners
+    if (!note.is_shared) {
+      actions.push({
+        icon: 'share-social-outline',
+        label: 'Share',
+        onPress: () => { onClose(); onShare(note); },
+        testId: 'context-share',
+      });
+    }
     actions.push({
       icon: note.pinned ? 'pin' : 'pin-outline',
       label: note.pinned ? 'Unpin' : 'Pin',
@@ -73,15 +82,6 @@ export default function NoteContextMenu({
       onPress: () => { onClose(); onChangeColor(note); },
       testId: 'context-color',
     });
-    // is_shared means the current user is a recipient, not the owner — hide Share for non-owners
-    if (!note.is_shared) {
-      actions.push({
-        icon: 'share-social-outline',
-        label: 'Share',
-        onPress: () => { onClose(); onShare(note); },
-        testId: 'context-share',
-      });
-    }
     actions.push({
       icon: 'trash-outline',
       label: 'Move to trash',
