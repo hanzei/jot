@@ -148,6 +148,12 @@ export class DashboardPage {
       .click();
   }
 
+  async switchToMyTodo() {
+    await this.page
+      .locator('aside[aria-label="Main navigation"] nav [aria-label="My Todo"]')
+      .click();
+  }
+
   async clickLogo() {
     await this.page.click('a:has-text("Jot")');
   }
@@ -222,6 +228,24 @@ export class DashboardPage {
     await expect(
       this.page.locator('aside ul').getByRole('button', { name: labelName, exact: true })
     ).toHaveCount(0);
+  }
+
+  /** Opens a note, assigns a todo item at the given index to a user, then closes the modal. */
+  async assignTodoItemToUser(noteTitle: string, itemIndex: number, username: string) {
+    await this.openNote(noteTitle);
+    await expect(this.page.getByRole('heading', { name: 'Edit Note' })).toBeVisible();
+
+    const itemRow = this.page.locator('input[placeholder="List item..."]').nth(itemIndex).locator('..');
+    await itemRow.hover();
+    const assignBtn = itemRow.locator('button[aria-label="Assign item"]');
+    await assignBtn.waitFor({ state: 'visible', timeout: 5000 });
+    await assignBtn.click();
+
+    await expect(this.page.getByText('Assign item')).toBeVisible();
+    const pickerPopover = this.page.locator('.max-h-48');
+    await pickerPopover.getByText(username).click();
+
+    await this.page.click('button[aria-label="Close"]');
   }
 
   /** Shares a note with a user via the card context menu and share modal. */

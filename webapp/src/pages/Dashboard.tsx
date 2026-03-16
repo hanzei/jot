@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { PlusIcon, MagnifyingGlassIcon, TagIcon, DocumentTextIcon, ArchiveBoxIcon, TrashIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, MagnifyingGlassIcon, TagIcon, DocumentTextIcon, ArchiveBoxIcon, TrashIcon, ClipboardDocumentCheckIcon } from '@heroicons/react/24/outline';
 import { useSidebarCollapsed } from '@/hooks/useSidebarCollapsed';
 import { useTranslation } from 'react-i18next';
 import { notes, auth, labels as labelsApi, users as usersApi } from '@/utils/api';
@@ -45,6 +45,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const initialLabel = searchParams.get('label');
   const [showArchived, setShowArchived] = useState(!initialLabel && searchParams.get('view') === 'archive');
   const [showBin, setShowBin] = useState(!initialLabel && searchParams.get('view') === 'bin');
+  const [showMyTodo, setShowMyTodo] = useState(!initialLabel && searchParams.get('view') === 'my-todo');
   const [labelsList, setLabelsList] = useState<Label[]>([]);
   const [selectedLabelId, setSelectedLabelId] = useState<string | null>(initialLabel);
   const [isModalOpen, setIsModalOpen] = useState(false);
@@ -66,6 +67,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     setSearchQueryState(searchParams.get('search') ?? '');
     setShowArchived(!label && searchParams.get('view') === 'archive');
     setShowBin(!label && searchParams.get('view') === 'bin');
+    setShowMyTodo(!label && searchParams.get('view') === 'my-todo');
     setSelectedLabelId(label);
   }, [searchParams]);
 
@@ -82,9 +84,10 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     });
   };
 
-  const handleViewChange = (view: 'notes' | 'archive' | 'bin') => {
+  const handleViewChange = (view: 'notes' | 'archive' | 'bin' | 'my-todo') => {
     setShowArchived(view === 'archive');
     setShowBin(view === 'bin');
+    setShowMyTodo(view === 'my-todo');
     setSearchQueryState('');
     setSelectedLabelId(null);
     setSearchParams(prev => {
@@ -95,6 +98,8 @@ export default function Dashboard({ onLogout }: DashboardProps) {
         next.set('view', 'archive');
       } else if (view === 'bin') {
         next.set('view', 'bin');
+      } else if (view === 'my-todo') {
+        next.set('view', 'my-todo');
       } else {
         next.delete('view');
       }
@@ -118,10 +123,12 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       document.title = t('pageTitle.bin');
     } else if (showArchived) {
       document.title = t('pageTitle.archive');
+    } else if (showMyTodo) {
+      document.title = t('pageTitle.myTodo');
     } else {
       document.title = t('pageTitle.notes');
     }
-  }, [showArchived, showBin, t]);
+  }, [showArchived, showBin, showMyTodo, t]);
 
   const loadLabels = useCallback(async () => {
     try {
@@ -149,14 +156,14 @@ export default function Dashboard({ onLogout }: DashboardProps) {
 
   const loadNotes = useCallback(async () => {
     try {
-      const notesData = await notes.getAll(showArchived, searchQuery, showBin, selectedLabelId ?? '');
+      const notesData = await notes.getAll(showArchived, searchQuery, showBin, selectedLabelId ?? '', showMyTodo);
       if (isMountedRef.current) setNotesList(notesData);
     } catch (error) {
       if (isMountedRef.current) console.error('Failed to load notes:', error);
     } finally {
       if (isMountedRef.current) setLoading(false);
     }
-  }, [showArchived, showBin, searchQuery, selectedLabelId]);
+  }, [showArchived, showBin, searchQuery, selectedLabelId, showMyTodo]);
 
   useEffect(() => {
     loadLabels();
@@ -267,6 +274,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     setSelectedLabelId(labelId);
     setShowArchived(false);
     setShowBin(false);
+    setShowMyTodo(false);
     setSearchQueryState('');
     setSearchParams(prev => {
       const next = new URLSearchParams(prev);
@@ -282,7 +290,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   };
 
   const handleDragEnd = async (event: DragEndEvent) => {
-    if (showBin) {
+    if (showBin || showMyTodo) {
       return;
     }
 
@@ -352,7 +360,13 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       label: t('dashboard.tabNotes'),
       icon: <DocumentTextIcon className="h-4 w-4 shrink-0" />,
       onClick: () => handleViewChange('notes'),
-      isActive: !showArchived && !showBin && !selectedLabelId,
+      isActive: !showArchived && !showBin && !showMyTodo && !selectedLabelId,
+    },
+    {
+      label: t('dashboard.tabMyTodo'),
+      icon: <ClipboardDocumentCheckIcon className="h-4 w-4 shrink-0" />,
+      onClick: () => handleViewChange('my-todo'),
+      isActive: showMyTodo,
     },
   ];
 
@@ -451,10 +465,10 @@ export default function Dashboard({ onLogout }: DashboardProps) {
             <div className="text-gray-500 dark:text-gray-400 text-lg">
               {searchQuery
                 ? t('dashboard.noSearchResults', { query: searchQuery })
-                : showBin ? t('dashboard.noBinnedNotes') : showArchived ? t('dashboard.noArchivedNotes') : t('dashboard.noNotesYet')}
+                : showBin ? t('dashboard.noBinnedNotes') : showArchived ? t('dashboard.noArchivedNotes') : showMyTodo ? t('dashboard.noMyTodoNotes') : t('dashboard.noNotesYet')}
             </div>
             <div className="text-gray-400 dark:text-gray-500 text-sm mt-2">
-              {!showArchived && !showBin && !searchQuery && t('dashboard.createFirstNote')}
+              {!showArchived && !showBin && !showMyTodo && !searchQuery && t('dashboard.createFirstNote')}
             </div>
           </div>
         ) : (
@@ -490,7 +504,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                           onPermanentlyDelete={handlePermanentlyDeleteNote}
                           currentUserId={user?.id}
                           usersById={usersById}
-                          disabled={showArchived || showBin}
+                          disabled={showArchived || showBin || showMyTodo}
                           inBin={showBin}
                           onRefresh={loadNotes}
                         />
@@ -524,7 +538,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                           onPermanentlyDelete={handlePermanentlyDeleteNote}
                           currentUserId={user?.id}
                           usersById={usersById}
-                          disabled={showArchived || showBin}
+                          disabled={showArchived || showBin || showMyTodo}
                           inBin={showBin}
                           onRefresh={loadNotes}
                         />

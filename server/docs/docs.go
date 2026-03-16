@@ -437,6 +437,12 @@ const docTemplate = `{
                         "description": "Filter by label ID",
                         "name": "label",
                         "in": "query"
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Return only notes with todos assigned to current user",
+                        "name": "my_todo",
+                        "in": "query"
                     }
                 ],
                 "responses": {
