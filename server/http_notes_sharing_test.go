@@ -67,7 +67,7 @@ func TestNoteSharingEndpoints(t *testing.T) {
 
 		resp := ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/share", noteID), shareBody)
 		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
-		assert.Contains(t, resp.GetString(), "empty user_id")
+		assert.Contains(t, resp.GetString(), "invalid user_id")
 	})
 
 	t.Run("share with invalid user_id format returns bad request", func(t *testing.T) {
@@ -77,7 +77,7 @@ func TestNoteSharingEndpoints(t *testing.T) {
 
 		resp := ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/share", noteID), shareBody)
 		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
-		assert.Contains(t, resp.GetString(), "invalid user_id format")
+		assert.Contains(t, resp.GetString(), "invalid user_id")
 	})
 
 	t.Run("share with self returns bad request", func(t *testing.T) {

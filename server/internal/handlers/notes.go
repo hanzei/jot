@@ -603,11 +603,8 @@ func (h *NotesHandler) ShareNote(w http.ResponseWriter, r *http.Request) (int, e
 		return http.StatusBadRequest, err
 	}
 
-	if req.UserID == "" {
-		return http.StatusBadRequest, errors.New("empty user_id")
-	}
 	if !models.IsValidID(req.UserID) {
-		return http.StatusBadRequest, errors.New("invalid user_id format")
+		return http.StatusBadRequest, errors.New("invalid user_id")
 	}
 
 	isOwner, err := h.noteStore.IsOwner(id, user.ID)
@@ -622,15 +619,14 @@ func (h *NotesHandler) ShareNote(w http.ResponseWriter, r *http.Request) (int, e
 		return http.StatusBadRequest, errors.New("cannot share with self")
 	}
 
-	targetUser, err := h.userStore.GetByID(req.UserID)
-	if err != nil {
-		if errors.Is(err, models.ErrUserNotFound) {
-			return http.StatusNotFound, err
+	if _, lookupErr := h.userStore.GetByID(req.UserID); lookupErr != nil {
+		if errors.Is(lookupErr, models.ErrUserNotFound) {
+			return http.StatusNotFound, lookupErr
 		}
-		return http.StatusInternalServerError, err
+		return http.StatusInternalServerError, lookupErr
 	}
 
-	err = h.noteStore.ShareNote(id, user.ID, targetUser.ID)
+	err = h.noteStore.ShareNote(id, user.ID, req.UserID)
 	if err != nil {
 		if errors.Is(err, models.ErrNoteAlreadyShared) {
 			return http.StatusConflict, err
@@ -688,11 +684,8 @@ func (h *NotesHandler) UnshareNote(w http.ResponseWriter, r *http.Request) (int,
 		return http.StatusBadRequest, err
 	}
 
-	if req.UserID == "" {
-		return http.StatusBadRequest, errors.New("empty user_id")
-	}
 	if !models.IsValidID(req.UserID) {
-		return http.StatusBadRequest, errors.New("invalid user_id format")
+		return http.StatusBadRequest, errors.New("invalid user_id")
 	}
 
 	isOwner, err := h.noteStore.IsOwner(id, user.ID)
