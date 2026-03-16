@@ -55,6 +55,12 @@ export default function NoteContextMenu({
   const actions: Action[] = [];
 
   if (viewContext === 'notes' || viewContext === 'my-todo') {
+    actions.push({
+      icon: 'color-palette-outline',
+      label: 'Change color',
+      onPress: () => { onClose(); onChangeColor(note); },
+      testId: 'context-color',
+    });
     // is_shared means the current user is a recipient, not the owner — hide Share for non-owners
     if (!note.is_shared) {
       actions.push({
@@ -75,12 +81,6 @@ export default function NoteContextMenu({
       label: 'Archive',
       onPress: () => { onClose(); onArchive(note); },
       testId: 'context-archive',
-    });
-    actions.push({
-      icon: 'color-palette-outline',
-      label: 'Change color',
-      onPress: () => { onClose(); onChangeColor(note); },
-      testId: 'context-color',
     });
     actions.push({
       icon: 'trash-outline',
