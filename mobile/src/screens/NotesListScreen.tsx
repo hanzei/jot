@@ -20,6 +20,7 @@ import { useUpdateNote, useDeleteNote, useRestoreNote, usePermanentDeleteNote, u
 import { useOfflineNotes } from '../hooks/useOfflineNotes';
 import { useLabels } from '../hooks/useLabels';
 import { useUsers } from '../store/UsersContext';
+import { useAuth } from '../store/AuthContext';
 import NoteCard from '../components/NoteCard';
 import NoteContextMenu, { ContextMenuViewContext } from '../components/NoteContextMenu';
 import ColorPicker from '../components/ColorPicker';
@@ -27,7 +28,7 @@ import { Note } from '../types';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 
 interface NotesListScreenProps {
-  variant?: 'notes' | 'archived' | 'trash';
+  variant?: 'notes' | 'archived' | 'trash' | 'my-todo';
   labelId?: string;
 }
 
@@ -45,6 +46,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   const [searchText, setSearchText] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const [selectedLabelId, setSelectedLabelId] = useState<string | undefined>(undefined);
+  const { user } = useAuth();
 
   // Sync drawer-level label filter into local state
   useEffect(() => {
@@ -54,7 +56,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   const [colorPickerNote, setColorPickerNote] = useState<Note | null>(null);
   const [localOrder, setLocalOrder] = useState<LocalReorderState>({ pinned: null, unpinned: null });
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const { usersById, refreshUsers } = useUsers();
+  const { refreshUsers } = useUsers();
 
   // Debounce search input by 300ms
   useEffect(() => {
@@ -72,7 +74,9 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     trashed: variant === 'trash' ? true : undefined,
     search: debouncedSearch || undefined,
     label: variant === 'notes' ? selectedLabelId : undefined,
-  }), [variant, debouncedSearch, selectedLabelId]);
+    my_todo: variant === 'my-todo' ? true : undefined,
+    user_id: variant === 'my-todo' ? user?.id : undefined,
+  }), [variant, debouncedSearch, selectedLabelId, user?.id]);
 
   const { data: notes, isLoading, isError, refetch, isRefetching } = useOfflineNotes(params);
   const { data: allLabels } = useLabels();
@@ -324,27 +328,25 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
         >
           <NoteCard
             note={item}
-            usersById={usersById}
             onPress={() => handleNotePress(item.id)}
             onMenuPress={() => handleOpenMenu(item)}
           />
         </TouchableOpacity>
       </ScaleDecorator>
     ),
-    [handleNotePress, handleOpenMenu, usersById],
+    [handleNotePress, handleOpenMenu],
   );
 
   const renderNonDraggableNoteCard = useCallback(
     ({ item }: { item: Note }) => (
       <NoteCard
         note={item}
-        usersById={usersById}
         onPress={() => handleNotePress(item.id)}
         onMenuPress={variant !== 'trash' ? () => handleOpenMenu(item) : undefined}
         onLongPress={variant === 'trash' ? () => handleOpenMenu(item) : undefined}
       />
     ),
-    [handleNotePress, handleOpenMenu, variant, usersById],
+    [handleNotePress, handleOpenMenu, variant],
   );
 
   if (isLoading && !notes) {
@@ -384,14 +386,20 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
             </Text>
           </View>
         )}
-        <Ionicons name="document-text-outline" size={64} color="#d1d5db" />
+        <Ionicons
+          name={variant === 'my-todo' ? 'clipboard-outline' : 'document-text-outline'}
+          size={64}
+          color="#d1d5db"
+        />
         <Text style={styles.emptyTitle}>
           {variant === 'notes' && 'No notes yet'}
+          {variant === 'my-todo' && 'No assigned todos'}
           {variant === 'archived' && 'No archived notes'}
           {variant === 'trash' && 'Trash is empty'}
         </Text>
         <Text style={styles.emptySubtext}>
           {variant === 'notes' && 'Tap + to create your first note'}
+          {variant === 'my-todo' && 'No notes with todos assigned to you'}
           {variant === 'archived' && 'Archived notes will appear here'}
           {variant === 'trash' && 'Deleted notes will appear here'}
         </Text>
@@ -410,7 +418,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     );
   }
 
-  // Drag-and-drop is only available in the notes variant (not archived/trash)
+  // Drag-and-drop is only available in the notes variant (not archived/trash/my-todo)
   const isDraggable = variant === 'notes';
 
   return (

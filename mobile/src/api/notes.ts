@@ -1,8 +1,13 @@
 import api from './client';
 import { Note, GetNotesParams, CreateNoteRequest, UpdateNoteRequest } from '../types';
 
+function stripClientOnlyParams(params: GetNotesParams): Omit<GetNotesParams, 'user_id'> {
+  const { archived, search, trashed, label, my_todo } = params;
+  return { archived, search, trashed, label, my_todo };
+}
+
 export async function getNotes(params?: GetNotesParams): Promise<Note[]> {
-  const res = await api.get('/notes', { params });
+  const res = await api.get('/notes', { params: params ? stripClientOnlyParams(params) : undefined });
   return res.data;
 }
 
