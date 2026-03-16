@@ -95,6 +95,20 @@ jest.mock('react-native-draggable-flatlist', () => {
   };
 });
 
+jest.mock('./src/theme/ThemeContext', () => {
+  const { lightColors } = require('./src/theme/colors');
+  return {
+    __esModule: true,
+    useTheme: () => ({
+      colors: lightColors,
+      isDark: false,
+      themePreference: 'system',
+      updateTheme: jest.fn(),
+    }),
+    ThemeProvider: ({ children }) => children,
+  };
+});
+
 jest.mock('@expo/vector-icons/Ionicons', () => {
   const React = require('react');
   const { Text } = require('react-native');

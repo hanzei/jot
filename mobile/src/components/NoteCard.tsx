@@ -70,7 +70,7 @@ function TodoPreview({ items, hasColor }: { items: NoteItem[]; hasColor?: boolea
 
 function NoteCard({ note, onPress, onLongPress, onMenuPress }: NoteCardProps) {
   const { colors } = useTheme();
-  const hasColor = note.color && note.color !== '#ffffff';
+  const hasColor = !!(note.color && note.color !== '#ffffff');
 
   return (
     <TouchableOpacity

@@ -8,7 +8,6 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useAuth } from '../store/AuthContext';
 import { useLabels } from '../hooks/useLabels';
 import { useTheme } from '../theme/ThemeContext';
-import type { ThemeColors } from '../theme/colors';
 
 import type { MainDrawerParamList } from '../navigation/MainDrawer';
 import type { RootStackParamList } from '../navigation/RootNavigator';

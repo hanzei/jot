@@ -1,7 +1,7 @@
 import React, { createContext, useContext, useMemo, useCallback, useState, useEffect } from 'react';
-import { useColorScheme, StatusBar, Appearance, ColorSchemeName } from 'react-native';
+import { useColorScheme, StatusBar, ColorSchemeName } from 'react-native';
 import { ThemeColors, lightColors, darkColors } from './colors';
-import { ThemePreference, UserSettings, UpdateSettingsRequest } from '../types';
+import { ThemePreference, UpdateSettingsRequest } from '../types';
 import { useAuth } from '../store/AuthContext';
 import { updateSettings as apiUpdateSettings } from '../api/users';
 

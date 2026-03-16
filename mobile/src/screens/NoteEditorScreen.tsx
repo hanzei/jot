@@ -92,7 +92,7 @@ export default function NoteEditorScreen() {
   const [syncToast, setSyncToast] = useState<string | null>(null);
   const { usersById } = useUsers();
 
-  const { colors, isDark } = useTheme();
+  const { colors } = useTheme();
   const { data: existingNote } = useOfflineNote(noteId);
   const createMutation = useCreateNote();
   const updateMutation = useUpdateNote();
