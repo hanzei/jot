@@ -27,7 +27,7 @@ func createSharedTodoNote(t *testing.T, ts *TestServer, owner *TestUser, sharedW
 	require.NoError(t, resp.UnmarshalBody(&note))
 	noteID := note["id"].(string)
 
-	shareBody := map[string]string{"username": sharedWith.User.Username}
+	shareBody := map[string]string{"user_id": sharedWith.User.ID}
 	shareResp := ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/share", noteID), shareBody)
 	require.Equal(t, http.StatusOK, shareResp.StatusCode)
 
@@ -426,8 +426,8 @@ func TestTaskAssignmentUnshareCleanup(t *testing.T) {
 		noteID := note["id"].(string)
 
 		// Share with both collaborators
-		ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/share", noteID), map[string]string{"username": "collab1"})
-		ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/share", noteID), map[string]string{"username": "collab2"})
+		ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/share", noteID), map[string]string{"user_id": collab1.User.ID})
+		ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/share", noteID), map[string]string{"user_id": collab2.User.ID})
 
 		// Assign items
 		updateBody := map[string]any{
@@ -441,7 +441,7 @@ func TestTaskAssignmentUnshareCleanup(t *testing.T) {
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 
 		// Unshare collab1 — only collab1's assignment should be cleared
-		ts.authRequest(t, owner, http.MethodDelete, fmt.Sprintf("/api/v1/notes/%s/share", noteID), map[string]string{"username": "collab1"})
+		ts.authRequest(t, owner, http.MethodDelete, fmt.Sprintf("/api/v1/notes/%s/share", noteID), map[string]string{"user_id": collab1.User.ID})
 
 		items := getNoteItems(t, ts, owner, noteID)
 		assert.Empty(t, items[0]["assigned_to"], "collab1's assignment should be cleared")
@@ -467,7 +467,7 @@ func TestTaskAssignmentUnshareCleanup(t *testing.T) {
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 
 		// Unshare the only collaborator — note becomes unshared, all assignments cleared
-		ts.authRequest(t, owner, http.MethodDelete, fmt.Sprintf("/api/v1/notes/%s/share", noteID), map[string]string{"username": "collab"})
+		ts.authRequest(t, owner, http.MethodDelete, fmt.Sprintf("/api/v1/notes/%s/share", noteID), map[string]string{"user_id": collab.User.ID})
 
 		items := getNoteItems(t, ts, owner, noteID)
 		assert.Empty(t, items[0]["assigned_to"], "owner's self-assignment should be cleared")
@@ -498,8 +498,8 @@ func TestTaskAssignmentUserDeletion(t *testing.T) {
 		noteID := note["id"].(string)
 
 		// Share with both collaborators so the note stays shared after one is deleted
-		ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/share", noteID), map[string]string{"username": "collab1"})
-		ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/share", noteID), map[string]string{"username": "collab2"})
+		ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/share", noteID), map[string]string{"user_id": collab1.User.ID})
+		ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/share", noteID), map[string]string{"user_id": collab2.User.ID})
 
 		// Assign collab1 to item 1, collab2 to item 2
 		updateBody := map[string]any{
