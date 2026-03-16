@@ -77,12 +77,12 @@ type CreateNoteItem struct {
 }
 
 type UpdateNoteRequest struct {
-	Title                 string           `json:"title"`
-	Content               string           `json:"content"`
-	Pinned                bool             `json:"pinned"`
-	Archived              bool             `json:"archived"`
-	Color                 string           `json:"color"`
-	CheckedItemsCollapsed bool             `json:"checked_items_collapsed"`
+	Title                 *string          `json:"title"`
+	Content               *string          `json:"content"`
+	Pinned                *bool            `json:"pinned"`
+	Archived              *bool            `json:"archived"`
+	Color                 *string          `json:"color"`
+	CheckedItemsCollapsed *bool            `json:"checked_items_collapsed"`
 	Items                 []UpdateNoteItem `json:"items,omitempty"`
 }
 
@@ -355,7 +355,7 @@ func (h *NotesHandler) updateTodoItems(noteID string, userID string, items []Upd
 //	@Failure	400		{string}	string	"bad request"
 //	@Failure	401		{string}	string	"unauthorized"
 //	@Failure	404		{string}	string	"not found"
-//	@Router		/notes/{id} [put]
+//	@Router		/notes/{id} [patch]
 func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
@@ -375,10 +375,6 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 		return http.StatusBadRequest, err
 	}
 
-	if req.Color == "" {
-		req.Color = models.DefaultNoteColor
-	}
-
 	// Validate items before persisting any changes so invalid assigned_to
 	// values are rejected before note metadata is committed.
 	if len(req.Items) > 0 {
@@ -387,7 +383,7 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 		}
 	}
 
-	err := h.noteStore.Update(id, user.ID, req.Title, req.Content, req.Pinned, req.Archived, req.Color, req.CheckedItemsCollapsed)
+	err := h.noteStore.Update(id, user.ID, req.Title, req.Content, req.Color, req.Pinned, req.Archived, req.CheckedItemsCollapsed)
 	if err != nil {
 		if errors.Is(err, models.ErrNoteNotFound) || errors.Is(err, models.ErrNoteNoAccess) {
 			return http.StatusNotFound, err
@@ -851,7 +847,8 @@ func (h *NotesHandler) importKeepNote(userID string, kn keepNote) error {
 	}
 
 	if kn.IsPinned || kn.IsArchived {
-		if err := h.noteStore.Update(note.ID, userID, kn.Title, kn.TextContent, kn.IsPinned, kn.IsArchived, color, false); err != nil {
+		f := false
+		if err := h.noteStore.Update(note.ID, userID, &kn.Title, &kn.TextContent, &color, &kn.IsPinned, &kn.IsArchived, &f); err != nil {
 			return err
 		}
 	}

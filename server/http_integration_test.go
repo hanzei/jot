@@ -637,7 +637,7 @@ func TestTodoItemIndentLevel(t *testing.T) {
 		assert.Equal(t, 1, note.Items[2].IndentLevel)
 	})
 
-	t.Run("indent levels updated via PUT", func(t *testing.T) {
+	t.Run("indent levels updated via PATCH", func(t *testing.T) {
 		_, err := user.Client.UpdateNote(t.Context(), created.ID, &client.UpdateNoteRequest{
 			Title: client.Ptr("Indent Test"),
 			Color: client.Ptr("#ffffff"),

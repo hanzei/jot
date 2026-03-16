@@ -22,7 +22,7 @@ export async function createNote(data: CreateNoteRequest): Promise<Note> {
 }
 
 export async function updateNote(id: string, data: UpdateNoteRequest): Promise<Note> {
-  const res = await api.put(`/notes/${id}`, data);
+  const res = await api.patch(`/notes/${id}`, data);
   return res.data;
 }
 

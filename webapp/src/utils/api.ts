@@ -48,7 +48,7 @@ export const notes = {
     api.post('/notes', data).then(res => res.data),
 
   update: (id: string, data: UpdateNoteRequest): Promise<Note> =>
-    api.put(`/notes/${id}`, data).then(res => res.data),
+    api.patch(`/notes/${id}`, data).then(res => res.data),
 
   delete: (id: string, opts?: { permanent?: boolean }): Promise<void> =>
     opts?.permanent

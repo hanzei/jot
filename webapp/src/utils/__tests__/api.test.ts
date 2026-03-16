@@ -14,6 +14,7 @@ import type {
 const mockPost = vi.hoisted(() => vi.fn())
 const mockGet = vi.hoisted(() => vi.fn())
 const mockPut = vi.hoisted(() => vi.fn())
+const mockPatch = vi.hoisted(() => vi.fn())
 const mockDelete = vi.hoisted(() => vi.fn())
 const mockRequestUse = vi.hoisted(() => vi.fn())
 const mockResponseUse = vi.hoisted(() => vi.fn())
@@ -25,6 +26,7 @@ vi.mock('axios', () => ({
       post: mockPost,
       get: mockGet,
       put: mockPut,
+      patch: mockPatch,
       delete: mockDelete,
       interceptors: {
         request: { use: mockRequestUse },
@@ -421,17 +423,17 @@ describe('API Module', () => {
           checked_items_collapsed: false
         }
         const updatedNote = { ...mockNote, ...updateData }
-        mockPut.mockResolvedValue({ data: updatedNote })
+        mockPatch.mockResolvedValue({ data: updatedNote })
 
         const result = await notes.update('1', updateData)
 
-        expect(mockPut).toHaveBeenCalledWith('/notes/1', updateData)
+        expect(mockPatch).toHaveBeenCalledWith('/notes/1', updateData)
         expect(result).toEqual(updatedNote)
       })
 
       it('handles update of non-existent note', async () => {
         const error = new Error('Note not found')
-        mockPut.mockRejectedValue(error)
+        mockPatch.mockRejectedValue(error)
 
         const updateData: UpdateNoteRequest = {
           title: 'Updated Note',
@@ -455,7 +457,7 @@ describe('API Module', () => {
           checked_items_collapsed: false
         }
         const updatedNote = { ...mockNote, ...updateData }
-        mockPut.mockResolvedValue({ data: updatedNote })
+        mockPatch.mockResolvedValue({ data: updatedNote })
 
         // Simulate concurrent updates
         const promise1 = notes.update('1', updateData)
@@ -463,7 +465,7 @@ describe('API Module', () => {
 
         const [result1, result2] = await Promise.all([promise1, promise2])
 
-        expect(mockPut).toHaveBeenCalledTimes(2)
+        expect(mockPatch).toHaveBeenCalledTimes(2)
         expect(result1).toEqual(updatedNote)
         expect(result2).toEqual(updatedNote)
       })
