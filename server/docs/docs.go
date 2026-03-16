@@ -1648,13 +1648,23 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "language": {
-                    "type": "string"
+                    "type": "string",
+                    "enum": [
+                        "system",
+                        "en",
+                        "de"
+                    ]
                 },
                 "last_name": {
                     "type": "string"
                 },
                 "theme": {
-                    "type": "string"
+                    "type": "string",
+                    "enum": [
+                        "system",
+                        "light",
+                        "dark"
+                    ]
                 },
                 "username": {
                     "type": "string"

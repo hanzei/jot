@@ -1,6 +1,7 @@
 import React, { useCallback } from 'react';
 import { View, Text, TouchableOpacity, StyleSheet, Alert, Platform } from 'react-native';
 import { DrawerContentScrollView, DrawerContentComponentProps } from '@react-navigation/drawer';
+import { CommonActions } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useAuth } from '../store/AuthContext';
@@ -59,6 +60,13 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
 
   const handleLabelPress = useCallback((labelId: string, labelName: string) => {
     props.navigation.navigate('Notes', { labelId, labelName });
+    props.navigation.closeDrawer();
+  }, [props.navigation]);
+
+  const handleSettingsPress = useCallback(() => {
+    props.navigation.dispatch(
+      CommonActions.navigate({ name: 'Settings' }),
+    );
     props.navigation.closeDrawer();
   }, [props.navigation]);
 
@@ -171,8 +179,19 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
         </View>
       </DrawerContentScrollView>
 
+      {/* Settings & Logout pinned to bottom */}
       <View style={[styles.bottomSection, { paddingBottom: Math.max(insets.bottom, 16) }]}>
         <View style={[styles.divider, { backgroundColor: colors.divider }]} />
+        <TouchableOpacity
+          style={styles.settingsButton}
+          onPress={handleSettingsPress}
+          testID="drawer-settings"
+          accessibilityLabel="Settings"
+          accessibilityRole="button"
+        >
+          <Ionicons name="settings-outline" size={22} color={colors.icon} />
+          <Text style={[styles.settingsText, { color: colors.icon }]}>Settings</Text>
+        </TouchableOpacity>
         <TouchableOpacity
           style={styles.logoutButton}
           onPress={handleLogout}
@@ -243,6 +262,17 @@ const styles = StyleSheet.create({
   },
   bottomSection: {
     paddingTop: 0,
+  },
+  settingsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 24,
+    gap: 14,
+  },
+  settingsText: {
+    fontSize: 15,
+    fontWeight: '500',
   },
   logoutButton: {
     flexDirection: 'row',

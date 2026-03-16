@@ -23,6 +23,7 @@
     "expo": "~55.0.0",
     "expo-asset": "~55.0.0",
     "expo-haptics": "~55.0.0",
+    "expo-image-picker": "^55.0.12",
     "expo-secure-store": "~55.0.0",
     "expo-sqlite": "~55.0.0",
     "react": "19.2.3",
