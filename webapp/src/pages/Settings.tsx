@@ -53,7 +53,7 @@ const Settings = ({ onLogout }: SettingsProps) => {
   const [themePref, setThemePref] = useState<ThemePreference>(() => getThemePreference());
 
   useEffect(() => {
-    users.getSettings().then(serverSettings => {
+    auth.me().then(({ settings: serverSettings }) => {
       setSettings(serverSettings);
       const langPref = serverSettings.language as LanguagePreference;
       setLanguagePref(langPref);
@@ -110,8 +110,9 @@ const Settings = ({ onLogout }: SettingsProps) => {
     setSuccess('');
 
     try {
-      const updatedUser = await users.updateMe({ username: draftUsername, first_name: draftFirstName, last_name: draftLastName });
+      const { user: updatedUser, settings: updatedSettings } = await users.updateMe({ username: draftUsername, first_name: draftFirstName, last_name: draftLastName });
       setUser(updatedUser);
+      if (updatedSettings) setSettings(updatedSettings);
       setCurrentUsername(updatedUser.username);
       setDraftUsername(updatedUser.username);
       setDraftFirstName(updatedUser.first_name ?? '');
@@ -144,16 +145,13 @@ const Settings = ({ onLogout }: SettingsProps) => {
     const current = getSettings();
     setLanguagePref(pref);
     i18n.changeLanguage(resolveLanguage(pref));
-    // Persist locally first so a refresh keeps the new language even if the
-    // server call fails.
     if (current) {
       setSettings({ ...current, language: pref });
     }
     try {
-      const updatedSettings = await users.updateSettings({ language: pref, theme: themePref });
-      setSettings(updatedSettings);
+      const { settings: updatedSettings } = await users.updateMe({ language: pref });
+      if (updatedSettings) setSettings(updatedSettings);
     } catch {
-      // Server call failed — roll back to previous state.
       setLanguagePref(prev);
       i18n.changeLanguage(resolveLanguage(prev));
       if (current) {
@@ -171,10 +169,9 @@ const Settings = ({ onLogout }: SettingsProps) => {
       setSettings({ ...current, theme: pref });
     }
     try {
-      const updatedSettings = await users.updateSettings({ language: languagePref, theme: pref });
-      setSettings(updatedSettings);
+      const { settings: updatedSettings } = await users.updateMe({ theme: pref });
+      if (updatedSettings) setSettings(updatedSettings);
     } catch {
-      // Server call failed — roll back to previous state.
       setThemePref(prev);
       applyTheme(prev);
       if (current) {

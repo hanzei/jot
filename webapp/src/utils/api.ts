@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { AboutInfo, AuthResponse, LoginRequest, RegisterRequest, Note, CreateNoteRequest, UpdateNoteRequest, User, CreateUserRequest, UserListResponse, ShareNoteRequest, ShareNoteResponse, NoteShare, ImportResponse, UpdateMeRequest, ChangePasswordRequest, UserSettings, UpdateSettingsRequest, UpdateUserRoleRequest, Label } from '@/types';
+import { AboutInfo, AuthResponse, LoginRequest, RegisterRequest, Note, CreateNoteRequest, UpdateNoteRequest, User, CreateUserRequest, UserListResponse, ShareNoteRequest, ShareNoteResponse, NoteShare, ImportResponse, UpdateMeRequest, ChangePasswordRequest, UpdateUserRoleRequest, Label } from '@/types';
 
 const api = axios.create({
   baseURL: '/api/v1',
@@ -50,14 +50,13 @@ export const notes = {
   update: (id: string, data: UpdateNoteRequest): Promise<Note> =>
     api.put(`/notes/${id}`, data).then(res => res.data),
 
-  delete: (id: string): Promise<void> =>
-    api.delete(`/notes/${id}`),
+  delete: (id: string, opts?: { permanent?: boolean }): Promise<void> =>
+    opts?.permanent
+      ? api.delete(`/notes/${id}`, { params: { permanent: true } })
+      : api.delete(`/notes/${id}`),
 
   restore: (id: string): Promise<Note> =>
     api.post(`/notes/${id}/restore`).then(res => res.data),
-
-  permanentlyDelete: (id: string): Promise<void> =>
-    api.delete(`/notes/${id}/permanent`),
 
   share: (id: string, data: ShareNoteRequest): Promise<ShareNoteResponse> =>
     api.post(`/notes/${id}/share`, data).then(res => res.data),
@@ -93,17 +92,11 @@ export const users = {
   search: (): Promise<User[]> =>
     api.get('/users').then(res => res.data),
 
-  updateMe: (data: UpdateMeRequest): Promise<User> =>
-    api.put('/users/me', data).then(res => res.data.user),
+  updateMe: (data: UpdateMeRequest): Promise<AuthResponse> =>
+    api.patch('/users/me', data).then(res => res.data),
 
   changePassword: (data: ChangePasswordRequest): Promise<void> =>
     api.put('/users/me/password', data),
-
-  getSettings: (): Promise<UserSettings> =>
-    api.get('/users/me/settings').then(res => res.data),
-
-  updateSettings: (data: UpdateSettingsRequest): Promise<UserSettings> =>
-    api.put('/users/me/settings', data).then(res => res.data),
 
   uploadProfileIcon: (file: File): Promise<User> => {
     const formData = new FormData();

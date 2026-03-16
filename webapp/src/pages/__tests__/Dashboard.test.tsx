@@ -16,7 +16,6 @@ vi.mock('@/utils/api', () => ({
     delete: vi.fn(),
     reorder: vi.fn(),
     restore: vi.fn(),
-    permanentlyDelete: vi.fn(),
   },
   auth: {
     logout: vi.fn(),
@@ -392,7 +391,7 @@ describe('Dashboard', () => {
       const mockGetAll = vi.mocked(notes.getAll)
       mockGetAll.mockResolvedValue([mockNote])
       vi.mocked(notes.restore).mockResolvedValue(mockNote)
-      vi.mocked(notes.permanentlyDelete).mockResolvedValue(undefined)
+      vi.mocked(notes.delete).mockResolvedValue(undefined)
 
       renderDashboard(['/dashboard?view=bin'])
 
@@ -417,7 +416,7 @@ describe('Dashboard', () => {
       // Permanently delete handler wires up correctly
       fireEvent.click(screen.getByTestId('permanently-delete-bin-note-1'))
       await waitFor(() => {
-        expect(vi.mocked(notes.permanentlyDelete)).toHaveBeenCalledWith('bin-note-1')
+        expect(vi.mocked(notes.delete)).toHaveBeenCalledWith('bin-note-1', { permanent: true })
       })
     })
 
