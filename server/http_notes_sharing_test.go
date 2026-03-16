@@ -330,15 +330,13 @@ func TestEdgeCases(t *testing.T) {
 		require.NoError(t, createResp.UnmarshalBody(&createdNote))
 		noteID := createdNote["id"].(string)
 
+		// Omitting color in a PATCH preserves the existing value (#ffffff default from create).
 		updateBody := map[string]any{
-			"title":    "Updated",
-			"content":  "Updated",
-			"pinned":   false,
-			"archived": false,
-			"color":    "", // Empty color should default to #ffffff
+			"title":   "Updated",
+			"content": "Updated",
 		}
 
-		resp := ts.authRequest(t, user, http.MethodPut, fmt.Sprintf("/api/v1/notes/%s", noteID), updateBody)
+		resp := ts.authRequest(t, user, http.MethodPatch, fmt.Sprintf("/api/v1/notes/%s", noteID), updateBody)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 		var updatedNote map[string]any

@@ -383,7 +383,7 @@ func TestNotesEndpoints(t *testing.T) {
 			"color":    "#ff0000",
 		}
 
-		resp := ts.authRequest(t, user, http.MethodPut, fmt.Sprintf("/api/v1/notes/%s", noteID), updateBody)
+		resp := ts.authRequest(t, user, http.MethodPatch, fmt.Sprintf("/api/v1/notes/%s", noteID), updateBody)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
 
 		var updatedNote map[string]any
@@ -873,7 +873,7 @@ func TestTodoItemIndentLevel(t *testing.T) {
 		assert.InDelta(t, float64(1), items[2].(map[string]any)["indent_level"], 0)
 	})
 
-	t.Run("indent levels updated via PUT", func(t *testing.T) {
+	t.Run("indent levels updated via PATCH", func(t *testing.T) {
 		updateBody := map[string]any{
 			"title":                   "Indent Test",
 			"content":                 "",
@@ -887,7 +887,7 @@ func TestTodoItemIndentLevel(t *testing.T) {
 				{"text": "promoted to top", "position": 2, "completed": false, "indent_level": 0},
 			},
 		}
-		resp := ts.authRequest(t, user, http.MethodPut, "/api/v1/notes/"+noteID, updateBody)
+		resp := ts.authRequest(t, user, http.MethodPatch, "/api/v1/notes/"+noteID, updateBody)
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 
 		getResp := ts.authRequest(t, user, http.MethodGet, "/api/v1/notes/"+noteID, nil)
@@ -950,7 +950,7 @@ func TestTodoItemIndentLevel(t *testing.T) {
 				{"text": "too deep", "position": 1, "completed": false, "indent_level": 2},
 			},
 		}
-		resp := ts.authRequest(t, user, http.MethodPut, "/api/v1/notes/"+noteID, updateBody)
+		resp := ts.authRequest(t, user, http.MethodPatch, "/api/v1/notes/"+noteID, updateBody)
 		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 	})
 }

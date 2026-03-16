@@ -160,7 +160,7 @@ func (s *Server) setupRoutes() {
 			r.Post("/notes/reorder", s.wrapHandler(s.notesHandler.ReorderNotes))
 			r.Post("/notes/import", s.wrapHandler(s.notesHandler.ImportNotes))
 			r.Get("/notes/{id}", s.wrapHandler(s.notesHandler.GetNote))
-			r.Put("/notes/{id}", s.wrapHandler(s.notesHandler.UpdateNote))
+			r.Patch("/notes/{id}", s.wrapHandler(s.notesHandler.UpdateNote))
 			r.Delete("/notes/{id}", s.wrapHandler(s.notesHandler.DeleteNote))
 
 			r.Post("/notes/{id}/restore", s.wrapHandler(s.notesHandler.RestoreNote))

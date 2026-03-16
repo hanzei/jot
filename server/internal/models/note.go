@@ -58,15 +58,15 @@ type Note struct {
 }
 
 type NoteItem struct {
-	ID               string    `json:"id"`
-	NoteID           string    `json:"note_id"`
-	Text             string    `json:"text"`
-	Completed        bool      `json:"completed"`
-	Position         int       `json:"position"`
-	IndentLevel      int       `json:"indent_level"`
-	AssignedTo       string    `json:"assigned_to"`
-	CreatedAt        time.Time `json:"created_at"`
-	UpdatedAt        time.Time `json:"updated_at"`
+	ID          string    `json:"id"`
+	NoteID      string    `json:"note_id"`
+	Text        string    `json:"text"`
+	Completed   bool      `json:"completed"`
+	Position    int       `json:"position"`
+	IndentLevel int       `json:"indent_level"`
+	AssignedTo  string    `json:"assigned_to"`
+	CreatedAt   time.Time `json:"created_at"`
+	UpdatedAt   time.Time `json:"updated_at"`
 }
 
 type NoteShare struct {
@@ -325,7 +325,7 @@ func (s *NoteStore) GetByID(id string, userID string) (*Note, error) {
 	return &note, nil
 }
 
-func (s *NoteStore) Update(id string, userID string, title, content string, pinned, archived bool, color string, checkedItemsCollapsed bool) error {
+func (s *NoteStore) Update(id string, userID string, title, content, color *string, pinned, archived, checkedItemsCollapsed *bool) error {
 	hasAccess, err := s.HasAccess(id, userID)
 	if err != nil {
 		return fmt.Errorf("failed to check access: %w", err)
@@ -334,16 +334,41 @@ func (s *NoteStore) Update(id string, userID string, title, content string, pinn
 		return ErrNoteNoAccess
 	}
 
-	// Get current note state to check if pinned status is changing
+	// Get current note state to merge partial updates and check if pinned status is changing
 	currentNote, err := s.GetByID(id, userID)
 	if err != nil {
 		return fmt.Errorf("failed to get current note: %w", err)
 	}
 
+	resolvedTitle := currentNote.Title
+	if title != nil {
+		resolvedTitle = *title
+	}
+	resolvedContent := currentNote.Content
+	if content != nil {
+		resolvedContent = *content
+	}
+	resolvedColor := currentNote.Color
+	if color != nil {
+		resolvedColor = *color
+	}
+	resolvedPinned := currentNote.Pinned
+	if pinned != nil {
+		resolvedPinned = *pinned
+	}
+	resolvedArchived := currentNote.Archived
+	if archived != nil {
+		resolvedArchived = *archived
+	}
+	resolvedCheckedItemsCollapsed := currentNote.CheckedItemsCollapsed
+	if checkedItemsCollapsed != nil {
+		resolvedCheckedItemsCollapsed = *checkedItemsCollapsed
+	}
+
 	query := `UPDATE notes SET title = ?, content = ?, pinned = ?, archived = ?, color = ?, checked_items_collapsed = ?, updated_at = CURRENT_TIMESTAMP
 			  WHERE id = ?`
 
-	result, err := s.db.Exec(query, title, content, pinned, archived, color, checkedItemsCollapsed, id)
+	result, err := s.db.Exec(query, resolvedTitle, resolvedContent, resolvedPinned, resolvedArchived, resolvedColor, resolvedCheckedItemsCollapsed, id)
 	if err != nil {
 		return fmt.Errorf("failed to update note: %w", err)
 	}
@@ -358,12 +383,12 @@ func (s *NoteStore) Update(id string, userID string, title, content string, pinn
 	}
 
 	// If pinned status changed, handle position preservation
-	if currentNote.Pinned != pinned {
-		if pinned {
+	if currentNote.Pinned != resolvedPinned {
+		if resolvedPinned {
 			// Pinning: Store current position as unpinned_position and move to end of pinned
 			var maxPosition int
 			posQuery := `SELECT COALESCE(MAX(position), -1) FROM notes WHERE user_id = ? AND pinned = ? AND archived = FALSE AND deleted_at IS NULL`
-			if err = s.db.QueryRow(posQuery, userID, pinned).Scan(&maxPosition); err != nil {
+			if err = s.db.QueryRow(posQuery, userID, resolvedPinned).Scan(&maxPosition); err != nil {
 				return fmt.Errorf("failed to get max position: %w", err)
 			}
 			newPosition := maxPosition + 1
@@ -388,7 +413,7 @@ func (s *NoteStore) Update(id string, userID string, title, content string, pinn
 				// No saved position, add to end
 				var maxPosition int
 				posQuery := `SELECT COALESCE(MAX(position), -1) FROM notes WHERE user_id = ? AND pinned = ? AND archived = FALSE AND deleted_at IS NULL`
-				if err = s.db.QueryRow(posQuery, userID, pinned).Scan(&maxPosition); err != nil {
+				if err = s.db.QueryRow(posQuery, userID, resolvedPinned).Scan(&maxPosition); err != nil {
 					return fmt.Errorf("failed to get max position: %w", err)
 				}
 				targetPosition = maxPosition + 1

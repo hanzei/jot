@@ -107,7 +107,7 @@ func TestTaskAssignment(t *testing.T) {
 				{"text": "Item 2", "position": 1, "indent_level": 0},
 			},
 		}
-		resp := ts.authRequest(t, owner, http.MethodPut, fmt.Sprintf("/api/v1/notes/%s", noteID), updateBody)
+		resp := ts.authRequest(t, owner, http.MethodPatch, fmt.Sprintf("/api/v1/notes/%s", noteID), updateBody)
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 
 		items := getNoteItems(t, ts, owner, noteID)
@@ -128,7 +128,7 @@ func TestTaskAssignment(t *testing.T) {
 				{"text": "Item 1", "position": 0, "indent_level": 0, "assigned_to": owner.User.ID},
 			},
 		}
-		resp := ts.authRequest(t, owner, http.MethodPut, fmt.Sprintf("/api/v1/notes/%s", noteID), updateBody)
+		resp := ts.authRequest(t, owner, http.MethodPatch, fmt.Sprintf("/api/v1/notes/%s", noteID), updateBody)
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 
 		items := getNoteItems(t, ts, owner, noteID)
@@ -158,7 +158,7 @@ func TestTaskAssignment(t *testing.T) {
 				{"text": "Item 1", "position": 0, "indent_level": 0, "assigned_to": owner.User.ID},
 			},
 		}
-		resp := ts.authRequest(t, owner, http.MethodPut, fmt.Sprintf("/api/v1/notes/%s", noteID), updateBody)
+		resp := ts.authRequest(t, owner, http.MethodPatch, fmt.Sprintf("/api/v1/notes/%s", noteID), updateBody)
 		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 		assert.Contains(t, resp.GetString(), "cannot assign items on an unshared note")
 	})
@@ -177,7 +177,7 @@ func TestTaskAssignment(t *testing.T) {
 				{"text": "Item 1", "position": 0, "indent_level": 0, "assigned_to": outsider.User.ID},
 			},
 		}
-		resp := ts.authRequest(t, owner, http.MethodPut, fmt.Sprintf("/api/v1/notes/%s", noteID), updateBody)
+		resp := ts.authRequest(t, owner, http.MethodPatch, fmt.Sprintf("/api/v1/notes/%s", noteID), updateBody)
 		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 		assert.Contains(t, resp.GetString(), "assigned user does not have access")
 	})
@@ -195,7 +195,7 @@ func TestTaskAssignment(t *testing.T) {
 				{"text": "Item 1", "position": 0, "indent_level": 0, "assigned_to": "short"},
 			},
 		}
-		resp := ts.authRequest(t, owner, http.MethodPut, fmt.Sprintf("/api/v1/notes/%s", noteID), updateBody)
+		resp := ts.authRequest(t, owner, http.MethodPatch, fmt.Sprintf("/api/v1/notes/%s", noteID), updateBody)
 		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 		assert.Contains(t, resp.GetString(), "invalid assigned_to format")
 	})
@@ -214,7 +214,7 @@ func TestTaskAssignment(t *testing.T) {
 				{"text": "Item 2", "position": 1, "indent_level": 0},
 			},
 		}
-		resp := ts.authRequest(t, collaborator, http.MethodPut, fmt.Sprintf("/api/v1/notes/%s", noteID), updateBody)
+		resp := ts.authRequest(t, collaborator, http.MethodPatch, fmt.Sprintf("/api/v1/notes/%s", noteID), updateBody)
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 
 		items := getNoteItems(t, ts, owner, noteID)
@@ -235,7 +235,7 @@ func TestTaskAssignment(t *testing.T) {
 				{"text": "Item 1", "position": 0, "indent_level": 0, "assigned_to": collabID},
 			},
 		}
-		resp := ts.authRequest(t, owner, http.MethodPut, fmt.Sprintf("/api/v1/notes/%s", noteID), updateBody)
+		resp := ts.authRequest(t, owner, http.MethodPatch, fmt.Sprintf("/api/v1/notes/%s", noteID), updateBody)
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 
 		items := getNoteItems(t, ts, owner, noteID)
@@ -248,7 +248,7 @@ func TestTaskAssignment(t *testing.T) {
 				{"text": "Item 1", "position": 0, "indent_level": 0, "assigned_to": ""},
 			},
 		}
-		resp = ts.authRequest(t, owner, http.MethodPut, fmt.Sprintf("/api/v1/notes/%s", noteID), unassignBody)
+		resp = ts.authRequest(t, owner, http.MethodPatch, fmt.Sprintf("/api/v1/notes/%s", noteID), unassignBody)
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 
 		items = getNoteItems(t, ts, owner, noteID)
@@ -268,7 +268,7 @@ func TestTaskAssignment(t *testing.T) {
 				{"text": "Item 1", "position": 0, "indent_level": 0, "completed": true, "assigned_to": collabID},
 			},
 		}
-		resp := ts.authRequest(t, owner, http.MethodPut, fmt.Sprintf("/api/v1/notes/%s", noteID), updateBody)
+		resp := ts.authRequest(t, owner, http.MethodPatch, fmt.Sprintf("/api/v1/notes/%s", noteID), updateBody)
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 
 		items := getNoteItems(t, ts, owner, noteID)
@@ -292,7 +292,7 @@ func TestMyTodoFilter(t *testing.T) {
 				{"text": "Item 2", "position": 1, "indent_level": 0},
 			},
 		}
-		resp := ts.authRequest(t, owner, http.MethodPut, fmt.Sprintf("/api/v1/notes/%s", noteID), updateBody)
+		resp := ts.authRequest(t, owner, http.MethodPatch, fmt.Sprintf("/api/v1/notes/%s", noteID), updateBody)
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 
 		resp = ts.authRequest(t, collaborator, http.MethodGet, "/api/v1/notes?my_todo=true", nil)
@@ -318,7 +318,7 @@ func TestMyTodoFilter(t *testing.T) {
 				{"text": "Item 2", "position": 1, "indent_level": 0},
 			},
 		}
-		resp := ts.authRequest(t, owner, http.MethodPut, fmt.Sprintf("/api/v1/notes/%s", noteID), updateBody)
+		resp := ts.authRequest(t, owner, http.MethodPatch, fmt.Sprintf("/api/v1/notes/%s", noteID), updateBody)
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 
 		resp = ts.authRequest(t, collaborator, http.MethodGet, "/api/v1/notes?my_todo=true", nil)
@@ -364,7 +364,7 @@ func TestMyTodoFilter(t *testing.T) {
 				{"text": "Item 1", "position": 0, "indent_level": 0, "assigned_to": owner.User.ID},
 			},
 		}
-		resp := ts.authRequest(t, owner, http.MethodPut, fmt.Sprintf("/api/v1/notes/%s", noteID), updateBody)
+		resp := ts.authRequest(t, owner, http.MethodPatch, fmt.Sprintf("/api/v1/notes/%s", noteID), updateBody)
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 
 		resp = ts.authRequest(t, owner, http.MethodGet, "/api/v1/notes?my_todo=true", nil)
@@ -389,7 +389,7 @@ func TestMyTodoFilter(t *testing.T) {
 				{"text": "Item 1", "position": 0, "indent_level": 0, "assigned_to": collabID},
 			},
 		}
-		resp := ts.authRequest(t, owner, http.MethodPut, fmt.Sprintf("/api/v1/notes/%s", noteID), updateBody)
+		resp := ts.authRequest(t, owner, http.MethodPatch, fmt.Sprintf("/api/v1/notes/%s", noteID), updateBody)
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 
 		resp = ts.authRequest(t, owner, http.MethodDelete, fmt.Sprintf("/api/v1/notes/%s", noteID), nil)
@@ -437,7 +437,7 @@ func TestTaskAssignmentUnshareCleanup(t *testing.T) {
 				{"text": "Item 2", "position": 1, "indent_level": 0, "assigned_to": collab2.User.ID},
 			},
 		}
-		resp := ts.authRequest(t, owner, http.MethodPut, fmt.Sprintf("/api/v1/notes/%s", noteID), updateBody)
+		resp := ts.authRequest(t, owner, http.MethodPatch, fmt.Sprintf("/api/v1/notes/%s", noteID), updateBody)
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 
 		// Unshare collab1 — only collab1's assignment should be cleared
@@ -463,7 +463,7 @@ func TestTaskAssignmentUnshareCleanup(t *testing.T) {
 				{"text": "Item 2", "position": 1, "indent_level": 0, "assigned_to": collab.User.ID},
 			},
 		}
-		resp := ts.authRequest(t, owner, http.MethodPut, fmt.Sprintf("/api/v1/notes/%s", noteID), updateBody)
+		resp := ts.authRequest(t, owner, http.MethodPatch, fmt.Sprintf("/api/v1/notes/%s", noteID), updateBody)
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 
 		// Unshare the only collaborator — note becomes unshared, all assignments cleared
@@ -509,7 +509,7 @@ func TestTaskAssignmentUserDeletion(t *testing.T) {
 				{"text": "Item 2", "position": 1, "indent_level": 0, "assigned_to": collab2.User.ID},
 			},
 		}
-		resp := ts.authRequest(t, owner, http.MethodPut, fmt.Sprintf("/api/v1/notes/%s", noteID), updateBody)
+		resp := ts.authRequest(t, owner, http.MethodPatch, fmt.Sprintf("/api/v1/notes/%s", noteID), updateBody)
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 
 		// Delete collab1 — only collab1's assignment cleared; note still shared with collab2
@@ -537,7 +537,7 @@ func TestTaskAssignmentUserDeletion(t *testing.T) {
 				{"text": "Item 2", "position": 1, "indent_level": 0, "assigned_to": collabID},
 			},
 		}
-		resp := ts.authRequest(t, owner, http.MethodPut, fmt.Sprintf("/api/v1/notes/%s", noteID), updateBody)
+		resp := ts.authRequest(t, owner, http.MethodPatch, fmt.Sprintf("/api/v1/notes/%s", noteID), updateBody)
 		require.Equal(t, http.StatusOK, resp.StatusCode)
 
 		// Delete the only collaborator — note becomes unshared, all assignments must be cleared
