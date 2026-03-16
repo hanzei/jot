@@ -29,7 +29,7 @@ func createSharedTodoNote(t *testing.T, ts *TestServer, owner *TestUser, sharedW
 	return note.ID, sharedWith.User.ID
 }
 
-func getNoteItems(t *testing.T, _ *TestServer, user *TestUser, noteID string) []client.NoteItem {
+func getNoteItems(t *testing.T, user *TestUser, noteID string) []client.NoteItem {
 	t.Helper()
 	note, err := user.Client.GetNote(t.Context(), noteID)
 	require.NoError(t, err)
@@ -99,7 +99,7 @@ func TestTaskAssignment(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		items := getNoteItems(t, ts, owner, noteID)
+		items := getNoteItems(t, owner, noteID)
 		assert.Equal(t, collabID, items[0].AssignedTo)
 		assert.Empty(t, items[1].AssignedTo)
 	})
@@ -120,7 +120,7 @@ func TestTaskAssignment(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		items := getNoteItems(t, ts, owner, noteID)
+		items := getNoteItems(t, owner, noteID)
 		assert.Equal(t, owner.User.ID, items[0].AssignedTo)
 	})
 
@@ -199,7 +199,7 @@ func TestTaskAssignment(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		items := getNoteItems(t, ts, owner, noteID)
+		items := getNoteItems(t, owner, noteID)
 		assert.Equal(t, owner.User.ID, items[0].AssignedTo)
 	})
 
@@ -218,7 +218,7 @@ func TestTaskAssignment(t *testing.T) {
 			},
 		})
 		require.NoError(t, err)
-		items := getNoteItems(t, ts, owner, noteID)
+		items := getNoteItems(t, owner, noteID)
 		assert.Equal(t, collabID, items[0].AssignedTo)
 
 		_, err = owner.Client.UpdateNote(t.Context(), noteID, &client.UpdateNoteRequest{
@@ -228,7 +228,7 @@ func TestTaskAssignment(t *testing.T) {
 			},
 		})
 		require.NoError(t, err)
-		items = getNoteItems(t, ts, owner, noteID)
+		items = getNoteItems(t, owner, noteID)
 		assert.Empty(t, items[0].AssignedTo)
 	})
 
@@ -248,7 +248,7 @@ func TestTaskAssignment(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		items := getNoteItems(t, ts, owner, noteID)
+		items := getNoteItems(t, owner, noteID)
 		assert.True(t, items[0].Completed)
 		assert.Equal(t, collabID, items[0].AssignedTo)
 	})
@@ -397,7 +397,7 @@ func TestTaskAssignmentUnshareCleanup(t *testing.T) {
 
 		require.NoError(t, owner.Client.UnshareNote(t.Context(), note.ID, collab1.User.ID))
 
-		items := getNoteItems(t, ts, owner, note.ID)
+		items := getNoteItems(t, owner, note.ID)
 		assert.Empty(t, items[0].AssignedTo, "collab1's assignment should be cleared")
 		assert.Equal(t, collab2.User.ID, items[1].AssignedTo, "collab2's assignment should remain")
 	})
@@ -421,7 +421,7 @@ func TestTaskAssignmentUnshareCleanup(t *testing.T) {
 
 		require.NoError(t, owner.Client.UnshareNote(t.Context(), noteID, collab.User.ID))
 
-		items := getNoteItems(t, ts, owner, noteID)
+		items := getNoteItems(t, owner, noteID)
 		assert.Empty(t, items[0].AssignedTo, "owner's self-assignment should be cleared")
 		assert.Empty(t, items[1].AssignedTo, "collab's assignment should be cleared")
 	})
@@ -460,7 +460,7 @@ func TestTaskAssignmentUserDeletion(t *testing.T) {
 
 		require.NoError(t, admin.Client.AdminDeleteUser(t.Context(), collab1.User.ID))
 
-		items := getNoteItems(t, ts, owner, note.ID)
+		items := getNoteItems(t, owner, note.ID)
 		assert.Empty(t, items[0].AssignedTo, "deleted user's assignment should be cleared")
 		assert.Equal(t, collab2.User.ID, items[1].AssignedTo, "other collab's assignment should remain")
 	})
@@ -485,7 +485,7 @@ func TestTaskAssignmentUserDeletion(t *testing.T) {
 
 		require.NoError(t, admin.Client.AdminDeleteUser(t.Context(), collabID))
 
-		items := getNoteItems(t, ts, owner, noteID)
+		items := getNoteItems(t, owner, noteID)
 		assert.Empty(t, items[0].AssignedTo, "owner's self-assignment should be cleared when note becomes unshared")
 		assert.Empty(t, items[1].AssignedTo, "deleted collab's assignment should be cleared")
 	})

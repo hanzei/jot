@@ -788,6 +788,8 @@ func TestUploadProfileIcon(t *testing.T) {
 	})
 
 	t.Run("decompression bomb is rejected", func(t *testing.T) {
+		// Minimal PNG with an IHDR claiming 5000x5000 pixels (~75 MB decompressed).
+		// UploadProfileIcon rejects dimensions exceeding the 4096-pixel cap.
 		pngHeader := []byte{
 			0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A,
 			0x00, 0x00, 0x00, 0x0D,

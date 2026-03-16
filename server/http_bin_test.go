@@ -10,7 +10,7 @@ import (
 )
 
 // createAndTrashNote creates a note and moves it to trash.
-func createAndTrashNote(t *testing.T, _ *TestServer, user *TestUser, title string) *client.Note {
+func createAndTrashNote(t *testing.T, user *TestUser, title string) *client.Note {
 	t.Helper()
 	note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
 		Title:    title,
@@ -42,7 +42,7 @@ func TestBinDeleteMovesToTrash(t *testing.T) {
 func TestBinTrashedNotesAppearInTrashList(t *testing.T) {
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "binuser2", "password123", false)
-	note := createAndTrashNote(t, ts, user, "Trashed Note")
+	note := createAndTrashNote(t, user, "Trashed Note")
 
 	trashedNotes, err := user.Client.ListNotes(t.Context(), &client.ListNotesOptions{Trashed: true})
 	require.NoError(t, err)
@@ -61,7 +61,7 @@ func TestBinTrashedNotesAppearInTrashList(t *testing.T) {
 func TestBinRestoreMovesToActiveList(t *testing.T) {
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "binuser3", "password123", false)
-	note := createAndTrashNote(t, ts, user, "Restore Me")
+	note := createAndTrashNote(t, user, "Restore Me")
 
 	restored, err := user.Client.RestoreNote(t.Context(), note.ID)
 	require.NoError(t, err)
@@ -88,7 +88,7 @@ func TestBinRestoreMovesToActiveList(t *testing.T) {
 func TestBinPermanentDeleteRemovesNote(t *testing.T) {
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "binuser4", "password123", false)
-	note := createAndTrashNote(t, ts, user, "Delete Me Permanently")
+	note := createAndTrashNote(t, user, "Delete Me Permanently")
 
 	require.NoError(t, user.Client.DeleteNotePermanently(t.Context(), note.ID))
 
@@ -136,7 +136,7 @@ func TestBinNonOwnerCannotRestore(t *testing.T) {
 	owner := ts.createTestUser(t, "binowner", "password123", false)
 	other := ts.createTestUser(t, "binother", "password123", false)
 
-	note := createAndTrashNote(t, ts, owner, "Owner Note")
+	note := createAndTrashNote(t, owner, "Owner Note")
 
 	_, err := other.Client.RestoreNote(t.Context(), note.ID)
 	assert.Equal(t, http.StatusNotFound, client.StatusCode(err))
@@ -147,7 +147,7 @@ func TestBinNonOwnerCannotPermanentDelete(t *testing.T) {
 	owner := ts.createTestUser(t, "binowner2", "password123", false)
 	other := ts.createTestUser(t, "binother2", "password123", false)
 
-	note := createAndTrashNote(t, ts, owner, "Owner Note 2")
+	note := createAndTrashNote(t, owner, "Owner Note 2")
 
 	err := other.Client.DeleteNotePermanently(t.Context(), note.ID)
 	assert.Equal(t, http.StatusNotFound, client.StatusCode(err))

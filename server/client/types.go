@@ -108,7 +108,7 @@ type UserInfo struct {
 	Username       string `json:"username"`
 	FirstName      string `json:"first_name"`
 	LastName       string `json:"last_name"`
-	Role           string `json:"role"`
+	Role           Role   `json:"role"`
 	HasProfileIcon bool   `json:"has_profile_icon"`
 }
 

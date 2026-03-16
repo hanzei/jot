@@ -159,7 +159,7 @@ func TestEdgeCases(t *testing.T) {
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 
-	t.Run("nonexistent note ID returns bad request", func(t *testing.T) {
+	t.Run("short note ID returns bad request", func(t *testing.T) {
 		_, err := user.Client.GetNote(t.Context(), "999")
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
