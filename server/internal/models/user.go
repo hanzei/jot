@@ -79,6 +79,10 @@ func (s *UserStore) Create(username, password string) (*User, error) {
 		&user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
+		var sqliteErr sqlite3.Error
+		if errors.As(err, &sqliteErr) && sqliteErr.ExtendedCode == sqlite3.ErrConstraintUnique {
+			return nil, ErrUsernameTaken
+		}
 		return nil, fmt.Errorf("failed to create user: %w", err)
 	}
 
@@ -557,6 +561,10 @@ func (s *UserStore) CreateByAdmin(username, password string, role string) (*User
 		&user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
+		var sqliteErr sqlite3.Error
+		if errors.As(err, &sqliteErr) && sqliteErr.ExtendedCode == sqlite3.ErrConstraintUnique {
+			return nil, ErrUsernameTaken
+		}
 		return nil, fmt.Errorf("failed to create user: %w", err)
 	}
 

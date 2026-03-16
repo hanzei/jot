@@ -181,17 +181,17 @@ func buildGetByUserIDQuery(userID string, archived bool, trashed bool, search st
 		args = []any{userID}
 	} else if myTodo {
 		query = `SELECT DISTINCT n.id, n.user_id, n.title, n.content, n.note_type, n.color, n.pinned, n.archived, n.position, n.unpinned_position, n.checked_items_collapsed, n.deleted_at, n.created_at, n.updated_at
-				  FROM notes n
+				  FROM active_notes n
 				  INNER JOIN note_items ni ON n.id = ni.note_id
 				  LEFT JOIN note_shares ns ON n.id = ns.note_id
-				  WHERE (n.user_id = ? OR ns.shared_with_user_id = ?) AND ni.assigned_to = ? AND n.deleted_at IS NULL`
+				  WHERE (n.user_id = ? OR ns.shared_with_user_id = ?) AND ni.assigned_to = ?`
 		args = []any{userID, userID, userID}
 	} else {
 		query = `SELECT DISTINCT n.id, n.user_id, n.title, n.content, n.note_type, n.color, n.pinned, n.archived, n.position, n.unpinned_position, n.checked_items_collapsed, n.deleted_at, n.created_at, n.updated_at
-				  FROM notes n
+				  FROM active_notes n
 				  LEFT JOIN note_shares ns ON n.id = ns.note_id
 				  LEFT JOIN note_items ni ON n.id = ni.note_id
-				  WHERE (n.user_id = ? OR ns.shared_with_user_id = ?) AND n.archived = ? AND n.deleted_at IS NULL`
+				  WHERE (n.user_id = ? OR ns.shared_with_user_id = ?) AND n.archived = ?`
 		args = []any{userID, userID, archived}
 	}
 	if search != "" {
@@ -285,7 +285,7 @@ func (s *NoteStore) GetByID(id string, userID string) (*Note, error) {
 	}
 
 	query := `SELECT id, user_id, title, content, note_type, color, pinned, archived, position, unpinned_position, checked_items_collapsed, deleted_at, created_at, updated_at
-			  FROM notes WHERE id = ? AND deleted_at IS NULL`
+			  FROM active_notes WHERE id = ?`
 
 	var note Note
 	err = s.db.QueryRow(query, id).Scan(
@@ -387,7 +387,7 @@ func (s *NoteStore) Update(id string, userID string, title, content, color *stri
 		if resolvedPinned {
 			// Pinning: Store current position as unpinned_position and move to end of pinned
 			var maxPosition int
-			posQuery := `SELECT COALESCE(MAX(position), -1) FROM notes WHERE user_id = ? AND pinned = ? AND archived = FALSE AND deleted_at IS NULL`
+			posQuery := `SELECT COALESCE(MAX(position), -1) FROM active_notes WHERE user_id = ? AND pinned = ? AND archived = FALSE`
 			if err = s.db.QueryRow(posQuery, userID, resolvedPinned).Scan(&maxPosition); err != nil {
 				return fmt.Errorf("failed to get max position: %w", err)
 			}
@@ -412,7 +412,7 @@ func (s *NoteStore) Update(id string, userID string, title, content, color *stri
 			} else {
 				// No saved position, add to end
 				var maxPosition int
-				posQuery := `SELECT COALESCE(MAX(position), -1) FROM notes WHERE user_id = ? AND pinned = ? AND archived = FALSE AND deleted_at IS NULL`
+				posQuery := `SELECT COALESCE(MAX(position), -1) FROM active_notes WHERE user_id = ? AND pinned = ? AND archived = FALSE`
 				if err = s.db.QueryRow(posQuery, userID, resolvedPinned).Scan(&maxPosition); err != nil {
 					return fmt.Errorf("failed to get max position: %w", err)
 				}
@@ -837,12 +837,12 @@ func (s *NoteStore) GetNoteShares(noteID string) ([]NoteShare, error) {
 
 func (s *NoteStore) HasAccess(noteID string, userID string) (bool, error) {
 	var count int
-	query := `SELECT COUNT(*) FROM notes WHERE id = ? AND user_id = ? AND deleted_at IS NULL
+	query := `SELECT COUNT(*) FROM active_notes WHERE id = ? AND user_id = ?
 			  UNION ALL
 			  SELECT COUNT(*) FROM note_shares WHERE note_id = ? AND shared_with_user_id = ?
-			    AND (SELECT deleted_at FROM notes WHERE id = ?) IS NULL`
+			    AND EXISTS (SELECT 1 FROM active_notes WHERE id = note_shares.note_id)`
 
-	rows, err := s.db.Query(query, noteID, userID, noteID, userID, noteID)
+	rows, err := s.db.Query(query, noteID, userID, noteID, userID)
 	if err != nil {
 		return false, fmt.Errorf("failed to check access: %w", err)
 	}
