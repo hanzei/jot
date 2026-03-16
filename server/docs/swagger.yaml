@@ -587,6 +587,10 @@ paths:
         in: query
         name: label
         type: string
+      - description: Return only notes with todos assigned to current user
+        in: query
+        name: my_todo
+        type: boolean
       produces:
       - application/json
       responses:
