@@ -563,7 +563,7 @@ export default function NoteEditorScreen() {
 
       {saveError && (
         <TouchableOpacity
-          style={[styles.errorBanner, { backgroundColor: colors.errorLight }]}
+          style={[styles.errorBanner, { backgroundColor: colors.errorLight, borderBottomColor: colors.error }]}
           onPress={() => {
             setSaveError(null);
             if (debounceRef.current) {
@@ -580,7 +580,7 @@ export default function NoteEditorScreen() {
 
       {syncToast && (
         <TouchableOpacity
-          style={[styles.syncToast, { backgroundColor: colors.primaryLight }]}
+          style={[styles.syncToast, { backgroundColor: colors.primaryLight, borderBottomColor: colors.primary }]}
           onPress={() => setSyncToast(null)}
           testID="sync-toast"
         >
@@ -862,7 +862,6 @@ const styles = StyleSheet.create({
   },
   errorBanner: {
     borderBottomWidth: 1,
-    borderBottomColor: '#fecaca',
     paddingHorizontal: 16,
     paddingVertical: 10,
   },
@@ -872,7 +871,6 @@ const styles = StyleSheet.create({
   },
   syncToast: {
     borderBottomWidth: 1,
-    borderBottomColor: '#bfdbfe',
     paddingHorizontal: 16,
     paddingVertical: 10,
   },

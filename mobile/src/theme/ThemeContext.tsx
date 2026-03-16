@@ -1,4 +1,4 @@
-import React, { createContext, useContext, useMemo, useCallback, useState, useEffect } from 'react';
+import React, { createContext, useContext, useMemo, useCallback, useState, useEffect, useRef } from 'react';
 import { useColorScheme, StatusBar, ColorSchemeName } from 'react-native';
 import { ThemeColors, lightColors, darkColors } from './colors';
 import { ThemePreference, UpdateSettingsRequest } from '../types';
@@ -29,10 +29,12 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
   const [themePreference, setThemePreference] = useState<ThemePreference>(
     settings?.theme ?? 'system',
   );
+  const serverThemeRef = useRef<ThemePreference>(settings?.theme ?? 'system');
 
   useEffect(() => {
     if (settings?.theme) {
       setThemePreference(settings.theme);
+      serverThemeRef.current = settings.theme;
     }
   }, [settings?.theme]);
 
@@ -42,7 +44,6 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
 
   const updateTheme = useCallback(
     async (pref: ThemePreference) => {
-      const prev = themePreference;
       setThemePreference(pref);
 
       try {
@@ -51,12 +52,13 @@ export function ThemeProvider({ children }: { children: React.ReactNode }) {
           theme: pref,
         };
         const updated = await apiUpdateSettings(body);
+        serverThemeRef.current = updated.theme;
         setAuthSettings(updated);
       } catch {
-        setThemePreference(prev);
+        setThemePreference(serverThemeRef.current);
       }
     },
-    [themePreference, settings, setAuthSettings],
+    [settings, setAuthSettings],
   );
 
   const value = useMemo<ThemeState>(

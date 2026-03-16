@@ -10,7 +10,6 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
 import { useTheme } from '../theme/ThemeContext';
 import { ThemePreference } from '../types';
-import type { ThemeColors } from '../theme/colors';
 
 const THEME_OPTIONS: { value: ThemePreference; label: string; icon: keyof typeof Ionicons.glyphMap }[] = [
   { value: 'system', label: 'System', icon: 'phone-portrait-outline' },
@@ -21,11 +20,10 @@ const THEME_OPTIONS: { value: ThemePreference; label: string; icon: keyof typeof
 export default function SettingsScreen() {
   const navigation = useNavigation();
   const { colors, themePreference, updateTheme } = useTheme();
-  const s = getStyles(colors);
 
   return (
-    <SafeAreaView style={s.container}>
-      <View style={s.header}>
+    <SafeAreaView style={[styles.container, { backgroundColor: colors.background }]}>
+      <View style={[styles.header, { borderBottomColor: colors.borderLight }]}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
           testID="settings-back"
@@ -34,18 +32,18 @@ export default function SettingsScreen() {
         >
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={s.headerTitle}>Settings</Text>
-        <View style={s.headerSpacer} />
+        <Text style={[styles.headerTitle, { color: colors.text }]}>Settings</Text>
+        <View style={styles.headerSpacer} />
       </View>
 
-      <View style={s.section}>
-        <Text style={s.sectionTitle}>Theme</Text>
+      <View style={styles.section}>
+        <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>Theme</Text>
         {THEME_OPTIONS.map((option) => {
           const isActive = themePreference === option.value;
           return (
             <TouchableOpacity
               key={option.value}
-              style={[s.optionRow, isActive && s.optionRowActive]}
+              style={[styles.optionRow, isActive && { backgroundColor: colors.primaryLight }]}
               onPress={() => updateTheme(option.value)}
               testID={`theme-option-${option.value}`}
               accessibilityRole="radio"
@@ -56,11 +54,11 @@ export default function SettingsScreen() {
                 size={22}
                 color={isActive ? colors.primary : colors.icon}
               />
-              <Text style={[s.optionText, isActive && { color: colors.primary, fontWeight: '600' }]}>
+              <Text style={[styles.optionText, { color: colors.text }, isActive && { color: colors.primary, fontWeight: '600' }]}>
                 {option.label}
               </Text>
               {isActive && (
-                <Ionicons name="checkmark" size={20} color={colors.primary} style={s.checkIcon} />
+                <Ionicons name="checkmark" size={20} color={colors.primary} style={styles.checkIcon} />
               )}
             </TouchableOpacity>
           );
@@ -70,61 +68,51 @@ export default function SettingsScreen() {
   );
 }
 
-function getStyles(colors: ThemeColors) {
-  return StyleSheet.create({
-    container: {
-      flex: 1,
-      backgroundColor: colors.background,
-    },
-    header: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingHorizontal: 16,
-      paddingVertical: 12,
-      borderBottomWidth: 1,
-      borderBottomColor: colors.borderLight,
-    },
-    headerTitle: {
-      flex: 1,
-      fontSize: 18,
-      fontWeight: '600',
-      color: colors.text,
-      textAlign: 'center',
-    },
-    headerSpacer: {
-      width: 24,
-    },
-    section: {
-      paddingHorizontal: 16,
-      paddingTop: 24,
-    },
-    sectionTitle: {
-      fontSize: 12,
-      fontWeight: '600',
-      color: colors.textMuted,
-      textTransform: 'uppercase',
-      letterSpacing: 0.5,
-      marginBottom: 12,
-    },
-    optionRow: {
-      flexDirection: 'row',
-      alignItems: 'center',
-      paddingVertical: 14,
-      paddingHorizontal: 16,
-      borderRadius: 10,
-      gap: 14,
-      marginBottom: 4,
-    },
-    optionRowActive: {
-      backgroundColor: colors.primaryLight,
-    },
-    optionText: {
-      fontSize: 15,
-      color: colors.text,
-      flex: 1,
-    },
-    checkIcon: {
-      marginLeft: 'auto',
-    },
-  });
-}
+const styles = StyleSheet.create({
+  container: {
+    flex: 1,
+  },
+  header: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 16,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+  },
+  headerTitle: {
+    flex: 1,
+    fontSize: 18,
+    fontWeight: '600',
+    textAlign: 'center',
+  },
+  headerSpacer: {
+    width: 24,
+  },
+  section: {
+    paddingHorizontal: 16,
+    paddingTop: 24,
+  },
+  sectionTitle: {
+    fontSize: 12,
+    fontWeight: '600',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
+    marginBottom: 12,
+  },
+  optionRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 14,
+    paddingHorizontal: 16,
+    borderRadius: 10,
+    gap: 14,
+    marginBottom: 4,
+  },
+  optionText: {
+    fontSize: 15,
+    flex: 1,
+  },
+  checkIcon: {
+    marginLeft: 'auto',
+  },
+});

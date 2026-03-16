@@ -16,6 +16,7 @@ const MAX_PREVIEW_ITEMS = 10;
 const MAX_AVATAR_DISPLAY = 3;
 
 function ShareAvatars({ shares }: { shares: NoteShare[] }) {
+  const { colors } = useTheme();
   const visible = shares.slice(0, MAX_AVATAR_DISPLAY);
   const overflow = shares.length - MAX_AVATAR_DISPLAY;
   return (
@@ -31,8 +32,8 @@ function ShareAvatars({ shares }: { shares: NoteShare[] }) {
         </View>
       ))}
       {overflow > 0 && (
-        <View style={styles.overflowBadge}>
-          <Text style={styles.overflowText}>+{overflow}</Text>
+        <View style={[styles.overflowBadge, { backgroundColor: colors.border }]}>
+          <Text style={[styles.overflowText, { color: colors.textSecondary }]}>+{overflow}</Text>
         </View>
       )}
     </View>
@@ -229,14 +230,12 @@ const styles = StyleSheet.create({
     width: 24,
     height: 24,
     borderRadius: 12,
-    backgroundColor: '#e5e7eb',
     justifyContent: 'center',
     alignItems: 'center',
     marginLeft: -4,
   },
   overflowText: {
     fontSize: 9,
-    color: '#666',
     fontWeight: '600',
   },
 });
