@@ -92,7 +92,7 @@ export default function NoteEditorScreen() {
   const [syncToast, setSyncToast] = useState<string | null>(null);
   const { usersById } = useUsers();
 
-  const { colors } = useTheme();
+  const { colors, isDark } = useTheme();
   const { data: existingNote } = useOfflineNote(noteId);
   const createMutation = useCreateNote();
   const updateMutation = useUpdateNote();
@@ -509,7 +509,7 @@ export default function NoteEditorScreen() {
       if (originalIndex === undefined) return null;
       return (
         <ScaleDecorator>
-          <View style={isActive ? styles.draggingTodoItem : undefined}>
+          <View style={isActive ? [styles.draggingTodoItem, { shadowColor: isDark ? colors.border : '#000' }] : undefined}>
             <TodoItem
               text={item.text}
               completed={item.completed}
@@ -529,7 +529,7 @@ export default function NoteEditorScreen() {
         </ScaleDecorator>
       );
     },
-    [handleToggleItem, handleItemTextChange, handleDeleteItem, handleAddItem, isNoteShared, collaborators, openAssigneePicker],
+    [handleToggleItem, handleItemTextChange, handleDeleteItem, handleAddItem, isNoteShared, collaborators, openAssigneePicker, isDark, colors],
   );
 
   const hasNoteColor = color && color !== '#ffffff';

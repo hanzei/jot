@@ -382,7 +382,7 @@ const docTemplate = `{
                 "tags": [
                     "auth"
                 ],
-                "summary": "Get the current authenticated user",
+                "summary": "Get the current authenticated user and settings",
                 "responses": {
                     "200": {
                         "description": "OK",
@@ -730,7 +730,7 @@ const docTemplate = `{
                 "tags": [
                     "notes"
                 ],
-                "summary": "Move a note to trash",
+                "summary": "Delete a note (move to trash, or permanently delete)",
                 "parameters": [
                     {
                         "type": "string",
@@ -738,6 +738,12 @@ const docTemplate = `{
                         "name": "id",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "type": "boolean",
+                        "description": "Permanently delete from trash instead of soft-deleting",
+                        "name": "permanent",
+                        "in": "query"
                     }
                 ],
                 "responses": {
@@ -880,51 +886,6 @@ const docTemplate = `{
                 }
             }
         },
-        "/notes/{id}/permanent": {
-            "delete": {
-                "security": [
-                    {
-                        "CookieAuth": []
-                    }
-                ],
-                "tags": [
-                    "notes"
-                ],
-                "summary": "Permanently delete a note from trash",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Note ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    }
-                ],
-                "responses": {
-                    "204": {
-                        "description": "no content"
-                    },
-                    "400": {
-                        "description": "bad request",
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    "401": {
-                        "description": "unauthorized",
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    "404": {
-                        "description": "not found",
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                }
-            }
-        },
         "/notes/{id}/restore": {
             "post": {
                 "security": [
@@ -1002,7 +963,7 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "Username to share with",
+                        "description": "User ID to share with",
                         "name": "body",
                         "in": "body",
                         "required": true,
@@ -1075,7 +1036,7 @@ const docTemplate = `{
                         "required": true
                     },
                     {
-                        "description": "Username to unshare with",
+                        "description": "User ID to unshare with",
                         "name": "body",
                         "in": "body",
                         "required": true,
@@ -1259,7 +1220,7 @@ const docTemplate = `{
             }
         },
         "/users/me": {
-            "put": {
+            "patch": {
                 "security": [
                     {
                         "CookieAuth": []
@@ -1272,12 +1233,12 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "auth"
+                    "users"
                 ],
-                "summary": "Update the current user's profile",
+                "summary": "Update the current user's profile and/or settings",
                 "parameters": [
                     {
-                        "description": "Profile update",
+                        "description": "Fields to update (all optional)",
                         "name": "body",
                         "in": "body",
                         "required": true,
@@ -1325,7 +1286,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "auth"
+                    "users"
                 ],
                 "summary": "Change the current user's password",
                 "parameters": [
@@ -1378,7 +1339,7 @@ const docTemplate = `{
                     "application/json"
                 ],
                 "tags": [
-                    "auth"
+                    "users"
                 ],
                 "summary": "Upload a profile icon for the current user",
                 "parameters": [
@@ -1418,90 +1379,12 @@ const docTemplate = `{
                     }
                 ],
                 "tags": [
-                    "auth"
+                    "users"
                 ],
                 "summary": "Delete the current user's profile icon",
                 "responses": {
                     "204": {
                         "description": "no content"
-                    },
-                    "401": {
-                        "description": "unauthorized",
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                }
-            }
-        },
-        "/users/me/settings": {
-            "get": {
-                "security": [
-                    {
-                        "CookieAuth": []
-                    }
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "auth"
-                ],
-                "summary": "Get the current user's settings",
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/models.UserSettings"
-                        }
-                    },
-                    "401": {
-                        "description": "unauthorized",
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                }
-            },
-            "put": {
-                "security": [
-                    {
-                        "CookieAuth": []
-                    }
-                ],
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "auth"
-                ],
-                "summary": "Update the current user's settings",
-                "parameters": [
-                    {
-                        "description": "Settings update",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/handlers.UpdateSettingsRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/models.UserSettings"
-                        }
-                    },
-                    "400": {
-                        "description": "bad request",
-                        "schema": {
-                            "type": "string"
-                        }
                     },
                     "401": {
                         "description": "unauthorized",
@@ -1693,7 +1576,7 @@ const docTemplate = `{
         "handlers.ShareNoteRequest": {
             "type": "object",
             "properties": {
-                "username": {
+                "user_id": {
                     "type": "string"
                 }
             }
@@ -1758,24 +1641,19 @@ const docTemplate = `{
                 }
             }
         },
-        "handlers.UpdateSettingsRequest": {
-            "type": "object",
-            "properties": {
-                "language": {
-                    "type": "string"
-                },
-                "theme": {
-                    "type": "string"
-                }
-            }
-        },
         "handlers.UpdateUserRequest": {
             "type": "object",
             "properties": {
                 "first_name": {
                     "type": "string"
                 },
+                "language": {
+                    "type": "string"
+                },
                 "last_name": {
+                    "type": "string"
+                },
+                "theme": {
                     "type": "string"
                 },
                 "username": {

@@ -18,7 +18,6 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useUpdateNote, useDeleteNote, useRestoreNote, usePermanentDeleteNote, useReorderNotes } from '../hooks/useNotes';
 import { useOfflineNotes } from '../hooks/useOfflineNotes';
-import { useLabels } from '../hooks/useLabels';
 import { useUsers } from '../store/UsersContext';
 import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
@@ -46,14 +45,9 @@ interface LocalReorderState {
 export default function NotesListScreen({ variant = 'notes', labelId }: NotesListScreenProps) {
   const [searchText, setSearchText] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const [selectedLabelId, setSelectedLabelId] = useState<string | undefined>(undefined);
   const { user } = useAuth();
   const { colors } = useTheme();
 
-  // Sync drawer-level label filter into local state
-  useEffect(() => {
-    setSelectedLabelId(labelId);
-  }, [labelId]);
   const [contextMenuNote, setContextMenuNote] = useState<Note | null>(null);
   const [colorPickerNote, setColorPickerNote] = useState<Note | null>(null);
   const [localOrder, setLocalOrder] = useState<LocalReorderState>({ pinned: null, unpinned: null });
@@ -75,13 +69,12 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     archived: variant === 'archived' ? true : undefined,
     trashed: variant === 'trash' ? true : undefined,
     search: debouncedSearch || undefined,
-    label: variant === 'notes' ? selectedLabelId : undefined,
+    label: variant === 'notes' ? labelId : undefined,
     my_todo: variant === 'my-todo' ? true : undefined,
     user_id: variant === 'my-todo' ? user?.id : undefined,
-  }), [variant, debouncedSearch, selectedLabelId, user?.id]);
+  }), [variant, debouncedSearch, labelId, user?.id]);
 
   const { data: notes, isLoading, isError, refetch, isRefetching } = useOfflineNotes(params);
-  const { data: allLabels } = useLabels();
   const updateNote = useUpdateNote();
   const deleteNote = useDeleteNote();
   const restoreNote = useRestoreNote();
@@ -234,10 +227,6 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     }
   }, [colorPickerNote, updateNote]);
 
-  const handleLabelChipPress = useCallback((labelId: string) => {
-    setSelectedLabelId((prev) => (prev === labelId ? undefined : labelId));
-  }, []);
-
   const { pinnedNotes, otherNotes } = useMemo(() => {
     const pinned: Note[] = [];
     const other: Note[] = [];
@@ -265,12 +254,14 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
 
   const listEmptyComponent = useMemo(
     () =>
-      debouncedSearch || selectedLabelId ? (
+      debouncedSearch || labelId ? (
         <View style={styles.emptySearchContainer}>
-          <Text style={[styles.emptySubtext, { color: colors.textMuted }]}>No notes match your search</Text>
+          <Text style={[styles.emptySubtext, { color: colors.textMuted }]}>
+            {debouncedSearch ? 'No notes match your search' : 'No notes for this label'}
+          </Text>
         </View>
       ) : null,
-    [debouncedSearch, selectedLabelId, colors],
+    [debouncedSearch, labelId, colors],
   );
 
   const handleDragEnd = useCallback(
@@ -374,7 +365,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
 
   const isEmpty = !isLoading && (!notes || notes.length === 0);
 
-  if (isEmpty && !debouncedSearch && !selectedLabelId) {
+  if (isEmpty && !debouncedSearch && (variant !== 'notes' || !labelId)) {
     return (
       <View style={[styles.emptyContainer, { backgroundColor: colors.background }]}>
         {variant === 'trash' && (
@@ -449,43 +440,6 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
           </TouchableOpacity>
         )}
       </View>
-
-      {/* Label filter chips (notes only, hidden when filtered via drawer sidebar) */}
-      {variant === 'notes' && !labelId && allLabels && allLabels.length > 0 && (
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.labelChipsRow}
-          testID="label-filter-row"
-        >
-          <TouchableOpacity
-            style={[styles.labelChip, { backgroundColor: colors.surface, borderColor: colors.border }, !selectedLabelId && { backgroundColor: colors.primaryLight, borderColor: colors.primary }]}
-            onPress={() => setSelectedLabelId(undefined)}
-            testID="label-chip-all"
-          >
-            <Text style={[styles.labelChipText, { color: colors.textSecondary }, !selectedLabelId && { color: colors.primary, fontWeight: '600' }]}>
-              All
-            </Text>
-          </TouchableOpacity>
-          {allLabels.map((label) => (
-            <TouchableOpacity
-              key={label.id}
-              style={[styles.labelChip, { backgroundColor: colors.surface, borderColor: colors.border }, selectedLabelId === label.id && { backgroundColor: colors.primaryLight, borderColor: colors.primary }]}
-              onPress={() => handleLabelChipPress(label.id)}
-              testID={`label-chip-${label.id}`}
-            >
-              <Text
-                style={[
-                  styles.labelChipText, { color: colors.textSecondary },
-                  selectedLabelId === label.id && { color: colors.primary, fontWeight: '600' },
-                ]}
-              >
-                {label.name}
-              </Text>
-            </TouchableOpacity>
-          ))}
-        </ScrollView>
-      )}
 
       {/* Notes list */}
       {isDraggable && hasPinned ? (
@@ -648,20 +602,6 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
     paddingVertical: 0,
-  },
-  labelChipsRow: {
-    paddingHorizontal: 16,
-    paddingBottom: 8,
-    gap: 8,
-  },
-  labelChip: {
-    paddingHorizontal: 14,
-    paddingVertical: 6,
-    borderRadius: 16,
-    borderWidth: 1,
-  },
-  labelChipText: {
-    fontSize: 13,
   },
   sectionHeader: {
     fontSize: 12,

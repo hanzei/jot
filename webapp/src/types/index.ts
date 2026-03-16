@@ -30,10 +30,6 @@ export interface AuthResponse {
   settings: UserSettings;
 }
 
-export interface UpdateSettingsRequest {
-  language: string;
-  theme: ThemePreference;
-}
 
 export interface LoginRequest {
   username: string;
@@ -130,9 +126,11 @@ export interface UserListResponse {
 }
 
 export interface UpdateMeRequest {
-  username: string;
-  first_name: string;
-  last_name: string;
+  username?: string;
+  first_name?: string;
+  last_name?: string;
+  language?: string;
+  theme?: ThemePreference;
 }
 
 export interface ChangePasswordRequest {
@@ -141,7 +139,7 @@ export interface ChangePasswordRequest {
 }
 
 export interface ShareNoteRequest {
-  username: string;
+  user_id: string;
 }
 
 export interface ShareNoteResponse {

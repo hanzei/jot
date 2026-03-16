@@ -17,6 +17,8 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
+const queryTrue = "true"
+
 // UserInfo contains safe public fields returned when listing users for share-target search.
 type UserInfo struct {
 	ID             string `json:"id"`
@@ -26,8 +28,6 @@ type UserInfo struct {
 	Role           string `json:"role"`
 	HasProfileIcon bool   `json:"has_profile_icon"`
 }
-
-const queryTrue = "true"
 
 type NotesHandler struct {
 	noteStore *models.NoteStore
@@ -416,14 +416,15 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 
 // DeleteNote godoc
 //
-//	@Summary	Move a note to trash
+//	@Summary	Delete a note (move to trash, or permanently delete)
 //	@Tags		notes
 //	@Security	CookieAuth
-//	@Param		id	path		string	true	"Note ID"
-//	@Success	204	"no content"
-//	@Failure	400	{string}	string	"bad request"
-//	@Failure	401	{string}	string	"unauthorized"
-//	@Failure	404	{string}	string	"not found"
+//	@Param		id			path		string	true	"Note ID"
+//	@Param		permanent	query		boolean	false	"Permanently delete from trash instead of soft-deleting"
+//	@Success	204			"no content"
+//	@Failure	400			{string}	string	"bad request"
+//	@Failure	401			{string}	string	"unauthorized"
+//	@Failure	404			{string}	string	"not found"
 //	@Router		/notes/{id} [delete]
 func (h *NotesHandler) DeleteNote(w http.ResponseWriter, r *http.Request) (int, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
@@ -439,15 +440,27 @@ func (h *NotesHandler) DeleteNote(w http.ResponseWriter, r *http.Request) (int, 
 		return http.StatusBadRequest, errors.New("invalid note ID format")
 	}
 
-	// Fetch audience before trashing so we can notify share targets too.
+	permanent := r.URL.Query().Get("permanent") == queryTrue
+
+	// Fetch audience before deleting so we can notify share targets too.
 	audienceIDs, audienceErr := h.noteStore.GetNoteAudienceIDs(id)
 
-	err := h.noteStore.MoveToTrash(id, user.ID)
-	if err != nil {
-		if errors.Is(err, models.ErrNoteNotOwnedByUser) {
-			return http.StatusNotFound, err
+	if permanent {
+		err := h.noteStore.DeleteFromTrash(id, user.ID)
+		if err != nil {
+			if errors.Is(err, models.ErrNoteNotInTrash) {
+				return http.StatusNotFound, err
+			}
+			return http.StatusInternalServerError, err
 		}
-		return http.StatusInternalServerError, err
+	} else {
+		err := h.noteStore.MoveToTrash(id, user.ID)
+		if err != nil {
+			if errors.Is(err, models.ErrNoteNotOwnedByUser) {
+				return http.StatusNotFound, err
+			}
+			return http.StatusInternalServerError, err
+		}
 	}
 
 	if audienceErr == nil && h.hub != nil {
@@ -510,57 +523,8 @@ func (h *NotesHandler) RestoreNote(w http.ResponseWriter, r *http.Request) (int,
 	return 0, nil
 }
 
-// PermanentlyDeleteNote godoc
-//
-//	@Summary	Permanently delete a note from trash
-//	@Tags		notes
-//	@Security	CookieAuth
-//	@Param		id	path		string	true	"Note ID"
-//	@Success	204	"no content"
-//	@Failure	400	{string}	string	"bad request"
-//	@Failure	401	{string}	string	"unauthorized"
-//	@Failure	404	{string}	string	"not found"
-//	@Router		/notes/{id}/permanent [delete]
-func (h *NotesHandler) PermanentlyDeleteNote(w http.ResponseWriter, r *http.Request) (int, error) {
-	user, ok := auth.GetUserFromContext(r.Context())
-	if !ok {
-		return http.StatusUnauthorized, errors.New("unauthorized")
-	}
-
-	id := chi.URLParam(r, "id")
-	if id == "" {
-		return http.StatusBadRequest, errors.New("missing note ID")
-	}
-	if !models.IsValidID(id) {
-		return http.StatusBadRequest, errors.New("invalid note ID format")
-	}
-
-	// Fetch audience before deletion so we can notify share targets too.
-	audienceIDs, audienceErr := h.noteStore.GetNoteAudienceIDs(id)
-
-	err := h.noteStore.DeleteFromTrash(id, user.ID)
-	if err != nil {
-		if errors.Is(err, models.ErrNoteNotInTrash) {
-			return http.StatusNotFound, err
-		}
-		return http.StatusInternalServerError, err
-	}
-
-	if audienceErr == nil && h.hub != nil {
-		h.hub.Publish(audienceIDs, sse.Event{
-			Type:         sse.EventNoteDeleted,
-			NoteID:       id,
-			Note:         nil,
-			SourceUserID: user.ID,
-		})
-	}
-
-	w.WriteHeader(http.StatusNoContent)
-	return 0, nil
-}
-
 type ShareNoteRequest struct {
-	Username string `json:"username"`
+	UserID string `json:"user_id"`
 }
 
 type ShareNoteResponse struct {
@@ -576,7 +540,7 @@ type ShareNoteResponse struct {
 //	@Accept		json
 //	@Produce	json
 //	@Param		id		path		string				true	"Note ID"
-//	@Param		body	body		ShareNoteRequest	true	"Username to share with"
+//	@Param		body	body		ShareNoteRequest	true	"User ID to share with"
 //	@Success	200		{object}	ShareNoteResponse
 //	@Failure	400		{string}	string	"bad request"
 //	@Failure	401		{string}	string	"unauthorized"
@@ -603,8 +567,8 @@ func (h *NotesHandler) ShareNote(w http.ResponseWriter, r *http.Request) (int, e
 		return http.StatusBadRequest, err
 	}
 
-	if req.Username == "" {
-		return http.StatusBadRequest, errors.New("empty username")
+	if !models.IsValidID(req.UserID) {
+		return http.StatusBadRequest, errors.New("invalid user_id")
 	}
 
 	isOwner, err := h.noteStore.IsOwner(id, user.ID)
@@ -615,19 +579,18 @@ func (h *NotesHandler) ShareNote(w http.ResponseWriter, r *http.Request) (int, e
 		return http.StatusForbidden, errors.New("not owner")
 	}
 
-	targetUser, err := h.userStore.GetByUsername(req.Username)
-	if err != nil {
-		if errors.Is(err, models.ErrUserNotFound) {
-			return http.StatusNotFound, err
-		}
-		return http.StatusInternalServerError, err
-	}
-
-	if targetUser.ID == user.ID {
+	if req.UserID == user.ID {
 		return http.StatusBadRequest, errors.New("cannot share with self")
 	}
 
-	err = h.noteStore.ShareNote(id, user.ID, targetUser.ID)
+	if _, lookupErr := h.userStore.GetByID(req.UserID); lookupErr != nil {
+		if errors.Is(lookupErr, models.ErrUserNotFound) {
+			return http.StatusNotFound, lookupErr
+		}
+		return http.StatusInternalServerError, lookupErr
+	}
+
+	err = h.noteStore.ShareNote(id, user.ID, req.UserID)
 	if err != nil {
 		if errors.Is(err, models.ErrNoteAlreadyShared) {
 			return http.StatusConflict, err
@@ -659,7 +622,7 @@ func (h *NotesHandler) ShareNote(w http.ResponseWriter, r *http.Request) (int, e
 //	@Accept		json
 //	@Produce	json
 //	@Param		id		path		string				true	"Note ID"
-//	@Param		body	body		ShareNoteRequest	true	"Username to unshare with"
+//	@Param		body	body		ShareNoteRequest	true	"User ID to unshare with"
 //	@Success	200		{object}	ShareNoteResponse
 //	@Failure	400		{string}	string	"bad request"
 //	@Failure	401		{string}	string	"unauthorized"
@@ -685,8 +648,8 @@ func (h *NotesHandler) UnshareNote(w http.ResponseWriter, r *http.Request) (int,
 		return http.StatusBadRequest, err
 	}
 
-	if req.Username == "" {
-		return http.StatusBadRequest, errors.New("empty username")
+	if !models.IsValidID(req.UserID) {
+		return http.StatusBadRequest, errors.New("invalid user_id")
 	}
 
 	isOwner, err := h.noteStore.IsOwner(id, user.ID)
@@ -697,18 +660,10 @@ func (h *NotesHandler) UnshareNote(w http.ResponseWriter, r *http.Request) (int,
 		return http.StatusForbidden, errors.New("not owner")
 	}
 
-	targetUser, err := h.userStore.GetByUsername(req.Username)
-	if err != nil {
-		if errors.Is(err, models.ErrUserNotFound) {
-			return http.StatusNotFound, err
-		}
-		return http.StatusInternalServerError, err
-	}
-
 	// Fetch audience before unsharing so the target user is still in the list.
 	audienceIDs, audienceErr := h.noteStore.GetNoteAudienceIDs(id)
 
-	err = h.noteStore.UnshareNote(id, targetUser.ID)
+	err = h.noteStore.UnshareNote(id, req.UserID)
 	if err != nil {
 		if errors.Is(err, models.ErrNoteShareNotFound) {
 			return http.StatusNotFound, err
@@ -722,7 +677,7 @@ func (h *NotesHandler) UnshareNote(w http.ResponseWriter, r *http.Request) (int,
 			NoteID:       id,
 			Note:         nil,
 			SourceUserID: user.ID,
-			TargetUserID: targetUser.ID,
+			TargetUserID: req.UserID,
 		})
 	}
 

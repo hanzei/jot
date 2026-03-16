@@ -13,7 +13,7 @@ import (
 func TestNoteSharingEndpoints(t *testing.T) {
 	ts := setupTestServer(t)
 	owner := ts.createTestUser(t, "owner", "password123", false)
-	_ = ts.createTestUser(t, "user", "password123", false)
+	sharedUser := ts.createTestUser(t, "user", "password123", false)
 	other := ts.createTestUser(t, "other", "password123", false)
 
 	// Create a note to share
@@ -28,7 +28,7 @@ func TestNoteSharingEndpoints(t *testing.T) {
 
 	t.Run("share note with user", func(t *testing.T) {
 		shareBody := map[string]string{
-			"username": "user",
+			"user_id": sharedUser.User.ID,
 		}
 
 		resp := ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/share", noteID), shareBody)
@@ -40,9 +40,8 @@ func TestNoteSharingEndpoints(t *testing.T) {
 	})
 
 	t.Run("share with duplicate user returns conflict", func(t *testing.T) {
-		// First share with other user
 		shareBody := map[string]string{
-			"username": "other",
+			"user_id": other.User.ID,
 		}
 		resp1 := ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/share", noteID), shareBody)
 		assert.Equal(t, http.StatusOK, resp1.StatusCode)
@@ -52,28 +51,38 @@ func TestNoteSharingEndpoints(t *testing.T) {
 		assert.Equal(t, http.StatusConflict, resp.StatusCode)
 	})
 
-	t.Run("share with nonexistent username returns not found", func(t *testing.T) {
+	t.Run("share with nonexistent user_id returns not found", func(t *testing.T) {
 		shareBody := map[string]string{
-			"username": "nonexistent",
+			"user_id": "abcdefghijklmnopqrstuv",
 		}
 
 		resp := ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/share", noteID), shareBody)
 		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
 	})
 
-	t.Run("share with empty username returns bad request", func(t *testing.T) {
+	t.Run("share with empty user_id returns bad request", func(t *testing.T) {
 		shareBody := map[string]string{
-			"username": "",
+			"user_id": "",
 		}
 
 		resp := ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/share", noteID), shareBody)
 		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
-		assert.Contains(t, resp.GetString(), "empty username")
+		assert.Contains(t, resp.GetString(), "invalid user_id")
+	})
+
+	t.Run("share with invalid user_id format returns bad request", func(t *testing.T) {
+		shareBody := map[string]string{
+			"user_id": "invalid",
+		}
+
+		resp := ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/share", noteID), shareBody)
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+		assert.Contains(t, resp.GetString(), "invalid user_id")
 	})
 
 	t.Run("share with self returns bad request", func(t *testing.T) {
 		shareBody := map[string]string{
-			"username": "owner",
+			"user_id": owner.User.ID,
 		}
 
 		resp := ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/share", noteID), shareBody)
@@ -83,7 +92,7 @@ func TestNoteSharingEndpoints(t *testing.T) {
 
 	t.Run("share by non-owner returns forbidden", func(t *testing.T) {
 		shareBody := map[string]string{
-			"username": "other",
+			"user_id": other.User.ID,
 		}
 
 		resp := ts.authRequest(t, other, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/share", noteID), shareBody)
@@ -106,7 +115,7 @@ func TestNoteSharingEndpoints(t *testing.T) {
 
 	t.Run("unshare note", func(t *testing.T) {
 		unshareBody := map[string]string{
-			"username": "user",
+			"user_id": sharedUser.User.ID,
 		}
 
 		resp := ts.authRequest(t, owner, http.MethodDelete, fmt.Sprintf("/api/v1/notes/%s/share", noteID), unshareBody)
@@ -119,7 +128,7 @@ func TestNoteSharingEndpoints(t *testing.T) {
 
 	t.Run("unshare non-shared user returns not found", func(t *testing.T) {
 		unshareBody := map[string]string{
-			"username": "user", // Already unshared
+			"user_id": sharedUser.User.ID, // Already unshared
 		}
 
 		resp := ts.authRequest(t, owner, http.MethodDelete, fmt.Sprintf("/api/v1/notes/%s/share", noteID), unshareBody)
@@ -134,11 +143,11 @@ func TestSearchUsersEndpoint(t *testing.T) {
 	_ = ts.createTestUser(t, "charlie", "password123", true)
 
 	// Set display names so we can test searching by first/last name.
-	resp := ts.authRequest(t, user1, http.MethodPut, "/api/v1/users/me", map[string]any{
+	resp := ts.authRequest(t, user1, http.MethodPatch, "/api/v1/users/me", map[string]any{
 		"username": "alice", "first_name": "Alice", "last_name": "Smith",
 	})
 	require.Equal(t, http.StatusOK, resp.StatusCode)
-	resp = ts.authRequest(t, bob, http.MethodPut, "/api/v1/users/me", map[string]any{
+	resp = ts.authRequest(t, bob, http.MethodPatch, "/api/v1/users/me", map[string]any{
 		"username": "bob", "first_name": "Robert", "last_name": "Jones",
 	})
 	require.Equal(t, http.StatusOK, resp.StatusCode)
