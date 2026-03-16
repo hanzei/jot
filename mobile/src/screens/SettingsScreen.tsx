@@ -51,13 +51,14 @@ export default function SettingsScreen() {
   const [passwordError, setPasswordError] = useState('');
   const [passwordSuccess, setPasswordSuccess] = useState('');
 
-  const [hasProfileIcon, setHasProfileIcon] = useState(user?.has_profile_icon ?? false);
+  const hasProfileIcon = user?.has_profile_icon ?? false;
   const [iconUploading, setIconUploading] = useState(false);
   const [iconDeleting, setIconDeleting] = useState(false);
   const [iconError, setIconError] = useState('');
   const [iconVersion, setIconVersion] = useState(user?.updated_at ?? '');
 
   const [themePref, setThemePref] = useState<ThemePreference>(settings?.theme ?? 'system');
+  const [themeError, setThemeError] = useState('');
 
   const [aboutInfo, setAboutInfo] = useState<AboutInfo | null>(null);
   const [aboutLoading, setAboutLoading] = useState(false);
@@ -127,12 +128,15 @@ export default function SettingsScreen() {
 
   const handleThemeChange = useCallback(async (theme: ThemePreference) => {
     const prev = themePref;
+    setThemeError('');
     setThemePref(theme);
     try {
       const { settings: updatedSettings } = await updateMe({ theme });
       setSettings(updatedSettings);
-    } catch {
+    } catch (err: unknown) {
       setThemePref(prev);
+      const msg = (err as { response?: { data?: string } })?.response?.data;
+      setThemeError(typeof msg === 'string' ? msg.trim() : 'Failed to update theme');
     }
   }, [themePref, setSettings]);
 
@@ -151,7 +155,6 @@ export default function SettingsScreen() {
     try {
       const updatedUser = await uploadProfileIcon(result.assets[0].uri);
       setUser(updatedUser);
-      setHasProfileIcon(true);
       setIconVersion(updatedUser.updated_at);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: string } })?.response?.data;
@@ -169,7 +172,6 @@ export default function SettingsScreen() {
       if (user) {
         setUser({ ...user, has_profile_icon: false, updated_at: new Date().toISOString() });
       }
-      setHasProfileIcon(false);
     } catch {
       setIconError('Failed to remove icon');
     } finally {
@@ -267,6 +269,7 @@ export default function SettingsScreen() {
               placeholder="First name"
               placeholderTextColor="#999"
               autoCapitalize="words"
+              accessibilityLabel="First Name"
               testID="settings-first-name"
             />
             <Text style={styles.label}>Last Name</Text>
@@ -277,6 +280,7 @@ export default function SettingsScreen() {
               placeholder="Last name"
               placeholderTextColor="#999"
               autoCapitalize="words"
+              accessibilityLabel="Last Name"
               testID="settings-last-name"
             />
             <Text style={styles.label}>Username</Text>
@@ -288,6 +292,7 @@ export default function SettingsScreen() {
               placeholderTextColor="#999"
               autoCapitalize="none"
               autoCorrect={false}
+              accessibilityLabel="Username"
               testID="settings-username"
             />
             {profileError !== '' && <Text style={styles.errorText}>{profileError}</Text>}
@@ -317,6 +322,7 @@ export default function SettingsScreen() {
               placeholder=""
               secureTextEntry
               autoCapitalize="none"
+              accessibilityLabel="Current Password"
               testID="settings-current-password"
             />
             <Text style={styles.label}>New Password</Text>
@@ -328,6 +334,7 @@ export default function SettingsScreen() {
               placeholderTextColor="#999"
               secureTextEntry
               autoCapitalize="none"
+              accessibilityLabel="New Password"
               testID="settings-new-password"
             />
             <Text style={styles.label}>Confirm New Password</Text>
@@ -338,6 +345,7 @@ export default function SettingsScreen() {
               placeholder=""
               secureTextEntry
               autoCapitalize="none"
+              accessibilityLabel="Confirm New Password"
               testID="settings-confirm-password"
             />
             {passwordError !== '' && <Text style={styles.errorText}>{passwordError}</Text>}
@@ -385,6 +393,7 @@ export default function SettingsScreen() {
                 </TouchableOpacity>
               ))}
             </View>
+            {themeError !== '' && <Text style={styles.errorText}>{themeError}</Text>}
           </View>
 
           {/* About */}
