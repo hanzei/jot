@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 import NoteCard from '../src/components/NoteCard';
-import { Note, User } from '../src/types';
+import { Note } from '../src/types';
 
 const baseNote: Note = {
   id: 'note-1',
@@ -120,26 +120,12 @@ describe('NoteCard', () => {
     expect(queryByText('Test Note')).toBeNull();
   });
 
-  it('shows assignee avatar for assigned todo items', () => {
+  it('does not show assignee avatar for assigned todo items', () => {
     const sharedTodo: Note = {
       ...baseNote,
       note_type: 'todo',
       content: '',
       is_shared: true,
-      shared_with: [
-        {
-          id: 's1',
-          note_id: 'note-1',
-          shared_with_user_id: 'user-2',
-          shared_by_user_id: 'user-1',
-          permission_level: 'edit',
-          username: 'bob',
-          first_name: 'Bob',
-          has_profile_icon: false,
-          created_at: '',
-          updated_at: '',
-        },
-      ],
       items: [
         {
           id: 'item-1',
@@ -155,18 +141,11 @@ describe('NoteCard', () => {
       ],
     };
 
-    const usersById = new Map<string, User>();
-    usersById.set('user-2', {
-      id: 'user-2', username: 'bob', first_name: 'Bob', last_name: '',
-      role: 'user', has_profile_icon: false, created_at: '', updated_at: '',
-    });
-
-    const { getByText } = render(
-      <NoteCard note={sharedTodo} usersById={usersById} onPress={jest.fn()} />,
+    const { getByText, queryByText } = render(
+      <NoteCard note={sharedTodo} onPress={jest.fn()} />,
     );
 
     expect(getByText('Assigned task')).toBeTruthy();
-    // Avatar for 'bob' renders letter 'B'
-    expect(getByText('B')).toBeTruthy();
+    expect(queryByText('B')).toBeNull();
   });
 });

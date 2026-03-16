@@ -54,7 +54,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   const [colorPickerNote, setColorPickerNote] = useState<Note | null>(null);
   const [localOrder, setLocalOrder] = useState<LocalReorderState>({ pinned: null, unpinned: null });
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const { usersById, refreshUsers } = useUsers();
+  const { refreshUsers } = useUsers();
 
   // Debounce search input by 300ms
   useEffect(() => {
@@ -324,27 +324,25 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
         >
           <NoteCard
             note={item}
-            usersById={usersById}
             onPress={() => handleNotePress(item.id)}
             onMenuPress={() => handleOpenMenu(item)}
           />
         </TouchableOpacity>
       </ScaleDecorator>
     ),
-    [handleNotePress, handleOpenMenu, usersById],
+    [handleNotePress, handleOpenMenu],
   );
 
   const renderNonDraggableNoteCard = useCallback(
     ({ item }: { item: Note }) => (
       <NoteCard
         note={item}
-        usersById={usersById}
         onPress={() => handleNotePress(item.id)}
         onMenuPress={variant !== 'trash' ? () => handleOpenMenu(item) : undefined}
         onLongPress={variant === 'trash' ? () => handleOpenMenu(item) : undefined}
       />
     ),
-    [handleNotePress, handleOpenMenu, variant, usersById],
+    [handleNotePress, handleOpenMenu, variant],
   );
 
   if (isLoading && !notes) {
