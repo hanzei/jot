@@ -39,27 +39,19 @@ type Client struct {
 	httpClient *http.Client
 }
 
-// Option configures a [Client].
-type Option func(*Client)
-
-// WithHTTPClient overrides the default HTTP client.
-// The provided client must have a cookie jar if session persistence is desired.
-func WithHTTPClient(c *http.Client) Option {
-	return func(cl *Client) { cl.httpClient = c }
-}
-
 // New creates a new Jot API client pointed at baseURL (e.g. "http://localhost:8080").
 // The default HTTP client has no timeout; callers should use context deadlines or
 // [WithHTTPClient] with a configured Timeout for production use.
-func New(baseURL string, opts ...Option) *Client {
-	jar, _ := cookiejar.New(nil) // nil options never produces an error in the standard library
+func New(baseURL string) *Client {
+	jar, err := cookiejar.New(nil)
+	if err != nil {
+		panic(err)
+	}
 	c := &Client{
 		baseURL:    strings.TrimRight(baseURL, "/"),
 		httpClient: &http.Client{Jar: jar},
 	}
-	for _, o := range opts {
-		o(c)
-	}
+
 	return c
 }
 

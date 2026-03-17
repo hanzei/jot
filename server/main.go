@@ -52,7 +52,10 @@ import (
 )
 
 func main() {
-	s := server.New()
+	s, err := server.New()
+	if err != nil {
+		logrus.WithError(err).Fatal("Failed to initialize server")
+	}
 	port := os.Getenv("PORT")
 	if port == "" {
 		port = "8080"

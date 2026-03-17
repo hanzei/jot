@@ -5,7 +5,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"fmt"
 	"image"
 	"image/color"
 	"image/gif"
@@ -40,17 +39,18 @@ type TestServer struct {
 }
 
 func setupTestServer(t *testing.T) *TestServer {
-	safeTestName := strings.NewReplacer("/", "_", "\\", "_").Replace(t.Name())
-	tmpDB := fmt.Sprintf("/tmp/test_%s.db", safeTestName)
-	_ = os.Remove(tmpDB)
-	staticDir := t.TempDir()
-	require.NoError(t, os.WriteFile(staticDir+"/index.html", []byte("<html><body>jot test app</body></html>"), 0o600))
+	t.Helper()
 
-	t.Setenv("DB_PATH", tmpDB)
+	tmpDir := t.TempDir()
+	require.NoError(t, os.WriteFile(tmpDir+"/index.html", []byte("<html><body>jot test app</body></html>"), 0o600))
+
+	t.Setenv("DB_PATH", tmpDir+"/test.db")
 	t.Setenv("COOKIE_SECURE", "false")
-	t.Setenv("STATIC_DIR", staticDir)
+	t.Setenv("STATIC_DIR", tmpDir)
 
-	s := server.New()
+	s, err := server.New()
+	require.NoError(t, err)
+
 	httpServer := httptest.NewServer(s.GetRouter())
 
 	ts := &TestServer{
@@ -61,7 +61,6 @@ func setupTestServer(t *testing.T) *TestServer {
 	t.Cleanup(func() {
 		httpServer.Close()
 		_ = ts.Server.GetDB().Close()
-		_ = os.Remove(tmpDB)
 	})
 
 	return ts
@@ -74,8 +73,8 @@ func (ts *TestServer) newClient() *client.Client {
 
 func (ts *TestServer) createTestUser(t *testing.T, username, password string, isAdmin bool) *TestUser {
 	t.Helper()
-	c := ts.newClient()
 
+	c := ts.newClient()
 	auth, err := c.Register(t.Context(), username, password)
 	require.NoError(t, err)
 
