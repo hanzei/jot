@@ -325,16 +325,18 @@ export default function NoteEditorScreen() {
 
   const handleAddItem = useCallback(() => {
     const newId = nextTempId();
+    const newItemRef = getItemRef(newId);
     setItems((prev) => [
       ...prev,
       { id: newId, text: '', completed: false, position: prev.length, indent_level: 0, assigned_to: '' },
     ]);
     scheduleUpdate();
-    setTimeout(() => itemInputRefsMap.current.get(newId)?.current?.focus(), 50);
-  }, [scheduleUpdate]);
+    setTimeout(() => newItemRef.current?.focus(), 50);
+  }, [scheduleUpdate, getItemRef]);
 
   const handleInsertItemAfter = useCallback((index: number) => {
     const newId = nextTempId();
+    const newItemRef = getItemRef(newId);
     setItems((prev) => {
       const newItem: LocalItem = {
         id: newId,
@@ -348,20 +350,21 @@ export default function NoteEditorScreen() {
       return next.map((item, i) => ({ ...item, position: i }));
     });
     scheduleUpdate();
-    setTimeout(() => itemInputRefsMap.current.get(newId)?.current?.focus(), 50);
-  }, [scheduleUpdate]);
+    setTimeout(() => newItemRef.current?.focus(), 50);
+  }, [scheduleUpdate, getItemRef]);
 
   const handleBackspaceOnEmpty = useCallback((index: number) => {
-    if (itemsRef.current[index]?.text !== '') return;
-    const focusTargetId = index > 0 ? itemsRef.current[index - 1]?.id : null;
+    let focusTargetId: string | null = null;
     setItems((prev) => {
-      if (prev[index]?.text !== '') return prev;
+      const item = prev[index];
+      if (!item || item.text !== '') return prev;
+      focusTargetId = index > 0 ? (prev[index - 1]?.id ?? null) : null;
       return prev.filter((_, i) => i !== index);
     });
     scheduleUpdate();
-    if (focusTargetId) {
-      setTimeout(() => itemInputRefsMap.current.get(focusTargetId)?.current?.focus(), 50);
-    }
+    setTimeout(() => {
+      if (focusTargetId) itemInputRefsMap.current.get(focusTargetId)?.current?.focus();
+    }, 50);
   }, [scheduleUpdate]);
 
   const handleTitleSubmit = useCallback(() => {
@@ -373,15 +376,16 @@ export default function NoteEditorScreen() {
         itemInputRefsMap.current.get(firstUnchecked.id)?.current?.focus();
       } else {
         const newId = nextTempId();
+        const newItemRef = getItemRef(newId);
         setItems((prev) => [
           ...prev,
           { id: newId, text: '', completed: false, position: prev.length, indent_level: 0, assigned_to: '' },
         ]);
         scheduleUpdate();
-        setTimeout(() => itemInputRefsMap.current.get(newId)?.current?.focus(), 50);
+        setTimeout(() => newItemRef.current?.focus(), 50);
       }
     }
-  }, [scheduleUpdate]);
+  }, [scheduleUpdate, getItemRef]);
 
   const handleToggleCollapsed = useCallback(() => {
     setCheckedItemsCollapsed((prev) => !prev);
@@ -710,6 +714,7 @@ export default function NoteEditorScreen() {
                     return (
                       <TodoItem
                         key={item.id}
+                        inputRef={getItemRef(item.id)}
                         text={item.text}
                         completed={item.completed}
                         indentLevel={item.indent_level}
@@ -719,6 +724,8 @@ export default function NoteEditorScreen() {
                         onToggle={() => handleToggleItem(originalIndex)}
                         onChangeText={(text) => handleItemTextChange(originalIndex, text)}
                         onDelete={() => handleDeleteItem(originalIndex)}
+                        onSubmitEditing={() => handleInsertItemAfter(originalIndex)}
+                        onBackspaceOnEmpty={() => handleBackspaceOnEmpty(originalIndex)}
                         onAssignPress={() => openAssigneePicker(item.id)}
                       />
                     );
