@@ -19,6 +19,7 @@ var ErrSessionNotFoundOrExpired = errors.New("session not found or expired")
 type Session struct {
 	Token     string    `json:"token"`
 	UserID    string    `json:"user_id"`
+	UserAgent string    `json:"user_agent"`
 	CreatedAt time.Time `json:"created_at"`
 	ExpiresAt time.Time `json:"expires_at"`
 }
@@ -39,7 +40,7 @@ func generateSessionToken() (string, error) {
 	return hex.EncodeToString(bytes), nil
 }
 
-func (s *SessionStore) Create(userID string) (*Session, error) {
+func (s *SessionStore) Create(userID, userAgent string) (*Session, error) {
 	token, err := generateSessionToken()
 	if err != nil {
 		return nil, err
@@ -48,14 +49,15 @@ func (s *SessionStore) Create(userID string) (*Session, error) {
 	now := time.Now()
 	expiresAt := now.Add(SessionDuration)
 
-	query := `INSERT INTO sessions (token, user_id, expires_at) VALUES (?, ?, ?)`
-	if _, err := s.db.Exec(query, token, userID, expiresAt); err != nil {
+	query := `INSERT INTO sessions (token, user_id, user_agent, expires_at) VALUES (?, ?, ?, ?)`
+	if _, err := s.db.Exec(query, token, userID, userAgent, expiresAt); err != nil {
 		return nil, fmt.Errorf("failed to create session: %w", err)
 	}
 
 	return &Session{
 		Token:     token,
 		UserID:    userID,
+		UserAgent: userAgent,
 		CreatedAt: now,
 		ExpiresAt: expiresAt,
 	}, nil
@@ -63,10 +65,10 @@ func (s *SessionStore) Create(userID string) (*Session, error) {
 
 func (s *SessionStore) GetByToken(token string) (*Session, error) {
 	var session Session
-	query := `SELECT token, user_id, created_at, expires_at FROM sessions WHERE token = ? AND expires_at > ?`
+	query := `SELECT token, user_id, user_agent, created_at, expires_at FROM sessions WHERE token = ? AND expires_at > ?`
 
 	err := s.db.QueryRow(query, token, time.Now()).Scan(
-		&session.Token, &session.UserID, &session.CreatedAt, &session.ExpiresAt,
+		&session.Token, &session.UserID, &session.UserAgent, &session.CreatedAt, &session.ExpiresAt,
 	)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -76,6 +78,30 @@ func (s *SessionStore) GetByToken(token string) (*Session, error) {
 	}
 
 	return &session, nil
+}
+
+func (s *SessionStore) GetByUserID(userID string) ([]*Session, error) {
+	query := `SELECT token, user_id, user_agent, created_at, expires_at FROM sessions WHERE user_id = ? AND expires_at > ? ORDER BY created_at DESC`
+
+	rows, err := s.db.Query(query, userID, time.Now())
+	if err != nil {
+		return nil, fmt.Errorf("failed to get sessions by user ID: %w", err)
+	}
+	defer rows.Close()
+
+	var sessions []*Session
+	for rows.Next() {
+		var session Session
+		if err := rows.Scan(&session.Token, &session.UserID, &session.UserAgent, &session.CreatedAt, &session.ExpiresAt); err != nil {
+			return nil, fmt.Errorf("failed to scan session: %w", err)
+		}
+		sessions = append(sessions, &session)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed to iterate sessions: %w", err)
+	}
+
+	return sessions, nil
 }
 
 func (s *SessionStore) Delete(token string) error {

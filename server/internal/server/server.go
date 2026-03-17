@@ -49,12 +49,13 @@ type Server struct {
 	serverMu       sync.RWMutex
 	ctx            context.Context
 	cancel         context.CancelFunc
-	sessionService *auth.SessionService
-	authHandler    *handlers.AuthHandler
-	notesHandler   *handlers.NotesHandler
-	labelsHandler  *handlers.LabelsHandler
-	eventsHandler  *handlers.EventsHandler
-	adminHandler   *handlers.AdminHandler
+	sessionService  *auth.SessionService
+	authHandler     *handlers.AuthHandler
+	notesHandler    *handlers.NotesHandler
+	labelsHandler   *handlers.LabelsHandler
+	eventsHandler   *handlers.EventsHandler
+	adminHandler    *handlers.AdminHandler
+	sessionsHandler *handlers.SessionsHandler
 }
 
 func New() (*Server, error) {
@@ -117,6 +118,7 @@ func New() (*Server, error) {
 	labelsHandler := handlers.NewLabelsHandler(noteStore, hub)
 	eventsHandler := handlers.NewEventsHandler(hub)
 	adminHandler := handlers.NewAdminHandler(userStore, noteStore)
+	sessionsHandler := handlers.NewSessionsHandler(sessionStore)
 
 	s := &Server{
 		router:         chi.NewRouter(),
@@ -124,12 +126,13 @@ func New() (*Server, error) {
 		startReady:     make(chan struct{}),
 		ctx:            ctx,
 		cancel:         cancel,
-		sessionService: sessionService,
-		authHandler:    authHandler,
-		notesHandler:   notesHandler,
-		labelsHandler:  labelsHandler,
-		eventsHandler:  eventsHandler,
-		adminHandler:   adminHandler,
+		sessionService:  sessionService,
+		authHandler:     authHandler,
+		notesHandler:    notesHandler,
+		labelsHandler:   labelsHandler,
+		eventsHandler:   eventsHandler,
+		adminHandler:    adminHandler,
+		sessionsHandler: sessionsHandler,
 	}
 
 	if err := s.setupRoutes(); err != nil {
@@ -202,6 +205,9 @@ func (s *Server) setupRoutes() error {
 			r.Get("/labels", s.wrapHandler(s.labelsHandler.GetLabels))
 
 			r.Get("/users", s.wrapHandler(s.notesHandler.SearchUsers))
+
+			r.Get("/sessions", s.wrapHandler(s.sessionsHandler.ListSessions))
+			r.Delete("/sessions/{id}", s.wrapHandler(s.sessionsHandler.RevokeSession))
 		})
 
 		r.Group(func(r chi.Router) {

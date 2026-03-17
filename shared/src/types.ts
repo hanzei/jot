@@ -166,6 +166,15 @@ export interface UpdateUserRoleRequest {
   role: string;
 }
 
+export interface ActiveSession {
+  id: string;
+  browser: string;
+  os: string;
+  is_current: boolean;
+  created_at: string;
+  expires_at: string;
+}
+
 export type SSEEventType =
   | 'note_created'
   | 'note_updated'
