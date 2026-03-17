@@ -5,6 +5,7 @@ import type { AuthResponse, LoginRequest, RegisterRequest } from '@jot/shared';
 
 const SESSION_KEY = 'jot_session';
 const SERVER_URL_KEY = 'jot_server_url';
+const CACHED_PROFILE_KEY = 'jot_cached_profile';
 
 function getDefaultBaseUrl(): string {
   if (Platform.OS === 'android') {
@@ -103,6 +104,32 @@ async function storeSessionFromResponse(headers: Record<string, string | string[
   }
 }
 
+export async function cacheAuthProfile(response: AuthResponse): Promise<void> {
+  try {
+    await SecureStore.setItemAsync(CACHED_PROFILE_KEY, JSON.stringify(response));
+  } catch {
+    // Best-effort: profile caching is not critical
+  }
+}
+
+export async function getCachedAuthProfile(): Promise<AuthResponse | null> {
+  try {
+    const raw = await SecureStore.getItemAsync(CACHED_PROFILE_KEY);
+    if (!raw) return null;
+    return JSON.parse(raw) as AuthResponse;
+  } catch {
+    return null;
+  }
+}
+
+export async function clearCachedProfile(): Promise<void> {
+  try {
+    await SecureStore.deleteItemAsync(CACHED_PROFILE_KEY);
+  } catch {
+    // Best-effort
+  }
+}
+
 export const auth = {
   login: async (data: LoginRequest): Promise<AuthResponse> => {
     const res = await api.post('/login', data);
@@ -123,6 +150,7 @@ export const auth = {
       // Best-effort: always clear local session even if server call fails
     }
     await SecureStore.deleteItemAsync(SESSION_KEY);
+    await clearCachedProfile();
   },
 
   me: async (): Promise<AuthResponse> => {

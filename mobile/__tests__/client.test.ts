@@ -1,6 +1,6 @@
 import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
-import { auth, getStoredSession, clearStoredSession } from '../src/api/client';
+import { auth, getStoredSession, clearStoredSession, cacheAuthProfile, getCachedAuthProfile, clearCachedProfile } from '../src/api/client';
 
 jest.mock('axios', () => {
   const mockInstance = {
@@ -103,21 +103,23 @@ describe('API Client', () => {
   });
 
   describe('auth.logout', () => {
-    it('calls POST /logout and clears stored session', async () => {
+    it('calls POST /logout and clears stored session and cached profile', async () => {
       mockAxiosInstance.post.mockResolvedValueOnce({});
 
       await auth.logout();
 
       expect(mockAxiosInstance.post).toHaveBeenCalledWith('/logout');
       expect(mockSecureStore.deleteItemAsync).toHaveBeenCalledWith('jot_session');
+      expect(mockSecureStore.deleteItemAsync).toHaveBeenCalledWith('jot_cached_profile');
     });
 
-    it('clears stored session even when server call fails', async () => {
+    it('clears stored session and cached profile even when server call fails', async () => {
       mockAxiosInstance.post.mockRejectedValueOnce(new Error('Network Error'));
 
       await auth.logout();
 
       expect(mockSecureStore.deleteItemAsync).toHaveBeenCalledWith('jot_session');
+      expect(mockSecureStore.deleteItemAsync).toHaveBeenCalledWith('jot_cached_profile');
     });
   });
 
@@ -159,6 +161,52 @@ describe('API Client', () => {
     it('deletes token from secure store', async () => {
       await clearStoredSession();
       expect(mockSecureStore.deleteItemAsync).toHaveBeenCalledWith('jot_session');
+    });
+  });
+
+  describe('cacheAuthProfile', () => {
+    it('stores profile as JSON in secure store', async () => {
+      const profile = { user: { id: '1', username: 'test' }, settings: { theme: 'system' } };
+      await cacheAuthProfile(profile as Parameters<typeof cacheAuthProfile>[0]);
+      expect(mockSecureStore.setItemAsync).toHaveBeenCalledWith(
+        'jot_cached_profile',
+        JSON.stringify(profile),
+      );
+    });
+
+    it('does not throw on SecureStore failure', async () => {
+      mockSecureStore.setItemAsync.mockRejectedValueOnce(new Error('storage full'));
+      await expect(
+        cacheAuthProfile({ user: { id: '1' }, settings: {} } as Parameters<typeof cacheAuthProfile>[0]),
+      ).resolves.toBeUndefined();
+    });
+  });
+
+  describe('getCachedAuthProfile', () => {
+    it('returns parsed profile from secure store', async () => {
+      const profile = { user: { id: '1', username: 'test' }, settings: { theme: 'system' } };
+      mockSecureStore.getItemAsync.mockResolvedValueOnce(JSON.stringify(profile));
+      const result = await getCachedAuthProfile();
+      expect(result).toEqual(profile);
+    });
+
+    it('returns null when nothing cached', async () => {
+      mockSecureStore.getItemAsync.mockResolvedValueOnce(null);
+      const result = await getCachedAuthProfile();
+      expect(result).toBeNull();
+    });
+
+    it('returns null on parse error', async () => {
+      mockSecureStore.getItemAsync.mockResolvedValueOnce('not-json');
+      const result = await getCachedAuthProfile();
+      expect(result).toBeNull();
+    });
+  });
+
+  describe('clearCachedProfile', () => {
+    it('deletes cached profile from secure store', async () => {
+      await clearCachedProfile();
+      expect(mockSecureStore.deleteItemAsync).toHaveBeenCalledWith('jot_cached_profile');
     });
   });
 });
