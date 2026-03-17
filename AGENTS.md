@@ -31,9 +31,10 @@ All `task` commands are documented in `README.md`, `CLAUDE.md`, and `Taskfile.ym
 
 ### Non-obvious caveats
 
-- **Go 1.24+** is required (the `go.mod` specifies `go 1.24.7`). CGO must be enabled for the `go-sqlite3` driver, so `gcc` is needed.
+- **Go 1.25+** is required (the `go.mod` specifies `go 1.25`). CGO must be enabled for the `go-sqlite3` driver, so `gcc` is needed. golangci-lint must be built with Go 1.25+ — install from source with `go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.2.2` rather than using the prebuilt binary.
 - **Node 24+** is used (matching the Dockerfile). Install via `nvm install 24 && nvm alias default 24`.
 - **Playwright e2e tests**: Chromium is preinstalled by the VM update script (`npx playwright install chromium`), and webapp deps are preinstalled via `npm ci`. The Playwright config auto-starts the Go server and uses a temp DB, so no manual server startup is needed — just run `npm run test:e2e` from `webapp/`. If Chromium is missing for some reason, run `npx playwright install --with-deps chromium` in `webapp/`.
 - **Auth is session-cookie based** (not JWT). The first registered user becomes admin.
 - The mobile app (`mobile/`) uses Expo and requires emulator/device access; it is not testable in a headless cloud environment for GUI flows.
-- **Some e2e tests may fail** due to stale selectors for "Archive"/"Bin" sidebar navigation in the page objects (`e2e/pages/DashboardPage.ts`). These are pre-existing test issues, not environment problems.
+- A `@jot/shared` package exists at `shared/` and is referenced by both `webapp` and `mobile` via `file:../shared`. Its deps must be installed before webapp/mobile deps.
+- The update script uses `npm ci` (not `npm install`) for `webapp/` to get deterministic installs from the lockfile.
