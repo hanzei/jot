@@ -22,6 +22,27 @@ export class DashboardPage {
     await expect(this.page.locator('[data-testid="note-card"]').filter({ hasText: title })).toBeVisible();
   }
 
+  /** Creates a new note with labels attached during creation. */
+  async createNoteWithLabels(title: string, content: string, labelNames: string[]) {
+    await this.clickNewNote();
+    await this.page.fill('input[placeholder="Note title..."]', title);
+    await this.page.fill('textarea[placeholder="Take a note..."]', content);
+
+    for (const labelName of labelNames) {
+      await this.page.getByRole('button', { name: 'Add labels' }).click();
+      await this.page.getByRole('button', { name: 'Create new...' }).click();
+      await this.page.getByPlaceholder('Label name...').fill(labelName);
+      await this.page.keyboard.press('Enter');
+      // Wait for checkbox to become checked, then close the picker
+      await expect(this.page.getByRole('checkbox', { name: labelName })).toBeChecked();
+      // Click outside picker to close it
+      await this.page.locator('input[placeholder="Note title..."]').click();
+    }
+
+    await this.page.click('button[aria-label="Close"]');
+    await expect(this.page.locator('[data-testid="note-card"]').filter({ hasText: title })).toBeVisible();
+  }
+
   async createTodoNote(title: string, items: string[]) {
     await this.clickNewNote();
     await this.selectTodoType();
