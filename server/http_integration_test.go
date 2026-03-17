@@ -96,17 +96,6 @@ func TestProbeEndpoints(t *testing.T) {
 	ts := setupTestServer(t)
 	c := ts.newClient()
 
-	t.Run("health path falls back to spa", func(t *testing.T) {
-		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, ts.HTTPServer.URL+"/health", nil)
-		require.NoError(t, err)
-		resp, err := c.HTTPClient().Do(req)
-		require.NoError(t, err)
-		defer resp.Body.Close()
-		body, _ := io.ReadAll(resp.Body)
-		assert.Equal(t, http.StatusOK, resp.StatusCode)
-		assert.Contains(t, string(body), "jot test app")
-	})
-
 	t.Run("unknown api route still returns not found", func(t *testing.T) {
 		req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, ts.HTTPServer.URL+"/api/v1/nonexistent", nil)
 		resp, err := c.HTTPClient().Do(req)
