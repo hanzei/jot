@@ -57,7 +57,7 @@ type Server struct {
 	adminHandler   *handlers.AdminHandler
 }
 
-func New() *Server {
+func New() (*Server, error) {
 	dbPath := os.Getenv("DB_PATH")
 	if dbPath == "" {
 		dbPath = "./jot.db"
@@ -65,7 +65,7 @@ func New() *Server {
 
 	db, err := database.New(dbPath)
 	if err != nil {
-		logrus.Fatalf("Failed to initialize database: %v", err)
+		return nil, fmt.Errorf("initialize database: %w", err)
 	}
 
 	userStore := models.NewUserStore(db.DB)
@@ -115,7 +115,7 @@ func New() *Server {
 	}
 
 	s.setupRoutes()
-	return s
+	return s, nil
 }
 
 func (s *Server) setupRoutes() {
@@ -406,6 +406,10 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		s.httpServer = nil
 	}
 	s.serverMu.Unlock()
+
+	if err := s.db.Close(); err != nil {
+		return fmt.Errorf("close database: %w", err)
+	}
 
 	return nil
 }
