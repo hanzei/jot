@@ -1,5 +1,5 @@
 import React from 'react';
-import { View, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, TextInput, TouchableOpacity, StyleSheet, type TextInput as TextInputType } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import UserAvatar from './UserAvatar';
 import { useTheme } from '../theme/ThemeContext';
@@ -14,11 +14,13 @@ interface TodoItemProps {
   assignedTo?: string;
   isShared?: boolean;
   collaborators?: Collaborator[];
+  inputRef?: React.RefObject<TextInputType | null>;
   onDrag?: () => void;
   onToggle?: () => void;
   onChangeText?: (text: string) => void;
   onDelete?: () => void;
   onSubmitEditing?: () => void;
+  onBackspaceOnEmpty?: () => void;
   onAssignPress?: () => void;
 }
 
@@ -31,11 +33,13 @@ function TodoItem({
   assignedTo,
   isShared,
   collaborators,
+  inputRef,
   onDrag,
   onToggle,
   onChangeText,
   onDelete,
   onSubmitEditing,
+  onBackspaceOnEmpty,
   onAssignPress,
 }: TodoItemProps) {
   const { colors } = useTheme();
@@ -69,14 +73,21 @@ function TodoItem({
         />
       </TouchableOpacity>
       <TextInput
+        ref={inputRef}
         style={[styles.textInput, { color: completed ? colors.textMuted : colors.text }, completed && styles.completedText]}
         value={text}
         onChangeText={onChangeText}
         editable={editable}
         placeholder="List item"
         placeholderTextColor={colors.placeholder}
+        returnKeyType="next"
         onSubmitEditing={onSubmitEditing}
         blurOnSubmit={false}
+        onKeyPress={({ nativeEvent }) => {
+          if (nativeEvent.key === 'Backspace' && text === '') {
+            onBackspaceOnEmpty?.();
+          }
+        }}
         testID="todo-item-text"
       />
       {showAssignUI && assignedTo ? (

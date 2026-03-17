@@ -9,6 +9,7 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
+  type TextInput as TextInputType,
 } from 'react-native';
 import DraggableFlatList, { ScaleDecorator } from 'react-native-draggable-flatlist';
 import * as Haptics from 'expo-haptics';
@@ -135,6 +136,17 @@ export default function NoteEditorScreen() {
   createMutateRef.current = createMutation.mutateAsync;
   const updateMutateRef = useRef(updateMutation.mutateAsync);
   updateMutateRef.current = updateMutation.mutateAsync;
+
+  const titleInputRef = useRef<TextInputType>(null);
+  const contentInputRef = useRef<TextInputType>(null);
+  const itemInputRefsMap = useRef(new Map<string, React.RefObject<TextInputType | null>>());
+
+  const getItemRef = useCallback((id: string): React.RefObject<TextInputType | null> => {
+    if (!itemInputRefsMap.current.has(id)) {
+      itemInputRefsMap.current.set(id, React.createRef<TextInputType>());
+    }
+    return itemInputRefsMap.current.get(id)!;
+  }, []);
 
   function nextTempId(): string {
     return `temp-${++tempIdCounterRef.current}`;
@@ -312,19 +324,68 @@ export default function NoteEditorScreen() {
   );
 
   const handleAddItem = useCallback(() => {
+    const newId = nextTempId();
+    const newItemRef = getItemRef(newId);
     setItems((prev) => [
       ...prev,
-      {
-        id: nextTempId(),
-        text: '',
-        completed: false,
-        position: prev.length,
-        indent_level: 0,
-        assigned_to: '',
-      },
+      { id: newId, text: '', completed: false, position: prev.length, indent_level: 0, assigned_to: '' },
     ]);
     scheduleUpdate();
+    setTimeout(() => newItemRef.current?.focus(), 50);
+  }, [scheduleUpdate, getItemRef]);
+
+  const handleInsertItemAfter = useCallback((index: number) => {
+    const newId = nextTempId();
+    const newItemRef = getItemRef(newId);
+    setItems((prev) => {
+      const newItem: LocalItem = {
+        id: newId,
+        text: '',
+        completed: false,
+        position: index + 1,
+        indent_level: prev[index]?.indent_level ?? 0,
+        assigned_to: '',
+      };
+      const next = [...prev.slice(0, index + 1), newItem, ...prev.slice(index + 1)];
+      return next.map((item, i) => ({ ...item, position: i }));
+    });
+    scheduleUpdate();
+    setTimeout(() => newItemRef.current?.focus(), 50);
+  }, [scheduleUpdate, getItemRef]);
+
+  const handleBackspaceOnEmpty = useCallback((index: number) => {
+    let focusTargetId: string | null = null;
+    setItems((prev) => {
+      const item = prev[index];
+      if (!item || item.text !== '') return prev;
+      focusTargetId = index > 0 ? (prev[index - 1]?.id ?? null) : null;
+      return prev.filter((_, i) => i !== index);
+    });
+    scheduleUpdate();
+    setTimeout(() => {
+      if (focusTargetId) itemInputRefsMap.current.get(focusTargetId)?.current?.focus();
+    }, 50);
   }, [scheduleUpdate]);
+
+  const handleTitleSubmit = useCallback(() => {
+    if (noteTypeRef.current === 'text') {
+      contentInputRef.current?.focus();
+    } else {
+      const firstUnchecked = itemsRef.current.find((item) => !item.completed);
+      if (firstUnchecked) {
+        itemInputRefsMap.current.get(firstUnchecked.id)?.current?.focus();
+      } else {
+        const newId = nextTempId();
+        const newItemRef = getItemRef(newId);
+        setItems((prev) => [
+          ...prev,
+          { id: newId, text: '', completed: false, position: prev.length, indent_level: 0, assigned_to: '' },
+        ]);
+        scheduleUpdate();
+        setTimeout(() => newItemRef.current?.focus(), 50);
+      }
+    }
+  }, [scheduleUpdate, getItemRef]);
 
   const handleToggleCollapsed = useCallback(() => {
     setCheckedItemsCollapsed((prev) => !prev);
@@ -496,10 +557,12 @@ export default function NoteEditorScreen() {
     ({ item, drag, isActive }: { item: LocalItem; drag: () => void; isActive: boolean }) => {
       const originalIndex = itemIndexMapRef.current.get(item.id);
       if (originalIndex === undefined) return null;
+      const itemRef = getItemRef(item.id);
       return (
         <ScaleDecorator>
           <View style={isActive ? [styles.draggingTodoItem, { shadowColor: isDark ? colors.border : '#000' }] : undefined}>
             <TodoItem
+              inputRef={itemRef}
               text={item.text}
               completed={item.completed}
               indentLevel={item.indent_level}
@@ -511,14 +574,15 @@ export default function NoteEditorScreen() {
               onToggle={() => handleToggleItem(originalIndex)}
               onChangeText={(text) => handleItemTextChange(originalIndex, text)}
               onDelete={() => handleDeleteItem(originalIndex)}
-              onSubmitEditing={handleAddItem}
+              onSubmitEditing={() => handleInsertItemAfter(originalIndex)}
+              onBackspaceOnEmpty={() => handleBackspaceOnEmpty(originalIndex)}
               onAssignPress={() => openAssigneePicker(item.id)}
             />
           </View>
         </ScaleDecorator>
       );
     },
-    [handleToggleItem, handleItemTextChange, handleDeleteItem, handleAddItem, isNoteShared, collaborators, openAssigneePicker, isDark, colors],
+    [getItemRef, handleToggleItem, handleItemTextChange, handleDeleteItem, handleInsertItemAfter, handleBackspaceOnEmpty, isNoteShared, collaborators, openAssigneePicker, isDark, colors],
   );
 
   const hasNoteColor = color && color !== '#ffffff';
@@ -582,18 +646,23 @@ export default function NoteEditorScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <TextInput
+          ref={titleInputRef}
           style={[styles.titleInput, { color: hasNoteColor ? '#1a1a1a' : colors.text }]}
           value={title}
           onChangeText={handleTitleChange}
           placeholder="Title"
           placeholderTextColor={hasNoteColor ? '#999' : colors.placeholder}
           maxLength={VALIDATION.TITLE_MAX_LENGTH}
+          returnKeyType="next"
+          onSubmitEditing={handleTitleSubmit}
+          blurOnSubmit={false}
           editable={!isHydrating}
           testID="note-title-input"
         />
 
         {noteType === 'text' ? (
           <TextInput
+            ref={contentInputRef}
             style={[styles.contentInput, { color: hasNoteColor ? '#1a1a1a' : colors.text }]}
             value={content}
             onChangeText={handleContentChange}
@@ -645,6 +714,7 @@ export default function NoteEditorScreen() {
                     return (
                       <TodoItem
                         key={item.id}
+                        inputRef={getItemRef(item.id)}
                         text={item.text}
                         completed={item.completed}
                         indentLevel={item.indent_level}
@@ -654,6 +724,8 @@ export default function NoteEditorScreen() {
                         onToggle={() => handleToggleItem(originalIndex)}
                         onChangeText={(text) => handleItemTextChange(originalIndex, text)}
                         onDelete={() => handleDeleteItem(originalIndex)}
+                        onSubmitEditing={() => handleInsertItemAfter(originalIndex)}
+                        onBackspaceOnEmpty={() => handleBackspaceOnEmpty(originalIndex)}
                         onAssignPress={() => openAssigneePicker(item.id)}
                       />
                     );
