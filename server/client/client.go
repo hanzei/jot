@@ -19,7 +19,7 @@ type Error struct {
 }
 
 func (e *Error) Error() string {
-	return fmt.Sprintf("jot api: %d %s", e.StatusCode, strings.TrimSpace(e.Body))
+	return fmt.Sprintf("jot api returned: %d %s", e.StatusCode, strings.TrimSpace(e.Body))
 }
 
 // StatusCode extracts the HTTP status code from an [Error].
