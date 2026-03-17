@@ -90,6 +90,7 @@ api.interceptors.response.use(
       const isAuthEndpoint = url === '/login' || url === '/register' || url === '/logout' || url === '/me';
       if (!isAuthEndpoint) {
         await SecureStore.deleteItemAsync(SESSION_KEY);
+        await clearCachedProfile();
         onUnauthorized?.();
       }
     }

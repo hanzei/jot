@@ -270,6 +270,25 @@ describe('AuthContext', () => {
     unmount();
   });
 
+  it('does not restore when cached profile has no settings', async () => {
+    mockGetStoredSession.mockResolvedValue('existing-token');
+    mockAuth.me.mockRejectedValue(new Error('Network Error'));
+    mockGetCachedAuthProfile.mockResolvedValue({ user: mockUser, settings: null });
+
+    const { getByTestId, unmount } = render(
+      <AuthProvider>
+        <TestConsumer />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(getByTestId('loading').props.children).toBe('false');
+    });
+
+    expect(getByTestId('authenticated').props.children).toBe('false');
+    unmount();
+  });
+
   it('shows login when network error and no cached profile', async () => {
     mockGetStoredSession.mockResolvedValue('existing-token');
     mockAuth.me.mockRejectedValue(new Error('Network Error'));
