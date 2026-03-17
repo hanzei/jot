@@ -39,11 +39,11 @@ export class DashboardPage {
 
   async addTodoItem(text: string) {
     await this.page.click('button:has-text("Add item")');
-    await this.page.locator('input[placeholder="List item..."]').last().fill(text);
+    await this.page.locator('[data-testid="todo-item-input"]').last().fill(text);
   }
 
   todoItemInput(index: number): Locator {
-    return this.page.locator('input[placeholder="List item..."]').nth(index);
+    return this.page.locator('[data-testid="todo-item-input"]').nth(index);
   }
 
   async focusTodoItem(index: number) {
@@ -55,7 +55,7 @@ export class DashboardPage {
   }
 
   async expectTodoItemCount(count: number) {
-    await expect(this.page.locator('input[placeholder="List item..."]')).toHaveCount(count);
+    await expect(this.page.locator('[data-testid="todo-item-input"]')).toHaveCount(count);
   }
 
   async expectTodoItemValue(index: number, value: string) {
@@ -247,7 +247,7 @@ export class DashboardPage {
     await this.openNote(noteTitle);
     await expect(this.page.getByRole('heading', { name: 'Edit Note' })).toBeVisible();
 
-    const itemRow = this.page.locator('input[placeholder="List item..."]').nth(itemIndex).locator('..');
+    const itemRow = this.page.locator('[data-testid="todo-item-input"]').nth(itemIndex).locator('..');
     await itemRow.hover();
     const assignBtn = itemRow.locator('button[aria-label="Assign item"]');
     await assignBtn.waitFor({ state: 'visible', timeout: 5000 });
