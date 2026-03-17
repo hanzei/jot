@@ -33,7 +33,7 @@ const AppLayout = ({
   const { collapsed, toggle: toggleSidebar, collapse: collapseSidebar } = useSidebarCollapsed();
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-slate-900 flex flex-col">
+    <div className="h-dvh bg-gray-50 dark:bg-slate-900 flex flex-col">
       <NavigationHeader
         title={title}
         onLogout={onLogout}
@@ -46,7 +46,7 @@ const AppLayout = ({
         {searchBar}
       </NavigationHeader>
 
-      <div className="relative flex flex-1">
+      <div className="relative flex flex-1 min-h-0">
         <Sidebar
           tabs={sidebarTabs}
           bottomTabs={sidebarBottomTabs}
@@ -56,7 +56,7 @@ const AppLayout = ({
           {sidebarChildren}
         </Sidebar>
 
-        <main className="flex-1">
+        <main className="flex-1 overflow-y-auto">
           {children}
         </main>
       </div>

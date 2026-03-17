@@ -146,7 +146,7 @@ const Admin = ({ onLogout }: AdminProps) => {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-slate-900">
+      <div className="h-dvh flex items-center justify-center bg-gray-50 dark:bg-slate-900">
         <div data-testid="loading-spinner" className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
       </div>
     );
