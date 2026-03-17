@@ -49,7 +49,7 @@ function buildNoteAvatars(
         key: s.id,
         userId: s.shared_with_user_id,
         username: s.username || '?',
-        hasProfileIcon: s.has_profile_icon,
+        hasProfileIcon: s.has_profile_icon ?? usersById.get(s.shared_with_user_id)?.has_profile_icon,
       });
     });
 
