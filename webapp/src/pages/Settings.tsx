@@ -241,7 +241,7 @@ const Settings = ({ onLogout }: SettingsProps) => {
   );
 
   return (
-    <div className="h-screen bg-gray-50 dark:bg-slate-900 flex flex-col">
+    <div className="h-dvh bg-gray-50 dark:bg-slate-900 flex flex-col">
       <NavigationHeader onLogout={handleLogout} username={currentUsername} settingsLinkActive={true} isAdmin={isAdmin()} onToggleSidebar={toggleSidebar}>
         {searchBar}
       </NavigationHeader>
