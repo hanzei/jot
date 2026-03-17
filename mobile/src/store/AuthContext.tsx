@@ -63,7 +63,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         } else {
           // Network error — try to restore from cached profile
           const cached = await getCachedAuthProfile();
-          if (cached && !cancelled) {
+          if (cached?.user && cached?.settings && !cancelled) {
             setUser(cached.user);
             setSettings(cached.settings);
           }
