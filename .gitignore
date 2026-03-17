@@ -16,6 +16,9 @@ jot-server
 *.out
 coverage.html
 
+# JavaScript/TypeScript test coverage
+coverage/
+
 # Go workspace file
 go.work
 
