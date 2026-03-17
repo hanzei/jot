@@ -12,6 +12,7 @@ import (
 const (
 	SessionDuration    = 30 * 24 * time.Hour
 	SessionRenewWindow = 7 * 24 * time.Hour
+	maxUserAgentLength = 512
 )
 
 var ErrSessionNotFoundOrExpired = errors.New("session not found or expired")
@@ -44,6 +45,10 @@ func (s *SessionStore) Create(userID, userAgent string) (*Session, error) {
 	token, err := generateSessionToken()
 	if err != nil {
 		return nil, err
+	}
+
+	if len(userAgent) > maxUserAgentLength {
+		userAgent = userAgent[:maxUserAgentLength]
 	}
 
 	now := time.Now()

@@ -146,19 +146,47 @@ func TestRevokedSessionCannotAuthenticate(t *testing.T) {
 func TestSessionUserAgentStored(t *testing.T) {
 	ts := setupTestServer(t)
 
-	c := ts.newClient()
-	req, _ := http.NewRequestWithContext(t.Context(), http.MethodPost, ts.HTTPServer.URL+"/api/v1/register", nil)
-	req.Header.Set("User-Agent", "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 Chrome/120.0.0.0 Safari/537.36")
-	req.Header.Set("Content-Type", "application/json")
+	// Register a user first (with default UA)
+	_ = ts.createTestUser(t, "uauser", "password123", false)
 
-	_, err := c.Register(t.Context(), "uauser", "password123")
+	// Login with a custom User-Agent to create a session with a known UA
+	c := ts.newClient()
+	transport := &uaRoundTripper{
+		ua:   "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/120.0.0.0 Safari/537.36",
+		base: c.HTTPClient().Transport,
+	}
+	c.HTTPClient().Transport = transport
+
+	_, err := c.Login(t.Context(), "uauser", "password123")
 	require.NoError(t, err)
 
 	sessions, err := c.ListSessions(t.Context())
 	require.NoError(t, err)
-	require.Len(t, sessions, 1)
-	assert.NotEmpty(t, sessions[0].Browser)
-	assert.NotEmpty(t, sessions[0].OS)
+
+	var chromeSession *client.SessionInfo
+	for _, s := range sessions {
+		if s.IsCurrent {
+			chromeSession = &s
+			break
+		}
+	}
+	require.NotNil(t, chromeSession)
+	assert.Equal(t, "Chrome", chromeSession.Browser)
+	assert.Equal(t, "Windows", chromeSession.OS)
+}
+
+type uaRoundTripper struct {
+	ua   string
+	base http.RoundTripper
+}
+
+func (u *uaRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
+	req.Header.Set("User-Agent", u.ua)
+	base := u.base
+	if base == nil {
+		base = http.DefaultTransport
+	}
+	return base.RoundTrip(req)
 }
 
 func TestSessionCrossUserIsolation(t *testing.T) {
