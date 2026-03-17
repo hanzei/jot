@@ -208,6 +208,16 @@ func buildGetByUserIDQuery(userID string, archived bool, trashed bool, search st
 	return query, args
 }
 
+func scanNote(rows *sql.Rows) (Note, error) {
+	var note Note
+	err := rows.Scan(
+		&note.ID, &note.UserID, &note.Title, &note.Content,
+		&note.NoteType, &note.Color, &note.Pinned, &note.Archived, &note.Position, &note.UnpinnedPosition, &note.CheckedItemsCollapsed,
+		&note.DeletedAt, &note.CreatedAt, &note.UpdatedAt,
+	)
+	return note, err
+}
+
 func (s *NoteStore) GetByUserID(userID string, archived bool, trashed bool, search string, labelID string, myTodo bool) ([]*Note, error) {
 	query, args := buildGetByUserIDQuery(userID, archived, trashed, search, labelID, myTodo)
 
@@ -215,23 +225,15 @@ func (s *NoteStore) GetByUserID(userID string, archived bool, trashed bool, sear
 	if err != nil {
 		return nil, fmt.Errorf("failed to get notes: %w", err)
 	}
-	defer func() {
-		if err = rows.Close(); err != nil {
-			logrus.WithError(err).Error("Failed to close rows")
-		}
-	}()
 
-	var notes []*Note
-	for rows.Next() {
-		var note Note
-		err = rows.Scan(
-			&note.ID, &note.UserID, &note.Title, &note.Content,
-			&note.NoteType, &note.Color, &note.Pinned, &note.Archived, &note.Position, &note.UnpinnedPosition, &note.CheckedItemsCollapsed,
-			&note.DeletedAt, &note.CreatedAt, &note.UpdatedAt,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan note: %w", err)
-		}
+	scannedNotes, err := collectRows(rows, scanNote)
+	if err != nil {
+		return nil, fmt.Errorf("failed to scan notes: %w", err)
+	}
+
+	notes := make([]*Note, 0, len(scannedNotes))
+	for i := range scannedNotes {
+		note := &scannedNotes[i]
 
 		if note.NoteType == NoteTypeTodo {
 			items, itemsErr := s.getItemsByNoteID(note.ID)
@@ -249,11 +251,7 @@ func (s *NoteStore) GetByUserID(userID string, archived bool, trashed bool, sear
 		note.IsShared = len(shares) > 0
 		note.Labels = []Label{}
 
-		notes = append(notes, &note)
-	}
-
-	if err = rows.Err(); err != nil {
-		return nil, fmt.Errorf("failed to iterate notes: %w", err)
+		notes = append(notes, note)
 	}
 
 	// Batch-load labels for all notes in a single query.
@@ -574,6 +572,16 @@ func (s *NoteStore) PurgeOldTrashedNotes(olderThan time.Duration) error {
 	return nil
 }
 
+func scanNoteItem(rows *sql.Rows) (NoteItem, error) {
+	var item NoteItem
+	err := rows.Scan(
+		&item.ID, &item.NoteID, &item.Text, &item.Completed,
+		&item.Position, &item.IndentLevel, &item.AssignedTo,
+		&item.CreatedAt, &item.UpdatedAt,
+	)
+	return item, err
+}
+
 func (s *NoteStore) getItemsByNoteID(noteID string) ([]NoteItem, error) {
 	query := `SELECT id, note_id, text, completed, position, indent_level,
 			  assigned_to, created_at, updated_at
@@ -583,30 +591,11 @@ func (s *NoteStore) getItemsByNoteID(noteID string) ([]NoteItem, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get note items: %w", err)
 	}
-	defer func() {
-		if err := rows.Close(); err != nil {
-			logrus.WithError(err).Error("Failed to close rows")
-		}
-	}()
 
-	var items []NoteItem
-	for rows.Next() {
-		var item NoteItem
-		err := rows.Scan(
-			&item.ID, &item.NoteID, &item.Text, &item.Completed,
-			&item.Position, &item.IndentLevel, &item.AssignedTo,
-			&item.CreatedAt, &item.UpdatedAt,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan note item: %w", err)
-		}
-		items = append(items, item)
+	items, err := collectRows(rows, scanNoteItem)
+	if err != nil {
+		return nil, fmt.Errorf("failed to scan note items: %w", err)
 	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("failed to iterate note items: %w", err)
-	}
-
 	return items, nil
 }
 
@@ -798,6 +787,16 @@ func (s *NoteStore) ClearUserAssignmentsTx(tx *sql.Tx, userID string) error {
 	return nil
 }
 
+func scanNoteShare(rows *sql.Rows) (NoteShare, error) {
+	var share NoteShare
+	err := rows.Scan(
+		&share.ID, &share.NoteID, &share.SharedWithUserID, &share.SharedByUserID,
+		&share.PermissionLevel, &share.Username, &share.FirstName, &share.LastName,
+		&share.HasProfileIcon, &share.CreatedAt, &share.UpdatedAt,
+	)
+	return share, err
+}
+
 func (s *NoteStore) GetNoteShares(noteID string) ([]NoteShare, error) {
 	query := `SELECT ns.id, ns.note_id, ns.shared_with_user_id, ns.shared_by_user_id,
 			  ns.permission_level, u.username, u.first_name, u.last_name,
@@ -812,35 +811,15 @@ func (s *NoteStore) GetNoteShares(noteID string) ([]NoteShare, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get note shares: %w", err)
 	}
-	defer func() {
-		if err := rows.Close(); err != nil {
-			logrus.WithError(err).Error("Failed to close rows")
-		}
-	}()
 
-	var shares []NoteShare
-	for rows.Next() {
-		var share NoteShare
-		err := rows.Scan(
-			&share.ID, &share.NoteID, &share.SharedWithUserID, &share.SharedByUserID,
-			&share.PermissionLevel, &share.Username, &share.FirstName, &share.LastName,
-			&share.HasProfileIcon, &share.CreatedAt, &share.UpdatedAt,
-		)
-		if err != nil {
-			return nil, fmt.Errorf("failed to scan note share: %w", err)
-		}
-		shares = append(shares, share)
+	shares, err := collectRows(rows, scanNoteShare)
+	if err != nil {
+		return nil, fmt.Errorf("failed to scan note shares: %w", err)
 	}
-
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("failed to iterate note shares: %w", err)
-	}
-
 	return shares, nil
 }
 
 func (s *NoteStore) HasAccess(noteID string, userID string) (bool, error) {
-	var count int
 	query := `SELECT COUNT(*) FROM active_notes WHERE id = ? AND user_id = ?
 			  UNION ALL
 			  SELECT COUNT(*) FROM note_shares WHERE note_id = ? AND shared_with_user_id = ?
@@ -850,25 +829,20 @@ func (s *NoteStore) HasAccess(noteID string, userID string) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("failed to check access: %w", err)
 	}
-	defer func() {
-		if err := rows.Close(); err != nil {
-			logrus.WithError(err).Error("Failed to close rows")
-		}
-	}()
+
+	scanInt := func(rows *sql.Rows) (int, error) {
+		var v int
+		return v, rows.Scan(&v)
+	}
+	counts, err := collectRows(rows, scanInt)
+	if err != nil {
+		return false, fmt.Errorf("failed to scan access counts: %w", err)
+	}
 
 	totalCount := 0
-	for rows.Next() {
-		err := rows.Scan(&count)
-		if err != nil {
-			return false, fmt.Errorf("failed to scan count: %w", err)
-		}
-		totalCount += count
+	for _, c := range counts {
+		totalCount += c
 	}
-
-	if err := rows.Err(); err != nil {
-		return false, fmt.Errorf("failed to iterate access rows: %w", err)
-	}
-
 	return totalCount > 0, nil
 }
 
@@ -962,25 +936,32 @@ func (s *NoteStore) getLabelsByNoteIDs(noteIDs []string) (map[string][]Label, er
 	if err != nil {
 		return nil, fmt.Errorf("failed to batch-get note labels: %w", err)
 	}
-	defer func() {
-		if err := rows.Close(); err != nil {
-			logrus.Errorf("Failed to close rows: %v", err)
-		}
-	}()
 
+	type noteLabelRow struct {
+		noteID string
+		label  Label
+	}
+	scanNoteLabel := func(rows *sql.Rows) (noteLabelRow, error) {
+		var r noteLabelRow
+		err := rows.Scan(&r.noteID, &r.label.ID, &r.label.UserID, &r.label.Name, &r.label.CreatedAt, &r.label.UpdatedAt)
+		return r, err
+	}
+
+	defer func() { _ = rows.Close() }()
 	result := map[string][]Label{}
-	for rows.Next() {
-		var noteID string
-		var l Label
-		if err := rows.Scan(&noteID, &l.ID, &l.UserID, &l.Name, &l.CreatedAt, &l.UpdatedAt); err != nil {
+	for row, err := range scanRows(rows, scanNoteLabel) {
+		if err != nil {
 			return nil, fmt.Errorf("failed to scan note label: %w", err)
 		}
-		result[noteID] = append(result[noteID], l)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("failed to iterate note labels: %w", err)
+		result[row.noteID] = append(result[row.noteID], row.label)
 	}
 	return result, nil
+}
+
+func scanLabel(rows *sql.Rows) (Label, error) {
+	var l Label
+	err := rows.Scan(&l.ID, &l.UserID, &l.Name, &l.CreatedAt, &l.UpdatedAt)
+	return l, err
 }
 
 // GetLabels returns all labels belonging to a user.
@@ -990,22 +971,13 @@ func (s *NoteStore) GetLabels(userID string) ([]Label, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get labels: %w", err)
 	}
-	defer func() {
-		if err := rows.Close(); err != nil {
-			logrus.Errorf("Failed to close rows: %v", err)
-		}
-	}()
 
-	labels := []Label{}
-	for rows.Next() {
-		var l Label
-		if err := rows.Scan(&l.ID, &l.UserID, &l.Name, &l.CreatedAt, &l.UpdatedAt); err != nil {
-			return nil, fmt.Errorf("failed to scan label: %w", err)
-		}
-		labels = append(labels, l)
+	labels, err := collectRows(rows, scanLabel)
+	if err != nil {
+		return nil, fmt.Errorf("failed to scan labels: %w", err)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("failed to iterate labels: %w", err)
+	if labels == nil {
+		labels = []Label{}
 	}
 	return labels, nil
 }
@@ -1021,22 +993,13 @@ func (s *NoteStore) GetNoteLabels(noteID string) ([]Label, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get note labels: %w", err)
 	}
-	defer func() {
-		if err := rows.Close(); err != nil {
-			logrus.Errorf("Failed to close rows: %v", err)
-		}
-	}()
 
-	labels := []Label{}
-	for rows.Next() {
-		var l Label
-		if err := rows.Scan(&l.ID, &l.UserID, &l.Name, &l.CreatedAt, &l.UpdatedAt); err != nil {
-			return nil, fmt.Errorf("failed to scan label: %w", err)
-		}
-		labels = append(labels, l)
+	labels, err := collectRows(rows, scanLabel)
+	if err != nil {
+		return nil, fmt.Errorf("failed to scan note labels: %w", err)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("failed to iterate note labels: %w", err)
+	if labels == nil {
+		labels = []Label{}
 	}
 	return labels, nil
 }
@@ -1118,22 +1081,14 @@ func (s *NoteStore) GetNoteAudienceIDs(noteID string) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get note audience: %w", err)
 	}
-	defer func() {
-		if err := rows.Close(); err != nil {
-			logrus.WithError(err).Error("Failed to close rows in GetNoteAudienceIDs")
-		}
-	}()
 
-	var ids []string
-	for rows.Next() {
-		var id string
-		if err := rows.Scan(&id); err != nil {
-			return nil, fmt.Errorf("failed to scan user ID: %w", err)
-		}
-		ids = append(ids, id)
+	scanString := func(rows *sql.Rows) (string, error) {
+		var v string
+		return v, rows.Scan(&v)
 	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("failed to iterate note audience rows: %w", err)
+	ids, err := collectRows(rows, scanString)
+	if err != nil {
+		return nil, fmt.Errorf("failed to scan note audience: %w", err)
 	}
 	return ids, nil
 }

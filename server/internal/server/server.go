@@ -28,10 +28,7 @@ import (
 )
 
 func buildInfo() aboutResponse {
-	c := commit
-	if len(c) > 7 {
-		c = c[:7]
-	}
+	c := commit[:min(len(commit), 7)]
 	return aboutResponse{
 		Version:   strings.TrimPrefix(version, "v"),
 		Commit:    c,
@@ -44,6 +41,7 @@ type Server struct {
 	router         chi.Router
 	db             *database.DB
 	httpServer     *http.Server
+	staticRoot     *os.Root
 	startErr       error
 	startReady     chan struct{}
 	startReadyOnce sync.Once
@@ -134,11 +132,15 @@ func New() (*Server, error) {
 		adminHandler:   adminHandler,
 	}
 
-	s.setupRoutes()
+	if err := s.setupRoutes(); err != nil {
+		cancel()
+		_ = db.Close()
+		return nil, fmt.Errorf("setup routes: %w", err)
+	}
 	return s, nil
 }
 
-func (s *Server) setupRoutes() {
+func (s *Server) setupRoutes() error {
 	s.router.Use(logrusRequestLogger)
 	s.router.Use(middleware.Recoverer)
 	allowedOrigin := os.Getenv("CORS_ALLOWED_ORIGIN")
@@ -159,7 +161,7 @@ func (s *Server) setupRoutes() {
 
 	cop := http.NewCrossOriginProtection()
 	if err := cop.AddTrustedOrigin(allowedOrigin); err != nil {
-		logrus.WithError(err).Warnf("cross-origin protection: ignoring malformed trusted origin %q", allowedOrigin)
+		return fmt.Errorf("add trusted origin %q: %w", allowedOrigin, err)
 	}
 	s.router.Route("/api/v1", func(r chi.Router) {
 		r.Use(cop.Handler)
@@ -227,7 +229,7 @@ func (s *Server) setupRoutes() {
 	if staticDir == "" {
 		workDir, err := os.Getwd()
 		if err != nil {
-			panic(err)
+			return fmt.Errorf("get working directory: %w", err)
 		}
 		staticDir = workDir + "/../webapp/build/"
 	}
@@ -235,33 +237,46 @@ func (s *Server) setupRoutes() {
 	safeStaticDir := strings.NewReplacer("\n", "", "\r", "").Replace(staticDir)
 
 	logrus.Infof("Serving static files from: %s", safeStaticDir) // #nosec G706 -- safeStaticDir has newlines stripped
-	filesDir := http.Dir(staticDir)
-	FileServer(s.router, "/", filesDir)
+	staticRoot, err := os.OpenRoot(staticDir)
+	if err != nil {
+		return fmt.Errorf("open static directory %s: %w", safeStaticDir, err)
+	}
+	s.staticRoot = staticRoot
+	FileServer(s.router, "/", staticRoot)
+	return nil
 }
 
-func FileServer(r chi.Router, path string, root http.FileSystem) {
+// FileServer registers a catch-all GET route that serves files from root
+// using os.Root for traversal-resistant filesystem access.
+func FileServer(r chi.Router, path string, root *os.Root) {
 	if path != "/" && path[len(path)-1] != '/' {
 		r.Get(path, http.RedirectHandler(path+"/", http.StatusMovedPermanently).ServeHTTP)
 		path += "/"
 	}
 	path += "*"
 
+	fsys := root.FS()
+	fileServer := http.FileServerFS(fsys)
+
 	r.Get(path, func(w http.ResponseWriter, req *http.Request) {
 		rctx := chi.RouteContext(req.Context())
 		pathPrefix := strings.TrimSuffix(rctx.RoutePattern(), "/*")
-		fs := http.StripPrefix(pathPrefix, http.FileServer(root))
 
-		// Custom handler for SPA routing
 		requestedFile := strings.TrimPrefix(req.URL.Path, pathPrefix)
 		if requestedFile == "" {
 			requestedFile = "/"
 		}
 
-		// Check if file exists
-		file, err := root.Open(requestedFile)
+		// Use os.Root for traversal-resistant file existence check.
+		cleanPath := strings.TrimPrefix(requestedFile, "/")
+		if cleanPath == "" {
+			cleanPath = "index.html"
+		}
+
+		file, err := root.Open(cleanPath)
 		if err != nil {
 			// File doesn't exist, serve index.html for SPA routing
-			indexFile, err := root.Open("/index.html")
+			indexFile, err := root.Open("index.html")
 			if err != nil {
 				http.NotFound(w, req)
 				return
@@ -282,7 +297,8 @@ func FileServer(r chi.Router, path string, root http.FileSystem) {
 			}
 		}()
 
-		// File exists, serve it normally
+		// File exists, serve it via the traversal-safe FS
+		fs := http.StripPrefix(pathPrefix, fileServer)
 		fs.ServeHTTP(w, req)
 	})
 }
@@ -433,6 +449,12 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	s.serverMu.Unlock()
 
 	s.cancel()
+
+	if s.staticRoot != nil {
+		if err := s.staticRoot.Close(); err != nil {
+			return fmt.Errorf("close static root: %w", err)
+		}
+	}
 
 	if err := s.db.Close(); err != nil {
 		return fmt.Errorf("close database: %w", err)
