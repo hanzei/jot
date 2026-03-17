@@ -42,29 +42,26 @@ import (
 	"fmt"
 	"os"
 	"os/signal"
-	"strconv"
 	"syscall"
 	"time"
 
 	_ "github.com/hanzei/jot/server/docs"
+	"github.com/hanzei/jot/server/internal/config"
 	"github.com/hanzei/jot/server/internal/server"
 	"github.com/sirupsen/logrus"
 )
 
 func main() {
-	s, err := server.New()
+	cfg, err := config.Load()
+	if err != nil {
+		logrus.WithError(err).Fatal("Failed to load configuration")
+	}
+
+	s, err := server.New(cfg)
 	if err != nil {
 		logrus.WithError(err).Fatal("Failed to initialize server")
 	}
-	port := os.Getenv("PORT")
-	if port == "" {
-		port = "8080"
-	}
-	portNum, err := strconv.Atoi(port)
-	if err != nil {
-		logrus.Fatal("Invalid PORT value: must be a number")
-	}
-	addr := fmt.Sprintf(":%d", portNum)
+	addr := fmt.Sprintf(":%d", cfg.Port)
 	logrus.Infof("Starting Jot server on %s", addr)
 
 	serverErrCh := make(chan error, 1)

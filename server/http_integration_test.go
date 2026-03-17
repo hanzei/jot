@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/hanzei/jot/server/client"
+	"github.com/hanzei/jot/server/internal/config"
 	"github.com/hanzei/jot/server/internal/models"
 	"github.com/hanzei/jot/server/internal/server"
 	"github.com/stretchr/testify/assert"
@@ -44,11 +45,15 @@ func setupTestServer(t *testing.T) *TestServer {
 	tmpDir := t.TempDir()
 	require.NoError(t, os.WriteFile(tmpDir+"/index.html", []byte("<html><body>jot test app</body></html>"), 0o600))
 
-	t.Setenv("DB_PATH", tmpDir+"/test.db")
-	t.Setenv("COOKIE_SECURE", "false")
-	t.Setenv("STATIC_DIR", tmpDir)
+	cfg := &config.Config{
+		Port:              0,
+		DBPath:            tmpDir + "/test.db",
+		StaticDir:         tmpDir,
+		CORSAllowedOrigin: "http://localhost:5173",
+		CookieSecure:      false,
+	}
 
-	s, err := server.New()
+	s, err := server.New(cfg)
 	require.NoError(t, err)
 
 	httpServer := httptest.NewServer(s.GetRouter())
