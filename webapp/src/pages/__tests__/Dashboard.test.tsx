@@ -1,7 +1,7 @@
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { MemoryRouter, useLocation } from 'react-router'
+import { MemoryRouter, useLocation, Routes, Route } from 'react-router'
 import { type ReactNode } from 'react'
 import Dashboard from '../Dashboard'
 import type { Note, Label } from '@jot/shared'
@@ -13,6 +13,7 @@ import { createMockNote } from '@/utils/__tests__/test-helpers'
 vi.mock('@/utils/api', () => ({
   notes: {
     getAll: vi.fn(),
+    getById: vi.fn(),
     delete: vi.fn(),
     reorder: vi.fn(),
     restore: vi.fn(),
@@ -182,7 +183,10 @@ vi.spyOn(console, 'error').mockImplementation(mockConsoleError)
 const renderDashboard = (initialEntries = ['/']) => {
   return render(
     <MemoryRouter initialEntries={initialEntries}>
-      <Dashboard onLogout={vi.fn()} />
+      <Routes>
+        <Route path="/" element={<Dashboard onLogout={vi.fn()} />} />
+        <Route path="/notes/:noteId" element={<Dashboard onLogout={vi.fn()} />} />
+      </Routes>
     </MemoryRouter>
   )
 }
