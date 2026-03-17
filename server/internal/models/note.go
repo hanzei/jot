@@ -94,16 +94,27 @@ func NewNoteStore(db *sql.DB) *NoteStore {
 
 // generateID returns a cryptographically random 22-character base62 string.
 // crypto/rand.Read never returns an error since Go 1.20.
+// Rejection sampling eliminates modulo bias: bytes >= threshold are discarded.
 func generateID() string {
 	const chars = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-	b := make([]byte, 22)
-	if _, err := rand.Read(b); err != nil {
-		panic(fmt.Sprintf("crypto/rand.Read: %v", err)) // unreachable since Go 1.20
+	// threshold = 256 - (256 % 62) = 248; bytes in [248, 255] are rejected.
+	const threshold = byte(256 - 256%len(chars))
+	result := make([]byte, 0, 22)
+	buf := make([]byte, 32) // read-ahead to amortise syscall cost
+	for len(result) < 22 {
+		if _, err := rand.Read(buf); err != nil {
+			panic(fmt.Sprintf("crypto/rand.Read: %v", err)) // unreachable since Go 1.20
+		}
+		for _, c := range buf {
+			if c < threshold {
+				result = append(result, chars[c%byte(len(chars))])
+				if len(result) == 22 {
+					return string(result)
+				}
+			}
+		}
 	}
-	for i, c := range b {
-		b[i] = chars[c%byte(len(chars))]
-	}
-	return string(b)
+	return string(result)
 }
 
 // deref returns *p if p is non-nil, otherwise def.

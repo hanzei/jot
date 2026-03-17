@@ -142,6 +142,9 @@ func (s *Server) setupRoutes() {
 	s.router.Get("/readyz", s.handleReady)
 
 	cop := http.NewCrossOriginProtection()
+	if err := cop.AddTrustedOrigin(allowedOrigin); err != nil {
+		logrus.WithError(err).Warnf("cross-origin protection: ignoring malformed trusted origin %q", allowedOrigin)
+	}
 	s.router.Route("/api/v1", func(r chi.Router) {
 		r.Use(cop.Handler)
 		r.Post("/register", s.wrapHandler(s.authHandler.Register))
