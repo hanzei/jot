@@ -177,6 +177,20 @@ func TestCreateNoteWithLabels(t *testing.T) {
 		assert.Equal(t, "Filterable", notes[0].Title)
 	})
 
+	t.Run("empty and whitespace-only label names are ignored", func(t *testing.T) {
+		note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
+			Title:   "Whitespace Labels",
+			Content: "content",
+			Labels:  []string{"valid", "", "  ", "  also valid  "},
+		})
+		require.NoError(t, err)
+		require.Len(t, note.Labels, 2)
+
+		labelNames := []string{note.Labels[0].Name, note.Labels[1].Name}
+		assert.Contains(t, labelNames, "valid")
+		assert.Contains(t, labelNames, "also valid")
+	})
+
 	t.Run("labels work with todo notes and items", func(t *testing.T) {
 		note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
 			Title:    "Todo With Labels",

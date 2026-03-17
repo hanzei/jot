@@ -210,7 +210,17 @@ func (h *NotesHandler) CreateNote(w http.ResponseWriter, r *http.Request) (int, 
 	}
 
 	if len(req.Labels) > 0 {
-		for _, name := range req.Labels {
+		seen := make(map[string]struct{})
+		for _, raw := range req.Labels {
+			name := strings.TrimSpace(raw)
+			if name == "" {
+				continue
+			}
+			if _, dup := seen[name]; dup {
+				continue
+			}
+			seen[name] = struct{}{}
+
 			label, labelErr := h.noteStore.GetOrCreateLabel(user.ID, name)
 			if labelErr != nil {
 				return http.StatusInternalServerError, labelErr

@@ -97,7 +97,7 @@ export default function LabelPicker({ note, selectedLabels, onLocalChange, onRef
         onLocalChange?.([...(selectedLabels ?? []), existingLabel]);
       } else {
         const placeholder: Label = {
-          id: `new_${Date.now()}`,
+          id: `new_${Date.now()}_${Math.random().toString(36).slice(2, 9)}`,
           user_id: '',
           name: trimmed,
           created_at: new Date().toISOString(),
