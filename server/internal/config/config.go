@@ -9,21 +9,23 @@ import (
 
 // Config holds all server configuration values.
 type Config struct {
-	Port              int
-	DBPath            string
-	StaticDir         string
-	CORSAllowedOrigin string
-	CookieSecure      bool
+	Port                int
+	DBPath              string
+	StaticDir           string
+	CORSAllowedOrigin   string
+	CookieSecure        bool
+	RegistrationEnabled bool
 }
 
 // Load reads configuration from environment variables, applying defaults
 // for any values not set.
 func Load() (*Config, error) {
 	cfg := &Config{
-		Port:              8080,
-		DBPath:            "./jot.db",
-		CORSAllowedOrigin: "http://localhost:5173",
-		CookieSecure:      true,
+		Port:                8080,
+		DBPath:              "./jot.db",
+		CORSAllowedOrigin:   "http://localhost:5173",
+		CookieSecure:        true,
+		RegistrationEnabled: true,
 	}
 
 	if v := os.Getenv("PORT"); v != "" {
@@ -54,6 +56,10 @@ func Load() (*Config, error) {
 
 	if os.Getenv("COOKIE_SECURE") == "false" {
 		cfg.CookieSecure = false
+	}
+
+	if os.Getenv("REGISTRATION_ENABLED") == "false" {
+		cfg.RegistrationEnabled = false
 	}
 
 	return cfg, nil

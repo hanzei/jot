@@ -13,6 +13,7 @@ func TestLoadDefaults(t *testing.T) {
 	t.Setenv("STATIC_DIR", "/tmp/static")
 	t.Setenv("CORS_ALLOWED_ORIGIN", "")
 	t.Setenv("COOKIE_SECURE", "")
+	t.Setenv("REGISTRATION_ENABLED", "")
 
 	cfg, err := Load()
 	require.NoError(t, err)
@@ -22,6 +23,7 @@ func TestLoadDefaults(t *testing.T) {
 	assert.Equal(t, "/tmp/static", cfg.StaticDir)
 	assert.Equal(t, "http://localhost:5173", cfg.CORSAllowedOrigin)
 	assert.True(t, cfg.CookieSecure)
+	assert.True(t, cfg.RegistrationEnabled)
 }
 
 func TestLoadCustomValues(t *testing.T) {
@@ -30,6 +32,7 @@ func TestLoadCustomValues(t *testing.T) {
 	t.Setenv("STATIC_DIR", "/var/www/")
 	t.Setenv("CORS_ALLOWED_ORIGIN", "https://example.com")
 	t.Setenv("COOKIE_SECURE", "false")
+	t.Setenv("REGISTRATION_ENABLED", "false")
 
 	cfg, err := Load()
 	require.NoError(t, err)
@@ -39,6 +42,7 @@ func TestLoadCustomValues(t *testing.T) {
 	assert.Equal(t, "/var/www", cfg.StaticDir)
 	assert.Equal(t, "https://example.com", cfg.CORSAllowedOrigin)
 	assert.False(t, cfg.CookieSecure)
+	assert.False(t, cfg.RegistrationEnabled)
 }
 
 func TestLoadInvalidPort(t *testing.T) {
@@ -78,4 +82,31 @@ func TestLoadCookieSecureExplicitTrue(t *testing.T) {
 	cfg, err := Load()
 	require.NoError(t, err)
 	assert.True(t, cfg.CookieSecure)
+}
+
+func TestLoadRegistrationEnabledDefault(t *testing.T) {
+	t.Setenv("REGISTRATION_ENABLED", "")
+	t.Setenv("STATIC_DIR", "/tmp/static")
+
+	cfg, err := Load()
+	require.NoError(t, err)
+	assert.True(t, cfg.RegistrationEnabled)
+}
+
+func TestLoadRegistrationDisabled(t *testing.T) {
+	t.Setenv("REGISTRATION_ENABLED", "false")
+	t.Setenv("STATIC_DIR", "/tmp/static")
+
+	cfg, err := Load()
+	require.NoError(t, err)
+	assert.False(t, cfg.RegistrationEnabled)
+}
+
+func TestLoadRegistrationExplicitTrue(t *testing.T) {
+	t.Setenv("REGISTRATION_ENABLED", "true")
+	t.Setenv("STATIC_DIR", "/tmp/static")
+
+	cfg, err := Load()
+	require.NoError(t, err)
+	assert.True(t, cfg.RegistrationEnabled)
 }

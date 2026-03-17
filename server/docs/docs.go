@@ -1169,6 +1169,12 @@ const docTemplate = `{
                             "type": "string"
                         }
                     },
+                    "403": {
+                        "description": "registration is disabled",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
                     "409": {
                         "description": "username already taken",
                         "schema": {

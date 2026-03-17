@@ -113,7 +113,7 @@ func New(cfg *config.Config) (*Server, error) {
 
 	hub := sse.NewHub()
 
-	authHandler := handlers.NewAuthHandler(userStore, sessionService, userSettingsStore)
+	authHandler := handlers.NewAuthHandler(userStore, sessionService, userSettingsStore, cfg.RegistrationEnabled)
 	notesHandler := handlers.NewNotesHandler(noteStore, userStore, hub)
 	labelsHandler := handlers.NewLabelsHandler(noteStore, hub)
 	eventsHandler := handlers.NewEventsHandler(hub)
