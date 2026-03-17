@@ -7,6 +7,8 @@ import (
 	"strings"
 )
 
+var usernameRegex = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
+
 func validateUsername(username string) error {
 	if len(username) < 2 {
 		return errors.New("username must be at least 2 characters")
@@ -16,7 +18,6 @@ func validateUsername(username string) error {
 	}
 
 	// Username can only contain letters, numbers, underscores, and hyphens
-	usernameRegex := regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 	if !usernameRegex.MatchString(username) {
 		return errors.New("username can only contain letters, numbers, underscores, and hyphens")
 	}

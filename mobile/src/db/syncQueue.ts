@@ -1,4 +1,5 @@
 import { SQLiteDatabase } from 'expo-sqlite';
+import axios from 'axios';
 import api from '../api/client';
 import type { Note } from '@jot/shared';
 import { replaceLocalNoteId, saveNote } from './noteQueries';
@@ -131,7 +132,7 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
 
       await db.runAsync('DELETE FROM sync_queue WHERE id = ?', [entry.id]);
     } catch (err) {
-      const status = (err as { response?: { status?: number } })?.response?.status;
+      const status = axios.isAxiosError(err) ? err.response?.status : undefined;
 
       if (status === 404 || status === 409) {
         // Note no longer exists on server — discard and continue
