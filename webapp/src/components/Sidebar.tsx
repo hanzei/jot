@@ -46,7 +46,7 @@ const Sidebar = ({ tabs, bottomTabs, children, collapsed, onCollapse }: SidebarP
       onMouseEnter={() => collapsed && setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      <nav className="flex flex-col space-y-1.5 pt-4 px-2 pb-2">
+      <nav className="flex flex-col shrink-0 space-y-1.5 pt-4 px-2 pb-2">
         {tabs.map((tab) =>
           tab.href ? (
             <Link
@@ -75,12 +75,13 @@ const Sidebar = ({ tabs, bottomTabs, children, collapsed, onCollapse }: SidebarP
         )}
       </nav>
       {children && (
-        <div className="overflow-y-auto">
+        <div className="flex-1 overflow-y-auto min-h-0">
           {children}
         </div>
       )}
+      {!children && <div className="flex-1" />}
       {bottomTabs && bottomTabs.length > 0 && (
-        <nav className="flex flex-col space-y-1.5 px-2 pb-2">
+        <nav className="flex flex-col shrink-0 space-y-1.5 px-2 pb-2 mt-auto">
           {bottomTabs.map((tab) =>
             tab.href ? (
               <Link

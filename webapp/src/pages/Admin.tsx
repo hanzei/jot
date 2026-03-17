@@ -150,7 +150,7 @@ const Admin = ({ onLogout }: AdminProps) => {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-slate-900">
+      <div className="h-screen flex items-center justify-center bg-gray-50 dark:bg-slate-900">
         <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-500"></div>
       </div>
     );
@@ -175,7 +175,7 @@ const Admin = ({ onLogout }: AdminProps) => {
   );
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-slate-900 flex flex-col">
+    <div className="h-screen bg-gray-50 dark:bg-slate-900 flex flex-col">
       <NavigationHeader
         onLogout={handleLogout}
         isAdmin={true}
@@ -185,9 +185,9 @@ const Admin = ({ onLogout }: AdminProps) => {
         {searchBar}
       </NavigationHeader>
 
-      <div className="flex flex-1">
+      <div className="relative flex flex-1 min-h-0">
         <Sidebar tabs={navigationTabs} collapsed={collapsed} onCollapse={collapseSidebar} />
-        <div className="flex-1 max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+        <div className="flex-1 overflow-y-auto max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         <div className="px-4 py-6 sm:px-0">
           <div className="mb-6">
             <div className="flex justify-between items-center">

@@ -349,7 +349,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-slate-900">
+      <div className="h-screen flex items-center justify-center bg-gray-50 dark:bg-slate-900">
         <div data-testid="loading-spinner" className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
       </div>
     );
@@ -402,7 +402,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   );
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-slate-900 flex flex-col">
+    <div className="h-screen bg-gray-50 dark:bg-slate-900 flex flex-col">
       <NavigationHeader
         title="Jot"
         onLogout={handleLogout}
@@ -412,7 +412,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
         {searchBar}
       </NavigationHeader>
 
-      <div className="relative flex flex-1">
+      <div className="relative flex flex-1 min-h-0">
         <Sidebar tabs={navigationTabs} bottomTabs={bottomNavigationTabs} collapsed={collapsed} onCollapse={collapseSidebar}>
           {labelsList.length > 0 && (
             <div className="px-2 pb-2">
@@ -438,7 +438,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
         </Sidebar>
 
         {/* Main content */}
-        <main className="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+        <main className="flex-1 overflow-y-auto max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Create note button — hidden in bin view */}
         {!showBin && (
           <div className="mb-8">
