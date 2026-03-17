@@ -11,7 +11,6 @@ import (
 	_ "image/png"
 	"io"
 	"net/http"
-	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/hanzei/jot/server/internal/auth"
@@ -76,8 +75,8 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) (int, err
 
 	user, err := h.userStore.Create(req.Username, req.Password)
 	if err != nil {
-		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
-			return http.StatusConflict, errors.New("username already taken")
+		if errors.Is(err, models.ErrUsernameTaken) {
+			return http.StatusConflict, models.ErrUsernameTaken
 		}
 		return http.StatusInternalServerError, err
 	}
