@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -116,19 +117,12 @@ func deref[T any](p *T, def T) T {
 }
 
 func IsValidID(id string) bool {
+	const chars = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 	if len(id) != 22 {
 		return false
 	}
-	const chars = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-	for _, char := range id {
-		found := false
-		for _, validChar := range chars {
-			if char == validChar {
-				found = true
-				break
-			}
-		}
-		if !found {
+	for _, c := range id {
+		if !strings.ContainsRune(chars, c) {
 			return false
 		}
 	}
@@ -136,7 +130,6 @@ func IsValidID(id string) bool {
 }
 
 func (s *NoteStore) Create(userID string, title, content string, noteType NoteType, color string) (*Note, error) {
-	// Generate note ID
 	noteID, err := generateID()
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate note ID: %w", err)
@@ -704,7 +697,6 @@ func (s *NoteStore) CreateItemWithCompleted(noteID string, text string, position
 }
 
 func (s *NoteStore) ShareNote(noteID string, sharedByUserID, sharedWithUserID string) error {
-	// Generate share ID
 	shareID, err := generateID()
 	if err != nil {
 		return fmt.Errorf("failed to generate share ID: %w", err)
@@ -954,10 +946,9 @@ func (s *NoteStore) getLabelsByNoteIDs(noteIDs []string) (map[string][]Label, er
 		return map[string][]Label{}, nil
 	}
 
-	placeholders := make([]string, len(noteIDs))
+	placeholders := slices.Repeat([]string{"?"}, len(noteIDs))
 	args := make([]any, len(noteIDs))
 	for i, id := range noteIDs {
-		placeholders[i] = "?"
 		args[i] = id
 	}
 

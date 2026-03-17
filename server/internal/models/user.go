@@ -553,7 +553,7 @@ func (s *UserStore) CreateByAdmin(username, password string, role string) (*User
 		return nil, fmt.Errorf("failed to generate user ID: %w", err)
 	}
 
-	query := `INSERT INTO users (id, username, password_hash, role) 
+	query := `INSERT INTO users (id, username, password_hash, role)
 			  VALUES (?, ?, ?, ?) RETURNING created_at, updated_at`
 
 	var user User
