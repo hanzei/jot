@@ -766,7 +766,7 @@ describe('API Module', () => {
       const sampleNote = createMockNote()
       mockGet.mockResolvedValue({ data: [] })
       mockPost.mockResolvedValue({ data: sampleNote })
-      mockPut.mockResolvedValue({ data: sampleNote })
+      mockPatch.mockResolvedValue({ data: sampleNote })
 
       // Verifies that the API wrappers do not add their own null-checks and pass
       // the values straight to axios (mocked here). Input validation is the
@@ -777,7 +777,7 @@ describe('API Module', () => {
 
       expect(mockGet).toHaveBeenCalled()
       expect(mockPost).toHaveBeenCalled()
-      expect(mockPut).toHaveBeenCalled()
+      expect(mockPatch).toHaveBeenCalled()
     })
   })
 })

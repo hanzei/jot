@@ -707,7 +707,7 @@ paths:
       summary: Get a single note by ID
       tags:
       - notes
-    put:
+    patch:
       consumes:
       - application/json
       parameters:

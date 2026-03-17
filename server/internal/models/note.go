@@ -374,44 +374,45 @@ func (s *NoteStore) Update(id string, userID string, title, content, color *stri
 
 	// If pinned status changed, handle position preservation
 	if currentNote.Pinned != resolvedPinned {
-		if resolvedPinned {
-			if err = s.handlePinPosition(id, userID, currentNote.Position); err != nil {
-				return err
-			}
-		} else {
-			if err = s.handleUnpinPosition(id, userID, currentNote.UnpinnedPosition); err != nil {
-				return err
-			}
+		if err = s.handlePinStatusChange(id, userID, currentNote, resolvedPinned); err != nil {
+			return err
 		}
 	}
 
 	return nil
 }
 
-// handlePinPosition moves a note to the end of the pinned section and saves its
-// current unpinned position so it can be restored later.
-func (s *NoteStore) handlePinPosition(id, userID string, currentPosition int) error {
+// handlePinStatusChange updates note positions when a note is pinned or unpinned.
+func (s *NoteStore) handlePinStatusChange(id, userID string, currentNote *Note, nowPinned bool) error {
+	if nowPinned {
+		return s.handlePinning(id, userID, currentNote)
+	}
+	return s.handleUnpinning(id, userID, currentNote)
+}
+
+// handlePinning stores the current position as unpinned_position and moves the note to the end of the pinned list.
+func (s *NoteStore) handlePinning(id, userID string, currentNote *Note) error {
 	var maxPosition int
-	posQuery := `SELECT COALESCE(MAX(position), -1) FROM active_notes WHERE user_id = ? AND pinned = TRUE AND archived = FALSE`
-	if err := s.db.QueryRow(posQuery, userID).Scan(&maxPosition); err != nil {
+	posQuery := `SELECT COALESCE(MAX(position), -1) FROM active_notes WHERE user_id = ? AND pinned = TRUE AND archived = FALSE AND id != ?`
+	if err := s.db.QueryRow(posQuery, userID, id).Scan(&maxPosition); err != nil {
 		return fmt.Errorf("failed to get max position: %w", err)
 	}
 
 	if _, err := s.db.Exec(
 		`UPDATE notes SET position = ?, unpinned_position = ? WHERE id = ?`,
-		maxPosition+1, currentPosition, id,
+		maxPosition+1, currentNote.Position, id,
 	); err != nil {
 		return fmt.Errorf("failed to update position: %w", err)
 	}
 	return nil
 }
 
-// handleUnpinPosition restores a note to its saved unpinned position (shifting
-// other notes to make room) or appends it to the end of the unpinned section.
-func (s *NoteStore) handleUnpinPosition(id, userID string, unpinnedPosition *int) error {
+// handleUnpinning restores the note to its saved unpinned_position, or appends it to the end of the unpinned list.
+func (s *NoteStore) handleUnpinning(id, userID string, currentNote *Note) error {
 	var targetPosition int
-	if unpinnedPosition != nil {
-		targetPosition = *unpinnedPosition
+
+	if currentNote.UnpinnedPosition != nil {
+		targetPosition = *currentNote.UnpinnedPosition
 
 		// Shift other unpinned notes to make room
 		if _, err := s.db.Exec(
@@ -422,10 +423,10 @@ func (s *NoteStore) handleUnpinPosition(id, userID string, unpinnedPosition *int
 			return fmt.Errorf("failed to shift notes: %w", err)
 		}
 	} else {
-		// No saved position — append to end
+		// No saved position, add to end
 		var maxPosition int
-		posQuery := `SELECT COALESCE(MAX(position), -1) FROM active_notes WHERE user_id = ? AND pinned = FALSE AND archived = FALSE`
-		if err := s.db.QueryRow(posQuery, userID).Scan(&maxPosition); err != nil {
+		posQuery := `SELECT COALESCE(MAX(position), -1) FROM active_notes WHERE user_id = ? AND pinned = FALSE AND archived = FALSE AND id != ?`
+		if err := s.db.QueryRow(posQuery, userID, id).Scan(&maxPosition); err != nil {
 			return fmt.Errorf("failed to get max position: %w", err)
 		}
 		targetPosition = maxPosition + 1
