@@ -28,10 +28,7 @@ import (
 )
 
 func buildInfo() aboutResponse {
-	c := commit
-	if len(c) > 7 {
-		c = c[:7]
-	}
+	c := commit[:min(len(commit), 7)]
 	return aboutResponse{
 		Version:   strings.TrimPrefix(version, "v"),
 		Commit:    c,
@@ -44,6 +41,7 @@ type Server struct {
 	router         chi.Router
 	db             *database.DB
 	httpServer     *http.Server
+	staticRoot     *os.Root
 	startErr       error
 	startReady     chan struct{}
 	startReadyOnce sync.Once
@@ -235,33 +233,46 @@ func (s *Server) setupRoutes() {
 	safeStaticDir := strings.NewReplacer("\n", "", "\r", "").Replace(staticDir)
 
 	logrus.Infof("Serving static files from: %s", safeStaticDir) // #nosec G706 -- safeStaticDir has newlines stripped
-	filesDir := http.Dir(staticDir)
-	FileServer(s.router, "/", filesDir)
+	staticRoot, err := os.OpenRoot(staticDir)
+	if err != nil {
+		logrus.WithError(err).Warnf("Failed to open static directory %s; static file serving disabled", safeStaticDir)
+		return
+	}
+	s.staticRoot = staticRoot
+	FileServer(s.router, "/", staticRoot)
 }
 
-func FileServer(r chi.Router, path string, root http.FileSystem) {
+// FileServer registers a catch-all GET route that serves files from root
+// using os.Root for traversal-resistant filesystem access.
+func FileServer(r chi.Router, path string, root *os.Root) {
 	if path != "/" && path[len(path)-1] != '/' {
 		r.Get(path, http.RedirectHandler(path+"/", http.StatusMovedPermanently).ServeHTTP)
 		path += "/"
 	}
 	path += "*"
 
+	fsys := root.FS()
+	fileServer := http.FileServerFS(fsys)
+
 	r.Get(path, func(w http.ResponseWriter, req *http.Request) {
 		rctx := chi.RouteContext(req.Context())
 		pathPrefix := strings.TrimSuffix(rctx.RoutePattern(), "/*")
-		fs := http.StripPrefix(pathPrefix, http.FileServer(root))
 
-		// Custom handler for SPA routing
 		requestedFile := strings.TrimPrefix(req.URL.Path, pathPrefix)
 		if requestedFile == "" {
 			requestedFile = "/"
 		}
 
-		// Check if file exists
-		file, err := root.Open(requestedFile)
+		// Use os.Root for traversal-resistant file existence check.
+		cleanPath := strings.TrimPrefix(requestedFile, "/")
+		if cleanPath == "" {
+			cleanPath = "index.html"
+		}
+
+		file, err := root.Open(cleanPath)
 		if err != nil {
 			// File doesn't exist, serve index.html for SPA routing
-			indexFile, err := root.Open("/index.html")
+			indexFile, err := root.Open("index.html")
 			if err != nil {
 				http.NotFound(w, req)
 				return
@@ -282,7 +293,8 @@ func FileServer(r chi.Router, path string, root http.FileSystem) {
 			}
 		}()
 
-		// File exists, serve it normally
+		// File exists, serve it via the traversal-safe FS
+		fs := http.StripPrefix(pathPrefix, fileServer)
 		fs.ServeHTTP(w, req)
 	})
 }
@@ -433,6 +445,12 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	s.serverMu.Unlock()
 
 	s.cancel()
+
+	if s.staticRoot != nil {
+		if err := s.staticRoot.Close(); err != nil {
+			return fmt.Errorf("close static root: %w", err)
+		}
+	}
 
 	if err := s.db.Close(); err != nil {
 		return fmt.Errorf("close database: %w", err)

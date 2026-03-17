@@ -479,12 +479,8 @@ func resizeImage(data []byte) ([]byte, error) {
 			dstH = maxProfileIconDimension
 			dstW = srcW * maxProfileIconDimension / srcH
 		}
-		if dstW < 1 {
-			dstW = 1
-		}
-		if dstH < 1 {
-			dstH = 1
-		}
+		dstW = max(dstW, 1)
+		dstH = max(dstH, 1)
 
 		dst := image.NewRGBA(image.Rect(0, 0, dstW, dstH))
 		draw.CatmullRom.Scale(dst, dst.Bounds(), img, bounds, draw.Src, nil)
