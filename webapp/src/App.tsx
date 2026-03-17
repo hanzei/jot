@@ -63,14 +63,10 @@ function App() {
             path="/register" 
             element={!isAuth ? <Register onRegister={() => setIsAuth(true)} /> : <Navigate to="/" />} 
           />
-          <Route 
-            path="/" 
-            element={isAuth ? <Dashboard onLogout={() => setIsAuth(false)} /> : <Navigate to="/login" />} 
-          />
-          <Route 
-            path="/notes/:noteId" 
-            element={isAuth ? <Dashboard onLogout={() => setIsAuth(false)} /> : <Navigate to="/login" />} 
-          />
+          <Route element={isAuth ? <Dashboard onLogout={() => setIsAuth(false)} /> : <Navigate to="/login" />}>
+            <Route index element={null} />
+            <Route path="notes/:noteId" element={null} />
+          </Route>
           <Route
             path="/admin"
             element={isAuth && isAdmin() ? <Admin onLogout={() => setIsAuth(false)} /> : <Navigate to="/" />}

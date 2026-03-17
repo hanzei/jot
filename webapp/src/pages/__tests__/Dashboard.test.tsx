@@ -184,8 +184,10 @@ const renderDashboard = (initialEntries = ['/']) => {
   return render(
     <MemoryRouter initialEntries={initialEntries}>
       <Routes>
-        <Route path="/" element={<Dashboard onLogout={vi.fn()} />} />
-        <Route path="/notes/:noteId" element={<Dashboard onLogout={vi.fn()} />} />
+        <Route element={<Dashboard onLogout={vi.fn()} />}>
+          <Route index element={null} />
+          <Route path="notes/:noteId" element={null} />
+        </Route>
       </Routes>
     </MemoryRouter>
   )
