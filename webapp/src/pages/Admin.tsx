@@ -189,10 +189,11 @@ const Admin = ({ onLogout }: AdminProps) => {
               <form onSubmit={handleCreateUser}>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    <label htmlFor="create-username" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                       {t('admin.usernameLabel')}
                     </label>
                     <input
+                      id="create-username"
                       type="text"
                       required
                       value={formData.username}
@@ -202,10 +203,11 @@ const Admin = ({ onLogout }: AdminProps) => {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    <label htmlFor="create-password" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                       {t('admin.passwordLabel')}
                     </label>
                     <input
+                      id="create-password"
                       type="password"
                       required
                       minLength={4}
@@ -227,7 +229,7 @@ const Admin = ({ onLogout }: AdminProps) => {
                   </label>
                 </div>
                 {createError && (
-                  <div className="mt-4 text-red-600 dark:text-red-400 text-sm">{createError}</div>
+                  <div role="alert" className="mt-4 text-red-600 dark:text-red-400 text-sm">{createError}</div>
                 )}
                 <div className="mt-6">
                   <button
