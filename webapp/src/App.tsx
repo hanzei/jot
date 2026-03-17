@@ -67,6 +67,10 @@ function App() {
             path="/" 
             element={isAuth ? <Dashboard onLogout={() => setIsAuth(false)} /> : <Navigate to="/login" />} 
           />
+          <Route 
+            path="/notes/:noteId" 
+            element={isAuth ? <Dashboard onLogout={() => setIsAuth(false)} /> : <Navigate to="/login" />} 
+          />
           <Route
             path="/admin"
             element={isAuth && isAdmin() ? <Admin onLogout={() => setIsAuth(false)} /> : <Navigate to="/" />}
