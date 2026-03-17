@@ -49,6 +49,8 @@ type Server struct {
 	startReadyOnce sync.Once
 	shuttingDown   atomic.Bool
 	serverMu       sync.RWMutex
+	ctx            context.Context
+	cancel         context.CancelFunc
 	sessionService *auth.SessionService
 	authHandler    *handlers.AuthHandler
 	notesHandler   *handlers.NotesHandler
@@ -75,12 +77,19 @@ func New() (*Server, error) {
 
 	sessionService := auth.NewSessionService(sessionStore, userStore)
 
+	ctx, cancel := context.WithCancel(context.Background())
+
 	go func() {
 		ticker := time.NewTicker(time.Hour)
 		defer ticker.Stop()
-		for range ticker.C {
-			if err := sessionStore.DeleteExpired(); err != nil {
-				logrus.WithError(err).Error("failed to delete expired sessions")
+		for {
+			select {
+			case <-ticker.C:
+				if err := sessionStore.DeleteExpired(); err != nil {
+					logrus.WithError(err).Error("failed to delete expired sessions")
+				}
+			case <-ctx.Done():
+				return
 			}
 		}
 	}()
@@ -91,9 +100,14 @@ func New() (*Server, error) {
 		}
 		ticker := time.NewTicker(time.Hour)
 		defer ticker.Stop()
-		for range ticker.C {
-			if err := noteStore.PurgeOldTrashedNotes(7 * 24 * time.Hour); err != nil {
-				logrus.WithError(err).Error("failed to purge old trashed notes")
+		for {
+			select {
+			case <-ticker.C:
+				if err := noteStore.PurgeOldTrashedNotes(7 * 24 * time.Hour); err != nil {
+					logrus.WithError(err).Error("failed to purge old trashed notes")
+				}
+			case <-ctx.Done():
+				return
 			}
 		}
 	}()
@@ -110,6 +124,8 @@ func New() (*Server, error) {
 		router:         chi.NewRouter(),
 		db:             db,
 		startReady:     make(chan struct{}),
+		ctx:            ctx,
+		cancel:         cancel,
 		sessionService: sessionService,
 		authHandler:    authHandler,
 		notesHandler:   notesHandler,
@@ -415,6 +431,8 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		s.httpServer = nil
 	}
 	s.serverMu.Unlock()
+
+	s.cancel()
 
 	if err := s.db.Close(); err != nil {
 		return fmt.Errorf("close database: %w", err)
