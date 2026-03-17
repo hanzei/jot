@@ -61,14 +61,15 @@ jest.mock('react-native-reanimated', () => {
 });
 
 jest.mock('react-native-gesture-handler', () => {
-  const View = require('react-native').View;
+  const RN = require('react-native');
   return {
-    GestureHandlerRootView: View,
-    Swipeable: View,
-    DrawerLayout: View,
+    GestureHandlerRootView: RN.View,
+    Swipeable: RN.View,
+    DrawerLayout: RN.View,
     State: {},
-    ScrollView: require('react-native').ScrollView,
-    FlatList: require('react-native').FlatList,
+    TouchableOpacity: RN.TouchableOpacity,
+    ScrollView: RN.ScrollView,
+    FlatList: RN.FlatList,
     gestureHandlerRootHOC: (component) => component,
     Directions: {},
   };
