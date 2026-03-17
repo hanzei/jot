@@ -6,6 +6,7 @@ import Dashboard from '@/pages/Dashboard';
 import Admin from '@/pages/Admin';
 import Settings from '@/pages/Settings';
 import { OfflineNotification } from '@/components/OfflineNotification';
+import { ToastProvider } from '@/components/Toast';
 import { isAdmin, setUser, setSettings, removeUser } from '@/utils/auth';
 import { auth } from '@/utils/api';
 import { applyTheme, getThemePreference } from '@/utils/theme';
@@ -52,6 +53,7 @@ function App() {
 
   return (
     <Router>
+      <ToastProvider>
       <div className="min-h-screen bg-gray-50 dark:bg-slate-900">
         <OfflineNotification />
         <Routes>
@@ -77,6 +79,7 @@ function App() {
           />
         </Routes>
       </div>
+      </ToastProvider>
     </Router>
   );
 }

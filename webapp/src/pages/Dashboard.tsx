@@ -11,6 +11,8 @@ import SearchBar from '@/components/SearchBar';
 import SortableNoteCard from '@/components/SortableNoteCard';
 import NoteModal from '@/components/NoteModal';
 import ShareModal from '@/components/ShareModal';
+import ConfirmDialog from '@/components/ConfirmDialog';
+import { useToast } from '@/components/Toast';
 import {
   DndContext,
   closestCenter,
@@ -36,6 +38,7 @@ interface DashboardProps {
 
 export default function Dashboard({ onLogout }: DashboardProps) {
   const { t } = useTranslation();
+  const { showToast } = useToast();
   const { noteId: noteIdParam } = useParams<{ noteId?: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const [notesList, setNotesList] = useState<Note[]>([]);
@@ -52,6 +55,13 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [sharingNote, setSharingNote] = useState<Note | null>(null);
   const [usersById, setUsersById] = useState<Map<string, User>>(new Map());
+  const [confirmDialog, setConfirmDialog] = useState<{
+    open: boolean;
+    title: string;
+    message: string;
+    confirmLabel: string;
+    onConfirm: () => void;
+  }>({ open: false, title: '', message: '', confirmLabel: '', onConfirm: () => {} });
   const user = getUser();
   const isMountedRef = useRef(true);
   const openNoteIdRef = useRef<string | null>(null);
@@ -295,6 +305,10 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     try {
       await notes.delete(noteId);
       loadNotes();
+      showToast(t('dashboard.noteDeleted'), 'success', {
+        label: t('dashboard.undo'),
+        onClick: () => handleRestoreNote(noteId),
+      });
     } catch (error) {
       console.error('Failed to delete note:', error);
     }
@@ -304,6 +318,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     try {
       await notes.restore(noteId);
       loadNotes();
+      showToast(t('dashboard.noteRestored'));
     } catch (error) {
       console.error('Failed to restore note:', error);
     }
@@ -313,6 +328,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     try {
       await notes.delete(noteId, { permanent: true });
       loadNotes();
+      showToast(t('dashboard.noteDeletedForever'));
     } catch (error) {
       console.error('Failed to permanently delete note:', error);
     }
@@ -504,9 +520,17 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                 ? t('dashboard.noSearchResults', { query: searchQuery })
                 : showBin ? t('dashboard.noBinnedNotes') : showArchived ? t('dashboard.noArchivedNotes') : showMyTodo ? t('dashboard.noMyTodoNotes') : t('dashboard.noNotesYet')}
             </div>
-            <div className="text-gray-400 dark:text-gray-500 text-sm mt-2">
-              {!showArchived && !showBin && !showMyTodo && !searchQuery && t('dashboard.createFirstNote')}
-            </div>
+            {!showArchived && !showBin && !showMyTodo && !searchQuery && (
+              <div className="mt-4">
+                <button
+                  onClick={handleCreateNote}
+                  className="inline-flex items-center px-4 py-2 text-sm font-medium rounded-md text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30 border border-blue-200 dark:border-blue-800 transition-colors"
+                >
+                  <PlusIcon className="h-5 w-5 mr-2" />
+                  {t('dashboard.createFirstNoteCta')}
+                </button>
+              </div>
+            )}
           </div>
         ) : (
           <DndContext
@@ -614,6 +638,19 @@ export default function Dashboard({ onLogout }: DashboardProps) {
             onClose={handleShareModalClose}
           />
         )}
+
+        {/* Confirm dialog */}
+        <ConfirmDialog
+          open={confirmDialog.open}
+          title={confirmDialog.title}
+          message={confirmDialog.message}
+          confirmLabel={confirmDialog.confirmLabel}
+          onConfirm={() => {
+            confirmDialog.onConfirm();
+            setConfirmDialog(prev => ({ ...prev, open: false }));
+          }}
+          onCancel={() => setConfirmDialog(prev => ({ ...prev, open: false }))}
+        />
       </div>
     </AppLayout>
   );

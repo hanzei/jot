@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { XMarkIcon, PlusIcon, TrashIcon, ChevronDownIcon, ArchiveBoxIcon, ArchiveBoxXMarkIcon, ShareIcon, UserPlusIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon, PlusIcon, TrashIcon, ChevronDownIcon, ArchiveBoxIcon, ArchiveBoxXMarkIcon, ShareIcon, UserPlusIcon, CheckIcon } from '@heroicons/react/24/outline';
 import { Dialog, DialogPanel } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
 import { VALIDATION, NOTE_COLORS, buildCollaborators, type Note, type NoteType, type CreateNoteRequest, type UpdateNoteRequest, type Label, type User, type Collaborator } from '@jot/shared';
@@ -7,6 +7,8 @@ import { notes } from '@/utils/api';
 import LabelPicker from '@/components/LabelPicker';
 import LetterAvatar from '@/components/LetterAvatar';
 import AssigneePicker from '@/components/AssigneePicker';
+import ConfirmDialog from '@/components/ConfirmDialog';
+import { useToast } from '@/components/Toast';
 import { buildShareAvatars } from '@/utils/shareAvatars';
 
 // Validation functions
@@ -223,6 +225,7 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
 
 export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, onDelete, isOwner = true, usersById, currentUserId }: NoteModalProps) {
   const { t, i18n } = useTranslation();
+  const { showToast } = useToast();
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [noteType, setNoteType] = useState<NoteType>('text');
@@ -231,10 +234,12 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   const [archived, setArchived] = useState(false);
   const [items, setItems] = useState<TodoItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [showSaved, setShowSaved] = useState(false);
   const [checkedItemsCollapsed, setCheckedItemsCollapsed] = useState(false);
   const [noteLabels, setNoteLabels] = useState<Label[]>(note?.labels ?? []);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showLabelPicker, setShowLabelPicker] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   
   // Use useRef for timeout management instead of global window property
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -242,6 +247,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   const itemInputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
   const contentRef = useRef<HTMLTextAreaElement>(null);
   const savingRef = useRef(false);
+  const savedTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -306,15 +312,11 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     }
   }, [note]);
 
-  // Cleanup timeouts on component unmount
   useEffect(() => {
     return () => {
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current);
-      }
-      if (errorTimeoutRef.current) {
-        clearTimeout(errorTimeoutRef.current);
-      }
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+      if (errorTimeoutRef.current) clearTimeout(errorTimeoutRef.current);
+      if (savedTimeoutRef.current) clearTimeout(savedTimeoutRef.current);
     };
   }, []);
 
@@ -527,7 +529,12 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     autoSaveNote(updatedItems);
   };
 
-  // Helper function to auto-save note changes
+  const flashSaved = useCallback(() => {
+    setShowSaved(true);
+    if (savedTimeoutRef.current) clearTimeout(savedTimeoutRef.current);
+    savedTimeoutRef.current = setTimeout(() => setShowSaved(false), 2000);
+  }, []);
+
   const autoSaveNote = async (updatedItems: TodoItem[]) => {
     if (!note) return;
     if (savingRef.current) return;
@@ -550,6 +557,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       };
       await notes.update(note.id, updateData);
       onRefresh?.();
+      flashSaved();
     } catch (error) {
       console.error('Failed to auto-save note:', error);
       showError(t('note.failedSaveChanges'));
@@ -735,10 +743,13 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
         })) : undefined,
       };
       await notes.update(note.id, updateData);
-      onSave(); // Refresh the notes list to show updated pin status
+      onSave();
+      showToast(
+        newPinnedState ? t('dashboard.notePinned') : t('dashboard.noteUnpinned'),
+        'success'
+      );
     } catch (error) {
       console.error('Failed to update pin status:', error);
-      // Revert the pin state on error
       setPinned(!newPinnedState);
     }
   };
@@ -766,20 +777,27 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
         })) : undefined,
       };
       await notes.update(note.id, updateData);
-      onSave(); // Refresh the notes list to show updated archive status
+      onSave();
+      showToast(
+        newArchivedState ? t('dashboard.noteArchived') : t('dashboard.noteUnarchived'),
+        'success'
+      );
     } catch (error) {
       console.error('Failed to update archive status:', error);
-      // Revert the archive state on error
       setArchived(!newArchivedState);
     }
   };
 
   const handleDelete = () => {
     if (!note || !onDelete) return;
-    if (window.confirm(t('note.deleteConfirm'))) {
-      onDelete(note.id);
-      onClose();
-    }
+    setShowDeleteConfirm(true);
+  };
+
+  const confirmDelete = () => {
+    if (!note || !onDelete) return;
+    onDelete(note.id);
+    setShowDeleteConfirm(false);
+    onClose();
   };
 
   const handleToggleCompleted = async () => {
@@ -915,7 +933,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                 </>
               )}
               <button
-                aria-label={t('import.close')}
+                aria-label={t('common.close')}
                 onClick={handleCloseRequest}
                 className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
               >
@@ -1145,6 +1163,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                     color === colorOption.value ? 'ring-2 ring-blue-500' : ''
                   }`}
                   title={colorOption.name}
+                  aria-label={colorOption.name}
                 />
               ))}
             </div>
@@ -1179,10 +1198,15 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
               </p>
             )}
             <div className="flex items-center ml-auto">
-              {loading && (
+              {loading ? (
                 <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300">
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600"></div>
                   <span>{t('note.saving')}</span>
+                </div>
+              ) : showSaved && (
+                <div className="flex items-center space-x-1 text-sm text-green-600 dark:text-green-400 transition-opacity">
+                  <CheckIcon className="h-4 w-4" />
+                  <span>{t('note.saved')}</span>
                 </div>
               )}
             </div>
@@ -1191,6 +1215,14 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       </div>
       </Dialog>
 
+      <ConfirmDialog
+        open={showDeleteConfirm}
+        title={t('note.deleteConfirmTitle')}
+        message={t('note.deleteConfirm')}
+        confirmLabel={t('note.delete')}
+        onConfirm={confirmDelete}
+        onCancel={() => setShowDeleteConfirm(false)}
+      />
     </>
   );
 }

@@ -12,6 +12,8 @@ import { useTranslation } from 'react-i18next';
 import { VALIDATION, type Note, type User } from '@jot/shared';
 import { notes } from '@/utils/api';
 import LetterAvatar from '@/components/LetterAvatar';
+import ConfirmDialog from '@/components/ConfirmDialog';
+import { useToast } from '@/components/Toast';
 import { buildShareAvatars } from '@/utils/shareAvatars';
 
 interface NoteCardProps {
@@ -29,7 +31,15 @@ interface NoteCardProps {
 
 export default function NoteCard({ note, onEdit, onDelete, onShare, onRestore, onPermanentlyDelete, currentUserId, usersById, inBin = false, onRefresh }: NoteCardProps) {
   const { t } = useTranslation();
+  const { showToast } = useToast();
   const [isUpdating, setIsUpdating] = useState(false);
+  const [confirmState, setConfirmState] = useState<{
+    open: boolean;
+    title: string;
+    message: string;
+    confirmLabel: string;
+    onConfirm: () => void;
+  }>({ open: false, title: '', message: '', confirmLabel: '', onConfirm: () => {} });
 
   const isOwner = note.user_id === currentUserId;
 
@@ -52,16 +62,20 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, onRestore, o
   const handleToggleArchive = async () => {
     setIsUpdating(true);
     try {
+      const willArchive = !note.archived;
       await notes.update(note.id, {
         title: note.title,
         content: note.content,
         pinned: note.pinned,
-        archived: !note.archived,
+        archived: willArchive,
         color: note.color,
         checked_items_collapsed: note.checked_items_collapsed,
       });
-      // Refresh data using callback
       onRefresh?.();
+      showToast(
+        willArchive ? t('dashboard.noteArchived') : t('dashboard.noteUnarchived'),
+        'success'
+      );
     } catch (error) {
       console.error('Failed to toggle archive:', error);
     } finally {
@@ -72,15 +86,20 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, onRestore, o
   const handleTogglePin = async () => {
     setIsUpdating(true);
     try {
+      const willPin = !note.pinned;
       await notes.update(note.id, {
         title: note.title,
         content: note.content,
-        pinned: !note.pinned,
+        pinned: willPin,
         archived: note.archived,
         color: note.color,
         checked_items_collapsed: note.checked_items_collapsed,
       });
       onRefresh?.();
+      showToast(
+        willPin ? t('dashboard.notePinned') : t('dashboard.noteUnpinned'),
+        'success'
+      );
     } catch (error) {
       console.error('Failed to toggle pin:', error);
     } finally {
@@ -89,9 +108,13 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, onRestore, o
   };
 
   const handleDelete = () => {
-    if (window.confirm(t('note.deleteConfirm'))) {
-      onDelete(note.id);
-    }
+    setConfirmState({
+      open: true,
+      title: t('note.deleteConfirmTitle'),
+      message: t('note.deleteConfirm'),
+      confirmLabel: t('note.delete'),
+      onConfirm: () => onDelete(note.id),
+    });
   };
 
   const handleRestore = () => {
@@ -99,9 +122,13 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, onRestore, o
   };
 
   const handlePermanentlyDelete = () => {
-    if (window.confirm(t('note.deleteForeverConfirm'))) {
-      onPermanentlyDelete?.(note.id);
-    }
+    setConfirmState({
+      open: true,
+      title: t('note.deleteForeverTitle'),
+      message: t('note.deleteForeverConfirm'),
+      confirmLabel: t('note.deleteForever'),
+      onConfirm: () => onPermanentlyDelete?.(note.id),
+    });
   };
 
   return (
@@ -296,6 +323,18 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, onRestore, o
           </div>
         );
       })()}
+
+      <ConfirmDialog
+        open={confirmState.open}
+        title={confirmState.title}
+        message={confirmState.message}
+        confirmLabel={confirmState.confirmLabel}
+        onConfirm={() => {
+          confirmState.onConfirm();
+          setConfirmState(prev => ({ ...prev, open: false }));
+        }}
+        onCancel={() => setConfirmState(prev => ({ ...prev, open: false }))}
+      />
     </div>
   );
 }
