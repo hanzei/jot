@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
-	"strings"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/hanzei/jot/server/internal/auth"
@@ -95,8 +94,8 @@ func (h *AdminHandler) CreateUser(w http.ResponseWriter, r *http.Request) (int, 
 
 	user, err := h.userStore.CreateByAdmin(req.Username, req.Password, req.Role)
 	if err != nil {
-		if strings.Contains(err.Error(), "UNIQUE constraint failed") {
-			return http.StatusConflict, err
+		if errors.Is(err, models.ErrUsernameTaken) {
+			return http.StatusConflict, models.ErrUsernameTaken
 		}
 		return http.StatusInternalServerError, err
 	}
