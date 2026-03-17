@@ -63,7 +63,7 @@ function LoginTrigger() {
   );
 }
 
-let revalidateFn: (() => Promise<void>) | null = null;
+let revalidateFn: (() => Promise<boolean>) | null = null;
 
 function RevalidateConsumer() {
   const { user, isAuthenticated, isLoading, revalidateSession } = useAuth();
