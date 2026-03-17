@@ -146,6 +146,59 @@ describe('NoteCard', () => {
     );
 
     expect(getByText('Assigned task')).toBeTruthy();
+    // Assignee avatar letter 'B' (for user-2) should not appear in the preview
     expect(queryByText('B')).toBeNull();
+  });
+
+  it('renders owner avatar for shared-with-you notes', () => {
+    const sharedNote: Note = {
+      ...baseNote,
+      user_id: 'owner-1',
+      is_shared: true,
+      shared_with: [
+        {
+          id: 'share-1',
+          note_id: 'note-1',
+          shared_with_user_id: 'current-user',
+          shared_by_user_id: 'owner-1',
+          permission_level: 'edit',
+          username: 'testuser',
+          created_at: '2024-01-01T00:00:00Z',
+          updated_at: '2024-01-01T00:00:00Z',
+        },
+      ],
+    };
+
+    const { getByText } = render(
+      <NoteCard note={sharedNote} onPress={jest.fn()} />,
+    );
+
+    // Owner avatar letter '?' shown (owner not in usersById mock)
+    expect(getByText('?')).toBeTruthy();
+  });
+
+  it('renders avatars for notes shared by the owner', () => {
+    const ownedSharedNote: Note = {
+      ...baseNote,
+      user_id: 'current-user',
+      shared_with: [
+        {
+          id: 'share-1',
+          note_id: 'note-1',
+          shared_with_user_id: 'user-2',
+          shared_by_user_id: 'current-user',
+          permission_level: 'edit',
+          username: 'bob',
+          created_at: '2024-01-01T00:00:00Z',
+          updated_at: '2024-01-01T00:00:00Z',
+        },
+      ],
+    };
+
+    const { getByText } = render(
+      <NoteCard note={ownedSharedNote} onPress={jest.fn()} />,
+    );
+
+    expect(getByText('B')).toBeTruthy();
   });
 });
