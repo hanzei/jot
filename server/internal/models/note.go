@@ -92,29 +92,20 @@ func NewNoteStore(db *sql.DB) *NoteStore {
 	return &NoteStore{db: db}
 }
 
-// generateID returns a cryptographically random 22-character base62 string.
-// crypto/rand.Read never returns an error since Go 1.20.
-// Rejection sampling eliminates modulo bias: bytes >= threshold are discarded.
-func generateID() string {
+func generateID() (string, error) {
 	const chars = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-	// threshold = 256 - (256 % 62) = 248; bytes in [248, 255] are rejected.
-	const threshold = byte(256 - 256%len(chars))
-	result := make([]byte, 0, 22)
-	buf := make([]byte, 32) // read-ahead to amortise syscall cost
-	for len(result) < 22 {
-		if _, err := rand.Read(buf); err != nil {
-			panic(fmt.Sprintf("crypto/rand.Read: %v", err)) // unreachable since Go 1.20
-		}
-		for _, c := range buf {
-			if c < threshold {
-				result = append(result, chars[c%byte(len(chars))])
-				if len(result) == 22 {
-					return string(result)
-				}
-			}
-		}
+	bytes := make([]byte, 22)
+	randBytes := make([]byte, 22)
+
+	if _, err := rand.Read(randBytes); err != nil {
+		return "", err
 	}
-	return string(result)
+
+	for i := range 22 {
+		bytes[i] = chars[randBytes[i]%byte(len(chars))]
+	}
+
+	return string(bytes), nil
 }
 
 // deref returns *p if p is non-nil, otherwise def.
@@ -139,11 +130,14 @@ func IsValidID(id string) bool {
 }
 
 func (s *NoteStore) Create(userID string, title, content string, noteType NoteType, color string) (*Note, error) {
-	noteID := generateID()
+	noteID, err := generateID()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate note ID: %w", err)
+	}
 
 	// Shift existing unpinned notes down to make room at position 0
 	shiftQuery := `UPDATE notes SET position = position + 1 WHERE user_id = ? AND pinned = FALSE AND archived = FALSE AND deleted_at IS NULL`
-	_, err := s.db.Exec(shiftQuery, userID)
+	_, err = s.db.Exec(shiftQuery, userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to shift existing notes: %w", err)
 	}
@@ -617,13 +611,16 @@ func (s *NoteStore) getItemsByNoteID(noteID string) ([]NoteItem, error) {
 }
 
 func (s *NoteStore) CreateItem(noteID string, text string, position, indentLevel int, assignedTo string) (*NoteItem, error) {
-	itemID := generateID()
+	itemID, err := generateID()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate item ID: %w", err)
+	}
 
 	query := `INSERT INTO note_items (id, note_id, text, position, indent_level, assigned_to)
 			  VALUES (?, ?, ?, ?, ?, ?) RETURNING completed, created_at, updated_at`
 
 	var item NoteItem
-	err := s.db.QueryRow(query, itemID, noteID, text, position, indentLevel, assignedTo).Scan(
+	err = s.db.QueryRow(query, itemID, noteID, text, position, indentLevel, assignedTo).Scan(
 		&item.Completed, &item.CreatedAt, &item.UpdatedAt,
 	)
 	if err != nil {
@@ -673,12 +670,15 @@ func (s *NoteStore) DeleteItemsByNoteID(noteID string) error {
 }
 
 func (s *NoteStore) CreateItemWithCompleted(noteID string, text string, position int, completed bool, indentLevel int, assignedTo string) (*NoteItem, error) {
-	itemID := generateID()
+	itemID, err := generateID()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate item ID: %w", err)
+	}
 
 	query := `INSERT INTO note_items (id, note_id, text, position, completed, indent_level, assigned_to)
 			  VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING created_at, updated_at`
 	var item NoteItem
-	err := s.db.QueryRow(query, itemID, noteID, text, position, completed, indentLevel, assignedTo).Scan(
+	err = s.db.QueryRow(query, itemID, noteID, text, position, completed, indentLevel, assignedTo).Scan(
 		&item.CreatedAt, &item.UpdatedAt,
 	)
 	if err != nil {
@@ -697,12 +697,15 @@ func (s *NoteStore) CreateItemWithCompleted(noteID string, text string, position
 }
 
 func (s *NoteStore) ShareNote(noteID string, sharedByUserID, sharedWithUserID string) error {
-	shareID := generateID()
+	shareID, err := generateID()
+	if err != nil {
+		return fmt.Errorf("failed to generate share ID: %w", err)
+	}
 
 	query := `INSERT INTO note_shares (id, note_id, shared_with_user_id, shared_by_user_id, permission_level)
 			  VALUES (?, ?, ?, ?, 'edit')`
 
-	_, err := s.db.Exec(query, shareID, noteID, sharedWithUserID, sharedByUserID)
+	_, err = s.db.Exec(query, shareID, noteID, sharedWithUserID, sharedByUserID)
 	if err != nil {
 		var sqliteErr sqlite3.Error
 		if errors.As(err, &sqliteErr) && sqliteErr.ExtendedCode == sqlite3.ErrConstraintUnique {
@@ -1041,10 +1044,13 @@ func (s *NoteStore) GetNoteLabels(noteID string) ([]Label, error) {
 // GetOrCreateLabel finds an existing label by name for a user or creates a new one.
 // Uses an atomic upsert to avoid race conditions when multiple callers create the same label concurrently.
 func (s *NoteStore) GetOrCreateLabel(userID, name string) (*Label, error) {
-	id := generateID()
+	id, err := generateID()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate label ID: %w", err)
+	}
 
 	var l Label
-	err := s.db.QueryRow(
+	err = s.db.QueryRow(
 		`INSERT INTO labels (id, user_id, name) VALUES (?, ?, ?)
 		 ON CONFLICT(user_id, name) DO UPDATE SET name=excluded.name
 		 RETURNING id, user_id, name, created_at, updated_at`,
@@ -1066,7 +1072,10 @@ func (s *NoteStore) AddLabelToNote(noteID, labelID, userID string) error {
 		return ErrNoteNoAccess
 	}
 
-	id := generateID()
+	id, err := generateID()
+	if err != nil {
+		return fmt.Errorf("failed to generate note_label ID: %w", err)
+	}
 	_, err = s.db.Exec(
 		`INSERT OR IGNORE INTO note_labels (id, note_id, label_id) VALUES (?, ?, ?)`,
 		id, noteID, labelID,

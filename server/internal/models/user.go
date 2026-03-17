@@ -53,7 +53,10 @@ func (s *UserStore) Create(username, password string) (*User, error) {
 		return nil, fmt.Errorf("failed to hash password: %w", err)
 	}
 
-	userID := generateID()
+	userID, err := generateID()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate user ID: %w", err)
+	}
 
 	var isFirstUser bool
 	var count int
@@ -545,7 +548,10 @@ func (s *UserStore) CreateByAdmin(username, password string, role string) (*User
 		return nil, fmt.Errorf("failed to hash password: %w", err)
 	}
 
-	userID := generateID()
+	userID, err := generateID()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate user ID: %w", err)
+	}
 
 	query := `INSERT INTO users (id, username, password_hash, role)
 			  VALUES (?, ?, ?, ?) RETURNING created_at, updated_at`
