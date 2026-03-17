@@ -21,20 +21,22 @@ const OfflineContext = createContext<OfflineContextValue>({ isConnected: true })
 
 export function OfflineProvider({ children }: { children: React.ReactNode }) {
   const [isConnected, setIsConnected] = useState(true);
-  const { isAuthenticated } = useAuth();
+  const { revalidateSession } = useAuth();
   const db = useSQLiteContext();
   const queryClient = useQueryClient();
   const prevConnectedRef = useRef(true);
   const isDrainingRef = useRef(false);
 
   const handleReconnect = useCallback(async () => {
-    if (!isAuthenticated) return; // Don't replay queued operations when not logged in
+    // Re-validate session with the server (handles offline-authenticated users
+    // and refreshes user/settings for all returning-online users).
+    const stillAuthenticated = await revalidateSession();
+
+    if (!stillAuthenticated) return;
     if (isDrainingRef.current) return;
     isDrainingRef.current = true;
     try {
       const { idMappings } = await drainQueue(db);
-      // For each create that was reconciled, update the React Query cache so any
-      // open editor still holding the local ID can transparently switch to the server note.
       for (const { localId, serverNote } of idMappings) {
         queryClient.setQueryData(['note-local', localId], serverNote);
       }
@@ -43,10 +45,9 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
     } finally {
       isDrainingRef.current = false;
     }
-    // Full refetch to reconcile local state with server
     queryClient.invalidateQueries({ queryKey: ['notes-local'] });
     queryClient.invalidateQueries({ queryKey: ['note-local'] });
-  }, [db, queryClient, isAuthenticated]);
+  }, [db, queryClient, revalidateSession]);
 
   useEffect(() => {
     // Seed the initial state from the real network status before subscribing to changes,

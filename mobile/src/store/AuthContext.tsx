@@ -1,6 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import type { User, UserSettings } from '@jot/shared';
-import { auth, getStoredSession, clearStoredSession, setOnUnauthorized, getStoredServerUrl, restoreServerUrl } from '../api/client';
+import { auth, getStoredSession, clearStoredSession, setOnUnauthorized, getStoredServerUrl, restoreServerUrl, cacheAuthProfile, getCachedAuthProfile, clearCachedProfile } from '../api/client';
 
 interface AuthState {
   user: User | null;
@@ -10,6 +10,7 @@ interface AuthState {
   login: (username: string, password: string) => Promise<void>;
   register: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  revalidateSession: () => Promise<boolean>;
   setUser: React.Dispatch<React.SetStateAction<User | null>>;
   setSettings: (settings: UserSettings) => void;
 }
@@ -53,10 +54,19 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (!cancelled) {
           setUser(response.user);
           setSettings(response.settings);
+          await cacheAuthProfile(response);
         }
       } catch (error) {
         if (isUnauthorizedError(error)) {
           await clearStoredSession();
+          await clearCachedProfile();
+        } else {
+          // Network error — try to restore from cached profile
+          const cached = await getCachedAuthProfile();
+          if (cached?.user && cached?.settings && !cancelled) {
+            setUser(cached.user);
+            setSettings(cached.settings);
+          }
         }
       } finally {
         if (!cancelled) {
@@ -75,12 +85,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     const response = await auth.login({ username, password });
     setUser(response.user);
     setSettings(response.settings);
+    await cacheAuthProfile(response);
   }, []);
 
   const register = useCallback(async (username: string, password: string) => {
     const response = await auth.register({ username, password });
     setUser(response.user);
     setSettings(response.settings);
+    await cacheAuthProfile(response);
   }, []);
 
   const logout = useCallback(async () => {
@@ -88,6 +100,24 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       await auth.logout();
     } finally {
       clearAuth();
+    }
+  }, [clearAuth]);
+
+  const revalidateSession = useCallback(async (): Promise<boolean> => {
+    try {
+      const response = await auth.me();
+      setUser(response.user);
+      setSettings(response.settings);
+      await cacheAuthProfile(response);
+      return true;
+    } catch (error) {
+      if (isUnauthorizedError(error)) {
+        await clearStoredSession();
+        await clearCachedProfile();
+        clearAuth();
+        return false;
+      }
+      return true;
     }
   }, [clearAuth]);
 
@@ -100,10 +130,11 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       login,
       register,
       logout,
+      revalidateSession,
       setUser,
       setSettings,
     }),
-    [user, settings, isLoading, login, register, logout],
+    [user, settings, isLoading, login, register, logout, revalidateSession],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

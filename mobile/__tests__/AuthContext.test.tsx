@@ -2,7 +2,7 @@ import React from 'react';
 import { render, waitFor, act, fireEvent, cleanup } from '@testing-library/react-native';
 import { Text, TouchableOpacity } from 'react-native';
 import { AuthProvider, useAuth } from '../src/store/AuthContext';
-import { auth, getStoredSession, setOnUnauthorized } from '../src/api/client';
+import { auth, getStoredSession, setOnUnauthorized, clearStoredSession, cacheAuthProfile, getCachedAuthProfile, clearCachedProfile } from '../src/api/client';
 
 jest.mock('../src/api/client', () => ({
   auth: {
@@ -16,6 +16,9 @@ jest.mock('../src/api/client', () => ({
   restoreServerUrl: jest.fn(),
   clearStoredSession: jest.fn(),
   setOnUnauthorized: jest.fn(),
+  cacheAuthProfile: jest.fn().mockResolvedValue(undefined),
+  getCachedAuthProfile: jest.fn().mockResolvedValue(null),
+  clearCachedProfile: jest.fn().mockResolvedValue(undefined),
 }));
 
 const mockAuth = auth as {
@@ -26,6 +29,10 @@ const mockAuth = auth as {
 };
 const mockGetStoredSession = getStoredSession as jest.Mock;
 const mockSetOnUnauthorized = setOnUnauthorized as jest.Mock;
+const mockClearStoredSession = clearStoredSession as jest.Mock;
+const mockCacheAuthProfile = cacheAuthProfile as jest.Mock;
+const mockGetCachedAuthProfile = getCachedAuthProfile as jest.Mock;
+const mockClearCachedProfile = clearCachedProfile as jest.Mock;
 
 function TestConsumer() {
   const { user, isAuthenticated, isLoading, logout } = useAuth();
@@ -51,6 +58,20 @@ function LoginTrigger() {
   return (
     <>
       <Text testID="loading">{String(isLoading)}</Text>
+      <Text testID="username">{user?.username || 'none'}</Text>
+    </>
+  );
+}
+
+let revalidateFn: (() => Promise<boolean>) | null = null;
+
+function RevalidateConsumer() {
+  const { user, isAuthenticated, isLoading, revalidateSession } = useAuth();
+  revalidateFn = revalidateSession;
+  return (
+    <>
+      <Text testID="loading">{String(isLoading)}</Text>
+      <Text testID="authenticated">{String(isAuthenticated)}</Text>
       <Text testID="username">{user?.username || 'none'}</Text>
     </>
   );
@@ -206,6 +227,220 @@ describe('AuthContext', () => {
 
     expect(getByTestId('authenticated').props.children).toBe('false');
     expect(getByTestId('username').props.children).toBe('none');
+    unmount();
+  });
+
+  it('caches profile on successful session restore', async () => {
+    const response = { user: mockUser, settings: mockSettings };
+    mockGetStoredSession.mockResolvedValue('existing-token');
+    mockAuth.me.mockResolvedValue(response);
+
+    const { getByTestId, unmount } = render(
+      <AuthProvider>
+        <TestConsumer />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(getByTestId('authenticated').props.children).toBe('true');
+    });
+
+    expect(mockCacheAuthProfile).toHaveBeenCalledWith(response);
+    unmount();
+  });
+
+  it('restores from cached profile on network error during session restore', async () => {
+    mockGetStoredSession.mockResolvedValue('existing-token');
+    mockAuth.me.mockRejectedValue(new Error('Network Error'));
+    mockGetCachedAuthProfile.mockResolvedValue({ user: { ...mockUser, username: 'cached' }, settings: mockSettings });
+
+    const { getByTestId, unmount } = render(
+      <AuthProvider>
+        <TestConsumer />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(getByTestId('loading').props.children).toBe('false');
+    });
+
+    expect(getByTestId('authenticated').props.children).toBe('true');
+    expect(getByTestId('username').props.children).toBe('cached');
+    expect(mockClearStoredSession).not.toHaveBeenCalled();
+    unmount();
+  });
+
+  it('does not restore when cached profile has no settings', async () => {
+    mockGetStoredSession.mockResolvedValue('existing-token');
+    mockAuth.me.mockRejectedValue(new Error('Network Error'));
+    mockGetCachedAuthProfile.mockResolvedValue({ user: mockUser, settings: null });
+
+    const { getByTestId, unmount } = render(
+      <AuthProvider>
+        <TestConsumer />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(getByTestId('loading').props.children).toBe('false');
+    });
+
+    expect(getByTestId('authenticated').props.children).toBe('false');
+    unmount();
+  });
+
+  it('does not restore when cached profile has no user', async () => {
+    mockGetStoredSession.mockResolvedValue('existing-token');
+    mockAuth.me.mockRejectedValue(new Error('Network Error'));
+    mockGetCachedAuthProfile.mockResolvedValue({ user: null, settings: mockSettings });
+
+    const { getByTestId, unmount } = render(
+      <AuthProvider>
+        <TestConsumer />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(getByTestId('loading').props.children).toBe('false');
+    });
+
+    expect(getByTestId('authenticated').props.children).toBe('false');
+    unmount();
+  });
+
+  it('shows login when network error and no cached profile', async () => {
+    mockGetStoredSession.mockResolvedValue('existing-token');
+    mockAuth.me.mockRejectedValue(new Error('Network Error'));
+    mockGetCachedAuthProfile.mockResolvedValue(null);
+
+    const { getByTestId, unmount } = render(
+      <AuthProvider>
+        <TestConsumer />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(getByTestId('loading').props.children).toBe('false');
+    });
+
+    expect(getByTestId('authenticated').props.children).toBe('false');
+    unmount();
+  });
+
+  it('clears cached profile on 401 during session restore', async () => {
+    mockGetStoredSession.mockResolvedValue('expired-token');
+    mockAuth.me.mockRejectedValue({ response: { status: 401 } });
+
+    const { getByTestId, unmount } = render(
+      <AuthProvider>
+        <TestConsumer />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(getByTestId('loading').props.children).toBe('false');
+    });
+
+    expect(mockClearStoredSession).toHaveBeenCalled();
+    expect(mockClearCachedProfile).toHaveBeenCalled();
+    expect(getByTestId('authenticated').props.children).toBe('false');
+    unmount();
+  });
+
+  it('caches profile on successful login', async () => {
+    const response = { user: mockUser, settings: mockSettings };
+    mockAuth.login.mockResolvedValue(response);
+
+    const { getByTestId, unmount } = render(
+      <AuthProvider>
+        <LoginTrigger />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(getByTestId('username').props.children).toBe('testuser');
+    });
+
+    expect(mockCacheAuthProfile).toHaveBeenCalledWith(response);
+    unmount();
+  });
+
+  it('revalidateSession updates user and caches profile on success', async () => {
+    mockGetStoredSession.mockResolvedValue(null);
+
+    const { getByTestId, unmount } = render(
+      <AuthProvider>
+        <RevalidateConsumer />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(getByTestId('loading').props.children).toBe('false');
+    });
+    expect(getByTestId('authenticated').props.children).toBe('false');
+
+    const updatedResponse = { user: { ...mockUser, username: 'revalidated' }, settings: mockSettings };
+    mockAuth.me.mockResolvedValue(updatedResponse);
+
+    await act(async () => {
+      await revalidateFn?.();
+    });
+
+    expect(getByTestId('authenticated').props.children).toBe('true');
+    expect(getByTestId('username').props.children).toBe('revalidated');
+    expect(mockCacheAuthProfile).toHaveBeenCalledWith(updatedResponse);
+    unmount();
+  });
+
+  it('revalidateSession clears auth on 401', async () => {
+    mockGetStoredSession.mockResolvedValue('token');
+    mockAuth.me.mockResolvedValueOnce({ user: mockUser, settings: mockSettings });
+
+    const { getByTestId, unmount } = render(
+      <AuthProvider>
+        <RevalidateConsumer />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(getByTestId('authenticated').props.children).toBe('true');
+    });
+
+    mockAuth.me.mockRejectedValueOnce({ response: { status: 401 } });
+
+    await act(async () => {
+      await revalidateFn?.();
+    });
+
+    expect(getByTestId('authenticated').props.children).toBe('false');
+    expect(mockClearStoredSession).toHaveBeenCalled();
+    expect(mockClearCachedProfile).toHaveBeenCalled();
+    unmount();
+  });
+
+  it('revalidateSession ignores network errors', async () => {
+    mockGetStoredSession.mockResolvedValue('token');
+    mockAuth.me.mockResolvedValueOnce({ user: mockUser, settings: mockSettings });
+
+    const { getByTestId, unmount } = render(
+      <AuthProvider>
+        <RevalidateConsumer />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(getByTestId('authenticated').props.children).toBe('true');
+    });
+
+    mockAuth.me.mockRejectedValueOnce(new Error('Network Error'));
+
+    await act(async () => {
+      await revalidateFn?.();
+    });
+
+    // User stays authenticated on network error
+    expect(getByTestId('authenticated').props.children).toBe('true');
+    expect(getByTestId('username').props.children).toBe('testuser');
     unmount();
   });
 });
