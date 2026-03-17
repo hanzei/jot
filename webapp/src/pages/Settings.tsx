@@ -241,14 +241,14 @@ const Settings = ({ onLogout }: SettingsProps) => {
   );
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-slate-900 flex flex-col">
+    <div className="h-dvh bg-gray-50 dark:bg-slate-900 flex flex-col">
       <NavigationHeader onLogout={handleLogout} username={currentUsername} settingsLinkActive={true} isAdmin={isAdmin()} onToggleSidebar={toggleSidebar}>
         {searchBar}
       </NavigationHeader>
 
-      <div className="flex flex-1">
+      <div className="relative flex flex-1 min-h-0">
         <Sidebar tabs={navigationTabs} collapsed={collapsed} onCollapse={collapseSidebar} />
-        <div className="flex-1 max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+        <div className="flex-1 overflow-y-auto max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         <div className="px-4 py-6 sm:px-0">
           <div className="mb-6">
             <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{t('settings.title')}</h1>
