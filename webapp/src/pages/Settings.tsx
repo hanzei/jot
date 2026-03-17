@@ -1,6 +1,6 @@
 import { useState, useEffect, useRef } from 'react';
 import { useNavigate } from 'react-router';
-import { MagnifyingGlassIcon, ArrowUpTrayIcon } from '@heroicons/react/24/outline';
+import { ArrowUpTrayIcon } from '@heroicons/react/24/outline';
 import LetterAvatar from '@/components/LetterAvatar';
 import { useTranslation } from 'react-i18next';
 import i18n from '@/i18n';
@@ -8,12 +8,11 @@ import { auth, users, isAxiosError } from '@/utils/api';
 import { getUser, setUser, removeUser, getSettings, setSettings, isAdmin } from '@/utils/auth';
 import { getLanguagePreference, resolveLanguage, LanguagePreference, SUPPORTED_LANGUAGES } from '@/utils/language';
 import { getThemePreference, applyTheme, ThemePreference } from '@/utils/theme';
-import NavigationHeader from '@/components/NavigationHeader';
+import AppLayout from '@/components/AppLayout';
+import SearchBar from '@/components/SearchBar';
 import ImportModal from '@/components/ImportModal';
 import AboutModal from '@/components/AboutModal';
-import Sidebar from '@/components/Sidebar';
 import { useNavigationLinkTabs } from '@/hooks/useNavigationTabs';
-import { useSidebarCollapsed } from '@/hooks/useSidebarCollapsed';
 
 interface SettingsProps {
   onLogout: () => void;
@@ -130,8 +129,7 @@ const Settings = ({ onLogout }: SettingsProps) => {
     }
   };
 
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSearch = () => {
     const trimmed = searchQuery.trim();
     if (trimmed) {
       navigate(`/?search=${encodeURIComponent(trimmed)}`);
@@ -219,36 +217,27 @@ const Settings = ({ onLogout }: SettingsProps) => {
     }
   };
 
-  const navigationTabs = useNavigationLinkTabs();
-  const { collapsed, toggle: toggleSidebar, collapse: collapseSidebar } = useSidebarCollapsed();
+  const { tabs: navigationTabs, bottomTabs: bottomNavigationTabs } = useNavigationLinkTabs();
 
   const searchBar = (
-    <div className="w-full sm:max-w-4xl">
-      <form onSubmit={handleSearch}>
-        <div className="relative">
-          <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-gray-400 dark:text-gray-500" />
-          <input
-            type="text"
-            placeholder={t('dashboard.searchPlaceholder')}
-            aria-label={t('dashboard.searchAriaLabel')}
-            className="w-full pl-9 sm:pl-10 pr-4 py-2 text-sm sm:text-base border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-        </div>
-      </form>
-    </div>
+    <SearchBar
+      value={searchQuery}
+      onChange={setSearchQuery}
+      onSubmit={handleSearch}
+    />
   );
 
   return (
-    <div className="h-dvh bg-gray-50 dark:bg-slate-900 flex flex-col">
-      <NavigationHeader onLogout={handleLogout} username={currentUsername} settingsLinkActive={true} isAdmin={isAdmin()} onToggleSidebar={toggleSidebar}>
-        {searchBar}
-      </NavigationHeader>
-
-      <div className="relative flex flex-1 min-h-0">
-        <Sidebar tabs={navigationTabs} collapsed={collapsed} onCollapse={collapseSidebar} />
-        <div className="flex-1 overflow-y-auto max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+    <AppLayout
+      onLogout={handleLogout}
+      username={currentUsername}
+      isAdmin={isAdmin()}
+      settingsLinkActive={true}
+      sidebarTabs={navigationTabs}
+      sidebarBottomTabs={bottomNavigationTabs}
+      searchBar={searchBar}
+    >
+      <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         <div className="px-4 py-6 sm:px-0">
           <div className="mb-6">
             <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{t('settings.title')}</h1>
@@ -503,7 +492,6 @@ const Settings = ({ onLogout }: SettingsProps) => {
           </div>
 
         </div>
-        </div>
       </div>
 
       <ImportModal
@@ -516,7 +504,7 @@ const Settings = ({ onLogout }: SettingsProps) => {
         isOpen={isAboutModalOpen}
         onClose={() => setIsAboutModalOpen(false)}
       />
-    </div>
+    </AppLayout>
   );
 };
 

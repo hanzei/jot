@@ -1,14 +1,12 @@
 import { useState, useEffect, useCallback } from 'react';
 import { ROLES, type User, type CreateUserRequest } from '@jot/shared';
 import { useTranslation } from 'react-i18next';
-import { MagnifyingGlassIcon } from '@heroicons/react/24/outline';
 import { admin, auth, isAxiosError } from '@/utils/api';
 import { isAdmin, removeUser, getUser } from '@/utils/auth';
 import { Navigate, useNavigate } from 'react-router';
-import NavigationHeader from '@/components/NavigationHeader';
-import Sidebar from '@/components/Sidebar';
+import AppLayout from '@/components/AppLayout';
+import SearchBar from '@/components/SearchBar';
 import { useNavigationLinkTabs } from '@/hooks/useNavigationTabs';
-import { useSidebarCollapsed } from '@/hooks/useSidebarCollapsed';
 
 interface AdminProps {
   onLogout: () => void;
@@ -34,8 +32,7 @@ const Admin = ({ onLogout }: AdminProps) => {
   const [deleteLoading, setDeleteLoading] = useState<Set<string>>(new Set());
 
   const userIsAdmin = isAdmin();
-  const navigationTabs = useNavigationLinkTabs();
-  const { collapsed, toggle: toggleSidebar, collapse: collapseSidebar } = useSidebarCollapsed();
+  const { tabs: navigationTabs, bottomTabs: bottomNavigationTabs } = useNavigationLinkTabs();
 
   useEffect(() => { document.title = t('pageTitle.admin'); }, [t]);
 
@@ -138,8 +135,7 @@ const Admin = ({ onLogout }: AdminProps) => {
     }
   };
 
-  const handleSearch = (e: React.FormEvent) => {
-    e.preventDefault();
+  const handleSearch = () => {
     const trimmed = searchQuery.trim();
     if (trimmed) {
       navigate(`/?search=${encodeURIComponent(trimmed)}`);
@@ -151,43 +147,29 @@ const Admin = ({ onLogout }: AdminProps) => {
   if (loading) {
     return (
       <div className="h-dvh flex items-center justify-center bg-gray-50 dark:bg-slate-900">
-        <div className="animate-spin rounded-full h-32 w-32 border-b-2 border-blue-500"></div>
+        <div data-testid="loading-spinner" className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
       </div>
     );
   }
 
   const searchBar = (
-    <div className="w-full sm:max-w-4xl">
-      <form onSubmit={handleSearch}>
-        <div className="relative">
-          <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-gray-400 dark:text-gray-500" />
-          <input
-            type="text"
-            placeholder={t('dashboard.searchPlaceholder')}
-            aria-label={t('dashboard.searchAriaLabel')}
-            className="w-full pl-9 sm:pl-10 pr-4 py-2 text-sm sm:text-base border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-          />
-        </div>
-      </form>
-    </div>
+    <SearchBar
+      value={searchQuery}
+      onChange={setSearchQuery}
+      onSubmit={handleSearch}
+    />
   );
 
   return (
-    <div className="h-dvh bg-gray-50 dark:bg-slate-900 flex flex-col">
-      <NavigationHeader
-        onLogout={handleLogout}
-        isAdmin={true}
-        adminLinkActive={true}
-        onToggleSidebar={toggleSidebar}
-      >
-        {searchBar}
-      </NavigationHeader>
-
-      <div className="relative flex flex-1 min-h-0">
-        <Sidebar tabs={navigationTabs} collapsed={collapsed} onCollapse={collapseSidebar} />
-        <div className="flex-1 overflow-y-auto max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
+    <AppLayout
+      onLogout={handleLogout}
+      isAdmin={true}
+      adminLinkActive={true}
+      sidebarTabs={navigationTabs}
+      sidebarBottomTabs={bottomNavigationTabs}
+      searchBar={searchBar}
+    >
+      <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         <div className="px-4 py-6 sm:px-0">
           <div className="mb-6">
             <div className="flex justify-between items-center">
@@ -207,10 +189,11 @@ const Admin = ({ onLogout }: AdminProps) => {
               <form onSubmit={handleCreateUser}>
                 <div className="grid grid-cols-1 gap-4 sm:grid-cols-2">
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    <label htmlFor="create-username" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                       {t('admin.usernameLabel')}
                     </label>
                     <input
+                      id="create-username"
                       type="text"
                       required
                       value={formData.username}
@@ -220,10 +203,11 @@ const Admin = ({ onLogout }: AdminProps) => {
                     />
                   </div>
                   <div>
-                    <label className="block text-sm font-medium text-gray-700 dark:text-gray-300">
+                    <label htmlFor="create-password" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
                       {t('admin.passwordLabel')}
                     </label>
                     <input
+                      id="create-password"
                       type="password"
                       required
                       minLength={4}
@@ -245,7 +229,7 @@ const Admin = ({ onLogout }: AdminProps) => {
                   </label>
                 </div>
                 {createError && (
-                  <div className="mt-4 text-red-600 dark:text-red-400 text-sm">{createError}</div>
+                  <div role="alert" className="mt-4 text-red-600 dark:text-red-400 text-sm">{createError}</div>
                 )}
                 <div className="mt-6">
                   <button
@@ -340,9 +324,8 @@ const Admin = ({ onLogout }: AdminProps) => {
             </div>
           )}
         </div>
-        </div>
       </div>
-    </div>
+    </AppLayout>
   );
 };
 

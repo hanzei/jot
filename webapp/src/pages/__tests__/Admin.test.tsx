@@ -13,6 +13,7 @@ vi.mock('@/utils/api', () => ({
     getUsers: vi.fn(),
     createUser: vi.fn(),
     updateUserRole: vi.fn(),
+    deleteUser: vi.fn(),
   },
   auth: {
     logout: vi.fn(),
@@ -26,10 +27,11 @@ vi.mock('@/utils/auth', () => ({
   isAdmin: vi.fn().mockReturnValue(true),
 }))
 
-vi.mock('@/components/NavigationHeader', () => ({
-  default: ({ onLogout, children, isAdmin, adminLinkActive }: { onLogout?: () => void; children?: ReactNode; tabs?: unknown[]; isAdmin?: boolean; adminLinkActive?: boolean }) => (
-    <div data-testid="navigation-header" data-is-admin={isAdmin} data-admin-link-active={adminLinkActive}>
+vi.mock('@/components/AppLayout', () => ({
+  default: ({ onLogout, children, isAdmin, adminLinkActive, searchBar }: { onLogout?: () => void; children?: ReactNode; isAdmin?: boolean; adminLinkActive?: boolean; searchBar?: ReactNode }) => (
+    <div data-testid="app-layout" data-is-admin={isAdmin} data-admin-link-active={adminLinkActive}>
       <button onClick={onLogout} data-testid="logout-button">Logout</button>
+      <div data-testid="search-bar">{searchBar}</div>
       {children}
     </div>
   ),
@@ -84,17 +86,17 @@ describe('Admin', () => {
     vi.mocked(admin.getUsers).mockResolvedValue({ users: [currentUser, otherUser, otherAdmin] })
   })
 
-  describe('NavigationHeader props', () => {
-    it('passes isAdmin and adminLinkActive to NavigationHeader', async () => {
+  describe('AppLayout props', () => {
+    it('passes isAdmin and adminLinkActive to AppLayout', async () => {
       renderAdmin()
 
       await waitFor(() => {
         expect(screen.getByText('regularuser')).toBeInTheDocument()
       })
 
-      const header = screen.getByTestId('navigation-header')
-      expect(header).toHaveAttribute('data-is-admin', 'true')
-      expect(header).toHaveAttribute('data-admin-link-active', 'true')
+      const layout = screen.getByTestId('app-layout')
+      expect(layout).toHaveAttribute('data-is-admin', 'true')
+      expect(layout).toHaveAttribute('data-admin-link-active', 'true')
     })
   })
 

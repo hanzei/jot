@@ -78,22 +78,47 @@ vi.mock('@/utils/useSSE', () => ({
   useSSE: vi.fn(),
 }))
 
-// Mock child components
-vi.mock('@/components/NavigationHeader', () => ({
-  default: ({ title, onLogout, children, isAdmin: showAdminLink, onToggleSidebar }: {
+// Mock AppLayout to render children and expose props for testing
+vi.mock('@/components/AppLayout', () => ({
+  default: ({ title, onLogout, children, isAdmin: showAdminLink, sidebarTabs, sidebarBottomTabs, sidebarChildren, searchBar }: {
     title?: string;
     onLogout?: () => void;
     children?: ReactNode;
     isAdmin?: boolean;
-    onToggleSidebar?: () => void;
+    sidebarTabs?: Array<{ label: string; onClick?: () => void; isActive?: boolean }>;
+    sidebarBottomTabs?: Array<{ label: string; onClick?: () => void; isActive?: boolean }>;
+    sidebarChildren?: ReactNode;
+    searchBar?: ReactNode;
   }) => (
-    <div data-testid="navigation-header">
+    <div data-testid="app-layout">
       <h1>{title}</h1>
       <button onClick={onLogout} data-testid="logout-button">Logout</button>
-      {onToggleSidebar && <button onClick={onToggleSidebar} data-testid="sidebar-toggle">Toggle sidebar</button>}
-      <div data-testid="tabs" />
       {showAdminLink && <div data-testid="admin-link">Admin</div>}
-      <div data-testid="search-bar">{children}</div>
+      <div data-testid="search-bar">{searchBar}</div>
+      <div data-testid="sidebar">
+        {sidebarTabs?.map(tab => (
+          <button
+            key={tab.label}
+            onClick={tab.onClick}
+            aria-label={tab.label}
+            aria-current={tab.isActive ? 'page' : undefined}
+          >
+            {tab.label}
+          </button>
+        ))}
+        {sidebarChildren}
+        {sidebarBottomTabs?.map(tab => (
+          <button
+            key={tab.label}
+            onClick={tab.onClick}
+            aria-label={tab.label}
+            aria-current={tab.isActive ? 'page' : undefined}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+      {children}
     </div>
   ),
 }))
@@ -379,7 +404,7 @@ describe('Dashboard', () => {
     it('loads archive view from URL parameter', async () => {
       const mockGetAll = vi.mocked(notes.getAll)
       
-      renderDashboard(['/dashboard?view=archive'])
+      renderDashboard(['/?view=archive'])
       
       await waitFor(() => {
         expect(mockGetAll).toHaveBeenCalledWith(true, '', false, '', false)
@@ -393,7 +418,7 @@ describe('Dashboard', () => {
       vi.mocked(notes.restore).mockResolvedValue(mockNote)
       vi.mocked(notes.delete).mockResolvedValue(undefined)
 
-      renderDashboard(['/dashboard?view=bin'])
+      renderDashboard(['/?view=bin'])
 
       await waitFor(() => {
         expect(mockGetAll).toHaveBeenCalledWith(false, '', true, '', false)
@@ -423,7 +448,7 @@ describe('Dashboard', () => {
     it('handles malformed URL parameters gracefully', async () => {
       const mockGetAll = vi.mocked(notes.getAll)
 
-      renderDashboard(['/dashboard?view=invalid'])
+      renderDashboard(['/?view=invalid'])
 
       await waitFor(() => {
         expect(mockGetAll).toHaveBeenCalledWith(false, '', false, '', false)
@@ -1182,7 +1207,7 @@ describe('Dashboard', () => {
     it('loads My Todo view from URL parameter', async () => {
       const mockGetAll = vi.mocked(notes.getAll)
 
-      renderDashboard(['/dashboard?view=my-todo'])
+      renderDashboard(['/?view=my-todo'])
 
       await waitFor(() => {
         expect(mockGetAll).toHaveBeenCalledWith(false, '', false, '', true)
@@ -1210,7 +1235,7 @@ describe('Dashboard', () => {
       const user = userEvent.setup()
       const mockGetAll = vi.mocked(notes.getAll)
 
-      renderDashboard(['/dashboard?view=my-todo'])
+      renderDashboard(['/?view=my-todo'])
 
       await waitFor(() => {
         expect(mockGetAll).toHaveBeenCalledWith(false, '', false, '', true)
@@ -1238,7 +1263,7 @@ describe('Dashboard', () => {
       ]
       vi.mocked(labels.getAll).mockResolvedValue(mockLabels)
 
-      renderDashboard(['/dashboard?view=my-todo'])
+      renderDashboard(['/?view=my-todo'])
 
       await waitFor(() => {
         expect(mockGetAll).toHaveBeenCalledWith(false, '', false, '', true)

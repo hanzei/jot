@@ -1,7 +1,7 @@
 import { ReactNode, useState } from 'react';
 import { Link } from 'react-router';
 
-interface SidebarTab {
+export interface SidebarTab {
   label: string;
   icon: ReactNode;
   isActive?: boolean;
