@@ -1,13 +1,18 @@
 package server
 
 import (
+	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"path/filepath"
 	"runtime"
 	"strings"
+	"sync"
+	"sync/atomic"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -19,6 +24,7 @@ import (
 	"github.com/hanzei/jot/server/internal/models"
 	"github.com/hanzei/jot/server/internal/sse"
 	"github.com/sirupsen/logrus"
+	httpSwagger "github.com/swaggo/http-swagger/v2"
 )
 
 func buildInfo() aboutResponse {
@@ -37,6 +43,14 @@ func buildInfo() aboutResponse {
 type Server struct {
 	router         chi.Router
 	db             *database.DB
+	httpServer     *http.Server
+	startErr       error
+	startReady     chan struct{}
+	startReadyOnce sync.Once
+	shuttingDown   atomic.Bool
+	serverMu       sync.RWMutex
+	ctx            context.Context
+	cancel         context.CancelFunc
 	sessionService *auth.SessionService
 	authHandler    *handlers.AuthHandler
 	notesHandler   *handlers.NotesHandler
@@ -45,7 +59,7 @@ type Server struct {
 	adminHandler   *handlers.AdminHandler
 }
 
-func New() *Server {
+func New() (*Server, error) {
 	dbPath := os.Getenv("DB_PATH")
 	if dbPath == "" {
 		dbPath = "./jot.db"
@@ -53,7 +67,7 @@ func New() *Server {
 
 	db, err := database.New(dbPath)
 	if err != nil {
-		logrus.Fatalf("Failed to initialize database: %v", err)
+		return nil, fmt.Errorf("initialize database: %w", err)
 	}
 
 	userStore := models.NewUserStore(db.DB)
@@ -63,10 +77,19 @@ func New() *Server {
 
 	sessionService := auth.NewSessionService(sessionStore, userStore)
 
+	ctx, cancel := context.WithCancel(context.Background())
+
 	go func() {
-		for range time.Tick(time.Hour) {
-			if err := sessionStore.DeleteExpired(); err != nil {
-				logrus.WithError(err).Error("failed to delete expired sessions")
+		ticker := time.NewTicker(time.Hour)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				if err := sessionStore.DeleteExpired(); err != nil {
+					logrus.WithError(err).Error("failed to delete expired sessions")
+				}
+			case <-ctx.Done():
+				return
 			}
 		}
 	}()
@@ -75,9 +98,16 @@ func New() *Server {
 		if err := noteStore.PurgeOldTrashedNotes(7 * 24 * time.Hour); err != nil {
 			logrus.WithError(err).Error("failed to purge old trashed notes on startup")
 		}
-		for range time.Tick(time.Hour) {
-			if err := noteStore.PurgeOldTrashedNotes(7 * 24 * time.Hour); err != nil {
-				logrus.WithError(err).Error("failed to purge old trashed notes")
+		ticker := time.NewTicker(time.Hour)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				if err := noteStore.PurgeOldTrashedNotes(7 * 24 * time.Hour); err != nil {
+					logrus.WithError(err).Error("failed to purge old trashed notes")
+				}
+			case <-ctx.Done():
+				return
 			}
 		}
 	}()
@@ -88,11 +118,14 @@ func New() *Server {
 	notesHandler := handlers.NewNotesHandler(noteStore, userStore, hub)
 	labelsHandler := handlers.NewLabelsHandler(noteStore, hub)
 	eventsHandler := handlers.NewEventsHandler(hub)
-	adminHandler := handlers.NewAdminHandler(userStore)
+	adminHandler := handlers.NewAdminHandler(userStore, noteStore)
 
 	s := &Server{
 		router:         chi.NewRouter(),
 		db:             db,
+		startReady:     make(chan struct{}),
+		ctx:            ctx,
+		cancel:         cancel,
 		sessionService: sessionService,
 		authHandler:    authHandler,
 		notesHandler:   notesHandler,
@@ -102,7 +135,7 @@ func New() *Server {
 	}
 
 	s.setupRoutes()
-	return s
+	return s, nil
 }
 
 func (s *Server) setupRoutes() {
@@ -114,16 +147,22 @@ func (s *Server) setupRoutes() {
 	}
 	s.router.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{allowedOrigin},
-		AllowedMethods:   []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodDelete, http.MethodOptions},
+		AllowedMethods:   []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodOptions},
 		AllowedHeaders:   []string{"Accept", "Content-Type"},
 		ExposedHeaders:   []string{"Link"},
 		AllowCredentials: true,
 		MaxAge:           300,
 	}))
 
-	s.router.Get("/health", s.handleHealth)
+	s.router.Get("/livez", s.handleLive)
+	s.router.Get("/readyz", s.handleReady)
 
+	cop := http.NewCrossOriginProtection()
+	if err := cop.AddTrustedOrigin(allowedOrigin); err != nil {
+		logrus.WithError(err).Warnf("cross-origin protection: ignoring malformed trusted origin %q", allowedOrigin)
+	}
 	s.router.Route("/api/v1", func(r chi.Router) {
+		r.Use(cop.Handler)
 		r.Post("/register", s.wrapHandler(s.authHandler.Register))
 		r.Post("/login", s.wrapHandler(s.authHandler.Login))
 		r.Post("/logout", s.wrapHandler(s.authHandler.Logout))
@@ -135,10 +174,8 @@ func (s *Server) setupRoutes() {
 
 			r.Get("/about", s.wrapHandler(s.handleAbout))
 			r.Get("/me", s.wrapHandler(s.authHandler.Me))
-			r.Put("/users/me", s.wrapHandler(s.authHandler.UpdateUser))
+			r.Patch("/users/me", s.wrapHandler(s.authHandler.UpdateUser))
 			r.Put("/users/me/password", s.wrapHandler(s.authHandler.ChangePassword))
-			r.Get("/users/me/settings", s.wrapHandler(s.authHandler.GetSettings))
-			r.Put("/users/me/settings", s.wrapHandler(s.authHandler.UpdateSettings))
 			r.Post("/users/me/profile-icon", s.wrapHandler(s.authHandler.UploadProfileIcon))
 			r.Delete("/users/me/profile-icon", s.wrapHandler(s.authHandler.DeleteProfileIcon))
 			r.Get("/users/{id}/profile-icon", s.wrapHandler(s.authHandler.GetUserProfileIcon))
@@ -148,11 +185,10 @@ func (s *Server) setupRoutes() {
 			r.Post("/notes/reorder", s.wrapHandler(s.notesHandler.ReorderNotes))
 			r.Post("/notes/import", s.wrapHandler(s.notesHandler.ImportNotes))
 			r.Get("/notes/{id}", s.wrapHandler(s.notesHandler.GetNote))
-			r.Put("/notes/{id}", s.wrapHandler(s.notesHandler.UpdateNote))
+			r.Patch("/notes/{id}", s.wrapHandler(s.notesHandler.UpdateNote))
 			r.Delete("/notes/{id}", s.wrapHandler(s.notesHandler.DeleteNote))
 
 			r.Post("/notes/{id}/restore", s.wrapHandler(s.notesHandler.RestoreNote))
-			r.Delete("/notes/{id}/permanent", s.wrapHandler(s.notesHandler.PermanentlyDeleteNote))
 
 			r.Post("/notes/{id}/share", s.wrapHandler(s.notesHandler.ShareNote))
 			r.Delete("/notes/{id}/share", s.wrapHandler(s.notesHandler.UnshareNote))
@@ -175,6 +211,15 @@ func (s *Server) setupRoutes() {
 			r.Put("/admin/users/{id}/role", s.wrapHandler(s.adminHandler.UpdateUserRole))
 			r.Delete("/admin/users/{id}", s.wrapHandler(s.adminHandler.DeleteUser))
 		})
+	})
+
+	// Swagger UI at /api/docs/
+	s.router.Get("/api/docs/*", httpSwagger.WrapHandler)
+	s.router.Get("/api", func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r)
+	})
+	s.router.Get("/api/*", func(w http.ResponseWriter, r *http.Request) {
+		http.NotFound(w, r)
 	})
 
 	// Serve static files from webapp build directory
@@ -256,10 +301,33 @@ func (s *Server) wrapHandler(handler func(w http.ResponseWriter, r *http.Request
 	}
 }
 
-func (s *Server) handleHealth(w http.ResponseWriter, _ *http.Request) {
+// handleLive serves the liveness probe response.
+func (s *Server) handleLive(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	if _, err := w.Write([]byte("OK")); err != nil {
 		logrus.WithError(err).Error("Failed to write health check response")
+	}
+}
+
+// handleReady serves the readiness probe response.
+func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
+	if s.shuttingDown.Load() {
+		http.Error(w, "NOT READY", http.StatusServiceUnavailable)
+		return
+	}
+
+	ctx, cancel := context.WithTimeout(r.Context(), 2*time.Second)
+	defer cancel()
+
+	if err := s.db.PingContext(ctx); err != nil {
+		logrus.WithError(err).Warn("Readiness check failed")
+		http.Error(w, "NOT READY", http.StatusServiceUnavailable)
+		return
+	}
+
+	w.WriteHeader(http.StatusOK)
+	if _, err := w.Write([]byte("OK")); err != nil {
+		logrus.WithError(err).Error("Failed to write readiness response")
 	}
 }
 
@@ -270,6 +338,14 @@ type aboutResponse struct {
 	GoVersion string `json:"go_version,omitempty"`
 }
 
+// handleAbout godoc
+//
+//	@Summary	Get server version and build info
+//	@Tags		system
+//	@Security	CookieAuth
+//	@Produce	json
+//	@Success	200	{object}	aboutResponse
+//	@Router		/about [get]
 func (s *Server) handleAbout(w http.ResponseWriter, _ *http.Request) (int, error) {
 	resp := buildInfo()
 
@@ -306,12 +382,87 @@ func logrusRequestLogger(next http.Handler) http.Handler {
 
 func (s *Server) Start(addr string) error {
 	logrus.Infof("Server starting on %s", addr)
-	server := &http.Server{
+	listener, err := net.Listen("tcp", addr)
+	if err != nil {
+		startErr := fmt.Errorf("listen: %w", err)
+		s.setStartResult(startErr)
+		return startErr
+	}
+
+	httpServer := &http.Server{
 		Addr:         addr,
 		Handler:      s.router,
 		ReadTimeout:  30 * time.Second,
 		WriteTimeout: 30 * time.Second,
 		IdleTimeout:  60 * time.Second,
 	}
-	return server.ListenAndServe()
+
+	s.serverMu.Lock()
+	s.httpServer = httpServer
+	s.serverMu.Unlock()
+	s.setStartResult(nil)
+
+	err = httpServer.Serve(listener)
+	if errors.Is(err, http.ErrServerClosed) {
+		return nil
+	}
+	return fmt.Errorf("serving: %w", err)
+}
+
+func (s *Server) Shutdown(ctx context.Context) error {
+	if err := s.WaitUntilStarted(ctx); err != nil {
+		return fmt.Errorf("wait until started: %w", err)
+	}
+
+	s.serverMu.RLock()
+	httpServer := s.httpServer
+	s.serverMu.RUnlock()
+
+	if httpServer == nil {
+		return nil
+	}
+
+	if err := httpServer.Shutdown(ctx); err != nil {
+		return fmt.Errorf("shutdown: %w", err)
+	}
+
+	s.serverMu.Lock()
+	if s.httpServer == httpServer {
+		s.httpServer = nil
+	}
+	s.serverMu.Unlock()
+
+	s.cancel()
+
+	if err := s.db.Close(); err != nil {
+		return fmt.Errorf("close database: %w", err)
+	}
+
+	return nil
+}
+
+func (s *Server) WaitUntilStarted(ctx context.Context) error {
+	select {
+	case <-s.startReady:
+		s.serverMu.RLock()
+		startErr := s.startErr
+		s.serverMu.RUnlock()
+		return startErr
+	case <-ctx.Done():
+		return ctx.Err()
+	}
+}
+
+func (s *Server) setStartResult(startErr error) {
+	s.serverMu.Lock()
+	s.startErr = startErr
+	s.serverMu.Unlock()
+
+	s.startReadyOnce.Do(func() {
+		close(s.startReady)
+	})
+}
+
+func (s *Server) BeginShutdown() {
+	s.shuttingDown.Store(true)
 }

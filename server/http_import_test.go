@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"testing"
 
+	"github.com/hanzei/jot/server/client"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -41,47 +42,15 @@ func buildZip(t *testing.T, files map[string][]byte) []byte {
 	return buf.Bytes()
 }
 
-// doImportRequest posts a file via multipart to the import endpoint.
-func doImportRequest(t *testing.T, ts *TestServer, user *TestUser, filename string, data []byte) *TestResponse {
-	t.Helper()
-	var buf bytes.Buffer
-	mw := multipart.NewWriter(&buf)
-	part, err := mw.CreateFormFile("file", filename)
-	require.NoError(t, err)
-	_, err = part.Write(data)
-	require.NoError(t, err)
-	require.NoError(t, mw.Close())
-
-	req, err := http.NewRequest(http.MethodPost, ts.HTTPServer.URL+"/api/v1/notes/import", &buf)
-	require.NoError(t, err)
-	req.Header.Set("Content-Type", mw.FormDataContentType())
-
-	resp, err := user.Client.Do(req)
-	require.NoError(t, err)
-	defer resp.Body.Close()
-
-	var body bytes.Buffer
-	_, _ = body.ReadFrom(resp.Body)
-	return &TestResponse{
-		StatusCode: resp.StatusCode,
-		Body:       body.Bytes(),
-		Headers:    resp.Header,
-		Cookies:    resp.Cookies(),
-	}
-}
-
 func TestImportSingleJSONFile(t *testing.T) {
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "importuser1", "password123", false)
 
 	noteData := marshalKeepNote(t, keepNoteJSON{Title: "Imported Note", TextContent: "some content"})
-	resp := doImportRequest(t, ts, user, "note.json", noteData)
-	require.Equal(t, http.StatusOK, resp.StatusCode)
-
-	var result map[string]any
-	require.NoError(t, resp.UnmarshalBody(&result))
-	assert.EqualValues(t, 1, result["imported"])
-	assert.EqualValues(t, 0, result["skipped"])
+	result, err := user.Client.ImportNotes(t.Context(), "note.json", bytes.NewReader(noteData))
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.Imported)
+	assert.Equal(t, 0, result.Skipped)
 }
 
 func TestImportZIPWithMultipleFiles(t *testing.T) {
@@ -95,12 +64,9 @@ func TestImportZIPWithMultipleFiles(t *testing.T) {
 		"note2.json": note2,
 	})
 
-	resp := doImportRequest(t, ts, user, "export.zip", zipData)
-	require.Equal(t, http.StatusOK, resp.StatusCode)
-
-	var result map[string]any
-	require.NoError(t, resp.UnmarshalBody(&result))
-	assert.EqualValues(t, 2, result["imported"])
+	result, err := user.Client.ImportNotes(t.Context(), "export.zip", bytes.NewReader(zipData))
+	require.NoError(t, err)
+	assert.Equal(t, 2, result.Imported)
 }
 
 func TestImportTrashedNoteSkipped(t *testing.T) {
@@ -114,20 +80,16 @@ func TestImportTrashedNoteSkipped(t *testing.T) {
 		"trashed.json": trashed,
 	})
 
-	resp := doImportRequest(t, ts, user, "export.zip", zipData)
-	require.Equal(t, http.StatusOK, resp.StatusCode)
-
-	var result map[string]any
-	require.NoError(t, resp.UnmarshalBody(&result))
-	assert.EqualValues(t, 1, result["imported"])
-	assert.EqualValues(t, 1, result["skipped"])
+	result, err := user.Client.ImportNotes(t.Context(), "export.zip", bytes.NewReader(zipData))
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.Imported)
+	assert.Equal(t, 1, result.Skipped)
 }
 
 func TestImportMissingFileFieldReturns400(t *testing.T) {
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "importuser4", "password123", false)
 
-	// Send multipart body with no "file" field.
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)
 	require.NoError(t, mw.Close())
@@ -136,7 +98,7 @@ func TestImportMissingFileFieldReturns400(t *testing.T) {
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", mw.FormDataContentType())
 
-	resp, err := user.Client.Do(req)
+	resp, err := user.Client.HTTPClient().Do(req)
 	require.NoError(t, err)
 	defer resp.Body.Close()
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
@@ -146,18 +108,17 @@ func TestImportInvalidJSONReturns400(t *testing.T) {
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "importuser5", "password123", false)
 
-	resp := doImportRequest(t, ts, user, "bad.json", []byte("not valid json"))
-	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	_, err := user.Client.ImportNotes(t.Context(), "bad.json", bytes.NewReader([]byte("not valid json")))
+	assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 }
 
 func TestImportCorruptZIPReturns400(t *testing.T) {
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "importuser6", "password123", false)
 
-	// ZIP magic bytes but corrupt content.
 	corrupt := []byte{'P', 'K', 0x03, 0x04, 0xDE, 0xAD, 0xBE, 0xEF}
-	resp := doImportRequest(t, ts, user, "bad.zip", corrupt)
-	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	_, err := user.Client.ImportNotes(t.Context(), "bad.zip", bytes.NewReader(corrupt))
+	assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 }
 
 func TestImportUnauthenticatedReturns401(t *testing.T) {
@@ -188,18 +149,15 @@ func TestImportNotesAppearInNotesList(t *testing.T) {
 	user := ts.createTestUser(t, "importuser7", "password123", false)
 
 	noteData := marshalKeepNote(t, keepNoteJSON{Title: "Findable Import", TextContent: "unique text"})
-	resp := doImportRequest(t, ts, user, "note.json", noteData)
-	require.Equal(t, http.StatusOK, resp.StatusCode)
+	_, err := user.Client.ImportNotes(t.Context(), "note.json", bytes.NewReader(noteData))
+	require.NoError(t, err)
 
-	listResp := ts.authRequest(t, user, http.MethodGet, "/api/v1/notes", nil)
-	require.Equal(t, http.StatusOK, listResp.StatusCode)
-
-	var notes []map[string]any
-	require.NoError(t, listResp.UnmarshalBody(&notes))
+	notes, err := user.Client.ListNotes(t.Context(), nil)
+	require.NoError(t, err)
 
 	found := false
 	for _, n := range notes {
-		if n["title"] == "Findable Import" {
+		if n.Title == "Findable Import" {
 			found = true
 			break
 		}

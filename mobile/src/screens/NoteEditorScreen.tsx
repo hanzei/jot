@@ -9,6 +9,7 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
+  type TextInput as TextInputType,
 } from 'react-native';
 import DraggableFlatList, { ScaleDecorator } from 'react-native-draggable-flatlist';
 import * as Haptics from 'expo-haptics';
@@ -22,15 +23,14 @@ import { useSSESubscription } from '../store/SSEContext';
 import TodoItem from '../components/TodoItem';
 import ColorPicker from '../components/ColorPicker';
 import LabelPicker from '../components/LabelPicker';
-import { NoteType, NoteItem, UpdateNoteRequest, Label } from '../types';
+import AssigneePicker from '../components/AssigneePicker';
+import { buildCollaborators, VALIDATION, type Collaborator, type NoteType, type NoteItem, type UpdateNoteRequest, type Label } from '@jot/shared';
+import { useUsers } from '../store/UsersContext';
+import { useTheme } from '../theme/ThemeContext';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 
 type EditorRouteProp = RouteProp<RootStackParamList, 'NoteEditor'>;
 type EditorNavProp = NativeStackNavigationProp<RootStackParamList, 'NoteEditor'>;
-
-const MAX_TITLE_LENGTH = 200;
-const MAX_CONTENT_LENGTH = 10000;
-const AUTO_SAVE_DEBOUNCE_MS = 1000;
 
 interface LocalItem {
   id: string;
@@ -38,6 +38,7 @@ interface LocalItem {
   completed: boolean;
   position: number;
   indent_level: number;
+  assigned_to: string;
 }
 
 function toLocalItems(serverItems: NoteItem[]): LocalItem[] {
@@ -49,6 +50,7 @@ function toLocalItems(serverItems: NoteItem[]): LocalItem[] {
       completed: item.completed,
       position: item.position,
       indent_level: item.indent_level,
+      assigned_to: item.assigned_to ?? '',
     }));
 }
 
@@ -58,6 +60,7 @@ function serializeItems(items: LocalItem[]) {
     position: i,
     completed: item.completed,
     indent_level: item.indent_level,
+    assigned_to: item.assigned_to,
   }));
 }
 
@@ -80,8 +83,12 @@ export default function NoteEditorScreen() {
   const [saveError, setSaveError] = useState<string | null>(null);
   const [colorPickerVisible, setColorPickerVisible] = useState(false);
   const [labelPickerVisible, setLabelPickerVisible] = useState(false);
+  const [assigneePickerVisible, setAssigneePickerVisible] = useState(false);
+  const [assigningItemId, setAssigningItemId] = useState<string | null>(null);
   const [syncToast, setSyncToast] = useState<string | null>(null);
+  const { usersById } = useUsers();
 
+  const { colors, isDark } = useTheme();
   const { data: existingNote } = useOfflineNote(noteId);
   const createMutation = useCreateNote();
   const updateMutation = useUpdateNote();
@@ -119,12 +126,27 @@ export default function NoteEditorScreen() {
   itemsRef.current = items;
   const checkedItemsCollapsedRef = useRef(checkedItemsCollapsed);
   checkedItemsCollapsedRef.current = checkedItemsCollapsed;
+  const pinnedRef = useRef(pinned);
+  pinnedRef.current = pinned;
+  const archivedRef = useRef(archived);
+  archivedRef.current = archived;
   const colorRef = useRef(color);
   colorRef.current = color;
   const createMutateRef = useRef(createMutation.mutateAsync);
   createMutateRef.current = createMutation.mutateAsync;
   const updateMutateRef = useRef(updateMutation.mutateAsync);
   updateMutateRef.current = updateMutation.mutateAsync;
+
+  const titleInputRef = useRef<TextInputType>(null);
+  const contentInputRef = useRef<TextInputType>(null);
+  const itemInputRefsMap = useRef(new Map<string, React.RefObject<TextInputType | null>>());
+
+  const getItemRef = useCallback((id: string): React.RefObject<TextInputType | null> => {
+    if (!itemInputRefsMap.current.has(id)) {
+      itemInputRefsMap.current.set(id, React.createRef<TextInputType>());
+    }
+    return itemInputRefsMap.current.get(id)!;
+  }, []);
 
   function nextTempId(): string {
     return `temp-${++tempIdCounterRef.current}`;
@@ -197,27 +219,24 @@ export default function NoteEditorScreen() {
         setNoteId(newNote.id);
         setHasCreated(true);
         setSaveError(null);
-        if (newNote.items) {
-          setItems(toLocalItems(newNote.items));
-        }
       } else {
         const updateData: UpdateNoteRequest = {
           title: currentTitle,
           content: currentContent,
+          pinned: pinnedRef.current,
+          archived: archivedRef.current,
+          color: currentColor,
           checked_items_collapsed: currentCollapsed,
         };
         if (currentNoteType === 'todo') {
           updateData.items = serializeItems(currentItems);
         }
-        const updated = await updateMutateRef.current({
+        await updateMutateRef.current({
           id: currentNoteId,
           data: updateData,
         });
         if (!isMountedRef.current || unmounting) return;
         setSaveError(null);
-        if (updated.items) {
-          setItems(toLocalItems(updated.items));
-        }
       }
     })();
 
@@ -242,7 +261,7 @@ export default function NoteEditorScreen() {
     }
     debounceRef.current = setTimeout(() => {
       flushSave();
-    }, AUTO_SAVE_DEBOUNCE_MS);
+    }, VALIDATION.AUTO_SAVE_TIMEOUT_MS);
   }, [flushSave]);
 
   // Flush pending save on unmount (prevent data loss), skip if intentionally exiting
@@ -262,7 +281,7 @@ export default function NoteEditorScreen() {
 
   const handleTitleChange = useCallback(
     (newTitle: string) => {
-      if (newTitle.length > MAX_TITLE_LENGTH) return;
+      if (newTitle.length > VALIDATION.TITLE_MAX_LENGTH) return;
       setTitle(newTitle);
       scheduleUpdate();
     },
@@ -271,7 +290,7 @@ export default function NoteEditorScreen() {
 
   const handleContentChange = useCallback(
     (newContent: string) => {
-      if (newContent.length > MAX_CONTENT_LENGTH) return;
+      if (newContent.length > VALIDATION.CONTENT_MAX_LENGTH) return;
       setContent(newContent);
       scheduleUpdate();
     },
@@ -305,23 +324,99 @@ export default function NoteEditorScreen() {
   );
 
   const handleAddItem = useCallback(() => {
+    const newId = nextTempId();
+    const newItemRef = getItemRef(newId);
     setItems((prev) => [
       ...prev,
-      {
-        id: nextTempId(),
-        text: '',
-        completed: false,
-        position: prev.length,
-        indent_level: 0,
-      },
+      { id: newId, text: '', completed: false, position: prev.length, indent_level: 0, assigned_to: '' },
     ]);
     scheduleUpdate();
+    setTimeout(() => newItemRef.current?.focus(), 50);
+  }, [scheduleUpdate, getItemRef]);
+
+  const handleInsertItemAfter = useCallback((index: number) => {
+    const newId = nextTempId();
+    const newItemRef = getItemRef(newId);
+    setItems((prev) => {
+      const newItem: LocalItem = {
+        id: newId,
+        text: '',
+        completed: false,
+        position: index + 1,
+        indent_level: prev[index]?.indent_level ?? 0,
+        assigned_to: '',
+      };
+      const next = [...prev.slice(0, index + 1), newItem, ...prev.slice(index + 1)];
+      return next.map((item, i) => ({ ...item, position: i }));
+    });
+    scheduleUpdate();
+    setTimeout(() => newItemRef.current?.focus(), 50);
+  }, [scheduleUpdate, getItemRef]);
+
+  const handleBackspaceOnEmpty = useCallback((index: number) => {
+    let focusTargetId: string | null = null;
+    setItems((prev) => {
+      const item = prev[index];
+      if (!item || item.text !== '') return prev;
+      focusTargetId = index > 0 ? (prev[index - 1]?.id ?? null) : null;
+      return prev.filter((_, i) => i !== index);
+    });
+    scheduleUpdate();
+    setTimeout(() => {
+      if (focusTargetId) itemInputRefsMap.current.get(focusTargetId)?.current?.focus();
+    }, 50);
   }, [scheduleUpdate]);
+
+  const handleTitleSubmit = useCallback(() => {
+    if (noteTypeRef.current === 'text') {
+      contentInputRef.current?.focus();
+    } else {
+      const firstUnchecked = itemsRef.current.find((item) => !item.completed);
+      if (firstUnchecked) {
+        itemInputRefsMap.current.get(firstUnchecked.id)?.current?.focus();
+      } else {
+        const newId = nextTempId();
+        const newItemRef = getItemRef(newId);
+        setItems((prev) => [
+          ...prev,
+          { id: newId, text: '', completed: false, position: prev.length, indent_level: 0, assigned_to: '' },
+        ]);
+        scheduleUpdate();
+        setTimeout(() => newItemRef.current?.focus(), 50);
+      }
+    }
+  }, [scheduleUpdate, getItemRef]);
 
   const handleToggleCollapsed = useCallback(() => {
     setCheckedItemsCollapsed((prev) => !prev);
     scheduleUpdate();
   }, [scheduleUpdate]);
+
+  const collaborators = useMemo<Collaborator[]>(() => {
+    if (!existingNote) return [];
+    const hasShares = existingNote.shared_with && existingNote.shared_with.length > 0;
+    if (!existingNote.is_shared && !hasShares) return [];
+    return buildCollaborators(existingNote.user_id, existingNote.shared_with, usersById);
+  }, [existingNote, usersById]);
+
+  const isNoteShared = useMemo(() => {
+    return (existingNote?.shared_with && existingNote.shared_with.length > 0) || existingNote?.is_shared;
+  }, [existingNote?.shared_with, existingNote?.is_shared]);
+
+  const handleAssignItem = useCallback(
+    (itemId: string, userId: string) => {
+      setItems((prev) =>
+        prev.map((item) => (item.id === itemId ? { ...item, assigned_to: userId } : item)),
+      );
+      scheduleUpdate();
+    },
+    [scheduleUpdate],
+  );
+
+  const openAssigneePicker = useCallback((itemId: string) => {
+    setAssigningItemId(itemId);
+    setAssigneePickerVisible(true);
+  }, []);
 
   const handleDelete = useCallback(() => {
     if (!noteId) {
@@ -357,41 +452,69 @@ export default function NoteEditorScreen() {
 
   const handleTogglePin = useCallback(async () => {
     if (!noteId) return;
-    const newPinned = !pinned;
+    const newPinned = !pinnedRef.current;
     setPinned(newPinned);
     try {
-      await updateMutation.mutateAsync({ id: noteId, data: { pinned: newPinned } });
+      await updateMutation.mutateAsync({
+        id: noteId,
+        data: {
+          title: titleRef.current,
+          content: contentRef.current,
+          pinned: newPinned,
+          archived: archivedRef.current,
+          color: colorRef.current,
+          checked_items_collapsed: checkedItemsCollapsedRef.current,
+        },
+      });
     } catch {
-      setPinned(pinned);
+      setPinned(!newPinned);
       Alert.alert('Error', 'Failed to update note');
     }
-  }, [noteId, pinned, updateMutation]);
+  }, [noteId, updateMutation]);
 
   const handleToggleArchive = useCallback(async () => {
     if (!noteId) return;
-    const newArchived = !archived;
+    const newArchived = !archivedRef.current;
     setArchived(newArchived);
     try {
-      await updateMutation.mutateAsync({ id: noteId, data: { archived: newArchived } });
+      await updateMutation.mutateAsync({
+        id: noteId,
+        data: {
+          title: titleRef.current,
+          content: contentRef.current,
+          pinned: pinnedRef.current,
+          archived: newArchived,
+          color: colorRef.current,
+          checked_items_collapsed: checkedItemsCollapsedRef.current,
+        },
+      });
     } catch {
-      setArchived(archived);
+      setArchived(!newArchived);
       Alert.alert('Error', 'Failed to update note');
     }
-  }, [noteId, archived, updateMutation]);
+  }, [noteId, updateMutation]);
 
   const handleColorSelect = useCallback(async (selectedColor: string) => {
-    // Update local state regardless; if note not yet saved the color is
-    // included in the next createNote call via flushSave.
-    const prevColor = color;
+    const prevColor = colorRef.current;
     setColor(selectedColor);
     if (!noteId) return;
     try {
-      await updateMutation.mutateAsync({ id: noteId, data: { color: selectedColor } });
+      await updateMutation.mutateAsync({
+        id: noteId,
+        data: {
+          title: titleRef.current,
+          content: contentRef.current,
+          pinned: pinnedRef.current,
+          archived: archivedRef.current,
+          color: selectedColor,
+          checked_items_collapsed: checkedItemsCollapsedRef.current,
+        },
+      });
     } catch {
       setColor(prevColor);
       Alert.alert('Error', 'Failed to update note color');
     }
-  }, [noteId, color, updateMutation]);
+  }, [noteId, updateMutation]);
 
   const handleToggleNoteType = useCallback(() => {
     if (hasCreated) return;
@@ -434,28 +557,36 @@ export default function NoteEditorScreen() {
     ({ item, drag, isActive }: { item: LocalItem; drag: () => void; isActive: boolean }) => {
       const originalIndex = itemIndexMapRef.current.get(item.id);
       if (originalIndex === undefined) return null;
+      const itemRef = getItemRef(item.id);
       return (
         <ScaleDecorator>
-          <View style={isActive ? styles.draggingTodoItem : undefined}>
+          <View style={isActive ? [styles.draggingTodoItem, { shadowColor: isDark ? colors.border : '#000' }] : undefined}>
             <TodoItem
+              inputRef={itemRef}
               text={item.text}
               completed={item.completed}
               indentLevel={item.indent_level}
               showDragHandle
+              assignedTo={item.assigned_to}
+              isShared={!!isNoteShared}
+              collaborators={collaborators}
               onDrag={drag}
               onToggle={() => handleToggleItem(originalIndex)}
               onChangeText={(text) => handleItemTextChange(originalIndex, text)}
               onDelete={() => handleDeleteItem(originalIndex)}
-              onSubmitEditing={handleAddItem}
+              onSubmitEditing={() => handleInsertItemAfter(originalIndex)}
+              onBackspaceOnEmpty={() => handleBackspaceOnEmpty(originalIndex)}
+              onAssignPress={() => openAssigneePicker(item.id)}
             />
           </View>
         </ScaleDecorator>
       );
     },
-    [handleToggleItem, handleItemTextChange, handleDeleteItem, handleAddItem],
+    [getItemRef, handleToggleItem, handleItemTextChange, handleDeleteItem, handleInsertItemAfter, handleBackspaceOnEmpty, isNoteShared, collaborators, openAssigneePicker, isDark, colors],
   );
 
-  const noteBackground = color && color !== '#ffffff' ? color : '#fff';
+  const hasNoteColor = color && color !== '#ffffff';
+  const noteBackground = hasNoteColor ? color : colors.surface;
 
   return (
     <KeyboardAvoidingView
@@ -463,19 +594,19 @@ export default function NoteEditorScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 0}
     >
-      <View style={[styles.header, { backgroundColor: noteBackground }]}>
+      <View style={[styles.header, { backgroundColor: noteBackground, borderBottomColor: hasNoteColor ? 'transparent' : colors.borderLight }]}>
         <TouchableOpacity onPress={() => navigation.goBack()} testID="editor-back">
-          <Ionicons name="arrow-back" size={24} color="#1a1a1a" />
+          <Ionicons name="arrow-back" size={24} color={hasNoteColor ? '#1a1a1a' : colors.text} />
         </TouchableOpacity>
         <View style={styles.headerRight}>
           {!hasCreated && (
-            <TouchableOpacity onPress={handleToggleNoteType} style={styles.typeToggle} testID="toggle-note-type">
+            <TouchableOpacity onPress={handleToggleNoteType} style={[styles.typeToggle, { backgroundColor: colors.primaryLight }]} testID="toggle-note-type">
               <Ionicons
                 name={noteType === 'text' ? 'list' : 'document-text-outline'}
                 size={22}
-                color="#2563eb"
+                color={colors.primary}
               />
-              <Text style={styles.typeToggleText}>
+              <Text style={[styles.typeToggleText, { color: colors.primary }]}>
                 {noteType === 'text' ? 'Todo' : 'Text'}
               </Text>
             </TouchableOpacity>
@@ -485,7 +616,7 @@ export default function NoteEditorScreen() {
 
       {saveError && (
         <TouchableOpacity
-          style={styles.errorBanner}
+          style={[styles.errorBanner, { backgroundColor: colors.errorLight, borderBottomColor: colors.error }]}
           onPress={() => {
             setSaveError(null);
             if (debounceRef.current) {
@@ -496,17 +627,17 @@ export default function NoteEditorScreen() {
           }}
           testID="save-error-banner"
         >
-          <Text style={styles.errorText}>{saveError}</Text>
+          <Text style={[styles.errorText, { color: colors.error }]}>{saveError}</Text>
         </TouchableOpacity>
       )}
 
       {syncToast && (
         <TouchableOpacity
-          style={styles.syncToast}
+          style={[styles.syncToast, { backgroundColor: colors.primaryLight, borderBottomColor: colors.primary }]}
           onPress={() => setSyncToast(null)}
           testID="sync-toast"
         >
-          <Text style={styles.syncToastText}>{syncToast}</Text>
+          <Text style={[styles.syncToastText, { color: colors.primary }]}>{syncToast}</Text>
         </TouchableOpacity>
       )}
 
@@ -515,26 +646,31 @@ export default function NoteEditorScreen() {
         keyboardShouldPersistTaps="handled"
       >
         <TextInput
-          style={styles.titleInput}
+          ref={titleInputRef}
+          style={[styles.titleInput, { color: hasNoteColor ? '#1a1a1a' : colors.text }]}
           value={title}
           onChangeText={handleTitleChange}
           placeholder="Title"
-          placeholderTextColor="#999"
-          maxLength={MAX_TITLE_LENGTH}
+          placeholderTextColor={hasNoteColor ? '#999' : colors.placeholder}
+          maxLength={VALIDATION.TITLE_MAX_LENGTH}
+          returnKeyType="next"
+          onSubmitEditing={handleTitleSubmit}
+          blurOnSubmit={false}
           editable={!isHydrating}
           testID="note-title-input"
         />
 
         {noteType === 'text' ? (
           <TextInput
-            style={styles.contentInput}
+            ref={contentInputRef}
+            style={[styles.contentInput, { color: hasNoteColor ? '#1a1a1a' : colors.text }]}
             value={content}
             onChangeText={handleContentChange}
             placeholder="Note"
-            placeholderTextColor="#999"
+            placeholderTextColor={hasNoteColor ? '#999' : colors.placeholder}
             multiline
             textAlignVertical="top"
-            maxLength={MAX_CONTENT_LENGTH}
+            maxLength={VALIDATION.CONTENT_MAX_LENGTH}
             editable={!isHydrating}
             testID="note-content-input"
           />
@@ -550,12 +686,12 @@ export default function NoteEditorScreen() {
             />
 
             <TouchableOpacity style={styles.addItemRow} onPress={handleAddItem} testID="add-todo-item">
-              <Ionicons name="add" size={22} color="#2563eb" />
-              <Text style={styles.addItemText}>Add item</Text>
+              <Ionicons name="add" size={22} color={colors.primary} />
+              <Text style={[styles.addItemText, { color: colors.primary }]}>Add item</Text>
             </TouchableOpacity>
 
             {checkedItems.length > 0 && (
-              <View style={styles.checkedSection}>
+              <View style={[styles.checkedSection, { borderTopColor: colors.borderLight }]}>
                 <TouchableOpacity
                   style={styles.checkedHeader}
                   onPress={handleToggleCollapsed}
@@ -564,9 +700,9 @@ export default function NoteEditorScreen() {
                   <Ionicons
                     name={checkedItemsCollapsed ? 'chevron-forward' : 'chevron-down'}
                     size={18}
-                    color="#999"
+                    color={colors.iconMuted}
                   />
-                  <Text style={styles.checkedHeaderText}>
+                  <Text style={[styles.checkedHeaderText, { color: colors.textMuted }]}>
                     {checkedItems.length} checked {checkedItems.length === 1 ? 'item' : 'items'}
                   </Text>
                 </TouchableOpacity>
@@ -578,12 +714,19 @@ export default function NoteEditorScreen() {
                     return (
                       <TodoItem
                         key={item.id}
+                        inputRef={getItemRef(item.id)}
                         text={item.text}
                         completed={item.completed}
                         indentLevel={item.indent_level}
+                        assignedTo={item.assigned_to}
+                        isShared={!!isNoteShared}
+                        collaborators={collaborators}
                         onToggle={() => handleToggleItem(originalIndex)}
                         onChangeText={(text) => handleItemTextChange(originalIndex, text)}
                         onDelete={() => handleDeleteItem(originalIndex)}
+                        onSubmitEditing={() => handleInsertItemAfter(originalIndex)}
+                        onBackspaceOnEmpty={() => handleBackspaceOnEmpty(originalIndex)}
+                        onAssignPress={() => openAssigneePicker(item.id)}
                       />
                     );
                   })}
@@ -593,7 +736,7 @@ export default function NoteEditorScreen() {
         )}
       </ScrollView>
 
-      <View style={[styles.toolbar, { backgroundColor: noteBackground }]}>
+      <View style={[styles.toolbar, { backgroundColor: noteBackground, borderTopColor: hasNoteColor ? 'transparent' : colors.borderLight }]}>
         {/* Color picker button */}
         <TouchableOpacity
           onPress={() => setColorPickerVisible(true)}
@@ -601,22 +744,22 @@ export default function NoteEditorScreen() {
           testID="toolbar-color-btn"
           accessibilityLabel="Change color"
         >
-          <Ionicons name="color-palette-outline" size={22} color="#444" />
+          <Ionicons name="color-palette-outline" size={22} color={hasNoteColor ? '#444' : colors.icon} />
         </TouchableOpacity>
 
-        {/* Label button (only when note is saved and synced to server) */}
-        {noteId && !isLocalId(noteId) && (
+        {/* Share (only when note is saved, synced, hydrated, and owned by current user) */}
+        {noteId && !isLocalId(noteId) && existingNote && !existingNote.is_shared && (
           <TouchableOpacity
-            onPress={() => setLabelPickerVisible(true)}
+            onPress={() => navigation.navigate('Share', { noteId })}
             style={styles.toolbarBtn}
-            testID="toolbar-label-btn"
-            accessibilityLabel="Labels"
+            testID="toolbar-share-btn"
+            accessibilityLabel="Share note"
           >
-            <Ionicons name="pricetag-outline" size={22} color="#444" />
+            <Ionicons name="share-social-outline" size={22} color={hasNoteColor ? '#444' : colors.icon} />
           </TouchableOpacity>
         )}
 
-        {/* Pin / Unpin (works offline via local DB + queue) */}
+        {/* Pin / Unpin */}
         {noteId && (
           <TouchableOpacity
             onPress={handleTogglePin}
@@ -624,11 +767,11 @@ export default function NoteEditorScreen() {
             testID="toolbar-pin-btn"
             accessibilityLabel={pinned ? 'Unpin note' : 'Pin note'}
           >
-            <Ionicons name={pinned ? 'pin' : 'pin-outline'} size={22} color={pinned ? '#2563eb' : '#444'} />
+            <Ionicons name={pinned ? 'pin' : 'pin-outline'} size={22} color={pinned ? colors.primary : (hasNoteColor ? '#444' : colors.icon)} />
           </TouchableOpacity>
         )}
 
-        {/* Archive / Unarchive (works offline via local DB + queue) */}
+        {/* Archive / Unarchive */}
         {noteId && (
           <TouchableOpacity
             onPress={handleToggleArchive}
@@ -639,26 +782,26 @@ export default function NoteEditorScreen() {
             <Ionicons
               name="archive-outline"
               size={22}
-              color={archived ? '#2563eb' : '#444'}
+              color={archived ? colors.primary : (hasNoteColor ? '#444' : colors.icon)}
             />
           </TouchableOpacity>
         )}
 
-        {/* Share (only when note is saved, synced, hydrated, and owned by current user) */}
-        {noteId && !isLocalId(noteId) && existingNote && !existingNote.is_shared && (
+        {/* Label button (only when note is saved and synced to server) */}
+        {noteId && !isLocalId(noteId) && (
           <TouchableOpacity
-            onPress={() => navigation.navigate('Share', { noteId })}
+            onPress={() => setLabelPickerVisible(true)}
             style={styles.toolbarBtn}
-            testID="toolbar-share-btn"
-            accessibilityLabel="Share note"
+            testID="toolbar-label-btn"
+            accessibilityLabel="Labels"
           >
-            <Ionicons name="share-social-outline" size={22} color="#444" />
+            <Ionicons name="pricetag-outline" size={22} color={hasNoteColor ? '#444' : colors.icon} />
           </TouchableOpacity>
         )}
 
         {/* Delete */}
         <TouchableOpacity onPress={handleDelete} style={styles.toolbarBtn} testID="delete-note-btn">
-          <Ionicons name="trash-outline" size={22} color="#ef4444" />
+          <Ionicons name="trash-outline" size={22} color={colors.error} />
         </TouchableOpacity>
       </View>
 
@@ -677,6 +820,25 @@ export default function NoteEditorScreen() {
           onClose={() => setLabelPickerVisible(false)}
         />
       )}
+
+      <AssigneePicker
+        visible={assigneePickerVisible}
+        collaborators={collaborators}
+        currentAssigneeId={
+          assigningItemId
+            ? items.find((i) => i.id === assigningItemId)?.assigned_to ?? ''
+            : ''
+        }
+        onAssign={(userId) => {
+          if (assigningItemId) {
+            handleAssignItem(assigningItemId, userId);
+          }
+        }}
+        onClose={() => {
+          setAssigneePickerVisible(false);
+          setAssigningItemId(null);
+        }}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -684,7 +846,6 @@ export default function NoteEditorScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#fff',
   },
   header: {
     flexDirection: 'row',
@@ -694,7 +855,6 @@ const styles = StyleSheet.create({
     paddingTop: Platform.OS === 'ios' ? 56 : 16,
     paddingBottom: 12,
     borderBottomWidth: 1,
-    borderBottomColor: '#f3f4f6',
   },
   headerRight: {
     flexDirection: 'row',
@@ -708,11 +868,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 12,
     paddingVertical: 6,
     borderRadius: 8,
-    backgroundColor: '#eff6ff',
   },
   typeToggleText: {
     fontSize: 14,
-    color: '#2563eb',
     fontWeight: '500',
   },
   scrollContent: {
@@ -722,13 +880,11 @@ const styles = StyleSheet.create({
   titleInput: {
     fontSize: 22,
     fontWeight: '600',
-    color: '#1a1a1a',
     paddingVertical: 16,
     paddingHorizontal: 0,
   },
   contentInput: {
     fontSize: 16,
-    color: '#1a1a1a',
     lineHeight: 24,
     minHeight: 200,
     paddingHorizontal: 0,
@@ -744,12 +900,10 @@ const styles = StyleSheet.create({
   },
   addItemText: {
     fontSize: 16,
-    color: '#2563eb',
   },
   checkedSection: {
     marginTop: 16,
     borderTopWidth: 1,
-    borderTopColor: '#f3f4f6',
     paddingTop: 8,
   },
   checkedHeader: {
@@ -760,48 +914,38 @@ const styles = StyleSheet.create({
   },
   checkedHeaderText: {
     fontSize: 14,
-    color: '#999',
   },
   toolbar: {
     flexDirection: 'row',
     alignItems: 'center',
     borderTopWidth: 1,
-    borderTopColor: '#f3f4f6',
     paddingHorizontal: 8,
     paddingVertical: 8,
     paddingBottom: Platform.OS === 'ios' ? 24 : 8,
-    backgroundColor: '#fff',
     gap: 4,
   },
   toolbarBtn: {
     padding: 8,
   },
   errorBanner: {
-    backgroundColor: '#fef2f2',
     borderBottomWidth: 1,
-    borderBottomColor: '#fecaca',
     paddingHorizontal: 16,
     paddingVertical: 10,
   },
   errorText: {
-    color: '#dc2626',
     fontSize: 14,
     textAlign: 'center',
   },
   syncToast: {
-    backgroundColor: '#eff6ff',
     borderBottomWidth: 1,
-    borderBottomColor: '#bfdbfe',
     paddingHorizontal: 16,
     paddingVertical: 10,
   },
   syncToastText: {
-    color: '#1d4ed8',
     fontSize: 14,
     textAlign: 'center',
   },
   draggingTodoItem: {
-    backgroundColor: '#f0f4ff',
     borderRadius: 8,
     elevation: 4,
     shadowColor: '#000',

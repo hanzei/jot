@@ -1,5 +1,5 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
-import { User, UserSettings } from '../types';
+import type { User, UserSettings } from '@jot/shared';
 import { auth, getStoredSession, clearStoredSession, setOnUnauthorized, getStoredServerUrl, restoreServerUrl } from '../api/client';
 
 interface AuthState {
@@ -10,6 +10,8 @@ interface AuthState {
   login: (username: string, password: string) => Promise<void>;
   register: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  setUser: React.Dispatch<React.SetStateAction<User | null>>;
+  setSettings: (settings: UserSettings) => void;
 }
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
@@ -98,6 +100,8 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       login,
       register,
       logout,
+      setUser,
+      setSettings,
     }),
     [user, settings, isLoading, login, register, logout],
   );

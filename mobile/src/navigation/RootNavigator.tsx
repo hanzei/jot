@@ -2,17 +2,20 @@ import React from 'react';
 import { ActivityIndicator, View, StyleSheet } from 'react-native';
 import { createNativeStackNavigator } from '@react-navigation/native-stack';
 import { useAuth } from '../store/AuthContext';
+import { useTheme } from '../theme/ThemeContext';
 import { SSEProvider } from '../store/SSEContext';
 import OfflineBanner from '../components/OfflineBanner';
 import AuthStack from './AuthStack';
-import MainTabs from './MainTabs';
+import MainDrawer from './MainDrawer';
 import NoteEditorScreen from '../screens/NoteEditorScreen';
 import ShareScreen from '../screens/ShareScreen';
+import SettingsScreen from '../screens/SettingsScreen';
 
 export type RootStackParamList = {
-  MainTabs: undefined;
+  MainDrawer: undefined;
   NoteEditor: { noteId: string | null };
   Share: { noteId: string };
+  Settings: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -23,7 +26,7 @@ function AuthenticatedStack() {
       <View style={styles.flex}>
         <OfflineBanner />
         <Stack.Navigator>
-          <Stack.Screen name="MainTabs" component={MainTabs} options={{ headerShown: false }} />
+          <Stack.Screen name="MainDrawer" component={MainDrawer} options={{ headerShown: false }} />
           <Stack.Screen
             name="NoteEditor"
             component={NoteEditorScreen}
@@ -40,6 +43,14 @@ function AuthenticatedStack() {
               presentation: 'modal',
             }}
           />
+          <Stack.Screen
+            name="Settings"
+            component={SettingsScreen}
+            options={{
+              headerShown: false,
+              presentation: 'modal',
+            }}
+          />
         </Stack.Navigator>
       </View>
     </SSEProvider>
@@ -48,11 +59,12 @@ function AuthenticatedStack() {
 
 export default function RootNavigator() {
   const { isAuthenticated, isLoading } = useAuth();
+  const { colors } = useTheme();
 
   if (isLoading) {
     return (
-      <View style={styles.loading}>
-        <ActivityIndicator size="large" color="#2563eb" />
+      <View style={[styles.loading, { backgroundColor: colors.background }]}>
+        <ActivityIndicator size="large" color={colors.primary} />
       </View>
     );
   }
@@ -68,6 +80,5 @@ const styles = StyleSheet.create({
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#fff',
   },
 });

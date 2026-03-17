@@ -2,7 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import NoteCard from '../NoteCard'
-import { Note, NoteItem } from '@/types'
+import type { Note, NoteItem } from '@jot/shared'
 import { notes } from '@/utils/api'
 import { createMockNote } from '@/utils/__tests__/test-helpers'
 
@@ -32,6 +32,7 @@ const createMockTodoItems = (): NoteItem[] => [
     completed: false,
     position: 0,
     indent_level: 0,
+    assigned_to: '',
     created_at: '2023-01-01T00:00:00Z',
     updated_at: '2023-01-01T00:00:00Z',
   },
@@ -42,6 +43,7 @@ const createMockTodoItems = (): NoteItem[] => [
     completed: true,
     position: 1,
     indent_level: 0,
+    assigned_to: '',
     created_at: '2023-01-01T00:00:00Z',
     updated_at: '2023-01-01T00:00:00Z',
   },
@@ -474,6 +476,7 @@ describe('NoteCard', () => {
           completed: true,
           position: 0,
           indent_level: 0,
+          assigned_to: '',
           created_at: '2023-01-01T00:00:00Z',
           updated_at: '2023-01-01T00:00:00Z',
         }],
@@ -495,6 +498,7 @@ describe('NoteCard', () => {
           completed: false,
           position: 0,
           indent_level: 0,
+          assigned_to: '',
           created_at: '2023-01-01T00:00:00Z',
           updated_at: '2023-01-01T00:00:00Z',
         }],

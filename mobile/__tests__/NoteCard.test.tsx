@@ -1,7 +1,7 @@
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 import NoteCard from '../src/components/NoteCard';
-import { Note } from '../src/types';
+import type { Note } from '@jot/shared';
 
 const baseNote: Note = {
   id: 'note-1',
@@ -44,6 +44,7 @@ describe('NoteCard', () => {
           completed: false,
           position: 0,
           indent_level: 0,
+          assigned_to: '',
           created_at: '2024-01-01T00:00:00Z',
           updated_at: '2024-01-01T00:00:00Z',
         },
@@ -54,6 +55,7 @@ describe('NoteCard', () => {
           completed: true,
           position: 1,
           indent_level: 0,
+          assigned_to: '',
           created_at: '2024-01-01T00:00:00Z',
           updated_at: '2024-01-01T00:00:00Z',
         },
@@ -90,16 +92,25 @@ describe('NoteCard', () => {
     expect(onPress).toHaveBeenCalledTimes(1);
   });
 
-  it('shows colored left border for notes with color', () => {
-    const coloredNote: Note = { ...baseNote, color: '#ff6600' };
+  it('uses note color as background for colored notes', () => {
+    const coloredNote: Note = { ...baseNote, color: '#fbbc04' };
     const { getByTestId } = render(<NoteCard note={coloredNote} onPress={jest.fn()} />);
 
     const card = getByTestId('note-card-note-1');
     const flatStyle = Array.isArray(card.props.style)
       ? Object.assign({}, ...card.props.style)
       : card.props.style;
-    expect(flatStyle.borderLeftColor).toBe('#ff6600');
-    expect(flatStyle.borderLeftWidth).toBe(4);
+    expect(flatStyle.backgroundColor).toBe('#fbbc04');
+  });
+
+  it('uses default white background for notes without color', () => {
+    const { getByTestId } = render(<NoteCard note={baseNote} onPress={jest.fn()} />);
+
+    const card = getByTestId('note-card-note-1');
+    const flatStyle = Array.isArray(card.props.style)
+      ? Object.assign({}, ...card.props.style)
+      : card.props.style;
+    expect(flatStyle.backgroundColor).toBe('#fff');
   });
 
   it('does not render title when empty', () => {
@@ -107,5 +118,34 @@ describe('NoteCard', () => {
     const { queryByText } = render(<NoteCard note={noTitleNote} onPress={jest.fn()} />);
 
     expect(queryByText('Test Note')).toBeNull();
+  });
+
+  it('does not show assignee avatar for assigned todo items', () => {
+    const sharedTodo: Note = {
+      ...baseNote,
+      note_type: 'todo',
+      content: '',
+      is_shared: true,
+      items: [
+        {
+          id: 'item-1',
+          note_id: 'note-1',
+          text: 'Assigned task',
+          completed: false,
+          position: 0,
+          indent_level: 0,
+          assigned_to: 'user-2',
+          created_at: '2024-01-01T00:00:00Z',
+          updated_at: '2024-01-01T00:00:00Z',
+        },
+      ],
+    };
+
+    const { getByText, queryByText } = render(
+      <NoteCard note={sharedTodo} onPress={jest.fn()} />,
+    );
+
+    expect(getByText('Assigned task')).toBeTruthy();
+    expect(queryByText('B')).toBeNull();
   });
 });

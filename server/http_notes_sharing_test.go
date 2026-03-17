@@ -1,10 +1,10 @@
 package main
 
 import (
-	"fmt"
 	"net/http"
 	"testing"
 
+	"github.com/hanzei/jot/server/client"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -13,149 +13,140 @@ import (
 func TestNoteSharingEndpoints(t *testing.T) {
 	ts := setupTestServer(t)
 	owner := ts.createTestUser(t, "owner", "password123", false)
-	_ = ts.createTestUser(t, "user", "password123", false)
+	sharedUser := ts.createTestUser(t, "user", "password123", false)
 	other := ts.createTestUser(t, "other", "password123", false)
 
-	// Create a note to share
-	body := map[string]any{
-		"title":   "Shared Note",
-		"content": "This will be shared",
-	}
-	createResp := ts.authRequest(t, owner, http.MethodPost, "/api/v1/notes", body)
-	var createdNote map[string]any
-	require.NoError(t, createResp.UnmarshalBody(&createdNote))
-	noteID := createdNote["id"].(string)
+	note, err := owner.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
+		Title:   "Shared Note",
+		Content: "This will be shared",
+	})
+	require.NoError(t, err)
 
 	t.Run("share note with user", func(t *testing.T) {
-		shareBody := map[string]string{
-			"username": "user",
-		}
-
-		resp := ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/share", noteID), shareBody)
-		assert.Equal(t, http.StatusOK, resp.StatusCode)
-
-		var response map[string]any
-		require.NoError(t, resp.UnmarshalBody(&response))
-		assert.True(t, response["success"].(bool))
+		require.NoError(t, owner.Client.ShareNote(t.Context(), note.ID, sharedUser.User.ID))
 	})
 
 	t.Run("share with duplicate user returns conflict", func(t *testing.T) {
-		// First share with other user
-		shareBody := map[string]string{
-			"username": "other",
-		}
-		resp1 := ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/share", noteID), shareBody)
-		assert.Equal(t, http.StatusOK, resp1.StatusCode)
+		require.NoError(t, owner.Client.ShareNote(t.Context(), note.ID, other.User.ID))
 
-		// Try to share again with the same user - should return conflict
-		resp := ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/share", noteID), shareBody)
-		assert.Equal(t, http.StatusConflict, resp.StatusCode)
+		err := owner.Client.ShareNote(t.Context(), note.ID, other.User.ID)
+		assert.Equal(t, http.StatusConflict, client.StatusCode(err))
 	})
 
-	t.Run("share with nonexistent username returns not found", func(t *testing.T) {
-		shareBody := map[string]string{
-			"username": "nonexistent",
-		}
-
-		resp := ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/share", noteID), shareBody)
-		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+	t.Run("share with nonexistent user_id returns not found", func(t *testing.T) {
+		err := owner.Client.ShareNote(t.Context(), note.ID, "abcdefghijklmnopqrstuv")
+		assert.Equal(t, http.StatusNotFound, client.StatusCode(err))
 	})
 
-	t.Run("share with empty username returns bad request", func(t *testing.T) {
-		shareBody := map[string]string{
-			"username": "",
-		}
+	t.Run("share with empty user_id returns bad request", func(t *testing.T) {
+		err := owner.Client.ShareNote(t.Context(), note.ID, "")
+		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
+	})
 
-		resp := ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/share", noteID), shareBody)
-		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
-		assert.Contains(t, resp.GetString(), "empty username")
+	t.Run("share with invalid user_id format returns bad request", func(t *testing.T) {
+		err := owner.Client.ShareNote(t.Context(), note.ID, "invalid")
+		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 
 	t.Run("share with self returns bad request", func(t *testing.T) {
-		shareBody := map[string]string{
-			"username": "owner",
-		}
-
-		resp := ts.authRequest(t, owner, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/share", noteID), shareBody)
-		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
-		assert.Contains(t, resp.GetString(), "cannot share with self")
+		err := owner.Client.ShareNote(t.Context(), note.ID, owner.User.ID)
+		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 
 	t.Run("share by non-owner returns forbidden", func(t *testing.T) {
-		shareBody := map[string]string{
-			"username": "other",
-		}
-
-		resp := ts.authRequest(t, other, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/share", noteID), shareBody)
-		assert.Equal(t, http.StatusForbidden, resp.StatusCode)
+		err := other.Client.ShareNote(t.Context(), note.ID, sharedUser.User.ID)
+		assert.Equal(t, http.StatusForbidden, client.StatusCode(err))
 	})
 
 	t.Run("get note shares", func(t *testing.T) {
-		resp := ts.authRequest(t, owner, http.MethodGet, fmt.Sprintf("/api/v1/notes/%s/shares", noteID), nil)
-		assert.Equal(t, http.StatusOK, resp.StatusCode)
-
-		var shares []any
-		require.NoError(t, resp.UnmarshalBody(&shares))
+		shares, err := owner.Client.GetNoteShares(t.Context(), note.ID)
+		require.NoError(t, err)
 		assert.GreaterOrEqual(t, len(shares), 1)
 	})
 
 	t.Run("get note shares by non-owner returns forbidden", func(t *testing.T) {
-		resp := ts.authRequest(t, other, http.MethodGet, fmt.Sprintf("/api/v1/notes/%s/shares", noteID), nil)
-		assert.Equal(t, http.StatusForbidden, resp.StatusCode)
+		_, err := other.Client.GetNoteShares(t.Context(), note.ID)
+		assert.Equal(t, http.StatusForbidden, client.StatusCode(err))
 	})
 
 	t.Run("unshare note", func(t *testing.T) {
-		unshareBody := map[string]string{
-			"username": "user",
-		}
-
-		resp := ts.authRequest(t, owner, http.MethodDelete, fmt.Sprintf("/api/v1/notes/%s/share", noteID), unshareBody)
-		assert.Equal(t, http.StatusOK, resp.StatusCode)
-
-		var response map[string]any
-		require.NoError(t, resp.UnmarshalBody(&response))
-		assert.True(t, response["success"].(bool))
+		require.NoError(t, owner.Client.UnshareNote(t.Context(), note.ID, sharedUser.User.ID))
 	})
 
 	t.Run("unshare non-shared user returns not found", func(t *testing.T) {
-		unshareBody := map[string]string{
-			"username": "user", // Already unshared
-		}
-
-		resp := ts.authRequest(t, owner, http.MethodDelete, fmt.Sprintf("/api/v1/notes/%s/share", noteID), unshareBody)
-		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+		err := owner.Client.UnshareNote(t.Context(), note.ID, sharedUser.User.ID)
+		assert.Equal(t, http.StatusNotFound, client.StatusCode(err))
 	})
 }
 
 func TestSearchUsersEndpoint(t *testing.T) {
 	ts := setupTestServer(t)
-	user1 := ts.createTestUser(t, "user1", "password123", false)
-	_ = ts.createTestUser(t, "user2", "password123", false)
-	_ = ts.createTestUser(t, "admin", "password123", true)
+	user1 := ts.createTestUser(t, "alice", "password123", false)
+	bob := ts.createTestUser(t, "bob", "password123", false)
+	_ = ts.createTestUser(t, "charlie", "password123", true)
 
-	t.Run("search users returns all except current user", func(t *testing.T) {
-		resp := ts.authRequest(t, user1, http.MethodGet, "/api/v1/users", nil)
-		assert.Equal(t, http.StatusOK, resp.StatusCode)
+	_, err := user1.Client.UpdateUser(t.Context(), &client.UpdateUserRequest{
+		Username: client.Ptr("alice"), FirstName: client.Ptr("Alice"), LastName: client.Ptr("Smith"),
+	})
+	require.NoError(t, err)
+	_, err = bob.Client.UpdateUser(t.Context(), &client.UpdateUserRequest{
+		Username: client.Ptr("bob"), FirstName: client.Ptr("Robert"), LastName: client.Ptr("Jones"),
+	})
+	require.NoError(t, err)
 
-		var users []map[string]any
-		require.NoError(t, resp.UnmarshalBody(&users))
+	t.Run("no search param returns all except current user", func(t *testing.T) {
+		users, err := user1.Client.SearchUsers(t.Context(), "")
+		require.NoError(t, err)
 		assert.Len(t, users, 2)
-
-		// Check that current user is not in results
-		for _, user := range users {
-			assert.NotEqual(t, "user1", user["username"], "Should not include current user in results")
-		}
-
-		// Check that response doesn't include passwords
-		for _, user := range users {
-			assert.NotContains(t, user, "password", "User response should not include password")
-			assert.NotContains(t, user, "password_hash", "User response should not include password_hash")
+		for _, u := range users {
+			assert.NotEqual(t, "alice", u.Username, "Should not include current user in results")
 		}
 	})
 
-	t.Run("search users without auth returns unauthorized", func(t *testing.T) {
-		resp := ts.request(t, nil, http.MethodGet, "/api/v1/users", nil)
-		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+	t.Run("search filters by username", func(t *testing.T) {
+		users, err := user1.Client.SearchUsers(t.Context(), "bob")
+		require.NoError(t, err)
+		require.Len(t, users, 1)
+		assert.Equal(t, "bob", users[0].Username)
+	})
+
+	t.Run("search is case insensitive", func(t *testing.T) {
+		users, err := user1.Client.SearchUsers(t.Context(), "BOB")
+		require.NoError(t, err)
+		require.Len(t, users, 1)
+		assert.Equal(t, "bob", users[0].Username)
+	})
+
+	t.Run("search filters by first name", func(t *testing.T) {
+		users, err := user1.Client.SearchUsers(t.Context(), "Robert")
+		require.NoError(t, err)
+		require.Len(t, users, 1)
+		assert.Equal(t, "bob", users[0].Username)
+	})
+
+	t.Run("search filters by last name", func(t *testing.T) {
+		users, err := user1.Client.SearchUsers(t.Context(), "Jones")
+		require.NoError(t, err)
+		require.Len(t, users, 1)
+		assert.Equal(t, "bob", users[0].Username)
+	})
+
+	t.Run("search with no matches returns empty list", func(t *testing.T) {
+		users, err := user1.Client.SearchUsers(t.Context(), "nonexistent")
+		require.NoError(t, err)
+		assert.Empty(t, users)
+	})
+
+	t.Run("search excludes current user from results", func(t *testing.T) {
+		users, err := user1.Client.SearchUsers(t.Context(), "alice")
+		require.NoError(t, err)
+		assert.Empty(t, users, "Current user should not appear in search results")
+	})
+
+	t.Run("search without auth returns unauthorized", func(t *testing.T) {
+		c := ts.newClient()
+		_, err := c.SearchUsers(t.Context(), "")
+		assert.Equal(t, http.StatusUnauthorized, client.StatusCode(err))
 	})
 }
 
@@ -164,76 +155,73 @@ func TestEdgeCases(t *testing.T) {
 	user := ts.createTestUser(t, "user", "password123", false)
 
 	t.Run("invalid note ID returns bad request", func(t *testing.T) {
-		resp := ts.authRequest(t, user, http.MethodGet, "/api/v1/notes/invalid", nil)
-		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+		_, err := user.Client.GetNote(t.Context(), "invalid")
+		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 
-	t.Run("nonexistent note ID returns bad request", func(t *testing.T) {
-		resp := ts.authRequest(t, user, http.MethodGet, "/api/v1/notes/999", nil)
-		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+	t.Run("short note ID returns bad request", func(t *testing.T) {
+		_, err := user.Client.GetNote(t.Context(), "999")
+		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 
 	t.Run("valid but nonexistent note ID returns not found", func(t *testing.T) {
-		// Use a valid 22-character ID format that doesn't exist
-		resp := ts.authRequest(t, user, http.MethodGet, "/api/v1/notes/abcdefghijklmnopqrstuv", nil)
-		assert.Equal(t, http.StatusNotFound, resp.StatusCode)
+		_, err := user.Client.GetNote(t.Context(), "abcdefghijklmnopqrstuv")
+		assert.Equal(t, http.StatusNotFound, client.StatusCode(err))
 	})
 
 	t.Run("create note with empty fields", func(t *testing.T) {
-		body := map[string]any{
-			"title":   "",
-			"content": "",
-		}
-
-		resp := ts.authRequest(t, user, http.MethodPost, "/api/v1/notes", body)
-		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
-		assert.Contains(t, resp.GetString(), "empty note")
+		_, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{})
+		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 
 	t.Run("create note with todo items", func(t *testing.T) {
-		body := map[string]any{
-			"title":     "Todo List",
-			"content":   "",
-			"note_type": "todo",
-			"items": []map[string]any{
-				{"text": "Item 1", "position": 0},
-				{"text": "Item 2", "position": 1},
+		note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
+			Title:    "Todo List",
+			NoteType: client.NoteTypeTodo,
+			Items: []client.CreateNoteItem{
+				{Text: "Item 1", Position: 0},
+				{Text: "Item 2", Position: 1},
 			},
-		}
+		})
+		require.NoError(t, err)
+		assert.Equal(t, client.NoteTypeTodo, note.NoteType)
+	})
 
-		resp := ts.authRequest(t, user, http.MethodPost, "/api/v1/notes", body)
-		assert.Equal(t, http.StatusCreated, resp.StatusCode)
+	t.Run("create note with items defaults note_type to todo", func(t *testing.T) {
+		note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
+			Title: "Implicit Todo",
+			Items: []client.CreateNoteItem{
+				{Text: "Item 1", Position: 0},
+			},
+		})
+		require.NoError(t, err)
+		assert.Equal(t, client.NoteTypeTodo, note.NoteType)
+		assert.Len(t, note.Items, 1)
+	})
 
-		var note map[string]any
-		require.NoError(t, resp.UnmarshalBody(&note))
-		assert.Equal(t, "todo", note["note_type"])
+	t.Run("create note rejects non-todo note_type when items are provided", func(t *testing.T) {
+		_, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
+			Title:    "Conflicting Note Type",
+			NoteType: client.NoteTypeText,
+			Items: []client.CreateNoteItem{
+				{Text: "Item 1", Position: 0},
+			},
+		})
+		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 
 	t.Run("update note with default color", func(t *testing.T) {
-		// Create note first
-		createBody := map[string]any{
-			"title":   "Test Note",
-			"content": "Content",
-		}
-		createResp := ts.authRequest(t, user, http.MethodPost, "/api/v1/notes", createBody)
-		var createdNote map[string]any
-		require.NoError(t, createResp.UnmarshalBody(&createdNote))
-		noteID := createdNote["id"].(string)
+		created, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
+			Title:   "Test Note",
+			Content: "Content",
+		})
+		require.NoError(t, err)
 
-		updateBody := map[string]any{
-			"title":    "Updated",
-			"content":  "Updated",
-			"pinned":   false,
-			"archived": false,
-			"color":    "", // Empty color should default to #ffffff
-		}
-
-		resp := ts.authRequest(t, user, http.MethodPut, fmt.Sprintf("/api/v1/notes/%s", noteID), updateBody)
-		assert.Equal(t, http.StatusOK, resp.StatusCode)
-
-		var updatedNote map[string]any
-		require.NoError(t, resp.UnmarshalBody(&updatedNote))
-
-		assert.Equal(t, "#ffffff", updatedNote["color"])
+		updated, err := user.Client.UpdateNote(t.Context(), created.ID, &client.UpdateNoteRequest{
+			Title:   client.Ptr("Updated"),
+			Content: client.Ptr("Updated"),
+		})
+		require.NoError(t, err)
+		assert.Equal(t, "#ffffff", updated.Color)
 	})
 }

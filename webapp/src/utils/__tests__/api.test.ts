@@ -8,12 +8,13 @@ import type {
   User,
   CreateUserRequest,
   ShareNoteRequest
-} from '@/types'
+} from '@jot/shared'
 
 // Create mocked functions that will be hoisted
 const mockPost = vi.hoisted(() => vi.fn())
 const mockGet = vi.hoisted(() => vi.fn())
 const mockPut = vi.hoisted(() => vi.fn())
+const mockPatch = vi.hoisted(() => vi.fn())
 const mockDelete = vi.hoisted(() => vi.fn())
 const mockRequestUse = vi.hoisted(() => vi.fn())
 const mockResponseUse = vi.hoisted(() => vi.fn())
@@ -25,6 +26,7 @@ vi.mock('axios', () => ({
       post: mockPost,
       get: mockGet,
       put: mockPut,
+      patch: mockPatch,
       delete: mockDelete,
       interceptors: {
         request: { use: mockRequestUse },
@@ -102,6 +104,14 @@ describe('API Module', () => {
 
       expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('user')
       expect(mockLocation.href).toBe('/login')
+    })
+
+    it('does not redirect on 401 from /me endpoint', async () => {
+      const error401 = { response: { status: 401 }, config: { url: '/me' } }
+      await expect(errorHandler(error401)).rejects.toEqual(error401)
+
+      expect(mockLocalStorage.removeItem).not.toHaveBeenCalled()
+      expect(mockLocation.href).not.toBe('/login')
     })
 
     it('does not redirect for non-401 errors', async () => {
@@ -413,17 +423,17 @@ describe('API Module', () => {
           checked_items_collapsed: false
         }
         const updatedNote = { ...mockNote, ...updateData }
-        mockPut.mockResolvedValue({ data: updatedNote })
+        mockPatch.mockResolvedValue({ data: updatedNote })
 
         const result = await notes.update('1', updateData)
 
-        expect(mockPut).toHaveBeenCalledWith('/notes/1', updateData)
+        expect(mockPatch).toHaveBeenCalledWith('/notes/1', updateData)
         expect(result).toEqual(updatedNote)
       })
 
       it('handles update of non-existent note', async () => {
         const error = new Error('Note not found')
-        mockPut.mockRejectedValue(error)
+        mockPatch.mockRejectedValue(error)
 
         const updateData: UpdateNoteRequest = {
           title: 'Updated Note',
@@ -447,7 +457,7 @@ describe('API Module', () => {
           checked_items_collapsed: false
         }
         const updatedNote = { ...mockNote, ...updateData }
-        mockPut.mockResolvedValue({ data: updatedNote })
+        mockPatch.mockResolvedValue({ data: updatedNote })
 
         // Simulate concurrent updates
         const promise1 = notes.update('1', updateData)
@@ -455,7 +465,7 @@ describe('API Module', () => {
 
         const [result1, result2] = await Promise.all([promise1, promise2])
 
-        expect(mockPut).toHaveBeenCalledTimes(2)
+        expect(mockPatch).toHaveBeenCalledTimes(2)
         expect(result1).toEqual(updatedNote)
         expect(result2).toEqual(updatedNote)
       })
@@ -487,7 +497,7 @@ describe('API Module', () => {
 
     describe('sharing functionality', () => {
       it('shares note with user', async () => {
-        const shareData: ShareNoteRequest = { username: 'testuser' }
+        const shareData: ShareNoteRequest = { user_id: 'abcdefghijklmnopqrstuv' }
         const shareResponse = { success: true, message: 'Note shared' }
         mockPost.mockResolvedValue({ data: shareResponse })
 
@@ -498,7 +508,7 @@ describe('API Module', () => {
       })
 
       it('unshares note', async () => {
-        const unshareData: ShareNoteRequest = { username: 'testuser' }
+        const unshareData: ShareNoteRequest = { user_id: 'abcdefghijklmnopqrstuv' }
         const unshareResponse = { success: true, message: 'Note unshared' }
         mockDelete.mockResolvedValue({ data: unshareResponse })
 
@@ -535,7 +545,7 @@ describe('API Module', () => {
         const error = new Error('User not found')
         mockPost.mockRejectedValue(error)
 
-        const shareData: ShareNoteRequest = { username: 'nonexistent' }
+        const shareData: ShareNoteRequest = { user_id: 'abcdefghijklmnopqrstuv' }
 
         await expect(notes.share('1', shareData)).rejects.toThrow('User not found')
       })
@@ -756,7 +766,7 @@ describe('API Module', () => {
       const sampleNote = createMockNote()
       mockGet.mockResolvedValue({ data: [] })
       mockPost.mockResolvedValue({ data: sampleNote })
-      mockPut.mockResolvedValue({ data: sampleNote })
+      mockPatch.mockResolvedValue({ data: sampleNote })
 
       // Verifies that the API wrappers do not add their own null-checks and pass
       // the values straight to axios (mocked here). Input validation is the
@@ -767,7 +777,7 @@ describe('API Module', () => {
 
       expect(mockGet).toHaveBeenCalled()
       expect(mockPost).toHaveBeenCalled()
-      expect(mockPut).toHaveBeenCalled()
+      expect(mockPatch).toHaveBeenCalled()
     })
   })
 })

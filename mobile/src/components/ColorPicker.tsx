@@ -10,12 +10,8 @@ import {
   Pressable,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
-
-export const COLOR_PALETTE = [
-  '#ffffff', '#f28b82', '#fbbc04', '#fff475', '#ccff90',
-  '#a7ffeb', '#cbf0f8', '#aecbfa', '#d7aefb', '#fdcfe8',
-  '#e6c9a8', '#e8eaed',
-];
+import { useTheme } from '../theme/ThemeContext';
+import { NOTE_COLORS, LIGHT_NOTE_COLORS } from '@jot/shared';
 
 interface ColorPickerProps {
   visible: boolean;
@@ -25,6 +21,8 @@ interface ColorPickerProps {
 }
 
 export default function ColorPicker({ visible, currentColor, onSelect, onClose }: ColorPickerProps) {
+  const { colors } = useTheme();
+
   return (
     <Modal
       visible={visible}
@@ -32,23 +30,23 @@ export default function ColorPicker({ visible, currentColor, onSelect, onClose }
       animationType="slide"
       onRequestClose={onClose}
     >
-      <Pressable style={styles.overlay} onPress={onClose}>
-        <SafeAreaView style={styles.sheet}>
+      <Pressable style={[styles.overlay, { backgroundColor: colors.overlay }]} onPress={onClose}>
+        <SafeAreaView style={[styles.sheet, { backgroundColor: colors.sheetBackground }]}>
           <Pressable>
-            <View style={styles.handle} />
-            <Text style={styles.title}>Note color</Text>
+            <View style={[styles.handle, { backgroundColor: colors.handleColor }]} />
+            <Text style={[styles.title, { color: colors.text }]}>Note color</Text>
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
               contentContainerStyle={styles.palette}
             >
-              {COLOR_PALETTE.map((color) => (
+              {NOTE_COLORS.map((color) => (
                 <TouchableOpacity
                   key={color}
                   style={[
                     styles.colorCircle,
                     { backgroundColor: color },
-                    color === '#ffffff' && styles.colorCircleWhite,
+                    LIGHT_NOTE_COLORS.has(color) && { borderWidth: 1, borderColor: colors.border },
                   ]}
                   onPress={() => {
                     onSelect(color);
@@ -61,7 +59,7 @@ export default function ColorPicker({ visible, currentColor, onSelect, onClose }
                     <Ionicons
                       name="checkmark"
                       size={18}
-                      color={color === '#ffffff' ? '#999' : '#333'}
+                      color={LIGHT_NOTE_COLORS.has(color) ? '#999' : '#333'}
                     />
                   )}
                 </TouchableOpacity>
@@ -77,11 +75,9 @@ export default function ColorPicker({ visible, currentColor, onSelect, onClose }
 const styles = StyleSheet.create({
   overlay: {
     flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.4)',
     justifyContent: 'flex-end',
   },
   sheet: {
-    backgroundColor: '#fff',
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
     padding: 16,
@@ -89,7 +85,6 @@ const styles = StyleSheet.create({
   handle: {
     width: 36,
     height: 4,
-    backgroundColor: '#d1d5db',
     borderRadius: 2,
     alignSelf: 'center',
     marginBottom: 16,
@@ -97,7 +92,6 @@ const styles = StyleSheet.create({
   title: {
     fontSize: 16,
     fontWeight: '600',
-    color: '#1a1a1a',
     marginBottom: 16,
   },
   palette: {
@@ -110,9 +104,5 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
-  },
-  colorCircleWhite: {
-    borderWidth: 1,
-    borderColor: '#e5e7eb',
   },
 });

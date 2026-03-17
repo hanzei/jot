@@ -4,7 +4,7 @@ import { XMarkIcon } from '@heroicons/react/24/outline';
 import { useTranslation } from 'react-i18next';
 import { about } from '@/utils/api';
 import { getUser } from '@/utils/auth';
-import { AboutInfo } from '@/types';
+import type { AboutInfo } from '@jot/shared';
 
 interface AboutModalProps {
   isOpen: boolean;

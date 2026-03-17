@@ -1,6 +1,9 @@
 import React from 'react';
-import { View, TextInput, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, TextInput, TouchableOpacity, StyleSheet, type TextInput as TextInputType } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import UserAvatar from './UserAvatar';
+import { useTheme } from '../theme/ThemeContext';
+import type { Collaborator } from '@jot/shared';
 
 interface TodoItemProps {
   text: string;
@@ -8,11 +11,17 @@ interface TodoItemProps {
   indentLevel?: number;
   editable?: boolean;
   showDragHandle?: boolean;
+  assignedTo?: string;
+  isShared?: boolean;
+  collaborators?: Collaborator[];
+  inputRef?: React.RefObject<TextInputType | null>;
   onDrag?: () => void;
   onToggle?: () => void;
   onChangeText?: (text: string) => void;
   onDelete?: () => void;
   onSubmitEditing?: () => void;
+  onBackspaceOnEmpty?: () => void;
+  onAssignPress?: () => void;
 }
 
 function TodoItem({
@@ -21,12 +30,22 @@ function TodoItem({
   indentLevel = 0,
   editable = true,
   showDragHandle = false,
+  assignedTo,
+  isShared,
+  collaborators,
+  inputRef,
   onDrag,
   onToggle,
   onChangeText,
   onDelete,
   onSubmitEditing,
+  onBackspaceOnEmpty,
+  onAssignPress,
 }: TodoItemProps) {
+  const { colors } = useTheme();
+  const showAssignUI = isShared && collaborators && collaborators.length > 0 && onAssignPress;
+  const assignedUser = assignedTo ? collaborators?.find((c) => c.userId === assignedTo) : undefined;
+
   return (
     <View style={[styles.container, { marginLeft: indentLevel * 24 }]}>
       {showDragHandle && onDrag && (
@@ -36,7 +55,7 @@ function TodoItem({
           testID="todo-item-drag-handle"
           accessibilityLabel="Drag to reorder"
         >
-          <Ionicons name="reorder-three" size={20} color="#999" />
+          <Ionicons name="reorder-three" size={20} color={colors.iconMuted} />
         </TouchableOpacity>
       )}
       <TouchableOpacity
@@ -50,23 +69,56 @@ function TodoItem({
         <Ionicons
           name={completed ? 'checkbox' : 'square-outline'}
           size={22}
-          color={completed ? '#2563eb' : '#999'}
+          color={completed ? colors.primary : colors.iconMuted}
         />
       </TouchableOpacity>
       <TextInput
-        style={[styles.textInput, completed && styles.completedText]}
+        ref={inputRef}
+        style={[styles.textInput, { color: completed ? colors.textMuted : colors.text }, completed && styles.completedText]}
         value={text}
         onChangeText={onChangeText}
         editable={editable}
         placeholder="List item"
-        placeholderTextColor="#999"
+        placeholderTextColor={colors.placeholder}
+        returnKeyType="next"
         onSubmitEditing={onSubmitEditing}
         blurOnSubmit={false}
+        onKeyPress={({ nativeEvent }) => {
+          if (nativeEvent.key === 'Backspace' && text === '') {
+            onBackspaceOnEmpty?.();
+          }
+        }}
         testID="todo-item-text"
       />
+      {showAssignUI && assignedTo ? (
+        <TouchableOpacity
+          onPress={!completed ? onAssignPress : undefined}
+          style={styles.assignBtn}
+          testID="todo-item-assignee"
+          accessibilityLabel={`Assigned to ${assignedUser?.username ?? 'unknown'}`}
+        >
+          <UserAvatar
+            userId={assignedTo}
+            username={assignedUser?.username ?? '?'}
+            hasProfileIcon={assignedUser?.hasProfileIcon}
+            size="small"
+          />
+        </TouchableOpacity>
+      ) : showAssignUI && !completed ? (
+        <TouchableOpacity
+          onPress={onAssignPress}
+          style={styles.assignBtn}
+          testID="todo-item-assign"
+          accessibilityLabel="Assign item"
+        >
+          <View style={[styles.assignPlaceholder, { borderColor: colors.border }]}>
+            <Ionicons name="person-add-outline" size={12} color={colors.iconMuted} />
+          </View>
+        </TouchableOpacity>
+      ) : null}
       {editable && onDelete && (
         <TouchableOpacity onPress={onDelete} style={styles.deleteBtn} testID="todo-item-delete">
-          <Ionicons name="close" size={18} color="#999" />
+          <Ionicons name="close" size={18} color={colors.iconMuted} />
         </TouchableOpacity>
       )}
     </View>
@@ -91,16 +143,27 @@ const styles = StyleSheet.create({
   textInput: {
     flex: 1,
     fontSize: 16,
-    color: '#1a1a1a',
     paddingVertical: 4,
   },
   completedText: {
-    textDecorationLine: 'line-through',
-    color: '#999',
+    textDecorationLine: 'line-through' as const,
   },
   deleteBtn: {
     padding: 4,
     marginLeft: 4,
+  },
+  assignBtn: {
+    padding: 4,
+    marginLeft: 4,
+  },
+  assignPlaceholder: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    borderWidth: 1,
+    borderStyle: 'dashed',
+    justifyContent: 'center',
+    alignItems: 'center',
   },
 });
 

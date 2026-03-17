@@ -51,6 +51,7 @@ export default defineConfig(({ mode }) => ({
   resolve: {
     alias: {
       '@': fileURLToPath(new URL('./src', import.meta.url)),
+      '@jot/shared': fileURLToPath(new URL('../shared/src', import.meta.url)),
     },
   },
   server: {
@@ -60,7 +61,11 @@ export default defineConfig(({ mode }) => ({
         target: 'http://localhost:8080',
         changeOrigin: true,
       },
-      '/health': {
+      '/livez': {
+        target: 'http://localhost:8080',
+        changeOrigin: true,
+      },
+      '/readyz': {
         target: 'http://localhost:8080',
         changeOrigin: true,
       },

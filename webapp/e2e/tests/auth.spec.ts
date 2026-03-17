@@ -95,4 +95,15 @@ test.describe('Authentication', () => {
     await page.goto('/login');
     await expect(page).toHaveURL('/');
   });
+
+  test('restores session after localStorage is cleared', async ({ page, authenticatedUser }) => {
+    void authenticatedUser;
+    await expect(page).toHaveURL('/');
+
+    await page.evaluate(() => localStorage.clear());
+    await page.reload();
+
+    // Session cookie is still valid — should land on the dashboard, not /login
+    await expect(page).toHaveURL('/');
+  });
 });

@@ -1,5 +1,10 @@
 import api from './client';
-import { User, NoteShare } from '../types';
+import type { User, NoteShare, UserSettings } from '@jot/shared';
+
+export async function getUsers(): Promise<User[]> {
+  const res = await api.get('/users');
+  return res.data;
+}
 
 export async function searchUsers(query: string): Promise<User[]> {
   const res = await api.get('/users', { params: { search: query } });
@@ -16,5 +21,10 @@ export async function unshareNote(noteId: string, userId: string): Promise<void>
 
 export async function getNoteShares(noteId: string): Promise<NoteShare[]> {
   const res = await api.get(`/notes/${noteId}/shares`);
+  return res.data;
+}
+
+export async function getSettings(): Promise<UserSettings> {
+  const res = await api.get('/users/me/settings');
   return res.data;
 }

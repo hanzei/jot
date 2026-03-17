@@ -37,6 +37,36 @@ test.describe('Notes', () => {
     await dashboardPage.expectNoteNotVisible('Note to Delete');
   });
 
+  test('restores a deleted note from bin', async ({ dashboardPage }) => {
+    await dashboardPage.goto();
+    await dashboardPage.createNote('Restore Me');
+
+    await dashboardPage.deleteNote('Restore Me');
+    await dashboardPage.switchToBin();
+    await dashboardPage.expectNoteVisible('Restore Me');
+
+    await dashboardPage.restoreNoteFromBin('Restore Me');
+    await dashboardPage.expectNoteNotVisible('Restore Me');
+
+    await dashboardPage.switchToNotes();
+    await dashboardPage.expectNoteVisible('Restore Me');
+  });
+
+  test('permanently deletes a note from bin', async ({ dashboardPage }) => {
+    await dashboardPage.goto();
+    await dashboardPage.createNote('Delete Forever');
+
+    await dashboardPage.deleteNote('Delete Forever');
+    await dashboardPage.switchToBin();
+    await dashboardPage.expectNoteVisible('Delete Forever');
+
+    await dashboardPage.permanentlyDeleteNoteFromBin('Delete Forever');
+    await dashboardPage.expectNoteNotVisible('Delete Forever');
+
+    await dashboardPage.switchToNotes();
+    await dashboardPage.expectNoteNotVisible('Delete Forever');
+  });
+
   test('pins a note and it appears in the pinned section', async ({ page, dashboardPage }) => {
     await dashboardPage.goto();
     await dashboardPage.createNote('Note to Pin');
@@ -90,7 +120,7 @@ test.describe('Notes', () => {
     await dashboardPage.expectNoteVisible('To Unarchive');
   });
 
-  test('creates a todo note with items', async ({ page, dashboardPage }) => {
+  test('creates a todo note with items', async ({ dashboardPage }) => {
     await dashboardPage.goto();
     await dashboardPage.createTodoNote('Shopping List', ['Apples', 'Bread', 'Milk']);
 
@@ -98,7 +128,19 @@ test.describe('Notes', () => {
     await expect(card.getByText('Apples')).toBeVisible();
     await expect(card.getByText('Bread')).toBeVisible();
     await expect(card.getByText('Milk')).toBeVisible();
-    void page;
+  });
+
+  test('newly created notes appear at the first position', async ({ dashboardPage }) => {
+    await dashboardPage.goto();
+
+    await dashboardPage.createNote('First Note');
+    await dashboardPage.createNote('Second Note');
+    await dashboardPage.createNote('Third Note');
+
+    // Most recently created note should be first
+    await dashboardPage.expectNoteAtPosition(0, 'Third Note');
+    await dashboardPage.expectNoteAtPosition(1, 'Second Note');
+    await dashboardPage.expectNoteAtPosition(2, 'First Note');
   });
 
   test('shows empty state when no notes exist', async ({ dashboardPage }) => {
@@ -106,39 +148,70 @@ test.describe('Notes', () => {
     await dashboardPage.expectEmptyState('No notes yet');
   });
 
-  test('pressing Enter on a todo item jumps to the next item', async ({ page, dashboardPage }) => {
+  test('pressing Enter on a non-last todo item inserts a new item below it', async ({ dashboardPage }) => {
     await dashboardPage.goto();
-    await page.click('button:has-text("New Note")');
-    await page.click('button:has-text("Todo List")');
+    await dashboardPage.clickNewNote();
+    await dashboardPage.selectTodoType();
 
-    // Add two items via the button
-    await page.click('button:has-text("Add item")');
-    await page.locator('input[placeholder="List item..."]').last().fill('First item');
-    await page.click('button:has-text("Add item")');
-    await page.locator('input[placeholder="List item..."]').last().fill('Second item');
+    await dashboardPage.addTodoItem('First item');
+    await dashboardPage.addTodoItem('Second item');
 
-    // Focus the first item and press Enter
-    await page.locator('input[placeholder="List item..."]').first().focus();
-    await page.keyboard.press('Enter');
+    await dashboardPage.focusTodoItem(0);
+    await dashboardPage.pressKey('Enter');
 
-    // The second item should now be focused
-    await expect(page.locator('input[placeholder="List item..."]').nth(1)).toBeFocused();
+    await dashboardPage.expectTodoItemCount(3);
+    await dashboardPage.expectTodoItemValue(0, 'First item');
+    await dashboardPage.expectTodoItemFocused(1);
+    await dashboardPage.expectTodoItemValue(1, '');
+    await dashboardPage.expectTodoItemValue(2, 'Second item');
   });
 
-  test('pressing Enter on the last todo item creates a new item', async ({ page, dashboardPage }) => {
+  test('arrow keys navigate between todo items', async ({ dashboardPage }) => {
     await dashboardPage.goto();
-    await page.click('button:has-text("New Note")');
-    await page.click('button:has-text("Todo List")');
+    await dashboardPage.clickNewNote();
+    await dashboardPage.selectTodoType();
 
-    // Add one item
-    await page.click('button:has-text("Add item")');
-    await page.locator('input[placeholder="List item..."]').last().fill('Only item');
+    for (const text of ['Alpha', 'Beta', 'Gamma']) {
+      await dashboardPage.addTodoItem(text);
+    }
 
-    // Press Enter on the only (last) item
-    await page.locator('input[placeholder="List item..."]').last().press('Enter');
+    await dashboardPage.focusTodoItem(0);
+    await dashboardPage.expectTodoItemFocused(0);
 
-    // A new empty input should appear and be focused
-    await expect(page.locator('input[placeholder="List item..."]')).toHaveCount(2);
-    await expect(page.locator('input[placeholder="List item..."]').nth(1)).toBeFocused();
+    await dashboardPage.pressKey('ArrowDown');
+    await dashboardPage.expectTodoItemFocused(1);
+
+    await dashboardPage.pressKey('ArrowDown');
+    await dashboardPage.expectTodoItemFocused(2);
+
+    // ArrowDown on last item should keep focus there
+    await dashboardPage.pressKey('ArrowDown');
+    await dashboardPage.expectTodoItemFocused(2);
+
+    // ArrowUp back to second item
+    await dashboardPage.pressKey('ArrowUp');
+    await dashboardPage.expectTodoItemFocused(1);
+
+    // ArrowUp back to first item
+    await dashboardPage.pressKey('ArrowUp');
+    await dashboardPage.expectTodoItemFocused(0);
+
+    // ArrowUp on first item should keep focus there
+    await dashboardPage.pressKey('ArrowUp');
+    await dashboardPage.expectTodoItemFocused(0);
+  });
+
+  test('pressing Enter on the last todo item creates a new item', async ({ dashboardPage }) => {
+    await dashboardPage.goto();
+    await dashboardPage.clickNewNote();
+    await dashboardPage.selectTodoType();
+
+    await dashboardPage.addTodoItem('Only item');
+
+    await dashboardPage.focusTodoItem(0);
+    await dashboardPage.pressKey('Enter');
+
+    await dashboardPage.expectTodoItemCount(2);
+    await dashboardPage.expectTodoItemFocused(1);
   });
 });

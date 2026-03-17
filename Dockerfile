@@ -5,6 +5,9 @@ FROM node:24-alpine AS frontend-builder
 
 WORKDIR /app/webapp
 
+# Copy shared package (dependency of webapp)
+COPY shared/ ../shared/
+
 # Copy frontend package files
 COPY webapp/package*.json ./
 
@@ -18,7 +21,7 @@ COPY webapp/ ./
 RUN npm run build
 
 # Backend build stage
-FROM golang:1.24-alpine AS backend-builder
+FROM golang:1.25-alpine AS backend-builder
 
 WORKDIR /src
 
@@ -59,7 +62,6 @@ WORKDIR /app
 
 # Copy the backend binary
 COPY --from=backend-builder /src/server/main ./
-COPY --from=backend-builder /src/server/migrations ./migrations/
 
 # Copy the built frontend files
 COPY --from=frontend-builder /app/webapp/build ./webapp/build/

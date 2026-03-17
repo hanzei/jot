@@ -1,6 +1,6 @@
 import EventSource from 'react-native-sse';
 import { getBaseUrl, getStoredSession } from './client';
-import { SSEEvent } from '../types';
+import type { SSEEvent } from '@jot/shared';
 
 const BASE_RECONNECT_DELAY_MS = 3000;
 const MAX_RECONNECT_DELAY_MS = 60000;

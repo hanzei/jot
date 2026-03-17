@@ -1,5 +1,5 @@
 import { SQLiteDatabase } from 'expo-sqlite';
-import { Note, NoteItem, GetNotesParams, Label, NoteShare } from '../types';
+import type { Note, NoteItem, GetNotesParams, Label, NoteShare } from '@jot/shared';
 
 interface NoteRow {
   id: string;
@@ -27,6 +27,7 @@ interface NoteItemRow {
   completed: number;
   position: number;
   indent_level: number;
+  assigned_to: string;
   created_at: string;
   updated_at: string;
 }
@@ -65,6 +66,7 @@ function itemRowToNoteItem(row: NoteItemRow): NoteItem {
     completed: row.completed === 1,
     position: row.position,
     indent_level: row.indent_level,
+    assigned_to: row.assigned_to ?? '',
     created_at: row.created_at ?? '',
     updated_at: row.updated_at ?? '',
   };
@@ -111,9 +113,9 @@ async function saveNoteInTx(db: SQLiteDatabase, note: Note): Promise<void> {
     await db.runAsync('DELETE FROM note_items WHERE note_id = ?', [note.id]);
     for (const item of note.items) {
       await db.runAsync(
-        `INSERT OR REPLACE INTO note_items (id, note_id, text, completed, position, indent_level, created_at, updated_at)
-         VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
-        [item.id, note.id, item.text, item.completed ? 1 : 0, item.position, item.indent_level, item.created_at ?? '', item.updated_at ?? ''],
+        `INSERT OR REPLACE INTO note_items (id, note_id, text, completed, position, indent_level, assigned_to, created_at, updated_at)
+         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+        [item.id, note.id, item.text, item.completed ? 1 : 0, item.position, item.indent_level, item.assigned_to ?? '', item.created_at ?? '', item.updated_at ?? ''],
       );
     }
   }
@@ -135,7 +137,11 @@ export async function getLocalNotes(db: SQLiteDatabase, params?: GetNotesParams)
   let sql = 'SELECT * FROM notes WHERE 1=1';
   const args: (string | number | null)[] = [];
 
-  if (params?.archived) {
+  if (params?.my_todo) {
+    if (!params.user_id) return [];
+    sql += ' AND deleted_at IS NULL AND id IN (SELECT note_id FROM note_items WHERE assigned_to = ?)';
+    args.push(params.user_id);
+  } else if (params?.archived) {
     sql += ' AND archived = 1 AND deleted_at IS NULL';
   } else if (params?.trashed) {
     sql += ' AND deleted_at IS NOT NULL';
@@ -254,6 +260,10 @@ export async function removeLocalNotesNotIn(
   params?: GetNotesParams,
 ): Promise<void> {
   const args: (string | number | null)[] = [];
+
+  // my_todo is a cross-cutting filter (overlaps with the main "notes" scope),
+  // so we must not remove notes that may still belong in other views.
+  if (params?.my_todo) return;
 
   let sql = "DELETE FROM notes WHERE id NOT LIKE 'local_%'";
 

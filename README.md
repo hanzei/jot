@@ -12,6 +12,24 @@ A self-hosted note-taking application built with Go backend and React frontend. 
 - **SQLite Database**: Lightweight, file-based database
 - **Admin Support**: First registered user becomes admin
 - **Single Binary**: Frontend and backend served from one Go binary
+- **Sliding Sessions**: 30-day sessions auto-extend when less than 7 days remain
+
+## Screenshots
+
+### Dashboard overview
+![Dashboard overview](images/feature-dashboard-overview.png)
+
+### Search and filter
+![Search and filter](images/feature-search-filter.png)
+
+### Todo note editor
+![Todo note editor](images/feature-todo-note-editor.png)
+
+### Archive view
+![Archive view](images/feature-archive-view.png)
+
+### Settings and theme
+![Settings and theme](images/feature-settings-theme.png)
 
 ## Development Setup
 
@@ -40,7 +58,7 @@ A self-hosted note-taking application built with Go backend and React frontend. 
    # Start the server (serves both API and frontend)
    cd server
    go mod tidy
-   go run main.go
+   COOKIE_SECURE=false go run main.go
    ```
 
 ### Task Automation
@@ -57,6 +75,7 @@ task run-webapp      # Start webapp dev server with HMR
 task test            # Run all tests
 task test-server     # Run server tests
 task test-webapp     # Run webapp tests
+task test-e2e        # Run Playwright end-to-end tests
 task test-mobile     # Run mobile app tests
 task coverage        # Run server tests with coverage report
 task lint                  # Run linters
@@ -64,6 +83,7 @@ task lint-server           # Run server linting with golangci-lint
 task lint-webapp           # Run webapp linting
 task lint-mobile           # Run mobile app linting
 task check-translations    # Check locale files for missing/extra keys
+task gen-docs              # Regenerate Swagger API docs (install swag first: go install github.com/swaggo/swag/cmd/swag@v1.16.6)
 task clean               # Remove generated files and node packages
 ```
    
@@ -79,15 +99,13 @@ Run the Vite dev server for instant hot module replacement:
 
 ```bash
 # Terminal 1: Start the Go backend
-task run-server
+COOKIE_SECURE=false task run-server
 
 # Terminal 2: Start the Vite dev server with HMR
 task run-webapp
 ```
 
 Access: `http://localhost:5173` — API calls are proxied to the Go server automatically.
-
-Access: `http://localhost:8080`
 
 ## Environment Variables
 
@@ -102,43 +120,9 @@ PORT=8080                           # Server port (optional)
 STATIC_DIR=../webapp/build/         # Frontend build directory (optional)
 ```
 
-## API Endpoints
+## API Reference
 
-All API endpoints are prefixed with `/api/v1/`:
-
-### Authentication
-- `POST /api/v1/register` - Register new user (sets session cookie)
-- `POST /api/v1/login` - Login user (sets session cookie)
-- `POST /api/v1/logout` - Logout and invalidate session
-- `GET /api/v1/me` - Get current authenticated user
-
-### Notes (Requires Authentication)
-- `GET /api/v1/notes` - List user's notes
-  - Query params: `archived=true/false`, `search=query`
-- `POST /api/v1/notes` - Create new note
-- `GET /api/v1/notes/{id}` - Get specific note
-- `PUT /api/v1/notes/{id}` - Update note (title, content, pin, archive, color)
-- `DELETE /api/v1/notes/{id}` - Delete note
-
-### System
-- `GET /health` - Server health check
-
-### Example API Usage
-
-```bash
-# Register user (session cookie is set automatically)
-curl -c cookies.txt -X POST http://localhost:8080/api/v1/register \
-  -H "Content-Type: application/json" \
-  -d '{"username":"myuser","password":"password123"}'
-
-# Create note (using session cookie)
-curl -b cookies.txt -X POST http://localhost:8080/api/v1/notes \
-  -H "Content-Type: application/json" \
-  -d '{"title":"My Note","content":"Note content","note_type":"text"}'
-
-# Logout
-curl -b cookies.txt -X POST http://localhost:8080/api/v1/logout
-```
+The full interactive API reference is available via Swagger UI at `http://localhost:8080/api/docs/index.html` when the server is running.
 
 ## Building for Production
 
@@ -190,6 +174,7 @@ docker run -d \
 
 # Or use docker-compose
 curl -O https://raw.githubusercontent.com/hanzei/jot/master/docker-compose.yml
+# add COOKIE_SECURE=false under jot.environment for local HTTP use
 docker-compose up -d
 ```
 
@@ -208,6 +193,13 @@ The Docker image uses multi-stage build:
 1. **Node.js stage**: Builds the React frontend
 2. **Go stage**: Builds the backend binary
 3. **Alpine stage**: Combines everything in minimal production image
+
+For production HTTPS, keep the default secure cookie behavior.
+
+For local HTTP-only testing, override with:
+```bash
+docker run -p 8080:8080 -e COOKIE_SECURE=false -v ./data:/data jot
+```
 
 ### Available Tags
 
@@ -247,8 +239,7 @@ services:
 2. **Database permissions**:
    ```bash
    # Fix SQLite file permissions
-   chmod 644 jot.db
-   chown app:app jot.db
+   chmod 664 jot.db
    ```
 
 3. **Port conflicts**:
@@ -273,7 +264,7 @@ services:
 ### Development Tips
 
 - **Frontend changes**: Rebuild with `npm run build` after React changes
-- **Backend changes**: Go has hot-reload when using `go run`
+- **Backend changes**: Restart the server after code changes
 - **Database inspection**: Use SQLite browser or `sqlite3 jot.db`
 - **Logs**: Check console output for detailed error messages
 - **API testing**: Use browser dev tools or curl/Postman
@@ -281,8 +272,8 @@ services:
 ### Debugging
 
 ```bash
-# Enable Go module debugging
-GOMODULE=on go run main.go
+# Run the server directly
+COOKIE_SECURE=false go run main.go
 
 # Frontend development build (separate dev server)
 cd webapp && npm run dev
@@ -320,8 +311,6 @@ Jot uses GitHub Actions for automated testing and Docker image publishing:
 - **Automated testing**: All PRs trigger test and lint jobs
 - **Docker publishing**: Master branch builds are published to `hanzei/jot` on Docker Hub
 - **Multi-platform**: Images support both AMD64 and ARM64 architectures
-
-For setup instructions, see [CI/CD Setup Guide](docs/admin/ci-setup.md).
 
 ## License
 

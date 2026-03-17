@@ -12,13 +12,13 @@ import {
   reorderNotes,
 } from '../api/notes';
 import { getNoteShares, shareNote, unshareNote } from '../api/users';
-import {
+import type {
   Note,
   NoteShare,
   GetNotesParams,
   CreateNoteRequest,
   UpdateNoteRequest,
-} from '../types';
+} from '@jot/shared';
 import {
   saveNote,
   saveNotes,
@@ -91,6 +91,7 @@ export function useCreateNote() {
           completed: item.completed ?? false,
           position: i,
           indent_level: item.indent_level ?? 0,
+          assigned_to: item.assigned_to ?? '',
           created_at: now,
           updated_at: now,
         })),
@@ -144,6 +145,7 @@ export function useUpdateNote() {
           completed: item.completed ?? false,
           position: i,
           indent_level: item.indent_level ?? 0,
+          assigned_to: item.assigned_to ?? existing.items?.[i]?.assigned_to ?? '',
           created_at: existing.items?.[i]?.created_at ?? now,
           updated_at: now,
         }));
@@ -152,11 +154,20 @@ export function useUpdateNote() {
         await updateLocalNote(db, id, data);
       }
 
+      const fullData: UpdateNoteRequest = {
+        title: data.title ?? existing.title,
+        content: data.content ?? existing.content,
+        pinned: data.pinned ?? existing.pinned,
+        archived: data.archived ?? existing.archived,
+        color: data.color ?? existing.color,
+        checked_items_collapsed: data.checked_items_collapsed ?? existing.checked_items_collapsed,
+        items: data.items,
+      };
       await enqueueOperation(db, {
         operation: 'update',
         endpoint: `/notes/${id}`,
         method: 'PUT',
-        body: data as Record<string, unknown>,
+        body: fullData as Record<string, unknown>,
       });
 
       // Build optimistic return from the data we already have (no second DB read)
@@ -247,7 +258,7 @@ export function usePermanentDeleteNote() {
         await permanentDeleteLocalNote(db, id);
         await enqueueOperation(db, {
           operation: 'permanentDelete',
-          endpoint: `/notes/${id}/permanent`,
+          endpoint: `/notes/${id}?permanent=true`,
           method: 'DELETE',
         });
       }

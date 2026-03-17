@@ -1,0 +1,1237 @@
+basePath: /api/v1
+definitions:
+  handlers.AddLabelRequest:
+    properties:
+      name:
+        type: string
+    type: object
+  handlers.AuthResponse:
+    properties:
+      settings:
+        $ref: '#/definitions/models.UserSettings'
+      user:
+        $ref: '#/definitions/models.User'
+    type: object
+  handlers.ChangePasswordRequest:
+    properties:
+      current_password:
+        type: string
+      new_password:
+        type: string
+    type: object
+  handlers.CreateNoteItem:
+    properties:
+      indent_level:
+        type: integer
+      position:
+        type: integer
+      text:
+        type: string
+    type: object
+  handlers.CreateNoteRequest:
+    properties:
+      color:
+        type: string
+      content:
+        type: string
+      items:
+        items:
+          $ref: '#/definitions/handlers.CreateNoteItem'
+        type: array
+      note_type:
+        $ref: '#/definitions/models.NoteType'
+      title:
+        type: string
+    type: object
+  handlers.CreateUserRequest:
+    properties:
+      password:
+        type: string
+      role:
+        type: string
+      username:
+        type: string
+    type: object
+  handlers.ImportResponse:
+    properties:
+      errors:
+        items:
+          type: string
+        type: array
+      imported:
+        type: integer
+      skipped:
+        type: integer
+    type: object
+  handlers.LoginRequest:
+    properties:
+      password:
+        type: string
+      username:
+        type: string
+    type: object
+  handlers.RegisterRequest:
+    properties:
+      password:
+        type: string
+      username:
+        type: string
+    type: object
+  handlers.ReorderNotesRequest:
+    properties:
+      note_ids:
+        items:
+          type: string
+        type: array
+    type: object
+  handlers.ShareNoteRequest:
+    properties:
+      user_id:
+        type: string
+    type: object
+  handlers.ShareNoteResponse:
+    properties:
+      message:
+        type: string
+      success:
+        type: boolean
+    type: object
+  handlers.UpdateNoteItem:
+    properties:
+      assigned_to:
+        type: string
+      completed:
+        type: boolean
+      indent_level:
+        type: integer
+      position:
+        type: integer
+      text:
+        type: string
+    type: object
+  handlers.UpdateNoteRequest:
+    properties:
+      archived:
+        type: boolean
+      checked_items_collapsed:
+        type: boolean
+      color:
+        type: string
+      content:
+        type: string
+      items:
+        items:
+          $ref: '#/definitions/handlers.UpdateNoteItem'
+        type: array
+      pinned:
+        type: boolean
+      title:
+        type: string
+    type: object
+  handlers.UpdateUserRequest:
+    properties:
+      first_name:
+        type: string
+      language:
+        enum:
+        - system
+        - en
+        - de
+        type: string
+      last_name:
+        type: string
+      theme:
+        enum:
+        - system
+        - light
+        - dark
+        type: string
+      username:
+        type: string
+    type: object
+  handlers.UpdateUserRoleRequest:
+    properties:
+      role:
+        type: string
+    type: object
+  handlers.UserInfo:
+    properties:
+      first_name:
+        type: string
+      has_profile_icon:
+        type: boolean
+      id:
+        type: string
+      last_name:
+        type: string
+      role:
+        type: string
+      username:
+        type: string
+    type: object
+  handlers.UserListResponse:
+    properties:
+      users:
+        items:
+          $ref: '#/definitions/models.User'
+        type: array
+    type: object
+  models.Label:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      updated_at:
+        type: string
+      user_id:
+        type: string
+    type: object
+  models.Note:
+    properties:
+      archived:
+        type: boolean
+      checked_items_collapsed:
+        type: boolean
+      color:
+        type: string
+      content:
+        type: string
+      created_at:
+        type: string
+      deleted_at:
+        type: string
+      id:
+        type: string
+      is_shared:
+        type: boolean
+      items:
+        items:
+          $ref: '#/definitions/models.NoteItem'
+        type: array
+      labels:
+        items:
+          $ref: '#/definitions/models.Label'
+        type: array
+      note_type:
+        $ref: '#/definitions/models.NoteType'
+      pinned:
+        type: boolean
+      position:
+        type: integer
+      shared_with:
+        items:
+          $ref: '#/definitions/models.NoteShare'
+        type: array
+      title:
+        type: string
+      updated_at:
+        type: string
+      user_id:
+        type: string
+    type: object
+  models.NoteItem:
+    properties:
+      assigned_to:
+        type: string
+      completed:
+        type: boolean
+      created_at:
+        type: string
+      id:
+        type: string
+      indent_level:
+        type: integer
+      note_id:
+        type: string
+      position:
+        type: integer
+      text:
+        type: string
+      updated_at:
+        type: string
+    type: object
+  models.NoteShare:
+    properties:
+      created_at:
+        type: string
+      first_name:
+        type: string
+      has_profile_icon:
+        type: boolean
+      id:
+        type: string
+      last_name:
+        type: string
+      note_id:
+        type: string
+      permission_level:
+        type: string
+      shared_by_user_id:
+        type: string
+      shared_with_user_id:
+        type: string
+      updated_at:
+        type: string
+      username:
+        type: string
+    type: object
+  models.NoteType:
+    enum:
+    - text
+    - todo
+    type: string
+    x-enum-varnames:
+    - NoteTypeText
+    - NoteTypeTodo
+  models.User:
+    properties:
+      created_at:
+        type: string
+      first_name:
+        type: string
+      has_profile_icon:
+        type: boolean
+      id:
+        type: string
+      last_name:
+        type: string
+      role:
+        type: string
+      updated_at:
+        type: string
+      username:
+        type: string
+    type: object
+  models.UserSettings:
+    properties:
+      language:
+        type: string
+      theme:
+        type: string
+      updated_at:
+        type: string
+      user_id:
+        type: string
+    type: object
+  server.aboutResponse:
+    properties:
+      build_time:
+        type: string
+      commit:
+        type: string
+      go_version:
+        type: string
+      version:
+        type: string
+    type: object
+info:
+  contact:
+    name: Jot Project
+    url: https://github.com/hanzei/jot
+  description: Self-hosted note-taking application API. Health probes are available
+    at root paths `/livez` and `/readyz` (outside `/api/v1`).
+  license:
+    name: MIT
+  title: Jot API
+  version: "1.0"
+paths:
+  /about:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.aboutResponse'
+      security:
+      - CookieAuth: []
+      summary: Get server version and build info
+      tags:
+      - system
+  /admin/users:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.UserListResponse'
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "403":
+          description: forbidden
+          schema:
+            type: string
+      security:
+      - CookieAuth: []
+      summary: List all users (admin only)
+      tags:
+      - admin
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: New user details
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.CreateUserRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.User'
+        "400":
+          description: bad request
+          schema:
+            type: string
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "403":
+          description: forbidden
+          schema:
+            type: string
+        "409":
+          description: username already taken
+          schema:
+            type: string
+      security:
+      - CookieAuth: []
+      summary: Create a user (admin only)
+      tags:
+      - admin
+  /admin/users/{id}:
+    delete:
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: no content
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "403":
+          description: forbidden
+          schema:
+            type: string
+        "404":
+          description: user not found
+          schema:
+            type: string
+        "409":
+          description: cannot demote the last admin
+          schema:
+            type: string
+      security:
+      - CookieAuth: []
+      summary: Delete a user (admin only)
+      tags:
+      - admin
+  /admin/users/{id}/role:
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: New role
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.UpdateUserRoleRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.User'
+        "400":
+          description: bad request
+          schema:
+            type: string
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "403":
+          description: forbidden
+          schema:
+            type: string
+        "404":
+          description: user not found
+          schema:
+            type: string
+        "409":
+          description: cannot demote the last admin
+          schema:
+            type: string
+      security:
+      - CookieAuth: []
+      summary: Update a user's role (admin only)
+      tags:
+      - admin
+  /labels:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.Label'
+            type: array
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+      security:
+      - CookieAuth: []
+      summary: List all labels for the current user
+      tags:
+      - labels
+  /login:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Login credentials
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.LoginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.AuthResponse'
+        "400":
+          description: missing username or password
+          schema:
+            type: string
+        "401":
+          description: invalid username or password
+          schema:
+            type: string
+      summary: Authenticate a user
+      tags:
+      - auth
+  /logout:
+    post:
+      responses:
+        "204":
+          description: no content
+        "500":
+          description: internal server error
+          schema:
+            type: string
+      security:
+      - CookieAuth: []
+      summary: Log out the current user
+      tags:
+      - auth
+  /me:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.AuthResponse'
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+      security:
+      - CookieAuth: []
+      summary: Get the current authenticated user and settings
+      tags:
+      - auth
+  /notes:
+    get:
+      parameters:
+      - description: Return archived notes
+        in: query
+        name: archived
+        type: boolean
+      - description: Return trashed notes
+        in: query
+        name: trashed
+        type: boolean
+      - description: Full-text search query
+        in: query
+        name: search
+        type: string
+      - description: Filter by label ID
+        in: query
+        name: label
+        type: string
+      - description: Return only notes with todos assigned to current user
+        in: query
+        name: my_todo
+        type: boolean
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.Note'
+            type: array
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+      security:
+      - CookieAuth: []
+      summary: List notes for the current user
+      tags:
+      - notes
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Note to create
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.CreateNoteRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.Note'
+        "400":
+          description: bad request
+          schema:
+            type: string
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+      security:
+      - CookieAuth: []
+      summary: Create a new note
+      tags:
+      - notes
+  /notes/{id}:
+    delete:
+      parameters:
+      - description: Note ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Permanently delete from trash instead of soft-deleting
+        in: query
+        name: permanent
+        type: boolean
+      responses:
+        "204":
+          description: no content
+        "400":
+          description: bad request
+          schema:
+            type: string
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "404":
+          description: not found
+          schema:
+            type: string
+      security:
+      - CookieAuth: []
+      summary: Delete a note (move to trash, or permanently delete)
+      tags:
+      - notes
+    get:
+      parameters:
+      - description: Note ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Note'
+        "400":
+          description: bad request
+          schema:
+            type: string
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "404":
+          description: not found
+          schema:
+            type: string
+      security:
+      - CookieAuth: []
+      summary: Get a single note by ID
+      tags:
+      - notes
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Note ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Fields to update
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.UpdateNoteRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Note'
+        "400":
+          description: bad request
+          schema:
+            type: string
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "404":
+          description: not found
+          schema:
+            type: string
+      security:
+      - CookieAuth: []
+      summary: Update a note
+      tags:
+      - notes
+  /notes/{id}/labels:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Note ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Label name
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.AddLabelRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Note'
+        "400":
+          description: bad request
+          schema:
+            type: string
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "403":
+          description: no access to note
+          schema:
+            type: string
+      security:
+      - CookieAuth: []
+      summary: Add a label to a note
+      tags:
+      - labels
+  /notes/{id}/labels/{label_id}:
+    delete:
+      parameters:
+      - description: Note ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Label ID
+        in: path
+        name: label_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Note'
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "403":
+          description: no access to note
+          schema:
+            type: string
+      security:
+      - CookieAuth: []
+      summary: Remove a label from a note
+      tags:
+      - labels
+  /notes/{id}/restore:
+    post:
+      parameters:
+      - description: Note ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Note'
+        "400":
+          description: bad request
+          schema:
+            type: string
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "404":
+          description: not found
+          schema:
+            type: string
+      security:
+      - CookieAuth: []
+      summary: Restore a note from trash
+      tags:
+      - notes
+  /notes/{id}/share:
+    delete:
+      consumes:
+      - application/json
+      parameters:
+      - description: Note ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: User ID to unshare with
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.ShareNoteRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.ShareNoteResponse'
+        "400":
+          description: bad request
+          schema:
+            type: string
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "403":
+          description: not owner
+          schema:
+            type: string
+        "404":
+          description: not found
+          schema:
+            type: string
+      security:
+      - CookieAuth: []
+      summary: Remove a share from a note
+      tags:
+      - sharing
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Note ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: User ID to share with
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.ShareNoteRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.ShareNoteResponse'
+        "400":
+          description: bad request
+          schema:
+            type: string
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "403":
+          description: not owner
+          schema:
+            type: string
+        "404":
+          description: not found
+          schema:
+            type: string
+        "409":
+          description: already shared
+          schema:
+            type: string
+      security:
+      - CookieAuth: []
+      summary: Share a note with another user
+      tags:
+      - sharing
+  /notes/{id}/shares:
+    get:
+      parameters:
+      - description: Note ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.NoteShare'
+            type: array
+        "400":
+          description: bad request
+          schema:
+            type: string
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "403":
+          description: not owner
+          schema:
+            type: string
+      security:
+      - CookieAuth: []
+      summary: List users a note is shared with
+      tags:
+      - sharing
+  /notes/import:
+    post:
+      consumes:
+      - multipart/form-data
+      parameters:
+      - description: Google Keep JSON or ZIP export file
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.ImportResponse'
+        "400":
+          description: bad request
+          schema:
+            type: string
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+      security:
+      - CookieAuth: []
+      summary: Import notes from a Google Keep export
+      tags:
+      - notes
+  /notes/reorder:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Ordered note IDs
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.ReorderNotesRequest'
+      responses:
+        "204":
+          description: no content
+        "400":
+          description: bad request
+          schema:
+            type: string
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "403":
+          description: forbidden
+          schema:
+            type: string
+      security:
+      - CookieAuth: []
+      summary: Reorder notes by providing an ordered list of IDs
+      tags:
+      - notes
+  /register:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Registration credentials
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.RegisterRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/handlers.AuthResponse'
+        "400":
+          description: bad request
+          schema:
+            type: string
+        "409":
+          description: username already taken
+          schema:
+            type: string
+      summary: Register a new user
+      tags:
+      - auth
+  /users:
+    get:
+      parameters:
+      - description: Filter by username, first name, or last name (case-insensitive
+          substring match)
+        in: query
+        name: search
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/handlers.UserInfo'
+            type: array
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+      security:
+      - CookieAuth: []
+      summary: Search or list users (excluding current user)
+      tags:
+      - users
+  /users/{id}/profile-icon:
+    get:
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - image/jpeg
+      responses:
+        "200":
+          description: JPEG image
+          schema:
+            type: file
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "404":
+          description: not found
+          schema:
+            type: string
+      security:
+      - CookieAuth: []
+      summary: Get a user's profile icon
+      tags:
+      - users
+  /users/me:
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Fields to update (all optional)
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.UpdateUserRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.AuthResponse'
+        "400":
+          description: bad request
+          schema:
+            type: string
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "409":
+          description: username already taken
+          schema:
+            type: string
+      security:
+      - CookieAuth: []
+      summary: Update the current user's profile and/or settings
+      tags:
+      - users
+  /users/me/password:
+    put:
+      consumes:
+      - application/json
+      parameters:
+      - description: Password change
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.ChangePasswordRequest'
+      responses:
+        "204":
+          description: no content
+        "400":
+          description: bad request
+          schema:
+            type: string
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "403":
+          description: current password is incorrect
+          schema:
+            type: string
+      security:
+      - CookieAuth: []
+      summary: Change the current user's password
+      tags:
+      - users
+  /users/me/profile-icon:
+    delete:
+      responses:
+        "204":
+          description: no content
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+      security:
+      - CookieAuth: []
+      summary: Delete the current user's profile icon
+      tags:
+      - users
+    post:
+      consumes:
+      - multipart/form-data
+      parameters:
+      - description: Profile icon image (JPEG, PNG or WebP, max 5 MB)
+        in: formData
+        name: file
+        required: true
+        type: file
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.User'
+        "400":
+          description: bad request
+          schema:
+            type: string
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+      security:
+      - CookieAuth: []
+      summary: Upload a profile icon for the current user
+      tags:
+      - users
+securityDefinitions:
+  CookieAuth:
+    in: header
+    name: jot_session
+    type: apiKey
+swagger: "2.0"

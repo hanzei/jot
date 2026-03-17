@@ -79,6 +79,10 @@ func (s *UserStore) Create(username, password string) (*User, error) {
 		&user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
+		var sqliteErr sqlite3.Error
+		if errors.As(err, &sqliteErr) && sqliteErr.ExtendedCode == sqlite3.ErrConstraintUnique {
+			return nil, ErrUsernameTaken
+		}
 		return nil, fmt.Errorf("failed to create user: %w", err)
 	}
 
@@ -144,6 +148,47 @@ func (s *UserStore) GetAll() ([]*User, error) {
 	rows, err := s.db.Query(query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query users: %w", err)
+	}
+	defer func() {
+		if err = rows.Close(); err != nil {
+			logrus.WithError(err).Error("Failed to close rows")
+		}
+	}()
+
+	var users []*User
+	for rows.Next() {
+		var user User
+		if err = rows.Scan(
+			&user.ID, &user.Username, &user.FirstName, &user.LastName, &user.PasswordHash,
+			&user.Role, &user.HasProfileIcon, &user.CreatedAt, &user.UpdatedAt,
+		); err != nil {
+			return nil, fmt.Errorf("failed to scan user: %w", err)
+		}
+		users = append(users, &user)
+	}
+
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("error iterating users: %w", err)
+	}
+
+	return users, nil
+}
+
+// Search returns users whose username, first name, or last name contain the
+// given search term (case-insensitive). Results are ordered by creation date
+// descending.
+func (s *UserStore) Search(term string) ([]*User, error) {
+	like := "%" + term + "%"
+	query := `SELECT id, username, first_name, last_name, password_hash, role,
+			         profile_icon IS NOT NULL AS has_profile_icon,
+			         created_at, updated_at
+			  FROM users
+			  WHERE username LIKE ? OR first_name LIKE ? OR last_name LIKE ?
+			  ORDER BY created_at DESC`
+
+	rows, err := s.db.Query(query, like, like, like)
+	if err != nil {
+		return nil, fmt.Errorf("failed to search users: %w", err)
 	}
 	defer func() {
 		if err = rows.Close(); err != nil {
@@ -436,6 +481,14 @@ func (s *UserStore) UpdateRole(id, role string) (*User, error) {
 }
 
 func (s *UserStore) Delete(id, requestingUserID string) error {
+	return s.DeleteWithCleanup(id, requestingUserID, nil)
+}
+
+// DeleteWithCleanup deletes a user and runs an optional postDelete callback
+// inside the same transaction. The callback executes after the user row is
+// deleted (and cascade effects like note_shares removal have taken place) but
+// before the transaction commits, so any cleanup is atomic with the delete.
+func (s *UserStore) DeleteWithCleanup(id, requestingUserID string, postDelete func(tx *sql.Tx) error) error {
 	if id == requestingUserID {
 		return fmt.Errorf("%w", ErrCannotDeleteSelf)
 	}
@@ -477,6 +530,12 @@ func (s *UserStore) Delete(id, requestingUserID string) error {
 		return fmt.Errorf("%w", ErrUserNotFound)
 	}
 
+	if postDelete != nil {
+		if err = postDelete(tx); err != nil {
+			return fmt.Errorf("post-delete cleanup failed: %w", err)
+		}
+	}
+
 	if err = tx.Commit(); err != nil {
 		return fmt.Errorf("failed to commit transaction: %w", err)
 	}
@@ -494,7 +553,7 @@ func (s *UserStore) CreateByAdmin(username, password string, role string) (*User
 		return nil, fmt.Errorf("failed to generate user ID: %w", err)
 	}
 
-	query := `INSERT INTO users (id, username, password_hash, role) 
+	query := `INSERT INTO users (id, username, password_hash, role)
 			  VALUES (?, ?, ?, ?) RETURNING created_at, updated_at`
 
 	var user User
@@ -502,6 +561,10 @@ func (s *UserStore) CreateByAdmin(username, password string, role string) (*User
 		&user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
+		var sqliteErr sqlite3.Error
+		if errors.As(err, &sqliteErr) && sqliteErr.ExtendedCode == sqlite3.ErrConstraintUnique {
+			return nil, ErrUsernameTaken
+		}
 		return nil, fmt.Errorf("failed to create user: %w", err)
 	}
 

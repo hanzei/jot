@@ -1,25 +1,7 @@
 import React, { useState } from 'react';
 import { View, Text, Image, StyleSheet } from 'react-native';
+import { getAvatarColor } from '@jot/shared';
 import { getBaseUrl } from '../api/client';
-
-const AVATAR_COLORS = [
-  '#f28b82',
-  '#fbbc04',
-  '#ccff90',
-  '#a7ffeb',
-  '#cbf0f8',
-  '#aecbfa',
-  '#d7aefb',
-  '#fdcfe8',
-];
-
-function getUserColor(username: string): string {
-  let hash = 0;
-  for (let i = 0; i < username.length; i++) {
-    hash = (hash * 31 + username.charCodeAt(i)) | 0;
-  }
-  return AVATAR_COLORS[Math.abs(hash) % AVATAR_COLORS.length];
-}
 
 const SIZE_MAP = {
   small: 24,
@@ -39,7 +21,7 @@ export default function UserAvatar({ userId, username, hasProfileIcon, size = 'm
   const fontSize = size === 'small' ? 10 : 15;
 
   const safeUsername = username || 'U';
-  const bgColor = getUserColor(safeUsername);
+  const bgColor = getAvatarColor(safeUsername);
   const letter = safeUsername.charAt(0).toUpperCase();
 
   if (hasProfileIcon && !imageError) {

@@ -1,13 +1,13 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { XMarkIcon, PlusIcon, TrashIcon, ChevronDownIcon, ArchiveBoxIcon, ArchiveBoxXMarkIcon, ShareIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon, PlusIcon, TrashIcon, ChevronDownIcon, ArchiveBoxIcon, ArchiveBoxXMarkIcon, ShareIcon, UserPlusIcon } from '@heroicons/react/24/outline';
 import { Dialog, DialogPanel } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
-import { Note, NoteType, CreateNoteRequest, UpdateNoteRequest, Label, User } from '@/types';
+import { VALIDATION, NOTE_COLORS, buildCollaborators, type Note, type NoteType, type CreateNoteRequest, type UpdateNoteRequest, type Label, type User, type Collaborator } from '@jot/shared';
 import { notes } from '@/utils/api';
 import LabelPicker from '@/components/LabelPicker';
 import LetterAvatar from '@/components/LetterAvatar';
+import AssigneePicker from '@/components/AssigneePicker';
 import { buildShareAvatars } from '@/utils/shareAvatars';
-import { VALIDATION_LIMITS } from '@/constants/validation';
 
 // Validation functions
 type TFunction = (key: string, opts?: Record<string, unknown>) => string;
@@ -15,18 +15,18 @@ type TFunction = (key: string, opts?: Record<string, unknown>) => string;
 const validateItemText = (text: string, t: TFunction): string | null => {
   const trimmed = text.trim();
   if (trimmed.length === 0) return null; // Allow empty items (will be removed on save)
-  if (trimmed.length > VALIDATION_LIMITS.ITEM_TEXT_MAX_LENGTH) return t('note.itemTooLong', { max: VALIDATION_LIMITS.ITEM_TEXT_MAX_LENGTH });
+  if (trimmed.length > VALIDATION.ITEM_TEXT_MAX_LENGTH) return t('note.itemTooLong', { max: VALIDATION.ITEM_TEXT_MAX_LENGTH });
   if (/[<>]/g.test(trimmed)) return t('note.itemInvalidChars');
   return null;
 };
 
 const validateTitle = (title: string, t: TFunction): string | null => {
-  if (title.length > VALIDATION_LIMITS.TITLE_MAX_LENGTH) return t('note.titleTooLong', { max: VALIDATION_LIMITS.TITLE_MAX_LENGTH });
+  if (title.length > VALIDATION.TITLE_MAX_LENGTH) return t('note.titleTooLong', { max: VALIDATION.TITLE_MAX_LENGTH });
   return null;
 };
 
 const validateContent = (content: string, t: TFunction): string | null => {
-  if (content.length > VALIDATION_LIMITS.CONTENT_MAX_LENGTH) return t('note.contentTooLong', { max: VALIDATION_LIMITS.CONTENT_MAX_LENGTH });
+  if (content.length > VALIDATION.CONTENT_MAX_LENGTH) return t('note.contentTooLong', { max: VALIDATION.CONTENT_MAX_LENGTH });
   return null;
 };
 
@@ -60,17 +60,19 @@ interface NoteModalProps {
   onSave: () => void;
   onRefresh?: () => void;
   onShare?: (note: Note) => void;
+  onDelete?: (noteId: string) => void;
   isOwner?: boolean;
   usersById?: Map<string, User>;
   currentUserId?: string;
 }
 
 interface TodoItem {
-  id: string; // Add unique ID for reliable tracking
+  id: string;
   text: string;
   completed: boolean;
   position: number;
   indentLevel: number;
+  assignedTo: string;
   originalPosition?: number;
 }
 
@@ -84,10 +86,16 @@ interface SortableItemProps {
   onKeyDown?: (index: number, e: React.KeyboardEvent<HTMLInputElement>) => void;
   inputRef?: React.RefCallback<HTMLInputElement>;
   onIndentChange?: (itemId: string, delta: 1 | -1) => void;
+  isShared?: boolean;
+  collaborators?: Collaborator[];
+  usersById?: Map<string, User>;
+  onAssignItem?: (itemId: string, userId: string) => void;
 }
 
-function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isCompleted = false, onKeyDown, inputRef, onIndentChange }: SortableItemProps) {
+function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isCompleted = false, onKeyDown, inputRef, onIndentChange, isShared, collaborators, usersById, onAssignItem }: SortableItemProps) {
   const { t } = useTranslation();
+  const [showAssigneePicker, setShowAssigneePicker] = useState(false);
+  const closeAssigneePicker = useCallback(() => setShowAssigneePicker(false), []);
   const {
     attributes,
     listeners,
@@ -97,36 +105,37 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
     isDragging,
   } = useSortable({
     id,
-    disabled: isCompleted // Disable dragging for completed items
+    disabled: isCompleted
   });
 
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
-    marginLeft: item.indentLevel * VALIDATION_LIMITS.INDENT_PX_PER_LEVEL,
+    marginLeft: item.indentLevel * VALIDATION.INDENT_PX_PER_LEVEL,
   };
+
+  const assignedUser = item.assignedTo ? usersById?.get(item.assignedTo) : undefined;
+  const showAssignUI = isShared && collaborators && collaborators.length > 0 && onAssignItem;
 
   return (
     <div
       ref={setNodeRef}
       style={style}
-      className={`flex items-center space-x-2 ${isDragging ? 'opacity-50' : ''} ${
+      className={`group/item flex items-center space-x-2 ${isDragging ? 'opacity-50' : ''} ${
         isCompleted ? 'opacity-60' : ''
       }`}
       {...attributes}
     >
-      {/* Only show drag handle for uncompleted items */}
       {!isCompleted && (
         <div
           {...listeners}
-          className="cursor-grab active:cursor-grabbing p-1 text-gray-400 hover:text-gray-600"
+          className="cursor-grab active:cursor-grabbing p-1 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
         >
           <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
             <path d="M7 2a2 2 0 1 1 .001 4.001A2 2 0 0 1 7 2zm0 6a2 2 0 1 1 .001 4.001A2 2 0 0 1 7 8zm0 6a2 2 0 1 1 .001 4.001A2 2 0 0 1 7 14zm6-8a2 2 0 1 1-.001-4.001A2 2 0 0 1 13 6zm0 2a2 2 0 1 1 .001 4.001A2 2 0 0 1 13 8zm0 6a2 2 0 1 1 .001 4.001A2 2 0 0 1 13 14z" />
           </svg>
         </div>
       )}
-      {/* Add spacing for completed items to align with uncompleted items */}
       {isCompleted && <div className="w-6 h-4"></div>}
       
       <input
@@ -135,27 +144,76 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
         onChange={(e) => onUpdateTodoItem(index, 'completed', e.target.checked)}
         className="h-4 w-4 text-blue-600 rounded"
       />
-      <input
-        type="text"
-        placeholder={t('note.itemPlaceholder')}
-        className={`flex-1 p-1 bg-transparent border-none outline-none placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white ${
-          isCompleted ? 'line-through text-gray-500 dark:text-gray-400' : ''
-        }`}
-        value={item.text}
-        onChange={(e) => onUpdateTodoItem(index, 'text', e.target.value)}
-        onKeyDown={(e) => {
-          if (e.key === 'Tab' && onIndentChange && !isCompleted) {
-            e.preventDefault();
-            onIndentChange(item.id, e.shiftKey ? -1 : 1);
-            return;
-          }
-          if (onKeyDown) onKeyDown(index, e);
-        }}
-        ref={inputRef}
-      />
+      <div className="flex-1 flex items-center min-w-0">
+        <input
+          type="text"
+          placeholder={t('note.itemPlaceholder')}
+          className={`field-sizing-content p-1 bg-transparent border-none outline-none placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white ${
+            isCompleted ? 'line-through text-gray-500 dark:text-gray-400' : ''
+          }`}
+          value={item.text}
+          onChange={(e) => onUpdateTodoItem(index, 'text', e.target.value)}
+          onKeyDown={(e) => {
+            if (e.key === 'Tab' && onIndentChange && !isCompleted) {
+              e.preventDefault();
+              onIndentChange(item.id, e.shiftKey ? -1 : 1);
+              return;
+            }
+            if (onKeyDown) onKeyDown(index, e);
+          }}
+          ref={inputRef}
+        />
+
+        {showAssignUI && (() => {
+          const assigneeDisplayName = assignedUser
+            ? [assignedUser.first_name, assignedUser.last_name].filter(Boolean).join(' ') || assignedUser.username
+            : '?';
+          return (
+          <div className="relative flex-shrink-0">
+            {item.assignedTo ? (
+              <button
+                onClick={() => setShowAssigneePicker(true)}
+                title={t('note.assignedTo', { name: assigneeDisplayName })}
+                aria-label={t('note.assignedTo', { name: assigneeDisplayName })}
+                className={`rounded-full focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-800 ${isCompleted ? 'cursor-default' : 'cursor-pointer'}`}
+                disabled={isCompleted}
+              >
+                <LetterAvatar
+                  firstName={assignedUser?.first_name}
+                  username={assignedUser?.username || '?'}
+                  userId={item.assignedTo}
+                  hasProfileIcon={assignedUser?.has_profile_icon}
+                  className="w-5 h-5"
+                />
+              </button>
+            ) : (
+              !isCompleted && (
+                <button
+                  onClick={() => setShowAssigneePicker(true)}
+                  className="w-5 h-5 rounded-full border border-dashed border-gray-300 dark:border-slate-600 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors opacity-0 group-hover/item:opacity-100 focus:opacity-100 focus-visible:ring-2 focus-visible:ring-blue-500 touch-visible"
+                  title={t('note.assignItem')}
+                  aria-label={t('note.assignItem')}
+                >
+                  <UserPlusIcon className="h-3 w-3 text-gray-400 dark:text-gray-500" aria-hidden="true" />
+                </button>
+              )
+            )}
+            {showAssigneePicker && (
+              <AssigneePicker
+                collaborators={collaborators}
+                currentAssigneeId={item.assignedTo}
+                onAssign={(userId) => onAssignItem(item.id, userId)}
+                onClose={closeAssigneePicker}
+              />
+            )}
+          </div>
+          );
+        })()}
+      </div>
+
       <button
         onClick={() => onRemoveTodoItem(item.id)}
-        className="p-1 text-gray-400 hover:text-gray-600"
+        className="p-1 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
       >
         <TrashIcon className="h-4 w-4" />
       </button>
@@ -163,7 +221,7 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
   );
 }
 
-export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, isOwner = true, usersById, currentUserId }: NoteModalProps) {
+export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, onDelete, isOwner = true, usersById, currentUserId }: NoteModalProps) {
   const { t, i18n } = useTranslation();
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
@@ -182,6 +240,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const errorTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const itemInputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
+  const contentRef = useRef<HTMLTextAreaElement>(null);
   const savingRef = useRef(false);
 
   const sensors = useSensors(
@@ -197,14 +256,25 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
     completedItems: items.filter(item => item.completed)
   }), [items]);
 
-  const colors = [
-    { value: '#ffffff', name: t('note.colorWhite'), class: 'bg-white dark:bg-slate-800 border-gray-300 dark:border-slate-600' },
-    { value: '#fbbc04', name: t('note.colorYellow'), class: 'bg-yellow-100 dark:bg-yellow-900 border-yellow-300 dark:border-yellow-700' },
-    { value: '#34a853', name: t('note.colorGreen'), class: 'bg-green-100 dark:bg-green-900 border-green-300 dark:border-green-700' },
-    { value: '#4285f4', name: t('note.colorBlue'), class: 'bg-blue-100 dark:bg-blue-900 border-blue-300 dark:border-blue-700' },
-    { value: '#ea4335', name: t('note.colorRed'), class: 'bg-red-100 dark:bg-red-900 border-red-300 dark:border-red-700' },
-    { value: '#8b5cf6', name: t('note.colorPurple'), class: 'bg-purple-100 dark:bg-purple-900 border-purple-300 dark:border-purple-700' },
-  ];
+  const colorMeta: Record<string, { name: string; class: string }> = {
+    '#ffffff': { name: t('note.colorWhite'), class: 'bg-white dark:bg-slate-800 border-gray-300 dark:border-slate-600' },
+    '#f28b82': { name: t('note.colorCoral'), class: 'bg-red-200 dark:bg-red-900 border-red-300 dark:border-red-700' },
+    '#fbbc04': { name: t('note.colorYellow'), class: 'bg-yellow-100 dark:bg-yellow-900 border-yellow-300 dark:border-yellow-700' },
+    '#fff475': { name: t('note.colorLemon'), class: 'bg-yellow-50 dark:bg-yellow-900/60 border-yellow-200 dark:border-yellow-700' },
+    '#ccff90': { name: t('note.colorLime'), class: 'bg-lime-100 dark:bg-lime-900 border-lime-300 dark:border-lime-700' },
+    '#a7ffeb': { name: t('note.colorTeal'), class: 'bg-teal-100 dark:bg-teal-900 border-teal-300 dark:border-teal-700' },
+    '#cbf0f8': { name: t('note.colorSky'), class: 'bg-sky-100 dark:bg-sky-900 border-sky-300 dark:border-sky-700' },
+    '#aecbfa': { name: t('note.colorPeriwinkle'), class: 'bg-blue-100 dark:bg-blue-900 border-blue-300 dark:border-blue-700' },
+    '#d7aefb': { name: t('note.colorLavender'), class: 'bg-purple-100 dark:bg-purple-900 border-purple-300 dark:border-purple-700' },
+    '#fdcfe8': { name: t('note.colorPink'), class: 'bg-pink-100 dark:bg-pink-900 border-pink-300 dark:border-pink-700' },
+    '#e6c9a8': { name: t('note.colorSand'), class: 'bg-amber-100 dark:bg-amber-900 border-amber-300 dark:border-amber-700' },
+    '#e8eaed': { name: t('note.colorGray'), class: 'bg-gray-100 dark:bg-gray-800 border-gray-300 dark:border-gray-600' },
+  };
+  const colors = NOTE_COLORS.map(value => ({
+    value,
+    name: colorMeta[value]?.name ?? value,
+    class: colorMeta[value]?.class ?? '',
+  }));
 
   useEffect(() => {
     if (note) {
@@ -217,11 +287,12 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
       setCheckedItemsCollapsed(note.checked_items_collapsed);
       setItems(
         note.items?.map((item, index) => ({
-          id: item.id || `existing_${item.position}_${index}`, // Use existing ID or generate fallback
+          id: item.id || `existing_${item.position}_${index}`,
           text: item.text,
           completed: item.completed,
           position: item.position,
           indentLevel: item.indent_level ?? 0,
+          assignedTo: item.assigned_to ?? '',
         })) || []
       );
       setNoteLabels(note.labels ?? []);
@@ -354,6 +425,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
       completed: false,
       position: uncompletedItems.length,
       indentLevel: 0,
+      assignedTo: '',
     };
     const newItems = [...items, newItem];
     setItems(newItems);
@@ -368,6 +440,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
       completed: false,
       position: 0,
       indentLevel: 0,
+      assignedTo: '',
     };
     const afterItemId = uncompletedItems[afterIndex]?.id;
     const afterItemPos = items.findIndex(item => item.id === afterItemId);
@@ -383,20 +456,63 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
   };
 
   const handleItemKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
-    if (e.key !== 'Enter') return;
+    if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
+      if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
+      const targetIndex = e.key === 'ArrowUp' ? index - 1 : index + 1;
+      if (targetIndex < 0 || targetIndex >= uncompletedItems.length) return;
+
+      e.preventDefault();
+      const targetItem = uncompletedItems[targetIndex];
+      const el = itemInputRefs.current.get(targetItem.id);
+      if (el) {
+        const cursorPos = Math.min(
+          (e.target as HTMLInputElement).selectionStart ?? 0,
+          el.value.length
+        );
+        el.focus();
+        el.setSelectionRange(cursorPos, cursorPos);
+      }
+      return;
+    }
+
     if (e.repeat) return;
     if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
-    e.preventDefault();
-    const newId = insertTodoItemAfter(index);
-    setTimeout(() => {
-      itemInputRefs.current.get(newId)?.focus();
-    }, 0);
+
+    if (e.key === 'Enter') {
+      e.preventDefault();
+      const newId = insertTodoItemAfter(index);
+      setTimeout(() => {
+        itemInputRefs.current.get(newId)?.focus();
+      }, 0);
+      return;
+    }
+
+    if (e.key === 'Backspace' || e.key === 'Delete') {
+      const currentItem = uncompletedItems[index];
+      if (!currentItem || currentItem.text.trim() !== '') return;
+
+      e.preventDefault();
+      const focusTarget = e.key === 'Backspace'
+        ? uncompletedItems[index - 1]
+        : uncompletedItems[index + 1];
+
+      removeTodoItem(currentItem.id);
+
+      if (focusTarget) {
+        setTimeout(() => {
+          const el = itemInputRefs.current.get(focusTarget.id);
+          if (el) {
+            el.focus();
+            el.setSelectionRange(el.value.length, el.value.length);
+          }
+        }, 0);
+      }
+    }
   };
 
   const removeTodoItem = (itemId: string) => {
     const newItems = items.filter(item => item.id !== itemId);
     
-    // Renumber positions for remaining uncompleted items
     let uncompletedCount = 0;
     const updatedItems = newItems.map((item) => {
       if (!item.completed) {
@@ -406,6 +522,11 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
     });
     
     setItems(updatedItems);
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = undefined;
+    }
+    autoSaveNote(updatedItems);
   };
 
   // Helper function to auto-save note changes
@@ -426,10 +547,11 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
           position: item.position,
           completed: item.completed,
           indent_level: item.indentLevel,
+          assigned_to: item.assignedTo,
         })),
       };
       await notes.update(note.id, updateData);
-      onRefresh?.(); // Refresh the notes list to reflect the changes
+      onRefresh?.();
     } catch (error) {
       console.error('Failed to auto-save note:', error);
       showError(t('note.failedSaveChanges'));
@@ -476,7 +598,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
       return;
     }
     
-    const textValue = newText.slice(0, VALIDATION_LIMITS.ITEM_TEXT_MAX_LENGTH);
+    const textValue = newText.slice(0, VALIDATION.ITEM_TEXT_MAX_LENGTH);
     const updatedItems = items.map(item => {
       if (item.id === itemId) {
         return { ...item, text: textValue };
@@ -496,7 +618,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
       // Set new timeout to save after user stops typing
       saveTimeoutRef.current = setTimeout(async () => {
         await autoSaveNote(updatedItems);
-      }, VALIDATION_LIMITS.AUTO_SAVE_TIMEOUT);
+      }, VALIDATION.AUTO_SAVE_TIMEOUT_MS);
     }
   };
 
@@ -531,6 +653,19 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
     }
   };
 
+  const collaborators = useMemo<Collaborator[]>(() => {
+    if (!note?.is_shared) return [];
+    return buildCollaborators(note.user_id, note.shared_with, usersById);
+  }, [note?.is_shared, note?.user_id, note?.shared_with, usersById]);
+
+  const assignItem = async (itemId: string, userId: string) => {
+    const updatedItems = items.map(item =>
+      item.id === itemId ? { ...item, assignedTo: userId } : item,
+    );
+    setItems(updatedItems);
+    await autoSaveNote(updatedItems);
+  };
+
   const handleSave = async () => {
     if (savingRef.current) return;
     savingRef.current = true;
@@ -543,7 +678,6 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
     setLoading(true);
     try {
       if (note) {
-        // Update existing note
         const updateData: UpdateNoteRequest = {
           title,
           content,
@@ -556,11 +690,11 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
             position: idx,
             completed: item.completed,
             indent_level: item.indentLevel,
+            assigned_to: item.assignedTo,
           })) : undefined,
         };
         await notes.update(note.id, updateData);
       } else {
-        // Create new note
         const createData: CreateNoteRequest = {
           title,
           content,
@@ -599,6 +733,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
           position: idx,
           completed: item.completed,
           indent_level: item.indentLevel,
+          assigned_to: item.assignedTo,
         })) : undefined,
       };
       await notes.update(note.id, updateData);
@@ -629,6 +764,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
           position: idx,
           completed: item.completed,
           indent_level: item.indentLevel,
+          assigned_to: item.assignedTo,
         })) : undefined,
       };
       await notes.update(note.id, updateData);
@@ -637,6 +773,14 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
       console.error('Failed to update archive status:', error);
       // Revert the archive state on error
       setArchived(!newArchivedState);
+    }
+  };
+
+  const handleDelete = () => {
+    if (!note || !onDelete) return;
+    if (window.confirm(t('note.deleteConfirm'))) {
+      onDelete(note.id);
+      onClose();
     }
   };
 
@@ -663,10 +807,11 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
           position: idx,
           completed: item.completed,
           indent_level: item.indentLevel,
+          assigned_to: item.assignedTo,
         })) : undefined,
       };
       await notes.update(note.id, updateData);
-      onRefresh?.(); // Refresh the notes list to reflect the changes
+      onRefresh?.();
     } catch (error) {
       console.error('Failed to update collapse state:', error);
       // Revert the state on error
@@ -721,6 +866,16 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
             <div className="flex items-center space-x-2">
               {note && (
                 <>
+                  {isOwner && onShare && (
+                    <button
+                      onClick={() => onShare(note)}
+                      className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                      title={t('note.share')}
+                      aria-label={t('note.share')}
+                    >
+                      <ShareIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+                    </button>
+                  )}
                   <button
                     onClick={handlePinToggle}
                     className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
@@ -749,14 +904,14 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
                       <ArchiveBoxIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
                     )}
                   </button>
-                  {isOwner && onShare && (
+                  {isOwner && onDelete && (
                     <button
-                      onClick={() => onShare(note)}
+                      onClick={handleDelete}
                       className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
-                      title={t('note.share')}
-                      aria-label={t('note.share')}
+                      title={t('note.delete')}
+                      aria-label={t('note.delete')}
                     >
-                      <ShareIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+                      <TrashIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
                     </button>
                   )}
                 </>
@@ -777,7 +932,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
               <span>{errorMessage}</span>
               <button
                 onClick={() => setErrorMessage(null)}
-                className="ml-2 text-red-500 hover:text-red-700"
+                className="ml-2 text-red-500 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300"
               >
                 ×
               </button>
@@ -827,11 +982,38 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
                 }
                 setTitle(newTitle);
               }}
+              onKeyDown={(e) => {
+                if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
+                if (e.repeat) return;
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  if (noteType === 'text') {
+                    const textarea = contentRef.current;
+                    if (textarea) {
+                      textarea.focus();
+                      textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+                    }
+                  } else {
+                    const firstItem = uncompletedItems[0];
+                    if (firstItem) {
+                      const input = itemInputRefs.current.get(firstItem.id);
+                      if (input) {
+                        input.focus();
+                        input.setSelectionRange(input.value.length, input.value.length);
+                      }
+                    } else {
+                      const newId = addTodoItem();
+                      setTimeout(() => itemInputRefs.current.get(newId)?.focus(), 0);
+                    }
+                  }
+                }
+              }}
             />
 
             {/* Content based on type */}
             {noteType === 'text' ? (
               <textarea
+                ref={contentRef}
                 placeholder={t('note.contentPlaceholder')}
                 rows={4}
                 className="w-full p-2 bg-transparent border-none outline-none resize-none placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white min-h-[6rem]"
@@ -874,6 +1056,10 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
                             if (el) itemInputRefs.current.set(item.id, el);
                             else itemInputRefs.current.delete(item.id);
                           }}
+                          isShared={note?.is_shared}
+                          collaborators={collaborators}
+                          usersById={usersById}
+                          onAssignItem={assignItem}
                         />
                       ))}
                     </SortableContext>
@@ -906,11 +1092,15 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
                           <SortableItem
                             key={item.id}
                             id={item.id}
-                            index={index + uncompletedItems.length} // Adjust index for completed items
+                            index={index + uncompletedItems.length}
                             item={item}
                             onUpdateTodoItem={(idx, field, value) => updateTodoItem(idx, field, value)}
                             onRemoveTodoItem={removeTodoItem}
                             isCompleted={true}
+                            isShared={note?.is_shared}
+                            collaborators={collaborators}
+                            usersById={usersById}
+                            onAssignItem={assignItem}
                           />
                         ))}
                       </div>
@@ -992,7 +1182,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, i
             )}
             <div className="flex items-center ml-auto">
               {loading && (
-                <div className="flex items-center space-x-2 text-sm text-gray-600">
+                <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300">
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600"></div>
                   <span>{t('note.saving')}</span>
                 </div>

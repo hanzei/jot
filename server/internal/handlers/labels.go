@@ -28,7 +28,15 @@ type AddLabelRequest struct {
 	Name string `json:"name"`
 }
 
-// GetLabels returns all labels for the authenticated user.
+// GetLabels godoc
+//
+//	@Summary	List all labels for the current user
+//	@Tags		labels
+//	@Security	CookieAuth
+//	@Produce	json
+//	@Success	200	{array}		models.Label
+//	@Failure	401	{string}	string	"unauthorized"
+//	@Router		/labels [get]
 func (h *LabelsHandler) GetLabels(w http.ResponseWriter, r *http.Request) (int, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
@@ -51,7 +59,20 @@ func (h *LabelsHandler) GetLabels(w http.ResponseWriter, r *http.Request) (int, 
 	return http.StatusOK, nil
 }
 
-// AddLabel creates or finds a label by name and attaches it to a note.
+// AddLabel godoc
+//
+//	@Summary	Add a label to a note
+//	@Tags		labels
+//	@Security	CookieAuth
+//	@Accept		json
+//	@Produce	json
+//	@Param		id		path		string			true	"Note ID"
+//	@Param		body	body		AddLabelRequest	true	"Label name"
+//	@Success	200		{object}	models.Note
+//	@Failure	400		{string}	string	"bad request"
+//	@Failure	401		{string}	string	"unauthorized"
+//	@Failure	403		{string}	string	"no access to note"
+//	@Router		/notes/{id}/labels [post]
 func (h *LabelsHandler) AddLabel(w http.ResponseWriter, r *http.Request) (int, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
@@ -106,7 +127,18 @@ func (h *LabelsHandler) AddLabel(w http.ResponseWriter, r *http.Request) (int, e
 	return http.StatusOK, nil
 }
 
-// RemoveLabel detaches a label from a note.
+// RemoveLabel godoc
+//
+//	@Summary	Remove a label from a note
+//	@Tags		labels
+//	@Security	CookieAuth
+//	@Produce	json
+//	@Param		id			path		string	true	"Note ID"
+//	@Param		label_id	path		string	true	"Label ID"
+//	@Success	200			{object}	models.Note
+//	@Failure	401			{string}	string	"unauthorized"
+//	@Failure	403			{string}	string	"no access to note"
+//	@Router		/notes/{id}/labels/{label_id} [delete]
 func (h *LabelsHandler) RemoveLabel(w http.ResponseWriter, r *http.Request) (int, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {

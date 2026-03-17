@@ -6,6 +6,7 @@ jest.mock('axios', () => {
     get: jest.fn(),
     post: jest.fn(),
     put: jest.fn(),
+    patch: jest.fn(),
     delete: jest.fn(),
     interceptors: {
       request: { use: jest.fn() },
@@ -53,6 +54,26 @@ describe('Notes API', () => {
       expect(mockAxiosInstance.get).toHaveBeenCalledWith('/notes', { params: undefined });
     });
 
+    it('passes my_todo param to GET /notes', async () => {
+      mockAxiosInstance.get.mockResolvedValueOnce({ data: [] });
+
+      await getNotes({ my_todo: true });
+
+      expect(mockAxiosInstance.get).toHaveBeenCalledWith('/notes', {
+        params: { my_todo: true },
+      });
+    });
+
+    it('strips user_id from server request params', async () => {
+      mockAxiosInstance.get.mockResolvedValueOnce({ data: [] });
+
+      await getNotes({ my_todo: true, user_id: 'user-123' });
+
+      expect(mockAxiosInstance.get).toHaveBeenCalledWith('/notes', {
+        params: { my_todo: true },
+      });
+    });
+
     it('throws on network error', async () => {
       mockAxiosInstance.get.mockRejectedValueOnce(new Error('Network Error'));
 
@@ -86,14 +107,14 @@ describe('Notes API', () => {
   });
 
   describe('updateNote', () => {
-    it('calls PUT /notes/{id} with data and returns updated note', async () => {
+    it('calls PATCH /notes/{id} with data and returns updated note', async () => {
       const updateData = { title: 'Updated Title' };
       const updated = { id: '123', title: 'Updated Title' };
-      mockAxiosInstance.put.mockResolvedValueOnce({ data: updated });
+      mockAxiosInstance.patch.mockResolvedValueOnce({ data: updated });
 
       const result = await updateNote('123', updateData);
 
-      expect(mockAxiosInstance.put).toHaveBeenCalledWith('/notes/123', updateData);
+      expect(mockAxiosInstance.patch).toHaveBeenCalledWith('/notes/123', updateData);
       expect(result).toEqual(updated);
     });
   });
