@@ -76,7 +76,9 @@ func New() (*Server, error) {
 	sessionService := auth.NewSessionService(sessionStore, userStore)
 
 	go func() {
-		for range time.Tick(time.Hour) {
+		ticker := time.NewTicker(time.Hour)
+		defer ticker.Stop()
+		for range ticker.C {
 			if err := sessionStore.DeleteExpired(); err != nil {
 				logrus.WithError(err).Error("failed to delete expired sessions")
 			}
@@ -87,7 +89,9 @@ func New() (*Server, error) {
 		if err := noteStore.PurgeOldTrashedNotes(7 * 24 * time.Hour); err != nil {
 			logrus.WithError(err).Error("failed to purge old trashed notes on startup")
 		}
-		for range time.Tick(time.Hour) {
+		ticker := time.NewTicker(time.Hour)
+		defer ticker.Stop()
+		for range ticker.C {
 			if err := noteStore.PurgeOldTrashedNotes(7 * 24 * time.Hour); err != nil {
 				logrus.WithError(err).Error("failed to purge old trashed notes")
 			}
@@ -137,7 +141,9 @@ func (s *Server) setupRoutes() {
 	s.router.Get("/livez", s.handleLive)
 	s.router.Get("/readyz", s.handleReady)
 
+	cop := http.NewCrossOriginProtection()
 	s.router.Route("/api/v1", func(r chi.Router) {
+		r.Use(cop.Handler)
 		r.Post("/register", s.wrapHandler(s.authHandler.Register))
 		r.Post("/login", s.wrapHandler(s.authHandler.Login))
 		r.Post("/logout", s.wrapHandler(s.authHandler.Logout))

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"errors"
 	"fmt"
+	"slices"
 	"strings"
 	"time"
 
@@ -91,20 +92,18 @@ func NewNoteStore(db *sql.DB) *NoteStore {
 	return &NoteStore{db: db}
 }
 
-func generateID() (string, error) {
+// generateID returns a cryptographically random 22-character base62 string.
+// crypto/rand.Read never returns an error since Go 1.20.
+func generateID() string {
 	const chars = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-	bytes := make([]byte, 22)
-	randBytes := make([]byte, 22)
-
-	if _, err := rand.Read(randBytes); err != nil {
-		return "", err
+	b := make([]byte, 22)
+	if _, err := rand.Read(b); err != nil {
+		panic(fmt.Sprintf("crypto/rand.Read: %v", err)) // unreachable since Go 1.20
 	}
-
-	for i := range 22 {
-		bytes[i] = chars[randBytes[i]%byte(len(chars))]
+	for i, c := range b {
+		b[i] = chars[c%byte(len(chars))]
 	}
-
-	return string(bytes), nil
+	return string(b)
 }
 
 // deref returns *p if p is non-nil, otherwise def.
@@ -116,19 +115,12 @@ func deref[T any](p *T, def T) T {
 }
 
 func IsValidID(id string) bool {
+	const chars = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 	if len(id) != 22 {
 		return false
 	}
-	const chars = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-	for _, char := range id {
-		found := false
-		for _, validChar := range chars {
-			if char == validChar {
-				found = true
-				break
-			}
-		}
-		if !found {
+	for _, c := range id {
+		if !strings.ContainsRune(chars, c) {
 			return false
 		}
 	}
@@ -136,15 +128,11 @@ func IsValidID(id string) bool {
 }
 
 func (s *NoteStore) Create(userID string, title, content string, noteType NoteType, color string) (*Note, error) {
-	// Generate note ID
-	noteID, err := generateID()
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate note ID: %w", err)
-	}
+	noteID := generateID()
 
 	// Shift existing unpinned notes down to make room at position 0
 	shiftQuery := `UPDATE notes SET position = position + 1 WHERE user_id = ? AND pinned = FALSE AND archived = FALSE AND deleted_at IS NULL`
-	_, err = s.db.Exec(shiftQuery, userID)
+	_, err := s.db.Exec(shiftQuery, userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to shift existing notes: %w", err)
 	}
@@ -618,16 +606,13 @@ func (s *NoteStore) getItemsByNoteID(noteID string) ([]NoteItem, error) {
 }
 
 func (s *NoteStore) CreateItem(noteID string, text string, position, indentLevel int, assignedTo string) (*NoteItem, error) {
-	itemID, err := generateID()
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate item ID: %w", err)
-	}
+	itemID := generateID()
 
 	query := `INSERT INTO note_items (id, note_id, text, position, indent_level, assigned_to)
 			  VALUES (?, ?, ?, ?, ?, ?) RETURNING completed, created_at, updated_at`
 
 	var item NoteItem
-	err = s.db.QueryRow(query, itemID, noteID, text, position, indentLevel, assignedTo).Scan(
+	err := s.db.QueryRow(query, itemID, noteID, text, position, indentLevel, assignedTo).Scan(
 		&item.Completed, &item.CreatedAt, &item.UpdatedAt,
 	)
 	if err != nil {
@@ -677,15 +662,12 @@ func (s *NoteStore) DeleteItemsByNoteID(noteID string) error {
 }
 
 func (s *NoteStore) CreateItemWithCompleted(noteID string, text string, position int, completed bool, indentLevel int, assignedTo string) (*NoteItem, error) {
-	itemID, err := generateID()
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate item ID: %w", err)
-	}
+	itemID := generateID()
 
 	query := `INSERT INTO note_items (id, note_id, text, position, completed, indent_level, assigned_to)
 			  VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING created_at, updated_at`
 	var item NoteItem
-	err = s.db.QueryRow(query, itemID, noteID, text, position, completed, indentLevel, assignedTo).Scan(
+	err := s.db.QueryRow(query, itemID, noteID, text, position, completed, indentLevel, assignedTo).Scan(
 		&item.CreatedAt, &item.UpdatedAt,
 	)
 	if err != nil {
@@ -704,16 +686,12 @@ func (s *NoteStore) CreateItemWithCompleted(noteID string, text string, position
 }
 
 func (s *NoteStore) ShareNote(noteID string, sharedByUserID, sharedWithUserID string) error {
-	// Generate share ID
-	shareID, err := generateID()
-	if err != nil {
-		return fmt.Errorf("failed to generate share ID: %w", err)
-	}
+	shareID := generateID()
 
 	query := `INSERT INTO note_shares (id, note_id, shared_with_user_id, shared_by_user_id, permission_level)
 			  VALUES (?, ?, ?, ?, 'edit')`
 
-	_, err = s.db.Exec(query, shareID, noteID, sharedWithUserID, sharedByUserID)
+	_, err := s.db.Exec(query, shareID, noteID, sharedWithUserID, sharedByUserID)
 	if err != nil {
 		var sqliteErr sqlite3.Error
 		if errors.As(err, &sqliteErr) && sqliteErr.ExtendedCode == sqlite3.ErrConstraintUnique {
@@ -954,10 +932,9 @@ func (s *NoteStore) getLabelsByNoteIDs(noteIDs []string) (map[string][]Label, er
 		return map[string][]Label{}, nil
 	}
 
-	placeholders := make([]string, len(noteIDs))
+	placeholders := slices.Repeat([]string{"?"}, len(noteIDs))
 	args := make([]any, len(noteIDs))
 	for i, id := range noteIDs {
-		placeholders[i] = "?"
 		args[i] = id
 	}
 
@@ -1053,13 +1030,10 @@ func (s *NoteStore) GetNoteLabels(noteID string) ([]Label, error) {
 // GetOrCreateLabel finds an existing label by name for a user or creates a new one.
 // Uses an atomic upsert to avoid race conditions when multiple callers create the same label concurrently.
 func (s *NoteStore) GetOrCreateLabel(userID, name string) (*Label, error) {
-	id, err := generateID()
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate label ID: %w", err)
-	}
+	id := generateID()
 
 	var l Label
-	err = s.db.QueryRow(
+	err := s.db.QueryRow(
 		`INSERT INTO labels (id, user_id, name) VALUES (?, ?, ?)
 		 ON CONFLICT(user_id, name) DO UPDATE SET name=excluded.name
 		 RETURNING id, user_id, name, created_at, updated_at`,
@@ -1081,10 +1055,7 @@ func (s *NoteStore) AddLabelToNote(noteID, labelID, userID string) error {
 		return ErrNoteNoAccess
 	}
 
-	id, err := generateID()
-	if err != nil {
-		return fmt.Errorf("failed to generate note_label ID: %w", err)
-	}
+	id := generateID()
 	_, err = s.db.Exec(
 		`INSERT OR IGNORE INTO note_labels (id, note_id, label_id) VALUES (?, ?, ?)`,
 		id, noteID, labelID,
