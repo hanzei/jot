@@ -188,13 +188,15 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     openNoteIdRef.current = noteId;
     notes.getById(noteId)
       .then(note => {
-        if (isMountedRef.current) {
+        if (isMountedRef.current && openNoteIdRef.current === noteId) {
           setEditingNote(note);
           setIsModalOpen(true);
         }
       })
       .catch(() => {
-        openNoteIdRef.current = null;
+        if (openNoteIdRef.current === noteId) {
+          openNoteIdRef.current = null;
+        }
         if (isMountedRef.current) {
           window.history.replaceState(null, '', '/');
         }
@@ -269,7 +271,9 @@ export default function Dashboard({ onLogout }: DashboardProps) {
 
   const handleEditNote = (note: Note) => {
     if (openNoteIdRef.current === note.id) return;
-    returnPathRef.current = window.location.pathname + window.location.search;
+    if (!openNoteIdRef.current) {
+      returnPathRef.current = window.location.pathname + window.location.search;
+    }
     openNoteIdRef.current = note.id;
     setEditingNote(note);
     setIsModalOpen(true);
