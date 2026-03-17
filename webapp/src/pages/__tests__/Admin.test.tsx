@@ -13,6 +13,7 @@ vi.mock('@/utils/api', () => ({
     getUsers: vi.fn(),
     createUser: vi.fn(),
     updateUserRole: vi.fn(),
+    deleteUser: vi.fn(),
   },
   auth: {
     logout: vi.fn(),

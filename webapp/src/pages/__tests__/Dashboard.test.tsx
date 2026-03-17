@@ -404,7 +404,7 @@ describe('Dashboard', () => {
     it('loads archive view from URL parameter', async () => {
       const mockGetAll = vi.mocked(notes.getAll)
       
-      renderDashboard(['/dashboard?view=archive'])
+      renderDashboard(['/?view=archive'])
       
       await waitFor(() => {
         expect(mockGetAll).toHaveBeenCalledWith(true, '', false, '', false)
@@ -418,7 +418,7 @@ describe('Dashboard', () => {
       vi.mocked(notes.restore).mockResolvedValue(mockNote)
       vi.mocked(notes.delete).mockResolvedValue(undefined)
 
-      renderDashboard(['/dashboard?view=bin'])
+      renderDashboard(['/?view=bin'])
 
       await waitFor(() => {
         expect(mockGetAll).toHaveBeenCalledWith(false, '', true, '', false)
@@ -448,7 +448,7 @@ describe('Dashboard', () => {
     it('handles malformed URL parameters gracefully', async () => {
       const mockGetAll = vi.mocked(notes.getAll)
 
-      renderDashboard(['/dashboard?view=invalid'])
+      renderDashboard(['/?view=invalid'])
 
       await waitFor(() => {
         expect(mockGetAll).toHaveBeenCalledWith(false, '', false, '', false)
@@ -1207,7 +1207,7 @@ describe('Dashboard', () => {
     it('loads My Todo view from URL parameter', async () => {
       const mockGetAll = vi.mocked(notes.getAll)
 
-      renderDashboard(['/dashboard?view=my-todo'])
+      renderDashboard(['/?view=my-todo'])
 
       await waitFor(() => {
         expect(mockGetAll).toHaveBeenCalledWith(false, '', false, '', true)
@@ -1235,7 +1235,7 @@ describe('Dashboard', () => {
       const user = userEvent.setup()
       const mockGetAll = vi.mocked(notes.getAll)
 
-      renderDashboard(['/dashboard?view=my-todo'])
+      renderDashboard(['/?view=my-todo'])
 
       await waitFor(() => {
         expect(mockGetAll).toHaveBeenCalledWith(false, '', false, '', true)
@@ -1263,7 +1263,7 @@ describe('Dashboard', () => {
       ]
       vi.mocked(labels.getAll).mockResolvedValue(mockLabels)
 
-      renderDashboard(['/dashboard?view=my-todo'])
+      renderDashboard(['/?view=my-todo'])
 
       await waitFor(() => {
         expect(mockGetAll).toHaveBeenCalledWith(false, '', false, '', true)

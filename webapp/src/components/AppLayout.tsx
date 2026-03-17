@@ -1,15 +1,7 @@
 import { type ReactNode } from 'react';
 import NavigationHeader from '@/components/NavigationHeader';
-import Sidebar from '@/components/Sidebar';
+import Sidebar, { type SidebarTab } from '@/components/Sidebar';
 import { useSidebarCollapsed } from '@/hooks/useSidebarCollapsed';
-
-interface SidebarTab {
-  label: string;
-  icon: ReactNode;
-  isActive?: boolean;
-  href?: string;
-  onClick?: () => void;
-}
 
 interface AppLayoutProps {
   onLogout: () => void;
@@ -21,7 +13,7 @@ interface AppLayoutProps {
   sidebarTabs: SidebarTab[];
   sidebarBottomTabs?: SidebarTab[];
   sidebarChildren?: ReactNode;
-  searchBar: ReactNode;
+  searchBar?: ReactNode;
   children: ReactNode;
 }
 
