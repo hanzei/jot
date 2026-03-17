@@ -30,11 +30,13 @@ vi.mock('@/utils/auth', () => ({
   isAdmin: vi.fn().mockReturnValue(false),
 }))
 
-vi.mock('@/components/NavigationHeader', () => ({
-  default: ({ onLogout, username, settingsLinkActive, isAdmin }: { onLogout?: () => void; username?: string; tabs?: unknown[]; children?: ReactNode; settingsLinkActive?: boolean; isAdmin?: boolean }) => (
-    <div data-testid="navigation-header" data-settings-link-active={settingsLinkActive} data-is-admin={isAdmin}>
+vi.mock('@/components/AppLayout', () => ({
+  default: ({ onLogout, username, settingsLinkActive, isAdmin, children, searchBar }: { onLogout?: () => void; username?: string; settingsLinkActive?: boolean; isAdmin?: boolean; children?: ReactNode; searchBar?: ReactNode }) => (
+    <div data-testid="app-layout" data-settings-link-active={settingsLinkActive} data-is-admin={isAdmin}>
       <span data-testid="displayed-username">{username}</span>
       <button onClick={onLogout} data-testid="logout-button">Logout</button>
+      <div data-testid="search-bar">{searchBar}</div>
+      {children}
     </div>
   ),
 }))
@@ -79,25 +81,25 @@ describe('Settings', () => {
       expect(screen.getByLabelText('Username')).toHaveValue('testuser')
     })
 
-    it('passes current username to the navigation header', () => {
+    it('passes current username to AppLayout', () => {
       renderSettings()
       expect(screen.getByTestId('displayed-username')).toHaveTextContent('testuser')
     })
 
-    it('passes settingsLinkActive to NavigationHeader', () => {
+    it('passes settingsLinkActive to AppLayout', () => {
       renderSettings()
-      expect(screen.getByTestId('navigation-header')).toHaveAttribute('data-settings-link-active', 'true')
+      expect(screen.getByTestId('app-layout')).toHaveAttribute('data-settings-link-active', 'true')
     })
 
-    it('passes isAdmin to NavigationHeader for non-admin user', () => {
+    it('passes isAdmin to AppLayout for non-admin user', () => {
       renderSettings()
-      expect(screen.getByTestId('navigation-header')).toHaveAttribute('data-is-admin', 'false')
+      expect(screen.getByTestId('app-layout')).toHaveAttribute('data-is-admin', 'false')
     })
 
-    it('passes isAdmin to NavigationHeader for admin user', () => {
+    it('passes isAdmin to AppLayout for admin user', () => {
       vi.mocked(authUtils.isAdmin).mockReturnValue(true)
       renderSettings()
-      expect(screen.getByTestId('navigation-header')).toHaveAttribute('data-is-admin', 'true')
+      expect(screen.getByTestId('app-layout')).toHaveAttribute('data-is-admin', 'true')
     })
 
     it('renders without errors when user is not logged in', () => {
@@ -130,7 +132,7 @@ describe('Settings', () => {
       expect(authUtils.setUser).toHaveBeenCalledWith(updatedUser)
     })
 
-    it('updates displayed username in nav header after successful save', async () => {
+    it('updates displayed username in AppLayout after successful save', async () => {
       const user = userEvent.setup()
       const updatedUser = { ...mockUser, username: 'newuser' }
       const mockSettings = { user_id: 'user1', language: 'system', theme: 'system' as const, updated_at: '' }

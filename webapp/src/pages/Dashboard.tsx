@@ -1,14 +1,13 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { PlusIcon, MagnifyingGlassIcon, TagIcon, DocumentTextIcon, ArchiveBoxIcon, TrashIcon, ClipboardDocumentCheckIcon } from '@heroicons/react/24/outline';
-import { useSidebarCollapsed } from '@/hooks/useSidebarCollapsed';
+import { PlusIcon, TagIcon, DocumentTextIcon, ArchiveBoxIcon, TrashIcon, ClipboardDocumentCheckIcon } from '@heroicons/react/24/outline';
 import { useTranslation } from 'react-i18next';
 import { notes, auth, labels as labelsApi, users as usersApi } from '@/utils/api';
 import { removeUser, getUser, isAdmin } from '@/utils/auth';
 import type { Note, Label, User, SSEEvent } from '@jot/shared';
 import { useSSE } from '@/utils/useSSE';
 import { useSearchParams } from 'react-router';
-import NavigationHeader from '@/components/NavigationHeader';
-import Sidebar from '@/components/Sidebar';
+import AppLayout from '@/components/AppLayout';
+import SearchBar from '@/components/SearchBar';
 import SortableNoteCard from '@/components/SortableNoteCard';
 import NoteModal from '@/components/NoteModal';
 import ShareModal from '@/components/ShareModal';
@@ -37,7 +36,6 @@ interface DashboardProps {
 
 export default function Dashboard({ onLogout }: DashboardProps) {
   const { t } = useTranslation();
-  const { collapsed, toggle: toggleSidebar, collapse: collapseSidebar } = useSidebarCollapsed();
   const [searchParams, setSearchParams] = useSearchParams();
   const [notesList, setNotesList] = useState<Note[]>([]);
   const [loading, setLoading] = useState(true);
@@ -191,7 +189,6 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     }
 
     loadNotes();
-    // Only reload labels when a note update could have changed label assignments
     if (event.type === 'note_updated') {
       loadLabels();
     }
@@ -229,7 +226,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   };
 
   const handleNoteRefresh = () => {
-    loadNotes(); // Only refresh data, don't close modal
+    loadNotes();
   };
 
   const handleDeleteNote = async (noteId: string) => {
@@ -267,7 +264,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const handleShareModalClose = () => {
     setIsShareModalOpen(false);
     setSharingNote(null);
-    loadNotes(); // Refresh notes to show updated sharing status
+    loadNotes();
   };
 
   const handleLabelSelect = (labelId: string | null) => {
@@ -307,41 +304,33 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       return;
     }
 
-    // Only allow reordering within the same group (pinned vs unpinned)
     if (activeNote.pinned !== overNote.pinned) {
       return;
     }
 
-    // Filter notes by the same pinned status
     const sameGroupNotes = notesList.filter(note => note.pinned === activeNote.pinned);
 
     const oldIndex = sameGroupNotes.findIndex(note => note.id === active.id);
     const newIndex = sameGroupNotes.findIndex(note => note.id === over.id);
 
     if (oldIndex !== newIndex) {
-      // Reorder the notes in the same group
       const reorderedNotes = arrayMove(sameGroupNotes, oldIndex, newIndex);
 
-      // Update local state immediately for better UX
       const updatedNotesList = [...notesList];
       const pinnedNotes = updatedNotesList.filter(note => note.pinned);
       const unpinnedNotes = updatedNotesList.filter(note => !note.pinned);
 
       if (activeNote.pinned) {
-        // Replace pinned notes with reordered ones
         setNotesList([...reorderedNotes, ...unpinnedNotes]);
       } else {
-        // Replace unpinned notes with reordered ones
         setNotesList([...pinnedNotes, ...reorderedNotes]);
       }
 
-      // Send the reorder request to the backend
       try {
         const noteIDs = reorderedNotes.map(note => note.id);
         await notes.reorder(noteIDs);
       } catch (error) {
         console.error('Failed to reorder notes:', error);
-        // Reload notes to revert to server state on error
         loadNotes();
       }
     }
@@ -386,59 +375,45 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   ];
 
   const searchBar = (
-    <div className="w-full sm:max-w-7xl">
-      <div className="relative">
-        <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-gray-400 dark:text-gray-500" />
-        <input
-          type="text"
-          placeholder={t('dashboard.searchPlaceholder')}
-          aria-label={t('dashboard.searchAriaLabel')}
-          className="w-full pl-9 sm:pl-10 pr-4 py-2 text-sm sm:text-base border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-        />
-      </div>
-    </div>
+    <SearchBar
+      value={searchQuery}
+      onChange={setSearchQuery}
+    />
   );
 
+  const sidebarChildren = labelsList.length > 0 ? (
+    <div className="px-2 pb-2">
+      <ul className="space-y-0.5">
+        {labelsList.map((label) => (
+          <li key={label.id}>
+            <button
+              onClick={() => handleLabelSelect(selectedLabelId === label.id ? null : label.id)}
+              className={`flex items-center gap-2 w-full text-left px-3 py-1.5 rounded-md text-sm ${
+                selectedLabelId === label.id
+                  ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium'
+                  : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-slate-700'
+              }`}
+            >
+              <TagIcon className="h-4 w-4 shrink-0" />
+              <span className="truncate min-w-0">{label.name}</span>
+            </button>
+          </li>
+        ))}
+      </ul>
+    </div>
+  ) : undefined;
+
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-slate-900 flex flex-col">
-      <NavigationHeader
-        title="Jot"
-        onLogout={handleLogout}
-        isAdmin={isAdmin()}
-        onToggleSidebar={toggleSidebar}
-      >
-        {searchBar}
-      </NavigationHeader>
-
-      <div className="relative flex flex-1">
-        <Sidebar tabs={navigationTabs} bottomTabs={bottomNavigationTabs} collapsed={collapsed} onCollapse={collapseSidebar}>
-          {labelsList.length > 0 && (
-            <div className="px-2 pb-2">
-              <ul className="space-y-0.5">
-                {labelsList.map((label) => (
-                  <li key={label.id}>
-                    <button
-                      onClick={() => handleLabelSelect(selectedLabelId === label.id ? null : label.id)}
-                      className={`flex items-center gap-2 w-full text-left px-3 py-1.5 rounded-md text-sm ${
-                        selectedLabelId === label.id
-                          ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium'
-                          : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-slate-700'
-                      }`}
-                    >
-                      <TagIcon className="h-4 w-4 shrink-0" />
-                      <span className="truncate min-w-0">{label.name}</span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </Sidebar>
-
-        {/* Main content */}
-        <main className="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <AppLayout
+      title="Jot"
+      onLogout={handleLogout}
+      isAdmin={isAdmin()}
+      sidebarTabs={navigationTabs}
+      sidebarBottomTabs={bottomNavigationTabs}
+      sidebarChildren={sidebarChildren}
+      searchBar={searchBar}
+    >
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Create note button — hidden in bin view */}
         {!showBin && (
           <div className="mb-8">
@@ -573,8 +548,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
             onClose={handleShareModalClose}
           />
         )}
-      </main>
       </div>
-    </div>
+    </AppLayout>
   );
 }
