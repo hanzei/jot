@@ -100,41 +100,10 @@ func New() (*Server, error) {
 		adminHandler:   adminHandler,
 	}
 
-	s.bgWg.Add(2)
-	go func() {
-		defer s.bgWg.Done()
-		ticker := time.NewTicker(time.Hour)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				if err := sessionStore.DeleteExpired(); err != nil {
-					logrus.WithError(err).Error("failed to delete expired sessions")
-				}
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
-
-	go func() {
-		defer s.bgWg.Done()
-		if err := noteStore.PurgeOldTrashedNotes(7 * 24 * time.Hour); err != nil {
-			logrus.WithError(err).Error("failed to purge old trashed notes on startup")
-		}
-		ticker := time.NewTicker(time.Hour)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				if err := noteStore.PurgeOldTrashedNotes(7 * 24 * time.Hour); err != nil {
-					logrus.WithError(err).Error("failed to purge old trashed notes")
-				}
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
+	startPeriodicTask(&s.bgWg, ctx, time.Hour, false, sessionStore.DeleteExpired, "delete expired sessions")
+	startPeriodicTask(&s.bgWg, ctx, time.Hour, true, func() error {
+		return noteStore.PurgeOldTrashedNotes(7 * 24 * time.Hour)
+	}, "purge old trashed notes")
 
 	if err := s.setupRoutes(); err != nil {
 		cancel()
@@ -492,4 +461,30 @@ func (s *Server) setStartResult(startErr error) {
 
 func (s *Server) BeginShutdown() {
 	s.shuttingDown.Store(true)
+}
+
+// startPeriodicTask starts a background goroutine tracked by wg that calls fn on every interval.
+// If runNow is true, fn is also called once immediately before the first tick.
+func startPeriodicTask(wg *sync.WaitGroup, ctx context.Context, interval time.Duration, runNow bool, fn func() error, logMsg string) {
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if runNow {
+			if err := fn(); err != nil {
+				logrus.WithError(err).Errorf("failed to %s", logMsg)
+			}
+		}
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				if err := fn(); err != nil {
+					logrus.WithError(err).Errorf("failed to %s", logMsg)
+				}
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
 }
