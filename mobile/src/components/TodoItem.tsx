@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, TextInput, TouchableOpacity, StyleSheet, type TextInput as TextInputType } from 'react-native';
+import { View, TextInput, StyleSheet, type TextInput as TextInputType } from 'react-native';
+import { TouchableOpacity } from 'react-native-gesture-handler';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import UserAvatar from './UserAvatar';
 import { useTheme } from '../theme/ThemeContext';
