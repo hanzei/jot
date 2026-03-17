@@ -68,6 +68,7 @@ type CreateNoteRequest struct {
 	NoteType models.NoteType  `json:"note_type"`
 	Color    string           `json:"color,omitempty"`
 	Items    []CreateNoteItem `json:"items,omitempty"`
+	Labels   []string         `json:"labels,omitempty"`
 }
 
 type CreateNoteItem struct {
@@ -198,14 +199,33 @@ func (h *NotesHandler) CreateNote(w http.ResponseWriter, r *http.Request) (int, 
 	if err != nil {
 		return http.StatusInternalServerError, err
 	}
+
+	needRefetch := false
+
 	if req.NoteType == models.NoteTypeTodo && len(req.Items) > 0 {
 		if status, err := h.createTodoItems(note.ID, req.Items); err != nil {
 			return status, err
 		}
+		needRefetch = true
+	}
 
-		updatedNote, err := h.noteStore.GetByID(note.ID, user.ID)
-		if err != nil {
-			return http.StatusInternalServerError, err
+	if len(req.Labels) > 0 {
+		for _, name := range req.Labels {
+			label, labelErr := h.noteStore.GetOrCreateLabel(user.ID, name)
+			if labelErr != nil {
+				return http.StatusInternalServerError, labelErr
+			}
+			if labelErr = h.noteStore.AddLabelToNote(note.ID, label.ID, user.ID); labelErr != nil {
+				return http.StatusInternalServerError, labelErr
+			}
+		}
+		needRefetch = true
+	}
+
+	if needRefetch {
+		updatedNote, refetchErr := h.noteStore.GetByID(note.ID, user.ID)
+		if refetchErr != nil {
+			return http.StatusInternalServerError, refetchErr
 		}
 		note = updatedNote
 	}

@@ -699,6 +699,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
           note_type: noteType,
           color,
           items: noteType === 'todo' ? items.map((item, idx) => ({ text: item.text, position: idx, indent_level: item.indentLevel })) : undefined,
+          labels: noteLabels.length > 0 ? noteLabels.map(l => l.name) : undefined,
         };
         await notes.create(createData);
       }
@@ -830,7 +831,8 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       return (
         title.trim() !== '' ||
         content.trim() !== '' ||
-        (noteType === 'todo' && items.some(item => item.text.trim() !== ''))
+        (noteType === 'todo' && items.some(item => item.text.trim() !== '')) ||
+        noteLabels.length > 0
       );
     }
   };
@@ -1109,31 +1111,33 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
             )}
 
             {/* Labels row: badges + add button with popover */}
-            {note && (
-              <div className="flex flex-wrap items-center gap-1">
-                {noteLabels.map(label => (
-                  <span
-                    key={label.id}
-                    className="inline-flex items-center bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full px-2 py-0.5 text-xs"
-                  >
-                    {label.name}
-                  </span>
-                ))}
-                <div className="relative">
-                  <button
-                    onClick={() => setShowLabelPicker(v => !v)}
-                    className="w-6 h-6 rounded-full border border-dashed border-gray-300 dark:border-slate-600 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors"
-                    title={t('labels.addLabels')}
-                    aria-label={t('labels.addLabels')}
-                  >
-                    <PlusIcon className="h-3 w-3 text-gray-400 dark:text-gray-500" />
-                  </button>
-                  {showLabelPicker && (
+            <div className="flex flex-wrap items-center gap-1">
+              {noteLabels.map(label => (
+                <span
+                  key={label.id}
+                  className="inline-flex items-center bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full px-2 py-0.5 text-xs"
+                >
+                  {label.name}
+                </span>
+              ))}
+              <div className="relative">
+                <button
+                  onClick={() => setShowLabelPicker(v => !v)}
+                  className="w-6 h-6 rounded-full border border-dashed border-gray-300 dark:border-slate-600 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors"
+                  title={t('labels.addLabels')}
+                  aria-label={t('labels.addLabels')}
+                >
+                  <PlusIcon className="h-3 w-3 text-gray-400 dark:text-gray-500" />
+                </button>
+                {showLabelPicker && (
+                  note ? (
                     <LabelPicker note={{...note, labels: noteLabels}} onRefresh={onRefresh} onNoteUpdate={(n) => setNoteLabels(n.labels ?? [])} onError={showError} onClose={() => setShowLabelPicker(false)} />
-                  )}
-                </div>
+                  ) : (
+                    <LabelPicker selectedLabels={noteLabels} onLocalChange={setNoteLabels} onError={showError} onClose={() => setShowLabelPicker(false)} />
+                  )
+                )}
               </div>
-            )}
+            </div>
 
             {/* Color selector */}
             <div className="flex space-x-2">

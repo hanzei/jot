@@ -5,14 +5,19 @@ import type { Label, Note } from '@jot/shared';
 import { notes as notesApi, labels as labelsApi } from '@/utils/api';
 
 interface LabelPickerProps {
-  note: Note;
+  /** When editing an existing note, pass the note to use API-based label toggling. */
+  note?: Note;
+  /** For new notes: the currently selected labels (local state). */
+  selectedLabels?: Label[];
+  /** For new notes: callback when labels change locally. */
+  onLocalChange?: (labels: Label[]) => void;
   onRefresh?: () => void;
   onNoteUpdate?: (note: Note) => void;
   onError?: (msg: string) => void;
   onClose: () => void;
 }
 
-export default function LabelPicker({ note, onRefresh, onNoteUpdate, onError, onClose }: LabelPickerProps) {
+export default function LabelPicker({ note, selectedLabels, onLocalChange, onRefresh, onNoteUpdate, onError, onClose }: LabelPickerProps) {
   const { t } = useTranslation();
   const [allLabels, setAllLabels] = useState<Label[]>([]);
   const [creating, setCreating] = useState(false);
@@ -20,7 +25,17 @@ export default function LabelPicker({ note, onRefresh, onNoteUpdate, onError, on
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
 
-  const currentLabelIds = new Set((note.labels ?? []).map(l => l.id));
+  const isLocalMode = !note;
+  const currentLabelIds = new Set(
+    isLocalMode
+      ? (selectedLabels ?? []).map(l => l.id)
+      : (note.labels ?? []).map(l => l.id)
+  );
+  const currentLabelNames = new Set(
+    isLocalMode
+      ? (selectedLabels ?? []).map(l => l.name)
+      : (note.labels ?? []).map(l => l.name)
+  );
 
   useEffect(() => {
     labelsApi.getAll()
@@ -28,7 +43,6 @@ export default function LabelPicker({ note, onRefresh, onNoteUpdate, onError, on
       .catch((err: Error) => onError?.(err.message));
   }, [onError]);
 
-  // Close on outside click
   useEffect(() => {
     const handler = (e: MouseEvent) => {
       if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
@@ -39,12 +53,21 @@ export default function LabelPicker({ note, onRefresh, onNoteUpdate, onError, on
     return () => document.removeEventListener('mousedown', handler);
   }, [onClose]);
 
-  // Focus input when creating
   useEffect(() => {
     if (creating) inputRef.current?.focus();
   }, [creating]);
 
   const toggleLabel = async (label: Label) => {
+    if (isLocalMode) {
+      const current = selectedLabels ?? [];
+      if (currentLabelIds.has(label.id)) {
+        onLocalChange?.(current.filter(l => l.id !== label.id));
+      } else {
+        onLocalChange?.([...current, label]);
+      }
+      return;
+    }
+
     try {
       let updatedNote: Note;
       if (currentLabelIds.has(label.id)) {
@@ -62,6 +85,32 @@ export default function LabelPicker({ note, onRefresh, onNoteUpdate, onError, on
   const handleCreate = async () => {
     const trimmed = newName.trim();
     if (!trimmed) return;
+
+    if (isLocalMode) {
+      if (currentLabelNames.has(trimmed)) {
+        setNewName('');
+        setCreating(false);
+        return;
+      }
+      const existingLabel = allLabels.find(l => l.name === trimmed);
+      if (existingLabel) {
+        onLocalChange?.([...(selectedLabels ?? []), existingLabel]);
+      } else {
+        const placeholder: Label = {
+          id: `new_${Date.now()}`,
+          user_id: '',
+          name: trimmed,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+        onLocalChange?.([...(selectedLabels ?? []), placeholder]);
+        setAllLabels(prev => [...prev, placeholder]);
+      }
+      setNewName('');
+      setCreating(false);
+      return;
+    }
+
     try {
       const updatedNote = await notesApi.addLabel(note.id, trimmed);
       labelsApi.getAll().then(setAllLabels).catch((err: Error) => onError?.(err.message));
@@ -87,13 +136,13 @@ export default function LabelPicker({ note, onRefresh, onNoteUpdate, onError, on
         <button
           key={label.id}
           role="checkbox"
-          aria-checked={currentLabelIds.has(label.id)}
+          aria-checked={currentLabelIds.has(label.id) || currentLabelNames.has(label.name)}
           onClick={() => toggleLabel(label)}
           className="flex items-center w-full px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-slate-700"
         >
           <input
             type="checkbox"
-            checked={currentLabelIds.has(label.id)}
+            checked={currentLabelIds.has(label.id) || currentLabelNames.has(label.name)}
             readOnly
             aria-hidden="true"
             tabIndex={-1}
