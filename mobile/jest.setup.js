@@ -107,25 +107,6 @@ jest.mock('./src/theme/ThemeContext', () => {
   };
 });
 
-jest.mock('./src/store/AuthContext', () => ({
-  __esModule: true,
-  useAuth: () => ({
-    user: { id: 'current-user', username: 'testuser' },
-    isAuthenticated: true,
-    isLoading: false,
-  }),
-  AuthProvider: ({ children }) => children,
-}));
-
-jest.mock('./src/store/UsersContext', () => ({
-  __esModule: true,
-  useUsers: () => ({
-    usersById: new Map(),
-    refreshUsers: jest.fn(),
-  }),
-  UsersProvider: ({ children }) => children,
-}));
-
 jest.mock('@expo/vector-icons/Ionicons', () => {
   const React = require('react');
   const { Text } = require('react-native');

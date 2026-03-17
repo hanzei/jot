@@ -3,6 +3,23 @@ import { render, fireEvent } from '@testing-library/react-native';
 import NoteCard from '../src/components/NoteCard';
 import type { Note } from '@jot/shared';
 
+jest.mock('../src/store/AuthContext', () => ({
+  __esModule: true,
+  useAuth: () => ({
+    user: { id: 'current-user', username: 'testuser' },
+    isAuthenticated: true,
+    isLoading: false,
+  }),
+}));
+
+jest.mock('../src/store/UsersContext', () => ({
+  __esModule: true,
+  useUsers: () => ({
+    usersById: new Map(),
+    refreshUsers: jest.fn(),
+  }),
+}));
+
 const baseNote: Note = {
   id: 'note-1',
   user_id: 'user-1',
