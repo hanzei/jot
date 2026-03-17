@@ -87,7 +87,11 @@ func (s *SessionStore) GetByUserID(userID string) ([]*Session, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to get sessions by user ID: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		if closeErr := rows.Close(); closeErr != nil {
+			err = fmt.Errorf("close rows: %w", closeErr)
+		}
+	}()
 
 	var sessions []*Session
 	for rows.Next() {

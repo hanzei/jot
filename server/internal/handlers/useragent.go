@@ -14,50 +14,63 @@ func parseUserAgent(ua string) ParsedUserAgent {
 	}
 }
 
+type browserRule struct {
+	markers []string
+	name    string
+}
+
+var browserRules = []browserRule{
+	{markers: []string{"Edg/", "EdgA/", "EdgiOS/"}, name: "Edge"},
+	{markers: []string{"OPR/", "Opera"}, name: "Opera"},
+	{markers: []string{"Vivaldi/"}, name: "Vivaldi"},
+	{markers: []string{"Brave"}, name: "Brave"},
+	{markers: []string{"YaBrowser/"}, name: "Yandex"},
+	{markers: []string{"SamsungBrowser/"}, name: "Samsung Internet"},
+	{markers: []string{"Firefox/", "FxiOS/"}, name: "Firefox"},
+	{markers: []string{"CriOS/"}, name: "Chrome"},
+	{markers: []string{"MSIE ", "Trident/"}, name: "Internet Explorer"},
+}
+
 func parseBrowser(ua string) string {
-	switch {
-	case strings.Contains(ua, "Edg/") || strings.Contains(ua, "EdgA/") || strings.Contains(ua, "EdgiOS/"):
-		return "Edge"
-	case strings.Contains(ua, "OPR/") || strings.Contains(ua, "Opera"):
-		return "Opera"
-	case strings.Contains(ua, "Vivaldi/"):
-		return "Vivaldi"
-	case strings.Contains(ua, "Brave"):
-		return "Brave"
-	case strings.Contains(ua, "YaBrowser/"):
-		return "Yandex"
-	case strings.Contains(ua, "SamsungBrowser/"):
-		return "Samsung Internet"
-	case strings.Contains(ua, "Firefox/") || strings.Contains(ua, "FxiOS/"):
-		return "Firefox"
-	case strings.Contains(ua, "CriOS/"):
-		return "Chrome"
-	case strings.Contains(ua, "Chrome/") && strings.Contains(ua, "Safari/"):
-		return "Chrome"
-	case strings.Contains(ua, "Safari/") && !strings.Contains(ua, "Chrome/"):
-		return "Safari"
-	case strings.Contains(ua, "MSIE ") || strings.Contains(ua, "Trident/"):
-		return "Internet Explorer"
-	default:
-		return "Unknown"
+	for _, rule := range browserRules {
+		for _, marker := range rule.markers {
+			if strings.Contains(ua, marker) {
+				return rule.name
+			}
+		}
 	}
+
+	if strings.Contains(ua, "Chrome/") && strings.Contains(ua, "Safari/") {
+		return "Chrome"
+	}
+	if strings.Contains(ua, "Safari/") {
+		return "Safari"
+	}
+
+	return "Unknown"
+}
+
+type osRule struct {
+	markers []string
+	name    string
+}
+
+var osRules = []osRule{
+	{markers: []string{"iPhone", "iPad", "iPod"}, name: "iOS"},
+	{markers: []string{"Android"}, name: "Android"},
+	{markers: []string{"Windows"}, name: "Windows"},
+	{markers: []string{"Mac OS X", "Macintosh"}, name: "macOS"},
+	{markers: []string{"CrOS"}, name: "ChromeOS"},
+	{markers: []string{"Linux"}, name: "Linux"},
 }
 
 func parseOS(ua string) string {
-	switch {
-	case strings.Contains(ua, "iPhone") || strings.Contains(ua, "iPad") || strings.Contains(ua, "iPod"):
-		return "iOS"
-	case strings.Contains(ua, "Android"):
-		return "Android"
-	case strings.Contains(ua, "Windows"):
-		return "Windows"
-	case strings.Contains(ua, "Mac OS X") || strings.Contains(ua, "Macintosh"):
-		return "macOS"
-	case strings.Contains(ua, "CrOS"):
-		return "ChromeOS"
-	case strings.Contains(ua, "Linux"):
-		return "Linux"
-	default:
-		return "Unknown"
+	for _, rule := range osRules {
+		for _, marker := range rule.markers {
+			if strings.Contains(ua, marker) {
+				return rule.name
+			}
+		}
 	}
+	return "Unknown"
 }
