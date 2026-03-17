@@ -1,7 +1,7 @@
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { MemoryRouter, useLocation } from 'react-router'
+import { MemoryRouter, useLocation, Routes, Route } from 'react-router'
 import { type ReactNode } from 'react'
 import Dashboard from '../Dashboard'
 import type { Note, Label } from '@jot/shared'
@@ -13,6 +13,7 @@ import { createMockNote } from '@/utils/__tests__/test-helpers'
 vi.mock('@/utils/api', () => ({
   notes: {
     getAll: vi.fn(),
+    getById: vi.fn(),
     delete: vi.fn(),
     reorder: vi.fn(),
     restore: vi.fn(),
@@ -182,7 +183,12 @@ vi.spyOn(console, 'error').mockImplementation(mockConsoleError)
 const renderDashboard = (initialEntries = ['/']) => {
   return render(
     <MemoryRouter initialEntries={initialEntries}>
-      <Dashboard onLogout={vi.fn()} />
+      <Routes>
+        <Route element={<Dashboard onLogout={vi.fn()} />}>
+          <Route index element={null} />
+          <Route path="notes/:noteId" element={null} />
+        </Route>
+      </Routes>
     </MemoryRouter>
   )
 }
@@ -573,6 +579,33 @@ describe('Dashboard', () => {
         expect(screen.getByTestId('note-modal')).toBeInTheDocument()
         expect(screen.getByText('Edit Note')).toBeInTheDocument()
       })
+    })
+
+    it('opens modal automatically when navigating to permalink route', async () => {
+      const mockNote = createMockNote({ id: 'abc123', title: 'Permalink Note' })
+      vi.mocked(notes.getById).mockResolvedValue(mockNote)
+
+      renderDashboard(['/notes/abc123'])
+
+      await waitFor(() => {
+        expect(notes.getById).toHaveBeenCalledWith('abc123')
+        expect(screen.getByTestId('note-modal')).toBeInTheDocument()
+        expect(screen.getByText('Edit Note')).toBeInTheDocument()
+      })
+    })
+
+    it('redirects to dashboard when permalink note is not found', async () => {
+      vi.mocked(notes.getById).mockRejectedValue(new Error('Not found'))
+      const replaceStateSpy = vi.spyOn(window.history, 'replaceState')
+
+      renderDashboard(['/notes/invalid-id'])
+
+      await waitFor(() => {
+        expect(notes.getById).toHaveBeenCalledWith('invalid-id')
+        expect(replaceStateSpy).toHaveBeenCalledWith(null, '', '/')
+      })
+
+      replaceStateSpy.mockRestore()
     })
 
     it('handles note deletion successfully', async () => {

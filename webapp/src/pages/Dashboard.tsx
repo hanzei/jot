@@ -5,7 +5,7 @@ import { notes, auth, labels as labelsApi, users as usersApi } from '@/utils/api
 import { removeUser, getUser, isAdmin } from '@/utils/auth';
 import type { Note, Label, User, SSEEvent } from '@jot/shared';
 import { useSSE } from '@/utils/useSSE';
-import { useSearchParams } from 'react-router';
+import { useSearchParams, useParams } from 'react-router';
 import AppLayout from '@/components/AppLayout';
 import SearchBar from '@/components/SearchBar';
 import SortableNoteCard from '@/components/SortableNoteCard';
@@ -36,6 +36,7 @@ interface DashboardProps {
 
 export default function Dashboard({ onLogout }: DashboardProps) {
   const { t } = useTranslation();
+  const { noteId: noteIdParam } = useParams<{ noteId?: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const [notesList, setNotesList] = useState<Note[]>([]);
   const [loading, setLoading] = useState(true);
@@ -53,6 +54,8 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const [usersById, setUsersById] = useState<Map<string, User>>(new Map());
   const user = getUser();
   const isMountedRef = useRef(true);
+  const openNoteIdRef = useRef<string | null>(null);
+  const returnPathRef = useRef('/');
   useEffect(() => {
     isMountedRef.current = true;
     return () => { isMountedRef.current = false; };
@@ -172,6 +175,57 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     loadNotes();
   }, [loadNotes]);
 
+  const restoreReturnUrl = useCallback(() => {
+    if (openNoteIdRef.current) {
+      openNoteIdRef.current = null;
+      const returnTo = returnPathRef.current;
+      returnPathRef.current = '/';
+      window.history.replaceState(null, '', returnTo);
+    }
+  }, []);
+
+  const openNoteFromUrl = useCallback((noteId: string) => {
+    openNoteIdRef.current = noteId;
+    returnPathRef.current = window.history.state?.returnTo ?? '/';
+    notes.getById(noteId)
+      .then(note => {
+        if (isMountedRef.current && openNoteIdRef.current === noteId) {
+          setEditingNote(note);
+          setIsModalOpen(true);
+        }
+      })
+      .catch(() => {
+        if (openNoteIdRef.current === noteId) {
+          openNoteIdRef.current = null;
+        }
+        if (isMountedRef.current) {
+          window.history.replaceState(null, '', '/');
+        }
+      });
+  }, []);
+
+  useEffect(() => {
+    if (noteIdParam) {
+      openNoteFromUrl(noteIdParam);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const notePathMatch = window.location.pathname.match(/^\/notes\/(.+)$/);
+      if (notePathMatch && !openNoteIdRef.current) {
+        openNoteFromUrl(notePathMatch[1]);
+      } else if (!notePathMatch && openNoteIdRef.current) {
+        openNoteIdRef.current = null;
+        setIsModalOpen(false);
+        setEditingNote(null);
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [openNoteFromUrl]);
+
   const handleSSEEvent = useCallback((event: SSEEvent) => {
     const currentUserLostAccess =
       event.type === 'note_deleted' ||
@@ -181,6 +235,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       if (editingNote && event.note_id === editingNote.id) {
         setIsModalOpen(false);
         setEditingNote(null);
+        restoreReturnUrl();
       }
       if (sharingNote && event.note_id === sharingNote.id) {
         setIsShareModalOpen(false);
@@ -192,7 +247,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     if (event.type === 'note_updated') {
       loadLabels();
     }
-  }, [editingNote, sharingNote, loadNotes, loadLabels, user?.id]);
+  }, [editingNote, sharingNote, loadNotes, loadLabels, user?.id, restoreReturnUrl]);
 
   useSSE({
     onEvent: handleSSEEvent,
@@ -215,14 +270,21 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   };
 
   const handleEditNote = (note: Note) => {
+    if (openNoteIdRef.current === note.id) return;
+    if (!openNoteIdRef.current) {
+      returnPathRef.current = window.location.pathname + window.location.search;
+    }
+    openNoteIdRef.current = note.id;
     setEditingNote(note);
     setIsModalOpen(true);
+    window.history.pushState({ returnTo: returnPathRef.current }, '', `/notes/${note.id}`);
   };
 
   const handleNoteUpdate = () => {
     loadNotes();
     setIsModalOpen(false);
     setEditingNote(null);
+    restoreReturnUrl();
   };
 
   const handleNoteRefresh = () => {
@@ -529,7 +591,11 @@ export default function Dashboard({ onLogout }: DashboardProps) {
         {isModalOpen && (
           <NoteModal
             note={editingNote}
-            onClose={() => setIsModalOpen(false)}
+            onClose={() => {
+              setIsModalOpen(false);
+              setEditingNote(null);
+              restoreReturnUrl();
+            }}
             onSave={handleNoteUpdate}
             onRefresh={handleNoteRefresh}
             onShare={handleShareNote}
