@@ -132,11 +132,15 @@ func New() (*Server, error) {
 		adminHandler:   adminHandler,
 	}
 
-	s.setupRoutes()
+	if err := s.setupRoutes(); err != nil {
+		cancel()
+		_ = db.Close()
+		return nil, fmt.Errorf("setup routes: %w", err)
+	}
 	return s, nil
 }
 
-func (s *Server) setupRoutes() {
+func (s *Server) setupRoutes() error {
 	s.router.Use(logrusRequestLogger)
 	s.router.Use(middleware.Recoverer)
 	allowedOrigin := os.Getenv("CORS_ALLOWED_ORIGIN")
@@ -157,7 +161,7 @@ func (s *Server) setupRoutes() {
 
 	cop := http.NewCrossOriginProtection()
 	if err := cop.AddTrustedOrigin(allowedOrigin); err != nil {
-		logrus.WithError(err).Warnf("cross-origin protection: ignoring malformed trusted origin %q", allowedOrigin)
+		return fmt.Errorf("add trusted origin %q: %w", allowedOrigin, err)
 	}
 	s.router.Route("/api/v1", func(r chi.Router) {
 		r.Use(cop.Handler)
@@ -225,7 +229,7 @@ func (s *Server) setupRoutes() {
 	if staticDir == "" {
 		workDir, err := os.Getwd()
 		if err != nil {
-			panic(err)
+			return fmt.Errorf("get working directory: %w", err)
 		}
 		staticDir = workDir + "/../webapp/build/"
 	}
@@ -235,11 +239,11 @@ func (s *Server) setupRoutes() {
 	logrus.Infof("Serving static files from: %s", safeStaticDir) // #nosec G706 -- safeStaticDir has newlines stripped
 	staticRoot, err := os.OpenRoot(staticDir)
 	if err != nil {
-		logrus.WithError(err).Warnf("Failed to open static directory %s; static file serving disabled", safeStaticDir)
-		return
+		return fmt.Errorf("open static directory %s: %w", safeStaticDir, err)
 	}
 	s.staticRoot = staticRoot
 	FileServer(s.router, "/", staticRoot)
+	return nil
 }
 
 // FileServer registers a catch-all GET route that serves files from root
