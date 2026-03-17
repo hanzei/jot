@@ -186,6 +186,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
 
   const openNoteFromUrl = useCallback((noteId: string) => {
     openNoteIdRef.current = noteId;
+    returnPathRef.current = window.history.state?.returnTo ?? '/';
     notes.getById(noteId)
       .then(note => {
         if (isMountedRef.current && openNoteIdRef.current === noteId) {
@@ -217,7 +218,6 @@ export default function Dashboard({ onLogout }: DashboardProps) {
         openNoteFromUrl(notePathMatch[1]);
       } else if (!notePathMatch && openNoteIdRef.current) {
         openNoteIdRef.current = null;
-        returnPathRef.current = '/';
         setIsModalOpen(false);
         setEditingNote(null);
       }
@@ -277,7 +277,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     openNoteIdRef.current = note.id;
     setEditingNote(note);
     setIsModalOpen(true);
-    window.history.pushState(null, '', `/notes/${note.id}`);
+    window.history.pushState({ returnTo: returnPathRef.current }, '', `/notes/${note.id}`);
   };
 
   const handleNoteUpdate = () => {

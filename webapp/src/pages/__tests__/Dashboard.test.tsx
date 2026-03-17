@@ -581,6 +581,33 @@ describe('Dashboard', () => {
       })
     })
 
+    it('opens modal automatically when navigating to permalink route', async () => {
+      const mockNote = createMockNote({ id: 'abc123', title: 'Permalink Note' })
+      vi.mocked(notes.getById).mockResolvedValue(mockNote)
+
+      renderDashboard(['/notes/abc123'])
+
+      await waitFor(() => {
+        expect(notes.getById).toHaveBeenCalledWith('abc123')
+        expect(screen.getByTestId('note-modal')).toBeInTheDocument()
+        expect(screen.getByText('Edit Note')).toBeInTheDocument()
+      })
+    })
+
+    it('redirects to dashboard when permalink note is not found', async () => {
+      vi.mocked(notes.getById).mockRejectedValue(new Error('Not found'))
+      const replaceStateSpy = vi.spyOn(window.history, 'replaceState')
+
+      renderDashboard(['/notes/invalid-id'])
+
+      await waitFor(() => {
+        expect(notes.getById).toHaveBeenCalledWith('invalid-id')
+        expect(replaceStateSpy).toHaveBeenCalledWith(null, '', '/')
+      })
+
+      replaceStateSpy.mockRestore()
+    })
+
     it('handles note deletion successfully', async () => {
       const user = userEvent.setup()
       const mockNotes = [createMockNote({ id: '1', title: 'Test Note' })]
