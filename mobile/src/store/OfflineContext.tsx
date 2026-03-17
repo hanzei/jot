@@ -21,7 +21,7 @@ const OfflineContext = createContext<OfflineContextValue>({ isConnected: true })
 
 export function OfflineProvider({ children }: { children: React.ReactNode }) {
   const [isConnected, setIsConnected] = useState(true);
-  const { isAuthenticated, revalidateSession } = useAuth();
+  const { revalidateSession } = useAuth();
   const db = useSQLiteContext();
   const queryClient = useQueryClient();
   const prevConnectedRef = useRef(true);
@@ -30,9 +30,9 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
   const handleReconnect = useCallback(async () => {
     // Re-validate session with the server (handles offline-authenticated users
     // and refreshes user/settings for all returning-online users).
-    await revalidateSession();
+    const stillAuthenticated = await revalidateSession();
 
-    if (!isAuthenticated) return;
+    if (!stillAuthenticated) return;
     if (isDrainingRef.current) return;
     isDrainingRef.current = true;
     try {
@@ -47,7 +47,7 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
     }
     queryClient.invalidateQueries({ queryKey: ['notes-local'] });
     queryClient.invalidateQueries({ queryKey: ['note-local'] });
-  }, [db, queryClient, isAuthenticated, revalidateSession]);
+  }, [db, queryClient, revalidateSession]);
 
   useEffect(() => {
     // Seed the initial state from the real network status before subscribing to changes,

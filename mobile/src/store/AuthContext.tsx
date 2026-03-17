@@ -10,7 +10,7 @@ interface AuthState {
   login: (username: string, password: string) => Promise<void>;
   register: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
-  revalidateSession: () => Promise<void>;
+  revalidateSession: () => Promise<boolean>;
   setUser: React.Dispatch<React.SetStateAction<User | null>>;
   setSettings: (settings: UserSettings) => void;
 }
@@ -103,18 +103,21 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     }
   }, [clearAuth]);
 
-  const revalidateSession = useCallback(async () => {
+  const revalidateSession = useCallback(async (): Promise<boolean> => {
     try {
       const response = await auth.me();
       setUser(response.user);
       setSettings(response.settings);
       await cacheAuthProfile(response);
+      return true;
     } catch (error) {
       if (isUnauthorizedError(error)) {
         await clearStoredSession();
         await clearCachedProfile();
         clearAuth();
+        return false;
       }
+      return true;
     }
   }, [clearAuth]);
 
