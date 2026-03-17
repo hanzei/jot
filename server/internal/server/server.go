@@ -239,7 +239,8 @@ func (s *Server) setupRoutes() error {
 	logrus.Infof("Serving static files from: %s", safeStaticDir) // #nosec G706 -- safeStaticDir has newlines stripped
 	staticRoot, err := os.OpenRoot(staticDir)
 	if err != nil {
-		return fmt.Errorf("open static directory %s: %w", safeStaticDir, err)
+		logrus.WithError(err).Warnf("Static directory %s not available; static file serving disabled", safeStaticDir)
+		return nil
 	}
 	s.staticRoot = staticRoot
 	FileServer(s.router, "/", staticRoot)
