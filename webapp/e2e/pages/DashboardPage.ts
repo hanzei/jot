@@ -157,25 +157,37 @@ export class DashboardPage {
     await this.page.fill('[aria-label="Search notes"]', '');
   }
 
+  private async ensureSidebarOpen() {
+    const sidebar = this.page.locator('aside[aria-label="Main navigation"]');
+    if (!(await sidebar.isVisible())) {
+      await this.page.getByRole('button', { name: 'Toggle sidebar' }).click();
+      await expect(sidebar).toBeVisible();
+    }
+  }
+
   async switchToArchived() {
+    await this.ensureSidebarOpen();
     await this.page
       .locator('aside[aria-label="Main navigation"] nav [aria-label="Archive"]')
       .click();
   }
 
   async switchToNotes() {
+    await this.ensureSidebarOpen();
     await this.page
       .locator('aside[aria-label="Main navigation"] nav [aria-label="Notes"]')
       .click();
   }
 
   async switchToBin() {
+    await this.ensureSidebarOpen();
     await this.page
       .locator('aside[aria-label="Main navigation"] nav [aria-label="Bin"]')
       .click();
   }
 
   async switchToMyTodo() {
+    await this.ensureSidebarOpen();
     await this.page
       .locator('aside[aria-label="Main navigation"] nav [aria-label="My Todo"]')
       .click();
@@ -254,16 +266,19 @@ export class DashboardPage {
 
   /** Clicks a label button in the sidebar to toggle the label filter. */
   async selectSidebarLabel(labelName: string) {
+    await this.ensureSidebarOpen();
     await this.page.locator('aside ul').getByRole('button', { name: labelName, exact: true }).click();
   }
 
   async expectLabelInSidebar(labelName: string) {
+    await this.ensureSidebarOpen();
     await expect(
       this.page.locator('aside ul').getByRole('button', { name: labelName, exact: true })
     ).toBeVisible();
   }
 
   async expectLabelNotInSidebar(labelName: string) {
+    await this.ensureSidebarOpen();
     await expect(
       this.page.locator('aside ul').getByRole('button', { name: labelName, exact: true })
     ).toHaveCount(0);
@@ -289,6 +304,7 @@ export class DashboardPage {
 
   /** Asserts that Archive and Bin appear directly after a given label in the sidebar with no large gap. */
   async expectArchiveAndBinDirectlyAfterLabel(labelName: string) {
+    await this.ensureSidebarOpen();
     const sidebar = this.page.locator('aside[aria-label="Main navigation"]');
 
     const labelButton = sidebar.getByRole('button', { name: labelName, exact: true });

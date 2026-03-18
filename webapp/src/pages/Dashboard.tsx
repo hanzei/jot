@@ -453,7 +453,12 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   );
 
   const sidebarChildren = labelsList.length > 0 ? (
-    <div className="px-2 pb-2">
+    <div className="px-2 pb-2" data-testid="sidebar-labels">
+      <div className="px-3 pt-3 pb-1">
+        <span className="text-xs font-medium text-gray-400 dark:text-gray-500 uppercase tracking-wider">
+          {t('labels.title')}
+        </span>
+      </div>
       <ul className="space-y-0.5">
         {labelsList.map((label) => (
           <li key={label.id}>
