@@ -6,7 +6,9 @@
     "profileMenu": "Profilmenü",
     "settings": "Einstellungen",
     "admin": "Admin",
-    "logout": "Abmelden"
+    "logout": "Abmelden",
+    "logoutConfirmTitle": "Abmelden",
+    "logoutConfirmMessage": "Möchtest du dich wirklich abmelden?"
   },
   "auth": {
     "signInTitle": "Bei Jot anmelden",
