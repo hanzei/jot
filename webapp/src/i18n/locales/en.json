@@ -6,7 +6,9 @@
     "profileMenu": "Profile menu",
     "settings": "Settings",
     "admin": "Admin",
-    "logout": "Logout"
+    "logout": "Logout",
+    "logoutConfirmTitle": "Log out",
+    "logoutConfirmMessage": "Are you sure you want to log out?"
   },
   "auth": {
     "signInTitle": "Sign in to Jot",
