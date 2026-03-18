@@ -25,6 +25,7 @@ import (
 	"github.com/hanzei/jot/server/internal/server"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // TestUser bundles a user model with a typed API client.
@@ -215,23 +216,26 @@ func TestRegisterDisabled(t *testing.T) {
 		cfg.RegistrationEnabled = false
 	})
 
-	t.Run("first user can still register for bootstrap", func(t *testing.T) {
+	t.Run("registration returns 403", func(t *testing.T) {
 		c := ts.newClient()
-		auth, err := c.Register(t.Context(), "firstuser", "password123")
-		require.NoError(t, err)
-		assert.Equal(t, "firstuser", auth.User.Username)
-	})
-
-	t.Run("subsequent registration returns 403", func(t *testing.T) {
-		c := ts.newClient()
-		_, err := c.Register(t.Context(), "seconduser", "password123")
+		_, err := c.Register(t.Context(), "newuser", "password123")
 		require.Error(t, err)
 		assert.Equal(t, http.StatusForbidden, client.StatusCode(err))
 	})
 
 	t.Run("admin can still create users", func(t *testing.T) {
+		db := ts.Server.GetDB()
+
+		hash, err := bcrypt.GenerateFromPassword([]byte("adminpass"), bcrypt.DefaultCost)
+		require.NoError(t, err)
+		_, err = db.Exec(
+			"INSERT INTO users (id, username, password_hash, role) VALUES (?, ?, ?, ?)",
+			"admin-test-id", "seedadmin", string(hash), "admin",
+		)
+		require.NoError(t, err)
+
 		adminClient := ts.newClient()
-		_, err := adminClient.Login(t.Context(), "firstuser", "password123")
+		_, err = adminClient.Login(t.Context(), "seedadmin", "adminpass")
 		require.NoError(t, err)
 
 		created, err := adminClient.AdminCreateUser(t.Context(), "adminmade", "password123", client.RoleUser)

@@ -1135,7 +1135,6 @@ const docTemplate = `{
         },
         "/register": {
             "post": {
-                "description": "When REGISTRATION_ENABLED is false, returns 403 unless no users exist yet (first-user bootstrap).",
                 "consumes": [
                     "application/json"
                 ],

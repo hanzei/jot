@@ -1060,8 +1060,6 @@ paths:
     post:
       consumes:
       - application/json
-      description: When REGISTRATION_ENABLED is false, returns 403 unless no users
-        exist yet (first-user bootstrap).
       parameters:
       - description: Registration credentials
         in: body

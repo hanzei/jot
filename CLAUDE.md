@@ -230,7 +230,7 @@ Migration files live in `server/internal/database/migrations/` and are named `NN
 | `STATIC_DIR` | `../webapp/build/` | Path to compiled frontend files |
 | `CORS_ALLOWED_ORIGIN` | `http://localhost:5173` | Allowed webapp origin for CORS |
 | `COOKIE_SECURE` | `true` (unless explicitly `false`) | Whether the session cookie is `Secure` |
-| `REGISTRATION_ENABLED` | `true` (unless explicitly `false`) | Whether public user registration is allowed. When `false`, only admins can create users via the admin API. The first user can always register (bootstrap). |
+| `REGISTRATION_ENABLED` | `true` (unless explicitly `false`) | Whether public user registration is allowed. When `false`, only admins can create users via the admin API. |
 
 ### Authentication
 
