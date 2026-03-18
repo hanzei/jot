@@ -84,7 +84,7 @@ Jot is a self-hosted note-taking application. The backend is a Go HTTP API and t
 │   │   ├── config/      # Server configuration (env vars, defaults)
 │   │   ├── database/    # Database bootstrap and migration runner
 │   │   ├── handlers/    # HTTP request handlers
-│   │   ├── models/      # Store types and shared data models
+│   │   ├── store/       # Store types and shared data models
 │   │   ├── sse/         # Server-sent event hub and event types
 │   │   └── server/      # Server setup, routing, middleware wiring
 │   ├── docs/            # Generated OpenAPI docs (swagger)
@@ -130,7 +130,7 @@ Jot is a self-hosted note-taking application. The backend is a Go HTTP API and t
 
 ### Architecture Patterns
 
-**Store pattern** — database interaction is wrapped in `*Store` types (`UserStore`, `NoteStore`, etc.) in `internal/models`, each holding a `*sql.DB`. No ORM is used; all queries are hand-written SQL with parameterized inputs.
+**Store pattern** — database interaction is wrapped in `*Store` types (`UserStore`, `NoteStore`, etc.) in `internal/store`, each holding a `*sql.DB`. No ORM is used; all queries are hand-written SQL with parameterized inputs.
 
 **Handler pattern** — handlers have the signature:
 ```go
@@ -243,7 +243,7 @@ Migration files live in `server/internal/database/migrations/` and are named `NN
 
 ### Naming Conventions (Go)
 
-- Packages: `internal/{auth,config,database,handlers,models,sse,server}`
+- Packages: `internal/{auth,config,database,handlers,store,sse,server}`
 - Go types: PascalCase when exported (`UserStore`, `NoteStore`); variables: camelCase (`noteStore`, `userID`)
 - Database columns: snake_case (`note_type`, `user_id`)
 - JSON fields: snake_case (`note_type`, `user_id`)
