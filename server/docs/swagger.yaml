@@ -371,10 +371,6 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/server.aboutResponse'
-        "500":
-          description: internal server error
-          schema:
-            type: string
       security:
       - CookieAuth: []
       summary: Get server version and build info
@@ -395,10 +391,6 @@ paths:
             type: string
         "403":
           description: forbidden
-          schema:
-            type: string
-        "500":
-          description: internal server error
           schema:
             type: string
       security:
@@ -439,10 +431,6 @@ paths:
           description: username already taken
           schema:
             type: string
-        "500":
-          description: internal server error
-          schema:
-            type: string
       security:
       - CookieAuth: []
       summary: Create a user (admin only)
@@ -473,10 +461,6 @@ paths:
             type: string
         "409":
           description: cannot demote the last admin
-          schema:
-            type: string
-        "500":
-          description: internal server error
           schema:
             type: string
       security:
@@ -527,10 +511,6 @@ paths:
           description: cannot demote the last admin
           schema:
             type: string
-        "500":
-          description: internal server error
-          schema:
-            type: string
       security:
       - CookieAuth: []
       summary: Update a user's role (admin only)
@@ -545,10 +525,6 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/server.configResponse'
-        "500":
-          description: internal server error
-          schema:
-            type: string
       summary: Get public server configuration
       tags:
       - system
@@ -1213,10 +1189,6 @@ paths:
           description: unauthorized
           schema:
             type: string
-        "500":
-          description: internal server error
-          schema:
-            type: string
       security:
       - CookieAuth: []
       summary: List all active sessions for the current user
@@ -1243,10 +1215,6 @@ paths:
             type: string
         "404":
           description: session not found
-          schema:
-            type: string
-        "500":
-          description: internal server error
           schema:
             type: string
       security:
@@ -1447,4 +1415,3 @@ securityDefinitions:
     name: jot_session
     type: apiKey
 swagger: "2.0"
-

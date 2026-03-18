@@ -4,6 +4,7 @@ package docs
 import "github.com/swaggo/swag"
 
 const docTemplate = `{
+    "schemes": {{ marshal .Schemes }},
     "swagger": "2.0",
     "info": {
         "description": "{{escape .Description}}",
@@ -17,7 +18,8 @@ const docTemplate = `{
         },
         "version": "{{.Version}}"
     },
-    "basePath": "/api/v1",
+    "host": "{{.Host}}",
+    "basePath": "{{.BasePath}}",
     "paths": {
         "/about": {
             "get": {
@@ -38,12 +40,6 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/server.aboutResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "internal server error",
-                        "schema": {
-                            "type": "string"
                         }
                     }
                 }
@@ -78,12 +74,6 @@ const docTemplate = `{
                     },
                     "403": {
                         "description": "forbidden",
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    "500": {
-                        "description": "internal server error",
                         "schema": {
                             "type": "string"
                         }
@@ -147,12 +137,6 @@ const docTemplate = `{
                         "schema": {
                             "type": "string"
                         }
-                    },
-                    "500": {
-                        "description": "internal server error",
-                        "schema": {
-                            "type": "string"
-                        }
                     }
                 }
             }
@@ -201,12 +185,6 @@ const docTemplate = `{
                     },
                     "409": {
                         "description": "cannot demote the last admin",
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    "500": {
-                        "description": "internal server error",
                         "schema": {
                             "type": "string"
                         }
@@ -285,12 +263,6 @@ const docTemplate = `{
                         "schema": {
                             "type": "string"
                         }
-                    },
-                    "500": {
-                        "description": "internal server error",
-                        "schema": {
-                            "type": "string"
-                        }
                     }
                 }
             }
@@ -309,12 +281,6 @@ const docTemplate = `{
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/server.configResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "internal server error",
-                        "schema": {
-                            "type": "string"
                         }
                     }
                 }
@@ -1368,12 +1334,6 @@ const docTemplate = `{
                         "schema": {
                             "type": "string"
                         }
-                    },
-                    "500": {
-                        "description": "internal server error",
-                        "schema": {
-                            "type": "string"
-                        }
                     }
                 }
             }
@@ -1416,12 +1376,6 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "session not found",
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    "500": {
-                        "description": "internal server error",
                         "schema": {
                             "type": "string"
                         }
@@ -2273,8 +2227,7 @@ const docTemplate = `{
             "name": "jot_session",
             "in": "header"
         }
-    },
-    "schemes": {{ marshal .Schemes }}
+    }
 }`
 
 // SwaggerInfo holds exported Swagger Info so clients can modify it

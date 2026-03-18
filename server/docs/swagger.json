@@ -34,12 +34,6 @@
                         "schema": {
                             "$ref": "#/definitions/server.aboutResponse"
                         }
-                    },
-                    "500": {
-                        "description": "internal server error",
-                        "schema": {
-                            "type": "string"
-                        }
                     }
                 }
             }
@@ -73,12 +67,6 @@
                     },
                     "403": {
                         "description": "forbidden",
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    "500": {
-                        "description": "internal server error",
                         "schema": {
                             "type": "string"
                         }
@@ -142,12 +130,6 @@
                         "schema": {
                             "type": "string"
                         }
-                    },
-                    "500": {
-                        "description": "internal server error",
-                        "schema": {
-                            "type": "string"
-                        }
                     }
                 }
             }
@@ -196,12 +178,6 @@
                     },
                     "409": {
                         "description": "cannot demote the last admin",
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    "500": {
-                        "description": "internal server error",
                         "schema": {
                             "type": "string"
                         }
@@ -280,12 +256,6 @@
                         "schema": {
                             "type": "string"
                         }
-                    },
-                    "500": {
-                        "description": "internal server error",
-                        "schema": {
-                            "type": "string"
-                        }
                     }
                 }
             }
@@ -304,12 +274,6 @@
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/server.configResponse"
-                        }
-                    },
-                    "500": {
-                        "description": "internal server error",
-                        "schema": {
-                            "type": "string"
                         }
                     }
                 }
@@ -1363,12 +1327,6 @@
                         "schema": {
                             "type": "string"
                         }
-                    },
-                    "500": {
-                        "description": "internal server error",
-                        "schema": {
-                            "type": "string"
-                        }
                     }
                 }
             }
@@ -1411,12 +1369,6 @@
                     },
                     "404": {
                         "description": "session not found",
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    "500": {
-                        "description": "internal server error",
                         "schema": {
                             "type": "string"
                         }
