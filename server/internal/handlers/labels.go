@@ -57,7 +57,7 @@ func (h *LabelsHandler) GetLabels(w http.ResponseWriter, r *http.Request) (int, 
 	if err := json.NewEncoder(w).Encode(labels); err != nil {
 		return http.StatusInternalServerError, err
 	}
-	return 0, nil
+	return http.StatusOK, nil
 }
 
 // AddLabel godoc
@@ -126,7 +126,7 @@ func (h *LabelsHandler) AddLabel(w http.ResponseWriter, r *http.Request) (int, e
 	if err := json.NewEncoder(w).Encode(note); err != nil {
 		return http.StatusInternalServerError, err
 	}
-	return 0, nil
+	return http.StatusOK, nil
 }
 
 // RemoveLabel godoc
@@ -179,5 +179,5 @@ func (h *LabelsHandler) RemoveLabel(w http.ResponseWriter, r *http.Request) (int
 	if err := json.NewEncoder(w).Encode(note); err != nil {
 		return http.StatusInternalServerError, err
 	}
-	return 0, nil
+	return http.StatusOK, nil
 }
