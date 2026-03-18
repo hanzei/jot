@@ -117,6 +117,7 @@ function TodoItem({
           </View>
         </TouchableOpacity>
       ) : null}
+      <View style={styles.spacer} />
       {editable && onDelete && (
         <TouchableOpacity onPress={onDelete} style={styles.deleteBtn} testID="todo-item-delete">
           <Ionicons name="close" size={18} color={colors.iconMuted} />
@@ -142,9 +143,12 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   textInput: {
-    flex: 1,
+    flexShrink: 1,
     fontSize: 16,
     paddingVertical: 4,
+  },
+  spacer: {
+    flex: 1,
   },
   completedText: {
     textDecorationLine: 'line-through' as const,
