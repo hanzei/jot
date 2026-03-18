@@ -36,27 +36,24 @@ type AddLabelRequest struct {
 //	@Produce	json
 //	@Success	200	{array}		models.Label
 //	@Failure	401	{string}	string	"unauthorized"
+//	@Failure	500	{string}	string	"internal server error"
 //	@Router		/labels [get]
-func (h *LabelsHandler) GetLabels(w http.ResponseWriter, r *http.Request) (int, error) {
+func (h *LabelsHandler) GetLabels(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
-		return http.StatusUnauthorized, errors.New("unauthorized")
+		return http.StatusUnauthorized, nil, errors.New("unauthorized")
 	}
 
 	labels, err := h.noteStore.GetLabels(user.ID)
 	if err != nil {
-		return http.StatusInternalServerError, err
+		return http.StatusInternalServerError, nil, err
 	}
 
 	if labels == nil {
 		labels = []models.Label{}
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(labels); err != nil {
-		return http.StatusInternalServerError, err
-	}
-	return http.StatusOK, nil
+	return http.StatusOK, labels, nil
 }
 
 // AddLabel godoc
@@ -72,40 +69,41 @@ func (h *LabelsHandler) GetLabels(w http.ResponseWriter, r *http.Request) (int, 
 //	@Failure	400		{string}	string	"bad request"
 //	@Failure	401		{string}	string	"unauthorized"
 //	@Failure	403		{string}	string	"no access to note"
+//	@Failure	500		{string}	string	"internal server error"
 //	@Router		/notes/{id}/labels [post]
-func (h *LabelsHandler) AddLabel(w http.ResponseWriter, r *http.Request) (int, error) {
+func (h *LabelsHandler) AddLabel(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
-		return http.StatusUnauthorized, errors.New("unauthorized")
+		return http.StatusUnauthorized, nil, errors.New("unauthorized")
 	}
 
 	noteID := chi.URLParam(r, "id")
 
 	var req AddLabelRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		return http.StatusBadRequest, errors.New("invalid request body")
+		return http.StatusBadRequest, nil, errors.New("invalid request body")
 	}
 
 	req.Name = strings.TrimSpace(req.Name)
 	if req.Name == "" {
-		return http.StatusBadRequest, errors.New("label name is required")
+		return http.StatusBadRequest, nil, errors.New("label name is required")
 	}
 
 	label, err := h.noteStore.GetOrCreateLabel(user.ID, req.Name)
 	if err != nil {
-		return http.StatusInternalServerError, err
+		return http.StatusInternalServerError, nil, err
 	}
 
 	if err = h.noteStore.AddLabelToNote(noteID, label.ID, user.ID); err != nil {
 		if errors.Is(err, models.ErrNoteNoAccess) {
-			return http.StatusForbidden, errors.New("no access to note")
+			return http.StatusForbidden, nil, errors.New("no access to note")
 		}
-		return http.StatusInternalServerError, err
+		return http.StatusInternalServerError, nil, err
 	}
 
 	note, err := h.noteStore.GetByID(noteID, user.ID)
 	if err != nil {
-		return http.StatusInternalServerError, err
+		return http.StatusInternalServerError, nil, err
 	}
 
 	if h.hub != nil {
@@ -120,11 +118,7 @@ func (h *LabelsHandler) AddLabel(w http.ResponseWriter, r *http.Request) (int, e
 		}
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(note); err != nil {
-		return http.StatusInternalServerError, err
-	}
-	return http.StatusOK, nil
+	return http.StatusOK, note, nil
 }
 
 // RemoveLabel godoc
@@ -138,11 +132,12 @@ func (h *LabelsHandler) AddLabel(w http.ResponseWriter, r *http.Request) (int, e
 //	@Success	200			{object}	models.Note
 //	@Failure	401			{string}	string	"unauthorized"
 //	@Failure	403			{string}	string	"no access to note"
+//	@Failure	500			{string}	string	"internal server error"
 //	@Router		/notes/{id}/labels/{label_id} [delete]
-func (h *LabelsHandler) RemoveLabel(w http.ResponseWriter, r *http.Request) (int, error) {
+func (h *LabelsHandler) RemoveLabel(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
-		return http.StatusUnauthorized, errors.New("unauthorized")
+		return http.StatusUnauthorized, nil, errors.New("unauthorized")
 	}
 
 	noteID := chi.URLParam(r, "id")
@@ -150,14 +145,14 @@ func (h *LabelsHandler) RemoveLabel(w http.ResponseWriter, r *http.Request) (int
 
 	if err := h.noteStore.RemoveLabelFromNote(noteID, labelID, user.ID); err != nil {
 		if errors.Is(err, models.ErrNoteNoAccess) {
-			return http.StatusForbidden, errors.New("no access to note")
+			return http.StatusForbidden, nil, errors.New("no access to note")
 		}
-		return http.StatusInternalServerError, err
+		return http.StatusInternalServerError, nil, err
 	}
 
 	note, err := h.noteStore.GetByID(noteID, user.ID)
 	if err != nil {
-		return http.StatusInternalServerError, err
+		return http.StatusInternalServerError, nil, err
 	}
 
 	if h.hub != nil {
@@ -172,9 +167,5 @@ func (h *LabelsHandler) RemoveLabel(w http.ResponseWriter, r *http.Request) (int
 		}
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(note); err != nil {
-		return http.StatusInternalServerError, err
-	}
-	return http.StatusOK, nil
+	return http.StatusOK, note, nil
 }

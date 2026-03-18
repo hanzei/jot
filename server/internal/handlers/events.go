@@ -73,7 +73,7 @@ func (h *EventsHandler) ServeSSE(w http.ResponseWriter, r *http.Request) {
 			}
 			data, err := json.Marshal(event)
 			if err != nil {
-				logrus.WithError(err).WithField("type", event.Type).WithField("note_id", event.NoteID).Error("Failed to marshal SSE event")
+				logrus.WithError(err).WithField("type", event.Type).WithField("note_id", event.NoteID).Error("failed to marshal SSE event")
 				continue
 			}
 			if _, err := fmt.Fprintf(w, "data: %s\n\n", data); err != nil {

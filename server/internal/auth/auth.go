@@ -7,7 +7,6 @@ import (
 
 	"github.com/hanzei/jot/server/internal/models"
 )
-
 const (
 	SessionCookieName = "jot_session"
 )

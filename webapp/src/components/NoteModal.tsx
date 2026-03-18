@@ -33,7 +33,7 @@ const validateContent = (content: string, t: TFunction): string | null => {
 };
 
 // Utility function to generate unique IDs for todo items
-const generateItemId = () => `item_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+const generateItemId = () => crypto.randomUUID();
 
 // Timeout management now handled via useRef instead of global window property
 import {

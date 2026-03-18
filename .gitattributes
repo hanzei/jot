@@ -1,0 +1,6 @@
+# Mark auto-generated files so GitHub collapses them in diffs
+# and excludes them from language statistics.
+# Regenerate with: task gen-docs
+server/docs/docs.go linguist-generated=true
+server/docs/swagger.json linguist-generated=true
+server/docs/swagger.yaml linguist-generated=true

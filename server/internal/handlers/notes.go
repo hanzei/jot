@@ -97,7 +97,7 @@ type UpdateNoteItem struct {
 
 func normalizeCreateNoteRequest(req *CreateNoteRequest) (int, error) {
 	if req.Title == "" && req.Content == "" && len(req.Items) == 0 {
-		return http.StatusBadRequest, errors.New("empty note")
+		return http.StatusBadRequest, errors.New("note must have a title, content, or items")
 	}
 
 	if len(req.Items) > 0 {
@@ -114,7 +114,7 @@ func normalizeCreateNoteRequest(req *CreateNoteRequest) (int, error) {
 		req.Color = models.DefaultNoteColor
 	}
 
-	return 0, nil
+	return http.StatusOK, nil
 }
 
 func (h *NotesHandler) createNoteLabels(noteID, userID string, rawLabels []string) (int, error) {
@@ -137,7 +137,7 @@ func (h *NotesHandler) createNoteLabels(noteID, userID string, rawLabels []strin
 			return http.StatusInternalServerError, fmt.Errorf("add label to note: %w", err)
 		}
 	}
-	return 0, nil
+	return http.StatusOK, nil
 }
 
 func (h *NotesHandler) createTodoItems(noteID string, items []CreateNoteItem) (int, error) {
@@ -149,7 +149,7 @@ func (h *NotesHandler) createTodoItems(noteID string, items []CreateNoteItem) (i
 			return http.StatusInternalServerError, err
 		}
 	}
-	return 0, nil
+	return http.StatusOK, nil
 }
 
 // GetNotes godoc
@@ -165,11 +165,12 @@ func (h *NotesHandler) createTodoItems(noteID string, items []CreateNoteItem) (i
 //	@Param		my_todo		query		boolean	false	"Return only notes with todos assigned to current user"
 //	@Success	200			{array}		models.Note
 //	@Failure	401			{string}	string	"unauthorized"
+//	@Failure	500			{string}	string	"internal server error"
 //	@Router		/notes [get]
-func (h *NotesHandler) GetNotes(w http.ResponseWriter, r *http.Request) (int, error) {
+func (h *NotesHandler) GetNotes(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
-		return http.StatusUnauthorized, errors.New("unauthorized")
+		return http.StatusUnauthorized, nil, errors.New("unauthorized")
 	}
 
 	q := r.URL.Query()
@@ -181,14 +182,10 @@ func (h *NotesHandler) GetNotes(w http.ResponseWriter, r *http.Request) (int, er
 
 	notes, err := h.noteStore.GetByUserID(user.ID, archived, trashed, search, labelID, myTodo)
 	if err != nil {
-		return http.StatusInternalServerError, err
+		return http.StatusInternalServerError, nil, err
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(notes); err != nil {
-		return http.StatusInternalServerError, err
-	}
-	return 0, nil
+	return http.StatusOK, notes, nil
 }
 
 // CreateNote godoc
@@ -202,39 +199,40 @@ func (h *NotesHandler) GetNotes(w http.ResponseWriter, r *http.Request) (int, er
 //	@Success	201		{object}	models.Note
 //	@Failure	400		{string}	string	"bad request"
 //	@Failure	401		{string}	string	"unauthorized"
+//	@Failure	500		{string}	string	"internal server error"
 //	@Router		/notes [post]
-func (h *NotesHandler) CreateNote(w http.ResponseWriter, r *http.Request) (int, error) {
+func (h *NotesHandler) CreateNote(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
-		return http.StatusUnauthorized, errors.New("unauthorized")
+		return http.StatusUnauthorized, nil, errors.New("unauthorized")
 	}
 
 	var req CreateNoteRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		return http.StatusBadRequest, err
+		return http.StatusBadRequest, nil, err
 	}
 
 	if status, err := normalizeCreateNoteRequest(&req); err != nil {
-		return status, err
+		return status, nil, err
 	}
 
 	note, err := h.noteStore.Create(user.ID, req.Title, req.Content, req.NoteType, req.Color)
 	if err != nil {
-		return http.StatusInternalServerError, err
+		return http.StatusInternalServerError, nil, err
 	}
 
 	needRefetch := false
 
 	if req.NoteType == models.NoteTypeTodo && len(req.Items) > 0 {
 		if status, err := h.createTodoItems(note.ID, req.Items); err != nil {
-			return status, err
+			return status, nil, err
 		}
 		needRefetch = true
 	}
 
 	if len(req.Labels) > 0 {
 		if status, err := h.createNoteLabels(note.ID, user.ID, req.Labels); err != nil {
-			return status, err
+			return status, nil, err
 		}
 		needRefetch = true
 	}
@@ -242,18 +240,13 @@ func (h *NotesHandler) CreateNote(w http.ResponseWriter, r *http.Request) (int, 
 	if needRefetch {
 		updatedNote, refetchErr := h.noteStore.GetByID(note.ID, user.ID)
 		if refetchErr != nil {
-			return http.StatusInternalServerError, fmt.Errorf("refetch updated note: %w", refetchErr)
+			return http.StatusInternalServerError, nil, fmt.Errorf("refetch updated note: %w", refetchErr)
 		}
 		note = updatedNote
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	if err := json.NewEncoder(w).Encode(note); err != nil {
-		return http.StatusInternalServerError, err
-	}
 	h.publishNoteEvent(note.ID, sse.EventNoteCreated, note, user.ID)
-	return 0, nil
+	return http.StatusCreated, note, nil
 }
 
 // GetNote godoc
@@ -267,34 +260,31 @@ func (h *NotesHandler) CreateNote(w http.ResponseWriter, r *http.Request) (int, 
 //	@Failure	400	{string}	string	"bad request"
 //	@Failure	401	{string}	string	"unauthorized"
 //	@Failure	404	{string}	string	"not found"
+//	@Failure	500	{string}	string	"internal server error"
 //	@Router		/notes/{id} [get]
-func (h *NotesHandler) GetNote(w http.ResponseWriter, r *http.Request) (int, error) {
+func (h *NotesHandler) GetNote(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
-		return http.StatusUnauthorized, errors.New("unauthorized")
+		return http.StatusUnauthorized, nil, errors.New("unauthorized")
 	}
 
 	id := chi.URLParam(r, "id")
 	if id == "" {
-		return http.StatusBadRequest, errors.New("missing note ID")
+		return http.StatusBadRequest, nil, errors.New("missing note ID")
 	}
 	if !models.IsValidID(id) {
-		return http.StatusBadRequest, errors.New("invalid note ID format")
+		return http.StatusBadRequest, nil, errors.New("invalid note ID format")
 	}
 
 	note, err := h.noteStore.GetByID(id, user.ID)
 	if err != nil {
 		if errors.Is(err, models.ErrNoteNotFound) {
-			return http.StatusNotFound, err
+			return http.StatusNotFound, nil, err
 		}
-		return http.StatusInternalServerError, err
+		return http.StatusInternalServerError, nil, err
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(note); err != nil {
-		return http.StatusInternalServerError, err
-	}
-	return 0, nil
+	return http.StatusOK, note, nil
 }
 
 func (h *NotesHandler) validateTodoItems(noteID string, items []UpdateNoteItem) (int, error) {
@@ -308,7 +298,7 @@ func (h *NotesHandler) validateTodoItems(noteID string, items []UpdateNoteItem) 
 		return status, err
 	}
 
-	return 0, nil
+	return http.StatusOK, nil
 }
 
 // validateItemAssignments checks that all assigned user IDs are valid and have access to the note.
@@ -321,7 +311,7 @@ func (h *NotesHandler) validateItemAssignments(noteID string, items []UpdateNote
 		}
 	}
 	if !hasAssignment {
-		return 0, nil
+		return http.StatusOK, nil
 	}
 
 	shares, err := h.noteStore.GetNoteShares(noteID)
@@ -355,7 +345,7 @@ func (h *NotesHandler) validateItemAssignments(noteID string, items []UpdateNote
 		}
 	}
 
-	return 0, nil
+	return http.StatusOK, nil
 }
 
 func (h *NotesHandler) updateTodoItems(noteID string, userID string, items []UpdateNoteItem) error {
@@ -392,59 +382,56 @@ func (h *NotesHandler) updateTodoItems(noteID string, userID string, items []Upd
 //	@Failure	400		{string}	string	"bad request"
 //	@Failure	401		{string}	string	"unauthorized"
 //	@Failure	404		{string}	string	"not found"
+//	@Failure	500		{string}	string	"internal server error"
 //	@Router		/notes/{id} [patch]
-func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, error) {
+func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
-		return http.StatusUnauthorized, errors.New("unauthorized")
+		return http.StatusUnauthorized, nil, errors.New("unauthorized")
 	}
 
 	id := chi.URLParam(r, "id")
 	if id == "" {
-		return http.StatusBadRequest, errors.New("missing note ID")
+		return http.StatusBadRequest, nil, errors.New("missing note ID")
 	}
 	if !models.IsValidID(id) {
-		return http.StatusBadRequest, errors.New("invalid note ID format")
+		return http.StatusBadRequest, nil, errors.New("invalid note ID format")
 	}
 
 	var req UpdateNoteRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		return http.StatusBadRequest, err
+		return http.StatusBadRequest, nil, err
 	}
 
 	// Validate items before persisting any changes so invalid assigned_to
 	// values are rejected before note metadata is committed.
 	if len(req.Items) > 0 {
 		if status, err := h.validateTodoItems(id, req.Items); err != nil {
-			return status, err
+			return status, nil, err
 		}
 	}
 
 	err := h.noteStore.Update(id, user.ID, req.Title, req.Content, req.Color, req.Pinned, req.Archived, req.CheckedItemsCollapsed)
 	if err != nil {
 		if errors.Is(err, models.ErrNoteNotFound) || errors.Is(err, models.ErrNoteNoAccess) {
-			return http.StatusNotFound, err
+			return http.StatusNotFound, nil, err
 		}
-		return http.StatusInternalServerError, err
+		return http.StatusInternalServerError, nil, err
 	}
 
 	if len(req.Items) > 0 {
 		if updateErr := h.updateTodoItems(id, user.ID, req.Items); updateErr != nil {
-			return http.StatusInternalServerError, updateErr
+			return http.StatusInternalServerError, nil, updateErr
 		}
 	}
 
 	note, err := h.noteStore.GetByID(id, user.ID)
 	if err != nil {
-		return http.StatusInternalServerError, err
+		return http.StatusInternalServerError, nil, err
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(note); err != nil {
-		return http.StatusInternalServerError, err
-	}
 	h.publishNoteEvent(id, sse.EventNoteUpdated, note, user.ID)
-	return 0, nil
+	return http.StatusOK, note, nil
 }
 
 // DeleteNote godoc
@@ -458,19 +445,20 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 //	@Failure	400			{string}	string	"bad request"
 //	@Failure	401			{string}	string	"unauthorized"
 //	@Failure	404			{string}	string	"not found"
+//	@Failure	500			{string}	string	"internal server error"
 //	@Router		/notes/{id} [delete]
-func (h *NotesHandler) DeleteNote(w http.ResponseWriter, r *http.Request) (int, error) {
+func (h *NotesHandler) DeleteNote(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
-		return http.StatusUnauthorized, errors.New("unauthorized")
+		return http.StatusUnauthorized, nil, errors.New("unauthorized")
 	}
 
 	id := chi.URLParam(r, "id")
 	if id == "" {
-		return http.StatusBadRequest, errors.New("missing note ID")
+		return http.StatusBadRequest, nil, errors.New("missing note ID")
 	}
 	if !models.IsValidID(id) {
-		return http.StatusBadRequest, errors.New("invalid note ID format")
+		return http.StatusBadRequest, nil, errors.New("invalid note ID format")
 	}
 
 	permanent := r.URL.Query().Get("permanent") == queryTrue
@@ -482,17 +470,17 @@ func (h *NotesHandler) DeleteNote(w http.ResponseWriter, r *http.Request) (int, 
 		err := h.noteStore.DeleteFromTrash(id, user.ID)
 		if err != nil {
 			if errors.Is(err, models.ErrNoteNotInTrash) {
-				return http.StatusNotFound, err
+				return http.StatusNotFound, nil, err
 			}
-			return http.StatusInternalServerError, err
+			return http.StatusInternalServerError, nil, err
 		}
 	} else {
 		err := h.noteStore.MoveToTrash(id, user.ID)
 		if err != nil {
 			if errors.Is(err, models.ErrNoteNotOwnedByUser) {
-				return http.StatusNotFound, err
+				return http.StatusNotFound, nil, err
 			}
-			return http.StatusInternalServerError, err
+			return http.StatusInternalServerError, nil, err
 		}
 	}
 
@@ -505,8 +493,7 @@ func (h *NotesHandler) DeleteNote(w http.ResponseWriter, r *http.Request) (int, 
 		})
 	}
 
-	w.WriteHeader(http.StatusNoContent)
-	return 0, nil
+	return http.StatusNoContent, nil, nil
 }
 
 // RestoreNote godoc
@@ -520,40 +507,37 @@ func (h *NotesHandler) DeleteNote(w http.ResponseWriter, r *http.Request) (int, 
 //	@Failure	400	{string}	string	"bad request"
 //	@Failure	401	{string}	string	"unauthorized"
 //	@Failure	404	{string}	string	"not found"
+//	@Failure	500	{string}	string	"internal server error"
 //	@Router		/notes/{id}/restore [post]
-func (h *NotesHandler) RestoreNote(w http.ResponseWriter, r *http.Request) (int, error) {
+func (h *NotesHandler) RestoreNote(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
-		return http.StatusUnauthorized, errors.New("unauthorized")
+		return http.StatusUnauthorized, nil, errors.New("unauthorized")
 	}
 
 	id := chi.URLParam(r, "id")
 	if id == "" {
-		return http.StatusBadRequest, errors.New("missing note ID")
+		return http.StatusBadRequest, nil, errors.New("missing note ID")
 	}
 	if !models.IsValidID(id) {
-		return http.StatusBadRequest, errors.New("invalid note ID format")
+		return http.StatusBadRequest, nil, errors.New("invalid note ID format")
 	}
 
 	err := h.noteStore.RestoreFromTrash(id, user.ID)
 	if err != nil {
 		if errors.Is(err, models.ErrNoteNotOwnedByUser) || errors.Is(err, models.ErrNoteNotInTrash) {
-			return http.StatusNotFound, err
+			return http.StatusNotFound, nil, err
 		}
-		return http.StatusInternalServerError, err
+		return http.StatusInternalServerError, nil, err
 	}
 
 	note, err := h.noteStore.GetByID(id, user.ID)
 	if err != nil {
-		return http.StatusInternalServerError, err
+		return http.StatusInternalServerError, nil, err
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(note); err != nil {
-		return http.StatusInternalServerError, err
-	}
 	h.publishNoteEvent(id, sse.EventNoteUpdated, note, user.ID)
-	return 0, nil
+	return http.StatusOK, note, nil
 }
 
 type ShareNoteRequest struct {
@@ -580,63 +564,61 @@ type ShareNoteResponse struct {
 //	@Failure	403		{string}	string	"not owner"
 //	@Failure	404		{string}	string	"not found"
 //	@Failure	409		{string}	string	"already shared"
+//	@Failure	500		{string}	string	"internal server error"
 //	@Router		/notes/{id}/share [post]
-func (h *NotesHandler) ShareNote(w http.ResponseWriter, r *http.Request) (int, error) {
+func (h *NotesHandler) ShareNote(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
-		return http.StatusUnauthorized, errors.New("unauthorized")
+		return http.StatusUnauthorized, nil, errors.New("unauthorized")
 	}
 
 	id := chi.URLParam(r, "id")
 	if id == "" {
-		return http.StatusBadRequest, errors.New("missing note ID")
+		return http.StatusBadRequest, nil, errors.New("missing note ID")
 	}
 	if !models.IsValidID(id) {
-		return http.StatusBadRequest, errors.New("invalid note ID format")
+		return http.StatusBadRequest, nil, errors.New("invalid note ID format")
 	}
 
 	var req ShareNoteRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		return http.StatusBadRequest, err
+		return http.StatusBadRequest, nil, err
 	}
 
 	if !models.IsValidID(req.UserID) {
-		return http.StatusBadRequest, errors.New("invalid user_id")
+		return http.StatusBadRequest, nil, errors.New("invalid user_id")
 	}
 
 	isOwner, err := h.noteStore.IsOwner(id, user.ID)
 	if err != nil {
-		return http.StatusInternalServerError, err
+		return http.StatusInternalServerError, nil, err
 	}
 	if !isOwner {
-		return http.StatusForbidden, errors.New("not owner")
+		return http.StatusForbidden, nil, errors.New("not owner")
 	}
 
 	if req.UserID == user.ID {
-		return http.StatusBadRequest, errors.New("cannot share with self")
+		return http.StatusBadRequest, nil, errors.New("cannot share with self")
 	}
 
 	if _, lookupErr := h.userStore.GetByID(req.UserID); lookupErr != nil {
 		if errors.Is(lookupErr, models.ErrUserNotFound) {
-			return http.StatusNotFound, lookupErr
+			return http.StatusNotFound, nil, lookupErr
 		}
-		return http.StatusInternalServerError, lookupErr
+		return http.StatusInternalServerError, nil, lookupErr
 	}
 
 	err = h.noteStore.ShareNote(id, user.ID, req.UserID)
 	if err != nil {
 		if errors.Is(err, models.ErrNoteAlreadyShared) {
-			return http.StatusConflict, err
+			return http.StatusConflict, nil, err
 		}
-		return http.StatusInternalServerError, err
+		return http.StatusInternalServerError, nil, err
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(ShareNoteResponse{
+	resp := ShareNoteResponse{
 		Success: true,
 		Message: "Note shared successfully",
-	}); err != nil {
-		return http.StatusInternalServerError, err
 	}
 
 	// Fetch the note to include in the SSE payload; audience now includes the new target.
@@ -644,7 +626,7 @@ func (h *NotesHandler) ShareNote(w http.ResponseWriter, r *http.Request) (int, e
 		h.publishNoteEvent(id, sse.EventNoteShared, sharedNote, user.ID)
 	}
 
-	return 0, nil
+	return http.StatusOK, resp, nil
 }
 
 // UnshareNote godoc
@@ -661,36 +643,37 @@ func (h *NotesHandler) ShareNote(w http.ResponseWriter, r *http.Request) (int, e
 //	@Failure	401		{string}	string	"unauthorized"
 //	@Failure	403		{string}	string	"not owner"
 //	@Failure	404		{string}	string	"not found"
+//	@Failure	500		{string}	string	"internal server error"
 //	@Router		/notes/{id}/share [delete]
-func (h *NotesHandler) UnshareNote(w http.ResponseWriter, r *http.Request) (int, error) {
+func (h *NotesHandler) UnshareNote(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
-		return http.StatusUnauthorized, errors.New("unauthorized")
+		return http.StatusUnauthorized, nil, errors.New("unauthorized")
 	}
 
 	id := chi.URLParam(r, "id")
 	if id == "" {
-		return http.StatusBadRequest, errors.New("missing note ID")
+		return http.StatusBadRequest, nil, errors.New("missing note ID")
 	}
 	if !models.IsValidID(id) {
-		return http.StatusBadRequest, errors.New("invalid note ID format")
+		return http.StatusBadRequest, nil, errors.New("invalid note ID format")
 	}
 
 	var req ShareNoteRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		return http.StatusBadRequest, err
+		return http.StatusBadRequest, nil, err
 	}
 
 	if !models.IsValidID(req.UserID) {
-		return http.StatusBadRequest, errors.New("invalid user_id")
+		return http.StatusBadRequest, nil, errors.New("invalid user_id")
 	}
 
 	isOwner, err := h.noteStore.IsOwner(id, user.ID)
 	if err != nil {
-		return http.StatusInternalServerError, err
+		return http.StatusInternalServerError, nil, err
 	}
 	if !isOwner {
-		return http.StatusForbidden, errors.New("not owner")
+		return http.StatusForbidden, nil, errors.New("not owner")
 	}
 
 	// Fetch audience before unsharing so the target user is still in the list.
@@ -699,9 +682,9 @@ func (h *NotesHandler) UnshareNote(w http.ResponseWriter, r *http.Request) (int,
 	err = h.noteStore.UnshareNote(id, req.UserID)
 	if err != nil {
 		if errors.Is(err, models.ErrNoteShareNotFound) {
-			return http.StatusNotFound, err
+			return http.StatusNotFound, nil, err
 		}
-		return http.StatusInternalServerError, err
+		return http.StatusInternalServerError, nil, err
 	}
 
 	if audienceErr == nil && h.hub != nil {
@@ -714,14 +697,10 @@ func (h *NotesHandler) UnshareNote(w http.ResponseWriter, r *http.Request) (int,
 		})
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(ShareNoteResponse{
+	return http.StatusOK, ShareNoteResponse{
 		Success: true,
 		Message: "Note unshared successfully",
-	}); err != nil {
-		return http.StatusInternalServerError, err
-	}
-	return 0, nil
+	}, nil
 }
 
 // GetNoteShares godoc
@@ -735,39 +714,36 @@ func (h *NotesHandler) UnshareNote(w http.ResponseWriter, r *http.Request) (int,
 //	@Failure	400	{string}	string	"bad request"
 //	@Failure	401	{string}	string	"unauthorized"
 //	@Failure	403	{string}	string	"not owner"
+//	@Failure	500	{string}	string	"internal server error"
 //	@Router		/notes/{id}/shares [get]
-func (h *NotesHandler) GetNoteShares(w http.ResponseWriter, r *http.Request) (int, error) {
+func (h *NotesHandler) GetNoteShares(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
-		return http.StatusUnauthorized, errors.New("unauthorized")
+		return http.StatusUnauthorized, nil, errors.New("unauthorized")
 	}
 
 	id := chi.URLParam(r, "id")
 	if id == "" {
-		return http.StatusBadRequest, errors.New("missing note ID")
+		return http.StatusBadRequest, nil, errors.New("missing note ID")
 	}
 	if !models.IsValidID(id) {
-		return http.StatusBadRequest, errors.New("invalid note ID format")
+		return http.StatusBadRequest, nil, errors.New("invalid note ID format")
 	}
 
 	isOwner, err := h.noteStore.IsOwner(id, user.ID)
 	if err != nil {
-		return http.StatusInternalServerError, err
+		return http.StatusInternalServerError, nil, err
 	}
 	if !isOwner {
-		return http.StatusForbidden, errors.New("not owner")
+		return http.StatusForbidden, nil, errors.New("not owner")
 	}
 
 	shares, err := h.noteStore.GetNoteShares(id)
 	if err != nil {
-		return http.StatusInternalServerError, err
+		return http.StatusInternalServerError, nil, err
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(shares); err != nil {
-		return http.StatusInternalServerError, err
-	}
-	return 0, nil
+	return http.StatusOK, shares, nil
 }
 
 // SearchUsers godoc
@@ -779,11 +755,12 @@ func (h *NotesHandler) GetNoteShares(w http.ResponseWriter, r *http.Request) (in
 //	@Param		search	query		string	false	"Filter by username, first name, or last name (case-insensitive substring match)"
 //	@Success	200		{array}		UserInfo
 //	@Failure	401		{string}	string	"unauthorized"
+//	@Failure	500		{string}	string	"internal server error"
 //	@Router		/users [get]
-func (h *NotesHandler) SearchUsers(w http.ResponseWriter, r *http.Request) (int, error) {
+func (h *NotesHandler) SearchUsers(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	currentUser, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
-		return http.StatusUnauthorized, errors.New("unauthorized")
+		return http.StatusUnauthorized, nil, errors.New("unauthorized")
 	}
 
 	search := r.URL.Query().Get("search")
@@ -796,7 +773,7 @@ func (h *NotesHandler) SearchUsers(w http.ResponseWriter, r *http.Request) (int,
 		users, err = h.userStore.GetAll()
 	}
 	if err != nil {
-		return http.StatusInternalServerError, err
+		return http.StatusInternalServerError, nil, err
 	}
 
 	userInfos := []UserInfo{}
@@ -813,11 +790,7 @@ func (h *NotesHandler) SearchUsers(w http.ResponseWriter, r *http.Request) (int,
 		}
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(userInfos); err != nil {
-		return http.StatusInternalServerError, err
-	}
-	return 0, nil
+	return http.StatusOK, userInfos, nil
 }
 
 type ImportResponse struct {
@@ -948,7 +921,7 @@ func parseKeepNotesFromData(filename string, data []byte) ([]keepNote, error) {
 		return nil, errors.New("invalid JSON file")
 	}
 	if kn.isEmpty() {
-		return nil, errors.New("note has no title, content, or list items")
+		return nil, errors.New("note must have a title, content, or items")
 	}
 	return []keepNote{kn}, nil
 }
@@ -983,41 +956,38 @@ func (h *NotesHandler) importKeepNotes(userID string, keepNotes []keepNote) (imp
 //	@Success	200		{object}	ImportResponse
 //	@Failure	400		{string}	string	"bad request"
 //	@Failure	401		{string}	string	"unauthorized"
+//	@Failure	500		{string}	string	"internal server error"
 //	@Router		/notes/import [post]
-func (h *NotesHandler) ImportNotes(w http.ResponseWriter, r *http.Request) (int, error) {
+func (h *NotesHandler) ImportNotes(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
-		return http.StatusUnauthorized, errors.New("unauthorized")
+		return http.StatusUnauthorized, nil, errors.New("unauthorized")
 	}
 
 	r.Body = http.MaxBytesReader(w, r.Body, 32<<20)
 	if err := r.ParseMultipartForm(32 << 20); err != nil {
-		return http.StatusBadRequest, errors.New("failed to parse form")
+		return http.StatusBadRequest, nil, errors.New("invalid multipart form")
 	}
 
 	file, header, err := r.FormFile("file")
 	if err != nil {
-		return http.StatusBadRequest, errors.New("missing file")
+		return http.StatusBadRequest, nil, errors.New("missing file")
 	}
 	defer func() { _ = file.Close() }()
 
 	data, err := io.ReadAll(file)
 	if err != nil {
-		return http.StatusInternalServerError, err
+		return http.StatusInternalServerError, nil, err
 	}
 
 	keepNotes, err := parseKeepNotesFromData(header.Filename, data)
 	if err != nil {
-		return http.StatusBadRequest, err
+		return http.StatusBadRequest, nil, err
 	}
 
 	imported, skipped, importErrors := h.importKeepNotes(user.ID, keepNotes)
 
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(ImportResponse{Imported: imported, Skipped: skipped, Errors: importErrors}); err != nil {
-		return http.StatusInternalServerError, err
-	}
-	return 0, nil
+	return http.StatusOK, ImportResponse{Imported: imported, Skipped: skipped, Errors: importErrors}, nil
 }
 
 type ReorderNotesRequest struct {
@@ -1035,30 +1005,30 @@ type ReorderNotesRequest struct {
 //	@Failure	400		{string}	string	"bad request"
 //	@Failure	401		{string}	string	"unauthorized"
 //	@Failure	403		{string}	string	"forbidden"
+//	@Failure	500		{string}	string	"internal server error"
 //	@Router		/notes/reorder [post]
-func (h *NotesHandler) ReorderNotes(w http.ResponseWriter, r *http.Request) (int, error) {
+func (h *NotesHandler) ReorderNotes(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
-		return http.StatusUnauthorized, errors.New("unauthorized")
+		return http.StatusUnauthorized, nil, errors.New("unauthorized")
 	}
 
 	var req ReorderNotesRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		return http.StatusBadRequest, err
+		return http.StatusBadRequest, nil, err
 	}
 
 	if len(req.NoteIDs) == 0 {
-		return http.StatusBadRequest, errors.New("empty note IDs list")
+		return http.StatusBadRequest, nil, errors.New("empty note IDs list")
 	}
 
 	err := h.noteStore.ReorderNotes(user.ID, req.NoteIDs)
 	if err != nil {
 		if errors.Is(err, models.ErrNoteNoAccess) {
-			return http.StatusForbidden, err
+			return http.StatusForbidden, nil, err
 		}
-		return http.StatusInternalServerError, err
+		return http.StatusInternalServerError, nil, err
 	}
 
-	w.WriteHeader(http.StatusNoContent)
-	return 0, nil
+	return http.StatusNoContent, nil, nil
 }

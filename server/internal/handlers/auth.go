@@ -61,41 +61,42 @@ type AuthResponse struct {
 //	@Failure	400		{string}	string	"bad request"
 //	@Failure	403		{string}	string	"registration is disabled"
 //	@Failure	409		{string}	string	"username already taken"
+//	@Failure	500		{string}	string	"internal server error"
 //	@Router		/register [post]
-func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) (int, error) {
+func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	if !h.registrationEnabled {
-		return http.StatusForbidden, errors.New("registration is disabled")
+		return http.StatusForbidden, nil, errors.New("registration is disabled")
 	}
 
 	var req RegisterRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		return http.StatusBadRequest, err
+		return http.StatusBadRequest, nil, err
 	}
 
 	if err := validateUsername(req.Username); err != nil {
-		return http.StatusBadRequest, err
+		return http.StatusBadRequest, nil, err
 	}
 
 	if err := validatePassword(req.Password); err != nil {
-		return http.StatusBadRequest, err
+		return http.StatusBadRequest, nil, err
 	}
 
 	user, err := h.userStore.Create(req.Username, req.Password)
 	if err != nil {
 		if errors.Is(err, models.ErrUsernameTaken) {
-			return http.StatusConflict, models.ErrUsernameTaken
+			return http.StatusConflict, nil, models.ErrUsernameTaken
 		}
-		return http.StatusInternalServerError, err
+		return http.StatusInternalServerError, nil, err
 	}
 
 	settings, err := h.userSettingsStore.GetOrCreate(user.ID)
 	if err != nil {
-		return http.StatusInternalServerError, err
+		return http.StatusInternalServerError, nil, err
 	}
 
 	err = h.sessionService.CreateSession(w, r, user.ID)
 	if err != nil {
-		return http.StatusInternalServerError, err
+		return http.StatusInternalServerError, nil, err
 	}
 
 	response := AuthResponse{
@@ -103,12 +104,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) (int, err
 		Settings: settings,
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	w.WriteHeader(http.StatusCreated)
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		return http.StatusInternalServerError, err
-	}
-	return 0, nil
+	return http.StatusCreated, response, nil
 }
 
 // Login godoc
@@ -121,34 +117,35 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) (int, err
 //	@Success	200		{object}	AuthResponse
 //	@Failure	400		{string}	string	"missing username or password"
 //	@Failure	401		{string}	string	"invalid username or password"
+//	@Failure	500		{string}	string	"internal server error"
 //	@Router		/login [post]
-func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) (int, error) {
+func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	var req LoginRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		return http.StatusBadRequest, err
+		return http.StatusBadRequest, nil, err
 	}
 
 	if req.Username == "" || req.Password == "" {
-		return http.StatusBadRequest, errors.New("missing username or password")
+		return http.StatusBadRequest, nil, errors.New("missing username or password")
 	}
 
 	user, err := h.userStore.GetByUsername(req.Username)
 	if err != nil {
-		return http.StatusUnauthorized, errors.New("invalid username or password")
+		return http.StatusUnauthorized, nil, errors.New("invalid username or password")
 	}
 
 	if !user.CheckPassword(req.Password) {
-		return http.StatusUnauthorized, errors.New("invalid username or password")
+		return http.StatusUnauthorized, nil, errors.New("invalid username or password")
 	}
 
 	settings, err := h.userSettingsStore.GetOrCreate(user.ID)
 	if err != nil {
-		return http.StatusInternalServerError, err
+		return http.StatusInternalServerError, nil, err
 	}
 
 	err = h.sessionService.CreateSession(w, r, user.ID)
 	if err != nil {
-		return http.StatusInternalServerError, err
+		return http.StatusInternalServerError, nil, err
 	}
 
 	response := AuthResponse{
@@ -156,11 +153,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) (int, error)
 		Settings: settings,
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		return http.StatusInternalServerError, err
-	}
-	return 0, nil
+	return http.StatusOK, response, nil
 }
 
 // Logout godoc
@@ -171,13 +164,12 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) (int, error)
 //	@Success	204	"no content"
 //	@Failure	500	{string}	string	"internal server error"
 //	@Router		/logout [post]
-func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) (int, error) {
+func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	if err := h.sessionService.DeleteSession(w, r); err != nil {
-		return http.StatusInternalServerError, err
+		return http.StatusInternalServerError, nil, err
 	}
 
-	w.WriteHeader(http.StatusNoContent)
-	return 0, nil
+	return http.StatusNoContent, nil, nil
 }
 
 type UpdateUserRequest struct {
@@ -246,16 +238,17 @@ func (h *AuthHandler) applySettingsUpdate(userID string, current *models.UserSet
 //	@Failure	400		{string}	string	"bad request"
 //	@Failure	401		{string}	string	"unauthorized"
 //	@Failure	409		{string}	string	"username already taken"
+//	@Failure	500		{string}	string	"internal server error"
 //	@Router		/users/me [patch]
-func (h *AuthHandler) UpdateUser(w http.ResponseWriter, r *http.Request) (int, error) {
+func (h *AuthHandler) UpdateUser(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	currentUser, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
-		return http.StatusUnauthorized, errors.New("unauthorized")
+		return http.StatusUnauthorized, nil, errors.New("unauthorized")
 	}
 
 	var req UpdateUserRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		return http.StatusBadRequest, err
+		return http.StatusBadRequest, nil, err
 	}
 
 	username := currentUser.Username
@@ -263,7 +256,7 @@ func (h *AuthHandler) UpdateUser(w http.ResponseWriter, r *http.Request) (int, e
 		username = *req.Username
 	}
 	if err := validateUsername(username); err != nil {
-		return http.StatusBadRequest, err
+		return http.StatusBadRequest, nil, err
 	}
 
 	firstName := currentUser.FirstName
@@ -278,32 +271,28 @@ func (h *AuthHandler) UpdateUser(w http.ResponseWriter, r *http.Request) (int, e
 	// Validate settings before committing any changes so we fail atomically.
 	settings, err := h.userSettingsStore.GetOrCreate(currentUser.ID)
 	if err != nil {
-		return http.StatusInternalServerError, err
+		return http.StatusInternalServerError, nil, err
 	}
 	if _, _, _, validateErr := validateSettingsFields(settings, req.Language, req.Theme); validateErr != nil {
-		return http.StatusBadRequest, validateErr
+		return http.StatusBadRequest, nil, validateErr
 	}
 
 	user, err := h.userStore.UpdateProfile(currentUser.ID, username, firstName, lastName)
 	if err != nil {
 		if errors.Is(err, models.ErrUsernameTaken) {
-			return http.StatusConflict, models.ErrUsernameTaken
+			return http.StatusConflict, nil, models.ErrUsernameTaken
 		}
-		return http.StatusInternalServerError, err
+		return http.StatusInternalServerError, nil, err
 	}
 
 	settings, status, settingsErr := h.applySettingsUpdate(currentUser.ID, settings, req.Language, req.Theme)
 	if settingsErr != nil {
-		return status, settingsErr
+		return status, nil, settingsErr
 	}
 
 	response := AuthResponse{User: user, Settings: settings}
 
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		return http.StatusInternalServerError, err
-	}
-	return 0, nil
+	return http.StatusOK, response, nil
 }
 
 type ChangePasswordRequest struct {
@@ -322,53 +311,53 @@ type ChangePasswordRequest struct {
 //	@Failure	400		{string}	string	"bad request"
 //	@Failure	401		{string}	string	"unauthorized"
 //	@Failure	403		{string}	string	"current password is incorrect"
+//	@Failure	500		{string}	string	"internal server error"
 //	@Router		/users/me/password [put]
-func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) (int, error) {
+func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	currentUser, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
-		return http.StatusUnauthorized, errors.New("unauthorized")
+		return http.StatusUnauthorized, nil, errors.New("unauthorized")
 	}
 
 	var req ChangePasswordRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		return http.StatusBadRequest, err
+		return http.StatusBadRequest, nil, err
 	}
 
 	if req.CurrentPassword == "" || req.NewPassword == "" {
-		return http.StatusBadRequest, errors.New("current_password and new_password are required")
+		return http.StatusBadRequest, nil, errors.New("current_password and new_password are required")
 	}
 
 	if err := validatePassword(req.NewPassword); err != nil {
-		return http.StatusBadRequest, err
+		return http.StatusBadRequest, nil, err
 	}
 
 	// Verify current password
 	user, err := h.userStore.GetByID(currentUser.ID)
 	if err != nil {
-		return http.StatusInternalServerError, err
+		return http.StatusInternalServerError, nil, err
 	}
 
 	if !user.CheckPassword(req.CurrentPassword) {
-		return http.StatusForbidden, errors.New("current password is incorrect")
+		return http.StatusForbidden, nil, errors.New("current password is incorrect")
 	}
 
 	if err := h.userStore.UpdatePassword(currentUser.ID, req.NewPassword); err != nil {
-		return http.StatusInternalServerError, err
+		return http.StatusInternalServerError, nil, err
 	}
 
 	// Invalidate all existing sessions so that stolen/compromised tokens
 	// cannot be reused after a password change.
 	if err := h.sessionService.InvalidateUserSessions(currentUser.ID); err != nil {
-		return http.StatusInternalServerError, err
+		return http.StatusInternalServerError, nil, err
 	}
 
 	// Issue a fresh session for the current request so the user stays logged in.
 	if err := h.sessionService.CreateSession(w, r, currentUser.ID); err != nil {
-		return http.StatusInternalServerError, err
+		return http.StatusInternalServerError, nil, err
 	}
 
-	w.WriteHeader(http.StatusNoContent)
-	return 0, nil
+	return http.StatusNoContent, nil, nil
 }
 
 // Me godoc
@@ -379,16 +368,17 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) (in
 //	@Produce	json
 //	@Success	200	{object}	AuthResponse
 //	@Failure	401	{string}	string	"unauthorized"
+//	@Failure	500	{string}	string	"internal server error"
 //	@Router		/me [get]
-func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) (int, error) {
+func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
-		return http.StatusUnauthorized, errors.New("unauthorized")
+		return http.StatusUnauthorized, nil, errors.New("unauthorized")
 	}
 
 	settings, err := h.userSettingsStore.GetOrCreate(user.ID)
 	if err != nil {
-		return http.StatusInternalServerError, err
+		return http.StatusInternalServerError, nil, err
 	}
 
 	response := AuthResponse{
@@ -396,11 +386,7 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) (int, error) {
 		Settings: settings,
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(response); err != nil {
-		return http.StatusInternalServerError, err
-	}
-	return 0, nil
+	return http.StatusOK, response, nil
 }
 
 var allowedImageTypes = map[string]bool{
@@ -413,7 +399,7 @@ const (
 	maxProfileIconDimension = 256
 	jpegQuality             = 85
 	maxSourceDimension      = 4096
-	maxSourcePixels         = 4096 * 4096 // ~16 megapixels
+	maxSourcePixels         = maxSourceDimension * maxSourceDimension // ~16 megapixels
 )
 
 // isOpaqueImage reports whether img is known to have no transparent pixels.
@@ -516,56 +502,53 @@ func resizeImage(data []byte) ([]byte, error) {
 //	@Success	200		{object}	models.User
 //	@Failure	400		{string}	string	"bad request"
 //	@Failure	401		{string}	string	"unauthorized"
+//	@Failure	500		{string}	string	"internal server error"
 //	@Router		/users/me/profile-icon [post]
-func (h *AuthHandler) UploadProfileIcon(w http.ResponseWriter, r *http.Request) (int, error) {
+func (h *AuthHandler) UploadProfileIcon(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	currentUser, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
-		return http.StatusUnauthorized, errors.New("unauthorized")
+		return http.StatusUnauthorized, nil, errors.New("unauthorized")
 	}
 
 	const fileLimit = int64(5 << 20)
 	const overhead = int64(64 << 10)
 	r.Body = http.MaxBytesReader(w, r.Body, fileLimit+overhead)
 	if err := r.ParseMultipartForm(fileLimit); err != nil {
-		return http.StatusBadRequest, fmt.Errorf("file too large (max %d MB)", fileLimit>>20)
+		return http.StatusBadRequest, nil, fmt.Errorf("file too large (max %d MB)", fileLimit>>20)
 	}
 
 	file, _, err := r.FormFile("file")
 	if err != nil {
-		return http.StatusBadRequest, errors.New("file is required")
+		return http.StatusBadRequest, nil, errors.New("file is required")
 	}
 	defer file.Close()
 
 	data, err := io.ReadAll(file)
 	if err != nil {
-		return http.StatusInternalServerError, fmt.Errorf("failed to read file: %w", err)
+		return http.StatusInternalServerError, nil, fmt.Errorf("failed to read file: %w", err)
 	}
 
 	contentType := http.DetectContentType(data)
 	if !allowedImageTypes[contentType] {
-		return http.StatusBadRequest, errors.New("unsupported file type: must be jpeg, png, or webp")
+		return http.StatusBadRequest, nil, errors.New("unsupported file type: must be jpeg, png, or webp")
 	}
 
 	data, err = resizeImage(data)
 	if err != nil {
-		return http.StatusBadRequest, fmt.Errorf("unsupported or corrupt image: %w", err)
+		return http.StatusBadRequest, nil, fmt.Errorf("unsupported or corrupt image: %w", err)
 	}
 	contentType = "image/jpeg"
 
 	if err = h.userStore.UpdateProfileIcon(currentUser.ID, data, contentType); err != nil {
-		return http.StatusInternalServerError, fmt.Errorf("update profile icon for user %s: %w", currentUser.ID, err)
+		return http.StatusInternalServerError, nil, fmt.Errorf("update profile icon for user %s: %w", currentUser.ID, err)
 	}
 
 	user, err := h.userStore.GetByID(currentUser.ID)
 	if err != nil {
-		return http.StatusInternalServerError, fmt.Errorf("fetch user by id: %w", err)
+		return http.StatusInternalServerError, nil, fmt.Errorf("fetch user by id: %w", err)
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(user); err != nil {
-		return http.StatusInternalServerError, err
-	}
-	return 0, nil
+	return http.StatusOK, user, nil
 }
 
 // DeleteProfileIcon godoc
@@ -575,19 +558,19 @@ func (h *AuthHandler) UploadProfileIcon(w http.ResponseWriter, r *http.Request) 
 //	@Security	CookieAuth
 //	@Success	204	"no content"
 //	@Failure	401	{string}	string	"unauthorized"
+//	@Failure	500	{string}	string	"internal server error"
 //	@Router		/users/me/profile-icon [delete]
-func (h *AuthHandler) DeleteProfileIcon(w http.ResponseWriter, r *http.Request) (int, error) {
+func (h *AuthHandler) DeleteProfileIcon(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	currentUser, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
-		return http.StatusUnauthorized, errors.New("unauthorized")
+		return http.StatusUnauthorized, nil, errors.New("unauthorized")
 	}
 
 	if err := h.userStore.DeleteProfileIcon(currentUser.ID); err != nil {
-		return http.StatusInternalServerError, fmt.Errorf("delete profile icon for user %s: %w", currentUser.ID, err)
+		return http.StatusInternalServerError, nil, fmt.Errorf("delete profile icon for user %s: %w", currentUser.ID, err)
 	}
 
-	w.WriteHeader(http.StatusNoContent)
-	return 0, nil
+	return http.StatusNoContent, nil, nil
 }
 
 // GetUserProfileIcon godoc
@@ -600,19 +583,20 @@ func (h *AuthHandler) DeleteProfileIcon(w http.ResponseWriter, r *http.Request) 
 //	@Success	200	{file}		binary	"JPEG image"
 //	@Failure	401	{string}	string	"unauthorized"
 //	@Failure	404	{string}	string	"not found"
+//	@Failure	500	{string}	string	"internal server error"
 //	@Router		/users/{id}/profile-icon [get]
-func (h *AuthHandler) GetUserProfileIcon(w http.ResponseWriter, r *http.Request) (int, error) {
+func (h *AuthHandler) GetUserProfileIcon(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	id := chi.URLParam(r, "id")
 
 	data, contentType, err := h.userStore.GetProfileIcon(id)
 	if err != nil {
 		if errors.Is(err, models.ErrUserNotFound) {
-			return http.StatusNotFound, errors.New("user not found")
+			return http.StatusNotFound, nil, errors.New("user not found")
 		}
-		return http.StatusInternalServerError, fmt.Errorf("fetch profile icon: %w", err)
+		return http.StatusInternalServerError, nil, fmt.Errorf("fetch profile icon: %w", err)
 	}
 	if len(data) == 0 {
-		return http.StatusNotFound, errors.New("no profile icon set")
+		return http.StatusNotFound, nil, errors.New("no profile icon set")
 	}
 
 	if contentType == "" {
@@ -623,7 +607,7 @@ func (h *AuthHandler) GetUserProfileIcon(w http.ResponseWriter, r *http.Request)
 	w.Header().Set("Cache-Control", "private, max-age=3600")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	if _, err := w.Write(data); err != nil { // #nosec G705 -- data is validated image bytes; MIME confirmed via http.DetectContentType at upload, Content-Type and X-Content-Type-Options: nosniff are set
-		return http.StatusInternalServerError, fmt.Errorf("failed to write response: %w", err)
+		return http.StatusInternalServerError, nil, fmt.Errorf("failed to write response: %w", err)
 	}
-	return 0, nil
+	return 0, nil, nil
 }

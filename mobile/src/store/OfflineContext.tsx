@@ -36,17 +36,23 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
     if (isDrainingRef.current) return;
     isDrainingRef.current = true;
     try {
-      const { idMappings } = await drainQueue(db);
+      const { idMappings, discardedOperations } = await drainQueue(db);
       for (const { localId, serverNote } of idMappings) {
         queryClient.setQueryData(['note-local', localId], serverNote);
       }
+      if (discardedOperations.length > 0) {
+        console.warn(
+          `Sync discarded ${discardedOperations.length} operation(s) that were rejected by the server:`,
+          discardedOperations,
+        );
+      }
+      queryClient.invalidateQueries({ queryKey: ['notes-local'] });
+      queryClient.invalidateQueries({ queryKey: ['note-local'] });
     } catch (err) {
       console.warn('Queue drain failed:', err);
     } finally {
       isDrainingRef.current = false;
     }
-    queryClient.invalidateQueries({ queryKey: ['notes-local'] });
-    queryClient.invalidateQueries({ queryKey: ['note-local'] });
   }, [db, queryClient, revalidateSession]);
 
   useEffect(() => {
