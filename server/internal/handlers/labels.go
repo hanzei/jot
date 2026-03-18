@@ -8,16 +8,16 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/hanzei/jot/server/internal/auth"
-	"github.com/hanzei/jot/server/internal/models"
+	"github.com/hanzei/jot/server/internal/store"
 	"github.com/hanzei/jot/server/internal/sse"
 )
 
 type LabelsHandler struct {
-	noteStore *models.NoteStore
+	noteStore *store.NoteStore
 	hub       *sse.Hub
 }
 
-func NewLabelsHandler(noteStore *models.NoteStore, hub *sse.Hub) *LabelsHandler {
+func NewLabelsHandler(noteStore *store.NoteStore, hub *sse.Hub) *LabelsHandler {
 	return &LabelsHandler{
 		noteStore: noteStore,
 		hub:       hub,
@@ -34,7 +34,7 @@ type AddLabelRequest struct {
 //	@Tags		labels
 //	@Security	CookieAuth
 //	@Produce	json
-//	@Success	200	{array}		models.Label
+//	@Success	200	{array}		store.Label
 //	@Failure	401	{string}	string	"unauthorized"
 //	@Failure	500	{string}	string	"internal server error"
 //	@Router		/labels [get]
@@ -50,7 +50,7 @@ func (h *LabelsHandler) GetLabels(w http.ResponseWriter, r *http.Request) (int, 
 	}
 
 	if labels == nil {
-		labels = []models.Label{}
+		labels = []store.Label{}
 	}
 
 	return http.StatusOK, labels, nil
@@ -65,7 +65,7 @@ func (h *LabelsHandler) GetLabels(w http.ResponseWriter, r *http.Request) (int, 
 //	@Produce	json
 //	@Param		id		path		string			true	"Note ID"
 //	@Param		body	body		AddLabelRequest	true	"Label name"
-//	@Success	200		{object}	models.Note
+//	@Success	200		{object}	store.Note
 //	@Failure	400		{string}	string	"bad request"
 //	@Failure	401		{string}	string	"unauthorized"
 //	@Failure	403		{string}	string	"no access to note"
@@ -95,7 +95,7 @@ func (h *LabelsHandler) AddLabel(w http.ResponseWriter, r *http.Request) (int, a
 	}
 
 	if err = h.noteStore.AddLabelToNote(noteID, label.ID, user.ID); err != nil {
-		if errors.Is(err, models.ErrNoteNoAccess) {
+		if errors.Is(err, store.ErrNoteNoAccess) {
 			return http.StatusForbidden, nil, errors.New("no access to note")
 		}
 		return http.StatusInternalServerError, nil, err
@@ -129,7 +129,7 @@ func (h *LabelsHandler) AddLabel(w http.ResponseWriter, r *http.Request) (int, a
 //	@Produce	json
 //	@Param		id			path		string	true	"Note ID"
 //	@Param		label_id	path		string	true	"Label ID"
-//	@Success	200			{object}	models.Note
+//	@Success	200			{object}	store.Note
 //	@Failure	401			{string}	string	"unauthorized"
 //	@Failure	403			{string}	string	"no access to note"
 //	@Failure	500			{string}	string	"internal server error"
@@ -144,7 +144,7 @@ func (h *LabelsHandler) RemoveLabel(w http.ResponseWriter, r *http.Request) (int
 	labelID := chi.URLParam(r, "label_id")
 
 	if err := h.noteStore.RemoveLabelFromNote(noteID, labelID, user.ID); err != nil {
-		if errors.Is(err, models.ErrNoteNoAccess) {
+		if errors.Is(err, store.ErrNoteNoAccess) {
 			return http.StatusForbidden, nil, errors.New("no access to note")
 		}
 		return http.StatusInternalServerError, nil, err

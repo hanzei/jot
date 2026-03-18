@@ -111,7 +111,7 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/models.User"
+                            "$ref": "#/definitions/store.User"
                         }
                     },
                     "400": {
@@ -231,7 +231,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.User"
+                            "$ref": "#/definitions/store.User"
                         }
                     },
                     "400": {
@@ -306,7 +306,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/models.Label"
+                                "$ref": "#/definitions/store.Label"
                             }
                         }
                     },
@@ -488,7 +488,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/models.Note"
+                                "$ref": "#/definitions/store.Note"
                             }
                         }
                     },
@@ -537,7 +537,7 @@ const docTemplate = `{
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/models.Note"
+                            "$ref": "#/definitions/store.Note"
                         }
                     },
                     "400": {
@@ -698,7 +698,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.Note"
+                            "$ref": "#/definitions/store.Note"
                         }
                     },
                     "400": {
@@ -820,7 +820,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.Note"
+                            "$ref": "#/definitions/store.Note"
                         }
                     },
                     "400": {
@@ -889,7 +889,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.Note"
+                            "$ref": "#/definitions/store.Note"
                         }
                     },
                     "400": {
@@ -953,7 +953,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.Note"
+                            "$ref": "#/definitions/store.Note"
                         }
                     },
                     "401": {
@@ -1004,7 +1004,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.Note"
+                            "$ref": "#/definitions/store.Note"
                         }
                     },
                     "400": {
@@ -1217,7 +1217,7 @@ const docTemplate = `{
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/models.NoteShare"
+                                "$ref": "#/definitions/store.NoteShare"
                             }
                         }
                     },
@@ -1578,7 +1578,7 @@ const docTemplate = `{
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.User"
+                            "$ref": "#/definitions/store.User"
                         }
                     },
                     "400": {
@@ -1695,10 +1695,10 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "settings": {
-                    "$ref": "#/definitions/models.UserSettings"
+                    "$ref": "#/definitions/store.UserSettings"
                 },
                 "user": {
-                    "$ref": "#/definitions/models.User"
+                    "$ref": "#/definitions/store.User"
                 }
             }
         },
@@ -1749,7 +1749,7 @@ const docTemplate = `{
                     }
                 },
                 "note_type": {
-                    "$ref": "#/definitions/models.NoteType"
+                    "$ref": "#/definitions/store.NoteType"
                 },
                 "title": {
                     "type": "string"
@@ -1978,12 +1978,12 @@ const docTemplate = `{
                 "users": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/models.User"
+                        "$ref": "#/definitions/store.User"
                     }
                 }
             }
         },
-        "models.Label": {
+        "store.Label": {
             "type": "object",
             "properties": {
                 "created_at": {
@@ -2003,7 +2003,7 @@ const docTemplate = `{
                 }
             }
         },
-        "models.Note": {
+        "store.Note": {
             "type": "object",
             "properties": {
                 "archived": {
@@ -2033,17 +2033,17 @@ const docTemplate = `{
                 "items": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/models.NoteItem"
+                        "$ref": "#/definitions/store.NoteItem"
                     }
                 },
                 "labels": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/models.Label"
+                        "$ref": "#/definitions/store.Label"
                     }
                 },
                 "note_type": {
-                    "$ref": "#/definitions/models.NoteType"
+                    "$ref": "#/definitions/store.NoteType"
                 },
                 "pinned": {
                     "type": "boolean"
@@ -2054,7 +2054,7 @@ const docTemplate = `{
                 "shared_with": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/models.NoteShare"
+                        "$ref": "#/definitions/store.NoteShare"
                     }
                 },
                 "title": {
@@ -2068,7 +2068,7 @@ const docTemplate = `{
                 }
             }
         },
-        "models.NoteItem": {
+        "store.NoteItem": {
             "type": "object",
             "properties": {
                 "assigned_to": {
@@ -2100,7 +2100,7 @@ const docTemplate = `{
                 }
             }
         },
-        "models.NoteShare": {
+        "store.NoteShare": {
             "type": "object",
             "properties": {
                 "created_at": {
@@ -2138,7 +2138,7 @@ const docTemplate = `{
                 }
             }
         },
-        "models.NoteType": {
+        "store.NoteType": {
             "type": "string",
             "enum": [
                 "text",
@@ -2149,7 +2149,7 @@ const docTemplate = `{
                 "NoteTypeTodo"
             ]
         },
-        "models.User": {
+        "store.User": {
             "type": "object",
             "properties": {
                 "created_at": {
@@ -2178,7 +2178,7 @@ const docTemplate = `{
                 }
             }
         },
-        "models.UserSettings": {
+        "store.UserSettings": {
             "type": "object",
             "properties": {
                 "language": {

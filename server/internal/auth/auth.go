@@ -5,19 +5,19 @@ import (
 	"net/http"
 	"time"
 
-	"github.com/hanzei/jot/server/internal/models"
+	"github.com/hanzei/jot/server/internal/store"
 )
 const (
 	SessionCookieName = "jot_session"
 )
 
 type SessionService struct {
-	sessionStore *models.SessionStore
-	userStore    *models.UserStore
+	sessionStore *store.SessionStore
+	userStore    *store.UserStore
 	cookieSecure bool
 }
 
-func NewSessionService(sessionStore *models.SessionStore, userStore *models.UserStore, cookieSecure bool) *SessionService {
+func NewSessionService(sessionStore *store.SessionStore, userStore *store.UserStore, cookieSecure bool) *SessionService {
 	return &SessionService{
 		sessionStore: sessionStore,
 		userStore:    userStore,
@@ -32,7 +32,7 @@ func (s *SessionService) CreateSession(w http.ResponseWriter, r *http.Request, u
 		return err
 	}
 
-	s.setSessionCookie(w, session.Token, int(models.SessionDuration.Seconds()))
+	s.setSessionCookie(w, session.Token, int(store.SessionDuration.Seconds()))
 
 	return nil
 }
@@ -56,7 +56,7 @@ func (s *SessionService) InvalidateUserSessions(userID string) error {
 	return s.sessionStore.DeleteByUserID(userID)
 }
 
-func (s *SessionService) GetSessionUser(r *http.Request) (*models.User, error) {
+func (s *SessionService) GetSessionUser(r *http.Request) (*store.User, error) {
 	_, user, err := s.GetSessionAndUser(r)
 	if err != nil {
 		return nil, err
@@ -64,7 +64,7 @@ func (s *SessionService) GetSessionUser(r *http.Request) (*models.User, error) {
 	return user, nil
 }
 
-func (s *SessionService) GetSessionAndUser(r *http.Request) (*models.Session, *models.User, error) {
+func (s *SessionService) GetSessionAndUser(r *http.Request) (*store.Session, *store.User, error) {
 	cookie, err := r.Cookie(SessionCookieName)
 	if err != nil {
 		return nil, nil, err
@@ -83,17 +83,17 @@ func (s *SessionService) GetSessionAndUser(r *http.Request) (*models.Session, *m
 	return session, user, nil
 }
 
-func (s *SessionService) RenewSessionIfExpiringSoon(w http.ResponseWriter, session *models.Session) error {
+func (s *SessionService) RenewSessionIfExpiringSoon(w http.ResponseWriter, session *store.Session) error {
 	now := time.Now()
-	if session.ExpiresAt.Sub(now) >= models.SessionRenewWindow {
+	if session.ExpiresAt.Sub(now) >= store.SessionRenewWindow {
 		return nil
 	}
 
-	newExpiry := now.Add(models.SessionDuration)
+	newExpiry := now.Add(store.SessionDuration)
 	if err := s.sessionStore.UpdateExpiry(session.Token, newExpiry); err != nil {
 		return fmt.Errorf("renew session: %w", err)
 	}
-	s.setSessionCookie(w, session.Token, int(models.SessionDuration.Seconds()))
+	s.setSessionCookie(w, session.Token, int(store.SessionDuration.Seconds()))
 	return nil
 }
 

@@ -1,12 +1,13 @@
 package main
 
 import (
+	"fmt"
 	"net/http"
 	"testing"
 	"time"
 
 	"github.com/hanzei/jot/server/client"
-	"github.com/hanzei/jot/server/internal/models"
+	"github.com/hanzei/jot/server/internal/store"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -90,8 +91,7 @@ func TestSessionRenewedWhenLessThanSevenDaysLeft(t *testing.T) {
 	require.NoError(t, err)
 
 	nearExpiry := time.Now().Add(6 * 24 * time.Hour)
-	_, err = ts.Server.GetDB().Exec("UPDATE sessions SET expires_at = ? WHERE token = ?", nearExpiry, token)
-	require.NoError(t, err)
+	require.NoError(t, ts.Server.SessionStore().UpdateExpiry(token, nearExpiry))
 
 	// Make an API call so the middleware can renew the session
 	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, ts.HTTPServer.URL+"/api/v1/me", nil)
@@ -106,7 +106,7 @@ func TestSessionRenewedWhenLessThanSevenDaysLeft(t *testing.T) {
 
 	renewedCookie := findCookie(resp, "jot_session")
 	if assert.NotNil(t, renewedCookie) {
-		assert.Equal(t, int(models.SessionDuration.Seconds()), renewedCookie.MaxAge)
+		assert.Equal(t, int(store.SessionDuration.Seconds()), renewedCookie.MaxAge)
 	}
 }
 
@@ -118,8 +118,7 @@ func TestSessionNotRenewedWhenAtLeastSevenDaysLeft(t *testing.T) {
 	require.NoError(t, err)
 
 	farExpiry := time.Now().Add(8 * 24 * time.Hour)
-	_, err = ts.Server.GetDB().Exec("UPDATE sessions SET expires_at = ? WHERE token = ?", farExpiry, token)
-	require.NoError(t, err)
+	require.NoError(t, ts.Server.SessionStore().UpdateExpiry(token, farExpiry))
 
 	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, ts.HTTPServer.URL+"/api/v1/me", nil)
 	resp, err := user.Client.HTTPClient().Do(req)
@@ -140,9 +139,8 @@ func TestSessionNotRenewedWhenSlightlyAboveSevenDaysLeft(t *testing.T) {
 	token, err := getSessionTokenByUserID(ts, user.User.ID)
 	require.NoError(t, err)
 
-	justAboveThreshold := time.Now().Add(models.SessionRenewWindow + time.Minute)
-	_, err = ts.Server.GetDB().Exec("UPDATE sessions SET expires_at = ? WHERE token = ?", justAboveThreshold, token)
-	require.NoError(t, err)
+	justAboveThreshold := time.Now().Add(store.SessionRenewWindow + time.Minute)
+	require.NoError(t, ts.Server.SessionStore().UpdateExpiry(token, justAboveThreshold))
 
 	req, _ := http.NewRequestWithContext(t.Context(), http.MethodGet, ts.HTTPServer.URL+"/api/v1/me", nil)
 	resp, err := user.Client.HTTPClient().Do(req)
@@ -157,15 +155,22 @@ func TestSessionNotRenewedWhenSlightlyAboveSevenDaysLeft(t *testing.T) {
 }
 
 func getSessionTokenByUserID(ts *TestServer, userID string) (string, error) {
-	var token string
-	err := ts.Server.GetDB().QueryRow("SELECT token FROM sessions WHERE user_id = ?", userID).Scan(&token)
-	return token, err
+	sessions, err := ts.Server.SessionStore().GetByUserID(userID)
+	if err != nil {
+		return "", err
+	}
+	if len(sessions) == 0 {
+		return "", fmt.Errorf("no sessions found for user %s", userID)
+	}
+	return sessions[0].Token, nil
 }
 
 func getSessionExpiryByToken(ts *TestServer, token string) (time.Time, error) {
-	var expiresAt time.Time
-	err := ts.Server.GetDB().QueryRow("SELECT expires_at FROM sessions WHERE token = ?", token).Scan(&expiresAt)
-	return expiresAt, err
+	session, err := ts.Server.SessionStore().GetByToken(token)
+	if err != nil {
+		return time.Time{}, err
+	}
+	return session.ExpiresAt, nil
 }
 
 func findCookie(resp *http.Response, name string) *http.Cookie {

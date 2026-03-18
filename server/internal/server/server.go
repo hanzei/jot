@@ -21,8 +21,8 @@ import (
 	"github.com/hanzei/jot/server/internal/config"
 	"github.com/hanzei/jot/server/internal/database"
 	"github.com/hanzei/jot/server/internal/handlers"
-	"github.com/hanzei/jot/server/internal/models"
 	"github.com/hanzei/jot/server/internal/sse"
+	"github.com/hanzei/jot/server/internal/store"
 	"github.com/sirupsen/logrus"
 	httpSwagger "github.com/swaggo/http-swagger/v2"
 )
@@ -38,26 +38,30 @@ func buildInfo() aboutResponse {
 }
 
 type Server struct {
-	cfg             *config.Config
-	router          chi.Router
-	db              *database.DB
-	httpServer      *http.Server
-	staticRoot      *os.Root
-	startErr        error
-	startReady      chan struct{}
-	startReadyOnce  sync.Once
-	shuttingDown    atomic.Bool
-	serverMu        sync.RWMutex
-	ctx             context.Context
-	cancel          context.CancelFunc
-	bgWg            sync.WaitGroup
-	sessionService  *auth.SessionService
-	authHandler     *handlers.AuthHandler
-	notesHandler    *handlers.NotesHandler
-	labelsHandler   *handlers.LabelsHandler
-	eventsHandler   *handlers.EventsHandler
-	adminHandler    *handlers.AdminHandler
-	sessionsHandler *handlers.SessionsHandler
+	cfg              *config.Config
+	router           chi.Router
+	db               *database.DB
+	httpServer       *http.Server
+	staticRoot       *os.Root
+	startErr         error
+	startReady       chan struct{}
+	startReadyOnce   sync.Once
+	shuttingDown     atomic.Bool
+	serverMu         sync.RWMutex
+	ctx              context.Context
+	cancel           context.CancelFunc
+	bgWg             sync.WaitGroup
+	userStore        *store.UserStore
+	noteStore        *store.NoteStore
+	sessionStore     *store.SessionStore
+	userSettingsStore *store.UserSettingsStore
+	sessionService   *auth.SessionService
+	authHandler      *handlers.AuthHandler
+	notesHandler     *handlers.NotesHandler
+	labelsHandler    *handlers.LabelsHandler
+	eventsHandler    *handlers.EventsHandler
+	adminHandler     *handlers.AdminHandler
+	sessionsHandler  *handlers.SessionsHandler
 }
 
 func New(cfg *config.Config) (*Server, error) {
@@ -70,10 +74,10 @@ func New(cfg *config.Config) (*Server, error) {
 		return nil, fmt.Errorf("initialize database: %w", err)
 	}
 
-	userStore := models.NewUserStore(db.DB)
-	noteStore := models.NewNoteStore(db.DB)
-	sessionStore := models.NewSessionStore(db.DB)
-	userSettingsStore := models.NewUserSettingsStore(db.DB)
+	userStore := store.NewUserStore(db.DB)
+	noteStore := store.NewNoteStore(db.DB)
+	sessionStore := store.NewSessionStore(db.DB)
+	userSettingsStore := store.NewUserSettingsStore(db.DB)
 
 	sessionService := auth.NewSessionService(sessionStore, userStore, cfg.CookieSecure)
 
@@ -89,19 +93,23 @@ func New(cfg *config.Config) (*Server, error) {
 	sessionsHandler := handlers.NewSessionsHandler(sessionStore)
 
 	s := &Server{
-		cfg:             cfg,
-		router:          chi.NewRouter(),
-		db:              db,
-		startReady:      make(chan struct{}),
-		ctx:             ctx,
-		cancel:          cancel,
-		sessionService:  sessionService,
-		authHandler:     authHandler,
-		notesHandler:    notesHandler,
-		labelsHandler:   labelsHandler,
-		eventsHandler:   eventsHandler,
-		adminHandler:    adminHandler,
-		sessionsHandler: sessionsHandler,
+		cfg:              cfg,
+		router:           chi.NewRouter(),
+		db:               db,
+		startReady:       make(chan struct{}),
+		ctx:              ctx,
+		cancel:           cancel,
+		userStore:        userStore,
+		noteStore:        noteStore,
+		sessionStore:     sessionStore,
+		userSettingsStore: userSettingsStore,
+		sessionService:   sessionService,
+		authHandler:      authHandler,
+		notesHandler:     notesHandler,
+		labelsHandler:    labelsHandler,
+		eventsHandler:    eventsHandler,
+		adminHandler:     adminHandler,
+		sessionsHandler:  sessionsHandler,
 	}
 
 	startPeriodicTask(&s.bgWg, ctx, time.Hour, false, sessionStore.DeleteExpired, "delete expired sessions")
@@ -366,6 +374,22 @@ func (s *Server) GetRouter() chi.Router {
 
 func (s *Server) GetDB() *database.DB {
 	return s.db
+}
+
+func (s *Server) UserStore() *store.UserStore {
+	return s.userStore
+}
+
+func (s *Server) NoteStore() *store.NoteStore {
+	return s.noteStore
+}
+
+func (s *Server) SessionStore() *store.SessionStore {
+	return s.sessionStore
+}
+
+func (s *Server) UserSettingsStore() *store.UserSettingsStore {
+	return s.userSettingsStore
 }
 
 func logrusRequestLogger(next http.Handler) http.Handler {

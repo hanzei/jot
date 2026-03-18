@@ -8,15 +8,15 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/hanzei/jot/server/internal/auth"
-	"github.com/hanzei/jot/server/internal/models"
+	"github.com/hanzei/jot/server/internal/store"
 )
 
 type AdminHandler struct {
-	userStore *models.UserStore
-	noteStore *models.NoteStore
+	userStore *store.UserStore
+	noteStore *store.NoteStore
 }
 
-func NewAdminHandler(userStore *models.UserStore, noteStore *models.NoteStore) *AdminHandler {
+func NewAdminHandler(userStore *store.UserStore, noteStore *store.NoteStore) *AdminHandler {
 	return &AdminHandler{
 		userStore: userStore,
 		noteStore: noteStore,
@@ -30,7 +30,7 @@ type CreateUserRequest struct {
 }
 
 type UserListResponse struct {
-	Users []*models.User `json:"users"`
+	Users []*store.User `json:"users"`
 }
 
 // GetUsers godoc
@@ -64,7 +64,7 @@ func (h *AdminHandler) GetUsers(w http.ResponseWriter, r *http.Request) (int, an
 //	@Accept		json
 //	@Produce	json
 //	@Param		body	body		CreateUserRequest	true	"New user details"
-//	@Success	201		{object}	models.User
+//	@Success	201		{object}	store.User
 //	@Failure	400		{string}	string	"bad request"
 //	@Failure	401		{string}	string	"unauthorized"
 //	@Failure	403		{string}	string	"forbidden"
@@ -90,8 +90,8 @@ func (h *AdminHandler) CreateUser(w http.ResponseWriter, r *http.Request) (int, 
 
 	user, err := h.userStore.CreateByAdmin(req.Username, req.Password, req.Role)
 	if err != nil {
-		if errors.Is(err, models.ErrUsernameTaken) {
-			return http.StatusConflict, nil, models.ErrUsernameTaken
+		if errors.Is(err, store.ErrUsernameTaken) {
+			return http.StatusConflict, nil, store.ErrUsernameTaken
 		}
 		return http.StatusInternalServerError, nil, err
 	}
@@ -112,7 +112,7 @@ type UpdateUserRoleRequest struct {
 //	@Produce	json
 //	@Param		id		path		string					true	"User ID"
 //	@Param		body	body		UpdateUserRoleRequest	true	"New role"
-//	@Success	200		{object}	models.User
+//	@Success	200		{object}	store.User
 //	@Failure	400		{string}	string	"bad request"
 //	@Failure	401		{string}	string	"unauthorized"
 //	@Failure	403		{string}	string	"forbidden"
@@ -130,10 +130,10 @@ func (h *AdminHandler) UpdateUserRole(w http.ResponseWriter, r *http.Request) (i
 	}
 	user, err := h.userStore.UpdateRole(userID, req.Role)
 	if err != nil {
-		if errors.Is(err, models.ErrUserNotFound) {
+		if errors.Is(err, store.ErrUserNotFound) {
 			return http.StatusNotFound, nil, err
 		}
-		if errors.Is(err, models.ErrLastAdmin) {
+		if errors.Is(err, store.ErrLastAdmin) {
 			return http.StatusConflict, nil, err
 		}
 		return http.StatusInternalServerError, nil, err
@@ -164,13 +164,13 @@ func (h *AdminHandler) DeleteUser(w http.ResponseWriter, r *http.Request) (int, 
 		return h.noteStore.ClearUserAssignmentsTx(tx, targetID)
 	})
 	if err != nil {
-		if errors.Is(err, models.ErrUserNotFound) {
+		if errors.Is(err, store.ErrUserNotFound) {
 			return http.StatusNotFound, nil, err
 		}
-		if errors.Is(err, models.ErrLastAdmin) {
+		if errors.Is(err, store.ErrLastAdmin) {
 			return http.StatusConflict, nil, err
 		}
-		if errors.Is(err, models.ErrCannotDeleteSelf) {
+		if errors.Is(err, store.ErrCannotDeleteSelf) {
 			return http.StatusForbidden, nil, err
 		}
 		return http.StatusInternalServerError, nil, err
@@ -180,7 +180,7 @@ func (h *AdminHandler) DeleteUser(w http.ResponseWriter, r *http.Request) (int, 
 }
 
 func validateRole(role string) error {
-	if role != models.RoleUser && role != models.RoleAdmin {
+	if role != store.RoleUser && role != store.RoleAdmin {
 		return errors.New("invalid role: must be 'user' or 'admin'")
 	}
 	return nil

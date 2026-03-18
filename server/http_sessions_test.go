@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/hanzei/jot/server/client"
-	"github.com/hanzei/jot/server/internal/models"
+	"github.com/hanzei/jot/server/internal/store"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -195,7 +195,7 @@ func TestSessionCapEvictsOldest(t *testing.T) {
 
 	_ = ts.createTestUser(t, "capuser", "password123", false)
 
-	for range models.MaxSessionsPerUser + 5 {
+	for range store.MaxSessionsPerUser + 5 {
 		c := ts.newClient()
 		_, err := c.Login(t.Context(), "capuser", "password123")
 		require.NoError(t, err)
@@ -207,7 +207,7 @@ func TestSessionCapEvictsOldest(t *testing.T) {
 
 	sessions, err := c.ListSessions(t.Context())
 	require.NoError(t, err)
-	assert.LessOrEqual(t, len(sessions), models.MaxSessionsPerUser)
+	assert.LessOrEqual(t, len(sessions), store.MaxSessionsPerUser)
 }
 
 func TestSessionCrossUserIsolation(t *testing.T) {

@@ -9,14 +9,14 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/hanzei/jot/server/internal/auth"
-	"github.com/hanzei/jot/server/internal/models"
+	"github.com/hanzei/jot/server/internal/store"
 )
 
 type SessionsHandler struct {
-	sessionStore *models.SessionStore
+	sessionStore *store.SessionStore
 }
 
-func NewSessionsHandler(sessionStore *models.SessionStore) *SessionsHandler {
+func NewSessionsHandler(sessionStore *store.SessionStore) *SessionsHandler {
 	return &SessionsHandler{sessionStore: sessionStore}
 }
 
@@ -34,7 +34,7 @@ func sessionID(token string) string {
 	return hex.EncodeToString(h[:])[:22]
 }
 
-func toSessionResponse(s *models.Session, currentToken string) SessionResponse {
+func toSessionResponse(s *store.Session, currentToken string) SessionResponse {
 	parsed := parseUserAgent(s.UserAgent)
 	return SessionResponse{
 		ID:        sessionID(s.Token),

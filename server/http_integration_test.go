@@ -21,11 +21,10 @@ import (
 
 	"github.com/hanzei/jot/server/client"
 	"github.com/hanzei/jot/server/internal/config"
-	"github.com/hanzei/jot/server/internal/models"
 	"github.com/hanzei/jot/server/internal/server"
+	"github.com/hanzei/jot/server/internal/store"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
-	"golang.org/x/crypto/bcrypt"
 )
 
 // TestUser bundles a user model with a typed API client.
@@ -98,7 +97,7 @@ func (ts *TestServer) createTestUser(t *testing.T, username, password string, is
 	require.NoError(t, err)
 
 	if isAdmin {
-		_, err = ts.Server.GetDB().Exec("UPDATE users SET role = ? WHERE id = ?", models.RoleAdmin, auth.User.ID)
+		_, err = ts.Server.UserStore().UpdateRole(auth.User.ID, store.RoleAdmin)
 		require.NoError(t, err)
 		auth.User.Role = client.RoleAdmin
 	}
@@ -255,14 +254,7 @@ func TestRegisterDisabled(t *testing.T) {
 	})
 
 	t.Run("admin can still create users", func(t *testing.T) {
-		db := ts.Server.GetDB()
-
-		hash, err := bcrypt.GenerateFromPassword([]byte("adminpass"), bcrypt.DefaultCost)
-		require.NoError(t, err)
-		_, err = db.Exec(
-			"INSERT INTO users (id, username, password_hash, role) VALUES (?, ?, ?, ?)",
-			"admin-test-id", "seedadmin", string(hash), "admin",
-		)
+		_, err := ts.Server.UserStore().CreateByAdmin("seedadmin", "adminpass", store.RoleAdmin)
 		require.NoError(t, err)
 
 		adminClient := ts.newClient()

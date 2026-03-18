@@ -14,19 +14,19 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/hanzei/jot/server/internal/auth"
-	"github.com/hanzei/jot/server/internal/models"
+	"github.com/hanzei/jot/server/internal/store"
 	"golang.org/x/image/draw"
 	_ "golang.org/x/image/webp"
 )
 
 type AuthHandler struct {
-	userStore           *models.UserStore
+	userStore           *store.UserStore
 	sessionService      *auth.SessionService
-	userSettingsStore   *models.UserSettingsStore
+	userSettingsStore   *store.UserSettingsStore
 	registrationEnabled bool
 }
 
-func NewAuthHandler(userStore *models.UserStore, sessionService *auth.SessionService, userSettingsStore *models.UserSettingsStore, registrationEnabled bool) *AuthHandler {
+func NewAuthHandler(userStore *store.UserStore, sessionService *auth.SessionService, userSettingsStore *store.UserSettingsStore, registrationEnabled bool) *AuthHandler {
 	return &AuthHandler{
 		userStore:           userStore,
 		sessionService:      sessionService,
@@ -46,8 +46,8 @@ type LoginRequest struct {
 }
 
 type AuthResponse struct {
-	User     *models.User         `json:"user"`
-	Settings *models.UserSettings `json:"settings"`
+	User     *store.User         `json:"user"`
+	Settings *store.UserSettings `json:"settings"`
 }
 
 // Register godoc
@@ -83,8 +83,8 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) (int, any
 
 	user, err := h.userStore.Create(req.Username, req.Password)
 	if err != nil {
-		if errors.Is(err, models.ErrUsernameTaken) {
-			return http.StatusConflict, nil, models.ErrUsernameTaken
+		if errors.Is(err, store.ErrUsernameTaken) {
+			return http.StatusConflict, nil, store.ErrUsernameTaken
 		}
 		return http.StatusInternalServerError, nil, err
 	}
@@ -185,7 +185,7 @@ var validThemes = map[string]bool{"system": true, "light": true, "dark": true}
 
 // validateSettingsFields validates language and theme. Returns (lang, theme, needUpdate).
 // If both are nil, needUpdate is false. If validation fails, returns a non-nil error.
-func validateSettingsFields(current *models.UserSettings, language, theme *string) (lang, th string, needUpdate bool, err error) {
+func validateSettingsFields(current *store.UserSettings, language, theme *string) (lang, th string, needUpdate bool, err error) {
 	if language == nil && theme == nil {
 		return "", "", false, nil
 	}
@@ -211,7 +211,7 @@ func validateSettingsFields(current *models.UserSettings, language, theme *strin
 
 // applySettingsUpdate validates and persists language/theme changes.
 // If neither field is set the current settings are returned unchanged.
-func (h *AuthHandler) applySettingsUpdate(userID string, current *models.UserSettings, language, theme *string) (*models.UserSettings, int, error) {
+func (h *AuthHandler) applySettingsUpdate(userID string, current *store.UserSettings, language, theme *string) (*store.UserSettings, int, error) {
 	lang, th, needUpdate, err := validateSettingsFields(current, language, theme)
 	if err != nil {
 		return nil, http.StatusBadRequest, err
@@ -279,8 +279,8 @@ func (h *AuthHandler) UpdateUser(w http.ResponseWriter, r *http.Request) (int, a
 
 	user, err := h.userStore.UpdateProfile(currentUser.ID, username, firstName, lastName)
 	if err != nil {
-		if errors.Is(err, models.ErrUsernameTaken) {
-			return http.StatusConflict, nil, models.ErrUsernameTaken
+		if errors.Is(err, store.ErrUsernameTaken) {
+			return http.StatusConflict, nil, store.ErrUsernameTaken
 		}
 		return http.StatusInternalServerError, nil, err
 	}
@@ -499,7 +499,7 @@ func resizeImage(data []byte) ([]byte, error) {
 //	@Accept		multipart/form-data
 //	@Produce	json
 //	@Param		file	formData	file			true	"Profile icon image (JPEG, PNG or WebP, max 5 MB)"
-//	@Success	200		{object}	models.User
+//	@Success	200		{object}	store.User
 //	@Failure	400		{string}	string	"bad request"
 //	@Failure	401		{string}	string	"unauthorized"
 //	@Failure	500		{string}	string	"internal server error"
@@ -590,7 +590,7 @@ func (h *AuthHandler) GetUserProfileIcon(w http.ResponseWriter, r *http.Request)
 
 	data, contentType, err := h.userStore.GetProfileIcon(id)
 	if err != nil {
-		if errors.Is(err, models.ErrUserNotFound) {
+		if errors.Is(err, store.ErrUserNotFound) {
 			return http.StatusNotFound, nil, errors.New("user not found")
 		}
 		return http.StatusInternalServerError, nil, fmt.Errorf("fetch profile icon: %w", err)

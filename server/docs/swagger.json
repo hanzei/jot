@@ -104,7 +104,7 @@
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/models.User"
+                            "$ref": "#/definitions/store.User"
                         }
                     },
                     "400": {
@@ -224,7 +224,7 @@
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.User"
+                            "$ref": "#/definitions/store.User"
                         }
                     },
                     "400": {
@@ -299,7 +299,7 @@
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/models.Label"
+                                "$ref": "#/definitions/store.Label"
                             }
                         }
                     },
@@ -481,7 +481,7 @@
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/models.Note"
+                                "$ref": "#/definitions/store.Note"
                             }
                         }
                     },
@@ -530,7 +530,7 @@
                     "201": {
                         "description": "Created",
                         "schema": {
-                            "$ref": "#/definitions/models.Note"
+                            "$ref": "#/definitions/store.Note"
                         }
                     },
                     "400": {
@@ -691,7 +691,7 @@
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.Note"
+                            "$ref": "#/definitions/store.Note"
                         }
                     },
                     "400": {
@@ -813,7 +813,7 @@
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.Note"
+                            "$ref": "#/definitions/store.Note"
                         }
                     },
                     "400": {
@@ -882,7 +882,7 @@
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.Note"
+                            "$ref": "#/definitions/store.Note"
                         }
                     },
                     "400": {
@@ -946,7 +946,7 @@
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.Note"
+                            "$ref": "#/definitions/store.Note"
                         }
                     },
                     "401": {
@@ -997,7 +997,7 @@
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.Note"
+                            "$ref": "#/definitions/store.Note"
                         }
                     },
                     "400": {
@@ -1210,7 +1210,7 @@
                         "schema": {
                             "type": "array",
                             "items": {
-                                "$ref": "#/definitions/models.NoteShare"
+                                "$ref": "#/definitions/store.NoteShare"
                             }
                         }
                     },
@@ -1571,7 +1571,7 @@
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "$ref": "#/definitions/models.User"
+                            "$ref": "#/definitions/store.User"
                         }
                     },
                     "400": {
@@ -1688,10 +1688,10 @@
             "type": "object",
             "properties": {
                 "settings": {
-                    "$ref": "#/definitions/models.UserSettings"
+                    "$ref": "#/definitions/store.UserSettings"
                 },
                 "user": {
-                    "$ref": "#/definitions/models.User"
+                    "$ref": "#/definitions/store.User"
                 }
             }
         },
@@ -1742,7 +1742,7 @@
                     }
                 },
                 "note_type": {
-                    "$ref": "#/definitions/models.NoteType"
+                    "$ref": "#/definitions/store.NoteType"
                 },
                 "title": {
                     "type": "string"
@@ -1971,12 +1971,12 @@
                 "users": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/models.User"
+                        "$ref": "#/definitions/store.User"
                     }
                 }
             }
         },
-        "models.Label": {
+        "store.Label": {
             "type": "object",
             "properties": {
                 "created_at": {
@@ -1996,7 +1996,7 @@
                 }
             }
         },
-        "models.Note": {
+        "store.Note": {
             "type": "object",
             "properties": {
                 "archived": {
@@ -2026,17 +2026,17 @@
                 "items": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/models.NoteItem"
+                        "$ref": "#/definitions/store.NoteItem"
                     }
                 },
                 "labels": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/models.Label"
+                        "$ref": "#/definitions/store.Label"
                     }
                 },
                 "note_type": {
-                    "$ref": "#/definitions/models.NoteType"
+                    "$ref": "#/definitions/store.NoteType"
                 },
                 "pinned": {
                     "type": "boolean"
@@ -2047,7 +2047,7 @@
                 "shared_with": {
                     "type": "array",
                     "items": {
-                        "$ref": "#/definitions/models.NoteShare"
+                        "$ref": "#/definitions/store.NoteShare"
                     }
                 },
                 "title": {
@@ -2061,7 +2061,7 @@
                 }
             }
         },
-        "models.NoteItem": {
+        "store.NoteItem": {
             "type": "object",
             "properties": {
                 "assigned_to": {
@@ -2093,7 +2093,7 @@
                 }
             }
         },
-        "models.NoteShare": {
+        "store.NoteShare": {
             "type": "object",
             "properties": {
                 "created_at": {
@@ -2131,7 +2131,7 @@
                 }
             }
         },
-        "models.NoteType": {
+        "store.NoteType": {
             "type": "string",
             "enum": [
                 "text",
@@ -2142,7 +2142,7 @@
                 "NoteTypeTodo"
             ]
         },
-        "models.User": {
+        "store.User": {
             "type": "object",
             "properties": {
                 "created_at": {
@@ -2171,7 +2171,7 @@
                 }
             }
         },
-        "models.UserSettings": {
+        "store.UserSettings": {
             "type": "object",
             "properties": {
                 "language": {

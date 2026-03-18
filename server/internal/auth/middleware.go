@@ -4,7 +4,7 @@ import (
 	"context"
 	"net/http"
 
-	"github.com/hanzei/jot/server/internal/models"
+	"github.com/hanzei/jot/server/internal/store"
 	"github.com/sirupsen/logrus"
 )
 
@@ -30,8 +30,8 @@ func (s *SessionService) AuthMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func GetUserFromContext(ctx context.Context) (*models.User, bool) {
-	user, ok := ctx.Value(UserContextKey).(*models.User)
+func GetUserFromContext(ctx context.Context) (*store.User, bool) {
+	user, ok := ctx.Value(UserContextKey).(*store.User)
 	return user, ok
 }
 
@@ -48,7 +48,7 @@ func AdminRequired(next http.Handler) http.Handler {
 			return
 		}
 
-		if user.Role != models.RoleAdmin {
+		if user.Role != store.RoleAdmin {
 			http.Error(w, "Admin required", http.StatusForbidden)
 			return
 		}

@@ -1,4 +1,4 @@
-package models
+package store
 
 // User roles
 const (

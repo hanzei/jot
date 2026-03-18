@@ -8,9 +8,9 @@ definitions:
   handlers.AuthResponse:
     properties:
       settings:
-        $ref: '#/definitions/models.UserSettings'
+        $ref: '#/definitions/store.UserSettings'
       user:
-        $ref: '#/definitions/models.User'
+        $ref: '#/definitions/store.User'
     type: object
   handlers.ChangePasswordRequest:
     properties:
@@ -43,7 +43,7 @@ definitions:
           type: string
         type: array
       note_type:
-        $ref: '#/definitions/models.NoteType'
+        $ref: '#/definitions/store.NoteType'
       title:
         type: string
     type: object
@@ -192,10 +192,10 @@ definitions:
     properties:
       users:
         items:
-          $ref: '#/definitions/models.User'
+          $ref: '#/definitions/store.User'
         type: array
     type: object
-  models.Label:
+  store.Label:
     properties:
       created_at:
         type: string
@@ -208,7 +208,7 @@ definitions:
       user_id:
         type: string
     type: object
-  models.Note:
+  store.Note:
     properties:
       archived:
         type: boolean
@@ -228,21 +228,21 @@ definitions:
         type: boolean
       items:
         items:
-          $ref: '#/definitions/models.NoteItem'
+          $ref: '#/definitions/store.NoteItem'
         type: array
       labels:
         items:
-          $ref: '#/definitions/models.Label'
+          $ref: '#/definitions/store.Label'
         type: array
       note_type:
-        $ref: '#/definitions/models.NoteType'
+        $ref: '#/definitions/store.NoteType'
       pinned:
         type: boolean
       position:
         type: integer
       shared_with:
         items:
-          $ref: '#/definitions/models.NoteShare'
+          $ref: '#/definitions/store.NoteShare'
         type: array
       title:
         type: string
@@ -251,7 +251,7 @@ definitions:
       user_id:
         type: string
     type: object
-  models.NoteItem:
+  store.NoteItem:
     properties:
       assigned_to:
         type: string
@@ -272,7 +272,7 @@ definitions:
       updated_at:
         type: string
     type: object
-  models.NoteShare:
+  store.NoteShare:
     properties:
       created_at:
         type: string
@@ -297,7 +297,7 @@ definitions:
       username:
         type: string
     type: object
-  models.NoteType:
+  store.NoteType:
     enum:
     - text
     - todo
@@ -305,7 +305,7 @@ definitions:
     x-enum-varnames:
     - NoteTypeText
     - NoteTypeTodo
-  models.User:
+  store.User:
     properties:
       created_at:
         type: string
@@ -324,7 +324,7 @@ definitions:
       username:
         type: string
     type: object
-  models.UserSettings:
+  store.UserSettings:
     properties:
       language:
         type: string
@@ -414,7 +414,7 @@ paths:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/models.User'
+            $ref: '#/definitions/store.User'
         "400":
           description: bad request
           schema:
@@ -490,7 +490,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/models.User'
+            $ref: '#/definitions/store.User'
         "400":
           description: bad request
           schema:
@@ -537,7 +537,7 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/models.Label'
+              $ref: '#/definitions/store.Label'
             type: array
         "401":
           description: unauthorized
@@ -651,7 +651,7 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/models.Note'
+              $ref: '#/definitions/store.Note'
             type: array
         "401":
           description: unauthorized
@@ -682,7 +682,7 @@ paths:
         "201":
           description: Created
           schema:
-            $ref: '#/definitions/models.Note'
+            $ref: '#/definitions/store.Note'
         "400":
           description: bad request
           schema:
@@ -749,7 +749,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/models.Note'
+            $ref: '#/definitions/store.Note'
         "400":
           description: bad request
           schema:
@@ -792,7 +792,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/models.Note'
+            $ref: '#/definitions/store.Note'
         "400":
           description: bad request
           schema:
@@ -836,7 +836,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/models.Note'
+            $ref: '#/definitions/store.Note'
         "400":
           description: bad request
           schema:
@@ -877,7 +877,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/models.Note'
+            $ref: '#/definitions/store.Note'
         "401":
           description: unauthorized
           schema:
@@ -909,7 +909,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/models.Note'
+            $ref: '#/definitions/store.Note'
         "400":
           description: bad request
           schema:
@@ -1045,7 +1045,7 @@ paths:
           description: OK
           schema:
             items:
-              $ref: '#/definitions/models.NoteShare'
+              $ref: '#/definitions/store.NoteShare'
             type: array
         "400":
           description: bad request
@@ -1391,7 +1391,7 @@ paths:
         "200":
           description: OK
           schema:
-            $ref: '#/definitions/models.User'
+            $ref: '#/definitions/store.User'
         "400":
           description: bad request
           schema:
