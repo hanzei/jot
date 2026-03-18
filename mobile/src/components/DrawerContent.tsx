@@ -126,32 +126,39 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
             );
           })}
 
-          {labels && labels.length > 0 && labels.map((label) => {
-            const isActive = activeLabelId === label.id;
-            return (
-              <TouchableOpacity
-                key={label.id}
-                style={[styles.navItem, isActive && { backgroundColor: colors.primaryLight }]}
-                onPress={() => handleLabelPress(label.id, label.name)}
-                testID={`drawer-label-${label.id}`}
-                accessibilityLabel={label.name}
-                accessibilityRole="button"
-                accessibilityState={{ selected: isActive }}
-              >
-                <Ionicons
-                  name={isActive ? 'pricetag' : 'pricetag-outline'}
-                  size={22}
-                  color={isActive ? colors.primary : colors.icon}
-                />
-                <Text
-                  style={[styles.navItemText, { color: colors.icon }, isActive && { color: colors.primary, fontWeight: '600' }]}
-                  numberOfLines={1}
-                >
-                  {label.name}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
+          {labels && labels.length > 0 && (
+            <>
+              <View style={[styles.navDivider, { backgroundColor: colors.divider }]} />
+              {labels.map((label) => {
+                const isActive = activeLabelId === label.id;
+                return (
+                  <TouchableOpacity
+                    key={label.id}
+                    style={[styles.navItem, isActive && { backgroundColor: colors.primaryLight }]}
+                    onPress={() => handleLabelPress(label.id, label.name)}
+                    testID={`drawer-label-${label.id}`}
+                    accessibilityLabel={label.name}
+                    accessibilityRole="button"
+                    accessibilityState={{ selected: isActive }}
+                  >
+                    <Ionicons
+                      name={isActive ? 'pricetag' : 'pricetag-outline'}
+                      size={22}
+                      color={isActive ? colors.primary : colors.icon}
+                    />
+                    <Text
+                      style={[styles.navItemText, { color: colors.icon }, isActive && { color: colors.primary, fontWeight: '600' }]}
+                      numberOfLines={1}
+                    >
+                      {label.name}
+                    </Text>
+                  </TouchableOpacity>
+                );
+              })}
+            </>
+          )}
+
+          <View style={[styles.navDivider, { backgroundColor: colors.divider }]} />
 
           {BOTTOM_ITEMS.map((item) => {
             const isActive = activeRoute === item.name;
@@ -219,16 +226,16 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
   },
   avatar: {
-    width: 48,
-    height: 48,
-    borderRadius: 24,
+    width: 52,
+    height: 52,
+    borderRadius: 26,
     justifyContent: 'center',
     alignItems: 'center',
     marginBottom: 12,
   },
   avatarText: {
     color: '#fff',
-    fontSize: 20,
+    fontSize: 22,
     fontWeight: '600',
   },
   displayName: {
@@ -259,6 +266,11 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '400',
     flexShrink: 1,
+  },
+  navDivider: {
+    height: 1,
+    marginHorizontal: 16,
+    marginVertical: 4,
   },
   bottomSection: {
     paddingTop: 0,

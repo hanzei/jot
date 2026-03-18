@@ -188,10 +188,15 @@ function NoteCard({ note, onPress, onLongPress, onMenuPress }: NoteCardProps) {
 const styles = StyleSheet.create({
   card: {
     borderWidth: 1,
-    borderRadius: 8,
+    borderRadius: 12,
     padding: 12,
     marginHorizontal: 16,
-    marginVertical: 4,
+    marginVertical: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
+    elevation: 1,
   },
   cardHeader: {
     flexDirection: 'row',
@@ -236,7 +241,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 8,
     flexWrap: 'wrap',
-    gap: 4,
+    gap: 6,
   },
   labels: {
     flexDirection: 'row',
@@ -245,9 +250,9 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   labelChip: {
-    borderRadius: 12,
+    borderRadius: 10,
     paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingVertical: 3,
   },
   labelText: {
     fontSize: 11,

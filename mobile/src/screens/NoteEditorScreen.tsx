@@ -595,7 +595,11 @@ export default function NoteEditorScreen() {
       keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 0}
     >
       <View style={[styles.header, { backgroundColor: noteBackground, borderBottomColor: hasNoteColor ? 'transparent' : colors.borderLight }]}>
-        <TouchableOpacity onPress={() => navigation.goBack()} testID="editor-back">
+        <TouchableOpacity
+          onPress={() => navigation.goBack()}
+          hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          testID="editor-back"
+        >
           <Ionicons name="arrow-back" size={24} color={hasNoteColor ? '#1a1a1a' : colors.text} />
         </TouchableOpacity>
         <View style={styles.headerRight}>
@@ -736,7 +740,7 @@ export default function NoteEditorScreen() {
         )}
       </ScrollView>
 
-      <View style={[styles.toolbar, { backgroundColor: noteBackground, borderTopColor: hasNoteColor ? 'transparent' : colors.borderLight }]}>
+      <View style={[styles.toolbar, { backgroundColor: noteBackground, borderTopColor: hasNoteColor ? 'transparent' : colors.border }]}>
         {/* Color picker button */}
         <TouchableOpacity
           onPress={() => setColorPickerVisible(true)}
@@ -799,6 +803,8 @@ export default function NoteEditorScreen() {
           </TouchableOpacity>
         )}
 
+        <View style={styles.toolbarSpacer} />
+
         {/* Delete */}
         <TouchableOpacity onPress={handleDelete} style={styles.toolbarBtn} testID="delete-note-btn">
           <Ionicons name="trash-outline" size={22} color={colors.error} />
@@ -854,7 +860,7 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingTop: Platform.OS === 'ios' ? 56 : 16,
     paddingBottom: 12,
-    borderBottomWidth: 1,
+    borderBottomWidth: StyleSheet.hairlineWidth,
   },
   headerRight: {
     flexDirection: 'row',
@@ -918,14 +924,18 @@ const styles = StyleSheet.create({
   toolbar: {
     flexDirection: 'row',
     alignItems: 'center',
-    borderTopWidth: 1,
+    borderTopWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: 8,
     paddingVertical: 8,
     paddingBottom: Platform.OS === 'ios' ? 24 : 8,
-    gap: 4,
+    gap: 2,
   },
   toolbarBtn: {
-    padding: 8,
+    padding: 10,
+    borderRadius: 20,
+  },
+  toolbarSpacer: {
+    flex: 1,
   },
   errorBanner: {
     borderBottomWidth: 1,

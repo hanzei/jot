@@ -53,7 +53,7 @@ const styles = StyleSheet.create({
     overflow: 'hidden',
   },
   letter: {
-    color: '#1a1a1a',
+    color: '#fff',
     fontWeight: '600',
   },
 });
