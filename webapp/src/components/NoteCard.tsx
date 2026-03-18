@@ -330,8 +330,9 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, onRestore, o
         message={confirmState.message}
         confirmLabel={confirmState.confirmLabel}
         onConfirm={() => {
-          confirmState.onConfirm();
+          const action = confirmState.onConfirm;
           setConfirmState(prev => ({ ...prev, open: false }));
+          action();
         }}
         onCancel={() => setConfirmState(prev => ({ ...prev, open: false }))}
       />

@@ -83,8 +83,9 @@ export class DashboardPage {
 
   async deleteNote(title: string) {
     await this.openNoteMenu(title);
-    this.page.once('dialog', dialog => dialog.accept());
     await this.page.getByRole('menuitem', { name: 'Delete' }).click();
+    const confirmDialog = this.page.getByRole('dialog').last();
+    await confirmDialog.getByRole('button', { name: 'Delete' }).click();
   }
 
   async restoreNoteFromBin(title: string) {
@@ -94,8 +95,9 @@ export class DashboardPage {
 
   async permanentlyDeleteNoteFromBin(title: string) {
     await this.openNoteMenu(title);
-    this.page.once('dialog', dialog => dialog.accept());
     await this.page.getByRole('menuitem', { name: 'Delete forever' }).click();
+    const confirmDialog = this.page.getByRole('dialog').last();
+    await confirmDialog.getByRole('button', { name: 'Delete forever' }).click();
   }
 
   async pinNote(title: string) {
