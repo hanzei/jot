@@ -1,9 +1,10 @@
-import { ReactNode } from 'react';
+import { ReactNode, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
 import { Bars3Icon } from '@heroicons/react/24/outline';
 import { Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/react';
 import LetterAvatar from '@/components/LetterAvatar';
+import ConfirmDialog from '@/components/ConfirmDialog';
 import { getUser } from '@/utils/auth';
 
 interface NavigationHeaderProps {
@@ -30,6 +31,8 @@ interface ProfileMenuProps {
 
 const ProfileMenu = ({ iconSrc, displayUsername, firstName, baseUsername, showAdminLink, adminLinkActive, settingsLinkActive, onLogout }: ProfileMenuProps) => {
   const { t } = useTranslation();
+  const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
+
   return (
     <div className="relative">
       <Menu>
@@ -76,7 +79,7 @@ const ProfileMenu = ({ iconSrc, displayUsername, firstName, baseUsername, showAd
           )}
           <MenuItem>
             <button
-              onClick={onLogout}
+              onClick={() => setShowLogoutConfirm(true)}
               className="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 data-[focus]:bg-gray-100 dark:data-[focus]:bg-slate-700 data-[focus]:text-red-600 dark:data-[focus]:text-red-400"
             >
               {t('nav.logout')}
@@ -85,6 +88,18 @@ const ProfileMenu = ({ iconSrc, displayUsername, firstName, baseUsername, showAd
         </div>
       </MenuItems>
       </Menu>
+      <ConfirmDialog
+        open={showLogoutConfirm}
+        title={t('nav.logoutConfirmTitle')}
+        message={t('nav.logoutConfirmMessage')}
+        confirmLabel={t('nav.logout')}
+        variant="danger"
+        onConfirm={() => {
+          setShowLogoutConfirm(false);
+          onLogout();
+        }}
+        onCancel={() => setShowLogoutConfirm(false)}
+      />
     </div>
   );
 };

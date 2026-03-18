@@ -118,6 +118,7 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
 
   const assignedUser = item.assignedTo ? usersById?.get(item.assignedTo) : undefined;
   const showAssignUI = isShared && collaborators && collaborators.length > 0 && onAssignItem;
+  const placeholder = item.text ? '' : t('note.itemPlaceholder');
 
   return (
     <div
@@ -151,7 +152,8 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
         <input
           type="text"
           data-testid="todo-item-input"
-          placeholder={item.text ? '' : t('note.itemPlaceholder')}
+          placeholder={placeholder}
+          size={Math.max((item.text || placeholder).length, 1) + 1}
           className={`field-sizing-content p-1 bg-transparent border-none outline-none min-w-0 placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white ${
             isCompleted ? 'line-through text-gray-500 dark:text-gray-400' : ''
           }`}

@@ -138,23 +138,36 @@ export default function NoteContextMenu({
                 {note.title}
               </Text>
             ) : null}
-            {actions.map((action) => (
-              <TouchableOpacity
-                key={action.testId}
-                style={[styles.actionRow, { borderBottomColor: colors.borderLight }]}
-                onPress={action.onPress}
-                testID={action.testId}
-              >
-                <Ionicons
-                  name={action.icon}
-                  size={22}
-                  color={action.destructive ? colors.error : colors.text}
-                />
-                <Text style={[styles.actionLabel, { color: colors.text }, action.destructive && { color: colors.error }]}>
-                  {action.label}
-                </Text>
-              </TouchableOpacity>
-            ))}
+            {actions.map((action, index) => {
+              const isLast = index === actions.length - 1;
+              const isDestructive = action.destructive;
+              const prevNonDestructive = index > 0 && !actions[index - 1].destructive;
+              const nextIsDestructive = actions[index + 1]?.destructive;
+              return (
+                <React.Fragment key={action.testId}>
+                  {isDestructive && prevNonDestructive && (
+                    <View style={[styles.destructiveSeparator, { backgroundColor: colors.borderLight }]} />
+                  )}
+                  <TouchableOpacity
+                    style={[
+                      styles.actionRow,
+                      !isLast && !isDestructive && !nextIsDestructive && { borderBottomColor: colors.borderLight, borderBottomWidth: 1 },
+                    ]}
+                    onPress={action.onPress}
+                    testID={action.testId}
+                  >
+                    <Ionicons
+                      name={action.icon}
+                      size={22}
+                      color={isDestructive ? colors.error : colors.text}
+                    />
+                    <Text style={[styles.actionLabel, { color: colors.text }, isDestructive && { color: colors.error }]}>
+                      {action.label}
+                    </Text>
+                  </TouchableOpacity>
+                </React.Fragment>
+              );
+            })}
           </Pressable>
         </SafeAreaView>
       </Pressable>
@@ -170,17 +183,19 @@ const styles = StyleSheet.create({
   sheet: {
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
-    padding: 16,
+    paddingTop: 16,
+    paddingHorizontal: 16,
+    paddingBottom: 8,
   },
   handle: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
+    width: 40,
+    height: 5,
+    borderRadius: 2.5,
     alignSelf: 'center',
     marginBottom: 16,
   },
   noteTitle: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: '600',
     marginBottom: 12,
     paddingBottom: 12,
@@ -191,9 +206,12 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     paddingVertical: 14,
     gap: 14,
-    borderBottomWidth: 1,
   },
   actionLabel: {
     fontSize: 16,
+  },
+  destructiveSeparator: {
+    height: 1,
+    marginVertical: 4,
   },
 });
