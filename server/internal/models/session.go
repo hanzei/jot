@@ -13,7 +13,7 @@ const (
 	SessionDuration    = 30 * 24 * time.Hour
 	SessionRenewWindow = 7 * 24 * time.Hour
 	maxUserAgentLength = 512
-	MaxSessionsPerUser = 10
+	MaxSessionsPerUser = 50
 )
 
 var ErrSessionNotFoundOrExpired = errors.New("session not found or expired")
