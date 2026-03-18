@@ -13,6 +13,7 @@ const (
 	SessionDuration    = 30 * 24 * time.Hour
 	SessionRenewWindow = 7 * 24 * time.Hour
 	maxUserAgentLength = 512
+	MaxSessionsPerUser = 10
 )
 
 var ErrSessionNotFoundOrExpired = errors.New("session not found or expired")
@@ -53,6 +54,15 @@ func (s *SessionStore) Create(userID, userAgent string) (*Session, error) {
 
 	now := time.Now()
 	expiresAt := now.Add(SessionDuration)
+
+	evictQuery := `DELETE FROM sessions WHERE token IN (
+		SELECT token FROM sessions WHERE user_id = ? AND expires_at > ?
+		ORDER BY created_at DESC
+		LIMIT -1 OFFSET ?
+	)`
+	if _, err := s.db.Exec(evictQuery, userID, time.Now(), MaxSessionsPerUser-1); err != nil {
+		return nil, fmt.Errorf("failed to evict old sessions: %w", err)
+	}
 
 	query := `INSERT INTO sessions (token, user_id, user_agent, expires_at) VALUES (?, ?, ?, ?)`
 	if _, err := s.db.Exec(query, token, userID, userAgent, expiresAt); err != nil {
@@ -119,6 +129,19 @@ func (s *SessionStore) Delete(token string) error {
 		return fmt.Errorf("failed to delete session: %w", err)
 	}
 	return nil
+}
+
+func (s *SessionStore) DeleteByUserIDAndToken(userID, token string) (bool, error) {
+	query := `DELETE FROM sessions WHERE user_id = ? AND token = ?`
+	result, err := s.db.Exec(query, userID, token)
+	if err != nil {
+		return false, fmt.Errorf("failed to delete session: %w", err)
+	}
+	n, err := result.RowsAffected()
+	if err != nil {
+		return false, fmt.Errorf("failed to read rows affected: %w", err)
+	}
+	return n > 0, nil
 }
 
 func (s *SessionStore) DeleteByUserID(userID string) error {

@@ -98,8 +98,12 @@ func (h *SessionsHandler) RevokeSession(w http.ResponseWriter, r *http.Request) 
 		return http.StatusUnauthorized, errors.New("unauthorized")
 	}
 
-	sessionIDParam := chi.URLParam(r, "id")
+	targetID := chi.URLParam(r, "id")
 	currentToken, _ := auth.GetSessionTokenFromContext(r.Context())
+
+	if sessionID(currentToken) == targetID {
+		return http.StatusBadRequest, errors.New("cannot revoke current session")
+	}
 
 	sessions, err := h.sessionStore.GetByUserID(user.ID)
 	if err != nil {
@@ -107,16 +111,18 @@ func (h *SessionsHandler) RevokeSession(w http.ResponseWriter, r *http.Request) 
 	}
 
 	for _, s := range sessions {
-		if sessionID(s.Token) == sessionIDParam {
-			if s.Token == currentToken {
-				return http.StatusBadRequest, errors.New("cannot revoke current session")
-			}
-			if err := h.sessionStore.Delete(s.Token); err != nil {
-				return http.StatusInternalServerError, err
-			}
-			w.WriteHeader(http.StatusNoContent)
-			return 0, nil
+		if sessionID(s.Token) != targetID {
+			continue
 		}
+		deleted, err := h.sessionStore.DeleteByUserIDAndToken(user.ID, s.Token)
+		if err != nil {
+			return http.StatusInternalServerError, err
+		}
+		if !deleted {
+			return http.StatusNotFound, errors.New("session not found")
+		}
+		w.WriteHeader(http.StatusNoContent)
+		return 0, nil
 	}
 
 	return http.StatusNotFound, errors.New("session not found")

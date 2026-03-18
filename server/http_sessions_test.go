@@ -5,6 +5,7 @@ import (
 	"testing"
 
 	"github.com/hanzei/jot/server/client"
+	"github.com/hanzei/jot/server/internal/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -187,6 +188,26 @@ func (u *uaRoundTripper) RoundTrip(req *http.Request) (*http.Response, error) {
 		base = http.DefaultTransport
 	}
 	return base.RoundTrip(req)
+}
+
+func TestSessionCapEvictsOldest(t *testing.T) {
+	ts := setupTestServer(t)
+
+	_ = ts.createTestUser(t, "capuser", "password123", false)
+
+	for range models.MaxSessionsPerUser + 5 {
+		c := ts.newClient()
+		_, err := c.Login(t.Context(), "capuser", "password123")
+		require.NoError(t, err)
+	}
+
+	c := ts.newClient()
+	_, err := c.Login(t.Context(), "capuser", "password123")
+	require.NoError(t, err)
+
+	sessions, err := c.ListSessions(t.Context())
+	require.NoError(t, err)
+	assert.LessOrEqual(t, len(sessions), models.MaxSessionsPerUser)
 }
 
 func TestSessionCrossUserIsolation(t *testing.T) {
