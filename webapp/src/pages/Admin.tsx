@@ -6,6 +6,7 @@ import { isAdmin, removeUser, getUser } from '@/utils/auth';
 import { Navigate, useNavigate } from 'react-router';
 import AppLayout from '@/components/AppLayout';
 import SearchBar from '@/components/SearchBar';
+import ConfirmDialog from '@/components/ConfirmDialog';
 import { useNavigationLinkTabs } from '@/hooks/useNavigationTabs';
 
 interface AdminProps {
@@ -30,6 +31,7 @@ const Admin = ({ onLogout }: AdminProps) => {
   const [searchQuery, setSearchQuery] = useState('');
   const [roleUpdating, setRoleUpdating] = useState<Set<string>>(new Set());
   const [deleteLoading, setDeleteLoading] = useState<Set<string>>(new Set());
+  const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; user: User | null }>({ open: false, user: null });
 
   const userIsAdmin = isAdmin();
   const { tabs: navigationTabs, bottomTabs: bottomNavigationTabs } = useNavigationLinkTabs();
@@ -110,10 +112,14 @@ const Admin = ({ onLogout }: AdminProps) => {
     }
   };
 
-  const handleDeleteUser = async (targetUser: User) => {
-    if (!window.confirm(t('admin.deleteUserConfirm', { username: targetUser.username }))) {
-      return;
-    }
+  const handleDeleteUser = (targetUser: User) => {
+    setDeleteConfirm({ open: true, user: targetUser });
+  };
+
+  const confirmDeleteUser = async () => {
+    const targetUser = deleteConfirm.user;
+    if (!targetUser) return;
+    setDeleteConfirm({ open: false, user: null });
     setError('');
     setDeleteLoading(prev => new Set(prev).add(targetUser.id));
     try {
@@ -271,8 +277,8 @@ const Admin = ({ onLogout }: AdminProps) => {
                               <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 dark:bg-slate-700 text-gray-500 dark:text-gray-400">{t('admin.youBadge')}</span>
                             )}
                           </div>
-                          <p className="text-sm text-gray-500 dark:text-gray-400">
-                            {t('admin.userIdCreated', { id: user.id, date: new Date(user.created_at).toLocaleDateString(i18n.resolvedLanguage) })}
+                          <p className="text-sm text-gray-500 dark:text-gray-400" title={user.id}>
+                            {t('admin.userCreated', { date: new Date(user.created_at).toLocaleDateString(i18n.resolvedLanguage) })}
                           </p>
                         </div>
                       </div>
@@ -323,6 +329,15 @@ const Admin = ({ onLogout }: AdminProps) => {
               <p className="text-gray-500 dark:text-gray-400">{t('admin.noUsersFound')}</p>
             </div>
           )}
+
+          <ConfirmDialog
+            open={deleteConfirm.open}
+            title={t('admin.deleteUser')}
+            message={deleteConfirm.user ? t('admin.deleteUserConfirm', { username: deleteConfirm.user.username }) : ''}
+            confirmLabel={t('admin.deleteUser')}
+            onConfirm={confirmDeleteUser}
+            onCancel={() => setDeleteConfirm({ open: false, user: null })}
+          />
         </div>
       </div>
     </AppLayout>

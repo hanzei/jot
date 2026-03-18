@@ -2,6 +2,7 @@ import { render, screen, fireEvent } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { type ReactNode } from 'react'
 import NoteModal from '../NoteModal'
+import { ToastProvider } from '../Toast'
 import type { Note, NoteItem } from '@jot/shared'
 import { createMockNote } from '@/utils/__tests__/test-helpers'
 
@@ -34,7 +35,11 @@ vi.mock('@headlessui/react', () => {
     </div>
   )
 
-  return { Dialog, DialogPanel }
+  const DialogTitle = ({ children, className }: { children?: ReactNode; className?: string }) => (
+    <h2 className={className}>{children}</h2>
+  )
+
+  return { Dialog, DialogPanel, DialogTitle }
 })
 
 // Mock @dnd-kit components
@@ -109,6 +114,10 @@ const createMockTodoItems = (): NoteItem[] => [
   },
 ]
 
+const renderNoteModal = (props: React.ComponentProps<typeof NoteModal>) => {
+  return render(<ToastProvider><NoteModal {...props} /></ToastProvider>)
+}
+
 const defaultProps = {
   onClose: vi.fn(),
   onSave: vi.fn(),
@@ -128,7 +137,7 @@ describe('NoteModal', () => {
 
   describe('Basic Rendering', () => {
     it('renders create mode correctly', () => {
-      render(<NoteModal {...defaultProps} />)
+      renderNoteModal(defaultProps)
 
       expect(screen.getByText('New Note')).toBeInTheDocument()
       expect(screen.getByPlaceholderText('Note title...')).toBeInTheDocument()
@@ -137,7 +146,7 @@ describe('NoteModal', () => {
 
     it('renders edit mode correctly', () => {
       const note = createMockNote()
-      render(<NoteModal {...defaultProps} note={note} />)
+      renderNoteModal({ ...defaultProps, note })
 
       expect(screen.getByText('Edit Note')).toBeInTheDocument()
       expect(screen.getByDisplayValue('Test Note')).toBeInTheDocument()
@@ -145,7 +154,7 @@ describe('NoteModal', () => {
     })
 
     it('shows note type selector only for new notes', () => {
-      render(<NoteModal {...defaultProps} />)
+      renderNoteModal(defaultProps)
 
       expect(screen.getByText('Text')).toBeInTheDocument()
       expect(screen.getByText('Todo List')).toBeInTheDocument()
@@ -153,7 +162,7 @@ describe('NoteModal', () => {
 
     it('does not show note type selector for existing notes', () => {
       const note = createMockNote()
-      render(<NoteModal {...defaultProps} note={note} />)
+      renderNoteModal({ ...defaultProps, note })
 
       expect(screen.queryByText('Text')).not.toBeInTheDocument()
       expect(screen.queryByText('Todo List')).not.toBeInTheDocument()
@@ -161,7 +170,7 @@ describe('NoteModal', () => {
 
     it('displays last edited time for existing notes', () => {
       const note = createMockNote({ updated_at: '2023-01-01T12:00:00Z' })
-      render(<NoteModal {...defaultProps} note={note} />)
+      renderNoteModal({ ...defaultProps, note })
 
       expect(screen.getByText(/Last edited:/)).toBeInTheDocument()
     })
@@ -169,7 +178,7 @@ describe('NoteModal', () => {
 
   describe('Form Validation', () => {
     it('handles title validation', async () => {
-      render(<NoteModal {...defaultProps} />)
+      renderNoteModal(defaultProps)
 
       const titleInput = screen.getByPlaceholderText('Note title...')
 
@@ -181,7 +190,7 @@ describe('NoteModal', () => {
     })
 
     it('handles content validation', async () => {
-      render(<NoteModal {...defaultProps} />)
+      renderNoteModal(defaultProps)
 
       const contentInput = screen.getByPlaceholderText('Take a note...')
 
@@ -193,7 +202,7 @@ describe('NoteModal', () => {
     })
 
     it('handles todo item text validation', async () => {
-      render(<NoteModal {...defaultProps} />)
+      renderNoteModal(defaultProps)
 
       // Switch to todo mode
       const todoButton = screen.getByText('Todo List')
@@ -211,7 +220,7 @@ describe('NoteModal', () => {
     })
 
     it('validates todo item length limits', async () => {
-      render(<NoteModal {...defaultProps} />)
+      renderNoteModal(defaultProps)
 
       // Switch to todo mode
       const todoButton = screen.getByText('Todo List')
@@ -230,7 +239,7 @@ describe('NoteModal', () => {
     })
 
     it('shows error messages for validation failures', async () => {
-      render(<NoteModal {...defaultProps} />)
+      renderNoteModal(defaultProps)
 
       const titleInput = screen.getByPlaceholderText('Note title...')
       const longTitle = 'a'.repeat(201)
@@ -241,7 +250,7 @@ describe('NoteModal', () => {
     })
 
     it('shows dismiss button for error messages', async () => {
-      render(<NoteModal {...defaultProps} />)
+      renderNoteModal(defaultProps)
 
       const titleInput = screen.getByPlaceholderText('Note title...')
       const longTitle = 'a'.repeat(201)
@@ -256,7 +265,7 @@ describe('NoteModal', () => {
 
   describe('Todo List Functionality', () => {
     it('switches between text and todo modes', async () => {
-      render(<NoteModal {...defaultProps} />)
+      renderNoteModal(defaultProps)
 
       // Start in text mode
       expect(screen.getByPlaceholderText('Take a note...')).toBeInTheDocument()
@@ -277,7 +286,7 @@ describe('NoteModal', () => {
     })
 
     it('shows todo interface when in todo mode', async () => {
-      render(<NoteModal {...defaultProps} />)
+      renderNoteModal(defaultProps)
 
       // Switch to todo mode
       const todoButton = screen.getByText('Todo List')
@@ -292,7 +301,7 @@ describe('NoteModal', () => {
         note_type: 'todo',
         items: createMockTodoItems(),
       })
-      render(<NoteModal {...defaultProps} note={todoNote} />)
+      renderNoteModal({ ...defaultProps, note: todoNote })
 
       // Should show todo items
       expect(screen.getByDisplayValue('First item')).toBeInTheDocument()
@@ -300,7 +309,7 @@ describe('NoteModal', () => {
     })
 
     it('pressing Enter on the last uncompleted item creates a new item', async () => {
-      render(<NoteModal {...defaultProps} />)
+      renderNoteModal(defaultProps)
 
       // Switch to todo mode and add an item
       fireEvent.click(screen.getByText('Todo List'))
@@ -318,7 +327,7 @@ describe('NoteModal', () => {
     })
 
     it('pressing Enter on a non-last uncompleted item inserts a new item below it', async () => {
-      render(<NoteModal {...defaultProps} />)
+      renderNoteModal(defaultProps)
 
       // Switch to todo mode and add two items
       fireEvent.click(screen.getByText('Todo List'))
@@ -354,7 +363,7 @@ describe('NoteModal', () => {
     })
 
     it('pressing a key other than Enter on a todo item does not create a new item', async () => {
-      render(<NoteModal {...defaultProps} />)
+      renderNoteModal(defaultProps)
 
       fireEvent.click(screen.getByText('Todo List'))
       fireEvent.click(screen.getByText('Add item'))
@@ -366,7 +375,7 @@ describe('NoteModal', () => {
     })
 
     it('pressing Backspace on an empty todo item deletes it', async () => {
-      render(<NoteModal {...defaultProps} />)
+      renderNoteModal(defaultProps)
 
       fireEvent.click(screen.getByText('Todo List'))
       fireEvent.click(screen.getByText('Add item'))
@@ -386,7 +395,7 @@ describe('NoteModal', () => {
     })
 
     it('pressing Delete on an empty todo item deletes it', async () => {
-      render(<NoteModal {...defaultProps} />)
+      renderNoteModal(defaultProps)
 
       fireEvent.click(screen.getByText('Todo List'))
       fireEvent.click(screen.getByText('Add item'))
@@ -406,7 +415,7 @@ describe('NoteModal', () => {
     })
 
     it('pressing Backspace on a non-empty todo item does not delete it', async () => {
-      render(<NoteModal {...defaultProps} />)
+      renderNoteModal(defaultProps)
 
       fireEvent.click(screen.getByText('Todo List'))
       fireEvent.click(screen.getByText('Add item'))
@@ -421,7 +430,7 @@ describe('NoteModal', () => {
     })
 
     it('pressing Delete on a non-empty todo item does not delete it', async () => {
-      render(<NoteModal {...defaultProps} />)
+      renderNoteModal(defaultProps)
 
       fireEvent.click(screen.getByText('Todo List'))
       fireEvent.click(screen.getByText('Add item'))
@@ -436,7 +445,7 @@ describe('NoteModal', () => {
     })
 
     it('pressing Backspace on the only empty todo item deletes it without error', async () => {
-      render(<NoteModal {...defaultProps} />)
+      renderNoteModal(defaultProps)
 
       fireEvent.click(screen.getByText('Todo List'))
       fireEvent.click(screen.getByText('Add item'))
@@ -450,7 +459,7 @@ describe('NoteModal', () => {
     })
 
     it('pressing Backspace on a whitespace-only todo item deletes it', async () => {
-      render(<NoteModal {...defaultProps} />)
+      renderNoteModal(defaultProps)
 
       fireEvent.click(screen.getByText('Todo List'))
       fireEvent.click(screen.getByText('Add item'))
@@ -464,7 +473,7 @@ describe('NoteModal', () => {
     })
 
     it('pressing Backspace on an empty item focuses the previous item', async () => {
-      render(<NoteModal {...defaultProps} />)
+      renderNoteModal(defaultProps)
 
       fireEvent.click(screen.getByText('Todo List'))
       fireEvent.click(screen.getByText('Add item'))
@@ -483,7 +492,7 @@ describe('NoteModal', () => {
     })
 
     it('pressing Delete on an empty item focuses the next item', async () => {
-      render(<NoteModal {...defaultProps} />)
+      renderNoteModal(defaultProps)
 
       fireEvent.click(screen.getByText('Todo List'))
       fireEvent.click(screen.getByText('Add item'))
@@ -502,7 +511,7 @@ describe('NoteModal', () => {
     })
 
     it('pressing ArrowDown moves focus to the next item', async () => {
-      render(<NoteModal {...defaultProps} />)
+      renderNoteModal(defaultProps)
 
       fireEvent.click(screen.getByText('Todo List'))
       fireEvent.click(screen.getByText('Add item'))
@@ -519,7 +528,7 @@ describe('NoteModal', () => {
     })
 
     it('pressing ArrowUp moves focus to the previous item', async () => {
-      render(<NoteModal {...defaultProps} />)
+      renderNoteModal(defaultProps)
 
       fireEvent.click(screen.getByText('Todo List'))
       fireEvent.click(screen.getByText('Add item'))
@@ -536,7 +545,7 @@ describe('NoteModal', () => {
     })
 
     it('pressing ArrowUp on the first item does not change focus', async () => {
-      render(<NoteModal {...defaultProps} />)
+      renderNoteModal(defaultProps)
 
       fireEvent.click(screen.getByText('Todo List'))
       fireEvent.click(screen.getByText('Add item'))
@@ -551,7 +560,7 @@ describe('NoteModal', () => {
     })
 
     it('pressing ArrowDown on the last item does not change focus', async () => {
-      render(<NoteModal {...defaultProps} />)
+      renderNoteModal(defaultProps)
 
       fireEvent.click(screen.getByText('Todo List'))
       fireEvent.click(screen.getByText('Add item'))
@@ -574,7 +583,7 @@ describe('NoteModal', () => {
         ],
       })
       mockNotesUpdate.mockClear()
-      render(<NoteModal {...defaultProps} note={todoNote} />)
+      renderNoteModal({ ...defaultProps, note: todoNote })
 
       const inputs = screen.getAllByTestId('todo-item-input')
       expect(inputs).toHaveLength(2)
@@ -592,13 +601,13 @@ describe('NoteModal', () => {
 
   describe('Labels on Creation', () => {
     it('shows label add button for new notes', () => {
-      render(<NoteModal {...defaultProps} />)
+      renderNoteModal(defaultProps)
       expect(screen.getByRole('button', { name: 'Add labels' })).toBeInTheDocument()
     })
 
     it('shows label add button for existing notes', () => {
       const note = createMockNote()
-      render(<NoteModal {...defaultProps} note={note} />)
+      renderNoteModal({ ...defaultProps, note })
       expect(screen.getByRole('button', { name: 'Add labels' })).toBeInTheDocument()
     })
   })
@@ -606,7 +615,7 @@ describe('NoteModal', () => {
   describe('Basic Modal Operations', () => {
     it('handles close button click', () => {
       const onClose = vi.fn()
-      render(<NoteModal {...defaultProps} onClose={onClose} />)
+      renderNoteModal({ ...defaultProps, onClose })
 
       const closeButton = screen.getByRole('button', { name: 'Close' })
       fireEvent.click(closeButton)
@@ -621,7 +630,7 @@ describe('NoteModal', () => {
         items: null,
       } as unknown as Note
 
-      render(<NoteModal {...defaultProps} note={malformedNote} />)
+      renderNoteModal({ ...defaultProps, note: malformedNote })
 
       // Should render without throwing errors
       expect(screen.getByText('Edit Note')).toBeInTheDocument()
@@ -633,7 +642,7 @@ describe('NoteModal', () => {
         title: 'Test',
       } as Note
 
-      render(<NoteModal {...defaultProps} note={incompleteNote} />)
+      renderNoteModal({ ...defaultProps, note: incompleteNote })
 
       expect(screen.getByDisplayValue('Test')).toBeInTheDocument()
     })
