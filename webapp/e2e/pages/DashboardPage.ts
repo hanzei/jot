@@ -260,6 +260,32 @@ export class DashboardPage {
     await this.page.click('button[aria-label="Close"]');
   }
 
+  /** Asserts that Archive and Bin appear directly after a given label in the sidebar with no large gap. */
+  async expectArchiveAndBinDirectlyAfterLabel(labelName: string) {
+    const sidebar = this.page.locator('aside[aria-label="Main navigation"]');
+
+    const labelButton = sidebar.getByRole('button', { name: labelName, exact: true });
+    const archiveButton = sidebar.locator('[aria-label="Archive"]');
+    const binButton = sidebar.locator('[aria-label="Bin"]');
+
+    await expect(labelButton).toBeVisible();
+    await expect(archiveButton).toBeVisible();
+    await expect(binButton).toBeVisible();
+
+    const labelBox = await labelButton.boundingBox();
+    const archiveBox = await archiveButton.boundingBox();
+    const binBox = await binButton.boundingBox();
+
+    expect(labelBox).toBeTruthy();
+    expect(archiveBox).toBeTruthy();
+    expect(binBox).toBeTruthy();
+
+    const gapBetweenLabelAndArchive = archiveBox!.y - (labelBox!.y + labelBox!.height);
+    expect(gapBetweenLabelAndArchive).toBeLessThan(30);
+
+    expect(binBox!.y).toBeGreaterThan(archiveBox!.y);
+  }
+
   /** Shares a note with a user via the card context menu and share modal. */
   async shareNoteWithUser(noteTitle: string, username: string) {
     await this.openNoteMenu(noteTitle);

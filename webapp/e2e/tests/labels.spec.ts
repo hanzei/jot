@@ -131,6 +131,15 @@ test.describe('Label Filtering', () => {
     await dashboardPage.switchToBin();
     await expect(page).not.toHaveURL(/label=/);
   });
+
+  test('archive and bin appear directly after the label list in the sidebar', async ({ dashboardPage }) => {
+    await dashboardPage.goto();
+    await dashboardPage.createNote('Note A', 'content');
+    await dashboardPage.addLabelToNote('Note A', 'sidebar-order');
+    await dashboardPage.expectLabelInSidebar('sidebar-order');
+
+    await dashboardPage.expectArchiveAndBinDirectlyAfterLabel('sidebar-order');
+  });
 });
 
 test.describe('Label Filtering — Mobile', () => {
