@@ -221,6 +221,9 @@ export class DashboardPage {
     // Open the profile dropdown, then click Logout (role=menuitem set by headlessui)
     await this.page.getByRole('button', { name: 'Profile menu' }).click();
     await this.page.getByRole('menuitem', { name: 'Logout' }).click();
+    // Confirm the logout in the confirmation dialog
+    const confirmDialog = this.page.getByRole('dialog');
+    await confirmDialog.getByRole('button', { name: 'Logout' }).click();
   }
 
   async expectProfileMenuTooltip(expected: string) {
