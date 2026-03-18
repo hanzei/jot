@@ -30,10 +30,14 @@ export class DashboardPage {
 
     for (const labelName of labelNames) {
       await this.page.getByRole('button', { name: 'Add labels' }).click();
-      await this.page.getByRole('button', { name: 'Create new...' }).click();
-      await this.page.getByPlaceholder('Label name...').fill(labelName);
-      await this.page.keyboard.press('Enter');
-      // Wait for checkbox to become checked, then close the picker
+      const existingCheckbox = this.page.getByRole('checkbox', { name: labelName });
+      if (await existingCheckbox.count() > 0 && !(await existingCheckbox.isChecked())) {
+        await existingCheckbox.click();
+      } else if (await existingCheckbox.count() === 0) {
+        await this.page.getByRole('button', { name: 'Create new...' }).click();
+        await this.page.getByPlaceholder('Label name...').fill(labelName);
+        await this.page.keyboard.press('Enter');
+      }
       await expect(this.page.getByRole('checkbox', { name: labelName })).toBeChecked();
       // Click outside picker to close it
       await this.page.locator('input[placeholder="Note title..."]').click();

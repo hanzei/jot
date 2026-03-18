@@ -131,10 +131,10 @@ func (h *NotesHandler) createNoteLabels(noteID, userID string, rawLabels []strin
 
 		label, err := h.noteStore.GetOrCreateLabel(userID, name)
 		if err != nil {
-			return http.StatusInternalServerError, err
+			return http.StatusInternalServerError, fmt.Errorf("get or create label: %w", err)
 		}
 		if err = h.noteStore.AddLabelToNote(noteID, label.ID, userID); err != nil {
-			return http.StatusInternalServerError, err
+			return http.StatusInternalServerError, fmt.Errorf("add label to note: %w", err)
 		}
 	}
 	return 0, nil
@@ -242,7 +242,7 @@ func (h *NotesHandler) CreateNote(w http.ResponseWriter, r *http.Request) (int, 
 	if needRefetch {
 		updatedNote, refetchErr := h.noteStore.GetByID(note.ID, user.ID)
 		if refetchErr != nil {
-			return http.StatusInternalServerError, refetchErr
+			return http.StatusInternalServerError, fmt.Errorf("refetch updated note: %w", refetchErr)
 		}
 		note = updatedNote
 	}

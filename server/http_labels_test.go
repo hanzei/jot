@@ -92,11 +92,16 @@ func TestGetNotesByLabel(t *testing.T) {
 	})
 }
 
-func TestCreateNoteWithLabels(t *testing.T) {
+// createNoteWithLabelsFixture creates a fresh server and user for a label test.
+func createNoteWithLabelsFixture(t *testing.T) *TestUser {
+	t.Helper()
 	ts := setupTestServer(t)
-	user := ts.createTestUser(t, "labelnote", "password123", false)
+	return ts.createTestUser(t, "labelnote", "password123", false)
+}
 
+func TestCreateNoteWithLabels(t *testing.T) {
 	t.Run("note created with labels has those labels attached", func(t *testing.T) {
+		user := createNoteWithLabelsFixture(t)
 		note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
 			Title:   "Labeled Note",
 			Content: "some content",
@@ -111,6 +116,14 @@ func TestCreateNoteWithLabels(t *testing.T) {
 	})
 
 	t.Run("labels created during note creation appear in global label list", func(t *testing.T) {
+		user := createNoteWithLabelsFixture(t)
+		_, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
+			Title:   "Labeled Note",
+			Content: "content",
+			Labels:  []string{"work", "urgent"},
+		})
+		require.NoError(t, err)
+
 		labels, err := user.Client.ListLabels(t.Context())
 		require.NoError(t, err)
 		nameSet := map[string]bool{}
@@ -122,6 +135,7 @@ func TestCreateNoteWithLabels(t *testing.T) {
 	})
 
 	t.Run("note without labels still works", func(t *testing.T) {
+		user := createNoteWithLabelsFixture(t)
 		note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
 			Title:   "No Labels",
 			Content: "content",
@@ -131,6 +145,7 @@ func TestCreateNoteWithLabels(t *testing.T) {
 	})
 
 	t.Run("duplicate label names are deduplicated", func(t *testing.T) {
+		user := createNoteWithLabelsFixture(t)
 		note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
 			Title:   "Duped Labels",
 			Content: "content",
@@ -142,8 +157,16 @@ func TestCreateNoteWithLabels(t *testing.T) {
 	})
 
 	t.Run("reuses existing labels by name", func(t *testing.T) {
+		user := createNoteWithLabelsFixture(t)
+		_, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
+			Title:   "First Note",
+			Content: "content",
+			Labels:  []string{"work"},
+		})
+		require.NoError(t, err)
+
 		note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-			Title:   "Reuse Label",
+			Title:   "Second Note",
 			Content: "content",
 			Labels:  []string{"work"},
 		})
@@ -163,6 +186,7 @@ func TestCreateNoteWithLabels(t *testing.T) {
 	})
 
 	t.Run("note filterable by label right after creation", func(t *testing.T) {
+		user := createNoteWithLabelsFixture(t)
 		note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
 			Title:   "Filterable",
 			Content: "content",
@@ -178,6 +202,7 @@ func TestCreateNoteWithLabels(t *testing.T) {
 	})
 
 	t.Run("empty and whitespace-only label names are ignored", func(t *testing.T) {
+		user := createNoteWithLabelsFixture(t)
 		note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
 			Title:   "Whitespace Labels",
 			Content: "content",
@@ -192,6 +217,7 @@ func TestCreateNoteWithLabels(t *testing.T) {
 	})
 
 	t.Run("labels work with todo notes and items", func(t *testing.T) {
+		user := createNoteWithLabelsFixture(t)
 		note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
 			Title:    "Todo With Labels",
 			Content:  "",

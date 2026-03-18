@@ -57,11 +57,14 @@ export default function LabelPicker({ note, selectedLabels, onLocalChange, onRef
     if (creating) inputRef.current?.focus();
   }, [creating]);
 
+  const isSelected = (label: Label) =>
+    currentLabelIds.has(label.id) || currentLabelNames.has(label.name);
+
   const toggleLabel = async (label: Label) => {
     if (isLocalMode) {
       const current = selectedLabels ?? [];
-      if (currentLabelIds.has(label.id)) {
-        onLocalChange?.(current.filter(l => l.id !== label.id));
+      if (isSelected(label)) {
+        onLocalChange?.(current.filter(l => l.id !== label.id && l.name !== label.name));
       } else {
         onLocalChange?.([...current, label]);
       }
@@ -136,13 +139,13 @@ export default function LabelPicker({ note, selectedLabels, onLocalChange, onRef
         <button
           key={label.id}
           role="checkbox"
-          aria-checked={currentLabelIds.has(label.id) || currentLabelNames.has(label.name)}
+          aria-checked={isSelected(label)}
           onClick={() => toggleLabel(label)}
           className="flex items-center w-full px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-slate-700"
         >
           <input
             type="checkbox"
-            checked={currentLabelIds.has(label.id) || currentLabelNames.has(label.name)}
+            checked={isSelected(label)}
             readOnly
             aria-hidden="true"
             tabIndex={-1}
