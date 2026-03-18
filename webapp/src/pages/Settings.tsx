@@ -462,44 +462,6 @@ const Settings = ({ onLogout }: SettingsProps) => {
               </div>
             </form>
           </div>
-          <div className="bg-white dark:bg-slate-800 shadow rounded-lg p-6 border border-gray-200 dark:border-slate-700 max-w-md mt-6">
-            <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">{t('settings.languageSection')}</h2>
-            <div>
-              <label htmlFor="language-select" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                {t('settings.languageLabel')}
-              </label>
-              <select
-                id="language-select"
-                value={languagePref}
-                onChange={(e) => handleLanguageChange(e.target.value as LanguagePreference)}
-                className="block w-full border border-gray-300 dark:border-slate-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="system">{t('settings.languageSystem')}</option>
-                {SUPPORTED_LANGUAGES.map((lang) => (
-                  <option key={lang} value={lang}>{t(`settings.language_${lang}`, { defaultValue: lang.toUpperCase() })}</option>
-                ))}
-              </select>
-            </div>
-          </div>
-
-          <div className="bg-white dark:bg-slate-800 shadow rounded-lg p-6 border border-gray-200 dark:border-slate-700 max-w-md mt-6">
-            <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">{t('settings.themeSection')}</h2>
-            <div>
-              <label htmlFor="theme-select" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
-                {t('settings.themeLabel')}
-              </label>
-              <select
-                id="theme-select"
-                value={themePref}
-                onChange={(e) => handleThemeChange(e.target.value as ThemePreference)}
-                className="block w-full border border-gray-300 dark:border-slate-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-              >
-                <option value="system">{t('settings.themeSystem')}</option>
-                <option value="light">{t('settings.themeLight')}</option>
-                <option value="dark">{t('settings.themeDark')}</option>
-              </select>
-            </div>
-          </div>
 
           <div className="bg-white dark:bg-slate-800 shadow rounded-lg p-6 border border-gray-200 dark:border-slate-700 max-w-md mt-6">
             <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">{t('settings.sessionsSection')}</h2>
@@ -548,6 +510,45 @@ const Settings = ({ onLogout }: SettingsProps) => {
                 ))}
               </ul>
             )}
+          </div>
+
+          <div className="bg-white dark:bg-slate-800 shadow rounded-lg p-6 border border-gray-200 dark:border-slate-700 max-w-md mt-6">
+            <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">{t('settings.languageSection')}</h2>
+            <div>
+              <label htmlFor="language-select" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                {t('settings.languageLabel')}
+              </label>
+              <select
+                id="language-select"
+                value={languagePref}
+                onChange={(e) => handleLanguageChange(e.target.value as LanguagePreference)}
+                className="block w-full border border-gray-300 dark:border-slate-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="system">{t('settings.languageSystem')}</option>
+                {SUPPORTED_LANGUAGES.map((lang) => (
+                  <option key={lang} value={lang}>{t(`settings.language_${lang}`, { defaultValue: lang.toUpperCase() })}</option>
+                ))}
+              </select>
+            </div>
+          </div>
+
+          <div className="bg-white dark:bg-slate-800 shadow rounded-lg p-6 border border-gray-200 dark:border-slate-700 max-w-md mt-6">
+            <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">{t('settings.themeSection')}</h2>
+            <div>
+              <label htmlFor="theme-select" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                {t('settings.themeLabel')}
+              </label>
+              <select
+                id="theme-select"
+                value={themePref}
+                onChange={(e) => handleThemeChange(e.target.value as ThemePreference)}
+                className="block w-full border border-gray-300 dark:border-slate-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+              >
+                <option value="system">{t('settings.themeSystem')}</option>
+                <option value="light">{t('settings.themeLight')}</option>
+                <option value="dark">{t('settings.themeDark')}</option>
+              </select>
+            </div>
           </div>
 
           <div className="bg-white dark:bg-slate-800 shadow rounded-lg p-6 border border-gray-200 dark:border-slate-700 max-w-md mt-6">
