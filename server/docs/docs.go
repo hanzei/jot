@@ -1579,6 +1579,12 @@ const docTemplate = `{
                         "$ref": "#/definitions/handlers.CreateNoteItem"
                     }
                 },
+                "labels": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
+                    }
+                },
                 "note_type": {
                     "$ref": "#/definitions/models.NoteType"
                 },

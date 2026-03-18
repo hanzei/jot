@@ -119,6 +119,7 @@ type CreateNoteRequest struct {
 	NoteType NoteType         `json:"note_type,omitempty"`
 	Color    string           `json:"color,omitempty"`
 	Items    []CreateNoteItem `json:"items,omitempty"`
+	Labels   []string         `json:"labels,omitempty"`
 }
 
 // CreateNoteItem describes a checklist item to create with a new todo note.
