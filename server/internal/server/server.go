@@ -38,18 +38,18 @@ func buildInfo() aboutResponse {
 }
 
 type Server struct {
-	cfg            *config.Config
-	router         chi.Router
-	db             *database.DB
-	httpServer     *http.Server
-	staticRoot     *os.Root
-	startErr       error
-	startReady     chan struct{}
-	startReadyOnce sync.Once
-	shuttingDown   atomic.Bool
-	serverMu       sync.RWMutex
-	ctx            context.Context
-	cancel         context.CancelFunc
+	cfg             *config.Config
+	router          chi.Router
+	db              *database.DB
+	httpServer      *http.Server
+	staticRoot      *os.Root
+	startErr        error
+	startReady      chan struct{}
+	startReadyOnce  sync.Once
+	shuttingDown    atomic.Bool
+	serverMu        sync.RWMutex
+	ctx             context.Context
+	cancel          context.CancelFunc
 	bgWg            sync.WaitGroup
 	sessionService  *auth.SessionService
 	authHandler     *handlers.AuthHandler
@@ -89,12 +89,12 @@ func New(cfg *config.Config) (*Server, error) {
 	sessionsHandler := handlers.NewSessionsHandler(sessionStore)
 
 	s := &Server{
-		cfg:            cfg,
-		router:         chi.NewRouter(),
-		db:             db,
-		startReady:     make(chan struct{}),
-		ctx:            ctx,
-		cancel:         cancel,
+		cfg:             cfg,
+		router:          chi.NewRouter(),
+		db:              db,
+		startReady:      make(chan struct{}),
+		ctx:             ctx,
+		cancel:          cancel,
 		sessionService:  sessionService,
 		authHandler:     authHandler,
 		notesHandler:    notesHandler,
