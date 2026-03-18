@@ -601,13 +601,13 @@ describe('NoteModal', () => {
 
   describe('Labels on Creation', () => {
     it('shows label add button for new notes', () => {
-      render(<NoteModal {...defaultProps} />)
+      renderNoteModal(defaultProps)
       expect(screen.getByRole('button', { name: 'Add labels' })).toBeInTheDocument()
     })
 
     it('shows label add button for existing notes', () => {
       const note = createMockNote()
-      render(<NoteModal {...defaultProps} note={note} />)
+      renderNoteModal({ ...defaultProps, note })
       expect(screen.getByRole('button', { name: 'Add labels' })).toBeInTheDocument()
     })
   })
