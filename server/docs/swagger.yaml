@@ -371,6 +371,10 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/server.aboutResponse'
+        "500":
+          description: internal server error
+          schema:
+            type: string
       security:
       - CookieAuth: []
       summary: Get server version and build info
@@ -391,6 +395,10 @@ paths:
             type: string
         "403":
           description: forbidden
+          schema:
+            type: string
+        "500":
+          description: internal server error
           schema:
             type: string
       security:
@@ -431,6 +439,10 @@ paths:
           description: username already taken
           schema:
             type: string
+        "500":
+          description: internal server error
+          schema:
+            type: string
       security:
       - CookieAuth: []
       summary: Create a user (admin only)
@@ -461,6 +473,10 @@ paths:
             type: string
         "409":
           description: cannot demote the last admin
+          schema:
+            type: string
+        "500":
+          description: internal server error
           schema:
             type: string
       security:
@@ -511,6 +527,10 @@ paths:
           description: cannot demote the last admin
           schema:
             type: string
+        "500":
+          description: internal server error
+          schema:
+            type: string
       security:
       - CookieAuth: []
       summary: Update a user's role (admin only)
@@ -525,6 +545,10 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/server.configResponse'
+        "500":
+          description: internal server error
+          schema:
+            type: string
       summary: Get public server configuration
       tags:
       - system
@@ -541,6 +565,10 @@ paths:
             type: array
         "401":
           description: unauthorized
+          schema:
+            type: string
+        "500":
+          description: internal server error
           schema:
             type: string
       security:
@@ -574,6 +602,10 @@ paths:
           description: invalid username or password
           schema:
             type: string
+        "500":
+          description: internal server error
+          schema:
+            type: string
       summary: Authenticate a user
       tags:
       - auth
@@ -602,6 +634,10 @@ paths:
             $ref: '#/definitions/handlers.AuthResponse'
         "401":
           description: unauthorized
+          schema:
+            type: string
+        "500":
+          description: internal server error
           schema:
             type: string
       security:
@@ -645,6 +681,10 @@ paths:
           description: unauthorized
           schema:
             type: string
+        "500":
+          description: internal server error
+          schema:
+            type: string
       security:
       - CookieAuth: []
       summary: List notes for the current user
@@ -673,6 +713,10 @@ paths:
             type: string
         "401":
           description: unauthorized
+          schema:
+            type: string
+        "500":
+          description: internal server error
           schema:
             type: string
       security:
@@ -707,6 +751,10 @@ paths:
           description: not found
           schema:
             type: string
+        "500":
+          description: internal server error
+          schema:
+            type: string
       security:
       - CookieAuth: []
       summary: Delete a note (move to trash, or permanently delete)
@@ -736,6 +784,10 @@ paths:
             type: string
         "404":
           description: not found
+          schema:
+            type: string
+        "500":
+          description: internal server error
           schema:
             type: string
       security:
@@ -775,6 +827,10 @@ paths:
             type: string
         "404":
           description: not found
+          schema:
+            type: string
+        "500":
+          description: internal server error
           schema:
             type: string
       security:
@@ -817,6 +873,10 @@ paths:
           description: no access to note
           schema:
             type: string
+        "500":
+          description: internal server error
+          schema:
+            type: string
       security:
       - CookieAuth: []
       summary: Add a label to a note
@@ -850,6 +910,10 @@ paths:
           description: no access to note
           schema:
             type: string
+        "500":
+          description: internal server error
+          schema:
+            type: string
       security:
       - CookieAuth: []
       summary: Remove a label from a note
@@ -880,6 +944,10 @@ paths:
             type: string
         "404":
           description: not found
+          schema:
+            type: string
+        "500":
+          description: internal server error
           schema:
             type: string
       security:
@@ -924,6 +992,10 @@ paths:
             type: string
         "404":
           description: not found
+          schema:
+            type: string
+        "500":
+          description: internal server error
           schema:
             type: string
       security:
@@ -973,6 +1045,10 @@ paths:
           description: already shared
           schema:
             type: string
+        "500":
+          description: internal server error
+          schema:
+            type: string
       security:
       - CookieAuth: []
       summary: Share a note with another user
@@ -1007,6 +1083,10 @@ paths:
           description: not owner
           schema:
             type: string
+        "500":
+          description: internal server error
+          schema:
+            type: string
       security:
       - CookieAuth: []
       summary: List users a note is shared with
@@ -1035,6 +1115,10 @@ paths:
             type: string
         "401":
           description: unauthorized
+          schema:
+            type: string
+        "500":
+          description: internal server error
           schema:
             type: string
       security:
@@ -1066,6 +1150,10 @@ paths:
             type: string
         "403":
           description: forbidden
+          schema:
+            type: string
+        "500":
+          description: internal server error
           schema:
             type: string
       security:
@@ -1103,6 +1191,10 @@ paths:
           description: username already taken
           schema:
             type: string
+        "500":
+          description: internal server error
+          schema:
+            type: string
       summary: Register a new user
       tags:
       - auth
@@ -1119,6 +1211,10 @@ paths:
             type: array
         "401":
           description: unauthorized
+          schema:
+            type: string
+        "500":
+          description: internal server error
           schema:
             type: string
       security:
@@ -1149,6 +1245,10 @@ paths:
           description: session not found
           schema:
             type: string
+        "500":
+          description: internal server error
+          schema:
+            type: string
       security:
       - CookieAuth: []
       summary: Revoke a specific session
@@ -1173,6 +1273,10 @@ paths:
             type: array
         "401":
           description: unauthorized
+          schema:
+            type: string
+        "500":
+          description: internal server error
           schema:
             type: string
       security:
@@ -1201,6 +1305,10 @@ paths:
             type: string
         "404":
           description: not found
+          schema:
+            type: string
+        "500":
+          description: internal server error
           schema:
             type: string
       security:
@@ -1238,6 +1346,10 @@ paths:
           description: username already taken
           schema:
             type: string
+        "500":
+          description: internal server error
+          schema:
+            type: string
       security:
       - CookieAuth: []
       summary: Update the current user's profile and/or settings
@@ -1269,6 +1381,10 @@ paths:
           description: current password is incorrect
           schema:
             type: string
+        "500":
+          description: internal server error
+          schema:
+            type: string
       security:
       - CookieAuth: []
       summary: Change the current user's password
@@ -1281,6 +1397,10 @@ paths:
           description: no content
         "401":
           description: unauthorized
+          schema:
+            type: string
+        "500":
+          description: internal server error
           schema:
             type: string
       security:
@@ -1312,6 +1432,10 @@ paths:
           description: unauthorized
           schema:
             type: string
+        "500":
+          description: internal server error
+          schema:
+            type: string
       security:
       - CookieAuth: []
       summary: Upload a profile icon for the current user
@@ -1323,3 +1447,4 @@ securityDefinitions:
     name: jot_session
     type: apiKey
 swagger: "2.0"
+
