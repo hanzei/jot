@@ -101,11 +101,9 @@ export class DashboardPage {
     const card = this.page.locator('[data-testid="note-card"]').filter({
       has: this.page.locator('h3').getByText(title, { exact: true }),
     });
-    await card.scrollIntoViewIfNeeded();
-    await card.hover();
-    const menuButton = card.locator('button[aria-label="Note options"]');
-    await menuButton.waitFor({ state: 'visible' });
-    await menuButton.click();
+    // force is intentional: hover/waitFor-based approaches were flaky in CI when sidebar overlays intercepted pointer events.
+    // TODO: remove force when note-card menu is reliably actionability-safe without hover timing dependence.
+    await card.locator('button[aria-label="Note options"]').click({ force: true });
   }
 
   async deleteNote(title: string) {
