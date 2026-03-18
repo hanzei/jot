@@ -112,6 +112,7 @@ export interface CreateNoteRequest {
   note_type: NoteType;
   color?: string;
   items?: { text: string; position: number; completed?: boolean; indent_level?: number; assigned_to?: string }[];
+  labels?: string[];
 }
 
 export interface UpdateNoteRequest {

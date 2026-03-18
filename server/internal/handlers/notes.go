@@ -68,6 +68,7 @@ type CreateNoteRequest struct {
 	NoteType models.NoteType  `json:"note_type"`
 	Color    string           `json:"color,omitempty"`
 	Items    []CreateNoteItem `json:"items,omitempty"`
+	Labels   []string         `json:"labels,omitempty"`
 }
 
 type CreateNoteItem struct {
@@ -113,6 +114,29 @@ func normalizeCreateNoteRequest(req *CreateNoteRequest) (int, error) {
 		req.Color = models.DefaultNoteColor
 	}
 
+	return 0, nil
+}
+
+func (h *NotesHandler) createNoteLabels(noteID, userID string, rawLabels []string) (int, error) {
+	seen := make(map[string]struct{})
+	for _, raw := range rawLabels {
+		name := strings.TrimSpace(raw)
+		if name == "" {
+			continue
+		}
+		if _, dup := seen[name]; dup {
+			continue
+		}
+		seen[name] = struct{}{}
+
+		label, err := h.noteStore.GetOrCreateLabel(userID, name)
+		if err != nil {
+			return http.StatusInternalServerError, fmt.Errorf("get or create label: %w", err)
+		}
+		if err = h.noteStore.AddLabelToNote(noteID, label.ID, userID); err != nil {
+			return http.StatusInternalServerError, fmt.Errorf("add label to note: %w", err)
+		}
+	}
 	return 0, nil
 }
 
@@ -198,14 +222,27 @@ func (h *NotesHandler) CreateNote(w http.ResponseWriter, r *http.Request) (int, 
 	if err != nil {
 		return http.StatusInternalServerError, err
 	}
+
+	needRefetch := false
+
 	if req.NoteType == models.NoteTypeTodo && len(req.Items) > 0 {
 		if status, err := h.createTodoItems(note.ID, req.Items); err != nil {
 			return status, err
 		}
+		needRefetch = true
+	}
 
-		updatedNote, err := h.noteStore.GetByID(note.ID, user.ID)
-		if err != nil {
-			return http.StatusInternalServerError, err
+	if len(req.Labels) > 0 {
+		if status, err := h.createNoteLabels(note.ID, user.ID, req.Labels); err != nil {
+			return status, err
+		}
+		needRefetch = true
+	}
+
+	if needRefetch {
+		updatedNote, refetchErr := h.noteStore.GetByID(note.ID, user.ID)
+		if refetchErr != nil {
+			return http.StatusInternalServerError, fmt.Errorf("refetch updated note: %w", refetchErr)
 		}
 		note = updatedNote
 	}
