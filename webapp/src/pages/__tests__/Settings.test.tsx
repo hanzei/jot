@@ -4,6 +4,7 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { MemoryRouter } from 'react-router'
 import { type ReactNode } from 'react'
 import Settings from '../Settings'
+import { ToastProvider } from '@/components/Toast'
 import { users, auth, isAxiosError } from '@/utils/api'
 import * as authUtils from '@/utils/auth'
 import type { UserSettings } from '@jot/shared'
@@ -59,7 +60,9 @@ const mockUser = {
 const renderSettings = (onLogout = vi.fn()) => {
   return render(
     <MemoryRouter>
-      <Settings onLogout={onLogout} />
+      <ToastProvider>
+        <Settings onLogout={onLogout} />
+      </ToastProvider>
     </MemoryRouter>
   )
 }
@@ -131,7 +134,7 @@ describe('Settings', () => {
         expect(users.updateMe).toHaveBeenCalledWith({ username: 'newuser', first_name: '', last_name: '' })
       })
       await waitFor(() => {
-        expect(screen.getByText('Profile updated successfully.')).toBeInTheDocument()
+        expect(screen.getByRole('status')).toHaveTextContent('Profile updated successfully.')
       })
       expect(authUtils.setUser).toHaveBeenCalledWith(updatedUser)
     })

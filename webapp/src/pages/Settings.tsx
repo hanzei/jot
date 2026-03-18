@@ -12,6 +12,7 @@ import AppLayout from '@/components/AppLayout';
 import SearchBar from '@/components/SearchBar';
 import ImportModal from '@/components/ImportModal';
 import AboutModal from '@/components/AboutModal';
+import { useToast } from '@/hooks/useToast';
 import { useNavigationLinkTabs } from '@/hooks/useNavigationTabs';
 import type { ActiveSession } from '@jot/shared';
 
@@ -21,6 +22,7 @@ interface SettingsProps {
 
 const Settings = ({ onLogout }: SettingsProps) => {
   const { t } = useTranslation();
+  const { showToast } = useToast();
   useEffect(() => { document.title = t('pageTitle.settings'); }, [t]);
   const displayMsg = (msg: string) => (i18n.exists(msg) ? t(msg) : msg);
   const currentUser = getUser();
@@ -33,7 +35,6 @@ const Settings = ({ onLogout }: SettingsProps) => {
   const [draftLastName, setDraftLastName] = useState(currentUser?.last_name ?? '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const [success, setSuccess] = useState('');
   const [searchQuery, setSearchQuery] = useState('');
 
   const [currentPassword, setCurrentPassword] = useState('');
@@ -41,7 +42,6 @@ const Settings = ({ onLogout }: SettingsProps) => {
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordSaving, setPasswordSaving] = useState(false);
   const [passwordError, setPasswordError] = useState('');
-  const [passwordSuccess, setPasswordSuccess] = useState('');
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
   const [isAboutModalOpen, setIsAboutModalOpen] = useState(false);
   const [hasProfileIcon, setHasProfileIcon] = useState(currentUser?.has_profile_icon ?? false);
@@ -111,7 +111,6 @@ const Settings = ({ onLogout }: SettingsProps) => {
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
     setPasswordError('');
-    setPasswordSuccess('');
 
     if (newPassword !== confirmPassword) {
       setPasswordError('settings.passwordsNoMatch');
@@ -121,7 +120,7 @@ const Settings = ({ onLogout }: SettingsProps) => {
     setPasswordSaving(true);
     try {
       await users.changePassword({ current_password: currentPassword, new_password: newPassword });
-      setPasswordSuccess('settings.passwordChanged');
+      showToast(t('settings.passwordChanged'), 'success');
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
@@ -141,7 +140,6 @@ const Settings = ({ onLogout }: SettingsProps) => {
     e.preventDefault();
     setSaving(true);
     setError('');
-    setSuccess('');
 
     try {
       const { user: updatedUser, settings: updatedSettings } = await users.updateMe({ username: draftUsername, first_name: draftFirstName, last_name: draftLastName });
@@ -151,7 +149,7 @@ const Settings = ({ onLogout }: SettingsProps) => {
       setDraftUsername(updatedUser.username);
       setDraftFirstName(updatedUser.first_name ?? '');
       setDraftLastName(updatedUser.last_name ?? '');
-      setSuccess('settings.profileUpdated');
+      showToast(t('settings.profileUpdated'), 'success');
     } catch (err: unknown) {
       if (isAxiosError(err)) {
         const msg = typeof err.response?.data === 'string' ? err.response.data.trim() : '';
@@ -184,6 +182,7 @@ const Settings = ({ onLogout }: SettingsProps) => {
     try {
       const { settings: updatedSettings } = await users.updateMe({ language: pref });
       if (updatedSettings) setSettings(updatedSettings);
+      showToast(t('settings.languageSaved'), 'success');
     } catch {
       setLanguagePref(prev);
       i18n.changeLanguage(resolveLanguage(prev));
@@ -204,6 +203,7 @@ const Settings = ({ onLogout }: SettingsProps) => {
     try {
       const { settings: updatedSettings } = await users.updateMe({ theme: pref });
       if (updatedSettings) setSettings(updatedSettings);
+      showToast(t('settings.themeSaved'), 'success');
     } catch {
       setThemePref(prev);
       applyTheme(prev);
@@ -222,6 +222,7 @@ const Settings = ({ onLogout }: SettingsProps) => {
       const updatedUser = await users.uploadProfileIcon(file);
       setUser(updatedUser);
       setHasProfileIcon(true);
+      showToast(t('settings.iconUploaded'), 'success');
     } catch (err: unknown) {
       if (isAxiosError(err)) {
         const msg = typeof err.response?.data === 'string' ? err.response.data.trim() : '';
@@ -245,6 +246,7 @@ const Settings = ({ onLogout }: SettingsProps) => {
         setUser({ ...user, has_profile_icon: false, updated_at: new Date().toISOString() });
       }
       setHasProfileIcon(false);
+      showToast(t('settings.iconRemoved'), 'success');
     } catch {
       setIconError(t('settings.iconDeleteFailed'));
     } finally {
@@ -377,11 +379,6 @@ const Settings = ({ onLogout }: SettingsProps) => {
                   {displayMsg(error)}
                 </div>
               )}
-              {success && (
-                <div aria-live="polite" className="mt-4 text-green-600 dark:text-green-400 text-sm">
-                  {displayMsg(success)}
-                </div>
-              )}
 
               <div className="mt-6">
                 <button
@@ -444,11 +441,6 @@ const Settings = ({ onLogout }: SettingsProps) => {
               {passwordError && (
                 <div role="alert" className="mt-4 text-red-600 dark:text-red-400 text-sm">
                   {displayMsg(passwordError)}
-                </div>
-              )}
-              {passwordSuccess && (
-                <div aria-live="polite" className="mt-4 text-green-600 dark:text-green-400 text-sm">
-                  {displayMsg(passwordSuccess)}
                 </div>
               )}
 
