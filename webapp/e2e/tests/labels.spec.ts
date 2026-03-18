@@ -132,3 +132,26 @@ test.describe('Label Filtering', () => {
     await expect(page).not.toHaveURL(/label=/);
   });
 });
+
+test.describe('Label Filtering — Mobile', () => {
+  test.use({ viewport: { width: 375, height: 812 } });
+
+  test.beforeEach(async ({ authenticatedUser }) => {
+    void authenticatedUser;
+  });
+
+  test('clicking a label closes the sidebar on mobile', async ({ page, dashboardPage }) => {
+    await dashboardPage.goto();
+    await dashboardPage.createNote('Mobile Label Note', 'content');
+    await dashboardPage.addLabelToNote('Mobile Label Note', 'mobiletag');
+
+    const sidebar = page.locator('aside[aria-label="Main navigation"]');
+    await expect(sidebar).toBeHidden();
+
+    await page.getByRole('button', { name: 'Toggle sidebar' }).click();
+    await expect(sidebar).toBeVisible();
+
+    await dashboardPage.selectSidebarLabel('mobiletag');
+    await expect(sidebar).toBeHidden();
+  });
+});
