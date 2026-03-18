@@ -24,8 +24,10 @@ import {
   uploadProfileIcon,
   deleteProfileIcon,
   getAboutInfo,
+  listSessions,
+  revokeSession,
 } from '../api/settings';
-import type { ThemePreference, AboutInfo } from '@jot/shared';
+import type { ThemePreference, AboutInfo, ActiveSession } from '@jot/shared';
 
 const THEME_OPTIONS: { value: ThemePreference; label: string }[] = [
   { value: 'system', label: 'System Default' },
@@ -62,10 +64,36 @@ export default function SettingsScreen() {
   const [themePref, setThemePref] = useState<ThemePreference>(settings?.theme ?? 'system');
   const [themeError, setThemeError] = useState('');
 
+  const [sessions, setSessions] = useState<ActiveSession[]>([]);
+  const [sessionsLoading, setSessionsLoading] = useState(true);
+  const [sessionsError, setSessionsError] = useState('');
+  const [revokingId, setRevokingId] = useState<string | null>(null);
+
   const [aboutInfo, setAboutInfo] = useState<AboutInfo | null>(null);
   const [aboutLoading, setAboutLoading] = useState(false);
   const [aboutError, setAboutError] = useState('');
   const [aboutExpanded, setAboutExpanded] = useState(false);
+
+  useEffect(() => {
+    setSessionsLoading(true);
+    listSessions()
+      .then(setSessions)
+      .catch(() => setSessionsError('Failed to load sessions'))
+      .finally(() => setSessionsLoading(false));
+  }, []);
+
+  const handleRevokeSession = useCallback(async (id: string) => {
+    setRevokingId(id);
+    try {
+      await revokeSession(id);
+      setSessionsError('');
+      setSessions(prev => prev.filter(s => s.id !== id));
+    } catch {
+      setSessionsError('Failed to revoke session');
+    } finally {
+      setRevokingId(null);
+    }
+  }, []);
 
   useEffect(() => {
     if (aboutExpanded && !aboutInfo && !aboutError) {
@@ -366,6 +394,70 @@ export default function SettingsScreen() {
             </TouchableOpacity>
           </View>
 
+          {/* Active Sessions */}
+          <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>Active Sessions</Text>
+            <Text style={[styles.sessionsDescription, { color: colors.textSecondary }]}>
+              Manage your active login sessions across devices.
+            </Text>
+            {sessionsLoading ? (
+              <ActivityIndicator size="small" color={colors.primary} style={styles.sessionsLoader} />
+            ) : sessionsError !== '' ? (
+              <Text style={[styles.errorText, { color: colors.error }]}>{sessionsError}</Text>
+            ) : sessions.length === 0 ? (
+              <Text style={[styles.sessionsDescription, { color: colors.textSecondary }]}>
+                No active sessions found.
+              </Text>
+            ) : (
+              <View style={styles.sessionsList}>
+                {sessions.map((session) => (
+                  <View
+                    key={session.id}
+                    style={[styles.sessionItem, { borderColor: colors.border }]}
+                  >
+                    <View style={styles.sessionInfo}>
+                      <View style={styles.sessionHeader}>
+                        <Text style={[styles.sessionBrowser, { color: colors.text }]}>
+                          {session.os !== 'Unknown'
+                            ? `${session.browser} on ${session.os}`
+                            : session.browser}
+                        </Text>
+                        {session.is_current && (
+                          <View style={styles.currentBadge}>
+                            <Text style={styles.currentBadgeText}>Current</Text>
+                          </View>
+                        )}
+                      </View>
+                      <Text style={[styles.sessionDate, { color: colors.textMuted }]}>
+                        {new Date(session.created_at).toLocaleDateString(undefined, {
+                          year: 'numeric', month: 'short', day: 'numeric',
+                          hour: '2-digit', minute: '2-digit',
+                        })}
+                      </Text>
+                    </View>
+                    {!session.is_current && (
+                      <TouchableOpacity
+                        onPress={() => handleRevokeSession(session.id)}
+                        disabled={revokingId === session.id}
+                        style={styles.revokeButton}
+                        accessibilityLabel="Revoke session"
+                        accessibilityRole="button"
+                      >
+                        <Text style={[
+                          styles.revokeText,
+                          { color: colors.error },
+                          revokingId === session.id && styles.buttonDisabled,
+                        ]}>
+                          {revokingId === session.id ? 'Revoking...' : 'Revoke'}
+                        </Text>
+                      </TouchableOpacity>
+                    )}
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+
           {/* Appearance */}
           <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>Appearance</Text>
@@ -657,5 +749,60 @@ const styles = StyleSheet.create({
     fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
     flexShrink: 1,
     textAlign: 'right',
+  },
+  sessionsDescription: {
+    fontSize: 13,
+    marginBottom: 12,
+  },
+  sessionsLoader: {
+    marginVertical: 8,
+  },
+  sessionsList: {
+    gap: 8,
+  },
+  sessionItem: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  sessionInfo: {
+    flex: 1,
+    marginRight: 8,
+  },
+  sessionHeader: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+  },
+  sessionBrowser: {
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  currentBadge: {
+    backgroundColor: '#dcfce7',
+    borderRadius: 10,
+    paddingHorizontal: 8,
+    paddingVertical: 2,
+  },
+  currentBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
+    color: '#166534',
+  },
+  sessionDate: {
+    fontSize: 12,
+    marginTop: 2,
+  },
+  revokeButton: {
+    paddingVertical: 4,
+    paddingHorizontal: 8,
+  },
+  revokeText: {
+    fontSize: 14,
+    fontWeight: '500',
   },
 });
