@@ -75,6 +75,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   }), [variant, debouncedSearch, labelId, user?.id]);
 
   const { data: notes, isLoading, isError, refetch, isRefetching } = useOfflineNotes(params);
+  const isSearchLoading = isLoading && !notes && !!debouncedSearch;
   const updateNote = useUpdateNote();
   const deleteNote = useDeleteNote();
   const restoreNote = useRestoreNote();
@@ -254,7 +255,11 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
 
   const listEmptyComponent = useMemo(
     () =>
-      debouncedSearch || labelId ? (
+      isSearchLoading ? (
+        <View style={styles.emptySearchContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      ) : debouncedSearch || labelId ? (
         <View style={styles.emptySearchContainer}>
           <Ionicons
             name={debouncedSearch ? 'search-outline' : 'pricetag-outline'}
@@ -271,7 +276,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
           )}
         </View>
       ) : null,
-    [debouncedSearch, labelId, colors],
+    [isSearchLoading, debouncedSearch, labelId, colors],
   );
 
   const handleDragEnd = useCallback(
@@ -348,7 +353,10 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     [handleNotePress, handleOpenMenu, variant],
   );
 
-  if (isLoading && !notes) {
+  // Show full-screen loading only on initial load (no prior data, no active search query).
+  // Uses debouncedSearch (not searchText) so clearing the input mid-debounce doesn't
+  // trigger the full-screen loader while the previous query is still in-flight.
+  if (isLoading && !notes && !debouncedSearch) {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: colors.background }]} testID="notes-loading">
         <ActivityIndicator size="large" color={colors.primary} />
