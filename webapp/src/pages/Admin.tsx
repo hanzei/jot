@@ -34,7 +34,7 @@ const Admin = ({ onLogout }: AdminProps) => {
   const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; user: User | null }>({ open: false, user: null });
 
   const userIsAdmin = isAdmin();
-  const { tabs: navigationTabs, bottomTabs: bottomNavigationTabs } = useNavigationLinkTabs();
+  const { tabs: navigationTabs, bottomTabs: bottomNavigationTabs, sidebarChildren } = useNavigationLinkTabs();
 
   useEffect(() => { document.title = t('pageTitle.admin'); }, [t]);
 
@@ -173,6 +173,7 @@ const Admin = ({ onLogout }: AdminProps) => {
       adminLinkActive={true}
       sidebarTabs={navigationTabs}
       sidebarBottomTabs={bottomNavigationTabs}
+      sidebarChildren={sidebarChildren}
       searchBar={searchBar}
     >
       <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">

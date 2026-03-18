@@ -254,7 +254,7 @@ const Settings = ({ onLogout }: SettingsProps) => {
     }
   };
 
-  const { tabs: navigationTabs, bottomTabs: bottomNavigationTabs } = useNavigationLinkTabs();
+  const { tabs: navigationTabs, bottomTabs: bottomNavigationTabs, sidebarChildren } = useNavigationLinkTabs();
 
   const searchBar = (
     <SearchBar
@@ -272,6 +272,7 @@ const Settings = ({ onLogout }: SettingsProps) => {
       settingsLinkActive={true}
       sidebarTabs={navigationTabs}
       sidebarBottomTabs={bottomNavigationTabs}
+      sidebarChildren={sidebarChildren}
       searchBar={searchBar}
     >
       <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">

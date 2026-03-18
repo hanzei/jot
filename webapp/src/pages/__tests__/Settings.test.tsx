@@ -23,6 +23,9 @@ vi.mock('@/utils/api', () => ({
     list: vi.fn().mockResolvedValue([]),
     revoke: vi.fn().mockResolvedValue(undefined),
   },
+  labels: {
+    getAll: vi.fn().mockResolvedValue([]),
+  },
   isAxiosError: vi.fn(),
 }))
 

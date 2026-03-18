@@ -18,6 +18,9 @@ vi.mock('@/utils/api', () => ({
   auth: {
     logout: vi.fn(),
   },
+  labels: {
+    getAll: vi.fn().mockResolvedValue([]),
+  },
   isAxiosError: vi.fn(),
 }))
 
