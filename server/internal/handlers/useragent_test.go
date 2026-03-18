@@ -68,6 +68,18 @@ func TestParseUserAgent(t *testing.T) {
 			os:      "ChromeOS",
 		},
 		{
+			name:    "Jot Mobile on Android",
+			ua:      "JotMobile/1.0 (Android)",
+			browser: "Jot Mobile",
+			os:      "Android",
+		},
+		{
+			name:    "Jot Mobile on iOS",
+			ua:      "JotMobile/1.0 (iOS)",
+			browser: "Jot Mobile",
+			os:      "iOS",
+		},
+		{
 			name:    "empty string",
 			ua:      "",
 			browser: "Unknown",
