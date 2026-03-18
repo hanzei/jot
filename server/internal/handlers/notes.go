@@ -117,6 +117,29 @@ func normalizeCreateNoteRequest(req *CreateNoteRequest) (int, error) {
 	return 0, nil
 }
 
+func (h *NotesHandler) createNoteLabels(noteID, userID string, rawLabels []string) (int, error) {
+	seen := make(map[string]struct{})
+	for _, raw := range rawLabels {
+		name := strings.TrimSpace(raw)
+		if name == "" {
+			continue
+		}
+		if _, dup := seen[name]; dup {
+			continue
+		}
+		seen[name] = struct{}{}
+
+		label, err := h.noteStore.GetOrCreateLabel(userID, name)
+		if err != nil {
+			return http.StatusInternalServerError, err
+		}
+		if err = h.noteStore.AddLabelToNote(noteID, label.ID, userID); err != nil {
+			return http.StatusInternalServerError, err
+		}
+	}
+	return 0, nil
+}
+
 func (h *NotesHandler) createTodoItems(noteID string, items []CreateNoteItem) (int, error) {
 	for _, item := range items {
 		if item.IndentLevel < 0 || item.IndentLevel > 1 {
@@ -210,24 +233,8 @@ func (h *NotesHandler) CreateNote(w http.ResponseWriter, r *http.Request) (int, 
 	}
 
 	if len(req.Labels) > 0 {
-		seen := make(map[string]struct{})
-		for _, raw := range req.Labels {
-			name := strings.TrimSpace(raw)
-			if name == "" {
-				continue
-			}
-			if _, dup := seen[name]; dup {
-				continue
-			}
-			seen[name] = struct{}{}
-
-			label, labelErr := h.noteStore.GetOrCreateLabel(user.ID, name)
-			if labelErr != nil {
-				return http.StatusInternalServerError, labelErr
-			}
-			if labelErr = h.noteStore.AddLabelToNote(note.ID, label.ID, user.ID); labelErr != nil {
-				return http.StatusInternalServerError, labelErr
-			}
+		if status, err := h.createNoteLabels(note.ID, user.ID, req.Labels); err != nil {
+			return status, err
 		}
 		needRefetch = true
 	}
