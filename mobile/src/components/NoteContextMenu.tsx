@@ -142,6 +142,7 @@ export default function NoteContextMenu({
               const isLast = index === actions.length - 1;
               const isDestructive = action.destructive;
               const prevNonDestructive = index > 0 && !actions[index - 1].destructive;
+              const nextIsDestructive = actions[index + 1]?.destructive;
               return (
                 <React.Fragment key={action.testId}>
                   {isDestructive && prevNonDestructive && (
@@ -150,7 +151,7 @@ export default function NoteContextMenu({
                   <TouchableOpacity
                     style={[
                       styles.actionRow,
-                      !isLast && !isDestructive && { borderBottomColor: colors.borderLight, borderBottomWidth: 1 },
+                      !isLast && !isDestructive && !nextIsDestructive && { borderBottomColor: colors.borderLight, borderBottomWidth: 1 },
                     ]}
                     onPress={action.onPress}
                     testID={action.testId}
