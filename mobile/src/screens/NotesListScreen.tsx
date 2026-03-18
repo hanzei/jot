@@ -75,6 +75,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   }), [variant, debouncedSearch, labelId, user?.id]);
 
   const { data: notes, isLoading, isError, refetch, isRefetching } = useOfflineNotes(params);
+  const isSearchLoading = isLoading && !notes && !!searchText;
   const updateNote = useUpdateNote();
   const deleteNote = useDeleteNote();
   const restoreNote = useRestoreNote();
@@ -254,14 +255,18 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
 
   const listEmptyComponent = useMemo(
     () =>
-      debouncedSearch || labelId ? (
+      isSearchLoading ? (
+        <View style={styles.emptySearchContainer}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      ) : debouncedSearch || labelId ? (
         <View style={styles.emptySearchContainer}>
           <Text style={[styles.emptySubtext, { color: colors.textMuted }]}>
             {debouncedSearch ? 'No notes match your search' : 'No notes for this label'}
           </Text>
         </View>
       ) : null,
-    [debouncedSearch, labelId, colors],
+    [isSearchLoading, debouncedSearch, labelId, colors],
   );
 
   const handleDragEnd = useCallback(
@@ -338,7 +343,10 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     [handleNotePress, handleOpenMenu, variant],
   );
 
-  if (isLoading && !notes) {
+  // Show full-screen loading only on initial load (no prior data, no active search).
+  // When the user is actively searching, skip this to keep the search input mounted
+  // and preserve keyboard focus while results load.
+  if (isLoading && !notes && !searchText) {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: colors.background }]} testID="notes-loading">
         <ActivityIndicator size="large" color={colors.primary} />
