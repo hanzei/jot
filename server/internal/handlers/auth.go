@@ -20,16 +20,18 @@ import (
 )
 
 type AuthHandler struct {
-	userStore         *models.UserStore
-	sessionService    *auth.SessionService
-	userSettingsStore *models.UserSettingsStore
+	userStore           *models.UserStore
+	sessionService      *auth.SessionService
+	userSettingsStore   *models.UserSettingsStore
+	registrationEnabled bool
 }
 
-func NewAuthHandler(userStore *models.UserStore, sessionService *auth.SessionService, userSettingsStore *models.UserSettingsStore) *AuthHandler {
+func NewAuthHandler(userStore *models.UserStore, sessionService *auth.SessionService, userSettingsStore *models.UserSettingsStore, registrationEnabled bool) *AuthHandler {
 	return &AuthHandler{
-		userStore:         userStore,
-		sessionService:    sessionService,
-		userSettingsStore: userSettingsStore,
+		userStore:           userStore,
+		sessionService:      sessionService,
+		userSettingsStore:   userSettingsStore,
+		registrationEnabled: registrationEnabled,
 	}
 }
 
@@ -57,10 +59,15 @@ type AuthResponse struct {
 //	@Param		body	body		RegisterRequest	true	"Registration credentials"
 //	@Success	201		{object}	AuthResponse
 //	@Failure	400		{string}	string	"bad request"
+//	@Failure	403		{string}	string	"registration is disabled"
 //	@Failure	409		{string}	string	"username already taken"
 //	@Failure	500		{string}	string	"internal server error"
 //	@Router		/register [post]
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) (int, error) {
+	if !h.registrationEnabled {
+		return http.StatusForbidden, errors.New("registration is disabled")
+	}
+
 	var req RegisterRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		return http.StatusBadRequest, err
@@ -87,7 +94,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) (int, err
 		return http.StatusInternalServerError, err
 	}
 
-	err = h.sessionService.CreateSession(w, user.ID)
+	err = h.sessionService.CreateSession(w, r, user.ID)
 	if err != nil {
 		return http.StatusInternalServerError, err
 	}
@@ -141,12 +148,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) (int, error)
 		return http.StatusInternalServerError, err
 	}
 
-	err = h.sessionService.InvalidateUserSessions(user.ID)
-	if err != nil {
-		return http.StatusInternalServerError, err
-	}
-
-	err = h.sessionService.CreateSession(w, user.ID)
+	err = h.sessionService.CreateSession(w, r, user.ID)
 	if err != nil {
 		return http.StatusInternalServerError, err
 	}
@@ -365,7 +367,7 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) (in
 	}
 
 	// Issue a fresh session for the current request so the user stays logged in.
-	if err := h.sessionService.CreateSession(w, currentUser.ID); err != nil {
+	if err := h.sessionService.CreateSession(w, r, currentUser.ID); err != nil {
 		return http.StatusInternalServerError, err
 	}
 

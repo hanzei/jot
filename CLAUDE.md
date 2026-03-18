@@ -81,6 +81,7 @@ Jot is a self-hosted note-taking application. The backend is a Go HTTP API and t
 │   ├── go.mod
 │   ├── internal/
 │   │   ├── auth/        # Session-cookie auth middleware and utilities
+│   │   ├── config/      # Server configuration (env vars, defaults)
 │   │   ├── database/    # Database bootstrap and migration runner
 │   │   ├── handlers/    # HTTP request handlers
 │   │   ├── models/      # Store types and shared data models
@@ -229,6 +230,7 @@ Migration files live in `server/internal/database/migrations/` and are named `NN
 | `STATIC_DIR` | `../webapp/build/` | Path to compiled frontend files |
 | `CORS_ALLOWED_ORIGIN` | `http://localhost:5173` | Allowed webapp origin for CORS |
 | `COOKIE_SECURE` | `true` (unless explicitly `false`) | Whether the session cookie is `Secure` |
+| `REGISTRATION_ENABLED` | `true` (unless explicitly `false`) | Whether public user registration is allowed. When `false`, only admins can create users via the admin API. |
 
 ### Authentication
 
@@ -241,7 +243,7 @@ Migration files live in `server/internal/database/migrations/` and are named `NN
 
 ### Naming Conventions (Go)
 
-- Packages: `internal/{auth,database,handlers,models,sse,server}`
+- Packages: `internal/{auth,config,database,handlers,models,sse,server}`
 - Go types: PascalCase when exported (`UserStore`, `NoteStore`); variables: camelCase (`noteStore`, `userID`)
 - Database columns: snake_case (`note_type`, `user_id`)
 - JSON fields: snake_case (`note_type`, `user_id`)

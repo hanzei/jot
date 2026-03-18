@@ -8,6 +8,7 @@ import type { Note, Label } from '@jot/shared'
 import { notes, labels } from '@/utils/api'
 import * as auth from '@/utils/auth'
 import { createMockNote } from '@/utils/__tests__/test-helpers'
+import { ToastProvider } from '@/components/Toast'
 
 // Mock dependencies
 vi.mock('@/utils/api', () => ({
@@ -183,12 +184,14 @@ vi.spyOn(console, 'error').mockImplementation(mockConsoleError)
 const renderDashboard = (initialEntries = ['/']) => {
   return render(
     <MemoryRouter initialEntries={initialEntries}>
-      <Routes>
-        <Route element={<Dashboard onLogout={vi.fn()} />}>
-          <Route index element={null} />
-          <Route path="notes/:noteId" element={null} />
-        </Route>
-      </Routes>
+      <ToastProvider>
+        <Routes>
+          <Route element={<Dashboard onLogout={vi.fn()} />}>
+            <Route index element={null} />
+            <Route path="notes/:noteId" element={null} />
+          </Route>
+        </Routes>
+      </ToastProvider>
     </MemoryRouter>
   )
 }
@@ -470,7 +473,7 @@ describe('Dashboard', () => {
       
       await waitFor(() => {
         expect(screen.getByText('No notes yet')).toBeInTheDocument()
-        expect(screen.getByText('Click "New Note" to create your first note')).toBeInTheDocument()
+        expect(screen.getByText('Create your first note')).toBeInTheDocument()
       })
     })
 
@@ -738,7 +741,9 @@ describe('Dashboard', () => {
 
       render(
         <MemoryRouter>
-          <Dashboard onLogout={mockOnLogout} />
+          <ToastProvider>
+            <Dashboard onLogout={mockOnLogout} />
+          </ToastProvider>
         </MemoryRouter>
       )
 
@@ -901,7 +906,9 @@ describe('Dashboard', () => {
   it('renders label list in sidebar when labels exist', async () => {
     render(
       <MemoryRouter initialEntries={['/']}>
-        <Dashboard onLogout={vi.fn()} />
+        <ToastProvider>
+          <Dashboard onLogout={vi.fn()} />
+        </ToastProvider>
       </MemoryRouter>
     )
 
@@ -916,7 +923,9 @@ describe('Dashboard', () => {
 
     render(
       <MemoryRouter initialEntries={['/']}>
-        <Dashboard onLogout={vi.fn()} />
+        <ToastProvider>
+          <Dashboard onLogout={vi.fn()} />
+        </ToastProvider>
       </MemoryRouter>
     )
 
@@ -933,7 +942,9 @@ describe('Dashboard', () => {
 
     render(
       <MemoryRouter initialEntries={['/']}>
-        <Dashboard onLogout={vi.fn()} />
+        <ToastProvider>
+          <Dashboard onLogout={vi.fn()} />
+        </ToastProvider>
       </MemoryRouter>
     )
 
@@ -954,7 +965,9 @@ describe('Dashboard', () => {
 
     render(
       <MemoryRouter initialEntries={['/']}>
-        <Dashboard onLogout={vi.fn()} />
+        <ToastProvider>
+          <Dashboard onLogout={vi.fn()} />
+        </ToastProvider>
       </MemoryRouter>
     )
 
@@ -987,7 +1000,9 @@ describe('Dashboard', () => {
 
     render(
       <MemoryRouter initialEntries={['/']}>
-        <Dashboard onLogout={vi.fn()} />
+        <ToastProvider>
+          <Dashboard onLogout={vi.fn()} />
+        </ToastProvider>
         <LocationProbe />
       </MemoryRouter>
     )
@@ -1016,7 +1031,7 @@ describe('Dashboard', () => {
 
     render(
       <MemoryRouter initialEntries={['/?label=label-work']}>
-        <Dashboard onLogout={vi.fn()} />
+        <ToastProvider><Dashboard onLogout={vi.fn()} /></ToastProvider>
       </MemoryRouter>
     )
 
@@ -1043,7 +1058,7 @@ describe('Dashboard', () => {
 
     render(
       <MemoryRouter initialEntries={['/?view=archive']}>
-        <Dashboard onLogout={vi.fn()} />
+        <ToastProvider><Dashboard onLogout={vi.fn()} /></ToastProvider>
       </MemoryRouter>
     )
 
@@ -1068,7 +1083,7 @@ describe('Dashboard', () => {
 
     render(
       <MemoryRouter initialEntries={['/?view=bin']}>
-        <Dashboard onLogout={vi.fn()} />
+        <ToastProvider><Dashboard onLogout={vi.fn()} /></ToastProvider>
       </MemoryRouter>
     )
 
@@ -1093,7 +1108,7 @@ describe('Dashboard', () => {
 
     render(
       <MemoryRouter initialEntries={['/?search=hello']}>
-        <Dashboard onLogout={vi.fn()} />
+        <ToastProvider><Dashboard onLogout={vi.fn()} /></ToastProvider>
       </MemoryRouter>
     )
 
@@ -1117,7 +1132,9 @@ describe('Dashboard', () => {
 
     render(
       <MemoryRouter initialEntries={['/']}>
-        <Dashboard onLogout={vi.fn()} />
+        <ToastProvider>
+          <Dashboard onLogout={vi.fn()} />
+        </ToastProvider>
       </MemoryRouter>
     )
 
@@ -1144,7 +1161,7 @@ describe('Dashboard', () => {
 
     render(
       <MemoryRouter initialEntries={['/?label=label-work']}>
-        <Dashboard onLogout={vi.fn()} />
+        <ToastProvider><Dashboard onLogout={vi.fn()} /></ToastProvider>
       </MemoryRouter>
     )
 
@@ -1169,7 +1186,7 @@ describe('Dashboard', () => {
 
     render(
       <MemoryRouter initialEntries={['/?view=archive&label=label-work']}>
-        <Dashboard onLogout={vi.fn()} />
+        <ToastProvider><Dashboard onLogout={vi.fn()} /></ToastProvider>
       </MemoryRouter>
     )
 
@@ -1193,7 +1210,7 @@ describe('Dashboard', () => {
 
     render(
       <MemoryRouter initialEntries={['/?label=label-work']}>
-        <Dashboard onLogout={vi.fn()} />
+        <ToastProvider><Dashboard onLogout={vi.fn()} /></ToastProvider>
       </MemoryRouter>
     )
 

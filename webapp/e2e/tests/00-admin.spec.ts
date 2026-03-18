@@ -49,8 +49,9 @@ test.describe('Admin', () => {
     await managedUserRow.getByRole('button', { name: 'Remove Admin' }).click();
     await expect(managedUserRow.getByRole('button', { name: 'Make Admin' })).toBeVisible();
 
-    page.once('dialog', dialog => dialog.accept());
     await managedUserRow.getByRole('button', { name: `Delete user ${managedUsername}` }).click();
+    const confirmDialog = page.getByRole('dialog').last();
+    await confirmDialog.getByRole('button', { name: 'Delete' }).click();
     await expect(usersList.getByTestId(`user-row-${managedUsername}`)).toHaveCount(0);
   });
 

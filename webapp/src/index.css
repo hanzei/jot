@@ -36,7 +36,7 @@ body {
 
 @layer components {
   .note-card {
-    @apply bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 hover:shadow-md dark:hover:shadow-slate-900/20 transition-shadow duration-200 cursor-pointer;
+    @apply bg-white dark:bg-slate-800 rounded-lg border border-gray-200 dark:border-slate-700 hover:shadow-lg hover:border-gray-300 dark:hover:shadow-slate-900/30 dark:hover:border-slate-600 transition-all duration-200 cursor-pointer;
     break-inside: avoid;
     display: inline-block;
     width: 100%;

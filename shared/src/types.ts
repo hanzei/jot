@@ -1,3 +1,7 @@
+export interface ServerConfig {
+  registration_enabled: boolean;
+}
+
 export interface AboutInfo {
   version: string;
   commit: string;
@@ -165,6 +169,15 @@ export interface ImportResponse {
 
 export interface UpdateUserRoleRequest {
   role: string;
+}
+
+export interface ActiveSession {
+  id: string;
+  browser: string;
+  os: string;
+  is_current: boolean;
+  created_at: string;
+  expires_at: string;
 }
 
 export type SSEEventType =
