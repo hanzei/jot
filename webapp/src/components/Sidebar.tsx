@@ -75,7 +75,7 @@ const Sidebar = ({ tabs, bottomTabs, children, collapsed, onCollapse }: SidebarP
         )}
       </nav>
       {children && (
-        <div className="flex-1 overflow-y-auto min-h-0">
+        <div className="flex-1 overflow-y-auto min-h-0" onClick={() => handleTabClick()}>
           {children}
         </div>
       )}
