@@ -181,5 +181,15 @@ type UserListResponse struct {
 	Users []*User `json:"users"`
 }
 
+// SessionInfo is a single active session as returned by the sessions API.
+type SessionInfo struct {
+	ID        string    `json:"id"`
+	Browser   string    `json:"browser"`
+	OS        string    `json:"os"`
+	IsCurrent bool      `json:"is_current"`
+	CreatedAt time.Time `json:"created_at"`
+	ExpiresAt time.Time `json:"expires_at"`
+}
+
 // Ptr returns a pointer to v; useful for building UpdateUserRequest fields.
 func Ptr[T any](v T) *T { return &v }

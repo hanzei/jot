@@ -86,7 +86,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) (int, err
 		return http.StatusInternalServerError, err
 	}
 
-	err = h.sessionService.CreateSession(w, user.ID)
+	err = h.sessionService.CreateSession(w, r, user.ID)
 	if err != nil {
 		return http.StatusInternalServerError, err
 	}
@@ -139,12 +139,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) (int, error)
 		return http.StatusInternalServerError, err
 	}
 
-	err = h.sessionService.InvalidateUserSessions(user.ID)
-	if err != nil {
-		return http.StatusInternalServerError, err
-	}
-
-	err = h.sessionService.CreateSession(w, user.ID)
+	err = h.sessionService.CreateSession(w, r, user.ID)
 	if err != nil {
 		return http.StatusInternalServerError, err
 	}
@@ -361,7 +356,7 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) (in
 	}
 
 	// Issue a fresh session for the current request so the user stays logged in.
-	if err := h.sessionService.CreateSession(w, currentUser.ID); err != nil {
+	if err := h.sessionService.CreateSession(w, r, currentUser.ID); err != nil {
 		return http.StatusInternalServerError, err
 	}
 

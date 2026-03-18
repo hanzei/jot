@@ -63,4 +63,16 @@ export class SettingsPage {
   navProfileIcon() {
     return this.page.locator('header img[alt]').filter({ visible: true }).first();
   }
+
+  sessionsSection() {
+    return this.page.getByRole('heading', { name: 'Active Sessions', exact: true }).locator('..');
+  }
+
+  sessionItems() {
+    return this.sessionsSection().locator('li');
+  }
+
+  async revokeSession(index: number) {
+    await this.sessionItems().nth(index).getByRole('button', { name: 'Revoke' }).click();
+  }
 }

@@ -1,10 +1,10 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router';
 import { ArrowUpTrayIcon } from '@heroicons/react/24/outline';
 import LetterAvatar from '@/components/LetterAvatar';
 import { useTranslation } from 'react-i18next';
 import i18n from '@/i18n';
-import { auth, users, isAxiosError } from '@/utils/api';
+import { auth, users, sessions as sessionsApi, isAxiosError } from '@/utils/api';
 import { getUser, setUser, removeUser, getSettings, setSettings, isAdmin } from '@/utils/auth';
 import { getLanguagePreference, resolveLanguage, LanguagePreference, SUPPORTED_LANGUAGES } from '@/utils/language';
 import { getThemePreference, applyTheme, ThemePreference } from '@/utils/theme';
@@ -13,6 +13,7 @@ import SearchBar from '@/components/SearchBar';
 import ImportModal from '@/components/ImportModal';
 import AboutModal from '@/components/AboutModal';
 import { useNavigationLinkTabs } from '@/hooks/useNavigationTabs';
+import type { ActiveSession } from '@jot/shared';
 
 interface SettingsProps {
   onLogout: () => void;
@@ -50,6 +51,40 @@ const Settings = ({ onLogout }: SettingsProps) => {
   const fileInputRef = useRef<HTMLInputElement>(null);
   const [languagePref, setLanguagePref] = useState<LanguagePreference>(() => getLanguagePreference());
   const [themePref, setThemePref] = useState<ThemePreference>(() => getThemePreference());
+  const [activeSessions, setActiveSessions] = useState<ActiveSession[]>([]);
+  const [sessionsLoading, setSessionsLoading] = useState(true);
+  const [sessionsError, setSessionsError] = useState('');
+  const [revokingSessionId, setRevokingSessionId] = useState<string | null>(null);
+
+  const loadSessions = useCallback(async () => {
+    setSessionsLoading(true);
+    setSessionsError('');
+    try {
+      const data = await sessionsApi.list();
+      setActiveSessions(data);
+    } catch {
+      setSessionsError('settings.sessionsLoadFailed');
+    } finally {
+      setSessionsLoading(false);
+    }
+  }, []);
+
+  useEffect(() => {
+    loadSessions();
+  }, [loadSessions]);
+
+  const handleRevokeSession = async (sessionId: string) => {
+    setRevokingSessionId(sessionId);
+    try {
+      await sessionsApi.revoke(sessionId);
+      setSessionsError('');
+      setActiveSessions(prev => prev.filter(s => s.id !== sessionId));
+    } catch {
+      setSessionsError('settings.sessionsRevokeFailed');
+    } finally {
+      setRevokingSessionId(null);
+    }
+  };
 
   useEffect(() => {
     auth.me().then(({ settings: serverSettings }) => {
@@ -428,6 +463,56 @@ const Settings = ({ onLogout }: SettingsProps) => {
               </div>
             </form>
           </div>
+
+          <div className="bg-white dark:bg-slate-800 shadow rounded-lg p-6 border border-gray-200 dark:border-slate-700 max-w-md mt-6">
+            <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">{t('settings.sessionsSection')}</h2>
+            <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+              {t('settings.sessionsDescription')}
+            </p>
+            {sessionsLoading ? (
+              <p className="text-sm text-gray-500 dark:text-gray-400">{t('settings.sessionsLoading')}</p>
+            ) : sessionsError ? (
+              <div role="alert" className="text-red-600 dark:text-red-400 text-sm">{displayMsg(sessionsError)}</div>
+            ) : activeSessions.length === 0 ? (
+              <p className="text-sm text-gray-500 dark:text-gray-400">{t('settings.sessionsNone')}</p>
+            ) : (
+              <ul className="space-y-3">
+                {activeSessions.map((session) => (
+                  <li
+                    key={session.id}
+                    className="flex items-center justify-between rounded-md border border-gray-200 dark:border-slate-600 px-4 py-3"
+                  >
+                    <div className="min-w-0">
+                      <div className="flex items-center gap-2">
+                        <span className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                          {session.os !== 'Unknown' ? t('settings.sessionsBrowserOnOS', { browser: session.browser, os: session.os }) : session.browser}
+                        </span>
+                        {session.is_current && (
+                          <span className="inline-flex items-center rounded-full bg-green-100 dark:bg-green-900 px-2 py-0.5 text-xs font-medium text-green-800 dark:text-green-200">
+                            {t('settings.sessionsCurrent')}
+                          </span>
+                        )}
+                      </div>
+                      <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                        {new Date(session.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' })}
+                      </p>
+                    </div>
+                    {!session.is_current && (
+                      <button
+                        type="button"
+                        onClick={() => handleRevokeSession(session.id)}
+                        disabled={revokingSessionId === session.id}
+                        className="ml-4 flex-shrink-0 text-sm text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 disabled:opacity-50"
+                      >
+                        {revokingSessionId === session.id ? t('settings.sessionsRevoking') : t('settings.sessionsRevoke')}
+                      </button>
+                    )}
+                  </li>
+                ))}
+              </ul>
+            )}
+          </div>
+
           <div className="bg-white dark:bg-slate-800 shadow rounded-lg p-6 border border-gray-200 dark:border-slate-700 max-w-md mt-6">
             <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">{t('settings.languageSection')}</h2>
             <div>

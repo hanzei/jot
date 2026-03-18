@@ -30,8 +30,9 @@ func NewSessionService(sessionStore *models.SessionStore, userStore *models.User
 	}
 }
 
-func (s *SessionService) CreateSession(w http.ResponseWriter, userID string) error {
-	session, err := s.sessionStore.Create(userID)
+func (s *SessionService) CreateSession(w http.ResponseWriter, r *http.Request, userID string) error {
+	userAgent := r.UserAgent()
+	session, err := s.sessionStore.Create(userID, userAgent)
 	if err != nil {
 		return err
 	}

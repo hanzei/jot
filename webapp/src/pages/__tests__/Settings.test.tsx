@@ -18,6 +18,10 @@ vi.mock('@/utils/api', () => ({
     updateMe: vi.fn(),
     changePassword: vi.fn(),
   },
+  sessions: {
+    list: vi.fn().mockResolvedValue([]),
+    revoke: vi.fn().mockResolvedValue(undefined),
+  },
   isAxiosError: vi.fn(),
 }))
 
