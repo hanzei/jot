@@ -423,8 +423,8 @@ export default function SettingsScreen() {
                             : session.browser}
                         </Text>
                         {session.is_current && (
-                          <View style={styles.currentBadge}>
-                            <Text style={styles.currentBadgeText}>Current</Text>
+                          <View style={[styles.currentBadge, { backgroundColor: colors.successLight }]}>
+                            <Text style={[styles.currentBadgeText, { color: colors.success }]}>Current</Text>
                           </View>
                         )}
                       </View>
@@ -783,7 +783,6 @@ const styles = StyleSheet.create({
     fontWeight: '500',
   },
   currentBadge: {
-    backgroundColor: '#dcfce7',
     borderRadius: 10,
     paddingHorizontal: 8,
     paddingVertical: 2,
@@ -791,7 +790,6 @@ const styles = StyleSheet.create({
   currentBadgeText: {
     fontSize: 11,
     fontWeight: '600',
-    color: '#166534',
   },
   sessionDate: {
     fontSize: 12,

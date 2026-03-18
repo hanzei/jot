@@ -55,18 +55,32 @@ func (s *SessionStore) Create(userID, userAgent string) (*Session, error) {
 	now := time.Now()
 	expiresAt := now.Add(SessionDuration)
 
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() {
+		if err != nil {
+			_ = tx.Rollback()
+		}
+	}()
+
 	evictQuery := `DELETE FROM sessions WHERE token IN (
 		SELECT token FROM sessions WHERE user_id = ? AND expires_at > ?
 		ORDER BY created_at DESC
 		LIMIT -1 OFFSET ?
 	)`
-	if _, err := s.db.Exec(evictQuery, userID, time.Now(), MaxSessionsPerUser-1); err != nil {
+	if _, err = tx.Exec(evictQuery, userID, now, MaxSessionsPerUser-1); err != nil {
 		return nil, fmt.Errorf("failed to evict old sessions: %w", err)
 	}
 
-	query := `INSERT INTO sessions (token, user_id, user_agent, expires_at) VALUES (?, ?, ?, ?)`
-	if _, err := s.db.Exec(query, token, userID, userAgent, expiresAt); err != nil {
+	insertQuery := `INSERT INTO sessions (token, user_id, user_agent, expires_at) VALUES (?, ?, ?, ?)`
+	if _, err = tx.Exec(insertQuery, token, userID, userAgent, expiresAt); err != nil {
 		return nil, fmt.Errorf("failed to create session: %w", err)
+	}
+
+	if err = tx.Commit(); err != nil {
+		return nil, fmt.Errorf("failed to commit session: %w", err)
 	}
 
 	return &Session{
