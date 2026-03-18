@@ -1,6 +1,7 @@
 package config
 
 import (
+	"path/filepath"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -10,7 +11,7 @@ import (
 func TestLoadDefaults(t *testing.T) {
 	t.Setenv("PORT", "")
 	t.Setenv("DB_PATH", "")
-	t.Setenv("STATIC_DIR", "/tmp/static")
+	t.Setenv("STATIC_DIR", "")
 	t.Setenv("CORS_ALLOWED_ORIGIN", "")
 	t.Setenv("COOKIE_SECURE", "")
 	t.Setenv("REGISTRATION_ENABLED", "")
@@ -20,7 +21,7 @@ func TestLoadDefaults(t *testing.T) {
 
 	assert.Equal(t, 8080, cfg.Port)
 	assert.Equal(t, "./jot.db", cfg.DBPath)
-	assert.Equal(t, "/tmp/static", cfg.StaticDir)
+	assert.Contains(t, cfg.StaticDir, filepath.Join("webapp", "build"))
 	assert.Equal(t, "http://localhost:5173", cfg.CORSAllowedOrigin)
 	assert.True(t, cfg.CookieSecure)
 	assert.True(t, cfg.RegistrationEnabled)
@@ -46,12 +47,42 @@ func TestLoadCustomValues(t *testing.T) {
 }
 
 func TestLoadInvalidPort(t *testing.T) {
-	t.Setenv("PORT", "notanumber")
 	t.Setenv("STATIC_DIR", "/tmp/static")
 
-	_, err := Load()
-	require.Error(t, err)
-	assert.Contains(t, err.Error(), "invalid PORT value")
+	t.Run("non-numeric", func(t *testing.T) {
+		t.Setenv("PORT", "notanumber")
+		_, err := Load()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid PORT value")
+	})
+
+	t.Run("zero", func(t *testing.T) {
+		t.Setenv("PORT", "0")
+		_, err := Load()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "must be between 1 and 65535")
+	})
+
+	t.Run("negative", func(t *testing.T) {
+		t.Setenv("PORT", "-1")
+		_, err := Load()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "must be between 1 and 65535")
+	})
+
+	t.Run("too high", func(t *testing.T) {
+		t.Setenv("PORT", "65536")
+		_, err := Load()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "must be between 1 and 65535")
+	})
+
+	t.Run("max valid", func(t *testing.T) {
+		t.Setenv("PORT", "65535")
+		cfg, err := Load()
+		require.NoError(t, err)
+		assert.Equal(t, 65535, cfg.Port)
+	})
 }
 
 func TestLoadStaticDirDefault(t *testing.T) {
@@ -63,7 +94,7 @@ func TestLoadStaticDirDefault(t *testing.T) {
 
 	cfg, err := Load()
 	require.NoError(t, err)
-	assert.Contains(t, cfg.StaticDir, "webapp/build")
+	assert.Contains(t, cfg.StaticDir, filepath.Join("webapp", "build"))
 }
 
 func TestLoadCookieSecureDefault(t *testing.T) {

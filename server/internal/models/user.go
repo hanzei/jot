@@ -46,6 +46,14 @@ func NewUserStore(db *sql.DB) *UserStore {
 }
 
 
+func (s *UserStore) Count() (int, error) {
+	var count int
+	if err := s.db.QueryRow("SELECT COUNT(*) FROM users").Scan(&count); err != nil {
+		return 0, fmt.Errorf("count users: %w", err)
+	}
+	return count, nil
+}
+
 func (s *UserStore) Create(username, password string) (*User, error) {
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {

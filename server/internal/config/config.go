@@ -33,6 +33,9 @@ func Load() (*Config, error) {
 		if err != nil {
 			return nil, fmt.Errorf("invalid PORT value %q: must be a number", v)
 		}
+		if p < 1 || p > 65535 {
+			return nil, fmt.Errorf("invalid PORT value %d: must be between 1 and 65535", p)
+		}
 		cfg.Port = p
 	}
 
@@ -47,7 +50,7 @@ func Load() (*Config, error) {
 		if err != nil {
 			return nil, fmt.Errorf("get working directory: %w", err)
 		}
-		cfg.StaticDir = filepath.Clean(workDir + "/../webapp/build/")
+		cfg.StaticDir = filepath.Join(workDir, "..", "webapp", "build")
 	}
 
 	if v := os.Getenv("CORS_ALLOWED_ORIGIN"); v != "" {

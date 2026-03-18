@@ -53,6 +53,7 @@ type AuthResponse struct {
 // Register godoc
 //
 //	@Summary	Register a new user
+//	@Description	When REGISTRATION_ENABLED is false, returns 403 unless no users exist yet (first-user bootstrap).
 //	@Tags		auth
 //	@Accept		json
 //	@Produce	json
@@ -64,7 +65,16 @@ type AuthResponse struct {
 //	@Router		/register [post]
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) (int, error) {
 	if !h.registrationEnabled {
-		return http.StatusForbidden, errors.New("registration is disabled")
+		// Allow the first user to register even when registration is disabled,
+		// so the admin account can be bootstrapped. Concurrent bootstrap
+		// requests may both pass this check; acceptable per threat model.
+		count, err := h.userStore.Count()
+		if err != nil {
+			return http.StatusInternalServerError, fmt.Errorf("check user count: %w", err)
+		}
+		if count > 0 {
+			return http.StatusForbidden, errors.New("registration is disabled")
+		}
 	}
 
 	var req RegisterRequest

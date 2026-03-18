@@ -120,7 +120,7 @@ PORT=8080                           # Server port (optional)
 STATIC_DIR=../webapp/build/         # Frontend build directory (optional)
 
 # Access control
-REGISTRATION_ENABLED=true           # Set to "false" to disable public registration; admins can still create users (optional)
+REGISTRATION_ENABLED=true           # Set to "false" to disable public registration; admins can still create users; first user can always register (optional)
 ```
 
 ## API Reference
