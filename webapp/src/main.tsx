@@ -17,7 +17,7 @@ if ('serviceWorker' in navigator) {
       await wb.register();
 
       // Check for updates every 60 minutes so long-running sessions pick up new deployments.
-      const _updateInterval = setInterval(() => wb.update(), 60 * 60 * 1000);
+      setInterval(() => wb.update(), 60 * 60 * 1000);
     } catch (error) {
       console.error('Service worker registration failed:', error);
     }
