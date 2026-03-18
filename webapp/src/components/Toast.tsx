@@ -1,9 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { XMarkIcon, CheckCircleIcon, ExclamationTriangleIcon, InformationCircleIcon } from '@heroicons/react/24/outline';
 import { useTranslation } from 'react-i18next';
-import { ToastContext, type ToastAction } from '@/hooks/useToast';
-
-type ToastType = 'success' | 'error' | 'info';
+import { ToastContext, type ToastAction, type ToastType } from '@/hooks/useToast';
 
 interface ToastMessage {
   id: number;

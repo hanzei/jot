@@ -537,10 +537,20 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     savedTimeoutRef.current = setTimeout(() => setShowSaved(false), 2000);
   }, []);
 
+  const markDirty = useCallback(() => {
+    setShowSaved(false);
+    if (savedTimeoutRef.current) {
+      clearTimeout(savedTimeoutRef.current);
+      savedTimeoutRef.current = undefined;
+    }
+  }, []);
+
   const autoSaveNote = async (updatedItems: TodoItem[]) => {
     if (!note) return;
     if (savingRef.current) return;
     
+    savingRef.current = true;
+    markDirty();
     try {
       const updateData: UpdateNoteRequest = {
         title,
@@ -563,6 +573,8 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     } catch (error) {
       console.error('Failed to auto-save note:', error);
       showError(t('note.failedSaveChanges'));
+    } finally {
+      savingRef.current = false;
     }
   };
 
@@ -615,15 +627,14 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     });
     
     setItems(updatedItems);
+    markDirty();
     
     // Auto-save text changes if editing an existing note (with debouncing)
     if (note) {
-      // Clear previous timeout if exists
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current);
       }
       
-      // Set new timeout to save after user stops typing
       saveTimeoutRef.current = setTimeout(async () => {
         await autoSaveNote(updatedItems);
       }, VALIDATION.AUTO_SAVE_TIMEOUT_MS);
@@ -745,7 +756,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
         })) : undefined,
       };
       await notes.update(note.id, updateData);
-      onSave();
+      onRefresh?.();
       showToast(
         newPinnedState ? t('dashboard.notePinned') : t('dashboard.noteUnpinned'),
         'success'
@@ -779,7 +790,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
         })) : undefined,
       };
       await notes.update(note.id, updateData);
-      onSave();
+      onRefresh?.();
       showToast(
         newArchivedState ? t('dashboard.noteArchived') : t('dashboard.noteUnarchived'),
         'success'
@@ -999,6 +1010,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                   return;
                 }
                 setTitle(newTitle);
+                if (note) markDirty();
               }}
               onKeyDown={(e) => {
                 if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
@@ -1044,6 +1056,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                     return;
                   }
                   setContent(newContent);
+                  if (note) markDirty();
                 }}
               />
             ) : (
@@ -1199,18 +1212,18 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                 {t('note.lastEdited', { date: new Date(note.updated_at).toLocaleString(i18n.resolvedLanguage) })}
               </p>
             )}
-            <div className="flex items-center ml-auto">
+            <div className="flex items-center ml-auto" role="status" aria-live="polite">
               {loading ? (
                 <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300">
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600"></div>
                   <span>{t('note.saving')}</span>
                 </div>
-              ) : showSaved && (
+              ) : showSaved ? (
                 <div className="flex items-center space-x-1 text-sm text-green-600 dark:text-green-400 transition-opacity">
                   <CheckIcon className="h-4 w-4" />
                   <span>{t('note.saved')}</span>
                 </div>
-              )}
+              ) : null}
             </div>
           </div>
         </DialogPanel>
