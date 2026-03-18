@@ -75,7 +75,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   }), [variant, debouncedSearch, labelId, user?.id]);
 
   const { data: notes, isLoading, isError, refetch, isRefetching } = useOfflineNotes(params);
-  const isSearchLoading = isLoading && !notes && !!searchText;
+  const isSearchLoading = isLoading && !notes && !!debouncedSearch;
   const updateNote = useUpdateNote();
   const deleteNote = useDeleteNote();
   const restoreNote = useRestoreNote();
@@ -343,10 +343,10 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     [handleNotePress, handleOpenMenu, variant],
   );
 
-  // Show full-screen loading only on initial load (no prior data, no active search).
-  // When the user is actively searching, skip this to keep the search input mounted
-  // and preserve keyboard focus while results load.
-  if (isLoading && !notes && !searchText) {
+  // Show full-screen loading only on initial load (no prior data, no active search query).
+  // Uses debouncedSearch (not searchText) so clearing the input mid-debounce doesn't
+  // trigger the full-screen loader while the previous query is still in-flight.
+  if (isLoading && !notes && !debouncedSearch) {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: colors.background }]} testID="notes-loading">
         <ActivityIndicator size="large" color={colors.primary} />
