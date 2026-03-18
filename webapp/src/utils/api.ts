@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { AboutInfo, AuthResponse, LoginRequest, RegisterRequest, Note, CreateNoteRequest, UpdateNoteRequest, User, CreateUserRequest, UserListResponse, ShareNoteRequest, ShareNoteResponse, NoteShare, ImportResponse, UpdateMeRequest, ChangePasswordRequest, UpdateUserRoleRequest, Label } from '@jot/shared';
+import type { ServerConfig, AboutInfo, AuthResponse, LoginRequest, RegisterRequest, Note, CreateNoteRequest, UpdateNoteRequest, User, CreateUserRequest, UserListResponse, ShareNoteRequest, ShareNoteResponse, NoteShare, ImportResponse, UpdateMeRequest, ChangePasswordRequest, UpdateUserRoleRequest, Label, ActiveSession } from '@jot/shared';
 
 const api = axios.create({
   baseURL: '/api/v1',
@@ -22,6 +22,11 @@ api.interceptors.response.use(
     return Promise.reject(error);
   }
 );
+
+export const serverConfig = {
+  get: (): Promise<ServerConfig> =>
+    api.get('/config').then(res => res.data),
+};
 
 export const auth = {
   login: (data: LoginRequest): Promise<AuthResponse> =>
@@ -106,6 +111,14 @@ export const users = {
 
   deleteProfileIcon: (): Promise<void> =>
     api.delete('/users/me/profile-icon'),
+};
+
+export const sessions = {
+  list: (): Promise<ActiveSession[]> =>
+    api.get('/sessions').then(res => res.data),
+
+  revoke: (id: string): Promise<void> =>
+    api.delete(`/sessions/${id}`).then(() => undefined),
 };
 
 export const about = {

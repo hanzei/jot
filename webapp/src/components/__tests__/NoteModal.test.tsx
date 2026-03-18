@@ -7,13 +7,19 @@ import type { Note, NoteItem } from '@jot/shared'
 import { createMockNote } from '@/utils/__tests__/test-helpers'
 
 // Mock the API module
-const { mockNotesUpdate } = vi.hoisted(() => ({
+const { mockNotesUpdate, mockNotesCreate } = vi.hoisted(() => ({
   mockNotesUpdate: vi.fn().mockResolvedValue({}),
+  mockNotesCreate: vi.fn().mockResolvedValue({}),
 }))
 vi.mock('@/utils/api', () => ({
   notes: {
-    create: vi.fn(),
+    create: mockNotesCreate,
     update: mockNotesUpdate,
+    addLabel: vi.fn(),
+    removeLabel: vi.fn(),
+  },
+  labels: {
+    getAll: vi.fn().mockResolvedValue([]),
   },
 }))
 
@@ -592,6 +598,19 @@ describe('NoteModal', () => {
     })
   })
 
+
+  describe('Labels on Creation', () => {
+    it('shows label add button for new notes', () => {
+      render(<NoteModal {...defaultProps} />)
+      expect(screen.getByRole('button', { name: 'Add labels' })).toBeInTheDocument()
+    })
+
+    it('shows label add button for existing notes', () => {
+      const note = createMockNote()
+      render(<NoteModal {...defaultProps} note={note} />)
+      expect(screen.getByRole('button', { name: 'Add labels' })).toBeInTheDocument()
+    })
+  })
 
   describe('Basic Modal Operations', () => {
     it('handles close button click', () => {

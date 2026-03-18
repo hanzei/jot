@@ -3,16 +3,10 @@ package auth
 import (
 	"fmt"
 	"net/http"
-	"os"
 	"time"
 
 	"github.com/hanzei/jot/server/internal/models"
 )
-
-func cookieSecure() bool {
-	v := os.Getenv("COOKIE_SECURE")
-	return v != "false"
-}
 
 const (
 	SessionCookieName = "jot_session"
@@ -21,22 +15,25 @@ const (
 type SessionService struct {
 	sessionStore *models.SessionStore
 	userStore    *models.UserStore
+	cookieSecure bool
 }
 
-func NewSessionService(sessionStore *models.SessionStore, userStore *models.UserStore) *SessionService {
+func NewSessionService(sessionStore *models.SessionStore, userStore *models.UserStore, cookieSecure bool) *SessionService {
 	return &SessionService{
 		sessionStore: sessionStore,
 		userStore:    userStore,
+		cookieSecure: cookieSecure,
 	}
 }
 
-func (s *SessionService) CreateSession(w http.ResponseWriter, userID string) error {
-	session, err := s.sessionStore.Create(userID)
+func (s *SessionService) CreateSession(w http.ResponseWriter, r *http.Request, userID string) error {
+	userAgent := r.UserAgent()
+	session, err := s.sessionStore.Create(userID, userAgent)
 	if err != nil {
 		return err
 	}
 
-	setSessionCookie(w, session.Token, int(models.SessionDuration.Seconds()))
+	s.setSessionCookie(w, session.Token, int(models.SessionDuration.Seconds()))
 
 	return nil
 }
@@ -51,7 +48,7 @@ func (s *SessionService) DeleteSession(w http.ResponseWriter, r *http.Request) e
 		return err
 	}
 
-	setSessionCookie(w, "", -1)
+	s.setSessionCookie(w, "", -1)
 
 	return nil
 }
@@ -97,17 +94,17 @@ func (s *SessionService) RenewSessionIfExpiringSoon(w http.ResponseWriter, sessi
 	if err := s.sessionStore.UpdateExpiry(session.Token, newExpiry); err != nil {
 		return fmt.Errorf("renew session: %w", err)
 	}
-	setSessionCookie(w, session.Token, int(models.SessionDuration.Seconds()))
+	s.setSessionCookie(w, session.Token, int(models.SessionDuration.Seconds()))
 	return nil
 }
 
-func setSessionCookie(w http.ResponseWriter, value string, maxAge int) {
+func (s *SessionService) setSessionCookie(w http.ResponseWriter, value string, maxAge int) {
 	http.SetCookie(w, &http.Cookie{
 		Name:     SessionCookieName,
 		Value:    value,
 		Path:     "/",
 		HttpOnly: true,
-		Secure:   cookieSecure(),
+		Secure:   s.cookieSecure,
 		SameSite: http.SameSiteLaxMode,
 		MaxAge:   maxAge,
 	})

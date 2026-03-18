@@ -10,6 +10,15 @@ import (
 	"net/http"
 )
 
+// Config returns the public server configuration (unauthenticated).
+func (c *Client) Config(ctx context.Context) (*ServerConfig, error) {
+	var resp ServerConfig
+	if err := c.doJSON(ctx, http.MethodGet, "/api/v1/config", nil, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
 // Register creates a new user account and stores the session cookie.
 func (c *Client) Register(ctx context.Context, username, password string) (*AuthResponse, error) {
 	var resp AuthResponse

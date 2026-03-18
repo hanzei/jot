@@ -20,10 +20,12 @@ import (
 	"time"
 
 	"github.com/hanzei/jot/server/client"
+	"github.com/hanzei/jot/server/internal/config"
 	"github.com/hanzei/jot/server/internal/models"
 	"github.com/hanzei/jot/server/internal/server"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"golang.org/x/crypto/bcrypt"
 )
 
 // TestUser bundles a user model with a typed API client.
@@ -38,17 +40,34 @@ type TestServer struct {
 	HTTPServer *httptest.Server
 }
 
+func defaultTestConfig(tmpDir string) *config.Config {
+	return &config.Config{
+		Port:                0,
+		DBPath:              tmpDir + "/test.db",
+		StaticDir:           tmpDir,
+		CORSAllowedOrigin:   "http://localhost:5173",
+		CookieSecure:        false,
+		RegistrationEnabled: true,
+	}
+}
+
 func setupTestServer(t *testing.T) *TestServer {
+	t.Helper()
+	return setupTestServerWithConfig(t, nil)
+}
+
+func setupTestServerWithConfig(t *testing.T, customize func(*config.Config)) *TestServer {
 	t.Helper()
 
 	tmpDir := t.TempDir()
 	require.NoError(t, os.WriteFile(tmpDir+"/index.html", []byte("<html><body>jot test app</body></html>"), 0o600))
 
-	t.Setenv("DB_PATH", tmpDir+"/test.db")
-	t.Setenv("COOKIE_SECURE", "false")
-	t.Setenv("STATIC_DIR", tmpDir)
+	cfg := defaultTestConfig(tmpDir)
+	if customize != nil {
+		customize(cfg)
+	}
 
-	s, err := server.New()
+	s, err := server.New(cfg)
 	require.NoError(t, err)
 
 	httpServer := httptest.NewServer(s.GetRouter())
@@ -164,6 +183,37 @@ func TestProbeEndpoints(t *testing.T) {
 	})
 }
 
+func TestConfigEndpoint(t *testing.T) {
+	t.Run("returns registration_enabled true by default", func(t *testing.T) {
+		ts := setupTestServer(t)
+		c := ts.newClient()
+
+		cfg, err := c.Config(t.Context())
+		require.NoError(t, err)
+		assert.True(t, cfg.RegistrationEnabled)
+	})
+
+	t.Run("returns registration_enabled false when disabled", func(t *testing.T) {
+		ts := setupTestServerWithConfig(t, func(cfg *config.Config) {
+			cfg.RegistrationEnabled = false
+		})
+		c := ts.newClient()
+
+		cfg, err := c.Config(t.Context())
+		require.NoError(t, err)
+		assert.False(t, cfg.RegistrationEnabled)
+	})
+
+	t.Run("does not require authentication", func(t *testing.T) {
+		ts := setupTestServer(t)
+		c := ts.newClient()
+
+		cfg, err := c.Config(t.Context())
+		require.NoError(t, err)
+		assert.True(t, cfg.RegistrationEnabled)
+	})
+}
+
 // Auth endpoint tests
 func TestRegisterEndpoint(t *testing.T) {
 	ts := setupTestServer(t)
@@ -189,6 +239,39 @@ func TestRegisterEndpoint(t *testing.T) {
 		c := ts.newClient()
 		_, err := c.Register(t.Context(), "x", "password123")
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
+	})
+}
+
+func TestRegisterDisabled(t *testing.T) {
+	ts := setupTestServerWithConfig(t, func(cfg *config.Config) {
+		cfg.RegistrationEnabled = false
+	})
+
+	t.Run("registration returns 403", func(t *testing.T) {
+		c := ts.newClient()
+		_, err := c.Register(t.Context(), "newuser", "password123")
+		require.Error(t, err)
+		assert.Equal(t, http.StatusForbidden, client.StatusCode(err))
+	})
+
+	t.Run("admin can still create users", func(t *testing.T) {
+		db := ts.Server.GetDB()
+
+		hash, err := bcrypt.GenerateFromPassword([]byte("adminpass"), bcrypt.DefaultCost)
+		require.NoError(t, err)
+		_, err = db.Exec(
+			"INSERT INTO users (id, username, password_hash, role) VALUES (?, ?, ?, ?)",
+			"admin-test-id", "seedadmin", string(hash), "admin",
+		)
+		require.NoError(t, err)
+
+		adminClient := ts.newClient()
+		_, err = adminClient.Login(t.Context(), "seedadmin", "adminpass")
+		require.NoError(t, err)
+
+		created, err := adminClient.AdminCreateUser(t.Context(), "adminmade", "password123", client.RoleUser)
+		require.NoError(t, err)
+		assert.Equal(t, "adminmade", created.Username)
 	})
 }
 

@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
 import api from './client';
-import type { User, AuthResponse, UpdateMeRequest, ChangePasswordRequest, AboutInfo } from '@jot/shared';
+import type { User, AuthResponse, UpdateMeRequest, ChangePasswordRequest, AboutInfo, ActiveSession } from '@jot/shared';
 
 export async function updateMe(data: UpdateMeRequest): Promise<AuthResponse> {
   const res = await api.patch('/users/me', data);
@@ -37,4 +37,13 @@ export async function deleteProfileIcon(): Promise<void> {
 export async function getAboutInfo(): Promise<AboutInfo> {
   const res = await api.get('/about');
   return res.data;
+}
+
+export async function listSessions(): Promise<ActiveSession[]> {
+  const res = await api.get('/sessions');
+  return res.data;
+}
+
+export async function revokeSession(id: string): Promise<void> {
+  await api.delete(`/sessions/${id}`);
 }

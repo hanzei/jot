@@ -8,12 +8,13 @@ import Settings from '@/pages/Settings';
 import { OfflineNotification } from '@/components/OfflineNotification';
 import { ToastProvider } from '@/components/Toast';
 import { isAdmin, setUser, setSettings, removeUser } from '@/utils/auth';
-import { auth } from '@/utils/api';
+import { auth, serverConfig } from '@/utils/api';
 import { applyTheme, getThemePreference } from '@/utils/theme';
 
 function App() {
   const [isAuth, setIsAuth] = useState(false);
   const [loading, setLoading] = useState(true);
+  const [registrationEnabled, setRegistrationEnabled] = useState(true);
 
   useEffect(() => {
     applyTheme(getThemePreference());
@@ -22,10 +23,14 @@ function App() {
     const handleSystemThemeChange = () => applyTheme(getThemePreference());
     mediaQuery.addEventListener('change', handleSystemThemeChange);
 
+    const configPromise = serverConfig.get()
+      .then((cfg) => setRegistrationEnabled(cfg.registration_enabled))
+      .catch(() => { /* keep default (enabled) if config fetch fails */ });
+
     // Always validate session against the server — the cookie is the source
     // of truth. localStorage may have been cleared while the session is still
     // valid (e.g. storage eviction, browser updates, cross-tab logout race).
-    auth.me()
+    const authPromise = auth.me()
       .then((response) => {
         setUser(response.user);
         setSettings(response.settings);
@@ -35,10 +40,11 @@ function App() {
       .catch(() => {
         removeUser();
         setIsAuth(false);
-      })
-      .finally(() => {
-        setLoading(false);
       });
+
+    Promise.all([configPromise, authPromise]).finally(() => {
+      setLoading(false);
+    });
 
     return () => mediaQuery.removeEventListener('change', handleSystemThemeChange);
   }, []);
@@ -59,11 +65,11 @@ function App() {
         <Routes>
           <Route 
             path="/login" 
-            element={!isAuth ? <Login onLogin={() => setIsAuth(true)} /> : <Navigate to="/" />} 
+            element={!isAuth ? <Login onLogin={() => setIsAuth(true)} registrationEnabled={registrationEnabled} /> : <Navigate to="/" />} 
           />
           <Route 
             path="/register" 
-            element={!isAuth ? <Register onRegister={() => setIsAuth(true)} /> : <Navigate to="/" />} 
+            element={!isAuth && registrationEnabled ? <Register onRegister={() => setIsAuth(true)} /> : <Navigate to={isAuth ? "/" : "/login"} />} 
           />
           <Route element={isAuth ? <Dashboard onLogout={() => setIsAuth(false)} /> : <Navigate to="/login" />}>
             <Route index element={null} />

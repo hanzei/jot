@@ -1,3 +1,7 @@
+export interface ServerConfig {
+  registration_enabled: boolean;
+}
+
 export interface AboutInfo {
   version: string;
   commit: string;
@@ -112,6 +116,7 @@ export interface CreateNoteRequest {
   note_type: NoteType;
   color?: string;
   items?: { text: string; position: number; completed?: boolean; indent_level?: number; assigned_to?: string }[];
+  labels?: string[];
 }
 
 export interface UpdateNoteRequest {
@@ -164,6 +169,15 @@ export interface ImportResponse {
 
 export interface UpdateUserRoleRequest {
   role: string;
+}
+
+export interface ActiveSession {
+  id: string;
+  browser: string;
+  os: string;
+  is_current: boolean;
+  created_at: string;
+  expires_at: string;
 }
 
 export type SSEEventType =

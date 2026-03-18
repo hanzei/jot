@@ -284,6 +284,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
 
   const handleNoteUpdate = () => {
     loadNotes();
+    loadLabels();
     setIsModalOpen(false);
     setEditingNote(null);
     restoreReturnUrl();
