@@ -183,6 +183,37 @@ func TestProbeEndpoints(t *testing.T) {
 	})
 }
 
+func TestConfigEndpoint(t *testing.T) {
+	t.Run("returns registration_enabled true by default", func(t *testing.T) {
+		ts := setupTestServer(t)
+		c := ts.newClient()
+
+		cfg, err := c.Config(t.Context())
+		require.NoError(t, err)
+		assert.True(t, cfg.RegistrationEnabled)
+	})
+
+	t.Run("returns registration_enabled false when disabled", func(t *testing.T) {
+		ts := setupTestServerWithConfig(t, func(cfg *config.Config) {
+			cfg.RegistrationEnabled = false
+		})
+		c := ts.newClient()
+
+		cfg, err := c.Config(t.Context())
+		require.NoError(t, err)
+		assert.False(t, cfg.RegistrationEnabled)
+	})
+
+	t.Run("does not require authentication", func(t *testing.T) {
+		ts := setupTestServer(t)
+		c := ts.newClient()
+
+		cfg, err := c.Config(t.Context())
+		require.NoError(t, err)
+		assert.True(t, cfg.RegistrationEnabled)
+	})
+}
+
 // Auth endpoint tests
 func TestRegisterEndpoint(t *testing.T) {
 	ts := setupTestServer(t)

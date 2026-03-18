@@ -267,6 +267,25 @@ const docTemplate = `{
                 }
             }
         },
+        "/config": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "system"
+                ],
+                "summary": "Get public server configuration",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.configResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/labels": {
             "get": {
                 "security": [
@@ -2052,6 +2071,14 @@ const docTemplate = `{
                 },
                 "version": {
                     "type": "string"
+                }
+            }
+        },
+        "server.configResponse": {
+            "type": "object",
+            "properties": {
+                "registration_enabled": {
+                    "type": "boolean"
                 }
             }
         }

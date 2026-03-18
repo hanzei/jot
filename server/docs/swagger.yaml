@@ -346,6 +346,11 @@ definitions:
       version:
         type: string
     type: object
+  server.configResponse:
+    properties:
+      registration_enabled:
+        type: boolean
+    type: object
 info:
   contact:
     name: Jot Project
@@ -511,6 +516,18 @@ paths:
       summary: Update a user's role (admin only)
       tags:
       - admin
+  /config:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/server.configResponse'
+      summary: Get public server configuration
+      tags:
+      - system
   /labels:
     get:
       produces:

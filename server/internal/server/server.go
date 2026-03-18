@@ -165,6 +165,7 @@ func (s *Server) setupRoutes() error {
 	}
 	s.router.Route("/api/v1", func(r chi.Router) {
 		r.Use(cop.Handler)
+		r.Get("/config", s.wrapHandler(s.handleConfig))
 		r.Post("/register", s.wrapHandler(s.authHandler.Register))
 		r.Post("/login", s.wrapHandler(s.authHandler.Login))
 		r.Post("/logout", s.wrapHandler(s.authHandler.Logout))
@@ -361,6 +362,29 @@ func (s *Server) handleAbout(w http.ResponseWriter, _ *http.Request) (int, error
 	w.Header().Set("Content-Type", "application/json")
 	if err := json.NewEncoder(w).Encode(resp); err != nil {
 		return http.StatusInternalServerError, fmt.Errorf("encoding about response: %w", err)
+	}
+	return 0, nil
+}
+
+type configResponse struct {
+	RegistrationEnabled bool `json:"registration_enabled"`
+}
+
+// handleConfig godoc
+//
+//	@Summary	Get public server configuration
+//	@Tags		system
+//	@Produce	json
+//	@Success	200	{object}	configResponse
+//	@Router		/config [get]
+func (s *Server) handleConfig(w http.ResponseWriter, _ *http.Request) (int, error) {
+	resp := configResponse{
+		RegistrationEnabled: s.cfg.RegistrationEnabled,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		return http.StatusInternalServerError, fmt.Errorf("encoding config response: %w", err)
 	}
 	return 0, nil
 }
