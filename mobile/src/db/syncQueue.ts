@@ -1,4 +1,5 @@
 import { SQLiteDatabase } from 'expo-sqlite';
+import axios from 'axios';
 import api from '../api/client';
 import type { Note } from '@jot/shared';
 import { replaceLocalNoteId, saveNote } from './noteQueries';
@@ -65,9 +66,18 @@ function remapIdsInBody(
   return remapValue(body, idMap) as Record<string, unknown>;
 }
 
+export interface DiscardedOperation {
+  operation: QueueOperation;
+  endpoint: string;
+  /** HTTP status code that caused the discard (404 or 409). */
+  status: number;
+}
+
 export interface DrainResult {
   /** Maps local_* IDs to the server IDs assigned during create operations. */
   idMappings: Array<{ localId: string; serverNote: Note }>;
+  /** Operations that were discarded because the server returned 404 or 409. */
+  discardedOperations: DiscardedOperation[];
 }
 
 /**
@@ -89,6 +99,7 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
   // Maps local_* IDs → server IDs as creates are processed
   const idMap = new Map<string, string>();
   const idMappings: Array<{ localId: string; serverNote: Note }> = [];
+  const discardedOperations: DiscardedOperation[] = [];
 
   for (const entry of entries) {
     try {
@@ -98,10 +109,14 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         body = remapIdsInBody(body, idMap);
       }
 
-      // Remap local IDs in the endpoint path
+      // Remap local IDs in the endpoint path, matching only complete path segments
+      // to avoid corrupting URLs where the ID appears as a substring.
       let endpoint = entry.endpoint;
       for (const [localId, serverId] of idMap) {
-        endpoint = endpoint.split(localId).join(serverId);
+        endpoint = endpoint
+          .split('/')
+          .map((seg) => (seg === localId ? serverId : seg))
+          .join('/');
       }
 
       if (entry.method === 'POST') {
@@ -131,11 +146,12 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
 
       await db.runAsync('DELETE FROM sync_queue WHERE id = ?', [entry.id]);
     } catch (err) {
-      const status = (err as { response?: { status?: number } })?.response?.status;
+      const status = axios.isAxiosError(err) ? err.response?.status : undefined;
 
       if (status === 404 || status === 409) {
         // Note no longer exists on server — discard and continue
-        console.warn(`Discarding queued operation id=${entry.id} (HTTP ${status ?? 'unknown'})`);
+        console.warn(`Discarding queued operation id=${entry.id} (HTTP ${status})`);
+        discardedOperations.push({ operation: entry.operation, endpoint: entry.endpoint, status });
         await db.runAsync('DELETE FROM sync_queue WHERE id = ?', [entry.id]);
       } else {
         // Network or server error — stop draining; retry on next reconnect
@@ -145,7 +161,7 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
     }
   }
 
-  return { idMappings };
+  return { idMappings, discardedOperations };
 }
 
 /** Persist a note that was returned by the server after a successful sync, updating local DB. */

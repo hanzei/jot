@@ -38,18 +38,19 @@ func buildInfo() aboutResponse {
 }
 
 type Server struct {
-	cfg            *config.Config
-	router         chi.Router
-	db             *database.DB
-	httpServer     *http.Server
-	staticRoot     *os.Root
-	startErr       error
-	startReady     chan struct{}
-	startReadyOnce sync.Once
-	shuttingDown   atomic.Bool
-	serverMu       sync.RWMutex
-	ctx            context.Context
-	cancel         context.CancelFunc
+	cfg             *config.Config
+	router          chi.Router
+	db              *database.DB
+	httpServer      *http.Server
+	staticRoot      *os.Root
+	startErr        error
+	startReady      chan struct{}
+	startReadyOnce  sync.Once
+	shuttingDown    atomic.Bool
+	serverMu        sync.RWMutex
+	ctx             context.Context
+	cancel          context.CancelFunc
+	bgWg            sync.WaitGroup
 	sessionService  *auth.SessionService
 	authHandler     *handlers.AuthHandler
 	notesHandler    *handlers.NotesHandler
@@ -78,39 +79,6 @@ func New(cfg *config.Config) (*Server, error) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	go func() {
-		ticker := time.NewTicker(time.Hour)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				if err := sessionStore.DeleteExpired(); err != nil {
-					logrus.WithError(err).Error("failed to delete expired sessions")
-				}
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
-
-	go func() {
-		if err := noteStore.PurgeOldTrashedNotes(7 * 24 * time.Hour); err != nil {
-			logrus.WithError(err).Error("failed to purge old trashed notes on startup")
-		}
-		ticker := time.NewTicker(time.Hour)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				if err := noteStore.PurgeOldTrashedNotes(7 * 24 * time.Hour); err != nil {
-					logrus.WithError(err).Error("failed to purge old trashed notes")
-				}
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
-
 	hub := sse.NewHub()
 
 	authHandler := handlers.NewAuthHandler(userStore, sessionService, userSettingsStore, cfg.RegistrationEnabled)
@@ -121,12 +89,12 @@ func New(cfg *config.Config) (*Server, error) {
 	sessionsHandler := handlers.NewSessionsHandler(sessionStore)
 
 	s := &Server{
-		cfg:            cfg,
-		router:         chi.NewRouter(),
-		db:             db,
-		startReady:     make(chan struct{}),
-		ctx:            ctx,
-		cancel:         cancel,
+		cfg:             cfg,
+		router:          chi.NewRouter(),
+		db:              db,
+		startReady:      make(chan struct{}),
+		ctx:             ctx,
+		cancel:          cancel,
 		sessionService:  sessionService,
 		authHandler:     authHandler,
 		notesHandler:    notesHandler,
@@ -135,6 +103,11 @@ func New(cfg *config.Config) (*Server, error) {
 		adminHandler:    adminHandler,
 		sessionsHandler: sessionsHandler,
 	}
+
+	startPeriodicTask(&s.bgWg, ctx, time.Hour, false, sessionStore.DeleteExpired, "delete expired sessions")
+	startPeriodicTask(&s.bgWg, ctx, time.Hour, true, func() error {
+		return noteStore.PurgeOldTrashedNotes(7 * 24 * time.Hour)
+	}, "purge old trashed notes")
 
 	if err := s.setupRoutes(); err != nil {
 		cancel()
@@ -297,9 +270,9 @@ func FileServer(r chi.Router, path string, root *os.Root) {
 	})
 }
 
-func (s *Server) wrapHandler(handler func(w http.ResponseWriter, r *http.Request) (int, error)) http.HandlerFunc {
+func (s *Server) wrapHandler(handler func(w http.ResponseWriter, r *http.Request) (int, any, error)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		statusCode, err := handler(w, r)
+		statusCode, body, err := handler(w, r)
 		if err != nil {
 			logrus.WithError(err).WithField("status_code", statusCode).WithField("method", r.Method).WithField("path", r.URL.Path).Error("HTTP handler error")
 			msg := err.Error()
@@ -307,6 +280,16 @@ func (s *Server) wrapHandler(handler func(w http.ResponseWriter, r *http.Request
 				msg = "internal server error"
 			}
 			http.Error(w, msg, statusCode)
+			return
+		}
+		if body != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(statusCode)
+			if err := json.NewEncoder(w).Encode(body); err != nil {
+				logrus.WithError(err).WithField("method", r.Method).WithField("path", r.URL.Path).Error("failed to encode response body")
+			}
+		} else if statusCode > 0 {
+			w.WriteHeader(statusCode)
 		}
 	}
 }
@@ -315,7 +298,7 @@ func (s *Server) wrapHandler(handler func(w http.ResponseWriter, r *http.Request
 func (s *Server) handleLive(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	if _, err := w.Write([]byte("OK")); err != nil {
-		logrus.WithError(err).Error("Failed to write health check response")
+		logrus.WithError(err).Error("failed to write health check response")
 	}
 }
 
@@ -356,14 +339,8 @@ type aboutResponse struct {
 //	@Produce	json
 //	@Success	200	{object}	aboutResponse
 //	@Router		/about [get]
-func (s *Server) handleAbout(w http.ResponseWriter, _ *http.Request) (int, error) {
-	resp := buildInfo()
-
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(resp); err != nil {
-		return http.StatusInternalServerError, fmt.Errorf("encoding about response: %w", err)
-	}
-	return 0, nil
+func (s *Server) handleAbout(_ http.ResponseWriter, _ *http.Request) (int, any, error) {
+	return http.StatusOK, buildInfo(), nil
 }
 
 type configResponse struct {
@@ -377,16 +354,10 @@ type configResponse struct {
 //	@Produce	json
 //	@Success	200	{object}	configResponse
 //	@Router		/config [get]
-func (s *Server) handleConfig(w http.ResponseWriter, _ *http.Request) (int, error) {
-	resp := configResponse{
+func (s *Server) handleConfig(_ http.ResponseWriter, _ *http.Request) (int, any, error) {
+	return http.StatusOK, configResponse{
 		RegistrationEnabled: s.cfg.RegistrationEnabled,
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(resp); err != nil {
-		return http.StatusInternalServerError, fmt.Errorf("encoding config response: %w", err)
-	}
-	return 0, nil
+	}, nil
 }
 
 func (s *Server) GetRouter() chi.Router {
@@ -465,6 +436,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	s.serverMu.Unlock()
 
 	s.cancel()
+	s.bgWg.Wait()
 
 	if s.staticRoot != nil {
 		if err := s.staticRoot.Close(); err != nil {
@@ -503,4 +475,30 @@ func (s *Server) setStartResult(startErr error) {
 
 func (s *Server) BeginShutdown() {
 	s.shuttingDown.Store(true)
+}
+
+// startPeriodicTask starts a background goroutine tracked by wg that calls fn on every interval.
+// If runNow is true, fn is also called once immediately before the first tick.
+func startPeriodicTask(wg *sync.WaitGroup, ctx context.Context, interval time.Duration, runNow bool, fn func() error, logMsg string) {
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if runNow {
+			if err := fn(); err != nil {
+				logrus.WithError(err).Errorf("failed to %s", logMsg)
+			}
+		}
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				if err := fn(); err != nil {
+					logrus.WithError(err).Errorf("failed to %s", logMsg)
+				}
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
 }

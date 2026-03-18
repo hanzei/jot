@@ -57,8 +57,13 @@ func Load() (*Config, error) {
 		cfg.CORSAllowedOrigin = v
 	}
 
-	if os.Getenv("COOKIE_SECURE") == "false" {
+	switch os.Getenv("COOKIE_SECURE") {
+	case "false":
 		cfg.CookieSecure = false
+	case "", "true":
+		// default already set to true
+	default:
+		return nil, fmt.Errorf("invalid COOKIE_SECURE value %q: must be \"true\" or \"false\"", os.Getenv("COOKIE_SECURE"))
 	}
 
 	if os.Getenv("REGISTRATION_ENABLED") == "false" {

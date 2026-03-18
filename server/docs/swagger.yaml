@@ -543,6 +543,10 @@ paths:
           description: unauthorized
           schema:
             type: string
+        "500":
+          description: internal server error
+          schema:
+            type: string
       security:
       - CookieAuth: []
       summary: List all labels for the current user
@@ -574,6 +578,10 @@ paths:
           description: invalid username or password
           schema:
             type: string
+        "500":
+          description: internal server error
+          schema:
+            type: string
       summary: Authenticate a user
       tags:
       - auth
@@ -602,6 +610,10 @@ paths:
             $ref: '#/definitions/handlers.AuthResponse'
         "401":
           description: unauthorized
+          schema:
+            type: string
+        "500":
+          description: internal server error
           schema:
             type: string
       security:
@@ -645,6 +657,10 @@ paths:
           description: unauthorized
           schema:
             type: string
+        "500":
+          description: internal server error
+          schema:
+            type: string
       security:
       - CookieAuth: []
       summary: List notes for the current user
@@ -673,6 +689,10 @@ paths:
             type: string
         "401":
           description: unauthorized
+          schema:
+            type: string
+        "500":
+          description: internal server error
           schema:
             type: string
       security:
@@ -707,6 +727,10 @@ paths:
           description: not found
           schema:
             type: string
+        "500":
+          description: internal server error
+          schema:
+            type: string
       security:
       - CookieAuth: []
       summary: Delete a note (move to trash, or permanently delete)
@@ -736,6 +760,10 @@ paths:
             type: string
         "404":
           description: not found
+          schema:
+            type: string
+        "500":
+          description: internal server error
           schema:
             type: string
       security:
@@ -775,6 +803,10 @@ paths:
             type: string
         "404":
           description: not found
+          schema:
+            type: string
+        "500":
+          description: internal server error
           schema:
             type: string
       security:
@@ -817,6 +849,10 @@ paths:
           description: no access to note
           schema:
             type: string
+        "500":
+          description: internal server error
+          schema:
+            type: string
       security:
       - CookieAuth: []
       summary: Add a label to a note
@@ -850,6 +886,10 @@ paths:
           description: no access to note
           schema:
             type: string
+        "500":
+          description: internal server error
+          schema:
+            type: string
       security:
       - CookieAuth: []
       summary: Remove a label from a note
@@ -880,6 +920,10 @@ paths:
             type: string
         "404":
           description: not found
+          schema:
+            type: string
+        "500":
+          description: internal server error
           schema:
             type: string
       security:
@@ -924,6 +968,10 @@ paths:
             type: string
         "404":
           description: not found
+          schema:
+            type: string
+        "500":
+          description: internal server error
           schema:
             type: string
       security:
@@ -973,6 +1021,10 @@ paths:
           description: already shared
           schema:
             type: string
+        "500":
+          description: internal server error
+          schema:
+            type: string
       security:
       - CookieAuth: []
       summary: Share a note with another user
@@ -1007,6 +1059,10 @@ paths:
           description: not owner
           schema:
             type: string
+        "500":
+          description: internal server error
+          schema:
+            type: string
       security:
       - CookieAuth: []
       summary: List users a note is shared with
@@ -1035,6 +1091,10 @@ paths:
             type: string
         "401":
           description: unauthorized
+          schema:
+            type: string
+        "500":
+          description: internal server error
           schema:
             type: string
       security:
@@ -1066,6 +1126,10 @@ paths:
             type: string
         "403":
           description: forbidden
+          schema:
+            type: string
+        "500":
+          description: internal server error
           schema:
             type: string
       security:
@@ -1101,6 +1165,10 @@ paths:
             type: string
         "409":
           description: username already taken
+          schema:
+            type: string
+        "500":
+          description: internal server error
           schema:
             type: string
       summary: Register a new user
@@ -1175,6 +1243,10 @@ paths:
           description: unauthorized
           schema:
             type: string
+        "500":
+          description: internal server error
+          schema:
+            type: string
       security:
       - CookieAuth: []
       summary: Search or list users (excluding current user)
@@ -1201,6 +1273,10 @@ paths:
             type: string
         "404":
           description: not found
+          schema:
+            type: string
+        "500":
+          description: internal server error
           schema:
             type: string
       security:
@@ -1238,6 +1314,10 @@ paths:
           description: username already taken
           schema:
             type: string
+        "500":
+          description: internal server error
+          schema:
+            type: string
       security:
       - CookieAuth: []
       summary: Update the current user's profile and/or settings
@@ -1269,6 +1349,10 @@ paths:
           description: current password is incorrect
           schema:
             type: string
+        "500":
+          description: internal server error
+          schema:
+            type: string
       security:
       - CookieAuth: []
       summary: Change the current user's password
@@ -1281,6 +1365,10 @@ paths:
           description: no content
         "401":
           description: unauthorized
+          schema:
+            type: string
+        "500":
+          description: internal server error
           schema:
             type: string
       security:
@@ -1310,6 +1398,10 @@ paths:
             type: string
         "401":
           description: unauthorized
+          schema:
+            type: string
+        "500":
+          description: internal server error
           schema:
             type: string
       security:
