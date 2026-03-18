@@ -98,6 +98,7 @@
     "sessionsDescription": "Manage your active login sessions across devices.",
     "sessionsLoading": "Loading sessions...",
     "sessionsLoadFailed": "Failed to load sessions.",
+    "sessionsBrowserOnOS": "{{browser}} on {{os}}",
     "sessionsCurrent": "Current",
     "sessionsRevoke": "Revoke",
     "sessionsRevoking": "Revoking...",

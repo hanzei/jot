@@ -20,7 +20,7 @@ vi.mock('@/utils/api', () => ({
   },
   sessions: {
     list: vi.fn().mockResolvedValue([]),
-    revoke: vi.fn(),
+    revoke: vi.fn().mockResolvedValue(undefined),
   },
   isAxiosError: vi.fn(),
 }))

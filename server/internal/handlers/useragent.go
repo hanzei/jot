@@ -15,8 +15,9 @@ func parseUserAgent(ua string) ParsedUserAgent {
 }
 
 type browserRule struct {
-	markers []string
-	name    string
+	markers    []string
+	requireAll bool
+	name       string
 }
 
 var browserRules = []browserRule{
@@ -29,25 +30,34 @@ var browserRules = []browserRule{
 	{markers: []string{"Firefox/", "FxiOS/"}, name: "Firefox"},
 	{markers: []string{"CriOS/"}, name: "Chrome"},
 	{markers: []string{"MSIE ", "Trident/"}, name: "Internet Explorer"},
+	{markers: []string{"Chrome/", "Safari/"}, requireAll: true, name: "Chrome"},
+	{markers: []string{"Safari/"}, name: "Safari"},
 }
 
 func parseBrowser(ua string) string {
 	for _, rule := range browserRules {
-		for _, marker := range rule.markers {
-			if strings.Contains(ua, marker) {
+		if rule.requireAll {
+			if matchesAll(ua, rule.markers) {
 				return rule.name
+			}
+		} else {
+			for _, marker := range rule.markers {
+				if strings.Contains(ua, marker) {
+					return rule.name
+				}
 			}
 		}
 	}
-
-	if strings.Contains(ua, "Chrome/") && strings.Contains(ua, "Safari/") {
-		return "Chrome"
-	}
-	if strings.Contains(ua, "Safari/") {
-		return "Safari"
-	}
-
 	return "Unknown"
+}
+
+func matchesAll(ua string, markers []string) bool {
+	for _, marker := range markers {
+		if !strings.Contains(ua, marker) {
+			return false
+		}
+	}
+	return true
 }
 
 type osRule struct {

@@ -98,6 +98,7 @@
     "sessionsDescription": "Verwalte deine aktiven Anmeldesitzungen auf verschiedenen Geräten.",
     "sessionsLoading": "Sitzungen werden geladen...",
     "sessionsLoadFailed": "Sitzungen konnten nicht geladen werden.",
+    "sessionsBrowserOnOS": "{{browser}} auf {{os}}",
     "sessionsCurrent": "Aktuell",
     "sessionsRevoke": "Widerrufen",
     "sessionsRevoking": "Widerrufen...",

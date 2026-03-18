@@ -77,6 +77,7 @@ const Settings = ({ onLogout }: SettingsProps) => {
     setRevokingSessionId(sessionId);
     try {
       await sessionsApi.revoke(sessionId);
+      setSessionsError('');
       setActiveSessions(prev => prev.filter(s => s.id !== sessionId));
     } catch {
       setSessionsError('settings.sessionsRevokeFailed');
@@ -484,7 +485,7 @@ const Settings = ({ onLogout }: SettingsProps) => {
                     <div className="min-w-0">
                       <div className="flex items-center gap-2">
                         <span className="text-sm font-medium text-gray-900 dark:text-white truncate">
-                          {session.browser}{session.os !== 'Unknown' ? ` on ${session.os}` : ''}
+                          {session.os !== 'Unknown' ? t('settings.sessionsBrowserOnOS', { browser: session.browser, os: session.os }) : session.browser}
                         </span>
                         {session.is_current && (
                           <span className="inline-flex items-center rounded-full bg-green-100 dark:bg-green-900 px-2 py-0.5 text-xs font-medium text-green-800 dark:text-green-200">

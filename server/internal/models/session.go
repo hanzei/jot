@@ -48,8 +48,8 @@ func (s *SessionStore) Create(userID, userAgent string) (*Session, error) {
 		return nil, err
 	}
 
-	if len(userAgent) > maxUserAgentLength {
-		userAgent = userAgent[:maxUserAgentLength]
+	if runes := []rune(userAgent); len(runes) > maxUserAgentLength {
+		userAgent = string(runes[:maxUserAgentLength])
 	}
 
 	now := time.Now()
@@ -95,7 +95,7 @@ func (s *SessionStore) GetByToken(token string) (*Session, error) {
 	return &session, nil
 }
 
-func (s *SessionStore) GetByUserID(userID string) ([]*Session, error) {
+func (s *SessionStore) GetByUserID(userID string) (sessions []*Session, err error) {
 	query := `SELECT token, user_id, user_agent, created_at, expires_at FROM sessions WHERE user_id = ? AND expires_at > ? ORDER BY created_at DESC`
 
 	rows, err := s.db.Query(query, userID, time.Now())
@@ -103,12 +103,11 @@ func (s *SessionStore) GetByUserID(userID string) ([]*Session, error) {
 		return nil, fmt.Errorf("failed to get sessions by user ID: %w", err)
 	}
 	defer func() {
-		if closeErr := rows.Close(); closeErr != nil {
+		if closeErr := rows.Close(); closeErr != nil && err == nil {
 			err = fmt.Errorf("close rows: %w", closeErr)
 		}
 	}()
 
-	var sessions []*Session
 	for rows.Next() {
 		var session Session
 		if err := rows.Scan(&session.Token, &session.UserID, &session.UserAgent, &session.CreatedAt, &session.ExpiresAt); err != nil {

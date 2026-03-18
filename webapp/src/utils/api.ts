@@ -113,7 +113,7 @@ export const sessions = {
     api.get('/sessions').then(res => res.data),
 
   revoke: (id: string): Promise<void> =>
-    api.delete(`/sessions/${id}`),
+    api.delete(`/sessions/${id}`).then(() => undefined),
 };
 
 export const about = {
