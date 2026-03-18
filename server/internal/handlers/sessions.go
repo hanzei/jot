@@ -3,7 +3,6 @@ package handlers
 import (
 	"crypto/sha256"
 	"encoding/hex"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"time"
@@ -56,17 +55,17 @@ func toSessionResponse(s *models.Session, currentToken string) SessionResponse {
 //	@Success	200	{array}		SessionResponse
 //	@Failure	401	{string}	string	"unauthorized"
 //	@Router		/sessions [get]
-func (h *SessionsHandler) ListSessions(w http.ResponseWriter, r *http.Request) (int, error) {
+func (h *SessionsHandler) ListSessions(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
-		return http.StatusUnauthorized, errors.New("unauthorized")
+		return http.StatusUnauthorized, nil, errors.New("unauthorized")
 	}
 
 	currentToken, _ := auth.GetSessionTokenFromContext(r.Context())
 
 	sessions, err := h.sessionStore.GetByUserID(user.ID)
 	if err != nil {
-		return http.StatusInternalServerError, err
+		return http.StatusInternalServerError, nil, err
 	}
 
 	responses := make([]SessionResponse, 0, len(sessions))
@@ -74,11 +73,7 @@ func (h *SessionsHandler) ListSessions(w http.ResponseWriter, r *http.Request) (
 		responses = append(responses, toSessionResponse(s, currentToken))
 	}
 
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(responses); err != nil {
-		return http.StatusInternalServerError, err
-	}
-	return 0, nil
+	return http.StatusOK, responses, nil
 }
 
 // RevokeSession godoc
@@ -92,22 +87,22 @@ func (h *SessionsHandler) ListSessions(w http.ResponseWriter, r *http.Request) (
 //	@Failure	401	{string}	string	"unauthorized"
 //	@Failure	404	{string}	string	"session not found"
 //	@Router		/sessions/{id} [delete]
-func (h *SessionsHandler) RevokeSession(w http.ResponseWriter, r *http.Request) (int, error) {
+func (h *SessionsHandler) RevokeSession(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
-		return http.StatusUnauthorized, errors.New("unauthorized")
+		return http.StatusUnauthorized, nil, errors.New("unauthorized")
 	}
 
 	targetID := chi.URLParam(r, "id")
 	currentToken, _ := auth.GetSessionTokenFromContext(r.Context())
 
 	if sessionID(currentToken) == targetID {
-		return http.StatusBadRequest, errors.New("cannot revoke current session")
+		return http.StatusBadRequest, nil, errors.New("cannot revoke current session")
 	}
 
 	sessions, err := h.sessionStore.GetByUserID(user.ID)
 	if err != nil {
-		return http.StatusInternalServerError, err
+		return http.StatusInternalServerError, nil, err
 	}
 
 	for _, s := range sessions {
@@ -116,14 +111,13 @@ func (h *SessionsHandler) RevokeSession(w http.ResponseWriter, r *http.Request) 
 		}
 		deleted, err := h.sessionStore.DeleteByUserIDAndToken(user.ID, s.Token)
 		if err != nil {
-			return http.StatusInternalServerError, err
+			return http.StatusInternalServerError, nil, err
 		}
 		if !deleted {
-			return http.StatusNotFound, errors.New("session not found")
+			return http.StatusNotFound, nil, errors.New("session not found")
 		}
-		w.WriteHeader(http.StatusNoContent)
-		return 0, nil
+		return http.StatusNoContent, nil, nil
 	}
 
-	return http.StatusNotFound, errors.New("session not found")
+	return http.StatusNotFound, nil, errors.New("session not found")
 }

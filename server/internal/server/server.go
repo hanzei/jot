@@ -270,9 +270,9 @@ func FileServer(r chi.Router, path string, root *os.Root) {
 	})
 }
 
-func (s *Server) wrapHandler(handler func(w http.ResponseWriter, r *http.Request) (int, error)) http.HandlerFunc {
+func (s *Server) wrapHandler(handler func(w http.ResponseWriter, r *http.Request) (int, any, error)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		statusCode, err := handler(w, r)
+		statusCode, body, err := handler(w, r)
 		if err != nil {
 			logrus.WithError(err).WithField("status_code", statusCode).WithField("method", r.Method).WithField("path", r.URL.Path).Error("HTTP handler error")
 			msg := err.Error()
@@ -280,6 +280,16 @@ func (s *Server) wrapHandler(handler func(w http.ResponseWriter, r *http.Request
 				msg = "internal server error"
 			}
 			http.Error(w, msg, statusCode)
+			return
+		}
+		if body != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(statusCode)
+			if err := json.NewEncoder(w).Encode(body); err != nil {
+				logrus.WithError(err).WithField("method", r.Method).WithField("path", r.URL.Path).Error("failed to encode response body")
+			}
+		} else if statusCode > 0 {
+			w.WriteHeader(statusCode)
 		}
 	}
 }
@@ -329,14 +339,8 @@ type aboutResponse struct {
 //	@Produce	json
 //	@Success	200	{object}	aboutResponse
 //	@Router		/about [get]
-func (s *Server) handleAbout(w http.ResponseWriter, _ *http.Request) (int, error) {
-	resp := buildInfo()
-
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(resp); err != nil {
-		return http.StatusInternalServerError, fmt.Errorf("encoding about response: %w", err)
-	}
-	return 0, nil
+func (s *Server) handleAbout(_ http.ResponseWriter, _ *http.Request) (int, any, error) {
+	return http.StatusOK, buildInfo(), nil
 }
 
 type configResponse struct {
@@ -350,16 +354,10 @@ type configResponse struct {
 //	@Produce	json
 //	@Success	200	{object}	configResponse
 //	@Router		/config [get]
-func (s *Server) handleConfig(w http.ResponseWriter, _ *http.Request) (int, error) {
-	resp := configResponse{
+func (s *Server) handleConfig(_ http.ResponseWriter, _ *http.Request) (int, any, error) {
+	return http.StatusOK, configResponse{
 		RegistrationEnabled: s.cfg.RegistrationEnabled,
-	}
-
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(resp); err != nil {
-		return http.StatusInternalServerError, fmt.Errorf("encoding config response: %w", err)
-	}
-	return 0, nil
+	}, nil
 }
 
 func (s *Server) GetRouter() chi.Router {
