@@ -207,7 +207,7 @@ describe('NoteModal', () => {
       fireEvent.click(addItemButton)
 
       // Find the input field and add invalid content using change event
-      const itemInput = screen.getByPlaceholderText('List item...')
+      const itemInput = screen.getByTestId('todo-item-input')
       fireEvent.change(itemInput, { target: { value: '<script>alert("xss")</script>' } })
 
       expect(screen.getByText(/Item text cannot contain < or > characters/)).toBeInTheDocument()
@@ -225,7 +225,7 @@ describe('NoteModal', () => {
       fireEvent.click(addItemButton)
 
       // Add very long text using change event
-      const itemInput = screen.getByPlaceholderText('List item...')
+      const itemInput = screen.getByTestId('todo-item-input')
       const longText = 'a'.repeat(501)
       fireEvent.change(itemInput, { target: { value: longText } })
 
@@ -309,14 +309,14 @@ describe('NoteModal', () => {
       fireEvent.click(screen.getByText('Todo List'))
       fireEvent.click(screen.getByText('Add item'))
 
-      const inputs = screen.getAllByPlaceholderText('List item...')
+      const inputs = screen.getAllByTestId('todo-item-input')
       expect(inputs).toHaveLength(1)
 
       // Press Enter on the only (last) item
       fireEvent.keyDown(inputs[0], { key: 'Enter', code: 'Enter' })
 
       // A new item should have been added
-      const inputsAfter = screen.getAllByPlaceholderText('List item...')
+      const inputsAfter = screen.getAllByTestId('todo-item-input')
       expect(inputsAfter).toHaveLength(2)
     })
 
@@ -328,7 +328,7 @@ describe('NoteModal', () => {
       fireEvent.click(screen.getByText('Add item'))
       fireEvent.click(screen.getByText('Add item'))
 
-      const inputs = screen.getAllByPlaceholderText('List item...')
+      const inputs = screen.getAllByTestId('todo-item-input')
       expect(inputs).toHaveLength(2)
 
       // Give the first item a value so we can identify it after insertion
@@ -340,7 +340,7 @@ describe('NoteModal', () => {
       await vi.runAllTimersAsync()
 
       // Three items total
-      const inputsAfter = screen.getAllByPlaceholderText('List item...')
+      const inputsAfter = screen.getAllByTestId('todo-item-input')
       expect(inputsAfter).toHaveLength(3)
 
       // Original first item stays at index 0
@@ -362,10 +362,10 @@ describe('NoteModal', () => {
       fireEvent.click(screen.getByText('Todo List'))
       fireEvent.click(screen.getByText('Add item'))
 
-      const inputs = screen.getAllByPlaceholderText('List item...')
+      const inputs = screen.getAllByTestId('todo-item-input')
       fireEvent.keyDown(inputs[0], { key: 'Escape', code: 'Escape' })
 
-      expect(screen.getAllByPlaceholderText('List item...')).toHaveLength(1)
+      expect(screen.getAllByTestId('todo-item-input')).toHaveLength(1)
     })
 
     it('pressing Backspace on an empty todo item deletes it', async () => {
@@ -375,7 +375,7 @@ describe('NoteModal', () => {
       fireEvent.click(screen.getByText('Add item'))
       fireEvent.click(screen.getByText('Add item'))
 
-      const inputs = screen.getAllByPlaceholderText('List item...')
+      const inputs = screen.getAllByTestId('todo-item-input')
       expect(inputs).toHaveLength(2)
 
       fireEvent.change(inputs[0], { target: { value: 'keep me' } })
@@ -383,7 +383,7 @@ describe('NoteModal', () => {
       // Press Backspace on the second (empty) item
       fireEvent.keyDown(inputs[1], { key: 'Backspace', code: 'Backspace' })
 
-      const inputsAfter = screen.getAllByPlaceholderText('List item...')
+      const inputsAfter = screen.getAllByTestId('todo-item-input')
       expect(inputsAfter).toHaveLength(1)
       expect(inputsAfter[0]).toHaveValue('keep me')
     })
@@ -395,7 +395,7 @@ describe('NoteModal', () => {
       fireEvent.click(screen.getByText('Add item'))
       fireEvent.click(screen.getByText('Add item'))
 
-      const inputs = screen.getAllByPlaceholderText('List item...')
+      const inputs = screen.getAllByTestId('todo-item-input')
       expect(inputs).toHaveLength(2)
 
       fireEvent.change(inputs[1], { target: { value: 'keep me' } })
@@ -403,7 +403,7 @@ describe('NoteModal', () => {
       // Press Delete on the first (empty) item
       fireEvent.keyDown(inputs[0], { key: 'Delete', code: 'Delete' })
 
-      const inputsAfter = screen.getAllByPlaceholderText('List item...')
+      const inputsAfter = screen.getAllByTestId('todo-item-input')
       expect(inputsAfter).toHaveLength(1)
       expect(inputsAfter[0]).toHaveValue('keep me')
     })
@@ -414,12 +414,12 @@ describe('NoteModal', () => {
       fireEvent.click(screen.getByText('Todo List'))
       fireEvent.click(screen.getByText('Add item'))
 
-      const inputs = screen.getAllByPlaceholderText('List item...')
+      const inputs = screen.getAllByTestId('todo-item-input')
       fireEvent.change(inputs[0], { target: { value: 'has text' } })
 
       fireEvent.keyDown(inputs[0], { key: 'Backspace', code: 'Backspace' })
 
-      expect(screen.getAllByPlaceholderText('List item...')).toHaveLength(1)
+      expect(screen.getAllByTestId('todo-item-input')).toHaveLength(1)
       expect(screen.getByDisplayValue('has text')).toBeInTheDocument()
     })
 
@@ -429,12 +429,12 @@ describe('NoteModal', () => {
       fireEvent.click(screen.getByText('Todo List'))
       fireEvent.click(screen.getByText('Add item'))
 
-      const inputs = screen.getAllByPlaceholderText('List item...')
+      const inputs = screen.getAllByTestId('todo-item-input')
       fireEvent.change(inputs[0], { target: { value: 'has text' } })
 
       fireEvent.keyDown(inputs[0], { key: 'Delete', code: 'Delete' })
 
-      expect(screen.getAllByPlaceholderText('List item...')).toHaveLength(1)
+      expect(screen.getAllByTestId('todo-item-input')).toHaveLength(1)
       expect(screen.getByDisplayValue('has text')).toBeInTheDocument()
     })
 
@@ -444,12 +444,12 @@ describe('NoteModal', () => {
       fireEvent.click(screen.getByText('Todo List'))
       fireEvent.click(screen.getByText('Add item'))
 
-      const inputs = screen.getAllByPlaceholderText('List item...')
+      const inputs = screen.getAllByTestId('todo-item-input')
       expect(inputs).toHaveLength(1)
 
       fireEvent.keyDown(inputs[0], { key: 'Backspace', code: 'Backspace' })
 
-      expect(screen.queryAllByPlaceholderText('List item...')).toHaveLength(0)
+      expect(screen.queryAllByTestId('todo-item-input')).toHaveLength(0)
     })
 
     it('pressing Backspace on a whitespace-only todo item deletes it', async () => {
@@ -458,12 +458,12 @@ describe('NoteModal', () => {
       fireEvent.click(screen.getByText('Todo List'))
       fireEvent.click(screen.getByText('Add item'))
 
-      const inputs = screen.getAllByPlaceholderText('List item...')
+      const inputs = screen.getAllByTestId('todo-item-input')
       fireEvent.change(inputs[0], { target: { value: '   ' } })
 
       fireEvent.keyDown(inputs[0], { key: 'Backspace', code: 'Backspace' })
 
-      expect(screen.queryAllByPlaceholderText('List item...')).toHaveLength(0)
+      expect(screen.queryAllByTestId('todo-item-input')).toHaveLength(0)
     })
 
     it('pressing Backspace on an empty item focuses the previous item', async () => {
@@ -473,14 +473,14 @@ describe('NoteModal', () => {
       fireEvent.click(screen.getByText('Add item'))
       fireEvent.click(screen.getByText('Add item'))
 
-      const inputs = screen.getAllByPlaceholderText('List item...')
+      const inputs = screen.getAllByTestId('todo-item-input')
       fireEvent.change(inputs[0], { target: { value: 'first' } })
 
       // Press Backspace on the second (empty) item
       fireEvent.keyDown(inputs[1], { key: 'Backspace', code: 'Backspace' })
       await vi.runAllTimersAsync()
 
-      const inputsAfter = screen.getAllByPlaceholderText('List item...')
+      const inputsAfter = screen.getAllByTestId('todo-item-input')
       expect(inputsAfter).toHaveLength(1)
       expect(inputsAfter[0]).toHaveFocus()
     })
@@ -492,14 +492,14 @@ describe('NoteModal', () => {
       fireEvent.click(screen.getByText('Add item'))
       fireEvent.click(screen.getByText('Add item'))
 
-      const inputs = screen.getAllByPlaceholderText('List item...')
+      const inputs = screen.getAllByTestId('todo-item-input')
       fireEvent.change(inputs[1], { target: { value: 'second' } })
 
       // Press Delete on the first (empty) item
       fireEvent.keyDown(inputs[0], { key: 'Delete', code: 'Delete' })
       await vi.runAllTimersAsync()
 
-      const inputsAfter = screen.getAllByPlaceholderText('List item...')
+      const inputsAfter = screen.getAllByTestId('todo-item-input')
       expect(inputsAfter).toHaveLength(1)
       expect(inputsAfter[0]).toHaveFocus()
     })
@@ -511,7 +511,7 @@ describe('NoteModal', () => {
       fireEvent.click(screen.getByText('Add item'))
       fireEvent.click(screen.getByText('Add item'))
 
-      const inputs = screen.getAllByPlaceholderText('List item...')
+      const inputs = screen.getAllByTestId('todo-item-input')
       fireEvent.change(inputs[0], { target: { value: 'first' } })
       fireEvent.change(inputs[1], { target: { value: 'second' } })
 
@@ -528,7 +528,7 @@ describe('NoteModal', () => {
       fireEvent.click(screen.getByText('Add item'))
       fireEvent.click(screen.getByText('Add item'))
 
-      const inputs = screen.getAllByPlaceholderText('List item...')
+      const inputs = screen.getAllByTestId('todo-item-input')
       fireEvent.change(inputs[0], { target: { value: 'first' } })
       fireEvent.change(inputs[1], { target: { value: 'second' } })
 
@@ -545,7 +545,7 @@ describe('NoteModal', () => {
       fireEvent.click(screen.getByText('Add item'))
       fireEvent.click(screen.getByText('Add item'))
 
-      const inputs = screen.getAllByPlaceholderText('List item...')
+      const inputs = screen.getAllByTestId('todo-item-input')
       inputs[0].focus()
       fireEvent.keyDown(inputs[0], { key: 'ArrowUp', code: 'ArrowUp' })
 
@@ -560,7 +560,7 @@ describe('NoteModal', () => {
       fireEvent.click(screen.getByText('Add item'))
       fireEvent.click(screen.getByText('Add item'))
 
-      const inputs = screen.getAllByPlaceholderText('List item...')
+      const inputs = screen.getAllByTestId('todo-item-input')
       inputs[1].focus()
       fireEvent.keyDown(inputs[1], { key: 'ArrowDown', code: 'ArrowDown' })
 
@@ -579,13 +579,13 @@ describe('NoteModal', () => {
       mockNotesUpdate.mockClear()
       renderNoteModal({ ...defaultProps, note: todoNote })
 
-      const inputs = screen.getAllByPlaceholderText('List item...')
+      const inputs = screen.getAllByTestId('todo-item-input')
       expect(inputs).toHaveLength(2)
 
       // Press Backspace on the empty second item
       fireEvent.keyDown(inputs[1], { key: 'Backspace', code: 'Backspace' })
 
-      expect(screen.getAllByPlaceholderText('List item...')).toHaveLength(1)
+      expect(screen.getAllByTestId('todo-item-input')).toHaveLength(1)
       expect(mockNotesUpdate).toHaveBeenCalledWith('1', expect.objectContaining({
         items: [expect.objectContaining({ text: 'First', position: 0 })],
       }))

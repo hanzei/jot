@@ -123,7 +123,8 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
     <div
       ref={setNodeRef}
       style={style}
-      className={`group/item flex items-center space-x-2 ${isDragging ? 'opacity-50' : ''} ${
+      data-testid="todo-item-row"
+      className={`group/item flex items-center gap-2 ${isDragging ? 'opacity-50' : ''} ${
         isCompleted ? 'opacity-60' : ''
       }`}
       {...attributes}
@@ -146,11 +147,12 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
         onChange={(e) => onUpdateTodoItem(index, 'completed', e.target.checked)}
         className="h-4 w-4 text-blue-600 rounded"
       />
-      <div className="flex-1 flex items-center min-w-0">
+      <div className="flex items-center min-w-0">
         <input
           type="text"
-          placeholder={t('note.itemPlaceholder')}
-          className={`field-sizing-content p-1 bg-transparent border-none outline-none placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white ${
+          data-testid="todo-item-input"
+          placeholder={item.text ? '' : t('note.itemPlaceholder')}
+          className={`field-sizing-content p-1 bg-transparent border-none outline-none min-w-0 placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white ${
             isCompleted ? 'line-through text-gray-500 dark:text-gray-400' : ''
           }`}
           value={item.text}
@@ -215,7 +217,7 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
 
       <button
         onClick={() => onRemoveTodoItem(item.id)}
-        className="p-1 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
+        className="ml-auto p-1 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
       >
         <TrashIcon className="h-4 w-4" />
       </button>
