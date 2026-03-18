@@ -24,7 +24,7 @@ function App() {
 
     const configPromise = serverConfig.get()
       .then((cfg) => setRegistrationEnabled(cfg.registration_enabled))
-      .catch(() => {});
+      .catch(() => { /* keep default (enabled) if config fetch fails */ });
 
     // Always validate session against the server — the cookie is the source
     // of truth. localStorage may have been cleared while the session is still
