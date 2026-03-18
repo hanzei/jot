@@ -252,7 +252,7 @@ Migration files live in `server/internal/database/migrations/` and are named `NN
 ### Server Tests
 
 - Integration tests live in `server/` root (for example: `http_integration_test.go`, `http_notes_sharing_test.go`, `http_labels_test.go`, `http_import_test.go`, `http_profile_icon_test.go`)
-- Unit tests alongside source: e.g., `server/internal/models/note_test.go`
+- Unit tests alongside source: e.g., `server/internal/store/note_test.go`
 - Tests spin up an `httptest.Server` against a temporary SQLite database (`/tmp/test_*.db`)
 - Helper types: `TestResponse`, `TestUser`, `TestServer`
 - Run: `task test-server`
