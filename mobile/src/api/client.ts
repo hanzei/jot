@@ -27,7 +27,10 @@ export async function getStoredServerUrl(): Promise<string | null> {
 const api = axios.create({
   baseURL: `${currentBaseUrl}/api/v1`,
   timeout: 15000,
-  headers: { 'Content-Type': 'application/json' },
+  headers: {
+    'Content-Type': 'application/json',
+    'User-Agent': `JotMobile/1.0 (${Platform.OS === 'ios' ? 'iOS' : 'Android'})`,
+  },
 });
 
 function applyServerUrl(url: string): string {
