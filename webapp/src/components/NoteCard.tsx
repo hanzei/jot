@@ -13,7 +13,7 @@ import { VALIDATION, type Note, type User } from '@jot/shared';
 import { notes } from '@/utils/api';
 import LetterAvatar from '@/components/LetterAvatar';
 import ConfirmDialog from '@/components/ConfirmDialog';
-import { useToast } from '@/components/Toast';
+import { useToast } from '@/hooks/useToast';
 import { buildShareAvatars } from '@/utils/shareAvatars';
 
 interface NoteCardProps {

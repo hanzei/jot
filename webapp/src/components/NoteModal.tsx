@@ -8,7 +8,7 @@ import LabelPicker from '@/components/LabelPicker';
 import LetterAvatar from '@/components/LetterAvatar';
 import AssigneePicker from '@/components/AssigneePicker';
 import ConfirmDialog from '@/components/ConfirmDialog';
-import { useToast } from '@/components/Toast';
+import { useToast } from '@/hooks/useToast';
 import { buildShareAvatars } from '@/utils/shareAvatars';
 
 // Validation functions

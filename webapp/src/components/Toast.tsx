@@ -1,5 +1,6 @@
-import { useState, useEffect, useCallback, createContext, useContext, useRef } from 'react';
+import { useState, useEffect, useCallback, useRef } from 'react';
 import { XMarkIcon, CheckCircleIcon, ExclamationTriangleIcon, InformationCircleIcon } from '@heroicons/react/24/outline';
+import { ToastContext, type ToastAction } from '@/hooks/useToast';
 
 type ToastType = 'success' | 'error' | 'info';
 
@@ -7,29 +8,14 @@ interface ToastMessage {
   id: number;
   message: string;
   type: ToastType;
-  action?: {
-    label: string;
-    onClick: () => void;
-  };
-}
-
-interface ToastContextType {
-  showToast: (message: string, type?: ToastType, action?: ToastMessage['action']) => void;
-}
-
-const ToastContext = createContext<ToastContextType | null>(null);
-
-export function useToast() {
-  const context = useContext(ToastContext);
-  if (!context) throw new Error('useToast must be used within a ToastProvider');
-  return context;
+  action?: ToastAction;
 }
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const nextId = useRef(0);
 
-  const showToast = useCallback((message: string, type: ToastType = 'success', action?: ToastMessage['action']) => {
+  const showToast = useCallback((message: string, type: ToastType = 'success', action?: ToastAction) => {
     const id = nextId.current++;
     setToasts(prev => [...prev, { id, message, type, action }]);
   }, []);

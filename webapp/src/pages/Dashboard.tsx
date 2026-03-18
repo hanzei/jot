@@ -12,7 +12,7 @@ import SortableNoteCard from '@/components/SortableNoteCard';
 import NoteModal from '@/components/NoteModal';
 import ShareModal from '@/components/ShareModal';
 import ConfirmDialog from '@/components/ConfirmDialog';
-import { useToast } from '@/components/Toast';
+import { useToast } from '@/hooks/useToast';
 import {
   DndContext,
   closestCenter,
