@@ -1,5 +1,6 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { XMarkIcon, CheckCircleIcon, ExclamationTriangleIcon, InformationCircleIcon } from '@heroicons/react/24/outline';
+import { useTranslation } from 'react-i18next';
 import { ToastContext, type ToastAction } from '@/hooks/useToast';
 
 type ToastType = 'success' | 'error' | 'info';
@@ -37,6 +38,7 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
 }
 
 function ToastItem({ toast, onDismiss }: { toast: ToastMessage; onDismiss: (id: number) => void }) {
+  const { t } = useTranslation();
   const [visible, setVisible] = useState(false);
   const [exiting, setExiting] = useState(false);
 
@@ -84,8 +86,9 @@ function ToastItem({ toast, onDismiss }: { toast: ToastMessage; onDismiss: (id: 
           setTimeout(() => onDismiss(toast.id), 200);
         }}
         className="ml-1 p-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700"
+        aria-label={t('common.close')}
       >
-        <XMarkIcon className="h-4 w-4 text-gray-400" />
+        <XMarkIcon className="h-4 w-4 text-gray-400" aria-hidden="true" />
       </button>
     </div>
   );

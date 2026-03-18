@@ -11,7 +11,6 @@ import SearchBar from '@/components/SearchBar';
 import SortableNoteCard from '@/components/SortableNoteCard';
 import NoteModal from '@/components/NoteModal';
 import ShareModal from '@/components/ShareModal';
-import ConfirmDialog from '@/components/ConfirmDialog';
 import { useToast } from '@/hooks/useToast';
 import {
   DndContext,
@@ -55,13 +54,6 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [sharingNote, setSharingNote] = useState<Note | null>(null);
   const [usersById, setUsersById] = useState<Map<string, User>>(new Map());
-  const [confirmDialog, setConfirmDialog] = useState<{
-    open: boolean;
-    title: string;
-    message: string;
-    confirmLabel: string;
-    onConfirm: () => void;
-  }>({ open: false, title: '', message: '', confirmLabel: '', onConfirm: () => {} });
   const user = getUser();
   const isMountedRef = useRef(true);
   const openNoteIdRef = useRef<string | null>(null);
@@ -638,19 +630,6 @@ export default function Dashboard({ onLogout }: DashboardProps) {
             onClose={handleShareModalClose}
           />
         )}
-
-        {/* Confirm dialog */}
-        <ConfirmDialog
-          open={confirmDialog.open}
-          title={confirmDialog.title}
-          message={confirmDialog.message}
-          confirmLabel={confirmDialog.confirmLabel}
-          onConfirm={() => {
-            confirmDialog.onConfirm();
-            setConfirmDialog(prev => ({ ...prev, open: false }));
-          }}
-          onCancel={() => setConfirmDialog(prev => ({ ...prev, open: false }))}
-        />
       </div>
     </AppLayout>
   );

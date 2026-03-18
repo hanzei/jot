@@ -690,7 +690,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
           pinned,
           archived,
           color,
-          checked_items_collapsed: !checkedItemsCollapsed,
+          checked_items_collapsed: checkedItemsCollapsed,
           items: note.note_type === 'todo' ? items.map((item, idx) => ({
             text: item.text,
             position: idx,
@@ -733,7 +733,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
         pinned: newPinnedState,
         archived,
         color,
-        checked_items_collapsed: !checkedItemsCollapsed,
+        checked_items_collapsed: checkedItemsCollapsed,
         items: note.note_type === 'todo' ? items.map((item, idx) => ({
           text: item.text,
           position: idx,
@@ -767,7 +767,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
         pinned,
         archived: newArchivedState,
         color,
-        checked_items_collapsed: !checkedItemsCollapsed,
+        checked_items_collapsed: checkedItemsCollapsed,
         items: note.note_type === 'todo' ? items.map((item, idx) => ({
           text: item.text,
           position: idx,
