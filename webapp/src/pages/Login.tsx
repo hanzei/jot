@@ -6,9 +6,10 @@ import { setUser, setSettings } from '@/utils/auth';
 
 interface LoginProps {
   onLogin: () => void;
+  registrationEnabled: boolean;
 }
 
-export default function Login({ onLogin }: LoginProps) {
+export default function Login({ onLogin, registrationEnabled }: LoginProps) {
   const { t } = useTranslation();
   useEffect(() => { document.title = t('pageTitle.login'); }, [t]);
   const [username, setUsername] = useState('');
@@ -41,15 +42,17 @@ export default function Login({ onLogin }: LoginProps) {
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900 dark:text-white">
             {t('auth.signInTitle')}
           </h2>
-          <p className="mt-2 text-center text-sm text-gray-600 dark:text-gray-300">
-            {t('auth.or')}{' '}
-            <Link
-              to="/register"
-              className="font-medium text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300"
-            >
-              {t('auth.createNewAccount')}
-            </Link>
-          </p>
+          {registrationEnabled && (
+            <p className="mt-2 text-center text-sm text-gray-600 dark:text-gray-300">
+              {t('auth.or')}{' '}
+              <Link
+                to="/register"
+                className="font-medium text-blue-600 dark:text-blue-400 hover:text-blue-500 dark:hover:text-blue-300"
+              >
+                {t('auth.createNewAccount')}
+              </Link>
+            </p>
+          )}
         </div>
         <form className="mt-8 space-y-6" onSubmit={handleSubmit}>
           <div className="rounded-md shadow-sm -space-y-px">

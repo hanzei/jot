@@ -20,16 +20,18 @@ import (
 )
 
 type AuthHandler struct {
-	userStore         *models.UserStore
-	sessionService    *auth.SessionService
-	userSettingsStore *models.UserSettingsStore
+	userStore           *models.UserStore
+	sessionService      *auth.SessionService
+	userSettingsStore   *models.UserSettingsStore
+	registrationEnabled bool
 }
 
-func NewAuthHandler(userStore *models.UserStore, sessionService *auth.SessionService, userSettingsStore *models.UserSettingsStore) *AuthHandler {
+func NewAuthHandler(userStore *models.UserStore, sessionService *auth.SessionService, userSettingsStore *models.UserSettingsStore, registrationEnabled bool) *AuthHandler {
 	return &AuthHandler{
-		userStore:         userStore,
-		sessionService:    sessionService,
-		userSettingsStore: userSettingsStore,
+		userStore:           userStore,
+		sessionService:      sessionService,
+		userSettingsStore:   userSettingsStore,
+		registrationEnabled: registrationEnabled,
 	}
 }
 
@@ -57,9 +59,14 @@ type AuthResponse struct {
 //	@Param		body	body		RegisterRequest	true	"Registration credentials"
 //	@Success	201		{object}	AuthResponse
 //	@Failure	400		{string}	string	"bad request"
+//	@Failure	403		{string}	string	"registration is disabled"
 //	@Failure	409		{string}	string	"username already taken"
 //	@Router		/register [post]
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) (int, error) {
+	if !h.registrationEnabled {
+		return http.StatusForbidden, errors.New("registration is disabled")
+	}
+
 	var req RegisterRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		return http.StatusBadRequest, err

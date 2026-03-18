@@ -1,3 +1,7 @@
+export interface ServerConfig {
+  registration_enabled: boolean;
+}
+
 export interface AboutInfo {
   version: string;
   commit: string;

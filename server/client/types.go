@@ -191,5 +191,10 @@ type SessionInfo struct {
 	ExpiresAt time.Time `json:"expires_at"`
 }
 
+// ServerConfig holds public server configuration returned by GET /api/v1/config.
+type ServerConfig struct {
+	RegistrationEnabled bool `json:"registration_enabled"`
+}
+
 // Ptr returns a pointer to v; useful for building UpdateUserRequest fields.
 func Ptr[T any](v T) *T { return &v }

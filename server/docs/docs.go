@@ -267,6 +267,25 @@ const docTemplate = `{
                 }
             }
         },
+        "/config": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "system"
+                ],
+                "summary": "Get public server configuration",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.configResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/labels": {
             "get": {
                 "security": [
@@ -1169,6 +1188,12 @@ const docTemplate = `{
                             "type": "string"
                         }
                     },
+                    "403": {
+                        "description": "registration is disabled",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
                     "409": {
                         "description": "username already taken",
                         "schema": {
@@ -2046,6 +2071,14 @@ const docTemplate = `{
                 },
                 "version": {
                     "type": "string"
+                }
+            }
+        },
+        "server.configResponse": {
+            "type": "object",
+            "properties": {
+                "registration_enabled": {
+                    "type": "boolean"
                 }
             }
         }

@@ -8,7 +8,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -19,6 +18,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"github.com/hanzei/jot/server/internal/auth"
+	"github.com/hanzei/jot/server/internal/config"
 	"github.com/hanzei/jot/server/internal/database"
 	"github.com/hanzei/jot/server/internal/handlers"
 	"github.com/hanzei/jot/server/internal/models"
@@ -38,6 +38,7 @@ func buildInfo() aboutResponse {
 }
 
 type Server struct {
+	cfg            *config.Config
 	router         chi.Router
 	db             *database.DB
 	httpServer     *http.Server
@@ -58,13 +59,12 @@ type Server struct {
 	sessionsHandler *handlers.SessionsHandler
 }
 
-func New() (*Server, error) {
-	dbPath := os.Getenv("DB_PATH")
-	if dbPath == "" {
-		dbPath = "./jot.db"
+func New(cfg *config.Config) (*Server, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("config must not be nil")
 	}
 
-	db, err := database.New(dbPath)
+	db, err := database.New(cfg.DBPath)
 	if err != nil {
 		return nil, fmt.Errorf("initialize database: %w", err)
 	}
@@ -74,7 +74,7 @@ func New() (*Server, error) {
 	sessionStore := models.NewSessionStore(db.DB)
 	userSettingsStore := models.NewUserSettingsStore(db.DB)
 
-	sessionService := auth.NewSessionService(sessionStore, userStore)
+	sessionService := auth.NewSessionService(sessionStore, userStore, cfg.CookieSecure)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -113,7 +113,7 @@ func New() (*Server, error) {
 
 	hub := sse.NewHub()
 
-	authHandler := handlers.NewAuthHandler(userStore, sessionService, userSettingsStore)
+	authHandler := handlers.NewAuthHandler(userStore, sessionService, userSettingsStore, cfg.RegistrationEnabled)
 	notesHandler := handlers.NewNotesHandler(noteStore, userStore, hub)
 	labelsHandler := handlers.NewLabelsHandler(noteStore, hub)
 	eventsHandler := handlers.NewEventsHandler(hub)
@@ -121,6 +121,7 @@ func New() (*Server, error) {
 	sessionsHandler := handlers.NewSessionsHandler(sessionStore)
 
 	s := &Server{
+		cfg:            cfg,
 		router:         chi.NewRouter(),
 		db:             db,
 		startReady:     make(chan struct{}),
@@ -146,12 +147,8 @@ func New() (*Server, error) {
 func (s *Server) setupRoutes() error {
 	s.router.Use(logrusRequestLogger)
 	s.router.Use(middleware.Recoverer)
-	allowedOrigin := os.Getenv("CORS_ALLOWED_ORIGIN")
-	if allowedOrigin == "" {
-		allowedOrigin = "http://localhost:5173"
-	}
 	s.router.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{allowedOrigin},
+		AllowedOrigins:   []string{s.cfg.CORSAllowedOrigin},
 		AllowedMethods:   []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodOptions},
 		AllowedHeaders:   []string{"Accept", "Content-Type"},
 		ExposedHeaders:   []string{"Link"},
@@ -163,11 +160,12 @@ func (s *Server) setupRoutes() error {
 	s.router.Get("/readyz", s.handleReady)
 
 	cop := http.NewCrossOriginProtection()
-	if err := cop.AddTrustedOrigin(allowedOrigin); err != nil {
-		return fmt.Errorf("add trusted origin %q: %w", allowedOrigin, err)
+	if err := cop.AddTrustedOrigin(s.cfg.CORSAllowedOrigin); err != nil {
+		return fmt.Errorf("add trusted origin %q: %w", s.cfg.CORSAllowedOrigin, err)
 	}
 	s.router.Route("/api/v1", func(r chi.Router) {
 		r.Use(cop.Handler)
+		r.Get("/config", s.wrapHandler(s.handleConfig))
 		r.Post("/register", s.wrapHandler(s.authHandler.Register))
 		r.Post("/login", s.wrapHandler(s.authHandler.Login))
 		r.Post("/logout", s.wrapHandler(s.authHandler.Logout))
@@ -230,20 +228,10 @@ func (s *Server) setupRoutes() error {
 		http.NotFound(w, r)
 	})
 
-	// Serve static files from webapp build directory
-	staticDir := os.Getenv("STATIC_DIR")
-	if staticDir == "" {
-		workDir, err := os.Getwd()
-		if err != nil {
-			return fmt.Errorf("get working directory: %w", err)
-		}
-		staticDir = workDir + "/../webapp/build/"
-	}
-	staticDir = filepath.Clean(staticDir)
-	safeStaticDir := strings.NewReplacer("\n", "", "\r", "").Replace(staticDir)
+	safeStaticDir := strings.NewReplacer("\n", "", "\r", "").Replace(s.cfg.StaticDir)
 
 	logrus.Infof("Serving static files from: %s", safeStaticDir) // #nosec G706 -- safeStaticDir has newlines stripped
-	staticRoot, err := os.OpenRoot(staticDir)
+	staticRoot, err := os.OpenRoot(s.cfg.StaticDir)
 	if err != nil {
 		return fmt.Errorf("open static directory %s: %w", safeStaticDir, err)
 	}
@@ -378,6 +366,29 @@ func (s *Server) handleAbout(w http.ResponseWriter, _ *http.Request) (int, error
 	return 0, nil
 }
 
+type configResponse struct {
+	RegistrationEnabled bool `json:"registration_enabled"`
+}
+
+// handleConfig godoc
+//
+//	@Summary	Get public server configuration
+//	@Tags		system
+//	@Produce	json
+//	@Success	200	{object}	configResponse
+//	@Router		/config [get]
+func (s *Server) handleConfig(w http.ResponseWriter, _ *http.Request) (int, error) {
+	resp := configResponse{
+		RegistrationEnabled: s.cfg.RegistrationEnabled,
+	}
+
+	w.Header().Set("Content-Type", "application/json")
+	if err := json.NewEncoder(w).Encode(resp); err != nil {
+		return http.StatusInternalServerError, fmt.Errorf("encoding config response: %w", err)
+	}
+	return 0, nil
+}
+
 func (s *Server) GetRouter() chi.Router {
 	return s.router
 }
@@ -403,7 +414,6 @@ func logrusRequestLogger(next http.Handler) http.Handler {
 }
 
 func (s *Server) Start(addr string) error {
-	logrus.Infof("Server starting on %s", addr)
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
 		startErr := fmt.Errorf("listen: %w", err)
