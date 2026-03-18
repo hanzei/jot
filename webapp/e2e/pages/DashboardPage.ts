@@ -247,7 +247,7 @@ export class DashboardPage {
     await this.openNote(noteTitle);
     await expect(this.page.getByRole('heading', { name: 'Edit Note' })).toBeVisible();
 
-    const itemRow = this.page.locator('[data-testid="todo-item-input"]').nth(itemIndex).locator('..');
+    const itemRow = this.page.locator('[data-testid="todo-item-row"]').nth(itemIndex);
     await itemRow.hover();
     const assignBtn = itemRow.locator('button[aria-label="Assign item"]');
     await assignBtn.waitFor({ state: 'visible', timeout: 5000 });

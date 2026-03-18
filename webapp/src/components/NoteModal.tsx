@@ -121,6 +121,7 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
     <div
       ref={setNodeRef}
       style={style}
+      data-testid="todo-item-row"
       className={`group/item flex items-center gap-2 ${isDragging ? 'opacity-50' : ''} ${
         isCompleted ? 'opacity-60' : ''
       }`}

@@ -27,7 +27,7 @@ test.describe('Task Assignment', () => {
     await expect(page.getByRole('heading', { name: 'Edit Note' })).toBeVisible();
 
     // The avatar should still be visible after reopening
-    const firstItemRowAfter = page.locator('[data-testid="todo-item-input"]').first().locator('..');
+    const firstItemRowAfter = page.locator('[data-testid="todo-item-row"]').first();
     await expect(firstItemRowAfter.locator('svg[role="img"], img[alt]').first()).toBeVisible();
 
     // Now unassign: click the avatar to open the picker
@@ -88,7 +88,7 @@ test.describe('Task Assignment', () => {
     await expect(page.getByRole('heading', { name: 'Edit Note' })).toBeVisible();
 
     // The assign button should not be visible since the note is no longer shared
-    const itemRowAfter = page.locator('[data-testid="todo-item-input"]').first().locator('..');
+    const itemRowAfter = page.locator('[data-testid="todo-item-row"]').first();
     await expect(itemRowAfter.locator('button[aria-label="Assign item"]')).toHaveCount(0);
 
     await page.click('button[aria-label="Close"]');
@@ -177,7 +177,7 @@ test.describe('Task Assignment', () => {
     await expect(page.getByRole('heading', { name: 'Edit Note' })).toBeVisible();
 
     // The assigned item should show an avatar
-    const sharedItemRow = page.locator('[data-testid="todo-item-input"]').first().locator('..');
+    const sharedItemRow = page.locator('[data-testid="todo-item-row"]').first();
     await expect(sharedItemRow.locator('svg[role="img"], img[alt]').first()).toBeVisible();
 
     await page.click('button[aria-label="Close"]');
