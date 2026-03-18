@@ -22,6 +22,31 @@ export class DashboardPage {
     await expect(this.page.locator('[data-testid="note-card"]').filter({ hasText: title })).toBeVisible();
   }
 
+  /** Creates a new note with labels attached during creation. */
+  async createNoteWithLabels(title: string, content: string, labelNames: string[]) {
+    await this.clickNewNote();
+    await this.page.fill('input[placeholder="Note title..."]', title);
+    await this.page.fill('textarea[placeholder="Take a note..."]', content);
+
+    for (const labelName of labelNames) {
+      await this.page.getByRole('button', { name: 'Add labels' }).click();
+      const existingCheckbox = this.page.getByRole('checkbox', { name: labelName });
+      if (await existingCheckbox.count() > 0 && !(await existingCheckbox.isChecked())) {
+        await existingCheckbox.click();
+      } else if (await existingCheckbox.count() === 0) {
+        await this.page.getByRole('button', { name: 'Create new...' }).click();
+        await this.page.getByPlaceholder('Label name...').fill(labelName);
+        await this.page.keyboard.press('Enter');
+      }
+      await expect(this.page.getByRole('checkbox', { name: labelName })).toBeChecked();
+      // Click outside picker to close it
+      await this.page.locator('input[placeholder="Note title..."]').click();
+    }
+
+    await this.page.click('button[aria-label="Close"]');
+    await expect(this.page.locator('[data-testid="note-card"]').filter({ hasText: title })).toBeVisible();
+  }
+
   async createTodoNote(title: string, items: string[]) {
     await this.clickNewNote();
     await this.selectTodoType();
@@ -39,11 +64,11 @@ export class DashboardPage {
 
   async addTodoItem(text: string) {
     await this.page.click('button:has-text("Add item")');
-    await this.page.locator('input[placeholder="List item..."]').last().fill(text);
+    await this.page.locator('[data-testid="todo-item-input"]').last().fill(text);
   }
 
   todoItemInput(index: number): Locator {
-    return this.page.locator('input[placeholder="List item..."]').nth(index);
+    return this.page.locator('[data-testid="todo-item-input"]').nth(index);
   }
 
   async focusTodoItem(index: number) {
@@ -55,7 +80,7 @@ export class DashboardPage {
   }
 
   async expectTodoItemCount(count: number) {
-    await expect(this.page.locator('input[placeholder="List item..."]')).toHaveCount(count);
+    await expect(this.page.locator('[data-testid="todo-item-input"]')).toHaveCount(count);
   }
 
   async expectTodoItemValue(index: number, value: string) {
@@ -249,7 +274,7 @@ export class DashboardPage {
     await this.openNote(noteTitle);
     await expect(this.page.getByRole('heading', { name: 'Edit Note' })).toBeVisible();
 
-    const itemRow = this.page.locator('input[placeholder="List item..."]').nth(itemIndex).locator('..');
+    const itemRow = this.page.locator('[data-testid="todo-item-row"]').nth(itemIndex);
     await itemRow.hover();
     const assignBtn = itemRow.locator('button[aria-label="Assign item"]');
     await assignBtn.waitFor({ state: 'visible', timeout: 5000 });
@@ -260,6 +285,32 @@ export class DashboardPage {
     await pickerPopover.getByText(username).click();
 
     await this.page.click('button[aria-label="Close"]');
+  }
+
+  /** Asserts that Archive and Bin appear directly after a given label in the sidebar with no large gap. */
+  async expectArchiveAndBinDirectlyAfterLabel(labelName: string) {
+    const sidebar = this.page.locator('aside[aria-label="Main navigation"]');
+
+    const labelButton = sidebar.getByRole('button', { name: labelName, exact: true });
+    const archiveButton = sidebar.locator('[aria-label="Archive"]');
+    const binButton = sidebar.locator('[aria-label="Bin"]');
+
+    await expect(labelButton).toBeVisible();
+    await expect(archiveButton).toBeVisible();
+    await expect(binButton).toBeVisible();
+
+    const labelBox = await labelButton.boundingBox();
+    const archiveBox = await archiveButton.boundingBox();
+    const binBox = await binButton.boundingBox();
+
+    expect(labelBox).toBeTruthy();
+    expect(archiveBox).toBeTruthy();
+    expect(binBox).toBeTruthy();
+
+    const gapBetweenLabelAndArchive = archiveBox!.y - (labelBox!.y + labelBox!.height);
+    expect(gapBetweenLabelAndArchive).toBeLessThan(30);
+
+    expect(binBox!.y).toBeGreaterThan(archiveBox!.y);
   }
 
   /** Shares a note with a user via the card context menu and share modal. */

@@ -74,42 +74,39 @@ const Sidebar = ({ tabs, bottomTabs, children, collapsed, onCollapse }: SidebarP
           )
         )}
       </nav>
-      {children && (
-        <div className="flex-1 overflow-y-auto min-h-0">
-          {children}
-        </div>
-      )}
-      {!children && <div className="flex-1" />}
-      {bottomTabs && bottomTabs.length > 0 && (
-        <nav className="flex flex-col shrink-0 space-y-1.5 px-2 pb-2 mt-auto">
-          {bottomTabs.map((tab) =>
-            tab.href ? (
-              <Link
-                key={tab.label}
-                to={tab.href}
-                aria-label={tab.label}
-                aria-current={tab.isActive ? 'page' : undefined}
-                className={tabClass(tab.isActive)}
-                onClick={() => handleTabClick()}
-              >
-                {tab.icon}
-                {isExpanded && tab.label}
-              </Link>
-            ) : (
-              <button
-                key={tab.label}
-                onClick={() => handleTabClick(tab.onClick)}
-                aria-label={tab.label}
-                aria-current={tab.isActive ? 'page' : undefined}
-                className={tabClass(tab.isActive)}
-              >
-                {tab.icon}
-                {isExpanded && tab.label}
-              </button>
-            )
-          )}
-        </nav>
-      )}
+      <div className="flex-1 overflow-y-auto min-h-0" onClick={() => handleTabClick()}>
+        {children}
+        {bottomTabs && bottomTabs.length > 0 && (
+          <nav aria-label="Secondary navigation" className="flex flex-col space-y-1.5 pt-2 px-2 pb-2">
+            {bottomTabs.map((tab) =>
+              tab.href ? (
+                <Link
+                  key={tab.label}
+                  to={tab.href}
+                  aria-label={tab.label}
+                  aria-current={tab.isActive ? 'page' : undefined}
+                  className={tabClass(tab.isActive)}
+                  onClick={() => handleTabClick()}
+                >
+                  {tab.icon}
+                  {isExpanded && tab.label}
+                </Link>
+              ) : (
+                <button
+                  key={tab.label}
+                  onClick={() => handleTabClick(tab.onClick)}
+                  aria-label={tab.label}
+                  aria-current={tab.isActive ? 'page' : undefined}
+                  className={tabClass(tab.isActive)}
+                >
+                  {tab.icon}
+                  {isExpanded && tab.label}
+                </button>
+              )
+            )}
+          </nav>
+        )}
+      </div>
     </aside>
   );
 };

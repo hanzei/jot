@@ -38,6 +38,10 @@ definitions:
         items:
           $ref: '#/definitions/handlers.CreateNoteItem'
         type: array
+      labels:
+        items:
+          type: string
+        type: array
       note_type:
         $ref: '#/definitions/models.NoteType'
       title:
