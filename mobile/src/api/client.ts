@@ -24,10 +24,21 @@ export async function getStoredServerUrl(): Promise<string | null> {
   return SecureStore.getItemAsync(SERVER_URL_KEY);
 }
 
+const platformLabel: Record<string, string> = {
+  ios: 'iOS',
+  android: 'Android',
+  web: 'Web',
+  windows: 'Windows',
+  macos: 'macOS',
+};
+
 const api = axios.create({
   baseURL: `${currentBaseUrl}/api/v1`,
   timeout: 15000,
-  headers: { 'Content-Type': 'application/json' },
+  headers: {
+    'Content-Type': 'application/json',
+    'User-Agent': `JotMobile/1.0 (${platformLabel[Platform.OS] ?? Platform.OS})`,
+  },
 });
 
 function applyServerUrl(url: string): string {

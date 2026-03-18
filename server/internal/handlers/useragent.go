@@ -21,6 +21,7 @@ type browserRule struct {
 }
 
 var browserRules = []browserRule{
+	{markers: []string{"JotMobile/"}, name: "Jot Mobile"},
 	{markers: []string{"Edg/", "EdgA/", "EdgiOS/"}, name: "Edge"},
 	{markers: []string{"OPR/", "Opera"}, name: "Opera"},
 	{markers: []string{"Vivaldi/"}, name: "Vivaldi"},
@@ -66,7 +67,7 @@ type osRule struct {
 }
 
 var osRules = []osRule{
-	{markers: []string{"iPhone", "iPad", "iPod"}, name: "iOS"},
+	{markers: []string{"iPhone", "iPad", "iPod", "iOS"}, name: "iOS"},
 	{markers: []string{"Android"}, name: "Android"},
 	{markers: []string{"Windows"}, name: "Windows"},
 	{markers: []string{"Mac OS X", "Macintosh"}, name: "macOS"},
