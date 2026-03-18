@@ -132,35 +132,12 @@ test.describe('Label Filtering', () => {
     await expect(page).not.toHaveURL(/label=/);
   });
 
-  test('archive and bin appear directly after the label list in the sidebar', async ({ page, dashboardPage }) => {
+  test('archive and bin appear directly after the label list in the sidebar', async ({ dashboardPage }) => {
     await dashboardPage.goto();
     await dashboardPage.createNote('Note A', 'content');
     await dashboardPage.addLabelToNote('Note A', 'sidebar-order');
     await dashboardPage.expectLabelInSidebar('sidebar-order');
 
-    const sidebar = page.locator('aside[aria-label="Main navigation"]');
-
-    const labelButton = sidebar.getByRole('button', { name: 'sidebar-order', exact: true });
-    const archiveButton = sidebar.locator('[aria-label="Archive"]');
-    const binButton = sidebar.locator('[aria-label="Bin"]');
-
-    await expect(labelButton).toBeVisible();
-    await expect(archiveButton).toBeVisible();
-    await expect(binButton).toBeVisible();
-
-    const labelBox = await labelButton.boundingBox();
-    const archiveBox = await archiveButton.boundingBox();
-    const binBox = await binButton.boundingBox();
-
-    expect(labelBox).toBeTruthy();
-    expect(archiveBox).toBeTruthy();
-    expect(binBox).toBeTruthy();
-
-    // Archive should appear below the label, with no large gap
-    const gapBetweenLabelAndArchive = archiveBox!.y - (labelBox!.y + labelBox!.height);
-    expect(gapBetweenLabelAndArchive).toBeLessThan(30);
-
-    // Bin should appear right after Archive
-    expect(binBox!.y).toBeGreaterThan(archiveBox!.y);
+    await dashboardPage.expectArchiveAndBinDirectlyAfterLabel('sidebar-order');
   });
 });

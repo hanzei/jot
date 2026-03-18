@@ -77,7 +77,7 @@ const Sidebar = ({ tabs, bottomTabs, children, collapsed, onCollapse }: SidebarP
       <div className="flex-1 overflow-y-auto min-h-0">
         {children}
         {bottomTabs && bottomTabs.length > 0 && (
-          <nav className="flex flex-col space-y-1.5 pt-2 px-2 pb-2">
+          <nav aria-label="Secondary navigation" className="flex flex-col space-y-1.5 pt-2 px-2 pb-2">
             {bottomTabs.map((tab) =>
               tab.href ? (
                 <Link
