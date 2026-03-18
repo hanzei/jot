@@ -58,6 +58,7 @@ type AuthResponse struct {
 //	@Success	201		{object}	AuthResponse
 //	@Failure	400		{string}	string	"bad request"
 //	@Failure	409		{string}	string	"username already taken"
+//	@Failure	500		{string}	string	"internal server error"
 //	@Router		/register [post]
 func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) (int, error) {
 	var req RegisterRequest
@@ -114,6 +115,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) (int, err
 //	@Success	200		{object}	AuthResponse
 //	@Failure	400		{string}	string	"missing username or password"
 //	@Failure	401		{string}	string	"invalid username or password"
+//	@Failure	500		{string}	string	"internal server error"
 //	@Router		/login [post]
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) (int, error) {
 	var req LoginRequest
@@ -244,6 +246,7 @@ func (h *AuthHandler) applySettingsUpdate(userID string, current *models.UserSet
 //	@Failure	400		{string}	string	"bad request"
 //	@Failure	401		{string}	string	"unauthorized"
 //	@Failure	409		{string}	string	"username already taken"
+//	@Failure	500		{string}	string	"internal server error"
 //	@Router		/users/me [patch]
 func (h *AuthHandler) UpdateUser(w http.ResponseWriter, r *http.Request) (int, error) {
 	currentUser, ok := auth.GetUserFromContext(r.Context())
@@ -320,6 +323,7 @@ type ChangePasswordRequest struct {
 //	@Failure	400		{string}	string	"bad request"
 //	@Failure	401		{string}	string	"unauthorized"
 //	@Failure	403		{string}	string	"current password is incorrect"
+//	@Failure	500		{string}	string	"internal server error"
 //	@Router		/users/me/password [put]
 func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) (int, error) {
 	currentUser, ok := auth.GetUserFromContext(r.Context())
@@ -377,6 +381,7 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) (in
 //	@Produce	json
 //	@Success	200	{object}	AuthResponse
 //	@Failure	401	{string}	string	"unauthorized"
+//	@Failure	500	{string}	string	"internal server error"
 //	@Router		/me [get]
 func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) (int, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
@@ -411,7 +416,7 @@ const (
 	maxProfileIconDimension = 256
 	jpegQuality             = 85
 	maxSourceDimension      = 4096
-	maxSourcePixels         = 4096 * 4096 // ~16 megapixels
+	maxSourcePixels         = maxSourceDimension * maxSourceDimension // ~16 megapixels
 )
 
 // isOpaqueImage reports whether img is known to have no transparent pixels.
@@ -514,6 +519,7 @@ func resizeImage(data []byte) ([]byte, error) {
 //	@Success	200		{object}	models.User
 //	@Failure	400		{string}	string	"bad request"
 //	@Failure	401		{string}	string	"unauthorized"
+//	@Failure	500		{string}	string	"internal server error"
 //	@Router		/users/me/profile-icon [post]
 func (h *AuthHandler) UploadProfileIcon(w http.ResponseWriter, r *http.Request) (int, error) {
 	currentUser, ok := auth.GetUserFromContext(r.Context())
@@ -573,6 +579,7 @@ func (h *AuthHandler) UploadProfileIcon(w http.ResponseWriter, r *http.Request) 
 //	@Security	CookieAuth
 //	@Success	204	"no content"
 //	@Failure	401	{string}	string	"unauthorized"
+//	@Failure	500	{string}	string	"internal server error"
 //	@Router		/users/me/profile-icon [delete]
 func (h *AuthHandler) DeleteProfileIcon(w http.ResponseWriter, r *http.Request) (int, error) {
 	currentUser, ok := auth.GetUserFromContext(r.Context())
@@ -598,6 +605,7 @@ func (h *AuthHandler) DeleteProfileIcon(w http.ResponseWriter, r *http.Request) 
 //	@Success	200	{file}		binary	"JPEG image"
 //	@Failure	401	{string}	string	"unauthorized"
 //	@Failure	404	{string}	string	"not found"
+//	@Failure	500	{string}	string	"internal server error"
 //	@Router		/users/{id}/profile-icon [get]
 func (h *AuthHandler) GetUserProfileIcon(w http.ResponseWriter, r *http.Request) (int, error) {
 	id := chi.URLParam(r, "id")

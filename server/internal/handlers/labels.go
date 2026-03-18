@@ -36,6 +36,7 @@ type AddLabelRequest struct {
 //	@Produce	json
 //	@Success	200	{array}		models.Label
 //	@Failure	401	{string}	string	"unauthorized"
+//	@Failure	500	{string}	string	"internal server error"
 //	@Router		/labels [get]
 func (h *LabelsHandler) GetLabels(w http.ResponseWriter, r *http.Request) (int, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
@@ -56,7 +57,7 @@ func (h *LabelsHandler) GetLabels(w http.ResponseWriter, r *http.Request) (int, 
 	if err := json.NewEncoder(w).Encode(labels); err != nil {
 		return http.StatusInternalServerError, err
 	}
-	return http.StatusOK, nil
+	return 0, nil
 }
 
 // AddLabel godoc
@@ -72,6 +73,7 @@ func (h *LabelsHandler) GetLabels(w http.ResponseWriter, r *http.Request) (int, 
 //	@Failure	400		{string}	string	"bad request"
 //	@Failure	401		{string}	string	"unauthorized"
 //	@Failure	403		{string}	string	"no access to note"
+//	@Failure	500		{string}	string	"internal server error"
 //	@Router		/notes/{id}/labels [post]
 func (h *LabelsHandler) AddLabel(w http.ResponseWriter, r *http.Request) (int, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
@@ -124,7 +126,7 @@ func (h *LabelsHandler) AddLabel(w http.ResponseWriter, r *http.Request) (int, e
 	if err := json.NewEncoder(w).Encode(note); err != nil {
 		return http.StatusInternalServerError, err
 	}
-	return http.StatusOK, nil
+	return 0, nil
 }
 
 // RemoveLabel godoc
@@ -138,6 +140,7 @@ func (h *LabelsHandler) AddLabel(w http.ResponseWriter, r *http.Request) (int, e
 //	@Success	200			{object}	models.Note
 //	@Failure	401			{string}	string	"unauthorized"
 //	@Failure	403			{string}	string	"no access to note"
+//	@Failure	500			{string}	string	"internal server error"
 //	@Router		/notes/{id}/labels/{label_id} [delete]
 func (h *LabelsHandler) RemoveLabel(w http.ResponseWriter, r *http.Request) (int, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
@@ -176,5 +179,5 @@ func (h *LabelsHandler) RemoveLabel(w http.ResponseWriter, r *http.Request) (int
 	if err := json.NewEncoder(w).Encode(note); err != nil {
 		return http.StatusInternalServerError, err
 	}
-	return http.StatusOK, nil
+	return 0, nil
 }

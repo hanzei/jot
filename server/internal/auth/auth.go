@@ -7,11 +7,23 @@ import (
 	"time"
 
 	"github.com/hanzei/jot/server/internal/models"
+	"github.com/sirupsen/logrus"
 )
 
+// cookieSecure returns whether the session cookie should have the Secure flag set.
+// Accepts "true" (default when unset) or "false". Any other value defaults to true
+// and logs a warning.
 func cookieSecure() bool {
-	v := os.Getenv("COOKIE_SECURE")
-	return v != "false"
+	switch os.Getenv("COOKIE_SECURE") {
+	case "false":
+		return false
+	case "", "true":
+		return true
+	default:
+		logrus.WithField("value", os.Getenv("COOKIE_SECURE")).
+			Warn("COOKIE_SECURE has unexpected value; expected \"true\" or \"false\", defaulting to true")
+		return true
+	}
 }
 
 const (

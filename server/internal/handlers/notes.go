@@ -97,7 +97,7 @@ type UpdateNoteItem struct {
 
 func normalizeCreateNoteRequest(req *CreateNoteRequest) (int, error) {
 	if req.Title == "" && req.Content == "" && len(req.Items) == 0 {
-		return http.StatusBadRequest, errors.New("empty note")
+		return http.StatusBadRequest, errors.New("note must have a title, content, or items")
 	}
 
 	if len(req.Items) > 0 {
@@ -165,6 +165,7 @@ func (h *NotesHandler) createTodoItems(noteID string, items []CreateNoteItem) (i
 //	@Param		my_todo		query		boolean	false	"Return only notes with todos assigned to current user"
 //	@Success	200			{array}		models.Note
 //	@Failure	401			{string}	string	"unauthorized"
+//	@Failure	500			{string}	string	"internal server error"
 //	@Router		/notes [get]
 func (h *NotesHandler) GetNotes(w http.ResponseWriter, r *http.Request) (int, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
@@ -202,6 +203,7 @@ func (h *NotesHandler) GetNotes(w http.ResponseWriter, r *http.Request) (int, er
 //	@Success	201		{object}	models.Note
 //	@Failure	400		{string}	string	"bad request"
 //	@Failure	401		{string}	string	"unauthorized"
+//	@Failure	500		{string}	string	"internal server error"
 //	@Router		/notes [post]
 func (h *NotesHandler) CreateNote(w http.ResponseWriter, r *http.Request) (int, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
@@ -267,6 +269,7 @@ func (h *NotesHandler) CreateNote(w http.ResponseWriter, r *http.Request) (int, 
 //	@Failure	400	{string}	string	"bad request"
 //	@Failure	401	{string}	string	"unauthorized"
 //	@Failure	404	{string}	string	"not found"
+//	@Failure	500	{string}	string	"internal server error"
 //	@Router		/notes/{id} [get]
 func (h *NotesHandler) GetNote(w http.ResponseWriter, r *http.Request) (int, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
@@ -392,6 +395,7 @@ func (h *NotesHandler) updateTodoItems(noteID string, userID string, items []Upd
 //	@Failure	400		{string}	string	"bad request"
 //	@Failure	401		{string}	string	"unauthorized"
 //	@Failure	404		{string}	string	"not found"
+//	@Failure	500		{string}	string	"internal server error"
 //	@Router		/notes/{id} [patch]
 func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
@@ -458,6 +462,7 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 //	@Failure	400			{string}	string	"bad request"
 //	@Failure	401			{string}	string	"unauthorized"
 //	@Failure	404			{string}	string	"not found"
+//	@Failure	500			{string}	string	"internal server error"
 //	@Router		/notes/{id} [delete]
 func (h *NotesHandler) DeleteNote(w http.ResponseWriter, r *http.Request) (int, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
@@ -520,6 +525,7 @@ func (h *NotesHandler) DeleteNote(w http.ResponseWriter, r *http.Request) (int, 
 //	@Failure	400	{string}	string	"bad request"
 //	@Failure	401	{string}	string	"unauthorized"
 //	@Failure	404	{string}	string	"not found"
+//	@Failure	500	{string}	string	"internal server error"
 //	@Router		/notes/{id}/restore [post]
 func (h *NotesHandler) RestoreNote(w http.ResponseWriter, r *http.Request) (int, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
@@ -580,6 +586,7 @@ type ShareNoteResponse struct {
 //	@Failure	403		{string}	string	"not owner"
 //	@Failure	404		{string}	string	"not found"
 //	@Failure	409		{string}	string	"already shared"
+//	@Failure	500		{string}	string	"internal server error"
 //	@Router		/notes/{id}/share [post]
 func (h *NotesHandler) ShareNote(w http.ResponseWriter, r *http.Request) (int, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
@@ -661,6 +668,7 @@ func (h *NotesHandler) ShareNote(w http.ResponseWriter, r *http.Request) (int, e
 //	@Failure	401		{string}	string	"unauthorized"
 //	@Failure	403		{string}	string	"not owner"
 //	@Failure	404		{string}	string	"not found"
+//	@Failure	500		{string}	string	"internal server error"
 //	@Router		/notes/{id}/share [delete]
 func (h *NotesHandler) UnshareNote(w http.ResponseWriter, r *http.Request) (int, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
@@ -735,6 +743,7 @@ func (h *NotesHandler) UnshareNote(w http.ResponseWriter, r *http.Request) (int,
 //	@Failure	400	{string}	string	"bad request"
 //	@Failure	401	{string}	string	"unauthorized"
 //	@Failure	403	{string}	string	"not owner"
+//	@Failure	500	{string}	string	"internal server error"
 //	@Router		/notes/{id}/shares [get]
 func (h *NotesHandler) GetNoteShares(w http.ResponseWriter, r *http.Request) (int, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
@@ -779,6 +788,7 @@ func (h *NotesHandler) GetNoteShares(w http.ResponseWriter, r *http.Request) (in
 //	@Param		search	query		string	false	"Filter by username, first name, or last name (case-insensitive substring match)"
 //	@Success	200		{array}		UserInfo
 //	@Failure	401		{string}	string	"unauthorized"
+//	@Failure	500		{string}	string	"internal server error"
 //	@Router		/users [get]
 func (h *NotesHandler) SearchUsers(w http.ResponseWriter, r *http.Request) (int, error) {
 	currentUser, ok := auth.GetUserFromContext(r.Context())
@@ -948,7 +958,7 @@ func parseKeepNotesFromData(filename string, data []byte) ([]keepNote, error) {
 		return nil, errors.New("invalid JSON file")
 	}
 	if kn.isEmpty() {
-		return nil, errors.New("note has no title, content, or list items")
+		return nil, errors.New("note must have a title, content, or items")
 	}
 	return []keepNote{kn}, nil
 }
@@ -983,6 +993,7 @@ func (h *NotesHandler) importKeepNotes(userID string, keepNotes []keepNote) (imp
 //	@Success	200		{object}	ImportResponse
 //	@Failure	400		{string}	string	"bad request"
 //	@Failure	401		{string}	string	"unauthorized"
+//	@Failure	500		{string}	string	"internal server error"
 //	@Router		/notes/import [post]
 func (h *NotesHandler) ImportNotes(w http.ResponseWriter, r *http.Request) (int, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
@@ -992,7 +1003,7 @@ func (h *NotesHandler) ImportNotes(w http.ResponseWriter, r *http.Request) (int,
 
 	r.Body = http.MaxBytesReader(w, r.Body, 32<<20)
 	if err := r.ParseMultipartForm(32 << 20); err != nil {
-		return http.StatusBadRequest, errors.New("failed to parse form")
+		return http.StatusBadRequest, errors.New("invalid multipart form")
 	}
 
 	file, header, err := r.FormFile("file")
@@ -1035,6 +1046,7 @@ type ReorderNotesRequest struct {
 //	@Failure	400		{string}	string	"bad request"
 //	@Failure	401		{string}	string	"unauthorized"
 //	@Failure	403		{string}	string	"forbidden"
+//	@Failure	500		{string}	string	"internal server error"
 //	@Router		/notes/reorder [post]
 func (h *NotesHandler) ReorderNotes(w http.ResponseWriter, r *http.Request) (int, error) {
 	user, ok := auth.GetUserFromContext(r.Context())

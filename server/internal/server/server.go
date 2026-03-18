@@ -294,7 +294,7 @@ func (s *Server) wrapHandler(handler func(w http.ResponseWriter, r *http.Request
 func (s *Server) handleLive(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	if _, err := w.Write([]byte("OK")); err != nil {
-		logrus.WithError(err).Error("Failed to write health check response")
+		logrus.WithError(err).Error("failed to write health check response")
 	}
 }
 
