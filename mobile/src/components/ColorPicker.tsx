@@ -59,7 +59,7 @@ export default function ColorPicker({ visible, currentColor, onSelect, onClose }
                     <Ionicons
                       name="checkmark"
                       size={18}
-                      color={LIGHT_NOTE_COLORS.has(color) ? '#999' : '#333'}
+                      color={LIGHT_NOTE_COLORS.has(color) ? '#666' : '#333'}
                     />
                   )}
                 </TouchableOpacity>
@@ -83,9 +83,9 @@ const styles = StyleSheet.create({
     padding: 16,
   },
   handle: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
+    width: 40,
+    height: 5,
+    borderRadius: 2.5,
     alignSelf: 'center',
     marginBottom: 16,
   },
@@ -96,12 +96,12 @@ const styles = StyleSheet.create({
   },
   palette: {
     paddingBottom: 8,
-    gap: 12,
+    gap: 10,
   },
   colorCircle: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     justifyContent: 'center',
     alignItems: 'center',
   },

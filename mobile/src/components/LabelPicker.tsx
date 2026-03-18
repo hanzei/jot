@@ -149,9 +149,9 @@ const styles = StyleSheet.create({
     maxHeight: '70%',
   },
   handle: {
-    width: 36,
-    height: 4,
-    borderRadius: 2,
+    width: 40,
+    height: 5,
+    borderRadius: 2.5,
     alignSelf: 'center',
     marginBottom: 16,
   },
