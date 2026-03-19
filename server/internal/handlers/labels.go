@@ -13,14 +13,16 @@ import (
 )
 
 type LabelsHandler struct {
-	noteStore *models.NoteStore
-	hub       *sse.Hub
+	noteStore  *models.NoteStore
+	labelStore *models.LabelStore
+	hub        *sse.Hub
 }
 
-func NewLabelsHandler(noteStore *models.NoteStore, hub *sse.Hub) *LabelsHandler {
+func NewLabelsHandler(noteStore *models.NoteStore, labelStore *models.LabelStore, hub *sse.Hub) *LabelsHandler {
 	return &LabelsHandler{
-		noteStore: noteStore,
-		hub:       hub,
+		noteStore:  noteStore,
+		labelStore: labelStore,
+		hub:        hub,
 	}
 }
 
@@ -44,7 +46,7 @@ func (h *LabelsHandler) GetLabels(w http.ResponseWriter, r *http.Request) (int, 
 		return http.StatusUnauthorized, nil, errors.New("unauthorized")
 	}
 
-	labels, err := h.noteStore.GetLabels(user.ID)
+	labels, err := h.labelStore.GetLabels(user.ID)
 	if err != nil {
 		return http.StatusInternalServerError, nil, err
 	}
@@ -89,7 +91,7 @@ func (h *LabelsHandler) AddLabel(w http.ResponseWriter, r *http.Request) (int, a
 		return http.StatusBadRequest, nil, errors.New("label name is required")
 	}
 
-	label, err := h.noteStore.GetOrCreateLabel(user.ID, req.Name)
+	label, err := h.labelStore.GetOrCreateLabel(user.ID, req.Name)
 	if err != nil {
 		return http.StatusInternalServerError, nil, err
 	}

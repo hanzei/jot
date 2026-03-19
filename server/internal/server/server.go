@@ -72,6 +72,7 @@ func New(cfg *config.Config) (*Server, error) {
 
 	userStore := models.NewUserStore(db.DB)
 	noteStore := models.NewNoteStore(db.DB)
+	labelStore := models.NewLabelStore(db.DB)
 	sessionStore := models.NewSessionStore(db.DB)
 	userSettingsStore := models.NewUserSettingsStore(db.DB)
 
@@ -82,8 +83,8 @@ func New(cfg *config.Config) (*Server, error) {
 	hub := sse.NewHub()
 
 	authHandler := handlers.NewAuthHandler(userStore, sessionService, userSettingsStore, cfg.RegistrationEnabled)
-	notesHandler := handlers.NewNotesHandler(noteStore, userStore, hub)
-	labelsHandler := handlers.NewLabelsHandler(noteStore, hub)
+	notesHandler := handlers.NewNotesHandler(noteStore, userStore, labelStore, hub)
+	labelsHandler := handlers.NewLabelsHandler(noteStore, labelStore, hub)
 	eventsHandler := handlers.NewEventsHandler(hub)
 	adminHandler := handlers.NewAdminHandler(userStore, noteStore)
 	sessionsHandler := handlers.NewSessionsHandler(sessionStore)
