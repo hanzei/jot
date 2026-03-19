@@ -115,9 +115,10 @@ func (s *NoteStore) UnshareNote(noteID string, sharedWithUserID string) error {
 
 // ClearUserAssignmentsTx clears all item assignments related to a deleted user
 // within an existing transaction. It:
-//  1. Removes the user's note_shares rows (SQLite FK cascades are not enforced).
-//  2. Clears items directly assigned to the deleted user.
-//  3. Clears all remaining assignments on notes that no longer have any shares,
+//  1. Removes note_shares rows where the user is the sharee (shared_with_user_id).
+//  2. Removes note_shares rows where the user is the sharer (shared_by_user_id).
+//  3. Clears items directly assigned to the deleted user.
+//  4. Clears all remaining assignments on notes that no longer have any shares,
 //     enforcing the invariant that unshared notes cannot have assignments.
 func (s *NoteStore) ClearUserAssignmentsTx(tx *sql.Tx, userID string) error {
 	if _, err := tx.Exec(
@@ -125,6 +126,13 @@ func (s *NoteStore) ClearUserAssignmentsTx(tx *sql.Tx, userID string) error {
 		userID,
 	); err != nil {
 		return fmt.Errorf("failed to remove deleted user shares: %w", err)
+	}
+
+	if _, err := tx.Exec(
+		`DELETE FROM note_shares WHERE shared_by_user_id = ?`,
+		userID,
+	); err != nil {
+		return fmt.Errorf("failed to remove shares created by deleted user: %w", err)
 	}
 
 	if _, err := tx.Exec(
