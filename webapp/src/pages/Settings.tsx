@@ -4,7 +4,7 @@ import { ArrowUpTrayIcon } from '@heroicons/react/24/outline';
 import LetterAvatar from '@/components/LetterAvatar';
 import { useTranslation } from 'react-i18next';
 import i18n from '@/i18n';
-import { auth, users, sessions as sessionsApi, isAxiosError } from '@/utils/api';
+import { auth, users, labels as labelsApi, sessions as sessionsApi, isAxiosError } from '@/utils/api';
 import { getUser, setUser, removeUser, getSettings, setSettings, isAdmin } from '@/utils/auth';
 import { getLanguagePreference, resolveLanguage, LanguagePreference, SUPPORTED_LANGUAGES } from '@/utils/language';
 import { getThemePreference, applyTheme, ThemePreference } from '@/utils/theme';
@@ -12,9 +12,10 @@ import AppLayout from '@/components/AppLayout';
 import SearchBar from '@/components/SearchBar';
 import ImportModal from '@/components/ImportModal';
 import AboutModal from '@/components/AboutModal';
+import SidebarLabels from '@/components/SidebarLabels';
 import { useToast } from '@/hooks/useToast';
 import { useNavigationLinkTabs } from '@/hooks/useNavigationTabs';
-import type { ActiveSession } from '@jot/shared';
+import type { ActiveSession, Label } from '@jot/shared';
 
 interface SettingsProps {
   onLogout: () => void;
@@ -55,6 +56,7 @@ const Settings = ({ onLogout }: SettingsProps) => {
   const [sessionsLoading, setSessionsLoading] = useState(true);
   const [sessionsError, setSessionsError] = useState('');
   const [revokingSessionId, setRevokingSessionId] = useState<string | null>(null);
+  const [labelsList, setLabelsList] = useState<Label[]>([]);
 
   const loadSessions = useCallback(async () => {
     setSessionsLoading(true);
@@ -72,6 +74,24 @@ const Settings = ({ onLogout }: SettingsProps) => {
   useEffect(() => {
     loadSessions();
   }, [loadSessions]);
+
+  useEffect(() => {
+    let mounted = true;
+    labelsApi.getAll()
+      .then((labels) => {
+        if (mounted) {
+          setLabelsList(labels);
+        }
+      })
+      .catch(() => {
+        if (mounted) {
+          setLabelsList([]);
+        }
+      });
+    return () => {
+      mounted = false;
+    };
+  }, []);
 
   const handleRevokeSession = async (sessionId: string) => {
     setRevokingSessionId(sessionId);
@@ -263,6 +283,12 @@ const Settings = ({ onLogout }: SettingsProps) => {
       onSubmit={handleSearch}
     />
   );
+  const sidebarChildren = (
+    <SidebarLabels
+      labels={labelsList}
+      getHref={(labelId) => `/?label=${encodeURIComponent(labelId)}`}
+    />
+  );
 
   return (
     <AppLayout
@@ -272,6 +298,7 @@ const Settings = ({ onLogout }: SettingsProps) => {
       settingsLinkActive={true}
       sidebarTabs={navigationTabs}
       sidebarBottomTabs={bottomNavigationTabs}
+      sidebarChildren={sidebarChildren}
       searchBar={searchBar}
     >
       <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">

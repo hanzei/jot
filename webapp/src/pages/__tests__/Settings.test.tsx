@@ -5,7 +5,7 @@ import { MemoryRouter } from 'react-router'
 import { type ReactNode } from 'react'
 import Settings from '../Settings'
 import { ToastProvider } from '@/components/Toast'
-import { users, auth, isAxiosError } from '@/utils/api'
+import { users, auth, labels as labelsApi, isAxiosError } from '@/utils/api'
 import * as authUtils from '@/utils/auth'
 import type { UserSettings } from '@jot/shared'
 import i18n from '@/i18n'
@@ -18,6 +18,9 @@ vi.mock('@/utils/api', () => ({
   users: {
     updateMe: vi.fn(),
     changePassword: vi.fn(),
+  },
+  labels: {
+    getAll: vi.fn().mockResolvedValue([]),
   },
   sessions: {
     list: vi.fn().mockResolvedValue([]),
@@ -36,11 +39,12 @@ vi.mock('@/utils/auth', () => ({
 }))
 
 vi.mock('@/components/AppLayout', () => ({
-  default: ({ onLogout, username, settingsLinkActive, isAdmin, children, searchBar }: { onLogout?: () => void; username?: string; settingsLinkActive?: boolean; isAdmin?: boolean; children?: ReactNode; searchBar?: ReactNode }) => (
+  default: ({ onLogout, username, settingsLinkActive, isAdmin, children, searchBar, sidebarChildren }: { onLogout?: () => void; username?: string; settingsLinkActive?: boolean; isAdmin?: boolean; children?: ReactNode; searchBar?: ReactNode; sidebarChildren?: ReactNode }) => (
     <div data-testid="app-layout" data-settings-link-active={settingsLinkActive} data-is-admin={isAdmin}>
       <span data-testid="displayed-username">{username}</span>
       <button onClick={onLogout} data-testid="logout-button">Logout</button>
       <div data-testid="search-bar">{searchBar}</div>
+      <div data-testid="sidebar-children">{sidebarChildren}</div>
       {children}
     </div>
   ),
@@ -113,6 +117,26 @@ describe('Settings', () => {
       vi.mocked(authUtils.getUser).mockReturnValue(null)
       renderSettings()
       expect(screen.getByLabelText('Username')).toHaveValue('')
+    })
+
+    it('loads labels and renders sidebar links to filtered notes', async () => {
+      vi.mocked(labelsApi.getAll).mockResolvedValue([
+        {
+          id: 'label-1',
+          user_id: 'user1',
+          name: 'Work',
+          created_at: '2023-01-01T00:00:00Z',
+          updated_at: '2023-01-01T00:00:00Z',
+        },
+      ])
+
+      renderSettings()
+
+      await waitFor(() => {
+        expect(labelsApi.getAll).toHaveBeenCalled()
+      })
+      const labelLink = await screen.findByRole('link', { name: 'Work' })
+      expect(labelLink).toHaveAttribute('href', '/?label=label-1')
     })
   })
 
