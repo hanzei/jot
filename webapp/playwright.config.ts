@@ -27,6 +27,10 @@ export default defineConfig({
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
     },
+    {
+      name: 'mobile-chrome',
+      use: { ...devices['Pixel 5'] },
+    },
   ],
   webServer: {
     command: `npm run --prefix ${path.resolve(__dirname)} build && go run main.go`,

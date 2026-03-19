@@ -40,7 +40,7 @@ const Sidebar = ({ tabs, bottomTabs, children, collapsed, onCollapse }: SidebarP
       aria-label="Main navigation"
       className={`flex-col bg-white dark:bg-slate-800 border-r border-gray-200 dark:border-slate-700 overflow-hidden
         transition-[width] duration-200
-        absolute inset-y-0 left-0 z-30 shadow-lg
+        absolute inset-y-0 left-0 z-30 shadow-lg sm:relative sm:inset-auto sm:shadow-none sm:z-auto
         ${collapsed ? 'hidden' : 'flex'} sm:flex
         ${isExpanded ? 'w-48' : 'sm:w-12'}`}
       onMouseEnter={() => collapsed && setHovered(true)}

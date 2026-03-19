@@ -192,3 +192,25 @@ test.describe('Settings', () => {
     });
   });
 });
+
+test.describe('Settings sidebar labels — Mobile', () => {
+  test.use({ viewport: { width: 375, height: 812 } });
+
+  test('shows labels in the settings sidebar and navigates to label filter', async ({ page, authenticatedUser, dashboardPage, settingsPage }) => {
+    await dashboardPage.goto();
+    await dashboardPage.createNote('Unlabeled note', 'content');
+    await dashboardPage.createNoteWithLabels('Seed settings label', 'content', ['settings-mobile-label']);
+
+    await settingsPage.goto();
+    await settingsPage.isSidebarHidden();
+    await settingsPage.openSidebar();
+    await settingsPage.isSidebarVisible();
+    await settingsPage.clickMobileLabel('settings-mobile-label');
+
+    await expect(page).toHaveURL(/[?&]label=/);
+    await settingsPage.isSidebarHidden();
+    await dashboardPage.expectNoteVisible('Seed settings label');
+    await dashboardPage.expectNoteNotVisible('Unlabeled note');
+    void authenticatedUser;
+  });
+});

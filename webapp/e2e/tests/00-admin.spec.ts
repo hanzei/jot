@@ -19,8 +19,11 @@ async function ensureAdminSession(page: Page) {
 }
 
 test.describe('Admin', () => {
-  test.beforeEach(async ({ authenticatedUser }) => {
-    // Ensure each test starts in an authenticated admin session.
+  test.beforeEach(async ({ authenticatedUser }, testInfo) => {
+    // The admin tests require the first registered user to be admin (fresh DB).
+    // With multiple Playwright projects sharing a single webServer, only the
+    // first project gets a fresh DB.
+    test.skip(testInfo.project.name === 'mobile-chrome', 'Admin tests require a fresh DB (first project only)');
     void authenticatedUser;
   });
 
