@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { PlusIcon, TagIcon, DocumentTextIcon, ArchiveBoxIcon, TrashIcon, ClipboardDocumentCheckIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, DocumentTextIcon, ArchiveBoxIcon, TrashIcon, ClipboardDocumentCheckIcon } from '@heroicons/react/24/outline';
 import { useTranslation } from 'react-i18next';
 import { notes, auth, labels as labelsApi, users as usersApi } from '@/utils/api';
 import { removeUser, getUser, isAdmin } from '@/utils/auth';
@@ -11,6 +11,7 @@ import SearchBar from '@/components/SearchBar';
 import SortableNoteCard from '@/components/SortableNoteCard';
 import NoteModal from '@/components/NoteModal';
 import ShareModal from '@/components/ShareModal';
+import SidebarLabels from '@/components/SidebarLabels';
 import { useToast } from '@/hooks/useToast';
 import {
   DndContext,
@@ -452,27 +453,13 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     />
   );
 
-  const sidebarChildren = labelsList.length > 0 ? (
-    <div className="px-2 pb-2" data-testid="sidebar-labels">
-      <ul className="space-y-0.5">
-        {labelsList.map((label) => (
-          <li key={label.id}>
-            <button
-              onClick={() => handleLabelSelect(selectedLabelId === label.id ? null : label.id)}
-              className={`flex items-center gap-2 w-full text-left px-3 py-1.5 rounded-md text-sm ${
-                selectedLabelId === label.id
-                  ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium'
-                  : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-slate-700'
-              }`}
-            >
-              <TagIcon className="h-4 w-4 shrink-0" />
-              <span className="truncate min-w-0">{label.name}</span>
-            </button>
-          </li>
-        ))}
-      </ul>
-    </div>
-  ) : undefined;
+  const sidebarChildren = (
+    <SidebarLabels
+      labels={labelsList}
+      selectedLabelId={selectedLabelId}
+      onSelect={(labelId) => handleLabelSelect(selectedLabelId === labelId ? null : labelId)}
+    />
+  );
 
   return (
     <AppLayout

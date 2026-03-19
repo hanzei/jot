@@ -5,10 +5,22 @@ import { MemoryRouter } from 'react-router'
 import { type ReactNode } from 'react'
 import Settings from '../Settings'
 import { ToastProvider } from '@/components/Toast'
-import { users, auth, isAxiosError } from '@/utils/api'
+import { users, auth, labels as labelsApi, isAxiosError } from '@/utils/api'
 import * as authUtils from '@/utils/auth'
 import type { UserSettings } from '@jot/shared'
 import i18n from '@/i18n'
+
+const { mockNavigate } = vi.hoisted(() => ({
+  mockNavigate: vi.fn(),
+}))
+
+vi.mock('react-router', async () => {
+  const actual = await vi.importActual<typeof import('react-router')>('react-router')
+  return {
+    ...actual,
+    useNavigate: () => mockNavigate,
+  }
+})
 
 vi.mock('@/utils/api', () => ({
   auth: {
@@ -18,6 +30,9 @@ vi.mock('@/utils/api', () => ({
   users: {
     updateMe: vi.fn(),
     changePassword: vi.fn(),
+  },
+  labels: {
+    getAll: vi.fn().mockResolvedValue([]),
   },
   sessions: {
     list: vi.fn().mockResolvedValue([]),
@@ -36,11 +51,12 @@ vi.mock('@/utils/auth', () => ({
 }))
 
 vi.mock('@/components/AppLayout', () => ({
-  default: ({ onLogout, username, settingsLinkActive, isAdmin, children, searchBar }: { onLogout?: () => void; username?: string; settingsLinkActive?: boolean; isAdmin?: boolean; children?: ReactNode; searchBar?: ReactNode }) => (
+  default: ({ onLogout, username, settingsLinkActive, isAdmin, children, searchBar, sidebarChildren }: { onLogout?: () => void; username?: string; settingsLinkActive?: boolean; isAdmin?: boolean; children?: ReactNode; searchBar?: ReactNode; sidebarChildren?: ReactNode }) => (
     <div data-testid="app-layout" data-settings-link-active={settingsLinkActive} data-is-admin={isAdmin}>
       <span data-testid="displayed-username">{username}</span>
       <button onClick={onLogout} data-testid="logout-button">Logout</button>
       <div data-testid="search-bar">{searchBar}</div>
+      <div data-testid="sidebar-children">{sidebarChildren}</div>
       {children}
     </div>
   ),
@@ -70,6 +86,7 @@ const renderSettings = (onLogout = vi.fn()) => {
 describe('Settings', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockNavigate.mockReset()
     vi.mocked(authUtils.isAdmin).mockReturnValue(false)
     vi.mocked(authUtils.getUser).mockReturnValue(mockUser)
     i18n.changeLanguage('en')
@@ -113,6 +130,44 @@ describe('Settings', () => {
       vi.mocked(authUtils.getUser).mockReturnValue(null)
       renderSettings()
       expect(screen.getByLabelText('Username')).toHaveValue('')
+    })
+
+    it('loads labels and renders sidebar label buttons', async () => {
+      vi.mocked(labelsApi.getAll).mockResolvedValue([
+        {
+          id: 'label-1',
+          user_id: 'user1',
+          name: 'Work',
+          created_at: '2023-01-01T00:00:00Z',
+          updated_at: '2023-01-01T00:00:00Z',
+        },
+      ])
+
+      renderSettings()
+
+      await waitFor(() => {
+        expect(labelsApi.getAll).toHaveBeenCalled()
+      })
+      expect(await screen.findByRole('button', { name: 'Work' })).toBeInTheDocument()
+    })
+
+    it('navigates to label-filtered notes when a sidebar label is clicked', async () => {
+      const user = userEvent.setup()
+      vi.mocked(labelsApi.getAll).mockResolvedValue([
+        {
+          id: 'label-1',
+          user_id: 'user1',
+          name: 'Work',
+          created_at: '2023-01-01T00:00:00Z',
+          updated_at: '2023-01-01T00:00:00Z',
+        },
+      ])
+
+      renderSettings()
+
+      await user.click(await screen.findByRole('button', { name: 'Work' }))
+
+      expect(mockNavigate).toHaveBeenCalledWith('/?label=label-1')
     })
   })
 
