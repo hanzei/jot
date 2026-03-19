@@ -92,7 +92,7 @@ export class SettingsPage {
     await expect(this.sidebar()).toBeHidden();
   }
 
-  async clickMobileLabel() {
-    await this.sidebar().getByRole('button', { name: 'settings-mobile-label', exact: true }).click();
+  async clickMobileLabel(labelName = 'settings-mobile-label') {
+    await this.sidebar().getByRole('button', { name: labelName, exact: true }).click();
   }
 }
