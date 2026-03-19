@@ -205,7 +205,7 @@ test.describe('Settings sidebar labels — Mobile', () => {
     await settingsPage.isSidebarHidden();
     await settingsPage.openSidebar();
     await settingsPage.isSidebarVisible();
-    await settingsPage.clickMobileLabel();
+    await settingsPage.clickMobileLabel('settings-mobile-label');
 
     await expect(page).toHaveURL(/[?&]label=/);
     await settingsPage.isSidebarHidden();

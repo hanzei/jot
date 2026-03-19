@@ -93,6 +93,6 @@ export class SettingsPage {
   }
 
   async clickMobileLabel(labelName = 'settings-mobile-label') {
-    await this.sidebar().getByRole('button', { name: labelName, exact: true }).click();
+    await this.sidebar().locator('ul').getByRole('button', { name: labelName, exact: true }).click();
   }
 }
