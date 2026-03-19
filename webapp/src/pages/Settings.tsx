@@ -286,7 +286,7 @@ const Settings = ({ onLogout }: SettingsProps) => {
   const sidebarChildren = (
     <SidebarLabels
       labels={labelsList}
-      getHref={(labelId) => `/?label=${encodeURIComponent(labelId)}`}
+      onSelect={(labelId) => navigate(`/?label=${encodeURIComponent(labelId)}`)}
     />
   );
 

@@ -208,9 +208,9 @@ test.describe('Settings sidebar labels — Mobile', () => {
     await page.getByRole('button', { name: 'Toggle sidebar' }).click();
     await expect(sidebar).toBeVisible();
 
-    const labelLink = sidebar.getByRole('link', { name: 'settings-mobile-label', exact: true });
-    await expect(labelLink).toBeVisible();
-    await labelLink.click();
+    const labelButton = sidebar.getByRole('button', { name: 'settings-mobile-label', exact: true });
+    await expect(labelButton).toBeVisible();
+    await labelButton.click();
 
     await expect(page).toHaveURL(/[?&]label=/);
     await expect(sidebar).toBeHidden();

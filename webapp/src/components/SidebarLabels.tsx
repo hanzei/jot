@@ -1,15 +1,13 @@
 import { TagIcon } from '@heroicons/react/24/outline';
-import { Link } from 'react-router';
 import type { Label } from '@jot/shared';
 
 interface SidebarLabelsProps {
   labels: Label[];
   selectedLabelId?: string | null;
   onSelect?: (labelId: string) => void;
-  getHref?: (labelId: string) => string;
 }
 
-const SidebarLabels = ({ labels, selectedLabelId, onSelect, getHref }: SidebarLabelsProps) => {
+const SidebarLabels = ({ labels, selectedLabelId, onSelect }: SidebarLabelsProps) => {
   if (labels.length === 0) {
     return null;
   }
@@ -27,22 +25,15 @@ const SidebarLabels = ({ labels, selectedLabelId, onSelect, getHref }: SidebarLa
 
           return (
             <li key={label.id}>
-              {onSelect ? (
-                <button
-                  type="button"
-                  onClick={() => onSelect(label.id)}
-                  className={className}
-                  aria-pressed={isActive ? 'true' : undefined}
-                >
-                  <TagIcon className="h-4 w-4 shrink-0" />
-                  <span className="truncate min-w-0">{label.name}</span>
-                </button>
-              ) : (
-                <Link to={getHref ? getHref(label.id) : '#'} className={className}>
-                  <TagIcon className="h-4 w-4 shrink-0" />
-                  <span className="truncate min-w-0">{label.name}</span>
-                </Link>
-              )}
+              <button
+                type="button"
+                onClick={() => onSelect?.(label.id)}
+                className={className}
+                aria-pressed={isActive ? 'true' : undefined}
+              >
+                <TagIcon className="h-4 w-4 shrink-0" />
+                <span className="truncate min-w-0">{label.name}</span>
+              </button>
             </li>
           );
         })}

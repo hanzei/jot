@@ -119,7 +119,7 @@ describe('Settings', () => {
       expect(screen.getByLabelText('Username')).toHaveValue('')
     })
 
-    it('loads labels and renders sidebar links to filtered notes', async () => {
+    it('loads labels and renders sidebar label buttons', async () => {
       vi.mocked(labelsApi.getAll).mockResolvedValue([
         {
           id: 'label-1',
@@ -135,8 +135,7 @@ describe('Settings', () => {
       await waitFor(() => {
         expect(labelsApi.getAll).toHaveBeenCalled()
       })
-      const labelLink = await screen.findByRole('link', { name: 'Work' })
-      expect(labelLink).toHaveAttribute('href', '/?label=label-1')
+      expect(await screen.findByRole('button', { name: 'Work' })).toBeInTheDocument()
     })
   })
 
