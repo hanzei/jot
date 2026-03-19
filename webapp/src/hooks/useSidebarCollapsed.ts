@@ -10,6 +10,9 @@ export function useSidebarCollapsed() {
     localStorage.setItem('sidebar-collapsed', String(next));
     return next;
   });
-  const collapse = () => setCollapsed(true);
+  const collapse = () => setCollapsed(() => {
+    localStorage.setItem('sidebar-collapsed', 'true');
+    return true;
+  });
   return { collapsed, toggle, collapse };
 }
