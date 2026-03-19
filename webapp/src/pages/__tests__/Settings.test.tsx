@@ -10,6 +10,18 @@ import * as authUtils from '@/utils/auth'
 import type { UserSettings } from '@jot/shared'
 import i18n from '@/i18n'
 
+const { mockNavigate } = vi.hoisted(() => ({
+  mockNavigate: vi.fn(),
+}))
+
+vi.mock('react-router', async () => {
+  const actual = await vi.importActual<typeof import('react-router')>('react-router')
+  return {
+    ...actual,
+    useNavigate: () => mockNavigate,
+  }
+})
+
 vi.mock('@/utils/api', () => ({
   auth: {
     logout: vi.fn(),
@@ -74,6 +86,7 @@ const renderSettings = (onLogout = vi.fn()) => {
 describe('Settings', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockNavigate.mockReset()
     vi.mocked(authUtils.isAdmin).mockReturnValue(false)
     vi.mocked(authUtils.getUser).mockReturnValue(mockUser)
     i18n.changeLanguage('en')
@@ -136,6 +149,25 @@ describe('Settings', () => {
         expect(labelsApi.getAll).toHaveBeenCalled()
       })
       expect(await screen.findByRole('button', { name: 'Work' })).toBeInTheDocument()
+    })
+
+    it('navigates to label-filtered notes when a sidebar label is clicked', async () => {
+      const user = userEvent.setup()
+      vi.mocked(labelsApi.getAll).mockResolvedValue([
+        {
+          id: 'label-1',
+          user_id: 'user1',
+          name: 'Work',
+          created_at: '2023-01-01T00:00:00Z',
+          updated_at: '2023-01-01T00:00:00Z',
+        },
+      ])
+
+      renderSettings()
+
+      await user.click(await screen.findByRole('button', { name: 'Work' }))
+
+      expect(mockNavigate).toHaveBeenCalledWith('/?label=label-1')
     })
   })
 

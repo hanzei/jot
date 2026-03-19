@@ -198,6 +198,7 @@ test.describe('Settings sidebar labels — Mobile', () => {
 
   test('shows labels in the settings sidebar and navigates to label filter', async ({ page, authenticatedUser, dashboardPage }) => {
     await dashboardPage.goto();
+    await dashboardPage.createNote('Unlabeled note', 'content');
     await dashboardPage.createNoteWithLabels('Seed settings label', 'content', ['settings-mobile-label']);
 
     await page.goto('/settings');
@@ -214,6 +215,8 @@ test.describe('Settings sidebar labels — Mobile', () => {
 
     await expect(page).toHaveURL(/[?&]label=/);
     await expect(sidebar).toBeHidden();
+    await dashboardPage.expectNoteVisible('Seed settings label');
+    await dashboardPage.expectNoteNotVisible('Unlabeled note');
     void authenticatedUser;
   });
 });
