@@ -191,10 +191,10 @@ test.describe('Label Filtering — Mobile', () => {
     void authenticatedUser;
   });
 
-  test('clicking a label closes the sidebar on mobile', async ({ page, dashboardPage }) => {
+  test('label list is visible in the sidebar on mobile', async ({ page, dashboardPage }) => {
     await dashboardPage.goto();
-    await dashboardPage.createNote('Mobile Label Note', 'content');
-    await dashboardPage.addLabelToNote('Mobile Label Note', 'mobiletag');
+    await dashboardPage.createNote('Mobile Note', 'content');
+    await dashboardPage.addLabelToNote('Mobile Note', 'mobilelabel');
 
     const sidebar = page.locator('aside[aria-label="Main navigation"]');
     await expect(sidebar).toBeHidden();
@@ -202,7 +202,41 @@ test.describe('Label Filtering — Mobile', () => {
     await page.getByRole('button', { name: 'Toggle sidebar' }).click();
     await expect(sidebar).toBeVisible();
 
+    await expect(sidebar.getByTestId('sidebar-labels')).toBeVisible();
+    await expect(
+      sidebar.locator('ul').getByRole('button', { name: 'mobilelabel', exact: true })
+    ).toBeVisible();
+  });
+
+  test('clicking a label filters notes and closes the sidebar on mobile', async ({ page, dashboardPage }) => {
+    await dashboardPage.goto();
+    await dashboardPage.createNote('Labeled Mobile', 'has label');
+    await dashboardPage.createNote('Plain Mobile', 'no label');
+    await dashboardPage.addLabelToNote('Labeled Mobile', 'mobiletag');
+
+    const sidebar = page.locator('aside[aria-label="Main navigation"]');
+    await expect(sidebar).toBeHidden();
+
     await dashboardPage.selectSidebarLabel('mobiletag');
     await expect(sidebar).toBeHidden();
+
+    await dashboardPage.expectNoteVisible('Labeled Mobile');
+    await dashboardPage.expectNoteNotVisible('Plain Mobile');
+  });
+
+  test('multiple labels appear in the sidebar on mobile', async ({ page, dashboardPage }) => {
+    await dashboardPage.goto();
+    await dashboardPage.createNoteWithLabels('Multi Mobile', 'content', ['alpha', 'beta']);
+
+    const sidebar = page.locator('aside[aria-label="Main navigation"]');
+    await page.getByRole('button', { name: 'Toggle sidebar' }).click();
+    await expect(sidebar).toBeVisible();
+
+    await expect(
+      sidebar.locator('ul').getByRole('button', { name: 'alpha', exact: true })
+    ).toBeVisible();
+    await expect(
+      sidebar.locator('ul').getByRole('button', { name: 'beta', exact: true })
+    ).toBeVisible();
   });
 });

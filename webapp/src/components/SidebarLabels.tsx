@@ -13,7 +13,7 @@ const SidebarLabels = ({ labels, selectedLabelId, onSelect }: SidebarLabelsProps
   }
 
   return (
-    <div className="px-2 pb-2">
+    <div className="px-2 pb-2" data-testid="sidebar-labels">
       <ul className="space-y-0.5">
         {labels.map((label) => {
           const isActive = selectedLabelId === label.id;
