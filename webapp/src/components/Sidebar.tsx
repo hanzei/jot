@@ -24,7 +24,7 @@ const tabClass = (isActive: boolean | undefined) =>
       : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-slate-700'
   }`;
 
-const isMobile = () => window.matchMedia('(max-width: 639px)').matches;
+const isMobile = () => window.matchMedia('(max-width: 767px)').matches;
 
 const Sidebar = ({ tabs, bottomTabs, children, collapsed, onCollapse }: SidebarProps) => {
   const [hovered, setHovered] = useState(false);
