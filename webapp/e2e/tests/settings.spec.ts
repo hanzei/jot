@@ -196,25 +196,19 @@ test.describe('Settings', () => {
 test.describe('Settings sidebar labels — Mobile', () => {
   test.use({ viewport: { width: 375, height: 812 } });
 
-  test('shows labels in the settings sidebar and navigates to label filter', async ({ page, authenticatedUser, dashboardPage }) => {
+  test('shows labels in the settings sidebar and navigates to label filter', async ({ page, authenticatedUser, dashboardPage, settingsPage }) => {
     await dashboardPage.goto();
     await dashboardPage.createNote('Unlabeled note', 'content');
     await dashboardPage.createNoteWithLabels('Seed settings label', 'content', ['settings-mobile-label']);
 
-    await page.goto('/settings');
-
-    const sidebar = page.locator('aside[aria-label="Main navigation"]');
-    await expect(sidebar).toBeHidden();
-
-    await page.getByRole('button', { name: 'Toggle sidebar' }).click();
-    await expect(sidebar).toBeVisible();
-
-    const labelButton = sidebar.getByRole('button', { name: 'settings-mobile-label', exact: true });
-    await expect(labelButton).toBeVisible();
-    await labelButton.click();
+    await settingsPage.goto();
+    await settingsPage.isSidebarHidden();
+    await settingsPage.openSidebar();
+    await settingsPage.isSidebarVisible();
+    await settingsPage.clickMobileLabel();
 
     await expect(page).toHaveURL(/[?&]label=/);
-    await expect(sidebar).toBeHidden();
+    await settingsPage.isSidebarHidden();
     await dashboardPage.expectNoteVisible('Seed settings label');
     await dashboardPage.expectNoteNotVisible('Unlabeled note');
     void authenticatedUser;
