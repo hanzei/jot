@@ -51,10 +51,6 @@ func (h *LabelsHandler) GetLabels(w http.ResponseWriter, r *http.Request) (int, 
 		return http.StatusInternalServerError, nil, err
 	}
 
-	if labels == nil {
-		labels = []models.Label{}
-	}
-
 	return http.StatusOK, labels, nil
 }
 

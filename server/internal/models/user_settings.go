@@ -2,6 +2,7 @@ package models
 
 import (
 	"database/sql"
+	"errors"
 	"fmt"
 	"time"
 )
@@ -28,8 +29,19 @@ func (s *UserSettingsStore) GetOrCreate(userID string) (*UserSettings, error) {
 	settings := &UserSettings{UserID: userID}
 	err := s.db.QueryRow(
 		`INSERT INTO user_settings (user_id, language, theme) VALUES (?, 'system', 'system')
-		 ON CONFLICT(user_id) DO UPDATE SET user_id = excluded.user_id
+		 ON CONFLICT(user_id) DO NOTHING
 		 RETURNING language, theme, updated_at`,
+		userID,
+	).Scan(&settings.Language, &settings.Theme, &settings.UpdatedAt)
+	if err == nil {
+		return settings, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("failed to get or create user settings: %w", err)
+	}
+	// Row already existed; read it.
+	err = s.db.QueryRow(
+		`SELECT language, theme, updated_at FROM user_settings WHERE user_id = ?`,
 		userID,
 	).Scan(&settings.Language, &settings.Theme, &settings.UpdatedAt)
 	if err != nil {

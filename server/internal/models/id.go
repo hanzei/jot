@@ -7,18 +7,21 @@ import (
 
 func generateID() (string, error) {
 	const chars = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
-	bytes := make([]byte, 22)
-	randBytes := make([]byte, 22)
-
-	if _, err := rand.Read(randBytes); err != nil {
-		return "", err
-	}
-
+	const maxByte = 256 - (256 % len(chars)) // rejection threshold to eliminate modulo bias
+	result := make([]byte, 22)
+	var buf [1]byte
 	for i := range 22 {
-		bytes[i] = chars[randBytes[i]%byte(len(chars))]
+		for {
+			if _, err := rand.Read(buf[:]); err != nil {
+				return "", err
+			}
+			if int(buf[0]) < maxByte {
+				result[i] = chars[int(buf[0])%len(chars)]
+				break
+			}
+		}
 	}
-
-	return string(bytes), nil
+	return string(result), nil
 }
 
 func IsValidID(id string) bool {

@@ -37,6 +37,9 @@ func (s *NoteStore) GetNoteShares(noteID string) ([]NoteShare, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to scan note shares: %w", err)
 	}
+	if shares == nil {
+		shares = []NoteShare{}
+	}
 	return shares, nil
 }
 
