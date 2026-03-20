@@ -4,6 +4,7 @@ import { Dialog, DialogPanel } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
 import { VALIDATION, NOTE_COLORS, buildCollaborators, type Note, type NoteType, type CreateNoteRequest, type UpdateNoteRequest, type Label, type User, type Collaborator } from '@jot/shared';
 import { notes } from '@/utils/api';
+import { useSSE } from '@/utils/useSSE';
 import LabelPicker from '@/components/LabelPicker';
 import LetterAvatar from '@/components/LetterAvatar';
 import AssigneePicker from '@/components/AssigneePicker';
@@ -76,6 +77,14 @@ interface TodoItem {
   indentLevel: number;
   assignedTo: string;
   originalPosition?: number;
+}
+
+interface PresenceViewer {
+  userId: string;
+  username: string;
+  firstName?: string;
+  displayName: string;
+  hasProfileIcon?: boolean;
 }
 
 interface SortableItemProps {
@@ -244,6 +253,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showLabelPicker, setShowLabelPicker] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [activeViewerIDs, setActiveViewerIDs] = useState<string[]>([]);
   
   // Use useRef for timeout management instead of global window property
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -679,6 +689,113 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     return buildCollaborators(note.user_id, note.shared_with, usersById);
   }, [note?.is_shared, note?.user_id, note?.shared_with, usersById]);
 
+  const presenceNoteID = note?.is_shared ? note.id : null;
+
+  const presenceUserLookup = useMemo(() => {
+    const lookup = new Map<string, { username: string; firstName?: string; lastName?: string; hasProfileIcon?: boolean }>();
+    if (!note?.is_shared) {
+      return lookup;
+    }
+
+    const owner = usersById?.get(note.user_id);
+    if (owner) {
+      lookup.set(owner.id, {
+        username: owner.username,
+        firstName: owner.first_name,
+        lastName: owner.last_name,
+        hasProfileIcon: owner.has_profile_icon,
+      });
+    }
+
+    for (const sharedUser of note.shared_with ?? []) {
+      lookup.set(sharedUser.shared_with_user_id, {
+        username: sharedUser.username ?? '?',
+        firstName: sharedUser.first_name,
+        lastName: sharedUser.last_name,
+        hasProfileIcon: sharedUser.has_profile_icon,
+      });
+    }
+
+    return lookup;
+  }, [note?.is_shared, note?.shared_with, note?.user_id, usersById]);
+
+  const activeViewers = useMemo<PresenceViewer[]>(() => {
+    return activeViewerIDs
+      .map((viewerID) => {
+        const user = usersById?.get(viewerID);
+        const fallbackUser = presenceUserLookup.get(viewerID);
+        const username = user?.username ?? fallbackUser?.username ?? '?';
+        const firstName = user?.first_name ?? fallbackUser?.firstName;
+        const lastName = user?.last_name ?? fallbackUser?.lastName;
+        const displayName = [firstName, lastName].filter(Boolean).join(' ') || username;
+
+        return {
+          userId: viewerID,
+          username,
+          firstName,
+          displayName,
+          hasProfileIcon: user?.has_profile_icon ?? fallbackUser?.hasProfileIcon,
+        };
+      })
+      .filter((viewer) => viewer.userId !== currentUserId);
+  }, [activeViewerIDs, currentUserId, presenceUserLookup, usersById]);
+
+  useSSE({
+    enabled: Boolean(presenceNoteID),
+    onEvent: (event) => {
+      if (!presenceNoteID || event.note_id !== presenceNoteID) {
+        return;
+      }
+      if (!event.source_user_id || event.source_user_id === currentUserId) {
+        return;
+      }
+
+      if (event.type === 'note_opened') {
+        setActiveViewerIDs((prev) => (prev.includes(event.source_user_id) ? prev : [...prev, event.source_user_id]));
+      }
+      if (event.type === 'note_closed') {
+        setActiveViewerIDs((prev) => prev.filter((viewerID) => viewerID !== event.source_user_id));
+      }
+    },
+  });
+
+  useEffect(() => {
+    setActiveViewerIDs([]);
+  }, [presenceNoteID]);
+
+  useEffect(() => {
+    if (!presenceNoteID) {
+      return;
+    }
+
+    const joinPresence = async () => {
+      try {
+        await notes.joinPresence(presenceNoteID);
+      } catch (error) {
+        console.error('Failed to join note presence:', error);
+      }
+    };
+
+    void joinPresence();
+
+    const leavePresenceOnBeforeUnload = () => {
+      void fetch(`/api/v1/notes/${presenceNoteID}/presence/leave`, {
+        method: 'POST',
+        credentials: 'include',
+        keepalive: true,
+      });
+    };
+
+    window.addEventListener('beforeunload', leavePresenceOnBeforeUnload);
+
+    return () => {
+      window.removeEventListener('beforeunload', leavePresenceOnBeforeUnload);
+      void notes.leavePresence(presenceNoteID).catch((error: unknown) => {
+        console.error('Failed to leave note presence:', error);
+      });
+    };
+  }, [presenceNoteID]);
+
   const assignItem = async (itemId: string, userId: string) => {
     const updatedItems = items.map(item =>
       item.id === itemId ? { ...item, assignedTo: userId } : item,
@@ -958,6 +1075,26 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
               </button>
             </div>
           </div>
+
+          {activeViewers.length > 0 && (
+            <div className="mx-4 mt-2 rounded-md border border-blue-200 bg-blue-50 px-3 py-2 text-sm text-blue-700 dark:border-blue-800 dark:bg-blue-900/20 dark:text-blue-300">
+              <div className="flex flex-wrap items-center gap-2">
+                <span className="font-medium">{t('note.alsoViewing')}</span>
+                {activeViewers.map((viewer) => (
+                  <div key={viewer.userId} className="flex items-center gap-1" title={viewer.displayName}>
+                    <LetterAvatar
+                      firstName={viewer.firstName}
+                      username={viewer.username}
+                      userId={viewer.userId}
+                      hasProfileIcon={viewer.hasProfileIcon}
+                      className="h-5 w-5"
+                    />
+                    <span>{viewer.displayName}</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
 
           {/* Error Message */}
           {errorMessage && (

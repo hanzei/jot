@@ -15,14 +15,16 @@ const (
 	EventNoteDeleted  EventType = "note_deleted"
 	EventNoteShared   EventType = "note_shared"
 	EventNoteUnshared EventType = "note_unshared"
+	EventNoteOpened   EventType = "note_opened"
+	EventNoteClosed   EventType = "note_closed"
 )
 
 // Event is the payload pushed to SSE clients.
 type Event struct {
 	Type         EventType `json:"type"`
 	NoteID       string    `json:"note_id"`
-	Note         any       `json:"note"`            // nil for deleted/unshared
-	SourceUserID string    `json:"source_user_id"` // who triggered the change
+	Note         any       `json:"note"`                     // nil for deleted/unshared
+	SourceUserID string    `json:"source_user_id"`           // who triggered the change
 	TargetUserID string    `json:"target_user_id,omitempty"` // user affected (e.g. unshared)
 }
 

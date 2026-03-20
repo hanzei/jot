@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, act } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { type ReactNode } from 'react'
 import NoteModal from '../NoteModal'
@@ -7,20 +7,36 @@ import type { Note, NoteItem } from '@jot/shared'
 import { createMockNote } from '@/utils/__tests__/test-helpers'
 
 // Mock the API module
-const { mockNotesUpdate, mockNotesCreate } = vi.hoisted(() => ({
+const { mockNotesUpdate, mockNotesCreate, mockJoinPresence, mockLeavePresence, mockUseSSE, emitSSEEvent } = vi.hoisted(() => {
+  let onEventCallback: ((event: unknown) => void) | null = null
+  return ({
   mockNotesUpdate: vi.fn().mockResolvedValue({}),
   mockNotesCreate: vi.fn().mockResolvedValue({}),
-}))
+  mockJoinPresence: vi.fn().mockResolvedValue({}),
+  mockLeavePresence: vi.fn().mockResolvedValue({}),
+  mockUseSSE: vi.fn(({ onEvent }: { onEvent: (event: unknown) => void }) => {
+    onEventCallback = onEvent
+  }),
+  emitSSEEvent: (event: unknown) => {
+    onEventCallback?.(event)
+  },
+})})
 vi.mock('@/utils/api', () => ({
   notes: {
     create: mockNotesCreate,
     update: mockNotesUpdate,
+    joinPresence: mockJoinPresence,
+    leavePresence: mockLeavePresence,
     addLabel: vi.fn(),
     removeLabel: vi.fn(),
   },
   labels: {
     getAll: vi.fn().mockResolvedValue([]),
   },
+}))
+
+vi.mock('@/utils/useSSE', () => ({
+  useSSE: mockUseSSE,
 }))
 
 // Mock @headlessui/react
@@ -609,6 +625,95 @@ describe('NoteModal', () => {
       const note = createMockNote()
       renderNoteModal({ ...defaultProps, note })
       expect(screen.getByRole('button', { name: 'Add labels' })).toBeInTheDocument()
+    })
+  })
+
+  describe('Presence Indicator', () => {
+    it('joins and leaves presence for shared notes', () => {
+      const sharedNote = createMockNote({
+        is_shared: true,
+        user_id: 'user1',
+        shared_with: [
+          {
+            id: 'share-1',
+            note_id: '1',
+            shared_with_user_id: 'user2',
+            shared_by_user_id: 'user1',
+            permission_level: 'edit',
+            username: 'otheruser',
+            first_name: 'Other',
+            last_name: 'User',
+            has_profile_icon: false,
+            created_at: '2023-01-01T00:00:00Z',
+            updated_at: '2023-01-01T00:00:00Z',
+          },
+        ],
+      })
+
+      const { unmount } = renderNoteModal({
+        ...defaultProps,
+        note: sharedNote,
+        currentUserId: 'user1',
+      })
+
+      expect(mockJoinPresence).toHaveBeenCalledWith('1')
+      unmount()
+      expect(mockLeavePresence).toHaveBeenCalledWith('1')
+    })
+
+    it('shows and hides "Also viewing" users from presence events', () => {
+      const sharedNote = createMockNote({
+        is_shared: true,
+        user_id: 'user1',
+        shared_with: [
+          {
+            id: 'share-1',
+            note_id: '1',
+            shared_with_user_id: 'user2',
+            shared_by_user_id: 'user1',
+            permission_level: 'edit',
+            username: 'otheruser',
+            first_name: 'Other',
+            last_name: 'User',
+            has_profile_icon: false,
+            created_at: '2023-01-01T00:00:00Z',
+            updated_at: '2023-01-01T00:00:00Z',
+          },
+        ],
+      })
+
+      const usersById = new Map([
+        ['user1', { id: 'user1', username: 'owner', first_name: 'Owner', last_name: 'One', role: 'user', has_profile_icon: false, created_at: '', updated_at: '' }],
+        ['user2', { id: 'user2', username: 'otheruser', first_name: 'Other', last_name: 'User', role: 'user', has_profile_icon: false, created_at: '', updated_at: '' }],
+      ])
+
+      renderNoteModal({
+        ...defaultProps,
+        note: sharedNote,
+        currentUserId: 'user1',
+        usersById,
+      })
+
+      act(() => {
+        emitSSEEvent({
+          type: 'note_opened',
+          note_id: '1',
+          source_user_id: 'user2',
+          note: null,
+        })
+      })
+      expect(screen.getByText('Also viewing:')).toBeInTheDocument()
+      expect(screen.getByText('Other User')).toBeInTheDocument()
+
+      act(() => {
+        emitSSEEvent({
+          type: 'note_closed',
+          note_id: '1',
+          source_user_id: 'user2',
+          note: null,
+        })
+      })
+      expect(screen.queryByText('Also viewing:')).not.toBeInTheDocument()
     })
   })
 

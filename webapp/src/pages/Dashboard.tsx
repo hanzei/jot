@@ -230,6 +230,10 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   }, [openNoteFromUrl]);
 
   const handleSSEEvent = useCallback((event: SSEEvent) => {
+    if (event.type === 'note_opened' || event.type === 'note_closed') {
+      return;
+    }
+
     const currentUserLostAccess =
       event.type === 'note_deleted' ||
       (event.type === 'note_unshared' && event.target_user_id === user?.id);

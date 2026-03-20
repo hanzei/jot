@@ -75,6 +75,12 @@ export const notes = {
   reorder: (noteIDs: string[]): Promise<void> =>
     api.post('/notes/reorder', { note_ids: noteIDs }),
 
+  joinPresence: (id: string): Promise<void> =>
+    api.post(`/notes/${id}/presence/join`).then(() => undefined),
+
+  leavePresence: (id: string): Promise<void> =>
+    api.post(`/notes/${id}/presence/leave`).then(() => undefined),
+
   importKeep: (file: File): Promise<ImportResponse> => {
     const formData = new FormData();
     formData.append('file', file);

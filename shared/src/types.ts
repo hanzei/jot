@@ -185,7 +185,9 @@ export type SSEEventType =
   | 'note_updated'
   | 'note_deleted'
   | 'note_shared'
-  | 'note_unshared';
+  | 'note_unshared'
+  | 'note_opened'
+  | 'note_closed';
 
 export interface SSEEvent {
   type: SSEEventType;

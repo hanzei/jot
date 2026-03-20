@@ -216,7 +216,8 @@
     "menuOptions": "Note options",
     "assignItem": "Assign item",
     "unassign": "Unassign",
-    "assignedTo": "Assigned to {{name}}"
+    "assignedTo": "Assigned to {{name}}",
+    "alsoViewing": "Also viewing:"
   },
   "labels": {
     "title": "Labels",

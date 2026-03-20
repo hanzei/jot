@@ -4,11 +4,12 @@ import type { SSEEventType, SSEEvent } from '@jot/shared';
 export type { SSEEventType, SSEEvent };
 
 interface UseSSEOptions {
+  enabled?: boolean;
   onEvent: (event: SSEEvent) => void;
   onConnected?: () => void;
 }
 
-export function useSSE({ onEvent, onConnected }: UseSSEOptions): void {
+export function useSSE({ enabled = true, onEvent, onConnected }: UseSSEOptions): void {
   // Store callbacks in refs so updates don't trigger reconnection.
   const onEventRef = useRef(onEvent);
   const onConnectedRef = useRef(onConnected);
@@ -21,6 +22,10 @@ export function useSSE({ onEvent, onConnected }: UseSSEOptions): void {
   });
 
   useEffect(() => {
+    if (!enabled) {
+      return;
+    }
+
     const es = new EventSource('/api/v1/events', { withCredentials: true });
 
     es.onopen = () => {
@@ -48,5 +53,5 @@ export function useSSE({ onEvent, onConnected }: UseSSEOptions): void {
     return () => {
       es.close();
     };
-  }, []); // empty deps — connect once, stay connected
+  }, [enabled]); // connect once when enabled, close when disabled
 }

@@ -70,6 +70,11 @@ describe('useSSE', () => {
       renderHook(() => useSSE({ onEvent: vi.fn() }))
       expect(MockEventSource.instances).toHaveLength(1)
     })
+
+    it('does not create EventSource when disabled', () => {
+      renderHook(() => useSSE({ enabled: false, onEvent: vi.fn() }))
+      expect(MockEventSource.instances).toHaveLength(0)
+    })
   })
 
   describe('onConnected callback', () => {

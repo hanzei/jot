@@ -105,6 +105,16 @@ func (c *Client) ReorderNotes(ctx context.Context, noteIDs []string) error {
 	})
 }
 
+// JoinNotePresence publishes a lightweight presence "join" event for a note.
+func (c *Client) JoinNotePresence(ctx context.Context, id string) error {
+	return c.doNoContent(ctx, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/presence/join", id), nil)
+}
+
+// LeaveNotePresence publishes a lightweight presence "leave" event for a note.
+func (c *Client) LeaveNotePresence(ctx context.Context, id string) error {
+	return c.doNoContent(ctx, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/presence/leave", id), nil)
+}
+
 // ImportNotes uploads a Google Keep export file (JSON or ZIP).
 func (c *Client) ImportNotes(ctx context.Context, filename string, data io.Reader) (*ImportResponse, error) {
 	var buf bytes.Buffer

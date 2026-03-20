@@ -582,6 +582,20 @@ describe('API Module', () => {
         await expect(notes.reorder(invalidIds)).rejects.toThrow('Invalid note IDs')
       })
     })
+
+    describe('presence', () => {
+      it('joins note presence', async () => {
+        mockPost.mockResolvedValue({})
+        await notes.joinPresence('note-1')
+        expect(mockPost).toHaveBeenCalledWith('/notes/note-1/presence/join')
+      })
+
+      it('leaves note presence', async () => {
+        mockPost.mockResolvedValue({})
+        await notes.leavePresence('note-1')
+        expect(mockPost).toHaveBeenCalledWith('/notes/note-1/presence/leave')
+      })
+    })
   })
 
   describe('Users API', () => {

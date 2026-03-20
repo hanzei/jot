@@ -364,6 +364,15 @@ func TestNotesEndpoints(t *testing.T) {
 		assert.Equal(t, "Updated Title", updated.Title)
 	})
 
+	t.Run("presence endpoints enforce access", func(t *testing.T) {
+		require.NoError(t, user.Client.JoinNotePresence(t.Context(), created.ID))
+		require.NoError(t, user.Client.LeaveNotePresence(t.Context(), created.ID))
+
+		other := ts.createTestUser(t, "presenceother", "password123", false)
+		err := other.Client.JoinNotePresence(t.Context(), created.ID)
+		assert.Equal(t, http.StatusNotFound, client.StatusCode(err))
+	})
+
 	t.Run("delete note", func(t *testing.T) {
 		require.NoError(t, user.Client.DeleteNote(t.Context(), created.ID))
 
@@ -573,6 +582,100 @@ func TestSSEEndpoint(t *testing.T) {
 			assert.Equal(t, note.ID, event["note_id"])
 		case <-sseCtx.Done():
 			t.Fatal("timed out waiting for SSE event after note creation")
+		}
+	})
+
+	t.Run("presence join and leave events are broadcast to other collaborators", func(t *testing.T) {
+		collaborator := ts.createTestUser(t, "presencecollab", "password123", false)
+
+		note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
+			Title:    "Presence Test Note",
+			Content:  "presence content",
+			NoteType: client.NoteTypeText,
+		})
+		require.NoError(t, err)
+		require.NoError(t, user.Client.ShareNote(t.Context(), note.ID, collaborator.User.ID))
+
+		openSSEStream := func(ctx context.Context, c *client.Client) (*http.Response, chan struct{}, chan map[string]any) {
+			t.Helper()
+
+			req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, ts.HTTPServer.URL+"/api/v1/events", nil)
+			require.NoError(t, reqErr)
+			resp, doErr := c.HTTPClient().Do(req)
+			require.NoError(t, doErr)
+
+			connectedCh := make(chan struct{}, 1)
+			eventCh := make(chan map[string]any, 8)
+
+			go func() {
+				scanner := bufio.NewScanner(resp.Body)
+				connectedSent := false
+				for scanner.Scan() {
+					line := scanner.Text()
+					if !connectedSent && line == ": connected" {
+						connectedCh <- struct{}{}
+						connectedSent = true
+						continue
+					}
+					if strings.HasPrefix(line, "data: ") {
+						var event map[string]any
+						if jsonErr := json.Unmarshal([]byte(line[6:]), &event); jsonErr == nil {
+							eventCh <- event
+						}
+					}
+				}
+			}()
+
+			return resp, connectedCh, eventCh
+		}
+
+		sseCtx, cancel := context.WithTimeout(t.Context(), 6*time.Second)
+		defer cancel()
+
+		ownerResp, ownerConnectedCh, ownerEvents := openSSEStream(sseCtx, user.Client)
+		defer ownerResp.Body.Close()
+		collaboratorResp, collaboratorConnectedCh, collaboratorEvents := openSSEStream(sseCtx, collaborator.Client)
+		defer collaboratorResp.Body.Close()
+
+		select {
+		case <-ownerConnectedCh:
+		case <-sseCtx.Done():
+			t.Fatal("timed out waiting for owner SSE connection")
+		}
+		select {
+		case <-collaboratorConnectedCh:
+		case <-sseCtx.Done():
+			t.Fatal("timed out waiting for collaborator SSE connection")
+		}
+
+		require.NoError(t, collaborator.Client.JoinNotePresence(t.Context(), note.ID))
+		select {
+		case event := <-ownerEvents:
+			assert.Equal(t, "note_opened", event["type"])
+			assert.Equal(t, note.ID, event["note_id"])
+			assert.Equal(t, collaborator.User.ID, event["source_user_id"])
+		case <-sseCtx.Done():
+			t.Fatal("timed out waiting for note_opened SSE event")
+		}
+		select {
+		case event := <-collaboratorEvents:
+			t.Fatalf("source user unexpectedly received own presence event: %v", event)
+		case <-time.After(300 * time.Millisecond):
+		}
+
+		require.NoError(t, collaborator.Client.LeaveNotePresence(t.Context(), note.ID))
+		select {
+		case event := <-ownerEvents:
+			assert.Equal(t, "note_closed", event["type"])
+			assert.Equal(t, note.ID, event["note_id"])
+			assert.Equal(t, collaborator.User.ID, event["source_user_id"])
+		case <-sseCtx.Done():
+			t.Fatal("timed out waiting for note_closed SSE event")
+		}
+		select {
+		case event := <-collaboratorEvents:
+			t.Fatalf("source user unexpectedly received own leave event: %v", event)
+		case <-time.After(300 * time.Millisecond):
 		}
 	})
 }
