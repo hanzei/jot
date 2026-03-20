@@ -7,6 +7,16 @@ type MeResponse = {
   };
 };
 
+type Credentials = {
+  username: string;
+  password: string;
+};
+
+const bootstrapAdmin: Credentials = {
+  username: 'e2eadmin',
+  password: 'testpass123',
+};
+
 async function ensureAdminSession(page: Page) {
   const meResponse = await page.request.get('/api/v1/me');
   expect(meResponse.ok()).toBeTruthy();
@@ -22,60 +32,45 @@ async function expectOk(response: { ok(): boolean; status(): number; statusText(
   expect(response.ok(), `${action} failed with ${response.status()} ${response.statusText()}`).toBeTruthy();
 }
 
+async function ensureBootstrapAdmin(page: Page) {
+  const registerResponse = await page.request.post('/api/v1/register', { data: bootstrapAdmin });
+  if (!registerResponse.ok()) {
+    expect(registerResponse.status()).toBe(409);
+    await expectOk(
+      await page.request.post('/api/v1/login', { data: bootstrapAdmin }),
+      'login bootstrap admin',
+    );
+  }
+}
+
 test.describe('Admin', () => {
-  test.beforeEach(async ({ authenticatedUser }, testInfo) => {
+  test.beforeEach(async ({ page }, testInfo) => {
     // The admin tests require the first registered user to be admin (fresh DB).
     // With multiple Playwright projects sharing a single webServer, only the
     // first project gets a fresh DB.
     test.skip(testInfo.project.name === 'mobile-chrome', 'Admin tests require a fresh DB (first project only)');
-    void authenticatedUser;
+
+    if (testInfo.title.includes('non-admin')) {
+      return;
+    }
+
+    await ensureBootstrapAdmin(page);
   });
 
-  test('admin can create, update role, and delete a user', async ({ page }) => {
-    const managedUsername = uniqueUsername('managed');
-    const managedPassword = 'testpass123';
-
-    await ensureAdminSession(page);
-    await page.goto('/admin');
-    await expect(page).toHaveURL('/admin');
-    await expect(page.getByRole('heading', { name: 'User Management' })).toBeVisible();
-
-    await page.getByRole('button', { name: 'Create User', exact: true }).click();
-    await page.getByPlaceholder('Username (2-30 characters)').fill(managedUsername);
-    await page.locator('input[type="password"]').fill(managedPassword);
-    await page.getByRole('button', { name: 'Create User' }).click();
-
-    const usersList = page.getByTestId('users-list');
-    const managedUserRow = usersList.getByTestId(`user-row-${managedUsername}`);
-    await expect(managedUserRow).toBeVisible();
-
-    await managedUserRow.getByRole('button', { name: 'Make Admin' }).click();
-    await expect(managedUserRow.getByRole('button', { name: 'Remove Admin' })).toBeVisible();
-    await expect(managedUserRow.getByText(/^Admin$/)).toBeVisible();
-
-    await managedUserRow.getByRole('button', { name: 'Remove Admin' }).click();
-    await expect(managedUserRow.getByRole('button', { name: 'Make Admin' })).toBeVisible();
-
-    await managedUserRow.getByRole('button', { name: `Delete user ${managedUsername}` }).click();
-    const confirmDialog = page.getByRole('dialog').last();
-    await confirmDialog.getByRole('button', { name: 'Delete' }).click();
-    await expect(usersList.getByTestId(`user-row-${managedUsername}`)).toHaveCount(0);
-  });
-
-  test('admin stats render seeded instance metrics', async ({ page }) => {
-    const memberOneUsername = uniqueUsername('statsmember');
-    const memberTwoUsername = uniqueUsername('statsmember');
+  test('admin stats render seeded instance metrics', async ({ page, request }) => {
+    const memberOneUsername = uniqueUsername('m1');
+    const memberTwoUsername = uniqueUsername('m2');
     const password = 'testpass123';
 
     await ensureAdminSession(page);
 
-    const memberOneResponse = await page.request.post('/api/v1/register', {
+    const memberOneResponse = await request.post('/api/v1/register', {
       data: { username: memberOneUsername, password },
     });
     await expectOk(memberOneResponse, 'register member one');
     const memberOne = await memberOneResponse.json() as { user: { id: string } };
 
-    const memberTwoResponse = await page.request.post('/api/v1/register', {
+    const memberTwoResponse = await request.post('/api/v1/register', {
       data: { username: memberTwoUsername, password },
     });
     await expectOk(memberTwoResponse, 'register member two');
@@ -115,6 +110,15 @@ test.describe('Admin', () => {
     });
     await expectOk(trashedTextResponse, 'create trashed text note');
     const trashedTextNote = await trashedTextResponse.json() as { id: string };
+
+    await expectOk(
+      await page.request.post(`/api/v1/notes/${archivedTodoNote.id}/share`, { data: { user_id: memberOne.user.id } }),
+      'share archived todo note with member one',
+    );
+    await expectOk(
+      await page.request.post(`/api/v1/notes/${activeTodoNote.id}/share`, { data: { user_id: memberTwo.user.id } }),
+      'share active todo note with member two',
+    );
 
     const updateArchivedTodoResponse = await page.request.patch(`/api/v1/notes/${archivedTodoNote.id}`, {
       data: {
@@ -161,36 +165,80 @@ test.describe('Admin', () => {
       'add work label to archived todo',
     );
 
+    const statsResponse = await page.request.get('/api/v1/admin/stats');
+    await expectOk(statsResponse, 'fetch admin stats');
+    const stats = await statsResponse.json() as {
+      users: { total: number };
+      notes: { total: number };
+      sharing: { shared_notes: number };
+      labels: { total: number };
+      todo_items: { total: number };
+    };
+
     await page.goto('/admin');
     await expect(page).toHaveURL('/admin');
     await expect(page.getByTestId('admin-stats-section')).toBeVisible();
 
-    await expect(page.getByTestId('admin-stats-users-total')).toHaveText('3');
-    await expect(page.getByTestId('admin-stats-notes-total')).toHaveText('4');
-    await expect(page.getByTestId('admin-stats-shared-notes')).toHaveText('1');
-    await expect(page.getByTestId('admin-stats-labels-total')).toHaveText('2');
-    await expect(page.getByTestId('admin-stats-todo-items-total')).toHaveText('3');
+    await expect(page.getByTestId('admin-stats-users-total')).toHaveText(String(stats.users.total));
+    await expect(page.getByTestId('admin-stats-notes-total')).toHaveText(String(stats.notes.total));
+    await expect(page.getByTestId('admin-stats-shared-notes')).toHaveText(String(stats.sharing.shared_notes));
+    await expect(page.getByTestId('admin-stats-labels-total')).toHaveText(String(stats.labels.total));
+    await expect(page.getByTestId('admin-stats-todo-items-total')).toHaveText(String(stats.todo_items.total));
     await expect(page.getByTestId('admin-stats-database-size')).not.toHaveText('0 B');
+  });
+
+  test('admin can create, update role, and delete a user', async ({ page }) => {
+    const managedUsername = uniqueUsername('managed');
+    const managedPassword = 'testpass123';
+
+    await ensureAdminSession(page);
+    await page.goto('/admin');
+    await expect(page).toHaveURL('/admin');
+    await expect(page.getByRole('heading', { name: 'User Management' })).toBeVisible();
+
+    await page.getByRole('button', { name: 'Create User', exact: true }).click();
+    await page.getByPlaceholder('Username (2-30 characters)').fill(managedUsername);
+    await page.locator('input[type="password"]').fill(managedPassword);
+    await page.getByRole('button', { name: 'Create User' }).click();
+
+    const usersList = page.getByTestId('users-list');
+    const managedUserRow = usersList.getByTestId(`user-row-${managedUsername}`);
+    await expect(managedUserRow).toBeVisible();
+
+    await managedUserRow.getByRole('button', { name: 'Make Admin' }).click();
+    await expect(managedUserRow.getByRole('button', { name: 'Remove Admin' })).toBeVisible();
+    await expect(managedUserRow.getByText(/^Admin$/)).toBeVisible();
+
+    await managedUserRow.getByRole('button', { name: 'Remove Admin' }).click();
+    await expect(managedUserRow.getByRole('button', { name: 'Make Admin' })).toBeVisible();
+
+    await managedUserRow.getByRole('button', { name: `Delete user ${managedUsername}` }).click();
+    const confirmDialog = page.getByRole('dialog').last();
+    await confirmDialog.getByRole('button', { name: 'Delete' }).click();
+    await expect(usersList.getByTestId(`user-row-${managedUsername}`)).toHaveCount(0);
   });
 
   test('non-admin users are redirected away from admin page', async ({
     page,
-    dashboardPage,
     loginPage,
     request,
   }) => {
     const standardUsername = uniqueUsername('member');
     const standardPassword = 'testpass123';
 
+    const bootstrapRegisterResponse = await request.post('/api/v1/register', {
+      data: bootstrapAdmin,
+    });
+    if (!bootstrapRegisterResponse.ok()) {
+      expect(bootstrapRegisterResponse.status()).toBe(409);
+    }
+
     const registerResponse = await request.post('/api/v1/register', {
       data: { username: standardUsername, password: standardPassword },
     });
     expect(registerResponse.ok()).toBeTruthy();
 
-    await dashboardPage.goto();
-    await dashboardPage.logout();
-    await expect(page).toHaveURL('/login');
-
+    await loginPage.goto();
     await loginPage.login(standardUsername, standardPassword);
     await expect(page).toHaveURL('/');
 

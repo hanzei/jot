@@ -479,6 +479,9 @@ func TestAdminStatsEndpoint(t *testing.T) {
 	})
 	require.NoError(t, err)
 
+	require.NoError(t, adminUser.Client.ShareNote(t.Context(), archivedTodoNote.ID, member1.User.ID))
+	require.NoError(t, adminUser.Client.ShareNote(t.Context(), activeTodoNote.ID, member2.User.ID))
+
 	archived := true
 	_, err = adminUser.Client.UpdateNote(t.Context(), archivedTodoNote.ID, &client.UpdateNoteRequest{
 		Archived: &archived,
@@ -518,8 +521,8 @@ func TestAdminStatsEndpoint(t *testing.T) {
 		assert.Equal(t, int64(1), stats.Notes.Trashed)
 		assert.Equal(t, int64(1), stats.Notes.Archived)
 
-		assert.Equal(t, int64(1), stats.Sharing.SharedNotes)
-		assert.Equal(t, int64(2), stats.Sharing.ShareLinks)
+		assert.Equal(t, int64(3), stats.Sharing.SharedNotes)
+		assert.Equal(t, int64(4), stats.Sharing.ShareLinks)
 
 		assert.Equal(t, int64(2), stats.Labels.Total)
 		assert.Equal(t, int64(3), stats.Labels.NoteAssociations)
@@ -531,7 +534,7 @@ func TestAdminStatsEndpoint(t *testing.T) {
 		fileInfo, err := os.Stat(dbPath)
 		require.NoError(t, err)
 		assert.Equal(t, fileInfo.Size(), stats.Storage.DatabaseSizeBytes)
-		assert.Greater(t, stats.Storage.DatabaseSizeBytes, int64(0))
+		assert.Positive(t, stats.Storage.DatabaseSizeBytes)
 		assert.GreaterOrEqual(t, stats.System.UptimeSeconds, int64(0))
 	})
 

@@ -129,16 +129,18 @@ describe('Admin', () => {
       expect(screen.getByTestId('admin-stats-uptime')).toHaveTextContent('2 days, 5 hours')
     })
 
-    it('shows loading placeholders while stats are fetching', () => {
+    it('shows loading placeholders while stats are fetching', async () => {
       vi.mocked(admin.getStats).mockImplementation(() => new Promise(() => undefined))
 
       renderAdmin()
 
+      await screen.findByText('regularuser')
       expect(screen.getByTestId('admin-stats-section')).toBeInTheDocument()
       expect(screen.queryByTestId('admin-stats-users-total')).not.toBeInTheDocument()
     })
 
     it('shows a stats error when loading fails', async () => {
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
       vi.mocked(admin.getStats).mockRejectedValue(new Error('boom'))
 
       renderAdmin()
@@ -146,6 +148,8 @@ describe('Admin', () => {
       await waitFor(() => {
         expect(screen.getByText('Failed to load statistics')).toBeInTheDocument()
       })
+
+      consoleError.mockRestore()
     })
   })
 

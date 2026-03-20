@@ -45,6 +45,48 @@ const docTemplate = `{
                 }
             }
         },
+        "/admin/stats": {
+            "get": {
+                "security": [
+                    {
+                        "CookieAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Get admin system stats (admin only)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.AdminStats"
+                        }
+                    },
+                    "401": {
+                        "description": "unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "403": {
+                        "description": "forbidden",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
         "/admin/users": {
             "get": {
                 "security": [
@@ -1980,6 +2022,112 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/models.User"
                     }
+                }
+            }
+        },
+        "models.AdminLabelStats": {
+            "type": "object",
+            "properties": {
+                "note_associations": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "models.AdminNoteStats": {
+            "type": "object",
+            "properties": {
+                "archived": {
+                    "type": "integer"
+                },
+                "text": {
+                    "type": "integer"
+                },
+                "todo": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                },
+                "trashed": {
+                    "type": "integer"
+                }
+            }
+        },
+        "models.AdminSharingStats": {
+            "type": "object",
+            "properties": {
+                "share_links": {
+                    "type": "integer"
+                },
+                "shared_notes": {
+                    "type": "integer"
+                }
+            }
+        },
+        "models.AdminStats": {
+            "type": "object",
+            "properties": {
+                "labels": {
+                    "$ref": "#/definitions/models.AdminLabelStats"
+                },
+                "notes": {
+                    "$ref": "#/definitions/models.AdminNoteStats"
+                },
+                "sharing": {
+                    "$ref": "#/definitions/models.AdminSharingStats"
+                },
+                "storage": {
+                    "$ref": "#/definitions/models.AdminStorageStats"
+                },
+                "system": {
+                    "$ref": "#/definitions/models.AdminSystemStats"
+                },
+                "todo_items": {
+                    "$ref": "#/definitions/models.AdminTodoItemStats"
+                },
+                "users": {
+                    "$ref": "#/definitions/models.AdminUserStats"
+                }
+            }
+        },
+        "models.AdminStorageStats": {
+            "type": "object",
+            "properties": {
+                "database_size_bytes": {
+                    "type": "integer"
+                }
+            }
+        },
+        "models.AdminSystemStats": {
+            "type": "object",
+            "properties": {
+                "uptime_seconds": {
+                    "type": "integer"
+                }
+            }
+        },
+        "models.AdminTodoItemStats": {
+            "type": "object",
+            "properties": {
+                "assigned": {
+                    "type": "integer"
+                },
+                "completed": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "models.AdminUserStats": {
+            "type": "object",
+            "properties": {
+                "total": {
+                    "type": "integer"
                 }
             }
         },
