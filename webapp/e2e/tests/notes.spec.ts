@@ -159,7 +159,10 @@ test.describe('Notes', () => {
 
     const secondNoteCard = dashboardPage.noteCard('Second Note');
     await secondNoteCard.hover();
-    const secondNoteHandle = secondNoteCard.getByRole('button', { name: 'Drag to reorder' });
+    const secondNoteHandle = secondNoteCard
+      .locator('..')
+      .locator('..')
+      .getByRole('button', { name: 'Drag to reorder' });
     await expect(secondNoteHandle).toBeVisible();
     const firstNoteCard = dashboardPage.noteCard('First Note');
     await secondNoteHandle.scrollIntoViewIfNeeded();
@@ -169,16 +172,14 @@ test.describe('Notes', () => {
     await dashboardPage.expectNoteAtPosition(0, 'First Note');
     await dashboardPage.expectNoteAtPosition(1, 'Second Note');
 
-    await dashboardPage.noteCard('Second Note').locator('h3').click();
+    await dashboardPage.openNote('Second Note');
     await expect(page.getByRole('heading', { name: 'Edit Note' })).toBeVisible();
     await page.click('button[aria-label="Close"]');
 
     await dashboardPage.archiveNote('Second Note');
     await dashboardPage.switchToArchived();
     await dashboardPage.expectNoteVisible('Second Note');
-    await expect(
-      dashboardPage.noteCard('Second Note').getByRole('button', { name: 'Drag to reorder' })
-    ).toHaveCount(0);
+    await expect(page.getByRole('button', { name: 'Drag to reorder' })).toHaveCount(0);
   });
 
   test('shows empty state when no notes exist', async ({ dashboardPage }) => {
