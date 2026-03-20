@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { ROLES, type User, type CreateUserRequest } from '@jot/shared';
+import { PASSWORD_MIN_LENGTH, ROLES, VALIDATION, type User, type CreateUserRequest } from '@jot/shared';
 import { useTranslation } from 'react-i18next';
 import { admin, auth, isAxiosError } from '@/utils/api';
 import { isAdmin, removeUser, getUser } from '@/utils/auth';
@@ -8,10 +8,13 @@ import AppLayout from '@/components/AppLayout';
 import SearchBar from '@/components/SearchBar';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { useNavigationLinkTabs } from '@/hooks/useNavigationTabs';
+import { getUsernameValidationError, isPasswordTooShort } from '@/utils/userValidation';
 
 interface AdminProps {
   onLogout: () => void;
 }
+
+type CreateUserField = 'username' | 'password';
 
 const Admin = ({ onLogout }: AdminProps) => {
   const { t, i18n } = useTranslation();
@@ -23,6 +26,11 @@ const Admin = ({ onLogout }: AdminProps) => {
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState('');
+  const [createTouched, setCreateTouched] = useState<Record<CreateUserField, boolean>>({
+    username: false,
+    password: false,
+  });
+  const [showCreateValidationErrors, setShowCreateValidationErrors] = useState(false);
   const [formData, setFormData] = useState<CreateUserRequest>({
     username: '',
     password: '',
@@ -71,19 +79,78 @@ const Admin = ({ onLogout }: AdminProps) => {
     return <Navigate to="/" />;
   }
 
+  const validateUsername = (username: string): string => {
+    const errorCode = getUsernameValidationError(username);
+    if (!errorCode) {
+      return '';
+    }
+    const translationKeyByError = {
+      min: 'admin.usernameMin',
+      max: 'admin.usernameMax',
+      chars: 'admin.usernameChars',
+      edge: 'admin.usernameEdge',
+    } as const;
+    return t(translationKeyByError[errorCode], {
+      min: VALIDATION.USERNAME_MIN_LENGTH,
+      max: VALIDATION.USERNAME_MAX_LENGTH,
+    });
+  };
+
+  const validatePassword = (password: string): string => {
+    if (isPasswordTooShort(password)) {
+      return t('admin.passwordMin', { min: PASSWORD_MIN_LENGTH });
+    }
+    return '';
+  };
+
+  const validateCreateField = (field: CreateUserField, value: string): string => {
+    if (field === 'username') {
+      return validateUsername(value);
+    }
+    return validatePassword(value);
+  };
+
+  const usernameValidationError = validateCreateField('username', formData.username);
+  const passwordValidationError = validateCreateField('password', formData.password);
+  const hasValidationErrors = Boolean(usernameValidationError || passwordValidationError);
+  const usernameFieldError = (createTouched.username || showCreateValidationErrors) ? usernameValidationError : '';
+  const passwordFieldError = (createTouched.password || showCreateValidationErrors) ? passwordValidationError : '';
+  const hasBlockingValidationErrors = Boolean(
+    (createTouched.username && usernameValidationError) ||
+    (createTouched.password && passwordValidationError) ||
+    (showCreateValidationErrors && hasValidationErrors),
+  );
+
+  const handleCreateFieldBlur = (field: CreateUserField) => {
+    setCreateTouched(prev => ({ ...prev, [field]: true }));
+  };
+
   const handleCreateUser = async (e: React.FormEvent) => {
     e.preventDefault();
-    setCreateLoading(true);
     setCreateError('');
+    setShowCreateValidationErrors(true);
+    setCreateTouched({ username: true, password: true });
+
+    if (hasValidationErrors) {
+      return;
+    }
+
+    setCreateLoading(true);
 
     try {
       const newUser = await admin.createUser(formData);
       setUsers(prev => [newUser, ...prev]);
       setFormData({ username: '', password: '', role: ROLES.USER });
+      setCreateTouched({ username: false, password: false });
+      setShowCreateValidationErrors(false);
       setShowCreateForm(false);
     } catch (err: unknown) {
-      const axiosError = err as { response?: { data?: string } };
-      setCreateError(axiosError.response?.data || t('admin.failedCreateUser'));
+      if (isAxiosError(err)) {
+        const msg = typeof err.response?.data === 'string' ? err.response.data.trim() : '';
+        setCreateError(msg || t('admin.failedCreateUser'));
+      } else {
+        setCreateError(t('admin.failedCreateUser'));
+      }
     } finally {
       setCreateLoading(false);
     }
@@ -181,7 +248,12 @@ const Admin = ({ onLogout }: AdminProps) => {
             <div className="flex justify-between items-center">
               <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{t('admin.title')}</h1>
               <button
-                onClick={() => setShowCreateForm(!showCreateForm)}
+                onClick={() => {
+                  setShowCreateForm(!showCreateForm);
+                  setCreateError('');
+                  setCreateTouched({ username: false, password: false });
+                  setShowCreateValidationErrors(false);
+                }}
                 className="bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium"
               >
                 {showCreateForm ? t('admin.cancel') : t('admin.createUser')}
@@ -203,10 +275,39 @@ const Admin = ({ onLogout }: AdminProps) => {
                       type="text"
                       required
                       value={formData.username}
-                      onChange={(e) => setFormData({ ...formData, username: e.target.value })}
-                      className="mt-1 block w-full border border-gray-300 dark:border-slate-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      onBlur={() => handleCreateFieldBlur('username')}
+                      onChange={(e) => {
+                        setFormData({ ...formData, username: e.target.value });
+                        if (createError) setCreateError('');
+                      }}
+                      className={`mt-1 block w-full border rounded-md px-3 py-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
+                        usernameFieldError
+                          ? 'border-red-300 dark:border-red-600'
+                          : 'border-gray-300 dark:border-slate-600'
+                      }`}
                       placeholder={t('admin.usernamePlaceholder')}
                     />
+                    <div className="mt-1 flex items-center justify-between text-xs">
+                      <p className="text-gray-500 dark:text-gray-400">
+                        {t('admin.usernameHint', {
+                          min: VALIDATION.USERNAME_MIN_LENGTH,
+                          max: VALIDATION.USERNAME_MAX_LENGTH,
+                        })}
+                      </p>
+                      <span
+                        className={formData.username.length > VALIDATION.USERNAME_MAX_LENGTH
+                          ? 'text-red-600 dark:text-red-400'
+                          : 'text-gray-500 dark:text-gray-400'}
+                      >
+                        {t('admin.usernameCharacterCount', {
+                          current: formData.username.length,
+                          max: VALIDATION.USERNAME_MAX_LENGTH,
+                        })}
+                      </span>
+                    </div>
+                    {usernameFieldError && (
+                      <p className="mt-1 text-sm text-red-600 dark:text-red-400">{usernameFieldError}</p>
+                    )}
                   </div>
                   <div>
                     <label htmlFor="create-password" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -216,11 +317,25 @@ const Admin = ({ onLogout }: AdminProps) => {
                       id="create-password"
                       type="password"
                       required
-                      minLength={4}
+                      minLength={PASSWORD_MIN_LENGTH}
                       value={formData.password}
-                      onChange={(e) => setFormData({ ...formData, password: e.target.value })}
-                      className="mt-1 block w-full border border-gray-300 dark:border-slate-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+                      onBlur={() => handleCreateFieldBlur('password')}
+                      onChange={(e) => {
+                        setFormData({ ...formData, password: e.target.value });
+                        if (createError) setCreateError('');
+                      }}
+                      className={`mt-1 block w-full border rounded-md px-3 py-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500 ${
+                        passwordFieldError
+                          ? 'border-red-300 dark:border-red-600'
+                          : 'border-gray-300 dark:border-slate-600'
+                      }`}
                     />
+                    <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
+                      {t('admin.passwordHint', { min: PASSWORD_MIN_LENGTH })}
+                    </p>
+                    {passwordFieldError && (
+                      <p className="mt-1 text-sm text-red-600 dark:text-red-400">{passwordFieldError}</p>
+                    )}
                   </div>
                 </div>
                 <div className="mt-4">
@@ -240,8 +355,8 @@ const Admin = ({ onLogout }: AdminProps) => {
                 <div className="mt-6">
                   <button
                     type="submit"
-                    disabled={createLoading}
-                    className="bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700 disabled:bg-blue-400 dark:disabled:bg-blue-500 text-white px-4 py-2 rounded-md text-sm font-medium"
+                    disabled={createLoading || hasBlockingValidationErrors}
+                    className="bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700 disabled:bg-blue-400 dark:disabled:bg-blue-500 disabled:cursor-not-allowed text-white px-4 py-2 rounded-md text-sm font-medium"
                   >
                     {createLoading ? t('admin.creating') : t('admin.createUserButton')}
                   </button>
