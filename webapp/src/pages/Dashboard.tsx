@@ -276,6 +276,10 @@ export default function Dashboard({ onLogout }: DashboardProps) {
 
   useEffect(() => {
     const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.repeat) {
+        return;
+      }
+
       if (event.defaultPrevented) {
         return;
       }
