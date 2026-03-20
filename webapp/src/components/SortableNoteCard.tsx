@@ -1,7 +1,7 @@
 import { useSortable } from '@dnd-kit/sortable';
 import { CSS } from '@dnd-kit/utilities';
-import { Bars3Icon } from '@heroicons/react/24/outline';
 import type { Note, User } from '@jot/shared';
+import { useTranslation } from 'react-i18next';
 import NoteCard from './NoteCard';
 
 interface SortableNoteCardProps {
@@ -31,6 +31,7 @@ export default function SortableNoteCard({
   inBin = false,
   onRefresh,
 }: SortableNoteCardProps) {
+  const { t } = useTranslation();
   const {
     attributes,
     listeners,
@@ -39,9 +40,9 @@ export default function SortableNoteCard({
     transform,
     transition,
     isDragging,
-  } = useSortable({ 
+  } = useSortable({
     id: note.id,
-    disabled: disabled
+    disabled,
   });
 
   const style = {
@@ -55,26 +56,28 @@ export default function SortableNoteCard({
     <div
       ref={setNodeRef}
       style={style}
-      {...(!disabled ? attributes : {})}
-      {...(!disabled ? listeners : {})}
-      className={`touch-none select-none relative ${
-        disabled ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'
-      } ${isDragging ? 'scale-105 shadow-xl' : ''}`}
+      className={`select-none relative group ${isDragging ? 'scale-105 shadow-xl' : ''}`}
     >
-      {/* Dedicated drag handle - only show for non-disabled notes */}
       {!disabled && (
-        <div
+        <button
+          type="button"
           ref={setActivatorNodeRef}
           {...attributes}
           {...listeners}
-          className="absolute top-2 right-10 p-2 rounded-md bg-gray-100 dark:bg-slate-700 opacity-0 group-hover:opacity-100 hover:bg-gray-200 dark:hover:bg-slate-600 transition-all cursor-grab active:cursor-grabbing z-20"
-          title="Drag to reorder"
+          onClick={(event) => event.stopPropagation()}
+          className={`absolute top-2 left-2 p-1 touch-none opacity-0 group-hover:opacity-100 focus:opacity-100 touch-visible transition-opacity z-20 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-800 ${
+            isDragging ? 'cursor-grabbing' : 'cursor-grab'
+          }`}
+          title={t('dashboard.dragToReorder')}
+          aria-label={t('dashboard.dragToReorder')}
         >
-          <Bars3Icon className="h-4 w-4 text-gray-600 dark:text-gray-300" />
-        </div>
+          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
+            <path d="M7 2a2 2 0 1 1 .001 4.001A2 2 0 0 1 7 2zm0 6a2 2 0 1 1 .001 4.001A2 2 0 0 1 7 8zm0 6a2 2 0 1 1 .001 4.001A2 2 0 0 1 7 14zm6-8a2 2 0 1 1-.001-4.001A2 2 0 0 1 13 6zm0 2a2 2 0 1 1 .001 4.001A2 2 0 0 1 13 8zm0 6a2 2 0 1 1 .001 4.001A2 2 0 0 1 13 14z" />
+          </svg>
+        </button>
       )}
 
-      <div className="group" style={{ pointerEvents: isDragging ? 'none' : 'auto' }}>
+      <div style={{ pointerEvents: isDragging ? 'none' : 'auto' }}>
         <NoteCard
           note={note}
           onEdit={onEdit}

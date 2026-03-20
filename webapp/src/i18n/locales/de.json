@@ -60,7 +60,8 @@
     "noteDeleted": "Notiz in den Papierkorb verschoben",
     "noteRestored": "Notiz wiederhergestellt",
     "noteDeletedForever": "Notiz endgültig gelöscht",
-    "undo": "Rückgängig"
+    "undo": "Rückgängig",
+    "dragToReorder": "Zum Neuordnen ziehen"
   },
   "settings": {
     "title": "Einstellungen",

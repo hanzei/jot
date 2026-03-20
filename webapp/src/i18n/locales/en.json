@@ -60,7 +60,8 @@
     "noteDeleted": "Note moved to bin",
     "noteRestored": "Note restored",
     "noteDeletedForever": "Note permanently deleted",
-    "undo": "Undo"
+    "undo": "Undo",
+    "dragToReorder": "Drag to reorder"
   },
   "settings": {
     "title": "Settings",
