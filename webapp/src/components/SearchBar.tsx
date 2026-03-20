@@ -1,3 +1,4 @@
+import type { Ref } from 'react';
 import { useTranslation } from 'react-i18next';
 import { MagnifyingGlassIcon } from '@heroicons/react/24/outline';
 
@@ -5,9 +6,10 @@ interface SearchBarProps {
   value: string;
   onChange: (value: string) => void;
   onSubmit?: () => void;
+  inputRef?: Ref<HTMLInputElement>;
 }
 
-const SearchBar = ({ value, onChange, onSubmit }: SearchBarProps) => {
+const SearchBar = ({ value, onChange, onSubmit, inputRef }: SearchBarProps) => {
   const { t } = useTranslation();
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -21,6 +23,7 @@ const SearchBar = ({ value, onChange, onSubmit }: SearchBarProps) => {
         <div className="relative">
           <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-gray-400 dark:text-gray-500" />
           <input
+            ref={inputRef}
             type="text"
             placeholder={t('dashboard.searchPlaceholder')}
             aria-label={t('dashboard.searchAriaLabel')}

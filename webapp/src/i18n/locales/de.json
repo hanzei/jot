@@ -137,6 +137,19 @@
     "loading": "Laden...",
     "failedLoad": "Serverinformationen konnten nicht geladen werden."
   },
+  "keyboardShortcuts": {
+    "title": "Tastenkombinationen",
+    "shortcutColumn": "Tastenkürzel",
+    "descriptionColumn": "Beschreibung",
+    "focusSearchKey": "Umschalt + F",
+    "focusSearchDescription": "Suchleiste fokussieren",
+    "newNoteKey": "N",
+    "newNoteDescription": "Neue Notiz öffnen",
+    "helpKey": "?",
+    "helpDescription": "Hilfe zu Tastenkombinationen öffnen",
+    "escapeKey": "Esc",
+    "escapeDescription": "Aktives Modal oder Dialog schließen"
+  },
   "admin": {
     "title": "Benutzerverwaltung",
     "tabAdmin": "Admin",

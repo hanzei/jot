@@ -13,6 +13,7 @@ import NoteModal from '@/components/NoteModal';
 import ShareModal from '@/components/ShareModal';
 import SidebarLabels from '@/components/SidebarLabels';
 import { useToast } from '@/hooks/useToast';
+import { isAnyModalDialogOpen, isEditableElementFocused, isOverlayControlFocused } from '@/utils/keyboardShortcuts';
 import {
   DndContext,
   closestCenter,
@@ -57,6 +58,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const [usersById, setUsersById] = useState<Map<string, User>>(new Map());
   const user = getUser();
   const isMountedRef = useRef(true);
+  const searchInputRef = useRef<HTMLInputElement>(null);
   const openNoteIdRef = useRef<string | null>(null);
   const returnPathRef = useRef('/');
   useEffect(() => {
@@ -267,10 +269,57 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     onLogout();
   };
 
-  const handleCreateNote = () => {
+  const handleCreateNote = useCallback(() => {
     setEditingNote(null);
     setIsModalOpen(true);
-  };
+  }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) {
+        return;
+      }
+
+      if (loading) {
+        return;
+      }
+
+      if (isEditableElementFocused() || isOverlayControlFocused() || isAnyModalDialogOpen()) {
+        return;
+      }
+
+      const isFocusSearchShortcut =
+        event.key.toLowerCase() === 'f' &&
+        event.shiftKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey;
+
+      if (isFocusSearchShortcut) {
+        event.preventDefault();
+        searchInputRef.current?.focus();
+        return;
+      }
+
+      const isNewNoteShortcut =
+        event.key.toLowerCase() === 'n' &&
+        !event.shiftKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey;
+
+      if (isNewNoteShortcut) {
+        if (showBin) {
+          return;
+        }
+        event.preventDefault();
+        handleCreateNote();
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleCreateNote, loading, showBin]);
 
   const handleEditNote = (note: Note) => {
     if (openNoteIdRef.current === note.id) return;
@@ -450,6 +499,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     <SearchBar
       value={searchQuery}
       onChange={setSearchQuery}
+      inputRef={searchInputRef}
     />
   );
 

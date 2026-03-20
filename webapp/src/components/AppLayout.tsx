@@ -1,7 +1,9 @@
-import { type ReactNode } from 'react';
+import { type ReactNode, useEffect, useState } from 'react';
 import NavigationHeader from '@/components/NavigationHeader';
+import KeyboardShortcutsDialog from '@/components/KeyboardShortcutsDialog';
 import Sidebar, { type SidebarTab } from '@/components/Sidebar';
 import { useSidebarCollapsed } from '@/hooks/useSidebarCollapsed';
+import { isAnyModalDialogOpen, isEditableElementFocused, isOverlayControlFocused } from '@/utils/keyboardShortcuts';
 
 interface AppLayoutProps {
   onLogout: () => void;
@@ -31,6 +33,34 @@ const AppLayout = ({
   children,
 }: AppLayoutProps) => {
   const { collapsed, toggle: toggleSidebar, collapse: collapseSidebar } = useSidebarCollapsed();
+  const [isKeyboardShortcutsOpen, setIsKeyboardShortcutsOpen] = useState(false);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.defaultPrevented) {
+        return;
+      }
+
+      const isQuestionMarkShortcut =
+        (event.key === '?' || (event.code === 'Slash' && event.shiftKey)) &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey;
+      if (!isQuestionMarkShortcut) {
+        return;
+      }
+
+      if (isEditableElementFocused() || isOverlayControlFocused() || isAnyModalDialogOpen()) {
+        return;
+      }
+
+      event.preventDefault();
+      setIsKeyboardShortcutsOpen(true);
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, []);
 
   return (
     <div className="h-dvh bg-gray-50 dark:bg-slate-900 flex flex-col">
@@ -60,6 +90,10 @@ const AppLayout = ({
           {children}
         </main>
       </div>
+      <KeyboardShortcutsDialog
+        isOpen={isKeyboardShortcutsOpen}
+        onClose={() => setIsKeyboardShortcutsOpen(false)}
+      />
     </div>
   );
 };
