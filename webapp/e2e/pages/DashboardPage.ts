@@ -94,9 +94,10 @@ export class DashboardPage {
   }
 
   async openNote(title: string) {
-    await this.page.locator('[data-testid="note-card"]').filter({
+    const card = this.page.locator('[data-testid="note-card"]').filter({
       has: this.page.locator('h3').getByText(title, { exact: true }),
-    }).click();
+    });
+    await card.getByRole('heading', { name: title, exact: true }).click();
   }
 
   private noteCardContainer(title: string): Locator {
