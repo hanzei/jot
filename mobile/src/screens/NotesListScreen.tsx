@@ -16,6 +16,7 @@ import * as Haptics from 'expo-haptics';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { updateMe } from '../api/settings';
 import { useUpdateNote, useDeleteNote, useRestoreNote, usePermanentDeleteNote, useReorderNotes } from '../hooks/useNotes';
 import { useOfflineNotes } from '../hooks/useOfflineNotes';
 import { useUsers } from '../store/UsersContext';
@@ -24,8 +25,9 @@ import { useTheme } from '../theme/ThemeContext';
 import NoteCard from '../components/NoteCard';
 import NoteContextMenu, { ContextMenuViewContext } from '../components/NoteContextMenu';
 import ColorPicker from '../components/ColorPicker';
-import type { Note } from '@jot/shared';
+import type { Note, NoteSort } from '@jot/shared';
 import type { RootStackParamList } from '../navigation/RootNavigator';
+import { NOTE_SORT_OPTIONS, getNoteSortLabel, normalizeNoteSort, sortNotesForDisplay } from '../utils/noteSort';
 
 interface NotesListScreenProps {
   variant?: 'notes' | 'archived' | 'trash' | 'my-todo';
@@ -45,13 +47,15 @@ interface LocalReorderState {
 export default function NotesListScreen({ variant = 'notes', labelId }: NotesListScreenProps) {
   const [searchText, setSearchText] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const { user } = useAuth();
+  const { user, settings, setSettings } = useAuth();
   const { colors } = useTheme();
 
   const [contextMenuNote, setContextMenuNote] = useState<Note | null>(null);
   const [colorPickerNote, setColorPickerNote] = useState<Note | null>(null);
   const [localOrder, setLocalOrder] = useState<LocalReorderState>({ pinned: null, unpinned: null });
+  const [sortMode, setSortMode] = useState<NoteSort>(() => normalizeNoteSort(settings?.note_sort));
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sortRequestIdRef = useRef(0);
   const { refreshUsers } = useUsers();
 
   // Debounce search input by 300ms
@@ -64,6 +68,10 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
   }, [searchText]);
+
+  useEffect(() => {
+    setSortMode(normalizeNoteSort(settings?.note_sort));
+  }, [settings?.note_sort]);
 
   const params = useMemo(() => ({
     archived: variant === 'archived' ? true : undefined,
@@ -92,6 +100,38 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     refetch();
     refreshUsers();
   }, [refetch, refreshUsers]);
+
+  const handleSortChange = useCallback(async (nextSort: NoteSort) => {
+    if (nextSort === sortMode) {
+      return;
+    }
+
+    const previousSort = sortMode;
+    const previousSettings = settings;
+    const requestId = ++sortRequestIdRef.current;
+
+    setSortMode(nextSort);
+    if (previousSettings) {
+      setSettings({ ...previousSettings, note_sort: nextSort });
+    }
+
+    try {
+      const response = await updateMe({ note_sort: nextSort });
+      if (requestId !== sortRequestIdRef.current) {
+        return;
+      }
+      setSettings(response.settings);
+    } catch {
+      if (requestId !== sortRequestIdRef.current) {
+        return;
+      }
+      setSortMode(previousSort);
+      if (previousSettings) {
+        setSettings(previousSettings);
+      }
+      Alert.alert('Error', 'Failed to update sort preference');
+    }
+  }, [setSettings, settings, sortMode]);
 
   const handleNotePress = useCallback(
     (noteId: string) => {
@@ -228,19 +268,21 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     }
   }, [colorPickerNote, updateNote]);
 
+  const sortedNotes = useMemo(() => sortNotesForDisplay(notes ?? EMPTY_NOTES, sortMode), [notes, sortMode]);
+
   const { pinnedNotes, otherNotes } = useMemo(() => {
     const pinned: Note[] = [];
     const other: Note[] = [];
-    for (const n of notes ?? []) {
+    for (const n of sortedNotes) {
       (n.pinned ? pinned : other).push(n);
     }
     return { pinnedNotes: pinned, otherNotes: other };
-  }, [notes]);
+  }, [sortedNotes]);
 
   // Clear local order overrides when server data changes
   useEffect(() => {
     setLocalOrder({ pinned: null, unpinned: null });
-  }, [notes]);
+  }, [notes, sortMode, variant]);
 
   const displayPinned = localOrder.pinned ?? pinnedNotes;
   const displayUnpinned = localOrder.unpinned ?? otherNotes;
@@ -251,7 +293,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   const displayUnpinnedRef = useRef(displayUnpinned);
   displayUnpinnedRef.current = displayUnpinned;
 
-  const hasPinned = variant === 'notes' && pinnedNotes.length > 0;
+  const hasPinned = pinnedNotes.length > 0;
 
   const listEmptyComponent = useMemo(
     () =>
@@ -432,8 +474,9 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     );
   }
 
-  // Drag-and-drop is only available in the notes variant (not archived/trash/my-todo)
-  const isDraggable = variant === 'notes';
+  // Drag-and-drop is only available in the notes variant while manual sorting is active.
+  const isDraggable = variant === 'notes' && sortMode === 'manual';
+  const activeSortLabel = getNoteSortLabel(sortMode);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -466,8 +509,67 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
         )}
       </View>
 
+      {/* Sort preference is global across notes, archived, trash, labels, and my-todo views. */}
+      <View style={styles.sortControlsContainer}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.sortControlsContent}
+          testID="sort-controls"
+        >
+          {NOTE_SORT_OPTIONS.map((option) => {
+            const isActive = sortMode === option.value;
+            return (
+              <TouchableOpacity
+                key={option.value}
+                style={[
+                  styles.sortChip,
+                  {
+                    borderColor: isActive ? colors.primary : colors.border,
+                    backgroundColor: isActive ? colors.primaryLight : colors.surface,
+                  },
+                ]}
+                onPress={() => void handleSortChange(option.value)}
+                testID={`sort-chip-${option.value}`}
+                accessibilityRole="button"
+                accessibilityLabel={`Sort by ${option.label}`}
+                accessibilityState={{ selected: isActive }}
+              >
+                <Text
+                  style={[
+                    styles.sortChipText,
+                    { color: isActive ? colors.primary : colors.textSecondary },
+                    isActive && styles.sortChipTextActive,
+                  ]}
+                >
+                  {option.label}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
+
+      {sortMode !== 'manual' && (
+        <View
+          style={[
+            styles.sortNotice,
+            {
+              backgroundColor: colors.primaryLight,
+              borderColor: colors.primary,
+            },
+          ]}
+          testID="sort-disabled-notice"
+        >
+          <Ionicons name="swap-vertical" size={16} color={colors.primary} style={styles.sortNoticeIcon} />
+          <Text style={[styles.sortNoticeText, { color: colors.textSecondary }]}>
+            Manual reorder is off. Notes are sorted by {activeSortLabel}, so drag-and-drop is unavailable.
+          </Text>
+        </View>
+      )}
+
       {/* Notes list */}
-      {isDraggable && hasPinned ? (
+      {hasPinned ? (
         <ScrollView
           refreshControl={
             <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={colors.primary} />
@@ -478,27 +580,51 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
           {displayPinned.length > 0 && (
             <>
               <Text style={[styles.sectionHeader, { color: colors.textMuted }]}>Pinned</Text>
-              <DraggableFlatList
-                data={displayPinned}
-                keyExtractor={(item) => item.id}
-                renderItem={renderDraggableNoteCard}
-                onDragBegin={handleDragStart}
-                onDragEnd={handleDragEndPinned}
-                scrollEnabled={false}
-              />
+              {isDraggable ? (
+                <DraggableFlatList
+                  data={displayPinned}
+                  keyExtractor={(item) => item.id}
+                  renderItem={renderDraggableNoteCard}
+                  onDragBegin={handleDragStart}
+                  onDragEnd={handleDragEndPinned}
+                  scrollEnabled={false}
+                  testID="pinned-draggable-list"
+                />
+              ) : (
+                <FlatList
+                  data={displayPinned}
+                  keyExtractor={(item) => item.id}
+                  renderItem={renderNonDraggableNoteCard}
+                  scrollEnabled={false}
+                  testID="pinned-static-list"
+                />
+              )}
             </>
           )}
           {displayUnpinned.length > 0 && (
             <>
-              <Text style={[styles.sectionHeader, { color: colors.textMuted }]}>Others</Text>
-              <DraggableFlatList
-                data={displayUnpinned}
-                keyExtractor={(item) => item.id}
-                renderItem={renderDraggableNoteCard}
-                onDragBegin={handleDragStart}
-                onDragEnd={handleDragEndUnpinned}
-                scrollEnabled={false}
-              />
+              {displayPinned.length > 0 && (
+                <Text style={[styles.sectionHeader, { color: colors.textMuted }]}>Others</Text>
+              )}
+              {isDraggable ? (
+                <DraggableFlatList
+                  data={displayUnpinned}
+                  keyExtractor={(item) => item.id}
+                  renderItem={renderDraggableNoteCard}
+                  onDragBegin={handleDragStart}
+                  onDragEnd={handleDragEndUnpinned}
+                  scrollEnabled={false}
+                  testID="unpinned-draggable-list"
+                />
+              ) : (
+                <FlatList
+                  data={displayUnpinned}
+                  keyExtractor={(item) => item.id}
+                  renderItem={renderNonDraggableNoteCard}
+                  scrollEnabled={false}
+                  testID="unpinned-static-list"
+                />
+              )}
             </>
           )}
           {displayPinned.length === 0 && displayUnpinned.length === 0 && listEmptyComponent}
@@ -519,7 +645,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
         />
       ) : (
         <FlatList
-          data={notes ?? EMPTY_NOTES}
+          data={displayUnpinned}
           keyExtractor={(item) => item.id}
           renderItem={renderNonDraggableNoteCard}
           refreshControl={
@@ -642,6 +768,46 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
     paddingVertical: 0,
+  },
+  sortControlsContainer: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+  },
+  sortControlsContent: {
+    gap: 8,
+    paddingRight: 8,
+  },
+  sortChip: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  sortChipText: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  sortChipTextActive: {
+    fontWeight: '600',
+  },
+  sortNotice: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginHorizontal: 16,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  sortNoticeIcon: {
+    marginRight: 8,
+    marginTop: 1,
+  },
+  sortNoticeText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
   },
   sectionHeader: {
     fontSize: 12,
