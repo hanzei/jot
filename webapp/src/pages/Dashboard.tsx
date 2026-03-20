@@ -190,6 +190,10 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   }, []);
 
   const openNoteFromUrl = useCallback((noteId: string) => {
+    openNoteIdRef.current = null;
+    setEditingNote(null);
+    setIsModalOpen(false);
+
     openNoteIdRef.current = noteId;
     returnPathRef.current = window.history.state?.returnTo ?? '/';
     notes.getById(noteId)
@@ -210,11 +214,21 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   }, []);
 
   useEffect(() => {
-    if (noteIdParam) {
-      openNoteFromUrl(noteIdParam);
+    if (!noteIdParam) {
+      if (openNoteIdRef.current) {
+        openNoteIdRef.current = null;
+        setIsModalOpen(false);
+        setEditingNote(null);
+      }
+      return;
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+
+    if (openNoteIdRef.current === noteIdParam) {
+      return;
+    }
+
+    openNoteFromUrl(noteIdParam);
+  }, [noteIdParam, openNoteFromUrl]);
 
   useEffect(() => {
     const handlePopState = () => {
@@ -249,7 +263,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     }
 
     loadNotes();
-    if (event.type === 'note_updated') {
+    if (event.type === 'note_created' || event.type === 'note_updated') {
       loadLabels();
     }
   }, [editingNote, sharingNote, loadNotes, loadLabels, user?.id, restoreReturnUrl]);
@@ -397,6 +411,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
 
   const handleNoteRefresh = () => {
     loadNotes();
+    loadLabels();
   };
 
   const handleDeleteNote = async (noteId: string) => {
