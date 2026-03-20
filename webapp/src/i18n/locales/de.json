@@ -171,6 +171,7 @@
     "escapeDescription": "Aktives Modal oder Dialog schließen"
   },
   "admin": {
+    "pageHeading": "Admin",
     "title": "Benutzerverwaltung",
     "tabAdmin": "Admin",
     "createUser": "Benutzer erstellen",
@@ -191,6 +192,7 @@
     "creating": "Erstellen...",
     "createUserButton": "Benutzer erstellen",
     "failedLoadUsers": "Benutzer konnten nicht geladen werden",
+    "failedLoadStats": "Statistiken konnten nicht geladen werden",
     "failedCreateUser": "Benutzer konnte nicht erstellt werden",
     "userIdCreated": "ID: {{id}} • Erstellt: {{date}}",
     "userCreated": "Erstellt: {{date}}",
@@ -207,7 +209,32 @@
     "deleting": "Löschen...",
     "deleteUserConfirm": "Soll der Benutzer \"{{username}}\" wirklich dauerhaft gelöscht werden? Dabei werden auch alle Notizen des Benutzers gelöscht.",
     "failedDeleteUser": "Benutzer konnte nicht gelöscht werden.",
-    "deleteUserLabel": "Benutzer {{username}} löschen"
+    "deleteUserLabel": "Benutzer {{username}} löschen",
+    "stats": {
+      "title": "Instanzübersicht",
+      "description": "Live-Metriken für diesen Jot-Server.",
+      "cards": {
+        "users": "Benutzer",
+        "notes": "Notizen",
+        "sharing": "Freigaben",
+        "labels": "Labels",
+        "todoItems": "Aufgaben",
+        "storage": "Speicher"
+      },
+      "metrics": {
+        "text": "Text",
+        "todo": "Aufgaben",
+        "archived": "Archiviert",
+        "trashed": "Papierkorb",
+        "sharedNotes": "Geteilte Notizen",
+        "shareLinks": "Freigabelinks",
+        "totalLabels": "Labels gesamt",
+        "noteAssociations": "Notiz-Verknüpfungen",
+        "completed": "Erledigt",
+        "assigned": "Zugewiesen",
+        "databaseSize": "Datenbankgröße"
+      }
+    }
   },
   "note": {
     "share": "Teilen",
