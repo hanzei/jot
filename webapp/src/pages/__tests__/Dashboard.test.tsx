@@ -664,6 +664,65 @@ describe('Dashboard', () => {
       })
     })
 
+    it('clears the current modal before loading a different permalink note', async () => {
+      const user = userEvent.setup()
+      const currentNote = createMockNote({ id: 'abc123', title: 'Current Note' })
+      let resolveNextNote: ((note: Note) => void) | undefined
+
+      vi.mocked(notes.getById)
+        .mockResolvedValueOnce(currentNote)
+        .mockImplementationOnce(() => new Promise<Note>((resolve) => {
+          resolveNextNote = resolve
+        }))
+
+      const NavigateToNextNoteButton = () => {
+        const navigate = useNavigate()
+
+        return (
+          <button onClick={() => navigate('/notes/next-note')} data-testid="navigate-to-next-note">
+            Open next permalink
+          </button>
+        )
+      }
+
+      render(
+        <MemoryRouter initialEntries={['/notes/abc123']}>
+          <NavigateToNextNoteButton />
+          <ToastProvider>
+            <Routes>
+              <Route element={<Dashboard onLogout={vi.fn()} />}>
+                <Route index element={null} />
+                <Route path="notes/:noteId" element={null} />
+              </Route>
+            </Routes>
+          </ToastProvider>
+        </MemoryRouter>
+      )
+
+      await waitFor(() => {
+        expect(notes.getById).toHaveBeenCalledWith('abc123')
+        expect(screen.getByTestId('note-modal')).toBeInTheDocument()
+      })
+
+      await user.click(screen.getByTestId('navigate-to-next-note'))
+
+      await waitFor(() => {
+        expect(notes.getById).toHaveBeenNthCalledWith(2, 'next-note')
+      })
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('note-modal')).not.toBeInTheDocument()
+      })
+
+      await act(async () => {
+        resolveNextNote?.(createMockNote({ id: 'next-note', title: 'Next Note' }))
+      })
+
+      await waitFor(() => {
+        expect(screen.getByTestId('note-modal')).toBeInTheDocument()
+      })
+    })
+
     it('redirects to dashboard when permalink note is not found', async () => {
       vi.mocked(notes.getById).mockRejectedValue(new Error('Not found'))
       const replaceStateSpy = vi.spyOn(window.history, 'replaceState')
