@@ -142,6 +142,27 @@
     "loading": "Laden...",
     "failedLoad": "Serverinformationen konnten nicht geladen werden."
   },
+  "keyboardShortcuts": {
+    "title": "Tastenkombinationen",
+    "shortcutColumn": "Tastenkürzel",
+    "descriptionColumn": "Beschreibung",
+    "focusSearchKey": "Strg + F",
+    "focusSearchDescription": "Suchleiste fokussieren",
+    "newNoteKey": "N",
+    "newNoteDescription": "Neue Notiz öffnen",
+    "notesKey": "D",
+    "notesDescription": "Notizansicht öffnen",
+    "myTodoKey": "T",
+    "myTodoDescription": "Meine-Aufgaben-Ansicht öffnen",
+    "archiveKey": "A",
+    "archiveDescription": "Archivansicht öffnen",
+    "binKey": "B",
+    "binDescription": "Papierkorb öffnen",
+    "helpKey": "?",
+    "helpDescription": "Hilfe zu Tastenkombinationen öffnen",
+    "escapeKey": "Esc",
+    "escapeDescription": "Aktives Modal oder Dialog schließen"
+  },
   "admin": {
     "title": "Benutzerverwaltung",
     "tabAdmin": "Admin",

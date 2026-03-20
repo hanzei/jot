@@ -142,6 +142,27 @@
     "loading": "Loading...",
     "failedLoad": "Failed to load server info."
   },
+  "keyboardShortcuts": {
+    "title": "Keyboard shortcuts",
+    "shortcutColumn": "Shortcut",
+    "descriptionColumn": "Description",
+    "focusSearchKey": "Ctrl + F",
+    "focusSearchDescription": "Focus the search bar",
+    "newNoteKey": "N",
+    "newNoteDescription": "Open a new note",
+    "notesKey": "D",
+    "notesDescription": "Open notes view",
+    "myTodoKey": "T",
+    "myTodoDescription": "Open my todo view",
+    "archiveKey": "A",
+    "archiveDescription": "Open archive view",
+    "binKey": "B",
+    "binDescription": "Open bin view",
+    "helpKey": "?",
+    "helpDescription": "Open keyboard shortcuts help",
+    "escapeKey": "Esc",
+    "escapeDescription": "Close the active modal or dialog"
+  },
   "admin": {
     "title": "User Management",
     "tabAdmin": "Admin",
