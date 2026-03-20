@@ -134,6 +134,20 @@ export class DashboardPage {
     await confirmDialog.getByRole('button', { name: 'Delete forever' }).click();
   }
 
+  async emptyTrash() {
+    await this.page.getByRole('button', { name: 'Empty Trash' }).click();
+    const confirmDialog = this.page.getByRole('dialog').last();
+    await confirmDialog.getByRole('button', { name: 'Empty Trash' }).click();
+  }
+
+  async expectEmptyTrashButtonVisible() {
+    await expect(this.page.getByRole('button', { name: 'Empty Trash' })).toBeVisible();
+  }
+
+  async expectEmptyTrashButtonHidden() {
+    await expect(this.page.getByRole('button', { name: 'Empty Trash' })).toHaveCount(0);
+  }
+
   async pinNote(title: string) {
     await this.openNoteMenu(title);
     await this.page.getByRole('menuitem', { name: 'Pin' }).click();

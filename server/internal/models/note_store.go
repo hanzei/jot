@@ -548,6 +548,85 @@ func (s *NoteStore) Delete(id string, userID string) error {
 	return tx.Commit()
 }
 
+func buildInClauseArgs(ids []string) (string, []any) {
+	placeholders := slices.Repeat([]string{"?"}, len(ids))
+	args := make([]any, len(ids))
+	for i, id := range ids {
+		args[i] = id
+	}
+	return strings.Join(placeholders, ","), args
+}
+
+func (s *NoteStore) getTrashedOwnedNoteIDsTx(tx *sql.Tx, userID string) ([]string, error) {
+	rows, err := tx.Query(`SELECT id FROM notes WHERE user_id = ? AND deleted_at IS NOT NULL ORDER BY deleted_at ASC, id ASC`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query trashed notes: %w", err)
+	}
+
+	scanString := func(rows *sql.Rows) (string, error) {
+		var id string
+		return id, rows.Scan(&id)
+	}
+	ids, err := collectRows(rows, scanString)
+	if err != nil {
+		return nil, fmt.Errorf("failed to scan trashed note IDs: %w", err)
+	}
+	return ids, nil
+}
+
+func (s *NoteStore) getNoteAudiencesTx(tx *sql.Tx, noteIDs []string) (map[string][]string, error) {
+	if len(noteIDs) == 0 {
+		return map[string][]string{}, nil
+	}
+
+	placeholders, args := buildInClauseArgs(noteIDs)
+	queryArgs := make([]any, 0, len(args)*2)
+	queryArgs = append(queryArgs, args...)
+	queryArgs = append(queryArgs, args...)
+
+	query := `SELECT id AS note_id, user_id FROM notes WHERE id IN (` + placeholders + `)
+		 UNION
+		 SELECT note_id, shared_with_user_id FROM note_shares WHERE note_id IN (` + placeholders + `)` // #nosec G202 -- only generated "?" placeholders are concatenated
+	rows, err := tx.Query(query, queryArgs...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to query note audiences: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	audiences := make(map[string][]string, len(noteIDs))
+	for rows.Next() {
+		var noteID string
+		var audienceID string
+		if err = rows.Scan(&noteID, &audienceID); err != nil {
+			return nil, fmt.Errorf("failed to scan note audience: %w", err)
+		}
+		audiences[noteID] = append(audiences[noteID], audienceID)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, fmt.Errorf("failed while reading note audiences: %w", err)
+	}
+	return audiences, nil
+}
+
+func deleteNoteDependenciesTx(tx *sql.Tx, noteIDs []string) error {
+	if len(noteIDs) == 0 {
+		return nil
+	}
+
+	placeholders, args := buildInClauseArgs(noteIDs)
+	for _, q := range []string{
+		`DELETE FROM note_items WHERE note_id IN (` + placeholders + `)`,
+		`DELETE FROM note_labels WHERE note_id IN (` + placeholders + `)`,
+		`DELETE FROM note_shares WHERE note_id IN (` + placeholders + `)`,
+	} {
+		if _, err := tx.Exec(q, args...); err != nil {
+			return fmt.Errorf("failed to delete dependent rows: %w", err)
+		}
+	}
+
+	return nil
+}
+
 // MoveToTrash soft-deletes a note by setting deleted_at to the current time.
 // The note is unpinned and unarchived so it doesn't appear in those filtered views.
 func (s *NoteStore) MoveToTrash(id string, userID string) error {
@@ -638,14 +717,8 @@ func (s *NoteStore) DeleteFromTrash(id string, userID string) error {
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	for _, q := range []string{
-		`DELETE FROM note_items WHERE note_id = ?`,
-		`DELETE FROM note_labels WHERE note_id = ?`,
-		`DELETE FROM note_shares WHERE note_id = ?`,
-	} {
-		if _, err = tx.Exec(q, id); err != nil {
-			return fmt.Errorf("failed to delete dependent rows: %w", err)
-		}
+	if err = deleteNoteDependenciesTx(tx, []string{id}); err != nil {
+		return err
 	}
 
 	result, err := tx.Exec(
@@ -665,6 +738,70 @@ func (s *NoteStore) DeleteFromTrash(id string, userID string) error {
 	}
 
 	return tx.Commit()
+}
+
+// EmptyTrash permanently removes all notes the user currently has in the trash.
+// It returns the deleted note IDs and their audiences so handlers can publish
+// note_deleted SSE events after the transaction commits.
+func (s *NoteStore) EmptyTrash(userID string) ([]DeletedNoteAudience, error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	noteIDs, err := s.getTrashedOwnedNoteIDsTx(tx, userID)
+	if err != nil {
+		return nil, err
+	}
+	if len(noteIDs) == 0 {
+		if err = tx.Commit(); err != nil {
+			return nil, fmt.Errorf("failed to commit empty trash transaction: %w", err)
+		}
+		return []DeletedNoteAudience{}, nil
+	}
+
+	audienceMap, err := s.getNoteAudiencesTx(tx, noteIDs)
+	if err != nil {
+		return nil, err
+	}
+
+	if err = deleteNoteDependenciesTx(tx, noteIDs); err != nil {
+		return nil, err
+	}
+
+	placeholders, args := buildInClauseArgs(noteIDs)
+	deleteArgs := make([]any, 0, len(args)+1)
+	deleteArgs = append(deleteArgs, userID)
+	deleteArgs = append(deleteArgs, args...)
+
+	deleteQuery := `DELETE FROM notes WHERE user_id = ? AND deleted_at IS NOT NULL AND id IN (` + placeholders + `)` // #nosec G202 -- only generated "?" placeholders are concatenated
+	result, err := tx.Exec(deleteQuery, deleteArgs...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to empty trash: %w", err)
+	}
+
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return nil, fmt.Errorf("failed to get deleted note count: %w", err)
+	}
+	if rowsAffected != int64(len(noteIDs)) {
+		return nil, fmt.Errorf("expected to delete %d trashed notes, deleted %d", len(noteIDs), rowsAffected)
+	}
+
+	deletedNotes := make([]DeletedNoteAudience, 0, len(noteIDs))
+	for _, noteID := range noteIDs {
+		deletedNotes = append(deletedNotes, DeletedNoteAudience{
+			NoteID:      noteID,
+			AudienceIDs: audienceMap[noteID],
+		})
+	}
+
+	if err = tx.Commit(); err != nil {
+		return nil, fmt.Errorf("failed to commit empty trash transaction: %w", err)
+	}
+
+	return deletedNotes, nil
 }
 
 // PurgeOldTrashedNotes permanently deletes all notes that have been in the trash

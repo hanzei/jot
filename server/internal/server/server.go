@@ -73,6 +73,7 @@ func New(cfg *config.Config) (*Server, error) {
 	userStore := models.NewUserStore(db.DB)
 	noteStore := models.NewNoteStore(db.DB)
 	labelStore := models.NewLabelStore(db.DB)
+	adminStatsStore := models.NewAdminStatsStore(db.DB)
 	sessionStore := models.NewSessionStore(db.DB)
 	userSettingsStore := models.NewUserSettingsStore(db.DB)
 
@@ -86,7 +87,7 @@ func New(cfg *config.Config) (*Server, error) {
 	notesHandler := handlers.NewNotesHandler(noteStore, userStore, labelStore, hub)
 	labelsHandler := handlers.NewLabelsHandler(noteStore, labelStore, hub)
 	eventsHandler := handlers.NewEventsHandler(hub)
-	adminHandler := handlers.NewAdminHandler(userStore, noteStore)
+	adminHandler := handlers.NewAdminHandler(userStore, noteStore, adminStatsStore, cfg.DBPath)
 	sessionsHandler := handlers.NewSessionsHandler(sessionStore)
 
 	s := &Server{
@@ -159,6 +160,7 @@ func (s *Server) setupRoutes() error {
 
 			r.Get("/notes", s.wrapHandler(s.notesHandler.GetNotes))
 			r.Post("/notes", s.wrapHandler(s.notesHandler.CreateNote))
+			r.Delete("/notes/trash", s.wrapHandler(s.notesHandler.EmptyTrash))
 			r.Post("/notes/reorder", s.wrapHandler(s.notesHandler.ReorderNotes))
 			r.Post("/notes/import", s.wrapHandler(s.notesHandler.ImportNotes))
 			r.Get("/notes/{id}", s.wrapHandler(s.notesHandler.GetNote))
@@ -189,6 +191,7 @@ func (s *Server) setupRoutes() error {
 			r.Use(s.sessionService.AuthMiddleware)
 			r.Use(auth.AdminRequired)
 
+			r.Get("/admin/stats", s.wrapHandler(s.adminHandler.GetStats))
 			r.Get("/admin/users", s.wrapHandler(s.adminHandler.GetUsers))
 			r.Post("/admin/users", s.wrapHandler(s.adminHandler.CreateUser))
 			r.Put("/admin/users/{id}/role", s.wrapHandler(s.adminHandler.UpdateUserRole))
