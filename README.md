@@ -11,7 +11,7 @@ A self-hosted note-taking application built with Go backend and React frontend. 
 - **Self-hosted**: Complete control over your data
 - **SQLite Database**: Lightweight, file-based database
 - **Admin Support**: First registered user becomes admin
-- **Admin Instance Overview**: Admin page shows live usage metrics like users, notes, sharing, labels, todo items, DB size, and uptime
+- **Admin Instance Overview**: Admin page shows live usage metrics like users, notes, sharing, labels, todo items, and DB size
 - **Single Binary**: Frontend and backend served from one Go binary
 - **Sliding Sessions**: 30-day sessions auto-extend when less than 7 days remain
 

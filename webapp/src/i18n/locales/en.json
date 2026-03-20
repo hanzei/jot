@@ -164,6 +164,7 @@
     "escapeDescription": "Close the active modal or dialog"
   },
   "admin": {
+    "pageHeading": "Admin",
     "title": "User Management",
     "tabAdmin": "Admin",
     "createUser": "Create User",
@@ -211,7 +212,7 @@
         "sharing": "Sharing",
         "labels": "Labels",
         "todoItems": "Todo Items",
-        "system": "System"
+        "storage": "Storage"
       },
       "metrics": {
         "text": "Text",
@@ -224,16 +225,8 @@
         "noteAssociations": "Note links",
         "completed": "Completed",
         "assigned": "Assigned",
-        "databaseSize": "Database size",
-        "uptime": "Uptime"
-      },
-      "lessThanMinute": "Less than a minute",
-      "day_one": "{{count}} day",
-      "day_other": "{{count}} days",
-      "hour_one": "{{count}} hour",
-      "hour_other": "{{count}} hours",
-      "minute_one": "{{count}} minute",
-      "minute_other": "{{count}} minutes"
+        "databaseSize": "Database size"
+      }
     }
   },
   "note": {

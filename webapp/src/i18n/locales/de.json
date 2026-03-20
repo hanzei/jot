@@ -164,6 +164,7 @@
     "escapeDescription": "Aktives Modal oder Dialog schließen"
   },
   "admin": {
+    "pageHeading": "Admin",
     "title": "Benutzerverwaltung",
     "tabAdmin": "Admin",
     "createUser": "Benutzer erstellen",
@@ -211,7 +212,7 @@
         "sharing": "Freigaben",
         "labels": "Labels",
         "todoItems": "Aufgaben",
-        "system": "System"
+        "storage": "Speicher"
       },
       "metrics": {
         "text": "Text",
@@ -224,16 +225,8 @@
         "noteAssociations": "Notiz-Verknüpfungen",
         "completed": "Erledigt",
         "assigned": "Zugewiesen",
-        "databaseSize": "Datenbankgröße",
-        "uptime": "Laufzeit"
-      },
-      "lessThanMinute": "Weniger als eine Minute",
-      "day_one": "{{count}} Tag",
-      "day_other": "{{count}} Tage",
-      "hour_one": "{{count}} Stunde",
-      "hour_other": "{{count}} Stunden",
-      "minute_one": "{{count}} Minute",
-      "minute_other": "{{count}} Minuten"
+        "databaseSize": "Datenbankgröße"
+      }
     }
   },
   "note": {

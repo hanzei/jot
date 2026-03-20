@@ -636,7 +636,6 @@ describe('API Module', () => {
           labels: { total: 2, note_associations: 3 },
           todo_items: { total: 3, completed: 1, assigned: 2 },
           storage: { database_size_bytes: 2048 },
-          system: { uptime_seconds: 3600 },
         }
         mockGet.mockResolvedValue({ data: mockResponse })
 

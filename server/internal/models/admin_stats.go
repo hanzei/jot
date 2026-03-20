@@ -37,10 +37,6 @@ type AdminStorageStats struct {
 	DatabaseSizeBytes int64 `json:"database_size_bytes"`
 }
 
-type AdminSystemStats struct {
-	UptimeSeconds int64 `json:"uptime_seconds"`
-}
-
 type AdminStats struct {
 	Users     AdminUserStats     `json:"users"`
 	Notes     AdminNoteStats     `json:"notes"`
@@ -48,7 +44,6 @@ type AdminStats struct {
 	Labels    AdminLabelStats    `json:"labels"`
 	TodoItems AdminTodoItemStats `json:"todo_items"`
 	Storage   AdminStorageStats  `json:"storage"`
-	System    AdminSystemStats   `json:"system"`
 }
 
 type AdminStatsStore struct {

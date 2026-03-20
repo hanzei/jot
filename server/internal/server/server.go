@@ -87,7 +87,7 @@ func New(cfg *config.Config) (*Server, error) {
 	notesHandler := handlers.NewNotesHandler(noteStore, userStore, labelStore, hub)
 	labelsHandler := handlers.NewLabelsHandler(noteStore, labelStore, hub)
 	eventsHandler := handlers.NewEventsHandler(hub)
-	adminHandler := handlers.NewAdminHandler(userStore, noteStore, adminStatsStore, cfg.DBPath, time.Now())
+	adminHandler := handlers.NewAdminHandler(userStore, noteStore, adminStatsStore, cfg.DBPath)
 	sessionsHandler := handlers.NewSessionsHandler(sessionStore)
 
 	s := &Server{

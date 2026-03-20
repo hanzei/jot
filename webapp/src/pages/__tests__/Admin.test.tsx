@@ -78,7 +78,6 @@ const mockStats: AdminStatsResponse = {
   labels: { total: 2, note_associations: 3 },
   todo_items: { total: 3, completed: 1, assigned: 2 },
   storage: { database_size_bytes: 4_398_047 },
-  system: { uptime_seconds: 190_800 },
 }
 
 const renderAdmin = (onLogout = vi.fn()) => {
@@ -120,13 +119,14 @@ describe('Admin', () => {
         expect(screen.getByTestId('admin-stats-users-total')).toHaveTextContent('3')
       })
 
+      expect(screen.getByRole('heading', { name: 'Admin' })).toBeInTheDocument()
       expect(screen.getByText('Instance Overview')).toBeInTheDocument()
+      expect(screen.getByRole('heading', { name: 'User Management' })).toBeInTheDocument()
       expect(screen.getByTestId('admin-stats-notes-total')).toHaveTextContent('4')
       expect(screen.getByTestId('admin-stats-shared-notes')).toHaveTextContent('1')
       expect(screen.getByTestId('admin-stats-labels-total')).toHaveTextContent('2')
       expect(screen.getByTestId('admin-stats-todo-items-total')).toHaveTextContent('3')
       expect(screen.getByTestId('admin-stats-database-size')).toHaveTextContent('4.2 MB')
-      expect(screen.getByTestId('admin-stats-uptime')).toHaveTextContent('2 days, 5 hours')
     })
 
     it('shows loading placeholders while stats are fetching', async () => {

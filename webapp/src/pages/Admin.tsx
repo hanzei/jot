@@ -121,29 +121,6 @@ const Admin = ({ onLogout }: AdminProps) => {
     return `${new Intl.NumberFormat(i18n.resolvedLanguage, { maximumFractionDigits }).format(size)} ${units[unitIndex]}`;
   }, [i18n.resolvedLanguage]);
 
-  const formatUptime = useCallback((uptimeSeconds: number) => {
-    if (uptimeSeconds < 60) {
-      return t('admin.stats.lessThanMinute');
-    }
-
-    const days = Math.floor(uptimeSeconds / 86400);
-    const hours = Math.floor((uptimeSeconds % 86400) / 3600);
-    const minutes = Math.floor((uptimeSeconds % 3600) / 60);
-    const parts: string[] = [];
-
-    if (days > 0) {
-      parts.push(t('admin.stats.day', { count: days }));
-    }
-    if (hours > 0) {
-      parts.push(t('admin.stats.hour', { count: hours }));
-    }
-    if (days === 0 && minutes > 0) {
-      parts.push(t('admin.stats.minute', { count: minutes }));
-    }
-
-    return parts.slice(0, 2).join(', ');
-  }, [t]);
-
   const fetchUsers = useCallback(async () => {
     try {
       setUsersLoading(true);
@@ -342,20 +319,7 @@ const Admin = ({ onLogout }: AdminProps) => {
       <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         <div className="px-4 py-6 sm:px-0">
           <div className="mb-6">
-            <div className="flex justify-between items-center">
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{t('admin.title')}</h1>
-              <button
-                onClick={() => {
-                  setShowCreateForm(!showCreateForm);
-                  setCreateError('');
-                  setCreateTouched({ username: false, password: false });
-                  setShowCreateValidationErrors(false);
-                }}
-                className="bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium"
-              >
-                {showCreateForm ? t('admin.cancel') : t('admin.createUser')}
-              </button>
-            </div>
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{t('admin.pageHeading')}</h1>
           </div>
 
           {showCreateForm && (
@@ -530,17 +494,32 @@ const Admin = ({ onLogout }: AdminProps) => {
                   </StatCard>
 
                   <StatCard
-                    title={t('admin.stats.cards.system')}
+                    title={t('admin.stats.cards.storage')}
                     value={formatBytes(stats.storage.database_size_bytes)}
                     valueTestId="admin-stats-database-size"
                   >
                     <StatLine label={t('admin.stats.metrics.databaseSize')} value={formatBytes(stats.storage.database_size_bytes)} />
-                    <StatLine label={t('admin.stats.metrics.uptime')} value={formatUptime(stats.system.uptime_seconds)} valueTestId="admin-stats-uptime" />
                   </StatCard>
                 </>
               ) : null}
             </div>
           </section>
+
+          <section className="mb-6">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-lg font-medium text-gray-900 dark:text-white">{t('admin.title')}</h2>
+              <button
+                onClick={() => {
+                  setShowCreateForm(!showCreateForm);
+                  setCreateError('');
+                  setCreateTouched({ username: false, password: false });
+                  setShowCreateValidationErrors(false);
+                }}
+                className="bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium"
+              >
+                {showCreateForm ? t('admin.cancel') : t('admin.createUser')}
+              </button>
+            </div>
 
           <div className="bg-white dark:bg-slate-800 shadow overflow-hidden sm:rounded-md border border-gray-200 dark:border-slate-700">
             {usersLoading ? (
@@ -615,6 +594,7 @@ const Admin = ({ onLogout }: AdminProps) => {
               </ul>
             )}
           </div>
+          </section>
 
           {(!users || users.length === 0) && !usersLoading && (
             <div className="text-center py-12">

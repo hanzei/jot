@@ -189,7 +189,6 @@ type AdminStatsResponse struct {
 	Labels    AdminLabelStats    `json:"labels"`
 	TodoItems AdminTodoItemStats `json:"todo_items"`
 	Storage   AdminStorageStats  `json:"storage"`
-	System    AdminSystemStats   `json:"system"`
 }
 
 type AdminUserStats struct {
@@ -222,10 +221,6 @@ type AdminTodoItemStats struct {
 
 type AdminStorageStats struct {
 	DatabaseSizeBytes int64 `json:"database_size_bytes"`
-}
-
-type AdminSystemStats struct {
-	UptimeSeconds int64 `json:"uptime_seconds"`
 }
 
 // SessionInfo is a single active session as returned by the sessions API.

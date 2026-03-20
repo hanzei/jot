@@ -6,7 +6,6 @@ import (
 	"errors"
 	"net/http"
 	"os"
-	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/hanzei/jot/server/internal/auth"
@@ -18,7 +17,6 @@ type AdminHandler struct {
 	noteStore  *models.NoteStore
 	statsStore *models.AdminStatsStore
 	dbPath     string
-	startedAt  time.Time
 }
 
 func NewAdminHandler(
@@ -26,14 +24,12 @@ func NewAdminHandler(
 	noteStore *models.NoteStore,
 	statsStore *models.AdminStatsStore,
 	dbPath string,
-	startedAt time.Time,
 ) *AdminHandler {
 	return &AdminHandler{
 		userStore:  userStore,
 		noteStore:  noteStore,
 		statsStore: statsStore,
 		dbPath:     dbPath,
-		startedAt:  startedAt,
 	}
 }
 
@@ -70,7 +66,6 @@ func (h *AdminHandler) GetStats(w http.ResponseWriter, r *http.Request) (int, an
 	}
 
 	stats.Storage.DatabaseSizeBytes = fileInfo.Size()
-	stats.System.UptimeSeconds = int64(time.Since(h.startedAt).Seconds())
 
 	return http.StatusOK, stats, nil
 }

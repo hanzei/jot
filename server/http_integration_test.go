@@ -535,7 +535,6 @@ func TestAdminStatsEndpoint(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, fileInfo.Size(), stats.Storage.DatabaseSizeBytes)
 		assert.Positive(t, stats.Storage.DatabaseSizeBytes)
-		assert.GreaterOrEqual(t, stats.System.UptimeSeconds, int64(0))
 	})
 
 	t.Run("returns 403 for non-admin users", func(t *testing.T) {

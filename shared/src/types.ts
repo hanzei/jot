@@ -171,10 +171,6 @@ export interface AdminStorageStats {
   database_size_bytes: number;
 }
 
-export interface AdminSystemStats {
-  uptime_seconds: number;
-}
-
 export interface AdminStatsResponse {
   users: AdminUserStats;
   notes: AdminNoteStats;
@@ -182,7 +178,6 @@ export interface AdminStatsResponse {
   labels: AdminLabelStats;
   todo_items: AdminTodoItemStats;
   storage: AdminStorageStats;
-  system: AdminSystemStats;
 }
 
 export interface UpdateMeRequest {
