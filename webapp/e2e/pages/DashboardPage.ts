@@ -3,6 +3,11 @@ import { Page, expect, Locator } from '@playwright/test';
 export class DashboardPage {
   constructor(private page: Page) {}
 
+  private async closeActiveDialog() {
+    const activeDialog = this.page.getByRole('dialog').last();
+    await activeDialog.getByRole('button', { name: 'Close' }).click();
+  }
+
   async goto() {
     await this.page.goto('/');
   }
@@ -18,7 +23,7 @@ export class DashboardPage {
       await this.page.fill('textarea[placeholder="Take a note..."]', content);
     }
     // Close the modal to save (auto-save on close when there are changes)
-    await this.page.click('button[aria-label="Close"]');
+    await this.closeActiveDialog();
     await expect(this.page.locator('[data-testid="note-card"]').filter({ hasText: title })).toBeVisible();
   }
 
@@ -43,7 +48,7 @@ export class DashboardPage {
       await this.page.locator('input[placeholder="Note title..."]').click();
     }
 
-    await this.page.click('button[aria-label="Close"]');
+    await this.closeActiveDialog();
     await expect(this.page.locator('[data-testid="note-card"]').filter({ hasText: title })).toBeVisible();
   }
 
@@ -54,7 +59,8 @@ export class DashboardPage {
     for (const item of items) {
       await this.addTodoItem(item);
     }
-    await this.page.click('button[aria-label="Close"]');
+    await this.closeActiveDialog();
+    await expect(this.page.getByRole('dialog')).toHaveCount(0);
     await expect(this.page.locator('[data-testid="note-card"]').filter({ hasText: title })).toBeVisible();
   }
 
@@ -63,8 +69,11 @@ export class DashboardPage {
   }
 
   async addTodoItem(text: string) {
+    const inputs = this.page.locator('[data-testid="todo-item-input"]');
+    const existingCount = await inputs.count();
     await this.page.click('button:has-text("Add item")');
-    await this.page.locator('[data-testid="todo-item-input"]').last().fill(text);
+    await expect(inputs).toHaveCount(existingCount + 1);
+    await inputs.nth(existingCount).fill(text);
   }
 
   todoItemInput(index: number): Locator {
@@ -278,7 +287,7 @@ export class DashboardPage {
     await expect(this.page.getByRole('heading', { name: 'Edit Note' })).toBeVisible();
     await this.page.fill('input[placeholder="Note title..."]', newTitle);
     await this.page.fill('textarea[placeholder="Take a note..."]', newContent);
-    await this.page.click('button[aria-label="Close"]');
+    await this.closeActiveDialog();
   }
 
   /** Opens a note and creates a new label, attaching it to the note. */
@@ -292,7 +301,7 @@ export class DashboardPage {
     // Wait for the label to be created and checked before closing the modal
     await expect(this.page.getByRole('checkbox', { name: labelName })).toBeChecked();
     // Closing the modal also dismisses the picker (outside-click fires on mousedown)
-    await this.page.locator('button[aria-label="Close"]').click();
+    await this.closeActiveDialog();
     await expect(this.page.locator('[data-testid="note-card"]').filter({
       has: this.page.locator('h3').getByText(noteTitle, { exact: true }),
     })).toBeVisible();
@@ -333,7 +342,7 @@ export class DashboardPage {
     const pickerPopover = this.page.locator('.max-h-48');
     await pickerPopover.getByText(username).click();
 
-    await this.page.click('button[aria-label="Close"]');
+    await this.closeActiveDialog();
   }
 
   /** Asserts that Archive and Bin appear directly after a given label in the sidebar with no large gap. */
