@@ -311,32 +311,38 @@ const Settings = ({ onLogout }: SettingsProps) => {
               t={t}
               currentUser={currentUser}
               currentUsername={currentUsername}
-              hasProfileIcon={hasProfileIcon}
-              fileInputRef={fileInputRef}
-              iconUploading={iconUploading}
-              iconDeleting={iconDeleting}
-              iconError={iconError}
-              onIconUpload={handleIconUpload}
-              onIconDelete={handleIconDelete}
-              draftFirstName={draftFirstName}
-              draftLastName={draftLastName}
-              draftUsername={draftUsername}
-              onDraftFirstNameChange={setDraftFirstName}
-              onDraftLastNameChange={setDraftLastName}
-              onDraftUsernameChange={setDraftUsername}
-              saving={saving}
-              error={error}
+              profileIcon={{
+                hasProfileIcon,
+                fileInputRef,
+                iconUploading,
+                iconDeleting,
+                iconError,
+                onIconUpload: handleIconUpload,
+                onIconDelete: handleIconDelete,
+              }}
+              accountForm={{
+                draftFirstName,
+                draftLastName,
+                draftUsername,
+                onDraftFirstNameChange: setDraftFirstName,
+                onDraftLastNameChange: setDraftLastName,
+                onDraftUsernameChange: setDraftUsername,
+                saving,
+                error,
+                onAccountSubmit: handleSubmit,
+              }}
+              passwordForm={{
+                currentPassword,
+                newPassword,
+                confirmPassword,
+                onCurrentPasswordChange: setCurrentPassword,
+                onNewPasswordChange: setNewPassword,
+                onConfirmPasswordChange: setConfirmPassword,
+                passwordSaving,
+                passwordError,
+                onPasswordSubmit: handlePasswordChange,
+              }}
               displayMsg={displayMsg}
-              onAccountSubmit={handleSubmit}
-              currentPassword={currentPassword}
-              newPassword={newPassword}
-              confirmPassword={confirmPassword}
-              onCurrentPasswordChange={setCurrentPassword}
-              onNewPasswordChange={setNewPassword}
-              onConfirmPasswordChange={setConfirmPassword}
-              passwordSaving={passwordSaving}
-              passwordError={passwordError}
-              onPasswordSubmit={handlePasswordChange}
             />
 
             <PreferencesInfoColumn

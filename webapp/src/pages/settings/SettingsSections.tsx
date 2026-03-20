@@ -27,6 +27,13 @@ interface IdentitySecurityColumnProps {
   t: Translate;
   currentUser: User | null;
   currentUsername: string;
+  profileIcon: ProfileIconProps;
+  accountForm: AccountFormProps;
+  passwordForm: PasswordFormProps;
+  displayMsg: (msg: string) => string;
+}
+
+interface ProfileIconProps {
   hasProfileIcon: boolean;
   fileInputRef: RefObject<HTMLInputElement | null>;
   iconUploading: boolean;
@@ -34,6 +41,9 @@ interface IdentitySecurityColumnProps {
   iconError: string;
   onIconUpload: (e: ChangeEvent<HTMLInputElement>) => void;
   onIconDelete: () => void | Promise<void>;
+}
+
+interface AccountFormProps {
   draftFirstName: string;
   draftLastName: string;
   draftUsername: string;
@@ -42,8 +52,10 @@ interface IdentitySecurityColumnProps {
   onDraftUsernameChange: (value: string) => void;
   saving: boolean;
   error: string;
-  displayMsg: (msg: string) => string;
   onAccountSubmit: (e: FormEvent<HTMLFormElement>) => void;
+}
+
+interface PasswordFormProps {
   currentPassword: string;
   newPassword: string;
   confirmPassword: string;
@@ -59,38 +71,16 @@ export const IdentitySecurityColumn = ({
   t,
   currentUser,
   currentUsername,
-  hasProfileIcon,
-  fileInputRef,
-  iconUploading,
-  iconDeleting,
-  iconError,
-  onIconUpload,
-  onIconDelete,
-  draftFirstName,
-  draftLastName,
-  draftUsername,
-  onDraftFirstNameChange,
-  onDraftLastNameChange,
-  onDraftUsernameChange,
-  saving,
-  error,
+  profileIcon,
+  accountForm,
+  passwordForm,
   displayMsg,
-  onAccountSubmit,
-  currentPassword,
-  newPassword,
-  confirmPassword,
-  onCurrentPasswordChange,
-  onNewPasswordChange,
-  onConfirmPasswordChange,
-  passwordSaving,
-  passwordError,
-  onPasswordSubmit,
 }: IdentitySecurityColumnProps) => (
   <div className="space-y-6">
     <SettingsSectionCard title={t('settings.profileIconSection')}>
       <div className="flex items-center space-x-4">
         <div className="flex-shrink-0">
-          {hasProfileIcon && currentUser ? (
+          {profileIcon.hasProfileIcon && currentUser ? (
             <img
               src={`/api/v1/users/${currentUser.id}/profile-icon?v=${currentUser.updated_at}`}
               alt={currentUsername}
@@ -102,26 +92,26 @@ export const IdentitySecurityColumn = ({
         </div>
         <div className="flex flex-col space-y-2">
           <input
-            ref={fileInputRef}
+            ref={profileIcon.fileInputRef}
             type="file"
             accept="image/jpeg,image/png,image/webp"
             className="hidden"
-            onChange={onIconUpload}
+            onChange={profileIcon.onIconUpload}
             aria-label={t('settings.uploadIconButton')}
           />
           <button
             type="button"
-            disabled={iconUploading || iconDeleting}
-            onClick={() => fileInputRef.current?.click()}
+            disabled={profileIcon.iconUploading || profileIcon.iconDeleting}
+            onClick={() => profileIcon.fileInputRef.current?.click()}
             className="inline-flex items-center px-3 py-1.5 border border-gray-300 dark:border-slate-600 text-sm font-medium rounded-md text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 hover:bg-gray-50 dark:hover:bg-slate-600 disabled:opacity-50"
           >
-            {iconUploading ? t('settings.iconUploading') : t('settings.uploadIconButton')}
+            {profileIcon.iconUploading ? t('settings.iconUploading') : t('settings.uploadIconButton')}
           </button>
-          {hasProfileIcon && (
+          {profileIcon.hasProfileIcon && (
             <button
               type="button"
-              onClick={onIconDelete}
-              disabled={iconUploading || iconDeleting}
+              onClick={profileIcon.onIconDelete}
+              disabled={profileIcon.iconUploading || profileIcon.iconDeleting}
               className="text-sm text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 text-left"
             >
               {t('settings.removeIconButton')}
@@ -129,13 +119,13 @@ export const IdentitySecurityColumn = ({
           )}
         </div>
       </div>
-      {iconError && (
-        <div role="alert" className="mt-3 text-red-600 dark:text-red-400 text-sm">{iconError}</div>
+      {profileIcon.iconError && (
+        <div role="alert" className="mt-3 text-red-600 dark:text-red-400 text-sm">{profileIcon.iconError}</div>
       )}
     </SettingsSectionCard>
 
     <SettingsSectionCard title={t('settings.accountSection')}>
-      <form onSubmit={onAccountSubmit}>
+      <form onSubmit={accountForm.onAccountSubmit}>
         <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
           <div>
             <label htmlFor="first-name" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
@@ -144,8 +134,8 @@ export const IdentitySecurityColumn = ({
             <input
               id="first-name"
               type="text"
-              value={draftFirstName}
-              onChange={(e) => onDraftFirstNameChange(e.target.value)}
+              value={accountForm.draftFirstName}
+              onChange={(e) => accountForm.onDraftFirstNameChange(e.target.value)}
               className="mt-1 block w-full border border-gray-300 dark:border-slate-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
               placeholder={t('settings.namePlaceholder')}
             />
@@ -157,8 +147,8 @@ export const IdentitySecurityColumn = ({
             <input
               id="last-name"
               type="text"
-              value={draftLastName}
-              onChange={(e) => onDraftLastNameChange(e.target.value)}
+              value={accountForm.draftLastName}
+              onChange={(e) => accountForm.onDraftLastNameChange(e.target.value)}
               className="mt-1 block w-full border border-gray-300 dark:border-slate-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
               placeholder={t('settings.namePlaceholder')}
             />
@@ -172,33 +162,33 @@ export const IdentitySecurityColumn = ({
             id="username"
             type="text"
             required
-            value={draftUsername}
-            onChange={(e) => onDraftUsernameChange(e.target.value)}
+            value={accountForm.draftUsername}
+            onChange={(e) => accountForm.onDraftUsernameChange(e.target.value)}
             className="mt-1 block w-full border border-gray-300 dark:border-slate-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
             placeholder={t('settings.usernamePlaceholder')}
           />
         </div>
 
-        {error && (
+        {accountForm.error && (
           <div role="alert" className="mt-4 text-red-600 dark:text-red-400 text-sm">
-            {displayMsg(error)}
+            {displayMsg(accountForm.error)}
           </div>
         )}
 
         <div className="mt-6">
           <button
             type="submit"
-            disabled={saving}
+            disabled={accountForm.saving}
             className="bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700 disabled:bg-blue-400 dark:disabled:bg-blue-500 text-white px-4 py-2 rounded-md text-sm font-medium"
           >
-            {saving ? t('settings.saving') : t('settings.saveChanges')}
+            {accountForm.saving ? t('settings.saving') : t('settings.saveChanges')}
           </button>
         </div>
       </form>
     </SettingsSectionCard>
 
     <SettingsSectionCard title={t('settings.changePasswordSection')}>
-      <form onSubmit={onPasswordSubmit}>
+      <form onSubmit={passwordForm.onPasswordSubmit}>
         <div>
           <label htmlFor="current-password" className="block text-sm font-medium text-gray-700 dark:text-gray-300">
             {t('settings.currentPasswordLabel')}
@@ -207,8 +197,8 @@ export const IdentitySecurityColumn = ({
             id="current-password"
             type="password"
             required
-            value={currentPassword}
-            onChange={(e) => onCurrentPasswordChange(e.target.value)}
+            value={passwordForm.currentPassword}
+            onChange={(e) => passwordForm.onCurrentPasswordChange(e.target.value)}
             className="mt-1 block w-full border border-gray-300 dark:border-slate-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
           />
         </div>
@@ -221,8 +211,8 @@ export const IdentitySecurityColumn = ({
             id="new-password"
             type="password"
             required
-            value={newPassword}
-            onChange={(e) => onNewPasswordChange(e.target.value)}
+            value={passwordForm.newPassword}
+            onChange={(e) => passwordForm.onNewPasswordChange(e.target.value)}
             className="mt-1 block w-full border border-gray-300 dark:border-slate-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
             placeholder={t('settings.newPasswordPlaceholder')}
           />
@@ -236,25 +226,25 @@ export const IdentitySecurityColumn = ({
             id="confirm-password"
             type="password"
             required
-            value={confirmPassword}
-            onChange={(e) => onConfirmPasswordChange(e.target.value)}
+            value={passwordForm.confirmPassword}
+            onChange={(e) => passwordForm.onConfirmPasswordChange(e.target.value)}
             className="mt-1 block w-full border border-gray-300 dark:border-slate-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
           />
         </div>
 
-        {passwordError && (
+        {passwordForm.passwordError && (
           <div role="alert" className="mt-4 text-red-600 dark:text-red-400 text-sm">
-            {displayMsg(passwordError)}
+            {displayMsg(passwordForm.passwordError)}
           </div>
         )}
 
         <div className="mt-6">
           <button
             type="submit"
-            disabled={passwordSaving}
+            disabled={passwordForm.passwordSaving}
             className="bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700 disabled:bg-blue-400 dark:disabled:bg-blue-500 text-white px-4 py-2 rounded-md text-sm font-medium"
           >
-            {passwordSaving ? t('settings.changing') : t('settings.changePassword')}
+            {passwordForm.passwordSaving ? t('settings.changing') : t('settings.changePassword')}
           </button>
         </div>
       </form>
