@@ -190,6 +190,10 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   }, []);
 
   const openNoteFromUrl = useCallback((noteId: string) => {
+    openNoteIdRef.current = null;
+    setEditingNote(null);
+    setIsModalOpen(false);
+
     openNoteIdRef.current = noteId;
     returnPathRef.current = window.history.state?.returnTo ?? '/';
     notes.getById(noteId)

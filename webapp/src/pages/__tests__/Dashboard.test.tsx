@@ -1335,9 +1335,10 @@ describe('Dashboard', () => {
       })
     })
 
-    it('refreshes sidebar labels when SSE reports a created note', async () => {
+    it('refreshes sidebar labels when SSE reports created and updated notes', async () => {
       vi.mocked(labels.getAll)
         .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([realtimeLabel])
         .mockResolvedValueOnce([realtimeLabel])
 
       renderDashboard()
@@ -1361,6 +1362,23 @@ describe('Dashboard', () => {
 
       await waitFor(() => {
         expect(labels.getAll).toHaveBeenCalledTimes(2)
+      })
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'realtime' })).toBeInTheDocument()
+      })
+
+      await act(async () => {
+        sseOptions?.onEvent({
+          type: 'note_updated',
+          note_id: 'note-1',
+          note: createMockNote({ id: 'note-1', labels: [realtimeLabel] }),
+          source_user_id: 'user1',
+        })
+      })
+
+      await waitFor(() => {
+        expect(labels.getAll).toHaveBeenCalledTimes(3)
       })
 
       await waitFor(() => {
