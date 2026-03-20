@@ -18,12 +18,19 @@ i18n
     resources: {
       en: { translation: en },
       de: { translation: de },
+      es: { translation: en },
+      fr: { translation: en },
+      pt: { translation: en },
+      it: { translation: en },
+      nl: { translation: en },
+      pl: { translation: en },
     },
     lng,
     fallbackLng: 'en',
     interpolation: {
       escapeValue: false,
     },
+    returnNull: false,
   });
 
 export default i18n;

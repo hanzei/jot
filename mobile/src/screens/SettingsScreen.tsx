@@ -30,7 +30,7 @@ import {
 } from '../api/settings';
 import type { ThemePreference, AboutInfo, ActiveSession } from '@jot/shared';
 import i18n from '../i18n';
-import { getLanguagePreference, resolveLanguage, type LanguagePreference } from '../i18n/language';
+import { SUPPORTED_LANGUAGES, getLanguagePreference, resolveLanguage, type LanguagePreference } from '../i18n/language';
 import { displayMessage, getCurrentLocale } from '../i18n/utils';
 
 export default function SettingsScreen() {
@@ -254,8 +254,10 @@ export default function SettingsScreen() {
   const currentLocale = getCurrentLocale();
   const languageOptions: { value: LanguagePreference; label: string }[] = [
     { value: 'system', label: t('settings.languageSystem') },
-    { value: 'en', label: t('settings.language_en') },
-    { value: 'de', label: t('settings.language_de') },
+    ...SUPPORTED_LANGUAGES.map((language) => ({
+      value: language,
+      label: t(`settings.language_${language}`),
+    })),
   ];
   const themeOptions: { value: ThemePreference; label: string }[] = [
     { value: 'system', label: t('settings.themeSystem') },

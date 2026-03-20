@@ -168,6 +168,12 @@ definitions:
         - system
         - en
         - de
+        - es
+        - fr
+        - pt
+        - it
+        - nl
+        - pl
         type: string
       last_name:
         type: string

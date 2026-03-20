@@ -176,12 +176,24 @@ type UpdateUserRequest struct {
 	Username  *string `json:"username,omitempty"`
 	FirstName *string `json:"first_name,omitempty"`
 	LastName  *string `json:"last_name,omitempty"`
-	Language  *string `json:"language,omitempty" enums:"system,en,de"`
+	Language  *string `json:"language,omitempty" enums:"system,en,de,es,fr,pt,it,nl,pl"`
 	Theme     *string `json:"theme,omitempty" enums:"system,light,dark"`
 	NoteSort  *string `json:"note_sort,omitempty" enums:"manual,updated_at,created_at"`
 }
 
-var validLanguages = map[string]bool{"system": true, "en": true, "de": true}
+// Keep this list in sync with webapp/mobile SUPPORTED_LANGUAGES and the
+// user_settings language CHECK constraint migration.
+var validLanguages = map[string]bool{
+	"system": true,
+	"en":     true,
+	"de":     true,
+	"es":     true,
+	"fr":     true,
+	"pt":     true,
+	"it":     true,
+	"nl":     true,
+	"pl":     true,
+}
 var validThemes = map[string]bool{"system": true, "light": true, "dark": true}
 var validNoteSorts = map[string]bool{"manual": true, "updated_at": true, "created_at": true}
 
@@ -196,7 +208,7 @@ func validateSettingsFields(current *models.UserSettings, language, theme, noteS
 		lang = *language
 	}
 	if !validLanguages[lang] {
-		return "", "", "", false, errors.New("invalid language: must be 'system', 'en', or 'de'")
+		return "", "", "", false, errors.New("invalid language: must be one of 'system', 'en', 'de', 'es', 'fr', 'pt', 'it', 'nl', or 'pl'")
 	}
 	th = current.Theme
 	if theme != nil {
