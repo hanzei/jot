@@ -107,7 +107,7 @@ function stripMarkdownImages(content: string): string {
     }
 
     const fenceMatch = segment.match(
-      /^((?:\s*>\s*)*(?:(?:[-*+]|\d+\.)\s+)?\s*)([`~]{3,})/,
+      /^(\s*(?:>\s*)*(?:(?:[-*+]|\d+\.)\s+)?\s*)([`~]{3,})/,
     );
     if (fenceMatch) {
       activeFence = {
