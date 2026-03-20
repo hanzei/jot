@@ -2,6 +2,7 @@ import React from 'react';
 import { View, Text, StyleSheet } from 'react-native';
 import { TouchableOpacity } from 'react-native-gesture-handler';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { useTranslation } from 'react-i18next';
 import type { Note, NoteItem, User } from '@jot/shared';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../store/AuthContext';
@@ -91,6 +92,7 @@ function NoteAvatars({ note }: { note: Note }) {
 
 function TodoPreview({ items, hasColor }: { items: NoteItem[]; hasColor?: boolean }) {
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const uncompleted: NoteItem[] = [];
   let completedCount = 0;
   for (const item of items) {
@@ -112,7 +114,9 @@ function TodoPreview({ items, hasColor }: { items: NoteItem[]; hasColor?: boolea
         </View>
       ))}
       {completedCount > 0 && (
-        <Text style={[styles.completedCount, { color: hasColor ? '#999' : colors.textMuted }]}>+{completedCount} checked</Text>
+        <Text style={[styles.completedCount, { color: hasColor ? '#999' : colors.textMuted }]}>
+          {t('note.moreCompletedItems', { count: completedCount })}
+        </Text>
       )}
     </View>
   );
@@ -120,6 +124,7 @@ function TodoPreview({ items, hasColor }: { items: NoteItem[]; hasColor?: boolea
 
 function NoteCard({ note, onPress, onLongPress, onMenuPress }: NoteCardProps) {
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const hasColor = !!(note.color && note.color !== '#ffffff');
 
   return (
@@ -148,7 +153,7 @@ function NoteCard({ note, onPress, onLongPress, onMenuPress }: NoteCardProps) {
             style={styles.menuButton}
             hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
             testID={`note-menu-${note.id}`}
-            accessibilityLabel="Note menu"
+            accessibilityLabel={t('note.menuOptions')}
             accessibilityRole="button"
           >
             <Ionicons name="ellipsis-vertical" size={18} color={hasColor ? '#999' : colors.iconMuted} />

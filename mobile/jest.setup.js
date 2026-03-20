@@ -4,6 +4,10 @@ jest.mock('expo-secure-store', () => ({
   deleteItemAsync: jest.fn().mockResolvedValue(undefined),
 }));
 
+jest.mock('expo-localization', () => ({
+  getLocales: jest.fn(() => [{ languageTag: 'en-US', languageCode: 'en' }]),
+}));
+
 jest.mock('expo-sqlite', () => ({
   SQLiteProvider: ({ children, onInit }) => {
     // Run onInit asynchronously to simulate DB initialization
@@ -117,3 +121,6 @@ jest.mock('@expo/vector-icons/Ionicons', () => {
   MockIonicons.glyphMap = {};
   return { __esModule: true, default: MockIonicons };
 });
+
+const i18n = require('./src/i18n').default;
+void i18n.changeLanguage('en');

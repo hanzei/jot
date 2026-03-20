@@ -14,6 +14,7 @@ import { DrawerContentScrollView, DrawerContentComponentProps } from '@react-nav
 import { CommonActions } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../store/AuthContext';
 import { useDeleteLabel, useLabels, useRenameLabel } from '../hooks/useLabels';
 import { useTheme } from '../theme/ThemeContext';
@@ -27,16 +28,6 @@ interface NavItem {
   icon: keyof typeof Ionicons.glyphMap;
   activeIcon: keyof typeof Ionicons.glyphMap;
 }
-
-const TOP_ITEMS: NavItem[] = [
-  { name: 'Notes', label: 'Notes', icon: 'document-text-outline', activeIcon: 'document-text' },
-  { name: 'MyTodo', label: 'My Todo', icon: 'clipboard-outline', activeIcon: 'clipboard' },
-];
-
-const BOTTOM_ITEMS: NavItem[] = [
-  { name: 'Archived', label: 'Archive', icon: 'archive-outline', activeIcon: 'archive' },
-  { name: 'Trash', label: 'Trash', icon: 'trash-outline', activeIcon: 'trash' },
-];
 
 function extractErrorMessage(error: unknown, fallback: string) {
   if (
@@ -60,14 +51,22 @@ function extractErrorMessage(error: unknown, fallback: string) {
 
   return fallback;
 }
-
 export default function DrawerContent(props: DrawerContentComponentProps) {
   const { user, logout } = useAuth();
   const { data: labels } = useLabels();
   const renameLabel = useRenameLabel();
   const deleteLabel = useDeleteLabel();
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
+  const topItems: NavItem[] = [
+    { name: 'Notes', label: t('dashboard.tabNotes'), icon: 'document-text-outline', activeIcon: 'document-text' },
+    { name: 'MyTodo', label: t('dashboard.tabMyTodo'), icon: 'clipboard-outline', activeIcon: 'clipboard' },
+  ];
+  const bottomItems: NavItem[] = [
+    { name: 'Archived', label: t('dashboard.tabArchive'), icon: 'archive-outline', activeIcon: 'archive' },
+    { name: 'Trash', label: t('dashboard.tabBin'), icon: 'trash-outline', activeIcon: 'trash' },
+  ];
   const [renameLabelTarget, setRenameLabelTarget] = useState<Label | null>(null);
   const [renameValue, setRenameValue] = useState('');
   const longPressHandledRef = useRef(false);
@@ -78,15 +77,15 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
   const activeLabelId = activeRoute === 'Notes' ? activeParams?.labelId : undefined;
 
   const handleLogout = useCallback(() => {
-    Alert.alert('Log out', 'Are you sure you want to log out?', [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(t('nav.logoutConfirmTitle'), t('nav.logoutConfirmMessage'), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Log out',
+        text: t('nav.logout'),
         style: 'destructive',
         onPress: () => logout(),
       },
     ]);
-  }, [logout]);
+  }, [logout, t]);
 
   const handleNavPress = useCallback((name: keyof MainDrawerParamList) => {
     if (name === 'Notes') {
@@ -131,11 +130,11 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
       setRenameLabelTarget(null);
       setRenameValue('');
       handleLabelRenameSuccess(updatedLabel.id, updatedLabel.name);
-      Alert.alert('Success', 'Label renamed');
+      Alert.alert(t('labels.renameSuccess'));
     } catch (error) {
-      Alert.alert('Error', extractErrorMessage(error, 'Failed to rename label'));
+      Alert.alert(t('common.error'), extractErrorMessage(error, t('labels.renameError')));
     }
-  }, [handleLabelRenameSuccess, renameLabel, renameLabelTarget, renameValue]);
+  }, [handleLabelRenameSuccess, renameLabel, renameLabelTarget, renameValue, t]);
 
   const openRenameModal = useCallback((label: Label) => {
     setRenameLabelTarget(label);
@@ -144,35 +143,35 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
 
   const handleDeleteLabel = useCallback((label: Label) => {
     Alert.alert(
-      'Delete label',
-      `Delete label "${label.name}"? It will be removed from all notes that use it.`,
+      t('labels.deleteConfirmTitle'),
+      t('labels.deleteConfirmMessage', { name: label.name }),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Delete',
+          text: t('labels.delete'),
           style: 'destructive',
           onPress: async () => {
             try {
               await deleteLabel.mutateAsync({ labelId: label.id });
               handleDeleteLabelSuccess(label.id);
-              Alert.alert('Success', 'Label deleted');
+              Alert.alert(t('labels.deleteSuccess'));
             } catch (error) {
-              Alert.alert('Error', extractErrorMessage(error, 'Failed to delete label'));
+              Alert.alert(t('common.error'), extractErrorMessage(error, t('labels.deleteError')));
             }
           },
         },
       ],
     );
-  }, [deleteLabel, handleDeleteLabelSuccess]);
+  }, [deleteLabel, handleDeleteLabelSuccess, t]);
 
   const handleLabelLongPress = useCallback((label: Label) => {
     longPressHandledRef.current = true;
-    Alert.alert(label.name, 'Choose an action for this label.', [
-      { text: 'Rename', onPress: () => openRenameModal(label) },
-      { text: 'Delete', style: 'destructive', onPress: () => handleDeleteLabel(label) },
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(label.name, t('labels.menuOptions', { name: label.name }), [
+      { text: t('labels.rename'), onPress: () => openRenameModal(label) },
+      { text: t('labels.delete'), style: 'destructive', onPress: () => handleDeleteLabel(label) },
+      { text: t('common.cancel'), style: 'cancel' },
     ]);
-  }, [handleDeleteLabel, openRenameModal]);
+  }, [handleDeleteLabel, openRenameModal, t]);
 
   const handleSettingsPress = useCallback(() => {
     props.navigation.dispatch(
@@ -211,7 +210,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
         <View style={[styles.divider, { backgroundColor: colors.divider }]} />
 
         <View style={styles.navSection}>
-          {TOP_ITEMS.map((item) => {
+          {topItems.map((item) => {
             const isActive = item.name === 'Notes'
               ? isNotesActiveWithoutLabel
               : activeRoute === item.name;
@@ -273,7 +272,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
 
           <View style={[styles.navDivider, { backgroundColor: colors.divider }]} />
 
-          {BOTTOM_ITEMS.map((item) => {
+          {bottomItems.map((item) => {
             const isActive = activeRoute === item.name;
             return (
               <TouchableOpacity
@@ -306,21 +305,21 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
           style={styles.settingsButton}
           onPress={handleSettingsPress}
           testID="drawer-settings"
-          accessibilityLabel="Settings"
+          accessibilityLabel={t('nav.settings')}
           accessibilityRole="button"
         >
           <Ionicons name="settings-outline" size={22} color={colors.icon} />
-          <Text style={[styles.settingsText, { color: colors.icon }]}>Settings</Text>
+          <Text style={[styles.settingsText, { color: colors.icon }]}>{t('nav.settings')}</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.logoutButton}
           onPress={handleLogout}
           testID="drawer-logout"
-          accessibilityLabel="Log out"
+          accessibilityLabel={t('nav.logout')}
           accessibilityRole="button"
         >
           <Ionicons name="log-out-outline" size={22} color={colors.error} />
-          <Text style={[styles.logoutText, { color: colors.error }]}>Log out</Text>
+          <Text style={[styles.logoutText, { color: colors.error }]}>{t('nav.logout')}</Text>
         </TouchableOpacity>
       </View>
 
@@ -346,12 +345,14 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
             style={[styles.modalCard, { backgroundColor: colors.surface, borderColor: colors.borderLight }]}
             onPress={(event) => event.stopPropagation()}
           >
-            <Text style={[styles.modalTitle, { color: colors.text }]}>Rename label</Text>
+            <Text style={[styles.modalTitle, { color: colors.text }]}>
+              {t('labels.renameInputLabel', { name: renameLabelTarget?.name ?? '' })}
+            </Text>
             <TextInput
               style={[styles.modalInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.background }]}
               value={renameValue}
               onChangeText={setRenameValue}
-              placeholder="Label name"
+              placeholder={t('labels.renamePlaceholder')}
               placeholderTextColor={colors.placeholder}
               autoFocus
               editable={!renameLabel.isPending}
@@ -371,7 +372,9 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
                 }}
                 disabled={renameLabel.isPending}
               >
-                <Text style={[styles.modalSecondaryText, { color: colors.textSecondary }]}>Cancel</Text>
+                <Text style={[styles.modalSecondaryText, { color: colors.textSecondary }]}>
+                  {t('labels.renameCancel')}
+                </Text>
               </TouchableOpacity>
               <TouchableOpacity
                 style={[
@@ -387,7 +390,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
                 testID="rename-label-submit"
               >
                 <Text style={styles.modalPrimaryText}>
-                  {renameLabel.isPending ? 'Saving...' : 'Save'}
+                  {renameLabel.isPending ? t('settings.saving') : t('labels.renameSave')}
                 </Text>
               </TouchableOpacity>
             </View>
