@@ -250,7 +250,25 @@
     "menuOptions": "Note options",
     "assignItem": "Assign item",
     "unassign": "Unassign",
-    "assignedTo": "Assigned to {{name}}"
+    "assignedTo": "Assigned to {{name}}",
+    "markdown": {
+      "bold": "Bold",
+      "italic": "Italic",
+      "strikethrough": "Strikethrough",
+      "heading": "Heading",
+      "heading1": "Heading 1",
+      "heading2": "Heading 2",
+      "heading3": "Heading 3",
+      "heading4": "Heading 4",
+      "bulletList": "Bullet list",
+      "orderedList": "Ordered list",
+      "code": "Code",
+      "link": "Link",
+      "horizontalRule": "Horizontal rule",
+      "edit": "Edit",
+      "preview": "Preview",
+      "previewRegion": "Note preview"
+    }
   },
   "labels": {
     "title": "Labels",

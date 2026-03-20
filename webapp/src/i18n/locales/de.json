@@ -250,7 +250,25 @@
     "menuOptions": "Notizoptionen",
     "assignItem": "Element zuweisen",
     "unassign": "Zuweisung aufheben",
-    "assignedTo": "Zugewiesen an {{name}}"
+    "assignedTo": "Zugewiesen an {{name}}",
+    "markdown": {
+      "bold": "Fett",
+      "italic": "Kursiv",
+      "strikethrough": "Durchgestrichen",
+      "heading": "Überschrift",
+      "heading1": "Überschrift 1",
+      "heading2": "Überschrift 2",
+      "heading3": "Überschrift 3",
+      "heading4": "Überschrift 4",
+      "bulletList": "Aufzählung",
+      "orderedList": "Nummerierte Liste",
+      "code": "Code",
+      "link": "Link",
+      "horizontalRule": "Horizontale Linie",
+      "edit": "Bearbeiten",
+      "preview": "Vorschau",
+      "previewRegion": "Notizvorschau"
+    }
   },
   "labels": {
     "title": "Labels",

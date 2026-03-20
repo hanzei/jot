@@ -1,6 +1,6 @@
 import { render, screen, fireEvent } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { type ReactNode } from 'react'
+import { type ReactNode, type ButtonHTMLAttributes } from 'react'
 import NoteModal from '../NoteModal'
 import { ToastProvider } from '../Toast'
 import type { Note, NoteItem } from '@jot/shared'
@@ -39,7 +39,16 @@ vi.mock('@headlessui/react', () => {
     <h2 className={className}>{children}</h2>
   )
 
-  return { Dialog, DialogPanel, DialogTitle }
+  const Menu = ({ children }: { children?: ReactNode }) => <div>{children}</div>
+  const MenuButton = ({ children, className, ...props }: ButtonHTMLAttributes<HTMLButtonElement>) => (
+    <button className={className} {...props}>{children}</button>
+  )
+  const MenuItems = ({ children, className }: { children?: ReactNode; className?: string }) => (
+    <div className={className}>{children}</div>
+  )
+  const MenuItem = ({ children }: { children?: ReactNode }) => <div>{children}</div>
+
+  return { Dialog, DialogPanel, DialogTitle, Menu, MenuButton, MenuItems, MenuItem }
 })
 
 // Mock @dnd-kit components
@@ -173,6 +182,22 @@ describe('NoteModal', () => {
       renderNoteModal({ ...defaultProps, note })
 
       expect(screen.getByText(/Last edited:/)).toBeInTheDocument()
+    })
+
+    it('shows the markdown toolbar for text notes only', () => {
+      renderNoteModal(defaultProps)
+
+      expect(screen.getByRole('button', { name: 'Bold' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Preview' })).toBeInTheDocument()
+    })
+
+    it('hides the markdown toolbar for todo notes', () => {
+      renderNoteModal(defaultProps)
+
+      fireEvent.click(screen.getByText('Todo List'))
+
+      expect(screen.queryByRole('button', { name: 'Bold' })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: 'Preview' })).not.toBeInTheDocument()
     })
   })
 
@@ -645,6 +670,54 @@ describe('NoteModal', () => {
       renderNoteModal({ ...defaultProps, note: incompleteNote })
 
       expect(screen.getByDisplayValue('Test')).toBeInTheDocument()
+    })
+
+    it('toggles between edit and markdown preview modes without changing content', () => {
+      const { container } = renderNoteModal(defaultProps)
+
+      fireEvent.change(screen.getByTestId('note-content-input'), {
+        target: { value: '# Heading\n\n**Bold** text' },
+      })
+
+      fireEvent.click(screen.getByRole('button', { name: 'Preview' }))
+
+      expect(screen.queryByTestId('note-content-input')).not.toBeInTheDocument()
+      expect(screen.getByTestId('note-markdown-preview')).toBeInTheDocument()
+      expect(screen.getByRole('heading', { level: 1, name: 'Heading' })).toBeInTheDocument()
+      expect(container.querySelector('strong')?.textContent).toBe('Bold')
+      expect(screen.getByRole('button', { name: 'Bold' })).toBeDisabled()
+
+      fireEvent.click(screen.getByRole('button', { name: 'Edit' }))
+
+      expect(screen.getByTestId('note-content-input')).toHaveValue('# Heading\n\n**Bold** text')
+    })
+
+    it('applies markdown shortcuts from the textarea', async () => {
+      renderNoteModal(defaultProps)
+
+      const textarea = screen.getByTestId('note-content-input') as HTMLTextAreaElement
+      fireEvent.change(textarea, { target: { value: 'Bold me' } })
+      textarea.focus()
+      textarea.setSelectionRange(0, 7)
+
+      fireEvent.keyDown(textarea, { key: 'b', ctrlKey: true })
+      await vi.runAllTimersAsync()
+
+      expect(textarea).toHaveValue('**Bold me**')
+    })
+
+    it('applies markdown shortcuts from the textarea with the meta key', async () => {
+      renderNoteModal(defaultProps)
+
+      const textarea = screen.getByTestId('note-content-input') as HTMLTextAreaElement
+      fireEvent.change(textarea, { target: { value: 'Bold me' } })
+      textarea.focus()
+      textarea.setSelectionRange(0, 7)
+
+      fireEvent.keyDown(textarea, { key: 'b', metaKey: true })
+      await vi.runAllTimersAsync()
+
+      expect(textarea).toHaveValue('**Bold me**')
     })
   })
 })

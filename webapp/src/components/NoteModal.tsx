@@ -1,15 +1,45 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { XMarkIcon, PlusIcon, TrashIcon, ChevronDownIcon, ArchiveBoxIcon, ArchiveBoxXMarkIcon, ShareIcon, UserPlusIcon, CheckIcon, TagIcon } from '@heroicons/react/24/outline';
-import { Dialog, DialogPanel } from '@headlessui/react';
+import {
+  XMarkIcon,
+  PlusIcon,
+  TrashIcon,
+  ChevronDownIcon,
+  ArchiveBoxIcon,
+  ArchiveBoxXMarkIcon,
+  ShareIcon,
+  UserPlusIcon,
+  CheckIcon,
+  TagIcon,
+  PencilSquareIcon,
+  EyeIcon,
+  ListBulletIcon,
+  CodeBracketIcon,
+  LinkIcon,
+  MinusIcon,
+} from '@heroicons/react/24/outline';
+import { Dialog, DialogPanel, Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
 import { VALIDATION, NOTE_COLORS, buildCollaborators, type Note, type NoteType, type CreateNoteRequest, type UpdateNoteRequest, type Label, type User, type Collaborator } from '@jot/shared';
 import { notes } from '@/utils/api';
+import NoteMarkdown from '@/components/NoteMarkdown';
 import LabelPicker from '@/components/LabelPicker';
 import LetterAvatar from '@/components/LetterAvatar';
 import AssigneePicker from '@/components/AssigneePicker';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { useToast } from '@/hooks/useToast';
 import { buildShareAvatars } from '@/utils/shareAvatars';
+import {
+  applyBold,
+  applyItalic,
+  applyStrikethrough,
+  applyHeading,
+  applyBulletList,
+  applyOrderedList,
+  applyCode,
+  applyLink,
+  insertHorizontalRule,
+  type FormattingResult,
+} from '@/utils/noteMarkdownFormatting';
 
 // Validation functions
 type TFunction = (key: string, opts?: Record<string, unknown>) => string;
@@ -227,6 +257,46 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
   );
 }
 
+type TextFormattingAction =
+  | 'bold'
+  | 'italic'
+  | 'strikethrough'
+  | 'bulletList'
+  | 'orderedList'
+  | 'code'
+  | 'link'
+  | 'horizontalRule';
+
+const headingLevels = [1, 2, 3, 4] as const;
+
+const applyFormattingAction = (
+  action: TextFormattingAction,
+  value: string,
+  selectionStart: number,
+  selectionEnd: number,
+): FormattingResult => {
+  const selection = { start: selectionStart, end: selectionEnd };
+
+  switch (action) {
+    case 'bold':
+      return applyBold(value, selection);
+    case 'italic':
+      return applyItalic(value, selection);
+    case 'strikethrough':
+      return applyStrikethrough(value, selection);
+    case 'bulletList':
+      return applyBulletList(value, selection);
+    case 'orderedList':
+      return applyOrderedList(value, selection);
+    case 'code':
+      return applyCode(value, selection);
+    case 'link':
+      return applyLink(value, selection);
+    case 'horizontalRule':
+      return insertHorizontalRule(value, selection);
+  }
+};
+
 export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, onDelete, isOwner = true, usersById, currentUserId }: NoteModalProps) {
   const { t, i18n } = useTranslation();
   const { showToast } = useToast();
@@ -244,6 +314,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showLabelPicker, setShowLabelPicker] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
+  const [isPreview, setIsPreview] = useState(false);
   
   // Use useRef for timeout management instead of global window property
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -285,6 +356,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   }));
 
   useEffect(() => {
+    setIsPreview(false);
     if (note) {
       setTitle(note.title);
       setContent(note.content);
@@ -315,6 +387,12 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       setNoteLabels([]);
     }
   }, [note]);
+
+  useEffect(() => {
+    if (noteType !== 'text' && isPreview) {
+      setIsPreview(false);
+    }
+  }, [isPreview, noteType]);
 
   useEffect(() => {
     return () => {
@@ -687,6 +765,80 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     await autoSaveNote(updatedItems);
   };
 
+  const focusContentEditor = useCallback((selectionStart: number, selectionEnd: number) => {
+    setTimeout(() => {
+      const textarea = contentRef.current;
+      if (!textarea) return;
+
+      textarea.focus();
+      textarea.setSelectionRange(selectionStart, selectionEnd);
+    }, 0);
+  }, []);
+
+  const applyFormattedContent = useCallback((result: FormattingResult) => {
+    const validationError = validateContent(result.value, t);
+    if (validationError) {
+      showError(validationError);
+      return;
+    }
+
+    setContent(result.value);
+    if (note) {
+      markDirty();
+    }
+    focusContentEditor(result.selectionStart, result.selectionEnd);
+  }, [focusContentEditor, markDirty, note, showError, t]);
+
+  const handleFormattingAction = useCallback((action: TextFormattingAction) => {
+    if (isPreview) return;
+
+    const textarea = contentRef.current;
+    if (!textarea) return;
+
+    const result = applyFormattingAction(
+      action,
+      content,
+      textarea.selectionStart ?? 0,
+      textarea.selectionEnd ?? 0,
+    );
+    applyFormattedContent(result);
+  }, [applyFormattedContent, content, isPreview]);
+
+  const handleHeadingAction = useCallback((level: (typeof headingLevels)[number]) => {
+    if (isPreview) return;
+
+    const textarea = contentRef.current;
+    if (!textarea) return;
+
+    const result = applyHeading(content, {
+      start: textarea.selectionStart ?? 0,
+      end: textarea.selectionEnd ?? 0,
+    }, level);
+    applyFormattedContent(result);
+  }, [applyFormattedContent, content, isPreview]);
+
+  const handleContentKeyDown = useCallback((e: React.KeyboardEvent<HTMLTextAreaElement>) => {
+    if (e.altKey || !(e.metaKey || e.ctrlKey)) return;
+
+    const key = e.key.toLowerCase();
+    let action: TextFormattingAction | null = null;
+
+    if (key === 'b' && !e.shiftKey) {
+      action = 'bold';
+    } else if (key === 'i' && !e.shiftKey) {
+      action = 'italic';
+    } else if (key === 'k' && !e.shiftKey) {
+      action = 'link';
+    } else if (key === 'x' && e.shiftKey) {
+      action = 'strikethrough';
+    }
+
+    if (!action) return;
+
+    e.preventDefault();
+    handleFormattingAction(action);
+  }, [handleFormattingAction]);
+
   const handleSave = async () => {
     if (savingRef.current) return;
     savingRef.current = true;
@@ -1046,23 +1198,225 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
 
             {/* Content based on type */}
             {noteType === 'text' ? (
-              <textarea
-                ref={contentRef}
-                placeholder={t('note.contentPlaceholder')}
-                rows={4}
-                className="w-full p-2 bg-transparent border-none outline-none resize-none placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white min-h-[6rem]"
-                value={content}
-                onChange={(e) => {
-                  const newContent = e.target.value;
-                  const validationError = validateContent(newContent, t);
-                  if (validationError) {
-                    showError(validationError);
-                    return;
-                  }
-                  setContent(newContent);
-                  if (note) markDirty();
-                }}
-              />
+              <div className="space-y-2">
+                <div className="flex flex-wrap items-center justify-between gap-2 rounded-md border border-black/10 bg-white/30 px-2 py-1.5 dark:border-white/10 dark:bg-slate-900/20">
+                  <div className="flex flex-wrap items-center gap-1">
+                    <button
+                      type="button"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => handleFormattingAction('bold')}
+                      disabled={isPreview}
+                      title={t('note.markdown.bold')}
+                      aria-label={t('note.markdown.bold')}
+                      className={`rounded px-2 py-1 text-sm font-semibold transition-colors ${
+                        isPreview
+                          ? 'cursor-not-allowed opacity-50'
+                          : 'text-gray-700 hover:bg-black/5 dark:text-gray-200 dark:hover:bg-white/10'
+                      }`}
+                    >
+                      B
+                    </button>
+                    <button
+                      type="button"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => handleFormattingAction('italic')}
+                      disabled={isPreview}
+                      title={t('note.markdown.italic')}
+                      aria-label={t('note.markdown.italic')}
+                      className={`rounded px-2 py-1 text-sm italic transition-colors ${
+                        isPreview
+                          ? 'cursor-not-allowed opacity-50'
+                          : 'text-gray-700 hover:bg-black/5 dark:text-gray-200 dark:hover:bg-white/10'
+                      }`}
+                    >
+                      I
+                    </button>
+                    <button
+                      type="button"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => handleFormattingAction('strikethrough')}
+                      disabled={isPreview}
+                      title={t('note.markdown.strikethrough')}
+                      aria-label={t('note.markdown.strikethrough')}
+                      className={`rounded px-2 py-1 text-sm line-through transition-colors ${
+                        isPreview
+                          ? 'cursor-not-allowed opacity-50'
+                          : 'text-gray-700 hover:bg-black/5 dark:text-gray-200 dark:hover:bg-white/10'
+                      }`}
+                    >
+                      S
+                    </button>
+                    <Menu as="div" className="relative">
+                      <MenuButton
+                        type="button"
+                        onMouseDown={(event) => event.preventDefault()}
+                        disabled={isPreview}
+                        title={t('note.markdown.heading')}
+                        aria-label={t('note.markdown.heading')}
+                        className={`flex items-center gap-1 rounded px-2 py-1 text-sm transition-colors ${
+                          isPreview
+                            ? 'cursor-not-allowed opacity-50'
+                            : 'text-gray-700 hover:bg-black/5 dark:text-gray-200 dark:hover:bg-white/10'
+                        }`}
+                      >
+                        <span className="font-semibold">H</span>
+                        <ChevronDownIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                      </MenuButton>
+                      {!isPreview && (
+                        <MenuItems className="absolute left-0 z-20 mt-1 min-w-28 rounded-md border border-gray-200 bg-white p-1 shadow-lg focus:outline-none dark:border-slate-600 dark:bg-slate-800">
+                          {headingLevels.map((level) => (
+                            <MenuItem key={level}>
+                              <button
+                                type="button"
+                                onMouseDown={(event) => event.preventDefault()}
+                                onClick={() => handleHeadingAction(level)}
+                                className="flex w-full items-center rounded px-2 py-1.5 text-sm text-gray-700 data-[focus]:bg-gray-100 dark:text-gray-200 dark:data-[focus]:bg-slate-700"
+                              >
+                                {t(`note.markdown.heading${level}`)}
+                              </button>
+                            </MenuItem>
+                          ))}
+                        </MenuItems>
+                      )}
+                    </Menu>
+                    <button
+                      type="button"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => handleFormattingAction('bulletList')}
+                      disabled={isPreview}
+                      title={t('note.markdown.bulletList')}
+                      aria-label={t('note.markdown.bulletList')}
+                      className={`rounded p-1.5 transition-colors ${
+                        isPreview
+                          ? 'cursor-not-allowed opacity-50'
+                          : 'text-gray-700 hover:bg-black/5 dark:text-gray-200 dark:hover:bg-white/10'
+                      }`}
+                    >
+                      <ListBulletIcon className="h-4 w-4" aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => handleFormattingAction('orderedList')}
+                      disabled={isPreview}
+                      title={t('note.markdown.orderedList')}
+                      aria-label={t('note.markdown.orderedList')}
+                      className={`rounded px-2 py-1 text-sm font-medium transition-colors ${
+                        isPreview
+                          ? 'cursor-not-allowed opacity-50'
+                          : 'text-gray-700 hover:bg-black/5 dark:text-gray-200 dark:hover:bg-white/10'
+                      }`}
+                    >
+                      1.
+                    </button>
+                    <button
+                      type="button"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => handleFormattingAction('code')}
+                      disabled={isPreview}
+                      title={t('note.markdown.code')}
+                      aria-label={t('note.markdown.code')}
+                      className={`rounded p-1.5 transition-colors ${
+                        isPreview
+                          ? 'cursor-not-allowed opacity-50'
+                          : 'text-gray-700 hover:bg-black/5 dark:text-gray-200 dark:hover:bg-white/10'
+                      }`}
+                    >
+                      <CodeBracketIcon className="h-4 w-4" aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => handleFormattingAction('link')}
+                      disabled={isPreview}
+                      title={t('note.markdown.link')}
+                      aria-label={t('note.markdown.link')}
+                      className={`rounded p-1.5 transition-colors ${
+                        isPreview
+                          ? 'cursor-not-allowed opacity-50'
+                          : 'text-gray-700 hover:bg-black/5 dark:text-gray-200 dark:hover:bg-white/10'
+                      }`}
+                    >
+                      <LinkIcon className="h-4 w-4" aria-hidden="true" />
+                    </button>
+                    <button
+                      type="button"
+                      onMouseDown={(event) => event.preventDefault()}
+                      onClick={() => handleFormattingAction('horizontalRule')}
+                      disabled={isPreview}
+                      title={t('note.markdown.horizontalRule')}
+                      aria-label={t('note.markdown.horizontalRule')}
+                      className={`rounded p-1.5 transition-colors ${
+                        isPreview
+                          ? 'cursor-not-allowed opacity-50'
+                          : 'text-gray-700 hover:bg-black/5 dark:text-gray-200 dark:hover:bg-white/10'
+                      }`}
+                    >
+                      <MinusIcon className="h-4 w-4" aria-hidden="true" />
+                    </button>
+                  </div>
+                  <div className="inline-flex rounded-md border border-black/10 bg-white/50 p-0.5 dark:border-white/10 dark:bg-slate-800/60">
+                    <button
+                      type="button"
+                      onClick={() => setIsPreview(false)}
+                      aria-label={t('note.markdown.edit')}
+                      aria-pressed={!isPreview}
+                      className={`flex items-center gap-1 rounded px-2 py-1 text-sm transition-colors ${
+                        !isPreview
+                          ? 'bg-blue-500 text-white shadow-sm'
+                          : 'text-gray-700 hover:bg-black/5 dark:text-gray-200 dark:hover:bg-white/10'
+                      }`}
+                    >
+                      <PencilSquareIcon className="h-4 w-4" aria-hidden="true" />
+                      <span>{t('note.markdown.edit')}</span>
+                    </button>
+                    <button
+                      type="button"
+                      onClick={() => setIsPreview(true)}
+                      aria-label={t('note.markdown.preview')}
+                      aria-pressed={isPreview}
+                      className={`flex items-center gap-1 rounded px-2 py-1 text-sm transition-colors ${
+                        isPreview
+                          ? 'bg-blue-500 text-white shadow-sm'
+                          : 'text-gray-700 hover:bg-black/5 dark:text-gray-200 dark:hover:bg-white/10'
+                      }`}
+                    >
+                      <EyeIcon className="h-4 w-4" aria-hidden="true" />
+                      <span>{t('note.markdown.preview')}</span>
+                    </button>
+                  </div>
+                </div>
+                {isPreview ? (
+                  <div
+                    data-testid="note-markdown-preview"
+                    role="region"
+                    aria-label={t('note.markdown.previewRegion')}
+                    className="w-full min-h-[6rem] p-2 text-gray-900 dark:text-white"
+                  >
+                    <NoteMarkdown content={content} variant="preview" />
+                  </div>
+                ) : (
+                  <textarea
+                    ref={contentRef}
+                    data-testid="note-content-input"
+                    placeholder={t('note.contentPlaceholder')}
+                    rows={4}
+                    className="w-full min-h-[6rem] resize-none bg-transparent p-2 text-gray-900 outline-none placeholder-gray-500 dark:text-white dark:placeholder-gray-400"
+                    value={content}
+                    onChange={(e) => {
+                      const newContent = e.target.value;
+                      const validationError = validateContent(newContent, t);
+                      if (validationError) {
+                        showError(validationError);
+                        return;
+                      }
+                      setContent(newContent);
+                      if (note) markDirty();
+                    }}
+                    onKeyDown={handleContentKeyDown}
+                  />
+                )}
+              </div>
             ) : (
               <div className="space-y-4">
                 {/* Uncompleted items section */}

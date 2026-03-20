@@ -13,6 +13,7 @@ import { VALIDATION, type Note, type User } from '@jot/shared';
 import { notes } from '@/utils/api';
 import LetterAvatar from '@/components/LetterAvatar';
 import ConfirmDialog from '@/components/ConfirmDialog';
+import NoteMarkdown from '@/components/NoteMarkdown';
 import { useToast } from '@/hooks/useToast';
 import { buildShareAvatars } from '@/utils/shareAvatars';
 
@@ -250,9 +251,11 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, onRestore, o
         )}
 
         {note.note_type === 'text' ? (
-          <div className="text-sm text-gray-700 dark:text-gray-200 line-clamp-6 whitespace-pre-wrap">
-            {note.content}
-          </div>
+          <NoteMarkdown
+            content={note.content}
+            variant="card"
+            className="line-clamp-6 text-sm text-gray-700 dark:text-gray-200"
+          />
         ) : (
           <div className="space-y-1">
             {(() => {

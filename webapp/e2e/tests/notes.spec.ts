@@ -28,6 +28,38 @@ test.describe('Notes', () => {
     await dashboardPage.expectNoteNotVisible('Original Title');
   });
 
+  test('formats markdown in the note modal and renders it on the card preview', async ({ page, dashboardPage }) => {
+    await dashboardPage.goto();
+    await dashboardPage.clickNewNote();
+    await page.fill('input[placeholder="Note title..."]', 'Markdown Note');
+    await dashboardPage.noteContentInput().fill('Heading line\n\nbold text');
+
+    await dashboardPage.noteContentInput().evaluate((element: HTMLTextAreaElement) => {
+      element.focus();
+      element.setSelectionRange(0, 'Heading line'.length);
+    });
+    await dashboardPage.selectHeading(1);
+
+    await dashboardPage.noteContentInput().evaluate((element: HTMLTextAreaElement) => {
+      const start = element.value.indexOf('bold text');
+      element.focus();
+      element.setSelectionRange(start, start + 'bold text'.length);
+    });
+    await dashboardPage.clickToolbarButton('Bold');
+
+    await dashboardPage.switchToPreviewMode();
+    await expect(dashboardPage.noteMarkdownPreview().locator('h1')).toHaveText('Heading line');
+    await expect(dashboardPage.noteMarkdownPreview().locator('strong')).toHaveText('bold text');
+
+    await dashboardPage.switchToEditMode();
+    await expect(dashboardPage.noteContentInput()).toHaveValue('# Heading line\n\n**bold text**');
+
+    await page.getByRole('button', { name: 'Close' }).click();
+
+    const card = dashboardPage.noteCard('Markdown Note');
+    await expect(card.locator('strong')).toHaveText('bold text');
+  });
+
   test('deletes a note', async ({ dashboardPage }) => {
     await dashboardPage.goto();
     await dashboardPage.createNote('Note to Delete');

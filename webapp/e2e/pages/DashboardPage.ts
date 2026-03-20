@@ -15,7 +15,7 @@ export class DashboardPage {
     await this.clickNewNote();
     await this.page.fill('input[placeholder="Note title..."]', title);
     if (content) {
-      await this.page.fill('textarea[placeholder="Take a note..."]', content);
+      await this.page.getByTestId('note-content-input').fill(content);
     }
     // Close the modal to save (auto-save on close when there are changes)
     await this.page.click('button[aria-label="Close"]');
@@ -26,7 +26,7 @@ export class DashboardPage {
   async createNoteWithLabels(title: string, content: string, labelNames: string[]) {
     await this.clickNewNote();
     await this.page.fill('input[placeholder="Note title..."]', title);
-    await this.page.fill('textarea[placeholder="Take a note..."]', content);
+    await this.page.getByTestId('note-content-input').fill(content);
 
     for (const labelName of labelNames) {
       await this.page.getByRole('button', { name: 'Add labels' }).click();
@@ -69,6 +69,31 @@ export class DashboardPage {
 
   todoItemInput(index: number): Locator {
     return this.page.locator('[data-testid="todo-item-input"]').nth(index);
+  }
+
+  noteContentInput(): Locator {
+    return this.page.getByTestId('note-content-input')
+  }
+
+  noteMarkdownPreview(): Locator {
+    return this.page.getByTestId('note-markdown-preview')
+  }
+
+  async clickToolbarButton(label: string) {
+    await this.page.getByRole('button', { name: label }).click()
+  }
+
+  async selectHeading(level: 1 | 2 | 3 | 4) {
+    await this.clickToolbarButton('Heading')
+    await this.page.getByRole('button', { name: `Heading ${level}` }).click()
+  }
+
+  async switchToPreviewMode() {
+    await this.clickToolbarButton('Preview')
+  }
+
+  async switchToEditMode() {
+    await this.clickToolbarButton('Edit')
   }
 
   async focusTodoItem(index: number) {
@@ -268,7 +293,7 @@ export class DashboardPage {
     await this.openNote(title);
     await expect(this.page.getByRole('heading', { name: 'Edit Note' })).toBeVisible();
     await this.page.fill('input[placeholder="Note title..."]', newTitle);
-    await this.page.fill('textarea[placeholder="Take a note..."]', newContent);
+    await this.noteContentInput().fill(newContent);
     await this.page.click('button[aria-label="Close"]');
   }
 

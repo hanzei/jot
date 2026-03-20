@@ -97,6 +97,19 @@ describe('NoteCard', () => {
       expect(screen.getByText('Special <>&"\'` Characters')).toBeInTheDocument()
       expect(screen.getByText('Content with <script>alert("xss")</script> and emojis 🚀💡')).toBeInTheDocument()
     })
+
+    it('renders markdown content on note cards', () => {
+      const markdownNote = createMockNote({
+        title: '',
+        content: '# Heading\n\n**Bold** and [Example](https://example.com)',
+      })
+
+      const { container } = renderNoteCard({ ...defaultProps, note: markdownNote })
+
+      expect(screen.getByText('Heading')).toBeInTheDocument()
+      expect(container.querySelector('strong')?.textContent).toBe('Bold')
+      expect(container.querySelector('a')).toBeNull()
+    })
   })
 
   describe('Color Handling', () => {
