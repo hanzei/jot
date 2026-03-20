@@ -8,7 +8,6 @@ export interface SidebarTab {
   isActive?: boolean;
   href?: string;
   onClick?: () => void;
-  title?: string;
 }
 
 interface SidebarProps {
@@ -57,7 +56,6 @@ const Sidebar = ({ tabs, bottomTabs, children, collapsed, onCollapse }: SidebarP
               aria-label={tab.label}
               title={tab.title}
               aria-current={tab.isActive ? 'page' : undefined}
-              title={tab.title}
               className={tabClass(tab.isActive)}
               onClick={() => handleTabClick()}
             >
@@ -71,7 +69,6 @@ const Sidebar = ({ tabs, bottomTabs, children, collapsed, onCollapse }: SidebarP
               aria-label={tab.label}
               title={tab.title}
               aria-current={tab.isActive ? 'page' : undefined}
-              title={tab.title}
               className={tabClass(tab.isActive)}
             >
               {tab.icon}
@@ -92,7 +89,6 @@ const Sidebar = ({ tabs, bottomTabs, children, collapsed, onCollapse }: SidebarP
                   aria-label={tab.label}
                   title={tab.title}
                   aria-current={tab.isActive ? 'page' : undefined}
-                  title={tab.title}
                   className={tabClass(tab.isActive)}
                   onClick={() => handleTabClick()}
                 >
@@ -106,7 +102,6 @@ const Sidebar = ({ tabs, bottomTabs, children, collapsed, onCollapse }: SidebarP
                   aria-label={tab.label}
                   title={tab.title}
                   aria-current={tab.isActive ? 'page' : undefined}
-                  title={tab.title}
                   className={tabClass(tab.isActive)}
                 >
                   {tab.icon}
