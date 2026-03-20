@@ -443,7 +443,7 @@ describe('Dashboard', () => {
         expect(mockGetAll).toHaveBeenCalledWith(false, '', true, '', false)
       })
 
-      expect(screen.getByText('Notes in the bin are deleted after 7 days')).toBeInTheDocument()
+      expect(await screen.findByText('Notes in the bin are deleted after 7 days')).toBeInTheDocument()
 
       // Bin-specific controls should be rendered
       await waitFor(() => {
