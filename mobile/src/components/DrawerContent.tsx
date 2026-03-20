@@ -38,6 +38,29 @@ const BOTTOM_ITEMS: NavItem[] = [
   { name: 'Trash', label: 'Trash', icon: 'trash-outline', activeIcon: 'trash' },
 ];
 
+function extractErrorMessage(error: unknown, fallback: string) {
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'response' in error &&
+    typeof error.response === 'object' &&
+    error.response !== null &&
+    'data' in error.response &&
+    typeof error.response.data === 'string'
+  ) {
+    const message = error.response.data.trim();
+    if (message) {
+      return message;
+    }
+  }
+
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
+
+  return fallback;
+}
+
 export default function DrawerContent(props: DrawerContentComponentProps) {
   const { user, logout } = useAuth();
   const { data: labels } = useLabels();
@@ -83,29 +106,6 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
     props.navigation.closeDrawer();
   }, [props.navigation]);
 
-  const extractErrorMessage = useCallback((error: unknown, fallback: string) => {
-    if (
-      typeof error === 'object' &&
-      error !== null &&
-      'response' in error &&
-      typeof error.response === 'object' &&
-      error.response !== null &&
-      'data' in error.response &&
-      typeof error.response.data === 'string'
-    ) {
-      const message = error.response.data.trim();
-      if (message) {
-        return message;
-      }
-    }
-
-    if (error instanceof Error && error.message) {
-      return error.message;
-    }
-
-    return fallback;
-  }, []);
-
   const handleLabelRenameSuccess = useCallback((labelId: string, labelName: string) => {
     if (activeLabelId === labelId) {
       props.navigation.navigate('Notes', { labelId, labelName });
@@ -135,7 +135,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
     } catch (error) {
       Alert.alert('Error', extractErrorMessage(error, 'Failed to rename label'));
     }
-  }, [extractErrorMessage, handleLabelRenameSuccess, renameLabel, renameLabelTarget, renameValue]);
+  }, [handleLabelRenameSuccess, renameLabel, renameLabelTarget, renameValue]);
 
   const openRenameModal = useCallback((label: Label) => {
     setRenameLabelTarget(label);
@@ -163,7 +163,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
         },
       ],
     );
-  }, [deleteLabel, extractErrorMessage, handleDeleteLabelSuccess]);
+  }, [deleteLabel, handleDeleteLabelSuccess]);
 
   const handleLabelLongPress = useCallback((label: Label) => {
     longPressHandledRef.current = true;

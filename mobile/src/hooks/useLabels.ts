@@ -6,6 +6,21 @@ import { getNotes } from '../api/notes';
 import { saveNote, saveNotes, renameLabelInLocalNotes, deleteLabelFromLocalNotes } from '../db/noteQueries';
 import { useNetworkStatus } from './useNetworkStatus';
 
+type LabelSyncScope = { archived?: true; trashed?: true; my_todo?: true } | undefined;
+
+function describeLabelSyncScope(scope: LabelSyncScope): string {
+  if (scope?.archived) {
+    return 'archived';
+  }
+  if (scope?.trashed) {
+    return 'trashed';
+  }
+  if (scope?.my_todo) {
+    return 'my_todo';
+  }
+  return 'active';
+}
+
 async function syncLocalNotesAfterLabelMutation(db: SQLiteDatabase) {
   const scopes = [
     undefined,
@@ -13,10 +28,20 @@ async function syncLocalNotesAfterLabelMutation(db: SQLiteDatabase) {
     { trashed: true },
     { my_todo: true },
   ] as const;
+  const failures: string[] = [];
 
   for (const scope of scopes) {
-    const notes = await getNotes(scope);
-    await saveNotes(db, notes);
+    try {
+      const notes = await getNotes(scope);
+      await saveNotes(db, notes);
+    } catch (error) {
+      const detail = error instanceof Error ? error.message : String(error);
+      failures.push(`${describeLabelSyncScope(scope)} scope: ${detail}`);
+    }
+  }
+
+  if (failures.length > 0) {
+    throw new Error(`failed to sync local notes after label mutation: ${failures.join('; ')}`);
   }
 }
 

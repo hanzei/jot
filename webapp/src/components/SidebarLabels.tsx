@@ -145,7 +145,7 @@ const SidebarLabels = ({ labels, selectedLabelId, onSelect, onRename, onDelete }
                     type="button"
                     onClick={() => onSelect?.(label.id)}
                     className={className}
-                    aria-pressed={isActive ? 'true' : undefined}
+                    aria-pressed={isActive ? true : undefined}
                   >
                     <TagIcon className="h-4 w-4 shrink-0" />
                     <span className="truncate min-w-0">{label.name}</span>
