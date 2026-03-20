@@ -2082,9 +2082,6 @@ const docTemplate = `{
                 "storage": {
                     "$ref": "#/definitions/models.AdminStorageStats"
                 },
-                "system": {
-                    "$ref": "#/definitions/models.AdminSystemStats"
-                },
                 "todo_items": {
                     "$ref": "#/definitions/models.AdminTodoItemStats"
                 },
@@ -2097,14 +2094,6 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "database_size_bytes": {
-                    "type": "integer"
-                }
-            }
-        },
-        "models.AdminSystemStats": {
-            "type": "object",
-            "properties": {
-                "uptime_seconds": {
                     "type": "integer"
                 }
             }
