@@ -97,7 +97,7 @@ const Admin = ({ onLogout }: AdminProps) => {
   };
 
   const validatePassword = (password: string): string => {
-    if (isPasswordTooShort(password, PASSWORD_MIN_LENGTH)) {
+    if (isPasswordTooShort(password)) {
       return t('admin.passwordMin', { min: PASSWORD_MIN_LENGTH });
     }
     return '';

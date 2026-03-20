@@ -17,7 +17,7 @@ func validateUsername(username string) error {
 		return errors.New("username must be at least 2 characters")
 	}
 	if len(username) > 30 {
-		return errors.New("username must be less than 30 characters")
+		return errors.New("username must be 30 characters or fewer")
 	}
 
 	// Username can only contain letters, numbers, underscores, and hyphens
