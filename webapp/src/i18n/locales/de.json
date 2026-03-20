@@ -46,6 +46,14 @@
     "otherNotes": "Weitere Notizen",
     "searchPlaceholder": "Notizen suchen...",
     "searchAriaLabel": "Notizen suchen",
+    "sortLabel": "Notizen sortieren",
+    "sortOption": {
+      "manual": "Manuell",
+      "updated_at": "Zuletzt bearbeitet",
+      "created_at": "Erstellungsdatum"
+    },
+    "manualReorderDisabledTitle": "Manuelles Sortieren ist aus.",
+    "manualReorderDisabled": "Notizen sind nach {{sort}} sortiert, daher ist Drag-and-drop deaktiviert.",
     "tabNotes": "Notizen",
     "tabMyTodo": "Meine Aufgaben",
     "myTodoTooltip": "Notizen mit dir zugewiesenen Aufgaben",

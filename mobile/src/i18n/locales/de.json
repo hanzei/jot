@@ -73,7 +73,14 @@
     "noNotesForLabel": "Keine Notizen für dieses Label",
     "tryDifferentKeywords": "Versuche andere Suchbegriffe",
     "failedLoadNotes": "Notizen konnten nicht geladen werden",
-    "checkConnection": "Prüfe deine Verbindung und versuche es erneut"
+    "checkConnection": "Prüfe deine Verbindung und versuche es erneut",
+    "sortOption": {
+      "manual": "Manuell",
+      "updated_at": "Zuletzt bearbeitet",
+      "created_at": "Erstellungsdatum"
+    },
+    "sortAccessibilityLabel": "Sortieren nach {{sortLabel}}",
+    "sortDisabledNotice": "Manuelles Sortieren ist aus. Notizen sind nach {{sortLabel}} sortiert, daher ist Drag-and-drop deaktiviert."
   },
   "settings": {
     "title": "Einstellungen",

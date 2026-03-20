@@ -78,7 +78,7 @@ function RevalidateConsumer() {
 }
 
 const mockUser = { id: '1', username: 'testuser', first_name: '', last_name: '', role: 'user', has_profile_icon: false, created_at: '', updated_at: '' };
-const mockSettings = { user_id: '1', language: 'en', theme: 'system' as const, updated_at: '' };
+const mockSettings = { user_id: '1', language: 'en', theme: 'system' as const, note_sort: 'manual' as const, updated_at: '' };
 
 describe('AuthContext', () => {
   beforeEach(() => {

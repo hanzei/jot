@@ -35,6 +35,7 @@ type UserSettings struct {
 	UserID    string    `json:"user_id"`
 	Language  string    `json:"language"`
 	Theme     string    `json:"theme"`
+	NoteSort  string    `json:"note_sort"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
@@ -159,6 +160,7 @@ type UpdateUserRequest struct {
 	LastName  *string `json:"last_name,omitempty"`
 	Language  *string `json:"language,omitempty"`
 	Theme     *string `json:"theme,omitempty"`
+	NoteSort  *string `json:"note_sort,omitempty"`
 }
 
 // ListNotesOptions holds optional query parameters for listing notes.

@@ -175,6 +175,85 @@ test.describe('Notes', () => {
     await dashboardPage.expectNoteAtPosition(2, 'First Note');
   });
 
+  test('switches sort modes and persists the selected sort preference', async ({
+    page,
+    authenticatedUser,
+    dashboardPage,
+    loginPage,
+  }) => {
+    await page.setViewportSize({ width: 600, height: 1000 });
+    await dashboardPage.goto();
+
+    // These 1.1s waits keep created/updated timestamps in distinct seconds so
+    // the sort assertions stay deterministic across create/edit operations.
+    await dashboardPage.createNote('Zulu');
+    await page.waitForTimeout(1100);
+    await dashboardPage.createNote('alpha');
+    await page.waitForTimeout(1100);
+    await dashboardPage.createNote('Bravo');
+    await dashboardPage.pinNote('Zulu');
+
+    await dashboardPage.selectSort('created_at');
+    await dashboardPage.expectManualReorderDisabledNotice();
+    await dashboardPage.expectVisibleNoteTitles(['Zulu', 'Bravo', 'alpha']);
+
+    await page.waitForTimeout(1100);
+    // Patch the alpha note directly so updated_at changes deterministically without
+    // relying on modal timing or extra UI interactions in this ordering test.
+    await page.evaluate(async () => {
+      const response = await fetch('/api/v1/notes', { credentials: 'include' });
+      const notes = await response.json() as Array<{
+        id: string;
+        title: string;
+        content: string;
+        pinned: boolean;
+        archived: boolean;
+        color: string;
+        checked_items_collapsed: boolean;
+      }>;
+      const alphaNote = notes.find(note => note.title === 'alpha');
+      if (!alphaNote) {
+        throw new Error('alpha note not found');
+      }
+
+      const updateResponse = await fetch(`/api/v1/notes/${alphaNote.id}`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: alphaNote.title,
+          content: 'updated content',
+          pinned: alphaNote.pinned,
+          archived: alphaNote.archived,
+          color: alphaNote.color,
+          checked_items_collapsed: alphaNote.checked_items_collapsed,
+        }),
+      });
+
+      if (!updateResponse.ok) {
+        throw new Error(`Failed to update alpha note: ${updateResponse.status}`);
+      }
+    });
+    await dashboardPage.selectSort('updated_at');
+    await dashboardPage.expectVisibleNoteTitles(['Zulu', 'alpha', 'Bravo']);
+
+    await dashboardPage.selectSort('created_at');
+    await dashboardPage.expectVisibleNoteTitles(['Zulu', 'Bravo', 'alpha']);
+    expect(await dashboardPage.getSortValue()).toBe('created_at');
+
+    await page.reload();
+    expect(await dashboardPage.getSortValue()).toBe('created_at');
+    await dashboardPage.expectVisibleNoteTitles(['Zulu', 'Bravo', 'alpha']);
+
+    await dashboardPage.logout();
+    await expect(page).toHaveURL('/login');
+
+    await loginPage.login(authenticatedUser.username, authenticatedUser.password);
+    await expect(page).toHaveURL('/');
+    expect(await dashboardPage.getSortValue()).toBe('created_at');
+    await dashboardPage.expectVisibleNoteTitles(['Zulu', 'Bravo', 'alpha']);
+  });
+
   test('duplicates text and todo notes with copied labels and cleared shares/assignments', async ({ page, dashboardPage, request }) => {
     const collaboratorName = `dup-collab-${Date.now()}`;
     const collaboratorPassword = 'testpass123';

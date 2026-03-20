@@ -171,6 +171,12 @@ definitions:
         type: string
       last_name:
         type: string
+      note_sort:
+        enum:
+        - manual
+        - updated_at
+        - created_at
+        type: string
       theme:
         enum:
         - system
@@ -400,6 +406,12 @@ definitions:
   models.UserSettings:
     properties:
       language:
+        type: string
+      note_sort:
+        enum:
+        - manual
+        - updated_at
+        - created_at
         type: string
       theme:
         type: string

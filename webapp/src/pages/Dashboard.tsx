@@ -1,9 +1,9 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { PlusIcon, DocumentTextIcon, ArchiveBoxIcon, TrashIcon, ClipboardDocumentCheckIcon } from '@heroicons/react/24/outline';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { PlusIcon, DocumentTextIcon, ArchiveBoxIcon, TrashIcon, ClipboardDocumentCheckIcon, ArrowsUpDownIcon } from '@heroicons/react/24/outline';
 import { useTranslation } from 'react-i18next';
 import { notes, auth, labels as labelsApi, users as usersApi, isAxiosError } from '@/utils/api';
-import { removeUser, getUser, isAdmin } from '@/utils/auth';
-import type { Note, Label, User, SSEEvent } from '@jot/shared';
+import { removeUser, getUser, getSettings, setSettings, isAdmin } from '@/utils/auth';
+import type { Note, Label, User, SSEEvent, NoteSort } from '@jot/shared';
 import { useSSE } from '@/utils/useSSE';
 import { useSearchParams, useParams } from 'react-router';
 import AppLayout from '@/components/AppLayout';
@@ -15,6 +15,7 @@ import SidebarLabels from '@/components/SidebarLabels';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { useToast } from '@/hooks/useToast';
 import { isAnyModalDialogOpen, isEditableElementFocused, isOverlayControlFocused } from '@/utils/keyboardShortcuts';
+import { NOTE_SORT_OPTIONS, normalizeNoteSort, sortNotesForDisplay } from '@/utils/noteSort';
 import {
   DndContext,
   closestCenter,
@@ -44,6 +45,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const { noteId: noteIdParam } = useParams<{ noteId?: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const [notesList, setNotesList] = useState<Note[]>([]);
+  const [noteSort, setNoteSort] = useState<NoteSort>(() => normalizeNoteSort(getSettings()?.note_sort));
   const [loading, setLoading] = useState(true);
   const [trashCount, setTrashCount] = useState(0);
   const [isEmptyingTrash, setIsEmptyingTrash] = useState(false);
@@ -65,6 +67,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const openNoteIdRef = useRef<string | null>(null);
   const returnPathRef = useRef('/');
+  const noteSortUpdateRequestIdRef = useRef(0);
   useEffect(() => {
     isMountedRef.current = true;
     return () => { isMountedRef.current = false; };
@@ -536,6 +539,59 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     });
   };
 
+  const rollbackNoteSortCache = (failedSort: NoteSort, previousSettings: ReturnType<typeof getSettings>): boolean => {
+    const cachedSettings = getSettings();
+    if (cachedSettings?.note_sort !== failedSort) {
+      return false;
+    }
+
+    if (previousSettings) {
+      setSettings(previousSettings);
+    } else {
+      localStorage.removeItem('settings');
+    }
+
+    return true;
+  };
+
+  const handleNoteSortChange = useCallback(async (nextSort: typeof NOTE_SORT_OPTIONS[number]) => {
+    if (nextSort === noteSort) {
+      return;
+    }
+
+    const previousSort = noteSort;
+    const previousSettings = getSettings();
+    const requestID = ++noteSortUpdateRequestIdRef.current;
+
+    setNoteSort(nextSort);
+    if (previousSettings) {
+      setSettings({ ...previousSettings, note_sort: nextSort });
+    }
+
+    try {
+      const { settings: updatedSettings } = await usersApi.updateMe({ note_sort: nextSort });
+      if (!isMountedRef.current || requestID !== noteSortUpdateRequestIdRef.current) {
+        return;
+      }
+      if (updatedSettings) {
+        setSettings(updatedSettings);
+      }
+    } catch (error) {
+      console.error('Failed to update note sort:', error);
+
+      const restoredSettings = rollbackNoteSortCache(nextSort, previousSettings);
+
+      if (!isMountedRef.current || requestID !== noteSortUpdateRequestIdRef.current) {
+        return;
+      }
+
+      setNoteSort(previousSort);
+      if (!restoredSettings && previousSettings) {
+        setSettings(previousSettings);
+      }
+    }
+  }, [noteSort]);
+
   const handleRenameLabel = useCallback(async (label: Label, newName: string): Promise<boolean> => {
     try {
       await labelsApi.rename(label.id, newName);
@@ -576,7 +632,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   }, [handleViewChange, loadLabels, loadNotes, selectedLabelId, showToast, t]);
 
   const handleDragEnd = async (event: DragEndEvent) => {
-    if (showBin || showMyTodo) {
+    if (showArchived || showBin || showMyTodo || noteSort !== 'manual') {
       return;
     }
 
@@ -625,6 +681,13 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     }
   };
 
+  const { pinned: displayedPinned, other: displayedOther } = useMemo(
+    () => sortNotesForDisplay(notesList, noteSort),
+    [notesList, noteSort],
+  );
+  const dragReorderingDisabled = showArchived || showBin || showMyTodo || noteSort !== 'manual';
+  const activeSortLabel = t(`dashboard.sortOption.${noteSort}`);
+
   if (loading) {
     return (
       <div className="h-dvh flex items-center justify-center bg-gray-50 dark:bg-slate-900">
@@ -667,32 +730,56 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   ];
 
   const searchBar = (
-    <div className="flex w-full flex-col gap-3 sm:flex-row sm:items-center">
-      <div className="flex-1">
+    <div className="w-full sm:max-w-7xl flex flex-col gap-3 sm:flex-row sm:items-center">
+      <div className="min-w-0 flex-1">
         <SearchBar
           value={searchQuery}
           onChange={setSearchQuery}
           inputRef={searchInputRef}
         />
       </div>
-      {showBin && trashCount > 0 && (
-        <button
-          type="button"
-          onClick={() => setShowEmptyTrashConfirm(true)}
-          disabled={isEmptyingTrash}
-          data-testid="empty-trash-button"
-          className="inline-flex items-center justify-center rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300 dark:hover:bg-red-950/60 dark:focus:ring-offset-slate-800"
-        >
-          {isEmptyingTrash ? (
-            <span className="flex items-center gap-2">
-              <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
-              {t('dashboard.emptyTrash')}
-            </span>
-          ) : (
-            t('dashboard.emptyTrash')
-          )}
-        </button>
-      )}
+      <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center sm:justify-end">
+        <div className="w-full sm:w-56">
+          <label htmlFor="dashboard-sort" className="sr-only">
+            {t('dashboard.sortLabel')}
+          </label>
+          <div className="relative">
+            <ArrowsUpDownIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
+            <select
+              id="dashboard-sort"
+              data-testid="dashboard-sort-select"
+              aria-label={t('dashboard.sortLabel')}
+              value={noteSort}
+              onChange={(event) => void handleNoteSortChange(event.target.value as NoteSort)}
+              className="w-full rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 py-2 pl-9 pr-10 text-sm text-gray-900 dark:text-white focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {NOTE_SORT_OPTIONS.map((sortOption) => (
+                <option key={sortOption} value={sortOption}>
+                  {t(`dashboard.sortOption.${sortOption}`)}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+        {showBin && trashCount > 0 && (
+          <button
+            type="button"
+            onClick={() => setShowEmptyTrashConfirm(true)}
+            disabled={isEmptyingTrash}
+            data-testid="empty-trash-button"
+            className="inline-flex items-center justify-center rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300 dark:hover:bg-red-950/60 dark:focus:ring-offset-slate-800"
+          >
+            {isEmptyingTrash ? (
+              <span className="flex items-center gap-2">
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                {t('dashboard.emptyTrash')}
+              </span>
+            ) : (
+              t('dashboard.emptyTrash')
+            )}
+          </button>
+        )}
+      </div>
     </div>
   );
 
@@ -750,7 +837,20 @@ export default function Dashboard({ onLogout }: DashboardProps) {
         )}
 
         {/* Notes grid */}
-        {!notesList || notesList.length === 0 ? (
+        {noteSort !== 'manual' && (
+          <div
+            data-testid="manual-reorder-disabled-notice"
+            className="mb-6 flex items-start gap-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900 dark:border-blue-900/70 dark:bg-blue-950/40 dark:text-blue-200"
+          >
+            <ArrowsUpDownIcon className="mt-0.5 h-4 w-4 shrink-0" />
+            <div>
+              <span className="font-medium">{t('dashboard.manualReorderDisabledTitle')}</span>{' '}
+              <span>{t('dashboard.manualReorderDisabled', { sort: activeSortLabel })}</span>
+            </div>
+          </div>
+        )}
+
+        {displayedPinned.length === 0 && displayedOther.length === 0 ? (
           <div className="text-center py-12">
             <div className="mx-auto max-w-xl text-gray-500 dark:text-gray-400 text-lg whitespace-normal break-words">
               {searchQuery
@@ -778,7 +878,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
           >
             <div className="space-y-8">
               {/* Pinned notes section */}
-              {notesList.some(note => note.pinned) && (
+              {displayedPinned.length > 0 && (
                 <div>
                   <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
                     <svg className="h-4 w-4 text-blue-500 dark:text-blue-400 mr-2" fill="currentColor" viewBox="0 0 24 24">
@@ -787,11 +887,11 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                     {t('dashboard.pinned')}
                   </h2>
                   <SortableContext
-                    items={notesList.filter(note => note.pinned).map(note => note.id)}
+                    items={displayedPinned.map(note => note.id)}
                     strategy={rectSortingStrategy}
                   >
                     <div className="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-4 space-y-0">
-                      {notesList.filter(note => note.pinned).map((note) => (
+                      {displayedPinned.map((note) => (
                         <SortableNoteCard
                           key={note.id}
                           note={note}
@@ -803,7 +903,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                           onPermanentlyDelete={handlePermanentlyDeleteNote}
                           currentUserId={user?.id}
                           usersById={usersById}
-                          disabled={showArchived || showBin || showMyTodo}
+                          disabled={dragReorderingDisabled}
                           inBin={showBin}
                           onRefresh={loadNotes}
                         />
@@ -814,19 +914,19 @@ export default function Dashboard({ onLogout }: DashboardProps) {
               )}
 
               {/* Other notes section */}
-              {notesList.some(note => !note.pinned) && (
+              {displayedOther.length > 0 && (
                 <div>
-                  {notesList.some(note => note.pinned) && (
+                  {displayedPinned.length > 0 && (
                     <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
                       {t('dashboard.otherNotes')}
                     </h2>
                   )}
                   <SortableContext
-                    items={notesList.filter(note => !note.pinned).map(note => note.id)}
+                    items={displayedOther.map(note => note.id)}
                     strategy={rectSortingStrategy}
                   >
                     <div className="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-4 space-y-0">
-                      {notesList.filter(note => !note.pinned).map((note) => (
+                      {displayedOther.map((note) => (
                         <SortableNoteCard
                           key={note.id}
                           note={note}
@@ -838,7 +938,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                           onPermanentlyDelete={handlePermanentlyDeleteNote}
                           currentUserId={user?.id}
                           usersById={usersById}
-                          disabled={showArchived || showBin || showMyTodo}
+                          disabled={dragReorderingDisabled}
                           inBin={showBin}
                           onRefresh={loadNotes}
                         />

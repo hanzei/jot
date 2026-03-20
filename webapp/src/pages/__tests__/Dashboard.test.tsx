@@ -4,8 +4,8 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { MemoryRouter, useLocation, useNavigate, Routes, Route } from 'react-router'
 import { type ReactNode } from 'react'
 import Dashboard from '../Dashboard'
-import type { Note, Label } from '@jot/shared'
-import { notes, labels } from '@/utils/api'
+import type { AuthResponse, Note, Label, NoteSort, UserSettings } from '@jot/shared'
+import { notes, labels, users } from '@/utils/api'
 import * as auth from '@/utils/auth'
 import { useSSE } from '@/utils/useSSE'
 import { createMockNote } from '@/utils/__tests__/test-helpers'
@@ -28,12 +28,23 @@ vi.mock('@/utils/api', () => ({
   },
   users: {
     search: vi.fn().mockResolvedValue([]),
+    updateMe: vi.fn().mockResolvedValue({
+      settings: {
+        user_id: 'user1',
+        language: 'system',
+        theme: 'system',
+        note_sort: 'manual',
+        updated_at: '2023-01-01T00:00:00Z',
+      },
+    }),
   },
 }))
 
 vi.mock('@/utils/auth', () => ({
   removeUser: vi.fn(),
   getUser: vi.fn(),
+  getSettings: vi.fn(),
+  setSettings: vi.fn(),
   isAdmin: vi.fn(),
 }))
 
@@ -129,17 +140,18 @@ vi.mock('@/components/AppLayout', () => ({
 }))
 
 vi.mock('@/components/SortableNoteCard', () => ({
-  default: ({ note, onEdit, onDelete, onShare, onRestore, onPermanentlyDelete, inBin, onRefresh }: {
+  default: ({ note, onEdit, onDelete, onShare, onRestore, onPermanentlyDelete, disabled, inBin, onRefresh }: {
     note: Note;
     onEdit?: (note: Note) => void;
     onDelete?: (id: string) => void;
     onShare?: (note: Note) => void;
     onRestore?: (id: string) => void;
     onPermanentlyDelete?: (id: string) => void;
+    disabled?: boolean;
     inBin?: boolean;
     onRefresh?: () => void;
   }) => (
-    <div data-testid={`note-card-${note.id}`}>
+    <div data-testid={`note-card-${note.id}`} data-disabled={disabled ? 'true' : 'false'}>
       <h3>{note.title}</h3>
       <p>{note.content}</p>
       {inBin ? (
@@ -215,6 +227,13 @@ describe('Dashboard', () => {
       has_profile_icon: false,
     })
     vi.mocked(auth.isAdmin).mockReturnValue(false)
+    vi.mocked(auth.getSettings).mockReturnValue({
+      user_id: 'user1',
+      language: 'system',
+      theme: 'system',
+      note_sort: 'manual',
+      updated_at: '2023-01-01T00:00:00Z',
+    })
     vi.mocked(notes.getAll).mockResolvedValue([])
   })
 
@@ -374,6 +393,194 @@ describe('Dashboard', () => {
       await waitFor(() => {
         expect(mockGetAll).toHaveBeenCalledWith(false, 'abc', false, '', false)
       })
+    })
+  })
+
+  describe('Sorting', () => {
+    it('renders the sort control with the saved preference', async () => {
+      vi.mocked(auth.getSettings).mockReturnValue({
+        user_id: 'user1',
+        language: 'system',
+        theme: 'system',
+        note_sort: 'unsupported' as unknown as NoteSort,
+        updated_at: '2023-01-01T00:00:00Z',
+      })
+
+      renderDashboard()
+
+      await waitFor(() => {
+        expect(screen.getByTestId('dashboard-sort-select')).toHaveValue('manual')
+      })
+    })
+
+    it('sorts pinned and unpinned notes by last modified within their groups', async () => {
+      vi.mocked(auth.getSettings).mockReturnValue({
+        user_id: 'user1',
+        language: 'system',
+        theme: 'system',
+        note_sort: 'updated_at',
+        updated_at: '2023-01-01T00:00:00Z',
+      })
+      vi.mocked(notes.getAll).mockResolvedValue([
+        createMockNote({ id: 'unpinned-old', title: 'Older unpinned', pinned: false, updated_at: '2024-01-01T00:00:00Z' }),
+        createMockNote({ id: 'pinned-old', title: 'Older pinned', pinned: true, updated_at: '2024-01-01T00:00:00Z' }),
+        createMockNote({ id: 'unpinned-new', title: 'Newer unpinned', pinned: false, updated_at: '2024-01-03T00:00:00Z' }),
+        createMockNote({ id: 'pinned-new', title: 'Newer pinned', pinned: true, updated_at: '2024-01-03T00:00:00Z' }),
+      ])
+
+      renderDashboard()
+
+      await waitFor(() => {
+        const renderedOrder = screen.getAllByTestId(/^note-card-/).map(card => card.getAttribute('data-testid'))
+        expect(renderedOrder).toEqual([
+          'note-card-pinned-new',
+          'note-card-pinned-old',
+          'note-card-unpinned-new',
+          'note-card-unpinned-old',
+        ])
+      })
+    })
+
+    it('persists sort changes and disables manual reordering for non-manual sorts', async () => {
+      const user = userEvent.setup()
+      vi.mocked(notes.getAll).mockResolvedValue([
+        createMockNote({ id: '1', title: 'A note' }),
+        createMockNote({ id: '2', title: 'B note' }),
+      ])
+      vi.mocked(users.updateMe).mockResolvedValue({
+        user: {
+          id: 'user1',
+          username: 'testuser',
+          first_name: '',
+          last_name: '',
+          role: 'user',
+          created_at: '2023-01-01T00:00:00Z',
+          updated_at: '2023-01-01T00:00:00Z',
+          has_profile_icon: false,
+        },
+        settings: {
+          user_id: 'user1',
+          language: 'system',
+          theme: 'system',
+          note_sort: 'updated_at',
+          updated_at: '2023-01-01T00:00:00Z',
+        },
+      })
+
+      renderDashboard()
+
+      const sortSelect = await screen.findByTestId('dashboard-sort-select')
+      await user.selectOptions(sortSelect, 'updated_at')
+
+      await waitFor(() => {
+        expect(users.updateMe).toHaveBeenCalledWith({ note_sort: 'updated_at' })
+        expect(screen.getByTestId('manual-reorder-disabled-notice')).toBeInTheDocument()
+        expect(screen.getByTestId('note-card-1')).toHaveAttribute('data-disabled', 'true')
+      })
+
+      expect(auth.setSettings).toHaveBeenCalledWith(expect.objectContaining({ note_sort: 'updated_at' }))
+    })
+
+    it('rolls back sort changes when persistence fails', async () => {
+      const user = userEvent.setup()
+      let currentSettings: UserSettings = {
+        user_id: 'user1',
+        language: 'system',
+        theme: 'system',
+        note_sort: 'manual',
+        updated_at: '2023-01-01T00:00:00Z',
+      }
+      vi.mocked(auth.getSettings).mockImplementation(() => currentSettings)
+      vi.mocked(auth.setSettings).mockImplementation((settings) => {
+        currentSettings = settings
+      })
+      vi.mocked(notes.getAll).mockResolvedValue([
+        createMockNote({ id: '1', title: 'A note' }),
+        createMockNote({ id: '2', title: 'B note' }),
+      ])
+      vi.mocked(users.updateMe).mockRejectedValueOnce(new Error('save failed'))
+
+      renderDashboard()
+
+      const sortSelect = await screen.findByTestId('dashboard-sort-select')
+      await user.selectOptions(sortSelect, 'updated_at')
+
+      await waitFor(() => {
+        expect(users.updateMe).toHaveBeenCalledWith({ note_sort: 'updated_at' })
+        expect(sortSelect).toHaveValue('manual')
+        expect(screen.queryByTestId('manual-reorder-disabled-notice')).not.toBeInTheDocument()
+        expect(screen.getByTestId('note-card-1')).toHaveAttribute('data-disabled', 'false')
+      })
+
+      expect(currentSettings.note_sort).toBe('manual')
+      expect(auth.setSettings).toHaveBeenLastCalledWith(expect.objectContaining({ note_sort: 'manual' }))
+    })
+
+    it('keeps the final sort when an earlier persistence request fails later', async () => {
+      const user = userEvent.setup()
+      let currentSettings: UserSettings = {
+        user_id: 'user1',
+        language: 'system',
+        theme: 'system',
+        note_sort: 'manual',
+        updated_at: '2023-01-01T00:00:00Z',
+      }
+      vi.mocked(auth.getSettings).mockImplementation(() => currentSettings)
+      vi.mocked(auth.setSettings).mockImplementation((settings) => {
+        currentSettings = settings
+      })
+      vi.mocked(notes.getAll).mockResolvedValue([
+        createMockNote({ id: '1', title: 'A note' }),
+        createMockNote({ id: '2', title: 'B note' }),
+      ])
+
+      let rejectFirstRequest: ((reason?: unknown) => void) | undefined
+      const firstRequest = new Promise<AuthResponse>((_, reject) => {
+        rejectFirstRequest = reject
+      })
+
+      vi.mocked(users.updateMe)
+        .mockReturnValueOnce(firstRequest)
+        .mockResolvedValueOnce({
+          user: {
+            id: 'user1',
+            username: 'testuser',
+            first_name: '',
+            last_name: '',
+            role: 'user',
+            created_at: '2023-01-01T00:00:00Z',
+            updated_at: '2023-01-01T00:00:00Z',
+            has_profile_icon: false,
+          },
+          settings: {
+            user_id: 'user1',
+            language: 'system',
+            theme: 'system',
+            note_sort: 'created_at',
+            updated_at: '2023-01-01T00:00:00Z',
+          },
+        })
+
+      renderDashboard()
+
+      const sortSelect = await screen.findByTestId('dashboard-sort-select')
+      await user.selectOptions(sortSelect, 'updated_at')
+      await user.selectOptions(sortSelect, 'created_at')
+
+      await waitFor(() => {
+        expect(sortSelect).toHaveValue('created_at')
+        expect(screen.getByTestId('manual-reorder-disabled-notice')).toBeInTheDocument()
+      })
+
+      rejectFirstRequest?.(new Error('stale failure'))
+
+      await waitFor(() => {
+        expect(sortSelect).toHaveValue('created_at')
+        expect(screen.getByTestId('note-card-1')).toHaveAttribute('data-disabled', 'true')
+      })
+
+      expect(currentSettings.note_sort).toBe('created_at')
+      expect(auth.setSettings).toHaveBeenLastCalledWith(expect.objectContaining({ note_sort: 'created_at' }))
     })
   })
 

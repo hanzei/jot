@@ -178,23 +178,25 @@ type UpdateUserRequest struct {
 	LastName  *string `json:"last_name,omitempty"`
 	Language  *string `json:"language,omitempty" enums:"system,en,de"`
 	Theme     *string `json:"theme,omitempty" enums:"system,light,dark"`
+	NoteSort  *string `json:"note_sort,omitempty" enums:"manual,updated_at,created_at"`
 }
 
 var validLanguages = map[string]bool{"system": true, "en": true, "de": true}
 var validThemes = map[string]bool{"system": true, "light": true, "dark": true}
+var validNoteSorts = map[string]bool{"manual": true, "updated_at": true, "created_at": true}
 
-// validateSettingsFields validates language and theme. Returns (lang, theme, needUpdate).
-// If both are nil, needUpdate is false. If validation fails, returns a non-nil error.
-func validateSettingsFields(current *models.UserSettings, language, theme *string) (lang, th string, needUpdate bool, err error) {
-	if language == nil && theme == nil {
-		return "", "", false, nil
+// validateSettingsFields validates language, theme, and note sort.
+// Returns (lang, theme, noteSort, needUpdate). If all are nil, needUpdate is false.
+func validateSettingsFields(current *models.UserSettings, language, theme, noteSort *string) (lang, th, ns string, needUpdate bool, err error) {
+	if language == nil && theme == nil && noteSort == nil {
+		return "", "", "", false, nil
 	}
 	lang = current.Language
 	if language != nil {
 		lang = *language
 	}
 	if !validLanguages[lang] {
-		return "", "", false, errors.New("invalid language: must be 'system', 'en', or 'de'")
+		return "", "", "", false, errors.New("invalid language: must be 'system', 'en', or 'de'")
 	}
 	th = current.Theme
 	if theme != nil {
@@ -204,22 +206,32 @@ func validateSettingsFields(current *models.UserSettings, language, theme *strin
 		th = "system"
 	}
 	if !validThemes[th] {
-		return "", "", false, errors.New("invalid theme: must be 'system', 'light', or 'dark'")
+		return "", "", "", false, errors.New("invalid theme: must be 'system', 'light', or 'dark'")
 	}
-	return lang, th, true, nil
+	ns = current.NoteSort
+	if noteSort != nil {
+		ns = *noteSort
+	}
+	if ns == "" {
+		ns = "manual"
+	}
+	if !validNoteSorts[ns] {
+		return "", "", "", false, errors.New("invalid note_sort: must be 'manual', 'updated_at', or 'created_at'")
+	}
+	return lang, th, ns, true, nil
 }
 
-// applySettingsUpdate validates and persists language/theme changes.
-// If neither field is set the current settings are returned unchanged.
-func (h *AuthHandler) applySettingsUpdate(userID string, current *models.UserSettings, language, theme *string) (*models.UserSettings, int, error) {
-	lang, th, needUpdate, err := validateSettingsFields(current, language, theme)
+// applySettingsUpdate validates and persists settings changes.
+// If no settings field is set the current settings are returned unchanged.
+func (h *AuthHandler) applySettingsUpdate(userID string, current *models.UserSettings, language, theme, noteSort *string) (*models.UserSettings, int, error) {
+	lang, th, ns, needUpdate, err := validateSettingsFields(current, language, theme, noteSort)
 	if err != nil {
 		return nil, http.StatusBadRequest, err
 	}
 	if !needUpdate {
 		return current, 0, nil
 	}
-	updated, err := h.userSettingsStore.Update(userID, lang, th)
+	updated, err := h.userSettingsStore.Update(userID, lang, th, ns)
 	if err != nil {
 		return nil, http.StatusInternalServerError, err
 	}
@@ -273,7 +285,7 @@ func (h *AuthHandler) UpdateUser(w http.ResponseWriter, r *http.Request) (int, a
 	if err != nil {
 		return http.StatusInternalServerError, nil, err
 	}
-	if _, _, _, validateErr := validateSettingsFields(settings, req.Language, req.Theme); validateErr != nil {
+	if _, _, _, _, validateErr := validateSettingsFields(settings, req.Language, req.Theme, req.NoteSort); validateErr != nil {
 		return http.StatusBadRequest, nil, validateErr
 	}
 
@@ -285,7 +297,7 @@ func (h *AuthHandler) UpdateUser(w http.ResponseWriter, r *http.Request) (int, a
 		return http.StatusInternalServerError, nil, err
 	}
 
-	settings, status, settingsErr := h.applySettingsUpdate(currentUser.ID, settings, req.Language, req.Theme)
+	settings, status, settingsErr := h.applySettingsUpdate(currentUser.ID, settings, req.Language, req.Theme, req.NoteSort)
 	if settingsErr != nil {
 		return status, nil, settingsErr
 	}

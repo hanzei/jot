@@ -43,7 +43,7 @@ describe('API Client', () => {
   describe('auth.login', () => {
     it('calls POST /login and stores session from cookie', async () => {
       const mockResponse = {
-        data: { user: { id: '1', username: 'test' }, settings: { theme: 'system' } },
+        data: { user: { id: '1', username: 'test' }, settings: { theme: 'system', note_sort: 'manual' } },
         headers: { 'set-cookie': ['jot_session=abc123; Path=/; HttpOnly'] },
       };
       mockAxiosInstance.post.mockResolvedValueOnce(mockResponse);
@@ -60,7 +60,7 @@ describe('API Client', () => {
 
     it('does not store session when set-cookie header is missing', async () => {
       const mockResponse = {
-        data: { user: { id: '1', username: 'test' }, settings: { theme: 'system' } },
+        data: { user: { id: '1', username: 'test' }, settings: { theme: 'system', note_sort: 'manual' } },
         headers: {},
       };
       mockAxiosInstance.post.mockResolvedValueOnce(mockResponse);
@@ -80,7 +80,7 @@ describe('API Client', () => {
   describe('auth.register', () => {
     it('calls POST /register and stores session from cookie', async () => {
       const mockResponse = {
-        data: { user: { id: '2', username: 'newuser' }, settings: { theme: 'system' } },
+        data: { user: { id: '2', username: 'newuser' }, settings: { theme: 'system', note_sort: 'manual' } },
         headers: { 'set-cookie': ['jot_session=def456; Path=/; HttpOnly'] },
       };
       mockAxiosInstance.post.mockResolvedValueOnce(mockResponse);
@@ -126,7 +126,7 @@ describe('API Client', () => {
   describe('auth.me', () => {
     it('calls GET /me and returns user data', async () => {
       const mockResponse = {
-        data: { user: { id: '1', username: 'test' }, settings: { theme: 'system' } },
+        data: { user: { id: '1', username: 'test' }, settings: { theme: 'system', note_sort: 'manual' } },
       };
       mockAxiosInstance.get.mockResolvedValueOnce(mockResponse);
 
@@ -166,7 +166,7 @@ describe('API Client', () => {
 
   describe('cacheAuthProfile', () => {
     it('stores profile as JSON in secure store', async () => {
-      const profile = { user: { id: '1', username: 'test' }, settings: { theme: 'system' } };
+      const profile = { user: { id: '1', username: 'test' }, settings: { theme: 'system', note_sort: 'manual' } };
       await cacheAuthProfile(profile as Parameters<typeof cacheAuthProfile>[0]);
       expect(mockSecureStore.setItemAsync).toHaveBeenCalledWith(
         'jot_cached_profile',
@@ -184,7 +184,7 @@ describe('API Client', () => {
 
   describe('getCachedAuthProfile', () => {
     it('returns parsed profile from secure store', async () => {
-      const profile = { user: { id: '1', username: 'test' }, settings: { theme: 'system' } };
+      const profile = { user: { id: '1', username: 'test' }, settings: { theme: 'system', note_sort: 'manual' } };
       mockSecureStore.getItemAsync.mockResolvedValueOnce(JSON.stringify(profile));
       const result = await getCachedAuthProfile();
       expect(result).toEqual(profile);
