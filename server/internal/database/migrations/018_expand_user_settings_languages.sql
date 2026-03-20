@@ -1,4 +1,4 @@
--- Keep lexicographic order so 017_add_note_sort_to_user_settings.sql runs first.
+-- Depends on 017_add_note_sort_to_user_settings.sql having run first.
 CREATE TABLE user_settings_new (
   user_id TEXT NOT NULL PRIMARY KEY,
   language TEXT NOT NULL DEFAULT 'system' CHECK (language IN ('system', 'en', 'de', 'es', 'fr', 'pt', 'it', 'nl', 'pl')),
