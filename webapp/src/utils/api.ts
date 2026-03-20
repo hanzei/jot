@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { ServerConfig, AboutInfo, AuthResponse, LoginRequest, RegisterRequest, Note, CreateNoteRequest, UpdateNoteRequest, User, CreateUserRequest, UserListResponse, ShareNoteRequest, ShareNoteResponse, NoteShare, ImportResponse, UpdateMeRequest, ChangePasswordRequest, UpdateUserRoleRequest, Label, ActiveSession } from '@jot/shared';
+import type { ServerConfig, AboutInfo, AuthResponse, LoginRequest, RegisterRequest, Note, CreateNoteRequest, UpdateNoteRequest, User, CreateUserRequest, UserListResponse, AdminStatsResponse, ShareNoteRequest, ShareNoteResponse, NoteShare, ImportResponse, UpdateMeRequest, ChangePasswordRequest, UpdateUserRoleRequest, Label, ActiveSession } from '@jot/shared';
 
 const api = axios.create({
   baseURL: '/api/v1',
@@ -136,6 +136,9 @@ export const about = {
 };
 
 export const admin = {
+  getStats: (): Promise<AdminStatsResponse> =>
+    api.get('/admin/stats').then(res => res.data),
+
   getUsers: (): Promise<UserListResponse> =>
     api.get('/admin/users').then(res => res.data),
 
