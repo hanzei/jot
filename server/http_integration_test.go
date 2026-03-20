@@ -618,6 +618,7 @@ func TestUserSettingsEndpoints(t *testing.T) {
 		me, err := user.Client.Me(t.Context())
 		require.NoError(t, err)
 		assert.Equal(t, "system", me.Settings.Language)
+		assert.Equal(t, "manual", me.Settings.NoteSort)
 		assert.Equal(t, user.User.ID, me.Settings.UserID)
 	})
 
@@ -625,16 +626,23 @@ func TestUserSettingsEndpoints(t *testing.T) {
 		resp, err := user.Client.UpdateUser(t.Context(), &client.UpdateUserRequest{Language: client.Ptr("de")})
 		require.NoError(t, err)
 		assert.Equal(t, "de", resp.Settings.Language)
+		assert.Equal(t, "manual", resp.Settings.NoteSort)
 	})
 
 	t.Run("me response reflects updated language", func(t *testing.T) {
 		me, err := user.Client.Me(t.Context())
 		require.NoError(t, err)
 		assert.Equal(t, "de", me.Settings.Language)
+		assert.Equal(t, "manual", me.Settings.NoteSort)
 	})
 
 	t.Run("PATCH /users/me with invalid language returns 400", func(t *testing.T) {
 		_, err := user.Client.UpdateUser(t.Context(), &client.UpdateUserRequest{Language: client.Ptr("fr")})
+		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
+	})
+
+	t.Run("PATCH /users/me with invalid note_sort returns 400", func(t *testing.T) {
+		_, err := user.Client.UpdateUser(t.Context(), &client.UpdateUserRequest{NoteSort: client.Ptr("priority")})
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 
@@ -650,15 +658,29 @@ func TestUserSettingsEndpoints(t *testing.T) {
 		assert.NotEqual(t, "ShouldNotPersist", me.User.FirstName)
 	})
 
+	t.Run("invalid note_sort with valid profile does not commit profile (atomic validation)", func(t *testing.T) {
+		_, err := user.Client.UpdateUser(t.Context(), &client.UpdateUserRequest{
+			FirstName: client.Ptr("ShouldNotPersistEither"),
+			NoteSort:  client.Ptr("priority"),
+		})
+		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
+
+		me, err := user.Client.Me(t.Context())
+		require.NoError(t, err)
+		assert.NotEqual(t, "ShouldNotPersistEither", me.User.FirstName)
+	})
+
 	t.Run("PATCH /users/me updates both profile and settings", func(t *testing.T) {
 		resp, err := user.Client.UpdateUser(t.Context(), &client.UpdateUserRequest{
 			FirstName: client.Ptr("Jane"),
 			Theme:     client.Ptr("dark"),
+			NoteSort:  client.Ptr("title"),
 		})
 		require.NoError(t, err)
 		assert.Equal(t, "Jane", resp.User.FirstName)
 		assert.Equal(t, "dark", resp.Settings.Theme)
 		assert.Equal(t, "de", resp.Settings.Language)
+		assert.Equal(t, "title", resp.Settings.NoteSort)
 	})
 
 	t.Run("me response includes settings", func(t *testing.T) {
@@ -673,6 +695,7 @@ func TestUserSettingsEndpoints(t *testing.T) {
 		require.NoError(t, err)
 		assert.NotNil(t, auth.Settings)
 		assert.Equal(t, "de", auth.Settings.Language)
+		assert.Equal(t, "title", auth.Settings.NoteSort)
 	})
 
 	t.Run("register response includes settings", func(t *testing.T) {
@@ -681,6 +704,7 @@ func TestUserSettingsEndpoints(t *testing.T) {
 		require.NoError(t, err)
 		assert.NotNil(t, auth.Settings)
 		assert.Equal(t, "system", auth.Settings.Language)
+		assert.Equal(t, "manual", auth.Settings.NoteSort)
 	})
 }
 

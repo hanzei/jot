@@ -156,6 +156,46 @@ test.describe('Notes', () => {
     await dashboardPage.expectNoteAtPosition(2, 'First Note');
   });
 
+  test('switches sort modes and persists the selected sort preference', async ({
+    page,
+    authenticatedUser,
+    dashboardPage,
+    loginPage,
+  }) => {
+    await page.setViewportSize({ width: 600, height: 1000 });
+    await dashboardPage.goto();
+
+    await dashboardPage.createNote('Zulu');
+    await dashboardPage.createNote('alpha');
+    await dashboardPage.createNote('Bravo');
+    await dashboardPage.pinNote('Zulu');
+
+    await dashboardPage.selectSort('title');
+    await dashboardPage.expectManualReorderDisabledNotice();
+    await dashboardPage.expectVisibleNoteTitles(['Zulu', 'alpha', 'Bravo']);
+
+    await dashboardPage.editNote('alpha', 'alpha', 'updated content');
+    await dashboardPage.selectSort('updated_at');
+    await dashboardPage.expectVisibleNoteTitles(['Zulu', 'alpha', 'Bravo']);
+
+    await dashboardPage.selectSort('created_at');
+    await dashboardPage.expectVisibleNoteTitles(['Zulu', 'Bravo', 'alpha']);
+    await expect(await dashboardPage.getSortValue()).toBe('created_at');
+
+    await page.reload();
+    await page.waitForLoadState('networkidle');
+    await expect(await dashboardPage.getSortValue()).toBe('created_at');
+    await dashboardPage.expectVisibleNoteTitles(['Zulu', 'Bravo', 'alpha']);
+
+    await dashboardPage.logout();
+    await expect(page).toHaveURL('/login');
+
+    await loginPage.login(authenticatedUser.username, authenticatedUser.password);
+    await expect(page).toHaveURL('/');
+    await expect(await dashboardPage.getSortValue()).toBe('created_at');
+    await dashboardPage.expectVisibleNoteTitles(['Zulu', 'Bravo', 'alpha']);
+  });
+
   test('shows empty state when no notes exist', async ({ dashboardPage }) => {
     await dashboardPage.goto();
     await dashboardPage.expectEmptyState('No notes yet');

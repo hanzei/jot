@@ -1,9 +1,9 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { PlusIcon, DocumentTextIcon, ArchiveBoxIcon, TrashIcon, ClipboardDocumentCheckIcon } from '@heroicons/react/24/outline';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { PlusIcon, DocumentTextIcon, ArchiveBoxIcon, TrashIcon, ClipboardDocumentCheckIcon, ArrowsUpDownIcon } from '@heroicons/react/24/outline';
 import { useTranslation } from 'react-i18next';
 import { notes, auth, labels as labelsApi, users as usersApi } from '@/utils/api';
-import { removeUser, getUser, isAdmin } from '@/utils/auth';
-import type { Note, Label, User, SSEEvent } from '@jot/shared';
+import { removeUser, getUser, getSettings, setSettings, isAdmin } from '@/utils/auth';
+import type { Note, Label, User, SSEEvent, NoteSort } from '@jot/shared';
 import { useSSE } from '@/utils/useSSE';
 import { useSearchParams, useParams } from 'react-router';
 import AppLayout from '@/components/AppLayout';
@@ -14,6 +14,7 @@ import ShareModal from '@/components/ShareModal';
 import SidebarLabels from '@/components/SidebarLabels';
 import { useToast } from '@/hooks/useToast';
 import { isAnyModalDialogOpen, isEditableElementFocused, isOverlayControlFocused } from '@/utils/keyboardShortcuts';
+import { sortNotesForDisplay } from '@/utils/noteSort';
 import {
   DndContext,
   closestCenter,
@@ -37,12 +38,17 @@ interface DashboardProps {
   onLogout: () => void;
 }
 
+const noteSortOptions = ['manual', 'updated_at', 'created_at', 'title'] as const;
+const normalizeNoteSort = (value?: string): NoteSort =>
+  noteSortOptions.includes(value as NoteSort) ? (value as NoteSort) : 'manual';
+
 export default function Dashboard({ onLogout }: DashboardProps) {
   const { t } = useTranslation();
   const { showToast } = useToast();
   const { noteId: noteIdParam } = useParams<{ noteId?: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const [notesList, setNotesList] = useState<Note[]>([]);
+  const [noteSort, setNoteSort] = useState<NoteSort>(() => normalizeNoteSort(getSettings()?.note_sort));
   const [loading, setLoading] = useState(true);
   const [searchQuery, setSearchQueryState] = useState(searchParams.get('search') ?? '');
   const initialLabel = searchParams.get('label');
@@ -61,6 +67,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const openNoteIdRef = useRef<string | null>(null);
   const returnPathRef = useRef('/');
+  const noteSortUpdateRequestIdRef = useRef(0);
   useEffect(() => {
     isMountedRef.current = true;
     return () => { isMountedRef.current = false; };
@@ -462,8 +469,42 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     });
   };
 
+  const handleNoteSortChange = async (nextSort: typeof noteSortOptions[number]) => {
+    if (nextSort === noteSort) {
+      return;
+    }
+
+    const previousSort = noteSort;
+    const previousSettings = getSettings();
+    const requestID = ++noteSortUpdateRequestIdRef.current;
+
+    setNoteSort(nextSort);
+    if (previousSettings) {
+      setSettings({ ...previousSettings, note_sort: nextSort });
+    }
+
+    try {
+      const { settings: updatedSettings } = await usersApi.updateMe({ note_sort: nextSort });
+      if (!isMountedRef.current || requestID !== noteSortUpdateRequestIdRef.current) {
+        return;
+      }
+      if (updatedSettings) {
+        setSettings(updatedSettings);
+      }
+    } catch (error) {
+      if (!isMountedRef.current || requestID !== noteSortUpdateRequestIdRef.current) {
+        return;
+      }
+      setNoteSort(previousSort);
+      if (previousSettings) {
+        setSettings(previousSettings);
+      }
+      console.error('Failed to update note sort:', error);
+    }
+  };
+
   const handleDragEnd = async (event: DragEndEvent) => {
-    if (showBin || showMyTodo) {
+    if (showArchived || showBin || showMyTodo || noteSort !== 'manual') {
       return;
     }
 
@@ -512,6 +553,10 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     }
   };
 
+  const displayedNotes = useMemo(() => sortNotesForDisplay(notesList, noteSort), [notesList, noteSort]);
+  const dragReorderingDisabled = showArchived || showBin || showMyTodo || noteSort !== 'manual';
+  const activeSortLabel = t(`dashboard.sortOption.${noteSort}`);
+
   if (loading) {
     return (
       <div className="h-dvh flex items-center justify-center bg-gray-50 dark:bg-slate-900">
@@ -554,11 +599,37 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   ];
 
   const searchBar = (
-    <SearchBar
-      value={searchQuery}
-      onChange={setSearchQuery}
-      inputRef={searchInputRef}
-    />
+    <div className="w-full sm:max-w-7xl flex flex-col gap-3 sm:flex-row sm:items-center">
+      <div className="min-w-0 flex-1">
+        <SearchBar
+          value={searchQuery}
+          onChange={setSearchQuery}
+          inputRef={searchInputRef}
+        />
+      </div>
+      <div className="w-full sm:w-56">
+        <label htmlFor="dashboard-sort" className="sr-only">
+          {t('dashboard.sortLabel')}
+        </label>
+        <div className="relative">
+          <ArrowsUpDownIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
+          <select
+            id="dashboard-sort"
+            data-testid="dashboard-sort-select"
+            aria-label={t('dashboard.sortLabel')}
+            value={noteSort}
+            onChange={(event) => void handleNoteSortChange(event.target.value as NoteSort)}
+            className="w-full rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 py-2 pl-9 pr-10 text-sm text-gray-900 dark:text-white focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
+          >
+            {noteSortOptions.map((sortOption) => (
+              <option key={sortOption} value={sortOption}>
+                {t(`dashboard.sortOption.${sortOption}`)}
+              </option>
+            ))}
+          </select>
+        </div>
+      </div>
+    </div>
   );
 
   const sidebarChildren = (
@@ -613,7 +684,20 @@ export default function Dashboard({ onLogout }: DashboardProps) {
         )}
 
         {/* Notes grid */}
-        {!notesList || notesList.length === 0 ? (
+        {noteSort !== 'manual' && (
+          <div
+            data-testid="manual-reorder-disabled-notice"
+            className="mb-6 flex items-start gap-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900 dark:border-blue-900/70 dark:bg-blue-950/40 dark:text-blue-200"
+          >
+            <ArrowsUpDownIcon className="mt-0.5 h-4 w-4 shrink-0" />
+            <div>
+              <span className="font-medium">{t('dashboard.manualReorderDisabledTitle')}</span>{' '}
+              <span>{t('dashboard.manualReorderDisabled', { sort: activeSortLabel })}</span>
+            </div>
+          </div>
+        )}
+
+        {!displayedNotes || displayedNotes.length === 0 ? (
           <div className="text-center py-12">
             <div className="mx-auto max-w-xl text-gray-500 dark:text-gray-400 text-lg whitespace-normal break-words">
               {searchQuery
@@ -641,7 +725,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
           >
             <div className="space-y-8">
               {/* Pinned notes section */}
-              {notesList.some(note => note.pinned) && (
+              {displayedNotes.some(note => note.pinned) && (
                 <div>
                   <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
                     <svg className="h-4 w-4 text-blue-500 dark:text-blue-400 mr-2" fill="currentColor" viewBox="0 0 24 24">
@@ -650,11 +734,11 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                     {t('dashboard.pinned')}
                   </h2>
                   <SortableContext
-                    items={notesList.filter(note => note.pinned).map(note => note.id)}
+                    items={displayedNotes.filter(note => note.pinned).map(note => note.id)}
                     strategy={rectSortingStrategy}
                   >
                     <div className="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-4 space-y-0">
-                      {notesList.filter(note => note.pinned).map((note) => (
+                      {displayedNotes.filter(note => note.pinned).map((note) => (
                         <SortableNoteCard
                           key={note.id}
                           note={note}
@@ -665,7 +749,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                           onPermanentlyDelete={handlePermanentlyDeleteNote}
                           currentUserId={user?.id}
                           usersById={usersById}
-                          disabled={showArchived || showBin || showMyTodo}
+                          disabled={dragReorderingDisabled}
                           inBin={showBin}
                           onRefresh={loadNotes}
                         />
@@ -676,19 +760,19 @@ export default function Dashboard({ onLogout }: DashboardProps) {
               )}
 
               {/* Other notes section */}
-              {notesList.some(note => !note.pinned) && (
+              {displayedNotes.some(note => !note.pinned) && (
                 <div>
-                  {notesList.some(note => note.pinned) && (
+                  {displayedNotes.some(note => note.pinned) && (
                     <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
                       {t('dashboard.otherNotes')}
                     </h2>
                   )}
                   <SortableContext
-                    items={notesList.filter(note => !note.pinned).map(note => note.id)}
+                    items={displayedNotes.filter(note => !note.pinned).map(note => note.id)}
                     strategy={rectSortingStrategy}
                   >
                     <div className="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-4 space-y-0">
-                      {notesList.filter(note => !note.pinned).map((note) => (
+                      {displayedNotes.filter(note => !note.pinned).map((note) => (
                         <SortableNoteCard
                           key={note.id}
                           note={note}
@@ -699,7 +783,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                           onPermanentlyDelete={handlePermanentlyDeleteNote}
                           currentUserId={user?.id}
                           usersById={usersById}
-                          disabled={showArchived || showBin || showMyTodo}
+                          disabled={dragReorderingDisabled}
                           inBin={showBin}
                           onRefresh={loadNotes}
                         />
