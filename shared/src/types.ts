@@ -139,6 +139,52 @@ export interface UserListResponse {
   users: User[];
 }
 
+export interface AdminUserStats {
+  total: number;
+}
+
+export interface AdminNoteStats {
+  total: number;
+  text: number;
+  todo: number;
+  trashed: number;
+  archived: number;
+}
+
+export interface AdminSharingStats {
+  shared_notes: number;
+  share_links: number;
+}
+
+export interface AdminLabelStats {
+  total: number;
+  note_associations: number;
+}
+
+export interface AdminTodoItemStats {
+  total: number;
+  completed: number;
+  assigned: number;
+}
+
+export interface AdminStorageStats {
+  database_size_bytes: number;
+}
+
+export interface AdminSystemStats {
+  uptime_seconds: number;
+}
+
+export interface AdminStatsResponse {
+  users: AdminUserStats;
+  notes: AdminNoteStats;
+  sharing: AdminSharingStats;
+  labels: AdminLabelStats;
+  todo_items: AdminTodoItemStats;
+  storage: AdminStorageStats;
+  system: AdminSystemStats;
+}
+
 export interface UpdateMeRequest {
   username?: string;
   first_name?: string;

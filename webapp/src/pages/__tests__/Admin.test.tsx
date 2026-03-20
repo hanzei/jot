@@ -6,10 +6,11 @@ import { type ReactNode } from 'react'
 import Admin from '../Admin'
 import { admin, isAxiosError } from '@/utils/api'
 import * as authUtils from '@/utils/auth'
-import { VALIDATION, type User } from '@jot/shared'
+import { VALIDATION, type User, type AdminStatsResponse } from '@jot/shared'
 
 vi.mock('@/utils/api', () => ({
   admin: {
+    getStats: vi.fn(),
     getUsers: vi.fn(),
     createUser: vi.fn(),
     updateUserRole: vi.fn(),
@@ -70,6 +71,16 @@ const otherAdmin: User = {
   has_profile_icon: false,
 }
 
+const mockStats: AdminStatsResponse = {
+  users: { total: 3 },
+  notes: { total: 4, text: 2, todo: 2, trashed: 1, archived: 1 },
+  sharing: { shared_notes: 1, share_links: 2 },
+  labels: { total: 2, note_associations: 3 },
+  todo_items: { total: 3, completed: 1, assigned: 2 },
+  storage: { database_size_bytes: 4_398_047 },
+  system: { uptime_seconds: 190_800 },
+}
+
 const renderAdmin = (onLogout = vi.fn()) => {
   return render(
     <MemoryRouter>
@@ -83,6 +94,7 @@ describe('Admin', () => {
     vi.clearAllMocks()
     vi.mocked(authUtils.isAdmin).mockReturnValue(true)
     vi.mocked(authUtils.getUser).mockReturnValue(currentUser)
+    vi.mocked(admin.getStats).mockResolvedValue(mockStats)
     vi.mocked(admin.getUsers).mockResolvedValue({ users: [currentUser, otherUser, otherAdmin] })
   })
 
@@ -97,6 +109,43 @@ describe('Admin', () => {
       const layout = screen.getByTestId('app-layout')
       expect(layout).toHaveAttribute('data-is-admin', 'true')
       expect(layout).toHaveAttribute('data-admin-link-active', 'true')
+    })
+  })
+
+  describe('Stats section', () => {
+    it('renders grouped stats cards with formatted values', async () => {
+      renderAdmin()
+
+      await waitFor(() => {
+        expect(screen.getByTestId('admin-stats-users-total')).toHaveTextContent('3')
+      })
+
+      expect(screen.getByText('Instance Overview')).toBeInTheDocument()
+      expect(screen.getByTestId('admin-stats-notes-total')).toHaveTextContent('4')
+      expect(screen.getByTestId('admin-stats-shared-notes')).toHaveTextContent('1')
+      expect(screen.getByTestId('admin-stats-labels-total')).toHaveTextContent('2')
+      expect(screen.getByTestId('admin-stats-todo-items-total')).toHaveTextContent('3')
+      expect(screen.getByTestId('admin-stats-database-size')).toHaveTextContent('4.2 MB')
+      expect(screen.getByTestId('admin-stats-uptime')).toHaveTextContent('2 days, 5 hours')
+    })
+
+    it('shows loading placeholders while stats are fetching', () => {
+      vi.mocked(admin.getStats).mockImplementation(() => new Promise(() => undefined))
+
+      renderAdmin()
+
+      expect(screen.getByTestId('admin-stats-section')).toBeInTheDocument()
+      expect(screen.queryByTestId('admin-stats-users-total')).not.toBeInTheDocument()
+    })
+
+    it('shows a stats error when loading fails', async () => {
+      vi.mocked(admin.getStats).mockRejectedValue(new Error('boom'))
+
+      renderAdmin()
+
+      await waitFor(() => {
+        expect(screen.getByText('Failed to load statistics')).toBeInTheDocument()
+      })
     })
   })
 

@@ -184,6 +184,7 @@
     "creating": "Creating...",
     "createUserButton": "Create User",
     "failedLoadUsers": "Failed to load users",
+    "failedLoadStats": "Failed to load statistics",
     "failedCreateUser": "Failed to create user",
     "userIdCreated": "ID: {{id}} • Created: {{date}}",
     "userCreated": "Created: {{date}}",
@@ -200,7 +201,40 @@
     "deleting": "Deleting...",
     "deleteUserConfirm": "Are you sure you want to permanently delete user \"{{username}}\"? This will also delete all their notes.",
     "failedDeleteUser": "Failed to delete user.",
-    "deleteUserLabel": "Delete user {{username}}"
+    "deleteUserLabel": "Delete user {{username}}",
+    "stats": {
+      "title": "Instance Overview",
+      "description": "Live metrics for this Jot server.",
+      "cards": {
+        "users": "Users",
+        "notes": "Notes",
+        "sharing": "Sharing",
+        "labels": "Labels",
+        "todoItems": "Todo Items",
+        "system": "System"
+      },
+      "metrics": {
+        "text": "Text",
+        "todo": "Todo",
+        "archived": "Archived",
+        "trashed": "Trashed",
+        "sharedNotes": "Shared notes",
+        "shareLinks": "Share links",
+        "totalLabels": "Total labels",
+        "noteAssociations": "Note links",
+        "completed": "Completed",
+        "assigned": "Assigned",
+        "databaseSize": "Database size",
+        "uptime": "Uptime"
+      },
+      "lessThanMinute": "Less than a minute",
+      "day_one": "{{count}} day",
+      "day_other": "{{count}} days",
+      "hour_one": "{{count}} hour",
+      "hour_other": "{{count}} hours",
+      "minute_one": "{{count}} minute",
+      "minute_other": "{{count}} minutes"
+    }
   },
   "note": {
     "share": "Share",

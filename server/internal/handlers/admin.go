@@ -5,6 +5,8 @@ import (
 	"encoding/json"
 	"errors"
 	"net/http"
+	"os"
+	"time"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/hanzei/jot/server/internal/auth"
@@ -12,14 +14,26 @@ import (
 )
 
 type AdminHandler struct {
-	userStore *models.UserStore
-	noteStore *models.NoteStore
+	userStore  *models.UserStore
+	noteStore  *models.NoteStore
+	statsStore *models.AdminStatsStore
+	dbPath     string
+	startedAt  time.Time
 }
 
-func NewAdminHandler(userStore *models.UserStore, noteStore *models.NoteStore) *AdminHandler {
+func NewAdminHandler(
+	userStore *models.UserStore,
+	noteStore *models.NoteStore,
+	statsStore *models.AdminStatsStore,
+	dbPath string,
+	startedAt time.Time,
+) *AdminHandler {
 	return &AdminHandler{
-		userStore: userStore,
-		noteStore: noteStore,
+		userStore:  userStore,
+		noteStore:  noteStore,
+		statsStore: statsStore,
+		dbPath:     dbPath,
+		startedAt:  startedAt,
 	}
 }
 
@@ -31,6 +45,34 @@ type CreateUserRequest struct {
 
 type UserListResponse struct {
 	Users []*models.User `json:"users"`
+}
+
+// GetStats godoc
+//
+//	@Summary	Get admin system stats (admin only)
+//	@Tags		admin
+//	@Security	CookieAuth
+//	@Produce	json
+//	@Success	200	{object}	models.AdminStats
+//	@Failure	401	{string}	string	"unauthorized"
+//	@Failure	403	{string}	string	"forbidden"
+//	@Failure	500	{string}	string	"internal server error"
+//	@Router		/admin/stats [get]
+func (h *AdminHandler) GetStats(w http.ResponseWriter, r *http.Request) (int, any, error) {
+	stats, err := h.statsStore.GetStats()
+	if err != nil {
+		return http.StatusInternalServerError, nil, err
+	}
+
+	fileInfo, err := os.Stat(h.dbPath)
+	if err != nil {
+		return http.StatusInternalServerError, nil, err
+	}
+
+	stats.Storage.DatabaseSizeBytes = fileInfo.Size()
+	stats.System.UptimeSeconds = int64(time.Since(h.startedAt).Seconds())
+
+	return http.StatusOK, stats, nil
 }
 
 // GetUsers godoc

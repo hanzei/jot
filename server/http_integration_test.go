@@ -436,6 +436,116 @@ func TestDeleteUserAdminCanDeleteOtherAdmin(t *testing.T) {
 	require.NoError(t, admin1.Client.AdminDeleteUser(t.Context(), admin2.User.ID))
 }
 
+func TestAdminStatsEndpoint(t *testing.T) {
+	var dbPath string
+	ts := setupTestServerWithConfig(t, func(cfg *config.Config) {
+		dbPath = cfg.DBPath
+	})
+
+	adminUser := ts.createTestUser(t, "adminstats", "password123", true)
+	member1 := ts.createTestUser(t, "memberstats1", "password123", false)
+	member2 := ts.createTestUser(t, "memberstats2", "password123", false)
+
+	sharedTextNote, err := adminUser.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
+		Title:    "Shared text note",
+		Content:  "shared content",
+		NoteType: client.NoteTypeText,
+	})
+	require.NoError(t, err)
+
+	archivedTodoNote, err := adminUser.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
+		Title:    "Archived todo note",
+		NoteType: client.NoteTypeTodo,
+		Items: []client.CreateNoteItem{
+			{Text: "First todo", Position: 0},
+			{Text: "Second todo", Position: 1},
+		},
+	})
+	require.NoError(t, err)
+
+	activeTodoNote, err := adminUser.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
+		Title:    "Active todo note",
+		NoteType: client.NoteTypeTodo,
+		Items: []client.CreateNoteItem{
+			{Text: "Assigned todo", Position: 0},
+		},
+	})
+	require.NoError(t, err)
+
+	trashedTextNote, err := adminUser.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
+		Title:    "Trashed text note",
+		Content:  "trashed content",
+		NoteType: client.NoteTypeText,
+	})
+	require.NoError(t, err)
+
+	archived := true
+	_, err = adminUser.Client.UpdateNote(t.Context(), archivedTodoNote.ID, &client.UpdateNoteRequest{
+		Archived: &archived,
+		Items: []client.UpdateNoteItem{
+			{Text: "First todo", Position: 0, Completed: true, AssignedTo: member1.User.ID},
+			{Text: "Second todo", Position: 1, Completed: false, AssignedTo: ""},
+		},
+	})
+	require.NoError(t, err)
+
+	_, err = adminUser.Client.UpdateNote(t.Context(), activeTodoNote.ID, &client.UpdateNoteRequest{
+		Items: []client.UpdateNoteItem{
+			{Text: "Assigned todo", Position: 0, Completed: false, AssignedTo: member2.User.ID},
+		},
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, adminUser.Client.DeleteNote(t.Context(), trashedTextNote.ID))
+	require.NoError(t, adminUser.Client.ShareNote(t.Context(), sharedTextNote.ID, member1.User.ID))
+	require.NoError(t, adminUser.Client.ShareNote(t.Context(), sharedTextNote.ID, member2.User.ID))
+
+	_, err = adminUser.Client.AddLabel(t.Context(), sharedTextNote.ID, "work")
+	require.NoError(t, err)
+	_, err = adminUser.Client.AddLabel(t.Context(), sharedTextNote.ID, "urgent")
+	require.NoError(t, err)
+	_, err = adminUser.Client.AddLabel(t.Context(), archivedTodoNote.ID, "work")
+	require.NoError(t, err)
+
+	t.Run("returns aggregated stats for admins", func(t *testing.T) {
+		stats, err := adminUser.Client.AdminGetStats(t.Context())
+		require.NoError(t, err)
+
+		assert.Equal(t, int64(3), stats.Users.Total)
+		assert.Equal(t, int64(4), stats.Notes.Total)
+		assert.Equal(t, int64(2), stats.Notes.Text)
+		assert.Equal(t, int64(2), stats.Notes.Todo)
+		assert.Equal(t, int64(1), stats.Notes.Trashed)
+		assert.Equal(t, int64(1), stats.Notes.Archived)
+
+		assert.Equal(t, int64(1), stats.Sharing.SharedNotes)
+		assert.Equal(t, int64(2), stats.Sharing.ShareLinks)
+
+		assert.Equal(t, int64(2), stats.Labels.Total)
+		assert.Equal(t, int64(3), stats.Labels.NoteAssociations)
+
+		assert.Equal(t, int64(3), stats.TodoItems.Total)
+		assert.Equal(t, int64(1), stats.TodoItems.Completed)
+		assert.Equal(t, int64(2), stats.TodoItems.Assigned)
+
+		fileInfo, err := os.Stat(dbPath)
+		require.NoError(t, err)
+		assert.Equal(t, fileInfo.Size(), stats.Storage.DatabaseSizeBytes)
+		assert.Greater(t, stats.Storage.DatabaseSizeBytes, int64(0))
+		assert.GreaterOrEqual(t, stats.System.UptimeSeconds, int64(0))
+	})
+
+	t.Run("returns 403 for non-admin users", func(t *testing.T) {
+		_, err := member1.Client.AdminGetStats(t.Context())
+		assert.Equal(t, http.StatusForbidden, client.StatusCode(err))
+	})
+
+	t.Run("returns 401 for unauthenticated requests", func(t *testing.T) {
+		_, err := ts.newClient().AdminGetStats(t.Context())
+		assert.Equal(t, http.StatusUnauthorized, client.StatusCode(err))
+	})
+}
+
 func TestUpdateUserEndpoint(t *testing.T) {
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "originaluser", "password123", false)
