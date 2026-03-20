@@ -10,6 +10,7 @@ import {
   Pressable,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { useTranslation } from 'react-i18next';
 import { useTheme } from '../theme/ThemeContext';
 import { NOTE_COLORS, LIGHT_NOTE_COLORS } from '@jot/shared';
 
@@ -20,8 +21,22 @@ interface ColorPickerProps {
   onClose: () => void;
 }
 
+const COLOR_LABELS: Record<string, string> = {
+  '#ffffff': 'note.colorWhite',
+  '#f28b82': 'note.colorCoral',
+  '#fbbc04': 'note.colorYellow',
+  '#ccff90': 'note.colorLime',
+  '#a7ffeb': 'note.colorTeal',
+  '#aecbfa': 'note.colorPeriwinkle',
+  '#d7aefb': 'note.colorLavender',
+  '#fdcfe8': 'note.colorPink',
+  '#e6c9a8': 'note.colorSand',
+  '#e8eaed': 'note.colorGray',
+};
+
 export default function ColorPicker({ visible, currentColor, onSelect, onClose }: ColorPickerProps) {
   const { colors } = useTheme();
+  const { t } = useTranslation();
 
   return (
     <Modal
@@ -34,7 +49,7 @@ export default function ColorPicker({ visible, currentColor, onSelect, onClose }
         <SafeAreaView style={[styles.sheet, { backgroundColor: colors.sheetBackground }]}>
           <Pressable>
             <View style={[styles.handle, { backgroundColor: colors.handleColor }]} />
-            <Text style={[styles.title, { color: colors.text }]}>Note color</Text>
+            <Text style={[styles.title, { color: colors.text }]}>{t('note.changeColor')}</Text>
             <ScrollView
               horizontal
               showsHorizontalScrollIndicator={false}
@@ -53,7 +68,7 @@ export default function ColorPicker({ visible, currentColor, onSelect, onClose }
                     onClose();
                   }}
                   testID={`color-swatch-${color.replace('#', '')}`}
-                  accessibilityLabel={`Select color ${color}`}
+                  accessibilityLabel={t(COLOR_LABELS[color] ?? 'note.changeColor')}
                 >
                   {currentColor === color && (
                     <Ionicons

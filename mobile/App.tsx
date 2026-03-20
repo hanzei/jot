@@ -4,11 +4,13 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SQLiteProvider } from 'expo-sqlite';
 import { AuthProvider } from './src/store/AuthContext';
+import MobileI18nProvider from './src/i18n/MobileI18nProvider';
 import { UsersProvider } from './src/store/UsersContext';
 import { OfflineProvider } from './src/store/OfflineContext';
 import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
 import RootNavigator from './src/navigation/RootNavigator';
 import { migrateDatabase } from './src/db/schema';
+import './src/i18n';
 
 const queryClient = new QueryClient({
   defaultOptions: {
@@ -48,13 +50,15 @@ export default function App() {
       <QueryClientProvider client={queryClient}>
         <SQLiteProvider databaseName="jot.db" onInit={migrateDatabase}>
           <AuthProvider>
-            <ThemeProvider>
-              <UsersProvider>
-                <OfflineProvider>
-                  <NavigationWrapper />
-                </OfflineProvider>
-              </UsersProvider>
-            </ThemeProvider>
+            <MobileI18nProvider>
+              <ThemeProvider>
+                <UsersProvider>
+                  <OfflineProvider>
+                    <NavigationWrapper />
+                  </OfflineProvider>
+                </UsersProvider>
+              </ThemeProvider>
+            </MobileI18nProvider>
           </AuthProvider>
         </SQLiteProvider>
       </QueryClientProvider>

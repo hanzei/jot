@@ -9,6 +9,7 @@ import {
   Pressable,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { useTranslation } from 'react-i18next';
 import type { Note } from '@jot/shared';
 import { useTheme } from '../theme/ThemeContext';
 
@@ -52,6 +53,7 @@ export default function NoteContextMenu({
   onShare,
 }: NoteContextMenuProps) {
   const { colors } = useTheme();
+  const { t } = useTranslation();
 
   if (!note) return null;
 
@@ -60,7 +62,7 @@ export default function NoteContextMenu({
   if (viewContext === 'notes' || viewContext === 'my-todo') {
     actions.push({
       icon: 'color-palette-outline',
-      label: 'Change color',
+      label: t('note.changeColor'),
       onPress: () => { onClose(); onChangeColor(note); },
       testId: 'context-color',
     });
@@ -68,26 +70,26 @@ export default function NoteContextMenu({
     if (!note.is_shared) {
       actions.push({
         icon: 'share-social-outline',
-        label: 'Share',
+        label: t('note.share'),
         onPress: () => { onClose(); onShare(note); },
         testId: 'context-share',
       });
     }
     actions.push({
       icon: note.pinned ? 'pin' : 'pin-outline',
-      label: note.pinned ? 'Unpin' : 'Pin',
+      label: note.pinned ? t('note.unpin') : t('note.pin'),
       onPress: () => { onClose(); onPin(note); },
       testId: 'context-pin',
     });
     actions.push({
       icon: 'archive-outline',
-      label: 'Archive',
+      label: t('note.archive'),
       onPress: () => { onClose(); onArchive(note); },
       testId: 'context-archive',
     });
     actions.push({
       icon: 'trash-outline',
-      label: 'Move to trash',
+      label: t('note.moveToTrash'),
       onPress: () => { onClose(); onMoveToTrash(note); },
       destructive: true,
       testId: 'context-trash',
@@ -95,13 +97,13 @@ export default function NoteContextMenu({
   } else if (viewContext === 'archived') {
     actions.push({
       icon: 'archive-outline',
-      label: 'Unarchive',
+      label: t('note.unarchive'),
       onPress: () => { onClose(); onUnarchive(note); },
       testId: 'context-unarchive',
     });
     actions.push({
       icon: 'trash-outline',
-      label: 'Move to trash',
+      label: t('note.moveToTrash'),
       onPress: () => { onClose(); onMoveToTrash(note); },
       destructive: true,
       testId: 'context-trash',
@@ -109,13 +111,13 @@ export default function NoteContextMenu({
   } else if (viewContext === 'trash') {
     actions.push({
       icon: 'arrow-undo-outline',
-      label: 'Restore',
+      label: t('note.restore'),
       onPress: () => { onClose(); onRestore(note); },
       testId: 'context-restore',
     });
     actions.push({
       icon: 'trash',
-      label: 'Delete permanently',
+      label: t('note.deleteForever'),
       onPress: () => { onClose(); onDeletePermanently(note); },
       destructive: true,
       testId: 'context-delete-permanently',

@@ -30,6 +30,35 @@ type AddLabelRequest struct {
 	Name string `json:"name"`
 }
 
+type RenameLabelRequest struct {
+	Name string `json:"name"`
+}
+
+func (h *LabelsHandler) publishLabelNoteUpdates(noteIDs []string, userID string) {
+	if h.hub == nil {
+		return
+	}
+
+	for _, noteID := range noteIDs {
+		note, err := h.noteStore.GetByIDAnyState(noteID, userID)
+		if err != nil {
+			continue
+		}
+
+		audienceIDs, err := h.noteStore.GetNoteAudienceIDs(noteID)
+		if err != nil {
+			continue
+		}
+
+		h.hub.Publish(audienceIDs, sse.Event{
+			Type:         sse.EventNoteUpdated,
+			NoteID:       noteID,
+			Note:         note,
+			SourceUserID: userID,
+		})
+	}
+}
+
 // GetLabels godoc
 //
 //	@Summary	List all labels for the current user
@@ -52,6 +81,63 @@ func (h *LabelsHandler) GetLabels(w http.ResponseWriter, r *http.Request) (int, 
 	}
 
 	return http.StatusOK, labels, nil
+}
+
+// RenameLabel godoc
+//
+//	@Summary	Rename a label
+//	@Tags		labels
+//	@Security	CookieAuth
+//	@Accept		json
+//	@Produce	json
+//	@Param		id		path		string				true	"Label ID"
+//	@Param		body	body		RenameLabelRequest	true	"New label name"
+//	@Success	200		{object}	models.Label
+//	@Failure	400		{string}	string	"bad request"
+//	@Failure	401		{string}	string	"unauthorized"
+//	@Failure	404		{string}	string	"label not found"
+//	@Failure	500		{string}	string	"internal server error"
+//	@Router		/labels/{id} [patch]
+func (h *LabelsHandler) RenameLabel(w http.ResponseWriter, r *http.Request) (int, any, error) {
+	user, ok := auth.GetUserFromContext(r.Context())
+	if !ok {
+		return http.StatusUnauthorized, nil, errors.New("unauthorized")
+	}
+
+	labelID := chi.URLParam(r, "id")
+
+	var req RenameLabelRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return http.StatusBadRequest, nil, errors.New("invalid request body")
+	}
+
+	req.Name = strings.TrimSpace(req.Name)
+	if req.Name == "" {
+		return http.StatusBadRequest, nil, errors.New("label name is required")
+	}
+
+	noteIDs, err := h.labelStore.GetLabelNoteIDs(labelID, user.ID)
+	if err != nil {
+		if errors.Is(err, models.ErrLabelNotFoundOrNotOwned) {
+			return http.StatusNotFound, nil, errors.New("label not found")
+		}
+		return http.StatusInternalServerError, nil, err
+	}
+
+	label, err := h.labelStore.RenameLabel(labelID, user.ID, req.Name)
+	if err != nil {
+		if errors.Is(err, models.ErrLabelNameConflict) {
+			return http.StatusBadRequest, nil, errors.New("label name already exists")
+		}
+		if errors.Is(err, models.ErrLabelNotFoundOrNotOwned) {
+			return http.StatusNotFound, nil, errors.New("label not found")
+		}
+		return http.StatusInternalServerError, nil, err
+	}
+
+	h.publishLabelNoteUpdates(noteIDs, user.ID)
+
+	return http.StatusOK, label, nil
 }
 
 // AddLabel godoc
@@ -166,4 +252,41 @@ func (h *LabelsHandler) RemoveLabel(w http.ResponseWriter, r *http.Request) (int
 	}
 
 	return http.StatusOK, note, nil
+}
+
+// DeleteLabel godoc
+//
+//	@Summary	Delete a label
+//	@Tags		labels
+//	@Security	CookieAuth
+//	@Param		id	path	string	true	"Label ID"
+//	@Success	204
+//	@Failure	401	{string}	string	"unauthorized"
+//	@Failure	404	{string}	string	"label not found"
+//	@Failure	500	{string}	string	"internal server error"
+//	@Router		/labels/{id} [delete]
+func (h *LabelsHandler) DeleteLabel(w http.ResponseWriter, r *http.Request) (int, any, error) {
+	user, ok := auth.GetUserFromContext(r.Context())
+	if !ok {
+		return http.StatusUnauthorized, nil, errors.New("unauthorized")
+	}
+
+	labelID := chi.URLParam(r, "id")
+	noteIDs, err := h.labelStore.GetLabelNoteIDs(labelID, user.ID)
+	if err != nil {
+		if errors.Is(err, models.ErrLabelNotFoundOrNotOwned) {
+			return http.StatusNotFound, nil, errors.New("label not found")
+		}
+		return http.StatusInternalServerError, nil, err
+	}
+	if err := h.labelStore.DeleteLabel(labelID, user.ID); err != nil {
+		if errors.Is(err, models.ErrLabelNotFoundOrNotOwned) {
+			return http.StatusNotFound, nil, errors.New("label not found")
+		}
+		return http.StatusInternalServerError, nil, err
+	}
+
+	h.publishLabelNoteUpdates(noteIDs, user.ID)
+
+	return http.StatusNoContent, nil, nil
 }

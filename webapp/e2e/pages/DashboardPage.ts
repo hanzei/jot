@@ -309,6 +309,44 @@ export class DashboardPage {
     ).toHaveCount(0);
   }
 
+  private sidebarLabelRow(labelName: string): Locator {
+    return this.page
+      .locator('aside [data-testid="sidebar-labels"] li')
+      .filter({ has: this.page.getByRole('button', { name: labelName, exact: true }) })
+      .first();
+  }
+
+  async renameSidebarLabel(currentName: string, nextName: string) {
+    await this.ensureSidebarOpen();
+    const row = this.sidebarLabelRow(currentName);
+    await row.getByRole('button', { name: `Label options for ${currentName}` }).click();
+    const renameMenuItem = this.page.getByRole('menuitem', { name: 'Rename' });
+    if (await renameMenuItem.count() > 0) {
+      await renameMenuItem.click();
+    } else {
+      await this.page.getByRole('button', { name: 'Rename', exact: true }).last().click();
+    }
+    const input = this.page.getByPlaceholder('Rename label...');
+    await input.fill(nextName);
+    await input.press('Enter');
+    await this.expectLabelInSidebar(nextName);
+  }
+
+  async deleteSidebarLabel(labelName: string) {
+    await this.ensureSidebarOpen();
+    const row = this.sidebarLabelRow(labelName);
+    await row.getByRole('button', { name: `Label options for ${labelName}` }).click();
+    const deleteMenuItem = this.page.getByRole('menuitem', { name: 'Delete' });
+    if (await deleteMenuItem.count() > 0) {
+      await deleteMenuItem.click();
+    } else {
+      await this.page.getByRole('button', { name: 'Delete', exact: true }).last().click();
+    }
+    const confirmDialog = this.page.getByRole('dialog').last();
+    await confirmDialog.getByRole('button', { name: 'Delete' }).click();
+    await this.expectLabelNotInSidebar(labelName);
+  }
+
   /** Opens a note, assigns a todo item at the given index to a user, then closes the modal. */
   async assignTodoItemToUser(noteTitle: string, itemIndex: number, username: string) {
     await this.openNote(noteTitle);

@@ -260,7 +260,20 @@
     "removeLabel": "Label {{name}} entfernen",
     "noLabels": "Noch keine Labels",
     "newLabelPlaceholder": "Label-Name...",
-    "createNew": "Neu erstellen..."
+    "createNew": "Neu erstellen...",
+    "menuOptions": "Labeloptionen für {{name}}",
+    "rename": "Umbenennen",
+    "delete": "Löschen",
+    "renamePlaceholder": "Label umbenennen...",
+    "renameInputLabel": "Label {{name}} umbenennen",
+    "renameSave": "Labelnamen speichern",
+    "renameCancel": "Umbenennen abbrechen",
+    "renameSuccess": "Label umbenannt",
+    "renameError": "Label konnte nicht umbenannt werden.",
+    "deleteSuccess": "Label gelöscht",
+    "deleteError": "Label konnte nicht gelöscht werden.",
+    "deleteConfirmTitle": "Label löschen",
+    "deleteConfirmMessage": "Label \"{{name}}\" löschen? Es wird aus allen Notizen entfernt, die es verwenden."
   },
   "share": {
     "title": "\"{{noteTitle}}\" teilen",
