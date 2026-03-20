@@ -65,15 +65,13 @@ export default function SortableNoteCard({
           {...attributes}
           {...listeners}
           onClick={(event) => event.stopPropagation()}
-          className={`absolute top-2 left-2 p-1 touch-none opacity-0 group-hover:opacity-100 focus:opacity-100 touch-visible transition-opacity z-20 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-800 ${
+          className={`absolute top-2 left-2 min-h-6 min-w-6 inline-flex items-center justify-center p-1 touch-none opacity-0 group-hover:opacity-100 focus:opacity-100 touch-visible transition-opacity z-20 text-gray-400 hover:text-gray-600 dark:text-gray-500 dark:hover:text-gray-300 focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-2 dark:focus-visible:ring-offset-slate-800 ${
             isDragging ? 'cursor-grabbing' : 'cursor-grab'
           }`}
           title={t('dashboard.dragToReorder')}
           aria-label={t('dashboard.dragToReorder')}
         >
-          <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20" aria-hidden="true">
-            <path d="M7 2a2 2 0 1 1 .001 4.001A2 2 0 0 1 7 2zm0 6a2 2 0 1 1 .001 4.001A2 2 0 0 1 7 8zm0 6a2 2 0 1 1 .001 4.001A2 2 0 0 1 7 14zm6-8a2 2 0 1 1-.001-4.001A2 2 0 0 1 13 6zm0 2a2 2 0 1 1 .001 4.001A2 2 0 0 1 13 8zm0 6a2 2 0 1 1 .001 4.001A2 2 0 0 1 13 14z" />
-          </svg>
+          <span className="block h-1 w-5 rounded-full bg-current/70" aria-hidden="true" />
         </button>
       )}
 
