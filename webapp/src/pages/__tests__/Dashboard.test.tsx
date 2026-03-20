@@ -1,7 +1,7 @@
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { MemoryRouter, useLocation, Routes, Route } from 'react-router'
+import { MemoryRouter, useLocation, useNavigate, Routes, Route } from 'react-router'
 import { type ReactNode } from 'react'
 import Dashboard from '../Dashboard'
 import type { Note, Label } from '@jot/shared'
@@ -613,6 +613,49 @@ describe('Dashboard', () => {
       vi.mocked(notes.getById).mockResolvedValue(mockNote)
 
       renderDashboard(['/notes/abc123'])
+
+      await waitFor(() => {
+        expect(notes.getById).toHaveBeenCalledWith('abc123')
+        expect(screen.getByTestId('note-modal')).toBeInTheDocument()
+        expect(screen.getByText('Edit Note')).toBeInTheDocument()
+      })
+    })
+
+    it('opens modal when navigating to a permalink route after initial render', async () => {
+      const user = userEvent.setup()
+      const mockNote = createMockNote({ id: 'abc123', title: 'Permalink Note' })
+      vi.mocked(notes.getAll).mockResolvedValue([mockNote])
+      vi.mocked(notes.getById).mockResolvedValue(mockNote)
+
+      const NavigateToNoteButton = () => {
+        const navigate = useNavigate()
+
+        return (
+          <button onClick={() => navigate('/notes/abc123')} data-testid="navigate-to-note">
+            Open permalink
+          </button>
+        )
+      }
+
+      render(
+        <MemoryRouter initialEntries={['/']}>
+          <NavigateToNoteButton />
+          <ToastProvider>
+            <Routes>
+              <Route element={<Dashboard onLogout={vi.fn()} />}>
+                <Route index element={null} />
+                <Route path="notes/:noteId" element={null} />
+              </Route>
+            </Routes>
+          </ToastProvider>
+        </MemoryRouter>
+      )
+
+      await waitFor(() => {
+        expect(screen.getByTestId('navigate-to-note')).toBeInTheDocument()
+      })
+
+      await user.click(screen.getByTestId('navigate-to-note'))
 
       await waitFor(() => {
         expect(notes.getById).toHaveBeenCalledWith('abc123')

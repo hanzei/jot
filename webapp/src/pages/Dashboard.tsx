@@ -210,11 +210,21 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   }, []);
 
   useEffect(() => {
-    if (noteIdParam) {
-      openNoteFromUrl(noteIdParam);
+    if (!noteIdParam) {
+      if (openNoteIdRef.current) {
+        openNoteIdRef.current = null;
+        setIsModalOpen(false);
+        setEditingNote(null);
+      }
+      return;
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+
+    if (openNoteIdRef.current === noteIdParam) {
+      return;
+    }
+
+    openNoteFromUrl(noteIdParam);
+  }, [noteIdParam, openNoteFromUrl]);
 
   useEffect(() => {
     const handlePopState = () => {
