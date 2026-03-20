@@ -55,6 +55,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [sharingNote, setSharingNote] = useState<Note | null>(null);
   const [usersById, setUsersById] = useState<Map<string, User>>(new Map());
+  const [presenceEvent, setPresenceEvent] = useState<SSEEvent | null>(null);
   const user = getUser();
   const isMountedRef = useRef(true);
   const openNoteIdRef = useRef<string | null>(null);
@@ -193,6 +194,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     notes.getById(noteId)
       .then(note => {
         if (isMountedRef.current && openNoteIdRef.current === noteId) {
+          setPresenceEvent(null);
           setEditingNote(note);
           setIsModalOpen(true);
         }
@@ -231,6 +233,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
 
   const handleSSEEvent = useCallback((event: SSEEvent) => {
     if (event.type === 'note_opened' || event.type === 'note_closed') {
+      setPresenceEvent(event);
       return;
     }
 
@@ -282,6 +285,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       returnPathRef.current = window.location.pathname + window.location.search;
     }
     openNoteIdRef.current = note.id;
+    setPresenceEvent(null);
     setEditingNote(note);
     setIsModalOpen(true);
     window.history.pushState({ returnTo: returnPathRef.current }, '', `/notes/${note.id}`);
@@ -290,6 +294,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const handleNoteUpdate = () => {
     loadNotes();
     loadLabels();
+    setPresenceEvent(null);
     setIsModalOpen(false);
     setEditingNote(null);
     restoreReturnUrl();
@@ -600,6 +605,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
           <NoteModal
             note={editingNote}
             onClose={() => {
+              setPresenceEvent(null);
               setIsModalOpen(false);
               setEditingNote(null);
               restoreReturnUrl();
@@ -611,6 +617,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
             isOwner={!editingNote || editingNote.user_id === user?.id}
             usersById={usersById}
             currentUserId={user?.id}
+            presenceEvent={presenceEvent}
           />
         )}
 

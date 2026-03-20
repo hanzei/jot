@@ -2,9 +2,8 @@ import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { XMarkIcon, PlusIcon, TrashIcon, ChevronDownIcon, ArchiveBoxIcon, ArchiveBoxXMarkIcon, ShareIcon, UserPlusIcon, CheckIcon } from '@heroicons/react/24/outline';
 import { Dialog, DialogPanel } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
-import { VALIDATION, NOTE_COLORS, buildCollaborators, type Note, type NoteType, type CreateNoteRequest, type UpdateNoteRequest, type Label, type User, type Collaborator } from '@jot/shared';
+import { VALIDATION, NOTE_COLORS, buildCollaborators, type Note, type NoteType, type CreateNoteRequest, type UpdateNoteRequest, type Label, type User, type Collaborator, type SSEEvent } from '@jot/shared';
 import { notes } from '@/utils/api';
-import { useSSE } from '@/utils/useSSE';
 import LabelPicker from '@/components/LabelPicker';
 import LetterAvatar from '@/components/LetterAvatar';
 import AssigneePicker from '@/components/AssigneePicker';
@@ -67,6 +66,7 @@ interface NoteModalProps {
   isOwner?: boolean;
   usersById?: Map<string, User>;
   currentUserId?: string;
+  presenceEvent?: SSEEvent | null;
 }
 
 interface TodoItem {
@@ -236,7 +236,7 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
   );
 }
 
-export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, onDelete, isOwner = true, usersById, currentUserId }: NoteModalProps) {
+export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, onDelete, isOwner = true, usersById, currentUserId, presenceEvent = null }: NoteModalProps) {
   const { t, i18n } = useTranslation();
   const { showToast } = useToast();
   const [title, setTitle] = useState('');
@@ -740,24 +740,21 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       .filter((viewer) => viewer.userId !== currentUserId);
   }, [activeViewerIDs, currentUserId, presenceUserLookup, usersById]);
 
-  useSSE({
-    enabled: Boolean(presenceNoteID),
-    onEvent: (event) => {
-      if (!presenceNoteID || event.note_id !== presenceNoteID) {
-        return;
-      }
-      if (!event.source_user_id || event.source_user_id === currentUserId) {
-        return;
-      }
+  useEffect(() => {
+    if (!presenceNoteID || !presenceEvent || presenceEvent.note_id !== presenceNoteID) {
+      return;
+    }
+    if (!presenceEvent.source_user_id || presenceEvent.source_user_id === currentUserId) {
+      return;
+    }
 
-      if (event.type === 'note_opened') {
-        setActiveViewerIDs((prev) => (prev.includes(event.source_user_id) ? prev : [...prev, event.source_user_id]));
-      }
-      if (event.type === 'note_closed') {
-        setActiveViewerIDs((prev) => prev.filter((viewerID) => viewerID !== event.source_user_id));
-      }
-    },
-  });
+    if (presenceEvent.type === 'note_opened') {
+      setActiveViewerIDs((prev) => (prev.includes(presenceEvent.source_user_id) ? prev : [...prev, presenceEvent.source_user_id]));
+    }
+    if (presenceEvent.type === 'note_closed') {
+      setActiveViewerIDs((prev) => prev.filter((viewerID) => viewerID !== presenceEvent.source_user_id));
+    }
+  }, [presenceEvent, presenceNoteID, currentUserId]);
 
   useEffect(() => {
     setActiveViewerIDs([]);

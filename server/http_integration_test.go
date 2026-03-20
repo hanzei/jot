@@ -496,6 +496,40 @@ func TestUpdateUserEndpoint(t *testing.T) {
 
 // SSE endpoint tests
 
+func openSSEStreamForTest(t *testing.T, ctx context.Context, baseURL string, c *client.Client) (*http.Response, <-chan struct{}, <-chan map[string]any) {
+	t.Helper()
+
+	req, err := http.NewRequestWithContext(ctx, http.MethodGet, baseURL+"/api/v1/events", nil)
+	require.NoError(t, err)
+
+	resp, err := c.HTTPClient().Do(req)
+	require.NoError(t, err)
+
+	connectedCh := make(chan struct{}, 1)
+	eventCh := make(chan map[string]any, 8)
+
+	go func() {
+		scanner := bufio.NewScanner(resp.Body)
+		connectedSent := false
+		for scanner.Scan() {
+			line := scanner.Text()
+			if !connectedSent && line == ": connected" {
+				connectedCh <- struct{}{}
+				connectedSent = true
+				continue
+			}
+			if strings.HasPrefix(line, "data: ") {
+				var event map[string]any
+				if jsonErr := json.Unmarshal([]byte(line[6:]), &event); jsonErr == nil {
+					eventCh <- event
+				}
+			}
+		}
+	}()
+
+	return resp, connectedCh, eventCh
+}
+
 func TestSSEEndpoint(t *testing.T) {
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "sseuser", "password123", false)
@@ -585,99 +619,69 @@ func TestSSEEndpoint(t *testing.T) {
 		}
 	})
 
-	t.Run("presence join and leave events are broadcast to other collaborators", func(t *testing.T) {
-		collaborator := ts.createTestUser(t, "presencecollab", "password123", false)
+}
 
-		note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-			Title:    "Presence Test Note",
-			Content:  "presence content",
-			NoteType: client.NoteTypeText,
-		})
-		require.NoError(t, err)
-		require.NoError(t, user.Client.ShareNote(t.Context(), note.ID, collaborator.User.ID))
+func TestSSEPresenceEndpoint(t *testing.T) {
+	ts := setupTestServer(t)
+	owner := ts.createTestUser(t, "presenceowner", "password123", false)
+	collaborator := ts.createTestUser(t, "presencecollab", "password123", false)
 
-		openSSEStream := func(ctx context.Context, c *client.Client) (*http.Response, chan struct{}, chan map[string]any) {
-			t.Helper()
-
-			req, reqErr := http.NewRequestWithContext(ctx, http.MethodGet, ts.HTTPServer.URL+"/api/v1/events", nil)
-			require.NoError(t, reqErr)
-			resp, doErr := c.HTTPClient().Do(req)
-			require.NoError(t, doErr)
-
-			connectedCh := make(chan struct{}, 1)
-			eventCh := make(chan map[string]any, 8)
-
-			go func() {
-				scanner := bufio.NewScanner(resp.Body)
-				connectedSent := false
-				for scanner.Scan() {
-					line := scanner.Text()
-					if !connectedSent && line == ": connected" {
-						connectedCh <- struct{}{}
-						connectedSent = true
-						continue
-					}
-					if strings.HasPrefix(line, "data: ") {
-						var event map[string]any
-						if jsonErr := json.Unmarshal([]byte(line[6:]), &event); jsonErr == nil {
-							eventCh <- event
-						}
-					}
-				}
-			}()
-
-			return resp, connectedCh, eventCh
-		}
-
-		sseCtx, cancel := context.WithTimeout(t.Context(), 6*time.Second)
-		defer cancel()
-
-		ownerResp, ownerConnectedCh, ownerEvents := openSSEStream(sseCtx, user.Client)
-		defer ownerResp.Body.Close()
-		collaboratorResp, collaboratorConnectedCh, collaboratorEvents := openSSEStream(sseCtx, collaborator.Client)
-		defer collaboratorResp.Body.Close()
-
-		select {
-		case <-ownerConnectedCh:
-		case <-sseCtx.Done():
-			t.Fatal("timed out waiting for owner SSE connection")
-		}
-		select {
-		case <-collaboratorConnectedCh:
-		case <-sseCtx.Done():
-			t.Fatal("timed out waiting for collaborator SSE connection")
-		}
-
-		require.NoError(t, collaborator.Client.JoinNotePresence(t.Context(), note.ID))
-		select {
-		case event := <-ownerEvents:
-			assert.Equal(t, "note_opened", event["type"])
-			assert.Equal(t, note.ID, event["note_id"])
-			assert.Equal(t, collaborator.User.ID, event["source_user_id"])
-		case <-sseCtx.Done():
-			t.Fatal("timed out waiting for note_opened SSE event")
-		}
-		select {
-		case event := <-collaboratorEvents:
-			t.Fatalf("source user unexpectedly received own presence event: %v", event)
-		case <-time.After(300 * time.Millisecond):
-		}
-
-		require.NoError(t, collaborator.Client.LeaveNotePresence(t.Context(), note.ID))
-		select {
-		case event := <-ownerEvents:
-			assert.Equal(t, "note_closed", event["type"])
-			assert.Equal(t, note.ID, event["note_id"])
-			assert.Equal(t, collaborator.User.ID, event["source_user_id"])
-		case <-sseCtx.Done():
-			t.Fatal("timed out waiting for note_closed SSE event")
-		}
-		select {
-		case event := <-collaboratorEvents:
-			t.Fatalf("source user unexpectedly received own leave event: %v", event)
-		case <-time.After(300 * time.Millisecond):
-		}
+	note, err := owner.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
+		Title:    "Presence Test Note",
+		Content:  "presence content",
+		NoteType: client.NoteTypeText,
 	})
+	require.NoError(t, err)
+	require.NoError(t, owner.Client.ShareNote(t.Context(), note.ID, collaborator.User.ID))
+
+	sseCtx, cancel := context.WithTimeout(t.Context(), 6*time.Second)
+	defer cancel()
+
+	ownerResp, ownerConnectedCh, ownerEvents := openSSEStreamForTest(t, sseCtx, ts.HTTPServer.URL, owner.Client)
+	defer ownerResp.Body.Close()
+	collaboratorResp, collaboratorConnectedCh, collaboratorEvents := openSSEStreamForTest(t, sseCtx, ts.HTTPServer.URL, collaborator.Client)
+	defer collaboratorResp.Body.Close()
+
+	select {
+	case <-ownerConnectedCh:
+	case <-sseCtx.Done():
+		t.Fatal("timed out waiting for owner SSE connection")
+	}
+	select {
+	case <-collaboratorConnectedCh:
+	case <-sseCtx.Done():
+		t.Fatal("timed out waiting for collaborator SSE connection")
+	}
+
+	require.NoError(t, collaborator.Client.JoinNotePresence(t.Context(), note.ID))
+	select {
+	case event := <-ownerEvents:
+		assert.Equal(t, "note_opened", event["type"])
+		assert.Equal(t, note.ID, event["note_id"])
+		assert.Equal(t, collaborator.User.ID, event["source_user_id"])
+	case <-sseCtx.Done():
+		t.Fatal("timed out waiting for note_opened SSE event")
+	}
+	select {
+	case event := <-collaboratorEvents:
+		t.Fatalf("source user unexpectedly received own presence event: %v", event)
+	case <-time.After(300 * time.Millisecond):
+	}
+
+	require.NoError(t, collaborator.Client.LeaveNotePresence(t.Context(), note.ID))
+	select {
+	case event := <-ownerEvents:
+		assert.Equal(t, "note_closed", event["type"])
+		assert.Equal(t, note.ID, event["note_id"])
+		assert.Equal(t, collaborator.User.ID, event["source_user_id"])
+	case <-sseCtx.Done():
+		t.Fatal("timed out waiting for note_closed SSE event")
+	}
+	select {
+	case event := <-collaboratorEvents:
+		t.Fatalf("source user unexpectedly received own leave event: %v", event)
+	case <-time.After(300 * time.Millisecond):
+	}
 }
 
 func TestChangePasswordEndpoint(t *testing.T) {

@@ -970,6 +970,108 @@
                 }
             }
         },
+        "/notes/{id}/presence/join": {
+            "post": {
+                "security": [
+                    {
+                        "CookieAuth": []
+                    }
+                ],
+                "tags": [
+                    "presence"
+                ],
+                "summary": "Join note presence",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Note ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "no content"
+                    },
+                    "400": {
+                        "description": "bad request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "401": {
+                        "description": "unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/notes/{id}/presence/leave": {
+            "post": {
+                "security": [
+                    {
+                        "CookieAuth": []
+                    }
+                ],
+                "tags": [
+                    "presence"
+                ],
+                "summary": "Leave note presence",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Note ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "no content"
+                    },
+                    "400": {
+                        "description": "bad request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "401": {
+                        "description": "unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
         "/notes/{id}/restore": {
             "post": {
                 "security": [

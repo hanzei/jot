@@ -895,6 +895,70 @@ paths:
       summary: Remove a label from a note
       tags:
       - labels
+  /notes/{id}/presence/join:
+    post:
+      parameters:
+      - description: Note ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: no content
+        "400":
+          description: bad request
+          schema:
+            type: string
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "404":
+          description: not found
+          schema:
+            type: string
+        "500":
+          description: internal server error
+          schema:
+            type: string
+      security:
+      - CookieAuth: []
+      summary: Join note presence
+      tags:
+      - presence
+  /notes/{id}/presence/leave:
+    post:
+      parameters:
+      - description: Note ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: no content
+        "400":
+          description: bad request
+          schema:
+            type: string
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "404":
+          description: not found
+          schema:
+            type: string
+        "500":
+          description: internal server error
+          schema:
+            type: string
+      security:
+      - CookieAuth: []
+      summary: Leave note presence
+      tags:
+      - presence
   /notes/{id}/restore:
     post:
       parameters:

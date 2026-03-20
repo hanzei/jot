@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, act } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { type ReactNode } from 'react'
 import NoteModal from '../NoteModal'
@@ -7,20 +7,12 @@ import type { Note, NoteItem } from '@jot/shared'
 import { createMockNote } from '@/utils/__tests__/test-helpers'
 
 // Mock the API module
-const { mockNotesUpdate, mockNotesCreate, mockJoinPresence, mockLeavePresence, mockUseSSE, emitSSEEvent } = vi.hoisted(() => {
-  let onEventCallback: ((event: unknown) => void) | null = null
-  return ({
+const { mockNotesUpdate, mockNotesCreate, mockJoinPresence, mockLeavePresence } = vi.hoisted(() => ({
   mockNotesUpdate: vi.fn().mockResolvedValue({}),
   mockNotesCreate: vi.fn().mockResolvedValue({}),
   mockJoinPresence: vi.fn().mockResolvedValue({}),
   mockLeavePresence: vi.fn().mockResolvedValue({}),
-  mockUseSSE: vi.fn(({ onEvent }: { onEvent: (event: unknown) => void }) => {
-    onEventCallback = onEvent
-  }),
-  emitSSEEvent: (event: unknown) => {
-    onEventCallback?.(event)
-  },
-})})
+}))
 vi.mock('@/utils/api', () => ({
   notes: {
     create: mockNotesCreate,
@@ -33,10 +25,6 @@ vi.mock('@/utils/api', () => ({
   labels: {
     getAll: vi.fn().mockResolvedValue([]),
   },
-}))
-
-vi.mock('@/utils/useSSE', () => ({
-  useSSE: mockUseSSE,
 }))
 
 // Mock @headlessui/react
@@ -661,6 +649,15 @@ describe('NoteModal', () => {
       expect(mockLeavePresence).toHaveBeenCalledWith('1')
     })
 
+    it('does not join presence for unshared notes', () => {
+      renderNoteModal({
+        ...defaultProps,
+        note: createMockNote({ is_shared: false }),
+        currentUserId: 'user1',
+      })
+      expect(mockJoinPresence).not.toHaveBeenCalled()
+    })
+
     it('shows and hides "Also viewing" users from presence events', () => {
       const sharedNote = createMockNote({
         is_shared: true,
@@ -687,32 +684,49 @@ describe('NoteModal', () => {
         ['user2', { id: 'user2', username: 'otheruser', first_name: 'Other', last_name: 'User', role: 'user', has_profile_icon: false, created_at: '', updated_at: '' }],
       ])
 
-      renderNoteModal({
+      const { rerender } = renderNoteModal({
         ...defaultProps,
         note: sharedNote,
         currentUserId: 'user1',
         usersById,
+        presenceEvent: null,
       })
 
-      act(() => {
-        emitSSEEvent({
-          type: 'note_opened',
-          note_id: '1',
-          source_user_id: 'user2',
-          note: null,
-        })
-      })
+      rerender(
+        <ToastProvider>
+          <NoteModal
+            {...defaultProps}
+            note={sharedNote}
+            currentUserId="user1"
+            usersById={usersById}
+            presenceEvent={{
+              type: 'note_opened',
+              note_id: '1',
+              source_user_id: 'user2',
+              note: null,
+            }}
+          />
+        </ToastProvider>
+      )
       expect(screen.getByText('Also viewing:')).toBeInTheDocument()
       expect(screen.getByText('Other User')).toBeInTheDocument()
 
-      act(() => {
-        emitSSEEvent({
-          type: 'note_closed',
-          note_id: '1',
-          source_user_id: 'user2',
-          note: null,
-        })
-      })
+      rerender(
+        <ToastProvider>
+          <NoteModal
+            {...defaultProps}
+            note={sharedNote}
+            currentUserId="user1"
+            usersById={usersById}
+            presenceEvent={{
+              type: 'note_closed',
+              note_id: '1',
+              source_user_id: 'user2',
+              note: null,
+            }}
+          />
+        </ToastProvider>
+      )
       expect(screen.queryByText('Also viewing:')).not.toBeInTheDocument()
     })
   })
