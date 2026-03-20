@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { XMarkIcon, PlusIcon, TrashIcon, ChevronDownIcon, ArchiveBoxIcon, ArchiveBoxXMarkIcon, ShareIcon, UserPlusIcon, CheckIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon, PlusIcon, TrashIcon, ChevronDownIcon, ArchiveBoxIcon, ArchiveBoxXMarkIcon, ShareIcon, UserPlusIcon, CheckIcon, TagIcon } from '@heroicons/react/24/outline';
 import { Dialog, DialogPanel } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
 import { VALIDATION, NOTE_COLORS, buildCollaborators, type Note, type NoteType, type CreateNoteRequest, type UpdateNoteRequest, type Label, type User, type Collaborator } from '@jot/shared';
@@ -1158,11 +1158,14 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
               <div className="relative">
                 <button
                   onClick={() => setShowLabelPicker(v => !v)}
-                  className="w-6 h-6 rounded-full border border-dashed border-gray-300 dark:border-slate-600 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors"
+                  onMouseDown={(event) => event.stopPropagation()}
+                  className="inline-flex items-center gap-1 rounded-full border border-dashed border-blue-300 dark:border-blue-700 bg-blue-50/80 dark:bg-blue-900/20 px-2 py-1 text-xs font-medium text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
                   title={t('labels.addLabels')}
                   aria-label={t('labels.addLabels')}
+                  aria-expanded={showLabelPicker}
                 >
-                  <PlusIcon className="h-3 w-3 text-gray-400 dark:text-gray-500" />
+                  <TagIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                  <span>{t('labels.addLabels')}</span>
                 </button>
                 {showLabelPicker && (
                   note ? (

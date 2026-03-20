@@ -6,7 +6,7 @@ import { type ReactNode } from 'react'
 import Admin from '../Admin'
 import { admin, isAxiosError } from '@/utils/api'
 import * as authUtils from '@/utils/auth'
-import type { User } from '@jot/shared'
+import { VALIDATION, type User } from '@jot/shared'
 
 vi.mock('@/utils/api', () => ({
   admin: {
@@ -97,6 +97,156 @@ describe('Admin', () => {
       const layout = screen.getByTestId('app-layout')
       expect(layout).toHaveAttribute('data-is-admin', 'true')
       expect(layout).toHaveAttribute('data-admin-link-active', 'true')
+    })
+  })
+
+  describe('Create user form validation', () => {
+    it('shows helper text and username counter', async () => {
+      const user = userEvent.setup()
+      renderAdmin()
+
+      await waitFor(() => {
+        expect(screen.getByText('regularuser')).toBeInTheDocument()
+      })
+
+      await user.click(screen.getByRole('button', { name: /^Create User$/ }))
+
+      expect(screen.getByText('2–30 characters. Letters, numbers, underscores, and hyphens.')).toBeInTheDocument()
+      expect(screen.getByText('At least 4 characters')).toBeInTheDocument()
+      expect(screen.getByText(`0/${VALIDATION.USERNAME_MAX_LENGTH}`)).toBeInTheDocument()
+
+      const submitButton = screen.getByRole('button', { name: 'Create User' })
+      expect(submitButton).toBeEnabled()
+    })
+
+    it('shows username validation errors only after blur', async () => {
+      const user = userEvent.setup()
+      renderAdmin()
+
+      await waitFor(() => {
+        expect(screen.getByText('regularuser')).toBeInTheDocument()
+      })
+
+      await user.click(screen.getByRole('button', { name: /^Create User$/ }))
+
+      const usernameInput = screen.getByLabelText('Username')
+      await user.type(usernameInput, 'bad*name')
+      expect(screen.queryByText('Username can only contain letters, numbers, underscores, and hyphens')).not.toBeInTheDocument()
+
+      await user.tab()
+      expect(screen.getByText('Username can only contain letters, numbers, underscores, and hyphens')).toBeInTheDocument()
+    })
+
+    it('shows password validation error on blur', async () => {
+      const user = userEvent.setup()
+      renderAdmin()
+
+      await waitFor(() => {
+        expect(screen.getByText('regularuser')).toBeInTheDocument()
+      })
+
+      await user.click(screen.getByRole('button', { name: /^Create User$/ }))
+
+      const passwordInput = screen.getByLabelText('Password')
+      await user.type(passwordInput, '123')
+      await user.tab()
+
+      expect(screen.getByText('Password must be at least 4 characters')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Create User' })).toBeDisabled()
+    })
+
+    it('shows username edge validation error on blur', async () => {
+      const user = userEvent.setup()
+      renderAdmin()
+
+      await waitFor(() => {
+        expect(screen.getByText('regularuser')).toBeInTheDocument()
+      })
+
+      await user.click(screen.getByRole('button', { name: /^Create User$/ }))
+
+      const usernameInput = screen.getByLabelText('Username')
+      await user.type(usernameInput, '-validchars')
+      await user.tab()
+
+      expect(screen.getByText('Username cannot start or end with underscore or hyphen')).toBeInTheDocument()
+    })
+
+    it('turns username counter red when over the max length', async () => {
+      const user = userEvent.setup()
+      renderAdmin()
+
+      await waitFor(() => {
+        expect(screen.getByText('regularuser')).toBeInTheDocument()
+      })
+
+      await user.click(screen.getByRole('button', { name: /^Create User$/ }))
+
+      const usernameInput = screen.getByLabelText('Username')
+      await user.type(usernameInput, 'a'.repeat(VALIDATION.USERNAME_MAX_LENGTH + 1))
+
+      const counter = screen.getByText(`${VALIDATION.USERNAME_MAX_LENGTH + 1}/${VALIDATION.USERNAME_MAX_LENGTH}`)
+      expect(counter).toHaveClass('text-red-600')
+    })
+
+    it('enables submit for valid fields and creates a user', async () => {
+      const user = userEvent.setup()
+      const newUser: User = {
+        id: 'user4',
+        username: 'new_user',
+        first_name: '',
+        last_name: '',
+        role: 'user',
+        created_at: '2023-01-04T00:00:00Z',
+        updated_at: '2023-01-04T00:00:00Z',
+        has_profile_icon: false,
+      }
+      vi.mocked(admin.createUser).mockResolvedValue(newUser)
+
+      renderAdmin()
+
+      await waitFor(() => {
+        expect(screen.getByText('regularuser')).toBeInTheDocument()
+      })
+
+      await user.click(screen.getByRole('button', { name: /^Create User$/ }))
+
+      await user.type(screen.getByLabelText('Username'), 'new_user')
+      await user.type(screen.getByLabelText('Password'), 'abcd')
+
+      const submitButton = screen.getByRole('button', { name: 'Create User' })
+      expect(submitButton).toBeEnabled()
+
+      await user.click(submitButton)
+
+      await waitFor(() => {
+        expect(admin.createUser).toHaveBeenCalledWith({
+          username: 'new_user',
+          password: 'abcd',
+          role: 'user',
+        })
+      })
+    })
+
+    it('shows server error message when create user fails', async () => {
+      const user = userEvent.setup()
+      vi.mocked(isAxiosError).mockReturnValue(true)
+      vi.mocked(admin.createUser).mockRejectedValue({ response: { data: '  username already exists  ' } })
+
+      renderAdmin()
+
+      await waitFor(() => {
+        expect(screen.getByText('regularuser')).toBeInTheDocument()
+      })
+
+      await user.click(screen.getByRole('button', { name: /^Create User$/ }))
+      await user.type(screen.getByLabelText('Username'), 'new_user')
+      await user.type(screen.getByLabelText('Password'), 'abcd')
+      await user.click(screen.getByRole('button', { name: 'Create User' }))
+
+      await waitFor(() => {
+        expect(screen.getByRole('alert')).toHaveTextContent('username already exists')
+      })
     })
   })
 

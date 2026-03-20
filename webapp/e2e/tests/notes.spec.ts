@@ -108,6 +108,19 @@ test.describe('Notes', () => {
     await dashboardPage.expectNoteVisible('Archived Note');
   });
 
+  test('shows archive/bin view context help in sidebar and banners', async ({ dashboardPage }) => {
+    await dashboardPage.goto();
+
+    await dashboardPage.expectArchiveTabTooltip();
+    await dashboardPage.expectBinTabTooltip();
+
+    await dashboardPage.switchToArchived();
+    await dashboardPage.expectArchiveInfoVisible();
+
+    await dashboardPage.switchToBin();
+    await dashboardPage.expectBinInfoVisible();
+  });
+
   test('unarchives a note and it reappears in main view', async ({ dashboardPage }) => {
     await dashboardPage.goto();
     await dashboardPage.createNote('To Unarchive');

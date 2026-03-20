@@ -29,11 +29,13 @@ export function useNavigationLinkTabs() {
   const bottomTabs = [
     {
       label: t('dashboard.tabArchive'),
+      title: t('dashboard.archiveTooltip'),
       icon: <ArchiveBoxIcon className="h-4 w-4 shrink-0" />,
       href: '/?view=archive',
     },
     {
       label: t('dashboard.tabBin'),
+      title: t('dashboard.binTooltip'),
       icon: <TrashIcon className="h-4 w-4 shrink-0" />,
       href: '/?view=bin',
     },

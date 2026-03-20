@@ -140,7 +140,9 @@ test.describe('Task Assignment', () => {
     await dashboardPage.createNote('Regular Note', 'Just a note');
 
     await dashboardPage.switchToMyTodo();
-    await dashboardPage.expectEmptyState('No notes with todos assigned to you');
+    await dashboardPage.expectEmptyState(
+      'No to-do items assigned to you yet. When someone assigns a to-do item to you in a shared note, it will appear here.'
+    );
   });
 
   test('collaborator sees the assignment on a shared note', async ({

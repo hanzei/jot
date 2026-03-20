@@ -87,8 +87,8 @@ vi.mock('@/components/AppLayout', () => ({
     onLogout?: () => void;
     children?: ReactNode;
     isAdmin?: boolean;
-    sidebarTabs?: Array<{ label: string; onClick?: () => void; isActive?: boolean }>;
-    sidebarBottomTabs?: Array<{ label: string; onClick?: () => void; isActive?: boolean }>;
+    sidebarTabs?: Array<{ label: string; onClick?: () => void; isActive?: boolean; title?: string }>;
+    sidebarBottomTabs?: Array<{ label: string; onClick?: () => void; isActive?: boolean; title?: string }>;
     sidebarChildren?: ReactNode;
     searchBar?: ReactNode;
   }) => (
@@ -103,6 +103,7 @@ vi.mock('@/components/AppLayout', () => ({
             key={tab.label}
             onClick={tab.onClick}
             aria-label={tab.label}
+            title={tab.title}
             aria-current={tab.isActive ? 'page' : undefined}
           >
             {tab.label}
@@ -114,6 +115,7 @@ vi.mock('@/components/AppLayout', () => ({
             key={tab.label}
             onClick={tab.onClick}
             aria-label={tab.label}
+            title={tab.title}
             aria-current={tab.isActive ? 'page' : undefined}
           >
             {tab.label}
@@ -203,8 +205,8 @@ describe('Dashboard', () => {
     vi.mocked(auth.getUser).mockReturnValue({
       id: 'user1',
       username: 'testuser',
-  first_name: '',
-  last_name: '',
+      first_name: '',
+      last_name: '',
       role: 'user',
       created_at: '2023-01-01T00:00:00Z',
       updated_at: '2023-01-01T00:00:00Z',
@@ -243,6 +245,7 @@ describe('Dashboard', () => {
 
       await waitFor(() => {
         expect(screen.getByText('Notes')).toBeInTheDocument()
+        expect(screen.getByText('My Todo')).toBeInTheDocument()
         expect(screen.getByText('Archive')).toBeInTheDocument()
         expect(screen.getByText('Bin')).toBeInTheDocument()
       })
@@ -420,6 +423,14 @@ describe('Dashboard', () => {
       })
     })
 
+    it('shows archive info banner in archive view', async () => {
+      renderDashboard(['/?view=archive'])
+
+      await waitFor(() => {
+        expect(screen.getByText('Archived notes are hidden from the main view but kept forever.')).toBeInTheDocument()
+      })
+    })
+
     it('loads bin view from URL parameter', async () => {
       const mockNote = createMockNote({ id: 'bin-note-1', title: 'Binned Note' })
       const mockGetAll = vi.mocked(notes.getAll)
@@ -432,6 +443,8 @@ describe('Dashboard', () => {
       await waitFor(() => {
         expect(mockGetAll).toHaveBeenCalledWith(false, '', true, '', false)
       })
+
+      expect(await screen.findByText('Notes in the bin are deleted after 7 days')).toBeInTheDocument()
 
       // Bin-specific controls should be rendered
       await waitFor(() => {
@@ -461,6 +474,15 @@ describe('Dashboard', () => {
 
       await waitFor(() => {
         expect(mockGetAll).toHaveBeenCalledWith(false, '', false, '', false)
+      })
+    })
+
+    it('sets sidebar tooltips for archive and bin tabs', async () => {
+      renderDashboard()
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Archive' })).toHaveAttribute('title', 'Hidden notes you want to keep')
+        expect(screen.getByRole('button', { name: 'Bin' })).toHaveAttribute('title', 'Deleted notes — removed after 7 days')
       })
     })
   })
@@ -1277,7 +1299,35 @@ describe('Dashboard', () => {
       await user.click(screen.getByRole('button', { name: 'My Todo' }))
 
       await waitFor(() => {
-        expect(screen.getByText('No notes with todos assigned to you')).toBeInTheDocument()
+        expect(screen.getByText('No to-do items assigned to you yet. When someone assigns a to-do item to you in a shared note, it will appear here.')).toBeInTheDocument()
+      })
+    })
+
+    it('shows My Todo tab tooltip and subtitle in My Todo view', async () => {
+      const user = userEvent.setup()
+      vi.mocked(notes.getAll).mockResolvedValue([])
+
+      renderDashboard()
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'My Todo' })).toHaveAttribute(
+          'title',
+          'Notes with to-do items assigned to you'
+        )
+      })
+
+      await user.click(screen.getByRole('button', { name: 'My Todo' }))
+
+      await waitFor(() => {
+        expect(screen.getByText('Showing notes that include your assigned to-do items.')).toBeInTheDocument()
+      })
+    })
+
+    it('sets My Todo page title when My Todo view is active', async () => {
+      renderDashboard(['/?view=my-todo'])
+
+      await waitFor(() => {
+        expect(document.title).toBe('My Todo - Jot')
       })
     })
 
