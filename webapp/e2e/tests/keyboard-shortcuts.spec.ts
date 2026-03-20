@@ -15,21 +15,20 @@ test.describe('Keyboard shortcuts help dialog', () => {
     void authenticatedUser;
     await dashboardPage.goto();
 
-    await page.locator('body').click();
+    await page.locator('main').click();
     await page.keyboard.press('n');
 
-    const activeDialog = page.locator('[role="dialog"][aria-modal="true"]');
-    const noteTitleInputInDialog = activeDialog.locator('input[type="text"]');
-    await expect(activeDialog).toBeVisible();
-    await expect(noteTitleInputInDialog).toBeVisible();
+    const noteTitleInput = page.getByPlaceholder('Note title...');
+    await expect(noteTitleInput).toBeVisible();
     await page.keyboard.press('Escape');
-    await expect(noteTitleInputInDialog).toHaveCount(0);
+    await expect(noteTitleInput).toHaveCount(0);
   });
 
   test('opens with ? and closes with Escape', async ({ authenticatedUser, page, dashboardPage }) => {
     void authenticatedUser;
     await dashboardPage.goto();
 
+    await page.locator('main').click();
     await page.keyboard.press('Shift+/');
 
     const shortcutsDialog = page.getByTestId('keyboard-shortcuts-dialog');

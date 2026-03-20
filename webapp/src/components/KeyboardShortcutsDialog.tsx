@@ -10,6 +10,10 @@ interface KeyboardShortcutsDialogProps {
 export default function KeyboardShortcutsDialog({ isOpen, onClose }: KeyboardShortcutsDialogProps) {
   const { t } = useTranslation();
 
+  if (!isOpen) {
+    return null;
+  }
+
   const shortcuts = [
     {
       id: 'focus-search',
