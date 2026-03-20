@@ -72,3 +72,20 @@ jobs:
 
       - name: Check docs are up to date
         run: git diff --exit-code server/docs/
+
+  migrations:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v6
+
+      - name: Check migration numbers are unique
+        run: |
+          dupes=$(ls server/internal/database/migrations/*.sql \
+            | xargs -I{} basename {} \
+            | grep -oP '^\d+' \
+            | sort | uniq -d)
+          if [ -n "$dupes" ]; then
+            echo "Duplicate migration numbers found: $dupes"
+            exit 1
+          fi
+          echo "All migration numbers are unique."
