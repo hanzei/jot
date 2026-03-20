@@ -33,7 +33,7 @@ describe('mobile i18n', () => {
     expect(resolveLanguage('system', [makeLocale('de', 'de-DE')])).toBe('de');
   });
 
-  it('resolves supported phase-1 locales from the device locale', () => {
+  it('resolves additional supported locales from the device locale', () => {
     expect(resolveLanguage('system', [makeLocale('fr', 'fr-FR')])).toBe('fr');
   });
 

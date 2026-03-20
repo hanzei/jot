@@ -739,7 +739,7 @@ func TestUserSettingsEndpoints(t *testing.T) {
 		assert.Equal(t, "de", resp.Settings.Language)
 	})
 
-	t.Run("PATCH /users/me accepts phase-1 languages", func(t *testing.T) {
+	t.Run("PATCH /users/me accepts additional supported languages", func(t *testing.T) {
 		resp, err := user.Client.UpdateUser(t.Context(), &client.UpdateUserRequest{Language: client.Ptr("fr")})
 		require.NoError(t, err)
 		assert.Equal(t, "fr", resp.Settings.Language)
