@@ -10,6 +10,10 @@ interface NoteMarkdownProps {
   interactiveLinks?: boolean;
 }
 
+function escapeRegExp(value: string): string {
+  return value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+}
+
 function consumeMarkdownImage(content: string, startIndex: number): { altText: string; endIndex: number } | null {
   if (content[startIndex] !== '!' || content[startIndex + 1] !== '[') {
     return null;
@@ -83,7 +87,7 @@ function stripInlineImagesOutsideCode(line: string): string {
 function stripMarkdownImages(content: string): string {
   const segments = content.match(/[^\r\n]+|\r\n|\r|\n/g) ?? [];
   const result: string[] = [];
-  let activeFence: { marker: '`' | '~'; length: number } | null = null;
+  let activeFence: { marker: '`' | '~'; length: number; prefix: string } | null = null;
 
   for (const segment of segments) {
     if (segment === '\n' || segment === '\r' || segment === '\r\n') {
@@ -93,7 +97,7 @@ function stripMarkdownImages(content: string): string {
 
     if (activeFence) {
       const closingFencePattern = new RegExp(
-        `^\\s{0,3}${activeFence.marker}{${activeFence.length},}\\s*$`,
+        `^${escapeRegExp(activeFence.prefix)}${activeFence.marker}{${activeFence.length},}\\s*$`,
       );
       if (closingFencePattern.test(segment)) {
         activeFence = null;
@@ -102,11 +106,14 @@ function stripMarkdownImages(content: string): string {
       continue;
     }
 
-    const fenceMatch = segment.match(/^\s{0,3}([`~]{3,})/);
+    const fenceMatch = segment.match(
+      /^((?:\s*>\s*)*(?:(?:[-*+]|\d+\.)\s+)?\s*)([`~]{3,})/,
+    );
     if (fenceMatch) {
       activeFence = {
-        marker: fenceMatch[1][0] as '`' | '~',
-        length: fenceMatch[1].length,
+        prefix: fenceMatch[1],
+        marker: fenceMatch[2][0] as '`' | '~',
+        length: fenceMatch[2].length,
       };
       result.push(segment);
       continue;

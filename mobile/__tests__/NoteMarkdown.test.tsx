@@ -36,6 +36,12 @@ describe('NoteMarkdown', () => {
     expect(prepareMarkdownForRender('- [ ]')).toBe('- ');
     expect(prepareMarkdownForRender('> - [ ] quoted task')).toBe('> - quoted task');
     expect(prepareMarkdownForRender('```\n- [ ] keep literal\n```')).toBe('```\n- [ ] keep literal\n```');
+    expect(prepareMarkdownForRender('> ```\n> - [ ] keep literal\n> ```')).toBe(
+      '> ```\n> - [ ] keep literal\n> ```',
+    );
+    expect(prepareMarkdownForRender('    ```\n    - [ ] keep literal\n    ```')).toBe(
+      '    ```\n    - [ ] keep literal\n    ```',
+    );
 
     const { getByText, queryByText } = render(
       <NoteMarkdown content={'- [ ] Draft spec\n- [x] Ship it'} />,

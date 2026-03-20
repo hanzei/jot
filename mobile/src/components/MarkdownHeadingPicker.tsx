@@ -1,11 +1,12 @@
 import React from 'react';
 import { Modal, Pressable, SafeAreaView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
 import { useTheme } from '../theme/ThemeContext';
+import type { HeadingLevel } from '../utils/markdownFormatting';
 
 interface MarkdownHeadingPickerProps {
   visible: boolean;
   onClose: () => void;
-  onSelect: (level: 1 | 2 | 3 | 4) => void;
+  onSelect: (level: HeadingLevel) => void;
 }
 
 const HEADING_OPTIONS = [
@@ -26,7 +27,7 @@ export default function MarkdownHeadingPicker({
     <Modal visible={visible} transparent animationType="slide" onRequestClose={onClose}>
       <Pressable style={[styles.overlay, { backgroundColor: colors.overlay }]} onPress={onClose}>
         <SafeAreaView style={[styles.sheet, { backgroundColor: colors.sheetBackground }]}>
-          <Pressable>
+          <Pressable onPress={() => {}}>
             <View style={[styles.handle, { backgroundColor: colors.handleColor }]} />
             <Text style={[styles.title, { color: colors.text }]}>Heading level</Text>
             {HEADING_OPTIONS.map((option) => (

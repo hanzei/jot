@@ -61,6 +61,8 @@ const MARKDOWN_LABELS = {
   horizontalRule: 'Horizontal rule',
 };
 
+const ICON_BUTTON_HIT_SLOP = { top: 6, bottom: 6, left: 6, right: 6 };
+
 interface LocalItem {
   id: string;
   text: string;
@@ -340,6 +342,10 @@ export default function NoteEditorScreen() {
       if (isHydrating) return;
 
       const result = formatter(contentRef.current, contentSelectionRef.current);
+      if (result.text.length > VALIDATION.CONTENT_MAX_LENGTH) {
+        return;
+      }
+
       handleContentChange(result.text);
       contentSelectionRef.current = result.selection;
 
@@ -585,6 +591,7 @@ export default function NoteEditorScreen() {
 
   const handleToggleNoteType = useCallback(() => {
     if (hasCreated) return;
+    setHeadingPickerVisible(false);
     setIsPreviewMode(false);
     setNoteType((prev) => (prev === 'text' ? 'todo' : 'text'));
   }, [hasCreated]);
@@ -592,6 +599,7 @@ export default function NoteEditorScreen() {
   const handleTogglePreviewMode = useCallback(() => {
     if (noteType !== 'text') return;
 
+    setHeadingPickerVisible(false);
     setIsPreviewMode((prev) => {
       const next = !prev;
       if (!next) {
@@ -695,6 +703,7 @@ export default function NoteEditorScreen() {
               ]}
               testID="toggle-preview-mode"
               accessibilityLabel={isPreviewMode ? MARKDOWN_LABELS.edit : MARKDOWN_LABELS.preview}
+              hitSlop={ICON_BUTTON_HIT_SLOP}
             >
               <Ionicons
                 name={isPreviewMode ? 'create-outline' : 'eye-outline'}
@@ -776,6 +785,7 @@ export default function NoteEditorScreen() {
               style={[styles.markdownToolbarButton, { backgroundColor: hasNoteColor ? 'rgba(0,0,0,0.08)' : colors.surfaceVariant }]}
               onPress={() => applyMarkdownFormat(applyBold)}
               accessibilityLabel={MARKDOWN_LABELS.bold}
+              hitSlop={ICON_BUTTON_HIT_SLOP}
             >
               <MaterialCommunityIcons name="format-bold" size={20} color={hasNoteColor ? '#444' : colors.icon} />
             </TouchableOpacity>
@@ -783,6 +793,7 @@ export default function NoteEditorScreen() {
               style={[styles.markdownToolbarButton, { backgroundColor: hasNoteColor ? 'rgba(0,0,0,0.08)' : colors.surfaceVariant }]}
               onPress={() => applyMarkdownFormat(applyItalic)}
               accessibilityLabel={MARKDOWN_LABELS.italic}
+              hitSlop={ICON_BUTTON_HIT_SLOP}
             >
               <MaterialCommunityIcons name="format-italic" size={20} color={hasNoteColor ? '#444' : colors.icon} />
             </TouchableOpacity>
@@ -790,6 +801,7 @@ export default function NoteEditorScreen() {
               style={[styles.markdownToolbarButton, { backgroundColor: hasNoteColor ? 'rgba(0,0,0,0.08)' : colors.surfaceVariant }]}
               onPress={() => applyMarkdownFormat(applyStrikethrough)}
               accessibilityLabel={MARKDOWN_LABELS.strikethrough}
+              hitSlop={ICON_BUTTON_HIT_SLOP}
             >
               <MaterialCommunityIcons name="format-strikethrough-variant" size={20} color={hasNoteColor ? '#444' : colors.icon} />
             </TouchableOpacity>
@@ -797,6 +809,7 @@ export default function NoteEditorScreen() {
               style={[styles.markdownToolbarButton, { backgroundColor: hasNoteColor ? 'rgba(0,0,0,0.08)' : colors.surfaceVariant }]}
               onPress={() => setHeadingPickerVisible(true)}
               accessibilityLabel={MARKDOWN_LABELS.heading}
+              hitSlop={ICON_BUTTON_HIT_SLOP}
             >
               <MaterialCommunityIcons name="format-header-pound" size={20} color={hasNoteColor ? '#444' : colors.icon} />
             </TouchableOpacity>
@@ -804,6 +817,7 @@ export default function NoteEditorScreen() {
               style={[styles.markdownToolbarButton, { backgroundColor: hasNoteColor ? 'rgba(0,0,0,0.08)' : colors.surfaceVariant }]}
               onPress={() => applyMarkdownFormat(applyBulletList)}
               accessibilityLabel={MARKDOWN_LABELS.bulletList}
+              hitSlop={ICON_BUTTON_HIT_SLOP}
             >
               <MaterialCommunityIcons name="format-list-bulleted" size={20} color={hasNoteColor ? '#444' : colors.icon} />
             </TouchableOpacity>
@@ -811,6 +825,7 @@ export default function NoteEditorScreen() {
               style={[styles.markdownToolbarButton, { backgroundColor: hasNoteColor ? 'rgba(0,0,0,0.08)' : colors.surfaceVariant }]}
               onPress={() => applyMarkdownFormat(applyOrderedList)}
               accessibilityLabel={MARKDOWN_LABELS.orderedList}
+              hitSlop={ICON_BUTTON_HIT_SLOP}
             >
               <MaterialCommunityIcons name="format-list-numbered" size={20} color={hasNoteColor ? '#444' : colors.icon} />
             </TouchableOpacity>
@@ -818,6 +833,7 @@ export default function NoteEditorScreen() {
               style={[styles.markdownToolbarButton, { backgroundColor: hasNoteColor ? 'rgba(0,0,0,0.08)' : colors.surfaceVariant }]}
               onPress={() => applyMarkdownFormat(applyCode)}
               accessibilityLabel={MARKDOWN_LABELS.code}
+              hitSlop={ICON_BUTTON_HIT_SLOP}
             >
               <MaterialCommunityIcons name="code-tags" size={20} color={hasNoteColor ? '#444' : colors.icon} />
             </TouchableOpacity>
@@ -825,6 +841,7 @@ export default function NoteEditorScreen() {
               style={[styles.markdownToolbarButton, { backgroundColor: hasNoteColor ? 'rgba(0,0,0,0.08)' : colors.surfaceVariant }]}
               onPress={() => applyMarkdownFormat(applyLink)}
               accessibilityLabel={MARKDOWN_LABELS.link}
+              hitSlop={ICON_BUTTON_HIT_SLOP}
             >
               <Ionicons name="link-outline" size={20} color={hasNoteColor ? '#444' : colors.icon} />
             </TouchableOpacity>
@@ -832,6 +849,7 @@ export default function NoteEditorScreen() {
               style={[styles.markdownToolbarButton, { backgroundColor: hasNoteColor ? 'rgba(0,0,0,0.08)' : colors.surfaceVariant }]}
               onPress={() => applyMarkdownFormat(applyHorizontalRule)}
               accessibilityLabel={MARKDOWN_LABELS.horizontalRule}
+              hitSlop={ICON_BUTTON_HIT_SLOP}
             >
               <MaterialCommunityIcons name="minus" size={20} color={hasNoteColor ? '#444' : colors.icon} />
             </TouchableOpacity>
@@ -1065,10 +1083,10 @@ const styles = StyleSheet.create({
   },
   headerIconButton: {
     alignItems: 'center',
-    borderRadius: 18,
-    height: 36,
+    borderRadius: 22,
+    height: 44,
     justifyContent: 'center',
-    width: 36,
+    width: 44,
   },
   typeToggle: {
     flexDirection: 'row',
@@ -1101,10 +1119,10 @@ const styles = StyleSheet.create({
   },
   markdownToolbarButton: {
     alignItems: 'center',
-    borderRadius: 20,
-    height: 40,
+    borderRadius: 22,
+    height: 44,
     justifyContent: 'center',
-    width: 40,
+    width: 44,
   },
   contentInput: {
     fontSize: 16,
