@@ -50,7 +50,8 @@ describe('NoteMarkdown', () => {
 
     expect(container.querySelector('a')).toBeNull();
     expect(container.querySelector('strong')?.textContent).toBe('Bold');
-    expect(getByText('Heading').tagName).toBe('P');
+    expect(container.textContent).toContain('Heading');
+    expect(getByText(/Heading/).closest('p')).toHaveClass('font-semibold');
     expect(getByText('Example')).toHaveClass('pointer-events-none');
   });
 });

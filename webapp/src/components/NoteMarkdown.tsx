@@ -14,22 +14,34 @@ interface NoteMarkdownProps {
 const joinClasses = (...classes: Array<string | undefined>) => classes.filter(Boolean).join(' ');
 
 const createPreviewHeading =
-  (Tag: 'h1' | 'h2' | 'h3' | 'h4', className: string) =>
-  ({ children, ...props }: ComponentPropsWithoutRef<typeof Tag>) =>
-    (
+  (Tag: 'h1' | 'h2' | 'h3' | 'h4', className: string) => {
+    const PreviewHeading = ({ node, children, ...props }: ComponentPropsWithoutRef<typeof Tag> & { node?: unknown }) => {
+      void node;
+      return (
       <Tag {...props} className={className}>
         {children}
       </Tag>
-    );
+      );
+    };
+
+    PreviewHeading.displayName = `${Tag.toUpperCase()}PreviewHeading`;
+    return PreviewHeading;
+  };
 
 const createCardHeading =
-  (className: string) =>
-  ({ children, ...props }: HTMLAttributes<HTMLParagraphElement>) =>
-    (
+  (className: string) => {
+    const CardHeading = ({ node, children, ...props }: HTMLAttributes<HTMLParagraphElement> & { node?: unknown }) => {
+      void node;
+      return (
       <p {...props} className={className}>
         {children}
       </p>
-    );
+      );
+    };
+
+    CardHeading.displayName = 'CardMarkdownHeading';
+    return CardHeading;
+  };
 
 const createMarkdownComponents = (variant: MarkdownVariant): Components => {
   const compact = variant === 'card';
@@ -81,7 +93,7 @@ const createMarkdownComponents = (variant: MarkdownVariant): Components => {
         {children}
       </pre>
     ),
-    code: ({ inline, children }) => {
+    code: ({ inline, children }: ComponentPropsWithoutRef<'code'> & { inline?: boolean }) => {
       if (inline) {
         return (
           <code className="rounded bg-black/8 px-1 py-0.5 font-mono text-[0.85em] text-gray-900 dark:bg-black/30 dark:text-gray-100">
@@ -115,7 +127,8 @@ const createMarkdownComponents = (variant: MarkdownVariant): Components => {
       );
     },
     img: ({ alt }) => (alt ? <span className="italic text-gray-500 dark:text-gray-400">[{alt}]</span> : null),
-    input: ({ type, ...props }) => {
+    input: ({ node, type, ...props }: ComponentPropsWithoutRef<'input'> & { node?: unknown }) => {
+      void node;
       if (type === 'checkbox') {
         return null;
       }

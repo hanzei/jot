@@ -85,7 +85,7 @@ export class DashboardPage {
 
   async selectHeading(level: 1 | 2 | 3 | 4) {
     await this.clickToolbarButton('Heading')
-    await this.page.getByRole('button', { name: `Heading ${level}` }).click()
+    await this.page.getByRole('menuitem', { name: `Heading ${level}` }).click()
   }
 
   async switchToPreviewMode() {

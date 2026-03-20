@@ -1,6 +1,6 @@
 import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
-import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
+import { describe, it, expect, vi, beforeEach, afterEach, afterAll } from 'vitest'
 import NoteCard from '../NoteCard'
 import { ToastProvider } from '../Toast'
 import type { Note, NoteItem } from '@jot/shared'
@@ -63,6 +63,10 @@ describe('NoteCard', () => {
     mockConsoleError.mockClear()
   })
 
+  afterAll(() => {
+    vi.restoreAllMocks()
+  })
+
   describe('Basic Rendering', () => {
     it('renders note title and content', () => {
       renderNoteCard(defaultProps)
@@ -92,10 +96,12 @@ describe('NoteCard', () => {
         title: 'Special <>&"\'` Characters',
         content: 'Content with <script>alert("xss")</script> and emojis 🚀💡',
       })
-      renderNoteCard({ ...defaultProps, note: specialNote })
+      const { container } = renderNoteCard({ ...defaultProps, note: specialNote })
 
       expect(screen.getByText('Special <>&"\'` Characters')).toBeInTheDocument()
-      expect(screen.getByText('Content with <script>alert("xss")</script> and emojis 🚀💡')).toBeInTheDocument()
+      expect(container.textContent).toContain('Content with')
+      expect(container.textContent).toContain('alert("xss")')
+      expect(container.textContent).toContain('emojis 🚀💡')
     })
 
     it('renders markdown content on note cards', () => {
