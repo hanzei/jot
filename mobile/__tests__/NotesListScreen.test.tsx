@@ -132,12 +132,12 @@ const baseSettings: {
 } = {
   user_id: 'user-1',
   language: 'en',
-  theme: 'system' as const,
+  theme: 'system',
   note_sort: 'manual',
   updated_at: '2024-01-01T00:00:00Z',
 };
 
-const createMockNote = (overrides: Partial<{
+const buildNote = (overrides: Partial<{
   id: string;
   title: string;
   pinned: boolean;
@@ -209,9 +209,9 @@ describe('NotesListScreen sorting', () => {
     });
     mockUseOfflineNotes.mockReturnValue({
       data: [
-        createMockNote({ id: 'unpinned-bravo', title: 'sort-demo-bravo', pinned: false }),
-        createMockNote({ id: 'pinned-zulu', title: 'sort-demo-zulu', pinned: true }),
-        createMockNote({ id: 'unpinned-alpha', title: 'sort-demo-alpha', pinned: false }),
+        buildNote({ id: 'unpinned-bravo', title: 'sort-demo-bravo', pinned: false }),
+        buildNote({ id: 'pinned-zulu', title: 'sort-demo-zulu', pinned: true }),
+        buildNote({ id: 'unpinned-alpha', title: 'sort-demo-alpha', pinned: false }),
       ],
       isLoading: false,
       isError: false,
@@ -238,9 +238,9 @@ describe('NotesListScreen sorting', () => {
     });
     mockUseOfflineNotes.mockReturnValue({
       data: [
-        createMockNote({ id: 'pinned-zulu', title: 'sort-demo-zulu', pinned: true }),
-        createMockNote({ id: 'unpinned-bravo', title: 'sort-demo-bravo', pinned: false }),
-        createMockNote({ id: 'unpinned-alpha', title: 'sort-demo-alpha', pinned: false }),
+        buildNote({ id: 'pinned-zulu', title: 'sort-demo-zulu', pinned: true }),
+        buildNote({ id: 'unpinned-bravo', title: 'sort-demo-bravo', pinned: false }),
+        buildNote({ id: 'unpinned-alpha', title: 'sort-demo-alpha', pinned: false }),
       ],
       isLoading: false,
       isError: false,
@@ -278,8 +278,8 @@ describe('NotesListScreen sorting', () => {
     });
     mockUseOfflineNotes.mockReturnValue({
       data: [
-        createMockNote({ id: 'unpinned-bravo', title: 'sort-demo-bravo', pinned: false }),
-        createMockNote({ id: 'unpinned-alpha', title: 'sort-demo-alpha', pinned: false }),
+        buildNote({ id: 'unpinned-bravo', title: 'sort-demo-bravo', pinned: false }),
+        buildNote({ id: 'unpinned-alpha', title: 'sort-demo-alpha', pinned: false }),
       ],
       isLoading: false,
       isError: false,
@@ -314,9 +314,9 @@ describe('NotesListScreen sorting', () => {
     });
     mockUseOfflineNotes.mockReturnValue({
       data: [
-        createMockNote({ id: 'pinned-zulu', title: 'sort-demo-zulu', pinned: true }),
-        createMockNote({ id: 'unpinned-bravo', title: 'sort-demo-bravo', pinned: false }),
-        createMockNote({ id: 'unpinned-alpha', title: 'sort-demo-alpha', pinned: false }),
+        buildNote({ id: 'pinned-zulu', title: 'sort-demo-zulu', pinned: true }),
+        buildNote({ id: 'unpinned-bravo', title: 'sort-demo-bravo', pinned: false }),
+        buildNote({ id: 'unpinned-alpha', title: 'sort-demo-alpha', pinned: false }),
       ],
       isLoading: false,
       isError: false,

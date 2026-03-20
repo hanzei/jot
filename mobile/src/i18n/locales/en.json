@@ -67,7 +67,15 @@
     "noNotesForLabel": "No notes for this label",
     "tryDifferentKeywords": "Try different keywords",
     "failedLoadNotes": "Failed to load notes",
-    "checkConnection": "Check your connection and try again"
+    "checkConnection": "Check your connection and try again",
+    "sortOption": {
+      "manual": "Manual",
+      "updated_at": "Last modified",
+      "created_at": "Date created",
+      "title": "Alphabetical"
+    },
+    "sortAccessibilityLabel": "Sort by {{sortLabel}}",
+    "sortDisabledNotice": "Manual reorder is off. Notes are sorted by {{sortLabel}}, so drag-and-drop is unavailable."
   },
   "settings": {
     "title": "Settings",

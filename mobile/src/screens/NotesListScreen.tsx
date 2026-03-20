@@ -286,16 +286,10 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     }
   }, [colorPickerNote, t, updateNote]);
 
-  const sortedNotes = useMemo(() => sortNotesForDisplay(notes ?? EMPTY_NOTES, sortMode), [notes, sortMode]);
-
-  const { pinnedNotes, otherNotes } = useMemo(() => {
-    const pinned: Note[] = [];
-    const other: Note[] = [];
-    for (const n of sortedNotes) {
-      (n.pinned ? pinned : other).push(n);
-    }
-    return { pinnedNotes: pinned, otherNotes: other };
-  }, [sortedNotes]);
+  const { pinned: pinnedNotes, other: otherNotes } = useMemo(
+    () => sortNotesForDisplay(notes ?? EMPTY_NOTES, sortMode),
+    [notes, sortMode],
+  );
 
   // Clear local order overrides when server data changes
   useEffect(() => {
@@ -496,7 +490,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
 
   // Drag-and-drop is only available in the notes variant while manual sorting is active.
   const isDraggable = variant === 'notes' && sortMode === 'manual';
-  const activeSortLabel = getNoteSortLabel(sortMode);
+  const activeSortLabel = getNoteSortLabel(sortMode, t);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
@@ -538,10 +532,11 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
           testID="sort-controls"
         >
           {NOTE_SORT_OPTIONS.map((option) => {
-            const isActive = sortMode === option.value;
+            const isActive = sortMode === option;
+            const optionLabel = getNoteSortLabel(option, t);
             return (
               <TouchableOpacity
-                key={option.value}
+                key={option}
                 style={[
                   styles.sortChip,
                   {
@@ -549,10 +544,10 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
                     backgroundColor: isActive ? colors.primaryLight : colors.surface,
                   },
                 ]}
-                onPress={() => void handleSortChange(option.value)}
-                testID={`sort-chip-${option.value}`}
+                onPress={() => void handleSortChange(option)}
+                testID={`sort-chip-${option}`}
                 accessibilityRole="button"
-                accessibilityLabel={`Sort by ${option.label}`}
+                accessibilityLabel={t('dashboard.sortAccessibilityLabel', { sortLabel: optionLabel })}
                 accessibilityState={{ selected: isActive }}
               >
                 <Text
@@ -562,7 +557,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
                     isActive && styles.sortChipTextActive,
                   ]}
                 >
-                  {option.label}
+                  {optionLabel}
                 </Text>
               </TouchableOpacity>
             );
@@ -583,7 +578,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
         >
           <Ionicons name="swap-vertical" size={16} color={colors.primary} style={styles.sortNoticeIcon} />
           <Text style={[styles.sortNoticeText, { color: colors.textSecondary }]}>
-            Manual reorder is off. Notes are sorted by {activeSortLabel}, so drag-and-drop is unavailable.
+            {t('dashboard.sortDisabledNotice', { sortLabel: activeSortLabel })}
           </Text>
         </View>
       )}

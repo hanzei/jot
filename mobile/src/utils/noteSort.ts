@@ -1,18 +1,18 @@
 import type { Note, NoteSort } from '@jot/shared';
 
-export const NOTE_SORT_OPTIONS: ReadonlyArray<{ value: NoteSort; label: string }> = [
-  { value: 'manual', label: 'Manual' },
-  { value: 'updated_at', label: 'Last modified' },
-  { value: 'created_at', label: 'Date created' },
-  { value: 'title', label: 'Alphabetical' },
+export const NOTE_SORT_OPTIONS: ReadonlyArray<NoteSort> = [
+  'manual',
+  'updated_at',
+  'created_at',
+  'title',
 ];
 
 export const normalizeNoteSort = (value?: string): NoteSort =>
-  NOTE_SORT_OPTIONS.some(option => option.value === value) ? (value as NoteSort) : 'manual';
+  NOTE_SORT_OPTIONS.includes(value as NoteSort) ? (value as NoteSort) : 'manual';
 
-const getTitleKey = (title: string | null | undefined): string => (title ?? '').trim();
+export const getTitleKey = (title: string | null | undefined): string => (title ?? '').trim();
 
-const compareDescendingTimestamps = (left: string, right: string): number => {
+export const compareDescendingTimestamps = (left: string, right: string): number => {
   const leftTime = Date.parse(left);
   const rightTime = Date.parse(right);
 
@@ -29,7 +29,35 @@ const compareDescendingTimestamps = (left: string, right: string): number => {
   return rightTime - leftTime;
 };
 
-export const sortNotesForDisplay = (notes: Note[], sortMode: NoteSort): Note[] => {
+const getEnglishSortLabel = (sortMode: NoteSort): string => {
+  switch (sortMode) {
+    case 'updated_at':
+      return 'Last modified';
+    case 'created_at':
+      return 'Date created';
+    case 'title':
+      return 'Alphabetical';
+    case 'manual':
+    default:
+      return 'Manual';
+  }
+};
+
+export const getNoteSortLabel = (
+  sortMode: NoteSort,
+  translate?: (key: string, options?: Record<string, unknown>) => string,
+): string => {
+  if (translate) {
+    return translate(`dashboard.sortOption.${sortMode}`);
+  }
+
+  return getEnglishSortLabel(sortMode);
+};
+
+export const sortNotesForDisplay = (
+  notes: Note[],
+  sortMode: NoteSort,
+): { pinned: Note[]; other: Note[] } => {
   const originalIndexById = new Map(notes.map((note, index) => [note.id, index]));
   const preserveOriginalOrder = (left: Note, right: Note): number =>
     (originalIndexById.get(left.id) ?? 0) - (originalIndexById.get(right.id) ?? 0);
@@ -41,10 +69,25 @@ export const sortNotesForDisplay = (notes: Note[], sortMode: NoteSort): Note[] =
       case 'created_at':
         return compareDescendingTimestamps(left.created_at, right.created_at) || preserveOriginalOrder(left, right);
       case 'title':
-        return (
-          getTitleKey(left.title).localeCompare(getTitleKey(right.title), undefined, { sensitivity: 'base' }) ||
-          preserveOriginalOrder(left, right)
-        );
+        {
+          const leftTitle = getTitleKey(left.title);
+          const rightTitle = getTitleKey(right.title);
+
+          if (!leftTitle && !rightTitle) {
+            return preserveOriginalOrder(left, right);
+          }
+          if (!leftTitle) {
+            return 1;
+          }
+          if (!rightTitle) {
+            return -1;
+          }
+
+          return (
+            leftTitle.localeCompare(rightTitle, undefined, { sensitivity: 'base' }) ||
+            preserveOriginalOrder(left, right)
+          );
+        }
       case 'manual':
       default:
         return preserveOriginalOrder(left, right);
@@ -53,10 +96,7 @@ export const sortNotesForDisplay = (notes: Note[], sortMode: NoteSort): Note[] =
 
   const sortGroup = (group: Note[]) => (sortMode === 'manual' ? group : [...group].sort(compareWithinGroup));
   const pinned = sortGroup(notes.filter(note => note.pinned));
-  const others = sortGroup(notes.filter(note => !note.pinned));
+  const other = sortGroup(notes.filter(note => !note.pinned));
 
-  return [...pinned, ...others];
+  return { pinned, other };
 };
-
-export const getNoteSortLabel = (sortMode: NoteSort): string =>
-  NOTE_SORT_OPTIONS.find(option => option.value === sortMode)?.label ?? 'Manual';
