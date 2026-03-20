@@ -55,7 +55,6 @@ export default function SortableNoteCard({
     <div
       ref={setNodeRef}
       style={style}
-      aria-disabled={disabled}
       data-drag-disabled={disabled ? 'true' : 'false'}
       className={`touch-none select-none relative cursor-default ${
         isDragging ? 'scale-105 shadow-xl' : ''

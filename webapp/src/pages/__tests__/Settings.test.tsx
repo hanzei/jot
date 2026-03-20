@@ -25,7 +25,7 @@ vi.mock('react-router', async () => {
 vi.mock('@/utils/api', () => ({
   auth: {
     logout: vi.fn(),
-    me: vi.fn().mockResolvedValue({ user: { id: 'user1', username: 'testuser', role: 'user' }, settings: { user_id: 'user1', language: 'system', theme: 'system', updated_at: '' } }),
+    me: vi.fn().mockResolvedValue({ user: { id: 'user1', username: 'testuser', role: 'user' }, settings: { user_id: 'user1', language: 'system', theme: 'system', note_sort: 'manual', updated_at: '' } }),
   },
   users: {
     updateMe: vi.fn(),
@@ -71,6 +71,14 @@ const mockUser = {
   created_at: '2023-01-01T00:00:00Z',
   updated_at: '2023-01-01T00:00:00Z',
   has_profile_icon: false,
+}
+
+const defaultSettings: UserSettings = {
+  user_id: 'user1',
+  language: 'system',
+  theme: 'system',
+  note_sort: 'manual',
+  updated_at: '',
 }
 
 const renderSettings = (onLogout = vi.fn()) => {
@@ -175,7 +183,7 @@ describe('Settings', () => {
     it('submits the form and updates the username on success', async () => {
       const user = userEvent.setup()
       const updatedUser = { ...mockUser, username: 'newuser' }
-      const mockSettings = { user_id: 'user1', language: 'system', theme: 'system' as const, updated_at: '' }
+      const mockSettings = { ...defaultSettings }
       vi.mocked(users.updateMe).mockResolvedValue({ user: updatedUser, settings: mockSettings })
 
       renderSettings()
@@ -197,7 +205,7 @@ describe('Settings', () => {
     it('updates displayed username in AppLayout after successful save', async () => {
       const user = userEvent.setup()
       const updatedUser = { ...mockUser, username: 'newuser' }
-      const mockSettings = { user_id: 'user1', language: 'system', theme: 'system' as const, updated_at: '' }
+      const mockSettings = { ...defaultSettings }
       vi.mocked(users.updateMe).mockResolvedValue({ user: updatedUser, settings: mockSettings })
 
       renderSettings()
@@ -214,7 +222,7 @@ describe('Settings', () => {
 
     it('shows saving state while request is in flight', async () => {
       const user = userEvent.setup()
-      const mockSettings = { user_id: 'user1', language: 'system', theme: 'system' as const, updated_at: '' }
+      const mockSettings = { ...defaultSettings }
       let resolveUpdate!: (r: { user: typeof mockUser; settings: typeof mockSettings }) => void
       vi.mocked(users.updateMe).mockImplementation(
         () => new Promise((resolve) => { resolveUpdate = resolve })
@@ -264,7 +272,7 @@ describe('Settings', () => {
     it('clears previous error/success messages on a new submission', async () => {
       const user = userEvent.setup()
       vi.mocked(isAxiosError).mockReturnValue(false)
-      const mockSettings = { user_id: 'user1', language: 'system', theme: 'system' as const, updated_at: '' }
+      const mockSettings = { ...defaultSettings }
       vi.mocked(users.updateMe)
         .mockRejectedValueOnce(new Error('first failure'))
         .mockResolvedValueOnce({ user: mockUser, settings: mockSettings })
@@ -291,7 +299,7 @@ describe('Settings', () => {
 
     it('calls updateMe and setSettings when language is changed', async () => {
       const user = userEvent.setup()
-      const updatedSettings: UserSettings = { user_id: 'user1', language: 'de', theme: 'system', updated_at: '' }
+      const updatedSettings: UserSettings = { ...defaultSettings, language: 'de' }
       vi.mocked(users.updateMe).mockResolvedValue({ user: mockUser, settings: updatedSettings })
 
       renderSettings()
@@ -310,7 +318,7 @@ describe('Settings', () => {
   describe('Theme settings', () => {
     it('calls updateMe and setSettings when theme is changed', async () => {
       const user = userEvent.setup()
-      const updatedSettings: UserSettings = { user_id: 'user1', language: 'system', theme: 'dark', updated_at: '' }
+      const updatedSettings: UserSettings = { ...defaultSettings, theme: 'dark' }
       vi.mocked(users.updateMe).mockResolvedValue({ user: mockUser, settings: updatedSettings })
 
       renderSettings()

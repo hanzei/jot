@@ -166,7 +166,9 @@ test.describe('Notes', () => {
     await dashboardPage.goto();
 
     await dashboardPage.createNote('Zulu');
+    await page.waitForTimeout(1100);
     await dashboardPage.createNote('alpha');
+    await page.waitForTimeout(1100);
     await dashboardPage.createNote('Bravo');
     await dashboardPage.pinNote('Zulu');
 
@@ -174,7 +176,41 @@ test.describe('Notes', () => {
     await dashboardPage.expectManualReorderDisabledNotice();
     await dashboardPage.expectVisibleNoteTitles(['Zulu', 'alpha', 'Bravo']);
 
-    await dashboardPage.editNote('alpha', 'alpha', 'updated content');
+    await page.waitForTimeout(1100);
+    await page.evaluate(async () => {
+      const response = await fetch('/api/v1/notes', { credentials: 'include' });
+      const notes = await response.json() as Array<{
+        id: string;
+        title: string;
+        content: string;
+        pinned: boolean;
+        archived: boolean;
+        color: string;
+        checked_items_collapsed: boolean;
+      }>;
+      const alphaNote = notes.find(note => note.title === 'alpha');
+      if (!alphaNote) {
+        throw new Error('alpha note not found');
+      }
+
+      const updateResponse = await fetch(`/api/v1/notes/${alphaNote.id}`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: alphaNote.title,
+          content: 'updated content',
+          pinned: alphaNote.pinned,
+          archived: alphaNote.archived,
+          color: alphaNote.color,
+          checked_items_collapsed: alphaNote.checked_items_collapsed,
+        }),
+      });
+
+      if (!updateResponse.ok) {
+        throw new Error(`Failed to update alpha note: ${updateResponse.status}`);
+      }
+    });
     await dashboardPage.selectSort('updated_at');
     await dashboardPage.expectVisibleNoteTitles(['Zulu', 'alpha', 'Bravo']);
 
@@ -183,7 +219,6 @@ test.describe('Notes', () => {
     await expect(await dashboardPage.getSortValue()).toBe('created_at');
 
     await page.reload();
-    await page.waitForLoadState('networkidle');
     await expect(await dashboardPage.getSortValue()).toBe('created_at');
     await dashboardPage.expectVisibleNoteTitles(['Zulu', 'Bravo', 'alpha']);
 

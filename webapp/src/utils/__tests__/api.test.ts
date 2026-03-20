@@ -143,7 +143,7 @@ describe('API Module', () => {
             updated_at: '2023-01-01T00:00:00Z',
             has_profile_icon: false,
           },
-          settings: { user_id: '1', language: 'system', theme: 'system', updated_at: '2023-01-01T00:00:00Z' },
+          settings: { user_id: '1', language: 'system', theme: 'system', note_sort: 'manual', updated_at: '2023-01-01T00:00:00Z' },
         }
         mockPost.mockResolvedValue({ data: mockResponse })
 
@@ -208,7 +208,7 @@ describe('API Module', () => {
             updated_at: '2023-01-01T00:00:00Z',
             has_profile_icon: false,
           },
-          settings: { user_id: '1', language: 'system', theme: 'system', updated_at: '2023-01-01T00:00:00Z' },
+          settings: { user_id: '1', language: 'system', theme: 'system', note_sort: 'manual', updated_at: '2023-01-01T00:00:00Z' },
         }
         mockPost.mockResolvedValue({ data: mockResponse })
 
