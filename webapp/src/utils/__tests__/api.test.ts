@@ -495,6 +495,16 @@ describe('API Module', () => {
 
         await expect(notes.delete('1')).rejects.toThrow('Network timeout')
       })
+
+      it('empties trash and returns deleted count', async () => {
+        const response = { deleted: 3 }
+        mockDelete.mockResolvedValue({ data: response })
+
+        const result = await notes.emptyTrash()
+
+        expect(mockDelete).toHaveBeenCalledWith('/notes/trash')
+        expect(result).toEqual(response)
+      })
     })
 
     describe('sharing functionality', () => {

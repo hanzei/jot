@@ -58,6 +58,11 @@ definitions:
       username:
         type: string
     type: object
+  handlers.EmptyTrashResponse:
+    properties:
+      deleted:
+        type: integer
+    type: object
   handlers.ImportResponse:
     properties:
       errors:
@@ -1336,6 +1341,28 @@ paths:
       security:
       - CookieAuth: []
       summary: Reorder notes by providing an ordered list of IDs
+      tags:
+      - notes
+  /notes/trash:
+    delete:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.EmptyTrashResponse'
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "500":
+          description: internal server error
+          schema:
+            type: string
+      security:
+      - CookieAuth: []
+      summary: Permanently delete all notes in the current user's trash
       tags:
       - notes
   /register:

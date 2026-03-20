@@ -66,6 +66,12 @@
     "noteDeleted": "Notiz in den Papierkorb verschoben",
     "noteRestored": "Notiz wiederhergestellt",
     "noteDeletedForever": "Notiz endgültig gelöscht",
+    "emptyTrash": "Papierkorb leeren",
+    "emptyTrashConfirmTitle": "Papierkorb leeren?",
+    "emptyTrashConfirmMessage_one": "Die {{count}} Notiz im Papierkorb endgültig löschen? Dies kann nicht rückgängig gemacht werden.",
+    "emptyTrashConfirmMessage_other": "Alle {{count}} Notizen im Papierkorb endgültig löschen? Dies kann nicht rückgängig gemacht werden.",
+    "trashEmptied": "Papierkorb geleert",
+    "emptyTrashFailed": "Papierkorb konnte nicht geleert werden",
     "undo": "Rückgängig"
   },
   "settings": {

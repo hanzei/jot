@@ -208,6 +208,10 @@ export interface ImportResponse {
   errors?: string[];
 }
 
+export interface EmptyTrashResponse {
+  deleted: number;
+}
+
 export interface UpdateUserRoleRequest {
   role: string;
 }
