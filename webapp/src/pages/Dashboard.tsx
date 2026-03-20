@@ -329,6 +329,32 @@ export default function Dashboard({ onLogout }: DashboardProps) {
         return;
       }
 
+      const isNotesShortcut =
+        event.key.toLowerCase() === 'd' &&
+        !event.shiftKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey;
+
+      if (isNotesShortcut) {
+        event.preventDefault();
+        handleViewChange('notes');
+        return;
+      }
+
+      const isMyTodoShortcut =
+        event.key.toLowerCase() === 't' &&
+        !event.shiftKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey;
+
+      if (isMyTodoShortcut) {
+        event.preventDefault();
+        handleViewChange('my-todo');
+        return;
+      }
+
       const isBinShortcut =
         event.key.toLowerCase() === 'b' &&
         !event.shiftKey &&

@@ -18,7 +18,7 @@ test.describe('Keyboard shortcuts help dialog', () => {
     await page.locator('main').click();
     await page.keyboard.press('n');
 
-    const noteTitleInput = page.getByPlaceholder('Note title...');
+    const noteTitleInput = page.locator('[role="dialog"][aria-modal="true"] input[type="text"]').first();
     await expect(noteTitleInput).toBeVisible();
     await page.keyboard.press('Escape');
     await expect(noteTitleInput).toHaveCount(0);
@@ -37,6 +37,10 @@ test.describe('Keyboard shortcuts help dialog', () => {
     await expect(shortcutsDialog.getByTestId('shortcut-description-focus-search')).toBeVisible();
     await expect(shortcutsDialog.getByTestId('shortcut-key-new-note')).toBeVisible();
     await expect(shortcutsDialog.getByTestId('shortcut-description-new-note')).toBeVisible();
+    await expect(shortcutsDialog.getByTestId('shortcut-key-notes-view')).toBeVisible();
+    await expect(shortcutsDialog.getByTestId('shortcut-description-notes-view')).toBeVisible();
+    await expect(shortcutsDialog.getByTestId('shortcut-key-my-todo-view')).toBeVisible();
+    await expect(shortcutsDialog.getByTestId('shortcut-description-my-todo-view')).toBeVisible();
     await expect(shortcutsDialog.getByTestId('shortcut-key-archive-view')).toBeVisible();
     await expect(shortcutsDialog.getByTestId('shortcut-description-archive-view')).toBeVisible();
     await expect(shortcutsDialog.getByTestId('shortcut-key-bin-view')).toBeVisible();
@@ -50,9 +54,13 @@ test.describe('Keyboard shortcuts help dialog', () => {
     await expect(shortcutsDialog).toBeHidden();
   });
 
-  test('opens archive with a and bin with b', async ({ authenticatedUser, page, dashboardPage }) => {
+  test('opens notes/todo/archive/bin views with d/t/a/b', async ({ authenticatedUser, page, dashboardPage }) => {
     void authenticatedUser;
     await dashboardPage.goto();
+
+    await page.locator('main').click();
+    await page.keyboard.press('t');
+    await expect(page).toHaveURL(/\/\?view=my-todo$/);
 
     await page.locator('main').click();
     await page.keyboard.press('a');
@@ -61,5 +69,9 @@ test.describe('Keyboard shortcuts help dialog', () => {
     await page.locator('main').click();
     await page.keyboard.press('b');
     await expect(page).toHaveURL(/\/\?view=bin$/);
+
+    await page.locator('main').click();
+    await page.keyboard.press('d');
+    await expect(page).toHaveURL(/\/$/);
   });
 });
