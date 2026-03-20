@@ -249,7 +249,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     }
 
     loadNotes();
-    if (event.type === 'note_updated') {
+    if (event.type === 'note_created' || event.type === 'note_updated') {
       loadLabels();
     }
   }, [editingNote, sharingNote, loadNotes, loadLabels, user?.id, restoreReturnUrl]);
@@ -397,6 +397,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
 
   const handleNoteRefresh = () => {
     loadNotes();
+    loadLabels();
   };
 
   const handleDeleteNote = async (noteId: string) => {

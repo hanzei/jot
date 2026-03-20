@@ -1,4 +1,4 @@
-import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { MemoryRouter, useLocation, Routes, Route } from 'react-router'
@@ -7,6 +7,7 @@ import Dashboard from '../Dashboard'
 import type { Note, Label } from '@jot/shared'
 import { notes, labels } from '@/utils/api'
 import * as auth from '@/utils/auth'
+import { useSSE } from '@/utils/useSSE'
 import { createMockNote } from '@/utils/__tests__/test-helpers'
 import { ToastProvider } from '@/components/Toast'
 
@@ -159,11 +160,12 @@ vi.mock('@/components/SortableNoteCard', () => ({
 }))
 
 vi.mock('@/components/NoteModal', () => ({
-  default: ({ note, onClose, onSave }: { note?: Note | null; onClose?: () => void; onSave?: () => void }) => (
+  default: ({ note, onClose, onSave, onRefresh }: { note?: Note | null; onClose?: () => void; onSave?: () => void; onRefresh?: () => void }) => (
     <div data-testid="note-modal">
       <h2>{note ? 'Edit Note' : 'New Note'}</h2>
       <button onClick={onClose} data-testid="modal-close">Close</button>
       <button onClick={onSave} data-testid="modal-save">Save</button>
+      <button onClick={onRefresh} data-testid="modal-refresh">Refresh</button>
     </div>
   ),
 }))
@@ -1248,6 +1250,80 @@ describe('Dashboard', () => {
       expect(mockGetAll).toHaveBeenCalledWith(true, '', false, '', false)
     })
   })
+  })
+
+  describe('Real-time label updates', () => {
+    const realtimeLabel: Label = {
+      id: 'label-realtime',
+      user_id: 'user1',
+      name: 'realtime',
+      created_at: '2024-01-01T00:00:00Z',
+      updated_at: '2024-01-01T00:00:00Z',
+    }
+
+    it('refreshes sidebar labels when an open note refreshes locally', async () => {
+      const user = userEvent.setup()
+
+      vi.mocked(notes.getAll).mockResolvedValue([createMockNote({ id: '1', title: 'Existing Note' })])
+      vi.mocked(labels.getAll)
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([realtimeLabel])
+
+      renderDashboard()
+
+      await waitFor(() => {
+        expect(screen.getByTestId('edit-1')).toBeInTheDocument()
+      })
+
+      await user.click(screen.getByTestId('edit-1'))
+
+      await waitFor(() => {
+        expect(screen.getByTestId('note-modal')).toBeInTheDocument()
+      })
+
+      await user.click(screen.getByTestId('modal-refresh'))
+
+      await waitFor(() => {
+        expect(labels.getAll).toHaveBeenCalledTimes(2)
+      })
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'realtime' })).toBeInTheDocument()
+      })
+    })
+
+    it('refreshes sidebar labels when SSE reports a created note', async () => {
+      vi.mocked(labels.getAll)
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([realtimeLabel])
+
+      renderDashboard()
+
+      await waitFor(() => {
+        expect(useSSE).toHaveBeenCalled()
+        expect(labels.getAll).toHaveBeenCalledTimes(1)
+      })
+
+      const sseOptions = vi.mocked(useSSE).mock.calls[0]?.[0]
+      expect(sseOptions).toBeDefined()
+
+      await act(async () => {
+        sseOptions?.onEvent({
+          type: 'note_created',
+          note_id: 'note-1',
+          note: createMockNote({ id: 'note-1', labels: [realtimeLabel] }),
+          source_user_id: 'user1',
+        })
+      })
+
+      await waitFor(() => {
+        expect(labels.getAll).toHaveBeenCalledTimes(2)
+      })
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'realtime' })).toBeInTheDocument()
+      })
+    })
   })
 
   describe('My Todo Filtering', () => {
