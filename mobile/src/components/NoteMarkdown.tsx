@@ -114,7 +114,7 @@ function stripMarkdownImages(content: string): string {
 
     result.push(
       stripInlineImagesOutsideCode(segment).replace(
-        /^((?:\s*>\s*)*\s*(?:[-*+]|\d+\.)\s+)\[\s*(?:x|X)?\s*\]\s*(.*)$/,
+        /^(\s*(?:>\s*)*\s*(?:[-*+]|\d+\.)\s+)\[\s*(?:x|X)?\s*\]\s*(.*)$/,
         '$1$2',
       ),
     );
