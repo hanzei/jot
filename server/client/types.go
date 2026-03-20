@@ -176,6 +176,11 @@ type ImportResponse struct {
 	Errors   []string `json:"errors,omitempty"`
 }
 
+// EmptyTrashResponse is returned by DELETE /api/v1/notes/trash.
+type EmptyTrashResponse struct {
+	Deleted int `json:"deleted"`
+}
+
 // UserListResponse wraps the admin user listing.
 type UserListResponse struct {
 	Users []*User `json:"users"`

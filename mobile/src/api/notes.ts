@@ -1,5 +1,5 @@
 import api from './client';
-import type { Note, GetNotesParams, CreateNoteRequest, UpdateNoteRequest } from '@jot/shared';
+import type { Note, GetNotesParams, CreateNoteRequest, UpdateNoteRequest, EmptyTrashResponse } from '@jot/shared';
 
 function stripClientOnlyParams(params: GetNotesParams): Omit<GetNotesParams, 'user_id'> {
   const { archived, search, trashed, label, my_todo } = params;
@@ -36,6 +36,11 @@ export async function restoreNote(id: string): Promise<void> {
 
 export async function permanentDeleteNote(id: string): Promise<void> {
   await api.delete(`/notes/${id}`, { params: { permanent: true } });
+}
+
+export async function emptyTrash(): Promise<EmptyTrashResponse> {
+  const res = await api.delete('/notes/trash');
+  return res.data;
 }
 
 export async function reorderNotes(noteIds: string[]): Promise<void> {

@@ -65,6 +65,12 @@
     "noteDeleted": "Note moved to bin",
     "noteRestored": "Note restored",
     "noteDeletedForever": "Note permanently deleted",
+    "emptyTrash": "Empty Trash",
+    "emptyTrashConfirmTitle": "Empty trash?",
+    "emptyTrashConfirmMessage_one": "Permanently delete the {{count}} note in trash? This cannot be undone.",
+    "emptyTrashConfirmMessage_other": "Permanently delete all {{count}} notes in trash? This cannot be undone.",
+    "trashEmptied": "Trash emptied",
+    "emptyTrashFailed": "Failed to empty trash",
     "undo": "Undo"
   },
   "settings": {

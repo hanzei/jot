@@ -11,6 +11,7 @@ import {
   Alert,
   ScrollView,
 } from 'react-native';
+import { useSQLiteContext } from 'expo-sqlite';
 import DraggableFlatList, { ScaleDecorator } from 'react-native-draggable-flatlist';
 import * as Haptics from 'expo-haptics';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -26,6 +27,9 @@ import NoteContextMenu, { ContextMenuViewContext } from '../components/NoteConte
 import ColorPicker from '../components/ColorPicker';
 import type { Note } from '@jot/shared';
 import type { RootStackParamList } from '../navigation/RootNavigator';
+import { emptyTrash as emptyTrashNotes } from '../api/notes';
+import { getLocalNotes, permanentDeleteLocalNote } from '../db/noteQueries';
+import { useNetworkStatus } from '../hooks/useNetworkStatus';
 
 interface NotesListScreenProps {
   variant?: 'notes' | 'archived' | 'trash' | 'my-todo';
@@ -45,6 +49,10 @@ interface LocalReorderState {
 export default function NotesListScreen({ variant = 'notes', labelId }: NotesListScreenProps) {
   const [searchText, setSearchText] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
+  const [trashCount, setTrashCount] = useState(0);
+  const [isEmptyingTrash, setIsEmptyingTrash] = useState(false);
+  const db = useSQLiteContext();
+  const { isConnected } = useNetworkStatus();
   const { user } = useAuth();
   const { colors } = useTheme();
 
@@ -88,9 +96,9 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     setDebouncedSearch('');
   }, []);
 
-  const handleRefresh = useCallback(() => {
-    refetch();
-    refreshUsers();
+  const handleRefresh = useCallback(async () => {
+    await refetch();
+    await refreshUsers();
   }, [refetch, refreshUsers]);
 
   const handleNotePress = useCallback(
@@ -201,6 +209,51 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     );
   }, [permanentDeleteNote]);
 
+  const handleEmptyTrash = useCallback(() => {
+    if (trashCount === 0) {
+      return;
+    }
+
+    Alert.alert(
+      'Empty Trash',
+      `Permanently delete all ${trashCount} ${trashCount === 1 ? 'note' : 'notes'} in trash? This action cannot be undone.`,
+      [
+        { text: 'Cancel', style: 'cancel' },
+        {
+          text: 'Empty Trash',
+          style: 'destructive',
+          onPress: async () => {
+            if (!isConnected) {
+              Alert.alert('Error', "Empty Trash isn't available offline");
+              return;
+            }
+
+            setIsEmptyingTrash(true);
+            let serverTrashEmptied = false;
+            try {
+              await emptyTrashNotes();
+              serverTrashEmptied = true;
+              const trashedNotes = await getLocalNotes(db, { trashed: true });
+              await Promise.all(trashedNotes.map((note) => permanentDeleteLocalNote(db, note.id)));
+              Alert.alert('Success', 'Trash emptied');
+            } catch {
+              if (serverTrashEmptied) {
+                Alert.alert('Success', 'Trash emptied');
+              } else {
+                Alert.alert('Error', 'Failed to empty trash');
+              }
+            } finally {
+              if (serverTrashEmptied) {
+                await handleRefresh().catch(() => {});
+              }
+              setIsEmptyingTrash(false);
+            }
+          },
+        },
+      ],
+    );
+  }, [db, handleRefresh, isConnected, trashCount]);
+
   const handleChangeColor = useCallback((note: Note) => {
     setColorPickerNote(note);
   }, []);
@@ -241,6 +294,32 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   useEffect(() => {
     setLocalOrder({ pinned: null, unpinned: null });
   }, [notes]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadTrashCount() {
+      if (variant !== 'trash') {
+        setTrashCount(0);
+        return;
+      }
+
+      try {
+        const trashedNotes = await getLocalNotes(db, { trashed: true });
+        if (!cancelled) {
+          setTrashCount(trashedNotes.length);
+        }
+      } catch {
+        // Keep the previous count if the local query fails transiently.
+      }
+    }
+
+    void loadTrashCount();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [db, notes, variant]);
 
   const displayPinned = localOrder.pinned ?? pinnedNotes;
   const displayUnpinned = localOrder.unpinned ?? otherNotes;
@@ -440,10 +519,28 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
       {/* Trash banner */}
       {variant === 'trash' && (
         <View style={[styles.trashBanner, { backgroundColor: colors.warning, borderBottomColor: colors.warningBorder }]}>
-          <Ionicons name="information-circle-outline" size={16} color={colors.warningText} style={styles.trashBannerIcon} />
-          <Text style={[styles.trashBannerText, { color: colors.warningText }]}>
-            Items in Trash are automatically deleted after 7 days
-          </Text>
+          <View style={styles.trashBannerMessage}>
+            <Ionicons name="information-circle-outline" size={16} color={colors.warningText} style={styles.trashBannerIcon} />
+            <Text style={[styles.trashBannerText, { color: colors.warningText }]}>
+              Items in Trash are automatically deleted after 7 days
+            </Text>
+          </View>
+          {trashCount > 0 && (
+            <TouchableOpacity
+              style={[styles.emptyTrashButton, { borderColor: colors.warningText }, isEmptyingTrash ? styles.emptyTrashButtonDisabled : undefined]}
+              onPress={handleEmptyTrash}
+              disabled={isEmptyingTrash}
+              testID="empty-trash-button"
+              accessibilityLabel="Empty Trash"
+              accessibilityRole="button"
+            >
+              {isEmptyingTrash ? (
+                <ActivityIndicator size="small" color={colors.warningText} />
+              ) : (
+                <Text style={[styles.emptyTrashButtonText, { color: colors.warningText }]}>Empty Trash</Text>
+              )}
+            </TouchableOpacity>
+          )}
         </View>
       )}
 
@@ -614,9 +711,15 @@ const styles = StyleSheet.create({
   trashBanner: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderBottomWidth: 1,
+  },
+  trashBannerMessage: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   trashBannerIcon: {
     marginRight: 8,
@@ -624,6 +727,23 @@ const styles = StyleSheet.create({
   trashBannerText: {
     fontSize: 13,
     flex: 1,
+  },
+  emptyTrashButton: {
+    marginLeft: 12,
+    minWidth: 96,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyTrashButtonDisabled: {
+    opacity: 0.6,
+  },
+  emptyTrashButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
   },
   searchContainer: {
     flexDirection: 'row',
