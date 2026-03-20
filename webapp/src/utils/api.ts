@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { ServerConfig, AboutInfo, AuthResponse, LoginRequest, RegisterRequest, Note, CreateNoteRequest, UpdateNoteRequest, User, CreateUserRequest, UserListResponse, ShareNoteRequest, ShareNoteResponse, NoteShare, ImportResponse, UpdateMeRequest, ChangePasswordRequest, UpdateUserRoleRequest, Label, ActiveSession } from '@jot/shared';
+import type { ServerConfig, AboutInfo, AuthResponse, LoginRequest, RegisterRequest, Note, CreateNoteRequest, UpdateNoteRequest, User, CreateUserRequest, UserListResponse, AdminStatsResponse, ShareNoteRequest, ShareNoteResponse, NoteShare, ImportResponse, UpdateMeRequest, ChangePasswordRequest, UpdateUserRoleRequest, Label, ActiveSession, EmptyTrashResponse } from '@jot/shared';
 
 const api = axios.create({
   baseURL: '/api/v1',
@@ -59,6 +59,9 @@ export const notes = {
     opts?.permanent
       ? api.delete(`/notes/${id}`, { params: { permanent: true } })
       : api.delete(`/notes/${id}`),
+
+  emptyTrash: (): Promise<EmptyTrashResponse> =>
+    api.delete('/notes/trash').then(res => res.data),
 
   restore: (id: string): Promise<Note> =>
     api.post(`/notes/${id}/restore`).then(res => res.data),
@@ -136,6 +139,9 @@ export const about = {
 };
 
 export const admin = {
+  getStats: (): Promise<AdminStatsResponse> =>
+    api.get('/admin/stats').then(res => res.data),
+
   getUsers: (): Promise<UserListResponse> =>
     api.get('/admin/users').then(res => res.data),
 

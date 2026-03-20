@@ -58,6 +58,11 @@ definitions:
       username:
         type: string
     type: object
+  handlers.EmptyTrashResponse:
+    properties:
+      deleted:
+        type: integer
+    type: object
   handlers.ImportResponse:
     properties:
       errors:
@@ -208,6 +213,67 @@ definitions:
         items:
           $ref: '#/definitions/models.User'
         type: array
+    type: object
+  models.AdminLabelStats:
+    properties:
+      note_associations:
+        type: integer
+      total:
+        type: integer
+    type: object
+  models.AdminNoteStats:
+    properties:
+      archived:
+        type: integer
+      text:
+        type: integer
+      todo:
+        type: integer
+      total:
+        type: integer
+      trashed:
+        type: integer
+    type: object
+  models.AdminSharingStats:
+    properties:
+      share_links:
+        type: integer
+      shared_notes:
+        type: integer
+    type: object
+  models.AdminStats:
+    properties:
+      labels:
+        $ref: '#/definitions/models.AdminLabelStats'
+      notes:
+        $ref: '#/definitions/models.AdminNoteStats'
+      sharing:
+        $ref: '#/definitions/models.AdminSharingStats'
+      storage:
+        $ref: '#/definitions/models.AdminStorageStats'
+      todo_items:
+        $ref: '#/definitions/models.AdminTodoItemStats'
+      users:
+        $ref: '#/definitions/models.AdminUserStats'
+    type: object
+  models.AdminStorageStats:
+    properties:
+      database_size_bytes:
+        type: integer
+    type: object
+  models.AdminTodoItemStats:
+    properties:
+      assigned:
+        type: integer
+      completed:
+        type: integer
+      total:
+        type: integer
+    type: object
+  models.AdminUserStats:
+    properties:
+      total:
+        type: integer
     type: object
   models.Label:
     properties:
@@ -397,6 +463,32 @@ paths:
       summary: Get server version and build info
       tags:
       - system
+  /admin/stats:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.AdminStats'
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "403":
+          description: forbidden
+          schema:
+            type: string
+        "500":
+          description: internal server error
+          schema:
+            type: string
+      security:
+      - CookieAuth: []
+      summary: Get admin system stats (admin only)
+      tags:
+      - admin
   /admin/users:
     get:
       produces:
@@ -1263,6 +1355,28 @@ paths:
       security:
       - CookieAuth: []
       summary: Reorder notes by providing an ordered list of IDs
+      tags:
+      - notes
+  /notes/trash:
+    delete:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.EmptyTrashResponse'
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "500":
+          description: internal server error
+          schema:
+            type: string
+      security:
+      - CookieAuth: []
+      summary: Permanently delete all notes in the current user's trash
       tags:
       - notes
   /register:

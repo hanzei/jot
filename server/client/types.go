@@ -179,9 +179,56 @@ type ImportResponse struct {
 	Errors   []string `json:"errors,omitempty"`
 }
 
+// EmptyTrashResponse is returned by DELETE /api/v1/notes/trash.
+type EmptyTrashResponse struct {
+	Deleted int `json:"deleted"`
+}
+
 // UserListResponse wraps the admin user listing.
 type UserListResponse struct {
 	Users []*User `json:"users"`
+}
+
+// AdminStatsResponse wraps the admin system statistics response.
+type AdminStatsResponse struct {
+	Users     AdminUserStats     `json:"users"`
+	Notes     AdminNoteStats     `json:"notes"`
+	Sharing   AdminSharingStats  `json:"sharing"`
+	Labels    AdminLabelStats    `json:"labels"`
+	TodoItems AdminTodoItemStats `json:"todo_items"`
+	Storage   AdminStorageStats  `json:"storage"`
+}
+
+type AdminUserStats struct {
+	Total int64 `json:"total"`
+}
+
+type AdminNoteStats struct {
+	Total    int64 `json:"total"`
+	Text     int64 `json:"text"`
+	Todo     int64 `json:"todo"`
+	Trashed  int64 `json:"trashed"`
+	Archived int64 `json:"archived"`
+}
+
+type AdminSharingStats struct {
+	SharedNotes int64 `json:"shared_notes"`
+	ShareLinks  int64 `json:"share_links"`
+}
+
+type AdminLabelStats struct {
+	Total            int64 `json:"total"`
+	NoteAssociations int64 `json:"note_associations"`
+}
+
+type AdminTodoItemStats struct {
+	Total     int64 `json:"total"`
+	Completed int64 `json:"completed"`
+	Assigned  int64 `json:"assigned"`
+}
+
+type AdminStorageStats struct {
+	DatabaseSizeBytes int64 `json:"database_size_bytes"`
 }
 
 // SessionInfo is a single active session as returned by the sessions API.

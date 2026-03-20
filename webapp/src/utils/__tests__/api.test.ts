@@ -7,6 +7,7 @@ import type {
   UpdateNoteRequest,
   User,
   CreateUserRequest,
+  AdminStatsResponse,
   ShareNoteRequest
 } from '@jot/shared'
 
@@ -92,6 +93,7 @@ describe('API Module', () => {
       expect(notes.delete).toBeDefined()
       expect(users.search).toBeDefined()
       expect(admin.getUsers).toBeDefined()
+      expect(admin.getStats).toBeDefined()
       expect(admin.createUser).toBeDefined()
     })
   })
@@ -493,6 +495,16 @@ describe('API Module', () => {
 
         await expect(notes.delete('1')).rejects.toThrow('Network timeout')
       })
+
+      it('empties trash and returns deleted count', async () => {
+        const response = { deleted: 3 }
+        mockDelete.mockResolvedValue({ data: response })
+
+        const result = await notes.emptyTrash()
+
+        expect(mockDelete).toHaveBeenCalledWith('/notes/trash')
+        expect(result).toEqual(response)
+      })
     })
 
     describe('sharing functionality', () => {
@@ -625,6 +637,32 @@ describe('API Module', () => {
   })
 
   describe('Admin API', () => {
+    describe('getStats', () => {
+      it('gets aggregate admin stats', async () => {
+        const mockResponse: AdminStatsResponse = {
+          users: { total: 3 },
+          notes: { total: 4, text: 2, todo: 2, trashed: 1, archived: 1 },
+          sharing: { shared_notes: 1, share_links: 2 },
+          labels: { total: 2, note_associations: 3 },
+          todo_items: { total: 3, completed: 1, assigned: 2 },
+          storage: { database_size_bytes: 2048 },
+        }
+        mockGet.mockResolvedValue({ data: mockResponse })
+
+        const result = await admin.getStats()
+
+        expect(mockGet).toHaveBeenCalledWith('/admin/stats')
+        expect(result).toEqual(mockResponse)
+      })
+
+      it('handles stats access denied', async () => {
+        const error = new Error('Access denied')
+        mockGet.mockRejectedValue(error)
+
+        await expect(admin.getStats()).rejects.toThrow('Access denied')
+      })
+    })
+
     describe('getUsers', () => {
       it('gets all users for admin', async () => {
         const mockResponse = {
@@ -718,6 +756,7 @@ describe('API Module', () => {
       expect(typeof notes.getAll).toBe('function')
       expect(typeof users.search).toBe('function')
       expect(typeof admin.getUsers).toBe('function')
+      expect(typeof admin.getStats).toBe('function')
     })
 
     it('handles localStorage errors gracefully in user retrieval', () => {

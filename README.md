@@ -11,6 +11,7 @@ A self-hosted note-taking application built with Go backend and React frontend. 
 - **Self-hosted**: Complete control over your data
 - **SQLite Database**: Lightweight, file-based database
 - **Admin Support**: First registered user becomes admin
+- **Admin Instance Overview**: Admin page shows live usage metrics like users, notes, sharing, labels, todo items, and DB size
 - **Single Binary**: Frontend and backend served from one Go binary
 - **Sliding Sessions**: 30-day sessions auto-extend when less than 7 days remain
 
@@ -35,7 +36,7 @@ A self-hosted note-taking application built with Go backend and React frontend. 
 
 ### Prerequisites
 
-- **Go 1.24+**: [Download Go](https://golang.org/dl/)
+- **Go 1.25+**: [Download Go](https://golang.org/dl/)
 - **Node.js 24+**: [Download Node.js](https://nodejs.org/)
 - **npm**: Package manager for frontend dependencies
 
@@ -90,6 +91,7 @@ task clean               # Remove generated files and node packages
 3. **Access the application**:
    - Open `http://localhost:8080` in your browser
    - Register your first account with a username and password (becomes admin automatically)
+   - Open the Admin page to view the instance overview cards and manage users
    - Start creating notes!
 
 ### Development Options

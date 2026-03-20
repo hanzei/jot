@@ -12,6 +12,7 @@ import SortableNoteCard from '@/components/SortableNoteCard';
 import NoteModal from '@/components/NoteModal';
 import ShareModal from '@/components/ShareModal';
 import SidebarLabels from '@/components/SidebarLabels';
+import ConfirmDialog from '@/components/ConfirmDialog';
 import { useToast } from '@/hooks/useToast';
 import { isAnyModalDialogOpen, isEditableElementFocused, isOverlayControlFocused } from '@/utils/keyboardShortcuts';
 import { sortNotesForDisplay } from '@/utils/noteSort';
@@ -50,6 +51,9 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const [notesList, setNotesList] = useState<Note[]>([]);
   const [noteSort, setNoteSort] = useState<NoteSort>(() => normalizeNoteSort(getSettings()?.note_sort));
   const [loading, setLoading] = useState(true);
+  const [trashCount, setTrashCount] = useState(0);
+  const [isEmptyingTrash, setIsEmptyingTrash] = useState(false);
+  const [showEmptyTrashConfirm, setShowEmptyTrashConfirm] = useState(false);
   const [searchQuery, setSearchQueryState] = useState(searchParams.get('search') ?? '');
   const initialLabel = searchParams.get('label');
   const [showArchived, setShowArchived] = useState(!initialLabel && searchParams.get('view') === 'archive');
@@ -83,6 +87,12 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     setShowMyTodo(!label && searchParams.get('view') === 'my-todo');
     setSelectedLabelId(label);
   }, [searchParams]);
+
+  useEffect(() => {
+    if (!showBin) {
+      setShowEmptyTrashConfirm(false);
+    }
+  }, [showBin]);
 
   const setSearchQuery = (query: string) => {
     setSearchQueryState(query);
@@ -169,8 +179,27 @@ export default function Dashboard({ onLogout }: DashboardProps) {
 
   const loadNotes = useCallback(async () => {
     try {
-      const notesData = await notes.getAll(showArchived, searchQuery, showBin, selectedLabelId ?? '', showMyTodo);
-      if (isMountedRef.current) setNotesList(notesData);
+      let notesData: Note[] = [];
+      let nextTrashCount = 0;
+
+      if (showBin && searchQuery) {
+        const [loadedNotes, allTrashedNotes] = await Promise.all([
+          notes.getAll(showArchived, searchQuery, showBin, selectedLabelId ?? '', showMyTodo),
+          notes.getAll(false, '', true),
+        ]);
+        notesData = loadedNotes;
+        nextTrashCount = allTrashedNotes.length;
+      } else {
+        notesData = await notes.getAll(showArchived, searchQuery, showBin, selectedLabelId ?? '', showMyTodo);
+        if (showBin) {
+          nextTrashCount = notesData.length;
+        }
+      }
+
+      if (isMountedRef.current) {
+        setNotesList(notesData);
+        setTrashCount(nextTrashCount);
+      }
     } catch (error) {
       if (isMountedRef.current) console.error('Failed to load notes:', error);
     } finally {
@@ -454,6 +483,25 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     }
   };
 
+  const handleEmptyTrash = async () => {
+    setIsEmptyingTrash(true);
+    try {
+      await notes.emptyTrash();
+      if (isMountedRef.current) {
+        setNotesList([]);
+        setTrashCount(0);
+      }
+      setShowEmptyTrashConfirm(false);
+      showToast(t('dashboard.trashEmptied'));
+      void loadNotes();
+    } catch (error) {
+      console.error('Failed to empty trash:', error);
+      showToast(t('dashboard.emptyTrashFailed'), 'error');
+    } finally {
+      setIsEmptyingTrash(false);
+    }
+  };
+
   const handleDuplicateNote = useCallback(async (noteId: string) => {
     try {
       await notes.duplicate(noteId);
@@ -691,27 +739,47 @@ export default function Dashboard({ onLogout }: DashboardProps) {
           inputRef={searchInputRef}
         />
       </div>
-      <div className="w-full sm:w-56">
-        <label htmlFor="dashboard-sort" className="sr-only">
-          {t('dashboard.sortLabel')}
-        </label>
-        <div className="relative">
-          <ArrowsUpDownIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
-          <select
-            id="dashboard-sort"
-            data-testid="dashboard-sort-select"
-            aria-label={t('dashboard.sortLabel')}
-            value={noteSort}
-            onChange={(event) => void handleNoteSortChange(event.target.value as NoteSort)}
-            className="w-full rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 py-2 pl-9 pr-10 text-sm text-gray-900 dark:text-white focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
-          >
-            {noteSortOptions.map((sortOption) => (
-              <option key={sortOption} value={sortOption}>
-                {t(`dashboard.sortOption.${sortOption}`)}
-              </option>
-            ))}
-          </select>
+      <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center sm:justify-end">
+        <div className="w-full sm:w-56">
+          <label htmlFor="dashboard-sort" className="sr-only">
+            {t('dashboard.sortLabel')}
+          </label>
+          <div className="relative">
+            <ArrowsUpDownIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
+            <select
+              id="dashboard-sort"
+              data-testid="dashboard-sort-select"
+              aria-label={t('dashboard.sortLabel')}
+              value={noteSort}
+              onChange={(event) => void handleNoteSortChange(event.target.value as NoteSort)}
+              className="w-full rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 py-2 pl-9 pr-10 text-sm text-gray-900 dark:text-white focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {noteSortOptions.map((sortOption) => (
+                <option key={sortOption} value={sortOption}>
+                  {t(`dashboard.sortOption.${sortOption}`)}
+                </option>
+              ))}
+            </select>
+          </div>
         </div>
+        {showBin && trashCount > 0 && (
+          <button
+            type="button"
+            onClick={() => setShowEmptyTrashConfirm(true)}
+            disabled={isEmptyingTrash}
+            data-testid="empty-trash-button"
+            className="inline-flex items-center justify-center rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300 dark:hover:bg-red-950/60 dark:focus:ring-offset-slate-800"
+          >
+            {isEmptyingTrash ? (
+              <span className="flex items-center gap-2">
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                {t('dashboard.emptyTrash')}
+              </span>
+            ) : (
+              t('dashboard.emptyTrash')
+            )}
+          </button>
+        )}
       </div>
     </div>
   );
@@ -883,6 +951,18 @@ export default function Dashboard({ onLogout }: DashboardProps) {
             </div>
           </DndContext>
         )}
+        <ConfirmDialog
+          open={showEmptyTrashConfirm}
+          title={t('dashboard.emptyTrashConfirmTitle')}
+          message={t('dashboard.emptyTrashConfirmMessage', { count: trashCount })}
+          confirmLabel={t('dashboard.emptyTrash')}
+          onConfirm={handleEmptyTrash}
+          onCancel={() => {
+            if (!isEmptyingTrash) {
+              setShowEmptyTrashConfirm(false);
+            }
+          }}
+        />
         {/* Note modal */}
         {isModalOpen && (
           <NoteModal
