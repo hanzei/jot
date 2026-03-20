@@ -4,10 +4,10 @@ import { Link } from 'react-router';
 export interface SidebarTab {
   label: string;
   icon: ReactNode;
+  title?: string;
   isActive?: boolean;
   href?: string;
   onClick?: () => void;
-  title?: string;
 }
 
 interface SidebarProps {
@@ -54,8 +54,8 @@ const Sidebar = ({ tabs, bottomTabs, children, collapsed, onCollapse }: SidebarP
               key={tab.label}
               to={tab.href}
               aria-label={tab.label}
-              aria-current={tab.isActive ? 'page' : undefined}
               title={tab.title}
+              aria-current={tab.isActive ? 'page' : undefined}
               className={tabClass(tab.isActive)}
               onClick={() => handleTabClick()}
             >
@@ -67,8 +67,8 @@ const Sidebar = ({ tabs, bottomTabs, children, collapsed, onCollapse }: SidebarP
               key={tab.label}
               onClick={() => handleTabClick(tab.onClick)}
               aria-label={tab.label}
-              aria-current={tab.isActive ? 'page' : undefined}
               title={tab.title}
+              aria-current={tab.isActive ? 'page' : undefined}
               className={tabClass(tab.isActive)}
             >
               {tab.icon}
@@ -87,8 +87,8 @@ const Sidebar = ({ tabs, bottomTabs, children, collapsed, onCollapse }: SidebarP
                   key={tab.label}
                   to={tab.href}
                   aria-label={tab.label}
-                  aria-current={tab.isActive ? 'page' : undefined}
                   title={tab.title}
+                  aria-current={tab.isActive ? 'page' : undefined}
                   className={tabClass(tab.isActive)}
                   onClick={() => handleTabClick()}
                 >
@@ -100,8 +100,8 @@ const Sidebar = ({ tabs, bottomTabs, children, collapsed, onCollapse }: SidebarP
                   key={tab.label}
                   onClick={() => handleTabClick(tab.onClick)}
                   aria-label={tab.label}
-                  aria-current={tab.isActive ? 'page' : undefined}
                   title={tab.title}
+                  aria-current={tab.isActive ? 'page' : undefined}
                   className={tabClass(tab.isActive)}
                 >
                   {tab.icon}

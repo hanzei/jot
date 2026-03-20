@@ -186,6 +186,28 @@ export class DashboardPage {
       .click();
   }
 
+  async expectArchiveTabTooltip(expected = 'Hidden notes you want to keep') {
+    await this.ensureSidebarOpen();
+    await expect(
+      this.page.locator('aside[aria-label="Main navigation"] nav [aria-label="Archive"]')
+    ).toHaveAttribute('title', expected);
+  }
+
+  async expectBinTabTooltip(expected = 'Deleted notes — removed after 7 days') {
+    await this.ensureSidebarOpen();
+    await expect(
+      this.page.locator('aside[aria-label="Main navigation"] nav [aria-label="Bin"]')
+    ).toHaveAttribute('title', expected);
+  }
+
+  async expectArchiveInfoVisible() {
+    await expect(this.page.getByText('Archived notes are hidden from the main view but kept forever.')).toBeVisible();
+  }
+
+  async expectBinInfoVisible() {
+    await expect(this.page.getByText('Notes in the bin are deleted after 7 days')).toBeVisible();
+  }
+
   async switchToMyTodo() {
     await this.ensureSidebarOpen();
     await this.page
