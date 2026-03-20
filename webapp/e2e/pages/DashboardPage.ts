@@ -186,6 +186,22 @@ export class DashboardPage {
     await this.page.fill('[aria-label="Search notes"]', query);
   }
 
+  async selectSort(sort: 'manual' | 'updated_at' | 'created_at') {
+    await this.page.getByLabel('Sort notes').selectOption(sort);
+  }
+
+  async getSortValue() {
+    return this.page.getByLabel('Sort notes').inputValue();
+  }
+
+  async expectVisibleNoteTitles(titles: string[]) {
+    await expect(this.page.locator('[data-testid="note-card"] h3')).toHaveText(titles);
+  }
+
+  async expectManualReorderDisabledNotice() {
+    await expect(this.page.getByTestId('manual-reorder-disabled-notice')).toBeVisible();
+  }
+
   async clearSearch() {
     await this.page.fill('[aria-label="Search notes"]', '');
   }

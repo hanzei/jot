@@ -57,6 +57,7 @@ let currentSettings = {
   user_id: 'user-1',
   language: 'system',
   theme: 'system' as const,
+  note_sort: 'manual' as const,
   updated_at: '2026-01-02T00:00:00Z',
 };
 
@@ -85,6 +86,7 @@ describe('SettingsScreen language selection', () => {
       user_id: 'user-1',
       language: 'system',
       theme: 'system',
+      note_sort: 'manual',
       updated_at: '2026-01-02T00:00:00Z',
     };
     setSettings.mockClear();

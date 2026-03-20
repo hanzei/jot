@@ -2200,6 +2200,14 @@ const docTemplate = `{
                 "last_name": {
                     "type": "string"
                 },
+                "note_sort": {
+                    "type": "string",
+                    "enum": [
+                        "manual",
+                        "updated_at",
+                        "created_at"
+                    ]
+                },
                 "theme": {
                     "type": "string",
                     "enum": [
@@ -2550,6 +2558,14 @@ const docTemplate = `{
             "properties": {
                 "language": {
                     "type": "string"
+                },
+                "note_sort": {
+                    "type": "string",
+                    "enum": [
+                        "manual",
+                        "updated_at",
+                        "created_at"
+                    ]
                 },
                 "theme": {
                     "type": "string"

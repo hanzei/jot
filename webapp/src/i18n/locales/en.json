@@ -46,6 +46,14 @@
     "otherNotes": "Other Notes",
     "searchPlaceholder": "Search notes...",
     "searchAriaLabel": "Search notes",
+    "sortLabel": "Sort notes",
+    "sortOption": {
+      "manual": "Manual",
+      "updated_at": "Last modified",
+      "created_at": "Date created"
+    },
+    "manualReorderDisabledTitle": "Manual reorder is off.",
+    "manualReorderDisabled": "Notes are sorted by {{sort}}, so drag-and-drop is unavailable.",
     "tabNotes": "Notes",
     "tabMyTodo": "My Todo",
     "myTodoTooltip": "Notes with to-do items assigned to you",

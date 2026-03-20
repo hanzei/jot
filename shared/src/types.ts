@@ -21,11 +21,13 @@ export interface User {
 }
 
 export type ThemePreference = 'system' | 'light' | 'dark';
+export type NoteSort = 'manual' | 'updated_at' | 'created_at';
 
 export interface UserSettings {
   user_id: string;
   language: string;
   theme: ThemePreference;
+  note_sort: NoteSort;
   updated_at: string;
 }
 
@@ -186,6 +188,7 @@ export interface UpdateMeRequest {
   last_name?: string;
   language?: string;
   theme?: ThemePreference;
+  note_sort?: NoteSort;
 }
 
 export interface ChangePasswordRequest {
