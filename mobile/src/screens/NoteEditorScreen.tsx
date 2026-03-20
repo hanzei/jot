@@ -14,6 +14,7 @@ import {
 import DraggableFlatList, { ScaleDecorator } from 'react-native-draggable-flatlist';
 import * as Haptics from 'expo-haptics';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import MaterialCommunityIcons from '@expo/vector-icons/MaterialCommunityIcons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useCreateNote, useUpdateNote, useDeleteNote } from '../hooks/useNotes';
@@ -24,13 +25,41 @@ import TodoItem from '../components/TodoItem';
 import ColorPicker from '../components/ColorPicker';
 import LabelPicker from '../components/LabelPicker';
 import AssigneePicker from '../components/AssigneePicker';
+import MarkdownHeadingPicker from '../components/MarkdownHeadingPicker';
+import NoteMarkdown from '../components/NoteMarkdown';
 import { buildCollaborators, VALIDATION, type Collaborator, type NoteType, type NoteItem, type UpdateNoteRequest, type Label } from '@jot/shared';
 import { useUsers } from '../store/UsersContext';
 import { useTheme } from '../theme/ThemeContext';
 import type { RootStackParamList } from '../navigation/RootNavigator';
+import {
+  applyBold,
+  applyBulletList,
+  applyCode,
+  applyHeading,
+  applyHorizontalRule,
+  applyItalic,
+  applyLink,
+  applyOrderedList,
+  applyStrikethrough,
+} from '../utils/markdownFormatting';
 
 type EditorRouteProp = RouteProp<RootStackParamList, 'NoteEditor'>;
 type EditorNavProp = NativeStackNavigationProp<RootStackParamList, 'NoteEditor'>;
+
+// TODO: Localize Markdown editor labels once mobile i18n is introduced.
+const MARKDOWN_LABELS = {
+  preview: 'Preview note',
+  edit: 'Edit note',
+  bold: 'Bold',
+  italic: 'Italic',
+  strikethrough: 'Strikethrough',
+  heading: 'Heading',
+  bulletList: 'Bullet list',
+  orderedList: 'Ordered list',
+  code: 'Code',
+  link: 'Link',
+  horizontalRule: 'Horizontal rule',
+};
 
 interface LocalItem {
   id: string;
@@ -86,10 +115,13 @@ export default function NoteEditorScreen() {
   const [assigneePickerVisible, setAssigneePickerVisible] = useState(false);
   const [assigningItemId, setAssigningItemId] = useState<string | null>(null);
   const [syncToast, setSyncToast] = useState<string | null>(null);
+  const [isPreviewMode, setIsPreviewMode] = useState(false);
+  const [headingPickerVisible, setHeadingPickerVisible] = useState(false);
   const { usersById } = useUsers();
 
   const { colors, isDark } = useTheme();
   const { data: existingNote } = useOfflineNote(noteId);
+  const isHydrating = initialNoteId !== null && !existingNote;
   const createMutation = useCreateNote();
   const updateMutation = useUpdateNote();
   const deleteMutation = useDeleteNote();
@@ -140,6 +172,7 @@ export default function NoteEditorScreen() {
   const titleInputRef = useRef<TextInputType>(null);
   const contentInputRef = useRef<TextInputType>(null);
   const itemInputRefsMap = useRef(new Map<string, React.RefObject<TextInputType | null>>());
+  const contentSelectionRef = useRef({ start: 0, end: 0 });
 
   const getItemRef = useCallback((id: string): React.RefObject<TextInputType | null> => {
     if (!itemInputRefsMap.current.has(id)) {
@@ -297,6 +330,34 @@ export default function NoteEditorScreen() {
     [scheduleUpdate],
   );
 
+  const applyMarkdownFormat = useCallback(
+    (
+      formatter: (
+        value: string,
+        selection: { start: number; end: number },
+      ) => { text: string; selection: { start: number; end: number } },
+    ) => {
+      if (isHydrating) return;
+
+      const result = formatter(contentRef.current, contentSelectionRef.current);
+      handleContentChange(result.text);
+      contentSelectionRef.current = result.selection;
+
+      setTimeout(() => {
+        contentInputRef.current?.focus();
+        contentInputRef.current?.setNativeProps({ selection: result.selection });
+      }, 0);
+    },
+    [handleContentChange, isHydrating],
+  );
+
+  const handleContentSelectionChange = useCallback(
+    (event: { nativeEvent: { selection: { start: number; end: number } } }) => {
+      contentSelectionRef.current = event.nativeEvent.selection;
+    },
+    [],
+  );
+
   const handleToggleItem = useCallback(
     (index: number) => {
       setItems((prev) =>
@@ -369,6 +430,12 @@ export default function NoteEditorScreen() {
 
   const handleTitleSubmit = useCallback(() => {
     if (noteTypeRef.current === 'text') {
+      if (isPreviewMode) {
+        setIsPreviewMode(false);
+        setTimeout(() => contentInputRef.current?.focus(), 50);
+        return;
+      }
+
       contentInputRef.current?.focus();
     } else {
       const firstUnchecked = itemsRef.current.find((item) => !item.completed);
@@ -385,7 +452,7 @@ export default function NoteEditorScreen() {
         setTimeout(() => newItemRef.current?.focus(), 50);
       }
     }
-  }, [scheduleUpdate, getItemRef]);
+  }, [getItemRef, isPreviewMode, scheduleUpdate]);
 
   const handleToggleCollapsed = useCallback(() => {
     setCheckedItemsCollapsed((prev) => !prev);
@@ -518,11 +585,21 @@ export default function NoteEditorScreen() {
 
   const handleToggleNoteType = useCallback(() => {
     if (hasCreated) return;
+    setIsPreviewMode(false);
     setNoteType((prev) => (prev === 'text' ? 'todo' : 'text'));
   }, [hasCreated]);
 
-  // Disable inputs while waiting for existing note to hydrate
-  const isHydrating = initialNoteId !== null && !existingNote;
+  const handleTogglePreviewMode = useCallback(() => {
+    if (noteType !== 'text') return;
+
+    setIsPreviewMode((prev) => {
+      const next = !prev;
+      if (!next) {
+        setTimeout(() => contentInputRef.current?.focus(), 50);
+      }
+      return next;
+    });
+  }, [noteType]);
 
   // Build index lookup for items to avoid O(n) indexOf per item
   const itemIndexMap = useMemo(
@@ -585,7 +662,7 @@ export default function NoteEditorScreen() {
     [getItemRef, handleToggleItem, handleItemTextChange, handleDeleteItem, handleInsertItemAfter, handleBackspaceOnEmpty, isNoteShared, collaborators, openAssigneePicker, isDark, colors],
   );
 
-  const hasNoteColor = color && color !== '#ffffff';
+  const hasNoteColor = !!(color && color !== '#ffffff');
   const noteBackground = hasNoteColor ? color : colors.surface;
 
   return (
@@ -603,6 +680,29 @@ export default function NoteEditorScreen() {
           <Ionicons name="arrow-back" size={24} color={hasNoteColor ? '#1a1a1a' : colors.text} />
         </TouchableOpacity>
         <View style={styles.headerRight}>
+          {noteType === 'text' && (
+            <TouchableOpacity
+              onPress={handleTogglePreviewMode}
+              style={[
+                styles.headerIconButton,
+                {
+                  backgroundColor: isPreviewMode
+                    ? colors.primaryLight
+                    : hasNoteColor
+                      ? 'rgba(0,0,0,0.08)'
+                      : colors.surfaceVariant,
+                },
+              ]}
+              testID="toggle-preview-mode"
+              accessibilityLabel={isPreviewMode ? MARKDOWN_LABELS.edit : MARKDOWN_LABELS.preview}
+            >
+              <Ionicons
+                name={isPreviewMode ? 'create-outline' : 'eye-outline'}
+                size={20}
+                color={isPreviewMode ? colors.primary : (hasNoteColor ? '#444' : colors.icon)}
+              />
+            </TouchableOpacity>
+          )}
           {!hasCreated && (
             <TouchableOpacity onPress={handleToggleNoteType} style={[styles.typeToggle, { backgroundColor: colors.primaryLight }]} testID="toggle-note-type">
               <Ionicons
@@ -664,20 +764,110 @@ export default function NoteEditorScreen() {
           testID="note-title-input"
         />
 
+        {noteType === 'text' && !isPreviewMode ? (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.markdownToolbarContent}
+            style={styles.markdownToolbar}
+            testID="markdown-formatting-toolbar"
+          >
+            <TouchableOpacity
+              style={[styles.markdownToolbarButton, { backgroundColor: hasNoteColor ? 'rgba(0,0,0,0.08)' : colors.surfaceVariant }]}
+              onPress={() => applyMarkdownFormat(applyBold)}
+              accessibilityLabel={MARKDOWN_LABELS.bold}
+            >
+              <MaterialCommunityIcons name="format-bold" size={20} color={hasNoteColor ? '#444' : colors.icon} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.markdownToolbarButton, { backgroundColor: hasNoteColor ? 'rgba(0,0,0,0.08)' : colors.surfaceVariant }]}
+              onPress={() => applyMarkdownFormat(applyItalic)}
+              accessibilityLabel={MARKDOWN_LABELS.italic}
+            >
+              <MaterialCommunityIcons name="format-italic" size={20} color={hasNoteColor ? '#444' : colors.icon} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.markdownToolbarButton, { backgroundColor: hasNoteColor ? 'rgba(0,0,0,0.08)' : colors.surfaceVariant }]}
+              onPress={() => applyMarkdownFormat(applyStrikethrough)}
+              accessibilityLabel={MARKDOWN_LABELS.strikethrough}
+            >
+              <MaterialCommunityIcons name="format-strikethrough-variant" size={20} color={hasNoteColor ? '#444' : colors.icon} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.markdownToolbarButton, { backgroundColor: hasNoteColor ? 'rgba(0,0,0,0.08)' : colors.surfaceVariant }]}
+              onPress={() => setHeadingPickerVisible(true)}
+              accessibilityLabel={MARKDOWN_LABELS.heading}
+            >
+              <MaterialCommunityIcons name="format-header-pound" size={20} color={hasNoteColor ? '#444' : colors.icon} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.markdownToolbarButton, { backgroundColor: hasNoteColor ? 'rgba(0,0,0,0.08)' : colors.surfaceVariant }]}
+              onPress={() => applyMarkdownFormat(applyBulletList)}
+              accessibilityLabel={MARKDOWN_LABELS.bulletList}
+            >
+              <MaterialCommunityIcons name="format-list-bulleted" size={20} color={hasNoteColor ? '#444' : colors.icon} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.markdownToolbarButton, { backgroundColor: hasNoteColor ? 'rgba(0,0,0,0.08)' : colors.surfaceVariant }]}
+              onPress={() => applyMarkdownFormat(applyOrderedList)}
+              accessibilityLabel={MARKDOWN_LABELS.orderedList}
+            >
+              <MaterialCommunityIcons name="format-list-numbered" size={20} color={hasNoteColor ? '#444' : colors.icon} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.markdownToolbarButton, { backgroundColor: hasNoteColor ? 'rgba(0,0,0,0.08)' : colors.surfaceVariant }]}
+              onPress={() => applyMarkdownFormat(applyCode)}
+              accessibilityLabel={MARKDOWN_LABELS.code}
+            >
+              <MaterialCommunityIcons name="code-tags" size={20} color={hasNoteColor ? '#444' : colors.icon} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.markdownToolbarButton, { backgroundColor: hasNoteColor ? 'rgba(0,0,0,0.08)' : colors.surfaceVariant }]}
+              onPress={() => applyMarkdownFormat(applyLink)}
+              accessibilityLabel={MARKDOWN_LABELS.link}
+            >
+              <Ionicons name="link-outline" size={20} color={hasNoteColor ? '#444' : colors.icon} />
+            </TouchableOpacity>
+            <TouchableOpacity
+              style={[styles.markdownToolbarButton, { backgroundColor: hasNoteColor ? 'rgba(0,0,0,0.08)' : colors.surfaceVariant }]}
+              onPress={() => applyMarkdownFormat(applyHorizontalRule)}
+              accessibilityLabel={MARKDOWN_LABELS.horizontalRule}
+            >
+              <MaterialCommunityIcons name="minus" size={20} color={hasNoteColor ? '#444' : colors.icon} />
+            </TouchableOpacity>
+          </ScrollView>
+        ) : null}
+
         {noteType === 'text' ? (
-          <TextInput
-            ref={contentInputRef}
-            style={[styles.contentInput, { color: hasNoteColor ? '#1a1a1a' : colors.text }]}
-            value={content}
-            onChangeText={handleContentChange}
-            placeholder="Note"
-            placeholderTextColor={hasNoteColor ? '#999' : colors.placeholder}
-            multiline
-            textAlignVertical="top"
-            maxLength={VALIDATION.CONTENT_MAX_LENGTH}
-            editable={!isHydrating}
-            testID="note-content-input"
-          />
+          isPreviewMode ? (
+            <ScrollView
+              style={styles.previewScroll}
+              contentContainerStyle={styles.previewScrollContent}
+              scrollEnabled={false}
+              testID="note-markdown-preview"
+            >
+              <NoteMarkdown
+                content={content}
+                noteHasColor={hasNoteColor}
+                interactiveLinks
+              />
+            </ScrollView>
+          ) : (
+            <TextInput
+              ref={contentInputRef}
+              style={[styles.contentInput, { color: hasNoteColor ? '#1a1a1a' : colors.text }]}
+              value={content}
+              onChangeText={handleContentChange}
+              onSelectionChange={handleContentSelectionChange}
+              placeholder="Note"
+              placeholderTextColor={hasNoteColor ? '#999' : colors.placeholder}
+              multiline
+              textAlignVertical="top"
+              maxLength={VALIDATION.CONTENT_MAX_LENGTH}
+              editable={!isHydrating}
+              testID="note-content-input"
+            />
+          )
         ) : (
           <View style={styles.todoContainer}>
             <DraggableFlatList
@@ -845,6 +1035,12 @@ export default function NoteEditorScreen() {
           setAssigningItemId(null);
         }}
       />
+
+      <MarkdownHeadingPicker
+        visible={headingPickerVisible}
+        onClose={() => setHeadingPickerVisible(false)}
+        onSelect={(level) => applyMarkdownFormat((value, selection) => applyHeading(value, selection, level))}
+      />
     </KeyboardAvoidingView>
   );
 }
@@ -866,6 +1062,13 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     gap: 12,
+  },
+  headerIconButton: {
+    alignItems: 'center',
+    borderRadius: 18,
+    height: 36,
+    justifyContent: 'center',
+    width: 36,
   },
   typeToggle: {
     flexDirection: 'row',
@@ -889,11 +1092,31 @@ const styles = StyleSheet.create({
     paddingVertical: 16,
     paddingHorizontal: 0,
   },
+  markdownToolbar: {
+    marginBottom: 8,
+  },
+  markdownToolbarContent: {
+    gap: 8,
+    paddingBottom: 4,
+  },
+  markdownToolbarButton: {
+    alignItems: 'center',
+    borderRadius: 20,
+    height: 40,
+    justifyContent: 'center',
+    width: 40,
+  },
   contentInput: {
     fontSize: 16,
     lineHeight: 24,
     minHeight: 200,
     paddingHorizontal: 0,
+  },
+  previewScroll: {
+    minHeight: 200,
+  },
+  previewScrollContent: {
+    paddingBottom: 16,
   },
   todoContainer: {
     paddingBottom: 16,

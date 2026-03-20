@@ -117,3 +117,13 @@ jest.mock('@expo/vector-icons/Ionicons', () => {
   MockIonicons.glyphMap = {};
   return { __esModule: true, default: MockIonicons };
 });
+
+jest.mock('@expo/vector-icons/MaterialCommunityIcons', () => {
+  const React = require('react');
+  const { Text } = require('react-native');
+  const MockMaterialCommunityIcons = React.forwardRef(function MockMaterialCommunityIcons(props, ref) {
+    return React.createElement(Text, { ...props, ref, testID: props.testID || `icon-${props.name}` }, props.name);
+  });
+  MockMaterialCommunityIcons.glyphMap = {};
+  return { __esModule: true, default: MockMaterialCommunityIcons };
+});

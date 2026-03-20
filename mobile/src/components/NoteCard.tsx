@@ -7,6 +7,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../store/AuthContext';
 import { useUsers } from '../store/UsersContext';
 import UserAvatar from './UserAvatar';
+import NoteMarkdown from './NoteMarkdown';
 
 interface NoteCardProps {
   note: Note;
@@ -157,9 +158,14 @@ function NoteCard({ note, onPress, onLongPress, onMenuPress }: NoteCardProps) {
       </View>
 
       {note.note_type === 'text' && note.content ? (
-        <Text style={[styles.content, { color: hasColor ? '#666' : colors.textSecondary }]} numberOfLines={3}>
-          {note.content}
-        </Text>
+        <View style={styles.markdownPreview} pointerEvents="none">
+          <NoteMarkdown
+            content={note.content}
+            noteHasColor={hasColor}
+            compact
+            interactiveLinks={false}
+          />
+        </View>
       ) : null}
 
       {note.note_type === 'todo' && note.items && note.items.length > 0 ? (
@@ -215,9 +221,10 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: 4,
   },
-  content: {
-    fontSize: 14,
-    lineHeight: 20,
+  markdownPreview: {
+    marginTop: 2,
+    maxHeight: 64,
+    overflow: 'hidden',
   },
   todoPreview: {
     marginTop: 4,
