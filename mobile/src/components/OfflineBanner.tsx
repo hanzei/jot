@@ -1,11 +1,13 @@
 import React, { useEffect, useRef, useState } from 'react';
 import { Animated, StyleSheet, Text } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import { useTheme } from '../theme/ThemeContext';
 
 export default function OfflineBanner() {
   const { isConnected } = useNetworkStatus();
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const [shouldRender, setShouldRender] = useState(!isConnected);
   const opacity = useRef(new Animated.Value(isConnected ? 0 : 1)).current;
 
@@ -29,7 +31,7 @@ export default function OfflineBanner() {
   return (
     <Animated.View style={[styles.banner, { opacity, backgroundColor: colors.warning, borderBottomColor: colors.warningBorder }]} pointerEvents="none">
       <Text style={[styles.text, { color: colors.warningText }]}>
-        {"You're offline. Changes will sync when you reconnect."}
+        {t('offline.message')}
       </Text>
     </Animated.View>
   );

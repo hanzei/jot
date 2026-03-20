@@ -11,6 +11,7 @@ import {
   Platform,
   KeyboardAvoidingView,
 } from 'react-native';
+import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -28,18 +29,16 @@ import {
   revokeSession,
 } from '../api/settings';
 import type { ThemePreference, AboutInfo, ActiveSession } from '@jot/shared';
-
-const THEME_OPTIONS: { value: ThemePreference; label: string }[] = [
-  { value: 'system', label: 'System Default' },
-  { value: 'light', label: 'Light' },
-  { value: 'dark', label: 'Dark' },
-];
+import i18n from '../i18n';
+import { getLanguagePreference, resolveLanguage, type LanguagePreference } from '../i18n/language';
+import { displayMessage, getCurrentLocale } from '../i18n/utils';
 
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
   const { user, settings, setUser, setSettings } = useAuth();
   const { colors } = useTheme();
+  const { t } = useTranslation();
 
   const [firstName, setFirstName] = useState(user?.first_name ?? '');
   const [lastName, setLastName] = useState(user?.last_name ?? '');
@@ -61,6 +60,10 @@ export default function SettingsScreen() {
   const [iconError, setIconError] = useState('');
   const [iconVersion, setIconVersion] = useState(user?.updated_at ?? '');
 
+  const [languagePref, setLanguagePref] = useState<LanguagePreference>(
+    getLanguagePreference(settings?.language),
+  );
+  const [languageError, setLanguageError] = useState('');
   const [themePref, setThemePref] = useState<ThemePreference>(settings?.theme ?? 'system');
   const [themeError, setThemeError] = useState('');
 
@@ -75,10 +78,20 @@ export default function SettingsScreen() {
   const [aboutExpanded, setAboutExpanded] = useState(false);
 
   useEffect(() => {
+    setLanguagePref(getLanguagePreference(settings?.language));
+    setThemePref(settings?.theme ?? 'system');
+  }, [settings?.language, settings?.theme]);
+
+  useEffect(() => {
+    setProfileSuccess('');
+    setPasswordSuccess('');
+  }, [settings?.language]);
+
+  useEffect(() => {
     setSessionsLoading(true);
     listSessions()
       .then(setSessions)
-      .catch(() => setSessionsError('Failed to load sessions'))
+      .catch(() => setSessionsError('settings.sessionsLoadFailed'))
       .finally(() => setSessionsLoading(false));
   }, []);
 
@@ -89,7 +102,7 @@ export default function SettingsScreen() {
       setSessionsError('');
       setSessions(prev => prev.filter(s => s.id !== id));
     } catch {
-      setSessionsError('Failed to revoke session');
+      setSessionsError('settings.sessionsRevokeFailed');
     } finally {
       setRevokingId(null);
     }
@@ -100,7 +113,7 @@ export default function SettingsScreen() {
       setAboutLoading(true);
       getAboutInfo()
         .then(setAboutInfo)
-        .catch(() => setAboutError('Failed to load server info'))
+        .catch(() => setAboutError('about.failedLoad'))
         .finally(() => setAboutLoading(false));
     }
   }, [aboutExpanded, aboutInfo, aboutError]);
@@ -115,46 +128,72 @@ export default function SettingsScreen() {
       });
       setUser(updatedUser);
       setSettings(updatedSettings);
-      setProfileSuccess('Profile updated');
+      setProfileSuccess(t('settings.profileUpdated'));
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: string } })?.response?.data;
-      setProfileError(typeof msg === 'string' ? msg.trim() : 'Failed to update profile');
+      setProfileError(typeof msg === 'string' ? msg.trim() : 'settings.failedUpdateProfile');
     } finally {
       setProfileSaving(false);
     }
-  }, [username, firstName, lastName, setUser, setSettings]);
+  }, [firstName, lastName, setSettings, setUser, t, username]);
 
   const handleChangePassword = useCallback(async () => {
     setPasswordError('');
     setPasswordSuccess('');
 
     if (!currentPassword) {
-      setPasswordError('Current password is required');
+      setPasswordError(t('settings.currentPasswordRequired'));
       return;
     }
     if (newPassword !== confirmPassword) {
-      setPasswordError('Passwords do not match');
+      setPasswordError(t('settings.passwordsNoMatch'));
       return;
     }
     if (newPassword.length < 4) {
-      setPasswordError('Password must be at least 4 characters');
+      setPasswordError(t('auth.passwordMin'));
       return;
     }
 
     setPasswordSaving(true);
     try {
       await changePassword({ current_password: currentPassword, new_password: newPassword });
-      setPasswordSuccess('Password changed');
+      setPasswordSuccess(t('settings.passwordChanged'));
       setCurrentPassword('');
       setNewPassword('');
       setConfirmPassword('');
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: string } })?.response?.data;
-      setPasswordError(typeof msg === 'string' ? msg.trim() : 'Failed to change password');
+      setPasswordError(typeof msg === 'string' ? msg.trim() : 'settings.failedChangePassword');
     } finally {
       setPasswordSaving(false);
     }
-  }, [currentPassword, newPassword, confirmPassword]);
+  }, [confirmPassword, currentPassword, newPassword, t]);
+
+  const handleLanguageChange = useCallback(async (language: LanguagePreference) => {
+    const previousLanguage = languagePref;
+    const previousSettings = settings;
+
+    setLanguageError('');
+    setLanguagePref(language);
+    void i18n.changeLanguage(resolveLanguage(language));
+
+    if (previousSettings) {
+      setSettings({ ...previousSettings, language });
+    }
+
+    try {
+      const { settings: updatedSettings } = await updateMe({ language });
+      setSettings(updatedSettings);
+    } catch (err: unknown) {
+      setLanguagePref(previousLanguage);
+      void i18n.changeLanguage(resolveLanguage(previousLanguage));
+      if (previousSettings) {
+        setSettings(previousSettings);
+      }
+      const msg = (err as { response?: { data?: string } })?.response?.data;
+      setLanguageError(typeof msg === 'string' ? msg.trim() : 'settings.failedUpdateLanguage');
+    }
+  }, [languagePref, settings, setSettings]);
 
   const handleThemeChange = useCallback(async (theme: ThemePreference) => {
     const prev = themePref;
@@ -166,9 +205,9 @@ export default function SettingsScreen() {
     } catch (err: unknown) {
       setThemePref(prev);
       const msg = (err as { response?: { data?: string } })?.response?.data;
-      setThemeError(typeof msg === 'string' ? msg.trim() : 'Failed to update theme');
+      setThemeError(typeof msg === 'string' ? msg.trim() : 'settings.failedUpdateTheme');
     }
-  }, [themePref, setSettings]);
+  }, [setSettings, themePref]);
 
   const handleUploadIcon = useCallback(async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -188,7 +227,7 @@ export default function SettingsScreen() {
       setIconVersion(updatedUser.updated_at);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: string } })?.response?.data;
-      setIconError(typeof msg === 'string' ? msg.trim() : 'Failed to upload icon');
+      setIconError(typeof msg === 'string' ? msg.trim() : 'settings.iconUploadFailed');
     } finally {
       setIconUploading(false);
     }
@@ -203,7 +242,7 @@ export default function SettingsScreen() {
         prev ? { ...prev, has_profile_icon: false, updated_at: new Date().toISOString() } : prev,
       );
     } catch {
-      setIconError('Failed to remove icon');
+      setIconError('settings.iconDeleteFailed');
     } finally {
       setIconDeleting(false);
     }
@@ -212,6 +251,17 @@ export default function SettingsScreen() {
   const initials = user
     ? (user.first_name?.[0] ?? user.username?.[0] ?? '').toUpperCase()
     : '';
+  const currentLocale = getCurrentLocale();
+  const languageOptions: { value: LanguagePreference; label: string }[] = [
+    { value: 'system', label: t('settings.languageSystem') },
+    { value: 'en', label: t('settings.language_en') },
+    { value: 'de', label: t('settings.language_de') },
+  ];
+  const themeOptions: { value: ThemePreference; label: string }[] = [
+    { value: 'system', label: t('settings.themeSystem') },
+    { value: 'light', label: t('settings.themeLight') },
+    { value: 'dark', label: t('settings.themeDark') },
+  ];
 
   return (
     <View style={[styles.container, { paddingTop: insets.top, backgroundColor: colors.background }]}>
@@ -220,12 +270,12 @@ export default function SettingsScreen() {
           onPress={() => navigation.goBack()}
           style={styles.backButton}
           testID="settings-back"
-          accessibilityLabel="Go back"
+          accessibilityLabel={t('common.back')}
           accessibilityRole="button"
         >
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.text }]}>Settings</Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>{t('settings.title')}</Text>
         <View style={styles.headerSpacer} />
       </View>
 
@@ -240,7 +290,7 @@ export default function SettingsScreen() {
         >
           {/* Profile Icon */}
           <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Profile Icon</Text>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('settings.profileIconSection')}</Text>
             <View style={styles.profileIconRow}>
               <View>
                 {hasProfileIcon && user ? (
@@ -260,13 +310,13 @@ export default function SettingsScreen() {
                   onPress={handleUploadIcon}
                   disabled={iconUploading || iconDeleting}
                   testID="settings-upload-icon"
-                  accessibilityLabel="Upload icon"
+                  accessibilityLabel={t('settings.uploadIconButton')}
                   accessibilityRole="button"
                 >
                   {iconUploading ? (
                     <ActivityIndicator size="small" color="#fff" />
                   ) : (
-                    <Text style={styles.uploadButtonText}>Upload icon</Text>
+                    <Text style={styles.uploadButtonText}>{t('settings.uploadIconButton')}</Text>
                   )}
                 </TouchableOpacity>
                 {hasProfileIcon && (
@@ -275,76 +325,80 @@ export default function SettingsScreen() {
                     onPress={handleDeleteIcon}
                     disabled={iconUploading || iconDeleting}
                     testID="settings-remove-icon"
-                    accessibilityLabel="Remove icon"
+                    accessibilityLabel={t('settings.removeIconButton')}
                     accessibilityRole="button"
                   >
                     <Text style={[styles.removeIconText, { color: colors.error }]}>
-                      {iconDeleting ? 'Removing...' : 'Remove icon'}
+                      {iconDeleting ? t('settings.iconRemoving') : t('settings.removeIconButton')}
                     </Text>
                   </TouchableOpacity>
                 )}
               </View>
             </View>
-            {iconError !== '' && <Text style={[styles.errorText, { color: colors.error }]}>{iconError}</Text>}
+            {iconError !== '' && (
+              <Text style={[styles.errorText, { color: colors.error }]}>{displayMessage(t, iconError)}</Text>
+            )}
           </View>
 
           {/* Account */}
           <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Account</Text>
-            <Text style={[styles.label, { color: colors.icon }]}>First Name</Text>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('settings.accountSection')}</Text>
+            <Text style={[styles.label, { color: colors.icon }]}>{t('settings.firstNameLabel')}</Text>
             <TextInput
               style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.inputBackground }]}
               value={firstName}
               onChangeText={setFirstName}
-              placeholder="First name"
+              placeholder={t('settings.namePlaceholder')}
               placeholderTextColor={colors.placeholder}
               autoCapitalize="words"
-              accessibilityLabel="First Name"
+              accessibilityLabel={t('settings.firstNameLabel')}
               testID="settings-first-name"
             />
-            <Text style={[styles.label, { color: colors.icon }]}>Last Name</Text>
+            <Text style={[styles.label, { color: colors.icon }]}>{t('settings.lastNameLabel')}</Text>
             <TextInput
               style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.inputBackground }]}
               value={lastName}
               onChangeText={setLastName}
-              placeholder="Last name"
+              placeholder={t('settings.namePlaceholder')}
               placeholderTextColor={colors.placeholder}
               autoCapitalize="words"
-              accessibilityLabel="Last Name"
+              accessibilityLabel={t('settings.lastNameLabel')}
               testID="settings-last-name"
             />
-            <Text style={[styles.label, { color: colors.icon }]}>Username</Text>
+            <Text style={[styles.label, { color: colors.icon }]}>{t('settings.usernameLabel')}</Text>
             <TextInput
               style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.inputBackground }]}
               value={username}
               onChangeText={setUsername}
-              placeholder="Username"
+              placeholder={t('settings.usernamePlaceholder')}
               placeholderTextColor={colors.placeholder}
               autoCapitalize="none"
               autoCorrect={false}
-              accessibilityLabel="Username"
+              accessibilityLabel={t('settings.usernameLabel')}
               testID="settings-username"
             />
-            {profileError !== '' && <Text style={[styles.errorText, { color: colors.error }]}>{profileError}</Text>}
+            {profileError !== '' && (
+              <Text style={[styles.errorText, { color: colors.error }]}>{displayMessage(t, profileError)}</Text>
+            )}
             {profileSuccess !== '' && <Text style={styles.successText}>{profileSuccess}</Text>}
             <TouchableOpacity
               style={[styles.primaryButton, { backgroundColor: colors.primary }, profileSaving && styles.buttonDisabled]}
               onPress={handleSaveProfile}
               disabled={profileSaving}
               testID="settings-save-profile"
-              accessibilityLabel="Save Changes"
+              accessibilityLabel={t('settings.saveChanges')}
               accessibilityRole="button"
             >
               <Text style={styles.primaryButtonText}>
-                {profileSaving ? 'Saving...' : 'Save Changes'}
+                {profileSaving ? t('settings.saving') : t('settings.saveChanges')}
               </Text>
             </TouchableOpacity>
           </View>
 
           {/* Change Password */}
           <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Change Password</Text>
-            <Text style={[styles.label, { color: colors.icon }]}>Current Password</Text>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('settings.changePasswordSection')}</Text>
+            <Text style={[styles.label, { color: colors.icon }]}>{t('settings.currentPasswordLabel')}</Text>
             <TextInput
               style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.inputBackground }]}
               value={currentPassword}
@@ -352,22 +406,22 @@ export default function SettingsScreen() {
               placeholder=""
               secureTextEntry
               autoCapitalize="none"
-              accessibilityLabel="Current Password"
+              accessibilityLabel={t('settings.currentPasswordLabel')}
               testID="settings-current-password"
             />
-            <Text style={[styles.label, { color: colors.icon }]}>New Password</Text>
+            <Text style={[styles.label, { color: colors.icon }]}>{t('settings.newPasswordLabel')}</Text>
             <TextInput
               style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.inputBackground }]}
               value={newPassword}
               onChangeText={setNewPassword}
-              placeholder="At least 4 characters"
+              placeholder={t('settings.newPasswordPlaceholder')}
               placeholderTextColor={colors.placeholder}
               secureTextEntry
               autoCapitalize="none"
-              accessibilityLabel="New Password"
+              accessibilityLabel={t('settings.newPasswordLabel')}
               testID="settings-new-password"
             />
-            <Text style={[styles.label, { color: colors.icon }]}>Confirm New Password</Text>
+            <Text style={[styles.label, { color: colors.icon }]}>{t('settings.confirmNewPasswordLabel')}</Text>
             <TextInput
               style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.inputBackground }]}
               value={confirmPassword}
@@ -375,38 +429,40 @@ export default function SettingsScreen() {
               placeholder=""
               secureTextEntry
               autoCapitalize="none"
-              accessibilityLabel="Confirm New Password"
+              accessibilityLabel={t('settings.confirmNewPasswordLabel')}
               testID="settings-confirm-password"
             />
-            {passwordError !== '' && <Text style={[styles.errorText, { color: colors.error }]}>{passwordError}</Text>}
+            {passwordError !== '' && (
+              <Text style={[styles.errorText, { color: colors.error }]}>{displayMessage(t, passwordError)}</Text>
+            )}
             {passwordSuccess !== '' && <Text style={styles.successText}>{passwordSuccess}</Text>}
             <TouchableOpacity
               style={[styles.primaryButton, { backgroundColor: colors.primary }, passwordSaving && styles.buttonDisabled]}
               onPress={handleChangePassword}
               disabled={passwordSaving}
               testID="settings-change-password"
-              accessibilityLabel="Change Password"
+              accessibilityLabel={t('settings.changePassword')}
               accessibilityRole="button"
             >
               <Text style={styles.primaryButtonText}>
-                {passwordSaving ? 'Changing...' : 'Change Password'}
+                {passwordSaving ? t('settings.changing') : t('settings.changePassword')}
               </Text>
             </TouchableOpacity>
           </View>
 
           {/* Active Sessions */}
           <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Active Sessions</Text>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('settings.sessionsSection')}</Text>
             <Text style={[styles.sessionsDescription, { color: colors.textSecondary }]}>
-              Manage your active login sessions across devices.
+              {t('settings.sessionsDescription')}
             </Text>
             {sessionsLoading ? (
               <ActivityIndicator size="small" color={colors.primary} style={styles.sessionsLoader} />
             ) : sessionsError !== '' ? (
-              <Text style={[styles.errorText, { color: colors.error }]}>{sessionsError}</Text>
+              <Text style={[styles.errorText, { color: colors.error }]}>{displayMessage(t, sessionsError)}</Text>
             ) : sessions.length === 0 ? (
               <Text style={[styles.sessionsDescription, { color: colors.textSecondary }]}>
-                No active sessions found.
+                {t('settings.sessionsNone')}
               </Text>
             ) : (
               <View style={styles.sessionsList}>
@@ -419,17 +475,17 @@ export default function SettingsScreen() {
                       <View style={styles.sessionHeader}>
                         <Text style={[styles.sessionBrowser, { color: colors.text }]}>
                           {session.os !== 'Unknown'
-                            ? `${session.browser} on ${session.os}`
+                            ? t('settings.sessionsBrowserOnOS', { browser: session.browser, os: session.os })
                             : session.browser}
                         </Text>
                         {session.is_current && (
                           <View style={[styles.currentBadge, { backgroundColor: colors.successLight }]}>
-                            <Text style={[styles.currentBadgeText, { color: colors.success }]}>Current</Text>
+                            <Text style={[styles.currentBadgeText, { color: colors.success }]}>{t('settings.sessionsCurrent')}</Text>
                           </View>
                         )}
                       </View>
                       <Text style={[styles.sessionDate, { color: colors.textMuted }]}>
-                        {new Date(session.created_at).toLocaleDateString(undefined, {
+                        {new Date(session.created_at).toLocaleDateString(currentLocale, {
                           year: 'numeric', month: 'short', day: 'numeric',
                           hour: '2-digit', minute: '2-digit',
                         })}
@@ -440,7 +496,7 @@ export default function SettingsScreen() {
                         onPress={() => handleRevokeSession(session.id)}
                         disabled={revokingId === session.id}
                         style={styles.revokeButton}
-                        accessibilityLabel="Revoke session"
+                        accessibilityLabel={t('settings.sessionsRevoke')}
                         accessibilityRole="button"
                       >
                         <Text style={[
@@ -448,7 +504,7 @@ export default function SettingsScreen() {
                           { color: colors.error },
                           revokingId === session.id && styles.buttonDisabled,
                         ]}>
-                          {revokingId === session.id ? 'Revoking...' : 'Revoke'}
+                          {revokingId === session.id ? t('settings.sessionsRevoking') : t('settings.sessionsRevoke')}
                         </Text>
                       </TouchableOpacity>
                     )}
@@ -460,10 +516,44 @@ export default function SettingsScreen() {
 
           {/* Appearance */}
           <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>Appearance</Text>
-            <Text style={[styles.label, { color: colors.icon }]}>App theme</Text>
-            <View style={styles.themeOptions} accessibilityRole="radiogroup" accessibilityLabel="Theme">
-              {THEME_OPTIONS.map((option) => {
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('settings.themeSection')}</Text>
+            <Text style={[styles.label, { color: colors.icon }]}>{t('settings.languageLabel')}</Text>
+            <View style={styles.themeOptions} accessibilityRole="radiogroup" accessibilityLabel={t('settings.languageSection')}>
+              {languageOptions.map((option) => {
+                const isActive = languagePref === option.value;
+                return (
+                  <TouchableOpacity
+                    key={option.value}
+                    style={[
+                      styles.themeOption,
+                      { borderColor: colors.border, backgroundColor: colors.inputBackground },
+                      isActive && { borderColor: colors.primary, backgroundColor: colors.primaryLight },
+                    ]}
+                    onPress={() => handleLanguageChange(option.value)}
+                    testID={`settings-language-${option.value}`}
+                    accessibilityLabel={option.label}
+                    accessibilityRole="radio"
+                    accessibilityState={{ checked: isActive }}
+                  >
+                    <Text
+                      style={[
+                        styles.themeOptionText, { color: colors.icon },
+                        isActive && { color: colors.primary, fontWeight: '600' },
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
+                    {isActive && <Ionicons name="checkmark" size={16} color={colors.primary} />}
+                  </TouchableOpacity>
+                );
+              })}
+            </View>
+            {languageError !== '' && (
+              <Text style={[styles.errorText, { color: colors.error }]}>{displayMessage(t, languageError)}</Text>
+            )}
+            <Text style={[styles.label, styles.preferenceLabel, { color: colors.icon }]}>{t('settings.themeLabel')}</Text>
+            <View style={styles.themeOptions} accessibilityRole="radiogroup" accessibilityLabel={t('settings.themeSection')}>
+              {themeOptions.map((option) => {
                 const isActive = themePref === option.value;
                 return (
                   <TouchableOpacity
@@ -491,12 +581,14 @@ export default function SettingsScreen() {
                 );
               })}
             </View>
-            {themeError !== '' && <Text style={[styles.errorText, { color: colors.error }]}>{themeError}</Text>}
+            {themeError !== '' && (
+              <Text style={[styles.errorText, { color: colors.error }]}>{displayMessage(t, themeError)}</Text>
+            )}
           </View>
 
           {/* About */}
           <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>About</Text>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('settings.aboutSection')}</Text>
             <TouchableOpacity
               style={styles.aboutToggle}
               onPress={() => {
@@ -504,10 +596,10 @@ export default function SettingsScreen() {
                 setAboutExpanded(!aboutExpanded);
               }}
               testID="settings-about-toggle"
-              accessibilityLabel="About Jot"
+              accessibilityLabel={t('settings.aboutButton')}
               accessibilityRole="button"
             >
-              <Text style={[styles.aboutToggleText, { color: colors.icon }]}>About Jot</Text>
+              <Text style={[styles.aboutToggleText, { color: colors.icon }]}>{t('settings.aboutButton')}</Text>
               <Ionicons
                 name={aboutExpanded ? 'chevron-up' : 'chevron-down'}
                 size={20}
@@ -518,33 +610,35 @@ export default function SettingsScreen() {
               <View style={styles.aboutContent}>
                 {user && (
                   <View style={styles.aboutSection}>
-                    <Text style={[styles.aboutSectionTitle, { color: colors.textMuted }]}>Client Info</Text>
-                    <AboutRow label="Username" value={user.username} />
-                    <AboutRow label="User ID" value={user.id} />
-                    <AboutRow label="Role" value={user.role} />
+                    <Text style={[styles.aboutSectionTitle, { color: colors.textMuted }]}>{t('about.clientInfo')}</Text>
+                    <AboutRow label={t('about.username')} value={user.username} />
+                    <AboutRow label={t('about.userId')} value={user.id} />
+                    <AboutRow label={t('about.role')} value={user.role} />
                     <AboutRow
-                      label="Account Created"
-                      value={new Date(user.created_at).toLocaleDateString()}
+                      label={t('about.accountCreated')}
+                      value={new Date(user.created_at).toLocaleDateString(currentLocale)}
                     />
                   </View>
                 )}
                 <View style={[styles.aboutDivider, { backgroundColor: colors.divider }]} />
                 <View style={styles.aboutSection}>
-                  <Text style={[styles.aboutSectionTitle, { color: colors.textMuted }]}>Server Info</Text>
+                  <Text style={[styles.aboutSectionTitle, { color: colors.textMuted }]}>{t('about.serverInfo')}</Text>
                   {aboutLoading && <ActivityIndicator size="small" color={colors.primary} />}
-                  {aboutError !== '' && <Text style={[styles.errorText, { color: colors.error }]}>{aboutError}</Text>}
+                  {aboutError !== '' && (
+                    <Text style={[styles.errorText, { color: colors.error }]}>{displayMessage(t, aboutError)}</Text>
+                  )}
                   {aboutInfo && (
                     <>
-                      <AboutRow label="Version" value={aboutInfo.version} />
-                      <AboutRow label="Commit" value={aboutInfo.commit} />
+                      <AboutRow label={t('about.appVersion')} value={aboutInfo.version} />
+                      <AboutRow label={t('about.commit')} value={aboutInfo.commit} />
                       {aboutInfo.build_time && (
                         <AboutRow
-                          label="Build Time"
-                          value={formatDate(aboutInfo.build_time)}
+                          label={t('about.buildTime')}
+                          value={formatDate(aboutInfo.build_time, currentLocale)}
                         />
                       )}
                       {aboutInfo.go_version && (
-                        <AboutRow label="Go Version" value={aboutInfo.go_version} />
+                        <AboutRow label={t('about.goVersion')} value={aboutInfo.go_version} />
                       )}
                     </>
                   )}
@@ -558,9 +652,9 @@ export default function SettingsScreen() {
   );
 }
 
-function formatDate(iso: string): string {
+function formatDate(iso: string, locale?: string): string {
   const dt = new Date(iso);
-  return isNaN(dt.getTime()) ? '—' : dt.toLocaleString();
+  return isNaN(dt.getTime()) ? '—' : dt.toLocaleString(locale);
 }
 
 function AboutRow({ label, value }: { label: string; value: string }) {
@@ -706,6 +800,9 @@ const styles = StyleSheet.create({
   themeOptionText: {
     fontSize: 14,
     fontWeight: '500',
+  },
+  preferenceLabel: {
+    marginTop: 16,
   },
   aboutToggle: {
     flexDirection: 'row',

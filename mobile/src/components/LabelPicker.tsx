@@ -13,6 +13,7 @@ import {
   Alert,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { useTranslation } from 'react-i18next';
 import type { Label } from '@jot/shared';
 import { useTheme } from '../theme/ThemeContext';
 import { useLabels, useAddLabelToNote, useRemoveLabelFromNote } from '../hooks/useLabels';
@@ -34,6 +35,7 @@ export default function LabelPicker({
 }: LabelPickerProps) {
   const [newLabelText, setNewLabelText] = useState('');
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const { data: allLabels, isLoading } = useLabels();
   const addLabel = useAddLabelToNote();
   const removeLabel = useRemoveLabelFromNote();
@@ -51,7 +53,7 @@ export default function LabelPicker({
       }
       onLabelsChanged?.();
     } catch {
-      Alert.alert('Error', 'Failed to update label');
+      Alert.alert(t('common.error'), t('labels.failedUpdate'));
     }
   };
 
@@ -63,7 +65,7 @@ export default function LabelPicker({
       setNewLabelText('');
       onLabelsChanged?.();
     } catch {
-      Alert.alert('Error', 'Failed to create label');
+      Alert.alert(t('common.error'), t('labels.failedCreate'));
     }
   };
 
@@ -78,7 +80,7 @@ export default function LabelPicker({
         <SafeAreaView style={[styles.sheet, { backgroundColor: colors.sheetBackground }]}>
           <Pressable>
             <View style={[styles.handle, { backgroundColor: colors.handleColor }]} />
-            <Text style={[styles.title, { color: colors.text }]}>Labels</Text>
+            <Text style={[styles.title, { color: colors.text }]}>{t('labels.title')}</Text>
 
             {isLoading ? (
               <ActivityIndicator style={styles.loader} color={colors.primary} />
@@ -101,7 +103,7 @@ export default function LabelPicker({
                   </TouchableOpacity>
                 ))}
                 {(allLabels ?? []).length === 0 && (
-                  <Text style={[styles.emptyLabels, { color: colors.textMuted }]}>No labels yet</Text>
+                  <Text style={[styles.emptyLabels, { color: colors.textMuted }]}>{t('labels.noLabels')}</Text>
                 )}
               </ScrollView>
             )}
@@ -111,7 +113,7 @@ export default function LabelPicker({
                 style={[styles.addInput, { color: colors.text, borderBottomColor: colors.border }]}
                 value={newLabelText}
                 onChangeText={setNewLabelText}
-                placeholder="New label"
+                placeholder={t('labels.newLabelPlaceholder')}
                 placeholderTextColor={colors.placeholder}
                 onSubmitEditing={handleAddNewLabel}
                 returnKeyType="done"

@@ -1,6 +1,7 @@
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 import NoteCard from '../src/components/NoteCard';
+import i18n from '../src/i18n';
 import type { Note } from '@jot/shared';
 
 jest.mock('../src/store/AuthContext', () => ({
@@ -41,6 +42,10 @@ const baseNote: Note = {
 };
 
 describe('NoteCard', () => {
+  beforeEach(async () => {
+    await i18n.changeLanguage('en');
+  });
+
   it('renders title and content for text notes', () => {
     const { getByText } = render(<NoteCard note={baseNote} onPress={jest.fn()} />);
 
@@ -82,7 +87,7 @@ describe('NoteCard', () => {
     const { getByText } = render(<NoteCard note={todoNote} onPress={jest.fn()} />);
 
     expect(getByText('Buy groceries')).toBeTruthy();
-    expect(getByText('+1 checked')).toBeTruthy();
+    expect(getByText('+1 completed items')).toBeTruthy();
   });
 
   it('renders label chips', () => {

@@ -13,6 +13,7 @@ import {
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
+import { useTranslation } from 'react-i18next';
 import { searchUsers } from '../api/users';
 import { useNoteShares, useShareNote, useUnshareNote } from '../hooks/useNotes';
 import UserAvatar from '../components/UserAvatar';
@@ -29,6 +30,7 @@ export default function ShareScreen() {
   const route = useRoute<ShareRouteProp>();
   const { noteId } = route.params;
   const { colors } = useTheme();
+  const { t } = useTranslation();
 
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
@@ -108,7 +110,7 @@ export default function ShareScreen() {
       try {
         await shareMutateRef.current({ noteId, userId: user.id });
       } catch {
-        Alert.alert('Error', 'Failed to share note');
+        Alert.alert(t('common.error'), t('share.failedShare'));
       } finally {
         pendingUserIdsRef.current.delete(user.id);
         setPendingUserIds(new Set(pendingUserIdsRef.current));
@@ -122,10 +124,10 @@ export default function ShareScreen() {
       try {
         await unshareMutateRef.current({ noteId, userId: share.shared_with_user_id });
       } catch {
-        Alert.alert('Error', 'Failed to remove share');
+        Alert.alert(t('common.error'), t('share.failedUnshare'));
       }
     },
-    [noteId],
+    [noteId, t],
   );
 
   const isUnsharing = unshareMutation.isPending;
@@ -171,8 +173,7 @@ export default function ShareScreen() {
           testID={`remove-share-${item.shared_with_user_id}`}
           disabled={isUnsharing}
           accessibilityRole="button"
-          accessibilityLabel={`Remove share for ${item.username ?? item.shared_with_user_id}`}
-          accessibilityHint="Removes this shared item"
+          accessibilityLabel={t('share.removeAccessFor', { username: item.username ?? item.shared_with_user_id })}
         >
           <Ionicons name="close-circle-outline" size={22} color={colors.error} />
         </TouchableOpacity>
@@ -188,12 +189,11 @@ export default function ShareScreen() {
           onPress={() => navigation.goBack()}
           testID="share-screen-back"
           accessibilityRole="button"
-          accessibilityLabel="Back"
-          accessibilityHint="Goes back to the previous screen"
+          accessibilityLabel={t('common.back')}
         >
           <Ionicons name="arrow-back" size={24} color={colors.text} />
         </TouchableOpacity>
-        <Text style={[styles.headerTitle, { color: colors.text }]}>Share note</Text>
+        <Text style={[styles.headerTitle, { color: colors.text }]}>{t('note.share')}</Text>
         <View style={styles.headerSpacer} />
       </View>
 
@@ -201,7 +201,7 @@ export default function ShareScreen() {
         <Ionicons name="search" size={18} color={colors.iconMuted} style={styles.searchIcon} />
         <TextInput
           style={[styles.searchInput, { color: colors.text }]}
-          placeholder="Search by username..."
+          placeholder={t('share.searchUsersPlaceholder')}
           placeholderTextColor={colors.placeholder}
           value={searchQuery}
           onChangeText={setSearchQuery}
@@ -215,8 +215,7 @@ export default function ShareScreen() {
             onPress={() => setSearchQuery('')}
             testID="clear-share-search"
             accessibilityRole="button"
-            accessibilityLabel="Clear search"
-            accessibilityHint="Clears the search input"
+            accessibilityLabel={t('common.clearSearch')}
           >
             <Ionicons name="close-circle" size={18} color={colors.iconMuted} />
           </TouchableOpacity>
@@ -226,13 +225,13 @@ export default function ShareScreen() {
       <ScrollView keyboardShouldPersistTaps="handled">
         {debouncedQuery.length > 0 && (
           <View style={styles.section}>
-            <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>Results</Text>
+            <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>{t('share.results')}</Text>
             {isSearching ? (
               <ActivityIndicator size="small" color={colors.primary} style={styles.spinner} />
             ) : searchError ? (
-              <Text style={[styles.errorText, { color: colors.error }]}>Search failed. Please try again.</Text>
+              <Text style={[styles.errorText, { color: colors.error }]}>{t('share.searchFailed')}</Text>
             ) : filteredResults.length === 0 ? (
-              <Text style={[styles.emptyText, { color: colors.textMuted }]}>No users found</Text>
+              <Text style={[styles.emptyText, { color: colors.textMuted }]}>{t('share.noUsersFound')}</Text>
             ) : (
               <FlatList
                 data={filteredResults}
@@ -246,13 +245,15 @@ export default function ShareScreen() {
         )}
 
         <View style={styles.section}>
-          <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>Shared with</Text>
+          <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>
+            {t('share.sharedWith', { count: currentShares?.length ?? 0 })}
+          </Text>
           {isLoadingShares ? (
             <ActivityIndicator size="small" color={colors.primary} style={styles.spinner} />
           ) : isSharesError ? (
-            <Text style={[styles.errorText, { color: colors.error }]}>Failed to load shares</Text>
+            <Text style={[styles.errorText, { color: colors.error }]}>{t('share.failedLoad')}</Text>
           ) : !currentShares || currentShares.length === 0 ? (
-            <Text style={[styles.emptyText, { color: colors.textMuted }]}>Not shared with anyone yet</Text>
+            <Text style={[styles.emptyText, { color: colors.textMuted }]}>{t('share.notSharedYet')}</Text>
           ) : (
             <FlatList
               data={currentShares}
