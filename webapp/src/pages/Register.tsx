@@ -3,6 +3,7 @@ import { Link } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import { auth } from '@/utils/api';
 import { setUser, setSettings } from '@/utils/auth';
+import { getUsernameValidationError, isPasswordTooShort } from '@/utils/userValidation';
 
 interface RegisterProps {
   onRegister: () => void;
@@ -22,28 +23,15 @@ export default function Register({ onRegister }: RegisterProps) {
     setLoading(true);
     setError('');
 
-    if (username.length < 2) {
-      setError(t('auth.usernameMin'));
-      setLoading(false);
-      return;
-    }
-
-    if (username.length > 30) {
-      setError(t('auth.usernameMax'));
-      setLoading(false);
-      return;
-    }
-
-    const usernameRegex = /^[a-zA-Z0-9_-]+$/;
-    if (!usernameRegex.test(username)) {
-      setError(t('auth.usernameChars'));
-      setLoading(false);
-      return;
-    }
-
-    if (username.startsWith('_') || username.startsWith('-') ||
-      username.endsWith('_') || username.endsWith('-')) {
-      setError(t('auth.usernameEdge'));
+    const usernameValidationError = getUsernameValidationError(username);
+    if (usernameValidationError) {
+      const translationKeyByError = {
+        min: 'auth.usernameMin',
+        max: 'auth.usernameMax',
+        chars: 'auth.usernameChars',
+        edge: 'auth.usernameEdge',
+      } as const;
+      setError(t(translationKeyByError[usernameValidationError]));
       setLoading(false);
       return;
     }
@@ -54,7 +42,7 @@ export default function Register({ onRegister }: RegisterProps) {
       return;
     }
 
-    if (password.length < 4) {
+    if (isPasswordTooShort(password)) {
       setError(t('auth.passwordMin'));
       setLoading(false);
       return;

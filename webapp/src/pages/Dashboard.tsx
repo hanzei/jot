@@ -428,6 +428,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       icon: <ClipboardDocumentCheckIcon className="h-4 w-4 shrink-0" />,
       onClick: () => handleViewChange('my-todo'),
       isActive: showMyTodo,
+      title: t('dashboard.myTodoTooltip'),
     },
   ];
 
@@ -484,6 +485,11 @@ export default function Dashboard({ onLogout }: DashboardProps) {
               <PlusIcon className="h-5 w-5 mr-2" />
               {t('dashboard.newNote')}
             </button>
+            {showMyTodo && (
+              <div className="mt-3 px-4 py-2 bg-blue-50 dark:bg-slate-800 border border-blue-100 dark:border-slate-700 rounded-lg text-sm text-blue-800 dark:text-slate-200">
+                {t('dashboard.myTodoInfo')}
+              </div>
+            )}
           </div>
         )}
 
@@ -504,7 +510,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
         {/* Notes grid */}
         {!notesList || notesList.length === 0 ? (
           <div className="text-center py-12">
-            <div className="text-gray-500 dark:text-gray-400 text-lg">
+            <div className="mx-auto max-w-xl text-gray-500 dark:text-gray-400 text-lg whitespace-normal break-words">
               {searchQuery
                 ? t('dashboard.noSearchResults', { query: searchQuery })
                 : showBin ? t('dashboard.noBinnedNotes') : showArchived ? t('dashboard.noArchivedNotes') : showMyTodo ? t('dashboard.noMyTodoNotes') : t('dashboard.noNotesYet')}
