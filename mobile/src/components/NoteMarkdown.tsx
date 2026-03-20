@@ -10,6 +10,119 @@ interface NoteMarkdownProps {
   interactiveLinks?: boolean;
 }
 
+function consumeMarkdownImage(content: string, startIndex: number): { altText: string; endIndex: number } | null {
+  if (content[startIndex] !== '!' || content[startIndex + 1] !== '[') {
+    return null;
+  }
+
+  const altEnd = content.indexOf(']', startIndex + 2);
+  if (altEnd === -1 || content[altEnd + 1] !== '(') {
+    return null;
+  }
+
+  let index = altEnd + 2;
+  let depth = 1;
+
+  while (index < content.length && depth > 0) {
+    const currentChar = content[index];
+    if (currentChar === '(') {
+      depth += 1;
+    } else if (currentChar === ')') {
+      depth -= 1;
+    }
+    index += 1;
+  }
+
+  if (depth !== 0) {
+    return null;
+  }
+
+  return {
+    altText: content.slice(startIndex + 2, altEnd),
+    endIndex: index,
+  };
+}
+
+function stripInlineImagesOutsideCode(line: string): string {
+  let result = '';
+  let index = 0;
+
+  while (index < line.length) {
+    if (line[index] === '`') {
+      let delimiterEnd = index;
+      while (line[delimiterEnd] === '`') {
+        delimiterEnd += 1;
+      }
+
+      const delimiter = line.slice(index, delimiterEnd);
+      const closingIndex = line.indexOf(delimiter, delimiterEnd);
+      if (closingIndex === -1) {
+        result += line.slice(index);
+        break;
+      }
+
+      result += line.slice(index, closingIndex + delimiter.length);
+      index = closingIndex + delimiter.length;
+      continue;
+    }
+
+    const image = consumeMarkdownImage(line, index);
+    if (image) {
+      result += image.altText;
+      index = image.endIndex;
+      continue;
+    }
+
+    result += line[index];
+    index += 1;
+  }
+
+  return result;
+}
+
+function stripMarkdownImages(content: string): string {
+  const segments = content.match(/[^\r\n]+|\r\n|\r|\n/g) ?? [];
+  const result: string[] = [];
+  let activeFence: { marker: '`' | '~'; length: number } | null = null;
+
+  for (const segment of segments) {
+    if (segment === '\n' || segment === '\r' || segment === '\r\n') {
+      result.push(segment);
+      continue;
+    }
+
+    if (activeFence) {
+      const closingFencePattern = new RegExp(
+        `^\\s{0,3}${activeFence.marker}{${activeFence.length},}\\s*$`,
+      );
+      if (closingFencePattern.test(segment)) {
+        activeFence = null;
+      }
+      result.push(segment);
+      continue;
+    }
+
+    const fenceMatch = segment.match(/^\s{0,3}([`~]{3,})/);
+    if (fenceMatch) {
+      activeFence = {
+        marker: fenceMatch[1][0] as '`' | '~',
+        length: fenceMatch[1].length,
+      };
+      result.push(segment);
+      continue;
+    }
+
+    result.push(
+      stripInlineImagesOutsideCode(segment).replace(
+        /^((?:\s*>\s*)*\s*(?:[-*+]|\d+\.)\s+)\[\s*(?:x|X)?\s*\]\s*(.*)$/,
+        '$1$2',
+      ),
+    );
+  }
+
+  return result.join('');
+}
+
 function getBaseTextColor(noteHasColor: boolean | undefined, isMuted: boolean, colors: ReturnType<typeof useTheme>['colors']) {
   if (noteHasColor) {
     return isMuted ? '#666' : '#1a1a1a';
@@ -19,9 +132,7 @@ function getBaseTextColor(noteHasColor: boolean | undefined, isMuted: boolean, c
 }
 
 export function prepareMarkdownForRender(content: string): string {
-  return content
-    .replace(/!\[([^\]]*)\]\((?:[^()]+|\([^()]*\))*\)/g, (_, alt: string) => alt || '')
-    .replace(/^(\s*(?:[-*+]|\d+\.)\s+)\[\s*(?:x|X)?\s*\]\s+/gm, '$1');
+  return stripMarkdownImages(content);
 }
 
 function createMarkdownStyles(options: {
@@ -207,7 +318,7 @@ function createMarkdownStyles(options: {
   });
 }
 
-const markdownIt = MarkdownIt({ breaks: true });
+const markdownIt = new MarkdownIt({ breaks: true, typographer: false });
 
 function createRenderRules(): RenderRules {
   return {
@@ -255,7 +366,19 @@ export default function NoteMarkdown({
           return false;
         }
 
-        Linking.openURL(url).catch(() => {});
+        if (!/^https?:\/\//i.test(url)) {
+          return false;
+        }
+
+        Linking.canOpenURL(url)
+          .then((canOpen) => {
+            if (!canOpen) {
+              return;
+            }
+
+            return Linking.openURL(url);
+          })
+          .catch(() => {});
         return false;
       }}
     >
