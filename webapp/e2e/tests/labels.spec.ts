@@ -18,6 +18,21 @@ test.describe('Labels on Note Creation', () => {
     await expect(card.getByText('visible')).toBeVisible();
   });
 
+  test('label can be renamed and deleted from the sidebar', async ({ dashboardPage }) => {
+    await dashboardPage.goto();
+    await dashboardPage.createNoteWithLabels('Manage Label Note', 'content', ['groceries']);
+
+    const card = dashboardPage.noteCard('Manage Label Note');
+    await expect(card.getByText('groceries')).toBeVisible();
+
+    await dashboardPage.renameSidebarLabel('groceries', 'weekly groceries');
+    await expect(card.getByText('weekly groceries')).toBeVisible();
+    await expect(card.getByText('groceries')).toHaveCount(0);
+
+    await dashboardPage.deleteSidebarLabel('weekly groceries');
+    await expect(card.getByText('weekly groceries')).toHaveCount(0);
+  });
+
   test('note created with label is filterable by that label', async ({ dashboardPage }) => {
     await dashboardPage.goto();
     await dashboardPage.createNote('Plain', 'no label');
@@ -107,6 +122,25 @@ test.describe('Label Filtering', () => {
 
     await dashboardPage.selectSidebarLabel('clearparam');
     await expect(page).not.toHaveURL(/label=/);
+  });
+
+  test('deleting the active label clears the filter and returns to notes view', async ({ page, dashboardPage }) => {
+    await dashboardPage.goto();
+    await dashboardPage.createNote('Filtered Note', 'content');
+    await dashboardPage.createNote('Plain Note', 'content');
+    await dashboardPage.addLabelToNote('Filtered Note', 'temp-filter');
+
+    await dashboardPage.expectLabelInSidebar('temp-filter');
+    await dashboardPage.selectSidebarLabel('temp-filter');
+    await dashboardPage.expectNoteVisible('Filtered Note');
+    await dashboardPage.expectNoteNotVisible('Plain Note');
+    await expect(page).toHaveURL(/label=/);
+
+    await dashboardPage.deleteSidebarLabel('temp-filter');
+
+    await expect(page).not.toHaveURL(/label=/);
+    await dashboardPage.expectNoteVisible('Filtered Note');
+    await dashboardPage.expectNoteVisible('Plain Note');
   });
 
   test('clicking a label from archive view shows active labeled notes', async ({ page, dashboardPage }) => {
