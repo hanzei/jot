@@ -24,7 +24,7 @@ const tabClass = (isActive: boolean | undefined) =>
       : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-slate-700'
   }`;
 
-const isMobile = () => window.matchMedia('(max-width: 767px)').matches;
+const isMobile = () => window.matchMedia('(max-width: 639px)').matches;
 
 const Sidebar = ({ tabs, bottomTabs, children, collapsed, onCollapse }: SidebarProps) => {
   const [hovered, setHovered] = useState(false);
@@ -40,7 +40,7 @@ const Sidebar = ({ tabs, bottomTabs, children, collapsed, onCollapse }: SidebarP
       aria-label="Main navigation"
       className={`flex-col bg-white dark:bg-slate-800 border-r border-gray-200 dark:border-slate-700 overflow-hidden
         transition-[width] duration-200
-        absolute inset-y-0 left-0 z-30 shadow-lg md:relative md:inset-auto md:shadow-none md:z-auto lg:absolute lg:inset-y-0 lg:left-0 lg:shadow-lg lg:z-30
+        absolute inset-y-0 left-0 z-30 shadow-lg sm:relative sm:inset-auto sm:shadow-none sm:z-auto 2xl:absolute 2xl:inset-y-0 2xl:left-0 2xl:shadow-lg 2xl:z-30
         ${collapsed ? 'hidden' : 'flex'} sm:flex
         ${isExpanded ? 'w-48' : 'sm:w-12'}`}
       onMouseEnter={() => collapsed && setHovered(true)}
