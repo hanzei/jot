@@ -164,7 +164,8 @@ export class DashboardPage {
   }
 
   async duplicateCurrentNoteFromModal() {
-    await this.page.getByRole('button', { name: 'Duplicate' }).click();
+    const activeDialog = this.page.getByRole('dialog').last();
+    await activeDialog.getByRole('button', { name: 'Duplicate' }).click();
   }
 
   async search(query: string) {
