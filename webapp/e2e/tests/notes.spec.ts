@@ -156,7 +156,7 @@ test.describe('Notes', () => {
     await dashboardPage.expectNoteAtPosition(2, 'First Note');
   });
 
-  test('reorders notes from drag handle and keeps card click-to-edit behavior', async ({ page, dashboardPage }, testInfo) => {
+  test('reorders notes from drag handle and keeps card click-to-edit behavior', async ({ dashboardPage }, testInfo) => {
     test.skip(
       testInfo.project.name === 'mobile-chrome',
       'Mouse/pointer drag reorder is validated on desktop Chromium only'
@@ -170,29 +170,19 @@ test.describe('Notes', () => {
     await dashboardPage.expectNoteAtPosition(0, 'Second Note');
     await dashboardPage.expectNoteAtPosition(1, 'First Note');
 
-    const secondNoteCard = dashboardPage.noteCard('Second Note');
-    await secondNoteCard.hover();
-    const secondNoteHandle = secondNoteCard
-      .locator('..')
-      .locator('..')
-      .getByRole('button', { name: 'Drag to reorder' });
-    await expect(secondNoteHandle).toBeVisible();
-    const firstNoteCard = dashboardPage.noteCard('First Note');
-    await secondNoteHandle.scrollIntoViewIfNeeded();
-    await firstNoteCard.scrollIntoViewIfNeeded();
-    await secondNoteHandle.dragTo(firstNoteCard, { steps: 12 });
+    await dashboardPage.dragNoteTo('Second Note', 'First Note');
 
     await dashboardPage.expectNoteAtPosition(0, 'First Note');
     await dashboardPage.expectNoteAtPosition(1, 'Second Note');
 
     await dashboardPage.openNote('Second Note');
-    await expect(page.getByRole('heading', { name: 'Edit Note' })).toBeVisible();
-    await page.click('button[aria-label="Close"]');
+    await dashboardPage.expectEditorOpen();
+    await dashboardPage.closeEditor();
 
     await dashboardPage.archiveNote('Second Note');
     await dashboardPage.switchToArchived();
     await dashboardPage.expectNoteVisible('Second Note');
-    await expect(page.getByRole('button', { name: 'Drag to reorder' })).toHaveCount(0);
+    await dashboardPage.expectNoVisibleDragHandles();
   });
 
   test('shows empty state when no notes exist', async ({ dashboardPage }) => {

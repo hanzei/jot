@@ -1,6 +1,8 @@
 import { Page, expect, Locator } from '@playwright/test';
 
 export class DashboardPage {
+  private readonly dragHandleName = /drag to reorder|zum neuordnen ziehen/i;
+
   constructor(private page: Page) {}
 
   async goto() {
@@ -95,6 +97,36 @@ export class DashboardPage {
     await this.page.locator('[data-testid="note-card"]').filter({
       has: this.page.locator('h3').getByText(title, { exact: true }),
     }).click();
+  }
+
+  private noteCardContainer(title: string): Locator {
+    return this.noteCard(title).locator('..').locator('..');
+  }
+
+  getNoteDragHandle(title: string): Locator {
+    return this.noteCardContainer(title).getByRole('button', { name: this.dragHandleName });
+  }
+
+  async dragNoteTo(sourceTitle: string, targetTitle: string) {
+    await this.noteCard(sourceTitle).hover();
+    const sourceHandle = this.getNoteDragHandle(sourceTitle);
+    await expect(sourceHandle).toBeVisible();
+    const targetCard = this.noteCard(targetTitle);
+    await sourceHandle.scrollIntoViewIfNeeded();
+    await targetCard.scrollIntoViewIfNeeded();
+    await sourceHandle.dragTo(targetCard, { steps: 12 });
+  }
+
+  async expectEditorOpen() {
+    await expect(this.page.getByRole('heading', { name: 'Edit Note' })).toBeVisible();
+  }
+
+  async closeEditor() {
+    await this.page.click('button[aria-label="Close"]');
+  }
+
+  async expectNoVisibleDragHandles() {
+    await expect(this.page.getByRole('button', { name: this.dragHandleName })).toHaveCount(0);
   }
 
   private async openNoteMenu(title: string) {
