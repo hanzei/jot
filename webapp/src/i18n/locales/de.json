@@ -141,7 +141,7 @@
     "title": "Tastenkombinationen",
     "shortcutColumn": "Tastenkürzel",
     "descriptionColumn": "Beschreibung",
-    "focusSearchKey": "Umschalt + F",
+    "focusSearchKey": "Strg + F",
     "focusSearchDescription": "Suchleiste fokussieren",
     "newNoteKey": "N",
     "newNoteDescription": "Neue Notiz öffnen",

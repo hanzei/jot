@@ -1,12 +1,12 @@
 import { test, expect } from '../fixtures';
 
 test.describe('Keyboard shortcuts help dialog', () => {
-  test('focuses search with Shift+F', async ({ authenticatedUser, page, dashboardPage }) => {
+  test('focuses search with Ctrl+F', async ({ authenticatedUser, page, dashboardPage }) => {
     void authenticatedUser;
     await dashboardPage.goto();
 
     await page.locator('body').click();
-    await page.keyboard.press('Shift+F');
+    await page.keyboard.press('Control+F');
 
     await expect(page.locator('form[role="search"] input')).toBeFocused();
   });

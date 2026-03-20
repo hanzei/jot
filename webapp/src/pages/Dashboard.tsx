@@ -290,9 +290,8 @@ export default function Dashboard({ onLogout }: DashboardProps) {
 
       const isFocusSearchShortcut =
         event.key.toLowerCase() === 'f' &&
-        event.shiftKey &&
-        !event.ctrlKey &&
-        !event.metaKey &&
+        (event.ctrlKey || event.metaKey) &&
+        !event.shiftKey &&
         !event.altKey;
 
       if (isFocusSearchShortcut) {

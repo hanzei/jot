@@ -141,7 +141,7 @@
     "title": "Keyboard shortcuts",
     "shortcutColumn": "Shortcut",
     "descriptionColumn": "Description",
-    "focusSearchKey": "Shift + F",
+    "focusSearchKey": "Ctrl + F",
     "focusSearchDescription": "Focus the search bar",
     "newNoteKey": "N",
     "newNoteDescription": "Open a new note",
