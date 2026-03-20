@@ -51,6 +51,19 @@ func (h *NotesHandler) publishNoteEvent(noteID string, eventType sse.EventType, 
 	})
 }
 
+func (h *NotesHandler) publishDeletedNoteEvent(noteID string, audienceIDs []string, sourceUserID string) {
+	if h.hub == nil || len(audienceIDs) == 0 {
+		return
+	}
+
+	h.hub.Publish(audienceIDs, sse.Event{
+		Type:         sse.EventNoteDeleted,
+		NoteID:       noteID,
+		Note:         nil,
+		SourceUserID: sourceUserID,
+	})
+}
+
 type CreateNoteRequest struct {
 	Title    string           `json:"title"`
 	Content  string           `json:"content"`
@@ -83,6 +96,10 @@ type UpdateNoteItem struct {
 	Completed   bool   `json:"completed"`
 	IndentLevel int    `json:"indent_level"`
 	AssignedTo  string `json:"assigned_to"`
+}
+
+type EmptyTrashResponse struct {
+	Deleted int `json:"deleted"`
 }
 
 func normalizeCreateNoteRequest(req *CreateNoteRequest) (int, error) {
@@ -518,16 +535,39 @@ func (h *NotesHandler) DeleteNote(w http.ResponseWriter, r *http.Request) (int, 
 		}
 	}
 
-	if audienceErr == nil && h.hub != nil {
-		h.hub.Publish(audienceIDs, sse.Event{
-			Type:         sse.EventNoteDeleted,
-			NoteID:       id,
-			Note:         nil,
-			SourceUserID: user.ID,
-		})
+	if audienceErr == nil {
+		h.publishDeletedNoteEvent(id, audienceIDs, user.ID)
 	}
 
 	return http.StatusNoContent, nil, nil
+}
+
+// EmptyTrash godoc
+//
+//	@Summary	Permanently delete all notes in the current user's trash
+//	@Tags		notes
+//	@Security	CookieAuth
+//	@Produce	json
+//	@Success	200	{object}	EmptyTrashResponse
+//	@Failure	401	{string}	string	"unauthorized"
+//	@Failure	500	{string}	string	"internal server error"
+//	@Router		/notes/trash [delete]
+func (h *NotesHandler) EmptyTrash(w http.ResponseWriter, r *http.Request) (int, any, error) {
+	user, ok := auth.GetUserFromContext(r.Context())
+	if !ok {
+		return http.StatusUnauthorized, nil, errors.New("unauthorized")
+	}
+
+	deletedNotes, err := h.noteStore.EmptyTrash(user.ID)
+	if err != nil {
+		return http.StatusInternalServerError, nil, err
+	}
+
+	for _, deletedNote := range deletedNotes {
+		h.publishDeletedNoteEvent(deletedNote.NoteID, deletedNote.AudienceIDs, user.ID)
+	}
+
+	return http.StatusOK, EmptyTrashResponse{Deleted: len(deletedNotes)}, nil
 }
 
 // RestoreNote godoc

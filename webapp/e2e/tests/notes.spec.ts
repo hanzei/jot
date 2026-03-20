@@ -67,6 +67,25 @@ test.describe('Notes', () => {
     await dashboardPage.expectNoteNotVisible('Delete Forever');
   });
 
+  test('empties trash in one action', async ({ dashboardPage }) => {
+    await dashboardPage.goto();
+    await dashboardPage.createNote('Trash One');
+    await dashboardPage.createNote('Trash Two');
+    await dashboardPage.createNote('Trash Three');
+
+    await dashboardPage.deleteNote('Trash One');
+    await dashboardPage.deleteNote('Trash Two');
+    await dashboardPage.deleteNote('Trash Three');
+
+    await dashboardPage.switchToBin();
+    await dashboardPage.expectEmptyTrashButtonVisible();
+
+    await dashboardPage.emptyTrash();
+
+    await dashboardPage.expectEmptyTrashButtonHidden();
+    await dashboardPage.expectEmptyState('Bin is empty');
+  });
+
   test('pins a note and it appears in the pinned section', async ({ page, dashboardPage }) => {
     await dashboardPage.goto();
     await dashboardPage.createNote('Note to Pin');
