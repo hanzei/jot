@@ -234,3 +234,146 @@ func TestCreateNoteWithLabels(t *testing.T) {
 		require.Len(t, note.Items, 2)
 	})
 }
+
+func TestRenameLabel(t *testing.T) {
+	ts := setupTestServer(t)
+	user := ts.createTestUser(t, "renameowner", "password123", false)
+
+	note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
+		Title: "Rename Me", Content: "content",
+	})
+	require.NoError(t, err)
+
+	_, err = user.Client.AddLabel(t.Context(), note.ID, "work")
+	require.NoError(t, err)
+
+	labels, err := user.Client.ListLabels(t.Context())
+	require.NoError(t, err)
+	require.Len(t, labels, 1)
+	labelID := labels[0].ID
+
+	t.Run("rename label happy path", func(t *testing.T) {
+		renamed, err := user.Client.RenameLabel(t.Context(), labelID, "personal")
+		require.NoError(t, err)
+		assert.Equal(t, labelID, renamed.ID)
+		assert.Equal(t, "personal", renamed.Name)
+
+		updatedNote, err := user.Client.GetNote(t.Context(), note.ID)
+		require.NoError(t, err)
+		require.Len(t, updatedNote.Labels, 1)
+		assert.Equal(t, "personal", updatedNote.Labels[0].Name)
+	})
+
+	t.Run("rename to conflicting name returns 400", func(t *testing.T) {
+		secondNote, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
+			Title: "Other", Content: "content",
+		})
+		require.NoError(t, err)
+
+		_, err = user.Client.AddLabel(t.Context(), secondNote.ID, "urgent")
+		require.NoError(t, err)
+
+		_, err = user.Client.RenameLabel(t.Context(), labelID, "urgent")
+		require.Error(t, err)
+		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
+	})
+
+	t.Run("rename another user's label returns 404", func(t *testing.T) {
+		other := ts.createTestUser(t, "renameother", "password123", false)
+		otherNote, err := other.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
+			Title: "Other user note", Content: "content",
+		})
+		require.NoError(t, err)
+
+		_, err = other.Client.AddLabel(t.Context(), otherNote.ID, "private")
+		require.NoError(t, err)
+
+		otherLabels, err := other.Client.ListLabels(t.Context())
+		require.NoError(t, err)
+		require.Len(t, otherLabels, 1)
+
+		_, err = user.Client.RenameLabel(t.Context(), otherLabels[0].ID, "stolen")
+		require.Error(t, err)
+		assert.Equal(t, http.StatusNotFound, client.StatusCode(err))
+	})
+}
+
+func TestDeleteLabel(t *testing.T) {
+	ts := setupTestServer(t)
+
+	t.Run("delete label removes note_labels rows and keeps notes", func(t *testing.T) {
+		user := ts.createTestUser(t, "deleteowner", "password123", false)
+
+		firstNote, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
+			Title: "First", Content: "content",
+		})
+		require.NoError(t, err)
+
+		secondNote, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
+			Title: "Second", Content: "content",
+		})
+		require.NoError(t, err)
+
+		_, err = user.Client.AddLabel(t.Context(), firstNote.ID, "shared")
+		require.NoError(t, err)
+		_, err = user.Client.AddLabel(t.Context(), secondNote.ID, "shared")
+		require.NoError(t, err)
+
+		labels, err := user.Client.ListLabels(t.Context())
+		require.NoError(t, err)
+		require.Len(t, labels, 1)
+		labelID := labels[0].ID
+
+		var beforeAssociations int
+		err = ts.Server.GetDB().QueryRow("SELECT COUNT(*) FROM note_labels WHERE label_id = ?", labelID).Scan(&beforeAssociations)
+		require.NoError(t, err)
+		assert.Equal(t, 2, beforeAssociations)
+
+		err = user.Client.DeleteLabel(t.Context(), labelID)
+		require.NoError(t, err)
+
+		var remainingAssociations int
+		err = ts.Server.GetDB().QueryRow("SELECT COUNT(*) FROM note_labels WHERE label_id = ?", labelID).Scan(&remainingAssociations)
+		require.NoError(t, err)
+		assert.Equal(t, 0, remainingAssociations)
+
+		var remainingLabelRows int
+		err = ts.Server.GetDB().QueryRow("SELECT COUNT(*) FROM labels WHERE id = ?", labelID).Scan(&remainingLabelRows)
+		require.NoError(t, err)
+		assert.Equal(t, 0, remainingLabelRows)
+
+		var remainingNotes int
+		err = ts.Server.GetDB().QueryRow("SELECT COUNT(*) FROM notes WHERE id IN (?, ?)", firstNote.ID, secondNote.ID).Scan(&remainingNotes)
+		require.NoError(t, err)
+		assert.Equal(t, 2, remainingNotes)
+
+		firstUpdated, err := user.Client.GetNote(t.Context(), firstNote.ID)
+		require.NoError(t, err)
+		assert.Empty(t, firstUpdated.Labels)
+
+		secondUpdated, err := user.Client.GetNote(t.Context(), secondNote.ID)
+		require.NoError(t, err)
+		assert.Empty(t, secondUpdated.Labels)
+	})
+
+	t.Run("delete another user's label returns 404", func(t *testing.T) {
+		owner := ts.createTestUser(t, "deleteotherowner", "password123", false)
+		intruder := ts.createTestUser(t, "deleteintruder", "password123", false)
+
+		note, err := owner.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
+			Title: "Protected", Content: "content",
+		})
+		require.NoError(t, err)
+
+		_, err = owner.Client.AddLabel(t.Context(), note.ID, "private")
+		require.NoError(t, err)
+
+		labels, err := owner.Client.ListLabels(t.Context())
+		require.NoError(t, err)
+		require.Len(t, labels, 1)
+
+		err = intruder.Client.DeleteLabel(t.Context(), labels[0].ID)
+		require.Error(t, err)
+		assert.Equal(t, http.StatusNotFound, client.StatusCode(err))
+	})
+}

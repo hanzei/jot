@@ -81,6 +81,11 @@ definitions:
       username:
         type: string
     type: object
+  handlers.RenameLabelRequest:
+    properties:
+      name:
+        type: string
+    type: object
   handlers.ReorderNotesRequest:
     properties:
       note_ids:
@@ -564,6 +569,77 @@ paths:
       security:
       - CookieAuth: []
       summary: List all labels for the current user
+      tags:
+      - labels
+  /labels/{id}:
+    delete:
+      parameters:
+      - description: Label ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "404":
+          description: label not found
+          schema:
+            type: string
+        "500":
+          description: internal server error
+          schema:
+            type: string
+      security:
+      - CookieAuth: []
+      summary: Delete a label
+      tags:
+      - labels
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Label ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: New label name
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.RenameLabelRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Label'
+        "400":
+          description: bad request
+          schema:
+            type: string
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "404":
+          description: label not found
+          schema:
+            type: string
+        "500":
+          description: internal server error
+          schema:
+            type: string
+      security:
+      - CookieAuth: []
+      summary: Rename a label
       tags:
       - labels
   /login:

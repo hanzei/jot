@@ -2,6 +2,7 @@ import React from 'react';
 import { View, TextInput, StyleSheet, type TextInput as TextInputType } from 'react-native';
 import { TouchableOpacity } from 'react-native-gesture-handler';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { useTranslation } from 'react-i18next';
 import UserAvatar from './UserAvatar';
 import { useTheme } from '../theme/ThemeContext';
 import type { Collaborator } from '@jot/shared';
@@ -44,6 +45,7 @@ function TodoItem({
   onAssignPress,
 }: TodoItemProps) {
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const showAssignUI = isShared && collaborators && collaborators.length > 0 && onAssignPress;
   const assignedUser = assignedTo ? collaborators?.find((c) => c.userId === assignedTo) : undefined;
 
@@ -54,7 +56,7 @@ function TodoItem({
           onPressIn={onDrag}
           style={styles.dragHandle}
           testID="todo-item-drag-handle"
-          accessibilityLabel="Drag to reorder"
+          accessibilityLabel={t('note.dragToReorder')}
         >
           <Ionicons name="reorder-three" size={20} color={colors.iconMuted} />
         </TouchableOpacity>
@@ -65,7 +67,7 @@ function TodoItem({
         testID="todo-item-checkbox"
         accessibilityRole="checkbox"
         accessibilityState={{ checked: completed, disabled: !editable }}
-        accessibilityLabel={`${text || 'List item'} checkbox`}
+        accessibilityLabel={t('note.itemCheckbox', { item: text || t('note.listItemLabel') })}
       >
         <Ionicons
           name={completed ? 'checkbox' : 'square-outline'}
@@ -79,7 +81,7 @@ function TodoItem({
         value={text}
         onChangeText={onChangeText}
         editable={editable}
-        placeholder="List item"
+        placeholder={t('note.itemPlaceholder')}
         placeholderTextColor={colors.placeholder}
         returnKeyType="next"
         onSubmitEditing={onSubmitEditing}
@@ -96,7 +98,9 @@ function TodoItem({
           onPress={!completed ? onAssignPress : undefined}
           style={styles.assignBtn}
           testID="todo-item-assignee"
-          accessibilityLabel={`Assigned to ${assignedUser?.username ?? 'unknown'}`}
+          accessibilityLabel={t('note.assignedTo', {
+            name: assignedUser?.username ?? t('common.unknown'),
+          })}
         >
           <UserAvatar
             userId={assignedTo}
@@ -110,7 +114,7 @@ function TodoItem({
           onPress={onAssignPress}
           style={styles.assignBtn}
           testID="todo-item-assign"
-          accessibilityLabel="Assign item"
+          accessibilityLabel={t('note.assignItem')}
         >
           <View style={[styles.assignPlaceholder, { borderColor: colors.border }]}>
             <Ionicons name="person-add-outline" size={12} color={colors.iconMuted} />

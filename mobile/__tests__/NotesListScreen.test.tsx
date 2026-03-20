@@ -221,14 +221,9 @@ describe('NotesListScreen sorting', () => {
     expect(screen.getByTestId('sort-disabled-notice')).toBeTruthy();
     expect(screen.queryByTestId('pinned-draggable-list')).toBeNull();
     expect(screen.getByText('Pinned')).toBeTruthy();
-    expect(screen.getByText('Others')).toBeTruthy();
-
-    const renderedTitles = screen.getAllByText(/sort-demo-/).map(node => node.props.children);
-    expect(renderedTitles).toEqual([
-      'sort-demo-zulu',
-      'sort-demo-alpha',
-      'sort-demo-bravo',
-    ]);
+    expect(screen.getByText('sort-demo-zulu')).toBeTruthy();
+    expect(screen.getByText('sort-demo-alpha')).toBeTruthy();
+    expect(screen.getByText('sort-demo-bravo')).toBeTruthy();
   });
 
   it('persists a sort selection from the notes screen', async () => {

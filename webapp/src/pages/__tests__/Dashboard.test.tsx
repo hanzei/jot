@@ -1,12 +1,13 @@
-import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { MemoryRouter, useLocation, Routes, Route } from 'react-router'
+import { MemoryRouter, useLocation, useNavigate, Routes, Route } from 'react-router'
 import { type ReactNode } from 'react'
 import Dashboard from '../Dashboard'
 import type { Note, Label } from '@jot/shared'
 import { notes, labels, users } from '@/utils/api'
 import * as auth from '@/utils/auth'
+import { useSSE } from '@/utils/useSSE'
 import { createMockNote } from '@/utils/__tests__/test-helpers'
 import { ToastProvider } from '@/components/Toast'
 
@@ -171,11 +172,12 @@ vi.mock('@/components/SortableNoteCard', () => ({
 }))
 
 vi.mock('@/components/NoteModal', () => ({
-  default: ({ note, onClose, onSave }: { note?: Note | null; onClose?: () => void; onSave?: () => void }) => (
+  default: ({ note, onClose, onSave, onRefresh }: { note?: Note | null; onClose?: () => void; onSave?: () => void; onRefresh?: () => void }) => (
     <div data-testid="note-modal">
       <h2>{note ? 'Edit Note' : 'New Note'}</h2>
       <button onClick={onClose} data-testid="modal-close">Close</button>
       <button onClick={onSave} data-testid="modal-save">Save</button>
+      <button onClick={onRefresh} data-testid="modal-refresh">Refresh</button>
     </div>
   ),
 }))
@@ -721,6 +723,108 @@ describe('Dashboard', () => {
         expect(notes.getById).toHaveBeenCalledWith('abc123')
         expect(screen.getByTestId('note-modal')).toBeInTheDocument()
         expect(screen.getByText('Edit Note')).toBeInTheDocument()
+      })
+    })
+
+    it('opens modal when navigating to a permalink route after initial render', async () => {
+      const user = userEvent.setup()
+      const mockNote = createMockNote({ id: 'abc123', title: 'Permalink Note' })
+      vi.mocked(notes.getAll).mockResolvedValue([mockNote])
+      vi.mocked(notes.getById).mockResolvedValue(mockNote)
+
+      const NavigateToNoteButton = () => {
+        const navigate = useNavigate()
+
+        return (
+          <button onClick={() => navigate('/notes/abc123')} data-testid="navigate-to-note">
+            Open permalink
+          </button>
+        )
+      }
+
+      render(
+        <MemoryRouter initialEntries={['/']}>
+          <NavigateToNoteButton />
+          <ToastProvider>
+            <Routes>
+              <Route element={<Dashboard onLogout={vi.fn()} />}>
+                <Route index element={null} />
+                <Route path="notes/:noteId" element={null} />
+              </Route>
+            </Routes>
+          </ToastProvider>
+        </MemoryRouter>
+      )
+
+      await waitFor(() => {
+        expect(screen.getByTestId('navigate-to-note')).toBeInTheDocument()
+      })
+
+      await user.click(screen.getByTestId('navigate-to-note'))
+
+      await waitFor(() => {
+        expect(notes.getById).toHaveBeenCalledWith('abc123')
+        expect(screen.getByTestId('note-modal')).toBeInTheDocument()
+        expect(screen.getByText('Edit Note')).toBeInTheDocument()
+      })
+    })
+
+    it('clears the current modal before loading a different permalink note', async () => {
+      const user = userEvent.setup()
+      const currentNote = createMockNote({ id: 'abc123', title: 'Current Note' })
+      let resolveNextNote: ((note: Note) => void) | undefined
+
+      vi.mocked(notes.getById)
+        .mockResolvedValueOnce(currentNote)
+        .mockImplementationOnce(() => new Promise<Note>((resolve) => {
+          resolveNextNote = resolve
+        }))
+
+      const NavigateToNextNoteButton = () => {
+        const navigate = useNavigate()
+
+        return (
+          <button onClick={() => navigate('/notes/next-note')} data-testid="navigate-to-next-note">
+            Open next permalink
+          </button>
+        )
+      }
+
+      render(
+        <MemoryRouter initialEntries={['/notes/abc123']}>
+          <NavigateToNextNoteButton />
+          <ToastProvider>
+            <Routes>
+              <Route element={<Dashboard onLogout={vi.fn()} />}>
+                <Route index element={null} />
+                <Route path="notes/:noteId" element={null} />
+              </Route>
+            </Routes>
+          </ToastProvider>
+        </MemoryRouter>
+      )
+
+      await waitFor(() => {
+        expect(notes.getById).toHaveBeenCalledWith('abc123')
+        expect(screen.getByTestId('note-modal')).toBeInTheDocument()
+      })
+
+      await user.click(screen.getByTestId('navigate-to-next-note'))
+
+      await waitFor(() => {
+        expect(notes.getById).toHaveBeenNthCalledWith(2, 'next-note')
+      })
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('note-modal')).not.toBeInTheDocument()
+      })
+
+      await act(async () => {
+        resolveNextNote?.(createMockNote({ id: 'next-note', title: 'Next Note' }))
+      })
+
+      await waitFor(() => {
+        expect(screen.getByTestId('note-modal')).toBeInTheDocument()
       })
     })
 
@@ -1353,6 +1457,98 @@ describe('Dashboard', () => {
       expect(mockGetAll).toHaveBeenCalledWith(true, '', false, '', false)
     })
   })
+  })
+
+  describe('Real-time label updates', () => {
+    const realtimeLabel: Label = {
+      id: 'label-realtime',
+      user_id: 'user1',
+      name: 'realtime',
+      created_at: '2024-01-01T00:00:00Z',
+      updated_at: '2024-01-01T00:00:00Z',
+    }
+
+    it('refreshes sidebar labels when an open note refreshes locally', async () => {
+      const user = userEvent.setup()
+
+      vi.mocked(notes.getAll).mockResolvedValue([createMockNote({ id: '1', title: 'Existing Note' })])
+      vi.mocked(labels.getAll)
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([realtimeLabel])
+
+      renderDashboard()
+
+      await waitFor(() => {
+        expect(screen.getByTestId('edit-1')).toBeInTheDocument()
+      })
+
+      await user.click(screen.getByTestId('edit-1'))
+
+      await waitFor(() => {
+        expect(screen.getByTestId('note-modal')).toBeInTheDocument()
+      })
+
+      await user.click(screen.getByTestId('modal-refresh'))
+
+      await waitFor(() => {
+        expect(labels.getAll).toHaveBeenCalledTimes(2)
+      })
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'realtime' })).toBeInTheDocument()
+      })
+    })
+
+    it('refreshes sidebar labels when SSE reports created and updated notes', async () => {
+      vi.mocked(labels.getAll)
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([realtimeLabel])
+        .mockResolvedValueOnce([realtimeLabel])
+
+      renderDashboard()
+
+      await waitFor(() => {
+        expect(useSSE).toHaveBeenCalled()
+        expect(labels.getAll).toHaveBeenCalledTimes(1)
+      })
+
+      const sseOptions = vi.mocked(useSSE).mock.calls[0]?.[0]
+      expect(sseOptions).toBeDefined()
+
+      await act(async () => {
+        sseOptions?.onEvent({
+          type: 'note_created',
+          note_id: 'note-1',
+          note: createMockNote({ id: 'note-1', labels: [realtimeLabel] }),
+          source_user_id: 'user1',
+        })
+      })
+
+      await waitFor(() => {
+        expect(labels.getAll).toHaveBeenCalledTimes(2)
+      })
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'realtime' })).toBeInTheDocument()
+      })
+
+      await act(async () => {
+        sseOptions?.onEvent({
+          type: 'note_updated',
+          note_id: 'note-1',
+          note: createMockNote({ id: 'note-1', labels: [realtimeLabel] }),
+          source_user_id: 'user1',
+        })
+      })
+
+      await waitFor(() => {
+        expect(labels.getAll).toHaveBeenCalledTimes(3)
+      })
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'realtime' })).toBeInTheDocument()
+      })
+    })
   })
 
   describe('My Todo Filtering', () => {
