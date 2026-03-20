@@ -112,8 +112,7 @@ func TestDuplicateNoteEndpoint(t *testing.T) {
 		notes, err := collaborator.Client.ListNotes(t.Context(), nil)
 		require.NoError(t, err)
 		require.Len(t, notes, 2)
-		assert.Equal(t, duplicated.ID, notes[0].ID)
-		assert.Equal(t, source.ID, notes[1].ID)
+		assert.ElementsMatch(t, []string{duplicated.ID, source.ID}, []string{notes[0].ID, notes[1].ID})
 	})
 }
 

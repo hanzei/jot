@@ -111,7 +111,7 @@ export default function NoteEditorScreen() {
   const isMountedRef = useRef(true);
   const isInitializedRef = useRef(false);
   const intentionalExitRef = useRef(false);
-  const saveInFlightRef = useRef<Promise<void> | null>(null);
+  const saveInFlightRef = useRef<Promise<boolean> | null>(null);
   const tempIdCounterRef = useRef(0);
 
   // Refs for current state to avoid stale closures in debounced save
@@ -216,7 +216,7 @@ export default function NoteEditorScreen() {
           color: currentColor !== '#ffffff' ? currentColor : undefined,
           items: currentNoteType === 'todo' ? serializeItems(currentItems) : undefined,
         });
-        if (!isMountedRef.current || unmounting) return;
+        if (!isMountedRef.current || unmounting) return true;
         setNoteId(newNote.id);
         setHasCreated(true);
         setSaveError(null);
@@ -236,9 +236,11 @@ export default function NoteEditorScreen() {
           id: currentNoteId,
           data: updateData,
         });
-        if (!isMountedRef.current || unmounting) return;
+        if (!isMountedRef.current || unmounting) return true;
         setSaveError(null);
       }
+
+      return true;
     })();
 
     saveInFlightRef.current = thisPromise;

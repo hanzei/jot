@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, waitFor } from '@testing-library/react'
+import { render, screen, fireEvent } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { type ReactNode } from 'react'
 import NoteModal from '../NoteModal'
@@ -612,15 +612,14 @@ describe('NoteModal', () => {
       fireEvent.click(checkboxes[1])
 
       fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+      await vi.runAllTimersAsync()
 
-      await waitFor(() => {
-        expect(mockNotesCreate).toHaveBeenCalledWith(expect.objectContaining({
-          items: [
-            expect.objectContaining({ text: 'First item', completed: false, position: 0 }),
-            expect.objectContaining({ text: 'Second item', completed: true, position: 1 }),
-          ],
-        }))
-      })
+      expect(mockNotesCreate).toHaveBeenCalledWith(expect.objectContaining({
+        items: [
+          expect.objectContaining({ text: 'First item', completed: false, position: 0 }),
+          expect.objectContaining({ text: 'Second item', completed: true, position: 1 }),
+        ],
+      }))
     })
   })
 
@@ -681,15 +680,14 @@ describe('NoteModal', () => {
       renderNoteModal({ ...defaultProps, note, onDuplicate, onClose })
 
       fireEvent.click(screen.getByRole('button', { name: 'Duplicate' }))
+      await vi.runAllTimersAsync()
 
-      await waitFor(() => {
-        expect(mockNotesUpdate).toHaveBeenCalledWith('1', expect.objectContaining({
-          title: note.title,
-          content: note.content,
-        }))
-        expect(onDuplicate).toHaveBeenCalledWith('1')
-        expect(onClose).toHaveBeenCalled()
-      })
+      expect(mockNotesUpdate).toHaveBeenCalledWith('1', expect.objectContaining({
+        title: note.title,
+        content: note.content,
+      }))
+      expect(onDuplicate).toHaveBeenCalledWith('1')
+      expect(onClose).toHaveBeenCalled()
     })
   })
 })
