@@ -427,12 +427,10 @@ func (s *NoteStore) getNoteAudiencesTx(tx *sql.Tx, noteIDs []string) (map[string
 	queryArgs = append(queryArgs, args...)
 	queryArgs = append(queryArgs, args...)
 
-	rows, err := tx.Query(
-		`SELECT id AS note_id, user_id FROM notes WHERE id IN (`+placeholders+`)
+	query := `SELECT id AS note_id, user_id FROM notes WHERE id IN (` + placeholders + `)
 		 UNION
-		 SELECT note_id, shared_with_user_id FROM note_shares WHERE note_id IN (`+placeholders+`)`,
-		queryArgs...,
-	)
+		 SELECT note_id, shared_with_user_id FROM note_shares WHERE note_id IN (` + placeholders + `)` // #nosec G202 -- only generated "?" placeholders are concatenated
+	rows, err := tx.Query(query, queryArgs...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query note audiences: %w", err)
 	}
@@ -620,10 +618,8 @@ func (s *NoteStore) EmptyTrash(userID string) ([]DeletedNoteAudience, error) {
 	deleteArgs = append(deleteArgs, userID)
 	deleteArgs = append(deleteArgs, args...)
 
-	result, err := tx.Exec(
-		`DELETE FROM notes WHERE user_id = ? AND deleted_at IS NOT NULL AND id IN (`+placeholders+`)`,
-		deleteArgs...,
-	)
+	deleteQuery := `DELETE FROM notes WHERE user_id = ? AND deleted_at IS NOT NULL AND id IN (` + placeholders + `)` // #nosec G202 -- only generated "?" placeholders are concatenated
+	result, err := tx.Exec(deleteQuery, deleteArgs...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to empty trash: %w", err)
 	}
