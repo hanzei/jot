@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback } from 'react';
-import { ROLES, VALIDATION, type User, type CreateUserRequest } from '@jot/shared';
+import { PASSWORD_MIN_LENGTH, ROLES, VALIDATION, type User, type CreateUserRequest } from '@jot/shared';
 import { useTranslation } from 'react-i18next';
 import { admin, auth, isAxiosError } from '@/utils/api';
 import { isAdmin, removeUser, getUser } from '@/utils/auth';
@@ -8,7 +8,7 @@ import AppLayout from '@/components/AppLayout';
 import SearchBar from '@/components/SearchBar';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { useNavigationLinkTabs } from '@/hooks/useNavigationTabs';
-import { ACCOUNT_PASSWORD_MIN_LENGTH, getUsernameValidationError, isPasswordTooShort } from '@/utils/userValidation';
+import { getUsernameValidationError, isPasswordTooShort } from '@/utils/userValidation';
 
 interface AdminProps {
   onLogout: () => void;
@@ -97,8 +97,8 @@ const Admin = ({ onLogout }: AdminProps) => {
   };
 
   const validatePassword = (password: string): string => {
-    if (isPasswordTooShort(password, ACCOUNT_PASSWORD_MIN_LENGTH)) {
-      return t('admin.passwordMin', { min: ACCOUNT_PASSWORD_MIN_LENGTH });
+    if (isPasswordTooShort(password, PASSWORD_MIN_LENGTH)) {
+      return t('admin.passwordMin', { min: PASSWORD_MIN_LENGTH });
     }
     return '';
   };
@@ -317,7 +317,7 @@ const Admin = ({ onLogout }: AdminProps) => {
                       id="create-password"
                       type="password"
                       required
-                      minLength={ACCOUNT_PASSWORD_MIN_LENGTH}
+                      minLength={PASSWORD_MIN_LENGTH}
                       value={formData.password}
                       onBlur={() => handleCreateFieldBlur('password')}
                       onChange={(e) => {
@@ -331,7 +331,7 @@ const Admin = ({ onLogout }: AdminProps) => {
                       }`}
                     />
                     <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                      {t('admin.passwordHint', { min: ACCOUNT_PASSWORD_MIN_LENGTH })}
+                      {t('admin.passwordHint', { min: PASSWORD_MIN_LENGTH })}
                     </p>
                     {passwordFieldError && (
                       <p className="mt-1 text-sm text-red-600 dark:text-red-400">{passwordFieldError}</p>

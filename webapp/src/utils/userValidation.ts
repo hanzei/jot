@@ -1,6 +1,4 @@
-import { VALIDATION } from '@jot/shared';
-
-export const ACCOUNT_PASSWORD_MIN_LENGTH = 4;
+import { PASSWORD_MIN_LENGTH, VALIDATION } from '@jot/shared';
 
 const USERNAME_REGEX = /^[a-zA-Z0-9_-]+$/;
 
@@ -27,6 +25,6 @@ export const getUsernameValidationError = (username: string): UsernameValidation
   return null;
 };
 
-export const isPasswordTooShort = (password: string, minLength = ACCOUNT_PASSWORD_MIN_LENGTH): boolean => (
+export const isPasswordTooShort = (password: string, minLength = PASSWORD_MIN_LENGTH): boolean => (
   password.length < minLength
 );
