@@ -61,6 +61,48 @@ test.describe('Search', () => {
     await dashboardPage.expectNoteVisible('React Hooks');
   });
 
+  test('mobile search expands and collapses without using a second header row', async ({ page, dashboardPage }) => {
+    await dashboardPage.setMobileViewport();
+
+    await dashboardPage.expectMobileSearchCollapsed();
+
+    await dashboardPage.openMobileSearch();
+    await dashboardPage.expectSearchFocused();
+
+    await dashboardPage.search('TypeScript');
+    await dashboardPage.expectNoteVisible('TypeScript Tutorial');
+    await dashboardPage.expectNoteNotVisible('Go Programming');
+
+    await dashboardPage.pressKey('Escape');
+    await dashboardPage.expectMobileSearchCollapsed();
+
+    await dashboardPage.openMobileSearch();
+    await dashboardPage.expectSearchValue('TypeScript');
+
+    await dashboardPage.closeMobileSearch();
+    await dashboardPage.expectMobileSearchCollapsed();
+
+    await dashboardPage.openMobileSearch();
+    await dashboardPage.clearSearch();
+    await dashboardPage.blurMobileSearch();
+    await dashboardPage.expectMobileSearchCollapsed();
+    await dashboardPage.expectNoteVisible('TypeScript Tutorial');
+    await dashboardPage.expectNoteVisible('Go Programming');
+    await dashboardPage.expectNoteVisible('React Hooks');
+
+    await page.reload();
+    await dashboardPage.expectMobileSearchCollapsed();
+  });
+
+  test('mobile search starts expanded when the URL already has a query', async ({ page, dashboardPage }) => {
+    await dashboardPage.setMobileViewport();
+    await page.goto('/?search=TypeScript');
+
+    await dashboardPage.expectSearchValue('TypeScript');
+    await dashboardPage.expectNoteVisible('TypeScript Tutorial');
+    await dashboardPage.expectNoteNotVisible('Go Programming');
+  });
+
   test('clicking Archive tab clears search', async ({ dashboardPage }) => {
     await dashboardPage.search('TypeScript');
     await dashboardPage.expectNoteNotVisible('Go Programming');

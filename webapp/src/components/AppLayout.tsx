@@ -1,5 +1,6 @@
-import { type ReactNode } from 'react';
+import { type ReactElement, type ReactNode } from 'react';
 import NavigationHeader from '@/components/NavigationHeader';
+import type { SearchBarProps } from '@/components/SearchBar';
 import Sidebar, { type SidebarTab } from '@/components/Sidebar';
 import { useSidebarCollapsed } from '@/hooks/useSidebarCollapsed';
 
@@ -13,7 +14,7 @@ interface AppLayoutProps {
   sidebarTabs: SidebarTab[];
   sidebarBottomTabs?: SidebarTab[];
   sidebarChildren?: ReactNode;
-  searchBar?: ReactNode;
+  searchBar?: ReactElement<SearchBarProps>;
   children: ReactNode;
 }
 
@@ -42,9 +43,8 @@ const AppLayout = ({
         adminLinkActive={adminLinkActive}
         settingsLinkActive={settingsLinkActive}
         onToggleSidebar={toggleSidebar}
-      >
-        {searchBar}
-      </NavigationHeader>
+        searchBar={searchBar}
+      />
 
       <div className="relative flex flex-1 min-h-0">
         <Sidebar

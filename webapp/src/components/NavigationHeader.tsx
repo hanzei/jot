@@ -1,16 +1,17 @@
-import { ReactNode, useState } from 'react';
+import { cloneElement, isValidElement, type FocusEvent, type KeyboardEvent, type ReactElement, useEffect, useRef, useState } from 'react';
 import { useTranslation } from 'react-i18next';
 import { Link } from 'react-router';
-import { Bars3Icon } from '@heroicons/react/24/outline';
+import { Bars3Icon, MagnifyingGlassIcon } from '@heroicons/react/24/outline';
 import { Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/react';
 import LetterAvatar from '@/components/LetterAvatar';
 import ConfirmDialog from '@/components/ConfirmDialog';
+import type { SearchBarProps } from '@/components/SearchBar';
 import { getUser } from '@/utils/auth';
 
 interface NavigationHeaderProps {
   title?: string;
   onLogout: () => void;
-  children?: ReactNode; // For content like search bar between title and user menu
+  searchBar?: ReactElement<SearchBarProps>;
   username?: string;
   isAdmin?: boolean;
   adminLinkActive?: boolean;
@@ -28,6 +29,36 @@ interface ProfileMenuProps {
   settingsLinkActive: boolean | undefined;
   onLogout: () => void;
 }
+
+const MOBILE_BREAKPOINT_QUERY = '(max-width: 639px)';
+const DESKTOP_BREAKPOINT_QUERY = '(min-width: 640px)';
+
+const matchesMediaQuery = (query: string) =>
+  typeof window !== 'undefined' && window.matchMedia(query).matches;
+
+const useMediaQuery = (query: string) => {
+  const [matches, setMatches] = useState(() => matchesMediaQuery(query));
+
+  useEffect(() => {
+    if (typeof window === 'undefined') {
+      return;
+    }
+
+    const mediaQueryList = window.matchMedia(query);
+    const updateMatches = () => setMatches(mediaQueryList.matches);
+
+    updateMatches();
+    mediaQueryList.addEventListener?.('change', updateMatches);
+    mediaQueryList.addListener?.(updateMatches);
+
+    return () => {
+      mediaQueryList.removeEventListener?.('change', updateMatches);
+      mediaQueryList.removeListener?.(updateMatches);
+    };
+  }, [query]);
+
+  return matches;
+};
 
 const ProfileMenu = ({ iconSrc, displayUsername, firstName, baseUsername, showAdminLink, adminLinkActive, settingsLinkActive, onLogout }: ProfileMenuProps) => {
   const { t } = useTranslation();
@@ -104,17 +135,127 @@ const ProfileMenu = ({ iconSrc, displayUsername, firstName, baseUsername, showAd
   );
 };
 
-const NavigationHeader = ({ title = 'Jot', onLogout, children, username, isAdmin: showAdminLink, adminLinkActive, settingsLinkActive, onToggleSidebar }: NavigationHeaderProps) => {
+const NavigationHeader = ({ title = 'Jot', onLogout, searchBar, username, isAdmin: showAdminLink, adminLinkActive, settingsLinkActive, onToggleSidebar }: NavigationHeaderProps) => {
   const currentUser = getUser();
+  const { t } = useTranslation();
+  const isDesktop = useMediaQuery(DESKTOP_BREAKPOINT_QUERY);
+  const hasSearchBar = Boolean(searchBar);
+  const searchValue = searchBar?.props.value.trim() ?? '';
   const baseUsername = username ?? currentUser?.username ?? '';
   const fullName = currentUser?.first_name || currentUser?.last_name
     ? `${currentUser.first_name} ${currentUser.last_name}`.trim()
     : null;
   const displayUsername = fullName ?? baseUsername;
+  const searchInputRef = useRef<HTMLInputElement | null>(null);
+  const searchTriggerRef = useRef<HTMLButtonElement | null>(null);
+  const mobileSearchContainerRef = useRef<HTMLDivElement | null>(null);
+  const previousIsDesktopRef = useRef(isDesktop);
+  const previousSearchValueRef = useRef(searchValue);
+  const previousExpandedRef = useRef(false);
   // Use updated_at as a cache-buster so the icon refreshes automatically
   // on any page after an upload or delete without needing a prop.
   const iconSrc = currentUser?.has_profile_icon
     ? `/api/v1/users/${currentUser.id}/profile-icon?v=${currentUser.updated_at}`
+    : null;
+  const [searchExpanded, setSearchExpanded] = useState(
+    () => !matchesMediaQuery(MOBILE_BREAKPOINT_QUERY) || Boolean(searchValue)
+  );
+
+  useEffect(() => {
+    if (!hasSearchBar) {
+      return;
+    }
+
+    if (isDesktop) {
+      setSearchExpanded(true);
+      previousIsDesktopRef.current = true;
+      previousSearchValueRef.current = searchValue;
+      return;
+    }
+
+    if (previousIsDesktopRef.current && !searchValue) {
+      setSearchExpanded(false);
+    } else if (searchValue && searchValue !== previousSearchValueRef.current) {
+      setSearchExpanded(true);
+    }
+
+    previousIsDesktopRef.current = false;
+    previousSearchValueRef.current = searchValue;
+  }, [hasSearchBar, isDesktop, searchValue]);
+
+  useEffect(() => {
+    if (isDesktop) {
+      previousExpandedRef.current = true;
+      return;
+    }
+
+    if (searchExpanded && !previousExpandedRef.current) {
+      const timeoutId = window.setTimeout(() => {
+        searchInputRef.current?.focus();
+      }, 0);
+      previousExpandedRef.current = true;
+
+      return () => window.clearTimeout(timeoutId);
+    }
+
+    previousExpandedRef.current = searchExpanded;
+  }, [isDesktop, searchExpanded]);
+
+  const collapseSearch = (focusTrigger = false) => {
+    if (isDesktop) {
+      return;
+    }
+
+    searchInputRef.current?.blur();
+    setSearchExpanded(false);
+
+    if (focusTrigger) {
+      window.setTimeout(() => {
+        searchTriggerRef.current?.focus();
+      }, 0);
+    }
+  };
+
+  const handleSearchBlur = (event: FocusEvent<HTMLInputElement>) => {
+    const nextFocusedElement = event.relatedTarget;
+    if (nextFocusedElement instanceof Node && mobileSearchContainerRef.current?.contains(nextFocusedElement)) {
+      return;
+    }
+
+    if (!searchValue) {
+      collapseSearch();
+    }
+  };
+
+  const handleSearchKeyDown = (event: KeyboardEvent<HTMLInputElement>) => {
+    if (event.key === 'Escape') {
+      event.preventDefault();
+      collapseSearch(true);
+    }
+  };
+
+  const mobileSearchBar = hasSearchBar && isValidElement<SearchBarProps>(searchBar)
+    ? cloneElement(searchBar, {
+        className: 'w-full',
+        inputRef: searchInputRef,
+        inputTabIndex: searchExpanded ? 0 : -1,
+        onBlur: (event) => {
+          searchBar.props.onBlur?.(event);
+          handleSearchBlur(event);
+        },
+        onKeyDown: (event) => {
+          searchBar.props.onKeyDown?.(event);
+          if (!event.defaultPrevented) {
+            handleSearchKeyDown(event);
+          }
+        },
+        showCloseButton: true,
+        closeButtonTabIndex: searchExpanded ? 0 : -1,
+        onClose: () => {
+          searchBar.props.onClose?.();
+          collapseSearch(true);
+        },
+      })
     : null;
 
   const profileMenuProps: ProfileMenuProps = {
@@ -131,39 +272,79 @@ const NavigationHeader = ({ title = 'Jot', onLogout, children, username, isAdmin
   return (
     <header className="bg-white dark:bg-slate-800 shadow-sm border-b border-gray-200 dark:border-slate-700">
       <div className="px-4 sm:px-6 lg:px-8">
-        {/*
-          flex-wrap + CSS order keeps a single ProfileMenu in the DOM:
-          mobile  — row 1: [title (order-1)] … [profile (order-2)], row 2: [search (order-3, w-full)]
-          desktop — one row: [title (order-1)] [search (sm:order-2, flex-1)] [profile (sm:order-3)]
-        */}
-        <div className="flex flex-wrap items-center justify-between gap-x-3 gap-y-3 py-4">
+        <div className="flex items-center gap-3 py-4">
           {onToggleSidebar && (
             <button
               onClick={onToggleSidebar}
-              aria-label="Toggle sidebar"
+              aria-label={t('nav.toggleSidebar')}
               className="order-0 p-1.5 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-white"
             >
               <Bars3Icon className="h-7 w-7" />
             </button>
           )}
-          <div className="order-1 flex items-center space-x-2 sm:space-x-4">
+          <div className={`${hasSearchBar && !isDesktop && searchExpanded ? 'sr-only' : 'min-w-0 flex-1'} sm:flex sm:min-w-0 sm:flex-none sm:items-center sm:space-x-4`}>
             {title === 'Jot' ? (
-              <Link to="/" className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400">
+              <Link
+                to="/"
+                tabIndex={hasSearchBar && !isDesktop && searchExpanded ? -1 : undefined}
+                className="truncate text-xl sm:text-2xl font-bold text-gray-900 dark:text-white hover:text-blue-600 dark:hover:text-blue-400"
+              >
                 {title}
               </Link>
             ) : (
-              <h1 className="text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">{title}</h1>
+              <h1 className="truncate text-xl sm:text-2xl font-bold text-gray-900 dark:text-white">{title}</h1>
             )}
           </div>
 
-          {/* Single ProfileMenu — right of title on mobile, far right on desktop */}
-          <div className="order-2 sm:order-3">
-            <ProfileMenu {...profileMenuProps} />
-          </div>
+          {hasSearchBar && !isDesktop && (
+            <div
+              ref={mobileSearchContainerRef}
+              className={`flex items-center gap-2 transition-[flex-basis,width] duration-200 ease-out ${
+                searchExpanded ? 'min-w-0 flex-1 basis-0' : 'flex-none'
+              }`}
+            >
+              <button
+                ref={searchTriggerRef}
+                type="button"
+                aria-label={t('dashboard.openSearch')}
+                aria-controls="mobile-navigation-search"
+                aria-expanded={searchExpanded}
+                onClick={() => setSearchExpanded(true)}
+                tabIndex={searchExpanded ? -1 : 0}
+                className={`flex h-9 items-center justify-center rounded-lg transition-all duration-200 ease-out focus:outline-none focus:ring-2 focus:ring-blue-500 ${
+                  searchExpanded
+                    ? 'pointer-events-none w-0 opacity-0 scale-95'
+                    : `w-9 opacity-100 scale-100 ${
+                        searchValue
+                          ? 'bg-blue-100 text-blue-600 dark:bg-blue-900/40 dark:text-blue-300'
+                          : 'text-gray-500 hover:bg-gray-100 hover:text-gray-700 dark:text-gray-400 dark:hover:bg-slate-700 dark:hover:text-white'
+                      }`
+                }`}
+              >
+                <MagnifyingGlassIcon className="h-5 w-5" />
+              </button>
+              <div
+                id="mobile-navigation-search"
+                aria-hidden={!searchExpanded}
+                className={`origin-right overflow-hidden transition-all duration-200 ease-out ${
+                  searchExpanded
+                    ? 'w-full opacity-100 scale-100'
+                    : 'pointer-events-none w-0 opacity-0 scale-95'
+                }`}
+              >
+                {mobileSearchBar}
+              </div>
+            </div>
+          )}
 
-          {/* Search bar — wraps to row 2 on mobile, fills middle on desktop */}
-          <div className="order-3 sm:order-2 w-full sm:w-auto sm:flex-1 flex justify-center">
-            {children}
+          {hasSearchBar && isDesktop && (
+            <div className="min-w-0 flex-1 justify-center sm:flex">
+              {searchBar}
+            </div>
+          )}
+
+          <div className="ml-auto flex-none sm:ml-0">
+            <ProfileMenu {...profileMenuProps} />
           </div>
         </div>
       </div>

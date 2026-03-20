@@ -4,6 +4,7 @@
   },
   "nav": {
     "profileMenu": "Profile menu",
+    "toggleSidebar": "Toggle sidebar",
     "settings": "Settings",
     "admin": "Admin",
     "logout": "Logout",
@@ -46,6 +47,8 @@
     "otherNotes": "Other Notes",
     "searchPlaceholder": "Search notes...",
     "searchAriaLabel": "Search notes",
+    "openSearch": "Open search",
+    "closeSearch": "Close search",
     "tabNotes": "Notes",
     "tabMyTodo": "My Todo",
     "myTodoTooltip": "Notes with to-do items assigned to you",

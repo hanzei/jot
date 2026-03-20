@@ -4,6 +4,7 @@
   },
   "nav": {
     "profileMenu": "Profilmenü",
+    "toggleSidebar": "Seitenleiste umschalten",
     "settings": "Einstellungen",
     "admin": "Admin",
     "logout": "Abmelden",
@@ -46,6 +47,8 @@
     "otherNotes": "Weitere Notizen",
     "searchPlaceholder": "Notizen suchen...",
     "searchAriaLabel": "Notizen suchen",
+    "openSearch": "Suche öffnen",
+    "closeSearch": "Suche schließen",
     "tabNotes": "Notizen",
     "tabMyTodo": "Meine Aufgaben",
     "myTodoTooltip": "Notizen mit dir zugewiesenen Aufgaben",

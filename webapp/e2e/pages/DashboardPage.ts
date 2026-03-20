@@ -7,6 +7,17 @@ export class DashboardPage {
     await this.page.goto('/');
   }
 
+  async setMobileViewport() {
+    await this.page.setViewportSize({ width: 390, height: 844 });
+  }
+
+  private async ensureSearchVisible() {
+    const openSearchButton = this.page.getByRole('button', { name: 'Open search' });
+    if (await openSearchButton.isVisible().catch(() => false)) {
+      await openSearchButton.click();
+    }
+  }
+
   async clickNewNote() {
     await this.page.click('button:has-text("New Note")');
   }
@@ -150,11 +161,34 @@ export class DashboardPage {
   }
 
   async search(query: string) {
+    await this.ensureSearchVisible();
     await this.page.fill('[aria-label="Search notes"]', query);
   }
 
   async clearSearch() {
+    await this.ensureSearchVisible();
     await this.page.fill('[aria-label="Search notes"]', '');
+  }
+
+  async openMobileSearch() {
+    await this.page.getByRole('button', { name: 'Open search' }).click();
+  }
+
+  async closeMobileSearch() {
+    await this.page.getByRole('button', { name: 'Close search' }).click();
+  }
+
+  async blurMobileSearch() {
+    await this.page.locator('main').click({ position: { x: 24, y: 24 } });
+  }
+
+  async expectMobileSearchCollapsed() {
+    await expect(this.page.getByRole('button', { name: 'Open search' })).toBeVisible();
+    await expect(this.page.locator('[aria-label="Search notes"]')).toBeHidden();
+  }
+
+  async expectSearchFocused() {
+    await expect(this.page.locator('[aria-label="Search notes"]')).toBeFocused();
   }
 
   private async ensureSidebarOpen() {
