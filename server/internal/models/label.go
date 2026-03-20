@@ -90,7 +90,9 @@ func (s *LabelStore) GetLabelNoteIDs(labelID, userID string) ([]string, error) {
 	if err != nil {
 		return nil, fmt.Errorf("get label note IDs: %w", err)
 	}
-	defer rows.Close()
+	defer func() {
+		_ = rows.Close()
+	}()
 
 	noteIDs := make([]string, 0)
 	for rows.Next() {

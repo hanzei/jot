@@ -320,7 +320,12 @@ export class DashboardPage {
     await this.ensureSidebarOpen();
     const row = this.sidebarLabelRow(currentName);
     await row.getByRole('button', { name: `Label options for ${currentName}` }).click();
-    await this.page.getByRole('menuitem', { name: 'Rename' }).click();
+    const renameMenuItem = this.page.getByRole('menuitem', { name: 'Rename' });
+    if (await renameMenuItem.count() > 0) {
+      await renameMenuItem.click();
+    } else {
+      await this.page.getByRole('button', { name: 'Rename', exact: true }).last().click();
+    }
     const input = this.page.getByPlaceholder('Rename label...');
     await input.fill(nextName);
     await input.press('Enter');
@@ -331,7 +336,12 @@ export class DashboardPage {
     await this.ensureSidebarOpen();
     const row = this.sidebarLabelRow(labelName);
     await row.getByRole('button', { name: `Label options for ${labelName}` }).click();
-    await this.page.getByRole('menuitem', { name: 'Delete' }).click();
+    const deleteMenuItem = this.page.getByRole('menuitem', { name: 'Delete' });
+    if (await deleteMenuItem.count() > 0) {
+      await deleteMenuItem.click();
+    } else {
+      await this.page.getByRole('button', { name: 'Delete', exact: true }).last().click();
+    }
     const confirmDialog = this.page.getByRole('dialog').last();
     await confirmDialog.getByRole('button', { name: 'Delete' }).click();
     await this.expectLabelNotInSidebar(labelName);
