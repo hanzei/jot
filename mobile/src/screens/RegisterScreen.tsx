@@ -10,11 +10,14 @@ import {
   ScrollView,
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import { AuthStackParamList } from '../navigation/AuthStack';
 import { restoreServerUrl, setServerUrl as configureServerUrl } from '../api/client';
 import { useServerUrl } from '../hooks/useServerUrl';
+import { VALIDATION } from '@jot/shared';
+import { displayMessage } from '../i18n/utils';
 
 type RegisterScreenProps = {
   navigation: NativeStackNavigationProp<AuthStackParamList, 'Register'>;
@@ -23,6 +26,7 @@ type RegisterScreenProps = {
 export default function RegisterScreen({ navigation }: RegisterScreenProps) {
   const { register } = useAuth();
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const { serverUrl, setServerUrl, validateServerUrl } = useServerUrl();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -31,13 +35,24 @@ export default function RegisterScreen({ navigation }: RegisterScreenProps) {
 
   const validate = (): string | null => {
     const urlError = validateServerUrl(serverUrl);
-    if (urlError) return urlError;
-    if (!username.trim()) return 'Username is required';
-    if (username.trim().length < 2 || username.trim().length > 30) {
-      return 'Username must be 2-30 characters';
+    if (urlError) return displayMessage(t, urlError);
+
+    const trimmedUsername = username.trim();
+    if (!trimmedUsername) return t('auth.usernameRequired');
+    if (trimmedUsername.length < VALIDATION.USERNAME_MIN_LENGTH) {
+      return t('auth.usernameMin');
     }
-    if (!password.trim()) return 'Password is required';
-    if (password.length < 8) return 'Password must be at least 8 characters';
+    if (trimmedUsername.length > VALIDATION.USERNAME_MAX_LENGTH) {
+      return t('auth.usernameMax');
+    }
+    if (!/^[a-zA-Z0-9_-]+$/.test(trimmedUsername)) {
+      return t('auth.usernameChars');
+    }
+    if (/^[_-]|[_-]$/.test(trimmedUsername)) {
+      return t('auth.usernameEdge');
+    }
+    if (!password.trim()) return t('auth.passwordRequired');
+    if (password.length < VALIDATION.PASSWORD_MIN_LENGTH) return t('auth.passwordMin');
     return null;
   };
 
@@ -57,10 +72,14 @@ export default function RegisterScreen({ navigation }: RegisterScreenProps) {
     } catch (err: unknown) {
       const response = (err as { response?: { status?: number; data?: string } })?.response;
       if (!response) {
-        setError('Unable to connect to server');
+        setError(t('auth.unableToConnect'));
       } else {
         const message = response.data;
-        setError(typeof message === 'string' && message ? message : 'Registration failed');
+        setError(
+          typeof message === 'string' && message
+            ? displayMessage(t, message)
+            : t('auth.registrationFailed'),
+        );
       }
     } finally {
       setLoading(false);
@@ -73,43 +92,43 @@ export default function RegisterScreen({ navigation }: RegisterScreenProps) {
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
       <ScrollView contentContainerStyle={styles.inner} keyboardShouldPersistTaps="handled">
-        <Text style={[styles.title, { color: colors.text }]}>Create Account</Text>
+        <Text style={[styles.title, { color: colors.text }]}>{t('auth.createAccountTitle')}</Text>
 
         {error ? <Text style={[styles.error, { color: colors.error }]}>{error}</Text> : null}
 
         <TextInput
           style={[styles.input, { backgroundColor: colors.inputBackground, borderColor: colors.inputBorder, color: colors.text }]}
-          placeholder="Server URL"
+          placeholder={t('auth.serverUrlPlaceholder')}
           placeholderTextColor={colors.placeholder}
           autoCapitalize="none"
           autoCorrect={false}
           keyboardType="url"
           value={serverUrl}
           onChangeText={setServerUrl}
-          accessibilityLabel="Server URL"
+          accessibilityLabel={t('auth.serverUrlPlaceholder')}
           testID="server-url-input"
         />
 
         <TextInput
           style={[styles.input, { backgroundColor: colors.inputBackground, borderColor: colors.inputBorder, color: colors.text }]}
-          placeholder="Username"
+          placeholder={t('auth.usernamePlaceholderLong')}
           placeholderTextColor={colors.placeholder}
           autoCapitalize="none"
           autoCorrect={false}
           value={username}
           onChangeText={setUsername}
-          accessibilityLabel="Username"
+          accessibilityLabel={t('settings.usernameLabel')}
           testID="username-input"
         />
 
         <TextInput
           style={[styles.input, { backgroundColor: colors.inputBackground, borderColor: colors.inputBorder, color: colors.text }]}
-          placeholder="Password"
+          placeholder={t('auth.passwordPlaceholderLong')}
           placeholderTextColor={colors.placeholder}
           secureTextEntry
           value={password}
           onChangeText={setPassword}
-          accessibilityLabel="Password"
+          accessibilityLabel={t('auth.passwordPlaceholder')}
           testID="password-input"
         />
 
@@ -122,7 +141,7 @@ export default function RegisterScreen({ navigation }: RegisterScreenProps) {
           {loading ? (
             <ActivityIndicator color="#fff" />
           ) : (
-            <Text style={styles.buttonText}>Create account</Text>
+            <Text style={styles.buttonText}>{t('auth.createAccount')}</Text>
           )}
         </TouchableOpacity>
 
@@ -131,7 +150,7 @@ export default function RegisterScreen({ navigation }: RegisterScreenProps) {
           style={styles.link}
           testID="login-link"
         >
-          <Text style={[styles.linkText, { color: colors.primary }]}>Already have an account? Sign in</Text>
+          <Text style={[styles.linkText, { color: colors.primary }]}>{t('auth.alreadyHaveAccount')}</Text>
         </TouchableOpacity>
       </ScrollView>
     </KeyboardAvoidingView>

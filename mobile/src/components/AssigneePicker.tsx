@@ -8,6 +8,7 @@ import {
   ScrollView,
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { useTranslation } from 'react-i18next';
 import UserAvatar from './UserAvatar';
 import { useTheme } from '../theme/ThemeContext';
 import { displayName, type Collaborator } from '@jot/shared';
@@ -28,6 +29,7 @@ export default function AssigneePicker({
   onClose,
 }: AssigneePickerProps) {
   const { colors } = useTheme();
+  const { t } = useTranslation();
 
   return (
     <Modal
@@ -44,11 +46,11 @@ export default function AssigneePicker({
       >
         <View style={[styles.sheet, { backgroundColor: colors.sheetBackground }]} onStartShouldSetResponder={() => true}>
           <View style={[styles.header, { borderBottomColor: colors.borderLight }]}>
-            <Text style={[styles.headerTitle, { color: colors.text }]}>Assign item</Text>
+            <Text style={[styles.headerTitle, { color: colors.text }]}>{t('note.assignItem')}</Text>
             <TouchableOpacity
               onPress={onClose}
               testID="assignee-picker-close"
-              accessibilityLabel="Close"
+              accessibilityLabel={t('common.close')}
             >
               <Ionicons name="close" size={22} color={colors.textSecondary} />
             </TouchableOpacity>
@@ -67,7 +69,7 @@ export default function AssigneePicker({
                   }}
                   testID={`assignee-option-${c.userId}`}
                   accessibilityRole="button"
-                  accessibilityLabel={`Assign to ${displayName(c)}`}
+                  accessibilityLabel={t('note.assignedTo', { name: displayName(c) })}
                   accessibilityState={{ selected: isSelected }}
                 >
                   <UserAvatar
@@ -97,13 +99,13 @@ export default function AssigneePicker({
                 }}
                 testID="assignee-unassign"
                 accessibilityRole="button"
-                accessibilityLabel="Unassign item"
+                accessibilityLabel={t('note.unassign')}
                 accessibilityState={{ selected: false }}
               >
                 <View style={styles.unassignIcon}>
                   <Ionicons name="person-remove-outline" size={16} color={colors.error} />
                 </View>
-                <Text style={[styles.unassignText, { color: colors.error }]}>Unassign</Text>
+                <Text style={[styles.unassignText, { color: colors.error }]}>{t('note.unassign')}</Text>
               </TouchableOpacity>
             </View>
           )}

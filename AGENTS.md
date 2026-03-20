@@ -31,7 +31,7 @@ All `task` commands are documented in `README.md`, `CLAUDE.md`, and `Taskfile.ym
 
 ### Non-obvious caveats
 
-- **Go 1.25+** is required (the `go.mod` specifies `go 1.25`). CGO must be enabled for the `go-sqlite3` driver, so `gcc` is needed. golangci-lint must be built with Go 1.25+ — install from source with `go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.2.2` rather than using the prebuilt binary.
+- **Go 1.25.0**, **golangci-lint v2.2.2**, and **task** are preinstalled by the VM update script. Go lives at `/usr/local/go/bin/go`; golangci-lint and task live at `$HOME/go/bin/`. CGO must be enabled for the `go-sqlite3` driver, so `gcc` is needed (preinstalled in the base image). If golangci-lint needs reinstalling, build from source (`go install github.com/golangci/golangci-lint/v2/cmd/golangci-lint@v2.2.2`) — the prebuilt binary may be compiled with an older Go version.
 - **Node 24+** is used (matching the Dockerfile). Install via `nvm install 24 && nvm alias default 24`.
 - **Playwright e2e tests**: Chromium is preinstalled by the VM update script (`npx playwright install chromium`), and webapp deps are preinstalled via `npm ci`. The Playwright config auto-starts the Go server and uses a temp DB, so no manual server startup is needed — just run `npm run test:e2e` from `webapp/`. If Chromium is missing for some reason, run `npx playwright install --with-deps chromium` in `webapp/`.
 - **Auth is session-cookie based** (not JWT). The first registered user becomes admin.

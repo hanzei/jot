@@ -165,6 +165,7 @@ func (s *Server) setupRoutes() error {
 			r.Get("/notes/{id}", s.wrapHandler(s.notesHandler.GetNote))
 			r.Patch("/notes/{id}", s.wrapHandler(s.notesHandler.UpdateNote))
 			r.Delete("/notes/{id}", s.wrapHandler(s.notesHandler.DeleteNote))
+			r.Post("/notes/{id}/duplicate", s.wrapHandler(s.notesHandler.DuplicateNote))
 
 			r.Post("/notes/{id}/restore", s.wrapHandler(s.notesHandler.RestoreNote))
 
@@ -176,6 +177,8 @@ func (s *Server) setupRoutes() error {
 			r.Delete("/notes/{id}/labels/{label_id}", s.wrapHandler(s.labelsHandler.RemoveLabel))
 
 			r.Get("/labels", s.wrapHandler(s.labelsHandler.GetLabels))
+			r.Patch("/labels/{id}", s.wrapHandler(s.labelsHandler.RenameLabel))
+			r.Delete("/labels/{id}", s.wrapHandler(s.labelsHandler.DeleteLabel))
 
 			r.Get("/users", s.wrapHandler(s.notesHandler.SearchUsers))
 

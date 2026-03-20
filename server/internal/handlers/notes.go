@@ -77,6 +77,7 @@ type CreateNoteItem struct {
 	Text        string `json:"text"`
 	Position    int    `json:"position"`
 	IndentLevel int    `json:"indent_level"`
+	Completed   bool   `json:"completed"`
 }
 
 type UpdateNoteRequest struct {
@@ -151,7 +152,7 @@ func (h *NotesHandler) createTodoItems(noteID string, items []CreateNoteItem) (i
 		if item.IndentLevel < 0 || item.IndentLevel > 1 {
 			return http.StatusBadRequest, errors.New("indent_level must be 0 or 1")
 		}
-		if _, err := h.noteStore.CreateItem(noteID, item.Text, item.Position, item.IndentLevel, ""); err != nil {
+		if _, err := h.noteStore.CreateItemWithCompleted(noteID, item.Text, item.Position, item.Completed, item.IndentLevel, ""); err != nil {
 			return http.StatusInternalServerError, err
 		}
 	}
@@ -291,6 +292,50 @@ func (h *NotesHandler) GetNote(w http.ResponseWriter, r *http.Request) (int, any
 	}
 
 	return http.StatusOK, note, nil
+}
+
+// DuplicateNote godoc
+//
+//	@Summary	Duplicate an existing note
+//	@Tags		notes
+//	@Security	CookieAuth
+//	@Produce	json
+//	@Param		id	path		string	true	"Note ID"
+//	@Success	201	{object}	models.Note
+//	@Failure	400	{string}	string	"bad request"
+//	@Failure	401	{string}	string	"unauthorized"
+//	@Failure	404	{string}	string	"not found"
+//	@Failure	500	{string}	string	"internal server error"
+//	@Router		/notes/{id}/duplicate [post]
+func (h *NotesHandler) DuplicateNote(w http.ResponseWriter, r *http.Request) (int, any, error) {
+	user, ok := auth.GetUserFromContext(r.Context())
+	if !ok {
+		return http.StatusUnauthorized, nil, errors.New("unauthorized")
+	}
+
+	id := chi.URLParam(r, "id")
+	if id == "" {
+		return http.StatusBadRequest, nil, errors.New("missing note ID")
+	}
+	if !models.IsValidID(id) {
+		return http.StatusBadRequest, nil, errors.New("invalid note ID format")
+	}
+
+	sourceNote, err := h.noteStore.GetByID(id, user.ID)
+	if err != nil {
+		if errors.Is(err, models.ErrNoteNotFound) {
+			return http.StatusNotFound, nil, err
+		}
+		return http.StatusInternalServerError, nil, err
+	}
+
+	duplicatedNote, err := h.noteStore.Duplicate(sourceNote, user.ID)
+	if err != nil {
+		return http.StatusInternalServerError, nil, err
+	}
+
+	h.publishNoteEvent(duplicatedNote.ID, sse.EventNoteCreated, duplicatedNote, user.ID)
+	return http.StatusCreated, duplicatedNote, nil
 }
 
 func (h *NotesHandler) validateTodoItems(noteID string, items []UpdateNoteItem) (int, error) {

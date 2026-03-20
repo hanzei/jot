@@ -66,6 +66,9 @@ export const notes = {
   restore: (id: string): Promise<Note> =>
     api.post(`/notes/${id}/restore`).then(res => res.data),
 
+  duplicate: (id: string): Promise<Note> =>
+    api.post(`/notes/${id}/duplicate`).then(res => res.data),
+
   share: (id: string, data: ShareNoteRequest): Promise<ShareNoteResponse> =>
     api.post(`/notes/${id}/share`, data).then(res => res.data),
 
@@ -94,6 +97,12 @@ export const notes = {
 export const labels = {
   getAll: (): Promise<Label[]> =>
     api.get('/labels').then(res => res.data),
+
+  rename: (id: string, name: string): Promise<Label> =>
+    api.patch(`/labels/${id}`, { name }).then(res => res.data),
+
+  delete: (id: string): Promise<void> =>
+    api.delete(`/labels/${id}`).then(() => undefined),
 };
 
 export const users = {
