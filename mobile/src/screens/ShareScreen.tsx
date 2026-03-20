@@ -116,7 +116,7 @@ export default function ShareScreen() {
         setPendingUserIds(new Set(pendingUserIdsRef.current));
       }
     },
-    [noteId],
+    [noteId, t],
   );
 
   const handleUnshare = useCallback(
@@ -179,7 +179,7 @@ export default function ShareScreen() {
         </TouchableOpacity>
       </View>
     ),
-    [handleUnshare, isUnsharing, colors],
+    [colors, handleUnshare, isUnsharing, t],
   );
 
   return (

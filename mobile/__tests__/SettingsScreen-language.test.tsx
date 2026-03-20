@@ -65,6 +65,14 @@ const setSettings = jest.fn((next) => {
 });
 
 const setUser = jest.fn();
+const authStateBase = {
+  isAuthenticated: true,
+  isLoading: false,
+  login: jest.fn(),
+  register: jest.fn(),
+  logout: jest.fn(),
+  revalidateSession: jest.fn(),
+};
 
 function TranslationProbe() {
   const { t } = useTranslation();
@@ -85,11 +93,12 @@ describe('SettingsScreen language selection', () => {
     mockUseAuth.mockImplementation(
       () =>
         ({
+          ...authStateBase,
           user,
           settings: currentSettings,
           setUser,
           setSettings,
-        }) as ReturnType<typeof useAuth>,
+        }) as unknown as ReturnType<typeof useAuth>,
     );
     await i18n.changeLanguage('en');
   });
@@ -125,11 +134,12 @@ describe('SettingsScreen language selection', () => {
     mockUseAuth.mockImplementation(
       () =>
         ({
+          ...authStateBase,
           user,
           settings: updatedSettings,
           setUser,
           setSettings,
-        }) as ReturnType<typeof useAuth>,
+        }) as unknown as ReturnType<typeof useAuth>,
     );
 
     const { getByTestId: getProbeByTestId } = render(

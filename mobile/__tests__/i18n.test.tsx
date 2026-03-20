@@ -14,6 +14,8 @@ jest.mock('../src/store/AuthContext', () => ({
 
 const mockGetLocales = getLocales as jest.MockedFunction<typeof getLocales>;
 const mockUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;
+const makeLocale = (languageCode: string, languageTag: string) =>
+  ({ languageCode, languageTag } as (typeof getLocales extends () => infer T ? T : never)[number]);
 
 function TranslationProbe() {
   const { t } = useTranslation();
@@ -22,22 +24,22 @@ function TranslationProbe() {
 
 describe('mobile i18n', () => {
   beforeEach(async () => {
-    mockGetLocales.mockReturnValue([{ languageTag: 'en-US', languageCode: 'en' }]);
-    mockUseAuth.mockReturnValue({ settings: { language: 'system' } } as ReturnType<typeof useAuth>);
+    mockGetLocales.mockReturnValue([makeLocale('en', 'en-US')]);
+    mockUseAuth.mockReturnValue({ settings: { language: 'system' } } as unknown as ReturnType<typeof useAuth>);
     await i18n.changeLanguage('en');
   });
 
   it('resolves system language from the device locale', () => {
-    expect(resolveLanguage('system', [{ languageTag: 'de-DE', languageCode: 'de' }])).toBe('de');
+    expect(resolveLanguage('system', [makeLocale('de', 'de-DE')])).toBe('de');
   });
 
   it('falls back to English when the device locale is unsupported', () => {
-    expect(resolveLanguage('system', [{ languageTag: 'fr-FR', languageCode: 'fr' }])).toBe('en');
+    expect(resolveLanguage('system', [makeLocale('fr', 'fr-FR')])).toBe('en');
     expect(getLanguagePreference('invalid-language')).toBe('system');
   });
 
   it('switches the active language when auth settings change', async () => {
-    mockUseAuth.mockReturnValue({ settings: { language: 'en' } } as ReturnType<typeof useAuth>);
+    mockUseAuth.mockReturnValue({ settings: { language: 'en' } } as unknown as ReturnType<typeof useAuth>);
 
     const { getByTestId, rerender } = render(
       <MobileI18nProvider>
@@ -49,7 +51,7 @@ describe('mobile i18n', () => {
       expect(getByTestId('settings-title').props.children).toBe('Settings');
     });
 
-    mockUseAuth.mockReturnValue({ settings: { language: 'de' } } as ReturnType<typeof useAuth>);
+    mockUseAuth.mockReturnValue({ settings: { language: 'de' } } as unknown as ReturnType<typeof useAuth>);
     rerender(
       <MobileI18nProvider>
         <TranslationProbe />
