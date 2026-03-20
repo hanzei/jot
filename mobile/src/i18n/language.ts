@@ -1,8 +1,8 @@
 import { getLocales, type Locale } from 'expo-localization';
+import { SUPPORTED_LANGUAGES, type LanguagePreference, type SupportedLanguage } from '@jot/shared';
 
-export const SUPPORTED_LANGUAGES = ['en', 'de', 'es', 'fr', 'pt', 'it', 'nl', 'pl'] as const;
-export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number];
-export type LanguagePreference = 'system' | SupportedLanguage;
+export { SUPPORTED_LANGUAGES };
+export type { SupportedLanguage, LanguagePreference };
 
 function getDeviceLanguage(locales: Locale[]): string | null {
   const primary = locales[0];

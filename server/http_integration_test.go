@@ -725,6 +725,8 @@ func TestChangePasswordEndpoint(t *testing.T) {
 func TestUserSettingsEndpoints(t *testing.T) {
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "settingsuser", "password123", false)
+	additionalLocales := []string{"es", "fr", "pt", "it", "nl", "pl"}
+	lastAdditionalLocale := additionalLocales[len(additionalLocales)-1]
 
 	t.Run("me response includes default settings for new user", func(t *testing.T) {
 		me, err := user.Client.Me(t.Context())
@@ -740,15 +742,20 @@ func TestUserSettingsEndpoints(t *testing.T) {
 	})
 
 	t.Run("PATCH /users/me accepts additional supported languages", func(t *testing.T) {
-		resp, err := user.Client.UpdateUser(t.Context(), &client.UpdateUserRequest{Language: client.Ptr("fr")})
-		require.NoError(t, err)
-		assert.Equal(t, "fr", resp.Settings.Language)
+		for _, locale := range additionalLocales {
+			locale := locale
+			t.Run(locale, func(t *testing.T) {
+				resp, err := user.Client.UpdateUser(t.Context(), &client.UpdateUserRequest{Language: client.Ptr(locale)})
+				require.NoError(t, err)
+				assert.Equal(t, locale, resp.Settings.Language)
+			})
+		}
 	})
 
 	t.Run("me response reflects updated language", func(t *testing.T) {
 		me, err := user.Client.Me(t.Context())
 		require.NoError(t, err)
-		assert.Equal(t, "fr", me.Settings.Language)
+		assert.Equal(t, lastAdditionalLocale, me.Settings.Language)
 	})
 
 	t.Run("PATCH /users/me with invalid language returns 400", func(t *testing.T) {
@@ -776,7 +783,7 @@ func TestUserSettingsEndpoints(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "Jane", resp.User.FirstName)
 		assert.Equal(t, "dark", resp.Settings.Theme)
-		assert.Equal(t, "fr", resp.Settings.Language)
+		assert.Equal(t, lastAdditionalLocale, resp.Settings.Language)
 	})
 
 	t.Run("me response includes settings", func(t *testing.T) {
@@ -790,7 +797,7 @@ func TestUserSettingsEndpoints(t *testing.T) {
 		auth, err := loginClient.Login(t.Context(), "settingsuser", "password123")
 		require.NoError(t, err)
 		assert.NotNil(t, auth.Settings)
-		assert.Equal(t, "fr", auth.Settings.Language)
+		assert.Equal(t, lastAdditionalLocale, auth.Settings.Language)
 	})
 
 	t.Run("register response includes settings", func(t *testing.T) {
