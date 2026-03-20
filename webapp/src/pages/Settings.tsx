@@ -21,6 +21,8 @@ interface SettingsProps {
   onLogout: () => void;
 }
 
+const CARD_CLASSES = 'bg-white dark:bg-slate-800 shadow rounded-lg p-6 border border-gray-200 dark:border-slate-700';
+
 const Settings = ({ onLogout }: SettingsProps) => {
   const { t } = useTranslation();
   const { showToast } = useToast();
@@ -309,7 +311,7 @@ const Settings = ({ onLogout }: SettingsProps) => {
 
           <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
             <div className="space-y-6">
-              <div className="bg-white dark:bg-slate-800 shadow rounded-lg p-6 border border-gray-200 dark:border-slate-700">
+              <div className={CARD_CLASSES}>
                 <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">{t('settings.profileIconSection')}</h2>
                 <div className="flex items-center space-x-4">
                   <div className="flex-shrink-0">
@@ -357,7 +359,7 @@ const Settings = ({ onLogout }: SettingsProps) => {
                 )}
               </div>
 
-              <div className="bg-white dark:bg-slate-800 shadow rounded-lg p-6 border border-gray-200 dark:border-slate-700">
+              <div className={CARD_CLASSES}>
                 <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">{t('settings.accountSection')}</h2>
                 <form onSubmit={handleSubmit}>
                   <div className="grid grid-cols-1 sm:grid-cols-2 gap-4">
@@ -421,7 +423,7 @@ const Settings = ({ onLogout }: SettingsProps) => {
                 </form>
               </div>
 
-              <div className="bg-white dark:bg-slate-800 shadow rounded-lg p-6 border border-gray-200 dark:border-slate-700">
+              <div className={CARD_CLASSES}>
                 <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">{t('settings.changePasswordSection')}</h2>
                 <form onSubmit={handlePasswordChange}>
                   <div>
@@ -487,7 +489,7 @@ const Settings = ({ onLogout }: SettingsProps) => {
             </div>
 
             <div className="space-y-6">
-              <div className="bg-white dark:bg-slate-800 shadow rounded-lg p-6 border border-gray-200 dark:border-slate-700">
+              <div className={CARD_CLASSES}>
                 <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">{t('settings.sessionsSection')}</h2>
                 <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
                   {t('settings.sessionsDescription')}
@@ -536,7 +538,7 @@ const Settings = ({ onLogout }: SettingsProps) => {
                 )}
               </div>
 
-              <div className="bg-white dark:bg-slate-800 shadow rounded-lg p-6 border border-gray-200 dark:border-slate-700">
+              <div className={CARD_CLASSES}>
                 <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">{t('settings.languageSection')}</h2>
                 <div>
                   <label htmlFor="language-select" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -556,7 +558,7 @@ const Settings = ({ onLogout }: SettingsProps) => {
                 </div>
               </div>
 
-              <div className="bg-white dark:bg-slate-800 shadow rounded-lg p-6 border border-gray-200 dark:border-slate-700">
+              <div className={CARD_CLASSES}>
                 <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">{t('settings.themeSection')}</h2>
                 <div>
                   <label htmlFor="theme-select" className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
@@ -575,7 +577,7 @@ const Settings = ({ onLogout }: SettingsProps) => {
                 </div>
               </div>
 
-              <div className="bg-white dark:bg-slate-800 shadow rounded-lg p-6 border border-gray-200 dark:border-slate-700">
+              <div className={CARD_CLASSES}>
                 <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">{t('settings.importSection')}</h2>
                 <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
                   {t('settings.importDescription')}
@@ -590,7 +592,7 @@ const Settings = ({ onLogout }: SettingsProps) => {
                 </button>
               </div>
 
-              <div className="bg-white dark:bg-slate-800 shadow rounded-lg p-6 border border-gray-200 dark:border-slate-700">
+              <div className={CARD_CLASSES}>
                 <h2 className="text-lg font-medium text-gray-900 dark:text-white mb-4">{t('settings.aboutSection')}</h2>
                 <button
                   type="button"
