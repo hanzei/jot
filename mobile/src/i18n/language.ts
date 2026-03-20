@@ -1,8 +1,8 @@
 import { getLocales, type Locale } from 'expo-localization';
+import { SUPPORTED_LANGUAGES, type LanguagePreference, type SupportedLanguage } from '@jot/shared';
 
-export const SUPPORTED_LANGUAGES = ['en', 'de'] as const;
-export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number];
-export type LanguagePreference = 'system' | SupportedLanguage;
+export { SUPPORTED_LANGUAGES };
+export type { SupportedLanguage, LanguagePreference };
 
 function getDeviceLanguage(locales: Locale[]): string | null {
   const primary = locales[0];
@@ -20,8 +20,8 @@ function getDeviceLanguage(locales: Locale[]): string | null {
 }
 
 export function getLanguagePreference(value?: string | null): LanguagePreference {
-  if (value === 'system' || value === 'en' || value === 'de') {
-    return value;
+  if (value === 'system' || (SUPPORTED_LANGUAGES as readonly string[]).includes(value ?? '')) {
+    return value as LanguagePreference;
   }
 
   return 'system';
