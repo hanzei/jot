@@ -2102,7 +2102,13 @@ const docTemplate = `{
                     "enum": [
                         "system",
                         "en",
-                        "de"
+                        "de",
+                        "es",
+                        "fr",
+                        "pt",
+                        "it",
+                        "nl",
+                        "pl"
                     ]
                 },
                 "last_name": {

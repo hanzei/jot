@@ -627,14 +627,20 @@ func TestUserSettingsEndpoints(t *testing.T) {
 		assert.Equal(t, "de", resp.Settings.Language)
 	})
 
+	t.Run("PATCH /users/me accepts phase-1 languages", func(t *testing.T) {
+		resp, err := user.Client.UpdateUser(t.Context(), &client.UpdateUserRequest{Language: client.Ptr("fr")})
+		require.NoError(t, err)
+		assert.Equal(t, "fr", resp.Settings.Language)
+	})
+
 	t.Run("me response reflects updated language", func(t *testing.T) {
 		me, err := user.Client.Me(t.Context())
 		require.NoError(t, err)
-		assert.Equal(t, "de", me.Settings.Language)
+		assert.Equal(t, "fr", me.Settings.Language)
 	})
 
 	t.Run("PATCH /users/me with invalid language returns 400", func(t *testing.T) {
-		_, err := user.Client.UpdateUser(t.Context(), &client.UpdateUserRequest{Language: client.Ptr("fr")})
+		_, err := user.Client.UpdateUser(t.Context(), &client.UpdateUserRequest{Language: client.Ptr("sv")})
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 
@@ -658,7 +664,7 @@ func TestUserSettingsEndpoints(t *testing.T) {
 		require.NoError(t, err)
 		assert.Equal(t, "Jane", resp.User.FirstName)
 		assert.Equal(t, "dark", resp.Settings.Theme)
-		assert.Equal(t, "de", resp.Settings.Language)
+		assert.Equal(t, "fr", resp.Settings.Language)
 	})
 
 	t.Run("me response includes settings", func(t *testing.T) {
@@ -672,7 +678,7 @@ func TestUserSettingsEndpoints(t *testing.T) {
 		auth, err := loginClient.Login(t.Context(), "settingsuser", "password123")
 		require.NoError(t, err)
 		assert.NotNil(t, auth.Settings)
-		assert.Equal(t, "de", auth.Settings.Language)
+		assert.Equal(t, "fr", auth.Settings.Language)
 	})
 
 	t.Run("register response includes settings", func(t *testing.T) {

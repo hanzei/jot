@@ -10,6 +10,12 @@ i18n
     resources: {
       en: { translation: en },
       de: { translation: de },
+      es: { translation: en },
+      fr: { translation: en },
+      pt: { translation: en },
+      it: { translation: en },
+      nl: { translation: en },
+      pl: { translation: en },
     },
     lng: resolveLanguage('system'),
     fallbackLng: 'en',

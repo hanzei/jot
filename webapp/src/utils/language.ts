@@ -1,6 +1,6 @@
 import { getSettings } from './auth';
 
-export const SUPPORTED_LANGUAGES = ['en', 'de'] as const;
+export const SUPPORTED_LANGUAGES = ['en', 'de', 'es', 'fr', 'pt', 'it', 'nl', 'pl'] as const;
 export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number];
 export type LanguagePreference = 'system' | SupportedLanguage;
 
@@ -8,8 +8,8 @@ export const getLanguagePreference = (): LanguagePreference => {
   const settings = getSettings();
   if (!settings) return 'system';
   const lang = settings.language;
-  if (lang === 'system' || lang === 'en' || lang === 'de') {
-    return lang;
+  if (lang === 'system' || (SUPPORTED_LANGUAGES as readonly string[]).includes(lang)) {
+    return lang as LanguagePreference;
   }
   return 'system';
 };

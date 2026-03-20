@@ -33,8 +33,15 @@ describe('mobile i18n', () => {
     expect(resolveLanguage('system', [makeLocale('de', 'de-DE')])).toBe('de');
   });
 
+  it('resolves supported phase-1 locales from the device locale', () => {
+    expect(resolveLanguage('system', [makeLocale('fr', 'fr-FR')])).toBe('fr');
+  });
+
   it('falls back to English when the device locale is unsupported', () => {
-    expect(resolveLanguage('system', [makeLocale('fr', 'fr-FR')])).toBe('en');
+    expect(resolveLanguage('system', [makeLocale('sv', 'sv-SE')])).toBe('en');
+  });
+
+  it('uses system for invalid saved language preference', () => {
     expect(getLanguagePreference('invalid-language')).toBe('system');
   });
 
