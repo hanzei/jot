@@ -108,6 +108,21 @@ test.describe('Notes', () => {
     await dashboardPage.expectNoteVisible('Archived Note');
   });
 
+  test('shows archive/bin view context help in sidebar and banners', async ({ page, dashboardPage }) => {
+    await dashboardPage.goto();
+
+    const archiveTab = page.locator('aside[aria-label="Main navigation"] nav [aria-label="Archive"]');
+    const binTab = page.locator('aside[aria-label="Main navigation"] nav [aria-label="Bin"]');
+    await expect(archiveTab).toHaveAttribute('title', 'Hidden notes you want to keep');
+    await expect(binTab).toHaveAttribute('title', 'Deleted notes — removed after 7 days');
+
+    await dashboardPage.switchToArchived();
+    await expect(page.getByText('Archived notes are hidden from the main view but kept forever.')).toBeVisible();
+
+    await dashboardPage.switchToBin();
+    await expect(page.getByText('Notes in the bin are deleted after 7 days')).toBeVisible();
+  });
+
   test('unarchives a note and it reappears in main view', async ({ dashboardPage }) => {
     await dashboardPage.goto();
     await dashboardPage.createNote('To Unarchive');

@@ -434,12 +434,14 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const bottomNavigationTabs = [
     {
       label: t('dashboard.tabArchive'),
+      title: t('dashboard.archiveTooltip'),
       icon: <ArchiveBoxIcon className="h-4 w-4 shrink-0" />,
       onClick: () => handleViewChange('archive'),
       isActive: showArchived,
     },
     {
       label: t('dashboard.tabBin'),
+      title: t('dashboard.binTooltip'),
       icon: <TrashIcon className="h-4 w-4 shrink-0" />,
       onClick: () => handleViewChange('bin'),
       isActive: showBin,
@@ -482,6 +484,13 @@ export default function Dashboard({ onLogout }: DashboardProps) {
               <PlusIcon className="h-5 w-5 mr-2" />
               {t('dashboard.newNote')}
             </button>
+          </div>
+        )}
+
+        {/* Archive info banner */}
+        {showArchived && (
+          <div className="mb-6 px-4 py-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg text-sm text-blue-800 dark:text-blue-300">
+            {t('dashboard.archiveInfo')}
           </div>
         )}
 

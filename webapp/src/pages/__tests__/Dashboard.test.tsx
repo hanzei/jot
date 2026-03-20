@@ -87,8 +87,8 @@ vi.mock('@/components/AppLayout', () => ({
     onLogout?: () => void;
     children?: ReactNode;
     isAdmin?: boolean;
-    sidebarTabs?: Array<{ label: string; onClick?: () => void; isActive?: boolean }>;
-    sidebarBottomTabs?: Array<{ label: string; onClick?: () => void; isActive?: boolean }>;
+    sidebarTabs?: Array<{ label: string; title?: string; onClick?: () => void; isActive?: boolean }>;
+    sidebarBottomTabs?: Array<{ label: string; title?: string; onClick?: () => void; isActive?: boolean }>;
     sidebarChildren?: ReactNode;
     searchBar?: ReactNode;
   }) => (
@@ -103,6 +103,7 @@ vi.mock('@/components/AppLayout', () => ({
             key={tab.label}
             onClick={tab.onClick}
             aria-label={tab.label}
+            title={tab.title}
             aria-current={tab.isActive ? 'page' : undefined}
           >
             {tab.label}
@@ -114,6 +115,7 @@ vi.mock('@/components/AppLayout', () => ({
             key={tab.label}
             onClick={tab.onClick}
             aria-label={tab.label}
+            title={tab.title}
             aria-current={tab.isActive ? 'page' : undefined}
           >
             {tab.label}
@@ -420,6 +422,14 @@ describe('Dashboard', () => {
       })
     })
 
+    it('shows archive info banner in archive view', async () => {
+      renderDashboard(['/?view=archive'])
+
+      await waitFor(() => {
+        expect(screen.getByText('Archived notes are hidden from the main view but kept forever.')).toBeInTheDocument()
+      })
+    })
+
     it('loads bin view from URL parameter', async () => {
       const mockNote = createMockNote({ id: 'bin-note-1', title: 'Binned Note' })
       const mockGetAll = vi.mocked(notes.getAll)
@@ -432,6 +442,8 @@ describe('Dashboard', () => {
       await waitFor(() => {
         expect(mockGetAll).toHaveBeenCalledWith(false, '', true, '', false)
       })
+
+      expect(screen.getByText('Notes in the bin are deleted after 7 days')).toBeInTheDocument()
 
       // Bin-specific controls should be rendered
       await waitFor(() => {
@@ -461,6 +473,15 @@ describe('Dashboard', () => {
 
       await waitFor(() => {
         expect(mockGetAll).toHaveBeenCalledWith(false, '', false, '', false)
+      })
+    })
+
+    it('sets sidebar tooltips for archive and bin tabs', async () => {
+      renderDashboard()
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Archive' })).toHaveAttribute('title', 'Hidden notes you want to keep')
+        expect(screen.getByRole('button', { name: 'Bin' })).toHaveAttribute('title', 'Deleted notes — removed after 7 days')
       })
     })
   })
