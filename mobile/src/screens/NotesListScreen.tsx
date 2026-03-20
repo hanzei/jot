@@ -63,6 +63,8 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   const [colorPickerNote, setColorPickerNote] = useState<Note | null>(null);
   const [localOrder, setLocalOrder] = useState<LocalReorderState>({ pinned: null, unpinned: null });
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const trashCountRef = useRef(0);
+  trashCountRef.current = trashCount;
   const { refreshUsers } = useUsers();
 
   // Debounce search input by 300ms
@@ -228,19 +230,23 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   }, [permanentDeleteNote, t]);
 
   const handleEmptyTrash = useCallback(() => {
-    if (trashCount === 0) {
+    const currentTrashCount = trashCountRef.current;
+    if (currentTrashCount === 0) {
       return;
     }
 
     Alert.alert(
       t('dashboard.emptyTrash'),
-      t('dashboard.emptyTrashConfirmMessage', { count: trashCount }),
+      t('dashboard.emptyTrashConfirmMessage', { count: currentTrashCount }),
       [
         { text: t('common.cancel'), style: 'cancel' },
         {
           text: t('dashboard.emptyTrash'),
           style: 'destructive',
           onPress: async () => {
+            if (trashCountRef.current === 0) {
+              return;
+            }
             if (!isConnected) {
               Alert.alert(t('common.error'), t('dashboard.emptyTrashOffline'));
               return;
@@ -270,7 +276,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
         },
       ],
     );
-  }, [db, handleRefresh, isConnected, t, trashCount]);
+  }, [db, handleRefresh, isConnected, t]);
 
   const handleChangeColor = useCallback((note: Note) => {
     setColorPickerNote(note);

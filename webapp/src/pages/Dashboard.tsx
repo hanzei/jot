@@ -175,7 +175,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       let notesData: Note[] = [];
       let nextTrashCount = 0;
 
-      if (showBin) {
+      if (showBin && searchQuery) {
         const [loadedNotes, allTrashedNotes] = await Promise.all([
           notes.getAll(showArchived, searchQuery, showBin, selectedLabelId ?? '', showMyTodo),
           notes.getAll(false, '', true),
@@ -184,6 +184,9 @@ export default function Dashboard({ onLogout }: DashboardProps) {
         nextTrashCount = allTrashedNotes.length;
       } else {
         notesData = await notes.getAll(showArchived, searchQuery, showBin, selectedLabelId ?? '', showMyTodo);
+        if (showBin) {
+          nextTrashCount = notesData.length;
+        }
       }
 
       if (isMountedRef.current) {
