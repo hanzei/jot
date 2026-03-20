@@ -1,17 +1,19 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
-import { PlusIcon, MagnifyingGlassIcon, TagIcon, DocumentTextIcon, ArchiveBoxIcon, TrashIcon, ClipboardDocumentCheckIcon } from '@heroicons/react/24/outline';
-import { useSidebarCollapsed } from '@/hooks/useSidebarCollapsed';
+import { PlusIcon, DocumentTextIcon, ArchiveBoxIcon, TrashIcon, ClipboardDocumentCheckIcon } from '@heroicons/react/24/outline';
 import { useTranslation } from 'react-i18next';
 import { notes, auth, labels as labelsApi, users as usersApi } from '@/utils/api';
 import { removeUser, getUser, isAdmin } from '@/utils/auth';
 import type { Note, Label, User, SSEEvent } from '@jot/shared';
 import { useSSE } from '@/utils/useSSE';
-import { useSearchParams } from 'react-router';
-import NavigationHeader from '@/components/NavigationHeader';
-import Sidebar from '@/components/Sidebar';
+import { useSearchParams, useParams } from 'react-router';
+import AppLayout from '@/components/AppLayout';
+import SearchBar from '@/components/SearchBar';
 import SortableNoteCard from '@/components/SortableNoteCard';
 import NoteModal from '@/components/NoteModal';
 import ShareModal from '@/components/ShareModal';
+import SidebarLabels from '@/components/SidebarLabels';
+import { useToast } from '@/hooks/useToast';
+import { isAnyModalDialogOpen, isEditableElementFocused, isOverlayControlFocused } from '@/utils/keyboardShortcuts';
 import {
   DndContext,
   closestCenter,
@@ -37,7 +39,8 @@ interface DashboardProps {
 
 export default function Dashboard({ onLogout }: DashboardProps) {
   const { t } = useTranslation();
-  const { collapsed, toggle: toggleSidebar, collapse: collapseSidebar } = useSidebarCollapsed();
+  const { showToast } = useToast();
+  const { noteId: noteIdParam } = useParams<{ noteId?: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const [notesList, setNotesList] = useState<Note[]>([]);
   const [loading, setLoading] = useState(true);
@@ -55,6 +58,9 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const [usersById, setUsersById] = useState<Map<string, User>>(new Map());
   const user = getUser();
   const isMountedRef = useRef(true);
+  const searchInputRef = useRef<HTMLInputElement>(null);
+  const openNoteIdRef = useRef<string | null>(null);
+  const returnPathRef = useRef('/');
   useEffect(() => {
     isMountedRef.current = true;
     return () => { isMountedRef.current = false; };
@@ -84,7 +90,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     });
   };
 
-  const handleViewChange = (view: 'notes' | 'archive' | 'bin' | 'my-todo') => {
+  const handleViewChange = useCallback((view: 'notes' | 'archive' | 'bin' | 'my-todo') => {
     setShowArchived(view === 'archive');
     setShowBin(view === 'bin');
     setShowMyTodo(view === 'my-todo');
@@ -105,7 +111,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       }
       return next;
     });
-  };
+  }, [setSearchParams]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -174,6 +180,57 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     loadNotes();
   }, [loadNotes]);
 
+  const restoreReturnUrl = useCallback(() => {
+    if (openNoteIdRef.current) {
+      openNoteIdRef.current = null;
+      const returnTo = returnPathRef.current;
+      returnPathRef.current = '/';
+      window.history.replaceState(null, '', returnTo);
+    }
+  }, []);
+
+  const openNoteFromUrl = useCallback((noteId: string) => {
+    openNoteIdRef.current = noteId;
+    returnPathRef.current = window.history.state?.returnTo ?? '/';
+    notes.getById(noteId)
+      .then(note => {
+        if (isMountedRef.current && openNoteIdRef.current === noteId) {
+          setEditingNote(note);
+          setIsModalOpen(true);
+        }
+      })
+      .catch(() => {
+        if (openNoteIdRef.current === noteId) {
+          openNoteIdRef.current = null;
+        }
+        if (isMountedRef.current) {
+          window.history.replaceState(null, '', '/');
+        }
+      });
+  }, []);
+
+  useEffect(() => {
+    if (noteIdParam) {
+      openNoteFromUrl(noteIdParam);
+    }
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  useEffect(() => {
+    const handlePopState = () => {
+      const notePathMatch = window.location.pathname.match(/^\/notes\/(.+)$/);
+      if (notePathMatch && !openNoteIdRef.current) {
+        openNoteFromUrl(notePathMatch[1]);
+      } else if (!notePathMatch && openNoteIdRef.current) {
+        openNoteIdRef.current = null;
+        setIsModalOpen(false);
+        setEditingNote(null);
+      }
+    };
+    window.addEventListener('popstate', handlePopState);
+    return () => window.removeEventListener('popstate', handlePopState);
+  }, [openNoteFromUrl]);
+
   const handleSSEEvent = useCallback((event: SSEEvent) => {
     const currentUserLostAccess =
       event.type === 'note_deleted' ||
@@ -183,6 +240,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       if (editingNote && event.note_id === editingNote.id) {
         setIsModalOpen(false);
         setEditingNote(null);
+        restoreReturnUrl();
       }
       if (sharingNote && event.note_id === sharingNote.id) {
         setIsShareModalOpen(false);
@@ -191,11 +249,10 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     }
 
     loadNotes();
-    // Only reload labels when a note update could have changed label assignments
     if (event.type === 'note_updated') {
       loadLabels();
     }
-  }, [editingNote, sharingNote, loadNotes, loadLabels, user?.id]);
+  }, [editingNote, sharingNote, loadNotes, loadLabels, user?.id, restoreReturnUrl]);
 
   useSSE({
     onEvent: handleSSEEvent,
@@ -212,30 +269,144 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     onLogout();
   };
 
-  const handleCreateNote = () => {
+  const handleCreateNote = useCallback(() => {
     setEditingNote(null);
     setIsModalOpen(true);
-  };
+  }, []);
+
+  useEffect(() => {
+    const handleKeyDown = (event: KeyboardEvent) => {
+      if (event.repeat) {
+        return;
+      }
+
+      if (event.defaultPrevented) {
+        return;
+      }
+
+      if (loading) {
+        return;
+      }
+
+      if (isEditableElementFocused() || isOverlayControlFocused() || isAnyModalDialogOpen()) {
+        return;
+      }
+
+      const isFocusSearchShortcut =
+        event.key.toLowerCase() === 'f' &&
+        (event.ctrlKey || event.metaKey) &&
+        !event.shiftKey &&
+        !event.altKey;
+
+      if (isFocusSearchShortcut) {
+        event.preventDefault();
+        searchInputRef.current?.focus();
+        return;
+      }
+
+      const isNewNoteShortcut =
+        event.key.toLowerCase() === 'n' &&
+        !event.shiftKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey;
+
+      if (isNewNoteShortcut) {
+        if (showBin) {
+          return;
+        }
+        event.preventDefault();
+        handleCreateNote();
+        return;
+      }
+
+      const isArchiveShortcut =
+        event.key.toLowerCase() === 'a' &&
+        !event.shiftKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey;
+
+      if (isArchiveShortcut) {
+        event.preventDefault();
+        handleViewChange('archive');
+        return;
+      }
+
+      const isNotesShortcut =
+        event.key.toLowerCase() === 'd' &&
+        !event.shiftKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey;
+
+      if (isNotesShortcut) {
+        event.preventDefault();
+        handleViewChange('notes');
+        return;
+      }
+
+      const isMyTodoShortcut =
+        event.key.toLowerCase() === 't' &&
+        !event.shiftKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey;
+
+      if (isMyTodoShortcut) {
+        event.preventDefault();
+        handleViewChange('my-todo');
+        return;
+      }
+
+      const isBinShortcut =
+        event.key.toLowerCase() === 'b' &&
+        !event.shiftKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey;
+
+      if (isBinShortcut) {
+        event.preventDefault();
+        handleViewChange('bin');
+      }
+    };
+
+    window.addEventListener('keydown', handleKeyDown);
+    return () => window.removeEventListener('keydown', handleKeyDown);
+  }, [handleCreateNote, handleViewChange, loading, showBin]);
 
   const handleEditNote = (note: Note) => {
+    if (openNoteIdRef.current === note.id) return;
+    if (!openNoteIdRef.current) {
+      returnPathRef.current = window.location.pathname + window.location.search;
+    }
+    openNoteIdRef.current = note.id;
     setEditingNote(note);
     setIsModalOpen(true);
+    window.history.pushState({ returnTo: returnPathRef.current }, '', `/notes/${note.id}`);
   };
 
   const handleNoteUpdate = () => {
     loadNotes();
+    loadLabels();
     setIsModalOpen(false);
     setEditingNote(null);
+    restoreReturnUrl();
   };
 
   const handleNoteRefresh = () => {
-    loadNotes(); // Only refresh data, don't close modal
+    loadNotes();
   };
 
   const handleDeleteNote = async (noteId: string) => {
     try {
       await notes.delete(noteId);
       loadNotes();
+      showToast(t('dashboard.noteDeleted'), 'success', {
+        label: t('dashboard.undo'),
+        onClick: () => handleRestoreNote(noteId),
+      });
     } catch (error) {
       console.error('Failed to delete note:', error);
     }
@@ -245,6 +416,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     try {
       await notes.restore(noteId);
       loadNotes();
+      showToast(t('dashboard.noteRestored'));
     } catch (error) {
       console.error('Failed to restore note:', error);
     }
@@ -254,6 +426,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     try {
       await notes.delete(noteId, { permanent: true });
       loadNotes();
+      showToast(t('dashboard.noteDeletedForever'));
     } catch (error) {
       console.error('Failed to permanently delete note:', error);
     }
@@ -267,7 +440,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const handleShareModalClose = () => {
     setIsShareModalOpen(false);
     setSharingNote(null);
-    loadNotes(); // Refresh notes to show updated sharing status
+    loadNotes();
   };
 
   const handleLabelSelect = (labelId: string | null) => {
@@ -307,41 +480,33 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       return;
     }
 
-    // Only allow reordering within the same group (pinned vs unpinned)
     if (activeNote.pinned !== overNote.pinned) {
       return;
     }
 
-    // Filter notes by the same pinned status
     const sameGroupNotes = notesList.filter(note => note.pinned === activeNote.pinned);
 
     const oldIndex = sameGroupNotes.findIndex(note => note.id === active.id);
     const newIndex = sameGroupNotes.findIndex(note => note.id === over.id);
 
     if (oldIndex !== newIndex) {
-      // Reorder the notes in the same group
       const reorderedNotes = arrayMove(sameGroupNotes, oldIndex, newIndex);
 
-      // Update local state immediately for better UX
       const updatedNotesList = [...notesList];
       const pinnedNotes = updatedNotesList.filter(note => note.pinned);
       const unpinnedNotes = updatedNotesList.filter(note => !note.pinned);
 
       if (activeNote.pinned) {
-        // Replace pinned notes with reordered ones
         setNotesList([...reorderedNotes, ...unpinnedNotes]);
       } else {
-        // Replace unpinned notes with reordered ones
         setNotesList([...pinnedNotes, ...reorderedNotes]);
       }
 
-      // Send the reorder request to the backend
       try {
         const noteIDs = reorderedNotes.map(note => note.id);
         await notes.reorder(noteIDs);
       } catch (error) {
         console.error('Failed to reorder notes:', error);
-        // Reload notes to revert to server state on error
         loadNotes();
       }
     }
@@ -349,7 +514,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center bg-gray-50 dark:bg-slate-900">
+      <div className="h-dvh flex items-center justify-center bg-gray-50 dark:bg-slate-900">
         <div data-testid="loading-spinner" className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
       </div>
     );
@@ -367,18 +532,21 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       icon: <ClipboardDocumentCheckIcon className="h-4 w-4 shrink-0" />,
       onClick: () => handleViewChange('my-todo'),
       isActive: showMyTodo,
+      title: t('dashboard.myTodoTooltip'),
     },
   ];
 
   const bottomNavigationTabs = [
     {
       label: t('dashboard.tabArchive'),
+      title: t('dashboard.archiveTooltip'),
       icon: <ArchiveBoxIcon className="h-4 w-4 shrink-0" />,
       onClick: () => handleViewChange('archive'),
       isActive: showArchived,
     },
     {
       label: t('dashboard.tabBin'),
+      title: t('dashboard.binTooltip'),
       icon: <TrashIcon className="h-4 w-4 shrink-0" />,
       onClick: () => handleViewChange('bin'),
       isActive: showBin,
@@ -386,59 +554,32 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   ];
 
   const searchBar = (
-    <div className="w-full sm:max-w-7xl">
-      <div className="relative">
-        <MagnifyingGlassIcon className="absolute left-3 top-1/2 transform -translate-y-1/2 h-4 w-4 sm:h-5 sm:w-5 text-gray-400 dark:text-gray-500" />
-        <input
-          type="text"
-          placeholder={t('dashboard.searchPlaceholder')}
-          aria-label={t('dashboard.searchAriaLabel')}
-          className="w-full pl-9 sm:pl-10 pr-4 py-2 text-sm sm:text-base border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
-          value={searchQuery}
-          onChange={(e) => setSearchQuery(e.target.value)}
-        />
-      </div>
-    </div>
+    <SearchBar
+      value={searchQuery}
+      onChange={setSearchQuery}
+      inputRef={searchInputRef}
+    />
+  );
+
+  const sidebarChildren = (
+    <SidebarLabels
+      labels={labelsList}
+      selectedLabelId={selectedLabelId}
+      onSelect={(labelId) => handleLabelSelect(selectedLabelId === labelId ? null : labelId)}
+    />
   );
 
   return (
-    <div className="min-h-screen bg-gray-50 dark:bg-slate-900 flex flex-col">
-      <NavigationHeader
-        title="Jot"
-        onLogout={handleLogout}
-        isAdmin={isAdmin()}
-        onToggleSidebar={toggleSidebar}
-      >
-        {searchBar}
-      </NavigationHeader>
-
-      <div className="relative flex flex-1">
-        <Sidebar tabs={navigationTabs} bottomTabs={bottomNavigationTabs} collapsed={collapsed} onCollapse={collapseSidebar}>
-          {labelsList.length > 0 && (
-            <div className="px-2 pb-2">
-              <ul className="space-y-0.5">
-                {labelsList.map((label) => (
-                  <li key={label.id}>
-                    <button
-                      onClick={() => handleLabelSelect(selectedLabelId === label.id ? null : label.id)}
-                      className={`flex items-center gap-2 w-full text-left px-3 py-1.5 rounded-md text-sm ${
-                        selectedLabelId === label.id
-                          ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium'
-                          : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-slate-700'
-                      }`}
-                    >
-                      <TagIcon className="h-4 w-4 shrink-0" />
-                      <span className="truncate min-w-0">{label.name}</span>
-                    </button>
-                  </li>
-                ))}
-              </ul>
-            </div>
-          )}
-        </Sidebar>
-
-        {/* Main content */}
-        <main className="flex-1 max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+    <AppLayout
+      title="Jot"
+      onLogout={handleLogout}
+      isAdmin={isAdmin()}
+      sidebarTabs={navigationTabs}
+      sidebarBottomTabs={bottomNavigationTabs}
+      sidebarChildren={sidebarChildren}
+      searchBar={searchBar}
+    >
+      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
         {/* Create note button — hidden in bin view */}
         {!showBin && (
           <div className="mb-8">
@@ -449,6 +590,18 @@ export default function Dashboard({ onLogout }: DashboardProps) {
               <PlusIcon className="h-5 w-5 mr-2" />
               {t('dashboard.newNote')}
             </button>
+            {showMyTodo && (
+              <div className="mt-3 px-4 py-2 bg-blue-50 dark:bg-slate-800 border border-blue-100 dark:border-slate-700 rounded-lg text-sm text-blue-800 dark:text-slate-200">
+                {t('dashboard.myTodoInfo')}
+              </div>
+            )}
+          </div>
+        )}
+
+        {/* Archive info banner */}
+        {showArchived && (
+          <div className="mb-6 px-4 py-2 bg-blue-50 dark:bg-blue-900/20 border border-blue-200 dark:border-blue-800 rounded-lg text-sm text-blue-800 dark:text-blue-300">
+            {t('dashboard.archiveInfo')}
           </div>
         )}
 
@@ -462,14 +615,22 @@ export default function Dashboard({ onLogout }: DashboardProps) {
         {/* Notes grid */}
         {!notesList || notesList.length === 0 ? (
           <div className="text-center py-12">
-            <div className="text-gray-500 dark:text-gray-400 text-lg">
+            <div className="mx-auto max-w-xl text-gray-500 dark:text-gray-400 text-lg whitespace-normal break-words">
               {searchQuery
                 ? t('dashboard.noSearchResults', { query: searchQuery })
                 : showBin ? t('dashboard.noBinnedNotes') : showArchived ? t('dashboard.noArchivedNotes') : showMyTodo ? t('dashboard.noMyTodoNotes') : t('dashboard.noNotesYet')}
             </div>
-            <div className="text-gray-400 dark:text-gray-500 text-sm mt-2">
-              {!showArchived && !showBin && !showMyTodo && !searchQuery && t('dashboard.createFirstNote')}
-            </div>
+            {!showArchived && !showBin && !showMyTodo && !searchQuery && (
+              <div className="mt-4">
+                <button
+                  onClick={handleCreateNote}
+                  className="inline-flex items-center px-4 py-2 text-sm font-medium rounded-md text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30 border border-blue-200 dark:border-blue-800 transition-colors"
+                >
+                  <PlusIcon className="h-5 w-5 mr-2" />
+                  {t('dashboard.createFirstNoteCta')}
+                </button>
+              </div>
+            )}
           </div>
         ) : (
           <DndContext
@@ -554,7 +715,11 @@ export default function Dashboard({ onLogout }: DashboardProps) {
         {isModalOpen && (
           <NoteModal
             note={editingNote}
-            onClose={() => setIsModalOpen(false)}
+            onClose={() => {
+              setIsModalOpen(false);
+              setEditingNote(null);
+              restoreReturnUrl();
+            }}
             onSave={handleNoteUpdate}
             onRefresh={handleNoteRefresh}
             onShare={handleShareNote}
@@ -573,8 +738,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
             onClose={handleShareModalClose}
           />
         )}
-      </main>
       </div>
-    </div>
+    </AppLayout>
   );
 }

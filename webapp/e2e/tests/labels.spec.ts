@@ -1,5 +1,47 @@
 import { test, expect } from '../fixtures';
 
+test.describe('Labels on Note Creation', () => {
+  test.beforeEach(async ({ authenticatedUser }) => {
+    void authenticatedUser;
+  });
+
+  test('can add a label while creating a new note', async ({ dashboardPage }) => {
+    await dashboardPage.goto();
+    await dashboardPage.createNoteWithLabels('Created With Label', 'content', ['myLabel']);
+    await dashboardPage.expectLabelInSidebar('myLabel');
+  });
+
+  test('label added during creation appears on the note card', async ({ dashboardPage }) => {
+    await dashboardPage.goto();
+    await dashboardPage.createNoteWithLabels('Badge Note', 'content', ['visible']);
+    const card = dashboardPage.noteCard('Badge Note');
+    await expect(card.getByText('visible')).toBeVisible();
+  });
+
+  test('note created with label is filterable by that label', async ({ dashboardPage }) => {
+    await dashboardPage.goto();
+    await dashboardPage.createNote('Plain', 'no label');
+    await dashboardPage.createNoteWithLabels('Labeled', 'content', ['filterme']);
+
+    await dashboardPage.selectSidebarLabel('filterme');
+
+    await dashboardPage.expectNoteVisible('Labeled');
+    await dashboardPage.expectNoteNotVisible('Plain');
+  });
+
+  test('multiple labels can be added during creation', async ({ dashboardPage }) => {
+    await dashboardPage.goto();
+    await dashboardPage.createNoteWithLabels('Multi Label', 'content', ['alpha', 'beta']);
+
+    await dashboardPage.expectLabelInSidebar('alpha');
+    await dashboardPage.expectLabelInSidebar('beta');
+
+    const card = dashboardPage.noteCard('Multi Label');
+    await expect(card.getByText('alpha')).toBeVisible();
+    await expect(card.getByText('beta')).toBeVisible();
+  });
+});
+
 test.describe('Label Filtering', () => {
   test.beforeEach(async ({ authenticatedUser }) => {
     // Ensure we're logged in for every test in this suite
@@ -130,5 +172,71 @@ test.describe('Label Filtering', () => {
 
     await dashboardPage.switchToBin();
     await expect(page).not.toHaveURL(/label=/);
+  });
+
+  test('archive and bin appear directly after the label list in the sidebar', async ({ dashboardPage }) => {
+    await dashboardPage.goto();
+    await dashboardPage.createNote('Note A', 'content');
+    await dashboardPage.addLabelToNote('Note A', 'sidebar-order');
+    await dashboardPage.expectLabelInSidebar('sidebar-order');
+
+    await dashboardPage.expectArchiveAndBinDirectlyAfterLabel('sidebar-order');
+  });
+});
+
+test.describe('Label Filtering — Mobile', () => {
+  test.use({ viewport: { width: 375, height: 812 } });
+
+  test.beforeEach(async ({ authenticatedUser }) => {
+    void authenticatedUser;
+  });
+
+  test('label list is visible in the sidebar on mobile', async ({ page, dashboardPage }) => {
+    await dashboardPage.goto();
+    await dashboardPage.createNote('Mobile Note', 'content');
+    await dashboardPage.addLabelToNote('Mobile Note', 'mobilelabel');
+
+    const sidebar = page.locator('aside[aria-label="Main navigation"]');
+    await expect(sidebar).toBeHidden();
+
+    await page.getByRole('button', { name: 'Toggle sidebar' }).click();
+    await expect(sidebar).toBeVisible();
+
+    await expect(sidebar.getByTestId('sidebar-labels')).toBeVisible();
+    await expect(
+      sidebar.locator('ul').getByRole('button', { name: 'mobilelabel', exact: true })
+    ).toBeVisible();
+  });
+
+  test('clicking a label filters notes and closes the sidebar on mobile', async ({ page, dashboardPage }) => {
+    await dashboardPage.goto();
+    await dashboardPage.createNote('Labeled Mobile', 'has label');
+    await dashboardPage.createNote('Plain Mobile', 'no label');
+    await dashboardPage.addLabelToNote('Labeled Mobile', 'mobiletag');
+
+    const sidebar = page.locator('aside[aria-label="Main navigation"]');
+    await expect(sidebar).toBeHidden();
+
+    await dashboardPage.selectSidebarLabel('mobiletag');
+    await expect(sidebar).toBeHidden();
+
+    await dashboardPage.expectNoteVisible('Labeled Mobile');
+    await dashboardPage.expectNoteNotVisible('Plain Mobile');
+  });
+
+  test('multiple labels appear in the sidebar on mobile', async ({ page, dashboardPage }) => {
+    await dashboardPage.goto();
+    await dashboardPage.createNoteWithLabels('Multi Mobile', 'content', ['alpha', 'beta']);
+
+    const sidebar = page.locator('aside[aria-label="Main navigation"]');
+    await page.getByRole('button', { name: 'Toggle sidebar' }).click();
+    await expect(sidebar).toBeVisible();
+
+    await expect(
+      sidebar.locator('ul').getByRole('button', { name: 'alpha', exact: true })
+    ).toBeVisible();
+    await expect(
+      sidebar.locator('ul').getByRole('button', { name: 'beta', exact: true })
+    ).toBeVisible();
   });
 });

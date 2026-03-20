@@ -1,18 +1,20 @@
 import { render, screen, waitFor, fireEvent } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { MemoryRouter, useLocation } from 'react-router'
+import { MemoryRouter, useLocation, Routes, Route } from 'react-router'
 import { type ReactNode } from 'react'
 import Dashboard from '../Dashboard'
 import type { Note, Label } from '@jot/shared'
 import { notes, labels } from '@/utils/api'
 import * as auth from '@/utils/auth'
 import { createMockNote } from '@/utils/__tests__/test-helpers'
+import { ToastProvider } from '@/components/Toast'
 
 // Mock dependencies
 vi.mock('@/utils/api', () => ({
   notes: {
     getAll: vi.fn(),
+    getById: vi.fn(),
     delete: vi.fn(),
     reorder: vi.fn(),
     restore: vi.fn(),
@@ -78,22 +80,49 @@ vi.mock('@/utils/useSSE', () => ({
   useSSE: vi.fn(),
 }))
 
-// Mock child components
-vi.mock('@/components/NavigationHeader', () => ({
-  default: ({ title, onLogout, children, isAdmin: showAdminLink, onToggleSidebar }: {
+// Mock AppLayout to render children and expose props for testing
+vi.mock('@/components/AppLayout', () => ({
+  default: ({ title, onLogout, children, isAdmin: showAdminLink, sidebarTabs, sidebarBottomTabs, sidebarChildren, searchBar }: {
     title?: string;
     onLogout?: () => void;
     children?: ReactNode;
     isAdmin?: boolean;
-    onToggleSidebar?: () => void;
+    sidebarTabs?: Array<{ label: string; onClick?: () => void; isActive?: boolean; title?: string }>;
+    sidebarBottomTabs?: Array<{ label: string; onClick?: () => void; isActive?: boolean; title?: string }>;
+    sidebarChildren?: ReactNode;
+    searchBar?: ReactNode;
   }) => (
-    <div data-testid="navigation-header">
+    <div data-testid="app-layout">
       <h1>{title}</h1>
       <button onClick={onLogout} data-testid="logout-button">Logout</button>
-      {onToggleSidebar && <button onClick={onToggleSidebar} data-testid="sidebar-toggle">Toggle sidebar</button>}
-      <div data-testid="tabs" />
       {showAdminLink && <div data-testid="admin-link">Admin</div>}
-      <div data-testid="search-bar">{children}</div>
+      <div data-testid="search-bar">{searchBar}</div>
+      <div data-testid="sidebar">
+        {sidebarTabs?.map(tab => (
+          <button
+            key={tab.label}
+            onClick={tab.onClick}
+            aria-label={tab.label}
+            title={tab.title}
+            aria-current={tab.isActive ? 'page' : undefined}
+          >
+            {tab.label}
+          </button>
+        ))}
+        {sidebarChildren}
+        {sidebarBottomTabs?.map(tab => (
+          <button
+            key={tab.label}
+            onClick={tab.onClick}
+            aria-label={tab.label}
+            title={tab.title}
+            aria-current={tab.isActive ? 'page' : undefined}
+          >
+            {tab.label}
+          </button>
+        ))}
+      </div>
+      {children}
     </div>
   ),
 }))
@@ -157,7 +186,14 @@ vi.spyOn(console, 'error').mockImplementation(mockConsoleError)
 const renderDashboard = (initialEntries = ['/']) => {
   return render(
     <MemoryRouter initialEntries={initialEntries}>
-      <Dashboard onLogout={vi.fn()} />
+      <ToastProvider>
+        <Routes>
+          <Route element={<Dashboard onLogout={vi.fn()} />}>
+            <Route index element={null} />
+            <Route path="notes/:noteId" element={null} />
+          </Route>
+        </Routes>
+      </ToastProvider>
     </MemoryRouter>
   )
 }
@@ -169,8 +205,8 @@ describe('Dashboard', () => {
     vi.mocked(auth.getUser).mockReturnValue({
       id: 'user1',
       username: 'testuser',
-  first_name: '',
-  last_name: '',
+      first_name: '',
+      last_name: '',
       role: 'user',
       created_at: '2023-01-01T00:00:00Z',
       updated_at: '2023-01-01T00:00:00Z',
@@ -209,6 +245,7 @@ describe('Dashboard', () => {
 
       await waitFor(() => {
         expect(screen.getByText('Notes')).toBeInTheDocument()
+        expect(screen.getByText('My Todo')).toBeInTheDocument()
         expect(screen.getByText('Archive')).toBeInTheDocument()
         expect(screen.getByText('Bin')).toBeInTheDocument()
       })
@@ -379,10 +416,18 @@ describe('Dashboard', () => {
     it('loads archive view from URL parameter', async () => {
       const mockGetAll = vi.mocked(notes.getAll)
       
-      renderDashboard(['/dashboard?view=archive'])
+      renderDashboard(['/?view=archive'])
       
       await waitFor(() => {
         expect(mockGetAll).toHaveBeenCalledWith(true, '', false, '', false)
+      })
+    })
+
+    it('shows archive info banner in archive view', async () => {
+      renderDashboard(['/?view=archive'])
+
+      await waitFor(() => {
+        expect(screen.getByText('Archived notes are hidden from the main view but kept forever.')).toBeInTheDocument()
       })
     })
 
@@ -393,11 +438,13 @@ describe('Dashboard', () => {
       vi.mocked(notes.restore).mockResolvedValue(mockNote)
       vi.mocked(notes.delete).mockResolvedValue(undefined)
 
-      renderDashboard(['/dashboard?view=bin'])
+      renderDashboard(['/?view=bin'])
 
       await waitFor(() => {
         expect(mockGetAll).toHaveBeenCalledWith(false, '', true, '', false)
       })
+
+      expect(await screen.findByText('Notes in the bin are deleted after 7 days')).toBeInTheDocument()
 
       // Bin-specific controls should be rendered
       await waitFor(() => {
@@ -423,10 +470,19 @@ describe('Dashboard', () => {
     it('handles malformed URL parameters gracefully', async () => {
       const mockGetAll = vi.mocked(notes.getAll)
 
-      renderDashboard(['/dashboard?view=invalid'])
+      renderDashboard(['/?view=invalid'])
 
       await waitFor(() => {
         expect(mockGetAll).toHaveBeenCalledWith(false, '', false, '', false)
+      })
+    })
+
+    it('sets sidebar tooltips for archive and bin tabs', async () => {
+      renderDashboard()
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Archive' })).toHaveAttribute('title', 'Hidden notes you want to keep')
+        expect(screen.getByRole('button', { name: 'Bin' })).toHaveAttribute('title', 'Deleted notes — removed after 7 days')
       })
     })
   })
@@ -439,7 +495,7 @@ describe('Dashboard', () => {
       
       await waitFor(() => {
         expect(screen.getByText('No notes yet')).toBeInTheDocument()
-        expect(screen.getByText('Click "New Note" to create your first note')).toBeInTheDocument()
+        expect(screen.getByText('Create your first note')).toBeInTheDocument()
       })
     })
 
@@ -548,6 +604,33 @@ describe('Dashboard', () => {
         expect(screen.getByTestId('note-modal')).toBeInTheDocument()
         expect(screen.getByText('Edit Note')).toBeInTheDocument()
       })
+    })
+
+    it('opens modal automatically when navigating to permalink route', async () => {
+      const mockNote = createMockNote({ id: 'abc123', title: 'Permalink Note' })
+      vi.mocked(notes.getById).mockResolvedValue(mockNote)
+
+      renderDashboard(['/notes/abc123'])
+
+      await waitFor(() => {
+        expect(notes.getById).toHaveBeenCalledWith('abc123')
+        expect(screen.getByTestId('note-modal')).toBeInTheDocument()
+        expect(screen.getByText('Edit Note')).toBeInTheDocument()
+      })
+    })
+
+    it('redirects to dashboard when permalink note is not found', async () => {
+      vi.mocked(notes.getById).mockRejectedValue(new Error('Not found'))
+      const replaceStateSpy = vi.spyOn(window.history, 'replaceState')
+
+      renderDashboard(['/notes/invalid-id'])
+
+      await waitFor(() => {
+        expect(notes.getById).toHaveBeenCalledWith('invalid-id')
+        expect(replaceStateSpy).toHaveBeenCalledWith(null, '', '/')
+      })
+
+      replaceStateSpy.mockRestore()
     })
 
     it('handles note deletion successfully', async () => {
@@ -680,7 +763,9 @@ describe('Dashboard', () => {
 
       render(
         <MemoryRouter>
-          <Dashboard onLogout={mockOnLogout} />
+          <ToastProvider>
+            <Dashboard onLogout={mockOnLogout} />
+          </ToastProvider>
         </MemoryRouter>
       )
 
@@ -843,7 +928,9 @@ describe('Dashboard', () => {
   it('renders label list in sidebar when labels exist', async () => {
     render(
       <MemoryRouter initialEntries={['/']}>
-        <Dashboard onLogout={vi.fn()} />
+        <ToastProvider>
+          <Dashboard onLogout={vi.fn()} />
+        </ToastProvider>
       </MemoryRouter>
     )
 
@@ -858,7 +945,9 @@ describe('Dashboard', () => {
 
     render(
       <MemoryRouter initialEntries={['/']}>
-        <Dashboard onLogout={vi.fn()} />
+        <ToastProvider>
+          <Dashboard onLogout={vi.fn()} />
+        </ToastProvider>
       </MemoryRouter>
     )
 
@@ -875,7 +964,9 @@ describe('Dashboard', () => {
 
     render(
       <MemoryRouter initialEntries={['/']}>
-        <Dashboard onLogout={vi.fn()} />
+        <ToastProvider>
+          <Dashboard onLogout={vi.fn()} />
+        </ToastProvider>
       </MemoryRouter>
     )
 
@@ -896,7 +987,9 @@ describe('Dashboard', () => {
 
     render(
       <MemoryRouter initialEntries={['/']}>
-        <Dashboard onLogout={vi.fn()} />
+        <ToastProvider>
+          <Dashboard onLogout={vi.fn()} />
+        </ToastProvider>
       </MemoryRouter>
     )
 
@@ -929,7 +1022,9 @@ describe('Dashboard', () => {
 
     render(
       <MemoryRouter initialEntries={['/']}>
-        <Dashboard onLogout={vi.fn()} />
+        <ToastProvider>
+          <Dashboard onLogout={vi.fn()} />
+        </ToastProvider>
         <LocationProbe />
       </MemoryRouter>
     )
@@ -958,7 +1053,7 @@ describe('Dashboard', () => {
 
     render(
       <MemoryRouter initialEntries={['/?label=label-work']}>
-        <Dashboard onLogout={vi.fn()} />
+        <ToastProvider><Dashboard onLogout={vi.fn()} /></ToastProvider>
       </MemoryRouter>
     )
 
@@ -985,7 +1080,7 @@ describe('Dashboard', () => {
 
     render(
       <MemoryRouter initialEntries={['/?view=archive']}>
-        <Dashboard onLogout={vi.fn()} />
+        <ToastProvider><Dashboard onLogout={vi.fn()} /></ToastProvider>
       </MemoryRouter>
     )
 
@@ -1010,7 +1105,7 @@ describe('Dashboard', () => {
 
     render(
       <MemoryRouter initialEntries={['/?view=bin']}>
-        <Dashboard onLogout={vi.fn()} />
+        <ToastProvider><Dashboard onLogout={vi.fn()} /></ToastProvider>
       </MemoryRouter>
     )
 
@@ -1035,7 +1130,7 @@ describe('Dashboard', () => {
 
     render(
       <MemoryRouter initialEntries={['/?search=hello']}>
-        <Dashboard onLogout={vi.fn()} />
+        <ToastProvider><Dashboard onLogout={vi.fn()} /></ToastProvider>
       </MemoryRouter>
     )
 
@@ -1059,7 +1154,9 @@ describe('Dashboard', () => {
 
     render(
       <MemoryRouter initialEntries={['/']}>
-        <Dashboard onLogout={vi.fn()} />
+        <ToastProvider>
+          <Dashboard onLogout={vi.fn()} />
+        </ToastProvider>
       </MemoryRouter>
     )
 
@@ -1086,7 +1183,7 @@ describe('Dashboard', () => {
 
     render(
       <MemoryRouter initialEntries={['/?label=label-work']}>
-        <Dashboard onLogout={vi.fn()} />
+        <ToastProvider><Dashboard onLogout={vi.fn()} /></ToastProvider>
       </MemoryRouter>
     )
 
@@ -1111,7 +1208,7 @@ describe('Dashboard', () => {
 
     render(
       <MemoryRouter initialEntries={['/?view=archive&label=label-work']}>
-        <Dashboard onLogout={vi.fn()} />
+        <ToastProvider><Dashboard onLogout={vi.fn()} /></ToastProvider>
       </MemoryRouter>
     )
 
@@ -1135,7 +1232,7 @@ describe('Dashboard', () => {
 
     render(
       <MemoryRouter initialEntries={['/?label=label-work']}>
-        <Dashboard onLogout={vi.fn()} />
+        <ToastProvider><Dashboard onLogout={vi.fn()} /></ToastProvider>
       </MemoryRouter>
     )
 
@@ -1182,7 +1279,7 @@ describe('Dashboard', () => {
     it('loads My Todo view from URL parameter', async () => {
       const mockGetAll = vi.mocked(notes.getAll)
 
-      renderDashboard(['/dashboard?view=my-todo'])
+      renderDashboard(['/?view=my-todo'])
 
       await waitFor(() => {
         expect(mockGetAll).toHaveBeenCalledWith(false, '', false, '', true)
@@ -1202,7 +1299,35 @@ describe('Dashboard', () => {
       await user.click(screen.getByRole('button', { name: 'My Todo' }))
 
       await waitFor(() => {
-        expect(screen.getByText('No notes with todos assigned to you')).toBeInTheDocument()
+        expect(screen.getByText('No to-do items assigned to you yet. When someone assigns a to-do item to you in a shared note, it will appear here.')).toBeInTheDocument()
+      })
+    })
+
+    it('shows My Todo tab tooltip and subtitle in My Todo view', async () => {
+      const user = userEvent.setup()
+      vi.mocked(notes.getAll).mockResolvedValue([])
+
+      renderDashboard()
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'My Todo' })).toHaveAttribute(
+          'title',
+          'Notes with to-do items assigned to you'
+        )
+      })
+
+      await user.click(screen.getByRole('button', { name: 'My Todo' }))
+
+      await waitFor(() => {
+        expect(screen.getByText('Showing notes that include your assigned to-do items.')).toBeInTheDocument()
+      })
+    })
+
+    it('sets My Todo page title when My Todo view is active', async () => {
+      renderDashboard(['/?view=my-todo'])
+
+      await waitFor(() => {
+        expect(document.title).toBe('My Todo - Jot')
       })
     })
 
@@ -1210,7 +1335,7 @@ describe('Dashboard', () => {
       const user = userEvent.setup()
       const mockGetAll = vi.mocked(notes.getAll)
 
-      renderDashboard(['/dashboard?view=my-todo'])
+      renderDashboard(['/?view=my-todo'])
 
       await waitFor(() => {
         expect(mockGetAll).toHaveBeenCalledWith(false, '', false, '', true)
@@ -1238,7 +1363,7 @@ describe('Dashboard', () => {
       ]
       vi.mocked(labels.getAll).mockResolvedValue(mockLabels)
 
-      renderDashboard(['/dashboard?view=my-todo'])
+      renderDashboard(['/?view=my-todo'])
 
       await waitFor(() => {
         expect(mockGetAll).toHaveBeenCalledWith(false, '', false, '', true)

@@ -55,9 +55,13 @@ export default function RegisterScreen({ navigation }: RegisterScreenProps) {
       await register(username.trim(), password);
       await configureServerUrl(serverUrl.trim());
     } catch (err: unknown) {
-      const message =
-        (err as { response?: { data?: string } })?.response?.data || 'Registration failed';
-      setError(typeof message === 'string' ? message : 'Registration failed');
+      const response = (err as { response?: { status?: number; data?: string } })?.response;
+      if (!response) {
+        setError('Unable to connect to server');
+      } else {
+        const message = response.data;
+        setError(typeof message === 'string' && message ? message : 'Registration failed');
+      }
     } finally {
       setLoading(false);
     }

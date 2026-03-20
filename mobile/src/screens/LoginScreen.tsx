@@ -47,9 +47,13 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
       await login(username.trim(), password);
       await configureServerUrl(serverUrl.trim());
     } catch (err: unknown) {
-      const message =
-        (err as { response?: { data?: string } })?.response?.data || 'Invalid credentials';
-      setError(typeof message === 'string' ? message : 'Login failed');
+      const response = (err as { response?: { status?: number; data?: string } })?.response;
+      if (!response) {
+        setError('Unable to connect to server');
+      } else {
+        const message = response.data;
+        setError(typeof message === 'string' && message ? message : 'Login failed');
+      }
     } finally {
       setLoading(false);
     }

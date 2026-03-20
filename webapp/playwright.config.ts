@@ -8,7 +8,6 @@ const E2E_DB_PATH = `/tmp/jot-e2e-${Date.now()}.db`;
 
 export default defineConfig({
   testDir: './e2e/tests',
-  globalSetup: './e2e/global-setup.ts',
   fullyParallel: false,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
@@ -28,9 +27,13 @@ export default defineConfig({
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
     },
+    {
+      name: 'mobile-chrome',
+      use: { ...devices['Pixel 5'] },
+    },
   ],
   webServer: {
-    command: `go run main.go`,
+    command: `npm run --prefix ${path.resolve(__dirname)} build && go run main.go`,
     cwd: path.resolve(__dirname, '../server'),
     url: 'http://localhost:8080/readyz',
     reuseExistingServer: false,

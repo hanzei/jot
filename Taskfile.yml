@@ -76,9 +76,9 @@ tasks:
     cmd: npm run lint && npm run typecheck
 
   gen-docs:
-    desc: Regenerate Swagger API docs (requires swag CLI)
+    desc: Regenerate Swagger API docs
     dir: server
-    cmd: swag init --generalInfo main.go --output docs --parseDependency --parseInternal
+    cmd: go tool swag init --generalInfo main.go --output docs --parseDependency --parseInternal
 
   test-shared:
     desc: Run shared package tests

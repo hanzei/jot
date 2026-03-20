@@ -33,8 +33,7 @@ test.describe('Sharing Avatars', () => {
     await expect(noteCard.locator('svg[role="img"], img[alt]').first()).toBeVisible();
 
     // Log out and log in as user2 to verify owner avatar
-    await page.getByRole('button', { name: /profile menu/i }).click();
-    await page.getByRole('menuitem', { name: /log\s*out/i }).click();
+    await dashboardPage.logout();
 
     const loginPage = new LoginPage(page);
     await loginPage.login(user2Name, user2Pass);

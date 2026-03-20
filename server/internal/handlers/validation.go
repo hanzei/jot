@@ -7,16 +7,20 @@ import (
 	"strings"
 )
 
+var usernameRegex = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
+
+// Keep in sync with shared/src/constants.ts PASSWORD_MIN_LENGTH for clients.
+const passwordMinLength = 4
+
 func validateUsername(username string) error {
 	if len(username) < 2 {
 		return errors.New("username must be at least 2 characters")
 	}
 	if len(username) > 30 {
-		return errors.New("username must be less than 30 characters")
+		return errors.New("username must be 30 characters or fewer")
 	}
 
 	// Username can only contain letters, numbers, underscores, and hyphens
-	usernameRegex := regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 	if !usernameRegex.MatchString(username) {
 		return errors.New("username can only contain letters, numbers, underscores, and hyphens")
 	}
@@ -31,9 +35,8 @@ func validateUsername(username string) error {
 }
 
 func validatePassword(password string) error {
-	const minPasswordLength = 4
-	if len(password) < minPasswordLength {
-		return fmt.Errorf("password must be at least %d characters", minPasswordLength)
+	if len(password) < passwordMinLength {
+		return fmt.Errorf("password must be at least %d characters", passwordMinLength)
 	}
 	return nil
 }

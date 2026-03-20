@@ -2,17 +2,24 @@ import { render, screen, fireEvent } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { type ReactNode } from 'react'
 import NoteModal from '../NoteModal'
+import { ToastProvider } from '../Toast'
 import type { Note, NoteItem } from '@jot/shared'
 import { createMockNote } from '@/utils/__tests__/test-helpers'
 
 // Mock the API module
-const { mockNotesUpdate } = vi.hoisted(() => ({
+const { mockNotesUpdate, mockNotesCreate } = vi.hoisted(() => ({
   mockNotesUpdate: vi.fn().mockResolvedValue({}),
+  mockNotesCreate: vi.fn().mockResolvedValue({}),
 }))
 vi.mock('@/utils/api', () => ({
   notes: {
-    create: vi.fn(),
+    create: mockNotesCreate,
     update: mockNotesUpdate,
+    addLabel: vi.fn(),
+    removeLabel: vi.fn(),
+  },
+  labels: {
+    getAll: vi.fn().mockResolvedValue([]),
   },
 }))
 
@@ -28,7 +35,11 @@ vi.mock('@headlessui/react', () => {
     </div>
   )
 
-  return { Dialog, DialogPanel }
+  const DialogTitle = ({ children, className }: { children?: ReactNode; className?: string }) => (
+    <h2 className={className}>{children}</h2>
+  )
+
+  return { Dialog, DialogPanel, DialogTitle }
 })
 
 // Mock @dnd-kit components
@@ -103,6 +114,10 @@ const createMockTodoItems = (): NoteItem[] => [
   },
 ]
 
+const renderNoteModal = (props: React.ComponentProps<typeof NoteModal>) => {
+  return render(<ToastProvider><NoteModal {...props} /></ToastProvider>)
+}
+
 const defaultProps = {
   onClose: vi.fn(),
   onSave: vi.fn(),
@@ -122,7 +137,7 @@ describe('NoteModal', () => {
 
   describe('Basic Rendering', () => {
     it('renders create mode correctly', () => {
-      render(<NoteModal {...defaultProps} />)
+      renderNoteModal(defaultProps)
 
       expect(screen.getByText('New Note')).toBeInTheDocument()
       expect(screen.getByPlaceholderText('Note title...')).toBeInTheDocument()
@@ -131,7 +146,7 @@ describe('NoteModal', () => {
 
     it('renders edit mode correctly', () => {
       const note = createMockNote()
-      render(<NoteModal {...defaultProps} note={note} />)
+      renderNoteModal({ ...defaultProps, note })
 
       expect(screen.getByText('Edit Note')).toBeInTheDocument()
       expect(screen.getByDisplayValue('Test Note')).toBeInTheDocument()
@@ -139,7 +154,7 @@ describe('NoteModal', () => {
     })
 
     it('shows note type selector only for new notes', () => {
-      render(<NoteModal {...defaultProps} />)
+      renderNoteModal(defaultProps)
 
       expect(screen.getByText('Text')).toBeInTheDocument()
       expect(screen.getByText('Todo List')).toBeInTheDocument()
@@ -147,7 +162,7 @@ describe('NoteModal', () => {
 
     it('does not show note type selector for existing notes', () => {
       const note = createMockNote()
-      render(<NoteModal {...defaultProps} note={note} />)
+      renderNoteModal({ ...defaultProps, note })
 
       expect(screen.queryByText('Text')).not.toBeInTheDocument()
       expect(screen.queryByText('Todo List')).not.toBeInTheDocument()
@@ -155,7 +170,7 @@ describe('NoteModal', () => {
 
     it('displays last edited time for existing notes', () => {
       const note = createMockNote({ updated_at: '2023-01-01T12:00:00Z' })
-      render(<NoteModal {...defaultProps} note={note} />)
+      renderNoteModal({ ...defaultProps, note })
 
       expect(screen.getByText(/Last edited:/)).toBeInTheDocument()
     })
@@ -163,7 +178,7 @@ describe('NoteModal', () => {
 
   describe('Form Validation', () => {
     it('handles title validation', async () => {
-      render(<NoteModal {...defaultProps} />)
+      renderNoteModal(defaultProps)
 
       const titleInput = screen.getByPlaceholderText('Note title...')
 
@@ -175,7 +190,7 @@ describe('NoteModal', () => {
     })
 
     it('handles content validation', async () => {
-      render(<NoteModal {...defaultProps} />)
+      renderNoteModal(defaultProps)
 
       const contentInput = screen.getByPlaceholderText('Take a note...')
 
@@ -187,7 +202,7 @@ describe('NoteModal', () => {
     })
 
     it('handles todo item text validation', async () => {
-      render(<NoteModal {...defaultProps} />)
+      renderNoteModal(defaultProps)
 
       // Switch to todo mode
       const todoButton = screen.getByText('Todo List')
@@ -198,14 +213,14 @@ describe('NoteModal', () => {
       fireEvent.click(addItemButton)
 
       // Find the input field and add invalid content using change event
-      const itemInput = screen.getByPlaceholderText('List item...')
+      const itemInput = screen.getByTestId('todo-item-input')
       fireEvent.change(itemInput, { target: { value: '<script>alert("xss")</script>' } })
 
       expect(screen.getByText(/Item text cannot contain < or > characters/)).toBeInTheDocument()
     })
 
     it('validates todo item length limits', async () => {
-      render(<NoteModal {...defaultProps} />)
+      renderNoteModal(defaultProps)
 
       // Switch to todo mode
       const todoButton = screen.getByText('Todo List')
@@ -216,7 +231,7 @@ describe('NoteModal', () => {
       fireEvent.click(addItemButton)
 
       // Add very long text using change event
-      const itemInput = screen.getByPlaceholderText('List item...')
+      const itemInput = screen.getByTestId('todo-item-input')
       const longText = 'a'.repeat(501)
       fireEvent.change(itemInput, { target: { value: longText } })
 
@@ -224,7 +239,7 @@ describe('NoteModal', () => {
     })
 
     it('shows error messages for validation failures', async () => {
-      render(<NoteModal {...defaultProps} />)
+      renderNoteModal(defaultProps)
 
       const titleInput = screen.getByPlaceholderText('Note title...')
       const longTitle = 'a'.repeat(201)
@@ -235,7 +250,7 @@ describe('NoteModal', () => {
     })
 
     it('shows dismiss button for error messages', async () => {
-      render(<NoteModal {...defaultProps} />)
+      renderNoteModal(defaultProps)
 
       const titleInput = screen.getByPlaceholderText('Note title...')
       const longTitle = 'a'.repeat(201)
@@ -250,7 +265,7 @@ describe('NoteModal', () => {
 
   describe('Todo List Functionality', () => {
     it('switches between text and todo modes', async () => {
-      render(<NoteModal {...defaultProps} />)
+      renderNoteModal(defaultProps)
 
       // Start in text mode
       expect(screen.getByPlaceholderText('Take a note...')).toBeInTheDocument()
@@ -271,7 +286,7 @@ describe('NoteModal', () => {
     })
 
     it('shows todo interface when in todo mode', async () => {
-      render(<NoteModal {...defaultProps} />)
+      renderNoteModal(defaultProps)
 
       // Switch to todo mode
       const todoButton = screen.getByText('Todo List')
@@ -286,7 +301,7 @@ describe('NoteModal', () => {
         note_type: 'todo',
         items: createMockTodoItems(),
       })
-      render(<NoteModal {...defaultProps} note={todoNote} />)
+      renderNoteModal({ ...defaultProps, note: todoNote })
 
       // Should show todo items
       expect(screen.getByDisplayValue('First item')).toBeInTheDocument()
@@ -294,32 +309,32 @@ describe('NoteModal', () => {
     })
 
     it('pressing Enter on the last uncompleted item creates a new item', async () => {
-      render(<NoteModal {...defaultProps} />)
+      renderNoteModal(defaultProps)
 
       // Switch to todo mode and add an item
       fireEvent.click(screen.getByText('Todo List'))
       fireEvent.click(screen.getByText('Add item'))
 
-      const inputs = screen.getAllByPlaceholderText('List item...')
+      const inputs = screen.getAllByTestId('todo-item-input')
       expect(inputs).toHaveLength(1)
 
       // Press Enter on the only (last) item
       fireEvent.keyDown(inputs[0], { key: 'Enter', code: 'Enter' })
 
       // A new item should have been added
-      const inputsAfter = screen.getAllByPlaceholderText('List item...')
+      const inputsAfter = screen.getAllByTestId('todo-item-input')
       expect(inputsAfter).toHaveLength(2)
     })
 
     it('pressing Enter on a non-last uncompleted item inserts a new item below it', async () => {
-      render(<NoteModal {...defaultProps} />)
+      renderNoteModal(defaultProps)
 
       // Switch to todo mode and add two items
       fireEvent.click(screen.getByText('Todo List'))
       fireEvent.click(screen.getByText('Add item'))
       fireEvent.click(screen.getByText('Add item'))
 
-      const inputs = screen.getAllByPlaceholderText('List item...')
+      const inputs = screen.getAllByTestId('todo-item-input')
       expect(inputs).toHaveLength(2)
 
       // Give the first item a value so we can identify it after insertion
@@ -331,7 +346,7 @@ describe('NoteModal', () => {
       await vi.runAllTimersAsync()
 
       // Three items total
-      const inputsAfter = screen.getAllByPlaceholderText('List item...')
+      const inputsAfter = screen.getAllByTestId('todo-item-input')
       expect(inputsAfter).toHaveLength(3)
 
       // Original first item stays at index 0
@@ -348,25 +363,25 @@ describe('NoteModal', () => {
     })
 
     it('pressing a key other than Enter on a todo item does not create a new item', async () => {
-      render(<NoteModal {...defaultProps} />)
+      renderNoteModal(defaultProps)
 
       fireEvent.click(screen.getByText('Todo List'))
       fireEvent.click(screen.getByText('Add item'))
 
-      const inputs = screen.getAllByPlaceholderText('List item...')
+      const inputs = screen.getAllByTestId('todo-item-input')
       fireEvent.keyDown(inputs[0], { key: 'Escape', code: 'Escape' })
 
-      expect(screen.getAllByPlaceholderText('List item...')).toHaveLength(1)
+      expect(screen.getAllByTestId('todo-item-input')).toHaveLength(1)
     })
 
     it('pressing Backspace on an empty todo item deletes it', async () => {
-      render(<NoteModal {...defaultProps} />)
+      renderNoteModal(defaultProps)
 
       fireEvent.click(screen.getByText('Todo List'))
       fireEvent.click(screen.getByText('Add item'))
       fireEvent.click(screen.getByText('Add item'))
 
-      const inputs = screen.getAllByPlaceholderText('List item...')
+      const inputs = screen.getAllByTestId('todo-item-input')
       expect(inputs).toHaveLength(2)
 
       fireEvent.change(inputs[0], { target: { value: 'keep me' } })
@@ -374,19 +389,19 @@ describe('NoteModal', () => {
       // Press Backspace on the second (empty) item
       fireEvent.keyDown(inputs[1], { key: 'Backspace', code: 'Backspace' })
 
-      const inputsAfter = screen.getAllByPlaceholderText('List item...')
+      const inputsAfter = screen.getAllByTestId('todo-item-input')
       expect(inputsAfter).toHaveLength(1)
       expect(inputsAfter[0]).toHaveValue('keep me')
     })
 
     it('pressing Delete on an empty todo item deletes it', async () => {
-      render(<NoteModal {...defaultProps} />)
+      renderNoteModal(defaultProps)
 
       fireEvent.click(screen.getByText('Todo List'))
       fireEvent.click(screen.getByText('Add item'))
       fireEvent.click(screen.getByText('Add item'))
 
-      const inputs = screen.getAllByPlaceholderText('List item...')
+      const inputs = screen.getAllByTestId('todo-item-input')
       expect(inputs).toHaveLength(2)
 
       fireEvent.change(inputs[1], { target: { value: 'keep me' } })
@@ -394,115 +409,115 @@ describe('NoteModal', () => {
       // Press Delete on the first (empty) item
       fireEvent.keyDown(inputs[0], { key: 'Delete', code: 'Delete' })
 
-      const inputsAfter = screen.getAllByPlaceholderText('List item...')
+      const inputsAfter = screen.getAllByTestId('todo-item-input')
       expect(inputsAfter).toHaveLength(1)
       expect(inputsAfter[0]).toHaveValue('keep me')
     })
 
     it('pressing Backspace on a non-empty todo item does not delete it', async () => {
-      render(<NoteModal {...defaultProps} />)
+      renderNoteModal(defaultProps)
 
       fireEvent.click(screen.getByText('Todo List'))
       fireEvent.click(screen.getByText('Add item'))
 
-      const inputs = screen.getAllByPlaceholderText('List item...')
+      const inputs = screen.getAllByTestId('todo-item-input')
       fireEvent.change(inputs[0], { target: { value: 'has text' } })
 
       fireEvent.keyDown(inputs[0], { key: 'Backspace', code: 'Backspace' })
 
-      expect(screen.getAllByPlaceholderText('List item...')).toHaveLength(1)
+      expect(screen.getAllByTestId('todo-item-input')).toHaveLength(1)
       expect(screen.getByDisplayValue('has text')).toBeInTheDocument()
     })
 
     it('pressing Delete on a non-empty todo item does not delete it', async () => {
-      render(<NoteModal {...defaultProps} />)
+      renderNoteModal(defaultProps)
 
       fireEvent.click(screen.getByText('Todo List'))
       fireEvent.click(screen.getByText('Add item'))
 
-      const inputs = screen.getAllByPlaceholderText('List item...')
+      const inputs = screen.getAllByTestId('todo-item-input')
       fireEvent.change(inputs[0], { target: { value: 'has text' } })
 
       fireEvent.keyDown(inputs[0], { key: 'Delete', code: 'Delete' })
 
-      expect(screen.getAllByPlaceholderText('List item...')).toHaveLength(1)
+      expect(screen.getAllByTestId('todo-item-input')).toHaveLength(1)
       expect(screen.getByDisplayValue('has text')).toBeInTheDocument()
     })
 
     it('pressing Backspace on the only empty todo item deletes it without error', async () => {
-      render(<NoteModal {...defaultProps} />)
+      renderNoteModal(defaultProps)
 
       fireEvent.click(screen.getByText('Todo List'))
       fireEvent.click(screen.getByText('Add item'))
 
-      const inputs = screen.getAllByPlaceholderText('List item...')
+      const inputs = screen.getAllByTestId('todo-item-input')
       expect(inputs).toHaveLength(1)
 
       fireEvent.keyDown(inputs[0], { key: 'Backspace', code: 'Backspace' })
 
-      expect(screen.queryAllByPlaceholderText('List item...')).toHaveLength(0)
+      expect(screen.queryAllByTestId('todo-item-input')).toHaveLength(0)
     })
 
     it('pressing Backspace on a whitespace-only todo item deletes it', async () => {
-      render(<NoteModal {...defaultProps} />)
+      renderNoteModal(defaultProps)
 
       fireEvent.click(screen.getByText('Todo List'))
       fireEvent.click(screen.getByText('Add item'))
 
-      const inputs = screen.getAllByPlaceholderText('List item...')
+      const inputs = screen.getAllByTestId('todo-item-input')
       fireEvent.change(inputs[0], { target: { value: '   ' } })
 
       fireEvent.keyDown(inputs[0], { key: 'Backspace', code: 'Backspace' })
 
-      expect(screen.queryAllByPlaceholderText('List item...')).toHaveLength(0)
+      expect(screen.queryAllByTestId('todo-item-input')).toHaveLength(0)
     })
 
     it('pressing Backspace on an empty item focuses the previous item', async () => {
-      render(<NoteModal {...defaultProps} />)
+      renderNoteModal(defaultProps)
 
       fireEvent.click(screen.getByText('Todo List'))
       fireEvent.click(screen.getByText('Add item'))
       fireEvent.click(screen.getByText('Add item'))
 
-      const inputs = screen.getAllByPlaceholderText('List item...')
+      const inputs = screen.getAllByTestId('todo-item-input')
       fireEvent.change(inputs[0], { target: { value: 'first' } })
 
       // Press Backspace on the second (empty) item
       fireEvent.keyDown(inputs[1], { key: 'Backspace', code: 'Backspace' })
       await vi.runAllTimersAsync()
 
-      const inputsAfter = screen.getAllByPlaceholderText('List item...')
+      const inputsAfter = screen.getAllByTestId('todo-item-input')
       expect(inputsAfter).toHaveLength(1)
       expect(inputsAfter[0]).toHaveFocus()
     })
 
     it('pressing Delete on an empty item focuses the next item', async () => {
-      render(<NoteModal {...defaultProps} />)
+      renderNoteModal(defaultProps)
 
       fireEvent.click(screen.getByText('Todo List'))
       fireEvent.click(screen.getByText('Add item'))
       fireEvent.click(screen.getByText('Add item'))
 
-      const inputs = screen.getAllByPlaceholderText('List item...')
+      const inputs = screen.getAllByTestId('todo-item-input')
       fireEvent.change(inputs[1], { target: { value: 'second' } })
 
       // Press Delete on the first (empty) item
       fireEvent.keyDown(inputs[0], { key: 'Delete', code: 'Delete' })
       await vi.runAllTimersAsync()
 
-      const inputsAfter = screen.getAllByPlaceholderText('List item...')
+      const inputsAfter = screen.getAllByTestId('todo-item-input')
       expect(inputsAfter).toHaveLength(1)
       expect(inputsAfter[0]).toHaveFocus()
     })
 
     it('pressing ArrowDown moves focus to the next item', async () => {
-      render(<NoteModal {...defaultProps} />)
+      renderNoteModal(defaultProps)
 
       fireEvent.click(screen.getByText('Todo List'))
       fireEvent.click(screen.getByText('Add item'))
       fireEvent.click(screen.getByText('Add item'))
 
-      const inputs = screen.getAllByPlaceholderText('List item...')
+      const inputs = screen.getAllByTestId('todo-item-input')
       fireEvent.change(inputs[0], { target: { value: 'first' } })
       fireEvent.change(inputs[1], { target: { value: 'second' } })
 
@@ -513,13 +528,13 @@ describe('NoteModal', () => {
     })
 
     it('pressing ArrowUp moves focus to the previous item', async () => {
-      render(<NoteModal {...defaultProps} />)
+      renderNoteModal(defaultProps)
 
       fireEvent.click(screen.getByText('Todo List'))
       fireEvent.click(screen.getByText('Add item'))
       fireEvent.click(screen.getByText('Add item'))
 
-      const inputs = screen.getAllByPlaceholderText('List item...')
+      const inputs = screen.getAllByTestId('todo-item-input')
       fireEvent.change(inputs[0], { target: { value: 'first' } })
       fireEvent.change(inputs[1], { target: { value: 'second' } })
 
@@ -530,13 +545,13 @@ describe('NoteModal', () => {
     })
 
     it('pressing ArrowUp on the first item does not change focus', async () => {
-      render(<NoteModal {...defaultProps} />)
+      renderNoteModal(defaultProps)
 
       fireEvent.click(screen.getByText('Todo List'))
       fireEvent.click(screen.getByText('Add item'))
       fireEvent.click(screen.getByText('Add item'))
 
-      const inputs = screen.getAllByPlaceholderText('List item...')
+      const inputs = screen.getAllByTestId('todo-item-input')
       inputs[0].focus()
       fireEvent.keyDown(inputs[0], { key: 'ArrowUp', code: 'ArrowUp' })
 
@@ -545,13 +560,13 @@ describe('NoteModal', () => {
     })
 
     it('pressing ArrowDown on the last item does not change focus', async () => {
-      render(<NoteModal {...defaultProps} />)
+      renderNoteModal(defaultProps)
 
       fireEvent.click(screen.getByText('Todo List'))
       fireEvent.click(screen.getByText('Add item'))
       fireEvent.click(screen.getByText('Add item'))
 
-      const inputs = screen.getAllByPlaceholderText('List item...')
+      const inputs = screen.getAllByTestId('todo-item-input')
       inputs[1].focus()
       fireEvent.keyDown(inputs[1], { key: 'ArrowDown', code: 'ArrowDown' })
 
@@ -568,15 +583,15 @@ describe('NoteModal', () => {
         ],
       })
       mockNotesUpdate.mockClear()
-      render(<NoteModal {...defaultProps} note={todoNote} />)
+      renderNoteModal({ ...defaultProps, note: todoNote })
 
-      const inputs = screen.getAllByPlaceholderText('List item...')
+      const inputs = screen.getAllByTestId('todo-item-input')
       expect(inputs).toHaveLength(2)
 
       // Press Backspace on the empty second item
       fireEvent.keyDown(inputs[1], { key: 'Backspace', code: 'Backspace' })
 
-      expect(screen.getAllByPlaceholderText('List item...')).toHaveLength(1)
+      expect(screen.getAllByTestId('todo-item-input')).toHaveLength(1)
       expect(mockNotesUpdate).toHaveBeenCalledWith('1', expect.objectContaining({
         items: [expect.objectContaining({ text: 'First', position: 0 })],
       }))
@@ -584,10 +599,23 @@ describe('NoteModal', () => {
   })
 
 
+  describe('Labels on Creation', () => {
+    it('shows label add button for new notes', () => {
+      renderNoteModal(defaultProps)
+      expect(screen.getByRole('button', { name: 'Add labels' })).toBeInTheDocument()
+    })
+
+    it('shows label add button for existing notes', () => {
+      const note = createMockNote()
+      renderNoteModal({ ...defaultProps, note })
+      expect(screen.getByRole('button', { name: 'Add labels' })).toBeInTheDocument()
+    })
+  })
+
   describe('Basic Modal Operations', () => {
     it('handles close button click', () => {
       const onClose = vi.fn()
-      render(<NoteModal {...defaultProps} onClose={onClose} />)
+      renderNoteModal({ ...defaultProps, onClose })
 
       const closeButton = screen.getByRole('button', { name: 'Close' })
       fireEvent.click(closeButton)
@@ -602,7 +630,7 @@ describe('NoteModal', () => {
         items: null,
       } as unknown as Note
 
-      render(<NoteModal {...defaultProps} note={malformedNote} />)
+      renderNoteModal({ ...defaultProps, note: malformedNote })
 
       // Should render without throwing errors
       expect(screen.getByText('Edit Note')).toBeInTheDocument()
@@ -614,7 +642,7 @@ describe('NoteModal', () => {
         title: 'Test',
       } as Note
 
-      render(<NoteModal {...defaultProps} note={incompleteNote} />)
+      renderNoteModal({ ...defaultProps, note: incompleteNote })
 
       expect(screen.getByDisplayValue('Test')).toBeInTheDocument()
     })

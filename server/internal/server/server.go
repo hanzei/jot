@@ -8,7 +8,6 @@ import (
 	"net"
 	"net/http"
 	"os"
-	"path/filepath"
 	"runtime"
 	"strings"
 	"sync"
@@ -19,6 +18,7 @@ import (
 	"github.com/go-chi/chi/v5/middleware"
 	"github.com/go-chi/cors"
 	"github.com/hanzei/jot/server/internal/auth"
+	"github.com/hanzei/jot/server/internal/config"
 	"github.com/hanzei/jot/server/internal/database"
 	"github.com/hanzei/jot/server/internal/handlers"
 	"github.com/hanzei/jot/server/internal/models"
@@ -28,10 +28,7 @@ import (
 )
 
 func buildInfo() aboutResponse {
-	c := commit
-	if len(c) > 7 {
-		c = c[:7]
-	}
+	c := commit[:min(len(commit), 7)]
 	return aboutResponse{
 		Version:   strings.TrimPrefix(version, "v"),
 		Commit:    c,
@@ -41,112 +38,91 @@ func buildInfo() aboutResponse {
 }
 
 type Server struct {
-	router         chi.Router
-	db             *database.DB
-	httpServer     *http.Server
-	startErr       error
-	startReady     chan struct{}
-	startReadyOnce sync.Once
-	shuttingDown   atomic.Bool
-	serverMu       sync.RWMutex
-	ctx            context.Context
-	cancel         context.CancelFunc
-	sessionService *auth.SessionService
-	authHandler    *handlers.AuthHandler
-	notesHandler   *handlers.NotesHandler
-	labelsHandler  *handlers.LabelsHandler
-	eventsHandler  *handlers.EventsHandler
-	adminHandler   *handlers.AdminHandler
+	cfg             *config.Config
+	router          chi.Router
+	db              *database.DB
+	httpServer      *http.Server
+	staticRoot      *os.Root
+	startErr        error
+	startReady      chan struct{}
+	startReadyOnce  sync.Once
+	shuttingDown    atomic.Bool
+	serverMu        sync.RWMutex
+	ctx             context.Context
+	cancel          context.CancelFunc
+	bgWg            sync.WaitGroup
+	sessionService  *auth.SessionService
+	authHandler     *handlers.AuthHandler
+	notesHandler    *handlers.NotesHandler
+	labelsHandler   *handlers.LabelsHandler
+	eventsHandler   *handlers.EventsHandler
+	adminHandler    *handlers.AdminHandler
+	sessionsHandler *handlers.SessionsHandler
 }
 
-func New() (*Server, error) {
-	dbPath := os.Getenv("DB_PATH")
-	if dbPath == "" {
-		dbPath = "./jot.db"
+func New(cfg *config.Config) (*Server, error) {
+	if cfg == nil {
+		return nil, fmt.Errorf("config must not be nil")
 	}
 
-	db, err := database.New(dbPath)
+	db, err := database.New(cfg.DBPath)
 	if err != nil {
 		return nil, fmt.Errorf("initialize database: %w", err)
 	}
 
 	userStore := models.NewUserStore(db.DB)
 	noteStore := models.NewNoteStore(db.DB)
+	labelStore := models.NewLabelStore(db.DB)
 	sessionStore := models.NewSessionStore(db.DB)
 	userSettingsStore := models.NewUserSettingsStore(db.DB)
 
-	sessionService := auth.NewSessionService(sessionStore, userStore)
+	sessionService := auth.NewSessionService(sessionStore, userStore, cfg.CookieSecure)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	go func() {
-		ticker := time.NewTicker(time.Hour)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				if err := sessionStore.DeleteExpired(); err != nil {
-					logrus.WithError(err).Error("failed to delete expired sessions")
-				}
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
-
-	go func() {
-		if err := noteStore.PurgeOldTrashedNotes(7 * 24 * time.Hour); err != nil {
-			logrus.WithError(err).Error("failed to purge old trashed notes on startup")
-		}
-		ticker := time.NewTicker(time.Hour)
-		defer ticker.Stop()
-		for {
-			select {
-			case <-ticker.C:
-				if err := noteStore.PurgeOldTrashedNotes(7 * 24 * time.Hour); err != nil {
-					logrus.WithError(err).Error("failed to purge old trashed notes")
-				}
-			case <-ctx.Done():
-				return
-			}
-		}
-	}()
-
 	hub := sse.NewHub()
 
-	authHandler := handlers.NewAuthHandler(userStore, sessionService, userSettingsStore)
-	notesHandler := handlers.NewNotesHandler(noteStore, userStore, hub)
-	labelsHandler := handlers.NewLabelsHandler(noteStore, hub)
+	authHandler := handlers.NewAuthHandler(userStore, sessionService, userSettingsStore, cfg.RegistrationEnabled)
+	notesHandler := handlers.NewNotesHandler(noteStore, userStore, labelStore, hub)
+	labelsHandler := handlers.NewLabelsHandler(noteStore, labelStore, hub)
 	eventsHandler := handlers.NewEventsHandler(hub)
 	adminHandler := handlers.NewAdminHandler(userStore, noteStore)
+	sessionsHandler := handlers.NewSessionsHandler(sessionStore)
 
 	s := &Server{
-		router:         chi.NewRouter(),
-		db:             db,
-		startReady:     make(chan struct{}),
-		ctx:            ctx,
-		cancel:         cancel,
-		sessionService: sessionService,
-		authHandler:    authHandler,
-		notesHandler:   notesHandler,
-		labelsHandler:  labelsHandler,
-		eventsHandler:  eventsHandler,
-		adminHandler:   adminHandler,
+		cfg:             cfg,
+		router:          chi.NewRouter(),
+		db:              db,
+		startReady:      make(chan struct{}),
+		ctx:             ctx,
+		cancel:          cancel,
+		sessionService:  sessionService,
+		authHandler:     authHandler,
+		notesHandler:    notesHandler,
+		labelsHandler:   labelsHandler,
+		eventsHandler:   eventsHandler,
+		adminHandler:    adminHandler,
+		sessionsHandler: sessionsHandler,
 	}
 
-	s.setupRoutes()
+	startPeriodicTask(&s.bgWg, ctx, time.Hour, false, sessionStore.DeleteExpired, "delete expired sessions")
+	startPeriodicTask(&s.bgWg, ctx, time.Hour, true, func() error {
+		return noteStore.PurgeOldTrashedNotes(7 * 24 * time.Hour)
+	}, "purge old trashed notes")
+
+	if err := s.setupRoutes(); err != nil {
+		cancel()
+		_ = db.Close()
+		return nil, fmt.Errorf("setup routes: %w", err)
+	}
 	return s, nil
 }
 
-func (s *Server) setupRoutes() {
+func (s *Server) setupRoutes() error {
 	s.router.Use(logrusRequestLogger)
 	s.router.Use(middleware.Recoverer)
-	allowedOrigin := os.Getenv("CORS_ALLOWED_ORIGIN")
-	if allowedOrigin == "" {
-		allowedOrigin = "http://localhost:5173"
-	}
 	s.router.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{allowedOrigin},
+		AllowedOrigins:   []string{s.cfg.CORSAllowedOrigin},
 		AllowedMethods:   []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodOptions},
 		AllowedHeaders:   []string{"Accept", "Content-Type"},
 		ExposedHeaders:   []string{"Link"},
@@ -158,11 +134,12 @@ func (s *Server) setupRoutes() {
 	s.router.Get("/readyz", s.handleReady)
 
 	cop := http.NewCrossOriginProtection()
-	if err := cop.AddTrustedOrigin(allowedOrigin); err != nil {
-		logrus.WithError(err).Warnf("cross-origin protection: ignoring malformed trusted origin %q", allowedOrigin)
+	if err := cop.AddTrustedOrigin(s.cfg.CORSAllowedOrigin); err != nil {
+		return fmt.Errorf("add trusted origin %q: %w", s.cfg.CORSAllowedOrigin, err)
 	}
 	s.router.Route("/api/v1", func(r chi.Router) {
 		r.Use(cop.Handler)
+		r.Get("/config", s.wrapHandler(s.handleConfig))
 		r.Post("/register", s.wrapHandler(s.authHandler.Register))
 		r.Post("/login", s.wrapHandler(s.authHandler.Login))
 		r.Post("/logout", s.wrapHandler(s.authHandler.Logout))
@@ -200,6 +177,9 @@ func (s *Server) setupRoutes() {
 			r.Get("/labels", s.wrapHandler(s.labelsHandler.GetLabels))
 
 			r.Get("/users", s.wrapHandler(s.notesHandler.SearchUsers))
+
+			r.Get("/sessions", s.wrapHandler(s.sessionsHandler.ListSessions))
+			r.Delete("/sessions/{id}", s.wrapHandler(s.sessionsHandler.RevokeSession))
 		})
 
 		r.Group(func(r chi.Router) {
@@ -222,46 +202,49 @@ func (s *Server) setupRoutes() {
 		http.NotFound(w, r)
 	})
 
-	// Serve static files from webapp build directory
-	staticDir := os.Getenv("STATIC_DIR")
-	if staticDir == "" {
-		workDir, err := os.Getwd()
-		if err != nil {
-			panic(err)
-		}
-		staticDir = workDir + "/../webapp/build/"
-	}
-	staticDir = filepath.Clean(staticDir)
-	safeStaticDir := strings.NewReplacer("\n", "", "\r", "").Replace(staticDir)
+	safeStaticDir := strings.NewReplacer("\n", "", "\r", "").Replace(s.cfg.StaticDir)
 
 	logrus.Infof("Serving static files from: %s", safeStaticDir) // #nosec G706 -- safeStaticDir has newlines stripped
-	filesDir := http.Dir(staticDir)
-	FileServer(s.router, "/", filesDir)
+	staticRoot, err := os.OpenRoot(s.cfg.StaticDir)
+	if err != nil {
+		return fmt.Errorf("open static directory %s: %w", safeStaticDir, err)
+	}
+	s.staticRoot = staticRoot
+	FileServer(s.router, "/", staticRoot)
+	return nil
 }
 
-func FileServer(r chi.Router, path string, root http.FileSystem) {
+// FileServer registers a catch-all GET route that serves files from root
+// using os.Root for traversal-resistant filesystem access.
+func FileServer(r chi.Router, path string, root *os.Root) {
 	if path != "/" && path[len(path)-1] != '/' {
 		r.Get(path, http.RedirectHandler(path+"/", http.StatusMovedPermanently).ServeHTTP)
 		path += "/"
 	}
 	path += "*"
 
+	fsys := root.FS()
+	fileServer := http.FileServerFS(fsys)
+
 	r.Get(path, func(w http.ResponseWriter, req *http.Request) {
 		rctx := chi.RouteContext(req.Context())
 		pathPrefix := strings.TrimSuffix(rctx.RoutePattern(), "/*")
-		fs := http.StripPrefix(pathPrefix, http.FileServer(root))
 
-		// Custom handler for SPA routing
 		requestedFile := strings.TrimPrefix(req.URL.Path, pathPrefix)
 		if requestedFile == "" {
 			requestedFile = "/"
 		}
 
-		// Check if file exists
-		file, err := root.Open(requestedFile)
+		// Use os.Root for traversal-resistant file existence check.
+		cleanPath := strings.TrimPrefix(requestedFile, "/")
+		if cleanPath == "" {
+			cleanPath = "index.html"
+		}
+
+		file, err := root.Open(cleanPath)
 		if err != nil {
 			// File doesn't exist, serve index.html for SPA routing
-			indexFile, err := root.Open("/index.html")
+			indexFile, err := root.Open("index.html")
 			if err != nil {
 				http.NotFound(w, req)
 				return
@@ -282,14 +265,15 @@ func FileServer(r chi.Router, path string, root http.FileSystem) {
 			}
 		}()
 
-		// File exists, serve it normally
+		// File exists, serve it via the traversal-safe FS
+		fs := http.StripPrefix(pathPrefix, fileServer)
 		fs.ServeHTTP(w, req)
 	})
 }
 
-func (s *Server) wrapHandler(handler func(w http.ResponseWriter, r *http.Request) (int, error)) http.HandlerFunc {
+func (s *Server) wrapHandler(handler func(w http.ResponseWriter, r *http.Request) (int, any, error)) http.HandlerFunc {
 	return func(w http.ResponseWriter, r *http.Request) {
-		statusCode, err := handler(w, r)
+		statusCode, body, err := handler(w, r)
 		if err != nil {
 			logrus.WithError(err).WithField("status_code", statusCode).WithField("method", r.Method).WithField("path", r.URL.Path).Error("HTTP handler error")
 			msg := err.Error()
@@ -297,6 +281,16 @@ func (s *Server) wrapHandler(handler func(w http.ResponseWriter, r *http.Request
 				msg = "internal server error"
 			}
 			http.Error(w, msg, statusCode)
+			return
+		}
+		if body != nil {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(statusCode)
+			if err := json.NewEncoder(w).Encode(body); err != nil {
+				logrus.WithError(err).WithField("method", r.Method).WithField("path", r.URL.Path).Error("failed to encode response body")
+			}
+		} else if statusCode > 0 {
+			w.WriteHeader(statusCode)
 		}
 	}
 }
@@ -305,7 +299,7 @@ func (s *Server) wrapHandler(handler func(w http.ResponseWriter, r *http.Request
 func (s *Server) handleLive(w http.ResponseWriter, _ *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	if _, err := w.Write([]byte("OK")); err != nil {
-		logrus.WithError(err).Error("Failed to write health check response")
+		logrus.WithError(err).Error("failed to write health check response")
 	}
 }
 
@@ -346,14 +340,25 @@ type aboutResponse struct {
 //	@Produce	json
 //	@Success	200	{object}	aboutResponse
 //	@Router		/about [get]
-func (s *Server) handleAbout(w http.ResponseWriter, _ *http.Request) (int, error) {
-	resp := buildInfo()
+func (s *Server) handleAbout(_ http.ResponseWriter, _ *http.Request) (int, any, error) {
+	return http.StatusOK, buildInfo(), nil
+}
 
-	w.Header().Set("Content-Type", "application/json")
-	if err := json.NewEncoder(w).Encode(resp); err != nil {
-		return http.StatusInternalServerError, fmt.Errorf("encoding about response: %w", err)
-	}
-	return 0, nil
+type configResponse struct {
+	RegistrationEnabled bool `json:"registration_enabled"`
+}
+
+// handleConfig godoc
+//
+//	@Summary	Get public server configuration
+//	@Tags		system
+//	@Produce	json
+//	@Success	200	{object}	configResponse
+//	@Router		/config [get]
+func (s *Server) handleConfig(_ http.ResponseWriter, _ *http.Request) (int, any, error) {
+	return http.StatusOK, configResponse{
+		RegistrationEnabled: s.cfg.RegistrationEnabled,
+	}, nil
 }
 
 func (s *Server) GetRouter() chi.Router {
@@ -381,7 +386,6 @@ func logrusRequestLogger(next http.Handler) http.Handler {
 }
 
 func (s *Server) Start(addr string) error {
-	logrus.Infof("Server starting on %s", addr)
 	listener, err := net.Listen("tcp", addr)
 	if err != nil {
 		startErr := fmt.Errorf("listen: %w", err)
@@ -433,6 +437,13 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	s.serverMu.Unlock()
 
 	s.cancel()
+	s.bgWg.Wait()
+
+	if s.staticRoot != nil {
+		if err := s.staticRoot.Close(); err != nil {
+			return fmt.Errorf("close static root: %w", err)
+		}
+	}
 
 	if err := s.db.Close(); err != nil {
 		return fmt.Errorf("close database: %w", err)
@@ -465,4 +476,30 @@ func (s *Server) setStartResult(startErr error) {
 
 func (s *Server) BeginShutdown() {
 	s.shuttingDown.Store(true)
+}
+
+// startPeriodicTask starts a background goroutine tracked by wg that calls fn on every interval.
+// If runNow is true, fn is also called once immediately before the first tick.
+func startPeriodicTask(wg *sync.WaitGroup, ctx context.Context, interval time.Duration, runNow bool, fn func() error, logMsg string) {
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		if runNow {
+			if err := fn(); err != nil {
+				logrus.WithError(err).Errorf("failed to %s", logMsg)
+			}
+		}
+		ticker := time.NewTicker(interval)
+		defer ticker.Stop()
+		for {
+			select {
+			case <-ticker.C:
+				if err := fn(); err != nil {
+					logrus.WithError(err).Errorf("failed to %s", logMsg)
+				}
+			case <-ctx.Done():
+				return
+			}
+		}
+	}()
 }

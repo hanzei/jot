@@ -267,6 +267,25 @@ const docTemplate = `{
                 }
             }
         },
+        "/config": {
+            "get": {
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "system"
+                ],
+                "summary": "Get public server configuration",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/server.configResponse"
+                        }
+                    }
+                }
+            }
+        },
         "/labels": {
             "get": {
                 "security": [
@@ -293,6 +312,12 @@ const docTemplate = `{
                     },
                     "401": {
                         "description": "unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
                         "schema": {
                             "type": "string"
                         }
@@ -338,6 +363,12 @@ const docTemplate = `{
                     },
                     "401": {
                         "description": "invalid username or password",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
                         "schema": {
                             "type": "string"
                         }
@@ -392,6 +423,12 @@ const docTemplate = `{
                     },
                     "401": {
                         "description": "unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
                         "schema": {
                             "type": "string"
                         }
@@ -460,6 +497,12 @@ const docTemplate = `{
                         "schema": {
                             "type": "string"
                         }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "type": "string"
+                        }
                     }
                 }
             },
@@ -505,6 +548,12 @@ const docTemplate = `{
                     },
                     "401": {
                         "description": "unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
                         "schema": {
                             "type": "string"
                         }
@@ -556,6 +605,12 @@ const docTemplate = `{
                         "schema": {
                             "type": "string"
                         }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "type": "string"
+                        }
                     }
                 }
             }
@@ -603,6 +658,12 @@ const docTemplate = `{
                     },
                     "403": {
                         "description": "forbidden",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
                         "schema": {
                             "type": "string"
                         }
@@ -657,6 +718,12 @@ const docTemplate = `{
                         "schema": {
                             "type": "string"
                         }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "type": "string"
+                        }
                     }
                 }
             },
@@ -703,6 +770,12 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
                         "schema": {
                             "type": "string"
                         }
@@ -764,6 +837,12 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
                         "schema": {
                             "type": "string"
                         }
@@ -830,6 +909,12 @@ const docTemplate = `{
                         "schema": {
                             "type": "string"
                         }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "type": "string"
+                        }
                     }
                 }
             }
@@ -882,6 +967,12 @@ const docTemplate = `{
                         "schema": {
                             "type": "string"
                         }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "type": "string"
+                        }
                     }
                 }
             }
@@ -930,6 +1021,12 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
                         "schema": {
                             "type": "string"
                         }
@@ -1008,6 +1105,12 @@ const docTemplate = `{
                         "schema": {
                             "type": "string"
                         }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "type": "string"
+                        }
                     }
                 }
             },
@@ -1075,6 +1178,12 @@ const docTemplate = `{
                         "schema": {
                             "type": "string"
                         }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "type": "string"
+                        }
                     }
                 }
             }
@@ -1129,6 +1238,12 @@ const docTemplate = `{
                         "schema": {
                             "type": "string"
                         }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "type": "string"
+                        }
                     }
                 }
             }
@@ -1169,8 +1284,98 @@ const docTemplate = `{
                             "type": "string"
                         }
                     },
+                    "403": {
+                        "description": "registration is disabled",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
                     "409": {
                         "description": "username already taken",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/sessions": {
+            "get": {
+                "security": [
+                    {
+                        "CookieAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sessions"
+                ],
+                "summary": "List all active sessions for the current user",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/handlers.SessionResponse"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/sessions/{id}": {
+            "delete": {
+                "security": [
+                    {
+                        "CookieAuth": []
+                    }
+                ],
+                "tags": [
+                    "sessions"
+                ],
+                "summary": "Revoke a specific session",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Session ID (hashed)",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "no content"
+                    },
+                    "400": {
+                        "description": "cannot revoke current session",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "401": {
+                        "description": "unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "session not found",
                         "schema": {
                             "type": "string"
                         }
@@ -1212,6 +1417,12 @@ const docTemplate = `{
                     },
                     "401": {
                         "description": "unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
                         "schema": {
                             "type": "string"
                         }
@@ -1271,6 +1482,12 @@ const docTemplate = `{
                         "schema": {
                             "type": "string"
                         }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "type": "string"
+                        }
                     }
                 }
             }
@@ -1318,6 +1535,12 @@ const docTemplate = `{
                     },
                     "403": {
                         "description": "current password is incorrect",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
                         "schema": {
                             "type": "string"
                         }
@@ -1369,6 +1592,12 @@ const docTemplate = `{
                         "schema": {
                             "type": "string"
                         }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "type": "string"
+                        }
                     }
                 }
             },
@@ -1388,6 +1617,12 @@ const docTemplate = `{
                     },
                     "401": {
                         "description": "unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
                         "schema": {
                             "type": "string"
                         }
@@ -1433,6 +1668,12 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
                         "schema": {
                             "type": "string"
                         }
@@ -1499,6 +1740,12 @@ const docTemplate = `{
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/handlers.CreateNoteItem"
+                    }
+                },
+                "labels": {
+                    "type": "array",
+                    "items": {
+                        "type": "string"
                     }
                 },
                 "note_type": {
@@ -1570,6 +1817,29 @@ const docTemplate = `{
                     "items": {
                         "type": "string"
                     }
+                }
+            }
+        },
+        "handlers.SessionResponse": {
+            "type": "object",
+            "properties": {
+                "browser": {
+                    "type": "string"
+                },
+                "created_at": {
+                    "type": "string"
+                },
+                "expires_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "is_current": {
+                    "type": "boolean"
+                },
+                "os": {
+                    "type": "string"
                 }
             }
         },
@@ -1939,6 +2209,14 @@ const docTemplate = `{
                 },
                 "version": {
                     "type": "string"
+                }
+            }
+        },
+        "server.configResponse": {
+            "type": "object",
+            "properties": {
+                "registration_enabled": {
+                    "type": "boolean"
                 }
             }
         }

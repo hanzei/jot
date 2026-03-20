@@ -1,8 +1,11 @@
 import React from 'react';
-import { View, Text, TouchableOpacity, StyleSheet } from 'react-native';
+import { View, Text, StyleSheet } from 'react-native';
+import { TouchableOpacity } from 'react-native-gesture-handler';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import type { Note, NoteItem, NoteShare } from '@jot/shared';
+import type { Note, NoteItem, User } from '@jot/shared';
 import { useTheme } from '../theme/ThemeContext';
+import { useAuth } from '../store/AuthContext';
+import { useUsers } from '../store/UsersContext';
 import UserAvatar from './UserAvatar';
 
 interface NoteCardProps {
@@ -15,18 +18,64 @@ interface NoteCardProps {
 const MAX_PREVIEW_ITEMS = 10;
 const MAX_AVATAR_DISPLAY = 3;
 
-function ShareAvatars({ shares }: { shares: NoteShare[] }) {
+interface AvatarData {
+  key: string;
+  userId: string;
+  username: string;
+  hasProfileIcon?: boolean;
+}
+
+function buildNoteAvatars(
+  note: Note,
+  currentUserId: string | undefined,
+  usersById: Map<string, User>,
+): AvatarData[] {
+  const isOwner = note.user_id === currentUserId;
+  const avatars: AvatarData[] = [];
+
+  if (!isOwner) {
+    const owner = usersById.get(note.user_id);
+    avatars.push({
+      key: 'owner',
+      userId: note.user_id,
+      username: owner?.username || '?',
+      hasProfileIcon: owner?.has_profile_icon,
+    });
+  }
+
+  note.shared_with
+    ?.filter(s => s.shared_with_user_id !== currentUserId)
+    .forEach(s => {
+      avatars.push({
+        key: s.id,
+        userId: s.shared_with_user_id,
+        username: s.username || '?',
+        hasProfileIcon: s.has_profile_icon ?? usersById.get(s.shared_with_user_id)?.has_profile_icon,
+      });
+    });
+
+  return avatars;
+}
+
+function NoteAvatars({ note }: { note: Note }) {
+  const { user } = useAuth();
+  const { usersById } = useUsers();
   const { colors } = useTheme();
-  const visible = shares.slice(0, MAX_AVATAR_DISPLAY);
-  const overflow = shares.length - MAX_AVATAR_DISPLAY;
+
+  const avatars = buildNoteAvatars(note, user?.id, usersById);
+  if (avatars.length === 0) return null;
+
+  const visible = avatars.slice(0, MAX_AVATAR_DISPLAY);
+  const overflow = avatars.length - MAX_AVATAR_DISPLAY;
+
   return (
     <View style={styles.avatarRow}>
-      {visible.map((share, index) => (
-        <View key={share.id} style={index === 0 ? styles.avatarFirst : styles.avatarWrapper}>
+      {visible.map((avatar, index) => (
+        <View key={avatar.key} style={index === 0 ? styles.avatarFirst : styles.avatarWrapper}>
           <UserAvatar
-            userId={share.shared_with_user_id}
-            username={share.username ?? share.shared_with_user_id}
-            hasProfileIcon={share.has_profile_icon}
+            userId={avatar.userId}
+            username={avatar.username}
+            hasProfileIcon={avatar.hasProfileIcon}
             size="small"
           />
         </View>
@@ -128,13 +177,8 @@ function NoteCard({ note, onPress, onLongPress, onMenuPress }: NoteCardProps) {
           </View>
         ) : null}
 
-        {note.is_shared ? (
-          <View style={styles.sharedWithYouRow}>
-            <Ionicons name="people-outline" size={13} color={colors.primary} />
-            <Text style={[styles.sharedWithYouText, { color: colors.primary }]}>Shared with you</Text>
-          </View>
-        ) : note.shared_with && note.shared_with.length > 0 ? (
-          <ShareAvatars shares={note.shared_with} />
+        {(note.is_shared || (note.shared_with && note.shared_with.length > 0)) ? (
+          <NoteAvatars note={note} />
         ) : null}
       </View>
     </TouchableOpacity>
@@ -144,10 +188,15 @@ function NoteCard({ note, onPress, onLongPress, onMenuPress }: NoteCardProps) {
 const styles = StyleSheet.create({
   card: {
     borderWidth: 1,
-    borderRadius: 8,
+    borderRadius: 12,
     padding: 12,
     marginHorizontal: 16,
-    marginVertical: 4,
+    marginVertical: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.06,
+    shadowRadius: 3,
+    elevation: 1,
   },
   cardHeader: {
     flexDirection: 'row',
@@ -192,7 +241,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     marginTop: 8,
     flexWrap: 'wrap',
-    gap: 4,
+    gap: 6,
   },
   labels: {
     flexDirection: 'row',
@@ -201,19 +250,11 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   labelChip: {
-    borderRadius: 12,
+    borderRadius: 10,
     paddingHorizontal: 8,
-    paddingVertical: 2,
+    paddingVertical: 3,
   },
   labelText: {
-    fontSize: 11,
-  },
-  sharedWithYouRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-  },
-  sharedWithYouText: {
     fontSize: 11,
   },
   avatarRow: {

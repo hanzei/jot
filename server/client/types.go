@@ -119,6 +119,7 @@ type CreateNoteRequest struct {
 	NoteType NoteType         `json:"note_type,omitempty"`
 	Color    string           `json:"color,omitempty"`
 	Items    []CreateNoteItem `json:"items,omitempty"`
+	Labels   []string         `json:"labels,omitempty"`
 }
 
 // CreateNoteItem describes a checklist item to create with a new todo note.
@@ -178,6 +179,21 @@ type ImportResponse struct {
 // UserListResponse wraps the admin user listing.
 type UserListResponse struct {
 	Users []*User `json:"users"`
+}
+
+// SessionInfo is a single active session as returned by the sessions API.
+type SessionInfo struct {
+	ID        string    `json:"id"`
+	Browser   string    `json:"browser"`
+	OS        string    `json:"os"`
+	IsCurrent bool      `json:"is_current"`
+	CreatedAt time.Time `json:"created_at"`
+	ExpiresAt time.Time `json:"expires_at"`
+}
+
+// ServerConfig holds public server configuration returned by GET /api/v1/config.
+type ServerConfig struct {
+	RegistrationEnabled bool `json:"registration_enabled"`
 }
 
 // Ptr returns a pointer to v; useful for building UpdateUserRequest fields.

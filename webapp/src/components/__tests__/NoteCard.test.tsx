@@ -2,6 +2,7 @@ import { render, screen, waitFor } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import NoteCard from '../NoteCard'
+import { ToastProvider } from '../Toast'
 import type { Note, NoteItem } from '@jot/shared'
 import { notes } from '@/utils/api'
 import { createMockNote } from '@/utils/__tests__/test-helpers'
@@ -12,13 +13,6 @@ vi.mock('@/utils/api', () => ({
     update: vi.fn(),
   },
 }))
-
-// Mock window.confirm
-const mockConfirm = vi.fn()
-Object.defineProperty(window, 'confirm', {
-  value: mockConfirm,
-  writable: true,
-})
 
 // Mock console.error to silence error logs in tests
 const mockConsoleError = vi.fn()
@@ -49,6 +43,10 @@ const createMockTodoItems = (): NoteItem[] => [
   },
 ]
 
+const renderNoteCard = (props: React.ComponentProps<typeof NoteCard>) => {
+  return render(<ToastProvider><NoteCard {...props} /></ToastProvider>)
+}
+
 const defaultProps = {
   note: createMockNote({ content: 'This is a test note content' }),
   onEdit: vi.fn(),
@@ -59,7 +57,6 @@ const defaultProps = {
 describe('NoteCard', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockConfirm.mockReturnValue(true)
   })
 
   afterEach(() => {
@@ -68,7 +65,7 @@ describe('NoteCard', () => {
 
   describe('Basic Rendering', () => {
     it('renders note title and content', () => {
-      render(<NoteCard {...defaultProps} />)
+      renderNoteCard(defaultProps)
 
       expect(screen.getByText('Test Note')).toBeInTheDocument()
       expect(screen.getByText('This is a test note content')).toBeInTheDocument()
@@ -76,7 +73,7 @@ describe('NoteCard', () => {
 
     it('renders note without title', () => {
       const noteWithoutTitle = createMockNote({ title: '', content: 'This is a test note content' })
-      render(<NoteCard {...defaultProps} note={noteWithoutTitle} />)
+      renderNoteCard({ ...defaultProps, note: noteWithoutTitle })
 
       expect(screen.queryByRole('heading')).not.toBeInTheDocument()
       expect(screen.getByText('This is a test note content')).toBeInTheDocument()
@@ -85,7 +82,7 @@ describe('NoteCard', () => {
     it('renders note with extremely long title', () => {
       const longTitle = 'A'.repeat(500)
       const noteWithLongTitle = createMockNote({ title: longTitle })
-      render(<NoteCard {...defaultProps} note={noteWithLongTitle} />)
+      renderNoteCard({ ...defaultProps, note: noteWithLongTitle })
 
       expect(screen.getByText(longTitle)).toBeInTheDocument()
     })
@@ -95,7 +92,7 @@ describe('NoteCard', () => {
         title: 'Special <>&"\'` Characters',
         content: 'Content with <script>alert("xss")</script> and emojis 🚀💡',
       })
-      render(<NoteCard {...defaultProps} note={specialNote} />)
+      renderNoteCard({ ...defaultProps, note: specialNote })
 
       expect(screen.getByText('Special <>&"\'` Characters')).toBeInTheDocument()
       expect(screen.getByText('Content with <script>alert("xss")</script> and emojis 🚀💡')).toBeInTheDocument()
@@ -108,7 +105,7 @@ describe('NoteCard', () => {
 
       validColors.forEach(color => {
         const coloredNote = createMockNote({ color })
-        const { unmount } = render(<NoteCard {...defaultProps} note={coloredNote} />)
+        const { unmount } = renderNoteCard({ ...defaultProps, note: coloredNote })
 
         expect(screen.getByTestId('note-card')).toBeInTheDocument()
 
@@ -118,7 +115,7 @@ describe('NoteCard', () => {
 
     it('handles invalid color values gracefully', () => {
       const invalidColorNote = createMockNote({ color: 'invalid-color' })
-      render(<NoteCard {...defaultProps} note={invalidColorNote} />)
+      renderNoteCard({ ...defaultProps, note: invalidColorNote })
 
       // Should still render without throwing errors
       expect(screen.getByText('Test Note')).toBeInTheDocument()
@@ -129,7 +126,7 @@ describe('NoteCard', () => {
 
       malformedColors.forEach((color, index) => {
         const coloredNote = createMockNote({ color, title: `Test Note ${index}` })
-        const { unmount } = render(<NoteCard {...defaultProps} note={coloredNote} />)
+        const { unmount } = renderNoteCard({ ...defaultProps, note: coloredNote })
 
         expect(screen.getByText(`Test Note ${index}`)).toBeInTheDocument()
 
@@ -141,7 +138,7 @@ describe('NoteCard', () => {
   describe('Pin/Unpin Functionality', () => {
     it('shows pinned indicator when note is pinned', () => {
       const pinnedNote = createMockNote({ pinned: true })
-      render(<NoteCard {...defaultProps} note={pinnedNote} />)
+      renderNoteCard({ ...defaultProps, note: pinnedNote })
 
       const pinIcon = screen.getByTestId('pin-icon')
       expect(pinIcon).toBeInTheDocument()
@@ -152,7 +149,7 @@ describe('NoteCard', () => {
       const mockUpdate = vi.mocked(notes.update)
       mockUpdate.mockResolvedValueOnce(createMockNote({ pinned: true }))
 
-      render(<NoteCard {...defaultProps} />)
+      renderNoteCard(defaultProps)
 
       // Hover to show menu
       await user.hover(screen.getByTestId('note-card'))
@@ -177,7 +174,7 @@ describe('NoteCard', () => {
       const mockUpdate = vi.mocked(notes.update)
       mockUpdate.mockRejectedValueOnce(new Error('Network error'))
 
-      render(<NoteCard {...defaultProps} />)
+      renderNoteCard(defaultProps)
 
       await user.hover(screen.getByTestId('note-card'))
 
@@ -196,7 +193,7 @@ describe('NoteCard', () => {
       const user = userEvent.setup()
 
       // Test unpinned note
-      render(<NoteCard {...defaultProps} />)
+      renderNoteCard(defaultProps)
 
       await user.hover(screen.getByTestId('note-card'))
 
@@ -223,7 +220,7 @@ describe('NoteCard', () => {
         .mockReturnValueOnce(firstPromise)
         .mockReturnValueOnce(secondPromise)
 
-      render(<NoteCard {...defaultProps} />)
+      renderNoteCard(defaultProps)
 
       await user.hover(screen.getByTestId('note-card'))
 
@@ -257,7 +254,7 @@ describe('NoteCard', () => {
       const mockUpdate = vi.mocked(notes.update)
       mockUpdate.mockResolvedValueOnce(createMockNote({ archived: true }))
 
-      render(<NoteCard {...defaultProps} />)
+      renderNoteCard(defaultProps)
 
       await user.hover(screen.getByTestId('note-card'))
 
@@ -278,7 +275,7 @@ describe('NoteCard', () => {
       const user = userEvent.setup()
 
       const archivedNote = createMockNote({ archived: true })
-      render(<NoteCard {...defaultProps} note={archivedNote} />)
+      renderNoteCard({ ...defaultProps, note: archivedNote })
 
       await user.hover(screen.getByTestId('note-card'))
 
@@ -305,7 +302,7 @@ describe('NoteCard', () => {
           updated_at: '2023-01-01T00:00:00Z',
         }],
       })
-      render(<NoteCard {...defaultProps} note={sharedNote} />)
+      renderNoteCard({ ...defaultProps, note: sharedNote })
 
       expect(screen.getByRole('img', { name: 'alice' })).toBeInTheDocument()
     })
@@ -326,7 +323,7 @@ describe('NoteCard', () => {
           updated_at: '2023-01-01T00:00:00Z',
         }],
       })
-      render(<NoteCard {...defaultProps} note={sharedNote} />)
+      renderNoteCard({ ...defaultProps, note: sharedNote })
 
       expect(screen.queryByRole('img', { name: 'me' })).not.toBeInTheDocument()
     })
@@ -348,7 +345,7 @@ describe('NoteCard', () => {
           updated_at: '2023-01-01T00:00:00Z',
         }],
       })
-      render(<NoteCard {...defaultProps} note={sharedNote} usersById={usersMap} />)
+      renderNoteCard({ ...defaultProps, note: sharedNote, usersById: usersMap })
 
       const img = screen.getByAltText('alice')
       expect(img).toBeInTheDocument()
@@ -360,7 +357,7 @@ describe('NoteCard', () => {
       const user = userEvent.setup()
       const onShare = vi.fn()
 
-      render(<NoteCard {...defaultProps} onShare={onShare} />)
+      renderNoteCard({ ...defaultProps, onShare })
 
       await user.hover(screen.getByTestId('note-card'))
 
@@ -375,7 +372,7 @@ describe('NoteCard', () => {
       const onShare = vi.fn()
       const notOwnedNote = createMockNote({ user_id: 'other_user' })
 
-      render(<NoteCard {...defaultProps} note={notOwnedNote} onShare={onShare} currentUserId="user1" />)
+      renderNoteCard({ ...defaultProps, note: notOwnedNote, onShare, currentUserId: "user1" })
 
       await user.hover(screen.getByTestId('note-card'))
 
@@ -387,41 +384,48 @@ describe('NoteCard', () => {
   })
 
   describe('Delete Functionality', () => {
-    it('shows delete confirmation and calls onDelete when confirmed', async () => {
+    it('shows delete confirmation dialog and calls onDelete when confirmed', async () => {
       const user = userEvent.setup()
       const onDelete = vi.fn()
-      mockConfirm.mockReturnValue(true)
 
-      render(<NoteCard {...defaultProps} onDelete={onDelete} />)
+      renderNoteCard({ ...defaultProps, onDelete })
 
       await user.hover(screen.getByTestId('note-card'))
 
       const menuButton = screen.getByRole('button', { name: 'Note options' })
       await user.click(menuButton)
 
-      const deleteButton = screen.getByText('Delete')
-      await user.click(deleteButton)
+      const deleteMenuItem = screen.getByText('Delete')
+      await user.click(deleteMenuItem)
 
-      expect(mockConfirm).toHaveBeenCalledWith('Are you sure you want to delete this note?')
+      expect(screen.getByText('Delete note')).toBeInTheDocument()
+      expect(screen.getByText('Are you sure you want to delete this note?')).toBeInTheDocument()
+
+      const confirmButton = screen.getAllByText('Delete').find(
+        el => el.closest('[class*="bg-red"]')
+      )!
+      await user.click(confirmButton)
+
       expect(onDelete).toHaveBeenCalledWith('1')
     })
 
     it('does not call onDelete when confirmation is cancelled', async () => {
       const user = userEvent.setup()
       const onDelete = vi.fn()
-      mockConfirm.mockReturnValue(false)
 
-      render(<NoteCard {...defaultProps} onDelete={onDelete} />)
+      renderNoteCard({ ...defaultProps, onDelete })
 
       await user.hover(screen.getByTestId('note-card'))
 
       const menuButton = screen.getByRole('button', { name: 'Note options' })
       await user.click(menuButton)
 
-      const deleteButton = screen.getByText('Delete')
-      await user.click(deleteButton)
+      const deleteMenuItem = screen.getByText('Delete')
+      await user.click(deleteMenuItem)
 
-      expect(mockConfirm).toHaveBeenCalled()
+      const cancelButton = screen.getByText('Cancel')
+      await user.click(cancelButton)
+
       expect(onDelete).not.toHaveBeenCalled()
     })
 
@@ -429,7 +433,7 @@ describe('NoteCard', () => {
       const user = userEvent.setup()
       const notOwnedNote = createMockNote({ user_id: 'other_user' })
 
-      render(<NoteCard {...defaultProps} note={notOwnedNote} currentUserId="user1" />)
+      renderNoteCard({ ...defaultProps, note: notOwnedNote, currentUserId: "user1" })
 
       await user.hover(screen.getByTestId('note-card'))
 
@@ -448,7 +452,7 @@ describe('NoteCard', () => {
         content: '', // Todo notes typically have empty content
       })
 
-      render(<NoteCard {...defaultProps} note={todoNote} />)
+      renderNoteCard({ ...defaultProps, note: todoNote })
 
       expect(screen.getByText('Uncompleted item')).toBeInTheDocument()
       expect(screen.getByText('+1 completed items')).toBeInTheDocument()
@@ -460,7 +464,7 @@ describe('NoteCard', () => {
         items: [],
       })
 
-      render(<NoteCard {...defaultProps} note={emptyTodoNote} />)
+      renderNoteCard({ ...defaultProps, note: emptyTodoNote })
 
       // Should render without errors
       expect(screen.getByText('Test Note')).toBeInTheDocument()
@@ -482,7 +486,7 @@ describe('NoteCard', () => {
         }],
       })
 
-      render(<NoteCard {...defaultProps} note={completedOnlyNote} />)
+      renderNoteCard({ ...defaultProps, note: completedOnlyNote })
 
       expect(screen.getByText('+1 completed items')).toBeInTheDocument()
     })
@@ -504,7 +508,7 @@ describe('NoteCard', () => {
         }],
       })
 
-      render(<NoteCard {...defaultProps} note={longTextTodoNote} />)
+      renderNoteCard({ ...defaultProps, note: longTextTodoNote })
 
       expect(screen.getByText(longText)).toBeInTheDocument()
     })
@@ -521,7 +525,7 @@ describe('NoteCard', () => {
       })
       mockUpdate.mockReturnValueOnce(promise)
 
-      render(<NoteCard {...defaultProps} />)
+      renderNoteCard(defaultProps)
 
       await user.hover(screen.getByTestId('note-card'))
 
@@ -549,7 +553,7 @@ describe('NoteCard', () => {
       const mockUpdate = vi.mocked(notes.update)
       mockUpdate.mockRejectedValueOnce(new Error('Network error'))
 
-      render(<NoteCard {...defaultProps} />)
+      renderNoteCard(defaultProps)
 
       await user.hover(screen.getByTestId('note-card'))
 
@@ -570,7 +574,7 @@ describe('NoteCard', () => {
       const user = userEvent.setup()
       const onEdit = vi.fn()
 
-      render(<NoteCard {...defaultProps} onEdit={onEdit} />)
+      renderNoteCard({ ...defaultProps, onEdit })
 
       const noteContent = screen.getByText('This is a test note content')
 
@@ -584,7 +588,7 @@ describe('NoteCard', () => {
 
     it('handles keyboard navigation', async () => {
       const user = userEvent.setup()
-      render(<NoteCard {...defaultProps} />)
+      renderNoteCard(defaultProps)
 
       await user.hover(screen.getByTestId('note-card'))
 
@@ -604,7 +608,7 @@ describe('NoteCard', () => {
         onDelete: vi.fn(),
       }
 
-      render(<NoteCard {...minimalProps} />)
+      renderNoteCard(minimalProps)
 
       expect(screen.getByText('Test Note')).toBeInTheDocument()
     })
@@ -619,7 +623,7 @@ describe('NoteCard', () => {
         items: null as unknown as NoteItem[],
       }
 
-      render(<NoteCard {...defaultProps} note={malformedNote} />)
+      renderNoteCard({ ...defaultProps, note: malformedNote })
 
       expect(screen.getByText('Test Note')).toBeInTheDocument()
     })
@@ -630,7 +634,7 @@ describe('NoteCard', () => {
         title: 'Test',
       } as Note
 
-      render(<NoteCard {...defaultProps} note={incompleteNote} />)
+      renderNoteCard({ ...defaultProps, note: incompleteNote })
 
       expect(screen.getByText('Test')).toBeInTheDocument()
     })

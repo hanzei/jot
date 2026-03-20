@@ -118,6 +118,9 @@ DB_PATH=./jot.db                     # SQLite database file location
 # Server configuration
 PORT=8080                           # Server port (optional)
 STATIC_DIR=../webapp/build/         # Frontend build directory (optional)
+
+# Access control
+REGISTRATION_ENABLED=true           # Set to "false" to disable public registration; admins can still create users (optional)
 ```
 
 ## API Reference

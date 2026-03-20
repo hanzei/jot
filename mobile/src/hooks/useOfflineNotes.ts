@@ -1,6 +1,7 @@
 import { useEffect, useCallback, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSQLiteContext } from 'expo-sqlite';
+import axios from 'axios';
 import { getLocalNotes, getLocalNote, saveNotes, saveNote, markLocalNoteDeleted, removeLocalNotesNotIn } from '../db/noteQueries';
 import { getNotes, getNote } from '../api/notes';
 import type { GetNotesParams, Note } from '@jot/shared';
@@ -30,8 +31,9 @@ export function useOfflineNotes(params?: GetNotesParams) {
       const serverIds = new Set(serverNotes.map((n) => n.id));
       await removeLocalNotesNotIn(db, serverIds, paramsRef.current);
       queryClient.invalidateQueries({ queryKey: ['notes-local', paramsRef.current] });
-    } catch {
-      // Silently ignore network errors — local data is used as fallback
+    } catch (err) {
+      // Log for debugging; local data is used as fallback
+      console.warn('Background notes sync failed:', err);
     }
   }, [db, queryClient]);
 
@@ -78,13 +80,16 @@ export function useOfflineNote(id: string | null) {
         await saveNote(db, serverNote);
         queryClient.invalidateQueries({ queryKey: ['note-local', id] });
       } catch (err) {
-        const status = (err as { response?: { status?: number } })?.response?.status;
+        const status = axios.isAxiosError(err) ? err.response?.status : undefined;
         if ((status === 404 || status === 410) && !cancelled) {
           // Note no longer exists on server — tombstone it locally
           await markLocalNoteDeleted(db, id);
           queryClient.invalidateQueries({ queryKey: ['note-local', id] });
         }
-        // Other errors: silently ignore — local cache is used as fallback
+        // Other errors: log for debugging; local cache is used as fallback
+        if (status !== 404 && status !== 410) {
+          console.warn(`Background note sync failed for id=${id}:`, err);
+        }
       }
     })();
     return () => { cancelled = true; };

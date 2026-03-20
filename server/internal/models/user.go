@@ -7,7 +7,6 @@ import (
 	"time"
 
 	sqlite3 "github.com/mattn/go-sqlite3"
-	"github.com/sirupsen/logrus"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -139,6 +138,15 @@ func (u *User) CheckPassword(password string) bool {
 	return err == nil
 }
 
+func scanUser(rows *sql.Rows) (User, error) {
+	var user User
+	err := rows.Scan(
+		&user.ID, &user.Username, &user.FirstName, &user.LastName, &user.PasswordHash,
+		&user.Role, &user.HasProfileIcon, &user.CreatedAt, &user.UpdatedAt,
+	)
+	return user, err
+}
+
 func (s *UserStore) GetAll() ([]*User, error) {
 	query := `SELECT id, username, first_name, last_name, password_hash, role,
 			         profile_icon IS NOT NULL AS has_profile_icon,
@@ -149,29 +157,17 @@ func (s *UserStore) GetAll() ([]*User, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to query users: %w", err)
 	}
-	defer func() {
-		if err = rows.Close(); err != nil {
-			logrus.WithError(err).Error("Failed to close rows")
-		}
-	}()
 
-	var users []*User
-	for rows.Next() {
-		var user User
-		if err = rows.Scan(
-			&user.ID, &user.Username, &user.FirstName, &user.LastName, &user.PasswordHash,
-			&user.Role, &user.HasProfileIcon, &user.CreatedAt, &user.UpdatedAt,
-		); err != nil {
-			return nil, fmt.Errorf("failed to scan user: %w", err)
-		}
-		users = append(users, &user)
+	users, err := collectRows(rows, scanUser)
+	if err != nil {
+		return nil, fmt.Errorf("failed to scan users: %w", err)
 	}
 
-	if err = rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating users: %w", err)
+	ptrs := make([]*User, len(users))
+	for i := range users {
+		ptrs[i] = &users[i]
 	}
-
-	return users, nil
+	return ptrs, nil
 }
 
 // Search returns users whose username, first name, or last name contain the
@@ -190,29 +186,17 @@ func (s *UserStore) Search(term string) ([]*User, error) {
 	if err != nil {
 		return nil, fmt.Errorf("failed to search users: %w", err)
 	}
-	defer func() {
-		if err = rows.Close(); err != nil {
-			logrus.WithError(err).Error("Failed to close rows")
-		}
-	}()
 
-	var users []*User
-	for rows.Next() {
-		var user User
-		if err = rows.Scan(
-			&user.ID, &user.Username, &user.FirstName, &user.LastName, &user.PasswordHash,
-			&user.Role, &user.HasProfileIcon, &user.CreatedAt, &user.UpdatedAt,
-		); err != nil {
-			return nil, fmt.Errorf("failed to scan user: %w", err)
-		}
-		users = append(users, &user)
+	users, err := collectRows(rows, scanUser)
+	if err != nil {
+		return nil, fmt.Errorf("failed to scan users: %w", err)
 	}
 
-	if err = rows.Err(); err != nil {
-		return nil, fmt.Errorf("error iterating users: %w", err)
+	ptrs := make([]*User, len(users))
+	for i := range users {
+		ptrs[i] = &users[i]
 	}
-
-	return users, nil
+	return ptrs, nil
 }
 
 // UpdateUsername sets a new username for the user with the given id and returns
@@ -266,7 +250,7 @@ func (s *UserStore) UpdateProfileIcon(id string, data []byte, contentType string
 
 func (s *UserStore) GetProfileIcon(id string) ([]byte, string, error) {
 	var data []byte
-	var contentType sql.NullString
+	var contentType sql.Null[string]
 	err := s.db.QueryRow(
 		`SELECT profile_icon, profile_icon_content_type FROM users WHERE id = ?`, id,
 	).Scan(&data, &contentType)
@@ -279,7 +263,7 @@ func (s *UserStore) GetProfileIcon(id string) ([]byte, string, error) {
 	if len(data) == 0 {
 		return nil, "", nil
 	}
-	return data, contentType.String, nil
+	return data, contentType.V, nil
 }
 
 func (s *UserStore) DeleteProfileIcon(id string) error {
@@ -323,54 +307,6 @@ func (s *UserStore) UpdatePassword(id, newPassword string) error {
 	}
 
 	return nil
-}
-
-type UserSettings struct {
-	UserID    string    `json:"user_id"`
-	Language  string    `json:"language"`
-	Theme     string    `json:"theme"`
-	UpdatedAt time.Time `json:"updated_at"`
-}
-
-type UserSettingsStore struct {
-	db *sql.DB
-}
-
-func NewUserSettingsStore(db *sql.DB) *UserSettingsStore {
-	return &UserSettingsStore{db: db}
-}
-
-// GetOrCreate returns existing settings for the user, or creates a row with
-// defaults and returns those. The operation is atomic: if two goroutines race
-// to create the row, one will win the INSERT and both will read consistent data.
-func (s *UserSettingsStore) GetOrCreate(userID string) (*UserSettings, error) {
-	settings := &UserSettings{UserID: userID}
-	err := s.db.QueryRow(
-		`INSERT INTO user_settings (user_id, language, theme) VALUES (?, 'system', 'system')
-		 ON CONFLICT(user_id) DO UPDATE SET user_id = excluded.user_id
-		 RETURNING language, theme, updated_at`,
-		userID,
-	).Scan(&settings.Language, &settings.Theme, &settings.UpdatedAt)
-	if err != nil {
-		return nil, fmt.Errorf("failed to get or create user settings: %w", err)
-	}
-	return settings, nil
-}
-
-// Update persists the language and theme preferences for the given user and
-// returns the updated settings.
-func (s *UserSettingsStore) Update(userID, language, theme string) (*UserSettings, error) {
-	settings := &UserSettings{UserID: userID}
-	err := s.db.QueryRow(
-		`INSERT INTO user_settings (user_id, language, theme) VALUES (?, ?, ?)
-		 ON CONFLICT(user_id) DO UPDATE SET language = excluded.language, theme = excluded.theme, updated_at = CURRENT_TIMESTAMP
-		 RETURNING language, theme, updated_at`,
-		userID, language, theme,
-	).Scan(&settings.Language, &settings.Theme, &settings.UpdatedAt)
-	if err != nil {
-		return nil, fmt.Errorf("failed to update user settings: %w", err)
-	}
-	return settings, nil
 }
 
 func (s *UserStore) UpdateName(id, firstName, lastName string) (*User, error) {

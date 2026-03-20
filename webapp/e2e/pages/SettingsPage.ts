@@ -1,11 +1,15 @@
 import path from 'path';
 import { fileURLToPath } from 'url';
-import { Page, expect } from '@playwright/test';
+import { Page, expect, Locator } from '@playwright/test';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
 export class SettingsPage {
   constructor(private page: Page) {}
+
+  private sidebar(): Locator {
+    return this.page.locator('aside[aria-label="Main navigation"]');
+  }
 
   async goto() {
     await this.page.goto('/settings');
@@ -62,5 +66,33 @@ export class SettingsPage {
 
   navProfileIcon() {
     return this.page.locator('header img[alt]').filter({ visible: true }).first();
+  }
+
+  sessionsSection() {
+    return this.page.getByRole('heading', { name: 'Active Sessions', exact: true }).locator('..');
+  }
+
+  sessionItems() {
+    return this.sessionsSection().locator('li');
+  }
+
+  async revokeSession(index: number) {
+    await this.sessionItems().nth(index).getByRole('button', { name: 'Revoke' }).click();
+  }
+
+  async openSidebar() {
+    await this.page.getByRole('button', { name: 'Toggle sidebar' }).click();
+  }
+
+  async isSidebarVisible() {
+    await expect(this.sidebar()).toBeVisible();
+  }
+
+  async isSidebarHidden() {
+    await expect(this.sidebar()).toBeHidden();
+  }
+
+  async clickMobileLabel(labelName = 'settings-mobile-label') {
+    await this.sidebar().locator('ul').getByRole('button', { name: labelName, exact: true }).click();
   }
 }

@@ -75,6 +75,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   }), [variant, debouncedSearch, labelId, user?.id]);
 
   const { data: notes, isLoading, isError, refetch, isRefetching } = useOfflineNotes(params);
+  const isSearchLoading = isLoading && !notes && !!debouncedSearch;
   const updateNote = useUpdateNote();
   const deleteNote = useDeleteNote();
   const restoreNote = useRestoreNote();
@@ -254,14 +255,28 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
 
   const listEmptyComponent = useMemo(
     () =>
-      debouncedSearch || labelId ? (
+      isSearchLoading ? (
         <View style={styles.emptySearchContainer}>
-          <Text style={[styles.emptySubtext, { color: colors.textMuted }]}>
+          <ActivityIndicator size="large" color={colors.primary} />
+        </View>
+      ) : debouncedSearch || labelId ? (
+        <View style={styles.emptySearchContainer}>
+          <Ionicons
+            name={debouncedSearch ? 'search-outline' : 'pricetag-outline'}
+            size={48}
+            color={colors.handleColor}
+          />
+          <Text style={[styles.emptySearchTitle, { color: colors.textSecondary }]}>
             {debouncedSearch ? 'No notes match your search' : 'No notes for this label'}
           </Text>
+          {debouncedSearch && (
+            <Text style={[styles.emptySubtext, { color: colors.textMuted }]}>
+              Try different keywords
+            </Text>
+          )}
         </View>
       ) : null,
-    [debouncedSearch, labelId, colors],
+    [isSearchLoading, debouncedSearch, labelId, colors],
   );
 
   const handleDragEnd = useCallback(
@@ -338,7 +353,10 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     [handleNotePress, handleOpenMenu, variant],
   );
 
-  if (isLoading && !notes) {
+  // Show full-screen loading only on initial load (no prior data, no active search query).
+  // Uses debouncedSearch (not searchText) so clearing the input mid-debounce doesn't
+  // trigger the full-screen loader while the previous query is still in-flight.
+  if (isLoading && !notes && !debouncedSearch) {
     return (
       <View style={[styles.loadingContainer, { backgroundColor: colors.background }]} testID="notes-loading">
         <ActivityIndicator size="large" color={colors.primary} />
@@ -366,32 +384,39 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   const isEmpty = !isLoading && (!notes || notes.length === 0);
 
   if (isEmpty && !debouncedSearch && (variant !== 'notes' || !labelId)) {
+    const emptyIcon: keyof typeof Ionicons.glyphMap =
+      variant === 'trash' ? 'trash-outline' :
+      variant === 'archived' ? 'archive-outline' :
+      variant === 'my-todo' ? 'clipboard-outline' : 'document-text-outline';
     return (
-      <View style={[styles.emptyContainer, { backgroundColor: colors.background }]}>
+      <View style={[styles.emptyWrapper, { backgroundColor: colors.background }]}>
         {variant === 'trash' && (
           <View style={[styles.trashBanner, { backgroundColor: colors.warning, borderBottomColor: colors.warningBorder }]}>
+            <Ionicons name="information-circle-outline" size={16} color={colors.warningText} style={styles.trashBannerIcon} />
             <Text style={[styles.trashBannerText, { color: colors.warningText }]}>
               Items in Trash are automatically deleted after 7 days
             </Text>
           </View>
         )}
-        <Ionicons
-          name={variant === 'my-todo' ? 'clipboard-outline' : 'document-text-outline'}
-          size={64}
-          color={colors.handleColor}
-        />
-        <Text style={[styles.emptyTitle, { color: colors.text }]}>
-          {variant === 'notes' && 'No notes yet'}
-          {variant === 'my-todo' && 'No assigned todos'}
-          {variant === 'archived' && 'No archived notes'}
-          {variant === 'trash' && 'Trash is empty'}
-        </Text>
-        <Text style={[styles.emptySubtext, { color: colors.textMuted }]}>
-          {variant === 'notes' && 'Tap + to create your first note'}
-          {variant === 'my-todo' && 'No notes with todos assigned to you'}
-          {variant === 'archived' && 'Archived notes will appear here'}
-          {variant === 'trash' && 'Deleted notes will appear here'}
-        </Text>
+        <View style={styles.emptyContent}>
+          <Ionicons
+            name={emptyIcon}
+            size={64}
+            color={colors.handleColor}
+          />
+          <Text style={[styles.emptyTitle, { color: colors.text }]}>
+            {variant === 'notes' && 'No notes yet'}
+            {variant === 'my-todo' && 'No assigned todos'}
+            {variant === 'archived' && 'No archived notes'}
+            {variant === 'trash' && 'Trash is empty'}
+          </Text>
+          <Text style={[styles.emptySubtext, { color: colors.textMuted }]}>
+            {variant === 'notes' && 'Tap + to create your first note'}
+            {variant === 'my-todo' && 'No notes with todos assigned to you'}
+            {variant === 'archived' && 'Archived notes will appear here'}
+            {variant === 'trash' && 'Deleted notes will appear here'}
+          </Text>
+        </View>
         {variant === 'notes' && (
           <TouchableOpacity
             style={[styles.fab, { backgroundColor: colors.primary }]}
@@ -552,6 +577,15 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
   },
+  emptyWrapper: {
+    flex: 1,
+  },
+  emptyContent: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
+  },
   emptyContainer: {
     flex: 1,
     justifyContent: 'center',
@@ -566,10 +600,16 @@ const styles = StyleSheet.create({
   emptySubtext: {
     fontSize: 14,
     marginTop: 8,
+    textAlign: 'center',
   },
   emptySearchContainer: {
     paddingTop: 48,
     alignItems: 'center',
+    gap: 8,
+  },
+  emptySearchTitle: {
+    fontSize: 16,
+    fontWeight: '500',
   },
   trashBanner: {
     flexDirection: 'row',
@@ -590,10 +630,10 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     margin: 16,
     marginBottom: 8,
-    borderRadius: 8,
+    borderRadius: 22,
     borderWidth: 1,
-    paddingHorizontal: 12,
-    height: 40,
+    paddingHorizontal: 14,
+    height: 44,
   },
   searchIcon: {
     marginRight: 8,

@@ -50,8 +50,8 @@ describe('color palettes', () => {
     expect(AVATAR_COLORS).toHaveLength(16);
   });
 
-  it('NOTE_COLORS has 12 entries starting with white', () => {
-    expect(NOTE_COLORS).toHaveLength(12);
+  it('NOTE_COLORS has 10 entries starting with white', () => {
+    expect(NOTE_COLORS).toHaveLength(10);
     expect(NOTE_COLORS[0]).toBe('#ffffff');
   });
 

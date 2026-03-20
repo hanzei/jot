@@ -1,3 +1,5 @@
+export const PASSWORD_MIN_LENGTH = 4;
+
 export const VALIDATION = {
   TITLE_MAX_LENGTH: 200,
   CONTENT_MAX_LENGTH: 10000,
@@ -6,7 +8,7 @@ export const VALIDATION = {
   INDENT_PX_PER_LEVEL: 24,
   USERNAME_MIN_LENGTH: 2,
   USERNAME_MAX_LENGTH: 30,
-  PASSWORD_MIN_LENGTH: 8,
+  PASSWORD_MIN_LENGTH,
 } as const;
 
 export const ROLES = {

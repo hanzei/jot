@@ -1,5 +1,6 @@
 import React from 'react';
-import { View, TextInput, TouchableOpacity, StyleSheet, type TextInput as TextInputType } from 'react-native';
+import { View, TextInput, StyleSheet, type TextInput as TextInputType } from 'react-native';
+import { TouchableOpacity } from 'react-native-gesture-handler';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import UserAvatar from './UserAvatar';
 import { useTheme } from '../theme/ThemeContext';
@@ -116,6 +117,7 @@ function TodoItem({
           </View>
         </TouchableOpacity>
       ) : null}
+      <View style={styles.spacer} />
       {editable && onDelete && (
         <TouchableOpacity onPress={onDelete} style={styles.deleteBtn} testID="todo-item-delete">
           <Ionicons name="close" size={18} color={colors.iconMuted} />
@@ -141,9 +143,12 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   textInput: {
-    flex: 1,
+    flexShrink: 1,
     fontSize: 16,
     paddingVertical: 4,
+  },
+  spacer: {
+    flex: 1,
   },
   completedText: {
     textDecorationLine: 'line-through' as const,

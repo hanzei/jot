@@ -13,6 +13,8 @@ export interface ThemeColors {
   primaryLight: string;
   error: string;
   errorLight: string;
+  success: string;
+  successLight: string;
   warning: string;
   warningBorder: string;
   warningText: string;
@@ -45,6 +47,8 @@ export const lightColors: ThemeColors = {
   primaryLight: '#eff6ff',
   error: '#ef4444',
   errorLight: '#fef2f2',
+  success: '#166534',
+  successLight: '#dcfce7',
   warning: '#fef3c7',
   warningBorder: '#fde68a',
   warningText: '#92400e',
@@ -77,6 +81,8 @@ export const darkColors: ThemeColors = {
   primaryLight: '#1e3a5f',
   error: '#f87171',
   errorLight: '#451a1a',
+  success: '#86efac',
+  successLight: '#14532d',
   warning: '#422006',
   warningBorder: '#78350f',
   warningText: '#fbbf24',

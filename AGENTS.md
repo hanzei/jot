@@ -38,3 +38,9 @@ All `task` commands are documented in `README.md`, `CLAUDE.md`, and `Taskfile.ym
 - The mobile app (`mobile/`) uses Expo and requires emulator/device access; it is not testable in a headless cloud environment for GUI flows.
 - A `@jot/shared` package exists at `shared/` and is referenced by both `webapp` and `mobile` via `file:../shared`. Its deps must be installed before webapp/mobile deps.
 - The update script uses `npm ci` (not `npm install`) for `webapp/` to get deterministic installs from the lockfile.
+
+### Pull request artifacts
+
+- When creating or updating PRs, include screenshots for visual/UI changes whenever possible.
+- Include a short demo video for flows/features that can be demonstrated in motion whenever possible.
+- If no visual artifact is feasible (for example, backend-only changes), briefly note that in the PR description.

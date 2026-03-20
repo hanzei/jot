@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { XMarkIcon, PlusIcon, TrashIcon, ChevronDownIcon, ArchiveBoxIcon, ArchiveBoxXMarkIcon, ShareIcon, UserPlusIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon, PlusIcon, TrashIcon, ChevronDownIcon, ArchiveBoxIcon, ArchiveBoxXMarkIcon, ShareIcon, UserPlusIcon, CheckIcon, TagIcon } from '@heroicons/react/24/outline';
 import { Dialog, DialogPanel } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
 import { VALIDATION, NOTE_COLORS, buildCollaborators, type Note, type NoteType, type CreateNoteRequest, type UpdateNoteRequest, type Label, type User, type Collaborator } from '@jot/shared';
@@ -7,6 +7,8 @@ import { notes } from '@/utils/api';
 import LabelPicker from '@/components/LabelPicker';
 import LetterAvatar from '@/components/LetterAvatar';
 import AssigneePicker from '@/components/AssigneePicker';
+import ConfirmDialog from '@/components/ConfirmDialog';
+import { useToast } from '@/hooks/useToast';
 import { buildShareAvatars } from '@/utils/shareAvatars';
 
 // Validation functions
@@ -31,7 +33,7 @@ const validateContent = (content: string, t: TFunction): string | null => {
 };
 
 // Utility function to generate unique IDs for todo items
-const generateItemId = () => `item_${Date.now()}_${Math.random().toString(36).substr(2, 9)}`;
+const generateItemId = () => crypto.randomUUID();
 
 // Timeout management now handled via useRef instead of global window property
 import {
@@ -116,12 +118,14 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
 
   const assignedUser = item.assignedTo ? usersById?.get(item.assignedTo) : undefined;
   const showAssignUI = isShared && collaborators && collaborators.length > 0 && onAssignItem;
+  const placeholder = item.text ? '' : t('note.itemPlaceholder');
 
   return (
     <div
       ref={setNodeRef}
       style={style}
-      className={`group/item flex items-center space-x-2 ${isDragging ? 'opacity-50' : ''} ${
+      data-testid="todo-item-row"
+      className={`group/item flex items-center gap-2 ${isDragging ? 'opacity-50' : ''} ${
         isCompleted ? 'opacity-60' : ''
       }`}
       {...attributes}
@@ -144,11 +148,13 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
         onChange={(e) => onUpdateTodoItem(index, 'completed', e.target.checked)}
         className="h-4 w-4 text-blue-600 rounded"
       />
-      <div className="flex-1 flex items-center min-w-0">
+      <div className="flex items-center min-w-0">
         <input
           type="text"
-          placeholder={t('note.itemPlaceholder')}
-          className={`field-sizing-content p-1 bg-transparent border-none outline-none placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white ${
+          data-testid="todo-item-input"
+          placeholder={placeholder}
+          size={Math.max((item.text || placeholder).length, 1) + 1}
+          className={`field-sizing-content p-1 bg-transparent border-none outline-none min-w-0 placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white ${
             isCompleted ? 'line-through text-gray-500 dark:text-gray-400' : ''
           }`}
           value={item.text}
@@ -213,7 +219,7 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
 
       <button
         onClick={() => onRemoveTodoItem(item.id)}
-        className="p-1 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
+        className="ml-auto p-1 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
       >
         <TrashIcon className="h-4 w-4" />
       </button>
@@ -223,6 +229,7 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
 
 export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, onDelete, isOwner = true, usersById, currentUserId }: NoteModalProps) {
   const { t, i18n } = useTranslation();
+  const { showToast } = useToast();
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [noteType, setNoteType] = useState<NoteType>('text');
@@ -231,10 +238,12 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   const [archived, setArchived] = useState(false);
   const [items, setItems] = useState<TodoItem[]>([]);
   const [loading, setLoading] = useState(false);
+  const [showSaved, setShowSaved] = useState(false);
   const [checkedItemsCollapsed, setCheckedItemsCollapsed] = useState(false);
   const [noteLabels, setNoteLabels] = useState<Label[]>(note?.labels ?? []);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showLabelPicker, setShowLabelPicker] = useState(false);
+  const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   
   // Use useRef for timeout management instead of global window property
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -242,6 +251,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   const itemInputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
   const contentRef = useRef<HTMLTextAreaElement>(null);
   const savingRef = useRef(false);
+  const savedTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -260,10 +270,8 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     '#ffffff': { name: t('note.colorWhite'), class: 'bg-white dark:bg-slate-800 border-gray-300 dark:border-slate-600' },
     '#f28b82': { name: t('note.colorCoral'), class: 'bg-red-200 dark:bg-red-900 border-red-300 dark:border-red-700' },
     '#fbbc04': { name: t('note.colorYellow'), class: 'bg-yellow-100 dark:bg-yellow-900 border-yellow-300 dark:border-yellow-700' },
-    '#fff475': { name: t('note.colorLemon'), class: 'bg-yellow-50 dark:bg-yellow-900/60 border-yellow-200 dark:border-yellow-700' },
     '#ccff90': { name: t('note.colorLime'), class: 'bg-lime-100 dark:bg-lime-900 border-lime-300 dark:border-lime-700' },
     '#a7ffeb': { name: t('note.colorTeal'), class: 'bg-teal-100 dark:bg-teal-900 border-teal-300 dark:border-teal-700' },
-    '#cbf0f8': { name: t('note.colorSky'), class: 'bg-sky-100 dark:bg-sky-900 border-sky-300 dark:border-sky-700' },
     '#aecbfa': { name: t('note.colorPeriwinkle'), class: 'bg-blue-100 dark:bg-blue-900 border-blue-300 dark:border-blue-700' },
     '#d7aefb': { name: t('note.colorLavender'), class: 'bg-purple-100 dark:bg-purple-900 border-purple-300 dark:border-purple-700' },
     '#fdcfe8': { name: t('note.colorPink'), class: 'bg-pink-100 dark:bg-pink-900 border-pink-300 dark:border-pink-700' },
@@ -308,15 +316,11 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     }
   }, [note]);
 
-  // Cleanup timeouts on component unmount
   useEffect(() => {
     return () => {
-      if (saveTimeoutRef.current) {
-        clearTimeout(saveTimeoutRef.current);
-      }
-      if (errorTimeoutRef.current) {
-        clearTimeout(errorTimeoutRef.current);
-      }
+      if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+      if (errorTimeoutRef.current) clearTimeout(errorTimeoutRef.current);
+      if (savedTimeoutRef.current) clearTimeout(savedTimeoutRef.current);
     };
   }, []);
 
@@ -529,11 +533,26 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     autoSaveNote(updatedItems);
   };
 
-  // Helper function to auto-save note changes
+  const flashSaved = useCallback(() => {
+    setShowSaved(true);
+    if (savedTimeoutRef.current) clearTimeout(savedTimeoutRef.current);
+    savedTimeoutRef.current = setTimeout(() => setShowSaved(false), 2000);
+  }, []);
+
+  const markDirty = useCallback(() => {
+    setShowSaved(false);
+    if (savedTimeoutRef.current) {
+      clearTimeout(savedTimeoutRef.current);
+      savedTimeoutRef.current = undefined;
+    }
+  }, []);
+
   const autoSaveNote = async (updatedItems: TodoItem[]) => {
     if (!note) return;
     if (savingRef.current) return;
     
+    savingRef.current = true;
+    markDirty();
     try {
       const updateData: UpdateNoteRequest = {
         title,
@@ -552,9 +571,12 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       };
       await notes.update(note.id, updateData);
       onRefresh?.();
+      flashSaved();
     } catch (error) {
       console.error('Failed to auto-save note:', error);
       showError(t('note.failedSaveChanges'));
+    } finally {
+      savingRef.current = false;
     }
   };
 
@@ -607,15 +629,14 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     });
     
     setItems(updatedItems);
+    markDirty();
     
     // Auto-save text changes if editing an existing note (with debouncing)
     if (note) {
-      // Clear previous timeout if exists
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current);
       }
       
-      // Set new timeout to save after user stops typing
       saveTimeoutRef.current = setTimeout(async () => {
         await autoSaveNote(updatedItems);
       }, VALIDATION.AUTO_SAVE_TIMEOUT_MS);
@@ -684,7 +705,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
           pinned,
           archived,
           color,
-          checked_items_collapsed: !checkedItemsCollapsed,
+          checked_items_collapsed: checkedItemsCollapsed,
           items: note.note_type === 'todo' ? items.map((item, idx) => ({
             text: item.text,
             position: idx,
@@ -701,6 +722,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
           note_type: noteType,
           color,
           items: noteType === 'todo' ? items.map((item, idx) => ({ text: item.text, position: idx, indent_level: item.indentLevel })) : undefined,
+          labels: noteLabels.length > 0 ? noteLabels.map(l => l.name) : undefined,
         };
         await notes.create(createData);
       }
@@ -727,7 +749,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
         pinned: newPinnedState,
         archived,
         color,
-        checked_items_collapsed: !checkedItemsCollapsed,
+        checked_items_collapsed: checkedItemsCollapsed,
         items: note.note_type === 'todo' ? items.map((item, idx) => ({
           text: item.text,
           position: idx,
@@ -737,10 +759,13 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
         })) : undefined,
       };
       await notes.update(note.id, updateData);
-      onSave(); // Refresh the notes list to show updated pin status
+      onRefresh?.();
+      showToast(
+        newPinnedState ? t('dashboard.notePinned') : t('dashboard.noteUnpinned'),
+        'success'
+      );
     } catch (error) {
       console.error('Failed to update pin status:', error);
-      // Revert the pin state on error
       setPinned(!newPinnedState);
     }
   };
@@ -758,7 +783,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
         pinned,
         archived: newArchivedState,
         color,
-        checked_items_collapsed: !checkedItemsCollapsed,
+        checked_items_collapsed: checkedItemsCollapsed,
         items: note.note_type === 'todo' ? items.map((item, idx) => ({
           text: item.text,
           position: idx,
@@ -768,20 +793,27 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
         })) : undefined,
       };
       await notes.update(note.id, updateData);
-      onSave(); // Refresh the notes list to show updated archive status
+      onRefresh?.();
+      showToast(
+        newArchivedState ? t('dashboard.noteArchived') : t('dashboard.noteUnarchived'),
+        'success'
+      );
     } catch (error) {
       console.error('Failed to update archive status:', error);
-      // Revert the archive state on error
       setArchived(!newArchivedState);
     }
   };
 
   const handleDelete = () => {
     if (!note || !onDelete) return;
-    if (window.confirm(t('note.deleteConfirm'))) {
-      onDelete(note.id);
-      onClose();
-    }
+    setShowDeleteConfirm(true);
+  };
+
+  const confirmDelete = () => {
+    if (!note || !onDelete) return;
+    onDelete(note.id);
+    setShowDeleteConfirm(false);
+    onClose();
   };
 
   const handleToggleCompleted = async () => {
@@ -832,7 +864,8 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       return (
         title.trim() !== '' ||
         content.trim() !== '' ||
-        (noteType === 'todo' && items.some(item => item.text.trim() !== ''))
+        (noteType === 'todo' && items.some(item => item.text.trim() !== '')) ||
+        noteLabels.length > 0
       );
     }
   };
@@ -917,7 +950,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                 </>
               )}
               <button
-                aria-label={t('import.close')}
+                aria-label={t('common.close')}
                 onClick={handleCloseRequest}
                 className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
               >
@@ -981,6 +1014,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                   return;
                 }
                 setTitle(newTitle);
+                if (note) markDirty();
               }}
               onKeyDown={(e) => {
                 if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
@@ -1026,6 +1060,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                     return;
                   }
                   setContent(newContent);
+                  if (note) markDirty();
                 }}
               />
             ) : (
@@ -1111,31 +1146,36 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
             )}
 
             {/* Labels row: badges + add button with popover */}
-            {note && (
-              <div className="flex flex-wrap items-center gap-1">
-                {noteLabels.map(label => (
-                  <span
-                    key={label.id}
-                    className="inline-flex items-center bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full px-2 py-0.5 text-xs"
-                  >
-                    {label.name}
-                  </span>
-                ))}
-                <div className="relative">
-                  <button
-                    onClick={() => setShowLabelPicker(v => !v)}
-                    className="w-6 h-6 rounded-full border border-dashed border-gray-300 dark:border-slate-600 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors"
-                    title={t('labels.addLabels')}
-                    aria-label={t('labels.addLabels')}
-                  >
-                    <PlusIcon className="h-3 w-3 text-gray-400 dark:text-gray-500" />
-                  </button>
-                  {showLabelPicker && (
+            <div className="flex flex-wrap items-center gap-1">
+              {noteLabels.map(label => (
+                <span
+                  key={label.id}
+                  className="inline-flex items-center bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 rounded-full px-2 py-0.5 text-xs"
+                >
+                  {label.name}
+                </span>
+              ))}
+              <div className="relative">
+                <button
+                  onClick={() => setShowLabelPicker(v => !v)}
+                  onMouseDown={(event) => event.stopPropagation()}
+                  className="inline-flex items-center gap-1 rounded-full border border-dashed border-blue-300 dark:border-blue-700 bg-blue-50/80 dark:bg-blue-900/20 px-2 py-1 text-xs font-medium text-blue-700 dark:text-blue-300 hover:bg-blue-100 dark:hover:bg-blue-900/30 transition-colors"
+                  title={t('labels.addLabels')}
+                  aria-label={t('labels.addLabels')}
+                  aria-expanded={showLabelPicker}
+                >
+                  <TagIcon className="h-3.5 w-3.5" aria-hidden="true" />
+                  <span>{t('labels.addLabels')}</span>
+                </button>
+                {showLabelPicker && (
+                  note ? (
                     <LabelPicker note={{...note, labels: noteLabels}} onRefresh={onRefresh} onNoteUpdate={(n) => setNoteLabels(n.labels ?? [])} onError={showError} onClose={() => setShowLabelPicker(false)} />
-                  )}
-                </div>
+                  ) : (
+                    <LabelPicker selectedLabels={noteLabels} onLocalChange={setNoteLabels} onError={showError} onClose={() => setShowLabelPicker(false)} />
+                  )
+                )}
               </div>
-            )}
+            </div>
 
             {/* Color selector */}
             <div className="flex space-x-2">
@@ -1147,6 +1187,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                     color === colorOption.value ? 'ring-2 ring-blue-500' : ''
                   }`}
                   title={colorOption.name}
+                  aria-label={colorOption.name}
                 />
               ))}
             </div>
@@ -1180,19 +1221,32 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                 {t('note.lastEdited', { date: new Date(note.updated_at).toLocaleString(i18n.resolvedLanguage) })}
               </p>
             )}
-            <div className="flex items-center ml-auto">
-              {loading && (
+            <div className="flex items-center ml-auto" role="status" aria-live="polite">
+              {loading ? (
                 <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300">
                   <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600"></div>
                   <span>{t('note.saving')}</span>
                 </div>
-              )}
+              ) : showSaved ? (
+                <div className="flex items-center space-x-1 text-sm text-green-600 dark:text-green-400 transition-opacity">
+                  <CheckIcon className="h-4 w-4" />
+                  <span>{t('note.saved')}</span>
+                </div>
+              ) : null}
             </div>
           </div>
         </DialogPanel>
       </div>
       </Dialog>
 
+      <ConfirmDialog
+        open={showDeleteConfirm}
+        title={t('note.deleteConfirmTitle')}
+        message={t('note.deleteConfirm')}
+        confirmLabel={t('note.delete')}
+        onConfirm={confirmDelete}
+        onCancel={() => setShowDeleteConfirm(false)}
+      />
     </>
   );
 }

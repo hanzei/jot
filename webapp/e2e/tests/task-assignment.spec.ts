@@ -27,7 +27,7 @@ test.describe('Task Assignment', () => {
     await expect(page.getByRole('heading', { name: 'Edit Note' })).toBeVisible();
 
     // The avatar should still be visible after reopening
-    const firstItemRowAfter = page.locator('input[placeholder="List item..."]').first().locator('..');
+    const firstItemRowAfter = page.locator('[data-testid="todo-item-row"]').first();
     await expect(firstItemRowAfter.locator('svg[role="img"], img[alt]').first()).toBeVisible();
 
     // Now unassign: click the avatar to open the picker
@@ -88,7 +88,7 @@ test.describe('Task Assignment', () => {
     await expect(page.getByRole('heading', { name: 'Edit Note' })).toBeVisible();
 
     // The assign button should not be visible since the note is no longer shared
-    const itemRowAfter = page.locator('input[placeholder="List item..."]').first().locator('..');
+    const itemRowAfter = page.locator('[data-testid="todo-item-row"]').first();
     await expect(itemRowAfter.locator('button[aria-label="Assign item"]')).toHaveCount(0);
 
     await page.click('button[aria-label="Close"]');
@@ -140,7 +140,9 @@ test.describe('Task Assignment', () => {
     await dashboardPage.createNote('Regular Note', 'Just a note');
 
     await dashboardPage.switchToMyTodo();
-    await dashboardPage.expectEmptyState('No notes with todos assigned to you');
+    await dashboardPage.expectEmptyState(
+      'No to-do items assigned to you yet. When someone assigns a to-do item to you in a shared note, it will appear here.'
+    );
   });
 
   test('collaborator sees the assignment on a shared note', async ({
@@ -177,7 +179,7 @@ test.describe('Task Assignment', () => {
     await expect(page.getByRole('heading', { name: 'Edit Note' })).toBeVisible();
 
     // The assigned item should show an avatar
-    const sharedItemRow = page.locator('input[placeholder="List item..."]').first().locator('..');
+    const sharedItemRow = page.locator('[data-testid="todo-item-row"]').first();
     await expect(sharedItemRow.locator('svg[role="img"], img[alt]').first()).toBeVisible();
 
     await page.click('button[aria-label="Close"]');

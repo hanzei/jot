@@ -4,10 +4,23 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { MemoryRouter } from 'react-router'
 import { type ReactNode } from 'react'
 import Settings from '../Settings'
-import { users, auth, isAxiosError } from '@/utils/api'
+import { ToastProvider } from '@/components/Toast'
+import { users, auth, labels as labelsApi, isAxiosError } from '@/utils/api'
 import * as authUtils from '@/utils/auth'
 import type { UserSettings } from '@jot/shared'
 import i18n from '@/i18n'
+
+const { mockNavigate } = vi.hoisted(() => ({
+  mockNavigate: vi.fn(),
+}))
+
+vi.mock('react-router', async () => {
+  const actual = await vi.importActual<typeof import('react-router')>('react-router')
+  return {
+    ...actual,
+    useNavigate: () => mockNavigate,
+  }
+})
 
 vi.mock('@/utils/api', () => ({
   auth: {
@@ -17,6 +30,13 @@ vi.mock('@/utils/api', () => ({
   users: {
     updateMe: vi.fn(),
     changePassword: vi.fn(),
+  },
+  labels: {
+    getAll: vi.fn().mockResolvedValue([]),
+  },
+  sessions: {
+    list: vi.fn().mockResolvedValue([]),
+    revoke: vi.fn().mockResolvedValue(undefined),
   },
   isAxiosError: vi.fn(),
 }))
@@ -30,11 +50,14 @@ vi.mock('@/utils/auth', () => ({
   isAdmin: vi.fn().mockReturnValue(false),
 }))
 
-vi.mock('@/components/NavigationHeader', () => ({
-  default: ({ onLogout, username, settingsLinkActive, isAdmin }: { onLogout?: () => void; username?: string; tabs?: unknown[]; children?: ReactNode; settingsLinkActive?: boolean; isAdmin?: boolean }) => (
-    <div data-testid="navigation-header" data-settings-link-active={settingsLinkActive} data-is-admin={isAdmin}>
+vi.mock('@/components/AppLayout', () => ({
+  default: ({ onLogout, username, settingsLinkActive, isAdmin, children, searchBar, sidebarChildren }: { onLogout?: () => void; username?: string; settingsLinkActive?: boolean; isAdmin?: boolean; children?: ReactNode; searchBar?: ReactNode; sidebarChildren?: ReactNode }) => (
+    <div data-testid="app-layout" data-settings-link-active={settingsLinkActive} data-is-admin={isAdmin}>
       <span data-testid="displayed-username">{username}</span>
       <button onClick={onLogout} data-testid="logout-button">Logout</button>
+      <div data-testid="search-bar">{searchBar}</div>
+      <div data-testid="sidebar-children">{sidebarChildren}</div>
+      {children}
     </div>
   ),
 }))
@@ -53,7 +76,9 @@ const mockUser = {
 const renderSettings = (onLogout = vi.fn()) => {
   return render(
     <MemoryRouter>
-      <Settings onLogout={onLogout} />
+      <ToastProvider>
+        <Settings onLogout={onLogout} />
+      </ToastProvider>
     </MemoryRouter>
   )
 }
@@ -61,6 +86,7 @@ const renderSettings = (onLogout = vi.fn()) => {
 describe('Settings', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    mockNavigate.mockReset()
     vi.mocked(authUtils.isAdmin).mockReturnValue(false)
     vi.mocked(authUtils.getUser).mockReturnValue(mockUser)
     i18n.changeLanguage('en')
@@ -79,31 +105,69 @@ describe('Settings', () => {
       expect(screen.getByLabelText('Username')).toHaveValue('testuser')
     })
 
-    it('passes current username to the navigation header', () => {
+    it('passes current username to AppLayout', () => {
       renderSettings()
       expect(screen.getByTestId('displayed-username')).toHaveTextContent('testuser')
     })
 
-    it('passes settingsLinkActive to NavigationHeader', () => {
+    it('passes settingsLinkActive to AppLayout', () => {
       renderSettings()
-      expect(screen.getByTestId('navigation-header')).toHaveAttribute('data-settings-link-active', 'true')
+      expect(screen.getByTestId('app-layout')).toHaveAttribute('data-settings-link-active', 'true')
     })
 
-    it('passes isAdmin to NavigationHeader for non-admin user', () => {
+    it('passes isAdmin to AppLayout for non-admin user', () => {
       renderSettings()
-      expect(screen.getByTestId('navigation-header')).toHaveAttribute('data-is-admin', 'false')
+      expect(screen.getByTestId('app-layout')).toHaveAttribute('data-is-admin', 'false')
     })
 
-    it('passes isAdmin to NavigationHeader for admin user', () => {
+    it('passes isAdmin to AppLayout for admin user', () => {
       vi.mocked(authUtils.isAdmin).mockReturnValue(true)
       renderSettings()
-      expect(screen.getByTestId('navigation-header')).toHaveAttribute('data-is-admin', 'true')
+      expect(screen.getByTestId('app-layout')).toHaveAttribute('data-is-admin', 'true')
     })
 
     it('renders without errors when user is not logged in', () => {
       vi.mocked(authUtils.getUser).mockReturnValue(null)
       renderSettings()
       expect(screen.getByLabelText('Username')).toHaveValue('')
+    })
+
+    it('loads labels and renders sidebar label buttons', async () => {
+      vi.mocked(labelsApi.getAll).mockResolvedValue([
+        {
+          id: 'label-1',
+          user_id: 'user1',
+          name: 'Work',
+          created_at: '2023-01-01T00:00:00Z',
+          updated_at: '2023-01-01T00:00:00Z',
+        },
+      ])
+
+      renderSettings()
+
+      await waitFor(() => {
+        expect(labelsApi.getAll).toHaveBeenCalled()
+      })
+      expect(await screen.findByRole('button', { name: 'Work' })).toBeInTheDocument()
+    })
+
+    it('navigates to label-filtered notes when a sidebar label is clicked', async () => {
+      const user = userEvent.setup()
+      vi.mocked(labelsApi.getAll).mockResolvedValue([
+        {
+          id: 'label-1',
+          user_id: 'user1',
+          name: 'Work',
+          created_at: '2023-01-01T00:00:00Z',
+          updated_at: '2023-01-01T00:00:00Z',
+        },
+      ])
+
+      renderSettings()
+
+      await user.click(await screen.findByRole('button', { name: 'Work' }))
+
+      expect(mockNavigate).toHaveBeenCalledWith('/?label=label-1')
     })
   })
 
@@ -125,12 +189,12 @@ describe('Settings', () => {
         expect(users.updateMe).toHaveBeenCalledWith({ username: 'newuser', first_name: '', last_name: '' })
       })
       await waitFor(() => {
-        expect(screen.getByText('Profile updated successfully.')).toBeInTheDocument()
+        expect(screen.getByRole('status')).toHaveTextContent('Profile updated successfully.')
       })
       expect(authUtils.setUser).toHaveBeenCalledWith(updatedUser)
     })
 
-    it('updates displayed username in nav header after successful save', async () => {
+    it('updates displayed username in AppLayout after successful save', async () => {
       const user = userEvent.setup()
       const updatedUser = { ...mockUser, username: 'newuser' }
       const mockSettings = { user_id: 'user1', language: 'system', theme: 'system' as const, updated_at: '' }

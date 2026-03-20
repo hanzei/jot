@@ -21,32 +21,39 @@ const OfflineContext = createContext<OfflineContextValue>({ isConnected: true })
 
 export function OfflineProvider({ children }: { children: React.ReactNode }) {
   const [isConnected, setIsConnected] = useState(true);
-  const { isAuthenticated } = useAuth();
+  const { revalidateSession } = useAuth();
   const db = useSQLiteContext();
   const queryClient = useQueryClient();
   const prevConnectedRef = useRef(true);
   const isDrainingRef = useRef(false);
 
   const handleReconnect = useCallback(async () => {
-    if (!isAuthenticated) return; // Don't replay queued operations when not logged in
+    // Re-validate session with the server (handles offline-authenticated users
+    // and refreshes user/settings for all returning-online users).
+    const stillAuthenticated = await revalidateSession();
+
+    if (!stillAuthenticated) return;
     if (isDrainingRef.current) return;
     isDrainingRef.current = true;
     try {
-      const { idMappings } = await drainQueue(db);
-      // For each create that was reconciled, update the React Query cache so any
-      // open editor still holding the local ID can transparently switch to the server note.
+      const { idMappings, discardedOperations } = await drainQueue(db);
       for (const { localId, serverNote } of idMappings) {
         queryClient.setQueryData(['note-local', localId], serverNote);
       }
+      if (discardedOperations.length > 0) {
+        console.warn(
+          `Sync discarded ${discardedOperations.length} operation(s) that were rejected by the server:`,
+          discardedOperations,
+        );
+      }
+      queryClient.invalidateQueries({ queryKey: ['notes-local'] });
+      queryClient.invalidateQueries({ queryKey: ['note-local'] });
     } catch (err) {
       console.warn('Queue drain failed:', err);
     } finally {
       isDrainingRef.current = false;
     }
-    // Full refetch to reconcile local state with server
-    queryClient.invalidateQueries({ queryKey: ['notes-local'] });
-    queryClient.invalidateQueries({ queryKey: ['note-local'] });
-  }, [db, queryClient, isAuthenticated]);
+  }, [db, queryClient, revalidateSession]);
 
   useEffect(() => {
     // Seed the initial state from the real network status before subscribing to changes,

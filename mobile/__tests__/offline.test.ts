@@ -6,6 +6,13 @@ import { generateLocalId, isLocalId, replaceLocalNoteId } from '../src/db/noteQu
 import { drainQueue } from '../src/db/syncQueue';
 import api from '../src/api/client';
 
+function makeAxiosError(status: number) {
+  return Object.assign(new Error(`Request failed with status code ${status}`), {
+    isAxiosError: true,
+    response: { status },
+  });
+}
+
 jest.mock('../src/api/client', () => ({
   __esModule: true,
   default: {
@@ -105,7 +112,7 @@ describe('drainQueue', () => {
       { id: 4, operation: 'delete', endpoint: '/notes/gone', method: 'DELETE', body: null, created_at: '' },
       { id: 5, operation: 'update', endpoint: '/notes/exists', method: 'PUT', body: '{}', created_at: '' },
     ]);
-    mockApi.delete.mockRejectedValueOnce({ response: { status: 404 } });
+    mockApi.delete.mockRejectedValueOnce(makeAxiosError(404));
     mockApi.put.mockResolvedValueOnce({ data: {} } as never);
 
     await drainQueue(db as never);
@@ -119,7 +126,7 @@ describe('drainQueue', () => {
       { id: 4, operation: 'update', endpoint: '/notes/conflict', method: 'PUT', body: '{}', created_at: '' },
       { id: 5, operation: 'update', endpoint: '/notes/exists', method: 'PUT', body: '{}', created_at: '' },
     ]);
-    mockApi.put.mockRejectedValueOnce({ response: { status: 409 } });
+    mockApi.put.mockRejectedValueOnce(makeAxiosError(409));
     mockApi.put.mockResolvedValueOnce({ data: {} } as never);
 
     await drainQueue(db as never);
