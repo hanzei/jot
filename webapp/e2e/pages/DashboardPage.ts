@@ -149,6 +149,15 @@ export class DashboardPage {
     await expect(this.page.locator('[data-testid="note-card"]').filter({ hasText: title })).toHaveCount(0);
   }
 
+  async duplicateNoteFromMenu(title: string) {
+    await this.openNoteMenu(title);
+    await this.page.getByRole('menuitem', { name: 'Duplicate' }).click();
+  }
+
+  async duplicateCurrentNoteFromModal() {
+    await this.page.getByRole('button', { name: 'Duplicate' }).click();
+  }
+
   async search(query: string) {
     await this.page.fill('[aria-label="Search notes"]', query);
   }

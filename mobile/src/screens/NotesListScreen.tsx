@@ -16,11 +16,12 @@ import * as Haptics from 'expo-haptics';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useUpdateNote, useDeleteNote, useRestoreNote, usePermanentDeleteNote, useReorderNotes } from '../hooks/useNotes';
+import { useUpdateNote, useDeleteNote, useRestoreNote, usePermanentDeleteNote, useReorderNotes, useDuplicateNote } from '../hooks/useNotes';
 import { useOfflineNotes } from '../hooks/useOfflineNotes';
 import { useUsers } from '../store/UsersContext';
 import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
+import { isLocalId } from '../db/noteQueries';
 import NoteCard from '../components/NoteCard';
 import NoteContextMenu, { ContextMenuViewContext } from '../components/NoteContextMenu';
 import ColorPicker from '../components/ColorPicker';
@@ -80,6 +81,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   const deleteNote = useDeleteNote();
   const restoreNote = useRestoreNote();
   const permanentDeleteNote = usePermanentDeleteNote();
+  const duplicateNote = useDuplicateNote();
   const reorderNotes = useReorderNotes();
   const navigation = useNavigation<NavigationProp>();
 
@@ -179,6 +181,20 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
       Alert.alert('Error', 'Failed to restore note');
     }
   }, [restoreNote]);
+
+  const handleDuplicate = useCallback(async (note: Note) => {
+    if (isLocalId(note.id)) {
+      Alert.alert('Error', 'Please wait for this note to sync before duplicating it');
+      return;
+    }
+
+    try {
+      await duplicateNote.mutateAsync(note.id);
+      Alert.alert('Success', 'Note duplicated');
+    } catch {
+      Alert.alert('Error', 'Failed to duplicate note');
+    }
+  }, [duplicateNote]);
 
   const handleDeletePermanently = useCallback((note: Note) => {
     Alert.alert(
@@ -551,6 +567,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
         onPin={handlePin}
         onArchive={handleArchive}
         onUnarchive={handleUnarchive}
+        onDuplicate={handleDuplicate}
         onMoveToTrash={handleMoveToTrash}
         onRestore={handleRestore}
         onDeletePermanently={handleDeletePermanently}

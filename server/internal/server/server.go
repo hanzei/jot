@@ -164,6 +164,7 @@ func (s *Server) setupRoutes() error {
 			r.Get("/notes/{id}", s.wrapHandler(s.notesHandler.GetNote))
 			r.Patch("/notes/{id}", s.wrapHandler(s.notesHandler.UpdateNote))
 			r.Delete("/notes/{id}", s.wrapHandler(s.notesHandler.DeleteNote))
+			r.Post("/notes/{id}/duplicate", s.wrapHandler(s.notesHandler.DuplicateNote))
 
 			r.Post("/notes/{id}/restore", s.wrapHandler(s.notesHandler.RestoreNote))
 

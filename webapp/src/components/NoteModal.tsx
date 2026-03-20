@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { XMarkIcon, PlusIcon, TrashIcon, ChevronDownIcon, ArchiveBoxIcon, ArchiveBoxXMarkIcon, ShareIcon, UserPlusIcon, CheckIcon, TagIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon, PlusIcon, TrashIcon, ChevronDownIcon, ArchiveBoxIcon, ArchiveBoxXMarkIcon, ShareIcon, UserPlusIcon, CheckIcon, TagIcon, DocumentDuplicateIcon } from '@heroicons/react/24/outline';
 import { Dialog, DialogPanel } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
 import { VALIDATION, NOTE_COLORS, buildCollaborators, type Note, type NoteType, type CreateNoteRequest, type UpdateNoteRequest, type Label, type User, type Collaborator } from '@jot/shared';
@@ -63,6 +63,7 @@ interface NoteModalProps {
   onRefresh?: () => void;
   onShare?: (note: Note) => void;
   onDelete?: (noteId: string) => void;
+  onDuplicate?: (noteId: string) => Promise<void> | void;
   isOwner?: boolean;
   usersById?: Map<string, User>;
   currentUserId?: string;
@@ -227,7 +228,7 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
   );
 }
 
-export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, onDelete, isOwner = true, usersById, currentUserId }: NoteModalProps) {
+export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, onDelete, onDuplicate, isOwner = true, usersById, currentUserId }: NoteModalProps) {
   const { t, i18n } = useTranslation();
   const { showToast } = useToast();
   const [title, setTitle] = useState('');
@@ -687,6 +688,34 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     await autoSaveNote(updatedItems);
   };
 
+  const persistExistingNote = useCallback(async () => {
+    if (!note) return;
+
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = undefined;
+    }
+
+    const updateData: UpdateNoteRequest = {
+      title,
+      content,
+      pinned,
+      archived,
+      color,
+      checked_items_collapsed: checkedItemsCollapsed,
+      items: noteType === 'todo' ? items.map((item, idx) => ({
+        text: item.text,
+        position: idx,
+        completed: item.completed,
+        indent_level: item.indentLevel,
+        assigned_to: item.assignedTo,
+      })) : undefined,
+    };
+
+    await notes.update(note.id, updateData);
+    onRefresh?.();
+  }, [archived, checkedItemsCollapsed, color, content, items, note, noteType, onRefresh, pinned, title]);
+
   const handleSave = async () => {
     if (savingRef.current) return;
     savingRef.current = true;
@@ -699,29 +728,19 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     setLoading(true);
     try {
       if (note) {
-        const updateData: UpdateNoteRequest = {
-          title,
-          content,
-          pinned,
-          archived,
-          color,
-          checked_items_collapsed: checkedItemsCollapsed,
-          items: note.note_type === 'todo' ? items.map((item, idx) => ({
-            text: item.text,
-            position: idx,
-            completed: item.completed,
-            indent_level: item.indentLevel,
-            assigned_to: item.assignedTo,
-          })) : undefined,
-        };
-        await notes.update(note.id, updateData);
+        await persistExistingNote();
       } else {
         const createData: CreateNoteRequest = {
           title,
           content,
           note_type: noteType,
           color,
-          items: noteType === 'todo' ? items.map((item, idx) => ({ text: item.text, position: idx, indent_level: item.indentLevel })) : undefined,
+          items: noteType === 'todo' ? items.map((item, idx) => ({
+            text: item.text,
+            position: idx,
+            completed: item.completed,
+            indent_level: item.indentLevel,
+          })) : undefined,
           labels: noteLabels.length > 0 ? noteLabels.map(l => l.name) : undefined,
         };
         await notes.create(createData);
@@ -730,6 +749,33 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     } catch (error) {
       console.error('Failed to save note:', error);
       showError(t('note.failedSaveChanges'));
+    } finally {
+      savingRef.current = false;
+      setLoading(false);
+    }
+  };
+
+  const handleDuplicate = async () => {
+    if (!note || !onDuplicate || loading || savingRef.current) return;
+
+    savingRef.current = true;
+    setLoading(true);
+    try {
+      await persistExistingNote();
+    } catch (error) {
+      console.error('Failed to save note before duplicate:', error);
+      showError(t('note.failedSaveChanges'));
+      savingRef.current = false;
+      setLoading(false);
+      return;
+    }
+
+    try {
+      await onDuplicate(note.id);
+      onClose();
+    } catch (error) {
+      console.error('Failed to duplicate note:', error);
+      showError(t('note.failedDuplicate'));
     } finally {
       savingRef.current = false;
       setLoading(false);
@@ -937,6 +983,16 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                       <ArchiveBoxIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
                     )}
                   </button>
+                  {onDuplicate && (
+                    <button
+                      onClick={handleDuplicate}
+                      className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                      title={t('note.duplicate')}
+                      aria-label={t('note.duplicate')}
+                    >
+                      <DocumentDuplicateIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+                    </button>
+                  )}
                   {isOwner && onDelete && (
                     <button
                       onClick={handleDelete}

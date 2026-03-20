@@ -16,7 +16,7 @@ import * as Haptics from 'expo-haptics';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useCreateNote, useUpdateNote, useDeleteNote } from '../hooks/useNotes';
+import { useCreateNote, useUpdateNote, useDeleteNote, useDuplicateNote } from '../hooks/useNotes';
 import { useOfflineNote } from '../hooks/useOfflineNotes';
 import { isLocalId } from '../db/noteQueries';
 import { useSSESubscription } from '../store/SSEContext';
@@ -93,6 +93,7 @@ export default function NoteEditorScreen() {
   const createMutation = useCreateNote();
   const updateMutation = useUpdateNote();
   const deleteMutation = useDeleteNote();
+  const duplicateMutation = useDuplicateNote();
 
   // Show a toast when another user updates this note while editor is open
   useSSESubscription(noteId, useCallback(() => {
@@ -187,9 +188,9 @@ export default function NoteEditorScreen() {
     }
   }, [existingNote?.id, noteId, navigation]); // eslint-disable-line react-hooks/exhaustive-deps
 
-  const flushSave = useCallback(async (unmounting = false) => {
+  const flushSave = useCallback(async (unmounting = false): Promise<boolean> => {
     // Skip save if editing an existing note that hasn't hydrated yet
-    if (noteIdRef.current && !isInitializedRef.current) return;
+    if (noteIdRef.current && !isInitializedRef.current) return false;
 
     // Serialize mutations: chain onto any in-flight save to prevent concurrent writes
     const predecessor = saveInFlightRef.current;
@@ -207,7 +208,7 @@ export default function NoteEditorScreen() {
       const currentColor = colorRef.current;
 
       if (!currentNoteId) {
-        if (!currentTitle && !currentContent && currentItems.length === 0) return;
+        if (!currentTitle && !currentContent && currentItems.length === 0) return true;
         const newNote = await createMutateRef.current({
           title: currentTitle,
           content: currentContent,
@@ -243,11 +244,13 @@ export default function NoteEditorScreen() {
     saveInFlightRef.current = thisPromise;
     try {
       await thisPromise;
+      return true;
     } catch (err) {
       console.error('Failed to save note:', err);
       if (isMountedRef.current && !unmounting) {
         setSaveError('Failed to save note. Tap to retry.');
       }
+      return false;
     } finally {
       if (saveInFlightRef.current === thisPromise) {
         saveInFlightRef.current = null;
@@ -521,6 +524,33 @@ export default function NoteEditorScreen() {
     setNoteType((prev) => (prev === 'text' ? 'todo' : 'text'));
   }, [hasCreated]);
 
+  const handleDuplicate = useCallback(async () => {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+    }
+
+    const saveSucceeded = await flushSave();
+    if (!saveSucceeded) {
+      return;
+    }
+
+    const currentNoteId = noteIdRef.current;
+    if (!currentNoteId || isLocalId(currentNoteId)) {
+      Alert.alert('Error', 'Please wait for this note to sync before duplicating it');
+      return;
+    }
+
+    try {
+      const duplicatedNote = await duplicateMutation.mutateAsync(currentNoteId);
+      intentionalExitRef.current = true;
+      Alert.alert('Success', 'Note duplicated');
+      navigation.replace('NoteEditor', { noteId: duplicatedNote.id });
+    } catch {
+      Alert.alert('Error', 'Failed to duplicate note');
+    }
+  }, [duplicateMutation, flushSave, navigation]);
+
   // Disable inputs while waiting for existing note to hydrate
   const isHydrating = initialNoteId !== null && !existingNote;
 
@@ -788,6 +818,17 @@ export default function NoteEditorScreen() {
               size={22}
               color={archived ? colors.primary : (hasNoteColor ? '#444' : colors.icon)}
             />
+          </TouchableOpacity>
+        )}
+
+        {noteId && !isLocalId(noteId) && (
+          <TouchableOpacity
+            onPress={handleDuplicate}
+            style={styles.toolbarBtn}
+            testID="toolbar-duplicate-btn"
+            accessibilityLabel="Duplicate note"
+          >
+            <Ionicons name="copy-outline" size={22} color={hasNoteColor ? '#444' : colors.icon} />
           </TouchableOpacity>
         )}
 

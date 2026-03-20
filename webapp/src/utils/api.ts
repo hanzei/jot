@@ -63,6 +63,9 @@ export const notes = {
   restore: (id: string): Promise<Note> =>
     api.post(`/notes/${id}/restore`).then(res => res.data),
 
+  duplicate: (id: string): Promise<Note> =>
+    api.post(`/notes/${id}/duplicate`).then(res => res.data),
+
   share: (id: string, data: ShareNoteRequest): Promise<ShareNoteResponse> =>
     api.post(`/notes/${id}/share`, data).then(res => res.data),
 
