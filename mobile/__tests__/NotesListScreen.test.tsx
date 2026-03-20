@@ -201,16 +201,16 @@ describe('NotesListScreen sorting', () => {
     });
   });
 
-  it('shows pinned-first alphabetical ordering when title sort is active', () => {
+  it('normalizes a saved title sort preference back to manual', () => {
     mockUseAuth.mockReturnValue({
       user: mockUser,
-      settings: { ...baseSettings, note_sort: 'title' },
+      settings: { ...baseSettings, note_sort: 'title' as unknown as NoteSort },
       setSettings: jest.fn(),
     });
     mockUseOfflineNotes.mockReturnValue({
       data: [
-        buildNote({ id: 'unpinned-bravo', title: 'sort-demo-bravo', pinned: false }),
         buildNote({ id: 'pinned-zulu', title: 'sort-demo-zulu', pinned: true }),
+        buildNote({ id: 'unpinned-bravo', title: 'sort-demo-bravo', pinned: false }),
         buildNote({ id: 'unpinned-alpha', title: 'sort-demo-alpha', pinned: false }),
       ],
       isLoading: false,
@@ -221,8 +221,8 @@ describe('NotesListScreen sorting', () => {
 
     render(<NotesListScreen variant="notes" />);
 
-    expect(screen.getByTestId('sort-disabled-notice')).toBeTruthy();
-    expect(screen.queryByTestId('pinned-draggable-list')).toBeNull();
+    expect(screen.queryByTestId('sort-disabled-notice')).toBeNull();
+    expect(screen.getByTestId('pinned-draggable-list')).toBeTruthy();
     expect(screen.getByText('Pinned')).toBeTruthy();
     expect(screen.getByText('sort-demo-zulu')).toBeTruthy();
     expect(screen.getByText('sort-demo-alpha')).toBeTruthy();
@@ -249,7 +249,7 @@ describe('NotesListScreen sorting', () => {
     });
     mockUpdateMe.mockResolvedValue({
       user: mockUser,
-      settings: { ...baseSettings, note_sort: 'title' },
+      settings: { ...baseSettings, note_sort: 'created_at' },
     });
 
     render(<NotesListScreen variant="notes" />);
@@ -257,14 +257,14 @@ describe('NotesListScreen sorting', () => {
     expect(screen.queryByTestId('sort-disabled-notice')).toBeNull();
     expect(screen.getByTestId('notes-section-list')).toBeTruthy();
     expect(screen.getByTestId('unpinned-draggable-list')).toBeTruthy();
-    fireEvent.press(screen.getByTestId('sort-chip-title'));
+    fireEvent.press(screen.getByTestId('sort-chip-created_at'));
 
     await waitFor(() => {
-      expect(mockUpdateMe).toHaveBeenCalledWith({ note_sort: 'title' });
+      expect(mockUpdateMe).toHaveBeenCalledWith({ note_sort: 'created_at' });
       expect(screen.getByTestId('sort-disabled-notice')).toBeTruthy();
     });
 
-    expect(setSettings).toHaveBeenCalledWith(expect.objectContaining({ note_sort: 'title' }));
+    expect(setSettings).toHaveBeenCalledWith(expect.objectContaining({ note_sort: 'created_at' }));
     expect(screen.queryByTestId('unpinned-draggable-list')).toBeNull();
   });
 
@@ -290,10 +290,10 @@ describe('NotesListScreen sorting', () => {
 
     render(<NotesListScreen variant="notes" />);
 
-    fireEvent.press(screen.getByTestId('sort-chip-title'));
+    fireEvent.press(screen.getByTestId('sort-chip-created_at'));
 
     await waitFor(() => {
-      expect(mockUpdateMe).toHaveBeenCalledWith({ note_sort: 'title' });
+      expect(mockUpdateMe).toHaveBeenCalledWith({ note_sort: 'created_at' });
       expect(alertSpy).toHaveBeenCalledWith('Error', 'Failed to update sort preference');
     });
 
@@ -329,7 +329,7 @@ describe('NotesListScreen sorting', () => {
 
     render(<NotesListScreen variant="notes" />);
 
-    fireEvent.press(screen.getByTestId('sort-chip-title'));
+    fireEvent.press(screen.getByTestId('sort-chip-updated_at'));
     fireEvent.press(screen.getByTestId('sort-chip-created_at'));
 
     second.resolve({
@@ -343,7 +343,7 @@ describe('NotesListScreen sorting', () => {
 
     first.resolve({
       user: mockUser,
-      settings: { ...baseSettings, note_sort: 'title' },
+      settings: { ...baseSettings, note_sort: 'updated_at' },
     });
 
     await waitFor(() => {

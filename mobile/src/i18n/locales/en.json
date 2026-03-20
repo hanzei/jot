@@ -77,8 +77,7 @@
     "sortOption": {
       "manual": "Manual",
       "updated_at": "Last modified",
-      "created_at": "Date created",
-      "title": "Alphabetical"
+      "created_at": "Date created"
     },
     "sortAccessibilityLabel": "Sort by {{sortLabel}}",
     "sortDisabledNotice": "Manual reorder is off. Notes are sorted by {{sortLabel}}, so drag-and-drop is unavailable."

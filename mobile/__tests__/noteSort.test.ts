@@ -1,5 +1,5 @@
 import type { Note } from '@jot/shared';
-import { compareDescendingTimestamps, getNoteSortLabel, getTitleKey, normalizeNoteSort, sortNotesForDisplay } from '../src/utils/noteSort';
+import { compareDescendingTimestamps, getNoteSortLabel, normalizeNoteSort, sortNotesForDisplay } from '../src/utils/noteSort';
 
 function buildNote(overrides: Partial<Note> = {}): Note {
   return {
@@ -26,13 +26,14 @@ function buildNote(overrides: Partial<Note> = {}): Note {
 describe('mobile noteSort', () => {
   it('normalizes invalid sort values to manual', () => {
     expect(normalizeNoteSort('updated_at')).toBe('updated_at');
+    expect(normalizeNoteSort('title' as never)).toBe('manual');
     expect(normalizeNoteSort('unexpected')).toBe('manual');
     expect(normalizeNoteSort()).toBe('manual');
   });
 
   it('returns labels for sort modes', () => {
     expect(getNoteSortLabel('manual')).toBe('Manual');
-    expect(getNoteSortLabel('title')).toBe('Alphabetical');
+    expect(getNoteSortLabel('created_at')).toBe('Date created');
   });
 
   it('keeps manual ordering within pinned and unpinned groups', () => {
@@ -49,16 +50,6 @@ describe('mobile noteSort', () => {
       'unpinned-1',
       'unpinned-2',
     ]);
-  });
-
-  it('sorts titles alphabetically without case sensitivity', () => {
-    const sorted = sortNotesForDisplay([
-      buildNote({ id: 'note-1', title: 'zulu' }),
-      buildNote({ id: 'note-2', title: 'Alpha' }),
-      buildNote({ id: 'note-3', title: 'bravo' }),
-    ], 'title');
-
-    expect([...sorted.pinned, ...sorted.other].map(note => note.title)).toEqual(['Alpha', 'bravo', 'zulu']);
   });
 
   it('sorts by last modified descending', () => {
@@ -99,27 +90,8 @@ describe('mobile noteSort', () => {
 
   it('returns empty groups for empty note arrays', () => {
     expect(sortNotesForDisplay([], 'manual')).toEqual({ pinned: [], other: [] });
-    expect(sortNotesForDisplay([], 'title')).toEqual({ pinned: [], other: [] });
     expect(sortNotesForDisplay([], 'updated_at')).toEqual({ pinned: [], other: [] });
-  });
-
-  it('sorts null and empty titles after real titles while preserving their relative order', () => {
-    expect(getTitleKey(null)).toBe('');
-    expect(getTitleKey('')).toBe('');
-
-    const sorted = sortNotesForDisplay([
-      buildNote({ id: 'note-null', title: null as unknown as string }),
-      buildNote({ id: 'note-real-a', title: 'Alpha' }),
-      buildNote({ id: 'note-empty', title: '' }),
-      buildNote({ id: 'note-real-b', title: 'Beta' }),
-    ], 'title');
-
-    expect(sorted.other.map(note => note.id)).toEqual([
-      'note-real-a',
-      'note-real-b',
-      'note-null',
-      'note-empty',
-    ]);
+    expect(sortNotesForDisplay([], 'created_at')).toEqual({ pinned: [], other: [] });
   });
 
   it('sorts invalid timestamps after valid timestamps', () => {

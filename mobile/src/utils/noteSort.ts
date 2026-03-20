@@ -4,13 +4,10 @@ export const NOTE_SORT_OPTIONS: ReadonlyArray<NoteSort> = [
   'manual',
   'updated_at',
   'created_at',
-  'title',
 ];
 
 export const normalizeNoteSort = (value?: string): NoteSort =>
   NOTE_SORT_OPTIONS.includes(value as NoteSort) ? (value as NoteSort) : 'manual';
-
-export const getTitleKey = (title: string | null | undefined): string => (title ?? '').trim();
 
 export const compareDescendingTimestamps = (left: string, right: string): number => {
   const leftTime = Date.parse(left);
@@ -35,8 +32,6 @@ const getEnglishSortLabel = (sortMode: NoteSort): string => {
       return 'Last modified';
     case 'created_at':
       return 'Date created';
-    case 'title':
-      return 'Alphabetical';
     case 'manual':
     default:
       return 'Manual';
@@ -68,26 +63,6 @@ export const sortNotesForDisplay = (
         return compareDescendingTimestamps(left.updated_at, right.updated_at) || preserveOriginalOrder(left, right);
       case 'created_at':
         return compareDescendingTimestamps(left.created_at, right.created_at) || preserveOriginalOrder(left, right);
-      case 'title':
-        {
-          const leftTitle = getTitleKey(left.title);
-          const rightTitle = getTitleKey(right.title);
-
-          if (!leftTitle && !rightTitle) {
-            return preserveOriginalOrder(left, right);
-          }
-          if (!leftTitle) {
-            return 1;
-          }
-          if (!rightTitle) {
-            return -1;
-          }
-
-          return (
-            leftTitle.localeCompare(rightTitle, undefined, { sensitivity: 'base' }) ||
-            preserveOriginalOrder(left, right)
-          );
-        }
       case 'manual':
       default:
         return preserveOriginalOrder(left, right);

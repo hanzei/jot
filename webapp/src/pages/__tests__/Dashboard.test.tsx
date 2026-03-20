@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { MemoryRouter, useLocation, useNavigate, Routes, Route } from 'react-router'
 import { type ReactNode } from 'react'
 import Dashboard from '../Dashboard'
-import type { AuthResponse, Note, Label, UserSettings } from '@jot/shared'
+import type { AuthResponse, Note, Label, NoteSort, UserSettings } from '@jot/shared'
 import { notes, labels, users } from '@/utils/api'
 import * as auth from '@/utils/auth'
 import { useSSE } from '@/utils/useSSE'
@@ -402,30 +402,30 @@ describe('Dashboard', () => {
         user_id: 'user1',
         language: 'system',
         theme: 'system',
-        note_sort: 'title',
+        note_sort: 'title' as unknown as NoteSort,
         updated_at: '2023-01-01T00:00:00Z',
       })
 
       renderDashboard()
 
       await waitFor(() => {
-        expect(screen.getByTestId('dashboard-sort-select')).toHaveValue('title')
+        expect(screen.getByTestId('dashboard-sort-select')).toHaveValue('manual')
       })
     })
 
-    it('sorts pinned and unpinned notes alphabetically within their groups', async () => {
+    it('sorts pinned and unpinned notes by last modified within their groups', async () => {
       vi.mocked(auth.getSettings).mockReturnValue({
         user_id: 'user1',
         language: 'system',
         theme: 'system',
-        note_sort: 'title',
+        note_sort: 'updated_at',
         updated_at: '2023-01-01T00:00:00Z',
       })
       vi.mocked(notes.getAll).mockResolvedValue([
-        createMockNote({ id: 'unpinned-zulu', title: 'Zulu', pinned: false }),
-        createMockNote({ id: 'pinned-beta', title: 'beta', pinned: true }),
-        createMockNote({ id: 'unpinned-alpha', title: 'alpha', pinned: false }),
-        createMockNote({ id: 'pinned-alpha', title: 'Alpha', pinned: true }),
+        createMockNote({ id: 'unpinned-old', title: 'Older unpinned', pinned: false, updated_at: '2024-01-01T00:00:00Z' }),
+        createMockNote({ id: 'pinned-old', title: 'Older pinned', pinned: true, updated_at: '2024-01-01T00:00:00Z' }),
+        createMockNote({ id: 'unpinned-new', title: 'Newer unpinned', pinned: false, updated_at: '2024-01-03T00:00:00Z' }),
+        createMockNote({ id: 'pinned-new', title: 'Newer pinned', pinned: true, updated_at: '2024-01-03T00:00:00Z' }),
       ])
 
       renderDashboard()
@@ -433,10 +433,10 @@ describe('Dashboard', () => {
       await waitFor(() => {
         const renderedOrder = screen.getAllByTestId(/^note-card-/).map(card => card.getAttribute('data-testid'))
         expect(renderedOrder).toEqual([
-          'note-card-pinned-alpha',
-          'note-card-pinned-beta',
-          'note-card-unpinned-alpha',
-          'note-card-unpinned-zulu',
+          'note-card-pinned-new',
+          'note-card-pinned-old',
+          'note-card-unpinned-new',
+          'note-card-unpinned-old',
         ])
       })
     })

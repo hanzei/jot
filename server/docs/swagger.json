@@ -2192,8 +2192,7 @@
                     "enum": [
                         "manual",
                         "updated_at",
-                        "created_at",
-                        "title"
+                        "created_at"
                     ]
                 },
                 "theme": {
@@ -2552,8 +2551,7 @@
                     "enum": [
                         "manual",
                         "updated_at",
-                        "created_at",
-                        "title"
+                        "created_at"
                     ]
                 },
                 "theme": {

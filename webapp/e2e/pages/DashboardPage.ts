@@ -186,7 +186,7 @@ export class DashboardPage {
     await this.page.fill('[aria-label="Search notes"]', query);
   }
 
-  async selectSort(sort: 'manual' | 'updated_at' | 'created_at' | 'title') {
+  async selectSort(sort: 'manual' | 'updated_at' | 'created_at') {
     await this.page.getByLabel('Sort notes').selectOption(sort);
   }
 

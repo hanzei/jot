@@ -193,9 +193,9 @@ test.describe('Notes', () => {
     await dashboardPage.createNote('Bravo');
     await dashboardPage.pinNote('Zulu');
 
-    await dashboardPage.selectSort('title');
+    await dashboardPage.selectSort('created_at');
     await dashboardPage.expectManualReorderDisabledNotice();
-    await dashboardPage.expectVisibleNoteTitles(['Zulu', 'alpha', 'Bravo']);
+    await dashboardPage.expectVisibleNoteTitles(['Zulu', 'Bravo', 'alpha']);
 
     await page.waitForTimeout(1100);
     // Patch the alpha note directly so updated_at changes deterministically without

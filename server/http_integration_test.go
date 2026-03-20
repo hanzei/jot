@@ -754,7 +754,7 @@ func TestUserSettingsEndpoints(t *testing.T) {
 	})
 
 	t.Run("PATCH /users/me with invalid note_sort returns 400", func(t *testing.T) {
-		_, err := user.Client.UpdateUser(t.Context(), &client.UpdateUserRequest{NoteSort: client.Ptr("priority")})
+		_, err := user.Client.UpdateUser(t.Context(), &client.UpdateUserRequest{NoteSort: client.Ptr("title")})
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 
@@ -773,7 +773,7 @@ func TestUserSettingsEndpoints(t *testing.T) {
 	t.Run("invalid note_sort with valid profile does not commit profile (atomic validation)", func(t *testing.T) {
 		_, err := user.Client.UpdateUser(t.Context(), &client.UpdateUserRequest{
 			FirstName: client.Ptr("ShouldNotPersistEither"),
-			NoteSort:  client.Ptr("priority"),
+			NoteSort:  client.Ptr("title"),
 		})
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 
@@ -786,13 +786,13 @@ func TestUserSettingsEndpoints(t *testing.T) {
 		resp, err := user.Client.UpdateUser(t.Context(), &client.UpdateUserRequest{
 			FirstName: client.Ptr("Jane"),
 			Theme:     client.Ptr("dark"),
-			NoteSort:  client.Ptr("title"),
+			NoteSort:  client.Ptr("created_at"),
 		})
 		require.NoError(t, err)
 		assert.Equal(t, "Jane", resp.User.FirstName)
 		assert.Equal(t, "dark", resp.Settings.Theme)
 		assert.Equal(t, "de", resp.Settings.Language)
-		assert.Equal(t, "title", resp.Settings.NoteSort)
+		assert.Equal(t, "created_at", resp.Settings.NoteSort)
 	})
 
 	t.Run("me response includes settings", func(t *testing.T) {
@@ -807,7 +807,7 @@ func TestUserSettingsEndpoints(t *testing.T) {
 		require.NoError(t, err)
 		assert.NotNil(t, auth.Settings)
 		assert.Equal(t, "de", auth.Settings.Language)
-		assert.Equal(t, "title", auth.Settings.NoteSort)
+		assert.Equal(t, "created_at", auth.Settings.NoteSort)
 	})
 
 	t.Run("register response includes settings", func(t *testing.T) {

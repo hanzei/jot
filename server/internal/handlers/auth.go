@@ -178,12 +178,12 @@ type UpdateUserRequest struct {
 	LastName  *string `json:"last_name,omitempty"`
 	Language  *string `json:"language,omitempty" enums:"system,en,de"`
 	Theme     *string `json:"theme,omitempty" enums:"system,light,dark"`
-	NoteSort  *string `json:"note_sort,omitempty" enums:"manual,updated_at,created_at,title"`
+	NoteSort  *string `json:"note_sort,omitempty" enums:"manual,updated_at,created_at"`
 }
 
 var validLanguages = map[string]bool{"system": true, "en": true, "de": true}
 var validThemes = map[string]bool{"system": true, "light": true, "dark": true}
-var validNoteSorts = map[string]bool{"manual": true, "updated_at": true, "created_at": true, "title": true}
+var validNoteSorts = map[string]bool{"manual": true, "updated_at": true, "created_at": true}
 
 // validateSettingsFields validates language, theme, and note sort.
 // Returns (lang, theme, noteSort, needUpdate). If all are nil, needUpdate is false.
@@ -216,7 +216,7 @@ func validateSettingsFields(current *models.UserSettings, language, theme, noteS
 		ns = "manual"
 	}
 	if !validNoteSorts[ns] {
-		return "", "", "", false, errors.New("invalid note_sort: must be 'manual', 'updated_at', 'created_at', or 'title'")
+		return "", "", "", false, errors.New("invalid note_sort: must be 'manual', 'updated_at', or 'created_at'")
 	}
 	return lang, th, ns, true, nil
 }

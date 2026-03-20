@@ -50,8 +50,7 @@
     "sortOption": {
       "manual": "Manual",
       "updated_at": "Last modified",
-      "created_at": "Date created",
-      "title": "Alphabetical"
+      "created_at": "Date created"
     },
     "manualReorderDisabledTitle": "Manual reorder is off.",
     "manualReorderDisabled": "Notes are sorted by {{sort}}, so drag-and-drop is unavailable.",

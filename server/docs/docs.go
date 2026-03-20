@@ -2199,8 +2199,7 @@ const docTemplate = `{
                     "enum": [
                         "manual",
                         "updated_at",
-                        "created_at",
-                        "title"
+                        "created_at"
                     ]
                 },
                 "theme": {
@@ -2559,8 +2558,7 @@ const docTemplate = `{
                     "enum": [
                         "manual",
                         "updated_at",
-                        "created_at",
-                        "title"
+                        "created_at"
                     ]
                 },
                 "theme": {

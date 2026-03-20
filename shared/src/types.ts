@@ -21,7 +21,7 @@ export interface User {
 }
 
 export type ThemePreference = 'system' | 'light' | 'dark';
-export type NoteSort = 'manual' | 'updated_at' | 'created_at' | 'title';
+export type NoteSort = 'manual' | 'updated_at' | 'created_at';
 
 export interface UserSettings {
   user_id: string;

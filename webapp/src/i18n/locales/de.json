@@ -50,8 +50,7 @@
     "sortOption": {
       "manual": "Manuell",
       "updated_at": "Zuletzt bearbeitet",
-      "created_at": "Erstellungsdatum",
-      "title": "Alphabetisch"
+      "created_at": "Erstellungsdatum"
     },
     "manualReorderDisabledTitle": "Manuelles Sortieren ist aus.",
     "manualReorderDisabled": "Notizen sind nach {{sort}} sortiert, daher ist Drag-and-drop deaktiviert.",

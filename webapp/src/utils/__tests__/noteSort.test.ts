@@ -1,6 +1,6 @@
 import { describe, expect, it } from 'vitest';
 import { createMockNote } from '@/utils/__tests__/test-helpers';
-import { sortNotesForDisplay } from '@/utils/noteSort';
+import { normalizeNoteSort, sortNotesForDisplay } from '@/utils/noteSort';
 
 describe('sortNotesForDisplay', () => {
   it('keeps manual ordering within pinned and unpinned groups', () => {
@@ -19,14 +19,9 @@ describe('sortNotesForDisplay', () => {
     ]);
   });
 
-  it('sorts titles alphabetically without case sensitivity', () => {
-    const sorted = sortNotesForDisplay([
-      createMockNote({ id: 'note-1', title: 'zulu' }),
-      createMockNote({ id: 'note-2', title: 'Alpha' }),
-      createMockNote({ id: 'note-3', title: 'bravo' }),
-    ], 'title');
-
-    expect(sorted.map(note => note.title)).toEqual(['Alpha', 'bravo', 'zulu']);
+  it('falls back to manual when persisted sort is no longer supported', () => {
+    expect(normalizeNoteSort('title')).toBe('manual');
+    expect(normalizeNoteSort('unexpected')).toBe('manual');
   });
 
   it('sorts by last modified descending and falls back to original order for invalid dates', () => {

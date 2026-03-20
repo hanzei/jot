@@ -77,8 +77,7 @@
     "sortOption": {
       "manual": "Manuell",
       "updated_at": "Zuletzt bearbeitet",
-      "created_at": "Erstellungsdatum",
-      "title": "Alphabetisch"
+      "created_at": "Erstellungsdatum"
     },
     "sortAccessibilityLabel": "Sortieren nach {{sortLabel}}",
     "sortDisabledNotice": "Manuelles Sortieren ist aus. Notizen sind nach {{sortLabel}} sortiert, daher ist Drag-and-drop deaktiviert."

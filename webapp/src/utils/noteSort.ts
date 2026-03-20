@@ -1,11 +1,9 @@
 import type { Note, NoteSort } from '@jot/shared';
 
-export const NOTE_SORT_OPTIONS = ['manual', 'updated_at', 'created_at', 'title'] as const;
+export const NOTE_SORT_OPTIONS = ['manual', 'updated_at', 'created_at'] as const;
 
 export const normalizeNoteSort = (value?: string): NoteSort =>
   NOTE_SORT_OPTIONS.includes(value as NoteSort) ? (value as NoteSort) : 'manual';
-
-const getTitleKey = (title: string | null | undefined): string => (title ?? '').trim();
 
 const compareDescendingTimestamps = (left: string, right: string): number => {
   const leftTime = Date.parse(left);
@@ -37,12 +35,6 @@ export const sortNotesForDisplay = (notes: Note[], sortMode: NoteSort): Note[] =
       }
       case 'created_at': {
         return compareDescendingTimestamps(left.created_at, right.created_at) || preserveOriginalOrder(left, right);
-      }
-      case 'title': {
-        return (
-          getTitleKey(left.title).localeCompare(getTitleKey(right.title), undefined, { sensitivity: 'base' }) ||
-          preserveOriginalOrder(left, right)
-        );
       }
       case 'manual':
       default:

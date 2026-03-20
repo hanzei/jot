@@ -176,7 +176,6 @@ definitions:
         - manual
         - updated_at
         - created_at
-        - title
         type: string
       theme:
         enum:
@@ -413,7 +412,6 @@ definitions:
         - manual
         - updated_at
         - created_at
-        - title
         type: string
       theme:
         type: string

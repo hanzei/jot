@@ -11,7 +11,7 @@ type UserSettings struct {
 	UserID    string    `json:"user_id"`
 	Language  string    `json:"language"`
 	Theme     string    `json:"theme"`
-	NoteSort  string    `json:"note_sort" enums:"manual,updated_at,created_at,title"`
+	NoteSort  string    `json:"note_sort" enums:"manual,updated_at,created_at"`
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
