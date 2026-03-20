@@ -1,6 +1,7 @@
 package models
 
 import (
+	"context"
 	"database/sql"
 	"fmt"
 )
@@ -54,14 +55,14 @@ func NewAdminStatsStore(db *sql.DB) *AdminStatsStore {
 	return &AdminStatsStore{db: db}
 }
 
-func (s *AdminStatsStore) GetStats() (*AdminStats, error) {
+func (s *AdminStatsStore) GetStats(ctx context.Context) (*AdminStats, error) {
 	stats := &AdminStats{}
 
-	if err := s.db.QueryRow(`SELECT COUNT(*) FROM users`).Scan(&stats.Users.Total); err != nil {
+	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM users`).Scan(&stats.Users.Total); err != nil {
 		return nil, fmt.Errorf("count users: %w", err)
 	}
 
-	if err := s.db.QueryRow(`
+	if err := s.db.QueryRowContext(ctx, `
 		SELECT
 			COUNT(*),
 			COALESCE(SUM(CASE WHEN note_type = ? THEN 1 ELSE 0 END), 0),
@@ -79,7 +80,7 @@ func (s *AdminStatsStore) GetStats() (*AdminStats, error) {
 		return nil, fmt.Errorf("count notes: %w", err)
 	}
 
-	if err := s.db.QueryRow(`
+	if err := s.db.QueryRowContext(ctx, `
 		SELECT
 			COUNT(DISTINCT note_id),
 			COUNT(*)
@@ -88,7 +89,7 @@ func (s *AdminStatsStore) GetStats() (*AdminStats, error) {
 		return nil, fmt.Errorf("count note shares: %w", err)
 	}
 
-	if err := s.db.QueryRow(`
+	if err := s.db.QueryRowContext(ctx, `
 		SELECT
 			(SELECT COUNT(*) FROM labels),
 			(SELECT COUNT(*) FROM note_labels)
@@ -96,7 +97,7 @@ func (s *AdminStatsStore) GetStats() (*AdminStats, error) {
 		return nil, fmt.Errorf("count labels: %w", err)
 	}
 
-	if err := s.db.QueryRow(`
+	if err := s.db.QueryRowContext(ctx, `
 		SELECT
 			COUNT(*),
 			COALESCE(SUM(CASE WHEN completed = 1 THEN 1 ELSE 0 END), 0),

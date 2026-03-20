@@ -141,15 +141,33 @@ describe('Admin', () => {
 
     it('shows a stats error when loading fails', async () => {
       const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
-      vi.mocked(admin.getStats).mockRejectedValue(new Error('boom'))
+      try {
+        vi.mocked(admin.getStats).mockRejectedValue(new Error('boom'))
 
-      renderAdmin()
+        renderAdmin()
 
-      await waitFor(() => {
-        expect(screen.getByText('Failed to load statistics')).toBeInTheDocument()
-      })
+        await waitFor(() => {
+          expect(screen.getByRole('alert')).toHaveTextContent('Failed to load statistics')
+        })
+      } finally {
+        consoleError.mockRestore()
+      }
+    })
 
-      consoleError.mockRestore()
+    it('does not show empty state when users fail to load', async () => {
+      const consoleError = vi.spyOn(console, 'error').mockImplementation(() => {})
+      try {
+        vi.mocked(admin.getUsers).mockRejectedValue(new Error('boom'))
+
+        renderAdmin()
+
+        await waitFor(() => {
+          expect(screen.getByRole('alert')).toHaveTextContent('Failed to load users')
+        })
+        expect(screen.queryByText('No users found.')).not.toBeInTheDocument()
+      } finally {
+        consoleError.mockRestore()
+      }
     })
   })
 

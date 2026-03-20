@@ -1,5 +1,6 @@
 import { test, expect, uniqueUsername } from '../fixtures';
 import type { Page } from '@playwright/test';
+import { AdminPage } from '../pages/AdminPage';
 
 type MeResponse = {
   user?: {
@@ -58,6 +59,7 @@ test.describe('Admin', () => {
   });
 
   test('admin stats render seeded instance metrics', async ({ page, request }) => {
+    const adminPage = new AdminPage(page);
     const memberOneUsername = uniqueUsername('m1');
     const memberTwoUsername = uniqueUsername('m2');
     const password = 'testpass123';
@@ -175,26 +177,27 @@ test.describe('Admin', () => {
       todo_items: { total: number };
     };
 
-    await page.goto('/admin');
+    await adminPage.goto();
     await expect(page).toHaveURL('/admin');
-    await expect(page.getByTestId('admin-stats-section')).toBeVisible();
+    expect(await adminPage.isVisible()).toBe(true);
 
-    await expect(page.getByTestId('admin-stats-users-total')).toHaveText(String(stats.users.total));
-    await expect(page.getByTestId('admin-stats-notes-total')).toHaveText(String(stats.notes.total));
-    await expect(page.getByTestId('admin-stats-shared-notes')).toHaveText(String(stats.sharing.shared_notes));
-    await expect(page.getByTestId('admin-stats-labels-total')).toHaveText(String(stats.labels.total));
-    await expect(page.getByTestId('admin-stats-todo-items-total')).toHaveText(String(stats.todo_items.total));
-    await expect(page.getByTestId('admin-stats-database-size')).not.toHaveText('0 B');
+    expect(await adminPage.getUsersTotal()).toBe(String(stats.users.total));
+    expect(await adminPage.getNotesTotal()).toBe(String(stats.notes.total));
+    expect(await adminPage.getSharedNotesCount()).toBe(String(stats.sharing.shared_notes));
+    expect(await adminPage.getLabelsTotal()).toBe(String(stats.labels.total));
+    expect(await adminPage.getTodoItemsTotal()).toBe(String(stats.todo_items.total));
+    expect(await adminPage.getDatabaseSizeText()).not.toBe('0 B');
   });
 
   test('admin can create, update role, and delete a user', async ({ page }) => {
+    const adminPage = new AdminPage(page);
     const managedUsername = uniqueUsername('managed');
     const managedPassword = 'testpass123';
 
     await ensureAdminSession(page);
-    await page.goto('/admin');
+    await adminPage.goto();
     await expect(page).toHaveURL('/admin');
-    await expect(page.getByRole('heading', { name: 'User Management' })).toBeVisible();
+    expect(await adminPage.isVisible()).toBe(true);
 
     await page.getByRole('button', { name: 'Create User', exact: true }).click();
     await page.getByPlaceholder('Username (2-30 characters)').fill(managedUsername);

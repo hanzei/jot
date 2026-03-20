@@ -62,6 +62,7 @@ const Admin = ({ onLogout }: AdminProps) => {
   const currentUser = getUser();
   const [users, setUsers] = useState<User[]>([]);
   const [usersLoading, setUsersLoading] = useState(true);
+  const [usersLoaded, setUsersLoaded] = useState(false);
   const [stats, setStats] = useState<AdminStatsResponse | null>(null);
   const [statsLoading, setStatsLoading] = useState(true);
   const [error, setError] = useState('');
@@ -124,8 +125,10 @@ const Admin = ({ onLogout }: AdminProps) => {
   const fetchUsers = useCallback(async () => {
     try {
       setUsersLoading(true);
+      setUsersLoaded(false);
       const response = await admin.getUsers();
       setUsers(response.users || []);
+      setUsersLoaded(true);
     } catch (err) {
       setError(t('admin.failedLoadUsers'));
       console.error(err);
@@ -439,7 +442,12 @@ const Admin = ({ onLogout }: AdminProps) => {
             </div>
 
             {statsError ? (
-              <div className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400">
+              <div
+                role="alert"
+                aria-live="assertive"
+                aria-atomic="true"
+                className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400"
+              >
                 {statsError}
               </div>
             ) : null}
@@ -596,7 +604,7 @@ const Admin = ({ onLogout }: AdminProps) => {
           </div>
           </section>
 
-          {(!users || users.length === 0) && !usersLoading && (
+          {usersLoaded && (!users || users.length === 0) && !usersLoading && (
             <div className="text-center py-12">
               <p className="text-gray-500 dark:text-gray-400">{t('admin.noUsersFound')}</p>
             </div>

@@ -55,7 +55,7 @@ type UserListResponse struct {
 //	@Failure	500	{string}	string	"internal server error"
 //	@Router		/admin/stats [get]
 func (h *AdminHandler) GetStats(w http.ResponseWriter, r *http.Request) (int, any, error) {
-	stats, err := h.statsStore.GetStats()
+	stats, err := h.statsStore.GetStats(r.Context())
 	if err != nil {
 		return http.StatusInternalServerError, nil, err
 	}
