@@ -402,7 +402,7 @@ describe('Dashboard', () => {
         user_id: 'user1',
         language: 'system',
         theme: 'system',
-        note_sort: 'title' as unknown as NoteSort,
+        note_sort: 'unsupported' as unknown as NoteSort,
         updated_at: '2023-01-01T00:00:00Z',
       })
 

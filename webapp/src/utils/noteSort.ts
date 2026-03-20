@@ -22,7 +22,7 @@ const compareDescendingTimestamps = (left: string, right: string): number => {
   return rightTime - leftTime;
 };
 
-export const sortNotesForDisplay = (notes: Note[], sortMode: NoteSort): Note[] => {
+export const sortNotesForDisplay = (notes: Note[], sortMode: NoteSort): { pinned: Note[]; other: Note[] } => {
   const originalIndexById = new Map(notes.map((note, index) => [note.id, index]));
 
   const preserveOriginalOrder = (left: Note, right: Note): number =>
@@ -43,8 +43,9 @@ export const sortNotesForDisplay = (notes: Note[], sortMode: NoteSort): Note[] =
   };
 
   const sortGroup = (group: Note[]) => (sortMode === 'manual' ? group : [...group].sort(compareWithinGroup));
-  const pinnedNotes = sortGroup(notes.filter(note => note.pinned));
-  const otherNotes = sortGroup(notes.filter(note => !note.pinned));
 
-  return [...pinnedNotes, ...otherNotes];
+  return {
+    pinned: sortGroup(notes.filter(note => note.pinned)),
+    other: sortGroup(notes.filter(note => !note.pinned)),
+  };
 };

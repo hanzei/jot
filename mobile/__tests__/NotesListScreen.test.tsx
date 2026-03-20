@@ -201,10 +201,10 @@ describe('NotesListScreen sorting', () => {
     });
   });
 
-  it('normalizes a saved title sort preference back to manual', () => {
+  it('normalizes an unsupported saved sort preference back to manual', () => {
     mockUseAuth.mockReturnValue({
       user: mockUser,
-      settings: { ...baseSettings, note_sort: 'title' as unknown as NoteSort },
+      settings: { ...baseSettings, note_sort: 'unsupported' as unknown as NoteSort },
       setSettings: jest.fn(),
     });
     mockUseOfflineNotes.mockReturnValue({

@@ -26,7 +26,7 @@ function buildNote(overrides: Partial<Note> = {}): Note {
 describe('mobile noteSort', () => {
   it('normalizes invalid sort values to manual', () => {
     expect(normalizeNoteSort('updated_at')).toBe('updated_at');
-    expect(normalizeNoteSort('title' as never)).toBe('manual');
+    expect(normalizeNoteSort('unsupported' as never)).toBe('manual');
     expect(normalizeNoteSort('unexpected')).toBe('manual');
     expect(normalizeNoteSort()).toBe('manual');
   });

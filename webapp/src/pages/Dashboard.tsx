@@ -554,7 +554,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     return true;
   };
 
-  const handleNoteSortChange = async (nextSort: typeof NOTE_SORT_OPTIONS[number]) => {
+  const handleNoteSortChange = useCallback(async (nextSort: typeof NOTE_SORT_OPTIONS[number]) => {
     if (nextSort === noteSort) {
       return;
     }
@@ -590,7 +590,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
         setSettings(previousSettings);
       }
     }
-  };
+  }, [noteSort]);
 
   const handleRenameLabel = useCallback(async (label: Label, newName: string): Promise<boolean> => {
     try {
@@ -681,7 +681,10 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     }
   };
 
-  const displayedNotes = useMemo(() => sortNotesForDisplay(notesList, noteSort), [notesList, noteSort]);
+  const { pinned: displayedPinned, other: displayedOther } = useMemo(
+    () => sortNotesForDisplay(notesList, noteSort),
+    [notesList, noteSort],
+  );
   const dragReorderingDisabled = showArchived || showBin || showMyTodo || noteSort !== 'manual';
   const activeSortLabel = t(`dashboard.sortOption.${noteSort}`);
 
@@ -750,7 +753,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
               onChange={(event) => void handleNoteSortChange(event.target.value as NoteSort)}
               className="w-full rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 py-2 pl-9 pr-10 text-sm text-gray-900 dark:text-white focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-            {NOTE_SORT_OPTIONS.map((sortOption) => (
+              {NOTE_SORT_OPTIONS.map((sortOption) => (
                 <option key={sortOption} value={sortOption}>
                   {t(`dashboard.sortOption.${sortOption}`)}
                 </option>
@@ -847,7 +850,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
           </div>
         )}
 
-        {!displayedNotes || displayedNotes.length === 0 ? (
+        {displayedPinned.length === 0 && displayedOther.length === 0 ? (
           <div className="text-center py-12">
             <div className="mx-auto max-w-xl text-gray-500 dark:text-gray-400 text-lg whitespace-normal break-words">
               {searchQuery
@@ -875,7 +878,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
           >
             <div className="space-y-8">
               {/* Pinned notes section */}
-              {displayedNotes.some(note => note.pinned) && (
+              {displayedPinned.length > 0 && (
                 <div>
                   <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
                     <svg className="h-4 w-4 text-blue-500 dark:text-blue-400 mr-2" fill="currentColor" viewBox="0 0 24 24">
@@ -884,11 +887,11 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                     {t('dashboard.pinned')}
                   </h2>
                   <SortableContext
-                    items={displayedNotes.filter(note => note.pinned).map(note => note.id)}
+                    items={displayedPinned.map(note => note.id)}
                     strategy={rectSortingStrategy}
                   >
                     <div className="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-4 space-y-0">
-                      {displayedNotes.filter(note => note.pinned).map((note) => (
+                      {displayedPinned.map((note) => (
                         <SortableNoteCard
                           key={note.id}
                           note={note}
@@ -911,19 +914,19 @@ export default function Dashboard({ onLogout }: DashboardProps) {
               )}
 
               {/* Other notes section */}
-              {displayedNotes.some(note => !note.pinned) && (
+              {displayedOther.length > 0 && (
                 <div>
-                  {displayedNotes.some(note => note.pinned) && (
+                  {displayedPinned.length > 0 && (
                     <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
                       {t('dashboard.otherNotes')}
                     </h2>
                   )}
                   <SortableContext
-                    items={displayedNotes.filter(note => !note.pinned).map(note => note.id)}
+                    items={displayedOther.map(note => note.id)}
                     strategy={rectSortingStrategy}
                   >
                     <div className="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-4 space-y-0">
-                      {displayedNotes.filter(note => !note.pinned).map((note) => (
+                      {displayedOther.map((note) => (
                         <SortableNoteCard
                           key={note.id}
                           note={note}
