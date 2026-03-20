@@ -23,6 +23,7 @@ interface NoteContextMenuProps {
   onPin: (note: Note) => void;
   onArchive: (note: Note) => void;
   onUnarchive: (note: Note) => void;
+  onDuplicate: (note: Note) => void;
   onMoveToTrash: (note: Note) => void;
   onRestore: (note: Note) => void;
   onDeletePermanently: (note: Note) => void;
@@ -46,6 +47,7 @@ export default function NoteContextMenu({
   onPin,
   onArchive,
   onUnarchive,
+  onDuplicate,
   onMoveToTrash,
   onRestore,
   onDeletePermanently,
@@ -88,6 +90,12 @@ export default function NoteContextMenu({
       testId: 'context-archive',
     });
     actions.push({
+      icon: 'copy-outline',
+      label: t('note.duplicate'),
+      onPress: () => { onClose(); onDuplicate(note); },
+      testId: 'context-duplicate',
+    });
+    actions.push({
       icon: 'trash-outline',
       label: t('note.moveToTrash'),
       onPress: () => { onClose(); onMoveToTrash(note); },
@@ -100,6 +108,12 @@ export default function NoteContextMenu({
       label: t('note.unarchive'),
       onPress: () => { onClose(); onUnarchive(note); },
       testId: 'context-unarchive',
+    });
+    actions.push({
+      icon: 'copy-outline',
+      label: t('note.duplicate'),
+      onPress: () => { onClose(); onDuplicate(note); },
+      testId: 'context-duplicate',
     });
     actions.push({
       icon: 'trash-outline',

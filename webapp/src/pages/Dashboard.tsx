@@ -447,6 +447,17 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     }
   };
 
+  const handleDuplicateNote = useCallback(async (noteId: string) => {
+    try {
+      await notes.duplicate(noteId);
+      await Promise.all([loadNotes(), loadLabels()]);
+      showToast(t('dashboard.noteDuplicated'), 'success');
+    } catch (error) {
+      console.error('Failed to duplicate note:', error);
+      throw error;
+    }
+  }, [loadLabels, loadNotes, showToast, t]);
+
   const handleShareNote = (note: Note) => {
     setSharingNote(note);
     setIsShareModalOpen(true);
@@ -716,6 +727,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                           note={note}
                           onEdit={handleEditNote}
                           onDelete={handleDeleteNote}
+                          onDuplicate={handleDuplicateNote}
                           onShare={handleShareNote}
                           onRestore={handleRestoreNote}
                           onPermanentlyDelete={handlePermanentlyDeleteNote}
@@ -750,6 +762,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                           note={note}
                           onEdit={handleEditNote}
                           onDelete={handleDeleteNote}
+                          onDuplicate={handleDuplicateNote}
                           onShare={handleShareNote}
                           onRestore={handleRestoreNote}
                           onPermanentlyDelete={handlePermanentlyDeleteNote}
@@ -780,6 +793,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
             onRefresh={handleNoteRefresh}
             onShare={handleShareNote}
             onDelete={handleDeleteNote}
+            onDuplicate={handleDuplicateNote}
             isOwner={!editingNote || editingNote.user_id === user?.id}
             usersById={usersById}
             currentUserId={user?.id}

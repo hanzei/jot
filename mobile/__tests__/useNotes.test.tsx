@@ -1,7 +1,7 @@
 import React from 'react';
 import { renderHook, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useNotes, useNote, useCreateNote, useUpdateNote, useDeleteNote } from '../src/hooks/useNotes';
+import { useNotes, useNote, useCreateNote, useUpdateNote, useDeleteNote, useDuplicateNote } from '../src/hooks/useNotes';
 import * as notesApi from '../src/api/notes';
 import * as noteQueriesModule from '../src/db/noteQueries';
 
@@ -193,6 +193,28 @@ describe('useNotes hooks', () => {
 
       expect(mockNotesApi.deleteNote).toHaveBeenCalledWith('123');
       expect(mockNoteQueries.markLocalNoteDeleted).toHaveBeenCalledWith(expect.anything(), '123');
+    });
+  });
+
+  describe('useDuplicateNote (online)', () => {
+    it('duplicates a note via API and caches it locally', async () => {
+      const duplicated = {
+        id: 'duplicate-id', title: 'Copy of Updated', content: '', note_type: 'text',
+        color: '#ffffff', pinned: false, archived: false, position: 0,
+        checked_items_collapsed: false, is_shared: false, deleted_at: null,
+        user_id: 'u1', created_at: '', updated_at: '', labels: [], shared_with: [],
+      };
+      mockNotesApi.duplicateNote.mockResolvedValueOnce(duplicated as never);
+
+      const { result } = renderHook(() => useDuplicateNote(), { wrapper: createWrapper() });
+
+      result.current.mutate('123');
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      expect(result.current.data).toEqual(duplicated);
+      expect(mockNotesApi.duplicateNote).toHaveBeenCalledWith('123');
+      expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), duplicated);
     });
   });
 });

@@ -8,6 +8,7 @@ import {
   updateNote,
   deleteNote,
   restoreNote,
+  duplicateNote,
   permanentDeleteNote,
   reorderNotes,
 } from '../api/notes';
@@ -206,6 +207,32 @@ export function useDeleteNote() {
     onSuccess: (_data, id) => {
       queryClient.removeQueries({ queryKey: ['note', id] });
       queryClient.removeQueries({ queryKey: ['note-local', id] });
+      queryClient.invalidateQueries({ queryKey: ['notes-local'] });
+      queryClient.invalidateQueries({ queryKey: ['notes'] });
+    },
+  });
+}
+
+export function useDuplicateNote() {
+  const queryClient = useQueryClient();
+  const db = useSQLiteContext();
+  const { isConnected } = useNetworkStatus();
+  const isConnectedRef = useRef(isConnected);
+  isConnectedRef.current = isConnected;
+
+  return useMutation({
+    mutationFn: async (id: string): Promise<Note> => {
+      if (!isConnectedRef.current) {
+        throw new Error('Note duplication requires an internet connection');
+      }
+
+      const duplicatedNote = await duplicateNote(id);
+      await saveNote(db, duplicatedNote);
+      return duplicatedNote;
+    },
+    onSuccess: (duplicatedNote) => {
+      queryClient.setQueryData(['note', duplicatedNote.id], duplicatedNote);
+      queryClient.setQueryData(['note-local', duplicatedNote.id], duplicatedNote);
       queryClient.invalidateQueries({ queryKey: ['notes-local'] });
       queryClient.invalidateQueries({ queryKey: ['notes'] });
     },

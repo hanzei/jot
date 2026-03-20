@@ -34,6 +34,11 @@ export async function restoreNote(id: string): Promise<void> {
   await api.post(`/notes/${id}/restore`);
 }
 
+export async function duplicateNote(id: string): Promise<Note> {
+  const res = await api.post(`/notes/${id}/duplicate`);
+  return res.data;
+}
+
 export async function permanentDeleteNote(id: string): Promise<void> {
   await api.delete(`/notes/${id}`, { params: { permanent: true } });
 }
