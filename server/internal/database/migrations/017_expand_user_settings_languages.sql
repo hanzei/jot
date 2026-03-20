@@ -1,13 +1,15 @@
+-- Keep lexicographic order so 017_add_note_sort_to_user_settings.sql runs first.
 CREATE TABLE user_settings_new (
   user_id TEXT NOT NULL PRIMARY KEY,
   language TEXT NOT NULL DEFAULT 'system' CHECK (language IN ('system', 'en', 'de', 'es', 'fr', 'pt', 'it', 'nl', 'pl')),
   created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
   theme TEXT NOT NULL DEFAULT 'system' CONSTRAINT user_settings_theme_check CHECK (theme IN ('system', 'light', 'dark')),
+  note_sort TEXT NOT NULL DEFAULT 'manual' CONSTRAINT user_settings_note_sort_check CHECK (note_sort IN ('manual', 'updated_at', 'created_at')),
   FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
-INSERT INTO user_settings_new (user_id, language, created_at, updated_at, theme)
+INSERT INTO user_settings_new (user_id, language, created_at, updated_at, theme, note_sort)
 SELECT
   user_id,
   language,
@@ -16,6 +18,10 @@ SELECT
   CASE
     WHEN theme IN ('system', 'light', 'dark') THEN theme
     ELSE 'system'
+  END,
+  CASE
+    WHEN note_sort IN ('manual', 'updated_at', 'created_at') THEN note_sort
+    ELSE 'manual'
   END
 FROM user_settings;
 
