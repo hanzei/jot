@@ -109,7 +109,7 @@ describe('Admin', () => {
         expect(screen.getByText('regularuser')).toBeInTheDocument()
       })
 
-      await user.click(screen.getByRole('button', { name: 'Create User', exact: true }))
+      await user.click(screen.getByRole('button', { name: /^Create User$/ }))
 
       expect(screen.getByText('2–30 characters. Letters, numbers, underscores, and hyphens.')).toBeInTheDocument()
       expect(screen.getByText('At least 4 characters')).toBeInTheDocument()
@@ -127,7 +127,7 @@ describe('Admin', () => {
         expect(screen.getByText('regularuser')).toBeInTheDocument()
       })
 
-      await user.click(screen.getByRole('button', { name: 'Create User', exact: true }))
+      await user.click(screen.getByRole('button', { name: /^Create User$/ }))
 
       const usernameInput = screen.getByLabelText('Username')
       await user.type(usernameInput, 'bad*name')
@@ -145,7 +145,7 @@ describe('Admin', () => {
         expect(screen.getByText('regularuser')).toBeInTheDocument()
       })
 
-      await user.click(screen.getByRole('button', { name: 'Create User', exact: true }))
+      await user.click(screen.getByRole('button', { name: /^Create User$/ }))
 
       const passwordInput = screen.getByLabelText('Password')
       await user.type(passwordInput, '123')
@@ -163,7 +163,7 @@ describe('Admin', () => {
         expect(screen.getByText('regularuser')).toBeInTheDocument()
       })
 
-      await user.click(screen.getByRole('button', { name: 'Create User', exact: true }))
+      await user.click(screen.getByRole('button', { name: /^Create User$/ }))
 
       const usernameInput = screen.getByLabelText('Username')
       await user.type(usernameInput, '-validchars')
@@ -180,7 +180,7 @@ describe('Admin', () => {
         expect(screen.getByText('regularuser')).toBeInTheDocument()
       })
 
-      await user.click(screen.getByRole('button', { name: 'Create User', exact: true }))
+      await user.click(screen.getByRole('button', { name: /^Create User$/ }))
 
       const usernameInput = screen.getByLabelText('Username')
       await user.type(usernameInput, 'a'.repeat(VALIDATION.USERNAME_MAX_LENGTH + 1))
@@ -209,7 +209,7 @@ describe('Admin', () => {
         expect(screen.getByText('regularuser')).toBeInTheDocument()
       })
 
-      await user.click(screen.getByRole('button', { name: 'Create User', exact: true }))
+      await user.click(screen.getByRole('button', { name: /^Create User$/ }))
 
       await user.type(screen.getByLabelText('Username'), 'new_user')
       await user.type(screen.getByLabelText('Password'), 'abcd')
@@ -239,7 +239,7 @@ describe('Admin', () => {
         expect(screen.getByText('regularuser')).toBeInTheDocument()
       })
 
-      await user.click(screen.getByRole('button', { name: 'Create User', exact: true }))
+      await user.click(screen.getByRole('button', { name: /^Create User$/ }))
       await user.type(screen.getByLabelText('Username'), 'new_user')
       await user.type(screen.getByLabelText('Password'), 'abcd')
       await user.click(screen.getByRole('button', { name: 'Create User' }))
