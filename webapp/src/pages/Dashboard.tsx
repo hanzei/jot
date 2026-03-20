@@ -15,7 +15,7 @@ import SidebarLabels from '@/components/SidebarLabels';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { useToast } from '@/hooks/useToast';
 import { isAnyModalDialogOpen, isEditableElementFocused, isOverlayControlFocused } from '@/utils/keyboardShortcuts';
-import { sortNotesForDisplay } from '@/utils/noteSort';
+import { NOTE_SORT_OPTIONS, normalizeNoteSort, sortNotesForDisplay } from '@/utils/noteSort';
 import {
   DndContext,
   closestCenter,
@@ -38,10 +38,6 @@ import {
 interface DashboardProps {
   onLogout: () => void;
 }
-
-const noteSortOptions = ['manual', 'updated_at', 'created_at', 'title'] as const;
-const normalizeNoteSort = (value?: string): NoteSort =>
-  noteSortOptions.includes(value as NoteSort) ? (value as NoteSort) : 'manual';
 
 export default function Dashboard({ onLogout }: DashboardProps) {
   const { t } = useTranslation();
@@ -558,7 +554,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     return true;
   };
 
-  const handleNoteSortChange = async (nextSort: typeof noteSortOptions[number]) => {
+  const handleNoteSortChange = async (nextSort: typeof NOTE_SORT_OPTIONS[number]) => {
     if (nextSort === noteSort) {
       return;
     }
@@ -583,14 +579,14 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     } catch (error) {
       console.error('Failed to update note sort:', error);
 
-      rollbackNoteSortCache(nextSort, previousSettings);
+      const restoredSettings = rollbackNoteSortCache(nextSort, previousSettings);
 
       if (!isMountedRef.current || requestID !== noteSortUpdateRequestIdRef.current) {
         return;
       }
 
       setNoteSort(previousSort);
-      if (previousSettings) {
+      if (!restoredSettings && previousSettings) {
         setSettings(previousSettings);
       }
     }
@@ -754,7 +750,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
               onChange={(event) => void handleNoteSortChange(event.target.value as NoteSort)}
               className="w-full rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 py-2 pl-9 pr-10 text-sm text-gray-900 dark:text-white focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
             >
-              {noteSortOptions.map((sortOption) => (
+            {NOTE_SORT_OPTIONS.map((sortOption) => (
                 <option key={sortOption} value={sortOption}>
                   {t(`dashboard.sortOption.${sortOption}`)}
                 </option>

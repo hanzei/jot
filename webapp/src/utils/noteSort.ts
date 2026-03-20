@@ -1,5 +1,10 @@
 import type { Note, NoteSort } from '@jot/shared';
 
+export const NOTE_SORT_OPTIONS = ['manual', 'updated_at', 'created_at', 'title'] as const;
+
+export const normalizeNoteSort = (value?: string): NoteSort =>
+  NOTE_SORT_OPTIONS.includes(value as NoteSort) ? (value as NoteSort) : 'manual';
+
 const getTitleKey = (title: string | null | undefined): string => (title ?? '').trim();
 
 const compareDescendingTimestamps = (left: string, right: string): number => {

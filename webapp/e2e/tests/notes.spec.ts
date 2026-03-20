@@ -184,6 +184,8 @@ test.describe('Notes', () => {
     await page.setViewportSize({ width: 600, height: 1000 });
     await dashboardPage.goto();
 
+    // These 1.1s waits keep created/updated timestamps in distinct seconds so
+    // the sort assertions stay deterministic across create/edit operations.
     await dashboardPage.createNote('Zulu');
     await page.waitForTimeout(1100);
     await dashboardPage.createNote('alpha');
@@ -237,10 +239,10 @@ test.describe('Notes', () => {
 
     await dashboardPage.selectSort('created_at');
     await dashboardPage.expectVisibleNoteTitles(['Zulu', 'Bravo', 'alpha']);
-    await expect(await dashboardPage.getSortValue()).toBe('created_at');
+    expect(await dashboardPage.getSortValue()).toBe('created_at');
 
     await page.reload();
-    await expect(await dashboardPage.getSortValue()).toBe('created_at');
+    expect(await dashboardPage.getSortValue()).toBe('created_at');
     await dashboardPage.expectVisibleNoteTitles(['Zulu', 'Bravo', 'alpha']);
 
     await dashboardPage.logout();
@@ -248,7 +250,7 @@ test.describe('Notes', () => {
 
     await loginPage.login(authenticatedUser.username, authenticatedUser.password);
     await expect(page).toHaveURL('/');
-    await expect(await dashboardPage.getSortValue()).toBe('created_at');
+    expect(await dashboardPage.getSortValue()).toBe('created_at');
     await dashboardPage.expectVisibleNoteTitles(['Zulu', 'Bravo', 'alpha']);
   });
 
