@@ -69,6 +69,116 @@ func (s *NoteStore) Create(userID string, title, content string, noteType NoteTy
 	return &note, nil
 }
 
+func duplicateNoteTitle(title string) string {
+	return "Copy of " + title
+}
+
+func (s *NoteStore) Duplicate(source *Note, userID string) (*Note, error) {
+	tx, err := s.db.Begin()
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	noteID, err := generateID()
+	if err != nil {
+		return nil, fmt.Errorf("failed to generate note ID: %w", err)
+	}
+
+	if _, err = tx.Exec(
+		`UPDATE notes
+		 SET position = position + 1
+		 WHERE user_id = ? AND pinned = FALSE AND archived = FALSE AND deleted_at IS NULL`,
+		userID,
+	); err != nil {
+		return nil, fmt.Errorf("failed to shift existing notes: %w", err)
+	}
+
+	const nextPosition = 0
+	query := `INSERT INTO notes (id, user_id, title, content, note_type, color, pinned, archived, position, unpinned_position, checked_items_collapsed)
+			  VALUES (?, ?, ?, ?, ?, ?, FALSE, FALSE, ?, ?, ?)`
+
+	if _, err = tx.Exec(
+		query,
+		noteID,
+		userID,
+		duplicateNoteTitle(source.Title),
+		source.Content,
+		source.NoteType,
+		source.Color,
+		nextPosition,
+		nextPosition,
+		source.CheckedItemsCollapsed,
+	); err != nil {
+		return nil, fmt.Errorf("failed to create duplicated note: %w", err)
+	}
+
+	for _, item := range source.Items {
+		itemID, itemErr := generateID()
+		if itemErr != nil {
+			return nil, fmt.Errorf("failed to generate note item ID: %w", itemErr)
+		}
+
+		if _, itemErr = tx.Exec(
+			`INSERT INTO note_items (id, note_id, text, completed, position, indent_level, assigned_to)
+			 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+			itemID,
+			noteID,
+			item.Text,
+			item.Completed,
+			item.Position,
+			item.IndentLevel,
+			"",
+		); itemErr != nil {
+			return nil, fmt.Errorf("failed to duplicate note item: %w", itemErr)
+		}
+	}
+
+	for _, label := range source.Labels {
+		labelID, labelErr := generateID()
+		if labelErr != nil {
+			return nil, fmt.Errorf("failed to generate label ID: %w", labelErr)
+		}
+
+		var resolvedLabelID string
+		if labelErr = tx.QueryRow(
+			`INSERT INTO labels (id, user_id, name) VALUES (?, ?, ?)
+			 ON CONFLICT(user_id, name) DO UPDATE SET name=excluded.name
+			 RETURNING id`,
+			labelID,
+			userID,
+			label.Name,
+		).Scan(&resolvedLabelID); labelErr != nil {
+			return nil, fmt.Errorf("failed to get or create duplicated label: %w", labelErr)
+		}
+
+		noteLabelID, noteLabelErr := generateID()
+		if noteLabelErr != nil {
+			return nil, fmt.Errorf("failed to generate note label ID: %w", noteLabelErr)
+		}
+
+		if _, noteLabelErr = tx.Exec(
+			`INSERT OR IGNORE INTO note_labels (id, note_id, label_id) VALUES (?, ?, ?)`,
+			noteLabelID,
+			noteID,
+			resolvedLabelID,
+		); noteLabelErr != nil {
+			return nil, fmt.Errorf("failed to attach duplicated label to note: %w", noteLabelErr)
+		}
+	}
+
+	if err = tx.Commit(); err != nil {
+		return nil, fmt.Errorf("failed to commit duplicate note transaction: %w", err)
+	}
+
+	duplicated, err := s.GetByID(noteID, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to load duplicated note: %w", err)
+	}
+
+	return duplicated, nil
+}
+
 func buildGetByUserIDQuery(userID string, archived bool, trashed bool, search string, labelID string, myTodo bool) (string, []any) {
 	var query string
 	var args []any

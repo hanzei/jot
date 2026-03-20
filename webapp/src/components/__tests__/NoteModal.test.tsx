@@ -596,6 +596,31 @@ describe('NoteModal', () => {
         items: [expect.objectContaining({ text: 'First', position: 0 })],
       }))
     })
+
+    it('preserves completed state when creating a new todo note', async () => {
+      renderNoteModal(defaultProps)
+
+      fireEvent.click(screen.getByText('Todo List'))
+      fireEvent.click(screen.getByText('Add item'))
+      fireEvent.click(screen.getByText('Add item'))
+
+      const inputs = screen.getAllByTestId('todo-item-input')
+      fireEvent.change(inputs[0], { target: { value: 'First item' } })
+      fireEvent.change(inputs[1], { target: { value: 'Second item' } })
+
+      const checkboxes = screen.getAllByRole('checkbox')
+      fireEvent.click(checkboxes[1])
+
+      fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+      await vi.runAllTimersAsync()
+
+      expect(mockNotesCreate).toHaveBeenCalledWith(expect.objectContaining({
+        items: [
+          expect.objectContaining({ text: 'First item', completed: false, position: 0 }),
+          expect.objectContaining({ text: 'Second item', completed: true, position: 1 }),
+        ],
+      }))
+    })
   })
 
 
@@ -645,6 +670,24 @@ describe('NoteModal', () => {
       renderNoteModal({ ...defaultProps, note: incompleteNote })
 
       expect(screen.getByDisplayValue('Test')).toBeInTheDocument()
+    })
+
+    it('duplicates an existing note through the toolbar button', async () => {
+      const note = createMockNote()
+      const onDuplicate = vi.fn().mockResolvedValue(undefined)
+      const onClose = vi.fn()
+
+      renderNoteModal({ ...defaultProps, note, onDuplicate, onClose })
+
+      fireEvent.click(screen.getByRole('button', { name: 'Duplicate' }))
+      await vi.runAllTimersAsync()
+
+      expect(mockNotesUpdate).toHaveBeenCalledWith('1', expect.objectContaining({
+        title: note.title,
+        content: note.content,
+      }))
+      expect(onDuplicate).toHaveBeenCalledWith('1')
+      expect(onClose).toHaveBeenCalled()
     })
   })
 })

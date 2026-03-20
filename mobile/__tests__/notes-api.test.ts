@@ -1,5 +1,5 @@
 import axios from 'axios';
-import { getNotes, getNote, createNote, updateNote, deleteNote } from '../src/api/notes';
+import { getNotes, getNote, createNote, updateNote, deleteNote, duplicateNote } from '../src/api/notes';
 
 jest.mock('axios', () => {
   const mockInstance = {
@@ -132,6 +132,18 @@ describe('Notes API', () => {
       mockAxiosInstance.delete.mockRejectedValueOnce(new Error('Network Error'));
 
       await expect(deleteNote('123')).rejects.toThrow('Network Error');
+    });
+  });
+
+  describe('duplicateNote', () => {
+    it('calls POST /notes/{id}/duplicate and returns the duplicated note', async () => {
+      const duplicated = { id: 'copy-123', title: 'Copy of Original' };
+      mockAxiosInstance.post.mockResolvedValueOnce({ data: duplicated });
+
+      const result = await duplicateNote('123');
+
+      expect(mockAxiosInstance.post).toHaveBeenCalledWith('/notes/123/duplicate');
+      expect(result).toEqual(duplicated);
     });
   });
 });

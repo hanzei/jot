@@ -18,11 +18,12 @@ import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { updateMe } from '../api/settings';
 import { useTranslation } from 'react-i18next';
-import { useUpdateNote, useDeleteNote, useRestoreNote, usePermanentDeleteNote, useReorderNotes } from '../hooks/useNotes';
+import { useUpdateNote, useDeleteNote, useRestoreNote, usePermanentDeleteNote, useReorderNotes, useDuplicateNote } from '../hooks/useNotes';
 import { useOfflineNotes } from '../hooks/useOfflineNotes';
 import { useUsers } from '../store/UsersContext';
 import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
+import { isLocalId } from '../db/noteQueries';
 import NoteCard from '../components/NoteCard';
 import NoteContextMenu, { ContextMenuViewContext } from '../components/NoteContextMenu';
 import ColorPicker from '../components/ColorPicker';
@@ -90,6 +91,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   const deleteNote = useDeleteNote();
   const restoreNote = useRestoreNote();
   const permanentDeleteNote = usePermanentDeleteNote();
+  const duplicateNote = useDuplicateNote();
   const reorderNotes = useReorderNotes();
   const navigation = useNavigation<NavigationProp>();
 
@@ -221,6 +223,20 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
       Alert.alert(t('common.error'), t('note.failedRestore'));
     }
   }, [restoreNote, t]);
+
+  const handleDuplicate = useCallback(async (note: Note) => {
+    if (isLocalId(note.id)) {
+      Alert.alert(t('common.error'), t('note.waitForSyncBeforeDuplicating'));
+      return;
+    }
+
+    try {
+      await duplicateNote.mutateAsync(note.id);
+      Alert.alert(t('note.duplicate'), t('note.duplicated'));
+    } catch {
+      Alert.alert(t('common.error'), t('note.failedDuplicate'));
+    }
+  }, [duplicateNote, t]);
 
   const handleDeletePermanently = useCallback((note: Note) => {
     Alert.alert(
@@ -681,6 +697,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
         onPin={handlePin}
         onArchive={handleArchive}
         onUnarchive={handleUnarchive}
+        onDuplicate={handleDuplicate}
         onMoveToTrash={handleMoveToTrash}
         onRestore={handleRestore}
         onDeletePermanently={handleDeletePermanently}

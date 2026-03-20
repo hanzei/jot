@@ -129,6 +129,7 @@ type CreateNoteItem struct {
 	Text        string `json:"text"`
 	Position    int    `json:"position"`
 	IndentLevel int    `json:"indent_level"`
+	Completed   bool   `json:"completed"`
 }
 
 // UpdateNoteRequest is the body for PATCH /api/v1/notes/{id}.

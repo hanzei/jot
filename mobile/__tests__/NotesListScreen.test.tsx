@@ -61,6 +61,7 @@ jest.mock('../src/hooks/useNotes', () => ({
   useRestoreNote: jest.fn(),
   usePermanentDeleteNote: jest.fn(),
   useReorderNotes: jest.fn(),
+  useDuplicateNote: jest.fn(),
 }));
 
 jest.mock('../src/store/UsersContext', () => ({
@@ -110,6 +111,7 @@ const notesHooks = jest.requireMock('../src/hooks/useNotes') as {
   useRestoreNote: jest.Mock;
   usePermanentDeleteNote: jest.Mock;
   useReorderNotes: jest.Mock;
+  useDuplicateNote: jest.Mock;
 };
 const mockUseUsers = jest.requireMock('../src/store/UsersContext').useUsers as jest.Mock;
 const mockUseAuth = jest.requireMock('../src/store/AuthContext').useAuth as jest.Mock;
@@ -182,6 +184,7 @@ describe('NotesListScreen sorting', () => {
     notesHooks.useRestoreNote.mockReturnValue({ mutateAsync: mockMutateAsync });
     notesHooks.usePermanentDeleteNote.mockReturnValue({ mutateAsync: mockMutateAsync });
     notesHooks.useReorderNotes.mockReturnValue({ mutateAsync: mockMutateAsync });
+    notesHooks.useDuplicateNote.mockReturnValue({ mutateAsync: mockMutateAsync });
     mockUseUsers.mockReturnValue({ refreshUsers: jest.fn() });
     mockUseTheme.mockReturnValue({ colors: lightColors });
     mockUseAuth.mockReturnValue({
