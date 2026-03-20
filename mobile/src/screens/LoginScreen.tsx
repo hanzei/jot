@@ -10,11 +10,13 @@ import {
   ActivityIndicator,
 } from 'react-native';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import { AuthStackParamList } from '../navigation/AuthStack';
 import { restoreServerUrl, setServerUrl as configureServerUrl } from '../api/client';
 import { useServerUrl } from '../hooks/useServerUrl';
+import { displayMessage } from '../i18n/utils';
 
 type LoginScreenProps = {
   navigation: NativeStackNavigationProp<AuthStackParamList, 'Login'>;
@@ -23,6 +25,7 @@ type LoginScreenProps = {
 export default function LoginScreen({ navigation }: LoginScreenProps) {
   const { login } = useAuth();
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const { serverUrl, setServerUrl, validateServerUrl } = useServerUrl();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
@@ -32,11 +35,11 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
   const handleLogin = async () => {
     const urlError = validateServerUrl(serverUrl);
     if (urlError) {
-      setError(urlError);
+      setError(displayMessage(t, urlError));
       return;
     }
     if (!username.trim() || !password.trim()) {
-      setError('Username and password are required');
+      setError(t('auth.usernamePasswordRequired'));
       return;
     }
 
@@ -49,10 +52,14 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
     } catch (err: unknown) {
       const response = (err as { response?: { status?: number; data?: string } })?.response;
       if (!response) {
-        setError('Unable to connect to server');
+        setError(t('auth.unableToConnect'));
       } else {
         const message = response.data;
-        setError(typeof message === 'string' && message ? message : 'Login failed');
+        setError(
+          typeof message === 'string' && message
+            ? displayMessage(t, message)
+            : t('auth.loginFailed'),
+        );
       }
     } finally {
       setLoading(false);
@@ -66,43 +73,43 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
     >
       <View style={styles.inner}>
         <Text style={[styles.title, { color: colors.text }]}>Jot</Text>
-        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>Sign in to your account</Text>
+        <Text style={[styles.subtitle, { color: colors.textSecondary }]}>{t('auth.signInSubtitle')}</Text>
 
         {error ? <Text style={[styles.error, { color: colors.error }]}>{error}</Text> : null}
 
         <TextInput
           style={[styles.input, { backgroundColor: colors.inputBackground, borderColor: colors.inputBorder, color: colors.text }]}
-          placeholder="Server URL"
+          placeholder={t('auth.serverUrlPlaceholder')}
           placeholderTextColor={colors.placeholder}
           autoCapitalize="none"
           autoCorrect={false}
           keyboardType="url"
           value={serverUrl}
           onChangeText={setServerUrl}
-          accessibilityLabel="Server URL"
+          accessibilityLabel={t('auth.serverUrlPlaceholder')}
           testID="server-url-input"
         />
 
         <TextInput
           style={[styles.input, { backgroundColor: colors.inputBackground, borderColor: colors.inputBorder, color: colors.text }]}
-          placeholder="Username"
+          placeholder={t('auth.usernamePlaceholder')}
           placeholderTextColor={colors.placeholder}
           autoCapitalize="none"
           autoCorrect={false}
           value={username}
           onChangeText={setUsername}
-          accessibilityLabel="Username"
+          accessibilityLabel={t('settings.usernameLabel')}
           testID="username-input"
         />
 
         <TextInput
           style={[styles.input, { backgroundColor: colors.inputBackground, borderColor: colors.inputBorder, color: colors.text }]}
-          placeholder="Password"
+          placeholder={t('auth.passwordPlaceholder')}
           placeholderTextColor={colors.placeholder}
           secureTextEntry
           value={password}
           onChangeText={setPassword}
-          accessibilityLabel="Password"
+          accessibilityLabel={t('auth.passwordPlaceholder')}
           testID="password-input"
         />
 
@@ -115,7 +122,7 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
           {loading ? (
             <ActivityIndicator color="#fff" />
           ) : (
-            <Text style={styles.buttonText}>Sign in</Text>
+            <Text style={styles.buttonText}>{t('auth.signIn')}</Text>
           )}
         </TouchableOpacity>
 
@@ -124,7 +131,7 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
           style={styles.link}
           testID="create-account-link"
         >
-          <Text style={[styles.linkText, { color: colors.primary }]}>Create account</Text>
+          <Text style={[styles.linkText, { color: colors.primary }]}>{t('auth.createAccountLink')}</Text>
         </TouchableOpacity>
       </View>
     </KeyboardAvoidingView>

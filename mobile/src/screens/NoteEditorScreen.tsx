@@ -16,6 +16,7 @@ import * as Haptics from 'expo-haptics';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useTranslation } from 'react-i18next';
 import { useCreateNote, useUpdateNote, useDeleteNote, useDuplicateNote } from '../hooks/useNotes';
 import { useOfflineNote } from '../hooks/useOfflineNotes';
 import { isLocalId } from '../db/noteQueries';
@@ -68,6 +69,7 @@ export default function NoteEditorScreen() {
   const navigation = useNavigation<EditorNavProp>();
   const route = useRoute<EditorRouteProp>();
   const { noteId: initialNoteId } = route.params;
+  const { t, i18n } = useTranslation();
 
   const [noteId, setNoteId] = useState<string | null>(initialNoteId);
   const [title, setTitle] = useState('');
@@ -97,8 +99,8 @@ export default function NoteEditorScreen() {
 
   // Show a toast when another user updates this note while editor is open
   useSSESubscription(noteId, useCallback(() => {
-    setSyncToast((prev) => prev ?? 'This note was updated by another user');
-  }, []));
+    setSyncToast((prev) => prev ?? t('note.updatedByAnotherUser'));
+  }, [t]));
 
   // Auto-dismiss sync toast after 4 seconds
   useEffect(() => {
@@ -106,6 +108,11 @@ export default function NoteEditorScreen() {
     const timer = setTimeout(() => setSyncToast(null), 4000);
     return () => clearTimeout(timer);
   }, [syncToast]);
+
+  useEffect(() => {
+    setSaveError(null);
+    setSyncToast(null);
+  }, [i18n.language]);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isMountedRef = useRef(true);
@@ -250,7 +257,7 @@ export default function NoteEditorScreen() {
     } catch (err) {
       console.error('Failed to save note:', err);
       if (isMountedRef.current && !unmounting) {
-        setSaveError('Failed to save note. Tap to retry.');
+        setSaveError(t('note.failedSaveChanges'));
       }
       return false;
     } finally {
@@ -258,7 +265,7 @@ export default function NoteEditorScreen() {
         saveInFlightRef.current = null;
       }
     }
-  }, []);
+  }, [t]);
 
   const scheduleUpdate = useCallback(() => {
     if (debounceRef.current) {
@@ -429,10 +436,10 @@ export default function NoteEditorScreen() {
       navigation.goBack();
       return;
     }
-    Alert.alert('Delete note', 'Move this note to trash?', [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(t('note.deleteConfirmTitle'), t('note.deleteConfirm'), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Delete',
+        text: t('common.delete'),
         style: 'destructive',
         onPress: async () => {
           try {
@@ -448,12 +455,12 @@ export default function NoteEditorScreen() {
             navigation.goBack();
           } catch {
             intentionalExitRef.current = false;
-            Alert.alert('Error', 'Failed to delete note');
+            Alert.alert(t('common.error'), t('note.failedDelete'));
           }
         },
       },
     ]);
-  }, [noteId, deleteMutation, navigation]);
+  }, [deleteMutation, navigation, noteId, t]);
 
   const handleTogglePin = useCallback(async () => {
     if (!noteId) return;
@@ -473,9 +480,9 @@ export default function NoteEditorScreen() {
       });
     } catch {
       setPinned(!newPinned);
-      Alert.alert('Error', 'Failed to update note');
+      Alert.alert(t('common.error'), t('note.failedUpdate'));
     }
-  }, [noteId, updateMutation]);
+  }, [noteId, t, updateMutation]);
 
   const handleToggleArchive = useCallback(async () => {
     if (!noteId) return;
@@ -495,9 +502,9 @@ export default function NoteEditorScreen() {
       });
     } catch {
       setArchived(!newArchived);
-      Alert.alert('Error', 'Failed to update note');
+      Alert.alert(t('common.error'), t('note.failedUpdate'));
     }
-  }, [noteId, updateMutation]);
+  }, [noteId, t, updateMutation]);
 
   const handleColorSelect = useCallback(async (selectedColor: string) => {
     const prevColor = colorRef.current;
@@ -517,9 +524,9 @@ export default function NoteEditorScreen() {
       });
     } catch {
       setColor(prevColor);
-      Alert.alert('Error', 'Failed to update note color');
+      Alert.alert(t('common.error'), t('note.failedColorUpdate'));
     }
-  }, [noteId, updateMutation]);
+  }, [noteId, t, updateMutation]);
 
   const handleToggleNoteType = useCallback(() => {
     if (hasCreated) return;
@@ -539,19 +546,19 @@ export default function NoteEditorScreen() {
 
     const currentNoteId = noteIdRef.current;
     if (!currentNoteId || isLocalId(currentNoteId)) {
-      Alert.alert('Error', 'Please wait for this note to sync before duplicating it');
+      Alert.alert(t('common.error'), t('note.waitForSyncBeforeDuplicating'));
       return;
     }
 
     try {
       const duplicatedNote = await duplicateMutation.mutateAsync(currentNoteId);
       intentionalExitRef.current = true;
-      Alert.alert('Success', 'Note duplicated');
+      Alert.alert(t('note.duplicate'), t('note.duplicated'));
       navigation.replace('NoteEditor', { noteId: duplicatedNote.id });
     } catch {
-      Alert.alert('Error', 'Failed to duplicate note');
+      Alert.alert(t('common.error'), t('note.failedDuplicate'));
     }
-  }, [duplicateMutation, flushSave, navigation]);
+  }, [duplicateMutation, flushSave, navigation, t]);
 
   // Disable inputs while waiting for existing note to hydrate
   const isHydrating = initialNoteId !== null && !existingNote;
@@ -643,7 +650,7 @@ export default function NoteEditorScreen() {
                 color={colors.primary}
               />
               <Text style={[styles.typeToggleText, { color: colors.primary }]}>
-                {noteType === 'text' ? 'Todo' : 'Text'}
+                {noteType === 'text' ? t('note.typeTodo') : t('note.typeText')}
               </Text>
             </TouchableOpacity>
           )}
@@ -686,7 +693,7 @@ export default function NoteEditorScreen() {
           style={[styles.titleInput, { color: hasNoteColor ? '#1a1a1a' : colors.text }]}
           value={title}
           onChangeText={handleTitleChange}
-          placeholder="Title"
+          placeholder={t('note.titlePlaceholder')}
           placeholderTextColor={hasNoteColor ? '#999' : colors.placeholder}
           maxLength={VALIDATION.TITLE_MAX_LENGTH}
           returnKeyType="next"
@@ -702,7 +709,7 @@ export default function NoteEditorScreen() {
             style={[styles.contentInput, { color: hasNoteColor ? '#1a1a1a' : colors.text }]}
             value={content}
             onChangeText={handleContentChange}
-            placeholder="Note"
+            placeholder={t('note.contentPlaceholder')}
             placeholderTextColor={hasNoteColor ? '#999' : colors.placeholder}
             multiline
             textAlignVertical="top"
@@ -723,7 +730,7 @@ export default function NoteEditorScreen() {
 
             <TouchableOpacity style={styles.addItemRow} onPress={handleAddItem} testID="add-todo-item">
               <Ionicons name="add" size={22} color={colors.primary} />
-              <Text style={[styles.addItemText, { color: colors.primary }]}>Add item</Text>
+              <Text style={[styles.addItemText, { color: colors.primary }]}>{t('note.addItem')}</Text>
             </TouchableOpacity>
 
             {checkedItems.length > 0 && (
@@ -739,7 +746,7 @@ export default function NoteEditorScreen() {
                     color={colors.iconMuted}
                   />
                   <Text style={[styles.checkedHeaderText, { color: colors.textMuted }]}>
-                    {checkedItems.length} checked {checkedItems.length === 1 ? 'item' : 'items'}
+                    {t('note.completedItems', { count: checkedItems.length })}
                   </Text>
                 </TouchableOpacity>
 
@@ -778,7 +785,7 @@ export default function NoteEditorScreen() {
           onPress={() => setColorPickerVisible(true)}
           style={styles.toolbarBtn}
           testID="toolbar-color-btn"
-          accessibilityLabel="Change color"
+          accessibilityLabel={t('note.changeColor')}
         >
           <Ionicons name="color-palette-outline" size={22} color={hasNoteColor ? '#444' : colors.icon} />
         </TouchableOpacity>
@@ -789,7 +796,7 @@ export default function NoteEditorScreen() {
             onPress={() => navigation.navigate('Share', { noteId })}
             style={styles.toolbarBtn}
             testID="toolbar-share-btn"
-            accessibilityLabel="Share note"
+            accessibilityLabel={t('note.share')}
           >
             <Ionicons name="share-social-outline" size={22} color={hasNoteColor ? '#444' : colors.icon} />
           </TouchableOpacity>
@@ -801,7 +808,7 @@ export default function NoteEditorScreen() {
             onPress={handleTogglePin}
             style={styles.toolbarBtn}
             testID="toolbar-pin-btn"
-            accessibilityLabel={pinned ? 'Unpin note' : 'Pin note'}
+            accessibilityLabel={pinned ? t('note.unpin') : t('note.pin')}
           >
             <Ionicons name={pinned ? 'pin' : 'pin-outline'} size={22} color={pinned ? colors.primary : (hasNoteColor ? '#444' : colors.icon)} />
           </TouchableOpacity>
@@ -813,7 +820,7 @@ export default function NoteEditorScreen() {
             onPress={handleToggleArchive}
             style={styles.toolbarBtn}
             testID="toolbar-archive-btn"
-            accessibilityLabel={archived ? 'Unarchive note' : 'Archive note'}
+            accessibilityLabel={archived ? t('note.unarchive') : t('note.archive')}
           >
             <Ionicons
               name="archive-outline"
@@ -828,7 +835,7 @@ export default function NoteEditorScreen() {
             onPress={handleDuplicate}
             style={styles.toolbarBtn}
             testID="toolbar-duplicate-btn"
-            accessibilityLabel="Duplicate note"
+            accessibilityLabel={t('note.duplicate')}
           >
             <Ionicons name="copy-outline" size={22} color={hasNoteColor ? '#444' : colors.icon} />
           </TouchableOpacity>
@@ -840,7 +847,7 @@ export default function NoteEditorScreen() {
             onPress={() => setLabelPickerVisible(true)}
             style={styles.toolbarBtn}
             testID="toolbar-label-btn"
-            accessibilityLabel="Labels"
+            accessibilityLabel={t('labels.title')}
           >
             <Ionicons name="pricetag-outline" size={22} color={hasNoteColor ? '#444' : colors.icon} />
           </TouchableOpacity>

@@ -94,6 +94,12 @@ export const notes = {
 export const labels = {
   getAll: (): Promise<Label[]> =>
     api.get('/labels').then(res => res.data),
+
+  rename: (id: string, name: string): Promise<Label> =>
+    api.patch(`/labels/${id}`, { name }).then(res => res.data),
+
+  delete: (id: string): Promise<void> =>
+    api.delete(`/labels/${id}`).then(() => undefined),
 };
 
 export const users = {

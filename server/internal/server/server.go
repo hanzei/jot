@@ -176,6 +176,8 @@ func (s *Server) setupRoutes() error {
 			r.Delete("/notes/{id}/labels/{label_id}", s.wrapHandler(s.labelsHandler.RemoveLabel))
 
 			r.Get("/labels", s.wrapHandler(s.labelsHandler.GetLabels))
+			r.Patch("/labels/{id}", s.wrapHandler(s.labelsHandler.RenameLabel))
+			r.Delete("/labels/{id}", s.wrapHandler(s.labelsHandler.DeleteLabel))
 
 			r.Get("/users", s.wrapHandler(s.notesHandler.SearchUsers))
 

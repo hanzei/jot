@@ -236,6 +236,75 @@ export async function updateLocalNote(
   await db.runAsync(`UPDATE notes SET ${fields.join(', ')} WHERE id = ?`, values);
 }
 
+export async function renameLabelInLocalNotes(
+  db: SQLiteDatabase,
+  labelId: string,
+  name: string,
+): Promise<void> {
+  const rows = await db.getAllAsync<Pick<NoteRow, 'id' | 'labels_json'>>(
+    'SELECT id, labels_json FROM notes',
+  );
+
+  await db.withTransactionAsync(async () => {
+    for (const row of rows) {
+      let labels: Label[] = [];
+      try {
+        labels = JSON.parse(row.labels_json) as Label[];
+      } catch {
+        continue;
+      }
+
+      let changed = false;
+      const nextLabels = labels.map((label) => {
+        if (label.id !== labelId || label.name === name) {
+          return label;
+        }
+        changed = true;
+        return { ...label, name };
+      });
+
+      if (!changed) {
+        continue;
+      }
+
+      await db.runAsync(
+        'UPDATE notes SET labels_json = ?, updated_at = ? WHERE id = ?',
+        [JSON.stringify(nextLabels), new Date().toISOString(), row.id],
+      );
+    }
+  });
+}
+
+export async function deleteLabelFromLocalNotes(
+  db: SQLiteDatabase,
+  labelId: string,
+): Promise<void> {
+  const rows = await db.getAllAsync<Pick<NoteRow, 'id' | 'labels_json'>>(
+    'SELECT id, labels_json FROM notes',
+  );
+
+  await db.withTransactionAsync(async () => {
+    for (const row of rows) {
+      let labels: Label[] = [];
+      try {
+        labels = JSON.parse(row.labels_json) as Label[];
+      } catch {
+        continue;
+      }
+
+      const nextLabels = labels.filter((label) => label.id !== labelId);
+      if (nextLabels.length === labels.length) {
+        continue;
+      }
+
+      await db.runAsync(
+        'UPDATE notes SET labels_json = ?, updated_at = ? WHERE id = ?',
+        [JSON.stringify(nextLabels), new Date().toISOString(), row.id],
+      );
+    }
+  });
+}
+
 export async function replaceLocalNoteId(
   db: SQLiteDatabase,
   oldId: string,

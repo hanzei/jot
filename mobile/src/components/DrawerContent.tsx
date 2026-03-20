@@ -1,13 +1,25 @@
-import React, { useCallback } from 'react';
-import { View, Text, TouchableOpacity, StyleSheet, Alert, Platform } from 'react-native';
+import React, { useCallback, useRef, useState } from 'react';
+import {
+  View,
+  Text,
+  TouchableOpacity,
+  StyleSheet,
+  Alert,
+  Platform,
+  Modal,
+  Pressable,
+  TextInput,
+} from 'react-native';
 import { DrawerContentScrollView, DrawerContentComponentProps } from '@react-navigation/drawer';
 import { CommonActions } from '@react-navigation/native';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { useTranslation } from 'react-i18next';
 import { useAuth } from '../store/AuthContext';
-import { useLabels } from '../hooks/useLabels';
+import { useDeleteLabel, useLabels, useRenameLabel } from '../hooks/useLabels';
 import { useTheme } from '../theme/ThemeContext';
 
+import type { Label } from '@jot/shared';
 import type { MainDrawerParamList } from '../navigation/MainDrawer';
 
 interface NavItem {
@@ -17,21 +29,47 @@ interface NavItem {
   activeIcon: keyof typeof Ionicons.glyphMap;
 }
 
-const TOP_ITEMS: NavItem[] = [
-  { name: 'Notes', label: 'Notes', icon: 'document-text-outline', activeIcon: 'document-text' },
-  { name: 'MyTodo', label: 'My Todo', icon: 'clipboard-outline', activeIcon: 'clipboard' },
-];
+function extractErrorMessage(error: unknown, fallback: string) {
+  if (
+    typeof error === 'object' &&
+    error !== null &&
+    'response' in error &&
+    typeof error.response === 'object' &&
+    error.response !== null &&
+    'data' in error.response &&
+    typeof error.response.data === 'string'
+  ) {
+    const message = error.response.data.trim();
+    if (message) {
+      return message;
+    }
+  }
 
-const BOTTOM_ITEMS: NavItem[] = [
-  { name: 'Archived', label: 'Archive', icon: 'archive-outline', activeIcon: 'archive' },
-  { name: 'Trash', label: 'Trash', icon: 'trash-outline', activeIcon: 'trash' },
-];
+  if (error instanceof Error && error.message) {
+    return error.message;
+  }
 
+  return fallback;
+}
 export default function DrawerContent(props: DrawerContentComponentProps) {
   const { user, logout } = useAuth();
   const { data: labels } = useLabels();
+  const renameLabel = useRenameLabel();
+  const deleteLabel = useDeleteLabel();
   const { colors } = useTheme();
+  const { t } = useTranslation();
   const insets = useSafeAreaInsets();
+  const topItems: NavItem[] = [
+    { name: 'Notes', label: t('dashboard.tabNotes'), icon: 'document-text-outline', activeIcon: 'document-text' },
+    { name: 'MyTodo', label: t('dashboard.tabMyTodo'), icon: 'clipboard-outline', activeIcon: 'clipboard' },
+  ];
+  const bottomItems: NavItem[] = [
+    { name: 'Archived', label: t('dashboard.tabArchive'), icon: 'archive-outline', activeIcon: 'archive' },
+    { name: 'Trash', label: t('dashboard.tabBin'), icon: 'trash-outline', activeIcon: 'trash' },
+  ];
+  const [renameLabelTarget, setRenameLabelTarget] = useState<Label | null>(null);
+  const [renameValue, setRenameValue] = useState('');
+  const longPressHandledRef = useRef(false);
 
   const activeRoute = props.state.routes[props.state.index]?.name;
   const activeParams = props.state.routes[props.state.index]?.params as
@@ -39,15 +77,15 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
   const activeLabelId = activeRoute === 'Notes' ? activeParams?.labelId : undefined;
 
   const handleLogout = useCallback(() => {
-    Alert.alert('Log out', 'Are you sure you want to log out?', [
-      { text: 'Cancel', style: 'cancel' },
+    Alert.alert(t('nav.logoutConfirmTitle'), t('nav.logoutConfirmMessage'), [
+      { text: t('common.cancel'), style: 'cancel' },
       {
-        text: 'Log out',
+        text: t('nav.logout'),
         style: 'destructive',
         onPress: () => logout(),
       },
     ]);
-  }, [logout]);
+  }, [logout, t]);
 
   const handleNavPress = useCallback((name: keyof MainDrawerParamList) => {
     if (name === 'Notes') {
@@ -59,9 +97,81 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
   }, [props.navigation]);
 
   const handleLabelPress = useCallback((labelId: string, labelName: string) => {
+    if (longPressHandledRef.current) {
+      longPressHandledRef.current = false;
+      return;
+    }
     props.navigation.navigate('Notes', { labelId, labelName });
     props.navigation.closeDrawer();
   }, [props.navigation]);
+
+  const handleLabelRenameSuccess = useCallback((labelId: string, labelName: string) => {
+    if (activeLabelId === labelId) {
+      props.navigation.navigate('Notes', { labelId, labelName });
+    }
+  }, [activeLabelId, props.navigation]);
+
+  const handleDeleteLabelSuccess = useCallback((labelId: string) => {
+    if (activeLabelId === labelId) {
+      props.navigation.navigate('Notes', { labelId: undefined, labelName: undefined });
+      props.navigation.closeDrawer();
+    }
+  }, [activeLabelId, props.navigation]);
+
+  const handleSubmitRename = useCallback(async () => {
+    const label = renameLabelTarget;
+    const name = renameValue.trim();
+    if (!label || !name || renameLabel.isPending) {
+      return;
+    }
+
+    try {
+      const updatedLabel = await renameLabel.mutateAsync({ labelId: label.id, name });
+      setRenameLabelTarget(null);
+      setRenameValue('');
+      handleLabelRenameSuccess(updatedLabel.id, updatedLabel.name);
+      Alert.alert(t('labels.renameSuccess'));
+    } catch (error) {
+      Alert.alert(t('common.error'), extractErrorMessage(error, t('labels.renameError')));
+    }
+  }, [handleLabelRenameSuccess, renameLabel, renameLabelTarget, renameValue, t]);
+
+  const openRenameModal = useCallback((label: Label) => {
+    setRenameLabelTarget(label);
+    setRenameValue(label.name);
+  }, []);
+
+  const handleDeleteLabel = useCallback((label: Label) => {
+    Alert.alert(
+      t('labels.deleteConfirmTitle'),
+      t('labels.deleteConfirmMessage', { name: label.name }),
+      [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('labels.delete'),
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteLabel.mutateAsync({ labelId: label.id });
+              handleDeleteLabelSuccess(label.id);
+              Alert.alert(t('labels.deleteSuccess'));
+            } catch (error) {
+              Alert.alert(t('common.error'), extractErrorMessage(error, t('labels.deleteError')));
+            }
+          },
+        },
+      ],
+    );
+  }, [deleteLabel, handleDeleteLabelSuccess, t]);
+
+  const handleLabelLongPress = useCallback((label: Label) => {
+    longPressHandledRef.current = true;
+    Alert.alert(label.name, t('labels.menuOptions', { name: label.name }), [
+      { text: t('labels.rename'), onPress: () => openRenameModal(label) },
+      { text: t('labels.delete'), style: 'destructive', onPress: () => handleDeleteLabel(label) },
+      { text: t('common.cancel'), style: 'cancel' },
+    ]);
+  }, [handleDeleteLabel, openRenameModal, t]);
 
   const handleSettingsPress = useCallback(() => {
     props.navigation.dispatch(
@@ -100,7 +210,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
         <View style={[styles.divider, { backgroundColor: colors.divider }]} />
 
         <View style={styles.navSection}>
-          {TOP_ITEMS.map((item) => {
+          {topItems.map((item) => {
             const isActive = item.name === 'Notes'
               ? isNotesActiveWithoutLabel
               : activeRoute === item.name;
@@ -136,6 +246,8 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
                     key={label.id}
                     style={[styles.navItem, isActive && { backgroundColor: colors.primaryLight }]}
                     onPress={() => handleLabelPress(label.id, label.name)}
+                    onLongPress={() => handleLabelLongPress(label)}
+                    delayLongPress={250}
                     testID={`drawer-label-${label.id}`}
                     accessibilityLabel={label.name}
                     accessibilityRole="button"
@@ -160,7 +272,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
 
           <View style={[styles.navDivider, { backgroundColor: colors.divider }]} />
 
-          {BOTTOM_ITEMS.map((item) => {
+          {bottomItems.map((item) => {
             const isActive = activeRoute === item.name;
             return (
               <TouchableOpacity
@@ -193,23 +305,98 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
           style={styles.settingsButton}
           onPress={handleSettingsPress}
           testID="drawer-settings"
-          accessibilityLabel="Settings"
+          accessibilityLabel={t('nav.settings')}
           accessibilityRole="button"
         >
           <Ionicons name="settings-outline" size={22} color={colors.icon} />
-          <Text style={[styles.settingsText, { color: colors.icon }]}>Settings</Text>
+          <Text style={[styles.settingsText, { color: colors.icon }]}>{t('nav.settings')}</Text>
         </TouchableOpacity>
         <TouchableOpacity
           style={styles.logoutButton}
           onPress={handleLogout}
           testID="drawer-logout"
-          accessibilityLabel="Log out"
+          accessibilityLabel={t('nav.logout')}
           accessibilityRole="button"
         >
           <Ionicons name="log-out-outline" size={22} color={colors.error} />
-          <Text style={[styles.logoutText, { color: colors.error }]}>Log out</Text>
+          <Text style={[styles.logoutText, { color: colors.error }]}>{t('nav.logout')}</Text>
         </TouchableOpacity>
       </View>
+
+      <Modal
+        visible={renameLabelTarget !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (!renameLabel.isPending) {
+            setRenameLabelTarget(null);
+          }
+        }}
+      >
+        <Pressable
+          style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}
+          onPress={() => {
+            if (!renameLabel.isPending) {
+              setRenameLabelTarget(null);
+            }
+          }}
+        >
+          <Pressable
+            style={[styles.modalCard, { backgroundColor: colors.surface, borderColor: colors.borderLight }]}
+            onPress={(event) => event.stopPropagation()}
+          >
+            <Text style={[styles.modalTitle, { color: colors.text }]}>
+              {t('labels.renameInputLabel', { name: renameLabelTarget?.name ?? '' })}
+            </Text>
+            <TextInput
+              style={[styles.modalInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.background }]}
+              value={renameValue}
+              onChangeText={setRenameValue}
+              placeholder={t('labels.renamePlaceholder')}
+              placeholderTextColor={colors.placeholder}
+              autoFocus
+              editable={!renameLabel.isPending}
+              returnKeyType="done"
+              onSubmitEditing={() => {
+                void handleSubmitRename();
+              }}
+              testID="rename-label-input"
+            />
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalSecondaryButton, { borderColor: colors.border }]}
+                onPress={() => {
+                  if (!renameLabel.isPending) {
+                    setRenameLabelTarget(null);
+                  }
+                }}
+                disabled={renameLabel.isPending}
+              >
+                <Text style={[styles.modalSecondaryText, { color: colors.textSecondary }]}>
+                  {t('labels.renameCancel')}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.modalButton,
+                  styles.modalPrimaryButton,
+                  { backgroundColor: colors.primary },
+                  !renameValue.trim() && styles.modalButtonDisabled,
+                ]}
+                onPress={() => {
+                  void handleSubmitRename();
+                }}
+                disabled={!renameValue.trim() || renameLabel.isPending}
+                testID="rename-label-submit"
+              >
+                <Text style={styles.modalPrimaryText}>
+                  {renameLabel.isPending ? t('settings.saving') : t('labels.renameSave')}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -274,6 +461,53 @@ const styles = StyleSheet.create({
   },
   bottomSection: {
     paddingTop: 0,
+  },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    padding: 24,
+  },
+  modalCard: {
+    borderRadius: 16,
+    borderWidth: 1,
+    padding: 20,
+  },
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: '600',
+    marginBottom: 12,
+  },
+  modalInput: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    fontSize: 15,
+  },
+  modalActions: {
+    flexDirection: 'row',
+    justifyContent: 'flex-end',
+    gap: 12,
+    marginTop: 16,
+  },
+  modalButton: {
+    borderRadius: 10,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+  },
+  modalPrimaryButton: {},
+  modalSecondaryButton: {
+    borderWidth: 1,
+  },
+  modalButtonDisabled: {
+    opacity: 0.5,
+  },
+  modalPrimaryText: {
+    color: '#fff',
+    fontWeight: '600',
+  },
+  modalSecondaryText: {
+    fontWeight: '500',
   },
   settingsButton: {
     flexDirection: 'row',

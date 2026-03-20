@@ -27,6 +27,22 @@ func (c *Client) AddLabel(ctx context.Context, noteID, name string) (*Note, erro
 	return &note, nil
 }
 
+// RenameLabel renames a label and returns the updated label.
+func (c *Client) RenameLabel(ctx context.Context, labelID, name string) (*Label, error) {
+	var label Label
+	if err := c.doJSON(ctx, http.MethodPatch, fmt.Sprintf("/api/v1/labels/%s", labelID), map[string]string{
+		"name": name,
+	}, &label); err != nil {
+		return nil, err
+	}
+	return &label, nil
+}
+
+// DeleteLabel deletes a label.
+func (c *Client) DeleteLabel(ctx context.Context, labelID string) error {
+	return c.doNoContent(ctx, http.MethodDelete, fmt.Sprintf("/api/v1/labels/%s", labelID), nil)
+}
+
 // RemoveLabel detaches a label from a note. Returns the updated note.
 func (c *Client) RemoveLabel(ctx context.Context, noteID, labelID string) (*Note, error) {
 	var note Note
