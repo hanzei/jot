@@ -8,6 +8,7 @@ interface SortableNoteCardProps {
   note: Note;
   onEdit: (note: Note) => void;
   onDelete: (noteId: string) => void;
+  onDuplicate?: (noteId: string) => Promise<void> | void;
   onShare: (note: Note) => void;
   onRestore?: (noteId: string) => void;
   onPermanentlyDelete?: (noteId: string) => void;
@@ -22,6 +23,7 @@ export default function SortableNoteCard({
   note,
   onEdit,
   onDelete,
+  onDuplicate,
   onShare,
   onRestore,
   onPermanentlyDelete,
@@ -79,6 +81,7 @@ export default function SortableNoteCard({
           note={note}
           onEdit={onEdit}
           onDelete={onDelete}
+          onDuplicate={onDuplicate}
           onShare={onShare}
           onRestore={onRestore}
           onPermanentlyDelete={onPermanentlyDelete}

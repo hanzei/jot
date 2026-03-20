@@ -16,11 +16,13 @@ import * as Haptics from 'expo-haptics';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useUpdateNote, useDeleteNote, useRestoreNote, usePermanentDeleteNote, useReorderNotes } from '../hooks/useNotes';
+import { useTranslation } from 'react-i18next';
+import { useUpdateNote, useDeleteNote, useRestoreNote, usePermanentDeleteNote, useReorderNotes, useDuplicateNote } from '../hooks/useNotes';
 import { useOfflineNotes } from '../hooks/useOfflineNotes';
 import { useUsers } from '../store/UsersContext';
 import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
+import { isLocalId } from '../db/noteQueries';
 import NoteCard from '../components/NoteCard';
 import NoteContextMenu, { ContextMenuViewContext } from '../components/NoteContextMenu';
 import ColorPicker from '../components/ColorPicker';
@@ -47,6 +49,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   const [debouncedSearch, setDebouncedSearch] = useState('');
   const { user } = useAuth();
   const { colors } = useTheme();
+  const { t } = useTranslation();
 
   const [contextMenuNote, setContextMenuNote] = useState<Note | null>(null);
   const [colorPickerNote, setColorPickerNote] = useState<Note | null>(null);
@@ -80,6 +83,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   const deleteNote = useDeleteNote();
   const restoreNote = useRestoreNote();
   const permanentDeleteNote = usePermanentDeleteNote();
+  const duplicateNote = useDuplicateNote();
   const reorderNotes = useReorderNotes();
   const navigation = useNavigation<NavigationProp>();
 
@@ -124,9 +128,9 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
         },
       });
     } catch {
-      Alert.alert('Error', 'Failed to update note');
+      Alert.alert(t('common.error'), t('note.failedUpdate'));
     }
-  }, [updateNote]);
+  }, [t, updateNote]);
 
   const handleArchive = useCallback(async (note: Note) => {
     try {
@@ -142,9 +146,9 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
         },
       });
     } catch {
-      Alert.alert('Error', 'Failed to archive note');
+      Alert.alert(t('common.error'), t('note.failedArchive'));
     }
-  }, [updateNote]);
+  }, [t, updateNote]);
 
   const handleUnarchive = useCallback(async (note: Note) => {
     try {
@@ -160,46 +164,60 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
         },
       });
     } catch {
-      Alert.alert('Error', 'Failed to unarchive note');
+      Alert.alert(t('common.error'), t('note.failedUnarchive'));
     }
-  }, [updateNote]);
+  }, [t, updateNote]);
 
   const handleMoveToTrash = useCallback(async (note: Note) => {
     try {
       await deleteNote.mutateAsync(note.id);
     } catch {
-      Alert.alert('Error', 'Failed to move note to trash');
+      Alert.alert(t('common.error'), t('note.failedMoveToTrash'));
     }
-  }, [deleteNote]);
+  }, [deleteNote, t]);
 
   const handleRestore = useCallback(async (note: Note) => {
     try {
       await restoreNote.mutateAsync(note.id);
     } catch {
-      Alert.alert('Error', 'Failed to restore note');
+      Alert.alert(t('common.error'), t('note.failedRestore'));
     }
-  }, [restoreNote]);
+  }, [restoreNote, t]);
+
+  const handleDuplicate = useCallback(async (note: Note) => {
+    if (isLocalId(note.id)) {
+      Alert.alert(t('common.error'), t('note.waitForSyncBeforeDuplicating'));
+      return;
+    }
+
+    try {
+      await duplicateNote.mutateAsync(note.id);
+      Alert.alert(t('note.duplicate'), t('note.duplicated'));
+    } catch {
+      Alert.alert(t('common.error'), t('note.failedDuplicate'));
+    }
+  }, [duplicateNote, t]);
 
   const handleDeletePermanently = useCallback((note: Note) => {
     Alert.alert(
-      'Delete permanently',
-      'This note will be deleted forever. This action cannot be undone.',
+      t('note.deleteForeverTitle'),
+      t('note.deleteForeverConfirm'),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Delete',
+          text: t('common.delete'),
           style: 'destructive',
           onPress: async () => {
             try {
               await permanentDeleteNote.mutateAsync(note.id);
             } catch {
-              Alert.alert('Error', 'Failed to delete note');
+              Alert.alert(t('common.error'), t('note.failedDelete'));
             }
           },
         },
       ],
     );
-  }, [permanentDeleteNote]);
+  }, [permanentDeleteNote, t]);
 
   const handleChangeColor = useCallback((note: Note) => {
     setColorPickerNote(note);
@@ -224,9 +242,9 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
         },
       });
     } catch {
-      Alert.alert('Error', 'Failed to update note color');
+      Alert.alert(t('common.error'), t('note.failedColorUpdate'));
     }
-  }, [colorPickerNote, updateNote]);
+  }, [colorPickerNote, t, updateNote]);
 
   const { pinnedNotes, otherNotes } = useMemo(() => {
     const pinned: Note[] = [];
@@ -267,16 +285,18 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
             color={colors.handleColor}
           />
           <Text style={[styles.emptySearchTitle, { color: colors.textSecondary }]}>
-            {debouncedSearch ? 'No notes match your search' : 'No notes for this label'}
+            {debouncedSearch
+              ? t('dashboard.noSearchResults', { query: debouncedSearch })
+              : t('dashboard.noNotesForLabel')}
           </Text>
           {debouncedSearch && (
             <Text style={[styles.emptySubtext, { color: colors.textMuted }]}>
-              Try different keywords
+              {t('dashboard.tryDifferentKeywords')}
             </Text>
           )}
         </View>
       ) : null,
-    [isSearchLoading, debouncedSearch, labelId, colors],
+    [isSearchLoading, debouncedSearch, labelId, colors, t],
   );
 
   const handleDragEnd = useCallback(
@@ -305,10 +325,10 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
           ? { ...prev, pinned: null }
           : { ...prev, unpinned: null },
         );
-        Alert.alert('Error', 'Failed to reorder notes');
+        Alert.alert(t('common.error'), t('note.failedReorder'));
       }
     },
-    [reorderNotes],
+    [reorderNotes, t],
   );
 
   const handleDragEndPinned = useCallback(
@@ -368,14 +388,14 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     return (
       <View style={[styles.emptyContainer, { backgroundColor: colors.background }]} testID="notes-error-state">
         <Ionicons name="cloud-offline-outline" size={64} color={colors.handleColor} />
-        <Text style={[styles.emptyTitle, { color: colors.text }]}>Failed to load notes</Text>
-        <Text style={[styles.emptySubtext, { color: colors.textMuted }]}>Check your connection and try again</Text>
+        <Text style={[styles.emptyTitle, { color: colors.text }]}>{t('dashboard.failedLoadNotes')}</Text>
+        <Text style={[styles.emptySubtext, { color: colors.textMuted }]}>{t('dashboard.checkConnection')}</Text>
         <TouchableOpacity
           style={[styles.retryButton, { backgroundColor: colors.primary }]}
           onPress={() => refetch()}
           testID="retry-fetch"
         >
-          <Text style={styles.retryText}>Retry</Text>
+          <Text style={styles.retryText}>{t('common.retry')}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -394,7 +414,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
           <View style={[styles.trashBanner, { backgroundColor: colors.warning, borderBottomColor: colors.warningBorder }]}>
             <Ionicons name="information-circle-outline" size={16} color={colors.warningText} style={styles.trashBannerIcon} />
             <Text style={[styles.trashBannerText, { color: colors.warningText }]}>
-              Items in Trash are automatically deleted after 7 days
+              {t('dashboard.binInfo')}
             </Text>
           </View>
         )}
@@ -405,16 +425,16 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
             color={colors.handleColor}
           />
           <Text style={[styles.emptyTitle, { color: colors.text }]}>
-            {variant === 'notes' && 'No notes yet'}
-            {variant === 'my-todo' && 'No assigned todos'}
-            {variant === 'archived' && 'No archived notes'}
-            {variant === 'trash' && 'Trash is empty'}
+            {variant === 'notes' && t('dashboard.noNotesYet')}
+            {variant === 'my-todo' && t('dashboard.noAssignedTodos')}
+            {variant === 'archived' && t('dashboard.noArchivedNotes')}
+            {variant === 'trash' && t('dashboard.noBinnedNotes')}
           </Text>
           <Text style={[styles.emptySubtext, { color: colors.textMuted }]}>
-            {variant === 'notes' && 'Tap + to create your first note'}
-            {variant === 'my-todo' && 'No notes with todos assigned to you'}
-            {variant === 'archived' && 'Archived notes will appear here'}
-            {variant === 'trash' && 'Deleted notes will appear here'}
+            {variant === 'notes' && t('dashboard.createFirstNote')}
+            {variant === 'my-todo' && t('dashboard.noMyTodoNotes')}
+            {variant === 'archived' && t('dashboard.archivedNotesWillAppear')}
+            {variant === 'trash' && t('dashboard.deletedNotesWillAppear')}
           </Text>
         </View>
         {variant === 'notes' && (
@@ -422,7 +442,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
             style={[styles.fab, { backgroundColor: colors.primary }]}
             onPress={handleCreateNote}
             testID="create-note-fab"
-            accessibilityLabel="Create note"
+            accessibilityLabel={t('dashboard.newNote')}
             accessibilityRole="button"
           >
             <Ionicons name="add" size={28} color="#fff" />
@@ -442,7 +462,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
         <View style={[styles.trashBanner, { backgroundColor: colors.warning, borderBottomColor: colors.warningBorder }]}>
           <Ionicons name="information-circle-outline" size={16} color={colors.warningText} style={styles.trashBannerIcon} />
           <Text style={[styles.trashBannerText, { color: colors.warningText }]}>
-            Items in Trash are automatically deleted after 7 days
+            {t('dashboard.binInfo')}
           </Text>
         </View>
       )}
@@ -452,7 +472,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
         <Ionicons name="search" size={18} color={colors.iconMuted} style={styles.searchIcon} />
         <TextInput
           style={[styles.searchInput, { color: colors.text }]}
-          placeholder="Search notes..."
+          placeholder={t('dashboard.searchPlaceholder')}
           placeholderTextColor={colors.placeholder}
           value={searchText}
           onChangeText={setSearchText}
@@ -477,7 +497,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
         >
           {displayPinned.length > 0 && (
             <>
-              <Text style={[styles.sectionHeader, { color: colors.textMuted }]}>Pinned</Text>
+              <Text style={[styles.sectionHeader, { color: colors.textMuted }]}>{t('dashboard.pinned')}</Text>
               <DraggableFlatList
                 data={displayPinned}
                 keyExtractor={(item) => item.id}
@@ -490,7 +510,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
           )}
           {displayUnpinned.length > 0 && (
             <>
-              <Text style={[styles.sectionHeader, { color: colors.textMuted }]}>Others</Text>
+              <Text style={[styles.sectionHeader, { color: colors.textMuted }]}>{t('dashboard.otherNotes')}</Text>
               <DraggableFlatList
                 data={displayUnpinned}
                 keyExtractor={(item) => item.id}
@@ -536,7 +556,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
           style={[styles.fab, { backgroundColor: colors.primary }]}
           onPress={handleCreateNote}
           testID="create-note-fab"
-          accessibilityLabel="Create note"
+          accessibilityLabel={t('dashboard.newNote')}
           accessibilityRole="button"
         >
           <Ionicons name="add" size={28} color="#fff" />
@@ -551,6 +571,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
         onPin={handlePin}
         onArchive={handleArchive}
         onUnarchive={handleUnarchive}
+        onDuplicate={handleDuplicate}
         onMoveToTrash={handleMoveToTrash}
         onRestore={handleRestore}
         onDeletePermanently={handleDeletePermanently}

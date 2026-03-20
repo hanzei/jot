@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { PlusIcon, DocumentTextIcon, ArchiveBoxIcon, TrashIcon, ClipboardDocumentCheckIcon } from '@heroicons/react/24/outline';
 import { useTranslation } from 'react-i18next';
-import { notes, auth, labels as labelsApi, users as usersApi } from '@/utils/api';
+import { notes, auth, labels as labelsApi, users as usersApi, isAxiosError } from '@/utils/api';
 import { removeUser, getUser, isAdmin } from '@/utils/auth';
 import type { Note, Label, User, SSEEvent } from '@jot/shared';
 import { useSSE } from '@/utils/useSSE';
@@ -190,6 +190,10 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   }, []);
 
   const openNoteFromUrl = useCallback((noteId: string) => {
+    openNoteIdRef.current = null;
+    setEditingNote(null);
+    setIsModalOpen(false);
+
     openNoteIdRef.current = noteId;
     returnPathRef.current = window.history.state?.returnTo ?? '/';
     notes.getById(noteId)
@@ -210,11 +214,21 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   }, []);
 
   useEffect(() => {
-    if (noteIdParam) {
-      openNoteFromUrl(noteIdParam);
+    if (!noteIdParam) {
+      if (openNoteIdRef.current) {
+        openNoteIdRef.current = null;
+        setIsModalOpen(false);
+        setEditingNote(null);
+      }
+      return;
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+
+    if (openNoteIdRef.current === noteIdParam) {
+      return;
+    }
+
+    openNoteFromUrl(noteIdParam);
+  }, [noteIdParam, openNoteFromUrl]);
 
   useEffect(() => {
     const handlePopState = () => {
@@ -249,7 +263,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     }
 
     loadNotes();
-    if (event.type === 'note_updated') {
+    if (event.type === 'note_created' || event.type === 'note_updated') {
       loadLabels();
     }
   }, [editingNote, sharingNote, loadNotes, loadLabels, user?.id, restoreReturnUrl]);
@@ -397,6 +411,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
 
   const handleNoteRefresh = () => {
     loadNotes();
+    loadLabels();
   };
 
   const handleDeleteNote = async (noteId: string) => {
@@ -432,6 +447,17 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     }
   };
 
+  const handleDuplicateNote = useCallback(async (noteId: string) => {
+    try {
+      await notes.duplicate(noteId);
+      await Promise.all([loadNotes(), loadLabels()]);
+      showToast(t('dashboard.noteDuplicated'), 'success');
+    } catch (error) {
+      console.error('Failed to duplicate note:', error);
+      throw error;
+    }
+  }, [loadLabels, loadNotes, showToast, t]);
+
   const handleShareNote = (note: Note) => {
     setSharingNote(note);
     setIsShareModalOpen(true);
@@ -461,6 +487,45 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       return next;
     });
   };
+
+  const handleRenameLabel = useCallback(async (label: Label, newName: string): Promise<boolean> => {
+    try {
+      await labelsApi.rename(label.id, newName);
+      await Promise.all([loadLabels(), loadNotes()]);
+      showToast(t('labels.renameSuccess'), 'success');
+      return true;
+    } catch (err: unknown) {
+      if (isAxiosError(err)) {
+        const msg = typeof err.response?.data === 'string' ? err.response.data.trim() : '';
+        showToast(msg || t('labels.renameError'), 'error');
+      } else {
+        showToast(t('labels.renameError'), 'error');
+      }
+      return false;
+    }
+  }, [loadLabels, loadNotes, showToast, t]);
+
+  const handleDeleteLabel = useCallback(async (label: Label): Promise<boolean> => {
+    try {
+      await labelsApi.delete(label.id);
+      await loadLabels();
+      if (selectedLabelId === label.id) {
+        handleViewChange('notes');
+      } else {
+        await loadNotes();
+      }
+      showToast(t('labels.deleteSuccess'), 'success');
+      return true;
+    } catch (err: unknown) {
+      if (isAxiosError(err)) {
+        const msg = typeof err.response?.data === 'string' ? err.response.data.trim() : '';
+        showToast(msg || t('labels.deleteError'), 'error');
+      } else {
+        showToast(t('labels.deleteError'), 'error');
+      }
+      return false;
+    }
+  }, [handleViewChange, loadLabels, loadNotes, selectedLabelId, showToast, t]);
 
   const handleDragEnd = async (event: DragEndEvent) => {
     if (showBin || showMyTodo) {
@@ -566,6 +631,8 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       labels={labelsList}
       selectedLabelId={selectedLabelId}
       onSelect={(labelId) => handleLabelSelect(selectedLabelId === labelId ? null : labelId)}
+      onRename={handleRenameLabel}
+      onDelete={handleDeleteLabel}
     />
   );
 
@@ -660,6 +727,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                           note={note}
                           onEdit={handleEditNote}
                           onDelete={handleDeleteNote}
+                          onDuplicate={handleDuplicateNote}
                           onShare={handleShareNote}
                           onRestore={handleRestoreNote}
                           onPermanentlyDelete={handlePermanentlyDeleteNote}
@@ -694,6 +762,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                           note={note}
                           onEdit={handleEditNote}
                           onDelete={handleDeleteNote}
+                          onDuplicate={handleDuplicateNote}
                           onShare={handleShareNote}
                           onRestore={handleRestoreNote}
                           onPermanentlyDelete={handlePermanentlyDeleteNote}
@@ -724,6 +793,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
             onRefresh={handleNoteRefresh}
             onShare={handleShareNote}
             onDelete={handleDeleteNote}
+            onDuplicate={handleDuplicateNote}
             isOwner={!editingNote || editingNote.user_id === user?.id}
             usersById={usersById}
             currentUserId={user?.id}

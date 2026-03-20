@@ -286,6 +286,35 @@ describe('NoteCard', () => {
     })
   })
 
+  describe('Duplicate Functionality', () => {
+    it('shows duplicate action when a duplicate handler is provided', async () => {
+      const user = userEvent.setup()
+      const onDuplicate = vi.fn()
+
+      renderNoteCard({ ...defaultProps, onDuplicate })
+
+      await user.hover(screen.getByTestId('note-card'))
+      await user.click(screen.getByRole('button', { name: 'Note options' }))
+
+      expect(screen.getByText('Duplicate')).toBeInTheDocument()
+    })
+
+    it('calls onDuplicate with the note id', async () => {
+      const user = userEvent.setup()
+      const onDuplicate = vi.fn().mockResolvedValue(undefined)
+
+      renderNoteCard({ ...defaultProps, onDuplicate })
+
+      await user.hover(screen.getByTestId('note-card'))
+      await user.click(screen.getByRole('button', { name: 'Note options' }))
+      await user.click(screen.getByText('Duplicate'))
+
+      await waitFor(() => {
+        expect(onDuplicate).toHaveBeenCalledWith('1')
+      })
+    })
+  })
+
   describe('Sharing Functionality', () => {
     it('shows shared user avatars when note is shared', () => {
       const sharedNote = createMockNote({

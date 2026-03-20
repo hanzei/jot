@@ -6,6 +6,7 @@ import {
   ArchiveBoxXMarkIcon,
   ShareIcon,
   ArrowUturnLeftIcon,
+  DocumentDuplicateIcon,
 } from '@heroicons/react/24/outline';
 import { Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
@@ -20,6 +21,7 @@ interface NoteCardProps {
   note: Note;
   onEdit: (note: Note) => void;
   onDelete: (noteId: string) => void;
+  onDuplicate?: (noteId: string) => Promise<void> | void;
   onShare?: (note: Note) => void;
   onRestore?: (noteId: string) => void;
   onPermanentlyDelete?: (noteId: string) => void;
@@ -29,7 +31,7 @@ interface NoteCardProps {
   onRefresh?: () => void;
 }
 
-export default function NoteCard({ note, onEdit, onDelete, onShare, onRestore, onPermanentlyDelete, currentUserId, usersById, inBin = false, onRefresh }: NoteCardProps) {
+export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare, onRestore, onPermanentlyDelete, currentUserId, usersById, inBin = false, onRefresh }: NoteCardProps) {
   const { t } = useTranslation();
   const { showToast } = useToast();
   const [isUpdating, setIsUpdating] = useState(false);
@@ -119,6 +121,20 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, onRestore, o
 
   const handleRestore = () => {
     onRestore?.(note.id);
+  };
+
+  const handleDuplicate = async () => {
+    if (!onDuplicate) return;
+
+    setIsUpdating(true);
+    try {
+      await onDuplicate(note.id);
+    } catch (error) {
+      console.error('Failed to duplicate note:', error);
+      showToast(t('note.failedDuplicate'), 'error');
+    } finally {
+      setIsUpdating(false);
+    }
   };
 
   const handlePermanentlyDelete = () => {
@@ -220,6 +236,17 @@ export default function NoteCard({ note, onEdit, onDelete, onShare, onRestore, o
                     )}
                   </button>
                 </MenuItem>
+                {onDuplicate && (
+                  <MenuItem>
+                    <button
+                      onClick={handleDuplicate}
+                      className="flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-200 data-[focus]:bg-gray-100 dark:data-[focus]:bg-slate-700"
+                    >
+                      <DocumentDuplicateIcon className="h-4 w-4 mr-2" />
+                      {t('note.duplicate')}
+                    </button>
+                  </MenuItem>
+                )}
                 {isOwner && (
                   <MenuItem>
                     <button

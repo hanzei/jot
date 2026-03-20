@@ -156,6 +156,108 @@ test.describe('Notes', () => {
     await dashboardPage.expectNoteAtPosition(2, 'First Note');
   });
 
+  test('duplicates text and todo notes with copied labels and cleared shares/assignments', async ({ page, dashboardPage, request }) => {
+    const collaboratorName = `dup-collab-${Date.now()}`;
+    const collaboratorPassword = 'testpass123';
+
+    const registerResp = await request.post('/api/v1/register', {
+      data: { username: collaboratorName, password: collaboratorPassword },
+    });
+    expect(registerResp.ok()).toBeTruthy();
+    const collaboratorData = await registerResp.json();
+    const collaboratorId = collaboratorData.user.id as string;
+
+    await dashboardPage.goto();
+
+    await dashboardPage.createNoteWithLabels('Source Text', 'Original text body', ['text-label']);
+    await dashboardPage.duplicateNoteFromMenu('Source Text');
+    await expect(page.getByText('Note duplicated')).toBeVisible();
+    await dashboardPage.expectNoteAtPosition(0, 'Copy of Source Text');
+    const duplicatedTextCard = dashboardPage.noteCard('Copy of Source Text');
+    await expect(duplicatedTextCard.getByText('Original text body')).toBeVisible();
+    await expect(duplicatedTextCard.getByText('text-label')).toBeVisible();
+
+    await dashboardPage.createTodoNote('Source Todo', ['Prepare agenda', 'Send follow-up']);
+    await dashboardPage.addLabelToNote('Source Todo', 'todo-label');
+    await dashboardPage.shareNoteWithUser('Source Todo', collaboratorName);
+    await dashboardPage.assignTodoItemToUser('Source Todo', 0, collaboratorName);
+
+    const cookies = await page.context().cookies();
+    const sessionCookie = cookies.find((cookie) => cookie.name === 'jot_session');
+    expect(sessionCookie, 'session cookie must exist').toBeDefined();
+    const authHeaders = { Cookie: `jot_session=${sessionCookie!.value}` };
+
+    const listNotes = async () => {
+      const response = await request.get('/api/v1/notes', { headers: authHeaders });
+      expect(response.ok()).toBeTruthy();
+      return response.json();
+    };
+
+    const findNoteByTitle = async (title: string) => {
+      const notes = await listNotes();
+      const note = notes.find((candidate: { title: string }) => candidate.title === title);
+      expect(note, `note "${title}" must exist`).toBeDefined();
+      return note as {
+        id: string;
+        title: string;
+        content: string;
+        pinned: boolean;
+        archived: boolean;
+        color: string;
+        checked_items_collapsed: boolean;
+        items: Array<{ text: string; position: number; completed: boolean; indent_level: number; assigned_to: string }>;
+        labels: Array<{ name: string }>;
+        shared_with: Array<{ shared_with_user_id: string }>;
+      };
+    };
+
+    const sourceTodo = await findNoteByTitle('Source Todo');
+    const updateResp = await request.patch(`/api/v1/notes/${sourceTodo.id}`, {
+      headers: authHeaders,
+      data: {
+        title: sourceTodo.title,
+        content: sourceTodo.content,
+        pinned: sourceTodo.pinned,
+        archived: sourceTodo.archived,
+        color: sourceTodo.color,
+        checked_items_collapsed: sourceTodo.checked_items_collapsed,
+        items: sourceTodo.items.map((item, index) => ({
+          text: item.text,
+          position: item.position,
+          completed: index === 1,
+          indent_level: index === 1 ? 1 : item.indent_level,
+          assigned_to: index === 0 ? collaboratorId : '',
+        })),
+      },
+    });
+    expect(updateResp.ok()).toBeTruthy();
+
+    await dashboardPage.openNote('Source Todo');
+    await dashboardPage.duplicateCurrentNoteFromModal();
+    await expect(page.getByText('Note duplicated')).toBeVisible();
+    await dashboardPage.expectNoteAtPosition(0, 'Copy of Source Todo');
+
+    const duplicatedTodo = await findNoteByTitle('Copy of Source Todo');
+    expect(duplicatedTodo.labels.map((label) => label.name)).toEqual(['todo-label']);
+    expect(duplicatedTodo.shared_with ?? []).toEqual([]);
+    expect(duplicatedTodo.items ?? []).toEqual([
+      expect.objectContaining({
+        text: 'Prepare agenda',
+        position: 0,
+        completed: false,
+        indent_level: 0,
+        assigned_to: '',
+      }),
+      expect.objectContaining({
+        text: 'Send follow-up',
+        position: 1,
+        completed: true,
+        indent_level: 1,
+        assigned_to: '',
+      }),
+    ]);
+  });
+
   test('shows empty state when no notes exist', async ({ dashboardPage }) => {
     await dashboardPage.goto();
     await dashboardPage.expectEmptyState('No notes yet');

@@ -3,6 +3,7 @@ import { TouchableOpacity, StyleSheet } from 'react-native';
 import { createDrawerNavigator } from '@react-navigation/drawer';
 import { useRoute, RouteProp } from '@react-navigation/native';
 import Ionicons from '@expo/vector-icons/Ionicons';
+import { useTranslation } from 'react-i18next';
 import NotesListScreen from '../screens/NotesListScreen';
 import DrawerContent from '../components/DrawerContent';
 import { useTheme } from '../theme/ThemeContext';
@@ -36,6 +37,7 @@ function TrashScreen() {
 
 export default function MainDrawer() {
   const { colors } = useTheme();
+  const { t } = useTranslation();
 
   return (
     <Drawer.Navigator
@@ -55,7 +57,7 @@ export default function MainDrawer() {
             onPress={() => navigation.toggleDrawer()}
             style={styles.menuButton}
             testID="drawer-toggle"
-            accessibilityLabel="Open menu"
+            accessibilityLabel={t('nav.openMenu')}
             accessibilityRole="button"
           >
             <Ionicons name="menu" size={24} color={colors.text} />
@@ -67,16 +69,16 @@ export default function MainDrawer() {
         name="Notes"
         component={NotesScreen}
         options={({ route }) => ({
-          title: route.params?.labelName ?? 'Notes',
+          title: route.params?.labelName ?? t('dashboard.tabNotes'),
         })}
       />
       <Drawer.Screen
         name="MyTodo"
         component={MyTodoScreen}
-        options={{ title: 'My Todo' }}
+        options={{ title: t('dashboard.tabMyTodo') }}
       />
-      <Drawer.Screen name="Archived" component={ArchivedScreen} />
-      <Drawer.Screen name="Trash" component={TrashScreen} />
+      <Drawer.Screen name="Archived" component={ArchivedScreen} options={{ title: t('dashboard.tabArchive') }} />
+      <Drawer.Screen name="Trash" component={TrashScreen} options={{ title: t('dashboard.tabBin') }} />
     </Drawer.Navigator>
   );
 }
