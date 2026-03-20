@@ -260,7 +260,20 @@
     "removeLabel": "Remove label {{name}}",
     "noLabels": "No labels yet",
     "newLabelPlaceholder": "Label name...",
-    "createNew": "Create new..."
+    "createNew": "Create new...",
+    "menuOptions": "Label options for {{name}}",
+    "rename": "Rename",
+    "delete": "Delete",
+    "renamePlaceholder": "Rename label...",
+    "renameInputLabel": "Rename label {{name}}",
+    "renameSave": "Save label name",
+    "renameCancel": "Cancel renaming label",
+    "renameSuccess": "Label renamed",
+    "renameError": "Failed to rename label.",
+    "deleteSuccess": "Label deleted",
+    "deleteError": "Failed to delete label.",
+    "deleteConfirmTitle": "Delete label",
+    "deleteConfirmMessage": "Delete label \"{{name}}\"? It will be removed from all notes that use it."
   },
   "share": {
     "title": "Share \"{{noteTitle}}\"",

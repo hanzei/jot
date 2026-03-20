@@ -1,7 +1,7 @@
 import { useState, useEffect, useCallback, useRef } from 'react';
 import { PlusIcon, DocumentTextIcon, ArchiveBoxIcon, TrashIcon, ClipboardDocumentCheckIcon } from '@heroicons/react/24/outline';
 import { useTranslation } from 'react-i18next';
-import { notes, auth, labels as labelsApi, users as usersApi } from '@/utils/api';
+import { notes, auth, labels as labelsApi, users as usersApi, isAxiosError } from '@/utils/api';
 import { removeUser, getUser, isAdmin } from '@/utils/auth';
 import type { Note, Label, User, SSEEvent } from '@jot/shared';
 import { useSSE } from '@/utils/useSSE';
@@ -462,6 +462,45 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     });
   };
 
+  const handleRenameLabel = useCallback(async (label: Label, newName: string): Promise<boolean> => {
+    try {
+      await labelsApi.rename(label.id, newName);
+      await Promise.all([loadLabels(), loadNotes()]);
+      showToast(t('labels.renameSuccess'), 'success');
+      return true;
+    } catch (err: unknown) {
+      if (isAxiosError(err)) {
+        const msg = typeof err.response?.data === 'string' ? err.response.data.trim() : '';
+        showToast(msg || t('labels.renameError'), 'error');
+      } else {
+        showToast(t('labels.renameError'), 'error');
+      }
+      return false;
+    }
+  }, [loadLabels, loadNotes, showToast, t]);
+
+  const handleDeleteLabel = useCallback(async (label: Label): Promise<boolean> => {
+    try {
+      await labelsApi.delete(label.id);
+      await loadLabels();
+      if (selectedLabelId === label.id) {
+        handleViewChange('notes');
+      } else {
+        await loadNotes();
+      }
+      showToast(t('labels.deleteSuccess'), 'success');
+      return true;
+    } catch (err: unknown) {
+      if (isAxiosError(err)) {
+        const msg = typeof err.response?.data === 'string' ? err.response.data.trim() : '';
+        showToast(msg || t('labels.deleteError'), 'error');
+      } else {
+        showToast(t('labels.deleteError'), 'error');
+      }
+      return false;
+    }
+  }, [handleViewChange, loadLabels, loadNotes, selectedLabelId, showToast, t]);
+
   const handleDragEnd = async (event: DragEndEvent) => {
     if (showBin || showMyTodo) {
       return;
@@ -566,6 +605,8 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       labels={labelsList}
       selectedLabelId={selectedLabelId}
       onSelect={(labelId) => handleLabelSelect(selectedLabelId === labelId ? null : labelId)}
+      onRename={handleRenameLabel}
+      onDelete={handleDeleteLabel}
     />
   );
 

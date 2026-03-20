@@ -194,7 +194,20 @@
     "noLabels": "Noch keine Labels",
     "newLabelPlaceholder": "Neues Label",
     "failedUpdate": "Label konnte nicht aktualisiert werden",
-    "failedCreate": "Label konnte nicht erstellt werden"
+    "failedCreate": "Label konnte nicht erstellt werden",
+    "menuOptions": "Wähle eine Aktion für dieses Label.",
+    "rename": "Umbenennen",
+    "delete": "Löschen",
+    "renamePlaceholder": "Label umbenennen...",
+    "renameInputLabel": "Label {{name}} umbenennen",
+    "renameSave": "Speichern",
+    "renameCancel": "Abbrechen",
+    "renameSuccess": "Label umbenannt",
+    "renameError": "Label konnte nicht umbenannt werden",
+    "deleteSuccess": "Label gelöscht",
+    "deleteError": "Label konnte nicht gelöscht werden",
+    "deleteConfirmTitle": "Label löschen",
+    "deleteConfirmMessage": "Label \"{{name}}\" löschen? Es wird aus allen Notizen entfernt, die es verwenden."
   },
   "share": {
     "searchUsersPlaceholder": "Benutzer nach Namen suchen...",
