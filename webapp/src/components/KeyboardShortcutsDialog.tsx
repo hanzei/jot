@@ -26,6 +26,16 @@ export default function KeyboardShortcutsDialog({ isOpen, onClose }: KeyboardSho
       description: t('keyboardShortcuts.newNoteDescription'),
     },
     {
+      id: 'archive-view',
+      key: t('keyboardShortcuts.archiveKey'),
+      description: t('keyboardShortcuts.archiveDescription'),
+    },
+    {
+      id: 'bin-view',
+      key: t('keyboardShortcuts.binKey'),
+      description: t('keyboardShortcuts.binDescription'),
+    },
+    {
       id: 'open-help',
       key: t('keyboardShortcuts.helpKey'),
       description: t('keyboardShortcuts.helpDescription'),

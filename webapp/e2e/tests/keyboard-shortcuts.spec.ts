@@ -37,6 +37,10 @@ test.describe('Keyboard shortcuts help dialog', () => {
     await expect(shortcutsDialog.getByTestId('shortcut-description-focus-search')).toBeVisible();
     await expect(shortcutsDialog.getByTestId('shortcut-key-new-note')).toBeVisible();
     await expect(shortcutsDialog.getByTestId('shortcut-description-new-note')).toBeVisible();
+    await expect(shortcutsDialog.getByTestId('shortcut-key-archive-view')).toBeVisible();
+    await expect(shortcutsDialog.getByTestId('shortcut-description-archive-view')).toBeVisible();
+    await expect(shortcutsDialog.getByTestId('shortcut-key-bin-view')).toBeVisible();
+    await expect(shortcutsDialog.getByTestId('shortcut-description-bin-view')).toBeVisible();
     await expect(shortcutsDialog.getByTestId('shortcut-key-open-help')).toBeVisible();
     await expect(shortcutsDialog.getByTestId('shortcut-description-open-help')).toBeVisible();
     await expect(shortcutsDialog.getByTestId('shortcut-key-escape')).toBeVisible();
@@ -44,5 +48,18 @@ test.describe('Keyboard shortcuts help dialog', () => {
 
     await page.keyboard.press('Escape');
     await expect(shortcutsDialog).toBeHidden();
+  });
+
+  test('opens archive with a and bin with b', async ({ authenticatedUser, page, dashboardPage }) => {
+    void authenticatedUser;
+    await dashboardPage.goto();
+
+    await page.locator('main').click();
+    await page.keyboard.press('a');
+    await expect(page).toHaveURL(/\/\?view=archive$/);
+
+    await page.locator('main').click();
+    await page.keyboard.press('b');
+    await expect(page).toHaveURL(/\/\?view=bin$/);
   });
 });

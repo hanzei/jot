@@ -90,7 +90,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     });
   };
 
-  const handleViewChange = (view: 'notes' | 'archive' | 'bin' | 'my-todo') => {
+  const handleViewChange = useCallback((view: 'notes' | 'archive' | 'bin' | 'my-todo') => {
     setShowArchived(view === 'archive');
     setShowBin(view === 'bin');
     setShowMyTodo(view === 'my-todo');
@@ -111,7 +111,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       }
       return next;
     });
-  };
+  }, [setSearchParams]);
 
   const sensors = useSensors(
     useSensor(PointerSensor, {
@@ -313,12 +313,38 @@ export default function Dashboard({ onLogout }: DashboardProps) {
         }
         event.preventDefault();
         handleCreateNote();
+        return;
+      }
+
+      const isArchiveShortcut =
+        event.key.toLowerCase() === 'a' &&
+        !event.shiftKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey;
+
+      if (isArchiveShortcut) {
+        event.preventDefault();
+        handleViewChange('archive');
+        return;
+      }
+
+      const isBinShortcut =
+        event.key.toLowerCase() === 'b' &&
+        !event.shiftKey &&
+        !event.ctrlKey &&
+        !event.metaKey &&
+        !event.altKey;
+
+      if (isBinShortcut) {
+        event.preventDefault();
+        handleViewChange('bin');
       }
     };
 
     window.addEventListener('keydown', handleKeyDown);
     return () => window.removeEventListener('keydown', handleKeyDown);
-  }, [handleCreateNote, loading, showBin]);
+  }, [handleCreateNote, handleViewChange, loading, showBin]);
 
   const handleEditNote = (note: Note) => {
     if (openNoteIdRef.current === note.id) return;
