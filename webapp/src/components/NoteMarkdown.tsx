@@ -50,25 +50,29 @@ const createMarkdownComponents = (variant: MarkdownVariant): Components => {
     h1:
       variant === 'preview'
         ? createPreviewHeading('h1', 'mt-1 mb-2 text-lg font-semibold leading-tight text-gray-900 dark:text-white')
-        : createCardHeading('my-1 font-semibold leading-snug text-gray-900 dark:text-white'),
+        : createCardHeading('my-1 font-black leading-snug text-gray-950 dark:text-white'),
     h2:
       variant === 'preview'
         ? createPreviewHeading('h2', 'mt-1 mb-2 text-base font-semibold leading-tight text-gray-900 dark:text-white')
-        : createCardHeading('my-1 font-semibold leading-snug text-gray-900 dark:text-white'),
+        : createCardHeading('my-1 font-black leading-snug text-gray-950 dark:text-white'),
     h3:
       variant === 'preview'
         ? createPreviewHeading('h3', 'mt-1 mb-2 text-sm font-semibold leading-tight text-gray-900 dark:text-white')
-        : createCardHeading('my-1 font-semibold leading-snug text-gray-900 dark:text-white'),
+        : createCardHeading('my-1 font-black leading-snug text-gray-950 dark:text-white'),
     h4:
       variant === 'preview'
         ? createPreviewHeading('h4', 'mt-1 mb-2 text-sm font-medium uppercase tracking-wide text-gray-700 dark:text-gray-200')
-        : createCardHeading('my-1 font-semibold leading-snug text-gray-900 dark:text-white'),
+        : createCardHeading('my-1 font-black leading-snug text-gray-950 dark:text-white'),
     p: ({ children }) => (
       <p className={joinClasses(compact ? 'my-1 leading-snug' : 'my-2 leading-relaxed', 'break-words text-gray-800 dark:text-gray-100')}>
         {children}
       </p>
     ),
-    strong: ({ children }) => <strong className="font-semibold text-gray-900 dark:text-white">{children}</strong>,
+    strong: ({ children }) => (
+      <strong className={joinClasses(variant === 'card' ? 'font-extrabold text-gray-950 dark:text-white' : 'font-semibold text-gray-900 dark:text-white')}>
+        {children}
+      </strong>
+    ),
     em: ({ children }) => <em className="italic">{children}</em>,
     del: ({ children }) => <del className="opacity-80">{children}</del>,
     ul: ({ children }) => (
