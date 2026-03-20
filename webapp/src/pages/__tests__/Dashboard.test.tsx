@@ -4,7 +4,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { MemoryRouter, useLocation, useNavigate, Routes, Route } from 'react-router'
 import { type ReactNode } from 'react'
 import Dashboard from '../Dashboard'
-import type { Note, Label } from '@jot/shared'
+import type { AuthResponse, Note, Label, UserSettings } from '@jot/shared'
 import { notes, labels, users } from '@/utils/api'
 import * as auth from '@/utils/auth'
 import { useSSE } from '@/utils/useSSE'
@@ -479,6 +479,108 @@ describe('Dashboard', () => {
       })
 
       expect(auth.setSettings).toHaveBeenCalledWith(expect.objectContaining({ note_sort: 'updated_at' }))
+    })
+
+    it('rolls back sort changes when persistence fails', async () => {
+      const user = userEvent.setup()
+      let currentSettings: UserSettings = {
+        user_id: 'user1',
+        language: 'system',
+        theme: 'system',
+        note_sort: 'manual',
+        updated_at: '2023-01-01T00:00:00Z',
+      }
+      vi.mocked(auth.getSettings).mockImplementation(() => currentSettings)
+      vi.mocked(auth.setSettings).mockImplementation((settings) => {
+        currentSettings = settings
+      })
+      vi.mocked(notes.getAll).mockResolvedValue([
+        createMockNote({ id: '1', title: 'A note' }),
+        createMockNote({ id: '2', title: 'B note' }),
+      ])
+      vi.mocked(users.updateMe).mockRejectedValueOnce(new Error('save failed'))
+
+      renderDashboard()
+
+      const sortSelect = await screen.findByTestId('dashboard-sort-select')
+      await user.selectOptions(sortSelect, 'updated_at')
+
+      await waitFor(() => {
+        expect(users.updateMe).toHaveBeenCalledWith({ note_sort: 'updated_at' })
+        expect(sortSelect).toHaveValue('manual')
+        expect(screen.queryByTestId('manual-reorder-disabled-notice')).not.toBeInTheDocument()
+        expect(screen.getByTestId('note-card-1')).toHaveAttribute('data-disabled', 'false')
+      })
+
+      expect(currentSettings.note_sort).toBe('manual')
+      expect(auth.setSettings).toHaveBeenLastCalledWith(expect.objectContaining({ note_sort: 'manual' }))
+    })
+
+    it('keeps the final sort when an earlier persistence request fails later', async () => {
+      const user = userEvent.setup()
+      let currentSettings: UserSettings = {
+        user_id: 'user1',
+        language: 'system',
+        theme: 'system',
+        note_sort: 'manual',
+        updated_at: '2023-01-01T00:00:00Z',
+      }
+      vi.mocked(auth.getSettings).mockImplementation(() => currentSettings)
+      vi.mocked(auth.setSettings).mockImplementation((settings) => {
+        currentSettings = settings
+      })
+      vi.mocked(notes.getAll).mockResolvedValue([
+        createMockNote({ id: '1', title: 'A note' }),
+        createMockNote({ id: '2', title: 'B note' }),
+      ])
+
+      let rejectFirstRequest: ((reason?: unknown) => void) | undefined
+      const firstRequest = new Promise<AuthResponse>((_, reject) => {
+        rejectFirstRequest = reject
+      })
+
+      vi.mocked(users.updateMe)
+        .mockReturnValueOnce(firstRequest)
+        .mockResolvedValueOnce({
+          user: {
+            id: 'user1',
+            username: 'testuser',
+            first_name: '',
+            last_name: '',
+            role: 'user',
+            created_at: '2023-01-01T00:00:00Z',
+            updated_at: '2023-01-01T00:00:00Z',
+            has_profile_icon: false,
+          },
+          settings: {
+            user_id: 'user1',
+            language: 'system',
+            theme: 'system',
+            note_sort: 'created_at',
+            updated_at: '2023-01-01T00:00:00Z',
+          },
+        })
+
+      renderDashboard()
+
+      const sortSelect = await screen.findByTestId('dashboard-sort-select')
+      await user.selectOptions(sortSelect, 'updated_at')
+      await user.selectOptions(sortSelect, 'created_at')
+
+      await waitFor(() => {
+        expect(sortSelect).toHaveValue('created_at')
+        expect(screen.getByTestId('manual-reorder-disabled-notice')).toBeInTheDocument()
+      })
+
+      rejectFirstRequest?.(new Error('stale failure'))
+
+      await waitFor(() => {
+        expect(sortSelect).toHaveValue('created_at')
+        expect(screen.getByTestId('note-card-1')).toHaveAttribute('data-disabled', 'true')
+      })
+
+      expect(currentSettings.note_sort).toBe('created_at')
+      expect(auth.setSettings).toHaveBeenLastCalledWith(expect.objectContaining({ note_sort: 'created_at' }))
     })
   })
 

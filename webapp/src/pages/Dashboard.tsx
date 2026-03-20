@@ -484,6 +484,21 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     });
   };
 
+  const rollbackNoteSortCache = (failedSort: NoteSort, previousSettings: ReturnType<typeof getSettings>): boolean => {
+    const cachedSettings = getSettings();
+    if (cachedSettings?.note_sort !== failedSort) {
+      return false;
+    }
+
+    if (previousSettings) {
+      setSettings(previousSettings);
+    } else {
+      localStorage.removeItem('settings');
+    }
+
+    return true;
+  };
+
   const handleNoteSortChange = async (nextSort: typeof noteSortOptions[number]) => {
     if (nextSort === noteSort) {
       return;
@@ -507,14 +522,18 @@ export default function Dashboard({ onLogout }: DashboardProps) {
         setSettings(updatedSettings);
       }
     } catch (error) {
+      console.error('Failed to update note sort:', error);
+
+      rollbackNoteSortCache(nextSort, previousSettings);
+
       if (!isMountedRef.current || requestID !== noteSortUpdateRequestIdRef.current) {
         return;
       }
+
       setNoteSort(previousSort);
       if (previousSettings) {
         setSettings(previousSettings);
       }
-      console.error('Failed to update note sort:', error);
     }
   };
 

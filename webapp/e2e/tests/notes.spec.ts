@@ -177,6 +177,8 @@ test.describe('Notes', () => {
     await dashboardPage.expectVisibleNoteTitles(['Zulu', 'alpha', 'Bravo']);
 
     await page.waitForTimeout(1100);
+    // Patch the alpha note directly so updated_at changes deterministically without
+    // relying on modal timing or extra UI interactions in this ordering test.
     await page.evaluate(async () => {
       const response = await fetch('/api/v1/notes', { credentials: 'include' });
       const notes = await response.json() as Array<{
