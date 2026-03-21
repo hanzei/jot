@@ -1,5 +1,14 @@
 import React from 'react';
-import { NavigationContainer, DefaultTheme, DarkTheme, Theme, LinkingOptions, getStateFromPath } from '@react-navigation/native';
+import { Linking } from 'react-native';
+import {
+  NavigationContainer,
+  DefaultTheme,
+  DarkTheme,
+  Theme,
+  LinkingOptions,
+  createNavigationContainerRef,
+  getStateFromPath,
+} from '@react-navigation/native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SQLiteProvider } from 'expo-sqlite';
@@ -21,9 +30,38 @@ const queryClient = new QueryClient({
   },
 });
 
+const DEEP_LINK_PREFIXES = ['jot://'];
+
+function getDeepLinkPath(url: string): string {
+  try {
+    const parsed = new URL(url);
+    const host = parsed.hostname.trim();
+    const pathname = parsed.pathname.replace(/^\/+|\/+$/g, '');
+    return [host, pathname].filter(Boolean).join('/').replace(/^\/+|\/+$/g, '');
+  } catch {
+    return url
+      .replace(/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//, '')
+      .replace(/^\/+|\/+$/g, '');
+  }
+}
+
+function isProtectedDeepLinkPath(path: string): boolean {
+  const normalizedPath = path.replace(/^\/+|\/+$/g, '').toLowerCase();
+  if (normalizedPath.length === 0) {
+    return true;
+  }
+
+  const firstSegment = normalizedPath.split('/')[0];
+  return firstSegment === 'notes' || firstSegment === 'share' || firstSegment === 'settings';
+}
+
 function NavigationWrapper() {
   const { colors, isDark } = useTheme();
   const { isAuthenticated } = useAuth();
+  const navigationRef = React.useMemo(() => createNavigationContainerRef<RootStackParamList>(), []);
+  const pendingDeepLinkUrlRef = React.useRef<string | null>(null);
+  const wasAuthenticatedRef = React.useRef(isAuthenticated);
+  const [isNavReady, setIsNavReady] = React.useState(false);
 
   const navigationTheme: Theme = {
     ...(isDark ? DarkTheme : DefaultTheme),
@@ -40,7 +78,36 @@ function NavigationWrapper() {
 
   const linking = React.useMemo<LinkingOptions<RootStackParamList>>(
     () => ({
-      prefixes: ['jot://'],
+      prefixes: DEEP_LINK_PREFIXES,
+      getInitialURL: async () => {
+        const url = await Linking.getInitialURL();
+        if (!url) {
+          return null;
+        }
+
+        const path = getDeepLinkPath(url);
+        if (!isAuthenticated && isProtectedDeepLinkPath(path)) {
+          pendingDeepLinkUrlRef.current = url;
+          return null;
+        }
+
+        return url;
+      },
+      subscribe: (listener) => {
+        const subscription = Linking.addEventListener('url', ({ url }) => {
+          const path = getDeepLinkPath(url);
+          if (!isAuthenticated && isProtectedDeepLinkPath(path)) {
+            pendingDeepLinkUrlRef.current = url;
+            return;
+          }
+
+          listener(url);
+        });
+
+        return () => {
+          subscription.remove();
+        };
+      },
       config: {
         screens: {
           MainDrawer: '',
@@ -51,10 +118,7 @@ function NavigationWrapper() {
       },
       getStateFromPath: (path, options) => {
         const normalizedPath = path.replace(/^\/+/, '');
-        const isProtectedPath =
-          normalizedPath.startsWith('notes/') ||
-          normalizedPath.startsWith('share/') ||
-          normalizedPath === 'settings';
+        const isProtectedPath = isProtectedDeepLinkPath(normalizedPath);
 
         if (!isAuthenticated && isProtectedPath) {
           return undefined;
@@ -66,8 +130,35 @@ function NavigationWrapper() {
     [isAuthenticated],
   );
 
+  React.useEffect(() => {
+    if (wasAuthenticatedRef.current && !isAuthenticated) {
+      pendingDeepLinkUrlRef.current = null;
+    }
+    wasAuthenticatedRef.current = isAuthenticated;
+  }, [isAuthenticated]);
+
+  React.useEffect(() => {
+    if (!isAuthenticated || !isNavReady || !navigationRef.isReady()) {
+      return;
+    }
+
+    const pendingUrl = pendingDeepLinkUrlRef.current;
+    if (!pendingUrl) {
+      return;
+    }
+
+    const pendingPath = getDeepLinkPath(pendingUrl);
+    const pendingState = getStateFromPath(pendingPath, linking.config);
+    if (!pendingState) {
+      return;
+    }
+
+    navigationRef.resetRoot(pendingState);
+    pendingDeepLinkUrlRef.current = null;
+  }, [isAuthenticated, isNavReady, linking.config, navigationRef]);
+
   return (
-    <NavigationContainer theme={navigationTheme} linking={linking}>
+    <NavigationContainer ref={navigationRef} theme={navigationTheme} linking={linking} onReady={() => setIsNavReady(true)}>
       <RootNavigator />
     </NavigationContainer>
   );
