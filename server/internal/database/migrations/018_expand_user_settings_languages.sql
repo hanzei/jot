@@ -11,19 +11,27 @@ CREATE TABLE user_settings_new (
 
 INSERT INTO user_settings_new (user_id, language, created_at, updated_at, theme, note_sort)
 SELECT
-  user_id,
-  language,
-  created_at,
-  updated_at,
+  us.user_id,
   CASE
-    WHEN theme IN ('system', 'light', 'dark') THEN theme
+    WHEN us.language IN ('system', 'en', 'de', 'es', 'fr', 'pt', 'it', 'nl', 'pl') THEN us.language
+    ELSE 'system'
+  END,
+  us.created_at,
+  us.updated_at,
+  CASE
+    WHEN us.theme IN ('system', 'light', 'dark') THEN us.theme
     ELSE 'system'
   END,
   CASE
-    WHEN note_sort IN ('manual', 'updated_at', 'created_at') THEN note_sort
+    WHEN us.note_sort IN ('manual', 'updated_at', 'created_at') THEN us.note_sort
     ELSE 'manual'
   END
-FROM user_settings;
+FROM user_settings us
+WHERE EXISTS (
+  SELECT 1
+  FROM users
+  WHERE users.id = us.user_id
+);
 
 DROP TABLE user_settings;
 ALTER TABLE user_settings_new RENAME TO user_settings;
