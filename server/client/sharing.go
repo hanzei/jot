@@ -15,9 +15,7 @@ func (c *Client) ShareNote(ctx context.Context, noteID, userID string) error {
 
 // UnshareNote removes a share from a note.
 func (c *Client) UnshareNote(ctx context.Context, noteID, userID string) error {
-	return c.doNoContent(ctx, http.MethodDelete, fmt.Sprintf("/api/v1/notes/%s/share", noteID), map[string]string{
-		"user_id": userID,
-	})
+	return c.doNoContent(ctx, http.MethodDelete, fmt.Sprintf("/api/v1/notes/%s/shares/%s", noteID, userID), nil)
 }
 
 // GetNoteShares lists users a note is shared with.

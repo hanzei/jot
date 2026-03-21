@@ -105,17 +105,16 @@ func (h *NotesHandler) ShareNote(w http.ResponseWriter, r *http.Request) (int, a
 //	@Summary	Remove a share from a note
 //	@Tags		sharing
 //	@Security	CookieAuth
-//	@Accept		json
 //	@Produce	json
-//	@Param		id		path		string				true	"Note ID"
-//	@Param		body	body		ShareNoteRequest	true	"User ID to unshare with"
+//	@Param		id		path		string	true	"Note ID"
+//	@Param		user_id	path		string	true	"User ID to unshare with"
 //	@Success	200		{object}	ShareNoteResponse
 //	@Failure	400		{string}	string	"bad request"
 //	@Failure	401		{string}	string	"unauthorized"
 //	@Failure	403		{string}	string	"not owner"
 //	@Failure	404		{string}	string	"not found"
 //	@Failure	500		{string}	string	"internal server error"
-//	@Router		/notes/{id}/share [delete]
+//	@Router		/notes/{id}/shares/{user_id} [delete]
 func (h *NotesHandler) UnshareNote(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
 	if !ok {
@@ -130,12 +129,12 @@ func (h *NotesHandler) UnshareNote(w http.ResponseWriter, r *http.Request) (int,
 		return http.StatusBadRequest, nil, errors.New("invalid note ID format")
 	}
 
-	var req ShareNoteRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
-		return http.StatusBadRequest, nil, err
+	userID := chi.URLParam(r, "user_id")
+	if userID == "" {
+		return http.StatusBadRequest, nil, errors.New("missing user_id")
 	}
 
-	if !models.IsValidID(req.UserID) {
+	if !models.IsValidID(userID) {
 		return http.StatusBadRequest, nil, errors.New("invalid user_id")
 	}
 
@@ -150,7 +149,7 @@ func (h *NotesHandler) UnshareNote(w http.ResponseWriter, r *http.Request) (int,
 	// Fetch audience before unsharing so the target user is still in the list.
 	audienceIDs, audienceErr := h.noteStore.GetNoteAudienceIDs(id)
 
-	err = h.noteStore.UnshareNote(id, req.UserID)
+	err = h.noteStore.UnshareNote(id, userID)
 	if err != nil {
 		if errors.Is(err, models.ErrNoteShareNotFound) {
 			return http.StatusNotFound, nil, err
@@ -164,7 +163,7 @@ func (h *NotesHandler) UnshareNote(w http.ResponseWriter, r *http.Request) (int,
 			NoteID:       id,
 			Note:         nil,
 			SourceUserID: user.ID,
-			TargetUserID: req.UserID,
+			TargetUserID: userID,
 		})
 	}
 
