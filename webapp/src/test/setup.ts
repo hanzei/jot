@@ -1,7 +1,10 @@
 import '@testing-library/jest-dom'
 import i18n from '@/i18n';
+import { beforeEach } from 'vitest';
 
-i18n.changeLanguage('en');
+beforeEach(async () => {
+  await i18n.changeLanguage('en');
+});
 
 // EventSource is not available in jsdom. Provide a no-op mock so components
 // that use useSSE do not throw during tests.

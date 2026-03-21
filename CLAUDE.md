@@ -348,6 +348,8 @@ CI is split into per-component workflows in `.github/workflows/`:
 | Release | `release.yml` | push tags `v*` |
 | Claude Code | `claude.yml` | issue/PR comment and review events, plus issues opened/assigned, when `@claude` is mentioned |
 
+**Workflow pinning policy:** In GitHub Actions workflows, pin every external action `uses:` reference (`owner/repo@...`) to a full commit SHA and add an inline comment with the intended major version tag (for example, `# v6`). Do not use floating action refs such as `@v4`, `@v6`, `@main`, or `@latest`.
+
 ### CI Checklist (before opening a PR)
 
 1. `task test` — all tests pass
