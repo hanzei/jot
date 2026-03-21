@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { XMarkIcon, PlusIcon, TrashIcon, ChevronDownIcon, ArchiveBoxIcon, ArchiveBoxXMarkIcon, ShareIcon, UserPlusIcon, CheckIcon, TagIcon, DocumentDuplicateIcon } from '@heroicons/react/24/outline';
 import { Dialog, DialogPanel } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
-import { VALIDATION, NOTE_COLORS, buildCollaborators, type Note, type NoteType, type CreateNoteRequest, type UpdateNoteRequest, type Label, type User, type Collaborator } from '@jot/shared';
+import { VALIDATION, NOTE_COLORS, buildCollaborators, type Note, type NoteType, type CreateNoteRequest, type UpdateNoteRequest, type Label, type UserInfo, type Collaborator } from '@jot/shared';
 import { notes } from '@/utils/api';
 import LabelPicker from '@/components/LabelPicker';
 import LetterAvatar from '@/components/LetterAvatar';
@@ -65,7 +65,7 @@ interface NoteModalProps {
   onDelete?: (noteId: string) => void;
   onDuplicate?: (noteId: string) => Promise<void> | void;
   isOwner?: boolean;
-  usersById?: Map<string, User>;
+  usersById?: ReadonlyMap<string, UserInfo>;
   currentUserId?: string;
 }
 
@@ -92,7 +92,7 @@ interface SortableItemProps {
   onIndentChange?: (itemId: string, delta: 1 | -1) => void;
   isShared?: boolean;
   collaborators?: Collaborator[];
-  usersById?: Map<string, User>;
+  usersById?: ReadonlyMap<string, UserInfo>;
   onAssignItem?: (itemId: string, userId: string) => void;
   completedItemTexts?: string[];
   onAcceptSuggestion?: (currentItemId: string, suggestionText: string) => void;

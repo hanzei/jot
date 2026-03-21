@@ -3,11 +3,13 @@ import { Platform } from 'react-native';
 import type {
   Note,
   GetNotesParams,
+  PaginatedNotesResponse,
   CreateNoteRequest,
   UpdateNoteRequest,
   EmptyTrashResponse,
   ImportResponse,
 } from '@jot/shared';
+import { collectAllPages } from './pagination';
 
 function stripClientOnlyParams(params: GetNotesParams): Omit<GetNotesParams, 'user_id'> {
   const { archived, search, trashed, label, my_todo } = params;
@@ -15,8 +17,11 @@ function stripClientOnlyParams(params: GetNotesParams): Omit<GetNotesParams, 'us
 }
 
 export async function getNotes(params?: GetNotesParams): Promise<Note[]> {
-  const res = await api.get('/notes', { params: params ? stripClientOnlyParams(params) : undefined });
-  return res.data;
+  return collectAllPages<Note>(async (page) => {
+    const requestParams = params ? stripClientOnlyParams(params) : {};
+    const res = await api.get('/notes', { params: { ...requestParams, ...page } });
+    return res.data as PaginatedNotesResponse;
+  });
 }
 
 export async function getNote(id: string): Promise<Note> {

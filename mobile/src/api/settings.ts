@@ -1,6 +1,7 @@
 import { Platform } from 'react-native';
 import api from './client';
-import type { User, AuthResponse, UpdateMeRequest, ChangePasswordRequest, AboutInfo, ActiveSession } from '@jot/shared';
+import type { User, AuthResponse, UpdateMeRequest, ChangePasswordRequest, AboutInfo, ActiveSession, PaginatedSessionsResponse } from '@jot/shared';
+import { collectAllPages } from './pagination';
 
 export async function updateMe(data: UpdateMeRequest): Promise<AuthResponse> {
   const res = await api.patch('/users/me', data);
@@ -40,8 +41,10 @@ export async function getAboutInfo(): Promise<AboutInfo> {
 }
 
 export async function listSessions(): Promise<ActiveSession[]> {
-  const res = await api.get('/sessions');
-  return res.data;
+  return collectAllPages<ActiveSession>(async (page) => {
+    const res = await api.get('/sessions', { params: page });
+    return res.data as PaginatedSessionsResponse;
+  });
 }
 
 export async function revokeSession(id: string): Promise<void> {

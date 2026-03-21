@@ -1,10 +1,10 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import type { User } from '@jot/shared';
+import type { UserInfo } from '@jot/shared';
 import { getUsers } from '../api/users';
 import { useAuth } from './AuthContext';
 
 interface UsersState {
-  usersById: Map<string, User>;
+  usersById: Map<string, UserInfo>;
   refreshUsers: () => Promise<void>;
 }
 
@@ -12,7 +12,7 @@ const UsersContext = createContext<UsersState | undefined>(undefined);
 
 export function UsersProvider({ children }: { children: React.ReactNode }) {
   const { user, isAuthenticated } = useAuth();
-  const [usersById, setUsersById] = useState<Map<string, User>>(new Map());
+  const [usersById, setUsersById] = useState<Map<string, UserInfo>>(new Map());
   const isMountedRef = useRef(true);
 
   useEffect(() => {
@@ -24,8 +24,8 @@ export function UsersProvider({ children }: { children: React.ReactNode }) {
     try {
       const users = await getUsers();
       if (!isMountedRef.current) return;
-      const map = new Map<string, User>();
-      if (user) map.set(user.id, user as User);
+      const map = new Map<string, UserInfo>();
+      if (user) map.set(user.id, user as UserInfo);
       for (const u of users) map.set(u.id, u);
       setUsersById(map);
     } catch {

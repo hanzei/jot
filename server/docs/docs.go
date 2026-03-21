@@ -101,11 +101,31 @@ const docTemplate = `{
                     "admin"
                 ],
                 "summary": "List all users (admin only)",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Page size (default 50, max 100)",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page offset (default 0)",
+                        "name": "offset",
+                        "in": "query"
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
                             "$ref": "#/definitions/handlers.UserListResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "bad request",
+                        "schema": {
+                            "type": "string"
                         }
                     },
                     "401": {
@@ -634,16 +654,31 @@ const docTemplate = `{
                         "description": "Return only notes with todos assigned to current user",
                         "name": "my_todo",
                         "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page size (default 50, max 100)",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page offset (default 0)",
+                        "name": "offset",
+                        "in": "query"
                     }
                 ],
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/models.Note"
-                            }
+                            "$ref": "#/definitions/handlers.PaginatedNotesResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "bad request",
+                        "schema": {
+                            "type": "string"
                         }
                     },
                     "401": {
@@ -1566,14 +1601,31 @@ const docTemplate = `{
                     "sessions"
                 ],
                 "summary": "List all active sessions for the current user",
+                "parameters": [
+                    {
+                        "type": "integer",
+                        "description": "Page size (default 50, max 100)",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page offset (default 0)",
+                        "name": "offset",
+                        "in": "query"
+                    }
+                ],
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/handlers.SessionResponse"
-                            }
+                            "$ref": "#/definitions/handlers.PaginatedSessionsResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "bad request",
+                        "schema": {
+                            "type": "string"
                         }
                     },
                     "401": {
@@ -1650,16 +1702,31 @@ const docTemplate = `{
                         "description": "Filter by username, first name, or last name (case-insensitive substring match)",
                         "name": "search",
                         "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page size (default 50, max 100)",
+                        "name": "limit",
+                        "in": "query"
+                    },
+                    {
+                        "type": "integer",
+                        "description": "Page offset (default 0)",
+                        "name": "offset",
+                        "in": "query"
                     }
                 ],
                 "responses": {
                     "200": {
                         "description": "OK",
                         "schema": {
-                            "type": "array",
-                            "items": {
-                                "$ref": "#/definitions/handlers.UserInfo"
-                            }
+                            "$ref": "#/definitions/handlers.PaginatedUsersResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "bad request",
+                        "schema": {
+                            "type": "string"
                         }
                     },
                     "401": {
@@ -2056,6 +2123,68 @@ const docTemplate = `{
                 }
             }
         },
+        "handlers.PaginatedNotesResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/models.Note"
+                    }
+                },
+                "pagination": {
+                    "$ref": "#/definitions/handlers.PaginationMetadata"
+                }
+            }
+        },
+        "handlers.PaginatedSessionsResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/handlers.SessionResponse"
+                    }
+                },
+                "pagination": {
+                    "$ref": "#/definitions/handlers.PaginationMetadata"
+                }
+            }
+        },
+        "handlers.PaginatedUsersResponse": {
+            "type": "object",
+            "properties": {
+                "items": {
+                    "type": "array",
+                    "items": {
+                        "$ref": "#/definitions/handlers.UserInfo"
+                    }
+                },
+                "pagination": {
+                    "$ref": "#/definitions/handlers.PaginationMetadata"
+                }
+            }
+        },
+        "handlers.PaginationMetadata": {
+            "type": "object",
+            "properties": {
+                "has_more": {
+                    "type": "boolean"
+                },
+                "limit": {
+                    "type": "integer"
+                },
+                "next_offset": {
+                    "type": "integer"
+                },
+                "offset": {
+                    "type": "integer"
+                },
+                "returned": {
+                    "type": "integer"
+                }
+            }
+        },
         "handlers.RegisterRequest": {
             "type": "object",
             "properties": {
@@ -2255,11 +2384,14 @@ const docTemplate = `{
         "handlers.UserListResponse": {
             "type": "object",
             "properties": {
-                "users": {
+                "items": {
                     "type": "array",
                     "items": {
                         "$ref": "#/definitions/models.User"
                     }
+                },
+                "pagination": {
+                    "$ref": "#/definitions/handlers.PaginationMetadata"
                 }
             }
         },

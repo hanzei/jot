@@ -1,4 +1,4 @@
-import type { User } from './types';
+import type { UserInfo } from './types';
 
 export interface Collaborator {
   userId: string;
@@ -16,7 +16,7 @@ export function displayName(c: Collaborator): string {
 export function buildCollaborators(
   noteUserId: string,
   sharedWith: { shared_with_user_id: string; username?: string; first_name?: string; last_name?: string; has_profile_icon?: boolean }[] | undefined,
-  usersById: Map<string, User> | undefined,
+  usersById: ReadonlyMap<string, UserInfo> | undefined,
 ): Collaborator[] {
   const result: Collaborator[] = [];
   const seen = new Set<string>();

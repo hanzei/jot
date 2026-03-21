@@ -88,13 +88,23 @@ const renderAdmin = (onLogout = vi.fn()) => {
   )
 }
 
+const paginatedUsers = (items: User[]) => ({
+  items,
+  pagination: {
+    limit: 100,
+    offset: 0,
+    returned: items.length,
+    has_more: false,
+  },
+})
+
 describe('Admin', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.mocked(authUtils.isAdmin).mockReturnValue(true)
     vi.mocked(authUtils.getUser).mockReturnValue(currentUser)
     vi.mocked(admin.getStats).mockResolvedValue(mockStats)
-    vi.mocked(admin.getUsers).mockResolvedValue({ users: [currentUser, otherUser, otherAdmin] })
+    vi.mocked(admin.getUsers).mockResolvedValue(paginatedUsers([currentUser, otherUser, otherAdmin]))
   })
 
   describe('AppLayout props', () => {

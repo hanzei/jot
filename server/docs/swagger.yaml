@@ -81,6 +81,46 @@ definitions:
       username:
         type: string
     type: object
+  handlers.PaginatedNotesResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/models.Note'
+        type: array
+      pagination:
+        $ref: '#/definitions/handlers.PaginationMetadata'
+    type: object
+  handlers.PaginatedSessionsResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/handlers.SessionResponse'
+        type: array
+      pagination:
+        $ref: '#/definitions/handlers.PaginationMetadata'
+    type: object
+  handlers.PaginatedUsersResponse:
+    properties:
+      items:
+        items:
+          $ref: '#/definitions/handlers.UserInfo'
+        type: array
+      pagination:
+        $ref: '#/definitions/handlers.PaginationMetadata'
+    type: object
+  handlers.PaginationMetadata:
+    properties:
+      has_more:
+        type: boolean
+      limit:
+        type: integer
+      next_offset:
+        type: integer
+      offset:
+        type: integer
+      returned:
+        type: integer
+    type: object
   handlers.RegisterRequest:
     properties:
       password:
@@ -214,10 +254,12 @@ definitions:
     type: object
   handlers.UserListResponse:
     properties:
-      users:
+      items:
         items:
           $ref: '#/definitions/models.User'
         type: array
+      pagination:
+        $ref: '#/definitions/handlers.PaginationMetadata'
     type: object
   models.AdminLabelStats:
     properties:
@@ -495,6 +537,15 @@ paths:
       - admin
   /admin/users:
     get:
+      parameters:
+      - description: Page size (default 50, max 100)
+        in: query
+        name: limit
+        type: integer
+      - description: Page offset (default 0)
+        in: query
+        name: offset
+        type: integer
       produces:
       - application/json
       responses:
@@ -502,6 +553,10 @@ paths:
           description: OK
           schema:
             $ref: '#/definitions/handlers.UserListResponse'
+        "400":
+          description: bad request
+          schema:
+            type: string
         "401":
           description: unauthorized
           schema:
@@ -832,15 +887,25 @@ paths:
         in: query
         name: my_todo
         type: boolean
+      - description: Page size (default 50, max 100)
+        in: query
+        name: limit
+        type: integer
+      - description: Page offset (default 0)
+        in: query
+        name: offset
+        type: integer
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            items:
-              $ref: '#/definitions/models.Note'
-            type: array
+            $ref: '#/definitions/handlers.PaginatedNotesResponse'
+        "400":
+          description: bad request
+          schema:
+            type: string
         "401":
           description: unauthorized
           schema:
@@ -1422,15 +1487,26 @@ paths:
       - auth
   /sessions:
     get:
+      parameters:
+      - description: Page size (default 50, max 100)
+        in: query
+        name: limit
+        type: integer
+      - description: Page offset (default 0)
+        in: query
+        name: offset
+        type: integer
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            items:
-              $ref: '#/definitions/handlers.SessionResponse'
-            type: array
+            $ref: '#/definitions/handlers.PaginatedSessionsResponse'
+        "400":
+          description: bad request
+          schema:
+            type: string
         "401":
           description: unauthorized
           schema:
@@ -1476,15 +1552,25 @@ paths:
         in: query
         name: search
         type: string
+      - description: Page size (default 50, max 100)
+        in: query
+        name: limit
+        type: integer
+      - description: Page offset (default 0)
+        in: query
+        name: offset
+        type: integer
       produces:
       - application/json
       responses:
         "200":
           description: OK
           schema:
-            items:
-              $ref: '#/definitions/handlers.UserInfo'
-            type: array
+            $ref: '#/definitions/handlers.PaginatedUsersResponse'
+        "400":
+          description: bad request
+          schema:
+            type: string
         "401":
           description: unauthorized
           schema:

@@ -18,7 +18,7 @@ import { searchUsers } from '../api/users';
 import { useNoteShares, useShareNote, useUnshareNote } from '../hooks/useNotes';
 import UserAvatar from '../components/UserAvatar';
 import { useTheme } from '../theme/ThemeContext';
-import type { User, NoteShare } from '@jot/shared';
+import type { UserInfo, NoteShare } from '@jot/shared';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 
 type ShareRouteProp = RouteProp<RootStackParamList, 'Share'>;
@@ -34,7 +34,7 @@ export default function ShareScreen() {
 
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
-  const [searchResults, setSearchResults] = useState<User[]>([]);
+  const [searchResults, setSearchResults] = useState<UserInfo[]>([]);
   const [isSearching, setIsSearching] = useState(false);
   const [searchError, setSearchError] = useState(false);
 
@@ -103,7 +103,7 @@ export default function ShareScreen() {
   );
 
   const handleShare = useCallback(
-    async (user: User) => {
+    async (user: UserInfo) => {
       if (pendingUserIdsRef.current.has(user.id)) return;
       pendingUserIdsRef.current.add(user.id);
       setPendingUserIds(new Set(pendingUserIdsRef.current));
@@ -133,7 +133,7 @@ export default function ShareScreen() {
   const isUnsharing = unshareMutation.isPending;
 
   const renderSearchResult = useCallback(
-    ({ item }: { item: User }) => (
+    ({ item }: { item: UserInfo }) => (
       <TouchableOpacity
         style={[styles.userRow, { borderBottomColor: colors.borderLight }]}
         onPress={() => handleShare(item)}

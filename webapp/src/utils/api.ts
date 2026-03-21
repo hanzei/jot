@@ -85,8 +85,12 @@ async function collectAllPages<T, TResponse extends { items: T[]; pagination: { 
     const response = await api.get<TResponse>(path, { params: { ...params, limit, offset } }).then(res => res.data);
     items.push(...response.items);
 
-    if (!response.pagination.has_more || response.pagination.next_offset === undefined) {
+    if (!response.pagination.has_more) {
       return items;
+    }
+
+    if (response.pagination.next_offset === undefined) {
+      throw new Error(`Paginated response for ${path} is missing next_offset`);
     }
 
     offset = response.pagination.next_offset;
@@ -95,7 +99,8 @@ async function collectAllPages<T, TResponse extends { items: T[]; pagination: { 
 
 export const notes = {
   listPage: (params: GetNotesParams = {}): Promise<PaginatedNotesResponse> => {
-    const { user_id: _userId, ...requestParams } = params;
+    const { user_id, ...requestParams } = params;
+    void user_id;
     return api.get('/notes', { params: requestParams }).then(res => res.data);
   },
 

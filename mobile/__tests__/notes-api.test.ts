@@ -46,41 +46,89 @@ describe('Notes API', () => {
   describe('getNotes', () => {
     it('calls GET /notes with params and returns notes array', async () => {
       const mockNotes = [{ id: '1', title: 'Note 1' }];
-      mockAxiosInstance.get.mockResolvedValueOnce({ data: mockNotes });
+      mockAxiosInstance.get.mockResolvedValueOnce({
+        data: {
+          items: mockNotes,
+          pagination: { limit: 100, offset: 0, returned: mockNotes.length, has_more: false },
+        },
+      });
 
       const result = await getNotes({ archived: false });
 
       expect(mockAxiosInstance.get).toHaveBeenCalledWith('/notes', {
-        params: { archived: false },
+        params: { archived: false, limit: 100, offset: 0 },
       });
       expect(result).toEqual(mockNotes);
     });
 
+    it('fetches additional note pages when next_offset is present', async () => {
+      const firstPage = [{ id: '1', title: 'Note 1' }];
+      const secondPage = [{ id: '2', title: 'Note 2' }];
+      mockAxiosInstance.get
+        .mockResolvedValueOnce({
+          data: {
+            items: firstPage,
+            pagination: { limit: 100, offset: 0, returned: 1, has_more: true, next_offset: 1 },
+          },
+        })
+        .mockResolvedValueOnce({
+          data: {
+            items: secondPage,
+            pagination: { limit: 100, offset: 1, returned: 1, has_more: false },
+          },
+        });
+
+      const result = await getNotes({ archived: false });
+
+      expect(mockAxiosInstance.get).toHaveBeenNthCalledWith(1, '/notes', {
+        params: { archived: false, limit: 100, offset: 0 },
+      });
+      expect(mockAxiosInstance.get).toHaveBeenNthCalledWith(2, '/notes', {
+        params: { archived: false, limit: 100, offset: 1 },
+      });
+      expect(result).toEqual([...firstPage, ...secondPage]);
+    });
+
     it('calls GET /notes without params when none provided', async () => {
-      mockAxiosInstance.get.mockResolvedValueOnce({ data: [] });
+      mockAxiosInstance.get.mockResolvedValueOnce({
+        data: {
+          items: [],
+          pagination: { limit: 100, offset: 0, returned: 0, has_more: false },
+        },
+      });
 
       await getNotes();
 
-      expect(mockAxiosInstance.get).toHaveBeenCalledWith('/notes', { params: undefined });
+      expect(mockAxiosInstance.get).toHaveBeenCalledWith('/notes', { params: { limit: 100, offset: 0 } });
     });
 
     it('passes my_todo param to GET /notes', async () => {
-      mockAxiosInstance.get.mockResolvedValueOnce({ data: [] });
+      mockAxiosInstance.get.mockResolvedValueOnce({
+        data: {
+          items: [],
+          pagination: { limit: 100, offset: 0, returned: 0, has_more: false },
+        },
+      });
 
       await getNotes({ my_todo: true });
 
       expect(mockAxiosInstance.get).toHaveBeenCalledWith('/notes', {
-        params: { my_todo: true },
+        params: { my_todo: true, limit: 100, offset: 0 },
       });
     });
 
     it('strips user_id from server request params', async () => {
-      mockAxiosInstance.get.mockResolvedValueOnce({ data: [] });
+      mockAxiosInstance.get.mockResolvedValueOnce({
+        data: {
+          items: [],
+          pagination: { limit: 100, offset: 0, returned: 0, has_more: false },
+        },
+      });
 
       await getNotes({ my_todo: true, user_id: 'user-123' });
 
       expect(mockAxiosInstance.get).toHaveBeenCalledWith('/notes', {
-        params: { my_todo: true },
+        params: { my_todo: true, limit: 100, offset: 0 },
       });
     });
 

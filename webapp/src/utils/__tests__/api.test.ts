@@ -39,7 +39,7 @@ vi.mock('axios', () => ({
 
 // Import API module after mocking axios
 import axios from 'axios'
-import { auth, notes, users, admin } from '../api'
+import { auth, notes, users, admin, sessions } from '../api'
 import { createMockNote } from './test-helpers'
 
 // Mock localStorage
@@ -253,46 +253,82 @@ describe('API Module', () => {
 
   describe('Notes API', () => {
     const mockNote = createMockNote()
+    const paginatedNotes = (items = [mockNote]) => ({
+      items,
+      pagination: {
+        limit: 100,
+        offset: 0,
+        returned: items.length,
+        has_more: false,
+      },
+    })
 
     describe('getAll', () => {
       it('fetches all notes with default parameters', async () => {
         const mockNotes = [mockNote]
-        mockGet.mockResolvedValue({ data: mockNotes })
+        mockGet.mockResolvedValue({ data: paginatedNotes(mockNotes) })
 
         const result = await notes.getAll()
 
         expect(mockGet).toHaveBeenCalledWith('/notes', { 
-          params: { archived: false, search: '', trashed: false }
+          params: { archived: false, search: '', trashed: false, limit: 100, offset: 0 }
         })
         expect(result).toEqual(mockNotes)
       })
 
       it('fetches archived notes when requested', async () => {
         const mockNotes = [{ ...mockNote, archived: true }]
-        mockGet.mockResolvedValue({ data: mockNotes })
+        mockGet.mockResolvedValue({ data: paginatedNotes(mockNotes) })
 
         const result = await notes.getAll(true)
 
         expect(mockGet).toHaveBeenCalledWith('/notes', { 
-          params: { archived: true, search: '', trashed: false }
+          params: { archived: true, search: '', trashed: false, limit: 100, offset: 0 }
         })
         expect(result).toEqual(mockNotes)
       })
 
       it('includes search query when provided', async () => {
         const mockNotes = [mockNote]
-        mockGet.mockResolvedValue({ data: mockNotes })
+        mockGet.mockResolvedValue({ data: paginatedNotes(mockNotes) })
 
         const result = await notes.getAll(false, 'test query')
 
         expect(mockGet).toHaveBeenCalledWith('/notes', { 
-          params: { archived: false, search: 'test query', trashed: false }
+          params: { archived: false, search: 'test query', trashed: false, limit: 100, offset: 0 }
         })
         expect(result).toEqual(mockNotes)
       })
 
+      it('fetches additional pages when next_offset is present', async () => {
+        const secondNote = { ...mockNote, id: 'note-2' }
+        mockGet
+          .mockResolvedValueOnce({
+            data: {
+              items: [mockNote],
+              pagination: { limit: 100, offset: 0, returned: 1, has_more: true, next_offset: 1 },
+            },
+          })
+          .mockResolvedValueOnce({
+            data: {
+              items: [secondNote],
+              pagination: { limit: 100, offset: 1, returned: 1, has_more: false },
+            },
+          })
+
+        const result = await notes.getAll()
+
+        expect(mockGet).toHaveBeenNthCalledWith(1, '/notes', {
+          params: { archived: false, search: '', trashed: false, limit: 100, offset: 0 }
+        })
+        expect(mockGet).toHaveBeenNthCalledWith(2, '/notes', {
+          params: { archived: false, search: '', trashed: false, limit: 100, offset: 1 }
+        })
+        expect(result).toEqual([mockNote, secondNote])
+      })
+
       it('handles empty response', async () => {
-        mockGet.mockResolvedValue({ data: [] })
+        mockGet.mockResolvedValue({ data: paginatedNotes([]) })
 
         const result = await notes.getAll()
 
@@ -309,18 +345,17 @@ describe('API Module', () => {
       it('handles malformed response data', async () => {
         mockGet.mockResolvedValue({ data: null })
 
-        const result = await notes.getAll()
-        expect(result).toBeNull()
+        await expect(notes.getAll()).rejects.toThrow()
       })
 
       it('handles special characters in search query', async () => {
         const specialQuery = '<script>alert("xss")</script>'
-        mockGet.mockResolvedValue({ data: [] })
+        mockGet.mockResolvedValue({ data: paginatedNotes([]) })
 
         await notes.getAll(false, specialQuery)
 
         expect(mockGet).toHaveBeenCalledWith('/notes', { 
-          params: { archived: false, search: specialQuery, trashed: false }
+          params: { archived: false, search: specialQuery, trashed: false, limit: 100, offset: 0 }
         })
       })
     })
@@ -599,7 +634,7 @@ describe('API Module', () => {
   describe('Users API', () => {
     describe('search', () => {
       it('searches all users', async () => {
-        const mockUsers: User[] = [
+        const mockUsers = [
           {
             id: '1',
             username: 'user1',
@@ -611,20 +646,68 @@ describe('API Module', () => {
             has_profile_icon: false,
           }
         ]
-        mockGet.mockResolvedValue({ data: mockUsers })
+        mockGet.mockResolvedValue({
+          data: {
+            items: mockUsers,
+            pagination: { limit: 100, offset: 0, returned: mockUsers.length, has_more: false },
+          },
+        })
 
         const result = await users.search()
 
-        expect(mockGet).toHaveBeenCalledWith('/users')
+        expect(mockGet).toHaveBeenCalledWith('/users', { params: { limit: 100, offset: 0 } })
         expect(result).toEqual(mockUsers)
       })
 
       it('handles empty users response', async () => {
-        mockGet.mockResolvedValue({ data: [] })
+        mockGet.mockResolvedValue({
+          data: {
+            items: [],
+            pagination: { limit: 100, offset: 0, returned: 0, has_more: false },
+          },
+        })
 
         const result = await users.search()
 
         expect(result).toEqual([])
+      })
+
+      it('fetches multiple user pages when needed', async () => {
+        const firstUser = {
+          id: '1',
+          username: 'user1',
+          first_name: '',
+          last_name: '',
+          role: 'user',
+          has_profile_icon: false,
+        }
+        const secondUser = {
+          id: '2',
+          username: 'user2',
+          first_name: '',
+          last_name: '',
+          role: 'admin',
+          has_profile_icon: false,
+        }
+        mockGet
+          .mockResolvedValueOnce({
+            data: {
+              items: [firstUser],
+              pagination: { limit: 100, offset: 0, returned: 1, has_more: true, next_offset: 1 },
+            },
+          })
+          .mockResolvedValueOnce({
+            data: {
+              items: [secondUser],
+              pagination: { limit: 100, offset: 1, returned: 1, has_more: false },
+            },
+          })
+
+        const result = await users.search()
+
+        expect(mockGet).toHaveBeenNthCalledWith(1, '/users', { params: { limit: 100, offset: 0 } })
+        expect(mockGet).toHaveBeenNthCalledWith(2, '/users', { params: { limit: 100, offset: 1 } })
+        expect(result).toEqual([firstUser, secondUser])
       })
 
       it('handles users API errors', async () => {
@@ -632,6 +715,72 @@ describe('API Module', () => {
         mockGet.mockRejectedValue(error)
 
         await expect(users.search()).rejects.toThrow('Unauthorized')
+      })
+    })
+  })
+
+  describe('Sessions API', () => {
+    describe('list', () => {
+      it('lists active sessions via paginated endpoint', async () => {
+        const mockSessions = [
+          {
+            id: 'session-1',
+            browser: 'Chrome',
+            os: 'Linux',
+            is_current: true,
+            created_at: '2023-01-01T00:00:00Z',
+            expires_at: '2023-02-01T00:00:00Z',
+          },
+        ]
+        mockGet.mockResolvedValue({
+          data: {
+            items: mockSessions,
+            pagination: { limit: 100, offset: 0, returned: mockSessions.length, has_more: false },
+          },
+        })
+
+        const result = await sessions.list()
+
+        expect(mockGet).toHaveBeenCalledWith('/sessions', { params: { limit: 100, offset: 0 } })
+        expect(result).toEqual(mockSessions)
+      })
+
+      it('fetches multiple session pages when needed', async () => {
+        const firstSession = {
+          id: 'session-1',
+          browser: 'Chrome',
+          os: 'Linux',
+          is_current: true,
+          created_at: '2023-01-01T00:00:00Z',
+          expires_at: '2023-02-01T00:00:00Z',
+        }
+        const secondSession = {
+          id: 'session-2',
+          browser: 'Firefox',
+          os: 'Linux',
+          is_current: false,
+          created_at: '2023-01-02T00:00:00Z',
+          expires_at: '2023-02-02T00:00:00Z',
+        }
+        mockGet
+          .mockResolvedValueOnce({
+            data: {
+              items: [firstSession],
+              pagination: { limit: 100, offset: 0, returned: 1, has_more: true, next_offset: 1 },
+            },
+          })
+          .mockResolvedValueOnce({
+            data: {
+              items: [secondSession],
+              pagination: { limit: 100, offset: 1, returned: 1, has_more: false },
+            },
+          })
+
+        const result = await sessions.list()
+
+        expect(mockGet).toHaveBeenNthCalledWith(1, '/sessions', { params: { limit: 100, offset: 0 } })
+        expect(mockGet).toHaveBeenNthCalledWith(2, '/sessions', { params: { limit: 100, offset: 1 } })
+        expect(result).toEqual([firstSession, secondSession])
       })
     })
   })
@@ -665,26 +814,77 @@ describe('API Module', () => {
 
     describe('getUsers', () => {
       it('gets all users for admin', async () => {
-        const mockResponse = {
-          users: [
-            {
-              id: '1',
-              username: 'user1',
-              first_name: '',
-              last_name: '',
-              role: 'user',
-              created_at: '2023-01-01T00:00:00Z',
-              updated_at: '2023-01-01T00:00:00Z',
-              has_profile_icon: false,
-            }
-          ]
-        }
-        mockGet.mockResolvedValue({ data: mockResponse })
+        const mockItems = [
+          {
+            id: '1',
+            username: 'user1',
+            first_name: '',
+            last_name: '',
+            role: 'user',
+            created_at: '2023-01-01T00:00:00Z',
+            updated_at: '2023-01-01T00:00:00Z',
+            has_profile_icon: false,
+          }
+        ]
+        mockGet.mockResolvedValue({
+          data: {
+            items: mockItems,
+            pagination: { limit: 100, offset: 0, returned: mockItems.length, has_more: false },
+          },
+        })
 
         const result = await admin.getUsers()
 
-        expect(mockGet).toHaveBeenCalledWith('/admin/users')
-        expect(result).toEqual(mockResponse)
+        expect(mockGet).toHaveBeenCalledWith('/admin/users', { params: { limit: 100, offset: 0 } })
+        expect(result).toEqual({
+          items: mockItems,
+          pagination: { limit: 100, offset: 0, returned: mockItems.length, has_more: false },
+        })
+      })
+
+      it('fetches multiple admin user pages when needed', async () => {
+        const firstUser = {
+          id: '1',
+          username: 'user1',
+          first_name: '',
+          last_name: '',
+          role: 'user',
+          created_at: '2023-01-01T00:00:00Z',
+          updated_at: '2023-01-01T00:00:00Z',
+          has_profile_icon: false,
+        }
+        const secondUser = {
+          id: '2',
+          username: 'user2',
+          first_name: '',
+          last_name: '',
+          role: 'admin',
+          created_at: '2023-01-02T00:00:00Z',
+          updated_at: '2023-01-02T00:00:00Z',
+          has_profile_icon: false,
+        }
+        mockGet
+          .mockResolvedValueOnce({
+            data: {
+              items: [firstUser],
+              pagination: { limit: 100, offset: 0, returned: 1, has_more: true, next_offset: 1 },
+            },
+          })
+          .mockResolvedValueOnce({
+            data: {
+              items: [secondUser],
+              pagination: { limit: 100, offset: 1, returned: 1, has_more: false },
+            },
+          })
+
+        const result = await admin.getUsers()
+
+        expect(mockGet).toHaveBeenNthCalledWith(1, '/admin/users', { params: { limit: 100, offset: 0 } })
+        expect(mockGet).toHaveBeenNthCalledWith(2, '/admin/users', { params: { limit: 100, offset: 1 } })
+        expect(result).toEqual({
+          items: [firstUser, secondUser],
+          pagination: { limit: 100, offset: 0, returned: 2, has_more: false },
+        })
       })
 
       it('handles admin access denied', async () => {
@@ -784,8 +984,12 @@ describe('API Module', () => {
 
     it('handles concurrent API calls', async () => {
       const sampleNote = createMockNote()
-      const mockNotes = [sampleNote]
-      mockGet.mockResolvedValue({ data: mockNotes })
+      mockGet.mockResolvedValue({
+        data: {
+          items: [sampleNote],
+          pagination: { limit: 100, offset: 0, returned: 1, has_more: false },
+        },
+      })
 
       // Make concurrent calls
       const promises = [
@@ -803,7 +1007,12 @@ describe('API Module', () => {
 
     it('passes null/undefined parameters through to axios without throwing', async () => {
       const sampleNote = createMockNote()
-      mockGet.mockResolvedValue({ data: [] })
+      mockGet.mockResolvedValue({
+        data: {
+          items: [],
+          pagination: { limit: 100, offset: 0, returned: 0, has_more: false },
+        },
+      })
       mockPost.mockResolvedValue({ data: sampleNote })
       mockPatch.mockResolvedValue({ data: sampleNote })
 

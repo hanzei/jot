@@ -3,7 +3,7 @@ import { View, Text, StyleSheet } from 'react-native';
 import { TouchableOpacity } from 'react-native-gesture-handler';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useTranslation } from 'react-i18next';
-import type { Note, NoteItem, User } from '@jot/shared';
+import type { Note, NoteItem, UserInfo } from '@jot/shared';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../store/AuthContext';
 import { useUsers } from '../store/UsersContext';
@@ -29,7 +29,7 @@ interface AvatarData {
 function buildNoteAvatars(
   note: Note,
   currentUserId: string | undefined,
-  usersById: Map<string, User>,
+  usersById: ReadonlyMap<string, UserInfo>,
 ): AvatarData[] {
   const isOwner = note.user_id === currentUserId;
   const avatars: AvatarData[] = [];

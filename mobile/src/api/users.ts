@@ -1,14 +1,19 @@
 import api from './client';
-import type { User, NoteShare, UserSettings } from '@jot/shared';
+import type { UserInfo, PaginatedUsersResponse, NoteShare, UserSettings } from '@jot/shared';
+import { collectAllPages } from './pagination';
 
-export async function getUsers(): Promise<User[]> {
-  const res = await api.get('/users');
-  return res.data;
+export async function getUsers(): Promise<UserInfo[]> {
+  return collectAllPages<UserInfo>(async (page) => {
+    const res = await api.get('/users', { params: page });
+    return res.data as PaginatedUsersResponse;
+  });
 }
 
-export async function searchUsers(query: string): Promise<User[]> {
-  const res = await api.get('/users', { params: { search: query } });
-  return res.data;
+export async function searchUsers(query: string): Promise<UserInfo[]> {
+  return collectAllPages<UserInfo>(async (page) => {
+    const res = await api.get('/users', { params: { search: query, ...page } });
+    return res.data as PaginatedUsersResponse;
+  });
 }
 
 export async function shareNote(noteId: string, userId: string): Promise<void> {

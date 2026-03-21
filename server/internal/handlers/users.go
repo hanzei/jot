@@ -5,7 +5,6 @@ import (
 	"net/http"
 
 	"github.com/hanzei/jot/server/internal/auth"
-	"github.com/hanzei/jot/server/internal/models"
 )
 
 // UserInfo contains safe public fields returned when listing users for share-target search.
