@@ -2,7 +2,6 @@ package main
 
 import (
 	"database/sql"
-	"errors"
 	"testing"
 	"time"
 
@@ -41,7 +40,7 @@ func TestSQLiteRejectsInvalidForeignKeys(t *testing.T) {
 	require.Error(t, err)
 
 	var sqliteErr sqlite3.Error
-	require.True(t, errors.As(err, &sqliteErr))
+	require.ErrorAs(t, err, &sqliteErr)
 	assert.Equal(t, sqlite3.ErrConstraintForeignKey, sqliteErr.ExtendedCode)
 }
 

@@ -82,8 +82,8 @@ func (d *DB) verifyForeignKeyState(ctx context.Context) error {
 	}
 	defer func() { _ = conn.Close() }()
 
-	if err := verifyForeignKeysEnabledOnConn(ctx, conn); err != nil {
-		return err
+	if verifyErr := verifyForeignKeysEnabledOnConn(ctx, conn); verifyErr != nil {
+		return verifyErr
 	}
 
 	rows, err := conn.QueryContext(ctx, "PRAGMA foreign_key_check")
