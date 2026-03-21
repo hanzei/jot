@@ -104,18 +104,19 @@ function NavigationWrapper() {
     },
   };
 
-  const resolveCurrentServerOrigin = React.useCallback(async (): Promise<string | null> => {
+  const resolveStoredServerOrigin = React.useCallback(async (): Promise<string | null> => {
     const storedUrl = await getStoredServerUrl();
-    if (storedUrl) {
-      restoreServerUrl(storedUrl);
+    if (!storedUrl) {
+      return null;
     }
-    return normalizeServerOrigin(getBaseUrl());
+    restoreServerUrl(storedUrl);
+    return normalizeServerOrigin(storedUrl);
   }, []);
 
   const evaluateIncomingDeepLink = React.useCallback(async (url: string): Promise<'allow' | 'stash' | 'ignore'> => {
     const { path, hasServerParam, serverOrigin } = parseDeepLink(url);
-    const currentServerOrigin = await resolveCurrentServerOrigin();
-    const serverLabel = currentServerOrigin ?? getBaseUrl();
+    const configuredServerOrigin = await resolveStoredServerOrigin();
+    const serverLabel = configuredServerOrigin ?? normalizeServerOrigin(getBaseUrl()) ?? getBaseUrl();
 
     if (!hasServerParam && !warnedDeepLinkUrlsRef.current.has(url)) {
       warnedDeepLinkUrlsRef.current.add(url);
@@ -133,12 +134,12 @@ function NavigationWrapper() {
       return 'ignore';
     }
 
-    if (serverOrigin && currentServerOrigin && serverOrigin !== currentServerOrigin) {
+    if (serverOrigin && configuredServerOrigin && serverOrigin !== configuredServerOrigin) {
       if (!warnedDeepLinkUrlsRef.current.has(url)) {
         warnedDeepLinkUrlsRef.current.add(url);
         Alert.alert(
           'Wrong server',
-          `This link targets ${serverOrigin}, but you are connected to ${currentServerOrigin}.`,
+          `This link targets ${serverOrigin}, but you are connected to ${configuredServerOrigin}.`,
         );
       }
       return 'ignore';
@@ -150,7 +151,7 @@ function NavigationWrapper() {
     }
 
     return 'allow';
-  }, [isAuthenticated, resolveCurrentServerOrigin]);
+  }, [isAuthenticated, resolveStoredServerOrigin]);
 
   const linking = React.useMemo<LinkingOptions<RootStackParamList>>(
     () => ({
@@ -225,11 +226,11 @@ function NavigationWrapper() {
       }
 
       const { hasServerParam, serverOrigin } = parseDeepLink(pendingUrl);
-      const currentServerOrigin = await resolveCurrentServerOrigin();
+      const configuredServerOrigin = await resolveStoredServerOrigin();
       if (cancelled) {
         return;
       }
-      if (hasServerParam && (!serverOrigin || (currentServerOrigin && serverOrigin !== currentServerOrigin))) {
+      if (hasServerParam && (!serverOrigin || (configuredServerOrigin && serverOrigin !== configuredServerOrigin))) {
         pendingDeepLinkUrlRef.current = null;
         return;
       }
@@ -247,7 +248,7 @@ function NavigationWrapper() {
     return () => {
       cancelled = true;
     };
-  }, [isAuthenticated, isNavReady, linking.config, navigationRef, resolveCurrentServerOrigin]);
+  }, [isAuthenticated, isNavReady, linking.config, navigationRef, resolveStoredServerOrigin]);
 
   return (
     <NavigationContainer ref={navigationRef} theme={navigationTheme} linking={linking} onReady={() => setIsNavReady(true)}>
