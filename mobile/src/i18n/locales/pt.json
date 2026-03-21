@@ -248,6 +248,14 @@
     "failedLoad": "Falha ao carregar os compartilhamentos",
     "removeAccessFor": "Remover compartilhamento para {{username}}"
   },
+  "deepLink": {
+    "missingServerTitle": "Aviso de link profundo",
+    "missingServerMessage": "Este link não especifica a URL do servidor. Será aberto em {{server}}.",
+    "invalidServerTitle": "Link profundo ignorado",
+    "invalidServerMessage": "Este link tem uma URL de servidor inválida.",
+    "wrongServerTitle": "Servidor incorreto",
+    "wrongServerMessage": "Este link aponta para {{targetServer}}, mas você está conectado a {{currentServer}}."
+  },
   "offline": {
     "message": "Você está offline. As alterações serão sincronizadas quando você se reconectar."
   },
