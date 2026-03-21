@@ -7,9 +7,11 @@ interface SearchBarProps {
   onChange: (value: string) => void;
   onSubmit?: () => void;
   inputRef?: Ref<HTMLInputElement>;
+  // Escape always clears non-empty input; this flag additionally prevents parent/global Escape handlers.
+  stopEscapePropagation?: boolean;
 }
 
-const SearchBar = ({ value, onChange, onSubmit, inputRef }: SearchBarProps) => {
+const SearchBar = ({ value, onChange, onSubmit, inputRef, stopEscapePropagation = false }: SearchBarProps) => {
   const { t } = useTranslation();
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -19,6 +21,10 @@ const SearchBar = ({ value, onChange, onSubmit, inputRef }: SearchBarProps) => {
 
   const handleKeyDown = (e: React.KeyboardEvent<HTMLInputElement>) => {
     if (e.key === 'Escape' && value) {
+      if (stopEscapePropagation) {
+        e.preventDefault();
+        e.stopPropagation();
+      }
       onChange('');
     }
   };

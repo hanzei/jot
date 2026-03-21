@@ -736,6 +736,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
           value={searchQuery}
           onChange={setSearchQuery}
           inputRef={searchInputRef}
+          stopEscapePropagation={true}
         />
       </div>
       <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center sm:justify-end">
