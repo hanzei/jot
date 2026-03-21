@@ -307,6 +307,7 @@ const Admin = ({ onLogout }: AdminProps) => {
       value={searchQuery}
       onChange={setSearchQuery}
       onSubmit={handleSearch}
+      stopEscapePropagation={true}
     />
   );
 
