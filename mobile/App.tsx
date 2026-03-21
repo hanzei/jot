@@ -1,5 +1,5 @@
 import React from 'react';
-import { Linking } from 'react-native';
+import { Alert, Linking } from 'react-native';
 import {
   NavigationContainer,
   DefaultTheme,
@@ -18,6 +18,7 @@ import { UsersProvider } from './src/store/UsersContext';
 import { OfflineProvider } from './src/store/OfflineContext';
 import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
 import RootNavigator, { type RootStackParamList } from './src/navigation/RootNavigator';
+import { getBaseUrl } from './src/api/client';
 import { migrateDatabase } from './src/db/schema';
 import './src/i18n';
 
@@ -32,17 +33,43 @@ const queryClient = new QueryClient({
 
 const DEEP_LINK_PREFIXES = ['jot://'];
 
-function getDeepLinkPath(url: string): string {
+function normalizeServerOrigin(url: string): string | null {
+  try {
+    const parsed = new URL(url);
+    if (!parsed.protocol || !parsed.host) {
+      return null;
+    }
+    return `${parsed.protocol}//${parsed.host}`.toLowerCase();
+  } catch {
+    return null;
+  }
+}
+
+function parseDeepLink(url: string): { path: string; hasServerParam: boolean; serverOrigin: string | null } {
   try {
     const parsed = new URL(url);
     const host = parsed.hostname.trim();
     const pathname = parsed.pathname.replace(/^\/+|\/+$/g, '');
-    return [host, pathname].filter(Boolean).join('/').replace(/^\/+|\/+$/g, '');
+    const path = [host, pathname].filter(Boolean).join('/').replace(/^\/+|\/+$/g, '');
+    const serverParam = parsed.searchParams.get('server');
+    return {
+      path,
+      hasServerParam: serverParam !== null,
+      serverOrigin: serverParam ? normalizeServerOrigin(serverParam) : null,
+    };
   } catch {
-    return url
-      .replace(/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//, '')
-      .replace(/^\/+|\/+$/g, '');
+    const [withoutScheme, rawQuery = ''] = url.replace(/^[a-zA-Z][a-zA-Z0-9+.-]*:\/\//, '').split('?');
+    const serverParam = new URLSearchParams(rawQuery).get('server');
+    return {
+      path: withoutScheme.replace(/^\/+|\/+$/g, ''),
+      hasServerParam: serverParam !== null,
+      serverOrigin: serverParam ? normalizeServerOrigin(serverParam) : null,
+    };
   }
+}
+
+function getDeepLinkPath(url: string): string {
+  return parseDeepLink(url).path;
 }
 
 function isProtectedDeepLinkPath(path: string): boolean {
@@ -60,6 +87,7 @@ function NavigationWrapper() {
   const { isAuthenticated } = useAuth();
   const navigationRef = React.useMemo(() => createNavigationContainerRef<RootStackParamList>(), []);
   const pendingDeepLinkUrlRef = React.useRef<string | null>(null);
+  const warnedDeepLinkUrlsRef = React.useRef<Set<string>>(new Set());
   const wasAuthenticatedRef = React.useRef(isAuthenticated);
   const [isNavReady, setIsNavReady] = React.useState(false);
 
@@ -85,7 +113,36 @@ function NavigationWrapper() {
           return null;
         }
 
-        const path = getDeepLinkPath(url);
+        const { path, hasServerParam, serverOrigin } = parseDeepLink(url);
+        const currentServerOrigin = normalizeServerOrigin(getBaseUrl()) ?? getBaseUrl();
+
+        if (!hasServerParam && !warnedDeepLinkUrlsRef.current.has(url)) {
+          warnedDeepLinkUrlsRef.current.add(url);
+          Alert.alert(
+            'Deep link warning',
+            `This link does not specify a server URL. Opening it on ${currentServerOrigin}.`,
+          );
+        }
+
+        if (hasServerParam && !serverOrigin) {
+          if (!warnedDeepLinkUrlsRef.current.has(url)) {
+            warnedDeepLinkUrlsRef.current.add(url);
+            Alert.alert('Deep link ignored', 'This link has an invalid server URL.');
+          }
+          return null;
+        }
+
+        if (serverOrigin && serverOrigin !== currentServerOrigin.toLowerCase()) {
+          if (!warnedDeepLinkUrlsRef.current.has(url)) {
+            warnedDeepLinkUrlsRef.current.add(url);
+            Alert.alert(
+              'Wrong server',
+              `This link targets ${serverOrigin}, but you are connected to ${currentServerOrigin}.`,
+            );
+          }
+          return null;
+        }
+
         if (!isAuthenticated && isProtectedDeepLinkPath(path)) {
           pendingDeepLinkUrlRef.current = url;
           return null;
@@ -95,7 +152,36 @@ function NavigationWrapper() {
       },
       subscribe: (listener) => {
         const subscription = Linking.addEventListener('url', ({ url }) => {
-          const path = getDeepLinkPath(url);
+          const { path, hasServerParam, serverOrigin } = parseDeepLink(url);
+          const currentServerOrigin = normalizeServerOrigin(getBaseUrl()) ?? getBaseUrl();
+
+          if (!hasServerParam && !warnedDeepLinkUrlsRef.current.has(url)) {
+            warnedDeepLinkUrlsRef.current.add(url);
+            Alert.alert(
+              'Deep link warning',
+              `This link does not specify a server URL. Opening it on ${currentServerOrigin}.`,
+            );
+          }
+
+          if (hasServerParam && !serverOrigin) {
+            if (!warnedDeepLinkUrlsRef.current.has(url)) {
+              warnedDeepLinkUrlsRef.current.add(url);
+              Alert.alert('Deep link ignored', 'This link has an invalid server URL.');
+            }
+            return;
+          }
+
+          if (serverOrigin && serverOrigin !== currentServerOrigin.toLowerCase()) {
+            if (!warnedDeepLinkUrlsRef.current.has(url)) {
+              warnedDeepLinkUrlsRef.current.add(url);
+              Alert.alert(
+                'Wrong server',
+                `This link targets ${serverOrigin}, but you are connected to ${currentServerOrigin}.`,
+              );
+            }
+            return;
+          }
+
           if (!isAuthenticated && isProtectedDeepLinkPath(path)) {
             pendingDeepLinkUrlRef.current = url;
             return;
@@ -144,6 +230,13 @@ function NavigationWrapper() {
 
     const pendingUrl = pendingDeepLinkUrlRef.current;
     if (!pendingUrl) {
+      return;
+    }
+
+    const { hasServerParam, serverOrigin } = parseDeepLink(pendingUrl);
+    const currentServerOrigin = normalizeServerOrigin(getBaseUrl()) ?? getBaseUrl();
+    if (hasServerParam && (!serverOrigin || serverOrigin !== currentServerOrigin.toLowerCase())) {
+      pendingDeepLinkUrlRef.current = null;
       return;
     }
 
