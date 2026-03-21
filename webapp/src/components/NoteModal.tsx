@@ -87,6 +87,7 @@ interface SortableItemProps {
   onRemoveTodoItem: (itemId: string) => void;
   isCompleted?: boolean;
   onKeyDown?: (index: number, e: React.KeyboardEvent<HTMLInputElement>) => void;
+  onPaste?: (index: number, e: React.ClipboardEvent<HTMLInputElement>) => void;
   inputRef?: React.RefCallback<HTMLInputElement>;
   onIndentChange?: (itemId: string, delta: 1 | -1) => void;
   isShared?: boolean;
@@ -97,7 +98,7 @@ interface SortableItemProps {
   onAcceptSuggestion?: (currentItemId: string, suggestionText: string) => void;
 }
 
-function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isCompleted = false, onKeyDown, inputRef, onIndentChange, isShared, collaborators, usersById, onAssignItem, completedItemTexts = [], onAcceptSuggestion }: SortableItemProps) {
+function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isCompleted = false, onKeyDown, onPaste, inputRef, onIndentChange, isShared, collaborators, usersById, onAssignItem, completedItemTexts = [], onAcceptSuggestion }: SortableItemProps) {
   const { t } = useTranslation();
   const [showAssigneePicker, setShowAssigneePicker] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -244,6 +245,7 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
               }
               if (onKeyDown) onKeyDown(index, e);
             }}
+            onPaste={(e) => onPaste?.(index, e)}
             ref={inputRef}
           />
           {showSuggestions && suggestions.length > 0 && !isCompleted && (
@@ -628,6 +630,81 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
         }, 0);
       }
     }
+  };
+
+  const handleItemPaste = (index: number, e: React.ClipboardEvent<HTMLInputElement>) => {
+    const text = e.clipboardData.getData('text');
+    const rawLines = text.split(/\r\n|\r|\n/);
+    const lines = rawLines.filter(l => l.trim().length > 0);
+
+    if (lines.length <= 1) {
+      return;
+    }
+
+    e.preventDefault();
+
+    const input = e.currentTarget;
+    const selStart = input.selectionStart ?? input.value.length;
+    const selEnd = input.selectionEnd ?? input.value.length;
+    const before = input.value.slice(0, selStart);
+    const after = input.value.slice(selEnd);
+
+    const currentItem = uncompletedItems[index];
+    if (!currentItem) return;
+
+    const insertAfterPos = items.findIndex(item => item.id === currentItem.id);
+
+    const firstLineText = (before + lines[0]).slice(0, VALIDATION.ITEM_TEXT_MAX_LENGTH);
+
+    const remainingLines = lines.slice(1);
+    const newItems: TodoItem[] = remainingLines.map((line, i) => {
+      const isLast = i === remainingLines.length - 1;
+      const lineText = isLast ? line + after : line;
+      return {
+        id: generateItemId(),
+        text: lineText.slice(0, VALIDATION.ITEM_TEXT_MAX_LENGTH),
+        completed: false,
+        position: 0,
+        indentLevel: 0,
+        assignedTo: '',
+      };
+    });
+
+    const allLineTexts = [firstLineText, ...newItems.map(item => item.text)];
+    for (const lineText of allLineTexts) {
+      const validationError = validateItemText(lineText, t);
+      if (validationError) {
+        showError(validationError);
+        return;
+      }
+    }
+
+    const updatedItems = items.map(item =>
+      item.id === currentItem.id ? { ...item, text: firstLineText } : item
+    );
+    updatedItems.splice(insertAfterPos + 1, 0, ...newItems);
+
+    let pos = 0;
+    const renumbered = updatedItems.map(item =>
+      item.completed ? item : { ...item, position: pos++ }
+    );
+
+    setItems(renumbered);
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = undefined;
+    }
+    autoSaveNote(renumbered);
+
+    const lastNewItem = newItems[newItems.length - 1];
+    setTimeout(() => {
+      const el = itemInputRefs.current.get(lastNewItem.id);
+      if (el) {
+        el.focus();
+        const cursorPos = Math.max(0, el.value.length - after.length);
+        el.setSelectionRange(cursorPos, cursorPos);
+      }
+    }, 0);
   };
 
   const removeTodoItem = (itemId: string) => {
@@ -1324,6 +1401,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                           onRemoveTodoItem={removeTodoItem}
                           isCompleted={false}
                           onKeyDown={handleItemKeyDown}
+                          onPaste={handleItemPaste}
                           onIndentChange={indentTodoItem}
                           inputRef={(el) => {
                             if (el) itemInputRefs.current.set(item.id, el);

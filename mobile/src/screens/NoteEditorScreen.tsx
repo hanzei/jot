@@ -321,10 +321,60 @@ export default function NoteEditorScreen() {
 
   const handleItemTextChange = useCallback(
     (index: number, text: string) => {
-      setItems((prev) => prev.map((item, i) => (i === index ? { ...item, text } : item)));
+      if (!text.includes('\n')) {
+        setItems((prev) => prev.map((item, i) => (i === index ? { ...item, text } : item)));
+        scheduleUpdate();
+        return;
+      }
+
+      // Multi-line paste: split into separate items
+      const lines = text.split(/\r?\n/).filter((l) => l.trim().length > 0);
+
+      if (lines.length <= 1) {
+        const singleText = (lines[0] ?? '').slice(0, VALIDATION.ITEM_TEXT_MAX_LENGTH);
+        setItems((prev) => prev.map((item, i) => (i === index ? { ...item, text: singleText } : item)));
+        scheduleUpdate();
+        return;
+      }
+
+      const isCompleted = itemsRef.current[index]?.completed ?? false;
+
+      if (isCompleted) {
+        setItems((prev) =>
+          prev.map((item, i) =>
+            i === index ? { ...item, text: lines.join(' ').slice(0, VALIDATION.ITEM_TEXT_MAX_LENGTH) } : item,
+          ),
+        );
+        scheduleUpdate();
+        return;
+      }
+
+      const [firstLine, ...remainingLines] = lines;
+      const newIds = remainingLines.map(() => nextTempId());
+
+      setItems((prev) => {
+        const sourceIndentLevel = prev[index]?.indent_level ?? 0;
+        const newItems: LocalItem[] = remainingLines.map((line, i) => ({
+          id: newIds[i],
+          text: line.slice(0, VALIDATION.ITEM_TEXT_MAX_LENGTH),
+          completed: false,
+          position: 0,
+          indent_level: sourceIndentLevel,
+          assigned_to: '',
+        }));
+        const updated = prev.map((item, i) =>
+          i === index ? { ...item, text: firstLine.slice(0, VALIDATION.ITEM_TEXT_MAX_LENGTH) } : item,
+        );
+        updated.splice(index + 1, 0, ...newItems);
+        return updated.map((item, i) => ({ ...item, position: i }));
+      });
       scheduleUpdate();
+
+      const lastId = newIds[newIds.length - 1];
+      const lastItemRef = getItemRef(lastId);
+      setTimeout(() => lastItemRef.current?.focus(), 50);
     },
-    [scheduleUpdate],
+    [scheduleUpdate, getItemRef],
   );
 
   const handleDeleteItem = useCallback(
