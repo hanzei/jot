@@ -23,7 +23,9 @@ jobs:
           cache-dependency-path: webapp/package-lock.json
 
       - name: Install Task
-        run: sh -c "$(curl -fsSL https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
+        uses: go-task/setup-task@v1
+        with:
+          version: 3.x
 
       - name: Install dependencies
         working-directory: ./webapp
@@ -45,7 +47,9 @@ jobs:
           cache-dependency-path: webapp/package-lock.json
 
       - name: Install Task
-        run: sh -c "$(curl -fsSL https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
+        uses: go-task/setup-task@v1
+        with:
+          version: 3.x
 
       - name: Install dependencies
         working-directory: ./webapp
@@ -67,7 +71,9 @@ jobs:
           cache-dependency-path: webapp/package-lock.json
 
       - name: Install Task
-        run: sh -c "$(curl -fsSL https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
+        uses: go-task/setup-task@v1
+        with:
+          version: 3.x
 
       - name: Install dependencies
         working-directory: ./webapp
@@ -96,7 +102,9 @@ jobs:
           cache-dependency-path: webapp/package-lock.json
 
       - name: Install Task
-        run: sh -c "$(curl -fsSL https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
+        uses: go-task/setup-task@v1
+        with:
+          version: 3.x
 
       - name: Install dependencies
         working-directory: ./webapp

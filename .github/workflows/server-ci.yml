@@ -22,7 +22,9 @@ jobs:
           cache-dependency-path: server/go.sum
 
       - name: Install Task
-        run: sh -c "$(curl -fsSL https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
+        uses: go-task/setup-task@v1
+        with:
+          version: 3.x
 
       - name: Run tests
         run: task test-server
@@ -39,7 +41,9 @@ jobs:
           cache-dependency-path: server/go.sum
 
       - name: Install Task
-        run: sh -c "$(curl -fsSL https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
+        uses: go-task/setup-task@v1
+        with:
+          version: 3.x
 
       - name: Install golangci-lint
         uses: golangci/golangci-lint-action@v9
@@ -65,7 +69,9 @@ jobs:
         run: go install github.com/swaggo/swag/cmd/swag@v1.16.6
 
       - name: Install Task
-        run: sh -c "$(curl -fsSL https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
+        uses: go-task/setup-task@v1
+        with:
+          version: 3.x
 
       - name: Regenerate docs
         run: task gen-docs
