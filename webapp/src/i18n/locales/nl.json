@@ -300,7 +300,8 @@
     "menuOptions": "Notitieopties",
     "assignItem": "Item toewijzen",
     "unassign": "Toewijzing opheffen",
-    "assignedTo": "Toegewezen aan {{name}}"
+    "assignedTo": "Toegewezen aan {{name}}",
+    "completedSuggestions": "Suggesties van voltooide items"
   },
   "labels": {
     "title": "Labels",

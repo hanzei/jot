@@ -300,7 +300,8 @@
     "menuOptions": "Opções da nota",
     "assignItem": "Atribuir item",
     "unassign": "Desatribuir",
-    "assignedTo": "Atribuído a {{name}}"
+    "assignedTo": "Atribuído a {{name}}",
+    "completedSuggestions": "Sugestões de itens concluídos"
   },
   "labels": {
     "title": "Etiquetas",
