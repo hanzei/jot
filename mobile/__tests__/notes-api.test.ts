@@ -1,5 +1,13 @@
 import axios from 'axios';
-import { getNotes, getNote, createNote, updateNote, deleteNote, duplicateNote } from '../src/api/notes';
+import {
+  getNotes,
+  getNote,
+  createNote,
+  updateNote,
+  deleteNote,
+  duplicateNote,
+  importKeepFile,
+} from '../src/api/notes';
 
 jest.mock('axios', () => {
   const mockInstance = {
@@ -144,6 +152,26 @@ describe('Notes API', () => {
 
       expect(mockAxiosInstance.post).toHaveBeenCalledWith('/notes/123/duplicate');
       expect(result).toEqual(duplicated);
+    });
+  });
+
+  describe('importKeepFile', () => {
+    it('uploads multipart form data to POST /notes/import and returns import summary', async () => {
+      const summary = { imported: 2, skipped: 1 };
+      mockAxiosInstance.post.mockResolvedValueOnce({ data: summary });
+
+      const result = await importKeepFile({
+        uri: 'file:///tmp/export.zip',
+        name: 'export.zip',
+        mimeType: 'application/zip',
+      });
+
+      expect(mockAxiosInstance.post).toHaveBeenCalledWith(
+        '/notes/import',
+        expect.any(FormData),
+        { headers: { 'Content-Type': 'multipart/form-data' } },
+      );
+      expect(result).toEqual(summary);
     });
   });
 });

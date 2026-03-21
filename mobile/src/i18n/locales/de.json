@@ -142,7 +142,10 @@
     "sessionsRevokeFailed": "Sitzung konnte nicht widerrufen werden",
     "sessionsNone": "Keine aktiven Sitzungen gefunden.",
     "aboutSection": "Info",
-    "aboutButton": "Info zu Jot"
+    "aboutButton": "Info zu Jot",
+    "importSection": "Importieren",
+    "importDescription": "Notizen aus Google Keep-Exporten importieren.",
+    "importButton": "Aus Google Keep importieren"
   },
   "about": {
     "clientInfo": "Client-Info",
@@ -247,5 +250,22 @@
   },
   "offline": {
     "message": "Du bist offline. Änderungen werden synchronisiert, sobald du wieder verbunden bist."
+  },
+  "import": {
+    "title": "Aus Google Keep importieren",
+    "description": "Lade eine Google Keep-Exportdatei hoch. Exportiere deine Notizen aus Google Takeout und lade das .zip-Archiv oder eine einzelne .json-Notiz-Datei hoch.",
+    "dropFile": "Datei hier ablegen oder",
+    "browse": "durchsuchen",
+    "fileTypes": ".zip- oder .json-Dateien",
+    "invalidFileType": "Ungültiger Dateityp. Bitte eine .json- oder .zip-Datei auswählen.",
+    "importedNotes_one": "{{count}} Notiz importiert",
+    "importedNotes_other": "{{count}} Notizen importiert",
+    "skipped": "({{count}} übersprungen)",
+    "failed": "{{count}} fehlgeschlagen",
+    "importFailed": "Import fehlgeschlagen. Bitte Datei prüfen und erneut versuchen.",
+    "close": "Schließen",
+    "cancelButton": "Abbrechen",
+    "importing": "Importieren...",
+    "importButton": "Importieren"
   }
 }

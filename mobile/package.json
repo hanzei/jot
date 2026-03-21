@@ -22,6 +22,7 @@
     "axios": "^1.7.0",
     "expo": "~55.0.0",
     "expo-asset": "~55.0.0",
+    "expo-document-picker": "^55.0.9",
     "expo-haptics": "~55.0.0",
     "expo-image-picker": "^55.0.12",
     "expo-localization": "~55.0.9",

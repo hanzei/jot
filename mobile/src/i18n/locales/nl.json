@@ -142,7 +142,10 @@
     "sessionsRevokeFailed": "Sessie intrekken mislukt",
     "sessionsNone": "Geen actieve sessies gevonden.",
     "aboutSection": "Over",
-    "aboutButton": "Over Jot"
+    "aboutButton": "Over Jot",
+    "importSection": "Importeren",
+    "importDescription": "Importeer notities uit Google Keep-exports.",
+    "importButton": "Importeren uit Google Keep"
   },
   "about": {
     "clientInfo": "Clientinformatie",
@@ -247,5 +250,22 @@
   },
   "offline": {
     "message": "Je bent offline. Wijzigingen worden gesynchroniseerd als je weer verbinding hebt."
+  },
+  "import": {
+    "title": "Importeren uit Google Keep",
+    "description": "Upload een Google Keep-exportbestand. Exporteer je notities via Google Takeout en upload het .zip-archief of een individueel .json-notitiebestand.",
+    "dropFile": "Zet je bestand hier neer, of",
+    "browse": "bladeren",
+    "fileTypes": ".zip- of .json-bestanden",
+    "invalidFileType": "Ongeldig bestandstype. Selecteer een .json- of .zip-bestand.",
+    "importedNotes_one": "{{count}} notitie geïmporteerd",
+    "importedNotes_other": "{{count}} notities geïmporteerd",
+    "skipped": "({{count}} overgeslagen)",
+    "failed": "{{count}} mislukt",
+    "importFailed": "Importeren mislukt. Controleer je bestand en probeer het opnieuw.",
+    "close": "Sluiten",
+    "cancelButton": "Annuleren",
+    "importing": "Importeren...",
+    "importButton": "Importeren"
   }
 }
