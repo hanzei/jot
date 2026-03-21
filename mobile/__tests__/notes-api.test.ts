@@ -1,4 +1,5 @@
 import axios from 'axios';
+import { Platform } from 'react-native';
 import {
   getNotes,
   getNote,
@@ -29,10 +30,8 @@ jest.mock('axios', () => {
   };
 });
 
-const mockPlatform: { OS: string } = { OS: 'ios' };
-
 jest.mock('react-native', () => ({
-  Platform: mockPlatform,
+  Platform: { OS: 'ios' },
 }));
 
 const mockAxiosInstance = (axios as unknown as { __mockInstance: Record<string, jest.Mock> })
@@ -41,7 +40,7 @@ const mockAxiosInstance = (axios as unknown as { __mockInstance: Record<string, 
 describe('Notes API', () => {
   beforeEach(() => {
     jest.clearAllMocks();
-    mockPlatform.OS = 'ios';
+    (Platform as { OS: string }).OS = 'ios';
   });
 
   describe('getNotes', () => {
@@ -200,7 +199,7 @@ describe('Notes API', () => {
 
     it('keeps Android content URI in FormData and posts to /notes/import', async () => {
       const appendSpy = jest.spyOn(FormData.prototype, 'append');
-      mockPlatform.OS = 'android';
+      (Platform as { OS: string }).OS = 'android';
       mockAxiosInstance.post.mockResolvedValueOnce({ data: { imported: 1, skipped: 0 } });
 
       await importKeepFile({
