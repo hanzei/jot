@@ -300,7 +300,8 @@
     "menuOptions": "Notizoptionen",
     "assignItem": "Element zuweisen",
     "unassign": "Zuweisung aufheben",
-    "assignedTo": "Zugewiesen an {{name}}"
+    "assignedTo": "Zugewiesen an {{name}}",
+    "completedSuggestions": "Vorschläge aus erledigten Elementen"
   },
   "labels": {
     "title": "Labels",
