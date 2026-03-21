@@ -18,7 +18,7 @@ import { UsersProvider } from './src/store/UsersContext';
 import { OfflineProvider } from './src/store/OfflineContext';
 import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
 import RootNavigator, { type RootStackParamList } from './src/navigation/RootNavigator';
-import { getBaseUrl } from './src/api/client';
+import { getBaseUrl, getStoredServerUrl, restoreServerUrl } from './src/api/client';
 import { migrateDatabase } from './src/db/schema';
 import './src/i18n';
 
@@ -104,6 +104,54 @@ function NavigationWrapper() {
     },
   };
 
+  const resolveCurrentServerOrigin = React.useCallback(async (): Promise<string | null> => {
+    const storedUrl = await getStoredServerUrl();
+    if (storedUrl) {
+      restoreServerUrl(storedUrl);
+    }
+    return normalizeServerOrigin(getBaseUrl());
+  }, []);
+
+  const evaluateIncomingDeepLink = React.useCallback(async (url: string): Promise<'allow' | 'stash' | 'ignore'> => {
+    const { path, hasServerParam, serverOrigin } = parseDeepLink(url);
+    const currentServerOrigin = await resolveCurrentServerOrigin();
+    const serverLabel = currentServerOrigin ?? getBaseUrl();
+
+    if (!hasServerParam && !warnedDeepLinkUrlsRef.current.has(url)) {
+      warnedDeepLinkUrlsRef.current.add(url);
+      Alert.alert(
+        'Deep link warning',
+        `This link does not specify a server URL. Opening it on ${serverLabel}.`,
+      );
+    }
+
+    if (hasServerParam && !serverOrigin) {
+      if (!warnedDeepLinkUrlsRef.current.has(url)) {
+        warnedDeepLinkUrlsRef.current.add(url);
+        Alert.alert('Deep link ignored', 'This link has an invalid server URL.');
+      }
+      return 'ignore';
+    }
+
+    if (serverOrigin && currentServerOrigin && serverOrigin !== currentServerOrigin) {
+      if (!warnedDeepLinkUrlsRef.current.has(url)) {
+        warnedDeepLinkUrlsRef.current.add(url);
+        Alert.alert(
+          'Wrong server',
+          `This link targets ${serverOrigin}, but you are connected to ${currentServerOrigin}.`,
+        );
+      }
+      return 'ignore';
+    }
+
+    if (!isAuthenticated && isProtectedDeepLinkPath(path)) {
+      pendingDeepLinkUrlRef.current = url;
+      return 'stash';
+    }
+
+    return 'allow';
+  }, [isAuthenticated, resolveCurrentServerOrigin]);
+
   const linking = React.useMemo<LinkingOptions<RootStackParamList>>(
     () => ({
       prefixes: DEEP_LINK_PREFIXES,
@@ -113,38 +161,8 @@ function NavigationWrapper() {
           return null;
         }
 
-        const { path, hasServerParam, serverOrigin } = parseDeepLink(url);
-        const currentServerOrigin = normalizeServerOrigin(getBaseUrl()) ?? getBaseUrl();
-
-        if (!hasServerParam && !warnedDeepLinkUrlsRef.current.has(url)) {
-          warnedDeepLinkUrlsRef.current.add(url);
-          Alert.alert(
-            'Deep link warning',
-            `This link does not specify a server URL. Opening it on ${currentServerOrigin}.`,
-          );
-        }
-
-        if (hasServerParam && !serverOrigin) {
-          if (!warnedDeepLinkUrlsRef.current.has(url)) {
-            warnedDeepLinkUrlsRef.current.add(url);
-            Alert.alert('Deep link ignored', 'This link has an invalid server URL.');
-          }
-          return null;
-        }
-
-        if (serverOrigin && serverOrigin !== currentServerOrigin.toLowerCase()) {
-          if (!warnedDeepLinkUrlsRef.current.has(url)) {
-            warnedDeepLinkUrlsRef.current.add(url);
-            Alert.alert(
-              'Wrong server',
-              `This link targets ${serverOrigin}, but you are connected to ${currentServerOrigin}.`,
-            );
-          }
-          return null;
-        }
-
-        if (!isAuthenticated && isProtectedDeepLinkPath(path)) {
-          pendingDeepLinkUrlRef.current = url;
+        const decision = await evaluateIncomingDeepLink(url);
+        if (decision !== 'allow') {
           return null;
         }
 
@@ -152,42 +170,12 @@ function NavigationWrapper() {
       },
       subscribe: (listener) => {
         const subscription = Linking.addEventListener('url', ({ url }) => {
-          const { path, hasServerParam, serverOrigin } = parseDeepLink(url);
-          const currentServerOrigin = normalizeServerOrigin(getBaseUrl()) ?? getBaseUrl();
-
-          if (!hasServerParam && !warnedDeepLinkUrlsRef.current.has(url)) {
-            warnedDeepLinkUrlsRef.current.add(url);
-            Alert.alert(
-              'Deep link warning',
-              `This link does not specify a server URL. Opening it on ${currentServerOrigin}.`,
-            );
-          }
-
-          if (hasServerParam && !serverOrigin) {
-            if (!warnedDeepLinkUrlsRef.current.has(url)) {
-              warnedDeepLinkUrlsRef.current.add(url);
-              Alert.alert('Deep link ignored', 'This link has an invalid server URL.');
+          void (async () => {
+            const decision = await evaluateIncomingDeepLink(url);
+            if (decision === 'allow') {
+              listener(url);
             }
-            return;
-          }
-
-          if (serverOrigin && serverOrigin !== currentServerOrigin.toLowerCase()) {
-            if (!warnedDeepLinkUrlsRef.current.has(url)) {
-              warnedDeepLinkUrlsRef.current.add(url);
-              Alert.alert(
-                'Wrong server',
-                `This link targets ${serverOrigin}, but you are connected to ${currentServerOrigin}.`,
-              );
-            }
-            return;
-          }
-
-          if (!isAuthenticated && isProtectedDeepLinkPath(path)) {
-            pendingDeepLinkUrlRef.current = url;
-            return;
-          }
-
-          listener(url);
+          })();
         });
 
         return () => {
@@ -213,12 +201,13 @@ function NavigationWrapper() {
         return getStateFromPath(path, options);
       },
     }),
-    [isAuthenticated],
+    [evaluateIncomingDeepLink, isAuthenticated],
   );
 
   React.useEffect(() => {
     if (wasAuthenticatedRef.current && !isAuthenticated) {
       pendingDeepLinkUrlRef.current = null;
+      warnedDeepLinkUrlsRef.current.clear();
     }
     wasAuthenticatedRef.current = isAuthenticated;
   }, [isAuthenticated]);
@@ -228,27 +217,37 @@ function NavigationWrapper() {
       return;
     }
 
-    const pendingUrl = pendingDeepLinkUrlRef.current;
-    if (!pendingUrl) {
-      return;
-    }
+    let cancelled = false;
+    void (async () => {
+      const pendingUrl = pendingDeepLinkUrlRef.current;
+      if (!pendingUrl) {
+        return;
+      }
 
-    const { hasServerParam, serverOrigin } = parseDeepLink(pendingUrl);
-    const currentServerOrigin = normalizeServerOrigin(getBaseUrl()) ?? getBaseUrl();
-    if (hasServerParam && (!serverOrigin || serverOrigin !== currentServerOrigin.toLowerCase())) {
+      const { hasServerParam, serverOrigin } = parseDeepLink(pendingUrl);
+      const currentServerOrigin = await resolveCurrentServerOrigin();
+      if (cancelled) {
+        return;
+      }
+      if (hasServerParam && (!serverOrigin || (currentServerOrigin && serverOrigin !== currentServerOrigin))) {
+        pendingDeepLinkUrlRef.current = null;
+        return;
+      }
+
+      const pendingPath = getDeepLinkPath(pendingUrl);
+      const pendingState = getStateFromPath(pendingPath, linking.config);
       pendingDeepLinkUrlRef.current = null;
-      return;
-    }
+      if (!pendingState) {
+        return;
+      }
 
-    const pendingPath = getDeepLinkPath(pendingUrl);
-    const pendingState = getStateFromPath(pendingPath, linking.config);
-    if (!pendingState) {
-      return;
-    }
+      navigationRef.resetRoot(pendingState);
+    })();
 
-    navigationRef.resetRoot(pendingState);
-    pendingDeepLinkUrlRef.current = null;
-  }, [isAuthenticated, isNavReady, linking.config, navigationRef]);
+    return () => {
+      cancelled = true;
+    };
+  }, [isAuthenticated, isNavReady, linking.config, navigationRef, resolveCurrentServerOrigin]);
 
   return (
     <NavigationContainer ref={navigationRef} theme={navigationTheme} linking={linking} onReady={() => setIsNavReady(true)}>
