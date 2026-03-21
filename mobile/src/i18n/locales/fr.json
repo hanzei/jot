@@ -248,6 +248,14 @@
     "failedLoad": "Impossible de charger les partages",
     "removeAccessFor": "Retirer le partage pour {{username}}"
   },
+  "deepLink": {
+    "missingServerTitle": "Avertissement de lien profond",
+    "missingServerMessage": "Ce lien ne précise pas d'URL de serveur. Ouverture sur {{server}}.",
+    "invalidServerTitle": "Lien profond ignoré",
+    "invalidServerMessage": "Ce lien contient une URL de serveur invalide.",
+    "wrongServerTitle": "Mauvais serveur",
+    "wrongServerMessage": "Ce lien cible {{targetServer}}, mais vous êtes connecté à {{currentServer}}."
+  },
   "offline": {
     "message": "Vous êtes hors ligne. Les modifications seront synchronisées lors de la reconnexion."
   },

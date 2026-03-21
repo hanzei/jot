@@ -248,6 +248,14 @@
     "failedLoad": "Impossibile caricare le condivisioni",
     "removeAccessFor": "Rimuovi condivisione per {{username}}"
   },
+  "deepLink": {
+    "missingServerTitle": "Avviso link profondo",
+    "missingServerMessage": "Questo link non specifica un URL server. Verrà aperto su {{server}}.",
+    "invalidServerTitle": "Link profondo ignorato",
+    "invalidServerMessage": "Questo link contiene un URL server non valido.",
+    "wrongServerTitle": "Server errato",
+    "wrongServerMessage": "Questo link punta a {{targetServer}}, ma sei connesso a {{currentServer}}."
+  },
   "offline": {
     "message": "Sei offline. Le modifiche verranno sincronizzate quando ti riconnetterai."
   },

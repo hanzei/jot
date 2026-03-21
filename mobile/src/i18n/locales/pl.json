@@ -248,6 +248,14 @@
     "failedLoad": "Nie udało się załadować udostępnień",
     "removeAccessFor": "Usuń udostępnienie dla {{username}}"
   },
+  "deepLink": {
+    "missingServerTitle": "Ostrzeżenie o linku głębokim",
+    "missingServerMessage": "Ten link nie zawiera adresu URL serwera. Zostanie otwarty na {{server}}.",
+    "invalidServerTitle": "Link głęboki zignorowany",
+    "invalidServerMessage": "Ten link ma nieprawidłowy adres URL serwera.",
+    "wrongServerTitle": "Nieprawidłowy serwer",
+    "wrongServerMessage": "Ten link prowadzi do {{targetServer}}, ale jesteś połączony z {{currentServer}}."
+  },
   "offline": {
     "message": "Jesteś offline. Zmiany zostaną zsynchronizowane po ponownym połączeniu."
   },

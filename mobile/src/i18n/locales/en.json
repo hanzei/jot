@@ -248,6 +248,14 @@
     "failedLoad": "Failed to load shares",
     "removeAccessFor": "Remove share for {{username}}"
   },
+  "deepLink": {
+    "missingServerTitle": "Deep link warning",
+    "missingServerMessage": "This link does not specify a server URL. Opening it on {{server}}.",
+    "invalidServerTitle": "Deep link ignored",
+    "invalidServerMessage": "This link has an invalid server URL.",
+    "wrongServerTitle": "Wrong server",
+    "wrongServerMessage": "This link targets {{targetServer}}, but you are connected to {{currentServer}}."
+  },
   "offline": {
     "message": "You're offline. Changes will sync when you reconnect."
   },

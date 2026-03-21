@@ -248,6 +248,14 @@
     "failedLoad": "Gedeelde items laden mislukt",
     "removeAccessFor": "Delen verwijderen voor {{username}}"
   },
+  "deepLink": {
+    "missingServerTitle": "Waarschuwing deep link",
+    "missingServerMessage": "Deze link bevat geen server-URL. Wordt geopend op {{server}}.",
+    "invalidServerTitle": "Deep link genegeerd",
+    "invalidServerMessage": "Deze link bevat een ongeldige server-URL.",
+    "wrongServerTitle": "Verkeerde server",
+    "wrongServerMessage": "Deze link verwijst naar {{targetServer}}, maar je bent verbonden met {{currentServer}}."
+  },
   "offline": {
     "message": "Je bent offline. Wijzigingen worden gesynchroniseerd als je weer verbinding hebt."
   },

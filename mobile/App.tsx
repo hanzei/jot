@@ -12,6 +12,7 @@ import {
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SQLiteProvider } from 'expo-sqlite';
+import { useTranslation } from 'react-i18next';
 import { AuthProvider, useAuth } from './src/store/AuthContext';
 import MobileI18nProvider from './src/i18n/MobileI18nProvider';
 import { UsersProvider } from './src/store/UsersContext';
@@ -32,6 +33,10 @@ const queryClient = new QueryClient({
 });
 
 const DEEP_LINK_PREFIXES = ['jot://'];
+
+function isJotSchemeUrl(url: string): boolean {
+  return /^jot:\/\//i.test(url);
+}
 
 function normalizeServerOrigin(url: string): string | null {
   try {
@@ -85,6 +90,7 @@ function isProtectedDeepLinkPath(path: string): boolean {
 function NavigationWrapper() {
   const { colors, isDark } = useTheme();
   const { isAuthenticated } = useAuth();
+  const { t } = useTranslation();
   const navigationRef = React.useMemo(() => createNavigationContainerRef<RootStackParamList>(), []);
   const pendingDeepLinkUrlRef = React.useRef<string | null>(null);
   const warnedDeepLinkUrlsRef = React.useRef<Set<string>>(new Set());
@@ -121,15 +127,18 @@ function NavigationWrapper() {
     if (!hasServerParam && !warnedDeepLinkUrlsRef.current.has(url)) {
       warnedDeepLinkUrlsRef.current.add(url);
       Alert.alert(
-        'Deep link warning',
-        `This link does not specify a server URL. Opening it on ${serverLabel}.`,
+        t('deepLink.missingServerTitle'),
+        t('deepLink.missingServerMessage', { server: serverLabel }),
       );
     }
 
     if (hasServerParam && !serverOrigin) {
       if (!warnedDeepLinkUrlsRef.current.has(url)) {
         warnedDeepLinkUrlsRef.current.add(url);
-        Alert.alert('Deep link ignored', 'This link has an invalid server URL.');
+        Alert.alert(
+          t('deepLink.invalidServerTitle'),
+          t('deepLink.invalidServerMessage'),
+        );
       }
       return 'ignore';
     }
@@ -138,8 +147,11 @@ function NavigationWrapper() {
       if (!warnedDeepLinkUrlsRef.current.has(url)) {
         warnedDeepLinkUrlsRef.current.add(url);
         Alert.alert(
-          'Wrong server',
-          `This link targets ${serverOrigin}, but you are connected to ${configuredServerOrigin}.`,
+          t('deepLink.wrongServerTitle'),
+          t('deepLink.wrongServerMessage', {
+            targetServer: serverOrigin,
+            currentServer: configuredServerOrigin,
+          }),
         );
       }
       return 'ignore';
@@ -151,14 +163,14 @@ function NavigationWrapper() {
     }
 
     return 'allow';
-  }, [isAuthenticated, resolveStoredServerOrigin]);
+  }, [isAuthenticated, resolveStoredServerOrigin, t]);
 
   const linking = React.useMemo<LinkingOptions<RootStackParamList>>(
     () => ({
       prefixes: DEEP_LINK_PREFIXES,
       getInitialURL: async () => {
         const url = await Linking.getInitialURL();
-        if (!url) {
+        if (!url || !isJotSchemeUrl(url)) {
           return null;
         }
 
@@ -171,6 +183,10 @@ function NavigationWrapper() {
       },
       subscribe: (listener) => {
         const subscription = Linking.addEventListener('url', ({ url }) => {
+          if (!isJotSchemeUrl(url)) {
+            return;
+          }
+
           void (async () => {
             const decision = await evaluateIncomingDeepLink(url);
             if (decision === 'allow') {

@@ -248,6 +248,14 @@
     "failedLoad": "Error al cargar los accesos compartidos",
     "removeAccessFor": "Eliminar acceso compartido para {{username}}"
   },
+  "deepLink": {
+    "missingServerTitle": "Advertencia de enlace profundo",
+    "missingServerMessage": "Este enlace no especifica una URL del servidor. Se abrirá en {{server}}.",
+    "invalidServerTitle": "Enlace profundo ignorado",
+    "invalidServerMessage": "Este enlace tiene una URL del servidor no válida.",
+    "wrongServerTitle": "Servidor incorrecto",
+    "wrongServerMessage": "Este enlace apunta a {{targetServer}}, pero estás conectado a {{currentServer}}."
+  },
   "offline": {
     "message": "Estás sin conexión. Los cambios se sincronizarán cuando vuelvas a conectarte."
   },
