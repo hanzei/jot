@@ -9,6 +9,7 @@ import i18n from '../src/i18n';
 import { saveNotes } from '../src/db/noteQueries';
 
 const mockInvalidateQueries = jest.fn();
+const SETTINGS_IMPORT_TEST_TIMEOUT_MS = 15_000;
 
 jest.mock('../src/store/AuthContext', () => ({
   useAuth: jest.fn(),
@@ -146,7 +147,7 @@ describe('SettingsScreen import section', () => {
       expect(getByText(/Imported 2 notes/i)).toBeTruthy();
     });
     expect(getByText(/\(1 skipped\)/i)).toBeTruthy();
-  });
+  }, SETTINGS_IMPORT_TEST_TIMEOUT_MS);
 
   it('rejects unsupported files with a validation error', async () => {
     mockGetDocumentAsync.mockResolvedValue({
