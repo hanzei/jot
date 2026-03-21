@@ -123,4 +123,6 @@ jest.mock('@expo/vector-icons/Ionicons', () => {
 });
 
 const i18n = require('./src/i18n').default;
-void i18n.changeLanguage('en');
+beforeEach(async () => {
+  await i18n.changeLanguage('en');
+});
