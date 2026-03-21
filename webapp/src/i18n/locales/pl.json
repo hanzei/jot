@@ -300,7 +300,8 @@
     "menuOptions": "Opcje notatki",
     "assignItem": "Przypisz element",
     "unassign": "Usuń przypisanie",
-    "assignedTo": "Przypisano do {{name}}"
+    "assignedTo": "Przypisano do {{name}}",
+    "completedSuggestions": "Podpowiedzi z ukończonych elementów"
   },
   "labels": {
     "title": "Etykiety",

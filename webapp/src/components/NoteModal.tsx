@@ -94,11 +94,16 @@ interface SortableItemProps {
   collaborators?: Collaborator[];
   usersById?: Map<string, User>;
   onAssignItem?: (itemId: string, userId: string) => void;
+  completedItemTexts?: string[];
+  onAcceptSuggestion?: (currentItemId: string, suggestionText: string) => void;
 }
 
-function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isCompleted = false, onKeyDown, onPaste, inputRef, onIndentChange, isShared, collaborators, usersById, onAssignItem }: SortableItemProps) {
+function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isCompleted = false, onKeyDown, onPaste, inputRef, onIndentChange, isShared, collaborators, usersById, onAssignItem, completedItemTexts = [], onAcceptSuggestion }: SortableItemProps) {
   const { t } = useTranslation();
   const [showAssigneePicker, setShowAssigneePicker] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
+  const suggestionsRef = useRef<HTMLDivElement>(null);
   const closeAssigneePicker = useCallback(() => setShowAssigneePicker(false), []);
   const {
     attributes,
@@ -121,6 +126,31 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
   const assignedUser = item.assignedTo ? usersById?.get(item.assignedTo) : undefined;
   const showAssignUI = isShared && collaborators && collaborators.length > 0 && onAssignItem;
   const placeholder = item.text ? '' : t('note.itemPlaceholder');
+
+  const suggestions = useMemo(() => {
+    const trimmed = item.text.trim();
+    if (!trimmed) return [];
+    const q = trimmed.toLowerCase();
+    const results: string[] = [];
+    for (const text of completedItemTexts) {
+      const lower = text.toLowerCase();
+      if (lower.includes(q) && lower !== q) {
+        results.push(text);
+        if (results.length === 5) break;
+      }
+    }
+    return results;
+  }, [item.text, completedItemTexts]);
+
+  const selectSuggestion = (text: string) => {
+    if (onAcceptSuggestion) {
+      onAcceptSuggestion(item.id, text);
+    } else {
+      onUpdateTodoItem(index, 'text', text);
+    }
+    setShowSuggestions(false);
+    setSelectedSuggestionIndex(-1);
+  };
 
   return (
     <div
@@ -151,27 +181,102 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
         className="h-4 w-4 text-blue-600 rounded"
       />
       <div className="flex items-center min-w-0">
-        <input
-          type="text"
-          data-testid="todo-item-input"
-          placeholder={placeholder}
-          size={Math.max((item.text || placeholder).length, 1) + 1}
-          className={`field-sizing-content p-1 bg-transparent border-none outline-none min-w-0 placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white ${
-            isCompleted ? 'line-through text-gray-500 dark:text-gray-400' : ''
-          }`}
-          value={item.text}
-          onChange={(e) => onUpdateTodoItem(index, 'text', e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Tab' && onIndentChange && !isCompleted) {
-              e.preventDefault();
-              onIndentChange(item.id, e.shiftKey ? -1 : 1);
-              return;
-            }
-            if (onKeyDown) onKeyDown(index, e);
-          }}
-          onPaste={(e) => onPaste?.(index, e)}
-          ref={inputRef}
-        />
+        <div className="relative min-w-0">
+          <input
+            type="text"
+            data-testid="todo-item-input"
+            placeholder={placeholder}
+            size={Math.max((item.text || placeholder).length, 1) + 1}
+            className={`field-sizing-content p-1 bg-transparent border-none outline-none min-w-0 placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white ${
+              isCompleted ? 'line-through text-gray-500 dark:text-gray-400' : ''
+            }`}
+            value={item.text}
+            onChange={(e) => {
+              onUpdateTodoItem(index, 'text', e.target.value);
+              if (e.target.value.trim()) setShowSuggestions(true);
+              setSelectedSuggestionIndex(-1);
+            }}
+            onFocus={() => {
+              if (suggestions.length > 0) setShowSuggestions(true);
+            }}
+            onBlur={(e) => {
+              const related = e.relatedTarget as Node | null;
+              if (suggestionsRef.current?.contains(related)) return;
+              // Delay to allow touch tap on suggestion to fire click first
+              setTimeout(() => {
+                setShowSuggestions(false);
+                setSelectedSuggestionIndex(-1);
+              }, 150);
+            }}
+            aria-autocomplete="list"
+            aria-expanded={showSuggestions && suggestions.length > 0}
+            aria-controls={showSuggestions && suggestions.length > 0 ? `suggestions-${id}` : undefined}
+            aria-activedescendant={selectedSuggestionIndex >= 0 ? `suggestion-${id}-${selectedSuggestionIndex}` : undefined}
+            onKeyDown={(e) => {
+              const suggestionsVisible = showSuggestions && suggestions.length > 0;
+              if (suggestionsVisible && !e.nativeEvent.isComposing && e.nativeEvent.keyCode !== 229) {
+                if (e.key === 'ArrowDown') {
+                  e.preventDefault();
+                  setSelectedSuggestionIndex(prev => Math.min(prev + 1, suggestions.length - 1));
+                  return;
+                }
+                if (e.key === 'ArrowUp') {
+                  e.preventDefault();
+                  setSelectedSuggestionIndex(prev => Math.max(prev - 1, -1));
+                  return;
+                }
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  const idxToAccept = selectedSuggestionIndex >= 0 ? selectedSuggestionIndex : 0;
+                  selectSuggestion(suggestions[idxToAccept]);
+                  return;
+                }
+                if (e.key === 'Escape' || e.key === 'Tab') {
+                  e.preventDefault();
+                  setShowSuggestions(false);
+                  setSelectedSuggestionIndex(-1);
+                  return;
+                }
+              }
+              if (e.key === 'Tab' && onIndentChange && !isCompleted) {
+                e.preventDefault();
+                onIndentChange(item.id, e.shiftKey ? -1 : 1);
+                return;
+              }
+              if (onKeyDown) onKeyDown(index, e);
+            }}
+            onPaste={(e) => onPaste?.(index, e)}
+            ref={inputRef}
+          />
+          {showSuggestions && suggestions.length > 0 && !isCompleted && (
+            <div
+              ref={suggestionsRef}
+              id={`suggestions-${id}`}
+              role="listbox"
+              aria-label={t('note.completedSuggestions')}
+              className="absolute z-20 top-full left-0 mt-0.5 min-w-40 max-w-64 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded-md shadow-lg max-h-36 overflow-y-auto"
+            >
+              {suggestions.map((text, i) => (
+                <div
+                  key={i}
+                  id={`suggestion-${id}-${i}`}
+                  role="option"
+                  aria-selected={i === selectedSuggestionIndex}
+                  className={`px-3 py-1.5 text-sm cursor-pointer truncate ${
+                    i === selectedSuggestionIndex
+                      ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-900 dark:text-blue-300'
+                      : 'text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-slate-700'
+                  }`}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => selectSuggestion(text)}
+                  onMouseEnter={() => setSelectedSuggestionIndex(i)}
+                >
+                  {text}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         {showAssignUI && (() => {
           const assigneeDisplayName = assignedUser
@@ -264,10 +369,20 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   );
 
   // Separate completed and uncompleted items with memoization
-  const { uncompletedItems, completedItems } = useMemo(() => ({
-    uncompletedItems: items.filter(item => !item.completed),
-    completedItems: items.filter(item => item.completed)
-  }), [items]);
+  const { uncompletedItems, completedItems, completedItemTexts } = useMemo(() => {
+    const uncompletedItems = items.filter(item => !item.completed);
+    const completedItems = items.filter(item => item.completed);
+    const seen = new Set<string>();
+    const completedItemTexts: string[] = [];
+    for (const item of completedItems) {
+      const trimmed = item.text.trim();
+      if (trimmed && !seen.has(trimmed.toLowerCase())) {
+        seen.add(trimmed.toLowerCase());
+        completedItemTexts.push(trimmed);
+      }
+    }
+    return { uncompletedItems, completedItems, completedItemTexts };
+  }, [items]);
 
   const colorMeta: Record<string, { name: string; class: string }> = {
     '#ffffff': { name: t('note.colorWhite'), class: 'bg-white dark:bg-slate-800 border-gray-300 dark:border-slate-600' },
@@ -752,6 +867,73 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     }
   };
 
+  // Restores a completed item at the position of the current (placeholder) item,
+  // keeping its assignment, and removes the placeholder.
+  const acceptSuggestion = (currentItemId: string, suggestionText: string) => {
+    const completedItem = completedItems.find(
+      item => item.text.trim().toLowerCase() === suggestionText.toLowerCase()
+    );
+
+    if (!completedItem) {
+      // No matching completed item — fall back to just updating the text
+      const updatedItems = items.map(item =>
+        item.id === currentItemId ? { ...item, text: suggestionText } : item
+      );
+      setItems(updatedItems);
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+        saveTimeoutRef.current = undefined;
+      }
+      autoSaveNote(updatedItems);
+      return;
+    }
+
+    // Position in uncompleted list where the placeholder lives
+    const insertAt = Math.max(
+      0,
+      uncompletedItems.findIndex(item => item.id === currentItemId)
+    );
+
+    // Remove the placeholder and the matched completed item from the full list
+    const filtered = items.filter(
+      item => item.id !== currentItemId && item.id !== completedItem.id
+    );
+
+    // Restore the completed item: uncompleted, keep assignee and indent
+    const restoredItem: TodoItem = {
+      ...completedItem,
+      completed: false,
+      originalPosition: undefined,
+    };
+
+    const remainingUncompleted = filtered.filter(item => !item.completed);
+    const remainingCompleted = filtered.filter(item => item.completed);
+
+    const newUncompleted = [
+      ...remainingUncompleted.slice(0, insertAt),
+      restoredItem,
+      ...remainingUncompleted.slice(insertAt),
+    ].map((item, i) => ({ ...item, position: i }));
+
+    const newItems = [...newUncompleted, ...remainingCompleted];
+    setItems(newItems);
+
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = undefined;
+    }
+    autoSaveNote(newItems);
+
+    // Restore focus to the item now sitting at the same position
+    setTimeout(() => {
+      const el = itemInputRefs.current.get(restoredItem.id);
+      if (el) {
+        el.focus();
+        el.setSelectionRange(el.value.length, el.value.length);
+      }
+    }, 0);
+  };
+
   const collaborators = useMemo<Collaborator[]>(() => {
     if (!note?.is_shared) return [];
     return buildCollaborators(note.user_id, note.shared_with, usersById);
@@ -1229,6 +1411,8 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                           collaborators={collaborators}
                           usersById={usersById}
                           onAssignItem={assignItem}
+                          completedItemTexts={completedItemTexts}
+                          onAcceptSuggestion={acceptSuggestion}
                         />
                       ))}
                     </SortableContext>
