@@ -36,16 +36,18 @@ jobs:
   translations:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v6
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
-      - uses: actions/setup-node@v6
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
         with:
           node-version: "24"
           cache: "npm"
           cache-dependency-path: webapp/package-lock.json
 
       - name: Install Task
-        run: sh -c "$(curl -fsSL https://taskfile.dev/install.sh)" -- -d -b /usr/local/bin
+        uses: go-task/setup-task@3be4020d41929789a01026e0e427a4321ce0ad44 # v2
+        with:
+          version: 3.x
 
       - name: Install dependencies
         run: npm ci
