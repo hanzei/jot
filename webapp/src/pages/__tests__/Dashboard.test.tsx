@@ -317,6 +317,33 @@ describe('Dashboard', () => {
       expect(searchInput).toHaveValue('test query')
     })
 
+    it('clears search input when escape is pressed', async () => {
+      const user = userEvent.setup()
+      const mockGetAll = vi.mocked(notes.getAll)
+
+      renderDashboard()
+
+      await waitFor(() => {
+        expect(screen.getByPlaceholderText('Search notes...')).toBeInTheDocument()
+      })
+
+      const searchInput = screen.getByPlaceholderText('Search notes...')
+      await user.type(searchInput, 'escape query')
+
+      await waitFor(() => {
+        expect(searchInput).toHaveValue('escape query')
+        expect(mockGetAll).toHaveBeenCalledWith(false, 'escape query', false, '', false)
+      })
+
+      await user.keyboard('{Escape}')
+
+      await waitFor(() => {
+        expect(searchInput).toHaveValue('')
+        const calls = mockGetAll.mock.calls
+        expect(calls[calls.length - 1]).toEqual([false, '', false, '', false])
+      })
+    })
+
     it('calls API with search query', async () => {
       const user = userEvent.setup()
       const mockGetAll = vi.mocked(notes.getAll)
