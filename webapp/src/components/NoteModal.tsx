@@ -94,9 +94,10 @@ interface SortableItemProps {
   usersById?: Map<string, User>;
   onAssignItem?: (itemId: string, userId: string) => void;
   completedItemTexts?: string[];
+  onAcceptSuggestion?: (currentItemId: string, suggestionText: string) => void;
 }
 
-function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isCompleted = false, onKeyDown, inputRef, onIndentChange, isShared, collaborators, usersById, onAssignItem, completedItemTexts = [] }: SortableItemProps) {
+function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isCompleted = false, onKeyDown, inputRef, onIndentChange, isShared, collaborators, usersById, onAssignItem, completedItemTexts = [], onAcceptSuggestion }: SortableItemProps) {
   const { t } = useTranslation();
   const [showAssigneePicker, setShowAssigneePicker] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
@@ -141,7 +142,11 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
   }, [item.text, completedItemTexts]);
 
   const selectSuggestion = (text: string) => {
-    onUpdateTodoItem(index, 'text', text);
+    if (onAcceptSuggestion) {
+      onAcceptSuggestion(item.id, text);
+    } else {
+      onUpdateTodoItem(index, 'text', text);
+    }
     setShowSuggestions(false);
     setSelectedSuggestionIndex(-1);
   };
@@ -221,12 +226,8 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
                 }
                 if (e.key === 'Enter') {
                   e.preventDefault();
-                  if (selectedSuggestionIndex >= 0) {
-                    selectSuggestion(suggestions[selectedSuggestionIndex]);
-                  } else {
-                    setShowSuggestions(false);
-                    setSelectedSuggestionIndex(-1);
-                  }
+                  const idxToAccept = selectedSuggestionIndex >= 0 ? selectedSuggestionIndex : 0;
+                  selectSuggestion(suggestions[idxToAccept]);
                   return;
                 }
                 if (e.key === 'Escape' || e.key === 'Tab') {
@@ -791,6 +792,73 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     }
   };
 
+  // Restores a completed item at the position of the current (placeholder) item,
+  // keeping its assignment, and removes the placeholder.
+  const acceptSuggestion = (currentItemId: string, suggestionText: string) => {
+    const completedItem = completedItems.find(
+      item => item.text.trim().toLowerCase() === suggestionText.toLowerCase()
+    );
+
+    if (!completedItem) {
+      // No matching completed item — fall back to just updating the text
+      const updatedItems = items.map(item =>
+        item.id === currentItemId ? { ...item, text: suggestionText } : item
+      );
+      setItems(updatedItems);
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+        saveTimeoutRef.current = undefined;
+      }
+      autoSaveNote(updatedItems);
+      return;
+    }
+
+    // Position in uncompleted list where the placeholder lives
+    const insertAt = Math.max(
+      0,
+      uncompletedItems.findIndex(item => item.id === currentItemId)
+    );
+
+    // Remove the placeholder and the matched completed item from the full list
+    const filtered = items.filter(
+      item => item.id !== currentItemId && item.id !== completedItem.id
+    );
+
+    // Restore the completed item: uncompleted, keep assignee and indent
+    const restoredItem: TodoItem = {
+      ...completedItem,
+      completed: false,
+      originalPosition: undefined,
+    };
+
+    const remainingUncompleted = filtered.filter(item => !item.completed);
+    const remainingCompleted = filtered.filter(item => item.completed);
+
+    const newUncompleted = [
+      ...remainingUncompleted.slice(0, insertAt),
+      restoredItem,
+      ...remainingUncompleted.slice(insertAt),
+    ].map((item, i) => ({ ...item, position: i }));
+
+    const newItems = [...newUncompleted, ...remainingCompleted];
+    setItems(newItems);
+
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = undefined;
+    }
+    autoSaveNote(newItems);
+
+    // Restore focus to the item now sitting at the same position
+    setTimeout(() => {
+      const el = itemInputRefs.current.get(restoredItem.id);
+      if (el) {
+        el.focus();
+        el.setSelectionRange(el.value.length, el.value.length);
+      }
+    }, 0);
+  };
+
   const collaborators = useMemo<Collaborator[]>(() => {
     if (!note?.is_shared) return [];
     return buildCollaborators(note.user_id, note.shared_with, usersById);
@@ -1268,6 +1336,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                           usersById={usersById}
                           onAssignItem={assignItem}
                           completedItemTexts={completedItemTexts}
+                          onAcceptSuggestion={acceptSuggestion}
                         />
                       ))}
                     </SortableContext>
