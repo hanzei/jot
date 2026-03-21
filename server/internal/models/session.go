@@ -136,6 +136,42 @@ func (s *SessionStore) GetByUserID(userID string) (sessions []*Session, err erro
 	return sessions, nil
 }
 
+func (s *SessionStore) GetPageByUserID(userID string, limit int, offset int) (sessions []*Session, hasMore bool, err error) {
+	query := `SELECT token, user_id, user_agent, created_at, expires_at
+		FROM sessions
+		WHERE user_id = ? AND expires_at > ?
+		ORDER BY created_at DESC, token DESC
+		LIMIT ? OFFSET ?`
+
+	rows, err := s.db.Query(query, userID, time.Now(), limit+1, offset)
+	if err != nil {
+		return nil, false, fmt.Errorf("failed to get sessions by user ID: %w", err)
+	}
+	defer func() {
+		if closeErr := rows.Close(); closeErr != nil && err == nil {
+			err = fmt.Errorf("close rows: %w", closeErr)
+		}
+	}()
+
+	for rows.Next() {
+		var session Session
+		if scanErr := rows.Scan(&session.Token, &session.UserID, &session.UserAgent, &session.CreatedAt, &session.ExpiresAt); scanErr != nil {
+			return nil, false, fmt.Errorf("failed to scan session: %w", scanErr)
+		}
+		sessions = append(sessions, &session)
+	}
+	if err = rows.Err(); err != nil {
+		return nil, false, fmt.Errorf("failed to iterate sessions: %w", err)
+	}
+
+	hasMore = len(sessions) > limit
+	if hasMore {
+		sessions = sessions[:limit]
+	}
+
+	return sessions, hasMore, nil
+}
+
 func (s *SessionStore) Delete(token string) error {
 	query := `DELETE FROM sessions WHERE token = ?`
 	if _, err := s.db.Exec(query, token); err != nil {

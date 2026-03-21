@@ -4,15 +4,34 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 )
 
 // ListSessions returns all active sessions for the authenticated user.
 func (c *Client) ListSessions(ctx context.Context) ([]SessionInfo, error) {
-	var sessions []SessionInfo
-	if err := c.doJSON(ctx, http.MethodGet, "/api/v1/sessions", nil, &sessions); err != nil {
+	sessions, err := collectAllPages(func(page *PaginationOptions) (*PaginatedResponse[SessionInfo], error) {
+		return c.ListSessionsPage(ctx, page)
+	})
+	if err != nil {
 		return nil, err
 	}
 	return sessions, nil
+}
+
+// ListSessionsPage returns a single paginated page of active sessions for the authenticated user.
+func (c *Client) ListSessionsPage(ctx context.Context, pagination *PaginationOptions) (*PaginatedResponse[SessionInfo], error) {
+	path := "/api/v1/sessions"
+	q := url.Values{}
+	applyPagination(q, pagination)
+	if encoded := q.Encode(); encoded != "" {
+		path += "?" + encoded
+	}
+
+	var response PaginatedResponse[SessionInfo]
+	if err := c.doJSON(ctx, http.MethodGet, path, nil, &response); err != nil {
+		return nil, err
+	}
+	return &response, nil
 }
 
 // RevokeSession deletes a specific session by its hashed ID.

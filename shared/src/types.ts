@@ -20,6 +20,15 @@ export interface User {
   updated_at: string;
 }
 
+export interface UserInfo {
+  id: string;
+  username: string;
+  first_name: string;
+  last_name: string;
+  role: string;
+  has_profile_icon: boolean;
+}
+
 export type ThemePreference = 'system' | 'light' | 'dark';
 export type NoteSort = 'manual' | 'updated_at' | 'created_at';
 
@@ -102,7 +111,25 @@ export interface Note {
   updated_at: string;
 }
 
-export interface GetNotesParams {
+export interface PaginationParams {
+  limit?: number;
+  offset?: number;
+}
+
+export interface PaginationMetadata {
+  limit: number;
+  offset: number;
+  returned: number;
+  has_more: boolean;
+  next_offset?: number;
+}
+
+export interface PaginatedResponse<T> {
+  items: T[];
+  pagination: PaginationMetadata;
+}
+
+export interface GetNotesParams extends PaginationParams {
   archived?: boolean;
   search?: string;
   trashed?: boolean;
@@ -137,9 +164,9 @@ export interface CreateUserRequest {
   role: string;
 }
 
-export interface UserListResponse {
-  users: User[];
-}
+export type PaginatedNotesResponse = PaginatedResponse<Note>;
+export type PaginatedUsersResponse = PaginatedResponse<UserInfo>;
+export type UserListResponse = PaginatedResponse<User>;
 
 export interface AdminUserStats {
   total: number;
@@ -227,6 +254,8 @@ export interface ActiveSession {
   created_at: string;
   expires_at: string;
 }
+
+export type PaginatedSessionsResponse = PaginatedResponse<ActiveSession>;
 
 export type SSEEventType =
   | 'note_created'

@@ -3,7 +3,7 @@ import { PlusIcon, DocumentTextIcon, ArchiveBoxIcon, TrashIcon, ClipboardDocumen
 import { useTranslation } from 'react-i18next';
 import { notes, auth, labels as labelsApi, users as usersApi, isAxiosError } from '@/utils/api';
 import { removeUser, getUser, getSettings, setSettings, isAdmin } from '@/utils/auth';
-import type { Note, Label, User, SSEEvent, NoteSort } from '@jot/shared';
+import type { Note, Label, UserInfo, SSEEvent, NoteSort } from '@jot/shared';
 import { useSSE } from '@/utils/useSSE';
 import { useSearchParams, useParams } from 'react-router';
 import AppLayout from '@/components/AppLayout';
@@ -61,7 +61,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const [editingNote, setEditingNote] = useState<Note | null>(null);
   const [isShareModalOpen, setIsShareModalOpen] = useState(false);
   const [sharingNote, setSharingNote] = useState<Note | null>(null);
-  const [usersById, setUsersById] = useState<Map<string, User>>(new Map());
+  const [usersById, setUsersById] = useState<Map<string, UserInfo>>(new Map());
   const user = getUser();
   const isMountedRef = useRef(true);
   const searchInputRef = useRef<HTMLInputElement>(null);
@@ -162,7 +162,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     try {
       const usersData = await usersApi.search();
       if (isMountedRef.current) {
-        const map = new Map<string, User>();
+        const map = new Map<string, UserInfo>();
         const currentUser = getUser();
         if (currentUser) map.set(currentUser.id, currentUser);
         for (const u of usersData) map.set(u.id, u);

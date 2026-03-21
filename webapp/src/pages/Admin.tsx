@@ -127,7 +127,7 @@ const Admin = ({ onLogout }: AdminProps) => {
       setUsersLoading(true);
       setUsersLoaded(false);
       const response = await admin.getUsers();
-      setUsers(response.users || []);
+      setUsers(response.items || []);
       setUsersLoaded(true);
     } catch (err) {
       setError(t('admin.failedLoadUsers'));

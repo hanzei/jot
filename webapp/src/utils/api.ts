@@ -1,10 +1,41 @@
 import axios from 'axios';
-import type { ServerConfig, AboutInfo, AuthResponse, LoginRequest, RegisterRequest, Note, CreateNoteRequest, UpdateNoteRequest, User, CreateUserRequest, UserListResponse, AdminStatsResponse, ShareNoteRequest, ShareNoteResponse, NoteShare, ImportResponse, UpdateMeRequest, ChangePasswordRequest, UpdateUserRoleRequest, Label, ActiveSession, EmptyTrashResponse } from '@jot/shared';
+import type {
+  ServerConfig,
+  AboutInfo,
+  AuthResponse,
+  LoginRequest,
+  RegisterRequest,
+  Note,
+  CreateNoteRequest,
+  UpdateNoteRequest,
+  User,
+  UserInfo,
+  CreateUserRequest,
+  UserListResponse,
+  AdminStatsResponse,
+  ShareNoteRequest,
+  ShareNoteResponse,
+  NoteShare,
+  ImportResponse,
+  UpdateMeRequest,
+  ChangePasswordRequest,
+  UpdateUserRoleRequest,
+  Label,
+  ActiveSession,
+  EmptyTrashResponse,
+  GetNotesParams,
+  PaginationParams,
+  PaginatedNotesResponse,
+  PaginatedUsersResponse,
+  PaginatedSessionsResponse,
+} from '@jot/shared';
 
 const api = axios.create({
   baseURL: '/api/v1',
   withCredentials: true,
 });
+
+const CLIENT_PAGE_SIZE = 100;
 
 // Handle auth errors
 api.interceptors.response.use(
@@ -42,9 +73,41 @@ export const auth = {
     api.get('/me').then(res => res.data),
 };
 
+async function collectAllPages<T, TResponse extends { items: T[]; pagination: { has_more: boolean; next_offset?: number } }>(
+  path: string,
+  params: Record<string, unknown> = {},
+): Promise<T[]> {
+  const items: T[] = [];
+  const limit = typeof params.limit === 'number' ? params.limit : CLIENT_PAGE_SIZE;
+  let offset = typeof params.offset === 'number' ? params.offset : 0;
+
+  for (;;) {
+    const response = await api.get<TResponse>(path, { params: { ...params, limit, offset } }).then(res => res.data);
+    items.push(...response.items);
+
+    if (!response.pagination.has_more || response.pagination.next_offset === undefined) {
+      return items;
+    }
+
+    offset = response.pagination.next_offset;
+  }
+}
+
 export const notes = {
+  listPage: (params: GetNotesParams = {}): Promise<PaginatedNotesResponse> => {
+    const { user_id: _userId, ...requestParams } = params;
+    return api.get('/notes', { params: requestParams }).then(res => res.data);
+  },
+
   getAll: (archived = false, search = '', trashed = false, labelId = '', myTodo = false): Promise<Note[]> =>
-    api.get('/notes', { params: { archived, search, trashed, ...(labelId ? { label: labelId } : {}), ...(myTodo ? { my_todo: true } : {}) } }).then(res => res.data),
+    collectAllPages<Note, PaginatedNotesResponse>('/notes', {
+      archived,
+      search,
+      trashed,
+      limit: CLIENT_PAGE_SIZE,
+      ...(labelId ? { label: labelId } : {}),
+      ...(myTodo ? { my_todo: true } : {}),
+    }),
 
   getById: (id: string): Promise<Note> =>
     api.get(`/notes/${id}`).then(res => res.data),
@@ -106,8 +169,14 @@ export const labels = {
 };
 
 export const users = {
-  search: (): Promise<User[]> =>
-    api.get('/users').then(res => res.data),
+  listPage: (params: PaginationParams & { search?: string } = {}): Promise<PaginatedUsersResponse> =>
+    api.get('/users', { params }).then(res => res.data),
+
+  search: (search = ''): Promise<UserInfo[]> =>
+    collectAllPages<UserInfo, PaginatedUsersResponse>('/users', {
+      limit: CLIENT_PAGE_SIZE,
+      ...(search ? { search } : {}),
+    }),
 
   updateMe: (data: UpdateMeRequest): Promise<AuthResponse> =>
     api.patch('/users/me', data).then(res => res.data),
@@ -126,8 +195,11 @@ export const users = {
 };
 
 export const sessions = {
+  listPage: (params: PaginationParams = {}): Promise<PaginatedSessionsResponse> =>
+    api.get('/sessions', { params }).then(res => res.data),
+
   list: (): Promise<ActiveSession[]> =>
-    api.get('/sessions').then(res => res.data),
+    collectAllPages<ActiveSession, PaginatedSessionsResponse>('/sessions', { limit: CLIENT_PAGE_SIZE }),
 
   revoke: (id: string): Promise<void> =>
     api.delete(`/sessions/${id}`).then(() => undefined),
@@ -142,8 +214,21 @@ export const admin = {
   getStats: (): Promise<AdminStatsResponse> =>
     api.get('/admin/stats').then(res => res.data),
 
-  getUsers: (): Promise<UserListResponse> =>
-    api.get('/admin/users').then(res => res.data),
+  getUsersPage: (params: PaginationParams = {}): Promise<UserListResponse> =>
+    api.get('/admin/users', { params }).then(res => res.data),
+
+  getUsers: async (): Promise<UserListResponse> => {
+    const items = await collectAllPages<User, UserListResponse>('/admin/users', { limit: CLIENT_PAGE_SIZE });
+    return {
+      items,
+      pagination: {
+        limit: CLIENT_PAGE_SIZE,
+        offset: 0,
+        returned: items.length,
+        has_more: false,
+      },
+    };
+  },
 
   createUser: (data: CreateUserRequest): Promise<User> =>
     api.post('/admin/users', data).then(res => res.data),

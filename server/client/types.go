@@ -45,6 +45,24 @@ type AuthResponse struct {
 	Settings *UserSettings `json:"settings"`
 }
 
+type PaginationOptions struct {
+	Limit  int
+	Offset int
+}
+
+type PaginationMetadata struct {
+	Limit      int  `json:"limit"`
+	Offset     int  `json:"offset"`
+	Returned   int  `json:"returned"`
+	HasMore    bool `json:"has_more"`
+	NextOffset *int `json:"next_offset,omitempty"`
+}
+
+type PaginatedResponse[T any] struct {
+	Items      []T                `json:"items"`
+	Pagination PaginationMetadata `json:"pagination"`
+}
+
 // Note is a single note with optional items, shares, and labels.
 type Note struct {
 	ID                    string      `json:"id"`
@@ -170,6 +188,8 @@ type ListNotesOptions struct {
 	Search   string
 	Label    string // label ID (not name) to filter by
 	MyTodo   bool
+	Limit    int
+	Offset   int
 }
 
 // ImportResponse is returned by the import endpoint.
@@ -185,9 +205,7 @@ type EmptyTrashResponse struct {
 }
 
 // UserListResponse wraps the admin user listing.
-type UserListResponse struct {
-	Users []*User `json:"users"`
-}
+type UserListResponse = PaginatedResponse[User]
 
 // AdminStatsResponse wraps the admin system statistics response.
 type AdminStatsResponse struct {

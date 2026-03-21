@@ -40,7 +40,8 @@ type CreateUserRequest struct {
 }
 
 type UserListResponse struct {
-	Users []*models.User `json:"users"`
+	Items      []*models.User     `json:"items"`
+	Pagination PaginationMetadata `json:"pagination"`
 }
 
 // GetStats godoc
@@ -76,18 +77,27 @@ func (h *AdminHandler) GetStats(w http.ResponseWriter, r *http.Request) (int, an
 //	@Tags		admin
 //	@Security	CookieAuth
 //	@Produce	json
+//	@Param		limit	query		int		false	"Page size (default 50, max 100)"
+//	@Param		offset	query		int		false	"Page offset (default 0)"
 //	@Success	200	{object}	UserListResponse
+//	@Failure	400	{string}	string	"bad request"
 //	@Failure	401	{string}	string	"unauthorized"
 //	@Failure	403	{string}	string	"forbidden"
 //	@Router		/admin/users [get]
 func (h *AdminHandler) GetUsers(w http.ResponseWriter, r *http.Request) (int, any, error) {
-	users, err := h.userStore.GetAll()
+	page, err := parsePaginationParams(r)
+	if err != nil {
+		return http.StatusBadRequest, nil, err
+	}
+
+	users, hasMore, err := h.userStore.GetPage("", "", page.Limit, page.Offset)
 	if err != nil {
 		return http.StatusInternalServerError, nil, err
 	}
 
 	response := UserListResponse{
-		Users: users,
+		Items:      users,
+		Pagination: newPaginationMetadata(page, len(users), hasMore),
 	}
 
 	return http.StatusOK, response, nil

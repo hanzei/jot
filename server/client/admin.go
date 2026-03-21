@@ -4,15 +4,39 @@ import (
 	"context"
 	"fmt"
 	"net/http"
+	"net/url"
 )
 
 // AdminListUsers returns all users (admin only).
 func (c *Client) AdminListUsers(ctx context.Context) ([]*User, error) {
-	var resp UserListResponse
-	if err := c.doJSON(ctx, http.MethodGet, "/api/v1/admin/users", nil, &resp); err != nil {
+	users, err := collectAllPages(func(page *PaginationOptions) (*PaginatedResponse[User], error) {
+		return c.AdminListUsersPage(ctx, page)
+	})
+	if err != nil {
 		return nil, err
 	}
-	return resp.Users, nil
+
+	result := make([]*User, len(users))
+	for i := range users {
+		result[i] = &users[i]
+	}
+	return result, nil
+}
+
+// AdminListUsersPage returns a single paginated page of users (admin only).
+func (c *Client) AdminListUsersPage(ctx context.Context, pagination *PaginationOptions) (*PaginatedResponse[User], error) {
+	path := "/api/v1/admin/users"
+	q := url.Values{}
+	applyPagination(q, pagination)
+	if encoded := q.Encode(); encoded != "" {
+		path += "?" + encoded
+	}
+
+	var resp UserListResponse
+	if err := c.doJSON(ctx, http.MethodGet, path, nil, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
 }
 
 // AdminGetStats returns aggregate system statistics (admin only).

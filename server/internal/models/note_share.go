@@ -43,6 +43,38 @@ func (s *NoteStore) GetNoteShares(noteID string) ([]NoteShare, error) {
 	return shares, nil
 }
 
+func (s *NoteStore) getNoteSharesByNoteIDs(noteIDs []string) (map[string][]NoteShare, error) {
+	if len(noteIDs) == 0 {
+		return map[string][]NoteShare{}, nil
+	}
+
+	placeholders, args := buildInClauseArgs(noteIDs)
+	query := `SELECT ns.id, ns.note_id, ns.shared_with_user_id, ns.shared_by_user_id,
+			  ns.permission_level, u.username, u.first_name, u.last_name,
+			  u.profile_icon IS NOT NULL AS has_profile_icon,
+			  ns.created_at, ns.updated_at
+			  FROM note_shares ns
+			  JOIN users u ON ns.shared_with_user_id = u.id
+			  WHERE ns.note_id IN (` + placeholders + `)
+			  ORDER BY ns.note_id ASC, u.username ASC, ns.id ASC` // #nosec G202 -- only generated "?" placeholders are concatenated
+
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to batch-get note shares: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	result := make(map[string][]NoteShare, len(noteIDs))
+	for share, scanErr := range scanRows(rows, scanNoteShare) {
+		if scanErr != nil {
+			return nil, fmt.Errorf("failed to scan batched note shares: %w", scanErr)
+		}
+		result[share.NoteID] = append(result[share.NoteID], share)
+	}
+
+	return result, nil
+}
+
 func (s *NoteStore) ShareNote(noteID string, sharedByUserID, sharedWithUserID string) error {
 	shareID, err := generateID()
 	if err != nil {

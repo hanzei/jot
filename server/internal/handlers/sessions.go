@@ -21,12 +21,17 @@ func NewSessionsHandler(sessionStore *models.SessionStore) *SessionsHandler {
 }
 
 type SessionResponse struct {
-	ID        string          `json:"id"`
-	Browser   string          `json:"browser"`
-	OS        string          `json:"os"`
-	IsCurrent bool            `json:"is_current"`
-	CreatedAt time.Time       `json:"created_at"`
-	ExpiresAt time.Time       `json:"expires_at"`
+	ID        string    `json:"id"`
+	Browser   string    `json:"browser"`
+	OS        string    `json:"os"`
+	IsCurrent bool      `json:"is_current"`
+	CreatedAt time.Time `json:"created_at"`
+	ExpiresAt time.Time `json:"expires_at"`
+}
+
+type PaginatedSessionsResponse struct {
+	Items      []SessionResponse  `json:"items"`
+	Pagination PaginationMetadata `json:"pagination"`
 }
 
 func sessionID(token string) string {
@@ -52,7 +57,10 @@ func toSessionResponse(s *models.Session, currentToken string) SessionResponse {
 //	@Tags		sessions
 //	@Security	CookieAuth
 //	@Produce	json
-//	@Success	200	{array}		SessionResponse
+//	@Param		limit	query		int		false	"Page size (default 50, max 100)"
+//	@Param		offset	query		int		false	"Page offset (default 0)"
+//	@Success	200	{object}	PaginatedSessionsResponse
+//	@Failure	400	{string}	string	"bad request"
 //	@Failure	401	{string}	string	"unauthorized"
 //	@Router		/sessions [get]
 func (h *SessionsHandler) ListSessions(w http.ResponseWriter, r *http.Request) (int, any, error) {
@@ -63,7 +71,12 @@ func (h *SessionsHandler) ListSessions(w http.ResponseWriter, r *http.Request) (
 
 	currentToken, _ := auth.GetSessionTokenFromContext(r.Context())
 
-	sessions, err := h.sessionStore.GetByUserID(user.ID)
+	page, err := parsePaginationParams(r)
+	if err != nil {
+		return http.StatusBadRequest, nil, err
+	}
+
+	sessions, hasMore, err := h.sessionStore.GetPageByUserID(user.ID, page.Limit, page.Offset)
 	if err != nil {
 		return http.StatusInternalServerError, nil, err
 	}
@@ -73,7 +86,10 @@ func (h *SessionsHandler) ListSessions(w http.ResponseWriter, r *http.Request) (
 		responses = append(responses, toSessionResponse(s, currentToken))
 	}
 
-	return http.StatusOK, responses, nil
+	return http.StatusOK, PaginatedSessionsResponse{
+		Items:      responses,
+		Pagination: newPaginationMetadata(page, len(responses), hasMore),
+	}, nil
 }
 
 // RevokeSession godoc

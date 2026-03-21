@@ -15,9 +15,26 @@ import (
 // ListNotes returns notes for the authenticated user.
 // Pass nil for opts to use defaults (active, non-archived notes).
 func (c *Client) ListNotes(ctx context.Context, opts *ListNotesOptions) ([]Note, error) {
+	notes, err := collectAllPages(func(page *PaginationOptions) (*PaginatedResponse[Note], error) {
+		pageOpts := &ListNotesOptions{}
+		if opts != nil {
+			*pageOpts = *opts
+		}
+		pageOpts.Limit = page.Limit
+		pageOpts.Offset = page.Offset
+		return c.ListNotesPage(ctx, pageOpts)
+	})
+	if err != nil {
+		return nil, err
+	}
+	return notes, nil
+}
+
+// ListNotesPage returns a single paginated notes response for the authenticated user.
+func (c *Client) ListNotesPage(ctx context.Context, opts *ListNotesOptions) (*PaginatedResponse[Note], error) {
 	path := "/api/v1/notes"
+	q := url.Values{}
 	if opts != nil {
-		q := url.Values{}
 		if opts.Archived {
 			q.Set("archived", "true")
 		}
@@ -33,16 +50,17 @@ func (c *Client) ListNotes(ctx context.Context, opts *ListNotesOptions) ([]Note,
 		if opts.MyTodo {
 			q.Set("my_todo", "true")
 		}
-		if encoded := q.Encode(); encoded != "" {
-			path += "?" + encoded
-		}
+		applyPagination(q, &PaginationOptions{Limit: opts.Limit, Offset: opts.Offset})
+	}
+	if encoded := q.Encode(); encoded != "" {
+		path += "?" + encoded
 	}
 
-	var notes []Note
-	if err := c.doJSON(ctx, http.MethodGet, path, nil, &notes); err != nil {
+	var response PaginatedResponse[Note]
+	if err := c.doJSON(ctx, http.MethodGet, path, nil, &response); err != nil {
 		return nil, err
 	}
-	return notes, nil
+	return &response, nil
 }
 
 // CreateNote creates a new note.

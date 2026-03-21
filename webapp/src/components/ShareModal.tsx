@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { Dialog, DialogPanel, DialogTitle } from '@headlessui/react';
 import { XMarkIcon, TrashIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
 import { useTranslation } from 'react-i18next';
-import { ROLES, type Note, type NoteShare, type User } from '@jot/shared';
+import { ROLES, type Note, type NoteShare, type UserInfo } from '@jot/shared';
 import { notes, users as usersApi } from '@/utils/api';
 
 interface ShareModalProps {
@@ -15,8 +15,8 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
   const { t } = useTranslation();
   const [searchQuery, setSearchQuery] = useState('');
   const [shares, setShares] = useState<NoteShare[]>([]);
-  const [users, setUsers] = useState<User[]>([]);
-  const [filteredUsers, setFilteredUsers] = useState<User[]>([]);
+  const [users, setUsers] = useState<UserInfo[]>([]);
+  const [filteredUsers, setFilteredUsers] = useState<UserInfo[]>([]);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedUserIndex, setSelectedUserIndex] = useState(-1);
   const [isLoading, setIsLoading] = useState(false);
@@ -132,7 +132,7 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
     }
   };
 
-  const handleUserSelect = (user: User) => {
+  const handleUserSelect = (user: UserInfo) => {
     handleShare(user.id);
     setShowSuggestions(false);
   };

@@ -212,7 +212,14 @@ func buildGetByUserIDQuery(userID string, archived bool, trashed bool, search st
 		query += ` AND n.id IN (SELECT note_id FROM note_labels WHERE label_id = ?)`
 		args = append(args, labelID)
 	}
-	query += ` ORDER BY n.pinned DESC, n.position ASC`
+	query += ` ORDER BY n.pinned DESC, n.position ASC, n.id ASC`
+	return query, args
+}
+
+func buildGetByUserIDPageQuery(userID string, archived bool, trashed bool, search string, labelID string, myTodo bool, limit int, offset int) (string, []any) {
+	query, args := buildGetByUserIDQuery(userID, archived, trashed, search, labelID, myTodo)
+	query += ` LIMIT ? OFFSET ?`
+	args = append(args, limit+1, offset)
 	return query, args
 }
 
@@ -239,43 +246,81 @@ func (s *NoteStore) GetByUserID(userID string, archived bool, trashed bool, sear
 		return nil, fmt.Errorf("failed to scan notes: %w", err)
 	}
 
+	return s.hydrateNotes(scannedNotes)
+}
+
+func (s *NoteStore) GetPageByUserID(userID string, archived bool, trashed bool, search string, labelID string, myTodo bool, limit int, offset int) ([]*Note, bool, error) {
+	query, args := buildGetByUserIDPageQuery(userID, archived, trashed, search, labelID, myTodo, limit, offset)
+
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return nil, false, fmt.Errorf("failed to get notes: %w", err)
+	}
+
+	scannedNotes, err := collectRows(rows, scanNote)
+	if err != nil {
+		return nil, false, fmt.Errorf("failed to scan notes: %w", err)
+	}
+
+	hasMore := len(scannedNotes) > limit
+	if hasMore {
+		scannedNotes = scannedNotes[:limit]
+	}
+
+	notes, err := s.hydrateNotes(scannedNotes)
+	if err != nil {
+		return nil, false, err
+	}
+
+	return notes, hasMore, nil
+}
+
+func (s *NoteStore) hydrateNotes(scannedNotes []Note) ([]*Note, error) {
 	notes := make([]*Note, 0, len(scannedNotes))
+	noteIDs := make([]string, 0, len(scannedNotes))
+	todoNoteIDs := make([]string, 0, len(scannedNotes))
 	for i := range scannedNotes {
 		note := &scannedNotes[i]
-
-		if note.NoteType == NoteTypeTodo {
-			items, itemsErr := s.getItemsByNoteID(note.ID)
-			if itemsErr != nil {
-				return nil, fmt.Errorf("failed to get note items: %w", itemsErr)
-			}
-			note.Items = items
-		}
-
-		shares, sharesErr := s.GetNoteShares(note.ID)
-		if sharesErr != nil {
-			return nil, fmt.Errorf("failed to get note shares: %w", sharesErr)
-		}
-		note.SharedWith = shares
-		note.IsShared = len(shares) > 0
 		note.Labels = []Label{}
-
+		note.SharedWith = []NoteShare{}
+		noteIDs = append(noteIDs, note.ID)
+		if note.NoteType == NoteTypeTodo {
+			todoNoteIDs = append(todoNoteIDs, note.ID)
+		}
 		notes = append(notes, note)
 	}
 
-	// Batch-load labels for all notes in a single query.
-	if len(notes) > 0 {
-		noteIDs := make([]string, len(notes))
-		for i, n := range notes {
-			noteIDs[i] = n.ID
+	if len(notes) == 0 {
+		return notes, nil
+	}
+
+	itemsMap, err := s.getItemsByNoteIDs(todoNoteIDs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to batch-load note items: %w", err)
+	}
+
+	sharesMap, err := s.getNoteSharesByNoteIDs(noteIDs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to batch-load note shares: %w", err)
+	}
+
+	labelsMap, err := s.getLabelsByNoteIDs(noteIDs)
+	if err != nil {
+		return nil, fmt.Errorf("failed to batch-load note labels: %w", err)
+	}
+
+	for _, note := range notes {
+		if note.NoteType == NoteTypeTodo {
+			note.Items = itemsMap[note.ID]
 		}
-		labelsMap, labelsErr := s.getLabelsByNoteIDs(noteIDs)
-		if labelsErr != nil {
-			return nil, fmt.Errorf("failed to batch-load note labels: %w", labelsErr)
+
+		if shares, ok := sharesMap[note.ID]; ok {
+			note.SharedWith = shares
+			note.IsShared = len(shares) > 0
 		}
-		for _, n := range notes {
-			if lbls, ok := labelsMap[n.ID]; ok {
-				n.Labels = lbls
-			}
+
+		if labels, ok := labelsMap[note.ID]; ok {
+			note.Labels = labels
 		}
 	}
 
@@ -858,6 +903,51 @@ func (s *NoteStore) getItemsByNoteID(noteID string) ([]NoteItem, error) {
 		return nil, fmt.Errorf("failed to scan note items: %w", err)
 	}
 	return items, nil
+}
+
+func (s *NoteStore) getItemsByNoteIDs(noteIDs []string) (map[string][]NoteItem, error) {
+	if len(noteIDs) == 0 {
+		return map[string][]NoteItem{}, nil
+	}
+
+	placeholders, args := buildInClauseArgs(noteIDs)
+	query := `SELECT id, note_id, text, completed, position, indent_level,
+			  assigned_to, created_at, updated_at
+			  FROM note_items
+			  WHERE note_id IN (` + placeholders + `)
+			  ORDER BY note_id ASC, position ASC, id ASC` // #nosec G202 -- only generated "?" placeholders are concatenated
+
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return nil, fmt.Errorf("failed to batch-get note items: %w", err)
+	}
+	defer func() { _ = rows.Close() }()
+
+	type noteItemRow struct {
+		noteID string
+		item   NoteItem
+	}
+
+	scanNoteItemRow := func(rows *sql.Rows) (noteItemRow, error) {
+		var row noteItemRow
+		err := rows.Scan(
+			&row.item.ID, &row.noteID, &row.item.Text, &row.item.Completed,
+			&row.item.Position, &row.item.IndentLevel, &row.item.AssignedTo,
+			&row.item.CreatedAt, &row.item.UpdatedAt,
+		)
+		row.item.NoteID = row.noteID
+		return row, err
+	}
+
+	result := make(map[string][]NoteItem, len(noteIDs))
+	for row, scanErr := range scanRows(rows, scanNoteItemRow) {
+		if scanErr != nil {
+			return nil, fmt.Errorf("failed to scan batched note item: %w", scanErr)
+		}
+		result[row.noteID] = append(result[row.noteID], row.item)
+	}
+
+	return result, nil
 }
 
 func (s *NoteStore) CreateItem(noteID string, text string, position, indentLevel int, assignedTo string) (*NoteItem, error) {

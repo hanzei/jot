@@ -45,7 +45,6 @@ func NewUserStore(db *sql.DB) *UserStore {
 	return &UserStore{db: db}
 }
 
-
 func (s *UserStore) Create(username, password string) (*User, error) {
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
@@ -145,6 +144,56 @@ func scanUser(rows *sql.Rows) (User, error) {
 		&user.Role, &user.HasProfileIcon, &user.CreatedAt, &user.UpdatedAt,
 	)
 	return user, err
+}
+
+func buildUserPageQuery(term string, excludeUserID string, limit int, offset int) (string, []any) {
+	query := `SELECT id, username, first_name, last_name, password_hash, role,
+			         profile_icon IS NOT NULL AS has_profile_icon,
+			         created_at, updated_at
+			  FROM users
+			  WHERE 1 = 1`
+	args := make([]any, 0, 6)
+
+	if excludeUserID != "" {
+		query += ` AND id != ?`
+		args = append(args, excludeUserID)
+	}
+
+	if term != "" {
+		like := "%" + term + "%"
+		query += ` AND (username LIKE ? OR first_name LIKE ? OR last_name LIKE ?)`
+		args = append(args, like, like, like)
+	}
+
+	query += ` ORDER BY created_at DESC, id DESC LIMIT ? OFFSET ?`
+	args = append(args, limit+1, offset)
+
+	return query, args
+}
+
+func (s *UserStore) GetPage(term string, excludeUserID string, limit int, offset int) ([]*User, bool, error) {
+	query, args := buildUserPageQuery(term, excludeUserID, limit, offset)
+
+	rows, err := s.db.Query(query, args...)
+	if err != nil {
+		return nil, false, fmt.Errorf("failed to query users: %w", err)
+	}
+
+	users, err := collectRows(rows, scanUser)
+	if err != nil {
+		return nil, false, fmt.Errorf("failed to scan users: %w", err)
+	}
+
+	hasMore := len(users) > limit
+	if hasMore {
+		users = users[:limit]
+	}
+
+	ptrs := make([]*User, len(users))
+	for i := range users {
+		ptrs[i] = &users[i]
+	}
+	return ptrs, hasMore, nil
 }
 
 func (s *UserStore) GetAll() ([]*User, error) {
@@ -510,4 +559,3 @@ func (s *UserStore) CreateByAdmin(username, password string, role string) (*User
 
 	return &user, nil
 }
-

@@ -102,6 +102,11 @@ type EmptyTrashResponse struct {
 	Deleted int `json:"deleted"`
 }
 
+type PaginatedNotesResponse struct {
+	Items      []*models.Note     `json:"items"`
+	Pagination PaginationMetadata `json:"pagination"`
+}
+
 func normalizeCreateNoteRequest(req *CreateNoteRequest) (int, error) {
 	if req.Title == "" && req.Content == "" && len(req.Items) == 0 {
 		return http.StatusBadRequest, errors.New("note must have a title, content, or items")
@@ -170,7 +175,10 @@ func (h *NotesHandler) createTodoItems(noteID string, items []CreateNoteItem) (i
 //	@Param		search		query		string	false	"Full-text search query"
 //	@Param		label		query		string	false	"Filter by label ID"
 //	@Param		my_todo		query		boolean	false	"Return only notes with todos assigned to current user"
-//	@Success	200			{array}		models.Note
+//	@Param		limit		query		int		false	"Page size (default 50, max 100)"
+//	@Param		offset		query		int		false	"Page offset (default 0)"
+//	@Success	200			{object}	PaginatedNotesResponse
+//	@Failure	400			{string}	string	"bad request"
 //	@Failure	401			{string}	string	"unauthorized"
 //	@Failure	500			{string}	string	"internal server error"
 //	@Router		/notes [get]
@@ -187,12 +195,20 @@ func (h *NotesHandler) GetNotes(w http.ResponseWriter, r *http.Request) (int, an
 	labelID := q.Get("label")
 	myTodo := q.Get("my_todo") == queryTrue
 
-	notes, err := h.noteStore.GetByUserID(user.ID, archived, trashed, search, labelID, myTodo)
+	page, err := parsePaginationParams(r)
+	if err != nil {
+		return http.StatusBadRequest, nil, err
+	}
+
+	notes, hasMore, err := h.noteStore.GetPageByUserID(user.ID, archived, trashed, search, labelID, myTodo, page.Limit, page.Offset)
 	if err != nil {
 		return http.StatusInternalServerError, nil, err
 	}
 
-	return http.StatusOK, notes, nil
+	return http.StatusOK, PaginatedNotesResponse{
+		Items:      notes,
+		Pagination: newPaginationMetadata(page, len(notes), hasMore),
+	}, nil
 }
 
 // CreateNote godoc
