@@ -180,7 +180,7 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
         className="h-4 w-4 text-blue-600 rounded"
       />
       <div className="flex items-center min-w-0">
-        <div className="relative">
+        <div className="relative min-w-0">
           <input
             type="text"
             data-testid="todo-item-input"
@@ -213,7 +213,7 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
             aria-activedescendant={selectedSuggestionIndex >= 0 ? `suggestion-${id}-${selectedSuggestionIndex}` : undefined}
             onKeyDown={(e) => {
               const suggestionsVisible = showSuggestions && suggestions.length > 0;
-              if (suggestionsVisible) {
+              if (suggestionsVisible && !e.nativeEvent.isComposing && e.nativeEvent.keyCode !== 229) {
                 if (e.key === 'ArrowDown') {
                   e.preventDefault();
                   setSelectedSuggestionIndex(prev => Math.min(prev + 1, suggestions.length - 1));
@@ -231,12 +231,10 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
                   return;
                 }
                 if (e.key === 'Escape' || e.key === 'Tab') {
+                  e.preventDefault();
                   setShowSuggestions(false);
                   setSelectedSuggestionIndex(-1);
-                  if (e.key === 'Escape') {
-                    e.preventDefault();
-                    return;
-                  }
+                  return;
                 }
               }
               if (e.key === 'Tab' && onIndentChange && !isCompleted) {
