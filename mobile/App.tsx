@@ -1,14 +1,14 @@
 import React from 'react';
-import { NavigationContainer, DefaultTheme, DarkTheme, Theme } from '@react-navigation/native';
+import { NavigationContainer, DefaultTheme, DarkTheme, Theme, LinkingOptions, getStateFromPath } from '@react-navigation/native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SQLiteProvider } from 'expo-sqlite';
-import { AuthProvider } from './src/store/AuthContext';
+import { AuthProvider, useAuth } from './src/store/AuthContext';
 import MobileI18nProvider from './src/i18n/MobileI18nProvider';
 import { UsersProvider } from './src/store/UsersContext';
 import { OfflineProvider } from './src/store/OfflineContext';
 import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
-import RootNavigator from './src/navigation/RootNavigator';
+import RootNavigator, { type RootStackParamList } from './src/navigation/RootNavigator';
 import { migrateDatabase } from './src/db/schema';
 import './src/i18n';
 
@@ -23,6 +23,7 @@ const queryClient = new QueryClient({
 
 function NavigationWrapper() {
   const { colors, isDark } = useTheme();
+  const { isAuthenticated } = useAuth();
 
   const navigationTheme: Theme = {
     ...(isDark ? DarkTheme : DefaultTheme),
@@ -37,8 +38,36 @@ function NavigationWrapper() {
     },
   };
 
+  const linking = React.useMemo<LinkingOptions<RootStackParamList>>(
+    () => ({
+      prefixes: ['jot://'],
+      config: {
+        screens: {
+          MainDrawer: '',
+          NoteEditor: 'notes/:noteId',
+          Share: 'share/:noteId',
+          Settings: 'settings',
+        },
+      },
+      getStateFromPath: (path, options) => {
+        const normalizedPath = path.replace(/^\/+/, '');
+        const isProtectedPath =
+          normalizedPath.startsWith('notes/') ||
+          normalizedPath.startsWith('share/') ||
+          normalizedPath === 'settings';
+
+        if (!isAuthenticated && isProtectedPath) {
+          return undefined;
+        }
+
+        return getStateFromPath(path, options);
+      },
+    }),
+    [isAuthenticated],
+  );
+
   return (
-    <NavigationContainer theme={navigationTheme}>
+    <NavigationContainer theme={navigationTheme} linking={linking}>
       <RootNavigator />
     </NavigationContainer>
   );
