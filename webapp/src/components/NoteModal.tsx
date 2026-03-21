@@ -575,6 +575,10 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     );
 
     setItems(renumbered);
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = undefined;
+    }
     autoSaveNote(renumbered);
 
     const lastNewItem = newItems[newItems.length - 1];
