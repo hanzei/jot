@@ -142,7 +142,10 @@
     "sessionsRevokeFailed": "Failed to revoke session",
     "sessionsNone": "No active sessions found.",
     "aboutSection": "About",
-    "aboutButton": "About Jot"
+    "aboutButton": "About Jot",
+    "importSection": "Import",
+    "importDescription": "Import notes from Google Keep exports.",
+    "importButton": "Import from Google Keep"
   },
   "about": {
     "clientInfo": "Client Info",
@@ -247,5 +250,22 @@
   },
   "offline": {
     "message": "You're offline. Changes will sync when you reconnect."
+  },
+  "import": {
+    "title": "Import from Google Keep",
+    "description": "Upload a Google Keep export file. Export your notes from Google Takeout and upload the .zip archive or an individual .json note file.",
+    "dropFile": "Drop your file here, or",
+    "browse": "browse",
+    "fileTypes": ".zip or .json files",
+    "invalidFileType": "Invalid file type. Please select a .json or .zip file.",
+    "importedNotes_one": "Imported {{count}} note",
+    "importedNotes_other": "Imported {{count}} notes",
+    "skipped": "({{count}} skipped)",
+    "failed": "{{count}} failed",
+    "importFailed": "Import failed. Please check your file and try again.",
+    "close": "Close",
+    "cancelButton": "Cancel",
+    "importing": "Importing...",
+    "importButton": "Import"
   }
 }

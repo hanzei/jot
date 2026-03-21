@@ -14,11 +14,15 @@ import {
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import { useSQLiteContext } from 'expo-sqlite';
+import { useQueryClient } from '@tanstack/react-query';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import * as ImagePicker from 'expo-image-picker';
+import * as DocumentPicker from 'expo-document-picker';
 import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import { getBaseUrl } from '../api/client';
+import { importKeepFile, getNotes } from '../api/notes';
 import {
   updateMe,
   changePassword,
@@ -28,14 +32,17 @@ import {
   listSessions,
   revokeSession,
 } from '../api/settings';
-import type { ThemePreference, AboutInfo, ActiveSession } from '@jot/shared';
+import type { ThemePreference, AboutInfo, ActiveSession, ImportResponse } from '@jot/shared';
 import i18n from '../i18n';
 import { SUPPORTED_LANGUAGES, getLanguagePreference, resolveLanguage, type LanguagePreference } from '../i18n/language';
 import { displayMessage, getCurrentLocale } from '../i18n/utils';
+import { saveNotes } from '../db/noteQueries';
 
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
   const navigation = useNavigation();
+  const db = useSQLiteContext();
+  const queryClient = useQueryClient();
   const { user, settings, setUser, setSettings } = useAuth();
   const { colors } = useTheme();
   const { t } = useTranslation();
@@ -72,6 +79,11 @@ export default function SettingsScreen() {
   const [sessionsError, setSessionsError] = useState('');
   const [revokingId, setRevokingId] = useState<string | null>(null);
 
+  const [selectedImportFile, setSelectedImportFile] = useState<DocumentPicker.DocumentPickerAsset | null>(null);
+  const [importing, setImporting] = useState(false);
+  const [importError, setImportError] = useState('');
+  const [importResult, setImportResult] = useState<ImportResponse | null>(null);
+
   const [aboutInfo, setAboutInfo] = useState<AboutInfo | null>(null);
   const [aboutLoading, setAboutLoading] = useState(false);
   const [aboutError, setAboutError] = useState('');
@@ -107,6 +119,65 @@ export default function SettingsScreen() {
       setRevokingId(null);
     }
   }, []);
+
+  const handleSelectImportFile = useCallback(async () => {
+    setImportError('');
+    const result = await DocumentPicker.getDocumentAsync({
+      type: ['application/json', 'application/zip', 'application/x-zip-compressed'],
+      multiple: false,
+      copyToCacheDirectory: true,
+    });
+    if (result.canceled || !result.assets?.[0]) return;
+
+    const file = result.assets[0];
+    const fileName = file.name.toLowerCase();
+    const mimeType = file.mimeType?.toLowerCase() ?? '';
+    const isJson = fileName.endsWith('.json') || mimeType === 'application/json';
+    const isZip = fileName.endsWith('.zip')
+      || mimeType === 'application/zip'
+      || mimeType === 'application/x-zip-compressed';
+
+    if (!isJson && !isZip) {
+      setSelectedImportFile(null);
+      setImportResult(null);
+      setImportError('import.invalidFileType');
+      return;
+    }
+
+    setSelectedImportFile(file);
+    setImportResult(null);
+    setImportError('');
+  }, []);
+
+  const handleImportNotes = useCallback(async () => {
+    if (!selectedImportFile) return;
+    setImporting(true);
+    setImportError('');
+    setImportResult(null);
+    try {
+      const response = await importKeepFile({
+        uri: selectedImportFile.uri,
+        name: selectedImportFile.name,
+        mimeType: selectedImportFile.mimeType,
+      });
+      setImportResult(response);
+      setSelectedImportFile(null);
+      try {
+        const latestNotes = await getNotes();
+        await saveNotes(db, latestNotes);
+      } catch (syncErr) {
+        console.warn('Post-import notes sync failed:', syncErr);
+      } finally {
+        queryClient.invalidateQueries({ queryKey: ['notes-local'] });
+        queryClient.invalidateQueries({ queryKey: ['notes'] });
+      }
+    } catch (err: unknown) {
+      const msg = (err as { response?: { data?: string } })?.response?.data;
+      setImportError(typeof msg === 'string' ? msg.trim() : 'import.importFailed');
+    } finally {
+      setImporting(false);
+    }
+  }, [db, queryClient, selectedImportFile]);
 
   useEffect(() => {
     if (aboutExpanded && !aboutInfo && !aboutError) {
@@ -516,6 +587,69 @@ export default function SettingsScreen() {
             )}
           </View>
 
+          {/* Import */}
+          <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('settings.importSection')}</Text>
+            <Text style={[styles.sessionsDescription, { color: colors.textSecondary }]}>
+              {t('settings.importDescription')}
+            </Text>
+            <TouchableOpacity
+              style={[styles.primaryButton, styles.importSelectButton, { backgroundColor: colors.inputBackground, borderColor: colors.border }]}
+              onPress={handleSelectImportFile}
+              disabled={importing}
+              testID="settings-import-select-file"
+              accessibilityLabel={t('settings.importButton')}
+              accessibilityRole="button"
+            >
+              <Text style={[styles.importSelectButtonText, { color: colors.text }]}>
+                {t('settings.importButton')}
+              </Text>
+            </TouchableOpacity>
+            <Text style={[styles.importFileTypesText, { color: colors.textMuted }]}>{t('import.fileTypes')}</Text>
+            {selectedImportFile && (
+              <Text style={[styles.importFileName, { color: colors.text }]} numberOfLines={1}>
+                {selectedImportFile.name}
+              </Text>
+            )}
+            {importError !== '' && (
+              <Text style={[styles.errorText, { color: colors.error }]}>{displayMessage(t, importError)}</Text>
+            )}
+            {importResult && (
+              <>
+                <Text style={[styles.successText, styles.importResultText]}>
+                  {t('import.importedNotes', { count: importResult.imported })}
+                  {importResult.skipped > 0 ? ` ${t('import.skipped', { count: importResult.skipped })}` : ''}
+                  {importResult.errors?.length ? `, ${t('import.failed', { count: importResult.errors.length })}` : ''}.
+                </Text>
+                {importResult.errors && importResult.errors.length > 0 && (
+                  <View style={styles.importErrorsContainer}>
+                    {importResult.errors.map((error, index) => (
+                      <Text key={`${index}-${error}`} style={[styles.errorText, styles.importErrorItem, { color: colors.error }]}>
+                        • {error}
+                      </Text>
+                    ))}
+                  </View>
+                )}
+              </>
+            )}
+            <TouchableOpacity
+              style={[
+                styles.primaryButton,
+                { backgroundColor: colors.primary },
+                (importing || !selectedImportFile) && styles.buttonDisabled,
+              ]}
+              onPress={handleImportNotes}
+              disabled={importing || !selectedImportFile}
+              testID="settings-import-submit"
+              accessibilityLabel={t('import.importButton')}
+              accessibilityRole="button"
+            >
+              <Text style={styles.primaryButtonText}>
+                {importing ? t('import.importing') : t('import.importButton')}
+              </Text>
+            </TouchableOpacity>
+          </View>
+
           {/* Appearance */}
           <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('settings.themeSection')}</Text>
@@ -727,6 +861,33 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     alignItems: 'center',
     marginTop: 20,
+  },
+  importSelectButton: {
+    marginTop: 0,
+    borderWidth: 1,
+  },
+  importSelectButtonText: {
+    fontSize: 15,
+    fontWeight: '500',
+  },
+  importFileTypesText: {
+    fontSize: 12,
+    marginTop: 8,
+  },
+  importFileName: {
+    fontSize: 14,
+    fontWeight: '500',
+    marginTop: 12,
+  },
+  importResultText: {
+    marginTop: 12,
+  },
+  importErrorsContainer: {
+    marginTop: 8,
+    gap: 4,
+  },
+  importErrorItem: {
+    marginTop: 0,
   },
   buttonDisabled: {
     opacity: 0.6,
