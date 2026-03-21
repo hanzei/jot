@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func createSharedTodoNote(t *testing.T, ts *TestServer, owner *TestUser, sharedWith *TestUser) (string, string) {
+func createSharedTodoNote(t *testing.T, _ *TestServer, owner *TestUser, sharedWith *TestUser) (string, string) {
 	t.Helper()
 
 	note, err := owner.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
@@ -39,7 +39,7 @@ func getNoteItems(t *testing.T, user *TestUser, noteID string) []client.NoteItem
 func TestTaskAssignment(t *testing.T) {
 	t.Run("create note items have empty assigned_to", func(t *testing.T) {
 		ts := setupTestServer(t)
-		
+
 		user := ts.createTestUser(t, "user1", "password123", false)
 
 		note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
@@ -53,7 +53,7 @@ func TestTaskAssignment(t *testing.T) {
 		assert.Empty(t, note.Items[0].AssignedTo)
 	})
 
-	t.Run("assigned_to is ignored on note creation", func(t *testing.T) {
+	t.Run("reject assigned_to on note creation", func(t *testing.T) {
 		ts := setupTestServer(t)
 		user := ts.createTestUser(t, "user1", "password123", false)
 
@@ -73,18 +73,16 @@ func TestTaskAssignment(t *testing.T) {
 		resp, err := user.Client.HTTPClient().Do(req)
 		require.NoError(t, err)
 		defer resp.Body.Close()
-		require.Equal(t, http.StatusCreated, resp.StatusCode)
+		require.Equal(t, http.StatusBadRequest, resp.StatusCode)
 
 		respBody, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
-		var note client.Note
-		require.NoError(t, json.Unmarshal(respBody, &note))
-		assert.Empty(t, note.Items[0].AssignedTo, "assigned_to should be ignored on create")
+		assert.Contains(t, string(respBody), "assigned_to is not allowed when creating note items")
 	})
 
 	t.Run("assign item to shared user on update", func(t *testing.T) {
 		ts := setupTestServer(t)
-		
+
 		owner := ts.createTestUser(t, "owner", "password123", false)
 		collaborator := ts.createTestUser(t, "collab", "password123", false)
 
@@ -106,7 +104,7 @@ func TestTaskAssignment(t *testing.T) {
 
 	t.Run("self-assignment by owner", func(t *testing.T) {
 		ts := setupTestServer(t)
-		
+
 		owner := ts.createTestUser(t, "owner", "password123", false)
 		collaborator := ts.createTestUser(t, "collab", "password123", false)
 
@@ -126,7 +124,7 @@ func TestTaskAssignment(t *testing.T) {
 
 	t.Run("reject assignment on unshared note", func(t *testing.T) {
 		ts := setupTestServer(t)
-		
+
 		owner := ts.createTestUser(t, "owner", "password123", false)
 
 		note, err := owner.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
@@ -149,7 +147,7 @@ func TestTaskAssignment(t *testing.T) {
 
 	t.Run("reject assignment to user without note access", func(t *testing.T) {
 		ts := setupTestServer(t)
-		
+
 		owner := ts.createTestUser(t, "owner", "password123", false)
 		collaborator := ts.createTestUser(t, "collab", "password123", false)
 		outsider := ts.createTestUser(t, "outsider", "password123", false)
@@ -167,7 +165,7 @@ func TestTaskAssignment(t *testing.T) {
 
 	t.Run("reject assignment with invalid user ID format", func(t *testing.T) {
 		ts := setupTestServer(t)
-		
+
 		owner := ts.createTestUser(t, "owner", "password123", false)
 		collaborator := ts.createTestUser(t, "collab", "password123", false)
 
@@ -184,7 +182,7 @@ func TestTaskAssignment(t *testing.T) {
 
 	t.Run("collaborator can assign items", func(t *testing.T) {
 		ts := setupTestServer(t)
-		
+
 		owner := ts.createTestUser(t, "owner", "password123", false)
 		collaborator := ts.createTestUser(t, "collab", "password123", false)
 
@@ -205,7 +203,7 @@ func TestTaskAssignment(t *testing.T) {
 
 	t.Run("unassign item by setting empty assigned_to", func(t *testing.T) {
 		ts := setupTestServer(t)
-		
+
 		owner := ts.createTestUser(t, "owner", "password123", false)
 		collaborator := ts.createTestUser(t, "collab", "password123", false)
 
@@ -234,7 +232,7 @@ func TestTaskAssignment(t *testing.T) {
 
 	t.Run("completed items retain assignment", func(t *testing.T) {
 		ts := setupTestServer(t)
-		
+
 		owner := ts.createTestUser(t, "owner", "password123", false)
 		collaborator := ts.createTestUser(t, "collab", "password123", false)
 
@@ -257,7 +255,7 @@ func TestTaskAssignment(t *testing.T) {
 func TestMyTodoFilter(t *testing.T) {
 	t.Run("returns notes with items assigned to current user", func(t *testing.T) {
 		ts := setupTestServer(t)
-		
+
 		owner := ts.createTestUser(t, "owner", "password123", false)
 		collaborator := ts.createTestUser(t, "collab", "password123", false)
 
@@ -280,7 +278,7 @@ func TestMyTodoFilter(t *testing.T) {
 
 	t.Run("does not return notes without assignments to current user", func(t *testing.T) {
 		ts := setupTestServer(t)
-		
+
 		owner := ts.createTestUser(t, "owner", "password123", false)
 		collaborator := ts.createTestUser(t, "collab", "password123", false)
 
@@ -302,7 +300,7 @@ func TestMyTodoFilter(t *testing.T) {
 
 	t.Run("returns empty list when no assignments exist", func(t *testing.T) {
 		ts := setupTestServer(t)
-		
+
 		owner := ts.createTestUser(t, "owner", "password123", false)
 
 		_, err := owner.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
@@ -321,7 +319,7 @@ func TestMyTodoFilter(t *testing.T) {
 
 	t.Run("owner sees own assignments in my_todo filter", func(t *testing.T) {
 		ts := setupTestServer(t)
-		
+
 		owner := ts.createTestUser(t, "owner", "password123", false)
 		collaborator := ts.createTestUser(t, "collab", "password123", false)
 
@@ -343,7 +341,7 @@ func TestMyTodoFilter(t *testing.T) {
 
 	t.Run("excludes trashed notes from my_todo filter", func(t *testing.T) {
 		ts := setupTestServer(t)
-		
+
 		owner := ts.createTestUser(t, "owner", "password123", false)
 		collaborator := ts.createTestUser(t, "collab", "password123", false)
 
@@ -368,7 +366,7 @@ func TestMyTodoFilter(t *testing.T) {
 func TestTaskAssignmentUnshareCleanup(t *testing.T) {
 	t.Run("unshare clears unshared users assignments", func(t *testing.T) {
 		ts := setupTestServer(t)
-		
+
 		owner := ts.createTestUser(t, "owner", "password123", false)
 		collab1 := ts.createTestUser(t, "collab1", "password123", false)
 		collab2 := ts.createTestUser(t, "collab2", "password123", false)
@@ -404,7 +402,7 @@ func TestTaskAssignmentUnshareCleanup(t *testing.T) {
 
 	t.Run("unshare last collaborator clears all assignments including owner", func(t *testing.T) {
 		ts := setupTestServer(t)
-		
+
 		owner := ts.createTestUser(t, "owner", "password123", false)
 		collab := ts.createTestUser(t, "collab", "password123", false)
 
@@ -430,7 +428,7 @@ func TestTaskAssignmentUnshareCleanup(t *testing.T) {
 func TestTaskAssignmentUserDeletion(t *testing.T) {
 	t.Run("deleting a user clears their assignments across all notes", func(t *testing.T) {
 		ts := setupTestServer(t)
-		
+
 		admin := ts.createTestUser(t, "admin", "password123", true)
 		owner := ts.createTestUser(t, "owner", "password123", false)
 		collab1 := ts.createTestUser(t, "collab1", "password123", false)
@@ -467,7 +465,7 @@ func TestTaskAssignmentUserDeletion(t *testing.T) {
 
 	t.Run("deleting last collaborator clears all assignments including owner self-assignment", func(t *testing.T) {
 		ts := setupTestServer(t)
-		
+
 		admin := ts.createTestUser(t, "admin", "password123", true)
 		owner := ts.createTestUser(t, "owner", "password123", false)
 		collab := ts.createTestUser(t, "collab", "password123", false)

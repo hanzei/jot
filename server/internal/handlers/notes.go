@@ -78,6 +78,32 @@ type CreateNoteItem struct {
 	Position    int    `json:"position"`
 	IndentLevel int    `json:"indent_level"`
 	Completed   bool   `json:"completed"`
+	hasAssigned bool
+}
+
+func (i *CreateNoteItem) UnmarshalJSON(data []byte) error {
+	var raw map[string]json.RawMessage
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return err
+	}
+
+	var item struct {
+		Text        string `json:"text"`
+		Position    int    `json:"position"`
+		IndentLevel int    `json:"indent_level"`
+		Completed   bool   `json:"completed"`
+	}
+	if err := json.Unmarshal(data, &item); err != nil {
+		return err
+	}
+
+	i.Text = item.Text
+	i.Position = item.Position
+	i.IndentLevel = item.IndentLevel
+	i.Completed = item.Completed
+	_, i.hasAssigned = raw["assigned_to"]
+
+	return nil
 }
 
 type UpdateNoteRequest struct {
@@ -119,6 +145,12 @@ func normalizeCreateNoteRequest(req *CreateNoteRequest) (int, error) {
 
 	if req.Color == "" {
 		req.Color = models.DefaultNoteColor
+	}
+
+	for _, item := range req.Items {
+		if item.hasAssigned {
+			return http.StatusBadRequest, errors.New("assigned_to is not allowed when creating note items")
+		}
 	}
 
 	return http.StatusOK, nil
