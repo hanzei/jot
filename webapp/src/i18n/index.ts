@@ -2,7 +2,28 @@ import i18n from 'i18next';
 import { initReactI18next } from 'react-i18next';
 import en from './locales/en.json';
 import de from './locales/de.json';
-import { getLanguagePreference, resolveLanguage, SupportedLanguage } from '@/utils/language';
+import es from './locales/es.json';
+import fr from './locales/fr.json';
+import pt from './locales/pt.json';
+import it from './locales/it.json';
+import nl from './locales/nl.json';
+import pl from './locales/pl.json';
+import { SUPPORTED_LANGUAGES, getLanguagePreference, resolveLanguage, SupportedLanguage } from '@/utils/language';
+
+const localeBundles: Record<SupportedLanguage, typeof en> = {
+  en,
+  de,
+  es,
+  fr,
+  pt,
+  it,
+  nl,
+  pl,
+};
+
+const resources = Object.fromEntries(
+  SUPPORTED_LANGUAGES.map((language) => [language, { translation: localeBundles[language] }]),
+) as Record<SupportedLanguage, { translation: typeof en }>;
 
 let lng: SupportedLanguage;
 try {
@@ -15,16 +36,7 @@ try {
 i18n
   .use(initReactI18next)
   .init({
-    resources: {
-      en: { translation: en },
-      de: { translation: de },
-      es: { translation: en },
-      fr: { translation: en },
-      pt: { translation: en },
-      it: { translation: en },
-      nl: { translation: en },
-      pl: { translation: en },
-    },
+    resources,
     lng,
     fallbackLng: 'en',
     interpolation: {
