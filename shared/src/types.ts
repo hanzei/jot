@@ -63,7 +63,7 @@ export interface NoteItem {
   completed: boolean;
   position: number;
   indent_level: number;
-  assigned_to: string;
+  assigned_to: string | null;
   created_at: string;
   updated_at: string;
 }
@@ -117,7 +117,7 @@ export interface CreateNoteRequest {
   content: string;
   note_type: NoteType;
   color?: string;
-  items?: { text: string; position: number; completed?: boolean; indent_level?: number; assigned_to?: string }[];
+  items?: { text: string; position: number; completed?: boolean; indent_level?: number }[];
   labels?: string[];
 }
 
@@ -128,7 +128,7 @@ export interface UpdateNoteRequest {
   archived?: boolean;
   color?: string;
   checked_items_collapsed?: boolean;
-  items?: { text: string; position: number; completed?: boolean; indent_level?: number; assigned_to?: string }[];
+  items?: { text: string; position: number; completed?: boolean; indent_level?: number; assigned_to?: string | null }[];
 }
 
 export interface CreateUserRequest {

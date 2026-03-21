@@ -75,7 +75,7 @@ interface TodoItem {
   completed: boolean;
   position: number;
   indentLevel: number;
-  assignedTo: string;
+  assignedTo: string | null;
   originalPosition?: number;
 }
 
@@ -93,7 +93,7 @@ interface SortableItemProps {
   isShared?: boolean;
   collaborators?: Collaborator[];
   usersById?: Map<string, User>;
-  onAssignItem?: (itemId: string, userId: string) => void;
+  onAssignItem?: (itemId: string, userId: string | null) => void;
   completedItemTexts?: string[];
   onAcceptSuggestion?: (currentItemId: string, suggestionText: string) => void;
 }
@@ -418,7 +418,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
           completed: item.completed,
           position: item.position,
           indentLevel: item.indent_level ?? 0,
-          assignedTo: item.assigned_to ?? '',
+          assignedTo: item.assigned_to || null,
         })) || []
       );
       setNoteLabels(note.labels ?? []);
@@ -547,7 +547,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       completed: false,
       position: uncompletedItems.length,
       indentLevel: 0,
-      assignedTo: '',
+      assignedTo: null,
     };
     const newItems = [...items, newItem];
     setItems(newItems);
@@ -562,7 +562,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       completed: false,
       position: 0,
       indentLevel: 0,
-      assignedTo: '',
+      assignedTo: null,
     };
     const afterItemId = uncompletedItems[afterIndex]?.id;
     const afterItemPos = items.findIndex(item => item.id === afterItemId);
@@ -666,7 +666,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
         completed: false,
         position: 0,
         indentLevel: 0,
-        assignedTo: '',
+        assignedTo: null,
       };
     });
 
@@ -939,7 +939,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     return buildCollaborators(note.user_id, note.shared_with, usersById);
   }, [note?.is_shared, note?.user_id, note?.shared_with, usersById]);
 
-  const assignItem = async (itemId: string, userId: string) => {
+  const assignItem = async (itemId: string, userId: string | null) => {
     const updatedItems = items.map(item =>
       item.id === itemId ? { ...item, assignedTo: userId } : item,
     );

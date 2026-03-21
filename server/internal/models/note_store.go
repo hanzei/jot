@@ -128,7 +128,7 @@ func (s *NoteStore) Duplicate(source *Note, userID string) (*Note, error) {
 			item.Completed,
 			item.Position,
 			item.IndentLevel,
-			"",
+			nil,
 		); itemErr != nil {
 			return nil, fmt.Errorf("failed to duplicate note item: %w", itemErr)
 		}
@@ -835,11 +835,15 @@ func (s *NoteStore) PurgeOldTrashedNotes(olderThan time.Duration) error {
 
 func scanNoteItem(rows *sql.Rows) (NoteItem, error) {
 	var item NoteItem
+	var assignedTo sql.NullString
 	err := rows.Scan(
 		&item.ID, &item.NoteID, &item.Text, &item.Completed,
-		&item.Position, &item.IndentLevel, &item.AssignedTo,
+		&item.Position, &item.IndentLevel, &assignedTo,
 		&item.CreatedAt, &item.UpdatedAt,
 	)
+	if assignedTo.Valid {
+		item.AssignedTo = &assignedTo.String
+	}
 	return item, err
 }
 
@@ -858,33 +862,6 @@ func (s *NoteStore) getItemsByNoteID(noteID string) ([]NoteItem, error) {
 		return nil, fmt.Errorf("failed to scan note items: %w", err)
 	}
 	return items, nil
-}
-
-func (s *NoteStore) CreateItem(noteID string, text string, position, indentLevel int, assignedTo string) (*NoteItem, error) {
-	itemID, err := generateID()
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate item ID: %w", err)
-	}
-
-	query := `INSERT INTO note_items (id, note_id, text, position, indent_level, assigned_to)
-			  VALUES (?, ?, ?, ?, ?, ?) RETURNING completed, created_at, updated_at`
-
-	var item NoteItem
-	err = s.db.QueryRow(query, itemID, noteID, text, position, indentLevel, assignedTo).Scan(
-		&item.Completed, &item.CreatedAt, &item.UpdatedAt,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create note item: %w", err)
-	}
-
-	item.ID = itemID
-	item.NoteID = noteID
-	item.Text = text
-	item.Position = position
-	item.IndentLevel = indentLevel
-	item.AssignedTo = assignedTo
-
-	return &item, nil
 }
 
 // UpdateItem updates text, completed, position, and indent_level for a note item.
@@ -919,7 +896,7 @@ func (s *NoteStore) DeleteItemsByNoteID(noteID string) error {
 	return nil
 }
 
-func (s *NoteStore) CreateItemWithCompleted(noteID string, text string, position int, completed bool, indentLevel int, assignedTo string) (*NoteItem, error) {
+func (s *NoteStore) CreateItemWithCompleted(noteID string, text string, position int, completed bool, indentLevel int, assignedTo *string) (*NoteItem, error) {
 	itemID, err := generateID()
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate item ID: %w", err)

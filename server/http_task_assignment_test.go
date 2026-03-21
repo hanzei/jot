@@ -37,9 +37,9 @@ func getNoteItems(t *testing.T, user *TestUser, noteID string) []client.NoteItem
 }
 
 func TestTaskAssignment(t *testing.T) {
-	t.Run("create note items have empty assigned_to", func(t *testing.T) {
+	t.Run("create note items have null assigned_to", func(t *testing.T) {
 		ts := setupTestServer(t)
-		
+
 		user := ts.createTestUser(t, "user1", "password123", false)
 
 		note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
@@ -50,7 +50,7 @@ func TestTaskAssignment(t *testing.T) {
 			},
 		})
 		require.NoError(t, err)
-		assert.Empty(t, note.Items[0].AssignedTo)
+		assert.Nil(t, note.Items[0].AssignedTo)
 	})
 
 	t.Run("assigned_to is ignored on note creation", func(t *testing.T) {
@@ -79,12 +79,12 @@ func TestTaskAssignment(t *testing.T) {
 		require.NoError(t, err)
 		var note client.Note
 		require.NoError(t, json.Unmarshal(respBody, &note))
-		assert.Empty(t, note.Items[0].AssignedTo, "assigned_to should be ignored on create")
+		assert.Nil(t, note.Items[0].AssignedTo, "assigned_to should be ignored on create")
 	})
 
 	t.Run("assign item to shared user on update", func(t *testing.T) {
 		ts := setupTestServer(t)
-		
+
 		owner := ts.createTestUser(t, "owner", "password123", false)
 		collaborator := ts.createTestUser(t, "collab", "password123", false)
 
@@ -93,20 +93,20 @@ func TestTaskAssignment(t *testing.T) {
 		_, err := owner.Client.UpdateNote(t.Context(), noteID, &client.UpdateNoteRequest{
 			Title: client.Ptr("Shared Todo"),
 			Items: []client.UpdateNoteItem{
-				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: collabID},
+				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: client.Ptr(collabID)},
 				{Text: "Item 2", Position: 1, IndentLevel: 0},
 			},
 		})
 		require.NoError(t, err)
 
 		items := getNoteItems(t, owner, noteID)
-		assert.Equal(t, collabID, items[0].AssignedTo)
-		assert.Empty(t, items[1].AssignedTo)
+		assert.Equal(t, client.Ptr(collabID), items[0].AssignedTo)
+		assert.Nil(t, items[1].AssignedTo)
 	})
 
 	t.Run("self-assignment by owner", func(t *testing.T) {
 		ts := setupTestServer(t)
-		
+
 		owner := ts.createTestUser(t, "owner", "password123", false)
 		collaborator := ts.createTestUser(t, "collab", "password123", false)
 
@@ -115,18 +115,18 @@ func TestTaskAssignment(t *testing.T) {
 		_, err := owner.Client.UpdateNote(t.Context(), noteID, &client.UpdateNoteRequest{
 			Title: client.Ptr("Shared Todo"),
 			Items: []client.UpdateNoteItem{
-				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: owner.User.ID},
+				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: client.Ptr(owner.User.ID)},
 			},
 		})
 		require.NoError(t, err)
 
 		items := getNoteItems(t, owner, noteID)
-		assert.Equal(t, owner.User.ID, items[0].AssignedTo)
+		assert.Equal(t, client.Ptr(owner.User.ID), items[0].AssignedTo)
 	})
 
 	t.Run("reject assignment on unshared note", func(t *testing.T) {
 		ts := setupTestServer(t)
-		
+
 		owner := ts.createTestUser(t, "owner", "password123", false)
 
 		note, err := owner.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
@@ -141,7 +141,7 @@ func TestTaskAssignment(t *testing.T) {
 		_, err = owner.Client.UpdateNote(t.Context(), note.ID, &client.UpdateNoteRequest{
 			Title: client.Ptr("Solo Todo"),
 			Items: []client.UpdateNoteItem{
-				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: owner.User.ID},
+				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: client.Ptr(owner.User.ID)},
 			},
 		})
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
@@ -149,7 +149,7 @@ func TestTaskAssignment(t *testing.T) {
 
 	t.Run("reject assignment to user without note access", func(t *testing.T) {
 		ts := setupTestServer(t)
-		
+
 		owner := ts.createTestUser(t, "owner", "password123", false)
 		collaborator := ts.createTestUser(t, "collab", "password123", false)
 		outsider := ts.createTestUser(t, "outsider", "password123", false)
@@ -159,7 +159,7 @@ func TestTaskAssignment(t *testing.T) {
 		_, err := owner.Client.UpdateNote(t.Context(), noteID, &client.UpdateNoteRequest{
 			Title: client.Ptr("Shared Todo"),
 			Items: []client.UpdateNoteItem{
-				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: outsider.User.ID},
+				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: client.Ptr(outsider.User.ID)},
 			},
 		})
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
@@ -167,7 +167,7 @@ func TestTaskAssignment(t *testing.T) {
 
 	t.Run("reject assignment with invalid user ID format", func(t *testing.T) {
 		ts := setupTestServer(t)
-		
+
 		owner := ts.createTestUser(t, "owner", "password123", false)
 		collaborator := ts.createTestUser(t, "collab", "password123", false)
 
@@ -176,7 +176,7 @@ func TestTaskAssignment(t *testing.T) {
 		_, err := owner.Client.UpdateNote(t.Context(), noteID, &client.UpdateNoteRequest{
 			Title: client.Ptr("Shared Todo"),
 			Items: []client.UpdateNoteItem{
-				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: "short"},
+				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: client.Ptr("short")},
 			},
 		})
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
@@ -184,7 +184,7 @@ func TestTaskAssignment(t *testing.T) {
 
 	t.Run("collaborator can assign items", func(t *testing.T) {
 		ts := setupTestServer(t)
-		
+
 		owner := ts.createTestUser(t, "owner", "password123", false)
 		collaborator := ts.createTestUser(t, "collab", "password123", false)
 
@@ -193,19 +193,19 @@ func TestTaskAssignment(t *testing.T) {
 		_, err := collaborator.Client.UpdateNote(t.Context(), noteID, &client.UpdateNoteRequest{
 			Title: client.Ptr("Shared Todo"),
 			Items: []client.UpdateNoteItem{
-				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: owner.User.ID},
+				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: client.Ptr(owner.User.ID)},
 				{Text: "Item 2", Position: 1, IndentLevel: 0},
 			},
 		})
 		require.NoError(t, err)
 
 		items := getNoteItems(t, owner, noteID)
-		assert.Equal(t, owner.User.ID, items[0].AssignedTo)
+		assert.Equal(t, client.Ptr(owner.User.ID), items[0].AssignedTo)
 	})
 
-	t.Run("unassign item by setting empty assigned_to", func(t *testing.T) {
+	t.Run("unassign item by setting null assigned_to", func(t *testing.T) {
 		ts := setupTestServer(t)
-		
+
 		owner := ts.createTestUser(t, "owner", "password123", false)
 		collaborator := ts.createTestUser(t, "collab", "password123", false)
 
@@ -214,27 +214,27 @@ func TestTaskAssignment(t *testing.T) {
 		_, err := owner.Client.UpdateNote(t.Context(), noteID, &client.UpdateNoteRequest{
 			Title: client.Ptr("Shared Todo"),
 			Items: []client.UpdateNoteItem{
-				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: collabID},
+				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: client.Ptr(collabID)},
 			},
 		})
 		require.NoError(t, err)
 		items := getNoteItems(t, owner, noteID)
-		assert.Equal(t, collabID, items[0].AssignedTo)
+		assert.Equal(t, client.Ptr(collabID), items[0].AssignedTo)
 
 		_, err = owner.Client.UpdateNote(t.Context(), noteID, &client.UpdateNoteRequest{
 			Title: client.Ptr("Shared Todo"),
 			Items: []client.UpdateNoteItem{
-				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: ""},
+				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: nil},
 			},
 		})
 		require.NoError(t, err)
 		items = getNoteItems(t, owner, noteID)
-		assert.Empty(t, items[0].AssignedTo)
+		assert.Nil(t, items[0].AssignedTo)
 	})
 
-	t.Run("completed items retain assignment", func(t *testing.T) {
+	t.Run("empty-string assigned_to is normalized to null", func(t *testing.T) {
 		ts := setupTestServer(t)
-		
+
 		owner := ts.createTestUser(t, "owner", "password123", false)
 		collaborator := ts.createTestUser(t, "collab", "password123", false)
 
@@ -243,21 +243,49 @@ func TestTaskAssignment(t *testing.T) {
 		_, err := owner.Client.UpdateNote(t.Context(), noteID, &client.UpdateNoteRequest{
 			Title: client.Ptr("Shared Todo"),
 			Items: []client.UpdateNoteItem{
-				{Text: "Item 1", Position: 0, IndentLevel: 0, Completed: true, AssignedTo: collabID},
+				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: client.Ptr(collabID)},
+			},
+		})
+		require.NoError(t, err)
+
+		_, err = owner.Client.UpdateNote(t.Context(), noteID, &client.UpdateNoteRequest{
+			Title: client.Ptr("Shared Todo"),
+			Items: []client.UpdateNoteItem{
+				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: client.Ptr("")},
+			},
+		})
+		require.NoError(t, err)
+
+		items := getNoteItems(t, owner, noteID)
+		assert.Nil(t, items[0].AssignedTo)
+	})
+
+	t.Run("completed items retain assignment", func(t *testing.T) {
+		ts := setupTestServer(t)
+
+		owner := ts.createTestUser(t, "owner", "password123", false)
+		collaborator := ts.createTestUser(t, "collab", "password123", false)
+
+		noteID, collabID := createSharedTodoNote(t, ts, owner, collaborator)
+
+		_, err := owner.Client.UpdateNote(t.Context(), noteID, &client.UpdateNoteRequest{
+			Title: client.Ptr("Shared Todo"),
+			Items: []client.UpdateNoteItem{
+				{Text: "Item 1", Position: 0, IndentLevel: 0, Completed: true, AssignedTo: client.Ptr(collabID)},
 			},
 		})
 		require.NoError(t, err)
 
 		items := getNoteItems(t, owner, noteID)
 		assert.True(t, items[0].Completed)
-		assert.Equal(t, collabID, items[0].AssignedTo)
+		assert.Equal(t, client.Ptr(collabID), items[0].AssignedTo)
 	})
 }
 
 func TestMyTodoFilter(t *testing.T) {
 	t.Run("returns notes with items assigned to current user", func(t *testing.T) {
 		ts := setupTestServer(t)
-		
+
 		owner := ts.createTestUser(t, "owner", "password123", false)
 		collaborator := ts.createTestUser(t, "collab", "password123", false)
 
@@ -266,7 +294,7 @@ func TestMyTodoFilter(t *testing.T) {
 		_, err := owner.Client.UpdateNote(t.Context(), noteID, &client.UpdateNoteRequest{
 			Title: client.Ptr("Shared Todo"),
 			Items: []client.UpdateNoteItem{
-				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: collabID},
+				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: client.Ptr(collabID)},
 				{Text: "Item 2", Position: 1, IndentLevel: 0},
 			},
 		})
@@ -280,7 +308,7 @@ func TestMyTodoFilter(t *testing.T) {
 
 	t.Run("does not return notes without assignments to current user", func(t *testing.T) {
 		ts := setupTestServer(t)
-		
+
 		owner := ts.createTestUser(t, "owner", "password123", false)
 		collaborator := ts.createTestUser(t, "collab", "password123", false)
 
@@ -289,7 +317,7 @@ func TestMyTodoFilter(t *testing.T) {
 		_, err := owner.Client.UpdateNote(t.Context(), noteID, &client.UpdateNoteRequest{
 			Title: client.Ptr("Shared Todo"),
 			Items: []client.UpdateNoteItem{
-				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: owner.User.ID},
+				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: client.Ptr(owner.User.ID)},
 				{Text: "Item 2", Position: 1, IndentLevel: 0},
 			},
 		})
@@ -302,7 +330,7 @@ func TestMyTodoFilter(t *testing.T) {
 
 	t.Run("returns empty list when no assignments exist", func(t *testing.T) {
 		ts := setupTestServer(t)
-		
+
 		owner := ts.createTestUser(t, "owner", "password123", false)
 
 		_, err := owner.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
@@ -321,7 +349,7 @@ func TestMyTodoFilter(t *testing.T) {
 
 	t.Run("owner sees own assignments in my_todo filter", func(t *testing.T) {
 		ts := setupTestServer(t)
-		
+
 		owner := ts.createTestUser(t, "owner", "password123", false)
 		collaborator := ts.createTestUser(t, "collab", "password123", false)
 
@@ -330,7 +358,7 @@ func TestMyTodoFilter(t *testing.T) {
 		_, err := owner.Client.UpdateNote(t.Context(), noteID, &client.UpdateNoteRequest{
 			Title: client.Ptr("Shared Todo"),
 			Items: []client.UpdateNoteItem{
-				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: owner.User.ID},
+				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: client.Ptr(owner.User.ID)},
 			},
 		})
 		require.NoError(t, err)
@@ -343,7 +371,7 @@ func TestMyTodoFilter(t *testing.T) {
 
 	t.Run("excludes trashed notes from my_todo filter", func(t *testing.T) {
 		ts := setupTestServer(t)
-		
+
 		owner := ts.createTestUser(t, "owner", "password123", false)
 		collaborator := ts.createTestUser(t, "collab", "password123", false)
 
@@ -352,7 +380,7 @@ func TestMyTodoFilter(t *testing.T) {
 		_, err := owner.Client.UpdateNote(t.Context(), noteID, &client.UpdateNoteRequest{
 			Title: client.Ptr("Shared Todo"),
 			Items: []client.UpdateNoteItem{
-				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: collabID},
+				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: client.Ptr(collabID)},
 			},
 		})
 		require.NoError(t, err)
@@ -368,7 +396,7 @@ func TestMyTodoFilter(t *testing.T) {
 func TestTaskAssignmentUnshareCleanup(t *testing.T) {
 	t.Run("unshare clears unshared users assignments", func(t *testing.T) {
 		ts := setupTestServer(t)
-		
+
 		owner := ts.createTestUser(t, "owner", "password123", false)
 		collab1 := ts.createTestUser(t, "collab1", "password123", false)
 		collab2 := ts.createTestUser(t, "collab2", "password123", false)
@@ -389,8 +417,8 @@ func TestTaskAssignmentUnshareCleanup(t *testing.T) {
 		_, err = owner.Client.UpdateNote(t.Context(), note.ID, &client.UpdateNoteRequest{
 			Title: client.Ptr("Shared Todo"),
 			Items: []client.UpdateNoteItem{
-				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: collab1.User.ID},
-				{Text: "Item 2", Position: 1, IndentLevel: 0, AssignedTo: collab2.User.ID},
+				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: client.Ptr(collab1.User.ID)},
+				{Text: "Item 2", Position: 1, IndentLevel: 0, AssignedTo: client.Ptr(collab2.User.ID)},
 			},
 		})
 		require.NoError(t, err)
@@ -398,13 +426,13 @@ func TestTaskAssignmentUnshareCleanup(t *testing.T) {
 		require.NoError(t, owner.Client.UnshareNote(t.Context(), note.ID, collab1.User.ID))
 
 		items := getNoteItems(t, owner, note.ID)
-		assert.Empty(t, items[0].AssignedTo, "collab1's assignment should be cleared")
-		assert.Equal(t, collab2.User.ID, items[1].AssignedTo, "collab2's assignment should remain")
+		assert.Nil(t, items[0].AssignedTo, "collab1's assignment should be cleared")
+		assert.Equal(t, client.Ptr(collab2.User.ID), items[1].AssignedTo, "collab2's assignment should remain")
 	})
 
 	t.Run("unshare last collaborator clears all assignments including owner", func(t *testing.T) {
 		ts := setupTestServer(t)
-		
+
 		owner := ts.createTestUser(t, "owner", "password123", false)
 		collab := ts.createTestUser(t, "collab", "password123", false)
 
@@ -413,8 +441,8 @@ func TestTaskAssignmentUnshareCleanup(t *testing.T) {
 		_, err := owner.Client.UpdateNote(t.Context(), noteID, &client.UpdateNoteRequest{
 			Title: client.Ptr("Shared Todo"),
 			Items: []client.UpdateNoteItem{
-				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: owner.User.ID},
-				{Text: "Item 2", Position: 1, IndentLevel: 0, AssignedTo: collab.User.ID},
+				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: client.Ptr(owner.User.ID)},
+				{Text: "Item 2", Position: 1, IndentLevel: 0, AssignedTo: client.Ptr(collab.User.ID)},
 			},
 		})
 		require.NoError(t, err)
@@ -422,15 +450,15 @@ func TestTaskAssignmentUnshareCleanup(t *testing.T) {
 		require.NoError(t, owner.Client.UnshareNote(t.Context(), noteID, collab.User.ID))
 
 		items := getNoteItems(t, owner, noteID)
-		assert.Empty(t, items[0].AssignedTo, "owner's self-assignment should be cleared")
-		assert.Empty(t, items[1].AssignedTo, "collab's assignment should be cleared")
+		assert.Nil(t, items[0].AssignedTo, "owner's self-assignment should be cleared")
+		assert.Nil(t, items[1].AssignedTo, "collab's assignment should be cleared")
 	})
 }
 
 func TestTaskAssignmentUserDeletion(t *testing.T) {
 	t.Run("deleting a user clears their assignments across all notes", func(t *testing.T) {
 		ts := setupTestServer(t)
-		
+
 		admin := ts.createTestUser(t, "admin", "password123", true)
 		owner := ts.createTestUser(t, "owner", "password123", false)
 		collab1 := ts.createTestUser(t, "collab1", "password123", false)
@@ -452,8 +480,8 @@ func TestTaskAssignmentUserDeletion(t *testing.T) {
 		_, err = owner.Client.UpdateNote(t.Context(), note.ID, &client.UpdateNoteRequest{
 			Title: client.Ptr("Shared Todo"),
 			Items: []client.UpdateNoteItem{
-				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: collab1.User.ID},
-				{Text: "Item 2", Position: 1, IndentLevel: 0, AssignedTo: collab2.User.ID},
+				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: client.Ptr(collab1.User.ID)},
+				{Text: "Item 2", Position: 1, IndentLevel: 0, AssignedTo: client.Ptr(collab2.User.ID)},
 			},
 		})
 		require.NoError(t, err)
@@ -461,13 +489,13 @@ func TestTaskAssignmentUserDeletion(t *testing.T) {
 		require.NoError(t, admin.Client.AdminDeleteUser(t.Context(), collab1.User.ID))
 
 		items := getNoteItems(t, owner, note.ID)
-		assert.Empty(t, items[0].AssignedTo, "deleted user's assignment should be cleared")
-		assert.Equal(t, collab2.User.ID, items[1].AssignedTo, "other collab's assignment should remain")
+		assert.Nil(t, items[0].AssignedTo, "deleted user's assignment should be cleared")
+		assert.Equal(t, client.Ptr(collab2.User.ID), items[1].AssignedTo, "other collab's assignment should remain")
 	})
 
 	t.Run("deleting last collaborator clears all assignments including owner self-assignment", func(t *testing.T) {
 		ts := setupTestServer(t)
-		
+
 		admin := ts.createTestUser(t, "admin", "password123", true)
 		owner := ts.createTestUser(t, "owner", "password123", false)
 		collab := ts.createTestUser(t, "collab", "password123", false)
@@ -477,8 +505,8 @@ func TestTaskAssignmentUserDeletion(t *testing.T) {
 		_, err := owner.Client.UpdateNote(t.Context(), noteID, &client.UpdateNoteRequest{
 			Title: client.Ptr("Shared Todo"),
 			Items: []client.UpdateNoteItem{
-				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: owner.User.ID},
-				{Text: "Item 2", Position: 1, IndentLevel: 0, AssignedTo: collabID},
+				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: client.Ptr(owner.User.ID)},
+				{Text: "Item 2", Position: 1, IndentLevel: 0, AssignedTo: client.Ptr(collabID)},
 			},
 		})
 		require.NoError(t, err)
@@ -486,7 +514,7 @@ func TestTaskAssignmentUserDeletion(t *testing.T) {
 		require.NoError(t, admin.Client.AdminDeleteUser(t.Context(), collabID))
 
 		items := getNoteItems(t, owner, noteID)
-		assert.Empty(t, items[0].AssignedTo, "owner's self-assignment should be cleared when note becomes unshared")
-		assert.Empty(t, items[1].AssignedTo, "deleted collab's assignment should be cleared")
+		assert.Nil(t, items[0].AssignedTo, "owner's self-assignment should be cleared when note becomes unshared")
+		assert.Nil(t, items[1].AssignedTo, "deleted collab's assignment should be cleared")
 	})
 }

@@ -6,8 +6,8 @@ import { type Collaborator, displayName } from '@jot/shared';
 
 interface AssigneePickerProps {
   collaborators: Collaborator[];
-  currentAssigneeId: string;
-  onAssign: (userId: string) => void;
+  currentAssigneeId: string | null;
+  onAssign: (userId: string | null) => void;
   onClose: () => void;
 }
 
@@ -18,9 +18,9 @@ export default function AssigneePicker({ collaborators, currentAssigneeId, onAss
   const instanceId = useId();
   const labelId = `${instanceId}-label`;
 
-  const totalOptions = currentAssigneeId ? collaborators.length + 1 : collaborators.length;
+  const totalOptions = currentAssigneeId !== null ? collaborators.length + 1 : collaborators.length;
 
-  const initialIndex = currentAssigneeId
+  const initialIndex = currentAssigneeId !== null
     ? collaborators.findIndex(c => c.userId === currentAssigneeId)
     : 0;
   const [focusedIndex, setFocusedIndex] = useState(initialIndex >= 0 ? initialIndex : 0);
@@ -43,9 +43,9 @@ export default function AssigneePicker({ collaborators, currentAssigneeId, onAss
     if (index < collaborators.length) {
       const c = collaborators[index];
       const isSelected = c.userId === currentAssigneeId;
-      onAssign(isSelected ? '' : c.userId);
+      onAssign(isSelected ? null : c.userId);
     } else {
-      onAssign('');
+      onAssign(null);
     }
     onClose();
   }, [collaborators, currentAssigneeId, onAssign, onClose]);
@@ -158,7 +158,7 @@ export default function AssigneePicker({ collaborators, currentAssigneeId, onAss
           );
         })}
 
-        {currentAssigneeId && (
+        {currentAssigneeId !== null && (
           <div
             id={`${instanceId}-option-${collaborators.length}`}
             role="option"

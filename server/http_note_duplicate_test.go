@@ -77,8 +77,8 @@ func TestDuplicateNoteEndpoint(t *testing.T) {
 
 		updatedSource, err := owner.Client.UpdateNote(t.Context(), source.ID, &client.UpdateNoteRequest{
 			Items: []client.UpdateNoteItem{
-				{Text: "Outline release", Position: 0, IndentLevel: 0, Completed: false, AssignedTo: collaborator.User.ID},
-				{Text: "Notify team", Position: 1, IndentLevel: 1, Completed: true, AssignedTo: owner.User.ID},
+				{Text: "Outline release", Position: 0, IndentLevel: 0, Completed: false, AssignedTo: client.Ptr(collaborator.User.ID)},
+				{Text: "Notify team", Position: 1, IndentLevel: 1, Completed: true, AssignedTo: client.Ptr(owner.User.ID)},
 			},
 		})
 		require.NoError(t, err)
@@ -102,12 +102,12 @@ func TestDuplicateNoteEndpoint(t *testing.T) {
 		assert.Equal(t, 0, duplicated.Items[0].Position)
 		assert.Equal(t, 0, duplicated.Items[0].IndentLevel)
 		assert.False(t, duplicated.Items[0].Completed)
-		assert.Empty(t, duplicated.Items[0].AssignedTo)
+		assert.Nil(t, duplicated.Items[0].AssignedTo)
 		assert.Equal(t, "Notify team", duplicated.Items[1].Text)
 		assert.Equal(t, 1, duplicated.Items[1].Position)
 		assert.Equal(t, 1, duplicated.Items[1].IndentLevel)
 		assert.True(t, duplicated.Items[1].Completed)
-		assert.Empty(t, duplicated.Items[1].AssignedTo)
+		assert.Nil(t, duplicated.Items[1].AssignedTo)
 
 		notes, err := collaborator.Client.ListNotes(t.Context(), nil)
 		require.NoError(t, err)

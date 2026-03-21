@@ -71,7 +71,7 @@ func (h *NotesHandler) importKeepNote(userID string, kn keepNote) error {
 
 	if noteType == models.NoteTypeTodo {
 		for i, item := range kn.ListContent {
-			if _, err := h.noteStore.CreateItemWithCompleted(note.ID, item.Text, i, item.IsChecked, 0, ""); err != nil {
+			if _, err := h.noteStore.CreateItemWithCompleted(note.ID, item.Text, i, item.IsChecked, 0, nil); err != nil {
 				return err
 			}
 		}

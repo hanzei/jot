@@ -86,7 +86,7 @@ func (s *NoteStore) UnshareNote(noteID string, sharedWithUserID string) error {
 	}
 
 	if _, err = tx.Exec(
-		`UPDATE note_items SET assigned_to = '' WHERE note_id = ? AND assigned_to = ?`,
+		`UPDATE note_items SET assigned_to = NULL WHERE note_id = ? AND assigned_to = ?`,
 		noteID, sharedWithUserID,
 	); err != nil {
 		return fmt.Errorf("failed to clear assignments for unshared user: %w", err)
@@ -99,7 +99,7 @@ func (s *NoteStore) UnshareNote(noteID string, sharedWithUserID string) error {
 
 	if remainingShares == 0 {
 		if _, err = tx.Exec(
-			`UPDATE note_items SET assigned_to = '' WHERE note_id = ? AND assigned_to != ''`,
+			`UPDATE note_items SET assigned_to = NULL WHERE note_id = ? AND assigned_to IS NOT NULL`,
 			noteID,
 		); err != nil {
 			return fmt.Errorf("failed to clear all assignments: %w", err)
@@ -136,15 +136,15 @@ func (s *NoteStore) ClearUserAssignmentsTx(tx *sql.Tx, userID string) error {
 	}
 
 	if _, err := tx.Exec(
-		`UPDATE note_items SET assigned_to = '' WHERE assigned_to = ?`,
+		`UPDATE note_items SET assigned_to = NULL WHERE assigned_to = ?`,
 		userID,
 	); err != nil {
 		return fmt.Errorf("failed to clear deleted user assignments: %w", err)
 	}
 
 	if _, err := tx.Exec(
-		`UPDATE note_items SET assigned_to = ''
-		 WHERE assigned_to != ''
+		`UPDATE note_items SET assigned_to = NULL
+		 WHERE assigned_to IS NOT NULL
 		   AND note_id NOT IN (SELECT DISTINCT note_id FROM note_shares)`,
 	); err != nil {
 		return fmt.Errorf("failed to clear assignments on unshared notes: %w", err)

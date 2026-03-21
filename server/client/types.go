@@ -74,7 +74,7 @@ type NoteItem struct {
 	Completed   bool      `json:"completed"`
 	Position    int       `json:"position"`
 	IndentLevel int       `json:"indent_level"`
-	AssignedTo  string    `json:"assigned_to"`
+	AssignedTo  *string   `json:"assigned_to"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 }
@@ -145,12 +145,13 @@ type UpdateNoteRequest struct {
 }
 
 // UpdateNoteItem describes a checklist item in an update request.
+// Keep this in sync with handlers.UpdateNoteItem in server handlers.
 type UpdateNoteItem struct {
-	Text        string `json:"text"`
-	Position    int    `json:"position"`
-	Completed   bool   `json:"completed"`
-	IndentLevel int    `json:"indent_level"`
-	AssignedTo  string `json:"assigned_to"`
+	Text        string  `json:"text"`
+	Position    int     `json:"position"`
+	Completed   bool    `json:"completed"`
+	IndentLevel int     `json:"indent_level"`
+	AssignedTo  *string `json:"assigned_to"`
 }
 
 // UpdateUserRequest is the body for PATCH /api/v1/users/me.

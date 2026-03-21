@@ -130,7 +130,10 @@ definitions:
   handlers.UpdateNoteItem:
     properties:
       assigned_to:
+        description: AssignedTo is nullable; null (or omitted) clears assignment for
+          this item.
         type: string
+        x-nullable: true
       completed:
         type: boolean
       indent_level:
@@ -340,6 +343,7 @@ definitions:
     properties:
       assigned_to:
         type: string
+        x-nullable: true
       completed:
         type: boolean
       created_at:

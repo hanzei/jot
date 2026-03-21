@@ -486,15 +486,15 @@ func TestAdminStatsEndpoint(t *testing.T) {
 	_, err = adminUser.Client.UpdateNote(t.Context(), archivedTodoNote.ID, &client.UpdateNoteRequest{
 		Archived: &archived,
 		Items: []client.UpdateNoteItem{
-			{Text: "First todo", Position: 0, Completed: true, AssignedTo: member1.User.ID},
-			{Text: "Second todo", Position: 1, Completed: false, AssignedTo: ""},
+			{Text: "First todo", Position: 0, Completed: true, AssignedTo: client.Ptr(member1.User.ID)},
+			{Text: "Second todo", Position: 1, Completed: false, AssignedTo: nil},
 		},
 	})
 	require.NoError(t, err)
 
 	_, err = adminUser.Client.UpdateNote(t.Context(), activeTodoNote.ID, &client.UpdateNoteRequest{
 		Items: []client.UpdateNoteItem{
-			{Text: "Assigned todo", Position: 0, Completed: false, AssignedTo: member2.User.ID},
+			{Text: "Assigned todo", Position: 0, Completed: false, AssignedTo: client.Ptr(member2.User.ID)},
 		},
 	})
 	require.NoError(t, err)

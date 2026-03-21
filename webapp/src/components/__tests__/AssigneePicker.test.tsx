@@ -22,7 +22,7 @@ describe('AssigneePicker', () => {
     render(
       <AssigneePicker
         collaborators={collaborators}
-        currentAssigneeId=""
+        currentAssigneeId={null}
         onAssign={onAssign}
         onClose={onClose}
       />
@@ -38,7 +38,7 @@ describe('AssigneePicker', () => {
     render(
       <AssigneePicker
         collaborators={collaborators}
-        currentAssigneeId=""
+        currentAssigneeId={null}
         onAssign={onAssign}
         onClose={onClose}
       />
@@ -98,7 +98,7 @@ describe('AssigneePicker', () => {
 
     fireEvent.click(screen.getByText('Alice Williams'))
 
-    expect(onAssign).toHaveBeenCalledWith('')
+    expect(onAssign).toHaveBeenCalledWith(null)
     expect(onClose).toHaveBeenCalled()
   })
 
@@ -119,7 +119,7 @@ describe('AssigneePicker', () => {
     render(
       <AssigneePicker
         collaborators={collaborators}
-        currentAssigneeId=""
+        currentAssigneeId={null}
         onAssign={onAssign}
         onClose={onClose}
       />
@@ -128,7 +128,7 @@ describe('AssigneePicker', () => {
     expect(screen.queryByText('Unassign')).not.toBeInTheDocument()
   })
 
-  it('clicking Unassign calls onAssign with empty string', () => {
+  it('clicking Unassign calls onAssign with null', () => {
     render(
       <AssigneePicker
         collaborators={collaborators}
@@ -140,7 +140,7 @@ describe('AssigneePicker', () => {
 
     fireEvent.click(screen.getByText('Unassign'))
 
-    expect(onAssign).toHaveBeenCalledWith('')
+    expect(onAssign).toHaveBeenCalledWith(null)
     expect(onClose).toHaveBeenCalled()
   })
 
@@ -148,7 +148,7 @@ describe('AssigneePicker', () => {
     render(
       <AssigneePicker
         collaborators={collaborators}
-        currentAssigneeId=""
+        currentAssigneeId={null}
         onAssign={onAssign}
         onClose={onClose}
       />
@@ -164,7 +164,7 @@ describe('AssigneePicker', () => {
     render(
       <AssigneePicker
         collaborators={collaborators}
-        currentAssigneeId=""
+        currentAssigneeId={null}
         onAssign={onAssign}
         onClose={onClose}
       />
@@ -182,7 +182,7 @@ describe('AssigneePicker', () => {
         <div data-testid="outside">Outside</div>
         <AssigneePicker
           collaborators={collaborators}
-          currentAssigneeId=""
+          currentAssigneeId={null}
           onAssign={onAssign}
           onClose={onClose}
         />
@@ -198,7 +198,7 @@ describe('AssigneePicker', () => {
     render(
       <AssigneePicker
         collaborators={collaborators}
-        currentAssigneeId=""
+        currentAssigneeId={null}
         onAssign={onAssign}
         onClose={onClose}
       />
@@ -213,7 +213,7 @@ describe('AssigneePicker', () => {
     render(
       <AssigneePicker
         collaborators={[collaborators[0]]}
-        currentAssigneeId=""
+        currentAssigneeId={null}
         onAssign={onAssign}
         onClose={onClose}
       />
@@ -231,7 +231,7 @@ describe('AssigneePicker', () => {
     render(
       <AssigneePicker
         collaborators={usernameOnly}
-        currentAssigneeId=""
+        currentAssigneeId={null}
         onAssign={onAssign}
         onClose={onClose}
       />
@@ -244,7 +244,7 @@ describe('AssigneePicker', () => {
     render(
       <AssigneePicker
         collaborators={[]}
-        currentAssigneeId=""
+        currentAssigneeId={null}
         onAssign={onAssign}
         onClose={onClose}
       />

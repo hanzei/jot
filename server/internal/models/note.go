@@ -55,7 +55,7 @@ type NoteItem struct {
 	Completed   bool      `json:"completed"`
 	Position    int       `json:"position"`
 	IndentLevel int       `json:"indent_level"`
-	AssignedTo  string    `json:"assigned_to"`
+	AssignedTo  *string   `json:"assigned_to" extensions:"x-nullable"`
 	CreatedAt   time.Time `json:"created_at"`
 	UpdatedAt   time.Time `json:"updated_at"`
 }

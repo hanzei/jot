@@ -2132,7 +2132,9 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "assigned_to": {
-                    "type": "string"
+                    "description": "AssignedTo is nullable; null (or omitted) clears assignment for this item.",
+                    "type": "string",
+                    "x-nullable": true
                 },
                 "completed": {
                     "type": "boolean"
@@ -2447,7 +2449,8 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "assigned_to": {
-                    "type": "string"
+                    "type": "string",
+                    "x-nullable": true
                 },
                 "completed": {
                     "type": "boolean"
