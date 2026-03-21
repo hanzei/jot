@@ -16,7 +16,7 @@ import de from '../src/i18n/locales/de.json';
 import en from '../src/i18n/locales/en.json';
 import es from '../src/i18n/locales/es.json';
 import fr from '../src/i18n/locales/fr.json';
-import it from '../src/i18n/locales/it.json';
+import itLocale from '../src/i18n/locales/it.json';
 import nl from '../src/i18n/locales/nl.json';
 import pl from '../src/i18n/locales/pl.json';
 import pt from '../src/i18n/locales/pt.json';
@@ -35,7 +35,7 @@ const bundles: Record<SupportedLanguage, typeof en> = {
   es,
   fr,
   pt,
-  it,
+  it: itLocale,
   nl,
   pl,
 };

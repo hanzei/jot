@@ -1,4 +1,4 @@
-import { afterEach, describe, expect, it } from 'vitest';
+import { afterEach, describe, expect, test } from 'vitest';
 import i18n from './index';
 import de from './locales/de.json';
 import en from './locales/en.json';
@@ -22,10 +22,12 @@ const bundles: Record<SupportedLanguage, typeof en> = {
 };
 
 describe('i18n locale resources', () => {
-  it.each(SUPPORTED_LANGUAGES)('uses the %s translation bundle', async (language) => {
-    await i18n.changeLanguage(language);
-    expect(i18n.t('settings.title')).toBe(bundles[language].settings.title);
-  });
+  for (const language of SUPPORTED_LANGUAGES) {
+    test(`uses the ${language} translation bundle`, async () => {
+      await i18n.changeLanguage(language);
+      expect(i18n.t('settings.title')).toBe(bundles[language].settings.title);
+    });
+  }
 
   afterEach(async () => {
     await i18n.changeLanguage('en');
