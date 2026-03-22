@@ -7,7 +7,11 @@ on:
   push:
     branches: ["master"]
   pull_request:
-    paths: ["server/**"]
+    paths:
+      - "server/**"
+      - ".github/workflows/server-ci.yml"
+      - "Taskfile.yml"
+      - ".golangci.yml"
 
 jobs:
   test:
@@ -40,19 +44,11 @@ jobs:
           go-version: "1.25"
           cache-dependency-path: server/go.sum
 
-      - name: Install Task
-        uses: go-task/setup-task@3be4020d41929789a01026e0e427a4321ce0ad44 # v2
-        with:
-          version: 3.x
-
-      - name: Install golangci-lint
+      - name: Run golangci-lint
         uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20 # v9
         with:
-          version: v2.2.2
+          version: v2.11.3
           working-directory: ./server
-
-      - name: Run linters
-        run: task lint-server
 
   docs:
     runs-on: ubuntu-latest
@@ -64,9 +60,6 @@ jobs:
         with:
           go-version: "1.25"
           cache-dependency-path: server/go.sum
-
-      - name: Install swag
-        run: go install github.com/swaggo/swag/cmd/swag@v1.16.6
 
       - name: Install Task
         uses: go-task/setup-task@3be4020d41929789a01026e0e427a4321ce0ad44 # v2
@@ -86,6 +79,7 @@ jobs:
 
       - name: Check migration numbers are unique
         run: |
+          set -euo pipefail
           dupes=$(ls server/internal/database/migrations/*.sql \
             | xargs -I{} basename {} \
             | grep -oP '^\d+' \
