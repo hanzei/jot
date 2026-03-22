@@ -49,7 +49,7 @@ func (h *NotesHandler) SearchUsers(w http.ResponseWriter, r *http.Request) (int,
 		return http.StatusBadRequest, nil, err
 	}
 
-	users, hasMore, err := h.userStore.GetPage(search, currentUser.ID, page.Limit, page.Offset)
+	users, hasMore, err := h.userStore.GetPage(r.Context(), search, currentUser.ID, page.Limit, page.Offset)
 	if err != nil {
 		return http.StatusInternalServerError, nil, err
 	}

@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -34,11 +35,11 @@ func NewNotesHandler(noteStore *models.NoteStore, userStore *models.UserStore, l
 
 // publishNoteEvent fetches the note's audience and publishes an SSE event.
 // Errors are logged but never fail the HTTP request.
-func (h *NotesHandler) publishNoteEvent(noteID string, eventType sse.EventType, note any, sourceUserID string) {
+func (h *NotesHandler) publishNoteEvent(ctx context.Context, noteID string, eventType sse.EventType, note any, sourceUserID string) {
 	if h.hub == nil {
 		return
 	}
-	audienceIDs, err := h.noteStore.GetNoteAudienceIDs(noteID)
+	audienceIDs, err := h.noteStore.GetNoteAudienceIDs(ctx, noteID)
 	if err != nil {
 		logrus.WithError(err).WithField("note_id", noteID).Error("failed to get note audience for SSE publish")
 		return
@@ -129,7 +130,7 @@ func normalizeCreateNoteRequest(req *CreateNoteRequest) (int, error) {
 	return http.StatusOK, nil
 }
 
-func (h *NotesHandler) createNoteLabels(noteID, userID string, rawLabels []string) (int, error) {
+func (h *NotesHandler) createNoteLabels(ctx context.Context, noteID, userID string, rawLabels []string) (int, error) {
 	seen := make(map[string]struct{})
 	for _, raw := range rawLabels {
 		name := strings.TrimSpace(raw)
@@ -141,23 +142,23 @@ func (h *NotesHandler) createNoteLabels(noteID, userID string, rawLabels []strin
 		}
 		seen[name] = struct{}{}
 
-		label, err := h.labelStore.GetOrCreateLabel(userID, name)
+		label, err := h.labelStore.GetOrCreateLabel(ctx, userID, name)
 		if err != nil {
 			return http.StatusInternalServerError, fmt.Errorf("get or create label: %w", err)
 		}
-		if err = h.noteStore.AddLabelToNote(noteID, label.ID, userID); err != nil {
+		if err = h.noteStore.AddLabelToNote(ctx, noteID, label.ID, userID); err != nil {
 			return http.StatusInternalServerError, fmt.Errorf("add label to note: %w", err)
 		}
 	}
 	return http.StatusOK, nil
 }
 
-func (h *NotesHandler) createTodoItems(noteID string, items []CreateNoteItem) (int, error) {
+func (h *NotesHandler) createTodoItems(ctx context.Context, noteID string, items []CreateNoteItem) (int, error) {
 	for _, item := range items {
 		if item.IndentLevel < 0 || item.IndentLevel > 1 {
 			return http.StatusBadRequest, errors.New("indent_level must be 0 or 1")
 		}
-		if _, err := h.noteStore.CreateItemWithCompleted(noteID, item.Text, item.Position, item.Completed, item.IndentLevel, ""); err != nil {
+		if _, err := h.noteStore.CreateItemWithCompleted(ctx, noteID, item.Text, item.Position, item.Completed, item.IndentLevel, ""); err != nil {
 			return http.StatusInternalServerError, err
 		}
 	}
@@ -200,7 +201,7 @@ func (h *NotesHandler) GetNotes(w http.ResponseWriter, r *http.Request) (int, an
 		return http.StatusBadRequest, nil, err
 	}
 
-	notes, hasMore, err := h.noteStore.GetPageByUserID(user.ID, archived, trashed, search, labelID, myTodo, page.Limit, page.Offset)
+	notes, hasMore, err := h.noteStore.GetPageByUserID(r.Context(), user.ID, archived, trashed, search, labelID, myTodo, page.Limit, page.Offset)
 	if err != nil {
 		return http.StatusInternalServerError, nil, err
 	}
@@ -239,7 +240,7 @@ func (h *NotesHandler) CreateNote(w http.ResponseWriter, r *http.Request) (int, 
 		return status, nil, err
 	}
 
-	note, err := h.noteStore.Create(user.ID, req.Title, req.Content, req.NoteType, req.Color)
+	note, err := h.noteStore.Create(r.Context(), user.ID, req.Title, req.Content, req.NoteType, req.Color)
 	if err != nil {
 		return http.StatusInternalServerError, nil, err
 	}
@@ -247,28 +248,28 @@ func (h *NotesHandler) CreateNote(w http.ResponseWriter, r *http.Request) (int, 
 	needRefetch := false
 
 	if req.NoteType == models.NoteTypeTodo && len(req.Items) > 0 {
-		if status, err := h.createTodoItems(note.ID, req.Items); err != nil {
+		if status, err := h.createTodoItems(r.Context(), note.ID, req.Items); err != nil {
 			return status, nil, err
 		}
 		needRefetch = true
 	}
 
 	if len(req.Labels) > 0 {
-		if status, err := h.createNoteLabels(note.ID, user.ID, req.Labels); err != nil {
+		if status, err := h.createNoteLabels(r.Context(), note.ID, user.ID, req.Labels); err != nil {
 			return status, nil, err
 		}
 		needRefetch = true
 	}
 
 	if needRefetch {
-		updatedNote, refetchErr := h.noteStore.GetByID(note.ID, user.ID)
+		updatedNote, refetchErr := h.noteStore.GetByID(r.Context(), note.ID, user.ID)
 		if refetchErr != nil {
 			return http.StatusInternalServerError, nil, fmt.Errorf("refetch updated note: %w", refetchErr)
 		}
 		note = updatedNote
 	}
 
-	h.publishNoteEvent(note.ID, sse.EventNoteCreated, note, user.ID)
+	h.publishNoteEvent(r.Context(), note.ID, sse.EventNoteCreated, note, user.ID)
 	return http.StatusCreated, note, nil
 }
 
@@ -299,7 +300,7 @@ func (h *NotesHandler) GetNote(w http.ResponseWriter, r *http.Request) (int, any
 		return http.StatusBadRequest, nil, errors.New("invalid note ID format")
 	}
 
-	note, err := h.noteStore.GetByID(id, user.ID)
+	note, err := h.noteStore.GetByID(r.Context(), id, user.ID)
 	if err != nil {
 		if errors.Is(err, models.ErrNoteNotFound) {
 			return http.StatusNotFound, nil, err
@@ -337,7 +338,7 @@ func (h *NotesHandler) DuplicateNote(w http.ResponseWriter, r *http.Request) (in
 		return http.StatusBadRequest, nil, errors.New("invalid note ID format")
 	}
 
-	sourceNote, err := h.noteStore.GetByID(id, user.ID)
+	sourceNote, err := h.noteStore.GetByID(r.Context(), id, user.ID)
 	if err != nil {
 		if errors.Is(err, models.ErrNoteNotFound) {
 			return http.StatusNotFound, nil, err
@@ -345,23 +346,23 @@ func (h *NotesHandler) DuplicateNote(w http.ResponseWriter, r *http.Request) (in
 		return http.StatusInternalServerError, nil, err
 	}
 
-	duplicatedNote, err := h.noteStore.Duplicate(sourceNote, user.ID)
+	duplicatedNote, err := h.noteStore.Duplicate(r.Context(), sourceNote, user.ID)
 	if err != nil {
 		return http.StatusInternalServerError, nil, err
 	}
 
-	h.publishNoteEvent(duplicatedNote.ID, sse.EventNoteCreated, duplicatedNote, user.ID)
+	h.publishNoteEvent(r.Context(), duplicatedNote.ID, sse.EventNoteCreated, duplicatedNote, user.ID)
 	return http.StatusCreated, duplicatedNote, nil
 }
 
-func (h *NotesHandler) validateTodoItems(noteID string, items []UpdateNoteItem) (int, error) {
+func (h *NotesHandler) validateTodoItems(ctx context.Context, noteID string, items []UpdateNoteItem) (int, error) {
 	for _, item := range items {
 		if item.IndentLevel < 0 || item.IndentLevel > 1 {
 			return http.StatusBadRequest, errors.New("indent_level must be 0 or 1")
 		}
 	}
 
-	if status, err := h.validateItemAssignments(noteID, items); err != nil {
+	if status, err := h.validateItemAssignments(ctx, noteID, items); err != nil {
 		return status, err
 	}
 
@@ -369,7 +370,7 @@ func (h *NotesHandler) validateTodoItems(noteID string, items []UpdateNoteItem) 
 }
 
 // validateItemAssignments checks that all assigned user IDs are valid and have access to the note.
-func (h *NotesHandler) validateItemAssignments(noteID string, items []UpdateNoteItem) (int, error) {
+func (h *NotesHandler) validateItemAssignments(ctx context.Context, noteID string, items []UpdateNoteItem) (int, error) {
 	hasAssignment := false
 	for _, item := range items {
 		if item.AssignedTo != "" {
@@ -381,7 +382,7 @@ func (h *NotesHandler) validateItemAssignments(noteID string, items []UpdateNote
 		return http.StatusOK, nil
 	}
 
-	shares, err := h.noteStore.GetNoteShares(noteID)
+	shares, err := h.noteStore.GetNoteShares(ctx, noteID)
 	if err != nil {
 		return http.StatusInternalServerError, fmt.Errorf("failed to check note shares: %w", err)
 	}
@@ -389,7 +390,7 @@ func (h *NotesHandler) validateItemAssignments(noteID string, items []UpdateNote
 		return http.StatusBadRequest, errors.New("cannot assign items on an unshared note")
 	}
 
-	ownerID, err := h.noteStore.GetOwnerID(noteID)
+	ownerID, err := h.noteStore.GetOwnerID(ctx, noteID)
 	if err != nil {
 		return http.StatusInternalServerError, fmt.Errorf("failed to get note owner: %w", err)
 	}
@@ -415,19 +416,19 @@ func (h *NotesHandler) validateItemAssignments(noteID string, items []UpdateNote
 	return http.StatusOK, nil
 }
 
-func (h *NotesHandler) updateTodoItems(noteID string, userID string, items []UpdateNoteItem) error {
-	currentNote, err := h.noteStore.GetByID(noteID, userID)
+func (h *NotesHandler) updateTodoItems(ctx context.Context, noteID string, userID string, items []UpdateNoteItem) error {
+	currentNote, err := h.noteStore.GetByID(ctx, noteID, userID)
 	if err != nil {
 		return err
 	}
 
 	if currentNote.NoteType == models.NoteTypeTodo {
-		if err := h.noteStore.DeleteItemsByNoteID(noteID); err != nil {
+		if err := h.noteStore.DeleteItemsByNoteID(ctx, noteID); err != nil {
 			return err
 		}
 
 		for _, item := range items {
-			_, err := h.noteStore.CreateItemWithCompleted(noteID, item.Text, item.Position, item.Completed, item.IndentLevel, item.AssignedTo)
+			_, err := h.noteStore.CreateItemWithCompleted(ctx, noteID, item.Text, item.Position, item.Completed, item.IndentLevel, item.AssignedTo)
 			if err != nil {
 				return err
 			}
@@ -473,12 +474,12 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 	// Validate items before persisting any changes so invalid assigned_to
 	// values are rejected before note metadata is committed.
 	if len(req.Items) > 0 {
-		if status, err := h.validateTodoItems(id, req.Items); err != nil {
+		if status, err := h.validateTodoItems(r.Context(), id, req.Items); err != nil {
 			return status, nil, err
 		}
 	}
 
-	err := h.noteStore.Update(id, user.ID, req.Title, req.Content, req.Color, req.Pinned, req.Archived, req.CheckedItemsCollapsed)
+	err := h.noteStore.Update(r.Context(), id, user.ID, req.Title, req.Content, req.Color, req.Pinned, req.Archived, req.CheckedItemsCollapsed)
 	if err != nil {
 		if errors.Is(err, models.ErrNoteNotFound) || errors.Is(err, models.ErrNoteNoAccess) {
 			return http.StatusNotFound, nil, err
@@ -487,17 +488,17 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 	}
 
 	if len(req.Items) > 0 {
-		if updateErr := h.updateTodoItems(id, user.ID, req.Items); updateErr != nil {
+		if updateErr := h.updateTodoItems(r.Context(), id, user.ID, req.Items); updateErr != nil {
 			return http.StatusInternalServerError, nil, updateErr
 		}
 	}
 
-	note, err := h.noteStore.GetByID(id, user.ID)
+	note, err := h.noteStore.GetByID(r.Context(), id, user.ID)
 	if err != nil {
 		return http.StatusInternalServerError, nil, err
 	}
 
-	h.publishNoteEvent(id, sse.EventNoteUpdated, note, user.ID)
+	h.publishNoteEvent(r.Context(), id, sse.EventNoteUpdated, note, user.ID)
 	return http.StatusOK, note, nil
 }
 
@@ -531,10 +532,10 @@ func (h *NotesHandler) DeleteNote(w http.ResponseWriter, r *http.Request) (int, 
 	permanent := r.URL.Query().Get("permanent") == queryTrue
 
 	// Fetch audience before deleting so we can notify share targets too.
-	audienceIDs, audienceErr := h.noteStore.GetNoteAudienceIDs(id)
+	audienceIDs, audienceErr := h.noteStore.GetNoteAudienceIDs(r.Context(), id)
 
 	if permanent {
-		err := h.noteStore.DeleteFromTrash(id, user.ID)
+		err := h.noteStore.DeleteFromTrash(r.Context(), id, user.ID)
 		if err != nil {
 			if errors.Is(err, models.ErrNoteNotInTrash) {
 				return http.StatusNotFound, nil, err
@@ -542,7 +543,7 @@ func (h *NotesHandler) DeleteNote(w http.ResponseWriter, r *http.Request) (int, 
 			return http.StatusInternalServerError, nil, err
 		}
 	} else {
-		err := h.noteStore.MoveToTrash(id, user.ID)
+		err := h.noteStore.MoveToTrash(r.Context(), id, user.ID)
 		if err != nil {
 			if errors.Is(err, models.ErrNoteNotOwnedByUser) {
 				return http.StatusNotFound, nil, err
@@ -574,7 +575,7 @@ func (h *NotesHandler) EmptyTrash(w http.ResponseWriter, r *http.Request) (int, 
 		return http.StatusUnauthorized, nil, errors.New("unauthorized")
 	}
 
-	deletedNotes, err := h.noteStore.EmptyTrash(user.ID)
+	deletedNotes, err := h.noteStore.EmptyTrash(r.Context(), user.ID)
 	if err != nil {
 		return http.StatusInternalServerError, nil, err
 	}
@@ -613,7 +614,7 @@ func (h *NotesHandler) RestoreNote(w http.ResponseWriter, r *http.Request) (int,
 		return http.StatusBadRequest, nil, errors.New("invalid note ID format")
 	}
 
-	err := h.noteStore.RestoreFromTrash(id, user.ID)
+	err := h.noteStore.RestoreFromTrash(r.Context(), id, user.ID)
 	if err != nil {
 		if errors.Is(err, models.ErrNoteNotOwnedByUser) || errors.Is(err, models.ErrNoteNotInTrash) {
 			return http.StatusNotFound, nil, err
@@ -621,12 +622,12 @@ func (h *NotesHandler) RestoreNote(w http.ResponseWriter, r *http.Request) (int,
 		return http.StatusInternalServerError, nil, err
 	}
 
-	note, err := h.noteStore.GetByID(id, user.ID)
+	note, err := h.noteStore.GetByID(r.Context(), id, user.ID)
 	if err != nil {
 		return http.StatusInternalServerError, nil, err
 	}
 
-	h.publishNoteEvent(id, sse.EventNoteUpdated, note, user.ID)
+	h.publishNoteEvent(r.Context(), id, sse.EventNoteUpdated, note, user.ID)
 	return http.StatusOK, note, nil
 }
 
@@ -662,7 +663,7 @@ func (h *NotesHandler) ReorderNotes(w http.ResponseWriter, r *http.Request) (int
 		return http.StatusBadRequest, nil, errors.New("empty note IDs list")
 	}
 
-	err := h.noteStore.ReorderNotes(user.ID, req.NoteIDs)
+	err := h.noteStore.ReorderNotes(r.Context(), user.ID, req.NoteIDs)
 	if err != nil {
 		if errors.Is(err, models.ErrNoteNoAccess) {
 			return http.StatusForbidden, nil, err

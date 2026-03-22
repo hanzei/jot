@@ -7,7 +7,8 @@
     "retry": "Spróbuj ponownie",
     "clearSearch": "Wyczyść wyszukiwanie",
     "error": "Błąd",
-    "unknown": "nieznany"
+    "unknown": "nieznany",
+    "loading": "Ładowanie..."
   },
   "nav": {
     "settings": "Ustawienia",
@@ -74,6 +75,7 @@
     "tryDifferentKeywords": "Spróbuj innych słów kluczowych",
     "failedLoadNotes": "Nie udało się załadować notatek",
     "checkConnection": "Sprawdź połączenie i spróbuj ponownie",
+    "sortUpdateFailed": "Nie udało się zaktualizować preferencji sortowania",
     "sortOption": {
       "manual": "Ręcznie",
       "updated_at": "Ostatnia modyfikacja",

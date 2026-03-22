@@ -1,12 +1,11 @@
 package models
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
 	"time"
-
-	sqlite3 "github.com/mattn/go-sqlite3"
 )
 
 var ErrLabelNotFoundOrNotOwned = errors.New("label not found or not owned by user")
@@ -35,9 +34,9 @@ func NewLabelStore(db *sql.DB) *LabelStore {
 }
 
 // GetLabels returns all labels belonging to a user.
-func (s *LabelStore) GetLabels(userID string) ([]Label, error) {
+func (s *LabelStore) GetLabels(ctx context.Context, userID string) ([]Label, error) {
 	query := `SELECT id, user_id, name, created_at, updated_at FROM labels WHERE user_id = ? ORDER BY name ASC`
-	rows, err := s.db.Query(query, userID)
+	rows, err := s.db.QueryContext(ctx, query, userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get labels: %w", err)
 	}
@@ -54,14 +53,14 @@ func (s *LabelStore) GetLabels(userID string) ([]Label, error) {
 
 // GetOrCreateLabel finds an existing label by name for a user or creates a new one.
 // Uses an atomic upsert to avoid race conditions when multiple callers create the same label concurrently.
-func (s *LabelStore) GetOrCreateLabel(userID, name string) (*Label, error) {
+func (s *LabelStore) GetOrCreateLabel(ctx context.Context, userID, name string) (*Label, error) {
 	id, err := generateID()
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate label ID: %w", err)
 	}
 
 	var l Label
-	err = s.db.QueryRow(
+	err = s.db.QueryRowContext(ctx,
 		`INSERT INTO labels (id, user_id, name) VALUES (?, ?, ?)
 		 ON CONFLICT(user_id, name) DO UPDATE SET name=excluded.name
 		 RETURNING id, user_id, name, created_at, updated_at`,
@@ -74,9 +73,9 @@ func (s *LabelStore) GetOrCreateLabel(userID, name string) (*Label, error) {
 }
 
 // GetLabelNoteIDs returns note IDs currently associated with a user-owned label.
-func (s *LabelStore) GetLabelNoteIDs(labelID, userID string) ([]string, error) {
+func (s *LabelStore) GetLabelNoteIDs(ctx context.Context, labelID, userID string) ([]string, error) {
 	var exists int
-	if err := s.db.QueryRow(
+	if err := s.db.QueryRowContext(ctx,
 		`SELECT 1 FROM labels WHERE id = ? AND user_id = ?`,
 		labelID, userID,
 	).Scan(&exists); err != nil {
@@ -86,7 +85,7 @@ func (s *LabelStore) GetLabelNoteIDs(labelID, userID string) ([]string, error) {
 		return nil, fmt.Errorf("check label ownership: %w", err)
 	}
 
-	rows, err := s.db.Query(`SELECT note_id FROM note_labels WHERE label_id = ?`, labelID)
+	rows, err := s.db.QueryContext(ctx, `SELECT note_id FROM note_labels WHERE label_id = ?`, labelID)
 	if err != nil {
 		return nil, fmt.Errorf("get label note IDs: %w", err)
 	}
@@ -109,9 +108,9 @@ func (s *LabelStore) GetLabelNoteIDs(labelID, userID string) ([]string, error) {
 }
 
 // RenameLabel renames a user-owned label and returns the updated row.
-func (s *LabelStore) RenameLabel(labelID, userID, newName string) (*Label, error) {
+func (s *LabelStore) RenameLabel(ctx context.Context, labelID, userID, newName string) (*Label, error) {
 	var l Label
-	err := s.db.QueryRow(
+	err := s.db.QueryRowContext(ctx,
 		`UPDATE labels
 		 SET name = ?, updated_at = CURRENT_TIMESTAMP
 		 WHERE id = ? AND user_id = ?
@@ -119,8 +118,7 @@ func (s *LabelStore) RenameLabel(labelID, userID, newName string) (*Label, error
 		newName, labelID, userID,
 	).Scan(&l.ID, &l.UserID, &l.Name, &l.CreatedAt, &l.UpdatedAt)
 	if err != nil {
-		var sqliteErr sqlite3.Error
-		if errors.As(err, &sqliteErr) && sqliteErr.ExtendedCode == sqlite3.ErrConstraintUnique {
+		if isUniqueConstraintError(err) {
 			return nil, ErrLabelNameConflict
 		}
 		if errors.Is(err, sql.ErrNoRows) {
@@ -132,8 +130,8 @@ func (s *LabelStore) RenameLabel(labelID, userID, newName string) (*Label, error
 }
 
 // DeleteLabel deletes a user-owned label and all note label associations in one transaction.
-func (s *LabelStore) DeleteLabel(labelID, userID string) error {
-	tx, err := s.db.Begin()
+func (s *LabelStore) DeleteLabel(ctx context.Context, labelID, userID string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin delete label transaction: %w", err)
 	}
@@ -144,7 +142,7 @@ func (s *LabelStore) DeleteLabel(labelID, userID string) error {
 	}()
 
 	var exists int
-	if err := tx.QueryRow(
+	if err := tx.QueryRowContext(ctx,
 		`SELECT 1 FROM labels WHERE id = ? AND user_id = ?`,
 		labelID, userID,
 	).Scan(&exists); err != nil {
@@ -154,11 +152,11 @@ func (s *LabelStore) DeleteLabel(labelID, userID string) error {
 		return fmt.Errorf("check label ownership: %w", err)
 	}
 
-	if _, err := tx.Exec(`DELETE FROM note_labels WHERE label_id = ?`, labelID); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM note_labels WHERE label_id = ?`, labelID); err != nil {
 		return fmt.Errorf("delete note label associations: %w", err)
 	}
 
-	if _, err := tx.Exec(`DELETE FROM labels WHERE id = ? AND user_id = ?`, labelID, userID); err != nil {
+	if _, err := tx.ExecContext(ctx, `DELETE FROM labels WHERE id = ? AND user_id = ?`, labelID, userID); err != nil {
 		return fmt.Errorf("delete label: %w", err)
 	}
 

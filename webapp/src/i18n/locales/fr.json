@@ -80,6 +80,12 @@
     "emptyTrashConfirmMessage_other": "Supprimer définitivement les {{count}} notes dans la corbeille ? Cette action est irréversible.",
     "trashEmptied": "Corbeille vidée",
     "emptyTrashFailed": "Impossible de vider la corbeille",
+    "failedLoadNotes": "Impossible de charger les notes.",
+    "failedDeleteNote": "Impossible de déplacer la note vers la corbeille.",
+    "failedRestoreNote": "Impossible de restaurer la note.",
+    "failedDeleteNoteForever": "Impossible de supprimer définitivement la note.",
+    "failedReorderNotes": "Impossible de réorganiser les notes.",
+    "failedUpdateSort": "Impossible de mettre à jour la préférence de tri.",
     "undo": "Annuler"
   },
   "settings": {
@@ -296,6 +302,8 @@
     "titleTooLong": "Le titre ne peut pas dépasser {{max}} caractères",
     "contentTooLong": "Le contenu ne peut pas dépasser {{max}} caractères",
     "failedSaveChanges": "Impossible d'enregistrer les modifications. Veuillez réessayer.",
+    "failedPin": "Impossible de mettre à jour l'épinglage.",
+    "failedArchive": "Impossible de mettre à jour l'archivage.",
     "failedDuplicate": "Impossible de dupliquer la note. Veuillez réessayer.",
     "menuOptions": "Options de la note",
     "assignItem": "Assigner l'élément",

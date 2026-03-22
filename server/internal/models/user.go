@@ -1,12 +1,12 @@
 package models
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
 	"time"
 
-	sqlite3 "github.com/mattn/go-sqlite3"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -45,7 +45,7 @@ func NewUserStore(db *sql.DB) *UserStore {
 	return &UserStore{db: db}
 }
 
-func (s *UserStore) Create(username, password string) (*User, error) {
+func (s *UserStore) Create(ctx context.Context, username, password string) (*User, error) {
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return nil, fmt.Errorf("failed to hash password: %w", err)
@@ -58,7 +58,7 @@ func (s *UserStore) Create(username, password string) (*User, error) {
 
 	var isFirstUser bool
 	var count int
-	err = s.db.QueryRow("SELECT COUNT(*) FROM users").Scan(&count)
+	err = s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM users").Scan(&count)
 	if err != nil {
 		return nil, fmt.Errorf("failed to count users: %w", err)
 	}
@@ -69,16 +69,15 @@ func (s *UserStore) Create(username, password string) (*User, error) {
 		role = RoleAdmin
 	}
 
-	query := `INSERT INTO users (id, username, password_hash, role) 
+	query := `INSERT INTO users (id, username, password_hash, role)
 			  VALUES (?, ?, ?, ?) RETURNING created_at, updated_at`
 
 	var user User
-	err = s.db.QueryRow(query, userID, username, string(hashedPassword), role).Scan(
+	err = s.db.QueryRowContext(ctx, query, userID, username, string(hashedPassword), role).Scan(
 		&user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
-		var sqliteErr sqlite3.Error
-		if errors.As(err, &sqliteErr) && sqliteErr.ExtendedCode == sqlite3.ErrConstraintUnique {
+		if isUniqueConstraintError(err) {
 			return nil, ErrUsernameTaken
 		}
 		return nil, fmt.Errorf("failed to create user: %w", err)
@@ -91,14 +90,14 @@ func (s *UserStore) Create(username, password string) (*User, error) {
 	return &user, nil
 }
 
-func (s *UserStore) GetByUsername(username string) (*User, error) {
+func (s *UserStore) GetByUsername(ctx context.Context, username string) (*User, error) {
 	var user User
 	query := `SELECT id, username, first_name, last_name, password_hash, role,
 			         profile_icon IS NOT NULL AS has_profile_icon,
 			         created_at, updated_at
 			  FROM users WHERE username = ?`
 
-	err := s.db.QueryRow(query, username).Scan(
+	err := s.db.QueryRowContext(ctx, query, username).Scan(
 		&user.ID, &user.Username, &user.FirstName, &user.LastName, &user.PasswordHash,
 		&user.Role, &user.HasProfileIcon, &user.CreatedAt, &user.UpdatedAt,
 	)
@@ -111,14 +110,14 @@ func (s *UserStore) GetByUsername(username string) (*User, error) {
 	return &user, nil
 }
 
-func (s *UserStore) GetByID(id string) (*User, error) {
+func (s *UserStore) GetByID(ctx context.Context, id string) (*User, error) {
 	var user User
 	query := `SELECT id, username, first_name, last_name, password_hash, role,
 			         profile_icon IS NOT NULL AS has_profile_icon,
 			         created_at, updated_at
 			  FROM users WHERE id = ?`
 
-	err := s.db.QueryRow(query, id).Scan(
+	err := s.db.QueryRowContext(ctx, query, id).Scan(
 		&user.ID, &user.Username, &user.FirstName, &user.LastName, &user.PasswordHash,
 		&user.Role, &user.HasProfileIcon, &user.CreatedAt, &user.UpdatedAt,
 	)
@@ -171,10 +170,10 @@ func buildUserPageQuery(term string, excludeUserID string, limit int, offset int
 	return query, args
 }
 
-func (s *UserStore) GetPage(term string, excludeUserID string, limit int, offset int) ([]*User, bool, error) {
+func (s *UserStore) GetPage(ctx context.Context, term string, excludeUserID string, limit int, offset int) ([]*User, bool, error) {
 	query, args := buildUserPageQuery(term, excludeUserID, limit, offset)
 
-	rows, err := s.db.Query(query, args...)
+	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
 		return nil, false, fmt.Errorf("failed to query users: %w", err)
 	}
@@ -196,13 +195,13 @@ func (s *UserStore) GetPage(term string, excludeUserID string, limit int, offset
 	return ptrs, hasMore, nil
 }
 
-func (s *UserStore) GetAll() ([]*User, error) {
+func (s *UserStore) GetAll(ctx context.Context) ([]*User, error) {
 	query := `SELECT id, username, first_name, last_name, password_hash, role,
 			         profile_icon IS NOT NULL AS has_profile_icon,
 			         created_at, updated_at
 			  FROM users ORDER BY created_at DESC`
 
-	rows, err := s.db.Query(query)
+	rows, err := s.db.QueryContext(ctx, query)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query users: %w", err)
 	}
@@ -222,7 +221,7 @@ func (s *UserStore) GetAll() ([]*User, error) {
 // Search returns users whose username, first name, or last name contain the
 // given search term (case-insensitive). Results are ordered by creation date
 // descending.
-func (s *UserStore) Search(term string) ([]*User, error) {
+func (s *UserStore) Search(ctx context.Context, term string) ([]*User, error) {
 	like := "%" + term + "%"
 	query := `SELECT id, username, first_name, last_name, password_hash, role,
 			         profile_icon IS NOT NULL AS has_profile_icon,
@@ -231,7 +230,7 @@ func (s *UserStore) Search(term string) ([]*User, error) {
 			  WHERE username LIKE ? OR first_name LIKE ? OR last_name LIKE ?
 			  ORDER BY created_at DESC`
 
-	rows, err := s.db.Query(query, like, like, like)
+	rows, err := s.db.QueryContext(ctx, query, like, like, like)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search users: %w", err)
 	}
@@ -251,18 +250,17 @@ func (s *UserStore) Search(term string) ([]*User, error) {
 // UpdateUsername sets a new username for the user with the given id and returns
 // the updated user. Returns ErrUsernameTaken if the username is already in use,
 // or another error if the id does not exist or the query fails.
-func (s *UserStore) UpdateUsername(id, newUsername string) (*User, error) {
+func (s *UserStore) UpdateUsername(ctx context.Context, id, newUsername string) (*User, error) {
 	query := `UPDATE users SET username = ?, updated_at = CURRENT_TIMESTAMP
 			  WHERE id = ? RETURNING id, username, first_name, last_name, role,
 			  profile_icon IS NOT NULL AS has_profile_icon,
 			  created_at, updated_at`
 	var user User
-	err := s.db.QueryRow(query, newUsername, id).Scan(
+	err := s.db.QueryRowContext(ctx, query, newUsername, id).Scan(
 		&user.ID, &user.Username, &user.FirstName, &user.LastName, &user.Role, &user.HasProfileIcon, &user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
-		var sqliteErr sqlite3.Error
-		if errors.As(err, &sqliteErr) && sqliteErr.ExtendedCode == sqlite3.ErrConstraintUnique {
+		if isUniqueConstraintError(err) {
 			return nil, ErrUsernameTaken
 		}
 		if errors.Is(err, sql.ErrNoRows) {
@@ -273,14 +271,14 @@ func (s *UserStore) UpdateUsername(id, newUsername string) (*User, error) {
 	return &user, nil
 }
 
-func (s *UserStore) UpdateProfileIcon(id string, data []byte, contentType string) error {
+func (s *UserStore) UpdateProfileIcon(ctx context.Context, id string, data []byte, contentType string) error {
 	if len(data) == 0 {
 		return errors.New("profile icon data must not be empty")
 	}
 	if contentType == "" {
 		return errors.New("profile icon content type must not be empty")
 	}
-	result, err := s.db.Exec(
+	result, err := s.db.ExecContext(ctx,
 		`UPDATE users SET profile_icon = ?, profile_icon_content_type = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
 		data, contentType, id,
 	)
@@ -297,10 +295,10 @@ func (s *UserStore) UpdateProfileIcon(id string, data []byte, contentType string
 	return nil
 }
 
-func (s *UserStore) GetProfileIcon(id string) ([]byte, string, error) {
+func (s *UserStore) GetProfileIcon(ctx context.Context, id string) ([]byte, string, error) {
 	var data []byte
 	var contentType sql.Null[string]
-	err := s.db.QueryRow(
+	err := s.db.QueryRowContext(ctx,
 		`SELECT profile_icon, profile_icon_content_type FROM users WHERE id = ?`, id,
 	).Scan(&data, &contentType)
 	if err != nil {
@@ -315,8 +313,8 @@ func (s *UserStore) GetProfileIcon(id string) ([]byte, string, error) {
 	return data, contentType.V, nil
 }
 
-func (s *UserStore) DeleteProfileIcon(id string) error {
-	result, err := s.db.Exec(
+func (s *UserStore) DeleteProfileIcon(ctx context.Context, id string) error {
+	result, err := s.db.ExecContext(ctx,
 		`UPDATE users SET profile_icon = NULL, profile_icon_content_type = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
 		id,
 	)
@@ -333,13 +331,13 @@ func (s *UserStore) DeleteProfileIcon(id string) error {
 	return nil
 }
 
-func (s *UserStore) UpdatePassword(id, newPassword string) error {
+func (s *UserStore) UpdatePassword(ctx context.Context, id, newPassword string) error {
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
 	if err != nil {
 		return fmt.Errorf("failed to hash password: %w", err)
 	}
 
-	result, err := s.db.Exec(
+	result, err := s.db.ExecContext(ctx,
 		`UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
 		string(hashedPassword), id,
 	)
@@ -358,13 +356,13 @@ func (s *UserStore) UpdatePassword(id, newPassword string) error {
 	return nil
 }
 
-func (s *UserStore) UpdateName(id, firstName, lastName string) (*User, error) {
+func (s *UserStore) UpdateName(ctx context.Context, id, firstName, lastName string) (*User, error) {
 	query := `UPDATE users SET first_name = ?, last_name = ?, updated_at = CURRENT_TIMESTAMP
 			  WHERE id = ? RETURNING id, username, first_name, last_name, role,
 			  profile_icon IS NOT NULL AS has_profile_icon,
 			  created_at, updated_at`
 	var user User
-	err := s.db.QueryRow(query, firstName, lastName, id).Scan(
+	err := s.db.QueryRowContext(ctx, query, firstName, lastName, id).Scan(
 		&user.ID, &user.Username, &user.FirstName, &user.LastName, &user.Role, &user.HasProfileIcon, &user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
@@ -380,15 +378,15 @@ func (s *UserStore) UpdateName(id, firstName, lastName string) (*User, error) {
 // the given user in a single transaction. Returns ErrUsernameTaken if the new
 // username conflicts with an existing account, or ErrUserNotFound if the id
 // does not exist.
-func (s *UserStore) UpdateProfile(id, username, firstName, lastName string) (*User, error) {
-	tx, err := s.db.Begin()
+func (s *UserStore) UpdateProfile(ctx context.Context, id, username, firstName, lastName string) (*User, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
 	var user User
-	err = tx.QueryRow(
+	err = tx.QueryRowContext(ctx,
 		`UPDATE users SET username = ?, first_name = ?, last_name = ?, updated_at = CURRENT_TIMESTAMP
 		 WHERE id = ? RETURNING id, username, first_name, last_name, role,
 		 profile_icon IS NOT NULL AS has_profile_icon,
@@ -396,8 +394,7 @@ func (s *UserStore) UpdateProfile(id, username, firstName, lastName string) (*Us
 		username, firstName, lastName, id,
 	).Scan(&user.ID, &user.Username, &user.FirstName, &user.LastName, &user.Role, &user.HasProfileIcon, &user.CreatedAt, &user.UpdatedAt)
 	if err != nil {
-		var sqliteErr sqlite3.Error
-		if errors.As(err, &sqliteErr) && sqliteErr.ExtendedCode == sqlite3.ErrConstraintUnique {
+		if isUniqueConstraintError(err) {
 			return nil, ErrUsernameTaken
 		}
 		if errors.Is(err, sql.ErrNoRows) {
@@ -412,12 +409,12 @@ func (s *UserStore) UpdateProfile(id, username, firstName, lastName string) (*Us
 	return &user, nil
 }
 
-func (s *UserStore) UpdateRole(id, role string) (*User, error) {
+func (s *UserStore) UpdateRole(ctx context.Context, id, role string) (*User, error) {
 	if role != RoleUser && role != RoleAdmin {
 		return nil, fmt.Errorf("invalid role %q: must be %q or %q", role, RoleUser, RoleAdmin)
 	}
 
-	tx, err := s.db.Begin()
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
@@ -426,7 +423,7 @@ func (s *UserStore) UpdateRole(id, role string) (*User, error) {
 	// Guard: if we're demoting an admin to user, ensure they're not the last admin.
 	if role == RoleUser {
 		var currentRole string
-		err = tx.QueryRow(`SELECT role FROM users WHERE id = ?`, id).Scan(&currentRole)
+		err = tx.QueryRowContext(ctx, `SELECT role FROM users WHERE id = ?`, id).Scan(&currentRole)
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("%w", ErrUserNotFound)
 		}
@@ -435,7 +432,7 @@ func (s *UserStore) UpdateRole(id, role string) (*User, error) {
 		}
 		if currentRole == RoleAdmin {
 			var adminCount int
-			if err = tx.QueryRow(`SELECT COUNT(*) FROM users WHERE role = 'admin'`).Scan(&adminCount); err != nil {
+			if err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM users WHERE role = 'admin'`).Scan(&adminCount); err != nil {
 				return nil, fmt.Errorf("failed to count admins: %w", err)
 			}
 			if adminCount <= 1 {
@@ -445,7 +442,7 @@ func (s *UserStore) UpdateRole(id, role string) (*User, error) {
 	}
 
 	var user User
-	err = tx.QueryRow(
+	err = tx.QueryRowContext(ctx,
 		`UPDATE users SET role = ?, updated_at = CURRENT_TIMESTAMP
 		 WHERE id = ? RETURNING id, username, first_name, last_name, role,
 		 profile_icon IS NOT NULL AS has_profile_icon,
@@ -465,27 +462,27 @@ func (s *UserStore) UpdateRole(id, role string) (*User, error) {
 	return &user, nil
 }
 
-func (s *UserStore) Delete(id, requestingUserID string) error {
-	return s.DeleteWithCleanup(id, requestingUserID, nil)
+func (s *UserStore) Delete(ctx context.Context, id, requestingUserID string) error {
+	return s.DeleteWithCleanup(ctx, id, requestingUserID, nil)
 }
 
 // DeleteWithCleanup deletes a user and runs an optional postDelete callback
 // inside the same transaction. The callback executes after the user row is
 // deleted (and cascade effects like note_shares removal have taken place) but
 // before the transaction commits, so any cleanup is atomic with the delete.
-func (s *UserStore) DeleteWithCleanup(id, requestingUserID string, postDelete func(tx *sql.Tx) error) error {
+func (s *UserStore) DeleteWithCleanup(ctx context.Context, id, requestingUserID string, postDelete func(ctx context.Context, tx *sql.Tx) error) error {
 	if id == requestingUserID {
 		return fmt.Errorf("%w", ErrCannotDeleteSelf)
 	}
 
-	tx, err := s.db.Begin()
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
 	var role string
-	err = tx.QueryRow(`SELECT role FROM users WHERE id = ?`, id).Scan(&role)
+	err = tx.QueryRowContext(ctx, `SELECT role FROM users WHERE id = ?`, id).Scan(&role)
 	if errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("%w", ErrUserNotFound)
 	}
@@ -495,7 +492,7 @@ func (s *UserStore) DeleteWithCleanup(id, requestingUserID string, postDelete fu
 
 	if role == RoleAdmin {
 		var adminCount int
-		if err = tx.QueryRow(`SELECT COUNT(*) FROM users WHERE role = 'admin'`).Scan(&adminCount); err != nil {
+		if err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM users WHERE role = 'admin'`).Scan(&adminCount); err != nil {
 			return fmt.Errorf("failed to count admins: %w", err)
 		}
 		if adminCount <= 1 {
@@ -503,7 +500,7 @@ func (s *UserStore) DeleteWithCleanup(id, requestingUserID string, postDelete fu
 		}
 	}
 
-	result, err := tx.Exec(`DELETE FROM users WHERE id = ?`, id)
+	result, err := tx.ExecContext(ctx, `DELETE FROM users WHERE id = ?`, id)
 	if err != nil {
 		return fmt.Errorf("failed to delete user: %w", err)
 	}
@@ -516,7 +513,7 @@ func (s *UserStore) DeleteWithCleanup(id, requestingUserID string, postDelete fu
 	}
 
 	if postDelete != nil {
-		if err = postDelete(tx); err != nil {
+		if err = postDelete(ctx, tx); err != nil {
 			return fmt.Errorf("post-delete cleanup failed: %w", err)
 		}
 	}
@@ -527,7 +524,7 @@ func (s *UserStore) DeleteWithCleanup(id, requestingUserID string, postDelete fu
 	return nil
 }
 
-func (s *UserStore) CreateByAdmin(username, password string, role string) (*User, error) {
+func (s *UserStore) CreateByAdmin(ctx context.Context, username, password string, role string) (*User, error) {
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return nil, fmt.Errorf("failed to hash password: %w", err)
@@ -542,12 +539,11 @@ func (s *UserStore) CreateByAdmin(username, password string, role string) (*User
 			  VALUES (?, ?, ?, ?) RETURNING created_at, updated_at`
 
 	var user User
-	err = s.db.QueryRow(query, userID, username, string(hashedPassword), role).Scan(
+	err = s.db.QueryRowContext(ctx, query, userID, username, string(hashedPassword), role).Scan(
 		&user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
-		var sqliteErr sqlite3.Error
-		if errors.As(err, &sqliteErr) && sqliteErr.ExtendedCode == sqlite3.ErrConstraintUnique {
+		if isUniqueConstraintError(err) {
 			return nil, ErrUsernameTaken
 		}
 		return nil, fmt.Errorf("failed to create user: %w", err)

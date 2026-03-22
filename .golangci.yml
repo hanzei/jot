@@ -26,6 +26,15 @@ linters:
     - unconvert
     - unused
     - testifylint
+    - canonicalheader
+    - noctx
+    - usestdlibvars
+    - durationcheck
+    - intrange
+    - recvcheck
+    - gocognit
+    - loggercheck
+    - prealloc
   settings:
     govet:
       enable-all: true
@@ -38,6 +47,12 @@ linters:
       min-occurrences: 3
     misspell:
       locale: US
+    gocognit:
+      min-complexity: 20
+    usestdlibvars:
+      http-method: true
+      http-status-code: true
+      http-header: true
     revive:
       rules:
         - name: exported
