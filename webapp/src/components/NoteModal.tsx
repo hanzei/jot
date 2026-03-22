@@ -1212,16 +1212,6 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
             <div className="flex items-center space-x-2">
               {note && (
                 <>
-                  {isOwner && onShare && (
-                    <button
-                      onClick={() => onShare(note)}
-                      className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
-                      title={t('note.share')}
-                      aria-label={t('note.share')}
-                    >
-                      <ShareIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
-                    </button>
-                  )}
                   {noteDeepLinkHref && (
                     <a
                       href={noteDeepLinkHref}
@@ -1232,6 +1222,16 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                     >
                       <DevicePhoneMobileIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
                     </a>
+                  )}
+                  {isOwner && onShare && (
+                    <button
+                      onClick={() => onShare(note)}
+                      className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                      title={t('note.share')}
+                      aria-label={t('note.share')}
+                    >
+                      <ShareIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+                    </button>
                   )}
                   <button
                     onClick={handlePinToggle}

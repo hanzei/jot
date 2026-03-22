@@ -5,7 +5,6 @@ import NoteModal from '../NoteModal'
 import { ToastProvider } from '../Toast'
 import type { Note, NoteItem } from '@jot/shared'
 import { createMockNote } from '@/utils/__tests__/test-helpers'
-import { buildMobileDeepLink } from '@/utils/deepLink'
 
 // Mock the API module
 const { mockNotesUpdate, mockNotesCreate } = vi.hoisted(() => ({
@@ -177,15 +176,28 @@ describe('NoteModal', () => {
       expect(screen.getByText(/Last edited:/)).toBeInTheDocument()
     })
 
-    it('renders permanent mobile app toolbar link in single note view', () => {
+    it('renders permanent mobile app toolbar link in note modal', () => {
       const note = createMockNote()
       renderNoteModal({ ...defaultProps, note })
 
-      expect(screen.getByTestId('note-open-mobile-app-toolbar-link')).toBeInTheDocument()
-      expect(screen.getByTestId('note-open-mobile-app-toolbar-link')).toHaveAttribute(
-        'href',
-        buildMobileDeepLink(`/notes/${note.id}`, window.location.origin),
-      )
+      const mobileLink = screen.getByTestId('note-open-mobile-app-toolbar-link')
+      const href = mobileLink.getAttribute('href')
+      const deepLink = new URL(href ?? '')
+
+      expect(mobileLink).toBeInTheDocument()
+      expect(deepLink.protocol).toBe('jot:')
+      expect(deepLink.hostname).toBe('notes')
+      expect(deepLink.pathname).toBe(`/${note.id}`)
+      expect(deepLink.searchParams.get('server')).toBe(window.location.origin)
+    })
+
+    it('renders mobile app toolbar link before share action', () => {
+      const note = createMockNote()
+      renderNoteModal({ ...defaultProps, note, onShare: vi.fn(), isOwner: true })
+
+      const mobileLink = screen.getByTestId('note-open-mobile-app-toolbar-link')
+      const shareButton = screen.getByRole('button', { name: 'Share' })
+      expect(mobileLink.compareDocumentPosition(shareButton) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
     })
 
     it('does not render mobile app toolbar link for new note', () => {
