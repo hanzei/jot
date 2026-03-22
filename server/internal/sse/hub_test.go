@@ -68,7 +68,7 @@ func TestHub_Unsubscribe(t *testing.T) {
 	})
 }
 
-func TestHub_Publish(t *testing.T) {
+func TestHub_Publish(t *testing.T) { //nolint:gocognit
 	event := Event{
 		Type:         EventNoteCreated,
 		NoteID:       "note1",

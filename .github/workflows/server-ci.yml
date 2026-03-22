@@ -44,11 +44,13 @@ jobs:
           go-version: "1.25"
           cache-dependency-path: server/go.sum
 
-      - name: Run golangci-lint
-        uses: golangci/golangci-lint-action@1e7e51e771db61008b38414a730f564565cf7c20 # v9
+      - name: Install Task
+        uses: go-task/setup-task@3be4020d41929789a01026e0e427a4321ce0ad44 # v2
         with:
-          version: v2.11.3
-          working-directory: ./server
+          version: 3.x
+
+      - name: Run golangci-lint
+        run: task lint-server
 
   docs:
     runs-on: ubuntu-latest
