@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { XMarkIcon, PlusIcon, TrashIcon, ChevronDownIcon, ArchiveBoxIcon, ArchiveBoxXMarkIcon, ShareIcon, UserPlusIcon, CheckIcon, TagIcon, DocumentDuplicateIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon, PlusIcon, TrashIcon, ChevronDownIcon, ArchiveBoxIcon, ArchiveBoxXMarkIcon, ShareIcon, UserPlusIcon, CheckIcon, TagIcon, DocumentDuplicateIcon, DevicePhoneMobileIcon } from '@heroicons/react/24/outline';
 import { Dialog, DialogPanel } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
 import { VALIDATION, NOTE_COLORS, buildCollaborators, type Note, type NoteType, type CreateNoteRequest, type UpdateNoteRequest, type Label, type User, type Collaborator } from '@jot/shared';
@@ -11,7 +11,6 @@ import ConfirmDialog from '@/components/ConfirmDialog';
 import { useToast } from '@/hooks/useToast';
 import { buildShareAvatars } from '@/utils/shareAvatars';
 import { buildMobileDeepLink } from '@/utils/deepLink';
-import { dismissMobileAppBanner, isMobileAppBannerDismissed } from '@/utils/mobileAppBanner';
 
 // Validation functions
 type TFunction = (key: string, opts?: Record<string, unknown>) => string;
@@ -340,7 +339,6 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
 export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, onDelete, onDuplicate, isOwner = true, usersById, currentUserId }: NoteModalProps) {
   const { t, i18n } = useTranslation();
   const { showToast } = useToast();
-  const [showMobileAppBanner, setShowMobileAppBanner] = useState(() => !isMobileAppBannerDismissed());
   const [title, setTitle] = useState('');
   const [content, setContent] = useState('');
   const [noteType, setNoteType] = useState<NoteType>('text');
@@ -411,11 +409,6 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     }
     return buildMobileDeepLink(`/notes/${note.id}`, window.location.origin);
   }, [note?.id]);
-
-  const handleDismissMobileAppBanner = () => {
-    dismissMobileAppBanner();
-    setShowMobileAppBanner(false);
-  };
 
   useEffect(() => {
     if (note) {
@@ -1229,6 +1222,17 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                       <ShareIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
                     </button>
                   )}
+                  {noteDeepLinkHref && (
+                    <a
+                      href={noteDeepLinkHref}
+                      className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                      title={t('nav.openMobileApp')}
+                      aria-label={t('nav.openMobileApp')}
+                      data-testid="note-open-mobile-app-toolbar-link"
+                    >
+                      <DevicePhoneMobileIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+                    </a>
+                  )}
                   <button
                     onClick={handlePinToggle}
                     className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
@@ -1299,30 +1303,6 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
               >
                 ×
               </button>
-            </div>
-          )}
-
-          {/* Mobile app CTA when editing an existing note on small viewports */}
-          {note && noteDeepLinkHref && showMobileAppBanner && (
-            <div className="mx-4 mt-2 rounded-md border border-blue-200 bg-blue-50 p-3 dark:border-blue-900 dark:bg-blue-900/30 sm:hidden" data-testid="note-open-mobile-app-banner">
-              <p className="text-sm text-blue-800 dark:text-blue-200">{t('nav.openMobileAppDescription')}</p>
-              <div className="mt-3 flex items-center gap-2">
-                <a
-                  href={noteDeepLinkHref}
-                  className="inline-flex flex-1 items-center justify-center rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-slate-800"
-                  data-testid="note-open-mobile-app-link"
-                >
-                  {t('nav.openMobileApp')}
-                </a>
-                <button
-                  type="button"
-                  onClick={handleDismissMobileAppBanner}
-                  className="inline-flex items-center justify-center rounded-md border border-blue-200 px-3 py-2 text-sm font-medium text-blue-700 transition-colors hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:border-blue-800 dark:text-blue-300 dark:hover:bg-blue-900/40 dark:focus:ring-offset-slate-800"
-                  data-testid="note-dismiss-mobile-app-banner"
-                >
-                  {t('nav.dismissMobileAppBanner')}
-                </button>
-              </div>
             </div>
           )}
 
