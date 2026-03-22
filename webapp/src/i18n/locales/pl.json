@@ -8,7 +8,10 @@
     "admin": "Admin",
     "logout": "Wyloguj się",
     "logoutConfirmTitle": "Wyloguj się",
-    "logoutConfirmMessage": "Czy na pewno chcesz się wylogować?"
+    "logoutConfirmMessage": "Czy na pewno chcesz się wylogować?",
+    "openMobileApp": "Otwórz w aplikacji mobilnej",
+    "openMobileAppDescription": "Wolisz natywne doświadczenie mobilne?",
+    "dismissMobileAppBanner": "Ukryj"
   },
   "auth": {
     "signInTitle": "Zaloguj się do Jot",
