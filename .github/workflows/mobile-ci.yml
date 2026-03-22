@@ -7,7 +7,7 @@ on:
   push:
     branches: ["master"]
   pull_request:
-    paths: ["mobile/**", "shared/**"]
+    paths: ["mobile/**", "shared/**", ".github/workflows/**"]
 
 jobs:
   lint:

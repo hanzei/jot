@@ -9,7 +9,7 @@ on:
   pull_request:
     paths:
       - "server/**"
-      - ".github/workflows/server-ci.yml"
+      - ".github/workflows/**"
       - "Taskfile.yml"
       - ".golangci.yml"
 
