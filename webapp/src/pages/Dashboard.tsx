@@ -39,6 +39,8 @@ interface DashboardProps {
   onLogout: () => void;
 }
 
+const SEARCH_DEBOUNCE_MS = 300;
+
 export default function Dashboard({ onLogout }: DashboardProps) {
   const { t } = useTranslation();
   const { showToast } = useToast();
@@ -50,7 +52,9 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const [trashCount, setTrashCount] = useState(0);
   const [isEmptyingTrash, setIsEmptyingTrash] = useState(false);
   const [showEmptyTrashConfirm, setShowEmptyTrashConfirm] = useState(false);
-  const [searchQuery, setSearchQueryState] = useState(searchParams.get('search') ?? '');
+  const initialSearchQuery = searchParams.get('search') ?? '';
+  const [searchQuery, setSearchQueryState] = useState(initialSearchQuery);
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState(initialSearchQuery);
   const initialLabel = searchParams.get('label');
   const [showArchived, setShowArchived] = useState(!initialLabel && searchParams.get('view') === 'archive');
   const [showBin, setShowBin] = useState(!initialLabel && searchParams.get('view') === 'bin');
@@ -68,6 +72,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const openNoteIdRef = useRef<string | null>(null);
   const returnPathRef = useRef('/');
   const noteSortUpdateRequestIdRef = useRef(0);
+  const loadNotesRequestIdRef = useRef(0);
   useEffect(() => {
     isMountedRef.current = true;
     return () => { isMountedRef.current = false; };
@@ -77,7 +82,10 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   // Label takes precedence over view — if both are present, ignore view.
   useEffect(() => {
     const label = searchParams.get('label');
-    setSearchQueryState(searchParams.get('search') ?? '');
+    const nextSearch = searchParams.get('search') ?? '';
+    setSearchQueryState(nextSearch);
+    // URL-driven navigation should update both states immediately.
+    setDebouncedSearchQuery(nextSearch);
     setShowArchived(!label && searchParams.get('view') === 'archive');
     setShowBin(!label && searchParams.get('view') === 'bin');
     setShowMyTodo(!label && searchParams.get('view') === 'my-todo');
@@ -90,17 +98,41 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     }
   }, [showBin]);
 
-  const setSearchQuery = (query: string) => {
-    setSearchQueryState(query);
+  useEffect(() => {
+    if (searchQuery === debouncedSearchQuery) {
+      return;
+    }
+
+    if (!searchQuery) {
+      setDebouncedSearchQuery('');
+      return;
+    }
+
+    const timeout = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, SEARCH_DEBOUNCE_MS);
+
+    return () => clearTimeout(timeout);
+  }, [searchQuery, debouncedSearchQuery]);
+
+  useEffect(() => {
     setSearchParams(prev => {
       const next = new URLSearchParams(prev);
-      if (query) {
-        next.set('search', query);
+      if (debouncedSearchQuery) {
+        next.set('search', debouncedSearchQuery);
       } else {
         next.delete('search');
       }
-      return next;
+
+      return next.toString() === prev.toString() ? prev : next;
     });
+  }, [debouncedSearchQuery, setSearchParams]);
+
+  const setSearchQuery = (query: string) => {
+    setSearchQueryState(query);
+    if (!query) {
+      setDebouncedSearchQuery('');
+    }
   };
 
   const handleViewChange = useCallback((view: 'notes' | 'archive' | 'bin' | 'my-todo') => {
@@ -108,6 +140,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     setShowBin(view === 'bin');
     setShowMyTodo(view === 'my-todo');
     setSearchQueryState('');
+    setDebouncedSearchQuery('');
     setSelectedLabelId(null);
     setSearchParams(prev => {
       const next = new URLSearchParams(prev);
@@ -174,25 +207,27 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   }, []);
 
   const loadNotes = useCallback(async () => {
+    const requestId = ++loadNotesRequestIdRef.current;
+
     try {
       let notesData: Note[] = [];
       let nextTrashCount = 0;
 
-      if (showBin && searchQuery) {
+      if (showBin && debouncedSearchQuery) {
         const [loadedNotes, allTrashedNotes] = await Promise.all([
-          notes.getAll(showArchived, searchQuery, showBin, selectedLabelId ?? '', showMyTodo),
+          notes.getAll(showArchived, debouncedSearchQuery, showBin, selectedLabelId ?? '', showMyTodo),
           notes.getAll(false, '', true),
         ]);
         notesData = loadedNotes;
         nextTrashCount = allTrashedNotes.length;
       } else {
-        notesData = await notes.getAll(showArchived, searchQuery, showBin, selectedLabelId ?? '', showMyTodo);
+        notesData = await notes.getAll(showArchived, debouncedSearchQuery, showBin, selectedLabelId ?? '', showMyTodo);
         if (showBin) {
           nextTrashCount = notesData.length;
         }
       }
 
-      if (isMountedRef.current) {
+      if (isMountedRef.current && requestId === loadNotesRequestIdRef.current) {
         setNotesList(notesData);
         setTrashCount(nextTrashCount);
       }
@@ -202,9 +237,11 @@ export default function Dashboard({ onLogout }: DashboardProps) {
         showToast(t('dashboard.failedLoadNotes'), 'error');
       }
     } finally {
-      if (isMountedRef.current) setLoading(false);
+      if (isMountedRef.current && requestId === loadNotesRequestIdRef.current) {
+        setLoading(false);
+      }
     }
-  }, [showArchived, showBin, searchQuery, selectedLabelId, showMyTodo, showToast, t]);
+  }, [showArchived, showBin, debouncedSearchQuery, selectedLabelId, showMyTodo, showToast, t]);
 
   useEffect(() => {
     loadLabels();
@@ -532,6 +569,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     setShowBin(false);
     setShowMyTodo(false);
     setSearchQueryState('');
+    setDebouncedSearchQuery('');
     setSearchParams(prev => {
       const next = new URLSearchParams(prev);
       if (labelId) {
@@ -862,11 +900,11 @@ export default function Dashboard({ onLogout }: DashboardProps) {
         {displayedPinned.length === 0 && displayedOther.length === 0 ? (
           <div className="text-center py-12">
             <div className="mx-auto max-w-xl text-gray-500 dark:text-gray-400 text-lg whitespace-normal break-words">
-              {searchQuery
-                ? t('dashboard.noSearchResults', { query: searchQuery })
+              {debouncedSearchQuery
+                ? t('dashboard.noSearchResults', { query: debouncedSearchQuery })
                 : showBin ? t('dashboard.noBinnedNotes') : showArchived ? t('dashboard.noArchivedNotes') : showMyTodo ? t('dashboard.noMyTodoNotes') : t('dashboard.noNotesYet')}
             </div>
-            {!showArchived && !showBin && !showMyTodo && !searchQuery && (
+            {!showArchived && !showBin && !showMyTodo && !debouncedSearchQuery && (
               <div className="mt-4">
                 <button
                   onClick={handleCreateNote}

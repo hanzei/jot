@@ -106,9 +106,11 @@ func New(cfg *config.Config) (*Server, error) {
 		sessionsHandler: sessionsHandler,
 	}
 
-	startPeriodicTask(&s.bgWg, ctx, time.Hour, false, sessionStore.DeleteExpired, "delete expired sessions")
+	startPeriodicTask(&s.bgWg, ctx, time.Hour, false, func() error {
+		return sessionStore.DeleteExpired(ctx)
+	}, "delete expired sessions")
 	startPeriodicTask(&s.bgWg, ctx, time.Hour, true, func() error {
-		return noteStore.PurgeOldTrashedNotes(7 * 24 * time.Hour)
+		return noteStore.PurgeOldTrashedNotes(ctx, 7*24*time.Hour)
 	}, "purge old trashed notes")
 
 	if err := s.setupRoutes(); err != nil {
@@ -392,7 +394,7 @@ func logrusRequestLogger(next http.Handler) http.Handler {
 }
 
 func (s *Server) Start(addr string) error {
-	listener, err := net.Listen("tcp", addr)
+	listener, err := (&net.ListenConfig{}).Listen(s.ctx, "tcp", addr)
 	if err != nil {
 		startErr := fmt.Errorf("listen: %w", err)
 		s.setStartResult(startErr)

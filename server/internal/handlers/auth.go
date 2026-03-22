@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -81,7 +82,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) (int, any
 		return http.StatusBadRequest, nil, err
 	}
 
-	user, err := h.userStore.Create(req.Username, req.Password)
+	user, err := h.userStore.Create(r.Context(), req.Username, req.Password)
 	if err != nil {
 		if errors.Is(err, models.ErrUsernameTaken) {
 			return http.StatusConflict, nil, models.ErrUsernameTaken
@@ -89,7 +90,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) (int, any
 		return http.StatusInternalServerError, nil, err
 	}
 
-	settings, err := h.userSettingsStore.GetOrCreate(user.ID)
+	settings, err := h.userSettingsStore.GetOrCreate(r.Context(), user.ID)
 	if err != nil {
 		return http.StatusInternalServerError, nil, err
 	}
@@ -129,7 +130,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) (int, any, e
 		return http.StatusBadRequest, nil, errors.New("missing username or password")
 	}
 
-	user, err := h.userStore.GetByUsername(req.Username)
+	user, err := h.userStore.GetByUsername(r.Context(), req.Username)
 	if err != nil {
 		return http.StatusUnauthorized, nil, errors.New("invalid username or password")
 	}
@@ -138,7 +139,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) (int, any, e
 		return http.StatusUnauthorized, nil, errors.New("invalid username or password")
 	}
 
-	settings, err := h.userSettingsStore.GetOrCreate(user.ID)
+	settings, err := h.userSettingsStore.GetOrCreate(r.Context(), user.ID)
 	if err != nil {
 		return http.StatusInternalServerError, nil, err
 	}
@@ -235,7 +236,7 @@ func validateSettingsFields(current *models.UserSettings, language, theme, noteS
 
 // applySettingsUpdate validates and persists settings changes.
 // If no settings field is set the current settings are returned unchanged.
-func (h *AuthHandler) applySettingsUpdate(userID string, current *models.UserSettings, language, theme, noteSort *string) (*models.UserSettings, int, error) {
+func (h *AuthHandler) applySettingsUpdate(ctx context.Context, userID string, current *models.UserSettings, language, theme, noteSort *string) (*models.UserSettings, int, error) {
 	lang, th, ns, needUpdate, err := validateSettingsFields(current, language, theme, noteSort)
 	if err != nil {
 		return nil, http.StatusBadRequest, err
@@ -243,7 +244,7 @@ func (h *AuthHandler) applySettingsUpdate(userID string, current *models.UserSet
 	if !needUpdate {
 		return current, 0, nil
 	}
-	updated, err := h.userSettingsStore.Update(userID, lang, th, ns)
+	updated, err := h.userSettingsStore.Update(ctx, userID, lang, th, ns)
 	if err != nil {
 		return nil, http.StatusInternalServerError, err
 	}
@@ -293,7 +294,7 @@ func (h *AuthHandler) UpdateUser(w http.ResponseWriter, r *http.Request) (int, a
 	}
 
 	// Validate settings before committing any changes so we fail atomically.
-	settings, err := h.userSettingsStore.GetOrCreate(currentUser.ID)
+	settings, err := h.userSettingsStore.GetOrCreate(r.Context(), currentUser.ID)
 	if err != nil {
 		return http.StatusInternalServerError, nil, err
 	}
@@ -301,7 +302,7 @@ func (h *AuthHandler) UpdateUser(w http.ResponseWriter, r *http.Request) (int, a
 		return http.StatusBadRequest, nil, validateErr
 	}
 
-	user, err := h.userStore.UpdateProfile(currentUser.ID, username, firstName, lastName)
+	user, err := h.userStore.UpdateProfile(r.Context(), currentUser.ID, username, firstName, lastName)
 	if err != nil {
 		if errors.Is(err, models.ErrUsernameTaken) {
 			return http.StatusConflict, nil, models.ErrUsernameTaken
@@ -309,7 +310,7 @@ func (h *AuthHandler) UpdateUser(w http.ResponseWriter, r *http.Request) (int, a
 		return http.StatusInternalServerError, nil, err
 	}
 
-	settings, status, settingsErr := h.applySettingsUpdate(currentUser.ID, settings, req.Language, req.Theme, req.NoteSort)
+	settings, status, settingsErr := h.applySettingsUpdate(r.Context(), currentUser.ID, settings, req.Language, req.Theme, req.NoteSort)
 	if settingsErr != nil {
 		return status, nil, settingsErr
 	}
@@ -357,7 +358,7 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) (in
 	}
 
 	// Verify current password
-	user, err := h.userStore.GetByID(currentUser.ID)
+	user, err := h.userStore.GetByID(r.Context(), currentUser.ID)
 	if err != nil {
 		return http.StatusInternalServerError, nil, err
 	}
@@ -366,13 +367,13 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) (in
 		return http.StatusForbidden, nil, errors.New("current password is incorrect")
 	}
 
-	if err := h.userStore.UpdatePassword(currentUser.ID, req.NewPassword); err != nil {
+	if err := h.userStore.UpdatePassword(r.Context(), currentUser.ID, req.NewPassword); err != nil {
 		return http.StatusInternalServerError, nil, err
 	}
 
 	// Invalidate all existing sessions so that stolen/compromised tokens
 	// cannot be reused after a password change.
-	if err := h.sessionService.InvalidateUserSessions(currentUser.ID); err != nil {
+	if err := h.sessionService.InvalidateUserSessions(r.Context(), currentUser.ID); err != nil {
 		return http.StatusInternalServerError, nil, err
 	}
 
@@ -400,7 +401,7 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) (int, any, erro
 		return http.StatusUnauthorized, nil, errors.New("unauthorized")
 	}
 
-	settings, err := h.userSettingsStore.GetOrCreate(user.ID)
+	settings, err := h.userSettingsStore.GetOrCreate(r.Context(), user.ID)
 	if err != nil {
 		return http.StatusInternalServerError, nil, err
 	}
@@ -563,11 +564,11 @@ func (h *AuthHandler) UploadProfileIcon(w http.ResponseWriter, r *http.Request) 
 	}
 	contentType = "image/jpeg"
 
-	if err = h.userStore.UpdateProfileIcon(currentUser.ID, data, contentType); err != nil {
+	if err = h.userStore.UpdateProfileIcon(r.Context(), currentUser.ID, data, contentType); err != nil {
 		return http.StatusInternalServerError, nil, fmt.Errorf("update profile icon for user %s: %w", currentUser.ID, err)
 	}
 
-	user, err := h.userStore.GetByID(currentUser.ID)
+	user, err := h.userStore.GetByID(r.Context(), currentUser.ID)
 	if err != nil {
 		return http.StatusInternalServerError, nil, fmt.Errorf("fetch user by id: %w", err)
 	}
@@ -590,7 +591,7 @@ func (h *AuthHandler) DeleteProfileIcon(w http.ResponseWriter, r *http.Request) 
 		return http.StatusUnauthorized, nil, errors.New("unauthorized")
 	}
 
-	if err := h.userStore.DeleteProfileIcon(currentUser.ID); err != nil {
+	if err := h.userStore.DeleteProfileIcon(r.Context(), currentUser.ID); err != nil {
 		return http.StatusInternalServerError, nil, fmt.Errorf("delete profile icon for user %s: %w", currentUser.ID, err)
 	}
 
@@ -612,7 +613,7 @@ func (h *AuthHandler) DeleteProfileIcon(w http.ResponseWriter, r *http.Request) 
 func (h *AuthHandler) GetUserProfileIcon(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	id := chi.URLParam(r, "id")
 
-	data, contentType, err := h.userStore.GetProfileIcon(id)
+	data, contentType, err := h.userStore.GetProfileIcon(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, models.ErrUserNotFound) {
 			return http.StatusNotFound, nil, errors.New("user not found")
