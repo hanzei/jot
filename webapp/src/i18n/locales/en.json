@@ -83,6 +83,12 @@
     "emptyTrashConfirmMessage_other": "Permanently delete all {{count}} notes in trash? This cannot be undone.",
     "trashEmptied": "Trash emptied",
     "emptyTrashFailed": "Failed to empty trash",
+    "failedLoadNotes": "Failed to load notes.",
+    "failedDeleteNote": "Failed to move note to trash.",
+    "failedRestoreNote": "Failed to restore note.",
+    "failedDeleteNoteForever": "Failed to permanently delete note.",
+    "failedReorderNotes": "Failed to reorder notes.",
+    "failedUpdateSort": "Failed to update sort preference.",
     "undo": "Undo"
   },
   "settings": {
@@ -299,6 +305,8 @@
     "titleTooLong": "Title must be {{max}} characters or less",
     "contentTooLong": "Content must be {{max}} characters or less",
     "failedSaveChanges": "Failed to save changes. Please try again.",
+    "failedPin": "Failed to update pin. Please try again.",
+    "failedArchive": "Failed to update archive. Please try again.",
     "failedDuplicate": "Failed to duplicate note. Please try again.",
     "menuOptions": "Note options",
     "assignItem": "Assign item",

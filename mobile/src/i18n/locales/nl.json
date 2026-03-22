@@ -7,7 +7,8 @@
     "retry": "Opnieuw proberen",
     "clearSearch": "Zoekopdracht wissen",
     "error": "Fout",
-    "unknown": "onbekend"
+    "unknown": "onbekend",
+    "loading": "Laden..."
   },
   "nav": {
     "settings": "Instellingen",
@@ -74,6 +75,7 @@
     "tryDifferentKeywords": "Probeer andere zoekwoorden",
     "failedLoadNotes": "Notities laden mislukt",
     "checkConnection": "Controleer je verbinding en probeer het opnieuw",
+    "sortUpdateFailed": "Sorteerinstelling kon niet worden bijgewerkt",
     "sortOption": {
       "manual": "Handmatig",
       "updated_at": "Laatst gewijzigd",

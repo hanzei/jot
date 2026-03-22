@@ -83,6 +83,12 @@
     "emptyTrashConfirmMessage_other": "Alle {{count}} notities in de prullenbak permanent verwijderen? Dit kan niet ongedaan worden gemaakt.",
     "trashEmptied": "Prullenbak geleegd",
     "emptyTrashFailed": "Prullenbak leegmaken mislukt",
+    "failedLoadNotes": "Notities laden mislukt.",
+    "failedDeleteNote": "Notitie naar prullenbak verplaatsen mislukt.",
+    "failedRestoreNote": "Notitie herstellen mislukt.",
+    "failedDeleteNoteForever": "Notitie permanent verwijderen mislukt.",
+    "failedReorderNotes": "Notities opnieuw ordenen mislukt.",
+    "failedUpdateSort": "Sorteervoorkeur bijwerken mislukt.",
     "undo": "Ongedaan maken"
   },
   "settings": {
@@ -299,6 +305,8 @@
     "titleTooLong": "Titel mag niet meer dan {{max}} tekens bevatten",
     "contentTooLong": "Inhoud mag niet meer dan {{max}} tekens bevatten",
     "failedSaveChanges": "Wijzigingen opslaan mislukt. Probeer het opnieuw.",
+    "failedPin": "Vastmaken bijwerken mislukt.",
+    "failedArchive": "Archiveren bijwerken mislukt.",
     "failedDuplicate": "Notitie dupliceren mislukt. Probeer het opnieuw.",
     "menuOptions": "Notitieopties",
     "assignItem": "Item toewijzen",

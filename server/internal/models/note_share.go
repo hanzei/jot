@@ -1,11 +1,9 @@
 package models
 
 import (
+	"context"
 	"database/sql"
-	"errors"
 	"fmt"
-
-	sqlite3 "github.com/mattn/go-sqlite3"
 )
 
 func scanNoteShare(rows *sql.Rows) (NoteShare, error) {
@@ -18,7 +16,7 @@ func scanNoteShare(rows *sql.Rows) (NoteShare, error) {
 	return share, err
 }
 
-func (s *NoteStore) GetNoteShares(noteID string) ([]NoteShare, error) {
+func (s *NoteStore) GetNoteShares(ctx context.Context, noteID string) ([]NoteShare, error) {
 	query := `SELECT ns.id, ns.note_id, ns.shared_with_user_id, ns.shared_by_user_id,
 			  ns.permission_level, u.username, u.first_name, u.last_name,
 			  u.profile_icon IS NOT NULL AS has_profile_icon,
@@ -28,7 +26,7 @@ func (s *NoteStore) GetNoteShares(noteID string) ([]NoteShare, error) {
 			  WHERE ns.note_id = ?
 			  ORDER BY u.username`
 
-	rows, err := s.db.Query(query, noteID)
+	rows, err := s.db.QueryContext(ctx, query, noteID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get note shares: %w", err)
 	}
@@ -43,7 +41,7 @@ func (s *NoteStore) GetNoteShares(noteID string) ([]NoteShare, error) {
 	return shares, nil
 }
 
-func (s *NoteStore) ShareNote(noteID string, sharedByUserID, sharedWithUserID string) error {
+func (s *NoteStore) ShareNote(ctx context.Context, noteID string, sharedByUserID, sharedWithUserID string) error {
 	shareID, err := generateID()
 	if err != nil {
 		return fmt.Errorf("failed to generate share ID: %w", err)
@@ -52,10 +50,9 @@ func (s *NoteStore) ShareNote(noteID string, sharedByUserID, sharedWithUserID st
 	query := `INSERT INTO note_shares (id, note_id, shared_with_user_id, shared_by_user_id, permission_level)
 			  VALUES (?, ?, ?, ?, 'edit')`
 
-	_, err = s.db.Exec(query, shareID, noteID, sharedWithUserID, sharedByUserID)
+	_, err = s.db.ExecContext(ctx, query, shareID, noteID, sharedWithUserID, sharedByUserID)
 	if err != nil {
-		var sqliteErr sqlite3.Error
-		if errors.As(err, &sqliteErr) && sqliteErr.ExtendedCode == sqlite3.ErrConstraintUnique {
+		if isUniqueConstraintError(err) {
 			return ErrNoteAlreadyShared
 		}
 		return fmt.Errorf("failed to share note: %w", err)
@@ -64,14 +61,14 @@ func (s *NoteStore) ShareNote(noteID string, sharedByUserID, sharedWithUserID st
 	return nil
 }
 
-func (s *NoteStore) UnshareNote(noteID string, sharedWithUserID string) error {
-	tx, err := s.db.Begin()
+func (s *NoteStore) UnshareNote(ctx context.Context, noteID string, sharedWithUserID string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	result, err := tx.Exec(`DELETE FROM note_shares WHERE note_id = ? AND shared_with_user_id = ?`, noteID, sharedWithUserID)
+	result, err := tx.ExecContext(ctx, `DELETE FROM note_shares WHERE note_id = ? AND shared_with_user_id = ?`, noteID, sharedWithUserID)
 	if err != nil {
 		return fmt.Errorf("failed to unshare note: %w", err)
 	}
@@ -85,7 +82,7 @@ func (s *NoteStore) UnshareNote(noteID string, sharedWithUserID string) error {
 		return ErrNoteShareNotFound
 	}
 
-	if _, err = tx.Exec(
+	if _, err = tx.ExecContext(ctx,
 		`UPDATE note_items SET assigned_to = '' WHERE note_id = ? AND assigned_to = ?`,
 		noteID, sharedWithUserID,
 	); err != nil {
@@ -93,12 +90,12 @@ func (s *NoteStore) UnshareNote(noteID string, sharedWithUserID string) error {
 	}
 
 	var remainingShares int
-	if err = tx.QueryRow(`SELECT COUNT(*) FROM note_shares WHERE note_id = ?`, noteID).Scan(&remainingShares); err != nil {
+	if err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM note_shares WHERE note_id = ?`, noteID).Scan(&remainingShares); err != nil {
 		return fmt.Errorf("failed to count remaining shares: %w", err)
 	}
 
 	if remainingShares == 0 {
-		if _, err = tx.Exec(
+		if _, err = tx.ExecContext(ctx,
 			`UPDATE note_items SET assigned_to = '' WHERE note_id = ? AND assigned_to != ''`,
 			noteID,
 		); err != nil {
@@ -120,29 +117,33 @@ func (s *NoteStore) UnshareNote(noteID string, sharedWithUserID string) error {
 //  3. Clears items directly assigned to the deleted user.
 //  4. Clears all remaining assignments on notes that no longer have any shares,
 //     enforcing the invariant that unshared notes cannot have assignments.
-func (s *NoteStore) ClearUserAssignmentsTx(tx *sql.Tx, userID string) error {
-	if _, err := tx.Exec(
+func (s *NoteStore) ClearUserAssignmentsTx(ctx context.Context, tx *sql.Tx, userID string) error {
+	if _, err := tx.ExecContext(
+		ctx,
 		`DELETE FROM note_shares WHERE shared_with_user_id = ?`,
 		userID,
 	); err != nil {
 		return fmt.Errorf("failed to remove deleted user shares: %w", err)
 	}
 
-	if _, err := tx.Exec(
+	if _, err := tx.ExecContext(
+		ctx,
 		`DELETE FROM note_shares WHERE shared_by_user_id = ?`,
 		userID,
 	); err != nil {
 		return fmt.Errorf("failed to remove shares created by deleted user: %w", err)
 	}
 
-	if _, err := tx.Exec(
+	if _, err := tx.ExecContext(
+		ctx,
 		`UPDATE note_items SET assigned_to = '' WHERE assigned_to = ?`,
 		userID,
 	); err != nil {
 		return fmt.Errorf("failed to clear deleted user assignments: %w", err)
 	}
 
-	if _, err := tx.Exec(
+	if _, err := tx.ExecContext(
+		ctx,
 		`UPDATE note_items SET assigned_to = ''
 		 WHERE assigned_to != ''
 		   AND note_id NOT IN (SELECT DISTINCT note_id FROM note_shares)`,

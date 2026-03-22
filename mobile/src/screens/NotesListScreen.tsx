@@ -25,6 +25,7 @@ import { useUsers } from '../store/UsersContext';
 import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import { isLocalId } from '../db/noteQueries';
+import SkeletonNoteList from '../components/SkeletonNoteList';
 import NoteCard from '../components/NoteCard';
 import NoteContextMenu, { ContextMenuViewContext } from '../components/NoteContextMenu';
 import ColorPicker from '../components/ColorPicker';
@@ -143,9 +144,9 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
       if (previousSettings) {
         setSettings(previousSettings);
       }
-      Alert.alert('Error', 'Failed to update sort preference');
+      Alert.alert(t('common.error'), t('dashboard.sortUpdateFailed'));
     }
-  }, [setSettings, settings, sortMode]);
+  }, [setSettings, settings, sortMode, t]);
 
   const handleNotePress = useCallback(
     (noteId: string) => {
@@ -498,11 +499,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   // Uses debouncedSearch (not searchText) so clearing the input mid-debounce doesn't
   // trigger the full-screen loader while the previous query is still in-flight.
   if (isLoading && !notes && !debouncedSearch) {
-    return (
-      <View style={[styles.loadingContainer, { backgroundColor: colors.background }]} testID="notes-loading">
-        <ActivityIndicator size="large" color={colors.primary} />
-      </View>
-    );
+    return <SkeletonNoteList />;
   }
 
   if (isError) {
@@ -816,11 +813,6 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   emptyWrapper: {
     flex: 1,

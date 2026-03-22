@@ -80,6 +80,7 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
       );
     } catch (error) {
       console.error('Failed to toggle archive:', error);
+      showToast(t('note.failedArchive'), 'error');
     } finally {
       setIsUpdating(false);
     }
@@ -104,6 +105,7 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
       );
     } catch (error) {
       console.error('Failed to toggle pin:', error);
+      showToast(t('note.failedPin'), 'error');
     } finally {
       setIsUpdating(false);
     }
