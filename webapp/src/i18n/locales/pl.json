@@ -80,6 +80,12 @@
     "emptyTrashConfirmMessage_other": "Trwale usunąć wszystkie {{count}} notatki z kosza? Tej operacji nie można cofnąć.",
     "trashEmptied": "Kosz opróżniony",
     "emptyTrashFailed": "Nie udało się opróżnić kosza",
+    "failedLoadNotes": "Nie udało się załadować notatek.",
+    "failedDeleteNote": "Nie udało się przenieść notatki do kosza.",
+    "failedRestoreNote": "Nie udało się przywrócić notatki.",
+    "failedDeleteNoteForever": "Nie udało się trwale usunąć notatki.",
+    "failedReorderNotes": "Nie udało się zmienić kolejności notatek.",
+    "failedUpdateSort": "Nie udało się zaktualizować preferencji sortowania.",
     "undo": "Cofnij"
   },
   "settings": {
@@ -296,6 +302,8 @@
     "titleTooLong": "Tytuł nie może przekraczać {{max}} znaków",
     "contentTooLong": "Treść nie może przekraczać {{max}} znaków",
     "failedSaveChanges": "Nie udało się zapisać zmian. Spróbuj ponownie.",
+    "failedPin": "Nie udało się zaktualizować przypięcia.",
+    "failedArchive": "Nie udało się zaktualizować archiwizacji.",
     "failedDuplicate": "Nie udało się zduplikować notatki. Spróbuj ponownie.",
     "menuOptions": "Opcje notatki",
     "assignItem": "Przypisz element",
