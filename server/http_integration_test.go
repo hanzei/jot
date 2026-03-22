@@ -555,8 +555,8 @@ func TestUpdateUserEndpoint(t *testing.T) {
 
 	t.Run("successful username update", func(t *testing.T) {
 		t.Cleanup(func() {
-			// t.Context() is already canceled when cleanup runs; use a fresh context.
-			_, err := user.Client.UpdateUser(t.Context(), &client.UpdateUserRequest{Username: client.Ptr("originaluser")})
+			// t.Context() is already canceled when cleanup runs; use a background context.
+			_, err := user.Client.UpdateUser(context.Background(), &client.UpdateUserRequest{Username: client.Ptr("originaluser")})
 			require.NoError(t, err)
 		})
 
