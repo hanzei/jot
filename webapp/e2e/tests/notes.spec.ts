@@ -202,16 +202,18 @@ test.describe('Notes', () => {
     // relying on modal timing or extra UI interactions in this ordering test.
     await page.evaluate(async () => {
       const response = await fetch('/api/v1/notes', { credentials: 'include' });
-      const notes = await response.json() as Array<{
-        id: string;
-        title: string;
-        content: string;
-        pinned: boolean;
-        archived: boolean;
-        color: string;
-        checked_items_collapsed: boolean;
-      }>;
-      const alphaNote = notes.find(note => note.title === 'alpha');
+      const body = (await response.json()) as {
+        items: Array<{
+          id: string;
+          title: string;
+          content: string;
+          pinned: boolean;
+          archived: boolean;
+          color: string;
+          checked_items_collapsed: boolean;
+        }>;
+      };
+      const alphaNote = body.items.find(note => note.title === 'alpha');
       if (!alphaNote) {
         throw new Error('alpha note not found');
       }
@@ -288,7 +290,8 @@ test.describe('Notes', () => {
     const listNotes = async () => {
       const response = await request.get('/api/v1/notes', { headers: authHeaders });
       expect(response.ok()).toBeTruthy();
-      return response.json();
+      const body = (await response.json()) as { items: unknown[] };
+      return body.items;
     };
 
     const findNoteByTitle = async (title: string) => {
