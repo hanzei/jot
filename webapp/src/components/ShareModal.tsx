@@ -124,7 +124,7 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
     if (!note) return;
 
     try {
-      await notes.unshare(note.id, { user_id: userId });
+      await notes.unshare(note.id, userId);
       setSuccess(t('share.unsharedSuccess'));
       await loadShares();
     } catch {

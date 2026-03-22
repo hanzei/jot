@@ -171,7 +171,7 @@ func (s *Server) setupRoutes() error {
 			r.Post("/notes/{id}/restore", s.wrapHandler(s.notesHandler.RestoreNote))
 
 			r.Post("/notes/{id}/share", s.wrapHandler(s.notesHandler.ShareNote))
-			r.Delete("/notes/{id}/share", s.wrapHandler(s.notesHandler.UnshareNote))
+			r.Delete("/notes/{id}/shares/{user_id}", s.wrapHandler(s.notesHandler.UnshareNote))
 			r.Get("/notes/{id}/shares", s.wrapHandler(s.notesHandler.GetNoteShares))
 
 			r.Post("/notes/{id}/labels", s.wrapHandler(s.labelsHandler.AddLabel))

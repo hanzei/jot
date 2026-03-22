@@ -7,7 +7,7 @@ on:
   push:
     branches: ["master"]
   pull_request:
-    paths: ["webapp/**", "shared/**"]
+    paths: ["webapp/**", "shared/**", ".github/workflows/**"]
 
 jobs:
   test:
