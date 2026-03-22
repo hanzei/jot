@@ -201,7 +201,10 @@ test.describe('Notes', () => {
     // Patch the alpha note directly so updated_at changes deterministically without
     // relying on modal timing or extra UI interactions in this ordering test.
     await page.evaluate(async () => {
-      const response = await fetch('/api/v1/notes', { credentials: 'include' });
+      const response = await fetch('/api/v1/notes?limit=100', { credentials: 'include' });
+      if (!response.ok) {
+        throw new Error(`Failed to list notes: ${response.status}`);
+      }
       const body = (await response.json()) as {
         items: Array<{
           id: string;
@@ -213,6 +216,9 @@ test.describe('Notes', () => {
           checked_items_collapsed: boolean;
         }>;
       };
+      if (!Array.isArray(body.items)) {
+        throw new Error('Expected paginated notes response with items array');
+      }
       const alphaNote = body.items.find(note => note.title === 'alpha');
       if (!alphaNote) {
         throw new Error('alpha note not found');
@@ -288,9 +294,10 @@ test.describe('Notes', () => {
     const authHeaders = { Cookie: `jot_session=${sessionCookie!.value}` };
 
     const listNotes = async () => {
-      const response = await request.get('/api/v1/notes', { headers: authHeaders });
+      const response = await request.get('/api/v1/notes?limit=100', { headers: authHeaders });
       expect(response.ok()).toBeTruthy();
       const body = (await response.json()) as { items: unknown[] };
+      expect(Array.isArray(body.items)).toBeTruthy();
       return body.items;
     };
 

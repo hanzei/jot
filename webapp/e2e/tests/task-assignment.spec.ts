@@ -69,11 +69,12 @@ test.describe('Task Assignment', () => {
     const sessionCookie = cookies.find(c => c.name === 'jot_session');
     expect(sessionCookie, 'session cookie must exist').toBeDefined();
 
-    const notesResp = await request.get('/api/v1/notes', {
+    const notesResp = await request.get('/api/v1/notes?limit=100', {
       headers: { Cookie: `jot_session=${sessionCookie!.value}` },
     });
     expect(notesResp.ok()).toBeTruthy();
     const notesBody = (await notesResp.json()) as { items: Array<{ id: string; title: string }> };
+    expect(Array.isArray(notesBody.items)).toBeTruthy();
     const note = notesBody.items.find((n) => n.title === 'Unshare Cleanup');
     expect(note, 'note "Unshare Cleanup" must exist in API response').toBeDefined();
 
