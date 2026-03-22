@@ -28,7 +28,7 @@
 
 ## Code Review Loop
 
-After completing a set of changes, run a sub-agent review loop before finalizing:
+Before submitting a PR, run a sub-agent review loop before finalizing:
 
 1. Launch a sub-agent (use the `simplify` skill or a `general-purpose` agent) to review all changed files for correctness, code quality, and consistency with project conventions.
 2. Address every piece of valid feedback the review returns (fix bugs, improve clarity, align with conventions).
