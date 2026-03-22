@@ -35,7 +35,10 @@ export default function SkeletonNoteCard({ hasTitle = true }: SkeletonNoteCardPr
   const placeholderStyle = { backgroundColor: colors.border, opacity };
 
   return (
-    <View style={[styles.card, { backgroundColor: colors.cardBackground, borderColor: colors.cardBorder }]}>
+    <View
+      style={[styles.card, { backgroundColor: colors.cardBackground, borderColor: colors.cardBorder }]}
+      accessible={false}
+    >
       {hasTitle ? <Animated.View style={[styles.title, placeholderStyle]} /> : null}
 
       <Animated.View style={[styles.contentLine, styles.contentLineWide, placeholderStyle]} />

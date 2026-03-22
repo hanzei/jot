@@ -25,6 +25,7 @@ import { useUsers } from '../store/UsersContext';
 import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import { isLocalId } from '../db/noteQueries';
+import SkeletonNoteList from '../components/SkeletonNoteList';
 import NoteCard from '../components/NoteCard';
 import NoteContextMenu, { ContextMenuViewContext } from '../components/NoteContextMenu';
 import ColorPicker from '../components/ColorPicker';
@@ -34,7 +35,6 @@ import { NOTE_SORT_OPTIONS, getNoteSortLabel, normalizeNoteSort, sortNotesForDis
 import { emptyTrash as emptyTrashNotes } from '../api/notes';
 import { getLocalNotes, permanentDeleteLocalNote } from '../db/noteQueries';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
-import SkeletonNoteList from '../components/SkeletonNoteList';
 
 interface NotesListScreenProps {
   variant?: 'notes' | 'archived' | 'trash' | 'my-todo';
@@ -144,9 +144,9 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
       if (previousSettings) {
         setSettings(previousSettings);
       }
-      Alert.alert('Error', 'Failed to update sort preference');
+      Alert.alert(t('common.error'), t('dashboard.sortUpdateFailed'));
     }
-  }, [setSettings, settings, sortMode]);
+  }, [setSettings, settings, sortMode, t]);
 
   const handleNotePress = useCallback(
     (noteId: string) => {
