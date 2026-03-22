@@ -556,7 +556,7 @@ func TestUpdateUserEndpoint(t *testing.T) {
 	t.Run("successful username update", func(t *testing.T) {
 		t.Cleanup(func() {
 			// t.Context() is already canceled when cleanup runs; use a fresh context.
-			_, err := user.Client.UpdateUser(context.Background(), &client.UpdateUserRequest{Username: client.Ptr("originaluser")})
+			_, err := user.Client.UpdateUser(t.Context(), &client.UpdateUserRequest{Username: client.Ptr("originaluser")})
 			require.NoError(t, err)
 		})
 
@@ -599,7 +599,7 @@ func TestUpdateUserEndpoint(t *testing.T) {
 
 // SSE endpoint tests
 
-func TestSSEEndpoint(t *testing.T) {
+func TestSSEEndpoint(t *testing.T) { //nolint:gocognit
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "sseuser", "password123", false)
 
@@ -1038,7 +1038,7 @@ func TestUploadProfileIcon(t *testing.T) {
 		pngData := encodePNG(t, img)
 		body, ct := createMultipartImage(t, "file", "test.png", pngData)
 
-		req, err := http.NewRequest(http.MethodPost, ts.HTTPServer.URL+"/api/v1/users/me/profile-icon", body)
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, ts.HTTPServer.URL+"/api/v1/users/me/profile-icon", body)
 		require.NoError(t, err)
 		req.Header.Set("Content-Type", ct)
 

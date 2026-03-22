@@ -20,7 +20,7 @@ func (s *SessionService) AuthMiddleware(next http.Handler) http.Handler {
 			http.Error(w, "Unauthorized", http.StatusUnauthorized)
 			return
 		}
-		if err := s.RenewSessionIfExpiringSoon(w, session); err != nil {
+		if err := s.RenewSessionIfExpiringSoon(r.Context(), w, session); err != nil {
 			logrus.WithError(err).Warn("failed to renew session")
 		}
 

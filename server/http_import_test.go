@@ -94,7 +94,7 @@ func TestImportMissingFileFieldReturns400(t *testing.T) {
 	mw := multipart.NewWriter(&buf)
 	require.NoError(t, mw.Close())
 
-	req, err := http.NewRequest(http.MethodPost, ts.HTTPServer.URL+"/api/v1/notes/import", &buf)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, ts.HTTPServer.URL+"/api/v1/notes/import", &buf)
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", mw.FormDataContentType())
 
@@ -134,7 +134,7 @@ func TestImportUnauthenticatedReturns401(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, mw.Close())
 
-	req, err := http.NewRequest(http.MethodPost, ts.HTTPServer.URL+"/api/v1/notes/import", &buf)
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, ts.HTTPServer.URL+"/api/v1/notes/import", &buf)
 	require.NoError(t, err)
 	req.Header.Set("Content-Type", mw.FormDataContentType())
 

@@ -25,8 +25,6 @@ FROM golang:1.25-alpine AS backend-builder
 
 WORKDIR /src
 
-# Install dependencies for CGO (SQLite)
-RUN apk add --no-cache gcc musl-dev sqlite-dev
 
 ARG COMMIT_SHA=unknown
 ARG VERSION=dev
@@ -44,7 +42,7 @@ COPY server/ server/
 # Build the backend
 RUN --mount=type=cache,id=gomodcache-${TARGETARCH},target=/go/pkg/mod \
     --mount=type=cache,id=gobuildcache-${TARGETARCH},target=/root/.cache/go-build \
-    cd server && CGO_ENABLED=1 GOOS=linux go build \
+    cd server && CGO_ENABLED=0 GOOS=linux go build \
     -buildvcs=false \
     -ldflags "-s -w \
       -X 'github.com/hanzei/jot/server/internal/server.commit=${COMMIT_SHA}' \
@@ -56,7 +54,7 @@ RUN --mount=type=cache,id=gomodcache-${TARGETARCH},target=/go/pkg/mod \
 FROM alpine:latest
 
 # Install runtime dependencies
-RUN apk --no-cache add ca-certificates sqlite
+RUN apk --no-cache add ca-certificates
 
 WORKDIR /app
 

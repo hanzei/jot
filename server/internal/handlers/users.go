@@ -40,9 +40,9 @@ func (h *NotesHandler) SearchUsers(w http.ResponseWriter, r *http.Request) (int,
 	var users []*models.User
 	var err error
 	if search != "" {
-		users, err = h.userStore.Search(search)
+		users, err = h.userStore.Search(r.Context(), search)
 	} else {
-		users, err = h.userStore.GetAll()
+		users, err = h.userStore.GetAll(r.Context())
 	}
 	if err != nil {
 		return http.StatusInternalServerError, nil, err
