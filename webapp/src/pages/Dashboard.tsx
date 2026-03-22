@@ -72,6 +72,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const openNoteIdRef = useRef<string | null>(null);
   const returnPathRef = useRef('/');
   const noteSortUpdateRequestIdRef = useRef(0);
+  const loadNotesRequestIdRef = useRef(0);
   useEffect(() => {
     isMountedRef.current = true;
     return () => { isMountedRef.current = false; };
@@ -206,6 +207,8 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   }, []);
 
   const loadNotes = useCallback(async () => {
+    const requestId = ++loadNotesRequestIdRef.current;
+
     try {
       let notesData: Note[] = [];
       let nextTrashCount = 0;
@@ -224,14 +227,16 @@ export default function Dashboard({ onLogout }: DashboardProps) {
         }
       }
 
-      if (isMountedRef.current) {
+      if (isMountedRef.current && requestId === loadNotesRequestIdRef.current) {
         setNotesList(notesData);
         setTrashCount(nextTrashCount);
       }
     } catch (error) {
       if (isMountedRef.current) console.error('Failed to load notes:', error);
     } finally {
-      if (isMountedRef.current) setLoading(false);
+      if (isMountedRef.current && requestId === loadNotesRequestIdRef.current) {
+        setLoading(false);
+      }
     }
   }, [showArchived, showBin, debouncedSearchQuery, selectedLabelId, showMyTodo]);
 
