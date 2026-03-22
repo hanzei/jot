@@ -5,6 +5,8 @@ import NoteModal from '../NoteModal'
 import { ToastProvider } from '../Toast'
 import type { Note, NoteItem } from '@jot/shared'
 import { createMockNote } from '@/utils/__tests__/test-helpers'
+import { buildMobileDeepLink } from '@/utils/deepLink'
+import { MOBILE_APP_BANNER_DISMISSED_KEY } from '@/utils/mobileAppBanner'
 
 // Mock the API module
 const { mockNotesUpdate, mockNotesCreate } = vi.hoisted(() => ({
@@ -128,6 +130,7 @@ describe('NoteModal', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.useFakeTimers()
+    localStorage.clear()
   })
 
   afterEach(() => {
@@ -173,6 +176,36 @@ describe('NoteModal', () => {
       renderNoteModal({ ...defaultProps, note })
 
       expect(screen.getByText(/Last edited:/)).toBeInTheDocument()
+    })
+
+    it('renders mobile app banner markup in single note view', () => {
+      const note = createMockNote()
+      renderNoteModal({ ...defaultProps, note })
+
+      expect(screen.getByTestId('note-open-mobile-app-banner')).toBeInTheDocument()
+      expect(screen.getByTestId('note-open-mobile-app-link')).toHaveAttribute(
+        'href',
+        buildMobileDeepLink(`/notes/${note.id}`, window.location.origin),
+      )
+    })
+
+    it('dismisses mobile app banner and persists dismissal for this device', () => {
+      const note = createMockNote()
+      renderNoteModal({ ...defaultProps, note })
+
+      fireEvent.click(screen.getByTestId('note-dismiss-mobile-app-banner'))
+
+      expect(screen.queryByTestId('note-open-mobile-app-banner')).not.toBeInTheDocument()
+      expect(localStorage.getItem(MOBILE_APP_BANNER_DISMISSED_KEY)).toBe('1')
+    })
+
+    it('does not show mobile app banner after prior dismissal', () => {
+      localStorage.setItem(MOBILE_APP_BANNER_DISMISSED_KEY, '1')
+      const note = createMockNote()
+
+      renderNoteModal({ ...defaultProps, note })
+
+      expect(screen.queryByTestId('note-open-mobile-app-banner')).not.toBeInTheDocument()
     })
   })
 

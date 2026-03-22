@@ -1,4 +1,4 @@
-const MOBILE_APP_BANNER_DISMISSED_KEY = 'jot_mobile_app_banner_dismissed';
+export const MOBILE_APP_BANNER_DISMISSED_KEY = 'jot_mobile_app_banner_dismissed';
 
 export function isMobileAppBannerDismissed(): boolean {
   try {
