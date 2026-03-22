@@ -34,6 +34,7 @@ import { NOTE_SORT_OPTIONS, getNoteSortLabel, normalizeNoteSort, sortNotesForDis
 import { emptyTrash as emptyTrashNotes } from '../api/notes';
 import { getLocalNotes, permanentDeleteLocalNote } from '../db/noteQueries';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
+import SkeletonNoteList from '../components/SkeletonNoteList';
 
 interface NotesListScreenProps {
   variant?: 'notes' | 'archived' | 'trash' | 'my-todo';
@@ -498,11 +499,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   // Uses debouncedSearch (not searchText) so clearing the input mid-debounce doesn't
   // trigger the full-screen loader while the previous query is still in-flight.
   if (isLoading && !notes && !debouncedSearch) {
-    return (
-      <View style={[styles.loadingContainer, { backgroundColor: colors.background }]} testID="notes-loading">
-        <ActivityIndicator size="large" color={colors.primary} />
-      </View>
-    );
+    return <SkeletonNoteList />;
   }
 
   if (isError) {
@@ -816,11 +813,6 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   emptyWrapper: {
     flex: 1,
