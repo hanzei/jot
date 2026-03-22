@@ -197,11 +197,14 @@ export default function Dashboard({ onLogout }: DashboardProps) {
         setTrashCount(nextTrashCount);
       }
     } catch (error) {
-      if (isMountedRef.current) console.error('Failed to load notes:', error);
+      if (isMountedRef.current) {
+        console.error('Failed to load notes:', error);
+        showToast(t('dashboard.failedLoadNotes'), 'error');
+      }
     } finally {
       if (isMountedRef.current) setLoading(false);
     }
-  }, [showArchived, showBin, searchQuery, selectedLabelId, showMyTodo]);
+  }, [showArchived, showBin, searchQuery, selectedLabelId, showMyTodo, showToast, t]);
 
   useEffect(() => {
     loadLabels();
@@ -456,6 +459,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       });
     } catch (error) {
       console.error('Failed to delete note:', error);
+      showToast(t('dashboard.failedDeleteNote'), 'error');
     }
   };
 
@@ -466,6 +470,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       showToast(t('dashboard.noteRestored'));
     } catch (error) {
       console.error('Failed to restore note:', error);
+      showToast(t('dashboard.failedRestoreNote'), 'error');
     }
   };
 
@@ -476,6 +481,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       showToast(t('dashboard.noteDeletedForever'));
     } catch (error) {
       console.error('Failed to permanently delete note:', error);
+      showToast(t('dashboard.failedDeleteNoteForever'), 'error');
     }
   };
 
@@ -585,12 +591,13 @@ export default function Dashboard({ onLogout }: DashboardProps) {
         return;
       }
 
+      showToast(t('dashboard.failedUpdateSort'), 'error');
       setNoteSort(previousSort);
       if (!restoredSettings && previousSettings) {
         setSettings(previousSettings);
       }
     }
-  }, [noteSort]);
+  }, [noteSort, showToast, t]);
 
   const handleRenameLabel = useCallback(async (label: Label, newName: string): Promise<boolean> => {
     try {
@@ -676,6 +683,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
         await notes.reorder(noteIDs);
       } catch (error) {
         console.error('Failed to reorder notes:', error);
+        showToast(t('dashboard.failedReorderNotes'), 'error');
         loadNotes();
       }
     }

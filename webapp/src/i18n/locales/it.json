@@ -80,6 +80,12 @@
     "emptyTrashConfirmMessage_other": "Eliminare definitivamente le {{count}} note nel cestino? Questa azione è irreversibile.",
     "trashEmptied": "Cestino svuotato",
     "emptyTrashFailed": "Impossibile svuotare il cestino",
+    "failedLoadNotes": "Impossibile caricare le note.",
+    "failedDeleteNote": "Impossibile spostare la nota nel cestino.",
+    "failedRestoreNote": "Impossibile ripristinare la nota.",
+    "failedDeleteNoteForever": "Impossibile eliminare definitivamente la nota.",
+    "failedReorderNotes": "Impossibile riordinare le note.",
+    "failedUpdateSort": "Impossibile aggiornare la preferenza di ordinamento.",
     "undo": "Annulla"
   },
   "settings": {
@@ -296,6 +302,8 @@
     "titleTooLong": "Il titolo non può superare i {{max}} caratteri",
     "contentTooLong": "Il contenuto non può superare i {{max}} caratteri",
     "failedSaveChanges": "Impossibile salvare le modifiche. Riprova.",
+    "failedPin": "Impossibile aggiornare il fissaggio in alto.",
+    "failedArchive": "Impossibile aggiornare l'archiviazione.",
     "failedDuplicate": "Impossibile duplicare la nota. Riprova.",
     "menuOptions": "Opzioni nota",
     "assignItem": "Assegna elemento",
