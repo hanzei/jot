@@ -119,7 +119,7 @@ Jot is a self-hosted note-taking application. The backend is a Go HTTP API and t
 
 ### Technology Stack
 
-- **Go 1.24**
+- **Go 1.25**
 - **Chi v5** — HTTP router with middleware
 - **go-chi/cors** — CORS middleware
 - **SQLite 3** — File-based database (requires CGO)
@@ -324,7 +324,7 @@ The server at `localhost:8080` serves the API. Vite is configured with a proxy t
 
 Multi-stage `Dockerfile`:
 1. **Node 24 Alpine** — builds the React app (`npm ci && npm run build`)
-2. **Go 1.24 Alpine** — compiles the Go binary (CGO enabled for SQLite)
+2. **Go 1.25 Alpine** — compiles the Go binary (CGO enabled for SQLite)
 3. **Alpine runtime** — copies binary and frontend build; exposes port 8080
 
 ```bash
@@ -339,11 +339,11 @@ CI is split into per-component workflows in `.github/workflows/`:
 
 | Workflow | File | Triggers |
 |----------|------|----------|
-| Server — CI | `server-ci.yml` | push to `master`; PRs touching `server/**` |
-| Shared — CI | `shared-ci.yml` | push to `master`; PRs touching `shared/**` |
-| Webapp — CI | `webapp-ci.yml` | push to `master`; PRs touching `webapp/**` or `shared/**` |
-| Mobile — CI | `mobile-ci.yml` | push to `master`; PRs touching `mobile/**` or `shared/**` |
-| Mobile — APK Build | `mobile-apk.yml` | push to `master` and `v*` tags; PRs touching `mobile/**` or `shared/**` |
+| Server — CI | `server-ci.yml` | push to `master`; PRs touching `server/**` or `.github/workflows/**` |
+| Shared — CI | `shared-ci.yml` | push to `master`; PRs touching `shared/**` or `.github/workflows/**` |
+| Webapp — CI | `webapp-ci.yml` | push to `master`; PRs touching `webapp/**`, `shared/**`, or `.github/workflows/**` |
+| Mobile — CI | `mobile-ci.yml` | push to `master`; PRs touching `mobile/**`, `shared/**`, or `.github/workflows/**` |
+| Mobile — APK Build | `mobile-apk.yml` | push to `master` and `v*` tags; PRs touching `mobile/**`, `shared/**`, or `.github/workflows/**` |
 | Docker | `docker.yml` | push to `master`; all PRs |
 | Release | `release.yml` | push tags `v*` |
 | Claude Code | `claude.yml` | issue/PR comment and review events, plus issues opened/assigned, when `@claude` is mentioned |

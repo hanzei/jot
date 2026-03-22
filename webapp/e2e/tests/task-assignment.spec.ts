@@ -77,9 +77,8 @@ test.describe('Task Assignment', () => {
     const note = notes.find((n: { title: string }) => n.title === 'Unshare Cleanup');
     expect(note, 'note "Unshare Cleanup" must exist in API response').toBeDefined();
 
-    const unshareResp = await request.delete(`/api/v1/notes/${note.id}/share`, {
+    const unshareResp = await request.delete(`/api/v1/notes/${note.id}/shares/${user2Id}`, {
       headers: { Cookie: `jot_session=${sessionCookie!.value}` },
-      data: { user_id: user2Id },
     });
     expect(unshareResp.ok()).toBeTruthy();
 

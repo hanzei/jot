@@ -555,13 +555,13 @@ describe('API Module', () => {
       })
 
       it('unshares note', async () => {
-        const unshareData: ShareNoteRequest = { user_id: 'abcdefghijklmnopqrstuv' }
+        const unshareUserId = 'abcdefghijklmnopqrstuv'
         const unshareResponse = { success: true, message: 'Note unshared' }
         mockDelete.mockResolvedValue({ data: unshareResponse })
 
-        const result = await notes.unshare('1', unshareData)
+        const result = await notes.unshare('1', unshareUserId)
 
-        expect(mockDelete).toHaveBeenCalledWith('/notes/1/share', { data: unshareData })
+        expect(mockDelete).toHaveBeenCalledWith('/notes/1/shares/abcdefghijklmnopqrstuv')
         expect(result).toEqual(unshareResponse)
       })
 

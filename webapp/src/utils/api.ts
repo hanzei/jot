@@ -140,8 +140,8 @@ export const notes = {
   share: (id: string, data: ShareNoteRequest): Promise<ShareNoteResponse> =>
     api.post(`/notes/${id}/share`, data).then(res => res.data),
 
-  unshare: (id: string, data: ShareNoteRequest): Promise<ShareNoteResponse> =>
-    api.delete(`/notes/${id}/share`, { data }).then(res => res.data),
+  unshare: (id: string, userId: string): Promise<ShareNoteResponse> =>
+    api.delete(`/notes/${id}/shares/${userId}`).then(res => res.data),
 
   getShares: (id: string): Promise<NoteShare[]> =>
     api.get(`/notes/${id}/shares`).then(res => res.data),
