@@ -10,6 +10,8 @@ import {
   Image,
   Platform,
   KeyboardAvoidingView,
+  Modal,
+  Pressable,
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -73,6 +75,7 @@ export default function SettingsScreen() {
   const [languageError, setLanguageError] = useState('');
   const [themePref, setThemePref] = useState<ThemePreference>(settings?.theme ?? 'system');
   const [themeError, setThemeError] = useState('');
+  const [openDropdown, setOpenDropdown] = useState<'language' | 'theme' | null>(null);
 
   const [sessions, setSessions] = useState<ActiveSession[]>([]);
   const [sessionsLoading, setSessionsLoading] = useState(true);
@@ -335,6 +338,12 @@ export default function SettingsScreen() {
     { value: 'light', label: t('settings.themeLight') },
     { value: 'dark', label: t('settings.themeDark') },
   ];
+  const selectedLanguageLabel = languageOptions.find(option => option.value === languagePref)?.label
+    ?? t('settings.languageSystem');
+  const selectedThemeLabel = themeOptions.find(option => option.value === themePref)?.label
+    ?? t('settings.themeSystem');
+  const dropdownOptions = openDropdown === 'language' ? languageOptions : themeOptions;
+  const selectedDropdownValue = openDropdown === 'language' ? languagePref : themePref;
 
   return (
     <View style={[styles.container, { paddingTop: insets.top, backgroundColor: colors.background }]}>
@@ -654,69 +663,44 @@ export default function SettingsScreen() {
           <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('settings.themeSection')}</Text>
             <Text style={[styles.label, { color: colors.icon }]}>{t('settings.languageLabel')}</Text>
-            <View style={styles.themeOptions} accessibilityRole="radiogroup" accessibilityLabel={t('settings.languageSection')}>
-              {languageOptions.map((option) => {
-                const isActive = languagePref === option.value;
-                return (
-                  <TouchableOpacity
-                    key={option.value}
-                    style={[
-                      styles.themeOption,
-                      { borderColor: colors.border, backgroundColor: colors.inputBackground },
-                      isActive && { borderColor: colors.primary, backgroundColor: colors.primaryLight },
-                    ]}
-                    onPress={() => handleLanguageChange(option.value)}
-                    testID={`settings-language-${option.value}`}
-                    accessibilityLabel={option.label}
-                    accessibilityRole="radio"
-                    accessibilityState={{ checked: isActive }}
-                  >
-                    <Text
-                      style={[
-                        styles.themeOptionText, { color: colors.icon },
-                        isActive && { color: colors.primary, fontWeight: '600' },
-                      ]}
-                    >
-                      {option.label}
-                    </Text>
-                    {isActive && <Ionicons name="checkmark" size={16} color={colors.primary} />}
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
+            <TouchableOpacity
+              style={[
+                styles.dropdownTrigger,
+                { borderColor: colors.border, backgroundColor: colors.inputBackground },
+              ]}
+              onPress={() => setOpenDropdown('language')}
+              testID="settings-language-dropdown"
+              accessibilityLabel={t('settings.languageLabel')}
+              accessibilityRole="button"
+            >
+              <Text style={[styles.dropdownTriggerText, { color: colors.text }]}>{selectedLanguageLabel}</Text>
+              <Ionicons
+                name={openDropdown === 'language' ? 'chevron-up' : 'chevron-down'}
+                size={18}
+                color={colors.icon}
+              />
+            </TouchableOpacity>
             {languageError !== '' && (
               <Text style={[styles.errorText, { color: colors.error }]}>{displayMessage(t, languageError)}</Text>
             )}
             <Text style={[styles.label, styles.preferenceLabel, { color: colors.icon }]}>{t('settings.themeLabel')}</Text>
-            <View style={styles.themeOptions} accessibilityRole="radiogroup" accessibilityLabel={t('settings.themeSection')}>
-              {themeOptions.map((option) => {
-                const isActive = themePref === option.value;
-                return (
-                  <TouchableOpacity
-                    key={option.value}
-                    style={[
-                      styles.themeOption,
-                      { borderColor: colors.border, backgroundColor: colors.inputBackground },
-                      isActive && { borderColor: colors.primary, backgroundColor: colors.primaryLight },
-                    ]}
-                    onPress={() => handleThemeChange(option.value)}
-                    testID={`settings-theme-${option.value}`}
-                    accessibilityLabel={option.label}
-                    accessibilityRole="radio"
-                    accessibilityState={{ checked: isActive }}
-                  >
-                    <Text
-                      style={[
-                        styles.themeOptionText, { color: colors.icon },
-                        isActive && { color: colors.primary, fontWeight: '600' },
-                      ]}
-                    >
-                      {option.label}
-                    </Text>
-                  </TouchableOpacity>
-                );
-              })}
-            </View>
+            <TouchableOpacity
+              style={[
+                styles.dropdownTrigger,
+                { borderColor: colors.border, backgroundColor: colors.inputBackground },
+              ]}
+              onPress={() => setOpenDropdown('theme')}
+              testID="settings-theme-dropdown"
+              accessibilityLabel={t('settings.themeLabel')}
+              accessibilityRole="button"
+            >
+              <Text style={[styles.dropdownTriggerText, { color: colors.text }]}>{selectedThemeLabel}</Text>
+              <Ionicons
+                name={openDropdown === 'theme' ? 'chevron-up' : 'chevron-down'}
+                size={18}
+                color={colors.icon}
+              />
+            </TouchableOpacity>
             {themeError !== '' && (
               <Text style={[styles.errorText, { color: colors.error }]}>{displayMessage(t, themeError)}</Text>
             )}
@@ -784,6 +768,61 @@ export default function SettingsScreen() {
           </View>
         </ScrollView>
       </KeyboardAvoidingView>
+      <Modal
+        visible={openDropdown !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setOpenDropdown(null)}
+      >
+        <Pressable
+          style={[styles.dropdownOverlay, { backgroundColor: colors.overlay }]}
+          onPress={() => setOpenDropdown(null)}
+          testID="settings-dropdown-overlay"
+        >
+          <View
+            style={[styles.dropdownMenu, { backgroundColor: colors.surface, borderColor: colors.border }]}
+            accessibilityRole="menu"
+          >
+            {dropdownOptions.map((option) => {
+              const isSelected = selectedDropdownValue === option.value;
+              const optionType = openDropdown === 'language' ? 'language' : 'theme';
+              return (
+                <TouchableOpacity
+                  key={option.value}
+                  style={[
+                    styles.dropdownOption,
+                    { borderBottomColor: colors.borderLight },
+                    isSelected && { backgroundColor: colors.primaryLight },
+                  ]}
+                  onPress={() => {
+                    if (optionType === 'language') {
+                      void handleLanguageChange(option.value as LanguagePreference);
+                    } else {
+                      void handleThemeChange(option.value as ThemePreference);
+                    }
+                    setOpenDropdown(null);
+                  }}
+                  testID={`settings-${optionType}-${option.value}`}
+                  accessibilityRole="menuitem"
+                  accessibilityLabel={option.label}
+                  accessibilityState={{ selected: isSelected }}
+                >
+                  <Text
+                    style={[
+                      styles.dropdownOptionText,
+                      { color: colors.text },
+                      isSelected && { color: colors.primary, fontWeight: '600' },
+                    ]}
+                  >
+                    {option.label}
+                  </Text>
+                  {isSelected && <Ionicons name="checkmark" size={16} color={colors.primary} />}
+                </TouchableOpacity>
+              );
+            })}
+          </View>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -949,19 +988,40 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: '500',
   },
-  themeOptions: {
-    flexDirection: 'row',
-    gap: 8,
-    flexWrap: 'wrap',
-  },
-  themeOption: {
+  dropdownTrigger: {
     borderWidth: 1,
     borderRadius: 8,
-    paddingHorizontal: 16,
+    paddingHorizontal: 12,
     paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
   },
-  themeOptionText: {
+  dropdownTriggerText: {
     fontSize: 14,
+    fontWeight: '500',
+  },
+  dropdownOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    paddingHorizontal: 16,
+  },
+  dropdownMenu: {
+    borderWidth: 1,
+    borderRadius: 12,
+    overflow: 'hidden',
+    maxHeight: '70%',
+  },
+  dropdownOption: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 12,
+    paddingVertical: 12,
+    borderBottomWidth: 1,
+  },
+  dropdownOptionText: {
+    fontSize: 15,
     fontWeight: '500',
   },
   preferenceLabel: {

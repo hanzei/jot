@@ -136,6 +136,7 @@ describe('SettingsScreen language selection', () => {
       expect(mockListSessions).toHaveBeenCalled();
     });
 
+    fireEvent.press(getByTestId('settings-language-dropdown'));
     fireEvent.press(getByTestId('settings-language-de'));
 
     await waitFor(() => {
