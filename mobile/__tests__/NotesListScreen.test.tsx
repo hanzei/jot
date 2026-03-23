@@ -5,12 +5,16 @@ import NotesListScreen from '../src/screens/NotesListScreen';
 import { lightColors } from '../src/theme/colors';
 import type { NoteSort } from '@jot/shared';
 
-jest.mock('@react-navigation/native', () => ({
-  useNavigation: jest.fn().mockReturnValue({ navigate: jest.fn(), dispatch: jest.fn() }),
-  DrawerActions: {
-    toggleDrawer: () => ({ type: 'DRAWER_TOGGLE' }),
-  },
-}));
+jest.mock('@react-navigation/native', () => {
+  const mockDispatch = jest.fn();
+  return {
+    useNavigation: jest.fn().mockReturnValue({ navigate: jest.fn(), dispatch: mockDispatch }),
+    DrawerActions: {
+      toggleDrawer: () => ({ type: 'DRAWER_TOGGLE' }),
+    },
+    __mockDispatch: mockDispatch,
+  };
+});
 
 jest.mock('react-native-safe-area-context', () => ({
   useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
@@ -112,6 +116,9 @@ jest.mock('../src/components/ColorPicker', () => ({
 }));
 
 const mockUseOfflineNotes = jest.requireMock('../src/hooks/useOfflineNotes').useOfflineNotes as jest.Mock;
+const navigationModule = jest.requireMock('@react-navigation/native') as {
+  __mockDispatch: jest.Mock;
+};
 const notesHooks = jest.requireMock('../src/hooks/useNotes') as {
   useUpdateNote: jest.Mock;
   useDeleteNote: jest.Mock;
@@ -393,9 +400,9 @@ describe('NotesListScreen sorting', () => {
   it('opens the drawer from the compact menu button', () => {
     render(<NotesListScreen variant="notes" />);
 
-    expect(() => {
-      fireEvent.press(screen.getByTestId('drawer-toggle'));
-    }).not.toThrow();
+    fireEvent.press(screen.getByTestId('drawer-toggle'));
+
+    expect(navigationModule.__mockDispatch).toHaveBeenCalledWith({ type: 'DRAWER_TOGGLE' });
   });
 
   it('clears search text from the compact header control', async () => {
