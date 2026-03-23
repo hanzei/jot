@@ -5,10 +5,12 @@ import (
 	"testing"
 	"time"
 
-	sqlite3 "github.com/mattn/go-sqlite3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	sqlitedriver "modernc.org/sqlite"
 )
+
+const sqliteForeignKeyConstraint = 787
 
 func TestSQLiteForeignKeysEnabledAfterStartup(t *testing.T) {
 	ts := setupTestServer(t)
@@ -31,7 +33,8 @@ func TestSQLiteForeignKeysEnabledAfterStartup(t *testing.T) {
 func TestSQLiteRejectsInvalidForeignKeys(t *testing.T) {
 	ts := setupTestServer(t)
 
-	_, err := ts.Server.GetDB().Exec(
+	_, err := ts.Server.GetDB().ExecContext(
+		t.Context(),
 		`INSERT INTO sessions (token, user_id, expires_at, user_agent) VALUES (?, ?, ?, '')`,
 		"orphan-session-token",
 		"missing-user",
@@ -39,9 +42,9 @@ func TestSQLiteRejectsInvalidForeignKeys(t *testing.T) {
 	)
 	require.Error(t, err)
 
-	var sqliteErr sqlite3.Error
+	var sqliteErr *sqlitedriver.Error
 	require.ErrorAs(t, err, &sqliteErr)
-	assert.Equal(t, sqlite3.ErrConstraintForeignKey, sqliteErr.ExtendedCode)
+	assert.Equal(t, sqliteForeignKeyConstraint, sqliteErr.Code())
 }
 
 func assertForeignKeysEnabledOnConn(t *testing.T, conn *sql.Conn) {

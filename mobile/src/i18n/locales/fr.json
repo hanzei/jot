@@ -7,7 +7,8 @@
     "retry": "Réessayer",
     "clearSearch": "Effacer la recherche",
     "error": "Erreur",
-    "unknown": "inconnu"
+    "unknown": "inconnu",
+    "loading": "Chargement..."
   },
   "nav": {
     "settings": "Paramètres",
@@ -74,6 +75,7 @@
     "tryDifferentKeywords": "Essayez d'autres mots-clés",
     "failedLoadNotes": "Impossible de charger les notes",
     "checkConnection": "Vérifiez votre connexion et réessayez",
+    "sortUpdateFailed": "Impossible de mettre à jour la préférence de tri",
     "sortOption": {
       "manual": "Manuel",
       "updated_at": "Dernière modification",

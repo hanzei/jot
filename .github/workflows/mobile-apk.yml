@@ -8,7 +8,7 @@ on:
     branches: [master]
     tags: ["v*"]
   pull_request:
-    paths: ["mobile/**", "shared/**"]
+    paths: ["mobile/**", "shared/**", ".github/workflows/**"]
 
 jobs:
   build-apk:

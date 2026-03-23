@@ -106,9 +106,11 @@ func New(cfg *config.Config) (*Server, error) {
 		sessionsHandler: sessionsHandler,
 	}
 
-	startPeriodicTask(&s.bgWg, ctx, time.Hour, false, sessionStore.DeleteExpired, "delete expired sessions")
+	startPeriodicTask(&s.bgWg, ctx, time.Hour, false, func() error {
+		return sessionStore.DeleteExpired(ctx)
+	}, "delete expired sessions")
 	startPeriodicTask(&s.bgWg, ctx, time.Hour, true, func() error {
-		return noteStore.PurgeOldTrashedNotes(7 * 24 * time.Hour)
+		return noteStore.PurgeOldTrashedNotes(ctx, 7*24*time.Hour)
 	}, "purge old trashed notes")
 
 	if err := s.setupRoutes(); err != nil {
@@ -171,7 +173,7 @@ func (s *Server) setupRoutes() error {
 			r.Post("/notes/{id}/restore", s.wrapHandler(s.notesHandler.RestoreNote))
 
 			r.Post("/notes/{id}/share", s.wrapHandler(s.notesHandler.ShareNote))
-			r.Delete("/notes/{id}/share", s.wrapHandler(s.notesHandler.UnshareNote))
+			r.Delete("/notes/{id}/shares/{user_id}", s.wrapHandler(s.notesHandler.UnshareNote))
 			r.Get("/notes/{id}/shares", s.wrapHandler(s.notesHandler.GetNoteShares))
 
 			r.Post("/notes/{id}/labels", s.wrapHandler(s.labelsHandler.AddLabel))
@@ -392,7 +394,7 @@ func logrusRequestLogger(next http.Handler) http.Handler {
 }
 
 func (s *Server) Start(addr string) error {
-	listener, err := net.Listen("tcp", addr)
+	listener, err := (&net.ListenConfig{}).Listen(s.ctx, "tcp", addr)
 	if err != nil {
 		startErr := fmt.Errorf("listen: %w", err)
 		s.setStartResult(startErr)

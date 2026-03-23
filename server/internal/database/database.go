@@ -5,10 +5,11 @@ import (
 	"database/sql"
 	"embed"
 	"fmt"
+	"io/fs"
 	"strings"
 
-	_ "github.com/mattn/go-sqlite3"
 	log "github.com/sirupsen/logrus"
+	_ "modernc.org/sqlite"
 )
 
 //go:embed migrations/*.sql
@@ -18,36 +19,50 @@ type DB struct {
 	*sql.DB
 }
 
-const sqliteForeignKeysParam = "_foreign_keys=on"
+const sqliteForeignKeysParam = "_pragma=foreign_keys(on)"
 
 func New(dbPath string) (*DB, error) {
-	db, err := sql.Open("sqlite3", sqliteDSN(dbPath))
+	ctx := context.Background()
+
+	db, err := sql.Open("sqlite", sqliteDSN(dbPath))
 	if err != nil {
 		return nil, fmt.Errorf("failed to open database: %w", err)
 	}
 
-	if err := db.Ping(); err != nil {
+	// Serialize all access through a single connection. SQLite supports only one
+	// concurrent writer; using a single connection eliminates SQLITE_BUSY errors
+	// without needing a busy timeout.
+	db.SetMaxOpenConns(1)
+
+	if err := db.PingContext(ctx); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("failed to ping database: %w", err)
 	}
 
+	// Enable WAL journal mode for better read concurrency and to avoid holding
+	// an exclusive lock on the database file (the default rollback journal does).
+	if _, err := db.ExecContext(ctx, `PRAGMA journal_mode=WAL`); err != nil {
+		_ = db.Close()
+		return nil, fmt.Errorf("failed to enable WAL mode: %w", err)
+	}
+
 	d := &DB{DB: db}
-	if err := d.verifyForeignKeysEnabled(context.Background()); err != nil {
+	if err := d.verifyForeignKeysEnabled(ctx); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("failed to verify foreign key enforcement before migrations: %w", err)
 	}
 
-	if err := d.runMigrations(); err != nil {
+	if err := d.runMigrations(ctx); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("failed to run migrations: %w", err)
 	}
 
-	if err := d.verifyForeignKeysEnabled(context.Background()); err != nil {
+	if err := d.verifyForeignKeysEnabled(ctx); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("failed to verify foreign key enforcement after migrations: %w", err)
 	}
 
-	if err := d.verifyForeignKeyState(context.Background()); err != nil {
+	if err := d.verifyForeignKeyState(ctx); err != nil {
 		_ = db.Close()
 		return nil, fmt.Errorf("failed to verify foreign key state after migrations: %w", err)
 	}
@@ -132,8 +147,8 @@ func formatRowID(rowID sql.NullInt64) string {
 	return fmt.Sprintf("%d", rowID.Int64)
 }
 
-func (d *DB) runMigrations() error {
-	if _, err := d.Exec(`CREATE TABLE IF NOT EXISTS migrations (
+func (d *DB) runMigrations(ctx context.Context) error {
+	if _, err := d.ExecContext(ctx, `CREATE TABLE IF NOT EXISTS migrations (
 		id INTEGER PRIMARY KEY AUTOINCREMENT,
 		filename TEXT UNIQUE NOT NULL,
 		applied_at DATETIME DEFAULT CURRENT_TIMESTAMP
@@ -148,7 +163,7 @@ func (d *DB) runMigrations() error {
 
 	for _, file := range files {
 		var count int
-		err := d.QueryRow("SELECT COUNT(*) FROM migrations WHERE filename = ?", file.Name()).Scan(&count)
+		err := d.QueryRowContext(ctx, "SELECT COUNT(*) FROM migrations WHERE filename = ?", file.Name()).Scan(&count)
 		if err != nil {
 			return fmt.Errorf("failed to check migration status: %w", err)
 		}
@@ -157,35 +172,43 @@ func (d *DB) runMigrations() error {
 			continue
 		}
 
-		content, err := migrationsFS.ReadFile("migrations/" + file.Name())
-		if err != nil {
-			return fmt.Errorf("failed to read migration file %s: %w", file.Name(), err)
-		}
-
-		tx, err := d.Begin()
-		if err != nil {
-			return fmt.Errorf("failed to begin transaction: %w", err)
-		}
-
-		if _, err := tx.Exec(string(content)); err != nil {
-			if rollbackErr := tx.Rollback(); rollbackErr != nil {
-				return fmt.Errorf("failed to execute migration %s: %w, rollback failed: %w", file.Name(), err, rollbackErr)
-			}
-			return fmt.Errorf("failed to execute migration %s: %w", file.Name(), err)
-		}
-
-		if _, err := tx.Exec("INSERT INTO migrations (filename) VALUES (?)", file.Name()); err != nil {
-			if rollbackErr := tx.Rollback(); rollbackErr != nil {
-				return fmt.Errorf("failed to record migration %s: %w, rollback failed: %w", file.Name(), err, rollbackErr)
-			}
-			return fmt.Errorf("failed to record migration %s: %w", file.Name(), err)
-		}
-
-		if err := tx.Commit(); err != nil {
-			return fmt.Errorf("failed to commit migration %s: %w", file.Name(), err)
+		if err := d.applyMigration(ctx, file); err != nil {
+			return err
 		}
 
 		log.WithField("filename", file.Name()).Info("Applied migration")
+	}
+
+	return nil
+}
+
+func (d *DB) applyMigration(ctx context.Context, file fs.DirEntry) error {
+	content, err := migrationsFS.ReadFile("migrations/" + file.Name())
+	if err != nil {
+		return fmt.Errorf("failed to read migration file %s: %w", file.Name(), err)
+	}
+
+	tx, err := d.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx, string(content)); err != nil {
+		if rollbackErr := tx.Rollback(); rollbackErr != nil {
+			return fmt.Errorf("failed to execute migration %s: %w, rollback failed: %w", file.Name(), err, rollbackErr)
+		}
+		return fmt.Errorf("failed to execute migration %s: %w", file.Name(), err)
+	}
+
+	if _, err := tx.ExecContext(ctx, "INSERT INTO migrations (filename) VALUES (?)", file.Name()); err != nil {
+		if rollbackErr := tx.Rollback(); rollbackErr != nil {
+			return fmt.Errorf("failed to record migration %s: %w, rollback failed: %w", file.Name(), err, rollbackErr)
+		}
+		return fmt.Errorf("failed to record migration %s: %w", file.Name(), err)
+	}
+
+	if err := tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit migration %s: %w", file.Name(), err)
 	}
 
 	return nil

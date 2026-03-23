@@ -3,6 +3,7 @@ package handlers
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -56,7 +57,7 @@ func keepColorToHex(color string) string {
 	}
 }
 
-func (h *NotesHandler) importKeepNote(userID string, kn keepNote) error {
+func (h *NotesHandler) importKeepNote(ctx context.Context, userID string, kn keepNote) error {
 	noteType := models.NoteTypeText
 	if len(kn.ListContent) > 0 {
 		noteType = models.NoteTypeTodo
@@ -64,14 +65,14 @@ func (h *NotesHandler) importKeepNote(userID string, kn keepNote) error {
 
 	color := keepColorToHex(kn.Color)
 
-	note, err := h.noteStore.Create(userID, kn.Title, kn.TextContent, noteType, color)
+	note, err := h.noteStore.Create(ctx, userID, kn.Title, kn.TextContent, noteType, color)
 	if err != nil {
 		return err
 	}
 
 	if noteType == models.NoteTypeTodo {
 		for i, item := range kn.ListContent {
-			if _, err := h.noteStore.CreateItemWithCompleted(note.ID, item.Text, i, item.IsChecked, 0, ""); err != nil {
+			if _, err := h.noteStore.CreateItemWithCompleted(ctx, note.ID, item.Text, i, item.IsChecked, 0, ""); err != nil {
 				return err
 			}
 		}
@@ -79,7 +80,7 @@ func (h *NotesHandler) importKeepNote(userID string, kn keepNote) error {
 
 	if kn.IsPinned || kn.IsArchived {
 		f := false
-		if err := h.noteStore.Update(note.ID, userID, &kn.Title, &kn.TextContent, &color, &kn.IsPinned, &kn.IsArchived, &f); err != nil {
+		if err := h.noteStore.Update(ctx, note.ID, userID, &kn.Title, &kn.TextContent, &color, &kn.IsPinned, &kn.IsArchived, &f); err != nil {
 			return err
 		}
 	}
@@ -147,13 +148,13 @@ func parseKeepNotesFromData(filename string, data []byte) ([]keepNote, error) {
 	return []keepNote{kn}, nil
 }
 
-func (h *NotesHandler) importKeepNotes(userID string, keepNotes []keepNote) (imported, skipped int, importErrors []string) {
+func (h *NotesHandler) importKeepNotes(ctx context.Context, userID string, keepNotes []keepNote) (imported, skipped int, importErrors []string) {
 	for i, kn := range keepNotes {
 		if kn.IsTrashed {
 			skipped++
 			continue
 		}
-		if err := h.importKeepNote(userID, kn); err != nil {
+		if err := h.importKeepNote(ctx, userID, kn); err != nil {
 			title := kn.Title
 			if title == "" {
 				title = fmt.Sprintf("note #%d", i+1)
@@ -206,7 +207,7 @@ func (h *NotesHandler) ImportNotes(w http.ResponseWriter, r *http.Request) (int,
 		return http.StatusBadRequest, nil, err
 	}
 
-	imported, skipped, importErrors := h.importKeepNotes(user.ID, keepNotes)
+	imported, skipped, importErrors := h.importKeepNotes(r.Context(), user.ID, keepNotes)
 
 	return http.StatusOK, ImportResponse{Imported: imported, Skipped: skipped, Errors: importErrors}, nil
 }

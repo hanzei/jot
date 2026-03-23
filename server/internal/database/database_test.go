@@ -8,17 +8,17 @@ import (
 	"testing"
 	"time"
 
-	_ "github.com/mattn/go-sqlite3"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	_ "modernc.org/sqlite"
 )
 
 func TestNewCleansOrphanedRowsDuringMigration(t *testing.T) {
 	dbPath := filepath.Join(t.TempDir(), "pre_upgrade.db")
-	seedDB, err := sql.Open("sqlite3", sqliteDSN(dbPath))
+	seedDB, err := sql.Open("sqlite", sqliteDSN(dbPath))
 	require.NoError(t, err)
 
-	require.NoError(t, seedDB.Ping())
+	require.NoError(t, seedDB.PingContext(t.Context()))
 
 	applyMigrationsBefore(t, seedDB, "019_cleanup_orphaned_foreign_keys.sql")
 
@@ -134,13 +134,13 @@ func applyMigrationsBefore(t *testing.T, db *sql.DB, stopBefore string) {
 		content, err := migrationsFS.ReadFile("migrations/" + file.Name())
 		require.NoError(t, err)
 
-		tx, err := db.Begin()
+		tx, err := db.BeginTx(t.Context(), nil)
 		require.NoError(t, err)
 
-		_, err = tx.Exec(string(content))
+		_, err = tx.ExecContext(t.Context(), string(content))
 		require.NoError(t, err)
 
-		_, err = tx.Exec(`INSERT INTO migrations (filename) VALUES (?)`, file.Name())
+		_, err = tx.ExecContext(t.Context(), `INSERT INTO migrations (filename) VALUES (?)`, file.Name())
 		require.NoError(t, err)
 
 		require.NoError(t, tx.Commit())
@@ -164,14 +164,14 @@ func assertForeignKeysEnabled(t *testing.T, db *sql.DB) {
 	t.Helper()
 
 	var enabled int
-	require.NoError(t, db.QueryRow("PRAGMA foreign_keys").Scan(&enabled))
+	require.NoError(t, db.QueryRowContext(t.Context(), "PRAGMA foreign_keys").Scan(&enabled))
 	assert.Equal(t, 1, enabled)
 }
 
 func assertNoForeignKeyViolations(t *testing.T, db *sql.DB) {
 	t.Helper()
 
-	rows, err := db.Query("PRAGMA foreign_key_check")
+	rows, err := db.QueryContext(t.Context(), "PRAGMA foreign_key_check")
 	require.NoError(t, err)
 	defer func() { _ = rows.Close() }()
 
@@ -196,6 +196,6 @@ func recordCount(t *testing.T, db *sql.DB, table, idColumn, id string) int {
 
 	var count int
 	query := fmt.Sprintf("SELECT COUNT(*) FROM %s WHERE %s = ?", table, idColumn)
-	require.NoError(t, db.QueryRow(query, id).Scan(&count))
+	require.NoError(t, db.QueryRowContext(t.Context(), query, id).Scan(&count))
 	return count
 }

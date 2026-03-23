@@ -325,7 +325,7 @@ func TestDeleteLabel(t *testing.T) {
 		labelID := labels[0].ID
 
 		var beforeAssociations int
-		err = ts.Server.GetDB().QueryRow("SELECT COUNT(*) FROM note_labels WHERE label_id = ?", labelID).Scan(&beforeAssociations)
+		err = ts.Server.GetDB().QueryRowContext(t.Context(), "SELECT COUNT(*) FROM note_labels WHERE label_id = ?", labelID).Scan(&beforeAssociations)
 		require.NoError(t, err)
 		assert.Equal(t, 2, beforeAssociations)
 
@@ -333,17 +333,17 @@ func TestDeleteLabel(t *testing.T) {
 		require.NoError(t, err)
 
 		var remainingAssociations int
-		err = ts.Server.GetDB().QueryRow("SELECT COUNT(*) FROM note_labels WHERE label_id = ?", labelID).Scan(&remainingAssociations)
+		err = ts.Server.GetDB().QueryRowContext(t.Context(), "SELECT COUNT(*) FROM note_labels WHERE label_id = ?", labelID).Scan(&remainingAssociations)
 		require.NoError(t, err)
 		assert.Equal(t, 0, remainingAssociations)
 
 		var remainingLabelRows int
-		err = ts.Server.GetDB().QueryRow("SELECT COUNT(*) FROM labels WHERE id = ?", labelID).Scan(&remainingLabelRows)
+		err = ts.Server.GetDB().QueryRowContext(t.Context(), "SELECT COUNT(*) FROM labels WHERE id = ?", labelID).Scan(&remainingLabelRows)
 		require.NoError(t, err)
 		assert.Equal(t, 0, remainingLabelRows)
 
 		var remainingNotes int
-		err = ts.Server.GetDB().QueryRow("SELECT COUNT(*) FROM notes WHERE id IN (?, ?)", firstNote.ID, secondNote.ID).Scan(&remainingNotes)
+		err = ts.Server.GetDB().QueryRowContext(t.Context(), "SELECT COUNT(*) FROM notes WHERE id IN (?, ?)", firstNote.ID, secondNote.ID).Scan(&remainingNotes)
 		require.NoError(t, err)
 		assert.Equal(t, 2, remainingNotes)
 

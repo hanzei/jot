@@ -73,6 +73,16 @@ func TestNoteSharingEndpoints(t *testing.T) {
 		require.NoError(t, owner.Client.UnshareNote(t.Context(), note.ID, sharedUser.User.ID))
 	})
 
+	t.Run("unshare with invalid user_id format returns bad request", func(t *testing.T) {
+		err := owner.Client.UnshareNote(t.Context(), note.ID, "invalid")
+		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
+	})
+
+	t.Run("unshare by non-owner returns forbidden", func(t *testing.T) {
+		err := other.Client.UnshareNote(t.Context(), note.ID, sharedUser.User.ID)
+		assert.Equal(t, http.StatusForbidden, client.StatusCode(err))
+	})
+
 	t.Run("unshare non-shared user returns not found", func(t *testing.T) {
 		err := owner.Client.UnshareNote(t.Context(), note.ID, sharedUser.User.ID)
 		assert.Equal(t, http.StatusNotFound, client.StatusCode(err))

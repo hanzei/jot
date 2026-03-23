@@ -63,7 +63,7 @@ func (h *SessionsHandler) ListSessions(w http.ResponseWriter, r *http.Request) (
 
 	currentToken, _ := auth.GetSessionTokenFromContext(r.Context())
 
-	sessions, err := h.sessionStore.GetByUserID(user.ID)
+	sessions, err := h.sessionStore.GetByUserID(r.Context(), user.ID)
 	if err != nil {
 		return http.StatusInternalServerError, nil, err
 	}
@@ -100,7 +100,7 @@ func (h *SessionsHandler) RevokeSession(w http.ResponseWriter, r *http.Request) 
 		return http.StatusBadRequest, nil, errors.New("cannot revoke current session")
 	}
 
-	sessions, err := h.sessionStore.GetByUserID(user.ID)
+	sessions, err := h.sessionStore.GetByUserID(r.Context(), user.ID)
 	if err != nil {
 		return http.StatusInternalServerError, nil, err
 	}
@@ -109,7 +109,7 @@ func (h *SessionsHandler) RevokeSession(w http.ResponseWriter, r *http.Request) 
 		if sessionID(s.Token) != targetID {
 			continue
 		}
-		deleted, err := h.sessionStore.DeleteByUserIDAndToken(user.ID, s.Token)
+		deleted, err := h.sessionStore.DeleteByUserIDAndToken(r.Context(), user.ID, s.Token)
 		if err != nil {
 			return http.StatusInternalServerError, nil, err
 		}

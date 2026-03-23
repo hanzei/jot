@@ -34,7 +34,7 @@ func countRowsByNoteID(t *testing.T, ts *TestServer, table string, noteID string
 	}
 
 	var count int
-	err := ts.Server.GetDB().QueryRow(query, noteID).Scan(&count)
+	err := ts.Server.GetDB().QueryRowContext(t.Context(), query, noteID).Scan(&count)
 	require.NoError(t, err)
 	return count
 }
@@ -43,7 +43,7 @@ func countNotesByID(t *testing.T, ts *TestServer, noteID string) int {
 	t.Helper()
 
 	var count int
-	err := ts.Server.GetDB().QueryRow("SELECT COUNT(*) FROM notes WHERE id = ?", noteID).Scan(&count)
+	err := ts.Server.GetDB().QueryRowContext(t.Context(), "SELECT COUNT(*) FROM notes WHERE id = ?", noteID).Scan(&count)
 	require.NoError(t, err)
 	return count
 }
