@@ -44,10 +44,16 @@ jest.mock('react-native-draggable-flatlist', () => {
     return children;
   }
 
+  function MockNestableScrollContainer(props: Record<string, unknown>) {
+    return <ReactNative.ScrollView {...props} />;
+  }
+
   return {
     __esModule: true,
     default: MockDraggableFlatList,
     ScaleDecorator: MockScaleDecorator,
+    NestableDraggableFlatList: MockDraggableFlatList,
+    NestableScrollContainer: MockNestableScrollContainer,
   };
 });
 

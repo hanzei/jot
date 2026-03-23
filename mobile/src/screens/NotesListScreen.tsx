@@ -12,7 +12,7 @@ import {
   ScrollView,
 } from 'react-native';
 import { useSQLiteContext } from 'expo-sqlite';
-import DraggableFlatList, { ScaleDecorator } from 'react-native-draggable-flatlist';
+import DraggableFlatList, { ScaleDecorator, NestableDraggableFlatList, NestableScrollContainer } from 'react-native-draggable-flatlist';
 import * as Haptics from 'expo-haptics';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
@@ -685,65 +685,85 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
 
       {/* Notes list */}
       {hasPinned ? (
-        <ScrollView
-          refreshControl={
-            <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={colors.primary} />
-          }
-          contentContainerStyle={styles.listContent}
-          testID="notes-section-list"
-        >
-          {displayPinned.length > 0 && (
-            <>
-              <Text style={[styles.sectionHeader, { color: colors.textMuted }]}>{t('dashboard.pinned')}</Text>
-              {isDraggable ? (
-                <DraggableFlatList
+        isDraggable ? (
+          <NestableScrollContainer
+            refreshControl={
+              <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={colors.primary} />
+            }
+            contentContainerStyle={styles.listContent}
+            testID="notes-section-list"
+          >
+            {displayPinned.length > 0 && (
+              <>
+                <Text style={[styles.sectionHeader, { color: colors.textMuted }]}>{t('dashboard.pinned')}</Text>
+                <NestableDraggableFlatList
                   data={displayPinned}
                   keyExtractor={(item) => item.id}
                   renderItem={renderDraggableNoteCard}
                   onDragBegin={handleDragStart}
                   onDragEnd={handleDragEndPinned}
-                  scrollEnabled={false}
                   testID="pinned-draggable-list"
                 />
-              ) : (
-                <FlatList
-                  data={displayPinned}
-                  keyExtractor={(item) => item.id}
-                  renderItem={renderNonDraggableNoteCard}
-                  scrollEnabled={false}
-                  testID="pinned-static-list"
-                />
-              )}
-            </>
-          )}
-          {displayUnpinned.length > 0 && (
-            <>
-              {displayPinned.length > 0 && (
-                <Text style={[styles.sectionHeader, { color: colors.textMuted }]}>{t('dashboard.otherNotes')}</Text>
-              )}
-              {isDraggable ? (
-                <DraggableFlatList
+              </>
+            )}
+            {displayUnpinned.length > 0 && (
+              <>
+                {displayPinned.length > 0 && (
+                  <Text style={[styles.sectionHeader, { color: colors.textMuted }]}>{t('dashboard.otherNotes')}</Text>
+                )}
+                <NestableDraggableFlatList
                   data={displayUnpinned}
                   keyExtractor={(item) => item.id}
                   renderItem={renderDraggableNoteCard}
                   onDragBegin={handleDragStart}
                   onDragEnd={handleDragEndUnpinned}
-                  scrollEnabled={false}
                   testID="unpinned-draggable-list"
                 />
-              ) : (
-                <FlatList
-                  data={displayUnpinned}
-                  keyExtractor={(item) => item.id}
-                  renderItem={renderNonDraggableNoteCard}
-                  scrollEnabled={false}
-                  testID="unpinned-static-list"
-                />
-              )}
-            </>
-          )}
-          {displayPinned.length === 0 && displayUnpinned.length === 0 && listEmptyComponent}
-        </ScrollView>
+              </>
+            )}
+            {displayPinned.length === 0 && displayUnpinned.length === 0 && listEmptyComponent}
+          </NestableScrollContainer>
+        ) : (
+          <ScrollView
+            refreshControl={
+              <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={colors.primary} />
+            }
+            contentContainerStyle={styles.listContent}
+            testID="notes-section-list"
+          >
+            {displayPinned.length > 0 && (
+              <>
+                <Text style={[styles.sectionHeader, { color: colors.textMuted }]}>{t('dashboard.pinned')}</Text>
+                {displayPinned.map((item) => (
+                  <NoteCard
+                    key={item.id}
+                    note={item}
+                    onPress={() => handleNotePress(item.id)}
+                    onMenuPress={variant !== 'trash' ? () => handleOpenMenu(item) : undefined}
+                    onLongPress={variant === 'trash' ? () => handleOpenMenu(item) : undefined}
+                  />
+                ))}
+              </>
+            )}
+            {displayUnpinned.length > 0 && (
+              <>
+                {displayPinned.length > 0 && (
+                  <Text style={[styles.sectionHeader, { color: colors.textMuted }]}>{t('dashboard.otherNotes')}</Text>
+                )}
+                {displayUnpinned.map((item) => (
+                  <NoteCard
+                    key={item.id}
+                    note={item}
+                    onPress={() => handleNotePress(item.id)}
+                    onMenuPress={variant !== 'trash' ? () => handleOpenMenu(item) : undefined}
+                    onLongPress={variant === 'trash' ? () => handleOpenMenu(item) : undefined}
+                  />
+                ))}
+              </>
+            )}
+            {displayPinned.length === 0 && displayUnpinned.length === 0 && listEmptyComponent}
+          </ScrollView>
+        )
       ) : isDraggable ? (
         <DraggableFlatList
           data={displayUnpinned}
@@ -751,6 +771,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
           renderItem={renderDraggableNoteCard}
           onDragBegin={handleDragStart}
           onDragEnd={handleDragEndUnpinned}
+          activationDistance={20}
           refreshControl={
             <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={colors.primary} />
           }
