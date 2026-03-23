@@ -536,6 +536,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
             style={[styles.searchInput, { color: colors.text }]}
             placeholder={t('dashboard.searchPlaceholder')}
             placeholderTextColor={colors.placeholder}
+            accessibilityLabel={t('dashboard.searchPlaceholder')}
             value={searchText}
             onChangeText={setSearchText}
             returnKeyType="search"
@@ -639,15 +640,12 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   // Uses debouncedSearch (not searchText) so clearing the input mid-debounce doesn't
   // trigger the full-screen loader while the previous query is still in-flight.
   if (isLoading && !notes && !debouncedSearch) {
-    if (variant === 'notes') {
-      return (
-        <View style={[styles.container, { backgroundColor: colors.background }]}>
-          {renderTopControls()}
-          <SkeletonNoteList />
-        </View>
-      );
-    }
-    return <SkeletonNoteList />;
+    return (
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        {renderTopControls()}
+        <SkeletonNoteList />
+      </View>
+    );
   }
 
   if (isError) {
@@ -666,23 +664,19 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
           style={[styles.retryButton, { backgroundColor: colors.primary }]}
           onPress={() => refetch()}
           testID="retry-fetch"
+          accessibilityRole="button"
+          accessibilityLabel={t('common.retry')}
         >
           <Text style={styles.retryText}>{t('common.retry')}</Text>
         </TouchableOpacity>
       </View>
     );
 
-    if (variant === 'notes') {
-      return (
-        <View style={[styles.container, { backgroundColor: colors.background }]}>
-          {renderTopControls()}
-          {errorContent}
-        </View>
-      );
-    }
-
     return (
-      errorContent
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        {renderTopControls()}
+        {errorContent}
+      </View>
     );
   }
 
