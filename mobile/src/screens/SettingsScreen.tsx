@@ -797,6 +797,7 @@ export default function SettingsScreen() {
           <View
             style={[styles.dropdownMenu, { backgroundColor: colors.surface, borderColor: colors.border }]}
             accessibilityRole="menu"
+            onStartShouldSetResponder={() => true}
           >
             <ScrollView style={styles.dropdownOptionsList}>
               {dropdownOptions.map((option) => {
