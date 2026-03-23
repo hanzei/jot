@@ -7,7 +7,8 @@
     "retry": "Tentar novamente",
     "clearSearch": "Limpar pesquisa",
     "error": "Erro",
-    "unknown": "desconhecido"
+    "unknown": "desconhecido",
+    "loading": "Carregando..."
   },
   "nav": {
     "settings": "Configurações",
@@ -74,6 +75,7 @@
     "tryDifferentKeywords": "Tente palavras-chave diferentes",
     "failedLoadNotes": "Falha ao carregar notas",
     "checkConnection": "Verifique sua conexão e tente novamente",
+    "sortUpdateFailed": "Falha ao atualizar a preferência de ordenação",
     "sortOption": {
       "manual": "Manual",
       "updated_at": "Última modificação",

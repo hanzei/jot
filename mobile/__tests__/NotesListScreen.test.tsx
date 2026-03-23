@@ -5,8 +5,19 @@ import NotesListScreen from '../src/screens/NotesListScreen';
 import { lightColors } from '../src/theme/colors';
 import type { NoteSort } from '@jot/shared';
 
-jest.mock('@react-navigation/native', () => ({
-  useNavigation: jest.fn().mockReturnValue({ navigate: jest.fn() }),
+jest.mock('@react-navigation/native', () => {
+  const mockDispatch = jest.fn();
+  return {
+    useNavigation: jest.fn().mockReturnValue({ navigate: jest.fn(), dispatch: mockDispatch }),
+    DrawerActions: {
+      toggleDrawer: () => ({ type: 'DRAWER_TOGGLE' }),
+    },
+    __mockDispatch: mockDispatch,
+  };
+});
+
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
 }));
 
 jest.mock('expo-haptics', () => ({
@@ -44,10 +55,16 @@ jest.mock('react-native-draggable-flatlist', () => {
     return children;
   }
 
+  function MockNestableScrollContainer(props: Record<string, unknown>) {
+    return <ReactNative.ScrollView {...props} />;
+  }
+
   return {
     __esModule: true,
     default: MockDraggableFlatList,
     ScaleDecorator: MockScaleDecorator,
+    NestableDraggableFlatList: MockDraggableFlatList,
+    NestableScrollContainer: MockNestableScrollContainer,
   };
 });
 
@@ -105,6 +122,9 @@ jest.mock('../src/components/ColorPicker', () => ({
 }));
 
 const mockUseOfflineNotes = jest.requireMock('../src/hooks/useOfflineNotes').useOfflineNotes as jest.Mock;
+const navigationModule = jest.requireMock('@react-navigation/native') as {
+  __mockDispatch: jest.Mock;
+};
 const notesHooks = jest.requireMock('../src/hooks/useNotes') as {
   useUpdateNote: jest.Mock;
   useDeleteNote: jest.Mock;
@@ -177,6 +197,10 @@ type SortPreferenceResponse = {
 };
 
 describe('NotesListScreen sorting', () => {
+  const openSortControls = () => {
+    fireEvent.press(screen.getByTestId('sort-toggle'));
+  };
+
   beforeEach(() => {
     jest.clearAllMocks();
     notesHooks.useUpdateNote.mockReturnValue({ mutateAsync: mockMutateAsync });
@@ -222,6 +246,9 @@ describe('NotesListScreen sorting', () => {
     render(<NotesListScreen variant="notes" />);
 
     expect(screen.queryByTestId('sort-disabled-notice')).toBeNull();
+    expect(screen.queryByTestId('sort-controls')).toBeNull();
+    expect(screen.getByTestId('drawer-toggle')).toBeTruthy();
+    expect(screen.getByTestId('sort-toggle')).toBeTruthy();
     expect(screen.getByTestId('pinned-draggable-list')).toBeTruthy();
     expect(screen.getByText('Pinned')).toBeTruthy();
     expect(screen.getByText('sort-demo-zulu')).toBeTruthy();
@@ -257,6 +284,7 @@ describe('NotesListScreen sorting', () => {
     expect(screen.queryByTestId('sort-disabled-notice')).toBeNull();
     expect(screen.getByTestId('notes-section-list')).toBeTruthy();
     expect(screen.getByTestId('unpinned-draggable-list')).toBeTruthy();
+    openSortControls();
     fireEvent.press(screen.getByTestId('sort-chip-created_at'));
 
     await waitFor(() => {
@@ -290,6 +318,7 @@ describe('NotesListScreen sorting', () => {
 
     render(<NotesListScreen variant="notes" />);
 
+    openSortControls();
     fireEvent.press(screen.getByTestId('sort-chip-created_at'));
 
     await waitFor(() => {
@@ -329,7 +358,9 @@ describe('NotesListScreen sorting', () => {
 
     render(<NotesListScreen variant="notes" />);
 
+    openSortControls();
     fireEvent.press(screen.getByTestId('sort-chip-updated_at'));
+    openSortControls();
     fireEvent.press(screen.getByTestId('sort-chip-created_at'));
 
     second.resolve({
@@ -350,5 +381,55 @@ describe('NotesListScreen sorting', () => {
       expect(setSettings).toHaveBeenLastCalledWith(expect.objectContaining({ note_sort: 'created_at' }));
     });
     expect(within(screen.getByTestId('sort-disabled-notice')).getByText(/Date created/)).toBeTruthy();
+  });
+
+  it('toggles sort controls visibility from the compact header', () => {
+    mockUseOfflineNotes.mockReturnValue({
+      data: [
+        buildNote({ id: 'unpinned-bravo', title: 'sort-demo-bravo', pinned: false }),
+      ],
+      isLoading: false,
+      isError: false,
+      refetch: jest.fn(),
+      isRefetching: false,
+    });
+
+    render(<NotesListScreen variant="notes" />);
+
+    expect(screen.queryByTestId('sort-controls')).toBeNull();
+    fireEvent.press(screen.getByTestId('sort-toggle'));
+    expect(screen.getByTestId('sort-controls')).toBeTruthy();
+    fireEvent.press(screen.getByTestId('sort-toggle'));
+    expect(screen.queryByTestId('sort-controls')).toBeNull();
+  });
+
+  it('opens the drawer from the compact menu button', () => {
+    render(<NotesListScreen variant="notes" />);
+
+    fireEvent.press(screen.getByTestId('drawer-toggle'));
+
+    expect(navigationModule.__mockDispatch).toHaveBeenCalledWith({ type: 'DRAWER_TOGGLE' });
+  });
+
+  it('clears search text from the compact header control', async () => {
+    mockUseOfflineNotes.mockReturnValue({
+      data: [
+        buildNote({ id: 'unpinned-bravo', title: 'sort-demo-bravo', pinned: false }),
+      ],
+      isLoading: false,
+      isError: false,
+      refetch: jest.fn(),
+      isRefetching: false,
+    });
+
+    render(<NotesListScreen variant="notes" />);
+
+    fireEvent.changeText(screen.getByTestId('search-input'), 'demo query');
+    expect(screen.getByLabelText('Clear search')).toBeTruthy();
+    fireEvent.press(screen.getByTestId('clear-search'));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('clear-search')).toBeNull();
+    });
   });
 });

@@ -128,6 +128,7 @@ describe('NoteModal', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     vi.useFakeTimers()
+    localStorage.clear()
   })
 
   afterEach(() => {
@@ -173,6 +174,35 @@ describe('NoteModal', () => {
       renderNoteModal({ ...defaultProps, note })
 
       expect(screen.getByText(/Last edited:/)).toBeInTheDocument()
+    })
+
+    it('renders permanent mobile app toolbar link in note modal', () => {
+      const note = createMockNote()
+      renderNoteModal({ ...defaultProps, note })
+
+      const mobileLink = screen.getByTestId('note-open-mobile-app-toolbar-link')
+      const href = mobileLink.getAttribute('href')
+      const deepLink = new URL(href ?? '')
+
+      expect(mobileLink).toBeInTheDocument()
+      expect(deepLink.protocol).toBe('jot:')
+      expect(deepLink.hostname).toBe('notes')
+      expect(deepLink.pathname).toBe(`/${note.id}`)
+      expect(deepLink.searchParams.get('server')).toBe(window.location.origin)
+    })
+
+    it('renders mobile app toolbar link before share action', () => {
+      const note = createMockNote()
+      renderNoteModal({ ...defaultProps, note, onShare: vi.fn(), isOwner: true })
+
+      const mobileLink = screen.getByTestId('note-open-mobile-app-toolbar-link')
+      const shareButton = screen.getByRole('button', { name: 'Share' })
+      expect(mobileLink.compareDocumentPosition(shareButton) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
+    })
+
+    it('does not render mobile app toolbar link for new note', () => {
+      renderNoteModal(defaultProps)
+      expect(screen.queryByTestId('note-open-mobile-app-toolbar-link')).not.toBeInTheDocument()
     })
   })
 

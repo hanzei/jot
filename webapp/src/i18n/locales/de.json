@@ -8,7 +8,10 @@
     "admin": "Admin",
     "logout": "Abmelden",
     "logoutConfirmTitle": "Abmelden",
-    "logoutConfirmMessage": "Möchtest du dich wirklich abmelden?"
+    "logoutConfirmMessage": "Möchtest du dich wirklich abmelden?",
+    "openMobileApp": "In mobiler App öffnen",
+    "openMobileAppDescription": "Lieber die native mobile App verwenden?",
+    "dismissMobileAppBanner": "Ausblenden"
   },
   "auth": {
     "signInTitle": "Bei Jot anmelden",
@@ -80,6 +83,12 @@
     "emptyTrashConfirmMessage_other": "Alle {{count}} Notizen im Papierkorb endgültig löschen? Dies kann nicht rückgängig gemacht werden.",
     "trashEmptied": "Papierkorb geleert",
     "emptyTrashFailed": "Papierkorb konnte nicht geleert werden",
+    "failedLoadNotes": "Notizen konnten nicht geladen werden.",
+    "failedDeleteNote": "Notiz konnte nicht in den Papierkorb verschoben werden.",
+    "failedRestoreNote": "Notiz konnte nicht wiederhergestellt werden.",
+    "failedDeleteNoteForever": "Notiz konnte nicht dauerhaft gelöscht werden.",
+    "failedReorderNotes": "Notizen konnten nicht neu sortiert werden.",
+    "failedUpdateSort": "Sortiereinstellung konnte nicht aktualisiert werden.",
     "undo": "Rückgängig"
   },
   "settings": {
@@ -296,6 +305,8 @@
     "titleTooLong": "Titel darf höchstens {{max}} Zeichen lang sein",
     "contentTooLong": "Inhalt darf höchstens {{max}} Zeichen lang sein",
     "failedSaveChanges": "Änderungen konnten nicht gespeichert werden. Bitte erneut versuchen.",
+    "failedPin": "Anheftung konnte nicht aktualisiert werden.",
+    "failedArchive": "Archivstatus konnte nicht aktualisiert werden.",
     "failedDuplicate": "Notiz konnte nicht dupliziert werden. Bitte erneut versuchen.",
     "menuOptions": "Notizoptionen",
     "assignItem": "Element zuweisen",

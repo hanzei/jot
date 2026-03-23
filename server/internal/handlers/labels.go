@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"context"
 	"encoding/json"
 	"errors"
 	"net/http"
@@ -34,18 +35,18 @@ type RenameLabelRequest struct {
 	Name string `json:"name"`
 }
 
-func (h *LabelsHandler) publishLabelNoteUpdates(noteIDs []string, userID string) {
+func (h *LabelsHandler) publishLabelNoteUpdates(ctx context.Context, noteIDs []string, userID string) {
 	if h.hub == nil {
 		return
 	}
 
 	for _, noteID := range noteIDs {
-		note, err := h.noteStore.GetByIDAnyState(noteID, userID)
+		note, err := h.noteStore.GetByIDAnyState(ctx, noteID, userID)
 		if err != nil {
 			continue
 		}
 
-		audienceIDs, err := h.noteStore.GetNoteAudienceIDs(noteID)
+		audienceIDs, err := h.noteStore.GetNoteAudienceIDs(ctx, noteID)
 		if err != nil {
 			continue
 		}
@@ -75,7 +76,7 @@ func (h *LabelsHandler) GetLabels(w http.ResponseWriter, r *http.Request) (int, 
 		return http.StatusUnauthorized, nil, errors.New("unauthorized")
 	}
 
-	labels, err := h.labelStore.GetLabels(user.ID)
+	labels, err := h.labelStore.GetLabels(r.Context(), user.ID)
 	if err != nil {
 		return http.StatusInternalServerError, nil, err
 	}
@@ -116,7 +117,7 @@ func (h *LabelsHandler) RenameLabel(w http.ResponseWriter, r *http.Request) (int
 		return http.StatusBadRequest, nil, errors.New("label name is required")
 	}
 
-	noteIDs, err := h.labelStore.GetLabelNoteIDs(labelID, user.ID)
+	noteIDs, err := h.labelStore.GetLabelNoteIDs(r.Context(), labelID, user.ID)
 	if err != nil {
 		if errors.Is(err, models.ErrLabelNotFoundOrNotOwned) {
 			return http.StatusNotFound, nil, errors.New("label not found")
@@ -124,7 +125,7 @@ func (h *LabelsHandler) RenameLabel(w http.ResponseWriter, r *http.Request) (int
 		return http.StatusInternalServerError, nil, err
 	}
 
-	label, err := h.labelStore.RenameLabel(labelID, user.ID, req.Name)
+	label, err := h.labelStore.RenameLabel(r.Context(), labelID, user.ID, req.Name)
 	if err != nil {
 		if errors.Is(err, models.ErrLabelNameConflict) {
 			return http.StatusBadRequest, nil, errors.New("label name already exists")
@@ -135,7 +136,7 @@ func (h *LabelsHandler) RenameLabel(w http.ResponseWriter, r *http.Request) (int
 		return http.StatusInternalServerError, nil, err
 	}
 
-	h.publishLabelNoteUpdates(noteIDs, user.ID)
+	h.publishLabelNoteUpdates(r.Context(), noteIDs, user.ID)
 
 	return http.StatusOK, label, nil
 }
@@ -173,25 +174,25 @@ func (h *LabelsHandler) AddLabel(w http.ResponseWriter, r *http.Request) (int, a
 		return http.StatusBadRequest, nil, errors.New("label name is required")
 	}
 
-	label, err := h.labelStore.GetOrCreateLabel(user.ID, req.Name)
+	label, err := h.labelStore.GetOrCreateLabel(r.Context(), user.ID, req.Name)
 	if err != nil {
 		return http.StatusInternalServerError, nil, err
 	}
 
-	if err = h.noteStore.AddLabelToNote(noteID, label.ID, user.ID); err != nil {
+	if err = h.noteStore.AddLabelToNote(r.Context(), noteID, label.ID, user.ID); err != nil {
 		if errors.Is(err, models.ErrNoteNoAccess) {
 			return http.StatusForbidden, nil, errors.New("no access to note")
 		}
 		return http.StatusInternalServerError, nil, err
 	}
 
-	note, err := h.noteStore.GetByID(noteID, user.ID)
+	note, err := h.noteStore.GetByID(r.Context(), noteID, user.ID)
 	if err != nil {
 		return http.StatusInternalServerError, nil, err
 	}
 
 	if h.hub != nil {
-		audienceIDs, audErr := h.noteStore.GetNoteAudienceIDs(noteID)
+		audienceIDs, audErr := h.noteStore.GetNoteAudienceIDs(r.Context(), noteID)
 		if audErr == nil {
 			h.hub.Publish(audienceIDs, sse.Event{
 				Type:         sse.EventNoteUpdated,
@@ -227,20 +228,20 @@ func (h *LabelsHandler) RemoveLabel(w http.ResponseWriter, r *http.Request) (int
 	noteID := chi.URLParam(r, "id")
 	labelID := chi.URLParam(r, "label_id")
 
-	if err := h.noteStore.RemoveLabelFromNote(noteID, labelID, user.ID); err != nil {
+	if err := h.noteStore.RemoveLabelFromNote(r.Context(), noteID, labelID, user.ID); err != nil {
 		if errors.Is(err, models.ErrNoteNoAccess) {
 			return http.StatusForbidden, nil, errors.New("no access to note")
 		}
 		return http.StatusInternalServerError, nil, err
 	}
 
-	note, err := h.noteStore.GetByID(noteID, user.ID)
+	note, err := h.noteStore.GetByID(r.Context(), noteID, user.ID)
 	if err != nil {
 		return http.StatusInternalServerError, nil, err
 	}
 
 	if h.hub != nil {
-		audienceIDs, audErr := h.noteStore.GetNoteAudienceIDs(noteID)
+		audienceIDs, audErr := h.noteStore.GetNoteAudienceIDs(r.Context(), noteID)
 		if audErr == nil {
 			h.hub.Publish(audienceIDs, sse.Event{
 				Type:         sse.EventNoteUpdated,
@@ -272,21 +273,21 @@ func (h *LabelsHandler) DeleteLabel(w http.ResponseWriter, r *http.Request) (int
 	}
 
 	labelID := chi.URLParam(r, "id")
-	noteIDs, err := h.labelStore.GetLabelNoteIDs(labelID, user.ID)
+	noteIDs, err := h.labelStore.GetLabelNoteIDs(r.Context(), labelID, user.ID)
 	if err != nil {
 		if errors.Is(err, models.ErrLabelNotFoundOrNotOwned) {
 			return http.StatusNotFound, nil, errors.New("label not found")
 		}
 		return http.StatusInternalServerError, nil, err
 	}
-	if err := h.labelStore.DeleteLabel(labelID, user.ID); err != nil {
+	if err := h.labelStore.DeleteLabel(r.Context(), labelID, user.ID); err != nil {
 		if errors.Is(err, models.ErrLabelNotFoundOrNotOwned) {
 			return http.StatusNotFound, nil, errors.New("label not found")
 		}
 		return http.StatusInternalServerError, nil, err
 	}
 
-	h.publishLabelNoteUpdates(noteIDs, user.ID)
+	h.publishLabelNoteUpdates(r.Context(), noteIDs, user.ID)
 
 	return http.StatusNoContent, nil, nil
 }
