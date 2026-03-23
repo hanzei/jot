@@ -66,6 +66,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   const [colorPickerNote, setColorPickerNote] = useState<Note | null>(null);
   const [localOrder, setLocalOrder] = useState<LocalReorderState>({ pinned: null, unpinned: null });
   const [sortMode, setSortMode] = useState<NoteSort>(() => normalizeNoteSort(settings?.note_sort));
+  const [isSortControlsOpen, setIsSortControlsOpen] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sortRequestIdRef = useRef(0);
   const trashCountRef = useRef(0);
@@ -147,6 +148,11 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
       Alert.alert(t('common.error'), t('dashboard.sortUpdateFailed'));
     }
   }, [setSettings, settings, sortMode, t]);
+
+  const handleSortChipPress = useCallback((nextSort: NoteSort) => {
+    setIsSortControlsOpen(false);
+    void handleSortChange(nextSort);
+  }, [handleSortChange]);
 
   const handleNotePress = useCallback(
     (noteId: string) => {
@@ -605,65 +611,85 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
       )}
 
       {/* Search bar */}
-      <View style={[styles.searchContainer, { backgroundColor: colors.searchBackground, borderColor: colors.searchBorder }]}>
-        <Ionicons name="search" size={18} color={colors.iconMuted} style={styles.searchIcon} />
-        <TextInput
-          style={[styles.searchInput, { color: colors.text }]}
-          placeholder={t('dashboard.searchPlaceholder')}
-          placeholderTextColor={colors.placeholder}
-          value={searchText}
-          onChangeText={setSearchText}
-          returnKeyType="search"
-          testID="search-input"
-        />
-        {searchText.length > 0 && (
-          <TouchableOpacity onPress={handleClearSearch} testID="clear-search">
-            <Ionicons name="close-circle" size={18} color={colors.iconMuted} />
-          </TouchableOpacity>
-        )}
+      <View style={styles.topControlsRow}>
+        <View style={[styles.searchContainer, { backgroundColor: colors.searchBackground, borderColor: colors.searchBorder }]}>
+          <Ionicons name="search" size={18} color={colors.iconMuted} style={styles.searchIcon} />
+          <TextInput
+            style={[styles.searchInput, { color: colors.text }]}
+            placeholder={t('dashboard.searchPlaceholder')}
+            placeholderTextColor={colors.placeholder}
+            value={searchText}
+            onChangeText={setSearchText}
+            returnKeyType="search"
+            testID="search-input"
+          />
+          {searchText.length > 0 && (
+            <TouchableOpacity onPress={handleClearSearch} testID="clear-search">
+              <Ionicons name="close-circle" size={18} color={colors.iconMuted} />
+            </TouchableOpacity>
+          )}
+        </View>
+        <TouchableOpacity
+          style={[
+            styles.sortToggleButton,
+            {
+              borderColor: colors.searchBorder,
+              backgroundColor: isSortControlsOpen ? colors.primaryLight : colors.surface,
+            },
+          ]}
+          onPress={() => setIsSortControlsOpen((open) => !open)}
+          testID="sort-toggle"
+          accessibilityRole="button"
+          accessibilityLabel={t('dashboard.sortAccessibilityLabel', { sortLabel: activeSortLabel })}
+          accessibilityState={{ expanded: isSortControlsOpen }}
+        >
+          <Ionicons name="swap-vertical" size={18} color={isSortControlsOpen ? colors.primary : colors.iconMuted} />
+        </TouchableOpacity>
       </View>
 
       {/* Sort preference is global across notes, archived, trash, labels, and my-todo views. */}
-      <View style={styles.sortControlsContainer}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.sortControlsContent}
-          testID="sort-controls"
-        >
-          {NOTE_SORT_OPTIONS.map((option) => {
-            const isActive = sortMode === option;
-            const optionLabel = getNoteSortLabel(option, t);
-            return (
-              <TouchableOpacity
-                key={option}
-                style={[
-                  styles.sortChip,
-                  {
-                    borderColor: isActive ? colors.primary : colors.border,
-                    backgroundColor: isActive ? colors.primaryLight : colors.surface,
-                  },
-                ]}
-                onPress={() => void handleSortChange(option)}
-                testID={`sort-chip-${option}`}
-                accessibilityRole="button"
-                accessibilityLabel={t('dashboard.sortAccessibilityLabel', { sortLabel: optionLabel })}
-                accessibilityState={{ selected: isActive }}
-              >
-                <Text
+      {isSortControlsOpen && (
+        <View style={styles.sortControlsContainer}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.sortControlsContent}
+            testID="sort-controls"
+          >
+            {NOTE_SORT_OPTIONS.map((option) => {
+              const isActive = sortMode === option;
+              const optionLabel = getNoteSortLabel(option, t);
+              return (
+                <TouchableOpacity
+                  key={option}
                   style={[
-                    styles.sortChipText,
-                    { color: isActive ? colors.primary : colors.textSecondary },
-                    isActive && styles.sortChipTextActive,
+                    styles.sortChip,
+                    {
+                      borderColor: isActive ? colors.primary : colors.border,
+                      backgroundColor: isActive ? colors.primaryLight : colors.surface,
+                    },
                   ]}
+                  onPress={() => handleSortChipPress(option)}
+                  testID={`sort-chip-${option}`}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('dashboard.sortAccessibilityLabel', { sortLabel: optionLabel })}
+                  accessibilityState={{ selected: isActive }}
                 >
-                  {optionLabel}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-      </View>
+                  <Text
+                    style={[
+                      styles.sortChipText,
+                      { color: isActive ? colors.primary : colors.textSecondary },
+                      isActive && styles.sortChipTextActive,
+                    ]}
+                  >
+                    {optionLabel}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
+      )}
 
       {sortMode !== 'manual' && (
         <View
@@ -885,26 +911,41 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
+  topControlsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 12,
+    marginTop: 12,
+    marginBottom: 8,
+    gap: 8,
+  },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    margin: 16,
-    marginBottom: 8,
+    flex: 1,
     borderRadius: 22,
     borderWidth: 1,
-    paddingHorizontal: 14,
-    height: 44,
+    paddingHorizontal: 12,
+    height: 40,
   },
   searchIcon: {
     marginRight: 8,
   },
   searchInput: {
     flex: 1,
-    fontSize: 15,
+    fontSize: 14,
     paddingVertical: 0,
   },
+  sortToggleButton: {
+    width: 40,
+    height: 40,
+    borderRadius: 20,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   sortControlsContainer: {
-    marginHorizontal: 16,
+    marginHorizontal: 12,
     marginBottom: 8,
   },
   sortControlsContent: {
@@ -914,8 +955,8 @@ const styles = StyleSheet.create({
   sortChip: {
     borderWidth: 1,
     borderRadius: 999,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
   },
   sortChipText: {
     fontSize: 13,

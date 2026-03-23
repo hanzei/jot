@@ -177,6 +177,10 @@ type SortPreferenceResponse = {
 };
 
 describe('NotesListScreen sorting', () => {
+  const openSortControls = () => {
+    fireEvent.press(screen.getByTestId('sort-toggle'));
+  };
+
   beforeEach(() => {
     jest.clearAllMocks();
     notesHooks.useUpdateNote.mockReturnValue({ mutateAsync: mockMutateAsync });
@@ -222,6 +226,8 @@ describe('NotesListScreen sorting', () => {
     render(<NotesListScreen variant="notes" />);
 
     expect(screen.queryByTestId('sort-disabled-notice')).toBeNull();
+    expect(screen.queryByTestId('sort-controls')).toBeNull();
+    expect(screen.getByTestId('sort-toggle')).toBeTruthy();
     expect(screen.getByTestId('pinned-draggable-list')).toBeTruthy();
     expect(screen.getByText('Pinned')).toBeTruthy();
     expect(screen.getByText('sort-demo-zulu')).toBeTruthy();
@@ -257,6 +263,7 @@ describe('NotesListScreen sorting', () => {
     expect(screen.queryByTestId('sort-disabled-notice')).toBeNull();
     expect(screen.getByTestId('notes-section-list')).toBeTruthy();
     expect(screen.getByTestId('unpinned-draggable-list')).toBeTruthy();
+    openSortControls();
     fireEvent.press(screen.getByTestId('sort-chip-created_at'));
 
     await waitFor(() => {
@@ -290,6 +297,7 @@ describe('NotesListScreen sorting', () => {
 
     render(<NotesListScreen variant="notes" />);
 
+    openSortControls();
     fireEvent.press(screen.getByTestId('sort-chip-created_at'));
 
     await waitFor(() => {
@@ -329,7 +337,9 @@ describe('NotesListScreen sorting', () => {
 
     render(<NotesListScreen variant="notes" />);
 
+    openSortControls();
     fireEvent.press(screen.getByTestId('sort-chip-updated_at'));
+    openSortControls();
     fireEvent.press(screen.getByTestId('sort-chip-created_at'));
 
     second.resolve({
