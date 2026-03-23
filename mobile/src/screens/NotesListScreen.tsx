@@ -15,8 +15,9 @@ import { useSQLiteContext } from 'expo-sqlite';
 import DraggableFlatList, { ScaleDecorator, NestableDraggableFlatList, NestableScrollContainer } from 'react-native-draggable-flatlist';
 import * as Haptics from 'expo-haptics';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useNavigation } from '@react-navigation/native';
+import { DrawerActions, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { updateMe } from '../api/settings';
 import { useTranslation } from 'react-i18next';
 import { useUpdateNote, useDeleteNote, useRestoreNote, usePermanentDeleteNote, useReorderNotes, useDuplicateNote } from '../hooks/useNotes';
@@ -61,11 +62,13 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   const { isConnected } = useNetworkStatus();
   const { colors } = useTheme();
   const { t } = useTranslation();
+  const insets = useSafeAreaInsets();
 
   const [contextMenuNote, setContextMenuNote] = useState<Note | null>(null);
   const [colorPickerNote, setColorPickerNote] = useState<Note | null>(null);
   const [localOrder, setLocalOrder] = useState<LocalReorderState>({ pinned: null, unpinned: null });
   const [sortMode, setSortMode] = useState<NoteSort>(() => normalizeNoteSort(settings?.note_sort));
+  const [isSortControlsOpen, setIsSortControlsOpen] = useState(false);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sortRequestIdRef = useRef(0);
   const trashCountRef = useRef(0);
@@ -116,6 +119,10 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     await refreshUsers();
   }, [refetch, refreshUsers]);
 
+  const handleToggleDrawer = useCallback(() => {
+    navigation.dispatch(DrawerActions.toggleDrawer());
+  }, [navigation]);
+
   const handleSortChange = useCallback(async (nextSort: NoteSort) => {
     if (nextSort === sortMode) {
       return;
@@ -147,6 +154,11 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
       Alert.alert(t('common.error'), t('dashboard.sortUpdateFailed'));
     }
   }, [setSettings, settings, sortMode, t]);
+
+  const handleSortChipPress = useCallback((nextSort: NoteSort) => {
+    setIsSortControlsOpen(false);
+    void handleSortChange(nextSort);
+  }, [handleSortChange]);
 
   const handleNotePress = useCallback(
     (noteId: string) => {
@@ -495,16 +507,156 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     [handleNotePress, handleOpenMenu, variant],
   );
 
+  // Drag-and-drop is only available in the notes variant while manual sorting is active.
+  const isDraggable = variant === 'notes' && sortMode === 'manual';
+  const activeSortLabel = getNoteSortLabel(sortMode, t);
+
+  const renderTopControls = () => (
+    <>
+      <View
+        style={[
+          styles.topControlsRow,
+          variant === 'notes' ? { paddingTop: insets.top + 4 } : undefined,
+        ]}
+      >
+        {variant === 'notes' && (
+          <TouchableOpacity
+            style={[styles.menuButton, { backgroundColor: colors.surface, borderColor: colors.searchBorder }]}
+            onPress={handleToggleDrawer}
+            testID="drawer-toggle"
+            accessibilityLabel={t('nav.openMenu')}
+            accessibilityRole="button"
+          >
+            <Ionicons name="menu" size={22} color={colors.text} />
+          </TouchableOpacity>
+        )}
+        <View style={[styles.searchContainer, { backgroundColor: colors.searchBackground, borderColor: colors.searchBorder }]}>
+          <Ionicons name="search" size={18} color={colors.iconMuted} style={styles.searchIcon} />
+          <TextInput
+            style={[styles.searchInput, { color: colors.text }]}
+            placeholder={t('dashboard.searchPlaceholder')}
+            placeholderTextColor={colors.placeholder}
+            accessibilityLabel={t('dashboard.searchPlaceholder')}
+            value={searchText}
+            onChangeText={setSearchText}
+            returnKeyType="search"
+            testID="search-input"
+          />
+          {searchText.length > 0 && (
+            <TouchableOpacity
+              onPress={handleClearSearch}
+              testID="clear-search"
+              accessibilityRole="button"
+              accessibilityLabel={t('common.clearSearch')}
+              hitSlop={{ top: 12, right: 12, bottom: 12, left: 12 }}
+            >
+              <Ionicons name="close-circle" size={18} color={colors.iconMuted} />
+            </TouchableOpacity>
+          )}
+        </View>
+        <TouchableOpacity
+          style={[
+            styles.sortToggleButton,
+            {
+              borderColor: colors.searchBorder,
+              backgroundColor: isSortControlsOpen ? colors.primaryLight : colors.surface,
+            },
+          ]}
+          onPress={() => setIsSortControlsOpen((open) => !open)}
+          testID="sort-toggle"
+          accessibilityRole="button"
+          accessibilityLabel={t('dashboard.sortAccessibilityLabel', { sortLabel: activeSortLabel })}
+          accessibilityState={{ expanded: isSortControlsOpen }}
+        >
+          <Ionicons name="swap-vertical" size={18} color={isSortControlsOpen ? colors.primary : colors.iconMuted} />
+        </TouchableOpacity>
+      </View>
+
+      {/* Sort preference is global across notes, archived, trash, labels, and my-todo views. */}
+      {isSortControlsOpen && (
+        <View style={styles.sortControlsContainer}>
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            contentContainerStyle={styles.sortControlsContent}
+            testID="sort-controls"
+          >
+            {NOTE_SORT_OPTIONS.map((option) => {
+              const isActive = sortMode === option;
+              const optionLabel = getNoteSortLabel(option, t);
+              return (
+                <TouchableOpacity
+                  key={option}
+                  style={[
+                    styles.sortChip,
+                    {
+                      borderColor: isActive ? colors.primary : colors.border,
+                      backgroundColor: isActive ? colors.primaryLight : colors.surface,
+                    },
+                  ]}
+                  onPress={() => handleSortChipPress(option)}
+                  testID={`sort-chip-${option}`}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('dashboard.sortAccessibilityLabel', { sortLabel: optionLabel })}
+                  accessibilityState={{ selected: isActive }}
+                >
+                  <Text
+                    style={[
+                      styles.sortChipText,
+                      { color: isActive ? colors.primary : colors.textSecondary },
+                      isActive && styles.sortChipTextActive,
+                    ]}
+                  >
+                    {optionLabel}
+                  </Text>
+                </TouchableOpacity>
+              );
+            })}
+          </ScrollView>
+        </View>
+      )}
+
+      {sortMode !== 'manual' && (
+        <View
+          style={[
+            styles.sortNotice,
+            {
+              backgroundColor: colors.primaryLight,
+              borderColor: colors.primary,
+            },
+          ]}
+          testID="sort-disabled-notice"
+        >
+          <Ionicons name="swap-vertical" size={16} color={colors.primary} style={styles.sortNoticeIcon} />
+          <Text style={[styles.sortNoticeText, { color: colors.textSecondary }]}>
+            {t('dashboard.sortDisabledNotice', { sortLabel: activeSortLabel })}
+          </Text>
+        </View>
+      )}
+    </>
+  );
+
   // Show full-screen loading only on initial load (no prior data, no active search query).
   // Uses debouncedSearch (not searchText) so clearing the input mid-debounce doesn't
   // trigger the full-screen loader while the previous query is still in-flight.
   if (isLoading && !notes && !debouncedSearch) {
-    return <SkeletonNoteList />;
+    return (
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        {renderTopControls()}
+        <SkeletonNoteList />
+      </View>
+    );
   }
 
   if (isError) {
-    return (
-      <View style={[styles.emptyContainer, { backgroundColor: colors.background }]} testID="notes-error-state">
+    const errorContent = (
+      <View
+        style={[
+          styles.emptyContainer,
+          { backgroundColor: colors.background },
+        ]}
+        testID="notes-error-state"
+      >
         <Ionicons name="cloud-offline-outline" size={64} color={colors.handleColor} />
         <Text style={[styles.emptyTitle, { color: colors.text }]}>{t('dashboard.failedLoadNotes')}</Text>
         <Text style={[styles.emptySubtext, { color: colors.textMuted }]}>{t('dashboard.checkConnection')}</Text>
@@ -512,9 +664,18 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
           style={[styles.retryButton, { backgroundColor: colors.primary }]}
           onPress={() => refetch()}
           testID="retry-fetch"
+          accessibilityRole="button"
+          accessibilityLabel={t('common.retry')}
         >
           <Text style={styles.retryText}>{t('common.retry')}</Text>
         </TouchableOpacity>
+      </View>
+    );
+
+    return (
+      <View style={[styles.container, { backgroundColor: colors.background }]}>
+        {renderTopControls()}
+        {errorContent}
       </View>
     );
   }
@@ -528,6 +689,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
       variant === 'my-todo' ? 'clipboard-outline' : 'document-text-outline';
     return (
       <View style={[styles.emptyWrapper, { backgroundColor: colors.background }]}>
+        {variant === 'notes' && renderTopControls()}
         {variant === 'trash' && (
           <View style={[styles.trashBanner, { backgroundColor: colors.warning, borderBottomColor: colors.warningBorder }]}>
             <Ionicons name="information-circle-outline" size={16} color={colors.warningText} style={styles.trashBannerIcon} />
@@ -570,10 +732,6 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     );
   }
 
-  // Drag-and-drop is only available in the notes variant while manual sorting is active.
-  const isDraggable = variant === 'notes' && sortMode === 'manual';
-  const activeSortLabel = getNoteSortLabel(sortMode, t);
-
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Trash banner */}
@@ -604,84 +762,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
         </View>
       )}
 
-      {/* Search bar */}
-      <View style={[styles.searchContainer, { backgroundColor: colors.searchBackground, borderColor: colors.searchBorder }]}>
-        <Ionicons name="search" size={18} color={colors.iconMuted} style={styles.searchIcon} />
-        <TextInput
-          style={[styles.searchInput, { color: colors.text }]}
-          placeholder={t('dashboard.searchPlaceholder')}
-          placeholderTextColor={colors.placeholder}
-          value={searchText}
-          onChangeText={setSearchText}
-          returnKeyType="search"
-          testID="search-input"
-        />
-        {searchText.length > 0 && (
-          <TouchableOpacity onPress={handleClearSearch} testID="clear-search">
-            <Ionicons name="close-circle" size={18} color={colors.iconMuted} />
-          </TouchableOpacity>
-        )}
-      </View>
-
-      {/* Sort preference is global across notes, archived, trash, labels, and my-todo views. */}
-      <View style={styles.sortControlsContainer}>
-        <ScrollView
-          horizontal
-          showsHorizontalScrollIndicator={false}
-          contentContainerStyle={styles.sortControlsContent}
-          testID="sort-controls"
-        >
-          {NOTE_SORT_OPTIONS.map((option) => {
-            const isActive = sortMode === option;
-            const optionLabel = getNoteSortLabel(option, t);
-            return (
-              <TouchableOpacity
-                key={option}
-                style={[
-                  styles.sortChip,
-                  {
-                    borderColor: isActive ? colors.primary : colors.border,
-                    backgroundColor: isActive ? colors.primaryLight : colors.surface,
-                  },
-                ]}
-                onPress={() => void handleSortChange(option)}
-                testID={`sort-chip-${option}`}
-                accessibilityRole="button"
-                accessibilityLabel={t('dashboard.sortAccessibilityLabel', { sortLabel: optionLabel })}
-                accessibilityState={{ selected: isActive }}
-              >
-                <Text
-                  style={[
-                    styles.sortChipText,
-                    { color: isActive ? colors.primary : colors.textSecondary },
-                    isActive && styles.sortChipTextActive,
-                  ]}
-                >
-                  {optionLabel}
-                </Text>
-              </TouchableOpacity>
-            );
-          })}
-        </ScrollView>
-      </View>
-
-      {sortMode !== 'manual' && (
-        <View
-          style={[
-            styles.sortNotice,
-            {
-              backgroundColor: colors.primaryLight,
-              borderColor: colors.primary,
-            },
-          ]}
-          testID="sort-disabled-notice"
-        >
-          <Ionicons name="swap-vertical" size={16} color={colors.primary} style={styles.sortNoticeIcon} />
-          <Text style={[styles.sortNoticeText, { color: colors.textSecondary }]}>
-            {t('dashboard.sortDisabledNotice', { sortLabel: activeSortLabel })}
-          </Text>
-        </View>
-      )}
+      {renderTopControls()}
 
       {/* Notes list */}
       {hasPinned ? (
@@ -906,26 +987,49 @@ const styles = StyleSheet.create({
     fontSize: 12,
     fontWeight: '600',
   },
+  topControlsRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginHorizontal: 12,
+    marginTop: 8,
+    marginBottom: 8,
+    gap: 8,
+  },
+  menuButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   searchContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    margin: 16,
-    marginBottom: 8,
+    flex: 1,
     borderRadius: 22,
     borderWidth: 1,
-    paddingHorizontal: 14,
-    height: 44,
+    paddingHorizontal: 12,
+    height: 40,
   },
   searchIcon: {
     marginRight: 8,
   },
   searchInput: {
     flex: 1,
-    fontSize: 15,
+    fontSize: 14,
     paddingVertical: 0,
   },
+  sortToggleButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
   sortControlsContainer: {
-    marginHorizontal: 16,
+    marginHorizontal: 12,
     marginBottom: 8,
   },
   sortControlsContent: {
@@ -935,8 +1039,8 @@ const styles = StyleSheet.create({
   sortChip: {
     borderWidth: 1,
     borderRadius: 999,
-    paddingHorizontal: 14,
-    paddingVertical: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 7,
   },
   sortChipText: {
     fontSize: 13,
