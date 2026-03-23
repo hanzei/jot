@@ -8,7 +8,10 @@
     "admin": "Admin",
     "logout": "Cerrar sesión",
     "logoutConfirmTitle": "Cerrar sesión",
-    "logoutConfirmMessage": "¿Seguro que quieres cerrar sesión?"
+    "logoutConfirmMessage": "¿Seguro que quieres cerrar sesión?",
+    "openMobileApp": "Abrir en la app móvil",
+    "openMobileAppDescription": "¿Prefieres la experiencia nativa móvil?",
+    "dismissMobileAppBanner": "Ocultar"
   },
   "auth": {
     "signInTitle": "Iniciar sesión en Jot",
@@ -80,6 +83,12 @@
     "emptyTrashConfirmMessage_other": "¿Eliminar permanentemente las {{count}} notas de la papelera? Esta acción no se puede deshacer.",
     "trashEmptied": "Papelera vaciada",
     "emptyTrashFailed": "Error al vaciar la papelera",
+    "failedLoadNotes": "Error al cargar las notas.",
+    "failedDeleteNote": "Error al mover la nota a la papelera.",
+    "failedRestoreNote": "Error al restaurar la nota.",
+    "failedDeleteNoteForever": "Error al eliminar la nota de forma permanente.",
+    "failedReorderNotes": "Error al reordenar las notas.",
+    "failedUpdateSort": "Error al actualizar la preferencia de orden.",
     "undo": "Deshacer"
   },
   "settings": {
@@ -296,6 +305,8 @@
     "titleTooLong": "El título no puede superar los {{max}} caracteres",
     "contentTooLong": "El contenido no puede superar los {{max}} caracteres",
     "failedSaveChanges": "Error al guardar los cambios. Inténtalo de nuevo.",
+    "failedPin": "Error al actualizar el anclado.",
+    "failedArchive": "Error al actualizar el archivado.",
     "failedDuplicate": "Error al duplicar la nota. Inténtalo de nuevo.",
     "menuOptions": "Opciones de nota",
     "assignItem": "Asignar elemento",

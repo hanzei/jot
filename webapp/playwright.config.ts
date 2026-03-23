@@ -30,6 +30,8 @@ export default defineConfig({
     {
       name: 'mobile-chrome',
       use: { ...devices['Pixel 5'] },
+      // Keyboard shortcuts are validated on desktop project only.
+      testIgnore: '**/keyboard-shortcuts.spec.ts',
     },
   ],
   webServer: {

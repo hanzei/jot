@@ -8,7 +8,10 @@
     "admin": "Admin",
     "logout": "Sair",
     "logoutConfirmTitle": "Sair",
-    "logoutConfirmMessage": "Tem certeza de que deseja sair?"
+    "logoutConfirmMessage": "Tem certeza de que deseja sair?",
+    "openMobileApp": "Abrir no app móvel",
+    "openMobileAppDescription": "Prefere a experiência móvel nativa?",
+    "dismissMobileAppBanner": "Ocultar"
   },
   "auth": {
     "signInTitle": "Entrar no Jot",
@@ -80,6 +83,12 @@
     "emptyTrashConfirmMessage_other": "Excluir permanentemente as {{count}} notas na lixeira? Esta ação não pode ser desfeita.",
     "trashEmptied": "Lixeira esvaziada",
     "emptyTrashFailed": "Falha ao esvaziar a lixeira",
+    "failedLoadNotes": "Falha ao carregar as notas.",
+    "failedDeleteNote": "Falha ao mover a nota para a lixeira.",
+    "failedRestoreNote": "Falha ao restaurar a nota.",
+    "failedDeleteNoteForever": "Falha ao excluir a nota permanentemente.",
+    "failedReorderNotes": "Falha ao reordenar as notas.",
+    "failedUpdateSort": "Falha ao atualizar a preferência de ordenação.",
     "undo": "Desfazer"
   },
   "settings": {
@@ -296,6 +305,8 @@
     "titleTooLong": "O título não pode ter mais de {{max}} caracteres",
     "contentTooLong": "O conteúdo não pode ter mais de {{max}} caracteres",
     "failedSaveChanges": "Falha ao salvar as alterações. Tente novamente.",
+    "failedPin": "Falha ao atualizar a fixação.",
+    "failedArchive": "Falha ao atualizar o arquivamento.",
     "failedDuplicate": "Falha ao duplicar a nota. Tente novamente.",
     "menuOptions": "Opções da nota",
     "assignItem": "Atribuir item",

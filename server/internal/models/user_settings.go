@@ -1,6 +1,7 @@
 package models
 
 import (
+	"context"
 	"database/sql"
 	"errors"
 	"fmt"
@@ -26,9 +27,9 @@ func NewUserSettingsStore(db *sql.DB) *UserSettingsStore {
 // GetOrCreate returns existing settings for the user, or creates a row with
 // defaults and returns those. The operation is atomic: if two goroutines race
 // to create the row, one will win the INSERT and both will read consistent data.
-func (s *UserSettingsStore) GetOrCreate(userID string) (*UserSettings, error) {
+func (s *UserSettingsStore) GetOrCreate(ctx context.Context, userID string) (*UserSettings, error) {
 	settings := &UserSettings{UserID: userID}
-	err := s.db.QueryRow(
+	err := s.db.QueryRowContext(ctx,
 		`INSERT INTO user_settings (user_id, language, theme, note_sort) VALUES (?, 'system', 'system', 'manual')
 		 ON CONFLICT(user_id) DO NOTHING
 		 RETURNING language, theme, note_sort, updated_at`,
@@ -41,7 +42,7 @@ func (s *UserSettingsStore) GetOrCreate(userID string) (*UserSettings, error) {
 		return nil, fmt.Errorf("failed to get or create user settings: %w", err)
 	}
 	// Row already existed; read it.
-	err = s.db.QueryRow(
+	err = s.db.QueryRowContext(ctx,
 		`SELECT language, theme, note_sort, updated_at FROM user_settings WHERE user_id = ?`,
 		userID,
 	).Scan(&settings.Language, &settings.Theme, &settings.NoteSort, &settings.UpdatedAt)
@@ -53,9 +54,9 @@ func (s *UserSettingsStore) GetOrCreate(userID string) (*UserSettings, error) {
 
 // Update persists the language, theme, and note sort preferences for the given user and
 // returns the updated settings.
-func (s *UserSettingsStore) Update(userID, language, theme, noteSort string) (*UserSettings, error) {
+func (s *UserSettingsStore) Update(ctx context.Context, userID, language, theme, noteSort string) (*UserSettings, error) {
 	settings := &UserSettings{UserID: userID}
-	err := s.db.QueryRow(
+	err := s.db.QueryRowContext(ctx,
 		`INSERT INTO user_settings (user_id, language, theme, note_sort) VALUES (?, ?, ?, ?)
 		 ON CONFLICT(user_id) DO UPDATE SET language = excluded.language, theme = excluded.theme, note_sort = excluded.note_sort, updated_at = CURRENT_TIMESTAMP
 		 RETURNING language, theme, note_sort, updated_at`,

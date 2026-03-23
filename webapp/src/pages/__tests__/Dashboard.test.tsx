@@ -318,29 +318,23 @@ describe('Dashboard', () => {
     })
 
     it('clears search input when escape is pressed', async () => {
-      const user = userEvent.setup()
       const mockGetAll = vi.mocked(notes.getAll)
 
-      renderDashboard()
+      renderDashboard(['/?search=escape%20query'])
 
       await waitFor(() => {
-        expect(screen.getByPlaceholderText('Search notes...')).toBeInTheDocument()
-      })
-
-      const searchInput = screen.getByPlaceholderText('Search notes...')
-      await user.type(searchInput, 'escape query')
-
-      await waitFor(() => {
+        const searchInput = screen.getByPlaceholderText('Search notes...')
+        expect(searchInput).toBeInTheDocument()
         expect(searchInput).toHaveValue('escape query')
         expect(mockGetAll).toHaveBeenCalledWith(false, 'escape query', false, '', false)
       })
 
-      await user.keyboard('{Escape}')
+      const searchInput = screen.getByPlaceholderText('Search notes...')
+      fireEvent.keyDown(searchInput, { key: 'Escape', code: 'Escape' })
 
       await waitFor(() => {
         expect(searchInput).toHaveValue('')
-        const calls = mockGetAll.mock.calls
-        expect(calls[calls.length - 1]).toEqual([false, '', false, '', false])
+        expect(mockGetAll).toHaveBeenLastCalledWith(false, '', false, '', false)
       })
     })
 
