@@ -8,7 +8,10 @@
     "admin": "Admin",
     "logout": "Cerrar sesión",
     "logoutConfirmTitle": "Cerrar sesión",
-    "logoutConfirmMessage": "¿Seguro que quieres cerrar sesión?"
+    "logoutConfirmMessage": "¿Seguro que quieres cerrar sesión?",
+    "openMobileApp": "Abrir en la app móvil",
+    "openMobileAppDescription": "¿Prefieres la experiencia nativa móvil?",
+    "dismissMobileAppBanner": "Ocultar"
   },
   "auth": {
     "signInTitle": "Iniciar sesión en Jot",

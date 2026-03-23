@@ -8,7 +8,10 @@
     "admin": "Admin",
     "logout": "Sair",
     "logoutConfirmTitle": "Sair",
-    "logoutConfirmMessage": "Tem certeza de que deseja sair?"
+    "logoutConfirmMessage": "Tem certeza de que deseja sair?",
+    "openMobileApp": "Abrir no app móvel",
+    "openMobileAppDescription": "Prefere a experiência móvel nativa?",
+    "dismissMobileAppBanner": "Ocultar"
   },
   "auth": {
     "signInTitle": "Entrar no Jot",

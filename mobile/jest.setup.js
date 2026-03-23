@@ -81,7 +81,7 @@ jest.mock('react-native-gesture-handler', () => {
 
 jest.mock('react-native-draggable-flatlist', () => {
   const React = require('react');
-  const { FlatList } = require('react-native');
+  const { FlatList, ScrollView } = require('react-native');
   function DraggableFlatList(props) {
     return React.createElement(FlatList, {
       ...props,
@@ -90,6 +90,17 @@ jest.mock('react-native-draggable-flatlist', () => {
     });
   }
   DraggableFlatList.displayName = 'DraggableFlatList';
+  function NestableDraggableFlatList(props) {
+    return React.createElement(FlatList, {
+      ...props,
+      renderItem: (info) =>
+        props.renderItem({ ...info, drag: jest.fn(), isActive: false }),
+    });
+  }
+  NestableDraggableFlatList.displayName = 'NestableDraggableFlatList';
+  const NestableScrollContainer = React.forwardRef(function NestableScrollContainer(props, ref) {
+    return React.createElement(ScrollView, { ...props, ref });
+  });
   function ScaleDecorator({ children }) {
     return children;
   }
@@ -97,6 +108,8 @@ jest.mock('react-native-draggable-flatlist', () => {
     __esModule: true,
     default: DraggableFlatList,
     ScaleDecorator,
+    NestableDraggableFlatList,
+    NestableScrollContainer,
   };
 });
 

@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { XMarkIcon, PlusIcon, TrashIcon, ChevronDownIcon, ArchiveBoxIcon, ArchiveBoxXMarkIcon, ShareIcon, UserPlusIcon, CheckIcon, TagIcon, DocumentDuplicateIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon, PlusIcon, TrashIcon, ChevronDownIcon, ArchiveBoxIcon, ArchiveBoxXMarkIcon, ShareIcon, UserPlusIcon, CheckIcon, TagIcon, DocumentDuplicateIcon, DevicePhoneMobileIcon } from '@heroicons/react/24/outline';
 import { Dialog, DialogPanel } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
 import { VALIDATION, NOTE_COLORS, buildCollaborators, type Note, type NoteType, type CreateNoteRequest, type UpdateNoteRequest, type Label, type UserInfo, type Collaborator } from '@jot/shared';
@@ -10,6 +10,7 @@ import AssigneePicker from '@/components/AssigneePicker';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { useToast } from '@/hooks/useToast';
 import { buildShareAvatars } from '@/utils/shareAvatars';
+import { buildMobileDeepLink } from '@/utils/deepLink';
 
 // Validation functions
 type TFunction = (key: string, opts?: Record<string, unknown>) => string;
@@ -401,6 +402,13 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     name: colorMeta[value]?.name ?? value,
     class: colorMeta[value]?.class ?? '',
   }));
+
+  const noteDeepLinkHref = useMemo(() => {
+    if (!note?.id) {
+      return null;
+    }
+    return buildMobileDeepLink(`/notes/${note.id}`, window.location.origin);
+  }, [note?.id]);
 
   useEffect(() => {
     if (note) {
@@ -1204,6 +1212,17 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
             <div className="flex items-center space-x-2">
               {note && (
                 <>
+                  {noteDeepLinkHref && (
+                    <a
+                      href={noteDeepLinkHref}
+                      className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                      title={t('nav.openMobileApp')}
+                      aria-label={t('nav.openMobileApp')}
+                      data-testid="note-open-mobile-app-toolbar-link"
+                    >
+                      <DevicePhoneMobileIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+                    </a>
+                  )}
                   {isOwner && onShare && (
                     <button
                       onClick={() => onShare(note)}

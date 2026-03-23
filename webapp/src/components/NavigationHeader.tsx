@@ -1,11 +1,13 @@
 import { ReactNode, useState } from 'react';
 import { useTranslation } from 'react-i18next';
-import { Link } from 'react-router';
+import { Link, useLocation } from 'react-router';
 import { Bars3Icon } from '@heroicons/react/24/outline';
 import { Menu, MenuButton, MenuItems, MenuItem } from '@headlessui/react';
 import LetterAvatar from '@/components/LetterAvatar';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { getUser } from '@/utils/auth';
+import { buildMobileDeepLink } from '@/utils/deepLink';
+import { dismissMobileAppBanner, isMobileAppBannerDismissed } from '@/utils/mobileAppBanner';
 
 interface NavigationHeaderProps {
   title?: string;
@@ -36,57 +38,57 @@ const ProfileMenu = ({ iconSrc, displayUsername, firstName, baseUsername, showAd
   return (
     <div className="relative">
       <Menu>
-      <MenuButton
-        title={displayUsername}
-        aria-label={t('nav.profileMenu')}
-        className="flex items-center rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-slate-800"
-      >
-        {iconSrc ? (
-          <img src={iconSrc} alt={displayUsername} className="h-8 w-8 rounded-full object-cover" />
-        ) : (
-          <LetterAvatar firstName={firstName} username={baseUsername} className="h-8 w-8" />
-        )}
-      </MenuButton>
-      <MenuItems className="absolute right-0 mt-2 w-44 bg-white dark:bg-slate-800 rounded-md shadow-lg ring-1 ring-black/5 dark:ring-slate-600/20 focus:outline-none z-10 border border-gray-200 dark:border-slate-600">
-        <div className="py-1">
-          <MenuItem>
-            <Link
-              to="/settings"
-              className={`block px-4 py-2 text-sm data-[focus]:bg-gray-100 dark:data-[focus]:bg-slate-700 ${
-                settingsLinkActive
-                  ? 'text-blue-600 dark:text-blue-400 font-medium'
-                  : 'text-gray-700 dark:text-gray-200'
-              }`}
-              {...(settingsLinkActive ? { 'aria-current': 'page' as const } : {})}
-            >
-              {t('nav.settings')}
-            </Link>
-          </MenuItem>
-          {showAdminLink && (
+        <MenuButton
+          title={displayUsername}
+          aria-label={t('nav.profileMenu')}
+          className="flex items-center rounded-full focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-slate-800"
+        >
+          {iconSrc ? (
+            <img src={iconSrc} alt={displayUsername} className="h-8 w-8 rounded-full object-cover" />
+          ) : (
+            <LetterAvatar firstName={firstName} username={baseUsername} className="h-8 w-8" />
+          )}
+        </MenuButton>
+        <MenuItems className="absolute right-0 mt-2 w-44 bg-white dark:bg-slate-800 rounded-md shadow-lg ring-1 ring-black/5 dark:ring-slate-600/20 focus:outline-none z-10 border border-gray-200 dark:border-slate-600">
+          <div className="py-1">
             <MenuItem>
               <Link
-                to="/admin"
+                to="/settings"
                 className={`block px-4 py-2 text-sm data-[focus]:bg-gray-100 dark:data-[focus]:bg-slate-700 ${
-                  adminLinkActive
+                  settingsLinkActive
                     ? 'text-blue-600 dark:text-blue-400 font-medium'
                     : 'text-gray-700 dark:text-gray-200'
                 }`}
-                {...(adminLinkActive ? { 'aria-current': 'page' as const } : {})}
+                {...(settingsLinkActive ? { 'aria-current': 'page' as const } : {})}
               >
-                {t('nav.admin')}
+                {t('nav.settings')}
               </Link>
             </MenuItem>
-          )}
-          <MenuItem>
-            <button
-              onClick={() => setShowLogoutConfirm(true)}
-              className="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 data-[focus]:bg-gray-100 dark:data-[focus]:bg-slate-700 data-[focus]:text-red-600 dark:data-[focus]:text-red-400"
-            >
-              {t('nav.logout')}
-            </button>
-          </MenuItem>
-        </div>
-      </MenuItems>
+            {showAdminLink && (
+              <MenuItem>
+                <Link
+                  to="/admin"
+                  className={`block px-4 py-2 text-sm data-[focus]:bg-gray-100 dark:data-[focus]:bg-slate-700 ${
+                    adminLinkActive
+                      ? 'text-blue-600 dark:text-blue-400 font-medium'
+                      : 'text-gray-700 dark:text-gray-200'
+                  }`}
+                  {...(adminLinkActive ? { 'aria-current': 'page' as const } : {})}
+                >
+                  {t('nav.admin')}
+                </Link>
+              </MenuItem>
+            )}
+            <MenuItem>
+              <button
+                onClick={() => setShowLogoutConfirm(true)}
+                className="block w-full text-left px-4 py-2 text-sm text-gray-700 dark:text-gray-200 data-[focus]:bg-gray-100 dark:data-[focus]:bg-slate-700 data-[focus]:text-red-600 dark:data-[focus]:text-red-400"
+              >
+                {t('nav.logout')}
+              </button>
+            </MenuItem>
+          </div>
+        </MenuItems>
       </Menu>
       <ConfirmDialog
         open={showLogoutConfirm}
@@ -105,6 +107,9 @@ const ProfileMenu = ({ iconSrc, displayUsername, firstName, baseUsername, showAd
 };
 
 const NavigationHeader = ({ title = 'Jot', onLogout, children, username, isAdmin: showAdminLink, adminLinkActive, settingsLinkActive, onToggleSidebar }: NavigationHeaderProps) => {
+  const { t } = useTranslation();
+  const location = useLocation();
+  const [showMobileAppBanner, setShowMobileAppBanner] = useState(() => !isMobileAppBannerDismissed());
   const currentUser = getUser();
   const baseUsername = username ?? currentUser?.username ?? '';
   const fullName = currentUser?.first_name || currentUser?.last_name
@@ -126,6 +131,13 @@ const NavigationHeader = ({ title = 'Jot', onLogout, children, username, isAdmin
     adminLinkActive,
     settingsLinkActive,
     onLogout,
+  };
+
+  const openInAppHref = buildMobileDeepLink(location.pathname, window.location.origin);
+
+  const handleDismissMobileAppBanner = () => {
+    dismissMobileAppBanner();
+    setShowMobileAppBanner(false);
   };
 
   return (
@@ -165,6 +177,32 @@ const NavigationHeader = ({ title = 'Jot', onLogout, children, username, isAdmin
           <div className="order-3 sm:order-2 w-full sm:w-auto sm:flex-1 flex justify-center">
             {children}
           </div>
+
+          {/* Mobile app CTA on small screens */}
+          {showMobileAppBanner && (
+            <div className="order-4 w-full sm:hidden" data-testid="open-mobile-app-banner">
+              <div className="rounded-md border border-blue-200 bg-blue-50 p-3 dark:border-blue-900 dark:bg-blue-900/30">
+                <p className="text-sm text-blue-800 dark:text-blue-200">{t('nav.openMobileAppDescription')}</p>
+                <div className="mt-3 flex items-center gap-2">
+                  <a
+                    href={openInAppHref}
+                    className="inline-flex flex-1 items-center justify-center rounded-md bg-blue-600 px-3 py-2 text-sm font-medium text-white transition-colors hover:bg-blue-700 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:focus:ring-offset-slate-800"
+                    data-testid="open-mobile-app-link"
+                  >
+                    {t('nav.openMobileApp')}
+                  </a>
+                  <button
+                    type="button"
+                    onClick={handleDismissMobileAppBanner}
+                    className="inline-flex items-center justify-center rounded-md border border-blue-200 px-3 py-2 text-sm font-medium text-blue-700 transition-colors hover:bg-blue-100 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:ring-offset-2 dark:border-blue-800 dark:text-blue-300 dark:hover:bg-blue-900/40 dark:focus:ring-offset-slate-800"
+                    data-testid="dismiss-mobile-app-banner"
+                  >
+                    {t('nav.dismissMobileAppBanner')}
+                  </button>
+                </div>
+              </div>
+            </div>
+          )}
         </div>
       </div>
     </header>

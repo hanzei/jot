@@ -8,7 +8,10 @@
     "admin": "Admin",
     "logout": "Abmelden",
     "logoutConfirmTitle": "Abmelden",
-    "logoutConfirmMessage": "Möchtest du dich wirklich abmelden?"
+    "logoutConfirmMessage": "Möchtest du dich wirklich abmelden?",
+    "openMobileApp": "In mobiler App öffnen",
+    "openMobileAppDescription": "Lieber die native mobile App verwenden?",
+    "dismissMobileAppBanner": "Ausblenden"
   },
   "auth": {
     "signInTitle": "Bei Jot anmelden",

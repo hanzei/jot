@@ -8,7 +8,10 @@
     "admin": "Admin",
     "logout": "Se déconnecter",
     "logoutConfirmTitle": "Se déconnecter",
-    "logoutConfirmMessage": "Êtes-vous sûr de vouloir vous déconnecter ?"
+    "logoutConfirmMessage": "Êtes-vous sûr de vouloir vous déconnecter ?",
+    "openMobileApp": "Ouvrir dans l’app mobile",
+    "openMobileAppDescription": "Vous préférez l’expérience mobile native ?",
+    "dismissMobileAppBanner": "Masquer"
   },
   "auth": {
     "signInTitle": "Se connecter à Jot",
