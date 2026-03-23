@@ -3,6 +3,7 @@ import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import NavigationHeader from '../NavigationHeader'
 import { buildMobileDeepLink } from '@/utils/deepLink'
+import { isMobileAppBannerDismissed } from '@/utils/mobileAppBanner'
 
 vi.mock('@/utils/auth', () => ({
   getUser: vi.fn(() => null),
@@ -34,6 +35,6 @@ describe('NavigationHeader', () => {
     fireEvent.click(screen.getByTestId('dismiss-mobile-app-banner'))
 
     expect(screen.queryByTestId('open-mobile-app-banner')).not.toBeInTheDocument()
-    expect(localStorage.getItem('jot_mobile_app_banner_dismissed')).toBe('1')
+    expect(isMobileAppBannerDismissed()).toBe(true)
   })
 })
