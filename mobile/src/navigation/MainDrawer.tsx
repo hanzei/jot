@@ -68,9 +68,7 @@ export default function MainDrawer() {
       <Drawer.Screen
         name="Notes"
         component={NotesScreen}
-        options={({ route }) => ({
-          title: route.params?.labelName ?? t('dashboard.tabNotes'),
-        })}
+        options={{ headerShown: false }}
       />
       <Drawer.Screen
         name="MyTodo"
@@ -89,7 +87,11 @@ const styles = StyleSheet.create({
     fontWeight: '600',
   },
   menuButton: {
-    paddingHorizontal: 16,
-    paddingVertical: 8,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginLeft: 8,
   },
 });

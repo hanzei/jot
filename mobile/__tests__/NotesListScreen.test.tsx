@@ -1,12 +1,24 @@
 import React from 'react';
 import { Alert } from 'react-native';
 import { fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
+import { DrawerActions } from '@react-navigation/native';
 import NotesListScreen from '../src/screens/NotesListScreen';
 import { lightColors } from '../src/theme/colors';
 import type { NoteSort } from '@jot/shared';
 
+const mockNavigate = jest.fn();
+const mockDispatch = jest.fn();
+const mockToggleDrawer = jest.fn(() => ({ type: 'DRAWER_TOGGLE' }));
+
 jest.mock('@react-navigation/native', () => ({
-  useNavigation: jest.fn().mockReturnValue({ navigate: jest.fn() }),
+  useNavigation: jest.fn().mockReturnValue({ navigate: mockNavigate, dispatch: mockDispatch }),
+  DrawerActions: {
+    toggleDrawer: mockToggleDrawer,
+  },
+}));
+
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
 }));
 
 jest.mock('expo-haptics', () => ({
@@ -227,6 +239,7 @@ describe('NotesListScreen sorting', () => {
 
     expect(screen.queryByTestId('sort-disabled-notice')).toBeNull();
     expect(screen.queryByTestId('sort-controls')).toBeNull();
+    expect(screen.getByTestId('drawer-toggle')).toBeTruthy();
     expect(screen.getByTestId('sort-toggle')).toBeTruthy();
     expect(screen.getByTestId('pinned-draggable-list')).toBeTruthy();
     expect(screen.getByText('Pinned')).toBeTruthy();
@@ -360,5 +373,56 @@ describe('NotesListScreen sorting', () => {
       expect(setSettings).toHaveBeenLastCalledWith(expect.objectContaining({ note_sort: 'created_at' }));
     });
     expect(within(screen.getByTestId('sort-disabled-notice')).getByText(/Date created/)).toBeTruthy();
+  });
+
+  it('toggles sort controls visibility from the compact header', () => {
+    mockUseOfflineNotes.mockReturnValue({
+      data: [
+        buildNote({ id: 'unpinned-bravo', title: 'sort-demo-bravo', pinned: false }),
+      ],
+      isLoading: false,
+      isError: false,
+      refetch: jest.fn(),
+      isRefetching: false,
+    });
+
+    render(<NotesListScreen variant="notes" />);
+
+    expect(screen.queryByTestId('sort-controls')).toBeNull();
+    fireEvent.press(screen.getByTestId('sort-toggle'));
+    expect(screen.getByTestId('sort-controls')).toBeTruthy();
+    fireEvent.press(screen.getByTestId('sort-toggle'));
+    expect(screen.queryByTestId('sort-controls')).toBeNull();
+  });
+
+  it('opens the drawer from the compact menu button', () => {
+    render(<NotesListScreen variant="notes" />);
+
+    fireEvent.press(screen.getByTestId('drawer-toggle'));
+
+    expect(DrawerActions.toggleDrawer).toHaveBeenCalledTimes(1);
+    expect(mockDispatch).toHaveBeenCalledWith({ type: 'DRAWER_TOGGLE' });
+  });
+
+  it('clears search text from the compact header control', async () => {
+    mockUseOfflineNotes.mockReturnValue({
+      data: [
+        buildNote({ id: 'unpinned-bravo', title: 'sort-demo-bravo', pinned: false }),
+      ],
+      isLoading: false,
+      isError: false,
+      refetch: jest.fn(),
+      isRefetching: false,
+    });
+
+    render(<NotesListScreen variant="notes" />);
+
+    fireEvent.changeText(screen.getByTestId('search-input'), 'demo query');
+    expect(screen.getByLabelText('Clear search')).toBeTruthy();
+    fireEvent.press(screen.getByTestId('clear-search'));
+
+    await waitFor(() => {
+      expect(screen.queryByTestId('clear-search')).toBeNull();
+    });
   });
 });

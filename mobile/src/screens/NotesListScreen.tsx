@@ -15,8 +15,9 @@ import { useSQLiteContext } from 'expo-sqlite';
 import DraggableFlatList, { ScaleDecorator } from 'react-native-draggable-flatlist';
 import * as Haptics from 'expo-haptics';
 import Ionicons from '@expo/vector-icons/Ionicons';
-import { useNavigation } from '@react-navigation/native';
+import { DrawerActions, useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { updateMe } from '../api/settings';
 import { useTranslation } from 'react-i18next';
 import { useUpdateNote, useDeleteNote, useRestoreNote, usePermanentDeleteNote, useReorderNotes, useDuplicateNote } from '../hooks/useNotes';
@@ -61,6 +62,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   const { isConnected } = useNetworkStatus();
   const { colors } = useTheme();
   const { t } = useTranslation();
+  const insets = useSafeAreaInsets();
 
   const [contextMenuNote, setContextMenuNote] = useState<Note | null>(null);
   const [colorPickerNote, setColorPickerNote] = useState<Note | null>(null);
@@ -116,6 +118,10 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     await refetch();
     await refreshUsers();
   }, [refetch, refreshUsers]);
+
+  const handleToggleDrawer = useCallback(() => {
+    navigation.dispatch(DrawerActions.toggleDrawer());
+  }, [navigation]);
 
   const handleSortChange = useCallback(async (nextSort: NoteSort) => {
     if (nextSort === sortMode) {
@@ -501,117 +507,29 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     [handleNotePress, handleOpenMenu, variant],
   );
 
-  // Show full-screen loading only on initial load (no prior data, no active search query).
-  // Uses debouncedSearch (not searchText) so clearing the input mid-debounce doesn't
-  // trigger the full-screen loader while the previous query is still in-flight.
-  if (isLoading && !notes && !debouncedSearch) {
-    return <SkeletonNoteList />;
-  }
-
-  if (isError) {
-    return (
-      <View style={[styles.emptyContainer, { backgroundColor: colors.background }]} testID="notes-error-state">
-        <Ionicons name="cloud-offline-outline" size={64} color={colors.handleColor} />
-        <Text style={[styles.emptyTitle, { color: colors.text }]}>{t('dashboard.failedLoadNotes')}</Text>
-        <Text style={[styles.emptySubtext, { color: colors.textMuted }]}>{t('dashboard.checkConnection')}</Text>
-        <TouchableOpacity
-          style={[styles.retryButton, { backgroundColor: colors.primary }]}
-          onPress={() => refetch()}
-          testID="retry-fetch"
-        >
-          <Text style={styles.retryText}>{t('common.retry')}</Text>
-        </TouchableOpacity>
-      </View>
-    );
-  }
-
-  const isEmpty = !isLoading && (!notes || notes.length === 0);
-
-  if (isEmpty && !debouncedSearch && (variant !== 'notes' || !labelId)) {
-    const emptyIcon: keyof typeof Ionicons.glyphMap =
-      variant === 'trash' ? 'trash-outline' :
-      variant === 'archived' ? 'archive-outline' :
-      variant === 'my-todo' ? 'clipboard-outline' : 'document-text-outline';
-    return (
-      <View style={[styles.emptyWrapper, { backgroundColor: colors.background }]}>
-        {variant === 'trash' && (
-          <View style={[styles.trashBanner, { backgroundColor: colors.warning, borderBottomColor: colors.warningBorder }]}>
-            <Ionicons name="information-circle-outline" size={16} color={colors.warningText} style={styles.trashBannerIcon} />
-            <Text style={[styles.trashBannerText, { color: colors.warningText }]}>
-              {t('dashboard.binInfo')}
-            </Text>
-          </View>
-        )}
-        <View style={styles.emptyContent}>
-          <Ionicons
-            name={emptyIcon}
-            size={64}
-            color={colors.handleColor}
-          />
-          <Text style={[styles.emptyTitle, { color: colors.text }]}>
-            {variant === 'notes' && t('dashboard.noNotesYet')}
-            {variant === 'my-todo' && t('dashboard.noAssignedTodos')}
-            {variant === 'archived' && t('dashboard.noArchivedNotes')}
-            {variant === 'trash' && t('dashboard.noBinnedNotes')}
-          </Text>
-          <Text style={[styles.emptySubtext, { color: colors.textMuted }]}>
-            {variant === 'notes' && t('dashboard.createFirstNote')}
-            {variant === 'my-todo' && t('dashboard.noMyTodoNotes')}
-            {variant === 'archived' && t('dashboard.archivedNotesWillAppear')}
-            {variant === 'trash' && t('dashboard.deletedNotesWillAppear')}
-          </Text>
-        </View>
-        {variant === 'notes' && (
-          <TouchableOpacity
-            style={[styles.fab, { backgroundColor: colors.primary }]}
-            onPress={handleCreateNote}
-            testID="create-note-fab"
-            accessibilityLabel={t('dashboard.newNote')}
-            accessibilityRole="button"
-          >
-            <Ionicons name="add" size={28} color="#fff" />
-          </TouchableOpacity>
-        )}
-      </View>
-    );
-  }
-
   // Drag-and-drop is only available in the notes variant while manual sorting is active.
   const isDraggable = variant === 'notes' && sortMode === 'manual';
   const activeSortLabel = getNoteSortLabel(sortMode, t);
 
-  return (
-    <View style={[styles.container, { backgroundColor: colors.background }]}>
-      {/* Trash banner */}
-      {variant === 'trash' && (
-        <View style={[styles.trashBanner, { backgroundColor: colors.warning, borderBottomColor: colors.warningBorder }]}>
-          <View style={styles.trashBannerMessage}>
-            <Ionicons name="information-circle-outline" size={16} color={colors.warningText} style={styles.trashBannerIcon} />
-            <Text style={[styles.trashBannerText, { color: colors.warningText }]}>
-              {t('dashboard.binInfo')}
-            </Text>
-          </View>
-          {trashCount > 0 && (
-            <TouchableOpacity
-              style={[styles.emptyTrashButton, { borderColor: colors.warningText }, isEmptyingTrash ? styles.emptyTrashButtonDisabled : undefined]}
-              onPress={handleEmptyTrash}
-              disabled={isEmptyingTrash}
-              testID="empty-trash-button"
-              accessibilityLabel={t('dashboard.emptyTrash')}
-              accessibilityRole="button"
-            >
-              {isEmptyingTrash ? (
-                <ActivityIndicator size="small" color={colors.warningText} />
-              ) : (
-                <Text style={[styles.emptyTrashButtonText, { color: colors.warningText }]}>{t('dashboard.emptyTrash')}</Text>
-              )}
-            </TouchableOpacity>
-          )}
-        </View>
-      )}
-
-      {/* Search bar */}
-      <View style={styles.topControlsRow}>
+  const renderTopControls = () => (
+    <>
+      <View
+        style={[
+          styles.topControlsRow,
+          variant === 'notes' ? { paddingTop: insets.top + 4 } : undefined,
+        ]}
+      >
+        {variant === 'notes' && (
+          <TouchableOpacity
+            style={[styles.menuButton, { backgroundColor: colors.surface, borderColor: colors.searchBorder }]}
+            onPress={handleToggleDrawer}
+            testID="drawer-toggle"
+            accessibilityLabel={t('nav.openMenu')}
+            accessibilityRole="button"
+          >
+            <Ionicons name="menu" size={22} color={colors.text} />
+          </TouchableOpacity>
+        )}
         <View style={[styles.searchContainer, { backgroundColor: colors.searchBackground, borderColor: colors.searchBorder }]}>
           <Ionicons name="search" size={18} color={colors.iconMuted} style={styles.searchIcon} />
           <TextInput
@@ -624,7 +542,13 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
             testID="search-input"
           />
           {searchText.length > 0 && (
-            <TouchableOpacity onPress={handleClearSearch} testID="clear-search">
+            <TouchableOpacity
+              onPress={handleClearSearch}
+              testID="clear-search"
+              accessibilityRole="button"
+              accessibilityLabel={t('common.clearSearch')}
+              hitSlop={{ top: 12, right: 12, bottom: 12, left: 12 }}
+            >
               <Ionicons name="close-circle" size={18} color={colors.iconMuted} />
             </TouchableOpacity>
           )}
@@ -708,6 +632,143 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
           </Text>
         </View>
       )}
+    </>
+  );
+
+  // Show full-screen loading only on initial load (no prior data, no active search query).
+  // Uses debouncedSearch (not searchText) so clearing the input mid-debounce doesn't
+  // trigger the full-screen loader while the previous query is still in-flight.
+  if (isLoading && !notes && !debouncedSearch) {
+    if (variant === 'notes') {
+      return (
+        <View style={[styles.container, { backgroundColor: colors.background }]}>
+          {renderTopControls()}
+          <SkeletonNoteList />
+        </View>
+      );
+    }
+    return <SkeletonNoteList />;
+  }
+
+  if (isError) {
+    const errorContent = (
+      <View
+        style={[
+          styles.emptyContainer,
+          { backgroundColor: colors.background },
+        ]}
+        testID="notes-error-state"
+      >
+        <Ionicons name="cloud-offline-outline" size={64} color={colors.handleColor} />
+        <Text style={[styles.emptyTitle, { color: colors.text }]}>{t('dashboard.failedLoadNotes')}</Text>
+        <Text style={[styles.emptySubtext, { color: colors.textMuted }]}>{t('dashboard.checkConnection')}</Text>
+        <TouchableOpacity
+          style={[styles.retryButton, { backgroundColor: colors.primary }]}
+          onPress={() => refetch()}
+          testID="retry-fetch"
+        >
+          <Text style={styles.retryText}>{t('common.retry')}</Text>
+        </TouchableOpacity>
+      </View>
+    );
+
+    if (variant === 'notes') {
+      return (
+        <View style={[styles.container, { backgroundColor: colors.background }]}>
+          {renderTopControls()}
+          {errorContent}
+        </View>
+      );
+    }
+
+    return (
+      errorContent
+    );
+  }
+
+  const isEmpty = !isLoading && (!notes || notes.length === 0);
+
+  if (isEmpty && !debouncedSearch && (variant !== 'notes' || !labelId)) {
+    const emptyIcon: keyof typeof Ionicons.glyphMap =
+      variant === 'trash' ? 'trash-outline' :
+      variant === 'archived' ? 'archive-outline' :
+      variant === 'my-todo' ? 'clipboard-outline' : 'document-text-outline';
+    return (
+      <View style={[styles.emptyWrapper, { backgroundColor: colors.background }]}>
+        {variant === 'notes' && renderTopControls()}
+        {variant === 'trash' && (
+          <View style={[styles.trashBanner, { backgroundColor: colors.warning, borderBottomColor: colors.warningBorder }]}>
+            <Ionicons name="information-circle-outline" size={16} color={colors.warningText} style={styles.trashBannerIcon} />
+            <Text style={[styles.trashBannerText, { color: colors.warningText }]}>
+              {t('dashboard.binInfo')}
+            </Text>
+          </View>
+        )}
+        <View style={styles.emptyContent}>
+          <Ionicons
+            name={emptyIcon}
+            size={64}
+            color={colors.handleColor}
+          />
+          <Text style={[styles.emptyTitle, { color: colors.text }]}>
+            {variant === 'notes' && t('dashboard.noNotesYet')}
+            {variant === 'my-todo' && t('dashboard.noAssignedTodos')}
+            {variant === 'archived' && t('dashboard.noArchivedNotes')}
+            {variant === 'trash' && t('dashboard.noBinnedNotes')}
+          </Text>
+          <Text style={[styles.emptySubtext, { color: colors.textMuted }]}>
+            {variant === 'notes' && t('dashboard.createFirstNote')}
+            {variant === 'my-todo' && t('dashboard.noMyTodoNotes')}
+            {variant === 'archived' && t('dashboard.archivedNotesWillAppear')}
+            {variant === 'trash' && t('dashboard.deletedNotesWillAppear')}
+          </Text>
+        </View>
+        {variant === 'notes' && (
+          <TouchableOpacity
+            style={[styles.fab, { backgroundColor: colors.primary }]}
+            onPress={handleCreateNote}
+            testID="create-note-fab"
+            accessibilityLabel={t('dashboard.newNote')}
+            accessibilityRole="button"
+          >
+            <Ionicons name="add" size={28} color="#fff" />
+          </TouchableOpacity>
+        )}
+      </View>
+    );
+  }
+
+  return (
+    <View style={[styles.container, { backgroundColor: colors.background }]}>
+      {/* Trash banner */}
+      {variant === 'trash' && (
+        <View style={[styles.trashBanner, { backgroundColor: colors.warning, borderBottomColor: colors.warningBorder }]}>
+          <View style={styles.trashBannerMessage}>
+            <Ionicons name="information-circle-outline" size={16} color={colors.warningText} style={styles.trashBannerIcon} />
+            <Text style={[styles.trashBannerText, { color: colors.warningText }]}>
+              {t('dashboard.binInfo')}
+            </Text>
+          </View>
+          {trashCount > 0 && (
+            <TouchableOpacity
+              style={[styles.emptyTrashButton, { borderColor: colors.warningText }, isEmptyingTrash ? styles.emptyTrashButtonDisabled : undefined]}
+              onPress={handleEmptyTrash}
+              disabled={isEmptyingTrash}
+              testID="empty-trash-button"
+              accessibilityLabel={t('dashboard.emptyTrash')}
+              accessibilityRole="button"
+            >
+              {isEmptyingTrash ? (
+                <ActivityIndicator size="small" color={colors.warningText} />
+              ) : (
+                <Text style={[styles.emptyTrashButtonText, { color: colors.warningText }]}>{t('dashboard.emptyTrash')}</Text>
+              )}
+            </TouchableOpacity>
+          )}
+        </View>
+      )}
+
+      {renderTopControls()}
 
       {/* Notes list */}
       {hasPinned ? (
@@ -915,9 +976,17 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
     marginHorizontal: 12,
-    marginTop: 12,
+    marginTop: 8,
     marginBottom: 8,
     gap: 8,
+  },
+  menuButton: {
+    width: 44,
+    height: 44,
+    borderRadius: 22,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
   },
   searchContainer: {
     flexDirection: 'row',
@@ -937,9 +1006,9 @@ const styles = StyleSheet.create({
     paddingVertical: 0,
   },
   sortToggleButton: {
-    width: 40,
-    height: 40,
-    borderRadius: 20,
+    width: 44,
+    height: 44,
+    borderRadius: 22,
     borderWidth: 1,
     alignItems: 'center',
     justifyContent: 'center',
