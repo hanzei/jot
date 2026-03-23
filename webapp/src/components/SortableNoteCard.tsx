@@ -8,6 +8,7 @@ interface SortableNoteCardProps {
   note: Note;
   onEdit: (note: Note) => void;
   onDelete: (noteId: string) => void;
+  onDuplicate?: (noteId: string) => Promise<void> | void;
   onShare: (note: Note) => void;
   onRestore?: (noteId: string) => void;
   onPermanentlyDelete?: (noteId: string) => void;
@@ -22,6 +23,7 @@ export default function SortableNoteCard({
   note,
   onEdit,
   onDelete,
+  onDuplicate,
   onShare,
   onRestore,
   onPermanentlyDelete,
@@ -55,11 +57,10 @@ export default function SortableNoteCard({
     <div
       ref={setNodeRef}
       style={style}
-      {...(!disabled ? attributes : {})}
-      {...(!disabled ? listeners : {})}
-      className={`touch-none select-none relative ${
-        disabled ? 'cursor-default' : 'cursor-grab active:cursor-grabbing'
-      } ${isDragging ? 'scale-105 shadow-xl' : ''}`}
+      data-drag-disabled={disabled ? 'true' : 'false'}
+      className={`group touch-none select-none relative cursor-default ${
+        isDragging ? 'scale-105 shadow-xl' : ''
+      }`}
     >
       {/* Dedicated drag handle - only show for non-disabled notes */}
       {!disabled && (
@@ -68,7 +69,6 @@ export default function SortableNoteCard({
           {...attributes}
           {...listeners}
           className="absolute top-2 right-10 p-2 rounded-md bg-gray-100 dark:bg-slate-700 opacity-0 group-hover:opacity-100 hover:bg-gray-200 dark:hover:bg-slate-600 transition-all cursor-grab active:cursor-grabbing z-20"
-          title="Drag to reorder"
         >
           <Bars3Icon className="h-4 w-4 text-gray-600 dark:text-gray-300" />
         </div>
@@ -79,6 +79,7 @@ export default function SortableNoteCard({
           note={note}
           onEdit={onEdit}
           onDelete={onDelete}
+          onDuplicate={onDuplicate}
           onShare={onShare}
           onRestore={onRestore}
           onPermanentlyDelete={onPermanentlyDelete}

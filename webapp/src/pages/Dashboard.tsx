@@ -1,9 +1,9 @@
-import { useState, useEffect, useCallback, useRef } from 'react';
-import { PlusIcon, DocumentTextIcon, ArchiveBoxIcon, TrashIcon, ClipboardDocumentCheckIcon } from '@heroicons/react/24/outline';
+import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
+import { PlusIcon, DocumentTextIcon, ArchiveBoxIcon, TrashIcon, ClipboardDocumentCheckIcon, ArrowsUpDownIcon } from '@heroicons/react/24/outline';
 import { useTranslation } from 'react-i18next';
-import { notes, auth, labels as labelsApi, users as usersApi } from '@/utils/api';
-import { removeUser, getUser, isAdmin } from '@/utils/auth';
-import type { Note, Label, User, SSEEvent } from '@jot/shared';
+import { notes, auth, labels as labelsApi, users as usersApi, isAxiosError } from '@/utils/api';
+import { removeUser, getUser, getSettings, setSettings, isAdmin } from '@/utils/auth';
+import type { Note, Label, User, SSEEvent, NoteSort } from '@jot/shared';
 import { useSSE } from '@/utils/useSSE';
 import { useSearchParams, useParams } from 'react-router';
 import AppLayout from '@/components/AppLayout';
@@ -12,8 +12,10 @@ import SortableNoteCard from '@/components/SortableNoteCard';
 import NoteModal from '@/components/NoteModal';
 import ShareModal from '@/components/ShareModal';
 import SidebarLabels from '@/components/SidebarLabels';
+import ConfirmDialog from '@/components/ConfirmDialog';
 import { useToast } from '@/hooks/useToast';
 import { isAnyModalDialogOpen, isEditableElementFocused, isOverlayControlFocused } from '@/utils/keyboardShortcuts';
+import { NOTE_SORT_OPTIONS, normalizeNoteSort, sortNotesForDisplay } from '@/utils/noteSort';
 import {
   DndContext,
   closestCenter,
@@ -37,14 +39,22 @@ interface DashboardProps {
   onLogout: () => void;
 }
 
+const SEARCH_DEBOUNCE_MS = 300;
+
 export default function Dashboard({ onLogout }: DashboardProps) {
   const { t } = useTranslation();
   const { showToast } = useToast();
   const { noteId: noteIdParam } = useParams<{ noteId?: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
   const [notesList, setNotesList] = useState<Note[]>([]);
+  const [noteSort, setNoteSort] = useState<NoteSort>(() => normalizeNoteSort(getSettings()?.note_sort));
   const [loading, setLoading] = useState(true);
-  const [searchQuery, setSearchQueryState] = useState(searchParams.get('search') ?? '');
+  const [trashCount, setTrashCount] = useState(0);
+  const [isEmptyingTrash, setIsEmptyingTrash] = useState(false);
+  const [showEmptyTrashConfirm, setShowEmptyTrashConfirm] = useState(false);
+  const initialSearchQuery = searchParams.get('search') ?? '';
+  const [searchQuery, setSearchQueryState] = useState(initialSearchQuery);
+  const [debouncedSearchQuery, setDebouncedSearchQuery] = useState(initialSearchQuery);
   const initialLabel = searchParams.get('label');
   const [showArchived, setShowArchived] = useState(!initialLabel && searchParams.get('view') === 'archive');
   const [showBin, setShowBin] = useState(!initialLabel && searchParams.get('view') === 'bin');
@@ -61,6 +71,8 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const searchInputRef = useRef<HTMLInputElement>(null);
   const openNoteIdRef = useRef<string | null>(null);
   const returnPathRef = useRef('/');
+  const noteSortUpdateRequestIdRef = useRef(0);
+  const loadNotesRequestIdRef = useRef(0);
   useEffect(() => {
     isMountedRef.current = true;
     return () => { isMountedRef.current = false; };
@@ -70,24 +82,57 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   // Label takes precedence over view — if both are present, ignore view.
   useEffect(() => {
     const label = searchParams.get('label');
-    setSearchQueryState(searchParams.get('search') ?? '');
+    const nextSearch = searchParams.get('search') ?? '';
+    setSearchQueryState(nextSearch);
+    // URL-driven navigation should update both states immediately.
+    setDebouncedSearchQuery(nextSearch);
     setShowArchived(!label && searchParams.get('view') === 'archive');
     setShowBin(!label && searchParams.get('view') === 'bin');
     setShowMyTodo(!label && searchParams.get('view') === 'my-todo');
     setSelectedLabelId(label);
   }, [searchParams]);
 
-  const setSearchQuery = (query: string) => {
-    setSearchQueryState(query);
+  useEffect(() => {
+    if (!showBin) {
+      setShowEmptyTrashConfirm(false);
+    }
+  }, [showBin]);
+
+  useEffect(() => {
+    if (searchQuery === debouncedSearchQuery) {
+      return;
+    }
+
+    if (!searchQuery) {
+      setDebouncedSearchQuery('');
+      return;
+    }
+
+    const timeout = setTimeout(() => {
+      setDebouncedSearchQuery(searchQuery);
+    }, SEARCH_DEBOUNCE_MS);
+
+    return () => clearTimeout(timeout);
+  }, [searchQuery, debouncedSearchQuery]);
+
+  useEffect(() => {
     setSearchParams(prev => {
       const next = new URLSearchParams(prev);
-      if (query) {
-        next.set('search', query);
+      if (debouncedSearchQuery) {
+        next.set('search', debouncedSearchQuery);
       } else {
         next.delete('search');
       }
-      return next;
+
+      return next.toString() === prev.toString() ? prev : next;
     });
+  }, [debouncedSearchQuery, setSearchParams]);
+
+  const setSearchQuery = (query: string) => {
+    setSearchQueryState(query);
+    if (!query) {
+      setDebouncedSearchQuery('');
+    }
   };
 
   const handleViewChange = useCallback((view: 'notes' | 'archive' | 'bin' | 'my-todo') => {
@@ -95,6 +140,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     setShowBin(view === 'bin');
     setShowMyTodo(view === 'my-todo');
     setSearchQueryState('');
+    setDebouncedSearchQuery('');
     setSelectedLabelId(null);
     setSearchParams(prev => {
       const next = new URLSearchParams(prev);
@@ -161,15 +207,41 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   }, []);
 
   const loadNotes = useCallback(async () => {
+    const requestId = ++loadNotesRequestIdRef.current;
+
     try {
-      const notesData = await notes.getAll(showArchived, searchQuery, showBin, selectedLabelId ?? '', showMyTodo);
-      if (isMountedRef.current) setNotesList(notesData);
+      let notesData: Note[] = [];
+      let nextTrashCount = 0;
+
+      if (showBin && debouncedSearchQuery) {
+        const [loadedNotes, allTrashedNotes] = await Promise.all([
+          notes.getAll(showArchived, debouncedSearchQuery, showBin, selectedLabelId ?? '', showMyTodo),
+          notes.getAll(false, '', true),
+        ]);
+        notesData = loadedNotes;
+        nextTrashCount = allTrashedNotes.length;
+      } else {
+        notesData = await notes.getAll(showArchived, debouncedSearchQuery, showBin, selectedLabelId ?? '', showMyTodo);
+        if (showBin) {
+          nextTrashCount = notesData.length;
+        }
+      }
+
+      if (isMountedRef.current && requestId === loadNotesRequestIdRef.current) {
+        setNotesList(notesData);
+        setTrashCount(nextTrashCount);
+      }
     } catch (error) {
-      if (isMountedRef.current) console.error('Failed to load notes:', error);
+      if (isMountedRef.current) {
+        console.error('Failed to load notes:', error);
+        showToast(t('dashboard.failedLoadNotes'), 'error');
+      }
     } finally {
-      if (isMountedRef.current) setLoading(false);
+      if (isMountedRef.current && requestId === loadNotesRequestIdRef.current) {
+        setLoading(false);
+      }
     }
-  }, [showArchived, showBin, searchQuery, selectedLabelId, showMyTodo]);
+  }, [showArchived, showBin, debouncedSearchQuery, selectedLabelId, showMyTodo, showToast, t]);
 
   useEffect(() => {
     loadLabels();
@@ -190,6 +262,10 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   }, []);
 
   const openNoteFromUrl = useCallback((noteId: string) => {
+    openNoteIdRef.current = null;
+    setEditingNote(null);
+    setIsModalOpen(false);
+
     openNoteIdRef.current = noteId;
     returnPathRef.current = window.history.state?.returnTo ?? '/';
     notes.getById(noteId)
@@ -210,11 +286,21 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   }, []);
 
   useEffect(() => {
-    if (noteIdParam) {
-      openNoteFromUrl(noteIdParam);
+    if (!noteIdParam) {
+      if (openNoteIdRef.current) {
+        openNoteIdRef.current = null;
+        setIsModalOpen(false);
+        setEditingNote(null);
+      }
+      return;
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, []);
+
+    if (openNoteIdRef.current === noteIdParam) {
+      return;
+    }
+
+    openNoteFromUrl(noteIdParam);
+  }, [noteIdParam, openNoteFromUrl]);
 
   useEffect(() => {
     const handlePopState = () => {
@@ -249,7 +335,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     }
 
     loadNotes();
-    if (event.type === 'note_updated') {
+    if (event.type === 'note_created' || event.type === 'note_updated') {
       loadLabels();
     }
   }, [editingNote, sharingNote, loadNotes, loadLabels, user?.id, restoreReturnUrl]);
@@ -397,6 +483,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
 
   const handleNoteRefresh = () => {
     loadNotes();
+    loadLabels();
   };
 
   const handleDeleteNote = async (noteId: string) => {
@@ -409,6 +496,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       });
     } catch (error) {
       console.error('Failed to delete note:', error);
+      showToast(t('dashboard.failedDeleteNote'), 'error');
     }
   };
 
@@ -419,6 +507,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       showToast(t('dashboard.noteRestored'));
     } catch (error) {
       console.error('Failed to restore note:', error);
+      showToast(t('dashboard.failedRestoreNote'), 'error');
     }
   };
 
@@ -429,8 +518,39 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       showToast(t('dashboard.noteDeletedForever'));
     } catch (error) {
       console.error('Failed to permanently delete note:', error);
+      showToast(t('dashboard.failedDeleteNoteForever'), 'error');
     }
   };
+
+  const handleEmptyTrash = async () => {
+    setIsEmptyingTrash(true);
+    try {
+      await notes.emptyTrash();
+      if (isMountedRef.current) {
+        setNotesList([]);
+        setTrashCount(0);
+      }
+      setShowEmptyTrashConfirm(false);
+      showToast(t('dashboard.trashEmptied'));
+      void loadNotes();
+    } catch (error) {
+      console.error('Failed to empty trash:', error);
+      showToast(t('dashboard.emptyTrashFailed'), 'error');
+    } finally {
+      setIsEmptyingTrash(false);
+    }
+  };
+
+  const handleDuplicateNote = useCallback(async (noteId: string) => {
+    try {
+      await notes.duplicate(noteId);
+      await Promise.all([loadNotes(), loadLabels()]);
+      showToast(t('dashboard.noteDuplicated'), 'success');
+    } catch (error) {
+      console.error('Failed to duplicate note:', error);
+      throw error;
+    }
+  }, [loadLabels, loadNotes, showToast, t]);
 
   const handleShareNote = (note: Note) => {
     setSharingNote(note);
@@ -449,6 +569,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     setShowBin(false);
     setShowMyTodo(false);
     setSearchQueryState('');
+    setDebouncedSearchQuery('');
     setSearchParams(prev => {
       const next = new URLSearchParams(prev);
       if (labelId) {
@@ -462,8 +583,101 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     });
   };
 
+  const rollbackNoteSortCache = (failedSort: NoteSort, previousSettings: ReturnType<typeof getSettings>): boolean => {
+    const cachedSettings = getSettings();
+    if (cachedSettings?.note_sort !== failedSort) {
+      return false;
+    }
+
+    if (previousSettings) {
+      setSettings(previousSettings);
+    } else {
+      localStorage.removeItem('settings');
+    }
+
+    return true;
+  };
+
+  const handleNoteSortChange = useCallback(async (nextSort: typeof NOTE_SORT_OPTIONS[number]) => {
+    if (nextSort === noteSort) {
+      return;
+    }
+
+    const previousSort = noteSort;
+    const previousSettings = getSettings();
+    const requestID = ++noteSortUpdateRequestIdRef.current;
+
+    setNoteSort(nextSort);
+    if (previousSettings) {
+      setSettings({ ...previousSettings, note_sort: nextSort });
+    }
+
+    try {
+      const { settings: updatedSettings } = await usersApi.updateMe({ note_sort: nextSort });
+      if (!isMountedRef.current || requestID !== noteSortUpdateRequestIdRef.current) {
+        return;
+      }
+      if (updatedSettings) {
+        setSettings(updatedSettings);
+      }
+    } catch (error) {
+      console.error('Failed to update note sort:', error);
+
+      const restoredSettings = rollbackNoteSortCache(nextSort, previousSettings);
+
+      if (!isMountedRef.current || requestID !== noteSortUpdateRequestIdRef.current) {
+        return;
+      }
+
+      showToast(t('dashboard.failedUpdateSort'), 'error');
+      setNoteSort(previousSort);
+      if (!restoredSettings && previousSettings) {
+        setSettings(previousSettings);
+      }
+    }
+  }, [noteSort, showToast, t]);
+
+  const handleRenameLabel = useCallback(async (label: Label, newName: string): Promise<boolean> => {
+    try {
+      await labelsApi.rename(label.id, newName);
+      await Promise.all([loadLabels(), loadNotes()]);
+      showToast(t('labels.renameSuccess'), 'success');
+      return true;
+    } catch (err: unknown) {
+      if (isAxiosError(err)) {
+        const msg = typeof err.response?.data === 'string' ? err.response.data.trim() : '';
+        showToast(msg || t('labels.renameError'), 'error');
+      } else {
+        showToast(t('labels.renameError'), 'error');
+      }
+      return false;
+    }
+  }, [loadLabels, loadNotes, showToast, t]);
+
+  const handleDeleteLabel = useCallback(async (label: Label): Promise<boolean> => {
+    try {
+      await labelsApi.delete(label.id);
+      await loadLabels();
+      if (selectedLabelId === label.id) {
+        handleViewChange('notes');
+      } else {
+        await loadNotes();
+      }
+      showToast(t('labels.deleteSuccess'), 'success');
+      return true;
+    } catch (err: unknown) {
+      if (isAxiosError(err)) {
+        const msg = typeof err.response?.data === 'string' ? err.response.data.trim() : '';
+        showToast(msg || t('labels.deleteError'), 'error');
+      } else {
+        showToast(t('labels.deleteError'), 'error');
+      }
+      return false;
+    }
+  }, [handleViewChange, loadLabels, loadNotes, selectedLabelId, showToast, t]);
+
   const handleDragEnd = async (event: DragEndEvent) => {
-    if (showBin || showMyTodo) {
+    if (showArchived || showBin || showMyTodo || noteSort !== 'manual') {
       return;
     }
 
@@ -507,10 +721,18 @@ export default function Dashboard({ onLogout }: DashboardProps) {
         await notes.reorder(noteIDs);
       } catch (error) {
         console.error('Failed to reorder notes:', error);
+        showToast(t('dashboard.failedReorderNotes'), 'error');
         loadNotes();
       }
     }
   };
+
+  const { pinned: displayedPinned, other: displayedOther } = useMemo(
+    () => sortNotesForDisplay(notesList, noteSort),
+    [notesList, noteSort],
+  );
+  const dragReorderingDisabled = showArchived || showBin || showMyTodo || noteSort !== 'manual';
+  const activeSortLabel = t(`dashboard.sortOption.${noteSort}`);
 
   if (loading) {
     return (
@@ -554,11 +776,58 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   ];
 
   const searchBar = (
-    <SearchBar
-      value={searchQuery}
-      onChange={setSearchQuery}
-      inputRef={searchInputRef}
-    />
+    <div className="w-full sm:max-w-7xl flex flex-col gap-3 sm:flex-row sm:items-center">
+      <div className="min-w-0 flex-1">
+        <SearchBar
+          value={searchQuery}
+          onChange={setSearchQuery}
+          inputRef={searchInputRef}
+          stopEscapePropagation={true}
+        />
+      </div>
+      <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center sm:justify-end">
+        <div className="w-full sm:w-56">
+          <label htmlFor="dashboard-sort" className="sr-only">
+            {t('dashboard.sortLabel')}
+          </label>
+          <div className="relative">
+            <ArrowsUpDownIcon className="pointer-events-none absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-gray-400 dark:text-gray-500" />
+            <select
+              id="dashboard-sort"
+              data-testid="dashboard-sort-select"
+              aria-label={t('dashboard.sortLabel')}
+              value={noteSort}
+              onChange={(event) => void handleNoteSortChange(event.target.value as NoteSort)}
+              className="w-full rounded-lg border border-gray-300 dark:border-slate-600 bg-white dark:bg-slate-700 py-2 pl-9 pr-10 text-sm text-gray-900 dark:text-white focus:border-transparent focus:outline-none focus:ring-2 focus:ring-blue-500"
+            >
+              {NOTE_SORT_OPTIONS.map((sortOption) => (
+                <option key={sortOption} value={sortOption}>
+                  {t(`dashboard.sortOption.${sortOption}`)}
+                </option>
+              ))}
+            </select>
+          </div>
+        </div>
+        {showBin && trashCount > 0 && (
+          <button
+            type="button"
+            onClick={() => setShowEmptyTrashConfirm(true)}
+            disabled={isEmptyingTrash}
+            data-testid="empty-trash-button"
+            className="inline-flex items-center justify-center rounded-lg border border-red-200 bg-red-50 px-4 py-2 text-sm font-medium text-red-700 transition-colors hover:bg-red-100 focus:outline-none focus:ring-2 focus:ring-red-500 focus:ring-offset-2 disabled:cursor-not-allowed disabled:opacity-60 dark:border-red-900/60 dark:bg-red-950/40 dark:text-red-300 dark:hover:bg-red-950/60 dark:focus:ring-offset-slate-800"
+          >
+            {isEmptyingTrash ? (
+              <span className="flex items-center gap-2">
+                <span className="h-4 w-4 animate-spin rounded-full border-2 border-current border-t-transparent" />
+                {t('dashboard.emptyTrash')}
+              </span>
+            ) : (
+              t('dashboard.emptyTrash')
+            )}
+          </button>
+        )}
+      </div>
+    </div>
   );
 
   const sidebarChildren = (
@@ -566,6 +835,8 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       labels={labelsList}
       selectedLabelId={selectedLabelId}
       onSelect={(labelId) => handleLabelSelect(selectedLabelId === labelId ? null : labelId)}
+      onRename={handleRenameLabel}
+      onDelete={handleDeleteLabel}
     />
   );
 
@@ -613,14 +884,27 @@ export default function Dashboard({ onLogout }: DashboardProps) {
         )}
 
         {/* Notes grid */}
-        {!notesList || notesList.length === 0 ? (
+        {noteSort !== 'manual' && (
+          <div
+            data-testid="manual-reorder-disabled-notice"
+            className="mb-6 flex items-start gap-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900 dark:border-blue-900/70 dark:bg-blue-950/40 dark:text-blue-200"
+          >
+            <ArrowsUpDownIcon className="mt-0.5 h-4 w-4 shrink-0" />
+            <div>
+              <span className="font-medium">{t('dashboard.manualReorderDisabledTitle')}</span>{' '}
+              <span>{t('dashboard.manualReorderDisabled', { sort: activeSortLabel })}</span>
+            </div>
+          </div>
+        )}
+
+        {displayedPinned.length === 0 && displayedOther.length === 0 ? (
           <div className="text-center py-12">
             <div className="mx-auto max-w-xl text-gray-500 dark:text-gray-400 text-lg whitespace-normal break-words">
-              {searchQuery
-                ? t('dashboard.noSearchResults', { query: searchQuery })
+              {debouncedSearchQuery
+                ? t('dashboard.noSearchResults', { query: debouncedSearchQuery })
                 : showBin ? t('dashboard.noBinnedNotes') : showArchived ? t('dashboard.noArchivedNotes') : showMyTodo ? t('dashboard.noMyTodoNotes') : t('dashboard.noNotesYet')}
             </div>
-            {!showArchived && !showBin && !showMyTodo && !searchQuery && (
+            {!showArchived && !showBin && !showMyTodo && !debouncedSearchQuery && (
               <div className="mt-4">
                 <button
                   onClick={handleCreateNote}
@@ -641,7 +925,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
           >
             <div className="space-y-8">
               {/* Pinned notes section */}
-              {notesList.some(note => note.pinned) && (
+              {displayedPinned.length > 0 && (
                 <div>
                   <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
                     <svg className="h-4 w-4 text-blue-500 dark:text-blue-400 mr-2" fill="currentColor" viewBox="0 0 24 24">
@@ -650,22 +934,23 @@ export default function Dashboard({ onLogout }: DashboardProps) {
                     {t('dashboard.pinned')}
                   </h2>
                   <SortableContext
-                    items={notesList.filter(note => note.pinned).map(note => note.id)}
+                    items={displayedPinned.map(note => note.id)}
                     strategy={rectSortingStrategy}
                   >
                     <div className="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-4 space-y-0">
-                      {notesList.filter(note => note.pinned).map((note) => (
+                      {displayedPinned.map((note) => (
                         <SortableNoteCard
                           key={note.id}
                           note={note}
                           onEdit={handleEditNote}
                           onDelete={handleDeleteNote}
+                          onDuplicate={handleDuplicateNote}
                           onShare={handleShareNote}
                           onRestore={handleRestoreNote}
                           onPermanentlyDelete={handlePermanentlyDeleteNote}
                           currentUserId={user?.id}
                           usersById={usersById}
-                          disabled={showArchived || showBin || showMyTodo}
+                          disabled={dragReorderingDisabled}
                           inBin={showBin}
                           onRefresh={loadNotes}
                         />
@@ -676,30 +961,31 @@ export default function Dashboard({ onLogout }: DashboardProps) {
               )}
 
               {/* Other notes section */}
-              {notesList.some(note => !note.pinned) && (
+              {displayedOther.length > 0 && (
                 <div>
-                  {notesList.some(note => note.pinned) && (
+                  {displayedPinned.length > 0 && (
                     <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4">
                       {t('dashboard.otherNotes')}
                     </h2>
                   )}
                   <SortableContext
-                    items={notesList.filter(note => !note.pinned).map(note => note.id)}
+                    items={displayedOther.map(note => note.id)}
                     strategy={rectSortingStrategy}
                   >
                     <div className="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-4 space-y-0">
-                      {notesList.filter(note => !note.pinned).map((note) => (
+                      {displayedOther.map((note) => (
                         <SortableNoteCard
                           key={note.id}
                           note={note}
                           onEdit={handleEditNote}
                           onDelete={handleDeleteNote}
+                          onDuplicate={handleDuplicateNote}
                           onShare={handleShareNote}
                           onRestore={handleRestoreNote}
                           onPermanentlyDelete={handlePermanentlyDeleteNote}
                           currentUserId={user?.id}
                           usersById={usersById}
-                          disabled={showArchived || showBin || showMyTodo}
+                          disabled={dragReorderingDisabled}
                           inBin={showBin}
                           onRefresh={loadNotes}
                         />
@@ -711,6 +997,18 @@ export default function Dashboard({ onLogout }: DashboardProps) {
             </div>
           </DndContext>
         )}
+        <ConfirmDialog
+          open={showEmptyTrashConfirm}
+          title={t('dashboard.emptyTrashConfirmTitle')}
+          message={t('dashboard.emptyTrashConfirmMessage', { count: trashCount })}
+          confirmLabel={t('dashboard.emptyTrash')}
+          onConfirm={handleEmptyTrash}
+          onCancel={() => {
+            if (!isEmptyingTrash) {
+              setShowEmptyTrashConfirm(false);
+            }
+          }}
+        />
         {/* Note modal */}
         {isModalOpen && (
           <NoteModal
@@ -724,6 +1022,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
             onRefresh={handleNoteRefresh}
             onShare={handleShareNote}
             onDelete={handleDeleteNote}
+            onDuplicate={handleDuplicateNote}
             isOwner={!editingNote || editingNote.user_id === user?.id}
             usersById={usersById}
             currentUserId={user?.id}

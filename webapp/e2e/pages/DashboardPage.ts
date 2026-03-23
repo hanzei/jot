@@ -3,6 +3,11 @@ import { Page, expect, Locator } from '@playwright/test';
 export class DashboardPage {
   constructor(private page: Page) {}
 
+  private async closeActiveDialog() {
+    const activeDialog = this.page.getByRole('dialog').last();
+    await activeDialog.getByRole('button', { name: 'Close' }).click();
+  }
+
   async goto() {
     await this.page.goto('/');
   }
@@ -18,7 +23,7 @@ export class DashboardPage {
       await this.page.fill('textarea[placeholder="Take a note..."]', content);
     }
     // Close the modal to save (auto-save on close when there are changes)
-    await this.page.click('button[aria-label="Close"]');
+    await this.closeActiveDialog();
     await expect(this.page.locator('[data-testid="note-card"]').filter({ hasText: title })).toBeVisible();
   }
 
@@ -43,7 +48,7 @@ export class DashboardPage {
       await this.page.locator('input[placeholder="Note title..."]').click();
     }
 
-    await this.page.click('button[aria-label="Close"]');
+    await this.closeActiveDialog();
     await expect(this.page.locator('[data-testid="note-card"]').filter({ hasText: title })).toBeVisible();
   }
 
@@ -54,7 +59,8 @@ export class DashboardPage {
     for (const item of items) {
       await this.addTodoItem(item);
     }
-    await this.page.click('button[aria-label="Close"]');
+    await this.closeActiveDialog();
+    await expect(this.page.getByRole('dialog')).toHaveCount(0);
     await expect(this.page.locator('[data-testid="note-card"]').filter({ hasText: title })).toBeVisible();
   }
 
@@ -63,8 +69,11 @@ export class DashboardPage {
   }
 
   async addTodoItem(text: string) {
+    const inputs = this.page.locator('[data-testid="todo-item-input"]');
+    const existingCount = await inputs.count();
     await this.page.click('button:has-text("Add item")');
-    await this.page.locator('[data-testid="todo-item-input"]').last().fill(text);
+    await expect(inputs).toHaveCount(existingCount + 1);
+    await inputs.nth(existingCount).fill(text);
   }
 
   todoItemInput(index: number): Locator {
@@ -125,6 +134,20 @@ export class DashboardPage {
     await confirmDialog.getByRole('button', { name: 'Delete forever' }).click();
   }
 
+  async emptyTrash() {
+    await this.page.getByRole('button', { name: 'Empty Trash' }).click();
+    const confirmDialog = this.page.getByRole('dialog').last();
+    await confirmDialog.getByRole('button', { name: 'Empty Trash' }).click();
+  }
+
+  async expectEmptyTrashButtonVisible() {
+    await expect(this.page.getByRole('button', { name: 'Empty Trash' })).toBeVisible();
+  }
+
+  async expectEmptyTrashButtonHidden() {
+    await expect(this.page.getByRole('button', { name: 'Empty Trash' })).toHaveCount(0);
+  }
+
   async pinNote(title: string) {
     await this.openNoteMenu(title);
     await this.page.getByRole('menuitem', { name: 'Pin' }).click();
@@ -149,8 +172,34 @@ export class DashboardPage {
     await expect(this.page.locator('[data-testid="note-card"]').filter({ hasText: title })).toHaveCount(0);
   }
 
+  async duplicateNoteFromMenu(title: string) {
+    await this.openNoteMenu(title);
+    await this.page.getByRole('menuitem', { name: 'Duplicate' }).click();
+  }
+
+  async duplicateCurrentNoteFromModal() {
+    const activeDialog = this.page.getByRole('dialog').last();
+    await activeDialog.getByRole('button', { name: 'Duplicate' }).click();
+  }
+
   async search(query: string) {
     await this.page.fill('[aria-label="Search notes"]', query);
+  }
+
+  async selectSort(sort: 'manual' | 'updated_at' | 'created_at') {
+    await this.page.getByLabel('Sort notes').selectOption(sort);
+  }
+
+  async getSortValue() {
+    return this.page.getByLabel('Sort notes').inputValue();
+  }
+
+  async expectVisibleNoteTitles(titles: string[]) {
+    await expect(this.page.locator('[data-testid="note-card"] h3')).toHaveText(titles);
+  }
+
+  async expectManualReorderDisabledNotice() {
+    await expect(this.page.getByTestId('manual-reorder-disabled-notice')).toBeVisible();
   }
 
   async clearSearch() {
@@ -269,7 +318,7 @@ export class DashboardPage {
     await expect(this.page.getByRole('heading', { name: 'Edit Note' })).toBeVisible();
     await this.page.fill('input[placeholder="Note title..."]', newTitle);
     await this.page.fill('textarea[placeholder="Take a note..."]', newContent);
-    await this.page.click('button[aria-label="Close"]');
+    await this.closeActiveDialog();
   }
 
   /** Opens a note and creates a new label, attaching it to the note. */
@@ -283,7 +332,7 @@ export class DashboardPage {
     // Wait for the label to be created and checked before closing the modal
     await expect(this.page.getByRole('checkbox', { name: labelName })).toBeChecked();
     // Closing the modal also dismisses the picker (outside-click fires on mousedown)
-    await this.page.locator('button[aria-label="Close"]').click();
+    await this.closeActiveDialog();
     await expect(this.page.locator('[data-testid="note-card"]').filter({
       has: this.page.locator('h3').getByText(noteTitle, { exact: true }),
     })).toBeVisible();
@@ -309,6 +358,44 @@ export class DashboardPage {
     ).toHaveCount(0);
   }
 
+  private sidebarLabelRow(labelName: string): Locator {
+    return this.page
+      .locator('aside [data-testid="sidebar-labels"] li')
+      .filter({ has: this.page.getByRole('button', { name: labelName, exact: true }) })
+      .first();
+  }
+
+  async renameSidebarLabel(currentName: string, nextName: string) {
+    await this.ensureSidebarOpen();
+    const row = this.sidebarLabelRow(currentName);
+    await row.getByRole('button', { name: `Label options for ${currentName}` }).click();
+    const renameMenuItem = this.page.getByRole('menuitem', { name: 'Rename' });
+    if (await renameMenuItem.count() > 0) {
+      await renameMenuItem.click();
+    } else {
+      await this.page.getByRole('button', { name: 'Rename', exact: true }).last().click();
+    }
+    const input = this.page.getByPlaceholder('Rename label...');
+    await input.fill(nextName);
+    await input.press('Enter');
+    await this.expectLabelInSidebar(nextName);
+  }
+
+  async deleteSidebarLabel(labelName: string) {
+    await this.ensureSidebarOpen();
+    const row = this.sidebarLabelRow(labelName);
+    await row.getByRole('button', { name: `Label options for ${labelName}` }).click();
+    const deleteMenuItem = this.page.getByRole('menuitem', { name: 'Delete' });
+    if (await deleteMenuItem.count() > 0) {
+      await deleteMenuItem.click();
+    } else {
+      await this.page.getByRole('button', { name: 'Delete', exact: true }).last().click();
+    }
+    const confirmDialog = this.page.getByRole('dialog').last();
+    await confirmDialog.getByRole('button', { name: 'Delete' }).click();
+    await this.expectLabelNotInSidebar(labelName);
+  }
+
   /** Opens a note, assigns a todo item at the given index to a user, then closes the modal. */
   async assignTodoItemToUser(noteTitle: string, itemIndex: number, username: string) {
     await this.openNote(noteTitle);
@@ -324,7 +411,7 @@ export class DashboardPage {
     const pickerPopover = this.page.locator('.max-h-48');
     await pickerPopover.getByText(username).click();
 
-    await this.page.click('button[aria-label="Close"]');
+    await this.closeActiveDialog();
   }
 
   /** Asserts that Archive and Bin appear directly after a given label in the sidebar with no large gap. */

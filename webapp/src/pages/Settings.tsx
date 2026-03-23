@@ -280,6 +280,7 @@ const Settings = ({ onLogout }: SettingsProps) => {
       value={searchQuery}
       onChange={setSearchQuery}
       onSubmit={handleSearch}
+      stopEscapePropagation={true}
     />
   );
   const sidebarChildren = (

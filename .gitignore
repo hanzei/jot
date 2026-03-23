@@ -35,6 +35,9 @@ dist/
 build/
 *.local
 
+# Claude Code local settings
+.claude/settings.local.json
+
 # Editor directories and files
 .vscode/*
 !.vscode/extensions.json

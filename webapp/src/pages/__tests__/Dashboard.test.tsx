@@ -1,12 +1,13 @@
-import { render, screen, waitFor, fireEvent } from '@testing-library/react'
+import { render, screen, waitFor, fireEvent, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
-import { MemoryRouter, useLocation, Routes, Route } from 'react-router'
+import { MemoryRouter, useLocation, useNavigate, Routes, Route } from 'react-router'
 import { type ReactNode } from 'react'
 import Dashboard from '../Dashboard'
-import type { Note, Label } from '@jot/shared'
-import { notes, labels } from '@/utils/api'
+import type { AuthResponse, Note, Label, NoteSort, UserSettings } from '@jot/shared'
+import { notes, labels, users } from '@/utils/api'
 import * as auth from '@/utils/auth'
+import { useSSE } from '@/utils/useSSE'
 import { createMockNote } from '@/utils/__tests__/test-helpers'
 import { ToastProvider } from '@/components/Toast'
 
@@ -27,12 +28,23 @@ vi.mock('@/utils/api', () => ({
   },
   users: {
     search: vi.fn().mockResolvedValue([]),
+    updateMe: vi.fn().mockResolvedValue({
+      settings: {
+        user_id: 'user1',
+        language: 'system',
+        theme: 'system',
+        note_sort: 'manual',
+        updated_at: '2023-01-01T00:00:00Z',
+      },
+    }),
   },
 }))
 
 vi.mock('@/utils/auth', () => ({
   removeUser: vi.fn(),
   getUser: vi.fn(),
+  getSettings: vi.fn(),
+  setSettings: vi.fn(),
   isAdmin: vi.fn(),
 }))
 
@@ -128,17 +140,18 @@ vi.mock('@/components/AppLayout', () => ({
 }))
 
 vi.mock('@/components/SortableNoteCard', () => ({
-  default: ({ note, onEdit, onDelete, onShare, onRestore, onPermanentlyDelete, inBin, onRefresh }: {
+  default: ({ note, onEdit, onDelete, onShare, onRestore, onPermanentlyDelete, disabled, inBin, onRefresh }: {
     note: Note;
     onEdit?: (note: Note) => void;
     onDelete?: (id: string) => void;
     onShare?: (note: Note) => void;
     onRestore?: (id: string) => void;
     onPermanentlyDelete?: (id: string) => void;
+    disabled?: boolean;
     inBin?: boolean;
     onRefresh?: () => void;
   }) => (
-    <div data-testid={`note-card-${note.id}`}>
+    <div data-testid={`note-card-${note.id}`} data-disabled={disabled ? 'true' : 'false'}>
       <h3>{note.title}</h3>
       <p>{note.content}</p>
       {inBin ? (
@@ -159,11 +172,12 @@ vi.mock('@/components/SortableNoteCard', () => ({
 }))
 
 vi.mock('@/components/NoteModal', () => ({
-  default: ({ note, onClose, onSave }: { note?: Note | null; onClose?: () => void; onSave?: () => void }) => (
+  default: ({ note, onClose, onSave, onRefresh }: { note?: Note | null; onClose?: () => void; onSave?: () => void; onRefresh?: () => void }) => (
     <div data-testid="note-modal">
       <h2>{note ? 'Edit Note' : 'New Note'}</h2>
       <button onClick={onClose} data-testid="modal-close">Close</button>
       <button onClick={onSave} data-testid="modal-save">Save</button>
+      <button onClick={onRefresh} data-testid="modal-refresh">Refresh</button>
     </div>
   ),
 }))
@@ -213,6 +227,13 @@ describe('Dashboard', () => {
       has_profile_icon: false,
     })
     vi.mocked(auth.isAdmin).mockReturnValue(false)
+    vi.mocked(auth.getSettings).mockReturnValue({
+      user_id: 'user1',
+      language: 'system',
+      theme: 'system',
+      note_sort: 'manual',
+      updated_at: '2023-01-01T00:00:00Z',
+    })
     vi.mocked(notes.getAll).mockResolvedValue([])
   })
 
@@ -296,6 +317,27 @@ describe('Dashboard', () => {
       expect(searchInput).toHaveValue('test query')
     })
 
+    it('clears search input when escape is pressed', async () => {
+      const mockGetAll = vi.mocked(notes.getAll)
+
+      renderDashboard(['/?search=escape%20query'])
+
+      await waitFor(() => {
+        const searchInput = screen.getByPlaceholderText('Search notes...')
+        expect(searchInput).toBeInTheDocument()
+        expect(searchInput).toHaveValue('escape query')
+        expect(mockGetAll).toHaveBeenCalledWith(false, 'escape query', false, '', false)
+      })
+
+      const searchInput = screen.getByPlaceholderText('Search notes...')
+      fireEvent.keyDown(searchInput, { key: 'Escape', code: 'Escape' })
+
+      await waitFor(() => {
+        expect(searchInput).toHaveValue('')
+        expect(mockGetAll).toHaveBeenLastCalledWith(false, '', false, '', false)
+      })
+    })
+
     it('calls API with search query', async () => {
       const user = userEvent.setup()
       const mockGetAll = vi.mocked(notes.getAll)
@@ -372,6 +414,194 @@ describe('Dashboard', () => {
       await waitFor(() => {
         expect(mockGetAll).toHaveBeenCalledWith(false, 'abc', false, '', false)
       })
+    })
+  })
+
+  describe('Sorting', () => {
+    it('renders the sort control with the saved preference', async () => {
+      vi.mocked(auth.getSettings).mockReturnValue({
+        user_id: 'user1',
+        language: 'system',
+        theme: 'system',
+        note_sort: 'unsupported' as unknown as NoteSort,
+        updated_at: '2023-01-01T00:00:00Z',
+      })
+
+      renderDashboard()
+
+      await waitFor(() => {
+        expect(screen.getByTestId('dashboard-sort-select')).toHaveValue('manual')
+      })
+    })
+
+    it('sorts pinned and unpinned notes by last modified within their groups', async () => {
+      vi.mocked(auth.getSettings).mockReturnValue({
+        user_id: 'user1',
+        language: 'system',
+        theme: 'system',
+        note_sort: 'updated_at',
+        updated_at: '2023-01-01T00:00:00Z',
+      })
+      vi.mocked(notes.getAll).mockResolvedValue([
+        createMockNote({ id: 'unpinned-old', title: 'Older unpinned', pinned: false, updated_at: '2024-01-01T00:00:00Z' }),
+        createMockNote({ id: 'pinned-old', title: 'Older pinned', pinned: true, updated_at: '2024-01-01T00:00:00Z' }),
+        createMockNote({ id: 'unpinned-new', title: 'Newer unpinned', pinned: false, updated_at: '2024-01-03T00:00:00Z' }),
+        createMockNote({ id: 'pinned-new', title: 'Newer pinned', pinned: true, updated_at: '2024-01-03T00:00:00Z' }),
+      ])
+
+      renderDashboard()
+
+      await waitFor(() => {
+        const renderedOrder = screen.getAllByTestId(/^note-card-/).map(card => card.getAttribute('data-testid'))
+        expect(renderedOrder).toEqual([
+          'note-card-pinned-new',
+          'note-card-pinned-old',
+          'note-card-unpinned-new',
+          'note-card-unpinned-old',
+        ])
+      })
+    })
+
+    it('persists sort changes and disables manual reordering for non-manual sorts', async () => {
+      const user = userEvent.setup()
+      vi.mocked(notes.getAll).mockResolvedValue([
+        createMockNote({ id: '1', title: 'A note' }),
+        createMockNote({ id: '2', title: 'B note' }),
+      ])
+      vi.mocked(users.updateMe).mockResolvedValue({
+        user: {
+          id: 'user1',
+          username: 'testuser',
+          first_name: '',
+          last_name: '',
+          role: 'user',
+          created_at: '2023-01-01T00:00:00Z',
+          updated_at: '2023-01-01T00:00:00Z',
+          has_profile_icon: false,
+        },
+        settings: {
+          user_id: 'user1',
+          language: 'system',
+          theme: 'system',
+          note_sort: 'updated_at',
+          updated_at: '2023-01-01T00:00:00Z',
+        },
+      })
+
+      renderDashboard()
+
+      const sortSelect = await screen.findByTestId('dashboard-sort-select')
+      await user.selectOptions(sortSelect, 'updated_at')
+
+      await waitFor(() => {
+        expect(users.updateMe).toHaveBeenCalledWith({ note_sort: 'updated_at' })
+        expect(screen.getByTestId('manual-reorder-disabled-notice')).toBeInTheDocument()
+        expect(screen.getByTestId('note-card-1')).toHaveAttribute('data-disabled', 'true')
+      })
+
+      expect(auth.setSettings).toHaveBeenCalledWith(expect.objectContaining({ note_sort: 'updated_at' }))
+    })
+
+    it('rolls back sort changes when persistence fails', async () => {
+      const user = userEvent.setup()
+      let currentSettings: UserSettings = {
+        user_id: 'user1',
+        language: 'system',
+        theme: 'system',
+        note_sort: 'manual',
+        updated_at: '2023-01-01T00:00:00Z',
+      }
+      vi.mocked(auth.getSettings).mockImplementation(() => currentSettings)
+      vi.mocked(auth.setSettings).mockImplementation((settings) => {
+        currentSettings = settings
+      })
+      vi.mocked(notes.getAll).mockResolvedValue([
+        createMockNote({ id: '1', title: 'A note' }),
+        createMockNote({ id: '2', title: 'B note' }),
+      ])
+      vi.mocked(users.updateMe).mockRejectedValueOnce(new Error('save failed'))
+
+      renderDashboard()
+
+      const sortSelect = await screen.findByTestId('dashboard-sort-select')
+      await user.selectOptions(sortSelect, 'updated_at')
+
+      await waitFor(() => {
+        expect(users.updateMe).toHaveBeenCalledWith({ note_sort: 'updated_at' })
+        expect(sortSelect).toHaveValue('manual')
+        expect(screen.queryByTestId('manual-reorder-disabled-notice')).not.toBeInTheDocument()
+        expect(screen.getByTestId('note-card-1')).toHaveAttribute('data-disabled', 'false')
+      })
+
+      expect(currentSettings.note_sort).toBe('manual')
+      expect(auth.setSettings).toHaveBeenLastCalledWith(expect.objectContaining({ note_sort: 'manual' }))
+    })
+
+    it('keeps the final sort when an earlier persistence request fails later', async () => {
+      const user = userEvent.setup()
+      let currentSettings: UserSettings = {
+        user_id: 'user1',
+        language: 'system',
+        theme: 'system',
+        note_sort: 'manual',
+        updated_at: '2023-01-01T00:00:00Z',
+      }
+      vi.mocked(auth.getSettings).mockImplementation(() => currentSettings)
+      vi.mocked(auth.setSettings).mockImplementation((settings) => {
+        currentSettings = settings
+      })
+      vi.mocked(notes.getAll).mockResolvedValue([
+        createMockNote({ id: '1', title: 'A note' }),
+        createMockNote({ id: '2', title: 'B note' }),
+      ])
+
+      let rejectFirstRequest: ((reason?: unknown) => void) | undefined
+      const firstRequest = new Promise<AuthResponse>((_, reject) => {
+        rejectFirstRequest = reject
+      })
+
+      vi.mocked(users.updateMe)
+        .mockReturnValueOnce(firstRequest)
+        .mockResolvedValueOnce({
+          user: {
+            id: 'user1',
+            username: 'testuser',
+            first_name: '',
+            last_name: '',
+            role: 'user',
+            created_at: '2023-01-01T00:00:00Z',
+            updated_at: '2023-01-01T00:00:00Z',
+            has_profile_icon: false,
+          },
+          settings: {
+            user_id: 'user1',
+            language: 'system',
+            theme: 'system',
+            note_sort: 'created_at',
+            updated_at: '2023-01-01T00:00:00Z',
+          },
+        })
+
+      renderDashboard()
+
+      const sortSelect = await screen.findByTestId('dashboard-sort-select')
+      await user.selectOptions(sortSelect, 'updated_at')
+      await user.selectOptions(sortSelect, 'created_at')
+
+      await waitFor(() => {
+        expect(sortSelect).toHaveValue('created_at')
+        expect(screen.getByTestId('manual-reorder-disabled-notice')).toBeInTheDocument()
+      })
+
+      rejectFirstRequest?.(new Error('stale failure'))
+
+      await waitFor(() => {
+        expect(sortSelect).toHaveValue('created_at')
+        expect(screen.getByTestId('note-card-1')).toHaveAttribute('data-disabled', 'true')
+      })
+
+      expect(currentSettings.note_sort).toBe('created_at')
+      expect(auth.setSettings).toHaveBeenLastCalledWith(expect.objectContaining({ note_sort: 'created_at' }))
     })
   })
 
@@ -616,6 +846,108 @@ describe('Dashboard', () => {
         expect(notes.getById).toHaveBeenCalledWith('abc123')
         expect(screen.getByTestId('note-modal')).toBeInTheDocument()
         expect(screen.getByText('Edit Note')).toBeInTheDocument()
+      })
+    })
+
+    it('opens modal when navigating to a permalink route after initial render', async () => {
+      const user = userEvent.setup()
+      const mockNote = createMockNote({ id: 'abc123', title: 'Permalink Note' })
+      vi.mocked(notes.getAll).mockResolvedValue([mockNote])
+      vi.mocked(notes.getById).mockResolvedValue(mockNote)
+
+      const NavigateToNoteButton = () => {
+        const navigate = useNavigate()
+
+        return (
+          <button onClick={() => navigate('/notes/abc123')} data-testid="navigate-to-note">
+            Open permalink
+          </button>
+        )
+      }
+
+      render(
+        <MemoryRouter initialEntries={['/']}>
+          <NavigateToNoteButton />
+          <ToastProvider>
+            <Routes>
+              <Route element={<Dashboard onLogout={vi.fn()} />}>
+                <Route index element={null} />
+                <Route path="notes/:noteId" element={null} />
+              </Route>
+            </Routes>
+          </ToastProvider>
+        </MemoryRouter>
+      )
+
+      await waitFor(() => {
+        expect(screen.getByTestId('navigate-to-note')).toBeInTheDocument()
+      })
+
+      await user.click(screen.getByTestId('navigate-to-note'))
+
+      await waitFor(() => {
+        expect(notes.getById).toHaveBeenCalledWith('abc123')
+        expect(screen.getByTestId('note-modal')).toBeInTheDocument()
+        expect(screen.getByText('Edit Note')).toBeInTheDocument()
+      })
+    })
+
+    it('clears the current modal before loading a different permalink note', async () => {
+      const user = userEvent.setup()
+      const currentNote = createMockNote({ id: 'abc123', title: 'Current Note' })
+      let resolveNextNote: ((note: Note) => void) | undefined
+
+      vi.mocked(notes.getById)
+        .mockResolvedValueOnce(currentNote)
+        .mockImplementationOnce(() => new Promise<Note>((resolve) => {
+          resolveNextNote = resolve
+        }))
+
+      const NavigateToNextNoteButton = () => {
+        const navigate = useNavigate()
+
+        return (
+          <button onClick={() => navigate('/notes/next-note')} data-testid="navigate-to-next-note">
+            Open next permalink
+          </button>
+        )
+      }
+
+      render(
+        <MemoryRouter initialEntries={['/notes/abc123']}>
+          <NavigateToNextNoteButton />
+          <ToastProvider>
+            <Routes>
+              <Route element={<Dashboard onLogout={vi.fn()} />}>
+                <Route index element={null} />
+                <Route path="notes/:noteId" element={null} />
+              </Route>
+            </Routes>
+          </ToastProvider>
+        </MemoryRouter>
+      )
+
+      await waitFor(() => {
+        expect(notes.getById).toHaveBeenCalledWith('abc123')
+        expect(screen.getByTestId('note-modal')).toBeInTheDocument()
+      })
+
+      await user.click(screen.getByTestId('navigate-to-next-note'))
+
+      await waitFor(() => {
+        expect(notes.getById).toHaveBeenNthCalledWith(2, 'next-note')
+      })
+
+      await waitFor(() => {
+        expect(screen.queryByTestId('note-modal')).not.toBeInTheDocument()
+      })
+
+      await act(async () => {
+        resolveNextNote?.(createMockNote({ id: 'next-note', title: 'Next Note' }))
+      })
+
+      await waitFor(() => {
+        expect(screen.getByTestId('note-modal')).toBeInTheDocument()
       })
     })
 
@@ -1248,6 +1580,98 @@ describe('Dashboard', () => {
       expect(mockGetAll).toHaveBeenCalledWith(true, '', false, '', false)
     })
   })
+  })
+
+  describe('Real-time label updates', () => {
+    const realtimeLabel: Label = {
+      id: 'label-realtime',
+      user_id: 'user1',
+      name: 'realtime',
+      created_at: '2024-01-01T00:00:00Z',
+      updated_at: '2024-01-01T00:00:00Z',
+    }
+
+    it('refreshes sidebar labels when an open note refreshes locally', async () => {
+      const user = userEvent.setup()
+
+      vi.mocked(notes.getAll).mockResolvedValue([createMockNote({ id: '1', title: 'Existing Note' })])
+      vi.mocked(labels.getAll)
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([realtimeLabel])
+
+      renderDashboard()
+
+      await waitFor(() => {
+        expect(screen.getByTestId('edit-1')).toBeInTheDocument()
+      })
+
+      await user.click(screen.getByTestId('edit-1'))
+
+      await waitFor(() => {
+        expect(screen.getByTestId('note-modal')).toBeInTheDocument()
+      })
+
+      await user.click(screen.getByTestId('modal-refresh'))
+
+      await waitFor(() => {
+        expect(labels.getAll).toHaveBeenCalledTimes(2)
+      })
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'realtime' })).toBeInTheDocument()
+      })
+    })
+
+    it('refreshes sidebar labels when SSE reports created and updated notes', async () => {
+      vi.mocked(labels.getAll)
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([realtimeLabel])
+        .mockResolvedValueOnce([realtimeLabel])
+
+      renderDashboard()
+
+      await waitFor(() => {
+        expect(useSSE).toHaveBeenCalled()
+        expect(labels.getAll).toHaveBeenCalledTimes(1)
+      })
+
+      const sseOptions = vi.mocked(useSSE).mock.calls[0]?.[0]
+      expect(sseOptions).toBeDefined()
+
+      await act(async () => {
+        sseOptions?.onEvent({
+          type: 'note_created',
+          note_id: 'note-1',
+          note: createMockNote({ id: 'note-1', labels: [realtimeLabel] }),
+          source_user_id: 'user1',
+        })
+      })
+
+      await waitFor(() => {
+        expect(labels.getAll).toHaveBeenCalledTimes(2)
+      })
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'realtime' })).toBeInTheDocument()
+      })
+
+      await act(async () => {
+        sseOptions?.onEvent({
+          type: 'note_updated',
+          note_id: 'note-1',
+          note: createMockNote({ id: 'note-1', labels: [realtimeLabel] }),
+          source_user_id: 'user1',
+        })
+      })
+
+      await waitFor(() => {
+        expect(labels.getAll).toHaveBeenCalledTimes(3)
+      })
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'realtime' })).toBeInTheDocument()
+      })
+    })
   })
 
   describe('My Todo Filtering', () => {

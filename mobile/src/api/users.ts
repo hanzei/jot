@@ -16,7 +16,7 @@ export async function shareNote(noteId: string, userId: string): Promise<void> {
 }
 
 export async function unshareNote(noteId: string, userId: string): Promise<void> {
-  await api.delete(`/notes/${noteId}/share`, { data: { user_id: userId } });
+  await api.delete(`/notes/${noteId}/shares/${userId}`);
 }
 
 export async function getNoteShares(noteId: string): Promise<NoteShare[]> {

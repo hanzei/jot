@@ -15,6 +15,15 @@ func (c *Client) AdminListUsers(ctx context.Context) ([]*User, error) {
 	return resp.Users, nil
 }
 
+// AdminGetStats returns aggregate system statistics (admin only).
+func (c *Client) AdminGetStats(ctx context.Context) (*AdminStatsResponse, error) {
+	var resp AdminStatsResponse
+	if err := c.doJSON(ctx, http.MethodGet, "/api/v1/admin/stats", nil, &resp); err != nil {
+		return nil, err
+	}
+	return &resp, nil
+}
+
 // AdminCreateUser creates a user account (admin only).
 func (c *Client) AdminCreateUser(ctx context.Context, username, password string, role Role) (*User, error) {
 	var user User

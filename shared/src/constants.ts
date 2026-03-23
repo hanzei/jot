@@ -1,4 +1,7 @@
 export const PASSWORD_MIN_LENGTH = 4;
+export const SUPPORTED_LANGUAGES = ['en', 'de', 'es', 'fr', 'pt', 'it', 'nl', 'pl'] as const;
+export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number];
+export type LanguagePreference = 'system' | SupportedLanguage;
 
 export const VALIDATION = {
   TITLE_MAX_LENGTH: 200,

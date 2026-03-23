@@ -48,7 +48,7 @@ tasks:
   lint-server:
     desc: Run server linting with golangci-lint
     dir: server
-    cmd: golangci-lint run
+    cmd: go tool golangci-lint run
 
   lint-webapp:
     desc: Run webapp linting

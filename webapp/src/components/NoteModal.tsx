@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { XMarkIcon, PlusIcon, TrashIcon, ChevronDownIcon, ArchiveBoxIcon, ArchiveBoxXMarkIcon, ShareIcon, UserPlusIcon, CheckIcon, TagIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon, PlusIcon, TrashIcon, ChevronDownIcon, ArchiveBoxIcon, ArchiveBoxXMarkIcon, ShareIcon, UserPlusIcon, CheckIcon, TagIcon, DocumentDuplicateIcon, DevicePhoneMobileIcon } from '@heroicons/react/24/outline';
 import { Dialog, DialogPanel } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
 import { VALIDATION, NOTE_COLORS, buildCollaborators, type Note, type NoteType, type CreateNoteRequest, type UpdateNoteRequest, type Label, type User, type Collaborator } from '@jot/shared';
@@ -10,6 +10,7 @@ import AssigneePicker from '@/components/AssigneePicker';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { useToast } from '@/hooks/useToast';
 import { buildShareAvatars } from '@/utils/shareAvatars';
+import { buildMobileDeepLink } from '@/utils/deepLink';
 
 // Validation functions
 type TFunction = (key: string, opts?: Record<string, unknown>) => string;
@@ -63,6 +64,7 @@ interface NoteModalProps {
   onRefresh?: () => void;
   onShare?: (note: Note) => void;
   onDelete?: (noteId: string) => void;
+  onDuplicate?: (noteId: string) => Promise<void> | void;
   isOwner?: boolean;
   usersById?: Map<string, User>;
   currentUserId?: string;
@@ -86,17 +88,23 @@ interface SortableItemProps {
   onRemoveTodoItem: (itemId: string) => void;
   isCompleted?: boolean;
   onKeyDown?: (index: number, e: React.KeyboardEvent<HTMLInputElement>) => void;
+  onPaste?: (index: number, e: React.ClipboardEvent<HTMLInputElement>) => void;
   inputRef?: React.RefCallback<HTMLInputElement>;
   onIndentChange?: (itemId: string, delta: 1 | -1) => void;
   isShared?: boolean;
   collaborators?: Collaborator[];
   usersById?: Map<string, User>;
   onAssignItem?: (itemId: string, userId: string) => void;
+  completedItemTexts?: string[];
+  onAcceptSuggestion?: (currentItemId: string, suggestionText: string) => void;
 }
 
-function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isCompleted = false, onKeyDown, inputRef, onIndentChange, isShared, collaborators, usersById, onAssignItem }: SortableItemProps) {
+function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isCompleted = false, onKeyDown, onPaste, inputRef, onIndentChange, isShared, collaborators, usersById, onAssignItem, completedItemTexts = [], onAcceptSuggestion }: SortableItemProps) {
   const { t } = useTranslation();
   const [showAssigneePicker, setShowAssigneePicker] = useState(false);
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
+  const suggestionsRef = useRef<HTMLDivElement>(null);
   const closeAssigneePicker = useCallback(() => setShowAssigneePicker(false), []);
   const {
     attributes,
@@ -119,6 +127,31 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
   const assignedUser = item.assignedTo ? usersById?.get(item.assignedTo) : undefined;
   const showAssignUI = isShared && collaborators && collaborators.length > 0 && onAssignItem;
   const placeholder = item.text ? '' : t('note.itemPlaceholder');
+
+  const suggestions = useMemo(() => {
+    const trimmed = item.text.trim();
+    if (!trimmed) return [];
+    const q = trimmed.toLowerCase();
+    const results: string[] = [];
+    for (const text of completedItemTexts) {
+      const lower = text.toLowerCase();
+      if (lower.includes(q) && lower !== q) {
+        results.push(text);
+        if (results.length === 5) break;
+      }
+    }
+    return results;
+  }, [item.text, completedItemTexts]);
+
+  const selectSuggestion = (text: string) => {
+    if (onAcceptSuggestion) {
+      onAcceptSuggestion(item.id, text);
+    } else {
+      onUpdateTodoItem(index, 'text', text);
+    }
+    setShowSuggestions(false);
+    setSelectedSuggestionIndex(-1);
+  };
 
   return (
     <div
@@ -149,26 +182,102 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
         className="h-4 w-4 text-blue-600 rounded"
       />
       <div className="flex items-center min-w-0">
-        <input
-          type="text"
-          data-testid="todo-item-input"
-          placeholder={placeholder}
-          size={Math.max((item.text || placeholder).length, 1) + 1}
-          className={`field-sizing-content p-1 bg-transparent border-none outline-none min-w-0 placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white ${
-            isCompleted ? 'line-through text-gray-500 dark:text-gray-400' : ''
-          }`}
-          value={item.text}
-          onChange={(e) => onUpdateTodoItem(index, 'text', e.target.value)}
-          onKeyDown={(e) => {
-            if (e.key === 'Tab' && onIndentChange && !isCompleted) {
-              e.preventDefault();
-              onIndentChange(item.id, e.shiftKey ? -1 : 1);
-              return;
-            }
-            if (onKeyDown) onKeyDown(index, e);
-          }}
-          ref={inputRef}
-        />
+        <div className="relative min-w-0">
+          <input
+            type="text"
+            data-testid="todo-item-input"
+            placeholder={placeholder}
+            size={Math.max((item.text || placeholder).length, 1) + 1}
+            className={`field-sizing-content p-1 bg-transparent border-none outline-none min-w-0 placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white ${
+              isCompleted ? 'line-through text-gray-500 dark:text-gray-400' : ''
+            }`}
+            value={item.text}
+            onChange={(e) => {
+              onUpdateTodoItem(index, 'text', e.target.value);
+              if (e.target.value.trim()) setShowSuggestions(true);
+              setSelectedSuggestionIndex(-1);
+            }}
+            onFocus={() => {
+              if (suggestions.length > 0) setShowSuggestions(true);
+            }}
+            onBlur={(e) => {
+              const related = e.relatedTarget as Node | null;
+              if (suggestionsRef.current?.contains(related)) return;
+              // Delay to allow touch tap on suggestion to fire click first
+              setTimeout(() => {
+                setShowSuggestions(false);
+                setSelectedSuggestionIndex(-1);
+              }, 150);
+            }}
+            aria-autocomplete="list"
+            aria-expanded={showSuggestions && suggestions.length > 0}
+            aria-controls={showSuggestions && suggestions.length > 0 ? `suggestions-${id}` : undefined}
+            aria-activedescendant={selectedSuggestionIndex >= 0 ? `suggestion-${id}-${selectedSuggestionIndex}` : undefined}
+            onKeyDown={(e) => {
+              const suggestionsVisible = showSuggestions && suggestions.length > 0;
+              if (suggestionsVisible && !e.nativeEvent.isComposing && e.nativeEvent.keyCode !== 229) {
+                if (e.key === 'ArrowDown') {
+                  e.preventDefault();
+                  setSelectedSuggestionIndex(prev => Math.min(prev + 1, suggestions.length - 1));
+                  return;
+                }
+                if (e.key === 'ArrowUp') {
+                  e.preventDefault();
+                  setSelectedSuggestionIndex(prev => Math.max(prev - 1, -1));
+                  return;
+                }
+                if (e.key === 'Enter') {
+                  e.preventDefault();
+                  const idxToAccept = selectedSuggestionIndex >= 0 ? selectedSuggestionIndex : 0;
+                  selectSuggestion(suggestions[idxToAccept]);
+                  return;
+                }
+                if (e.key === 'Escape' || e.key === 'Tab') {
+                  e.preventDefault();
+                  setShowSuggestions(false);
+                  setSelectedSuggestionIndex(-1);
+                  return;
+                }
+              }
+              if (e.key === 'Tab' && onIndentChange && !isCompleted) {
+                e.preventDefault();
+                onIndentChange(item.id, e.shiftKey ? -1 : 1);
+                return;
+              }
+              if (onKeyDown) onKeyDown(index, e);
+            }}
+            onPaste={(e) => onPaste?.(index, e)}
+            ref={inputRef}
+          />
+          {showSuggestions && suggestions.length > 0 && !isCompleted && (
+            <div
+              ref={suggestionsRef}
+              id={`suggestions-${id}`}
+              role="listbox"
+              aria-label={t('note.completedSuggestions')}
+              className="absolute z-20 top-full left-0 mt-0.5 min-w-40 max-w-64 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded-md shadow-lg max-h-36 overflow-y-auto"
+            >
+              {suggestions.map((text, i) => (
+                <div
+                  key={i}
+                  id={`suggestion-${id}-${i}`}
+                  role="option"
+                  aria-selected={i === selectedSuggestionIndex}
+                  className={`px-3 py-1.5 text-sm cursor-pointer truncate ${
+                    i === selectedSuggestionIndex
+                      ? 'bg-blue-50 dark:bg-blue-900/20 text-blue-900 dark:text-blue-300'
+                      : 'text-gray-700 dark:text-gray-200 hover:bg-gray-50 dark:hover:bg-slate-700'
+                  }`}
+                  onMouseDown={(e) => e.preventDefault()}
+                  onClick={() => selectSuggestion(text)}
+                  onMouseEnter={() => setSelectedSuggestionIndex(i)}
+                >
+                  {text}
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
 
         {showAssignUI && (() => {
           const assigneeDisplayName = assignedUser
@@ -227,7 +336,7 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
   );
 }
 
-export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, onDelete, isOwner = true, usersById, currentUserId }: NoteModalProps) {
+export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, onDelete, onDuplicate, isOwner = true, usersById, currentUserId }: NoteModalProps) {
   const { t, i18n } = useTranslation();
   const { showToast } = useToast();
   const [title, setTitle] = useState('');
@@ -261,10 +370,20 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   );
 
   // Separate completed and uncompleted items with memoization
-  const { uncompletedItems, completedItems } = useMemo(() => ({
-    uncompletedItems: items.filter(item => !item.completed),
-    completedItems: items.filter(item => item.completed)
-  }), [items]);
+  const { uncompletedItems, completedItems, completedItemTexts } = useMemo(() => {
+    const uncompletedItems = items.filter(item => !item.completed);
+    const completedItems = items.filter(item => item.completed);
+    const seen = new Set<string>();
+    const completedItemTexts: string[] = [];
+    for (const item of completedItems) {
+      const trimmed = item.text.trim();
+      if (trimmed && !seen.has(trimmed.toLowerCase())) {
+        seen.add(trimmed.toLowerCase());
+        completedItemTexts.push(trimmed);
+      }
+    }
+    return { uncompletedItems, completedItems, completedItemTexts };
+  }, [items]);
 
   const colorMeta: Record<string, { name: string; class: string }> = {
     '#ffffff': { name: t('note.colorWhite'), class: 'bg-white dark:bg-slate-800 border-gray-300 dark:border-slate-600' },
@@ -283,6 +402,13 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     name: colorMeta[value]?.name ?? value,
     class: colorMeta[value]?.class ?? '',
   }));
+
+  const noteDeepLinkHref = useMemo(() => {
+    if (!note?.id) {
+      return null;
+    }
+    return buildMobileDeepLink(`/notes/${note.id}`, window.location.origin);
+  }, [note?.id]);
 
   useEffect(() => {
     if (note) {
@@ -514,6 +640,81 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     }
   };
 
+  const handleItemPaste = (index: number, e: React.ClipboardEvent<HTMLInputElement>) => {
+    const text = e.clipboardData.getData('text');
+    const rawLines = text.split(/\r\n|\r|\n/);
+    const lines = rawLines.filter(l => l.trim().length > 0);
+
+    if (lines.length <= 1) {
+      return;
+    }
+
+    e.preventDefault();
+
+    const input = e.currentTarget;
+    const selStart = input.selectionStart ?? input.value.length;
+    const selEnd = input.selectionEnd ?? input.value.length;
+    const before = input.value.slice(0, selStart);
+    const after = input.value.slice(selEnd);
+
+    const currentItem = uncompletedItems[index];
+    if (!currentItem) return;
+
+    const insertAfterPos = items.findIndex(item => item.id === currentItem.id);
+
+    const firstLineText = (before + lines[0]).slice(0, VALIDATION.ITEM_TEXT_MAX_LENGTH);
+
+    const remainingLines = lines.slice(1);
+    const newItems: TodoItem[] = remainingLines.map((line, i) => {
+      const isLast = i === remainingLines.length - 1;
+      const lineText = isLast ? line + after : line;
+      return {
+        id: generateItemId(),
+        text: lineText.slice(0, VALIDATION.ITEM_TEXT_MAX_LENGTH),
+        completed: false,
+        position: 0,
+        indentLevel: 0,
+        assignedTo: '',
+      };
+    });
+
+    const allLineTexts = [firstLineText, ...newItems.map(item => item.text)];
+    for (const lineText of allLineTexts) {
+      const validationError = validateItemText(lineText, t);
+      if (validationError) {
+        showError(validationError);
+        return;
+      }
+    }
+
+    const updatedItems = items.map(item =>
+      item.id === currentItem.id ? { ...item, text: firstLineText } : item
+    );
+    updatedItems.splice(insertAfterPos + 1, 0, ...newItems);
+
+    let pos = 0;
+    const renumbered = updatedItems.map(item =>
+      item.completed ? item : { ...item, position: pos++ }
+    );
+
+    setItems(renumbered);
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = undefined;
+    }
+    autoSaveNote(renumbered);
+
+    const lastNewItem = newItems[newItems.length - 1];
+    setTimeout(() => {
+      const el = itemInputRefs.current.get(lastNewItem.id);
+      if (el) {
+        el.focus();
+        const cursorPos = Math.max(0, el.value.length - after.length);
+        el.setSelectionRange(cursorPos, cursorPos);
+      }
+    }, 0);
+  };
+
   const removeTodoItem = (itemId: string) => {
     const newItems = items.filter(item => item.id !== itemId);
     
@@ -674,6 +875,73 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     }
   };
 
+  // Restores a completed item at the position of the current (placeholder) item,
+  // keeping its assignment, and removes the placeholder.
+  const acceptSuggestion = (currentItemId: string, suggestionText: string) => {
+    const completedItem = completedItems.find(
+      item => item.text.trim().toLowerCase() === suggestionText.toLowerCase()
+    );
+
+    if (!completedItem) {
+      // No matching completed item — fall back to just updating the text
+      const updatedItems = items.map(item =>
+        item.id === currentItemId ? { ...item, text: suggestionText } : item
+      );
+      setItems(updatedItems);
+      if (saveTimeoutRef.current) {
+        clearTimeout(saveTimeoutRef.current);
+        saveTimeoutRef.current = undefined;
+      }
+      autoSaveNote(updatedItems);
+      return;
+    }
+
+    // Position in uncompleted list where the placeholder lives
+    const insertAt = Math.max(
+      0,
+      uncompletedItems.findIndex(item => item.id === currentItemId)
+    );
+
+    // Remove the placeholder and the matched completed item from the full list
+    const filtered = items.filter(
+      item => item.id !== currentItemId && item.id !== completedItem.id
+    );
+
+    // Restore the completed item: uncompleted, keep assignee and indent
+    const restoredItem: TodoItem = {
+      ...completedItem,
+      completed: false,
+      originalPosition: undefined,
+    };
+
+    const remainingUncompleted = filtered.filter(item => !item.completed);
+    const remainingCompleted = filtered.filter(item => item.completed);
+
+    const newUncompleted = [
+      ...remainingUncompleted.slice(0, insertAt),
+      restoredItem,
+      ...remainingUncompleted.slice(insertAt),
+    ].map((item, i) => ({ ...item, position: i }));
+
+    const newItems = [...newUncompleted, ...remainingCompleted];
+    setItems(newItems);
+
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = undefined;
+    }
+    autoSaveNote(newItems);
+
+    // Restore focus to the item now sitting at the same position
+    setTimeout(() => {
+      const el = itemInputRefs.current.get(restoredItem.id);
+      if (el) {
+        el.focus();
+        el.setSelectionRange(el.value.length, el.value.length);
+      }
+    }, 0);
+  };
+
   const collaborators = useMemo<Collaborator[]>(() => {
     if (!note?.is_shared) return [];
     return buildCollaborators(note.user_id, note.shared_with, usersById);
@@ -687,6 +955,34 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     await autoSaveNote(updatedItems);
   };
 
+  const persistExistingNote = useCallback(async () => {
+    if (!note) return;
+
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = undefined;
+    }
+
+    const updateData: UpdateNoteRequest = {
+      title,
+      content,
+      pinned,
+      archived,
+      color,
+      checked_items_collapsed: checkedItemsCollapsed,
+      items: noteType === 'todo' ? items.map((item, idx) => ({
+        text: item.text,
+        position: idx,
+        completed: item.completed,
+        indent_level: item.indentLevel,
+        assigned_to: item.assignedTo,
+      })) : undefined,
+    };
+
+    await notes.update(note.id, updateData);
+    onRefresh?.();
+  }, [archived, checkedItemsCollapsed, color, content, items, note, noteType, onRefresh, pinned, title]);
+
   const handleSave = async () => {
     if (savingRef.current) return;
     savingRef.current = true;
@@ -699,29 +995,19 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     setLoading(true);
     try {
       if (note) {
-        const updateData: UpdateNoteRequest = {
-          title,
-          content,
-          pinned,
-          archived,
-          color,
-          checked_items_collapsed: checkedItemsCollapsed,
-          items: note.note_type === 'todo' ? items.map((item, idx) => ({
-            text: item.text,
-            position: idx,
-            completed: item.completed,
-            indent_level: item.indentLevel,
-            assigned_to: item.assignedTo,
-          })) : undefined,
-        };
-        await notes.update(note.id, updateData);
+        await persistExistingNote();
       } else {
         const createData: CreateNoteRequest = {
           title,
           content,
           note_type: noteType,
           color,
-          items: noteType === 'todo' ? items.map((item, idx) => ({ text: item.text, position: idx, indent_level: item.indentLevel })) : undefined,
+          items: noteType === 'todo' ? items.map((item, idx) => ({
+            text: item.text,
+            position: idx,
+            completed: item.completed,
+            indent_level: item.indentLevel,
+          })) : undefined,
           labels: noteLabels.length > 0 ? noteLabels.map(l => l.name) : undefined,
         };
         await notes.create(createData);
@@ -730,6 +1016,33 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     } catch (error) {
       console.error('Failed to save note:', error);
       showError(t('note.failedSaveChanges'));
+    } finally {
+      savingRef.current = false;
+      setLoading(false);
+    }
+  };
+
+  const handleDuplicate = async () => {
+    if (!note || !onDuplicate || loading || savingRef.current) return;
+
+    savingRef.current = true;
+    setLoading(true);
+    try {
+      await persistExistingNote();
+    } catch (error) {
+      console.error('Failed to save note before duplicate:', error);
+      showError(t('note.failedSaveChanges'));
+      savingRef.current = false;
+      setLoading(false);
+      return;
+    }
+
+    try {
+      await onDuplicate(note.id);
+      onClose();
+    } catch (error) {
+      console.error('Failed to duplicate note:', error);
+      showError(t('note.failedDuplicate'));
     } finally {
       savingRef.current = false;
       setLoading(false);
@@ -899,6 +1212,17 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
             <div className="flex items-center space-x-2">
               {note && (
                 <>
+                  {noteDeepLinkHref && (
+                    <a
+                      href={noteDeepLinkHref}
+                      className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                      title={t('nav.openMobileApp')}
+                      aria-label={t('nav.openMobileApp')}
+                      data-testid="note-open-mobile-app-toolbar-link"
+                    >
+                      <DevicePhoneMobileIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+                    </a>
+                  )}
                   {isOwner && onShare && (
                     <button
                       onClick={() => onShare(note)}
@@ -937,6 +1261,16 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                       <ArchiveBoxIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
                     )}
                   </button>
+                  {onDuplicate && (
+                    <button
+                      onClick={handleDuplicate}
+                      className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                      title={t('note.duplicate')}
+                      aria-label={t('note.duplicate')}
+                    >
+                      <DocumentDuplicateIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+                    </button>
+                  )}
                   {isOwner && onDelete && (
                     <button
                       onClick={handleDelete}
@@ -1086,6 +1420,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                           onRemoveTodoItem={removeTodoItem}
                           isCompleted={false}
                           onKeyDown={handleItemKeyDown}
+                          onPaste={handleItemPaste}
                           onIndentChange={indentTodoItem}
                           inputRef={(el) => {
                             if (el) itemInputRefs.current.set(item.id, el);
@@ -1095,6 +1430,8 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                           collaborators={collaborators}
                           usersById={usersById}
                           onAssignItem={assignItem}
+                          completedItemTexts={completedItemTexts}
+                          onAcceptSuggestion={acceptSuggestion}
                         />
                       ))}
                     </SortableContext>

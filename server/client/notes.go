@@ -89,10 +89,28 @@ func (c *Client) DeleteNotePermanently(ctx context.Context, id string) error {
 	return c.doNoContent(ctx, http.MethodDelete, fmt.Sprintf("/api/v1/notes/%s?permanent=true", id), nil)
 }
 
+// EmptyTrash permanently deletes all trashed notes owned by the authenticated user.
+func (c *Client) EmptyTrash(ctx context.Context) (*EmptyTrashResponse, error) {
+	var result EmptyTrashResponse
+	if err := c.doJSON(ctx, http.MethodDelete, "/api/v1/notes/trash", nil, &result); err != nil {
+		return nil, err
+	}
+	return &result, nil
+}
+
 // RestoreNote restores a note from trash.
 func (c *Client) RestoreNote(ctx context.Context, id string) (*Note, error) {
 	var note Note
 	if err := c.doJSON(ctx, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/restore", id), nil, &note); err != nil {
+		return nil, err
+	}
+	return &note, nil
+}
+
+// DuplicateNote creates a copy of an existing note for the authenticated user.
+func (c *Client) DuplicateNote(ctx context.Context, id string) (*Note, error) {
+	var note Note
+	if err := c.doJSON(ctx, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/duplicate", id), nil, &note); err != nil {
 		return nil, err
 	}
 	return &note, nil

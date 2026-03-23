@@ -67,6 +67,25 @@ test.describe('Notes', () => {
     await dashboardPage.expectNoteNotVisible('Delete Forever');
   });
 
+  test('empties trash in one action', async ({ dashboardPage }) => {
+    await dashboardPage.goto();
+    await dashboardPage.createNote('Trash One');
+    await dashboardPage.createNote('Trash Two');
+    await dashboardPage.createNote('Trash Three');
+
+    await dashboardPage.deleteNote('Trash One');
+    await dashboardPage.deleteNote('Trash Two');
+    await dashboardPage.deleteNote('Trash Three');
+
+    await dashboardPage.switchToBin();
+    await dashboardPage.expectEmptyTrashButtonVisible();
+
+    await dashboardPage.emptyTrash();
+
+    await dashboardPage.expectEmptyTrashButtonHidden();
+    await dashboardPage.expectEmptyState('Bin is empty');
+  });
+
   test('pins a note and it appears in the pinned section', async ({ page, dashboardPage }) => {
     await dashboardPage.goto();
     await dashboardPage.createNote('Note to Pin');
@@ -154,6 +173,187 @@ test.describe('Notes', () => {
     await dashboardPage.expectNoteAtPosition(0, 'Third Note');
     await dashboardPage.expectNoteAtPosition(1, 'Second Note');
     await dashboardPage.expectNoteAtPosition(2, 'First Note');
+  });
+
+  test('switches sort modes and persists the selected sort preference', async ({
+    page,
+    authenticatedUser,
+    dashboardPage,
+    loginPage,
+  }) => {
+    await page.setViewportSize({ width: 600, height: 1000 });
+    await dashboardPage.goto();
+
+    // These 1.1s waits keep created/updated timestamps in distinct seconds so
+    // the sort assertions stay deterministic across create/edit operations.
+    await dashboardPage.createNote('Zulu');
+    await page.waitForTimeout(1100);
+    await dashboardPage.createNote('alpha');
+    await page.waitForTimeout(1100);
+    await dashboardPage.createNote('Bravo');
+    await dashboardPage.pinNote('Zulu');
+
+    await dashboardPage.selectSort('created_at');
+    await dashboardPage.expectManualReorderDisabledNotice();
+    await dashboardPage.expectVisibleNoteTitles(['Zulu', 'Bravo', 'alpha']);
+
+    await page.waitForTimeout(1100);
+    // Patch the alpha note directly so updated_at changes deterministically without
+    // relying on modal timing or extra UI interactions in this ordering test.
+    await page.evaluate(async () => {
+      const response = await fetch('/api/v1/notes', { credentials: 'include' });
+      const notes = await response.json() as Array<{
+        id: string;
+        title: string;
+        content: string;
+        pinned: boolean;
+        archived: boolean;
+        color: string;
+        checked_items_collapsed: boolean;
+      }>;
+      const alphaNote = notes.find(note => note.title === 'alpha');
+      if (!alphaNote) {
+        throw new Error('alpha note not found');
+      }
+
+      const updateResponse = await fetch(`/api/v1/notes/${alphaNote.id}`, {
+        method: 'PATCH',
+        credentials: 'include',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({
+          title: alphaNote.title,
+          content: 'updated content',
+          pinned: alphaNote.pinned,
+          archived: alphaNote.archived,
+          color: alphaNote.color,
+          checked_items_collapsed: alphaNote.checked_items_collapsed,
+        }),
+      });
+
+      if (!updateResponse.ok) {
+        throw new Error(`Failed to update alpha note: ${updateResponse.status}`);
+      }
+    });
+    await dashboardPage.selectSort('updated_at');
+    await dashboardPage.expectVisibleNoteTitles(['Zulu', 'alpha', 'Bravo']);
+
+    await dashboardPage.selectSort('created_at');
+    await dashboardPage.expectVisibleNoteTitles(['Zulu', 'Bravo', 'alpha']);
+    expect(await dashboardPage.getSortValue()).toBe('created_at');
+
+    await page.reload();
+    expect(await dashboardPage.getSortValue()).toBe('created_at');
+    await dashboardPage.expectVisibleNoteTitles(['Zulu', 'Bravo', 'alpha']);
+
+    await dashboardPage.logout();
+    await expect(page).toHaveURL('/login');
+
+    await loginPage.login(authenticatedUser.username, authenticatedUser.password);
+    await expect(page).toHaveURL('/');
+    expect(await dashboardPage.getSortValue()).toBe('created_at');
+    await dashboardPage.expectVisibleNoteTitles(['Zulu', 'Bravo', 'alpha']);
+  });
+
+  test('duplicates text and todo notes with copied labels and cleared shares/assignments', async ({ page, dashboardPage, request }) => {
+    const collaboratorName = `dup-collab-${Date.now()}`;
+    const collaboratorPassword = 'testpass123';
+
+    const registerResp = await request.post('/api/v1/register', {
+      data: { username: collaboratorName, password: collaboratorPassword },
+    });
+    expect(registerResp.ok()).toBeTruthy();
+    const collaboratorData = await registerResp.json();
+    const collaboratorId = collaboratorData.user.id as string;
+
+    await dashboardPage.goto();
+
+    await dashboardPage.createNoteWithLabels('Source Text', 'Original text body', ['text-label']);
+    await dashboardPage.duplicateNoteFromMenu('Source Text');
+    await expect(page.getByText('Note duplicated')).toBeVisible();
+    await dashboardPage.expectNoteAtPosition(0, 'Copy of Source Text');
+    const duplicatedTextCard = dashboardPage.noteCard('Copy of Source Text');
+    await expect(duplicatedTextCard.getByText('Original text body')).toBeVisible();
+    await expect(duplicatedTextCard.getByText('text-label')).toBeVisible();
+
+    await dashboardPage.createTodoNote('Source Todo', ['Prepare agenda', 'Send follow-up']);
+    await dashboardPage.addLabelToNote('Source Todo', 'todo-label');
+    await dashboardPage.shareNoteWithUser('Source Todo', collaboratorName);
+    await dashboardPage.assignTodoItemToUser('Source Todo', 0, collaboratorName);
+
+    const cookies = await page.context().cookies();
+    const sessionCookie = cookies.find((cookie) => cookie.name === 'jot_session');
+    expect(sessionCookie, 'session cookie must exist').toBeDefined();
+    const authHeaders = { Cookie: `jot_session=${sessionCookie!.value}` };
+
+    const listNotes = async () => {
+      const response = await request.get('/api/v1/notes', { headers: authHeaders });
+      expect(response.ok()).toBeTruthy();
+      return response.json();
+    };
+
+    const findNoteByTitle = async (title: string) => {
+      const notes = await listNotes();
+      const note = notes.find((candidate: { title: string }) => candidate.title === title);
+      expect(note, `note "${title}" must exist`).toBeDefined();
+      return note as {
+        id: string;
+        title: string;
+        content: string;
+        pinned: boolean;
+        archived: boolean;
+        color: string;
+        checked_items_collapsed: boolean;
+        items: Array<{ text: string; position: number; completed: boolean; indent_level: number; assigned_to: string }>;
+        labels: Array<{ name: string }>;
+        shared_with: Array<{ shared_with_user_id: string }>;
+      };
+    };
+
+    const sourceTodo = await findNoteByTitle('Source Todo');
+    const updateResp = await request.patch(`/api/v1/notes/${sourceTodo.id}`, {
+      headers: authHeaders,
+      data: {
+        title: sourceTodo.title,
+        content: sourceTodo.content,
+        pinned: sourceTodo.pinned,
+        archived: sourceTodo.archived,
+        color: sourceTodo.color,
+        checked_items_collapsed: sourceTodo.checked_items_collapsed,
+        items: sourceTodo.items.map((item, index) => ({
+          text: item.text,
+          position: item.position,
+          completed: index === 1,
+          indent_level: index === 1 ? 1 : item.indent_level,
+          assigned_to: index === 0 ? collaboratorId : '',
+        })),
+      },
+    });
+    expect(updateResp.ok()).toBeTruthy();
+
+    await dashboardPage.openNote('Source Todo');
+    await dashboardPage.duplicateCurrentNoteFromModal();
+    await expect(page.getByText('Note duplicated')).toBeVisible();
+    await dashboardPage.expectNoteAtPosition(0, 'Copy of Source Todo');
+
+    const duplicatedTodo = await findNoteByTitle('Copy of Source Todo');
+    expect(duplicatedTodo.labels.map((label) => label.name)).toEqual(['todo-label']);
+    expect(duplicatedTodo.shared_with ?? []).toEqual([]);
+    expect(duplicatedTodo.items ?? []).toEqual([
+      expect.objectContaining({
+        text: 'Prepare agenda',
+        position: 0,
+        completed: false,
+        indent_level: 0,
+        assigned_to: '',
+      }),
+      expect.objectContaining({
+        text: 'Send follow-up',
+        position: 1,
+        completed: true,
+        indent_level: 1,
+        assigned_to: '',
+      }),
+    ]);
   });
 
   test('shows empty state when no notes exist', async ({ dashboardPage }) => {

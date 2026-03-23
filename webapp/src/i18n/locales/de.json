@@ -8,7 +8,10 @@
     "admin": "Admin",
     "logout": "Abmelden",
     "logoutConfirmTitle": "Abmelden",
-    "logoutConfirmMessage": "Möchtest du dich wirklich abmelden?"
+    "logoutConfirmMessage": "Möchtest du dich wirklich abmelden?",
+    "openMobileApp": "In mobiler App öffnen",
+    "openMobileAppDescription": "Lieber die native mobile App verwenden?",
+    "dismissMobileAppBanner": "Ausblenden"
   },
   "auth": {
     "signInTitle": "Bei Jot anmelden",
@@ -46,6 +49,14 @@
     "otherNotes": "Weitere Notizen",
     "searchPlaceholder": "Notizen suchen...",
     "searchAriaLabel": "Notizen suchen",
+    "sortLabel": "Notizen sortieren",
+    "sortOption": {
+      "manual": "Manuell",
+      "updated_at": "Zuletzt bearbeitet",
+      "created_at": "Erstellungsdatum"
+    },
+    "manualReorderDisabledTitle": "Manuelles Sortieren ist aus.",
+    "manualReorderDisabled": "Notizen sind nach {{sort}} sortiert, daher ist Drag-and-drop deaktiviert.",
     "tabNotes": "Notizen",
     "tabMyTodo": "Meine Aufgaben",
     "myTodoTooltip": "Notizen mit dir zugewiesenen Aufgaben",
@@ -62,9 +73,22 @@
     "noteUnarchived": "Notiz dearchiviert",
     "notePinned": "Notiz angeheftet",
     "noteUnpinned": "Notiz gelöst",
+    "noteDuplicated": "Notiz dupliziert",
     "noteDeleted": "Notiz in den Papierkorb verschoben",
     "noteRestored": "Notiz wiederhergestellt",
     "noteDeletedForever": "Notiz endgültig gelöscht",
+    "emptyTrash": "Papierkorb leeren",
+    "emptyTrashConfirmTitle": "Papierkorb leeren?",
+    "emptyTrashConfirmMessage_one": "Die {{count}} Notiz im Papierkorb endgültig löschen? Dies kann nicht rückgängig gemacht werden.",
+    "emptyTrashConfirmMessage_other": "Alle {{count}} Notizen im Papierkorb endgültig löschen? Dies kann nicht rückgängig gemacht werden.",
+    "trashEmptied": "Papierkorb geleert",
+    "emptyTrashFailed": "Papierkorb konnte nicht geleert werden",
+    "failedLoadNotes": "Notizen konnten nicht geladen werden.",
+    "failedDeleteNote": "Notiz konnte nicht in den Papierkorb verschoben werden.",
+    "failedRestoreNote": "Notiz konnte nicht wiederhergestellt werden.",
+    "failedDeleteNoteForever": "Notiz konnte nicht dauerhaft gelöscht werden.",
+    "failedReorderNotes": "Notizen konnten nicht neu sortiert werden.",
+    "failedUpdateSort": "Sortiereinstellung konnte nicht aktualisiert werden.",
     "undo": "Rückgängig"
   },
   "settings": {
@@ -99,6 +123,12 @@
     "languageSystem": "Systemsprache",
     "language_en": "English",
     "language_de": "Deutsch",
+    "language_es": "Español",
+    "language_fr": "Français",
+    "language_pt": "Português",
+    "language_it": "Italiano",
+    "language_nl": "Nederlands",
+    "language_pl": "Polski",
     "themeSection": "Erscheinungsbild",
     "themeLabel": "App-Design",
     "themeSystem": "Systemstandard",
@@ -164,6 +194,7 @@
     "escapeDescription": "Aktives Modal oder Dialog schließen"
   },
   "admin": {
+    "pageHeading": "Admin",
     "title": "Benutzerverwaltung",
     "tabAdmin": "Admin",
     "createUser": "Benutzer erstellen",
@@ -184,6 +215,7 @@
     "creating": "Erstellen...",
     "createUserButton": "Benutzer erstellen",
     "failedLoadUsers": "Benutzer konnten nicht geladen werden",
+    "failedLoadStats": "Statistiken konnten nicht geladen werden",
     "failedCreateUser": "Benutzer konnte nicht erstellt werden",
     "userIdCreated": "ID: {{id}} • Erstellt: {{date}}",
     "userCreated": "Erstellt: {{date}}",
@@ -200,7 +232,32 @@
     "deleting": "Löschen...",
     "deleteUserConfirm": "Soll der Benutzer \"{{username}}\" wirklich dauerhaft gelöscht werden? Dabei werden auch alle Notizen des Benutzers gelöscht.",
     "failedDeleteUser": "Benutzer konnte nicht gelöscht werden.",
-    "deleteUserLabel": "Benutzer {{username}} löschen"
+    "deleteUserLabel": "Benutzer {{username}} löschen",
+    "stats": {
+      "title": "Instanzübersicht",
+      "description": "Live-Metriken für diesen Jot-Server.",
+      "cards": {
+        "users": "Benutzer",
+        "notes": "Notizen",
+        "sharing": "Freigaben",
+        "labels": "Labels",
+        "todoItems": "Aufgaben",
+        "storage": "Speicher"
+      },
+      "metrics": {
+        "text": "Text",
+        "todo": "Aufgaben",
+        "archived": "Archiviert",
+        "trashed": "Papierkorb",
+        "sharedNotes": "Geteilte Notizen",
+        "shareLinks": "Freigabelinks",
+        "totalLabels": "Labels gesamt",
+        "noteAssociations": "Notiz-Verknüpfungen",
+        "completed": "Erledigt",
+        "assigned": "Zugewiesen",
+        "databaseSize": "Datenbankgröße"
+      }
+    }
   },
   "note": {
     "share": "Teilen",
@@ -208,6 +265,7 @@
     "pin": "Anheften",
     "unarchive": "Aus Archiv holen",
     "archive": "Archivieren",
+    "duplicate": "Duplizieren",
     "delete": "Löschen",
     "deleteConfirm": "Möchtest du diese Notiz wirklich löschen?",
     "deleteConfirmTitle": "Notiz löschen",
@@ -247,10 +305,14 @@
     "titleTooLong": "Titel darf höchstens {{max}} Zeichen lang sein",
     "contentTooLong": "Inhalt darf höchstens {{max}} Zeichen lang sein",
     "failedSaveChanges": "Änderungen konnten nicht gespeichert werden. Bitte erneut versuchen.",
+    "failedPin": "Anheftung konnte nicht aktualisiert werden.",
+    "failedArchive": "Archivstatus konnte nicht aktualisiert werden.",
+    "failedDuplicate": "Notiz konnte nicht dupliziert werden. Bitte erneut versuchen.",
     "menuOptions": "Notizoptionen",
     "assignItem": "Element zuweisen",
     "unassign": "Zuweisung aufheben",
-    "assignedTo": "Zugewiesen an {{name}}"
+    "assignedTo": "Zugewiesen an {{name}}",
+    "completedSuggestions": "Vorschläge aus erledigten Elementen"
   },
   "labels": {
     "title": "Labels",
@@ -260,7 +322,20 @@
     "removeLabel": "Label {{name}} entfernen",
     "noLabels": "Noch keine Labels",
     "newLabelPlaceholder": "Label-Name...",
-    "createNew": "Neu erstellen..."
+    "createNew": "Neu erstellen...",
+    "menuOptions": "Labeloptionen für {{name}}",
+    "rename": "Umbenennen",
+    "delete": "Löschen",
+    "renamePlaceholder": "Label umbenennen...",
+    "renameInputLabel": "Label {{name}} umbenennen",
+    "renameSave": "Labelnamen speichern",
+    "renameCancel": "Umbenennen abbrechen",
+    "renameSuccess": "Label umbenannt",
+    "renameError": "Label konnte nicht umbenannt werden.",
+    "deleteSuccess": "Label gelöscht",
+    "deleteError": "Label konnte nicht gelöscht werden.",
+    "deleteConfirmTitle": "Label löschen",
+    "deleteConfirmMessage": "Label \"{{name}}\" löschen? Es wird aus allen Notizen entfernt, die es verwenden."
   },
   "share": {
     "title": "\"{{noteTitle}}\" teilen",

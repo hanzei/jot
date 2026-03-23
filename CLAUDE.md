@@ -28,7 +28,7 @@
 
 ## Code Review Loop
 
-After completing a set of changes, run a sub-agent review loop before finalizing:
+Before submitting a PR, run a sub-agent review loop before finalizing:
 
 1. Launch a sub-agent (use the `simplify` skill or a `general-purpose` agent) to review all changed files for correctness, code quality, and consistency with project conventions.
 2. Address every piece of valid feedback the review returns (fix bugs, improve clarity, align with conventions).
@@ -119,10 +119,10 @@ Jot is a self-hosted note-taking application. The backend is a Go HTTP API and t
 
 ### Technology Stack
 
-- **Go 1.24**
+- **Go 1.25**
 - **Chi v5** — HTTP router with middleware
 - **go-chi/cors** — CORS middleware
-- **SQLite 3** — File-based database (requires CGO)
+- **SQLite 3** — File-based database (pure Go, no CGO required)
 - **bcrypt** — Password hashing
 - **logrus** — Structured logging
 - **testify** — Test assertions
@@ -324,7 +324,7 @@ The server at `localhost:8080` serves the API. Vite is configured with a proxy t
 
 Multi-stage `Dockerfile`:
 1. **Node 24 Alpine** — builds the React app (`npm ci && npm run build`)
-2. **Go 1.24 Alpine** — compiles the Go binary (CGO enabled for SQLite)
+2. **Go 1.25 Alpine** — compiles the Go binary (pure Go, no CGO)
 3. **Alpine runtime** — copies binary and frontend build; exposes port 8080
 
 ```bash
@@ -339,14 +339,16 @@ CI is split into per-component workflows in `.github/workflows/`:
 
 | Workflow | File | Triggers |
 |----------|------|----------|
-| Server — CI | `server-ci.yml` | push to `master`; PRs touching `server/**` |
-| Shared — CI | `shared-ci.yml` | push to `master`; PRs touching `shared/**` |
-| Webapp — CI | `webapp-ci.yml` | push to `master`; PRs touching `webapp/**` or `shared/**` |
-| Mobile — CI | `mobile-ci.yml` | push to `master`; PRs touching `mobile/**` or `shared/**` |
-| Mobile — APK Build | `mobile-apk.yml` | push to `master` and `v*` tags; PRs touching `mobile/**` or `shared/**` |
+| Server — CI | `server-ci.yml` | push to `master`; PRs touching `server/**` or `.github/workflows/**` |
+| Shared — CI | `shared-ci.yml` | push to `master`; PRs touching `shared/**` or `.github/workflows/**` |
+| Webapp — CI | `webapp-ci.yml` | push to `master`; PRs touching `webapp/**`, `shared/**`, or `.github/workflows/**` |
+| Mobile — CI | `mobile-ci.yml` | push to `master`; PRs touching `mobile/**`, `shared/**`, or `.github/workflows/**` |
+| Mobile — APK Build | `mobile-apk.yml` | push to `master` and `v*` tags; PRs touching `mobile/**`, `shared/**`, or `.github/workflows/**` |
 | Docker | `docker.yml` | push to `master`; all PRs |
 | Release | `release.yml` | push tags `v*` |
 | Claude Code | `claude.yml` | issue/PR comment and review events, plus issues opened/assigned, when `@claude` is mentioned |
+
+**Workflow pinning policy:** In GitHub Actions workflows, pin every external action `uses:` reference (`owner/repo@...`) to a full commit SHA and add an inline comment with the intended major version tag (for example, `# v6`). Do not use floating action refs such as `@v4`, `@v6`, `@main`, or `@latest`.
 
 ### CI Checklist (before opening a PR)
 

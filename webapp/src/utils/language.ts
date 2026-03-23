@@ -1,15 +1,15 @@
 import { getSettings } from './auth';
+import { SUPPORTED_LANGUAGES, type LanguagePreference, type SupportedLanguage } from '@jot/shared';
 
-export const SUPPORTED_LANGUAGES = ['en', 'de'] as const;
-export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number];
-export type LanguagePreference = 'system' | SupportedLanguage;
+export { SUPPORTED_LANGUAGES };
+export type { SupportedLanguage, LanguagePreference };
 
 export const getLanguagePreference = (): LanguagePreference => {
   const settings = getSettings();
   if (!settings) return 'system';
   const lang = settings.language;
-  if (lang === 'system' || lang === 'en' || lang === 'de') {
-    return lang;
+  if (lang === 'system' || (SUPPORTED_LANGUAGES as readonly string[]).includes(lang)) {
+    return lang as LanguagePreference;
   }
   return 'system';
 };

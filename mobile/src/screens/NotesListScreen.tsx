@@ -11,21 +11,30 @@ import {
   Alert,
   ScrollView,
 } from 'react-native';
+import { useSQLiteContext } from 'expo-sqlite';
 import DraggableFlatList, { ScaleDecorator } from 'react-native-draggable-flatlist';
 import * as Haptics from 'expo-haptics';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
-import { useUpdateNote, useDeleteNote, useRestoreNote, usePermanentDeleteNote, useReorderNotes } from '../hooks/useNotes';
+import { updateMe } from '../api/settings';
+import { useTranslation } from 'react-i18next';
+import { useUpdateNote, useDeleteNote, useRestoreNote, usePermanentDeleteNote, useReorderNotes, useDuplicateNote } from '../hooks/useNotes';
 import { useOfflineNotes } from '../hooks/useOfflineNotes';
 import { useUsers } from '../store/UsersContext';
 import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
+import { isLocalId } from '../db/noteQueries';
+import SkeletonNoteList from '../components/SkeletonNoteList';
 import NoteCard from '../components/NoteCard';
 import NoteContextMenu, { ContextMenuViewContext } from '../components/NoteContextMenu';
 import ColorPicker from '../components/ColorPicker';
-import type { Note } from '@jot/shared';
+import type { Note, NoteSort } from '@jot/shared';
 import type { RootStackParamList } from '../navigation/RootNavigator';
+import { NOTE_SORT_OPTIONS, getNoteSortLabel, normalizeNoteSort, sortNotesForDisplay } from '../utils/noteSort';
+import { emptyTrash as emptyTrashNotes } from '../api/notes';
+import { getLocalNotes, permanentDeleteLocalNote } from '../db/noteQueries';
+import { useNetworkStatus } from '../hooks/useNetworkStatus';
 
 interface NotesListScreenProps {
   variant?: 'notes' | 'archived' | 'trash' | 'my-todo';
@@ -45,13 +54,22 @@ interface LocalReorderState {
 export default function NotesListScreen({ variant = 'notes', labelId }: NotesListScreenProps) {
   const [searchText, setSearchText] = useState('');
   const [debouncedSearch, setDebouncedSearch] = useState('');
-  const { user } = useAuth();
+  const { user, settings, setSettings } = useAuth();
+  const [trashCount, setTrashCount] = useState(0);
+  const [isEmptyingTrash, setIsEmptyingTrash] = useState(false);
+  const db = useSQLiteContext();
+  const { isConnected } = useNetworkStatus();
   const { colors } = useTheme();
+  const { t } = useTranslation();
 
   const [contextMenuNote, setContextMenuNote] = useState<Note | null>(null);
   const [colorPickerNote, setColorPickerNote] = useState<Note | null>(null);
   const [localOrder, setLocalOrder] = useState<LocalReorderState>({ pinned: null, unpinned: null });
+  const [sortMode, setSortMode] = useState<NoteSort>(() => normalizeNoteSort(settings?.note_sort));
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const sortRequestIdRef = useRef(0);
+  const trashCountRef = useRef(0);
+  trashCountRef.current = trashCount;
   const { refreshUsers } = useUsers();
 
   // Debounce search input by 300ms
@@ -64,6 +82,10 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
       if (debounceRef.current) clearTimeout(debounceRef.current);
     };
   }, [searchText]);
+
+  useEffect(() => {
+    setSortMode(normalizeNoteSort(settings?.note_sort));
+  }, [settings?.note_sort]);
 
   const params = useMemo(() => ({
     archived: variant === 'archived' ? true : undefined,
@@ -80,6 +102,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   const deleteNote = useDeleteNote();
   const restoreNote = useRestoreNote();
   const permanentDeleteNote = usePermanentDeleteNote();
+  const duplicateNote = useDuplicateNote();
   const reorderNotes = useReorderNotes();
   const navigation = useNavigation<NavigationProp>();
 
@@ -88,10 +111,42 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     setDebouncedSearch('');
   }, []);
 
-  const handleRefresh = useCallback(() => {
-    refetch();
-    refreshUsers();
+  const handleRefresh = useCallback(async () => {
+    await refetch();
+    await refreshUsers();
   }, [refetch, refreshUsers]);
+
+  const handleSortChange = useCallback(async (nextSort: NoteSort) => {
+    if (nextSort === sortMode) {
+      return;
+    }
+
+    const previousSort = sortMode;
+    const previousSettings = settings;
+    const requestId = ++sortRequestIdRef.current;
+
+    setSortMode(nextSort);
+    if (previousSettings) {
+      setSettings({ ...previousSettings, note_sort: nextSort });
+    }
+
+    try {
+      const response = await updateMe({ note_sort: nextSort });
+      if (requestId !== sortRequestIdRef.current) {
+        return;
+      }
+      setSettings(response.settings);
+    } catch {
+      if (requestId !== sortRequestIdRef.current) {
+        return;
+      }
+      setSortMode(previousSort);
+      if (previousSettings) {
+        setSettings(previousSettings);
+      }
+      Alert.alert(t('common.error'), t('dashboard.sortUpdateFailed'));
+    }
+  }, [setSettings, settings, sortMode, t]);
 
   const handleNotePress = useCallback(
     (noteId: string) => {
@@ -124,9 +179,9 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
         },
       });
     } catch {
-      Alert.alert('Error', 'Failed to update note');
+      Alert.alert(t('common.error'), t('note.failedUpdate'));
     }
-  }, [updateNote]);
+  }, [t, updateNote]);
 
   const handleArchive = useCallback(async (note: Note) => {
     try {
@@ -142,9 +197,9 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
         },
       });
     } catch {
-      Alert.alert('Error', 'Failed to archive note');
+      Alert.alert(t('common.error'), t('note.failedArchive'));
     }
-  }, [updateNote]);
+  }, [t, updateNote]);
 
   const handleUnarchive = useCallback(async (note: Note) => {
     try {
@@ -160,46 +215,109 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
         },
       });
     } catch {
-      Alert.alert('Error', 'Failed to unarchive note');
+      Alert.alert(t('common.error'), t('note.failedUnarchive'));
     }
-  }, [updateNote]);
+  }, [t, updateNote]);
 
   const handleMoveToTrash = useCallback(async (note: Note) => {
     try {
       await deleteNote.mutateAsync(note.id);
     } catch {
-      Alert.alert('Error', 'Failed to move note to trash');
+      Alert.alert(t('common.error'), t('note.failedMoveToTrash'));
     }
-  }, [deleteNote]);
+  }, [deleteNote, t]);
 
   const handleRestore = useCallback(async (note: Note) => {
     try {
       await restoreNote.mutateAsync(note.id);
     } catch {
-      Alert.alert('Error', 'Failed to restore note');
+      Alert.alert(t('common.error'), t('note.failedRestore'));
     }
-  }, [restoreNote]);
+  }, [restoreNote, t]);
+
+  const handleDuplicate = useCallback(async (note: Note) => {
+    if (isLocalId(note.id)) {
+      Alert.alert(t('common.error'), t('note.waitForSyncBeforeDuplicating'));
+      return;
+    }
+
+    try {
+      await duplicateNote.mutateAsync(note.id);
+      Alert.alert(t('note.duplicate'), t('note.duplicated'));
+    } catch {
+      Alert.alert(t('common.error'), t('note.failedDuplicate'));
+    }
+  }, [duplicateNote, t]);
 
   const handleDeletePermanently = useCallback((note: Note) => {
     Alert.alert(
-      'Delete permanently',
-      'This note will be deleted forever. This action cannot be undone.',
+      t('note.deleteForeverTitle'),
+      t('note.deleteForeverConfirm'),
       [
-        { text: 'Cancel', style: 'cancel' },
+        { text: t('common.cancel'), style: 'cancel' },
         {
-          text: 'Delete',
+          text: t('common.delete'),
           style: 'destructive',
           onPress: async () => {
             try {
               await permanentDeleteNote.mutateAsync(note.id);
             } catch {
-              Alert.alert('Error', 'Failed to delete note');
+              Alert.alert(t('common.error'), t('note.failedDelete'));
             }
           },
         },
       ],
     );
-  }, [permanentDeleteNote]);
+  }, [permanentDeleteNote, t]);
+
+  const handleEmptyTrash = useCallback(() => {
+    const currentTrashCount = trashCountRef.current;
+    if (currentTrashCount === 0) {
+      return;
+    }
+
+    Alert.alert(
+      t('dashboard.emptyTrash'),
+      t('dashboard.emptyTrashConfirmMessage', { count: currentTrashCount }),
+      [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('dashboard.emptyTrash'),
+          style: 'destructive',
+          onPress: async () => {
+            if (trashCountRef.current === 0) {
+              return;
+            }
+            if (!isConnected) {
+              Alert.alert(t('common.error'), t('dashboard.emptyTrashOffline'));
+              return;
+            }
+
+            setIsEmptyingTrash(true);
+            let serverTrashEmptied = false;
+            try {
+              await emptyTrashNotes();
+              serverTrashEmptied = true;
+              const trashedNotes = await getLocalNotes(db, { trashed: true });
+              await Promise.all(trashedNotes.map((note) => permanentDeleteLocalNote(db, note.id)));
+              Alert.alert(t('dashboard.emptyTrash'), t('dashboard.trashEmptied'));
+            } catch {
+              if (serverTrashEmptied) {
+                Alert.alert(t('dashboard.emptyTrash'), t('dashboard.trashEmptied'));
+              } else {
+                Alert.alert(t('common.error'), t('dashboard.emptyTrashFailed'));
+              }
+            } finally {
+              if (serverTrashEmptied) {
+                await handleRefresh().catch(() => {});
+              }
+              setIsEmptyingTrash(false);
+            }
+          },
+        },
+      ],
+    );
+  }, [db, handleRefresh, isConnected, t]);
 
   const handleChangeColor = useCallback((note: Note) => {
     setColorPickerNote(note);
@@ -224,23 +342,45 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
         },
       });
     } catch {
-      Alert.alert('Error', 'Failed to update note color');
+      Alert.alert(t('common.error'), t('note.failedColorUpdate'));
     }
-  }, [colorPickerNote, updateNote]);
+  }, [colorPickerNote, t, updateNote]);
 
-  const { pinnedNotes, otherNotes } = useMemo(() => {
-    const pinned: Note[] = [];
-    const other: Note[] = [];
-    for (const n of notes ?? []) {
-      (n.pinned ? pinned : other).push(n);
-    }
-    return { pinnedNotes: pinned, otherNotes: other };
-  }, [notes]);
+  const { pinned: pinnedNotes, other: otherNotes } = useMemo(
+    () => sortNotesForDisplay(notes ?? EMPTY_NOTES, sortMode),
+    [notes, sortMode],
+  );
 
   // Clear local order overrides when server data changes
   useEffect(() => {
     setLocalOrder({ pinned: null, unpinned: null });
-  }, [notes]);
+  }, [notes, sortMode, variant]);
+
+  useEffect(() => {
+    let cancelled = false;
+
+    async function loadTrashCount() {
+      if (variant !== 'trash') {
+        setTrashCount(0);
+        return;
+      }
+
+      try {
+        const trashedNotes = await getLocalNotes(db, { trashed: true });
+        if (!cancelled) {
+          setTrashCount(trashedNotes.length);
+        }
+      } catch {
+        // Keep the previous count if the local query fails transiently.
+      }
+    }
+
+    void loadTrashCount();
+
+    return () => {
+      cancelled = true;
+    };
+  }, [db, notes, variant]);
 
   const displayPinned = localOrder.pinned ?? pinnedNotes;
   const displayUnpinned = localOrder.unpinned ?? otherNotes;
@@ -251,7 +391,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   const displayUnpinnedRef = useRef(displayUnpinned);
   displayUnpinnedRef.current = displayUnpinned;
 
-  const hasPinned = variant === 'notes' && pinnedNotes.length > 0;
+  const hasPinned = pinnedNotes.length > 0;
 
   const listEmptyComponent = useMemo(
     () =>
@@ -267,16 +407,18 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
             color={colors.handleColor}
           />
           <Text style={[styles.emptySearchTitle, { color: colors.textSecondary }]}>
-            {debouncedSearch ? 'No notes match your search' : 'No notes for this label'}
+            {debouncedSearch
+              ? t('dashboard.noSearchResults', { query: debouncedSearch })
+              : t('dashboard.noNotesForLabel')}
           </Text>
           {debouncedSearch && (
             <Text style={[styles.emptySubtext, { color: colors.textMuted }]}>
-              Try different keywords
+              {t('dashboard.tryDifferentKeywords')}
             </Text>
           )}
         </View>
       ) : null,
-    [isSearchLoading, debouncedSearch, labelId, colors],
+    [isSearchLoading, debouncedSearch, labelId, colors, t],
   );
 
   const handleDragEnd = useCallback(
@@ -305,10 +447,10 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
           ? { ...prev, pinned: null }
           : { ...prev, unpinned: null },
         );
-        Alert.alert('Error', 'Failed to reorder notes');
+        Alert.alert(t('common.error'), t('note.failedReorder'));
       }
     },
-    [reorderNotes],
+    [reorderNotes, t],
   );
 
   const handleDragEndPinned = useCallback(
@@ -357,25 +499,21 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   // Uses debouncedSearch (not searchText) so clearing the input mid-debounce doesn't
   // trigger the full-screen loader while the previous query is still in-flight.
   if (isLoading && !notes && !debouncedSearch) {
-    return (
-      <View style={[styles.loadingContainer, { backgroundColor: colors.background }]} testID="notes-loading">
-        <ActivityIndicator size="large" color={colors.primary} />
-      </View>
-    );
+    return <SkeletonNoteList />;
   }
 
   if (isError) {
     return (
       <View style={[styles.emptyContainer, { backgroundColor: colors.background }]} testID="notes-error-state">
         <Ionicons name="cloud-offline-outline" size={64} color={colors.handleColor} />
-        <Text style={[styles.emptyTitle, { color: colors.text }]}>Failed to load notes</Text>
-        <Text style={[styles.emptySubtext, { color: colors.textMuted }]}>Check your connection and try again</Text>
+        <Text style={[styles.emptyTitle, { color: colors.text }]}>{t('dashboard.failedLoadNotes')}</Text>
+        <Text style={[styles.emptySubtext, { color: colors.textMuted }]}>{t('dashboard.checkConnection')}</Text>
         <TouchableOpacity
           style={[styles.retryButton, { backgroundColor: colors.primary }]}
           onPress={() => refetch()}
           testID="retry-fetch"
         >
-          <Text style={styles.retryText}>Retry</Text>
+          <Text style={styles.retryText}>{t('common.retry')}</Text>
         </TouchableOpacity>
       </View>
     );
@@ -394,7 +532,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
           <View style={[styles.trashBanner, { backgroundColor: colors.warning, borderBottomColor: colors.warningBorder }]}>
             <Ionicons name="information-circle-outline" size={16} color={colors.warningText} style={styles.trashBannerIcon} />
             <Text style={[styles.trashBannerText, { color: colors.warningText }]}>
-              Items in Trash are automatically deleted after 7 days
+              {t('dashboard.binInfo')}
             </Text>
           </View>
         )}
@@ -405,16 +543,16 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
             color={colors.handleColor}
           />
           <Text style={[styles.emptyTitle, { color: colors.text }]}>
-            {variant === 'notes' && 'No notes yet'}
-            {variant === 'my-todo' && 'No assigned todos'}
-            {variant === 'archived' && 'No archived notes'}
-            {variant === 'trash' && 'Trash is empty'}
+            {variant === 'notes' && t('dashboard.noNotesYet')}
+            {variant === 'my-todo' && t('dashboard.noAssignedTodos')}
+            {variant === 'archived' && t('dashboard.noArchivedNotes')}
+            {variant === 'trash' && t('dashboard.noBinnedNotes')}
           </Text>
           <Text style={[styles.emptySubtext, { color: colors.textMuted }]}>
-            {variant === 'notes' && 'Tap + to create your first note'}
-            {variant === 'my-todo' && 'No notes with todos assigned to you'}
-            {variant === 'archived' && 'Archived notes will appear here'}
-            {variant === 'trash' && 'Deleted notes will appear here'}
+            {variant === 'notes' && t('dashboard.createFirstNote')}
+            {variant === 'my-todo' && t('dashboard.noMyTodoNotes')}
+            {variant === 'archived' && t('dashboard.archivedNotesWillAppear')}
+            {variant === 'trash' && t('dashboard.deletedNotesWillAppear')}
           </Text>
         </View>
         {variant === 'notes' && (
@@ -422,7 +560,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
             style={[styles.fab, { backgroundColor: colors.primary }]}
             onPress={handleCreateNote}
             testID="create-note-fab"
-            accessibilityLabel="Create note"
+            accessibilityLabel={t('dashboard.newNote')}
             accessibilityRole="button"
           >
             <Ionicons name="add" size={28} color="#fff" />
@@ -432,18 +570,37 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     );
   }
 
-  // Drag-and-drop is only available in the notes variant (not archived/trash/my-todo)
-  const isDraggable = variant === 'notes';
+  // Drag-and-drop is only available in the notes variant while manual sorting is active.
+  const isDraggable = variant === 'notes' && sortMode === 'manual';
+  const activeSortLabel = getNoteSortLabel(sortMode, t);
 
   return (
     <View style={[styles.container, { backgroundColor: colors.background }]}>
       {/* Trash banner */}
       {variant === 'trash' && (
         <View style={[styles.trashBanner, { backgroundColor: colors.warning, borderBottomColor: colors.warningBorder }]}>
-          <Ionicons name="information-circle-outline" size={16} color={colors.warningText} style={styles.trashBannerIcon} />
-          <Text style={[styles.trashBannerText, { color: colors.warningText }]}>
-            Items in Trash are automatically deleted after 7 days
-          </Text>
+          <View style={styles.trashBannerMessage}>
+            <Ionicons name="information-circle-outline" size={16} color={colors.warningText} style={styles.trashBannerIcon} />
+            <Text style={[styles.trashBannerText, { color: colors.warningText }]}>
+              {t('dashboard.binInfo')}
+            </Text>
+          </View>
+          {trashCount > 0 && (
+            <TouchableOpacity
+              style={[styles.emptyTrashButton, { borderColor: colors.warningText }, isEmptyingTrash ? styles.emptyTrashButtonDisabled : undefined]}
+              onPress={handleEmptyTrash}
+              disabled={isEmptyingTrash}
+              testID="empty-trash-button"
+              accessibilityLabel={t('dashboard.emptyTrash')}
+              accessibilityRole="button"
+            >
+              {isEmptyingTrash ? (
+                <ActivityIndicator size="small" color={colors.warningText} />
+              ) : (
+                <Text style={[styles.emptyTrashButtonText, { color: colors.warningText }]}>{t('dashboard.emptyTrash')}</Text>
+              )}
+            </TouchableOpacity>
+          )}
         </View>
       )}
 
@@ -452,7 +609,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
         <Ionicons name="search" size={18} color={colors.iconMuted} style={styles.searchIcon} />
         <TextInput
           style={[styles.searchInput, { color: colors.text }]}
-          placeholder="Search notes..."
+          placeholder={t('dashboard.searchPlaceholder')}
           placeholderTextColor={colors.placeholder}
           value={searchText}
           onChangeText={setSearchText}
@@ -466,8 +623,68 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
         )}
       </View>
 
+      {/* Sort preference is global across notes, archived, trash, labels, and my-todo views. */}
+      <View style={styles.sortControlsContainer}>
+        <ScrollView
+          horizontal
+          showsHorizontalScrollIndicator={false}
+          contentContainerStyle={styles.sortControlsContent}
+          testID="sort-controls"
+        >
+          {NOTE_SORT_OPTIONS.map((option) => {
+            const isActive = sortMode === option;
+            const optionLabel = getNoteSortLabel(option, t);
+            return (
+              <TouchableOpacity
+                key={option}
+                style={[
+                  styles.sortChip,
+                  {
+                    borderColor: isActive ? colors.primary : colors.border,
+                    backgroundColor: isActive ? colors.primaryLight : colors.surface,
+                  },
+                ]}
+                onPress={() => void handleSortChange(option)}
+                testID={`sort-chip-${option}`}
+                accessibilityRole="button"
+                accessibilityLabel={t('dashboard.sortAccessibilityLabel', { sortLabel: optionLabel })}
+                accessibilityState={{ selected: isActive }}
+              >
+                <Text
+                  style={[
+                    styles.sortChipText,
+                    { color: isActive ? colors.primary : colors.textSecondary },
+                    isActive && styles.sortChipTextActive,
+                  ]}
+                >
+                  {optionLabel}
+                </Text>
+              </TouchableOpacity>
+            );
+          })}
+        </ScrollView>
+      </View>
+
+      {sortMode !== 'manual' && (
+        <View
+          style={[
+            styles.sortNotice,
+            {
+              backgroundColor: colors.primaryLight,
+              borderColor: colors.primary,
+            },
+          ]}
+          testID="sort-disabled-notice"
+        >
+          <Ionicons name="swap-vertical" size={16} color={colors.primary} style={styles.sortNoticeIcon} />
+          <Text style={[styles.sortNoticeText, { color: colors.textSecondary }]}>
+            {t('dashboard.sortDisabledNotice', { sortLabel: activeSortLabel })}
+          </Text>
+        </View>
+      )}
+
       {/* Notes list */}
-      {isDraggable && hasPinned ? (
+      {hasPinned ? (
         <ScrollView
           refreshControl={
             <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={colors.primary} />
@@ -477,28 +694,52 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
         >
           {displayPinned.length > 0 && (
             <>
-              <Text style={[styles.sectionHeader, { color: colors.textMuted }]}>Pinned</Text>
-              <DraggableFlatList
-                data={displayPinned}
-                keyExtractor={(item) => item.id}
-                renderItem={renderDraggableNoteCard}
-                onDragBegin={handleDragStart}
-                onDragEnd={handleDragEndPinned}
-                scrollEnabled={false}
-              />
+              <Text style={[styles.sectionHeader, { color: colors.textMuted }]}>{t('dashboard.pinned')}</Text>
+              {isDraggable ? (
+                <DraggableFlatList
+                  data={displayPinned}
+                  keyExtractor={(item) => item.id}
+                  renderItem={renderDraggableNoteCard}
+                  onDragBegin={handleDragStart}
+                  onDragEnd={handleDragEndPinned}
+                  scrollEnabled={false}
+                  testID="pinned-draggable-list"
+                />
+              ) : (
+                <FlatList
+                  data={displayPinned}
+                  keyExtractor={(item) => item.id}
+                  renderItem={renderNonDraggableNoteCard}
+                  scrollEnabled={false}
+                  testID="pinned-static-list"
+                />
+              )}
             </>
           )}
           {displayUnpinned.length > 0 && (
             <>
-              <Text style={[styles.sectionHeader, { color: colors.textMuted }]}>Others</Text>
-              <DraggableFlatList
-                data={displayUnpinned}
-                keyExtractor={(item) => item.id}
-                renderItem={renderDraggableNoteCard}
-                onDragBegin={handleDragStart}
-                onDragEnd={handleDragEndUnpinned}
-                scrollEnabled={false}
-              />
+              {displayPinned.length > 0 && (
+                <Text style={[styles.sectionHeader, { color: colors.textMuted }]}>{t('dashboard.otherNotes')}</Text>
+              )}
+              {isDraggable ? (
+                <DraggableFlatList
+                  data={displayUnpinned}
+                  keyExtractor={(item) => item.id}
+                  renderItem={renderDraggableNoteCard}
+                  onDragBegin={handleDragStart}
+                  onDragEnd={handleDragEndUnpinned}
+                  scrollEnabled={false}
+                  testID="unpinned-draggable-list"
+                />
+              ) : (
+                <FlatList
+                  data={displayUnpinned}
+                  keyExtractor={(item) => item.id}
+                  renderItem={renderNonDraggableNoteCard}
+                  scrollEnabled={false}
+                  testID="unpinned-static-list"
+                />
+              )}
             </>
           )}
           {displayPinned.length === 0 && displayUnpinned.length === 0 && listEmptyComponent}
@@ -519,7 +760,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
         />
       ) : (
         <FlatList
-          data={notes ?? EMPTY_NOTES}
+          data={displayUnpinned}
           keyExtractor={(item) => item.id}
           renderItem={renderNonDraggableNoteCard}
           refreshControl={
@@ -536,7 +777,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
           style={[styles.fab, { backgroundColor: colors.primary }]}
           onPress={handleCreateNote}
           testID="create-note-fab"
-          accessibilityLabel="Create note"
+          accessibilityLabel={t('dashboard.newNote')}
           accessibilityRole="button"
         >
           <Ionicons name="add" size={28} color="#fff" />
@@ -551,6 +792,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
         onPin={handlePin}
         onArchive={handleArchive}
         onUnarchive={handleUnarchive}
+        onDuplicate={handleDuplicate}
         onMoveToTrash={handleMoveToTrash}
         onRestore={handleRestore}
         onDeletePermanently={handleDeletePermanently}
@@ -571,11 +813,6 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
   },
   emptyWrapper: {
     flex: 1,
@@ -614,9 +851,15 @@ const styles = StyleSheet.create({
   trashBanner: {
     flexDirection: 'row',
     alignItems: 'center',
+    justifyContent: 'space-between',
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderBottomWidth: 1,
+  },
+  trashBannerMessage: {
+    flex: 1,
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   trashBannerIcon: {
     marginRight: 8,
@@ -624,6 +867,23 @@ const styles = StyleSheet.create({
   trashBannerText: {
     fontSize: 13,
     flex: 1,
+  },
+  emptyTrashButton: {
+    marginLeft: 12,
+    minWidth: 96,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 999,
+    borderWidth: 1,
+    alignItems: 'center',
+    justifyContent: 'center',
+  },
+  emptyTrashButtonDisabled: {
+    opacity: 0.6,
+  },
+  emptyTrashButtonText: {
+    fontSize: 12,
+    fontWeight: '600',
   },
   searchContainer: {
     flexDirection: 'row',
@@ -642,6 +902,46 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 15,
     paddingVertical: 0,
+  },
+  sortControlsContainer: {
+    marginHorizontal: 16,
+    marginBottom: 8,
+  },
+  sortControlsContent: {
+    gap: 8,
+    paddingRight: 8,
+  },
+  sortChip: {
+    borderWidth: 1,
+    borderRadius: 999,
+    paddingHorizontal: 14,
+    paddingVertical: 8,
+  },
+  sortChipText: {
+    fontSize: 13,
+    fontWeight: '500',
+  },
+  sortChipTextActive: {
+    fontWeight: '600',
+  },
+  sortNotice: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
+    marginHorizontal: 16,
+    marginBottom: 8,
+    borderWidth: 1,
+    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+  },
+  sortNoticeIcon: {
+    marginRight: 8,
+    marginTop: 1,
+  },
+  sortNoticeText: {
+    flex: 1,
+    fontSize: 13,
+    lineHeight: 18,
   },
   sectionHeader: {
     fontSize: 12,

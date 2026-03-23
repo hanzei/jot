@@ -264,7 +264,7 @@ describe('ShareModal', () => {
       await user.click(removeBtn)
 
       await waitFor(() => {
-        expect(mockUnshare).toHaveBeenCalledWith('note1', { user_id: 'user2' })
+        expect(mockUnshare).toHaveBeenCalledWith('note1', 'user2')
       })
     })
   })

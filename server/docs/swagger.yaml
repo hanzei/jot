@@ -21,6 +21,8 @@ definitions:
     type: object
   handlers.CreateNoteItem:
     properties:
+      completed:
+        type: boolean
       indent_level:
         type: integer
       position:
@@ -56,6 +58,11 @@ definitions:
       username:
         type: string
     type: object
+  handlers.EmptyTrashResponse:
+    properties:
+      deleted:
+        type: integer
+    type: object
   handlers.ImportResponse:
     properties:
       errors:
@@ -79,6 +86,11 @@ definitions:
       password:
         type: string
       username:
+        type: string
+    type: object
+  handlers.RenameLabelRequest:
+    properties:
+      name:
         type: string
     type: object
   handlers.ReorderNotesRequest:
@@ -156,8 +168,20 @@ definitions:
         - system
         - en
         - de
+        - es
+        - fr
+        - pt
+        - it
+        - nl
+        - pl
         type: string
       last_name:
+        type: string
+      note_sort:
+        enum:
+        - manual
+        - updated_at
+        - created_at
         type: string
       theme:
         enum:
@@ -194,6 +218,67 @@ definitions:
         items:
           $ref: '#/definitions/models.User'
         type: array
+    type: object
+  models.AdminLabelStats:
+    properties:
+      note_associations:
+        type: integer
+      total:
+        type: integer
+    type: object
+  models.AdminNoteStats:
+    properties:
+      archived:
+        type: integer
+      text:
+        type: integer
+      todo:
+        type: integer
+      total:
+        type: integer
+      trashed:
+        type: integer
+    type: object
+  models.AdminSharingStats:
+    properties:
+      share_links:
+        type: integer
+      shared_notes:
+        type: integer
+    type: object
+  models.AdminStats:
+    properties:
+      labels:
+        $ref: '#/definitions/models.AdminLabelStats'
+      notes:
+        $ref: '#/definitions/models.AdminNoteStats'
+      sharing:
+        $ref: '#/definitions/models.AdminSharingStats'
+      storage:
+        $ref: '#/definitions/models.AdminStorageStats'
+      todo_items:
+        $ref: '#/definitions/models.AdminTodoItemStats'
+      users:
+        $ref: '#/definitions/models.AdminUserStats'
+    type: object
+  models.AdminStorageStats:
+    properties:
+      database_size_bytes:
+        type: integer
+    type: object
+  models.AdminTodoItemStats:
+    properties:
+      assigned:
+        type: integer
+      completed:
+        type: integer
+      total:
+        type: integer
+    type: object
+  models.AdminUserStats:
+    properties:
+      total:
+        type: integer
     type: object
   models.Label:
     properties:
@@ -328,6 +413,12 @@ definitions:
     properties:
       language:
         type: string
+      note_sort:
+        enum:
+        - manual
+        - updated_at
+        - created_at
+        type: string
       theme:
         type: string
       updated_at:
@@ -376,6 +467,32 @@ paths:
       summary: Get server version and build info
       tags:
       - system
+  /admin/stats:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.AdminStats'
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "403":
+          description: forbidden
+          schema:
+            type: string
+        "500":
+          description: internal server error
+          schema:
+            type: string
+      security:
+      - CookieAuth: []
+      summary: Get admin system stats (admin only)
+      tags:
+      - admin
   /admin/users:
     get:
       produces:
@@ -550,6 +667,77 @@ paths:
       security:
       - CookieAuth: []
       summary: List all labels for the current user
+      tags:
+      - labels
+  /labels/{id}:
+    delete:
+      parameters:
+      - description: Label ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: No Content
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "404":
+          description: label not found
+          schema:
+            type: string
+        "500":
+          description: internal server error
+          schema:
+            type: string
+      security:
+      - CookieAuth: []
+      summary: Delete a label
+      tags:
+      - labels
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Label ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: New label name
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.RenameLabelRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Label'
+        "400":
+          description: bad request
+          schema:
+            type: string
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "404":
+          description: label not found
+          schema:
+            type: string
+        "500":
+          description: internal server error
+          schema:
+            type: string
+      security:
+      - CookieAuth: []
+      summary: Rename a label
       tags:
       - labels
   /login:
@@ -814,6 +1002,42 @@ paths:
       summary: Update a note
       tags:
       - notes
+  /notes/{id}/duplicate:
+    post:
+      parameters:
+      - description: Note ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.Note'
+        "400":
+          description: bad request
+          schema:
+            type: string
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "404":
+          description: not found
+          schema:
+            type: string
+        "500":
+          description: internal server error
+          schema:
+            type: string
+      security:
+      - CookieAuth: []
+      summary: Duplicate an existing note
+      tags:
+      - notes
   /notes/{id}/labels:
     post:
       consumes:
@@ -932,53 +1156,6 @@ paths:
       tags:
       - notes
   /notes/{id}/share:
-    delete:
-      consumes:
-      - application/json
-      parameters:
-      - description: Note ID
-        in: path
-        name: id
-        required: true
-        type: string
-      - description: User ID to unshare with
-        in: body
-        name: body
-        required: true
-        schema:
-          $ref: '#/definitions/handlers.ShareNoteRequest'
-      produces:
-      - application/json
-      responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/handlers.ShareNoteResponse'
-        "400":
-          description: bad request
-          schema:
-            type: string
-        "401":
-          description: unauthorized
-          schema:
-            type: string
-        "403":
-          description: not owner
-          schema:
-            type: string
-        "404":
-          description: not found
-          schema:
-            type: string
-        "500":
-          description: internal server error
-          schema:
-            type: string
-      security:
-      - CookieAuth: []
-      summary: Remove a share from a note
-      tags:
-      - sharing
     post:
       consumes:
       - application/json
@@ -1068,6 +1245,51 @@ paths:
       summary: List users a note is shared with
       tags:
       - sharing
+  /notes/{id}/shares/{user_id}:
+    delete:
+      parameters:
+      - description: Note ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: User ID to unshare with
+        in: path
+        name: user_id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.ShareNoteResponse'
+        "400":
+          description: bad request
+          schema:
+            type: string
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "403":
+          description: not owner
+          schema:
+            type: string
+        "404":
+          description: not found
+          schema:
+            type: string
+        "500":
+          description: internal server error
+          schema:
+            type: string
+      security:
+      - CookieAuth: []
+      summary: Remove a share from a note
+      tags:
+      - sharing
   /notes/import:
     post:
       consumes:
@@ -1135,6 +1357,28 @@ paths:
       security:
       - CookieAuth: []
       summary: Reorder notes by providing an ordered list of IDs
+      tags:
+      - notes
+  /notes/trash:
+    delete:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.EmptyTrashResponse'
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "500":
+          description: internal server error
+          schema:
+            type: string
+      security:
+      - CookieAuth: []
+      summary: Permanently delete all notes in the current user's trash
       tags:
       - notes
   /register:

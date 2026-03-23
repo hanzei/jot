@@ -1,5 +1,5 @@
-import { useState, useEffect, useCallback } from 'react';
-import { PASSWORD_MIN_LENGTH, ROLES, VALIDATION, type User, type CreateUserRequest } from '@jot/shared';
+import { useState, useEffect, useCallback, type ReactNode } from 'react';
+import { PASSWORD_MIN_LENGTH, ROLES, VALIDATION, type User, type CreateUserRequest, type AdminStatsResponse } from '@jot/shared';
 import { useTranslation } from 'react-i18next';
 import { admin, auth, isAxiosError } from '@/utils/api';
 import { isAdmin, removeUser, getUser } from '@/utils/auth';
@@ -16,13 +16,57 @@ interface AdminProps {
 
 type CreateUserField = 'username' | 'password';
 
+interface StatCardProps {
+  title: string;
+  value: string;
+  valueTestId?: string;
+  children?: ReactNode;
+}
+
+interface StatLineProps {
+  label: string;
+  value: string;
+  valueTestId?: string;
+}
+
+const StatLine = ({ label, value, valueTestId }: StatLineProps) => (
+  <div className="flex items-center justify-between gap-4 text-sm">
+    <span className="text-gray-500 dark:text-gray-400">{label}</span>
+    <span data-testid={valueTestId} className="font-medium text-gray-900 dark:text-white">{value}</span>
+  </div>
+);
+
+const StatCard = ({ title, value, valueTestId, children }: StatCardProps) => (
+  <div className="rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+    <p className="text-sm font-medium text-gray-500 dark:text-gray-400">{title}</p>
+    <p data-testid={valueTestId} className="mt-2 text-2xl font-semibold text-gray-900 dark:text-white">{value}</p>
+    {children ? <div className="mt-4 space-y-2">{children}</div> : null}
+  </div>
+);
+
+const StatCardSkeleton = () => (
+  <div className="animate-pulse rounded-lg border border-gray-200 bg-white p-4 shadow-sm dark:border-slate-700 dark:bg-slate-800">
+    <div className="h-4 w-24 rounded bg-gray-200 dark:bg-slate-700"></div>
+    <div className="mt-3 h-8 w-20 rounded bg-gray-200 dark:bg-slate-700"></div>
+    <div className="mt-4 space-y-2">
+      <div className="h-4 w-full rounded bg-gray-200 dark:bg-slate-700"></div>
+      <div className="h-4 w-5/6 rounded bg-gray-200 dark:bg-slate-700"></div>
+      <div className="h-4 w-2/3 rounded bg-gray-200 dark:bg-slate-700"></div>
+    </div>
+  </div>
+);
+
 const Admin = ({ onLogout }: AdminProps) => {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const currentUser = getUser();
   const [users, setUsers] = useState<User[]>([]);
-  const [loading, setLoading] = useState(true);
+  const [usersLoading, setUsersLoading] = useState(true);
+  const [usersLoaded, setUsersLoaded] = useState(false);
+  const [stats, setStats] = useState<AdminStatsResponse | null>(null);
+  const [statsLoading, setStatsLoading] = useState(true);
   const [error, setError] = useState('');
+  const [statsError, setStatsError] = useState('');
   const [showCreateForm, setShowCreateForm] = useState(false);
   const [createLoading, setCreateLoading] = useState(false);
   const [createError, setCreateError] = useState('');
@@ -56,24 +100,63 @@ const Admin = ({ onLogout }: AdminProps) => {
     onLogout();
   };
 
+  const formatNumber = useCallback((value: number) => {
+    return new Intl.NumberFormat(i18n.resolvedLanguage).format(value);
+  }, [i18n.resolvedLanguage]);
+
+  const formatBytes = useCallback((bytes: number) => {
+    if (bytes === 0) {
+      return '0 B';
+    }
+
+    const units = ['B', 'KB', 'MB', 'GB', 'TB'];
+    let size = bytes;
+    let unitIndex = 0;
+
+    while (size >= 1024 && unitIndex < units.length - 1) {
+      size /= 1024;
+      unitIndex += 1;
+    }
+
+    const maximumFractionDigits = size >= 10 || unitIndex === 0 ? 0 : 1;
+    return `${new Intl.NumberFormat(i18n.resolvedLanguage, { maximumFractionDigits }).format(size)} ${units[unitIndex]}`;
+  }, [i18n.resolvedLanguage]);
+
   const fetchUsers = useCallback(async () => {
     try {
-      setLoading(true);
+      setUsersLoading(true);
+      setUsersLoaded(false);
       const response = await admin.getUsers();
       setUsers(response.users || []);
+      setUsersLoaded(true);
     } catch (err) {
       setError(t('admin.failedLoadUsers'));
       console.error(err);
     } finally {
-      setLoading(false);
+      setUsersLoading(false);
+    }
+  }, [t]);
+
+  const fetchStats = useCallback(async () => {
+    try {
+      setStatsLoading(true);
+      setStatsError('');
+      const response = await admin.getStats();
+      setStats(response);
+    } catch (err) {
+      setStatsError(t('admin.failedLoadStats'));
+      console.error(err);
+    } finally {
+      setStatsLoading(false);
     }
   }, [t]);
 
   useEffect(() => {
     if (userIsAdmin) {
-      fetchUsers();
+      void fetchUsers();
+      void fetchStats();
     }
-  }, [userIsAdmin, fetchUsers]);
+  }, [userIsAdmin, fetchUsers, fetchStats]);
 
   if (!userIsAdmin) {
     return <Navigate to="/" />;
@@ -140,6 +223,7 @@ const Admin = ({ onLogout }: AdminProps) => {
     try {
       const newUser = await admin.createUser(formData);
       setUsers(prev => [newUser, ...prev]);
+      void fetchStats();
       setFormData({ username: '', password: '', role: ROLES.USER });
       setCreateTouched({ username: false, password: false });
       setShowCreateValidationErrors(false);
@@ -192,6 +276,7 @@ const Admin = ({ onLogout }: AdminProps) => {
     try {
       await admin.deleteUser(targetUser.id);
       setUsers(prev => prev.filter(u => u.id !== targetUser.id));
+      void fetchStats();
     } catch (err: unknown) {
       if (isAxiosError(err)) {
         const msg = typeof err.response?.data === 'string' ? err.response.data.trim() : '';
@@ -217,19 +302,12 @@ const Admin = ({ onLogout }: AdminProps) => {
     }
   };
 
-  if (loading) {
-    return (
-      <div className="h-dvh flex items-center justify-center bg-gray-50 dark:bg-slate-900">
-        <div data-testid="loading-spinner" className="animate-spin rounded-full h-8 w-8 border-b-2 border-blue-500"></div>
-      </div>
-    );
-  }
-
   const searchBar = (
     <SearchBar
       value={searchQuery}
       onChange={setSearchQuery}
       onSubmit={handleSearch}
+      stopEscapePropagation={true}
     />
   );
 
@@ -245,20 +323,7 @@ const Admin = ({ onLogout }: AdminProps) => {
       <div className="max-w-7xl mx-auto py-6 sm:px-6 lg:px-8">
         <div className="px-4 py-6 sm:px-0">
           <div className="mb-6">
-            <div className="flex justify-between items-center">
-              <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{t('admin.title')}</h1>
-              <button
-                onClick={() => {
-                  setShowCreateForm(!showCreateForm);
-                  setCreateError('');
-                  setCreateTouched({ username: false, password: false });
-                  setShowCreateValidationErrors(false);
-                }}
-                className="bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium"
-              >
-                {showCreateForm ? t('admin.cancel') : t('admin.createUser')}
-              </button>
-            </div>
+            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{t('admin.pageHeading')}</h1>
           </div>
 
           {showCreateForm && (
@@ -371,75 +436,176 @@ const Admin = ({ onLogout }: AdminProps) => {
             </div>
           )}
 
+          <section data-testid="admin-stats-section" className="mb-6">
+            <div className="mb-4">
+              <h2 className="text-lg font-medium text-gray-900 dark:text-white">{t('admin.stats.title')}</h2>
+              <p className="text-sm text-gray-500 dark:text-gray-400">{t('admin.stats.description')}</p>
+            </div>
+
+            {statsError ? (
+              <div
+                role="alert"
+                aria-live="assertive"
+                aria-atomic="true"
+                className="rounded-lg border border-red-200 bg-red-50 px-4 py-3 text-sm text-red-600 dark:border-red-800 dark:bg-red-900/20 dark:text-red-400"
+              >
+                {statsError}
+              </div>
+            ) : null}
+
+            <div className="grid grid-cols-1 gap-4 sm:grid-cols-2 xl:grid-cols-3">
+              {statsLoading ? (
+                Array.from({ length: 6 }, (_, index) => <StatCardSkeleton key={index} />)
+              ) : stats ? (
+                <>
+                  <StatCard
+                    title={t('admin.stats.cards.users')}
+                    value={formatNumber(stats.users.total)}
+                    valueTestId="admin-stats-users-total"
+                  />
+
+                  <StatCard
+                    title={t('admin.stats.cards.notes')}
+                    value={formatNumber(stats.notes.total)}
+                    valueTestId="admin-stats-notes-total"
+                  >
+                    <StatLine label={t('admin.stats.metrics.text')} value={formatNumber(stats.notes.text)} />
+                    <StatLine label={t('admin.stats.metrics.todo')} value={formatNumber(stats.notes.todo)} />
+                    <StatLine label={t('admin.stats.metrics.archived')} value={formatNumber(stats.notes.archived)} />
+                    <StatLine label={t('admin.stats.metrics.trashed')} value={formatNumber(stats.notes.trashed)} />
+                  </StatCard>
+
+                  <StatCard
+                    title={t('admin.stats.cards.sharing')}
+                    value={formatNumber(stats.sharing.shared_notes)}
+                    valueTestId="admin-stats-shared-notes"
+                  >
+                    <StatLine label={t('admin.stats.metrics.sharedNotes')} value={formatNumber(stats.sharing.shared_notes)} />
+                    <StatLine label={t('admin.stats.metrics.shareLinks')} value={formatNumber(stats.sharing.share_links)} />
+                  </StatCard>
+
+                  <StatCard
+                    title={t('admin.stats.cards.labels')}
+                    value={formatNumber(stats.labels.total)}
+                    valueTestId="admin-stats-labels-total"
+                  >
+                    <StatLine label={t('admin.stats.metrics.totalLabels')} value={formatNumber(stats.labels.total)} />
+                    <StatLine label={t('admin.stats.metrics.noteAssociations')} value={formatNumber(stats.labels.note_associations)} />
+                  </StatCard>
+
+                  <StatCard
+                    title={t('admin.stats.cards.todoItems')}
+                    value={formatNumber(stats.todo_items.total)}
+                    valueTestId="admin-stats-todo-items-total"
+                  >
+                    <StatLine label={t('admin.stats.metrics.completed')} value={formatNumber(stats.todo_items.completed)} />
+                    <StatLine label={t('admin.stats.metrics.assigned')} value={formatNumber(stats.todo_items.assigned)} />
+                  </StatCard>
+
+                  <StatCard
+                    title={t('admin.stats.cards.storage')}
+                    value={formatBytes(stats.storage.database_size_bytes)}
+                    valueTestId="admin-stats-database-size"
+                  >
+                    <StatLine label={t('admin.stats.metrics.databaseSize')} value={formatBytes(stats.storage.database_size_bytes)} />
+                  </StatCard>
+                </>
+              ) : null}
+            </div>
+          </section>
+
+          <section className="mb-6">
+            <div className="mb-4 flex items-center justify-between">
+              <h2 className="text-lg font-medium text-gray-900 dark:text-white">{t('admin.title')}</h2>
+              <button
+                onClick={() => {
+                  setShowCreateForm(!showCreateForm);
+                  setCreateError('');
+                  setCreateTouched({ username: false, password: false });
+                  setShowCreateValidationErrors(false);
+                }}
+                className="bg-blue-600 hover:bg-blue-700 dark:bg-blue-600 dark:hover:bg-blue-700 text-white px-4 py-2 rounded-md text-sm font-medium"
+              >
+                {showCreateForm ? t('admin.cancel') : t('admin.createUser')}
+              </button>
+            </div>
+
           <div className="bg-white dark:bg-slate-800 shadow overflow-hidden sm:rounded-md border border-gray-200 dark:border-slate-700">
-            <ul data-testid="users-list" className="divide-y divide-gray-200 dark:divide-slate-700">
-              {(users || []).map((user) => (
-                <li key={user.id} data-testid={`user-row-${user.username}`}>
-                  <div className="px-4 py-4 sm:px-6">
-                    <div className="flex items-center justify-between">
-                      <div className="flex items-center">
-                        <div>
-                          <div className="flex items-center gap-2">
-                            <p className="text-sm font-medium text-gray-900 dark:text-white">
-                              {user.first_name || user.last_name
-                                ? `${user.first_name} ${user.last_name}`.trim()
-                                : user.username}
+            {usersLoading ? (
+              <div className="flex items-center justify-center px-4 py-12 sm:px-6">
+                <div data-testid="loading-spinner" className="h-8 w-8 animate-spin rounded-full border-b-2 border-blue-500"></div>
+              </div>
+            ) : (
+              <ul data-testid="users-list" className="divide-y divide-gray-200 dark:divide-slate-700">
+                {(users || []).map((user) => (
+                  <li key={user.id} data-testid={`user-row-${user.username}`}>
+                    <div className="px-4 py-4 sm:px-6">
+                      <div className="flex items-center justify-between">
+                        <div className="flex items-center">
+                          <div>
+                            <div className="flex items-center gap-2">
+                              <p className="text-sm font-medium text-gray-900 dark:text-white">
+                                {user.first_name || user.last_name
+                                  ? `${user.first_name} ${user.last_name}`.trim()
+                                  : user.username}
+                              </p>
+                              {(user.first_name || user.last_name) && (
+                                <span className="text-xs text-gray-500 dark:text-gray-400">({user.username})</span>
+                              )}
+                              {user.id === currentUser?.id && (
+                                <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 dark:bg-slate-700 text-gray-500 dark:text-gray-400">{t('admin.youBadge')}</span>
+                              )}
+                            </div>
+                            <p className="text-sm text-gray-500 dark:text-gray-400" title={user.id}>
+                              {t('admin.userCreated', { date: new Date(user.created_at).toLocaleDateString(i18n.resolvedLanguage) })}
                             </p>
-                            {(user.first_name || user.last_name) && (
-                              <span className="text-xs text-gray-500 dark:text-gray-400">({user.username})</span>
-                            )}
-                            {user.id === currentUser?.id && (
-                              <span className="text-xs px-1.5 py-0.5 rounded bg-gray-100 dark:bg-slate-700 text-gray-500 dark:text-gray-400">{t('admin.youBadge')}</span>
-                            )}
                           </div>
-                          <p className="text-sm text-gray-500 dark:text-gray-400" title={user.id}>
-                            {t('admin.userCreated', { date: new Date(user.created_at).toLocaleDateString(i18n.resolvedLanguage) })}
-                          </p>
+                        </div>
+                        <div className="flex items-center space-x-2">
+                          {user.role === ROLES.ADMIN && (
+                            <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300">
+                              {t('admin.adminBadge')}
+                            </span>
+                          )}
+                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300">
+                            {t('admin.activeBadge')}
+                          </span>
+                          <button
+                            disabled={user.id === currentUser?.id || roleUpdating.has(user.id)}
+                            onClick={() => handleRoleToggle(user)}
+                            aria-label={roleUpdating.has(user.id)
+                              ? t('admin.updatingRole')
+                              : t('admin.roleToggleLabel', {
+                                  action: user.role === ROLES.ADMIN ? t('admin.removeAdmin') : t('admin.makeAdmin'),
+                                  username: user.username,
+                                })}
+                            className="text-sm px-3 py-1 rounded-md border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 hover:bg-gray-50 dark:hover:bg-slate-600 disabled:opacity-40 disabled:cursor-not-allowed"
+                          >
+                            {roleUpdating.has(user.id)
+                              ? t('admin.updatingRole')
+                              : user.role === ROLES.ADMIN
+                                ? t('admin.removeAdmin')
+                                : t('admin.makeAdmin')}
+                          </button>
+                          <button
+                            disabled={user.id === currentUser?.id || deleteLoading.has(user.id)}
+                            onClick={() => handleDeleteUser(user)}
+                            aria-label={t('admin.deleteUserLabel', { username: user.username })}
+                            className="text-sm px-3 py-1 rounded-md border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 bg-white dark:bg-slate-700 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-40 disabled:cursor-not-allowed"
+                          >
+                            {deleteLoading.has(user.id) ? t('admin.deleting') : t('admin.deleteUser')}
+                          </button>
                         </div>
                       </div>
-                      <div className="flex items-center space-x-2">
-                        {user.role === ROLES.ADMIN && (
-                          <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 dark:bg-purple-900/30 text-purple-800 dark:text-purple-300">
-                            {t('admin.adminBadge')}
-                          </span>
-                        )}
-                        <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-green-100 dark:bg-green-900/30 text-green-800 dark:text-green-300">
-                          {t('admin.activeBadge')}
-                        </span>
-                        <button
-                          disabled={user.id === currentUser?.id || roleUpdating.has(user.id)}
-                          onClick={() => handleRoleToggle(user)}
-                          aria-label={roleUpdating.has(user.id)
-                            ? t('admin.updatingRole')
-                            : t('admin.roleToggleLabel', {
-                                action: user.role === ROLES.ADMIN ? t('admin.removeAdmin') : t('admin.makeAdmin'),
-                                username: user.username,
-                              })}
-                          className="text-sm px-3 py-1 rounded-md border border-gray-300 dark:border-slate-600 text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 hover:bg-gray-50 dark:hover:bg-slate-600 disabled:opacity-40 disabled:cursor-not-allowed"
-                        >
-                          {roleUpdating.has(user.id)
-                            ? t('admin.updatingRole')
-                            : user.role === ROLES.ADMIN
-                              ? t('admin.removeAdmin')
-                              : t('admin.makeAdmin')}
-                        </button>
-                        <button
-                          disabled={user.id === currentUser?.id || deleteLoading.has(user.id)}
-                          onClick={() => handleDeleteUser(user)}
-                          aria-label={t('admin.deleteUserLabel', { username: user.username })}
-                          className="text-sm px-3 py-1 rounded-md border border-red-300 dark:border-red-700 text-red-600 dark:text-red-400 bg-white dark:bg-slate-700 hover:bg-red-50 dark:hover:bg-red-900/20 disabled:opacity-40 disabled:cursor-not-allowed"
-                        >
-                          {deleteLoading.has(user.id) ? t('admin.deleting') : t('admin.deleteUser')}
-                        </button>
-                      </div>
                     </div>
-                  </div>
-                </li>
-              ))}
-            </ul>
+                  </li>
+                ))}
+              </ul>
+            )}
           </div>
+          </section>
 
-          {(!users || users.length === 0) && !loading && (
+          {usersLoaded && (!users || users.length === 0) && !usersLoading && (
             <div className="text-center py-12">
               <p className="text-gray-500 dark:text-gray-400">{t('admin.noUsersFound')}</p>
             </div>

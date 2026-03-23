@@ -45,6 +45,48 @@ const docTemplate = `{
                 }
             }
         },
+        "/admin/stats": {
+            "get": {
+                "security": [
+                    {
+                        "CookieAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "admin"
+                ],
+                "summary": "Get admin system stats (admin only)",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.AdminStats"
+                        }
+                    },
+                    "401": {
+                        "description": "unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "403": {
+                        "description": "forbidden",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
         "/admin/users": {
             "get": {
                 "security": [
@@ -312,6 +354,118 @@ const docTemplate = `{
                     },
                     "401": {
                         "description": "unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/labels/{id}": {
+            "delete": {
+                "security": [
+                    {
+                        "CookieAuth": []
+                    }
+                ],
+                "tags": [
+                    "labels"
+                ],
+                "summary": "Delete a label",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Label ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "No Content"
+                    },
+                    "401": {
+                        "description": "unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "label not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            },
+            "patch": {
+                "security": [
+                    {
+                        "CookieAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "labels"
+                ],
+                "summary": "Rename a label",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Label ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "New label name",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.RenameLabelRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.Label"
+                        }
+                    },
+                    "400": {
+                        "description": "bad request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "401": {
+                        "description": "unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "label not found",
                         "schema": {
                             "type": "string"
                         }
@@ -671,6 +825,42 @@ const docTemplate = `{
                 }
             }
         },
+        "/notes/trash": {
+            "delete": {
+                "security": [
+                    {
+                        "CookieAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "notes"
+                ],
+                "summary": "Permanently delete all notes in the current user's trash",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.EmptyTrashResponse"
+                        }
+                    },
+                    "401": {
+                        "description": "unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
         "/notes/{id}": {
             "get": {
                 "security": [
@@ -819,6 +1009,63 @@ const docTemplate = `{
                 "responses": {
                     "200": {
                         "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/models.Note"
+                        }
+                    },
+                    "400": {
+                        "description": "bad request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "401": {
+                        "description": "unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/notes/{id}/duplicate": {
+            "post": {
+                "security": [
+                    {
+                        "CookieAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "notes"
+                ],
+                "summary": "Duplicate an existing note",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Note ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
                         "schema": {
                             "$ref": "#/definitions/models.Note"
                         }
@@ -1113,79 +1360,6 @@ const docTemplate = `{
                         }
                     }
                 }
-            },
-            "delete": {
-                "security": [
-                    {
-                        "CookieAuth": []
-                    }
-                ],
-                "consumes": [
-                    "application/json"
-                ],
-                "produces": [
-                    "application/json"
-                ],
-                "tags": [
-                    "sharing"
-                ],
-                "summary": "Remove a share from a note",
-                "parameters": [
-                    {
-                        "type": "string",
-                        "description": "Note ID",
-                        "name": "id",
-                        "in": "path",
-                        "required": true
-                    },
-                    {
-                        "description": "User ID to unshare with",
-                        "name": "body",
-                        "in": "body",
-                        "required": true,
-                        "schema": {
-                            "$ref": "#/definitions/handlers.ShareNoteRequest"
-                        }
-                    }
-                ],
-                "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/handlers.ShareNoteResponse"
-                        }
-                    },
-                    "400": {
-                        "description": "bad request",
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    "401": {
-                        "description": "unauthorized",
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    "403": {
-                        "description": "not owner",
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    "404": {
-                        "description": "not found",
-                        "schema": {
-                            "type": "string"
-                        }
-                    },
-                    "500": {
-                        "description": "internal server error",
-                        "schema": {
-                            "type": "string"
-                        }
-                    }
-                }
             }
         },
         "/notes/{id}/shares": {
@@ -1235,6 +1409,76 @@ const docTemplate = `{
                     },
                     "403": {
                         "description": "not owner",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/notes/{id}/shares/{user_id}": {
+            "delete": {
+                "security": [
+                    {
+                        "CookieAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "sharing"
+                ],
+                "summary": "Remove a share from a note",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Note ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "User ID to unshare with",
+                        "name": "user_id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ShareNoteResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "bad request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "401": {
+                        "description": "unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "403": {
+                        "description": "not owner",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "not found",
                         "schema": {
                             "type": "string"
                         }
@@ -1716,6 +1960,9 @@ const docTemplate = `{
         "handlers.CreateNoteItem": {
             "type": "object",
             "properties": {
+                "completed": {
+                    "type": "boolean"
+                },
                 "indent_level": {
                     "type": "integer"
                 },
@@ -1770,6 +2017,14 @@ const docTemplate = `{
                 }
             }
         },
+        "handlers.EmptyTrashResponse": {
+            "type": "object",
+            "properties": {
+                "deleted": {
+                    "type": "integer"
+                }
+            }
+        },
         "handlers.ImportResponse": {
             "type": "object",
             "properties": {
@@ -1805,6 +2060,14 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "username": {
+                    "type": "string"
+                }
+            }
+        },
+        "handlers.RenameLabelRequest": {
+            "type": "object",
+            "properties": {
+                "name": {
                     "type": "string"
                 }
             }
@@ -1922,11 +2185,25 @@ const docTemplate = `{
                     "enum": [
                         "system",
                         "en",
-                        "de"
+                        "de",
+                        "es",
+                        "fr",
+                        "pt",
+                        "it",
+                        "nl",
+                        "pl"
                     ]
                 },
                 "last_name": {
                     "type": "string"
+                },
+                "note_sort": {
+                    "type": "string",
+                    "enum": [
+                        "manual",
+                        "updated_at",
+                        "created_at"
+                    ]
                 },
                 "theme": {
                     "type": "string",
@@ -1980,6 +2257,101 @@ const docTemplate = `{
                     "items": {
                         "$ref": "#/definitions/models.User"
                     }
+                }
+            }
+        },
+        "models.AdminLabelStats": {
+            "type": "object",
+            "properties": {
+                "note_associations": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "models.AdminNoteStats": {
+            "type": "object",
+            "properties": {
+                "archived": {
+                    "type": "integer"
+                },
+                "text": {
+                    "type": "integer"
+                },
+                "todo": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                },
+                "trashed": {
+                    "type": "integer"
+                }
+            }
+        },
+        "models.AdminSharingStats": {
+            "type": "object",
+            "properties": {
+                "share_links": {
+                    "type": "integer"
+                },
+                "shared_notes": {
+                    "type": "integer"
+                }
+            }
+        },
+        "models.AdminStats": {
+            "type": "object",
+            "properties": {
+                "labels": {
+                    "$ref": "#/definitions/models.AdminLabelStats"
+                },
+                "notes": {
+                    "$ref": "#/definitions/models.AdminNoteStats"
+                },
+                "sharing": {
+                    "$ref": "#/definitions/models.AdminSharingStats"
+                },
+                "storage": {
+                    "$ref": "#/definitions/models.AdminStorageStats"
+                },
+                "todo_items": {
+                    "$ref": "#/definitions/models.AdminTodoItemStats"
+                },
+                "users": {
+                    "$ref": "#/definitions/models.AdminUserStats"
+                }
+            }
+        },
+        "models.AdminStorageStats": {
+            "type": "object",
+            "properties": {
+                "database_size_bytes": {
+                    "type": "integer"
+                }
+            }
+        },
+        "models.AdminTodoItemStats": {
+            "type": "object",
+            "properties": {
+                "assigned": {
+                    "type": "integer"
+                },
+                "completed": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
+        "models.AdminUserStats": {
+            "type": "object",
+            "properties": {
+                "total": {
+                    "type": "integer"
                 }
             }
         },
@@ -2183,6 +2555,14 @@ const docTemplate = `{
             "properties": {
                 "language": {
                     "type": "string"
+                },
+                "note_sort": {
+                    "type": "string",
+                    "enum": [
+                        "manual",
+                        "updated_at",
+                        "created_at"
+                    ]
                 },
                 "theme": {
                     "type": "string"

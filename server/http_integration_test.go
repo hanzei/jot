@@ -436,6 +436,118 @@ func TestDeleteUserAdminCanDeleteOtherAdmin(t *testing.T) {
 	require.NoError(t, admin1.Client.AdminDeleteUser(t.Context(), admin2.User.ID))
 }
 
+func TestAdminStatsEndpoint(t *testing.T) {
+	var dbPath string
+	ts := setupTestServerWithConfig(t, func(cfg *config.Config) {
+		dbPath = cfg.DBPath
+	})
+
+	adminUser := ts.createTestUser(t, "adminstats", "password123", true)
+	member1 := ts.createTestUser(t, "memberstats1", "password123", false)
+	member2 := ts.createTestUser(t, "memberstats2", "password123", false)
+
+	sharedTextNote, err := adminUser.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
+		Title:    "Shared text note",
+		Content:  "shared content",
+		NoteType: client.NoteTypeText,
+	})
+	require.NoError(t, err)
+
+	archivedTodoNote, err := adminUser.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
+		Title:    "Archived todo note",
+		NoteType: client.NoteTypeTodo,
+		Items: []client.CreateNoteItem{
+			{Text: "First todo", Position: 0},
+			{Text: "Second todo", Position: 1},
+		},
+	})
+	require.NoError(t, err)
+
+	activeTodoNote, err := adminUser.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
+		Title:    "Active todo note",
+		NoteType: client.NoteTypeTodo,
+		Items: []client.CreateNoteItem{
+			{Text: "Assigned todo", Position: 0},
+		},
+	})
+	require.NoError(t, err)
+
+	trashedTextNote, err := adminUser.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
+		Title:    "Trashed text note",
+		Content:  "trashed content",
+		NoteType: client.NoteTypeText,
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, adminUser.Client.ShareNote(t.Context(), archivedTodoNote.ID, member1.User.ID))
+	require.NoError(t, adminUser.Client.ShareNote(t.Context(), activeTodoNote.ID, member2.User.ID))
+
+	archived := true
+	_, err = adminUser.Client.UpdateNote(t.Context(), archivedTodoNote.ID, &client.UpdateNoteRequest{
+		Archived: &archived,
+		Items: []client.UpdateNoteItem{
+			{Text: "First todo", Position: 0, Completed: true, AssignedTo: member1.User.ID},
+			{Text: "Second todo", Position: 1, Completed: false, AssignedTo: ""},
+		},
+	})
+	require.NoError(t, err)
+
+	_, err = adminUser.Client.UpdateNote(t.Context(), activeTodoNote.ID, &client.UpdateNoteRequest{
+		Items: []client.UpdateNoteItem{
+			{Text: "Assigned todo", Position: 0, Completed: false, AssignedTo: member2.User.ID},
+		},
+	})
+	require.NoError(t, err)
+
+	require.NoError(t, adminUser.Client.DeleteNote(t.Context(), trashedTextNote.ID))
+	require.NoError(t, adminUser.Client.ShareNote(t.Context(), sharedTextNote.ID, member1.User.ID))
+	require.NoError(t, adminUser.Client.ShareNote(t.Context(), sharedTextNote.ID, member2.User.ID))
+
+	_, err = adminUser.Client.AddLabel(t.Context(), sharedTextNote.ID, "work")
+	require.NoError(t, err)
+	_, err = adminUser.Client.AddLabel(t.Context(), sharedTextNote.ID, "urgent")
+	require.NoError(t, err)
+	_, err = adminUser.Client.AddLabel(t.Context(), archivedTodoNote.ID, "work")
+	require.NoError(t, err)
+
+	t.Run("returns aggregated stats for admins", func(t *testing.T) {
+		stats, err := adminUser.Client.AdminGetStats(t.Context())
+		require.NoError(t, err)
+
+		assert.Equal(t, int64(3), stats.Users.Total)
+		assert.Equal(t, int64(4), stats.Notes.Total)
+		assert.Equal(t, int64(2), stats.Notes.Text)
+		assert.Equal(t, int64(2), stats.Notes.Todo)
+		assert.Equal(t, int64(1), stats.Notes.Trashed)
+		assert.Equal(t, int64(1), stats.Notes.Archived)
+
+		assert.Equal(t, int64(3), stats.Sharing.SharedNotes)
+		assert.Equal(t, int64(4), stats.Sharing.ShareLinks)
+
+		assert.Equal(t, int64(2), stats.Labels.Total)
+		assert.Equal(t, int64(3), stats.Labels.NoteAssociations)
+
+		assert.Equal(t, int64(3), stats.TodoItems.Total)
+		assert.Equal(t, int64(1), stats.TodoItems.Completed)
+		assert.Equal(t, int64(2), stats.TodoItems.Assigned)
+
+		fileInfo, err := os.Stat(dbPath)
+		require.NoError(t, err)
+		assert.Equal(t, fileInfo.Size(), stats.Storage.DatabaseSizeBytes)
+		assert.Positive(t, stats.Storage.DatabaseSizeBytes)
+	})
+
+	t.Run("returns 403 for non-admin users", func(t *testing.T) {
+		_, err := member1.Client.AdminGetStats(t.Context())
+		assert.Equal(t, http.StatusForbidden, client.StatusCode(err))
+	})
+
+	t.Run("returns 401 for unauthenticated requests", func(t *testing.T) {
+		_, err := ts.newClient().AdminGetStats(t.Context())
+		assert.Equal(t, http.StatusUnauthorized, client.StatusCode(err))
+	})
+}
+
 func TestUpdateUserEndpoint(t *testing.T) {
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "originaluser", "password123", false)
@@ -443,7 +555,7 @@ func TestUpdateUserEndpoint(t *testing.T) {
 
 	t.Run("successful username update", func(t *testing.T) {
 		t.Cleanup(func() {
-			// t.Context() is already canceled when cleanup runs; use a fresh context.
+			// t.Context() is already canceled when cleanup runs; use a background context.
 			_, err := user.Client.UpdateUser(context.Background(), &client.UpdateUserRequest{Username: client.Ptr("originaluser")})
 			require.NoError(t, err)
 		})
@@ -487,7 +599,7 @@ func TestUpdateUserEndpoint(t *testing.T) {
 
 // SSE endpoint tests
 
-func TestSSEEndpoint(t *testing.T) {
+func TestSSEEndpoint(t *testing.T) { //nolint:gocognit
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "sseuser", "password123", false)
 
@@ -613,11 +725,14 @@ func TestChangePasswordEndpoint(t *testing.T) {
 func TestUserSettingsEndpoints(t *testing.T) {
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "settingsuser", "password123", false)
+	additionalLocales := []string{"es", "fr", "pt", "it", "nl", "pl"}
+	lastAdditionalLocale := additionalLocales[len(additionalLocales)-1]
 
 	t.Run("me response includes default settings for new user", func(t *testing.T) {
 		me, err := user.Client.Me(t.Context())
 		require.NoError(t, err)
 		assert.Equal(t, "system", me.Settings.Language)
+		assert.Equal(t, "manual", me.Settings.NoteSort)
 		assert.Equal(t, user.User.ID, me.Settings.UserID)
 	})
 
@@ -625,16 +740,34 @@ func TestUserSettingsEndpoints(t *testing.T) {
 		resp, err := user.Client.UpdateUser(t.Context(), &client.UpdateUserRequest{Language: client.Ptr("de")})
 		require.NoError(t, err)
 		assert.Equal(t, "de", resp.Settings.Language)
+		assert.Equal(t, "manual", resp.Settings.NoteSort)
+	})
+
+	t.Run("PATCH /users/me accepts additional supported languages", func(t *testing.T) {
+		for _, locale := range additionalLocales {
+			locale := locale
+			t.Run(locale, func(t *testing.T) {
+				resp, err := user.Client.UpdateUser(t.Context(), &client.UpdateUserRequest{Language: client.Ptr(locale)})
+				require.NoError(t, err)
+				assert.Equal(t, locale, resp.Settings.Language)
+			})
+		}
 	})
 
 	t.Run("me response reflects updated language", func(t *testing.T) {
 		me, err := user.Client.Me(t.Context())
 		require.NoError(t, err)
-		assert.Equal(t, "de", me.Settings.Language)
+		assert.Equal(t, lastAdditionalLocale, me.Settings.Language)
+		assert.Equal(t, "manual", me.Settings.NoteSort)
 	})
 
 	t.Run("PATCH /users/me with invalid language returns 400", func(t *testing.T) {
-		_, err := user.Client.UpdateUser(t.Context(), &client.UpdateUserRequest{Language: client.Ptr("fr")})
+		_, err := user.Client.UpdateUser(t.Context(), &client.UpdateUserRequest{Language: client.Ptr("sv")})
+		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
+	})
+
+	t.Run("PATCH /users/me with invalid note_sort returns 400", func(t *testing.T) {
+		_, err := user.Client.UpdateUser(t.Context(), &client.UpdateUserRequest{NoteSort: client.Ptr("title")})
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 
@@ -650,15 +783,29 @@ func TestUserSettingsEndpoints(t *testing.T) {
 		assert.NotEqual(t, "ShouldNotPersist", me.User.FirstName)
 	})
 
+	t.Run("invalid note_sort with valid profile does not commit profile (atomic validation)", func(t *testing.T) {
+		_, err := user.Client.UpdateUser(t.Context(), &client.UpdateUserRequest{
+			FirstName: client.Ptr("ShouldNotPersistEither"),
+			NoteSort:  client.Ptr("title"),
+		})
+		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
+
+		me, err := user.Client.Me(t.Context())
+		require.NoError(t, err)
+		assert.NotEqual(t, "ShouldNotPersistEither", me.User.FirstName)
+	})
+
 	t.Run("PATCH /users/me updates both profile and settings", func(t *testing.T) {
 		resp, err := user.Client.UpdateUser(t.Context(), &client.UpdateUserRequest{
 			FirstName: client.Ptr("Jane"),
 			Theme:     client.Ptr("dark"),
+			NoteSort:  client.Ptr("created_at"),
 		})
 		require.NoError(t, err)
 		assert.Equal(t, "Jane", resp.User.FirstName)
 		assert.Equal(t, "dark", resp.Settings.Theme)
-		assert.Equal(t, "de", resp.Settings.Language)
+		assert.Equal(t, lastAdditionalLocale, resp.Settings.Language)
+		assert.Equal(t, "created_at", resp.Settings.NoteSort)
 	})
 
 	t.Run("me response includes settings", func(t *testing.T) {
@@ -672,7 +819,8 @@ func TestUserSettingsEndpoints(t *testing.T) {
 		auth, err := loginClient.Login(t.Context(), "settingsuser", "password123")
 		require.NoError(t, err)
 		assert.NotNil(t, auth.Settings)
-		assert.Equal(t, "de", auth.Settings.Language)
+		assert.Equal(t, lastAdditionalLocale, auth.Settings.Language)
+		assert.Equal(t, "created_at", auth.Settings.NoteSort)
 	})
 
 	t.Run("register response includes settings", func(t *testing.T) {
@@ -681,6 +829,7 @@ func TestUserSettingsEndpoints(t *testing.T) {
 		require.NoError(t, err)
 		assert.NotNil(t, auth.Settings)
 		assert.Equal(t, "system", auth.Settings.Language)
+		assert.Equal(t, "manual", auth.Settings.NoteSort)
 	})
 }
 
@@ -889,7 +1038,7 @@ func TestUploadProfileIcon(t *testing.T) {
 		pngData := encodePNG(t, img)
 		body, ct := createMultipartImage(t, "file", "test.png", pngData)
 
-		req, err := http.NewRequest(http.MethodPost, ts.HTTPServer.URL+"/api/v1/users/me/profile-icon", body)
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, ts.HTTPServer.URL+"/api/v1/users/me/profile-icon", body)
 		require.NoError(t, err)
 		req.Header.Set("Content-Type", ct)
 

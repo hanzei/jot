@@ -1,10 +1,12 @@
 package handlers
 
 import (
+	"context"
 	"database/sql"
 	"encoding/json"
 	"errors"
 	"net/http"
+	"os"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/hanzei/jot/server/internal/auth"
@@ -12,14 +14,23 @@ import (
 )
 
 type AdminHandler struct {
-	userStore *models.UserStore
-	noteStore *models.NoteStore
+	userStore  *models.UserStore
+	noteStore  *models.NoteStore
+	statsStore *models.AdminStatsStore
+	dbPath     string
 }
 
-func NewAdminHandler(userStore *models.UserStore, noteStore *models.NoteStore) *AdminHandler {
+func NewAdminHandler(
+	userStore *models.UserStore,
+	noteStore *models.NoteStore,
+	statsStore *models.AdminStatsStore,
+	dbPath string,
+) *AdminHandler {
 	return &AdminHandler{
-		userStore: userStore,
-		noteStore: noteStore,
+		userStore:  userStore,
+		noteStore:  noteStore,
+		statsStore: statsStore,
+		dbPath:     dbPath,
 	}
 }
 
@@ -33,6 +44,33 @@ type UserListResponse struct {
 	Users []*models.User `json:"users"`
 }
 
+// GetStats godoc
+//
+//	@Summary	Get admin system stats (admin only)
+//	@Tags		admin
+//	@Security	CookieAuth
+//	@Produce	json
+//	@Success	200	{object}	models.AdminStats
+//	@Failure	401	{string}	string	"unauthorized"
+//	@Failure	403	{string}	string	"forbidden"
+//	@Failure	500	{string}	string	"internal server error"
+//	@Router		/admin/stats [get]
+func (h *AdminHandler) GetStats(w http.ResponseWriter, r *http.Request) (int, any, error) {
+	stats, err := h.statsStore.GetStats(r.Context())
+	if err != nil {
+		return http.StatusInternalServerError, nil, err
+	}
+
+	fileInfo, err := os.Stat(h.dbPath)
+	if err != nil {
+		return http.StatusInternalServerError, nil, err
+	}
+
+	stats.Storage.DatabaseSizeBytes = fileInfo.Size()
+
+	return http.StatusOK, stats, nil
+}
+
 // GetUsers godoc
 //
 //	@Summary	List all users (admin only)
@@ -44,7 +82,7 @@ type UserListResponse struct {
 //	@Failure	403	{string}	string	"forbidden"
 //	@Router		/admin/users [get]
 func (h *AdminHandler) GetUsers(w http.ResponseWriter, r *http.Request) (int, any, error) {
-	users, err := h.userStore.GetAll()
+	users, err := h.userStore.GetAll(r.Context())
 	if err != nil {
 		return http.StatusInternalServerError, nil, err
 	}
@@ -88,7 +126,7 @@ func (h *AdminHandler) CreateUser(w http.ResponseWriter, r *http.Request) (int, 
 		return http.StatusBadRequest, nil, err
 	}
 
-	user, err := h.userStore.CreateByAdmin(req.Username, req.Password, req.Role)
+	user, err := h.userStore.CreateByAdmin(r.Context(), req.Username, req.Password, req.Role)
 	if err != nil {
 		if errors.Is(err, models.ErrUsernameTaken) {
 			return http.StatusConflict, nil, models.ErrUsernameTaken
@@ -128,7 +166,7 @@ func (h *AdminHandler) UpdateUserRole(w http.ResponseWriter, r *http.Request) (i
 	if err := validateRole(req.Role); err != nil {
 		return http.StatusBadRequest, nil, err
 	}
-	user, err := h.userStore.UpdateRole(userID, req.Role)
+	user, err := h.userStore.UpdateRole(r.Context(), userID, req.Role)
 	if err != nil {
 		if errors.Is(err, models.ErrUserNotFound) {
 			return http.StatusNotFound, nil, err
@@ -160,8 +198,8 @@ func (h *AdminHandler) DeleteUser(w http.ResponseWriter, r *http.Request) (int, 
 		return http.StatusUnauthorized, nil, errors.New("unauthorized")
 	}
 
-	err := h.userStore.DeleteWithCleanup(targetID, requestingUser.ID, func(tx *sql.Tx) error {
-		return h.noteStore.ClearUserAssignmentsTx(tx, targetID)
+	err := h.userStore.DeleteWithCleanup(r.Context(), targetID, requestingUser.ID, func(ctx context.Context, tx *sql.Tx) error {
+		return h.noteStore.ClearUserAssignmentsTx(ctx, tx, targetID)
 	})
 	if err != nil {
 		if errors.Is(err, models.ErrUserNotFound) {

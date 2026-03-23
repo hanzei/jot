@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -81,7 +82,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) (int, any
 		return http.StatusBadRequest, nil, err
 	}
 
-	user, err := h.userStore.Create(req.Username, req.Password)
+	user, err := h.userStore.Create(r.Context(), req.Username, req.Password)
 	if err != nil {
 		if errors.Is(err, models.ErrUsernameTaken) {
 			return http.StatusConflict, nil, models.ErrUsernameTaken
@@ -89,7 +90,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) (int, any
 		return http.StatusInternalServerError, nil, err
 	}
 
-	settings, err := h.userSettingsStore.GetOrCreate(user.ID)
+	settings, err := h.userSettingsStore.GetOrCreate(r.Context(), user.ID)
 	if err != nil {
 		return http.StatusInternalServerError, nil, err
 	}
@@ -129,7 +130,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) (int, any, e
 		return http.StatusBadRequest, nil, errors.New("missing username or password")
 	}
 
-	user, err := h.userStore.GetByUsername(req.Username)
+	user, err := h.userStore.GetByUsername(r.Context(), req.Username)
 	if err != nil {
 		return http.StatusUnauthorized, nil, errors.New("invalid username or password")
 	}
@@ -138,7 +139,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) (int, any, e
 		return http.StatusUnauthorized, nil, errors.New("invalid username or password")
 	}
 
-	settings, err := h.userSettingsStore.GetOrCreate(user.ID)
+	settings, err := h.userSettingsStore.GetOrCreate(r.Context(), user.ID)
 	if err != nil {
 		return http.StatusInternalServerError, nil, err
 	}
@@ -176,25 +177,39 @@ type UpdateUserRequest struct {
 	Username  *string `json:"username,omitempty"`
 	FirstName *string `json:"first_name,omitempty"`
 	LastName  *string `json:"last_name,omitempty"`
-	Language  *string `json:"language,omitempty" enums:"system,en,de"`
+	Language  *string `json:"language,omitempty" enums:"system,en,de,es,fr,pt,it,nl,pl"`
 	Theme     *string `json:"theme,omitempty" enums:"system,light,dark"`
+	NoteSort  *string `json:"note_sort,omitempty" enums:"manual,updated_at,created_at"`
 }
 
-var validLanguages = map[string]bool{"system": true, "en": true, "de": true}
+// Keep this list in sync with webapp/mobile SUPPORTED_LANGUAGES and the
+// user_settings language CHECK constraint migration.
+var validLanguages = map[string]bool{
+	"system": true,
+	"en":     true,
+	"de":     true,
+	"es":     true,
+	"fr":     true,
+	"pt":     true,
+	"it":     true,
+	"nl":     true,
+	"pl":     true,
+}
 var validThemes = map[string]bool{"system": true, "light": true, "dark": true}
+var validNoteSorts = map[string]bool{"manual": true, "updated_at": true, "created_at": true}
 
-// validateSettingsFields validates language and theme. Returns (lang, theme, needUpdate).
-// If both are nil, needUpdate is false. If validation fails, returns a non-nil error.
-func validateSettingsFields(current *models.UserSettings, language, theme *string) (lang, th string, needUpdate bool, err error) {
-	if language == nil && theme == nil {
-		return "", "", false, nil
+// validateSettingsFields validates language, theme, and note sort.
+// Returns (lang, theme, noteSort, needUpdate). If all are nil, needUpdate is false.
+func validateSettingsFields(current *models.UserSettings, language, theme, noteSort *string) (lang, th, ns string, needUpdate bool, err error) {
+	if language == nil && theme == nil && noteSort == nil {
+		return "", "", "", false, nil
 	}
 	lang = current.Language
 	if language != nil {
 		lang = *language
 	}
 	if !validLanguages[lang] {
-		return "", "", false, errors.New("invalid language: must be 'system', 'en', or 'de'")
+		return "", "", "", false, errors.New("invalid language: must be one of 'system', 'en', 'de', 'es', 'fr', 'pt', 'it', 'nl', or 'pl'")
 	}
 	th = current.Theme
 	if theme != nil {
@@ -204,22 +219,32 @@ func validateSettingsFields(current *models.UserSettings, language, theme *strin
 		th = "system"
 	}
 	if !validThemes[th] {
-		return "", "", false, errors.New("invalid theme: must be 'system', 'light', or 'dark'")
+		return "", "", "", false, errors.New("invalid theme: must be 'system', 'light', or 'dark'")
 	}
-	return lang, th, true, nil
+	ns = current.NoteSort
+	if noteSort != nil {
+		ns = *noteSort
+	}
+	if ns == "" {
+		ns = "manual"
+	}
+	if !validNoteSorts[ns] {
+		return "", "", "", false, errors.New("invalid note_sort: must be 'manual', 'updated_at', or 'created_at'")
+	}
+	return lang, th, ns, true, nil
 }
 
-// applySettingsUpdate validates and persists language/theme changes.
-// If neither field is set the current settings are returned unchanged.
-func (h *AuthHandler) applySettingsUpdate(userID string, current *models.UserSettings, language, theme *string) (*models.UserSettings, int, error) {
-	lang, th, needUpdate, err := validateSettingsFields(current, language, theme)
+// applySettingsUpdate validates and persists settings changes.
+// If no settings field is set the current settings are returned unchanged.
+func (h *AuthHandler) applySettingsUpdate(ctx context.Context, userID string, current *models.UserSettings, language, theme, noteSort *string) (*models.UserSettings, int, error) {
+	lang, th, ns, needUpdate, err := validateSettingsFields(current, language, theme, noteSort)
 	if err != nil {
 		return nil, http.StatusBadRequest, err
 	}
 	if !needUpdate {
 		return current, 0, nil
 	}
-	updated, err := h.userSettingsStore.Update(userID, lang, th)
+	updated, err := h.userSettingsStore.Update(ctx, userID, lang, th, ns)
 	if err != nil {
 		return nil, http.StatusInternalServerError, err
 	}
@@ -269,15 +294,15 @@ func (h *AuthHandler) UpdateUser(w http.ResponseWriter, r *http.Request) (int, a
 	}
 
 	// Validate settings before committing any changes so we fail atomically.
-	settings, err := h.userSettingsStore.GetOrCreate(currentUser.ID)
+	settings, err := h.userSettingsStore.GetOrCreate(r.Context(), currentUser.ID)
 	if err != nil {
 		return http.StatusInternalServerError, nil, err
 	}
-	if _, _, _, validateErr := validateSettingsFields(settings, req.Language, req.Theme); validateErr != nil {
+	if _, _, _, _, validateErr := validateSettingsFields(settings, req.Language, req.Theme, req.NoteSort); validateErr != nil {
 		return http.StatusBadRequest, nil, validateErr
 	}
 
-	user, err := h.userStore.UpdateProfile(currentUser.ID, username, firstName, lastName)
+	user, err := h.userStore.UpdateProfile(r.Context(), currentUser.ID, username, firstName, lastName)
 	if err != nil {
 		if errors.Is(err, models.ErrUsernameTaken) {
 			return http.StatusConflict, nil, models.ErrUsernameTaken
@@ -285,7 +310,7 @@ func (h *AuthHandler) UpdateUser(w http.ResponseWriter, r *http.Request) (int, a
 		return http.StatusInternalServerError, nil, err
 	}
 
-	settings, status, settingsErr := h.applySettingsUpdate(currentUser.ID, settings, req.Language, req.Theme)
+	settings, status, settingsErr := h.applySettingsUpdate(r.Context(), currentUser.ID, settings, req.Language, req.Theme, req.NoteSort)
 	if settingsErr != nil {
 		return status, nil, settingsErr
 	}
@@ -333,7 +358,7 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) (in
 	}
 
 	// Verify current password
-	user, err := h.userStore.GetByID(currentUser.ID)
+	user, err := h.userStore.GetByID(r.Context(), currentUser.ID)
 	if err != nil {
 		return http.StatusInternalServerError, nil, err
 	}
@@ -342,13 +367,13 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) (in
 		return http.StatusForbidden, nil, errors.New("current password is incorrect")
 	}
 
-	if err := h.userStore.UpdatePassword(currentUser.ID, req.NewPassword); err != nil {
+	if err := h.userStore.UpdatePassword(r.Context(), currentUser.ID, req.NewPassword); err != nil {
 		return http.StatusInternalServerError, nil, err
 	}
 
 	// Invalidate all existing sessions so that stolen/compromised tokens
 	// cannot be reused after a password change.
-	if err := h.sessionService.InvalidateUserSessions(currentUser.ID); err != nil {
+	if err := h.sessionService.InvalidateUserSessions(r.Context(), currentUser.ID); err != nil {
 		return http.StatusInternalServerError, nil, err
 	}
 
@@ -376,7 +401,7 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) (int, any, erro
 		return http.StatusUnauthorized, nil, errors.New("unauthorized")
 	}
 
-	settings, err := h.userSettingsStore.GetOrCreate(user.ID)
+	settings, err := h.userSettingsStore.GetOrCreate(r.Context(), user.ID)
 	if err != nil {
 		return http.StatusInternalServerError, nil, err
 	}
@@ -539,11 +564,11 @@ func (h *AuthHandler) UploadProfileIcon(w http.ResponseWriter, r *http.Request) 
 	}
 	contentType = "image/jpeg"
 
-	if err = h.userStore.UpdateProfileIcon(currentUser.ID, data, contentType); err != nil {
+	if err = h.userStore.UpdateProfileIcon(r.Context(), currentUser.ID, data, contentType); err != nil {
 		return http.StatusInternalServerError, nil, fmt.Errorf("update profile icon for user %s: %w", currentUser.ID, err)
 	}
 
-	user, err := h.userStore.GetByID(currentUser.ID)
+	user, err := h.userStore.GetByID(r.Context(), currentUser.ID)
 	if err != nil {
 		return http.StatusInternalServerError, nil, fmt.Errorf("fetch user by id: %w", err)
 	}
@@ -566,7 +591,7 @@ func (h *AuthHandler) DeleteProfileIcon(w http.ResponseWriter, r *http.Request) 
 		return http.StatusUnauthorized, nil, errors.New("unauthorized")
 	}
 
-	if err := h.userStore.DeleteProfileIcon(currentUser.ID); err != nil {
+	if err := h.userStore.DeleteProfileIcon(r.Context(), currentUser.ID); err != nil {
 		return http.StatusInternalServerError, nil, fmt.Errorf("delete profile icon for user %s: %w", currentUser.ID, err)
 	}
 
@@ -588,7 +613,7 @@ func (h *AuthHandler) DeleteProfileIcon(w http.ResponseWriter, r *http.Request) 
 func (h *AuthHandler) GetUserProfileIcon(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	id := chi.URLParam(r, "id")
 
-	data, contentType, err := h.userStore.GetProfileIcon(id)
+	data, contentType, err := h.userStore.GetProfileIcon(r.Context(), id)
 	if err != nil {
 		if errors.Is(err, models.ErrUserNotFound) {
 			return http.StatusNotFound, nil, errors.New("user not found")

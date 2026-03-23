@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { ServerConfig, AboutInfo, AuthResponse, LoginRequest, RegisterRequest, Note, CreateNoteRequest, UpdateNoteRequest, User, CreateUserRequest, UserListResponse, ShareNoteRequest, ShareNoteResponse, NoteShare, ImportResponse, UpdateMeRequest, ChangePasswordRequest, UpdateUserRoleRequest, Label, ActiveSession } from '@jot/shared';
+import type { ServerConfig, AboutInfo, AuthResponse, LoginRequest, RegisterRequest, Note, CreateNoteRequest, UpdateNoteRequest, User, CreateUserRequest, UserListResponse, AdminStatsResponse, ShareNoteRequest, ShareNoteResponse, NoteShare, ImportResponse, UpdateMeRequest, ChangePasswordRequest, UpdateUserRoleRequest, Label, ActiveSession, EmptyTrashResponse } from '@jot/shared';
 
 const api = axios.create({
   baseURL: '/api/v1',
@@ -60,14 +60,20 @@ export const notes = {
       ? api.delete(`/notes/${id}`, { params: { permanent: true } })
       : api.delete(`/notes/${id}`),
 
+  emptyTrash: (): Promise<EmptyTrashResponse> =>
+    api.delete('/notes/trash').then(res => res.data),
+
   restore: (id: string): Promise<Note> =>
     api.post(`/notes/${id}/restore`).then(res => res.data),
+
+  duplicate: (id: string): Promise<Note> =>
+    api.post(`/notes/${id}/duplicate`).then(res => res.data),
 
   share: (id: string, data: ShareNoteRequest): Promise<ShareNoteResponse> =>
     api.post(`/notes/${id}/share`, data).then(res => res.data),
 
-  unshare: (id: string, data: ShareNoteRequest): Promise<ShareNoteResponse> =>
-    api.delete(`/notes/${id}/share`, { data }).then(res => res.data),
+  unshare: (id: string, userId: string): Promise<ShareNoteResponse> =>
+    api.delete(`/notes/${id}/shares/${userId}`).then(res => res.data),
 
   getShares: (id: string): Promise<NoteShare[]> =>
     api.get(`/notes/${id}/shares`).then(res => res.data),
@@ -91,6 +97,12 @@ export const notes = {
 export const labels = {
   getAll: (): Promise<Label[]> =>
     api.get('/labels').then(res => res.data),
+
+  rename: (id: string, name: string): Promise<Label> =>
+    api.patch(`/labels/${id}`, { name }).then(res => res.data),
+
+  delete: (id: string): Promise<void> =>
+    api.delete(`/labels/${id}`).then(() => undefined),
 };
 
 export const users = {
@@ -127,6 +139,9 @@ export const about = {
 };
 
 export const admin = {
+  getStats: (): Promise<AdminStatsResponse> =>
+    api.get('/admin/stats').then(res => res.data),
+
   getUsers: (): Promise<UserListResponse> =>
     api.get('/admin/users').then(res => res.data),
 

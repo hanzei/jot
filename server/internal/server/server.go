@@ -73,6 +73,7 @@ func New(cfg *config.Config) (*Server, error) {
 	userStore := models.NewUserStore(db.DB)
 	noteStore := models.NewNoteStore(db.DB)
 	labelStore := models.NewLabelStore(db.DB)
+	adminStatsStore := models.NewAdminStatsStore(db.DB)
 	sessionStore := models.NewSessionStore(db.DB)
 	userSettingsStore := models.NewUserSettingsStore(db.DB)
 
@@ -86,7 +87,7 @@ func New(cfg *config.Config) (*Server, error) {
 	notesHandler := handlers.NewNotesHandler(noteStore, userStore, labelStore, hub)
 	labelsHandler := handlers.NewLabelsHandler(noteStore, labelStore, hub)
 	eventsHandler := handlers.NewEventsHandler(hub)
-	adminHandler := handlers.NewAdminHandler(userStore, noteStore)
+	adminHandler := handlers.NewAdminHandler(userStore, noteStore, adminStatsStore, cfg.DBPath)
 	sessionsHandler := handlers.NewSessionsHandler(sessionStore)
 
 	s := &Server{
@@ -105,9 +106,11 @@ func New(cfg *config.Config) (*Server, error) {
 		sessionsHandler: sessionsHandler,
 	}
 
-	startPeriodicTask(&s.bgWg, ctx, time.Hour, false, sessionStore.DeleteExpired, "delete expired sessions")
+	startPeriodicTask(&s.bgWg, ctx, time.Hour, false, func() error {
+		return sessionStore.DeleteExpired(ctx)
+	}, "delete expired sessions")
 	startPeriodicTask(&s.bgWg, ctx, time.Hour, true, func() error {
-		return noteStore.PurgeOldTrashedNotes(7 * 24 * time.Hour)
+		return noteStore.PurgeOldTrashedNotes(ctx, 7*24*time.Hour)
 	}, "purge old trashed notes")
 
 	if err := s.setupRoutes(); err != nil {
@@ -159,22 +162,26 @@ func (s *Server) setupRoutes() error {
 
 			r.Get("/notes", s.wrapHandler(s.notesHandler.GetNotes))
 			r.Post("/notes", s.wrapHandler(s.notesHandler.CreateNote))
+			r.Delete("/notes/trash", s.wrapHandler(s.notesHandler.EmptyTrash))
 			r.Post("/notes/reorder", s.wrapHandler(s.notesHandler.ReorderNotes))
 			r.Post("/notes/import", s.wrapHandler(s.notesHandler.ImportNotes))
 			r.Get("/notes/{id}", s.wrapHandler(s.notesHandler.GetNote))
 			r.Patch("/notes/{id}", s.wrapHandler(s.notesHandler.UpdateNote))
 			r.Delete("/notes/{id}", s.wrapHandler(s.notesHandler.DeleteNote))
+			r.Post("/notes/{id}/duplicate", s.wrapHandler(s.notesHandler.DuplicateNote))
 
 			r.Post("/notes/{id}/restore", s.wrapHandler(s.notesHandler.RestoreNote))
 
 			r.Post("/notes/{id}/share", s.wrapHandler(s.notesHandler.ShareNote))
-			r.Delete("/notes/{id}/share", s.wrapHandler(s.notesHandler.UnshareNote))
+			r.Delete("/notes/{id}/shares/{user_id}", s.wrapHandler(s.notesHandler.UnshareNote))
 			r.Get("/notes/{id}/shares", s.wrapHandler(s.notesHandler.GetNoteShares))
 
 			r.Post("/notes/{id}/labels", s.wrapHandler(s.labelsHandler.AddLabel))
 			r.Delete("/notes/{id}/labels/{label_id}", s.wrapHandler(s.labelsHandler.RemoveLabel))
 
 			r.Get("/labels", s.wrapHandler(s.labelsHandler.GetLabels))
+			r.Patch("/labels/{id}", s.wrapHandler(s.labelsHandler.RenameLabel))
+			r.Delete("/labels/{id}", s.wrapHandler(s.labelsHandler.DeleteLabel))
 
 			r.Get("/users", s.wrapHandler(s.notesHandler.SearchUsers))
 
@@ -186,6 +193,7 @@ func (s *Server) setupRoutes() error {
 			r.Use(s.sessionService.AuthMiddleware)
 			r.Use(auth.AdminRequired)
 
+			r.Get("/admin/stats", s.wrapHandler(s.adminHandler.GetStats))
 			r.Get("/admin/users", s.wrapHandler(s.adminHandler.GetUsers))
 			r.Post("/admin/users", s.wrapHandler(s.adminHandler.CreateUser))
 			r.Put("/admin/users/{id}/role", s.wrapHandler(s.adminHandler.UpdateUserRole))
@@ -386,7 +394,7 @@ func logrusRequestLogger(next http.Handler) http.Handler {
 }
 
 func (s *Server) Start(addr string) error {
-	listener, err := net.Listen("tcp", addr)
+	listener, err := (&net.ListenConfig{}).Listen(s.ctx, "tcp", addr)
 	if err != nil {
 		startErr := fmt.Errorf("listen: %w", err)
 		s.setStartResult(startErr)
