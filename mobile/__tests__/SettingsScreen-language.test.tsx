@@ -170,4 +170,30 @@ describe('SettingsScreen language selection', () => {
       expect(getProbeByTestId('settings-title').props.children).toBe('Einstellungen');
     });
   });
+
+  it('persists selected theme through the theme dropdown', async () => {
+    const updatedSettings = {
+      ...currentSettings,
+      theme: 'dark' as const,
+    };
+    mockUpdateMe.mockResolvedValue({
+      user,
+      settings: updatedSettings,
+    });
+
+    const { getByTestId } = render(<SettingsScreen />);
+
+    await waitFor(() => {
+      expect(mockListSessions).toHaveBeenCalled();
+    });
+
+    fireEvent.press(getByTestId('settings-theme-dropdown'));
+    fireEvent.press(getByTestId('settings-theme-dark'));
+
+    await waitFor(() => {
+      expect(mockUpdateMe).toHaveBeenCalledWith({ theme: 'dark' });
+    });
+
+    expect(setSettings).toHaveBeenCalledWith(expect.objectContaining({ theme: 'dark' }));
+  });
 });

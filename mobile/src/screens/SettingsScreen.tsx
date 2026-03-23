@@ -271,17 +271,26 @@ export default function SettingsScreen() {
 
   const handleThemeChange = useCallback(async (theme: ThemePreference) => {
     const prev = themePref;
+    const previousSettings = settings;
     setThemeError('');
     setThemePref(theme);
+
+    if (previousSettings) {
+      setSettings({ ...previousSettings, theme });
+    }
+
     try {
       const { settings: updatedSettings } = await updateMe({ theme });
       setSettings(updatedSettings);
     } catch (err: unknown) {
       setThemePref(prev);
+      if (previousSettings) {
+        setSettings(previousSettings);
+      }
       const msg = (err as { response?: { data?: string } })?.response?.data;
       setThemeError(typeof msg === 'string' ? msg.trim() : 'settings.failedUpdateTheme');
     }
-  }, [setSettings, themePref]);
+  }, [settings, setSettings, themePref]);
 
   const handleUploadIcon = useCallback(async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -670,14 +679,16 @@ export default function SettingsScreen() {
               ]}
               onPress={() => setOpenDropdown('language')}
               testID="settings-language-dropdown"
-              accessibilityLabel={t('settings.languageLabel')}
+              accessibilityLabel={`${t('settings.languageLabel')}, ${selectedLanguageLabel}`}
               accessibilityRole="button"
+              accessibilityState={{ expanded: openDropdown === 'language' }}
             >
               <Text style={[styles.dropdownTriggerText, { color: colors.text }]}>{selectedLanguageLabel}</Text>
               <Ionicons
                 name={openDropdown === 'language' ? 'chevron-up' : 'chevron-down'}
                 size={18}
                 color={colors.icon}
+                accessible={false}
               />
             </TouchableOpacity>
             {languageError !== '' && (
@@ -691,14 +702,16 @@ export default function SettingsScreen() {
               ]}
               onPress={() => setOpenDropdown('theme')}
               testID="settings-theme-dropdown"
-              accessibilityLabel={t('settings.themeLabel')}
+              accessibilityLabel={`${t('settings.themeLabel')}, ${selectedThemeLabel}`}
               accessibilityRole="button"
+              accessibilityState={{ expanded: openDropdown === 'theme' }}
             >
               <Text style={[styles.dropdownTriggerText, { color: colors.text }]}>{selectedThemeLabel}</Text>
               <Ionicons
                 name={openDropdown === 'theme' ? 'chevron-up' : 'chevron-down'}
                 size={18}
                 color={colors.icon}
+                accessible={false}
               />
             </TouchableOpacity>
             {themeError !== '' && (
@@ -778,48 +791,56 @@ export default function SettingsScreen() {
           style={[styles.dropdownOverlay, { backgroundColor: colors.overlay }]}
           onPress={() => setOpenDropdown(null)}
           testID="settings-dropdown-overlay"
+          accessibilityRole="button"
+          accessibilityLabel={t('common.close')}
         >
           <View
             style={[styles.dropdownMenu, { backgroundColor: colors.surface, borderColor: colors.border }]}
             accessibilityRole="menu"
           >
-            {dropdownOptions.map((option) => {
-              const isSelected = selectedDropdownValue === option.value;
-              const optionType = openDropdown === 'language' ? 'language' : 'theme';
-              return (
-                <TouchableOpacity
-                  key={option.value}
-                  style={[
-                    styles.dropdownOption,
-                    { borderBottomColor: colors.borderLight },
-                    isSelected && { backgroundColor: colors.primaryLight },
-                  ]}
-                  onPress={() => {
-                    if (optionType === 'language') {
-                      void handleLanguageChange(option.value as LanguagePreference);
-                    } else {
-                      void handleThemeChange(option.value as ThemePreference);
-                    }
-                    setOpenDropdown(null);
-                  }}
-                  testID={`settings-${optionType}-${option.value}`}
-                  accessibilityRole="menuitem"
-                  accessibilityLabel={option.label}
-                  accessibilityState={{ selected: isSelected }}
-                >
-                  <Text
+            <ScrollView style={styles.dropdownOptionsList}>
+              {dropdownOptions.map((option) => {
+                const isSelected = selectedDropdownValue === option.value;
+                const optionType = openDropdown === 'language' ? 'language' : 'theme';
+                return (
+                  <TouchableOpacity
+                    key={option.value}
                     style={[
-                      styles.dropdownOptionText,
-                      { color: colors.text },
-                      isSelected && { color: colors.primary, fontWeight: '600' },
+                      styles.dropdownOption,
+                      { borderBottomColor: colors.borderLight },
+                      isSelected && { backgroundColor: colors.primaryLight },
                     ]}
+                    onPress={() => {
+                      if (isSelected) {
+                        setOpenDropdown(null);
+                        return;
+                      }
+                      if (optionType === 'language') {
+                        void handleLanguageChange(option.value as LanguagePreference);
+                      } else {
+                        void handleThemeChange(option.value as ThemePreference);
+                      }
+                      setOpenDropdown(null);
+                    }}
+                    testID={`settings-${optionType}-${option.value}`}
+                    accessibilityRole="menuitem"
+                    accessibilityLabel={option.label}
+                    accessibilityState={{ selected: isSelected }}
                   >
-                    {option.label}
-                  </Text>
-                  {isSelected && <Ionicons name="checkmark" size={16} color={colors.primary} />}
-                </TouchableOpacity>
-              );
-            })}
+                    <Text
+                      style={[
+                        styles.dropdownOptionText,
+                        { color: colors.text },
+                        isSelected && { color: colors.primary, fontWeight: '600' },
+                      ]}
+                    >
+                      {option.label}
+                    </Text>
+                    {isSelected && <Ionicons name="checkmark" size={16} color={colors.primary} />}
+                  </TouchableOpacity>
+                );
+              })}
+            </ScrollView>
           </View>
         </Pressable>
       </Modal>
@@ -1011,6 +1032,9 @@ const styles = StyleSheet.create({
     borderRadius: 12,
     overflow: 'hidden',
     maxHeight: '70%',
+  },
+  dropdownOptionsList: {
+    maxHeight: '100%',
   },
   dropdownOption: {
     flexDirection: 'row',
