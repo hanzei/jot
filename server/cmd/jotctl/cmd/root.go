@@ -43,6 +43,7 @@ func init() {
 	rootCmd.AddCommand(loginCmd)
 	rootCmd.AddCommand(logoutCmd)
 	rootCmd.AddCommand(usersCmd)
+	rootCmd.AddCommand(versionCmd)
 }
 
 func loadSession(_ *cobra.Command) error {
