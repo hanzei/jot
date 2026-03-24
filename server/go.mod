@@ -6,11 +6,13 @@ require (
 	github.com/go-chi/chi/v5 v5.2.5
 	github.com/go-chi/cors v1.2.2
 	github.com/sirupsen/logrus v1.9.4
+	github.com/spf13/cobra v1.10.2
 	github.com/stretchr/testify v1.11.1
 	github.com/swaggo/http-swagger/v2 v2.0.2
 	github.com/swaggo/swag v1.16.6
 	golang.org/x/crypto v0.48.0
 	golang.org/x/image v0.36.0
+	golang.org/x/term v0.41.0
 	modernc.org/sqlite v1.47.0
 )
 
@@ -190,7 +192,6 @@ require (
 	github.com/sourcegraph/go-diff v0.7.0 // indirect
 	github.com/spf13/afero v1.15.0 // indirect
 	github.com/spf13/cast v1.5.0 // indirect
-	github.com/spf13/cobra v1.10.2 // indirect
 	github.com/spf13/jwalterweatherman v1.1.0 // indirect
 	github.com/spf13/pflag v1.0.10 // indirect
 	github.com/spf13/viper v1.12.0 // indirect

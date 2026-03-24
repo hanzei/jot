@@ -90,6 +90,12 @@ tasks:
     dir: shared
     cmd: npm run lint && npm run typecheck
 
+  build-jotctl:
+    desc: Build the jotctl admin CLI binary
+    dir: server
+    cmds:
+      - go build -o jotctl ./cmd/jotctl
+
   clean:
     desc: Remove generated files and node packages
     cmds:
