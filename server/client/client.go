@@ -64,16 +64,27 @@ func New(baseURL string) *Client {
 }
 
 // WithHTTPClient replaces the underlying HTTP client and returns the receiver.
-// The provided client's cookie jar is replaced with a fresh one so that session
-// cookies are managed correctly.  Pass a client whose Timeout is 0 to disable
-// the default timeout (e.g. for long-lived SSE connections).
+// The caller's cookie jar is preserved: the receiver's existing jar takes
+// precedence (so in-flight session cookies are not discarded), falling back to
+// the provided client's jar, and only creating a fresh jar if neither has one.
+// Pass a client whose Timeout is 0 to disable the default timeout (e.g. for
+// long-lived SSE connections).
 func (c *Client) WithHTTPClient(httpClient *http.Client) *Client {
-	jar, err := cookiejar.New(nil)
-	if err != nil {
-		panic(err)
-	}
 	clone := *httpClient // shallow copy; avoids mutating the caller's value
-	clone.Jar = jar
+
+	switch {
+	case c.httpClient != nil && c.httpClient.Jar != nil:
+		clone.Jar = c.httpClient.Jar // preserve receiver's existing session cookies
+	case httpClient.Jar != nil:
+		clone.Jar = httpClient.Jar // use caller-supplied jar if present
+	default:
+		jar, err := cookiejar.New(nil)
+		if err != nil {
+			panic(err)
+		}
+		clone.Jar = jar
+	}
+
 	c.httpClient = &clone
 	return c
 }

@@ -122,6 +122,12 @@ func writeSessionFile(sd *sessionData) error {
 		return fmt.Errorf("write session file: %w", err)
 	}
 
+	// os.WriteFile does not reset permissions on an existing file, so force
+	// 0600 explicitly to defend against a pre-existing file with loose perms.
+	if err = os.Chmod(path, 0o600); err != nil {
+		return fmt.Errorf("chmod session file: %w", err)
+	}
+
 	return nil
 }
 
