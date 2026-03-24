@@ -7,7 +7,6 @@ import (
 	"net/url"
 	"os"
 	"strings"
-	"syscall"
 
 	"github.com/hanzei/jot/server/client"
 	"github.com/spf13/cobra"
@@ -66,7 +65,7 @@ func runLogin(cmd *cobra.Command, _ []string) error {
 
 	if password == "" {
 		fmt.Print("Password: ")
-		pw, err := term.ReadPassword(syscall.Stdin) //nolint:gosec // standard way to read a terminal password
+		pw, err := term.ReadPassword(int(os.Stdin.Fd()))
 		if err != nil {
 			return fmt.Errorf("read password: %w", err)
 		}
@@ -117,12 +116,21 @@ func runLogin(cmd *cobra.Command, _ []string) error {
 }
 
 func runLogout(cmd *cobra.Command, _ []string) error {
-	// Best-effort: try to invalidate the server-side session before removing the local file.
-	if jotClient != nil {
-		_ = jotClient.Logout(cmd.Context())
+	// Load the saved session to invalidate it server-side before removing the local file.
+	// This runs even when root's PersistentPreRunE is bypassed (no session file required).
+	sf, err := readSessionFile()
+	if err == nil {
+		c := client.New(sf.Server)
+		u, urlErr := url.Parse(sf.Server)
+		if urlErr == nil {
+			c.HTTPClient().Jar.SetCookies(u, []*http.Cookie{
+				{Name: sessionCookieName, Value: sf.SessionToken},
+			})
+		}
+		_ = c.Logout(cmd.Context()) // best-effort: session may already be expired
 	}
 
-	if err := deleteSessionFile(); err != nil {
+	if err = deleteSessionFile(); err != nil {
 		return err
 	}
 

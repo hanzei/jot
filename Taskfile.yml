@@ -94,7 +94,7 @@ tasks:
     desc: Build the jotctl admin CLI binary
     dir: server
     cmds:
-      - go build -o jotctl ./cmd/jotctl
+      - go build -buildvcs=false -o jotctl ./cmd/jotctl
 
   clean:
     desc: Remove generated files and node packages

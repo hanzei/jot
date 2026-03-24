@@ -108,16 +108,17 @@ func writeSessionFile(sd *sessionData) error {
 		return err
 	}
 
-	if err := os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
+	if err = os.MkdirAll(filepath.Dir(path), 0o700); err != nil {
 		return fmt.Errorf("create config dir: %w", err)
 	}
 
+	//nolint:gosec // session token is intentionally persisted to disk for reuse across invocations
 	data, err := json.Marshal(sd)
 	if err != nil {
 		return fmt.Errorf("marshal session: %w", err)
 	}
 
-	if err := os.WriteFile(path, data, 0o600); err != nil {
+	if err = os.WriteFile(path, data, 0o600); err != nil {
 		return fmt.Errorf("write session file: %w", err)
 	}
 
