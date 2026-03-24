@@ -90,6 +90,18 @@ tasks:
     dir: shared
     cmd: npm run lint && npm run typecheck
 
+  build-jotctl:
+    desc: Build the jotctl admin CLI binary
+    dir: server
+    vars:
+      COMMIT:
+        sh: git rev-parse --short HEAD
+      BUILD_TIME:
+        sh: date -u +%Y-%m-%dT%H:%M:%SZ
+      LDFLAGS: "-X 'github.com/hanzei/jot/server/cmd/jotctl/cmd.version=dev' -X 'github.com/hanzei/jot/server/cmd/jotctl/cmd.commit={{.COMMIT}}' -X 'github.com/hanzei/jot/server/cmd/jotctl/cmd.buildTime={{.BUILD_TIME}}'"
+    cmds:
+      - go build -buildvcs=false -ldflags "{{.LDFLAGS}}" -o jotctl ./cmd/jotctl
+
   clean:
     desc: Remove generated files and node packages
     cmds:
