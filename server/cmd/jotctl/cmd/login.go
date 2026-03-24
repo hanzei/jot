@@ -65,7 +65,7 @@ func runLogin(cmd *cobra.Command, _ []string) error {
 
 	if password == "" {
 		fmt.Print("Password: ")
-		pw, err := term.ReadPassword(int(os.Stdin.Fd()))
+		pw, err := term.ReadPassword(0) // 0 = stdin fd
 		if err != nil {
 			return fmt.Errorf("read password: %w", err)
 		}
