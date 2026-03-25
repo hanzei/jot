@@ -319,7 +319,7 @@ Jot uses GitHub Actions for automated testing and Docker image publishing:
 
 ## License
 
-[Add your license here - e.g., MIT, GPL-3.0, etc.]
+MIT License — see [LICENSE](LICENSE) for details.
 
 ---
 
