@@ -651,6 +651,103 @@ describe('NoteModal', () => {
         ],
       }))
     })
+
+    it('saves existing todo note on close when item text changed', async () => {
+      const todoNote = createMockNote({
+        note_type: 'todo',
+        content: '',
+        items: [
+          {
+            id: 'item1',
+            note_id: '1',
+            text: 'Original item',
+            completed: false,
+            position: 0,
+            indent_level: 0,
+            assigned_to: '',
+            created_at: '2023-01-01T00:00:00Z',
+            updated_at: '2023-01-01T00:00:00Z',
+          },
+        ],
+      })
+      const onSave = vi.fn()
+      renderNoteModal({ ...defaultProps, note: todoNote, onSave })
+
+      const input = screen.getByDisplayValue('Original item')
+      fireEvent.change(input, { target: { value: 'Updated item' } })
+
+      fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+      await vi.runAllTimersAsync()
+
+      expect(mockNotesUpdate).toHaveBeenCalledWith('1', expect.objectContaining({
+        items: [expect.objectContaining({ text: 'Updated item', completed: false })],
+      }))
+      expect(onSave).toHaveBeenCalled()
+    })
+  })
+
+  describe('Text note textarea sizing', () => {
+    it('sizes existing text note content after load and edit', () => {
+      const note = createMockNote({ content: 'Existing long content', note_type: 'text' })
+      renderNoteModal({ ...defaultProps, note })
+
+      const contentInput = screen.getByDisplayValue('Existing long content') as HTMLTextAreaElement
+      Object.defineProperty(contentInput, 'scrollHeight', {
+        configurable: true,
+        value: 500,
+      })
+
+      // Trigger resize after loading existing note content.
+      fireEvent.change(contentInput, { target: { value: 'Existing long content with update' } })
+
+      expect(contentInput.style.height).toBe('320px')
+      expect(contentInput.style.overflowY).toBe('auto')
+    })
+
+    it('grows up to the maximum height and becomes scrollable', () => {
+      renderNoteModal(defaultProps)
+
+      const contentInput = screen.getByPlaceholderText('Take a note...') as HTMLTextAreaElement
+      Object.defineProperty(contentInput, 'scrollHeight', {
+        configurable: true,
+        value: 500,
+      })
+
+      fireEvent.change(contentInput, { target: { value: 'Very long content' } })
+
+      expect(contentInput.style.height).toBe('320px')
+      expect(contentInput.style.overflowY).toBe('auto')
+    })
+
+    it('uses content height when within min and max bounds', () => {
+      renderNoteModal(defaultProps)
+
+      const contentInput = screen.getByPlaceholderText('Take a note...') as HTMLTextAreaElement
+      Object.defineProperty(contentInput, 'scrollHeight', {
+        configurable: true,
+        value: 180,
+      })
+
+      fireEvent.change(contentInput, { target: { value: 'Medium length content' } })
+
+      expect(contentInput.style.height).toBe('180px')
+      expect(contentInput.style.overflowY).toBe('hidden')
+    })
+
+    it('keeps a sensible minimum height for short content', () => {
+      renderNoteModal(defaultProps)
+
+      const contentInput = screen.getByPlaceholderText('Take a note...') as HTMLTextAreaElement
+      Object.defineProperty(contentInput, 'scrollHeight', {
+        configurable: true,
+        value: 40,
+      })
+
+      fireEvent.change(contentInput, { target: { value: 'Short' } })
+
+      expect(contentInput.style.height).toBe('96px')
+      expect(contentInput.style.overflowY).toBe('hidden')
+    })
   })
 
 

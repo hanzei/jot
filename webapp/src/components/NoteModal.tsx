@@ -11,6 +11,23 @@ import ConfirmDialog from '@/components/ConfirmDialog';
 import { useToast } from '@/hooks/useToast';
 import { buildShareAvatars } from '@/utils/shareAvatars';
 import { buildMobileDeepLink } from '@/utils/deepLink';
+import {
+  DndContext,
+  closestCenter,
+  KeyboardSensor,
+  PointerSensor,
+  useSensor,
+  useSensors,
+  DragEndEvent,
+} from '@dnd-kit/core';
+import {
+  arrayMove,
+  SortableContext,
+  sortableKeyboardCoordinates,
+  verticalListSortingStrategy,
+  useSortable,
+} from '@dnd-kit/sortable';
+import { CSS } from '@dnd-kit/utilities';
 
 // Validation functions
 type TFunction = (key: string, opts?: Record<string, unknown>) => string;
@@ -33,29 +50,30 @@ const validateContent = (content: string, t: TFunction): string | null => {
   return null;
 };
 
-// Utility function to generate unique IDs for todo items
-const generateItemId = () => crypto.randomUUID();
+const haveTodoItemsChanged = (currentItems: TodoItem[], originalItems: Note['items'] | undefined): boolean => {
+  const baseItems = originalItems ?? [];
+  if (currentItems.length !== baseItems.length) return true;
+
+  return currentItems.some((item, index) => {
+    const baseItem = baseItems[index];
+    if (!baseItem) return true;
+
+    return (
+      item.text !== baseItem.text ||
+      item.completed !== baseItem.completed ||
+      item.position !== baseItem.position ||
+      item.indentLevel !== (baseItem.indent_level ?? 0) ||
+      item.assignedTo !== (baseItem.assigned_to ?? '')
+    );
+  });
+};
 
 // Timeout management now handled via useRef instead of global window property
-import {
-  DndContext,
-  closestCenter,
-  KeyboardSensor,
-  PointerSensor,
-  useSensor,
-  useSensors,
-  DragEndEvent,
-} from '@dnd-kit/core';
-import {
-  arrayMove,
-  SortableContext,
-  sortableKeyboardCoordinates,
-  verticalListSortingStrategy,
-} from '@dnd-kit/sortable';
-import {
-  useSortable,
-} from '@dnd-kit/sortable';
-import { CSS } from '@dnd-kit/utilities';
+
+// Utility function to generate unique IDs for todo items
+const generateItemId = () => crypto.randomUUID();
+const TEXT_NOTE_MIN_HEIGHT_PX = 96;
+const TEXT_NOTE_MAX_HEIGHT_PX = 320;
 
 interface NoteModalProps {
   note?: Note | null;
@@ -361,6 +379,17 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   const contentRef = useRef<HTMLTextAreaElement>(null);
   const savingRef = useRef(false);
   const savedTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const resizeContentTextarea = useCallback((textarea: HTMLTextAreaElement | null) => {
+    if (!textarea) return;
+    textarea.style.height = 'auto';
+    const contentHeight = textarea.scrollHeight;
+    const nextHeight = Math.min(
+      Math.max(contentHeight, TEXT_NOTE_MIN_HEIGHT_PX),
+      TEXT_NOTE_MAX_HEIGHT_PX
+    );
+    textarea.style.height = `${nextHeight}px`;
+    textarea.style.overflowY = contentHeight > nextHeight ? 'auto' : 'hidden';
+  }, []);
 
   const sensors = useSensors(
     useSensor(PointerSensor),
@@ -449,6 +478,18 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       if (savedTimeoutRef.current) clearTimeout(savedTimeoutRef.current);
     };
   }, []);
+
+  useEffect(() => {
+    if (noteType !== 'text') return;
+    resizeContentTextarea(contentRef.current);
+  }, [content, noteType, resizeContentTextarea]);
+
+  useEffect(() => {
+    if (noteType !== 'text') return;
+    const handleWindowResize = () => resizeContentTextarea(contentRef.current);
+    window.addEventListener('resize', handleWindowResize);
+    return () => window.removeEventListener('resize', handleWindowResize);
+  }, [noteType, resizeContentTextarea]);
 
   // Helper function to show error messages with auto-dismiss
   const showError = useCallback((message: string) => {
@@ -1166,12 +1207,15 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
 
   const hasUnsavedChanges = () => {
     if (note) {
+      const todoItemsChanged = note.note_type === 'todo' && haveTodoItemsChanged(items, note.items);
       return (
         title !== note.title ||
         content !== note.content ||
         color !== note.color ||
         pinned !== note.pinned ||
-        archived !== note.archived
+        archived !== note.archived ||
+        checkedItemsCollapsed !== note.checked_items_collapsed ||
+        todoItemsChanged
       );
     } else {
       return (
