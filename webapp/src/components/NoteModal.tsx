@@ -74,6 +74,7 @@ const haveTodoItemsChanged = (currentItems: TodoItem[], originalItems: Note['ite
 const generateItemId = () => crypto.randomUUID();
 const TEXT_NOTE_MIN_HEIGHT_PX = 96;
 const TEXT_NOTE_MAX_HEIGHT_PX = 320;
+const TEXT_NOTE_RESIZE_DEBOUNCE_MS = 120;
 
 interface NoteModalProps {
   note?: Note | null;
@@ -486,9 +487,23 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
 
   useEffect(() => {
     if (noteType !== 'text') return;
-    const handleWindowResize = () => resizeContentTextarea(contentRef.current);
-    window.addEventListener('resize', handleWindowResize);
-    return () => window.removeEventListener('resize', handleWindowResize);
+    let resizeTimeout: ReturnType<typeof setTimeout> | undefined;
+    const debouncedHandler = () => {
+      if (resizeTimeout) {
+        clearTimeout(resizeTimeout);
+      }
+      resizeTimeout = setTimeout(() => {
+        resizeContentTextarea(contentRef.current);
+      }, TEXT_NOTE_RESIZE_DEBOUNCE_MS);
+    };
+
+    window.addEventListener('resize', debouncedHandler);
+    return () => {
+      window.removeEventListener('resize', debouncedHandler);
+      if (resizeTimeout) {
+        clearTimeout(resizeTimeout);
+      }
+    };
   }, [noteType, resizeContentTextarea]);
 
   // Helper function to show error messages with auto-dismiss
