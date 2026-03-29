@@ -1,5 +1,6 @@
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
 import { VALIDATION } from '@jot/shared';
 import NoteCard from '../src/components/NoteCard';
 import i18n from '../src/i18n';
@@ -127,11 +128,8 @@ describe('NoteCard', () => {
     const parentRow = getByTestId('note-card-todo-row-item-parent');
     const childRow = getByTestId('note-card-todo-row-item-child');
 
-    const flattenStyle = (style: unknown): Record<string, unknown> =>
-      Array.isArray(style) ? Object.assign({}, ...style) : (style as Record<string, unknown>);
-
-    expect(flattenStyle(parentRow.props.style).marginLeft).toBe(0);
-    expect(flattenStyle(childRow.props.style).marginLeft).toBe(1 * VALIDATION.INDENT_PX_PER_LEVEL);
+    expect(StyleSheet.flatten(parentRow.props.style)?.marginLeft).toBe(0);
+    expect(StyleSheet.flatten(childRow.props.style)?.marginLeft).toBe(1 * VALIDATION.INDENT_PX_PER_LEVEL);
   });
 
   it('clamps negative todo preview indentation to zero', () => {
@@ -157,10 +155,7 @@ describe('NoteCard', () => {
     const { getByTestId } = render(<NoteCard note={todoWithNegativeIndent} onPress={jest.fn()} />);
     const row = getByTestId('note-card-todo-row-item-negative-indent');
 
-    const flattenStyle = (style: unknown): Record<string, unknown> =>
-      Array.isArray(style) ? Object.assign({}, ...style) : (style as Record<string, unknown>);
-
-    expect(flattenStyle(row.props.style).marginLeft).toBe(0);
+    expect(StyleSheet.flatten(row.props.style)?.marginLeft).toBe(0);
   });
 
   it('renders label chips', () => {
@@ -192,20 +187,14 @@ describe('NoteCard', () => {
     const { getByTestId } = render(<NoteCard note={coloredNote} onPress={jest.fn()} />);
 
     const card = getByTestId('note-card-note-1');
-    const flatStyle = Array.isArray(card.props.style)
-      ? Object.assign({}, ...card.props.style)
-      : card.props.style;
-    expect(flatStyle.backgroundColor).toBe('#fbbc04');
+    expect(StyleSheet.flatten(card.props.style)?.backgroundColor).toBe('#fbbc04');
   });
 
   it('uses default white background for notes without color', () => {
     const { getByTestId } = render(<NoteCard note={baseNote} onPress={jest.fn()} />);
 
     const card = getByTestId('note-card-note-1');
-    const flatStyle = Array.isArray(card.props.style)
-      ? Object.assign({}, ...card.props.style)
-      : card.props.style;
-    expect(flatStyle.backgroundColor).toBe('#fff');
+    expect(StyleSheet.flatten(card.props.style)?.backgroundColor).toBe('#fff');
   });
 
   it('does not render title when empty', () => {
