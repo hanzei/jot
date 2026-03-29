@@ -831,7 +831,7 @@ export default function NoteEditorScreen() {
         )}
       </ScrollView>
 
-      <View style={[styles.toolbar, { backgroundColor: noteBackground, borderTopColor: hasNoteColor ? 'transparent' : colors.border }]}>
+      <View style={[styles.toolbar, { backgroundColor: noteBackground, borderTopColor: hasNoteColor ? 'transparent' : colors.border, paddingBottom: insets.bottom || 8 }]}>
         {/* Color picker button */}
         <TouchableOpacity
           onPress={() => setColorPickerVisible(true)}
@@ -1028,7 +1028,6 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: 8,
     paddingVertical: 8,
-    paddingBottom: Platform.OS === 'ios' ? 24 : 8,
     gap: 2,
   },
   toolbarBtn: {
