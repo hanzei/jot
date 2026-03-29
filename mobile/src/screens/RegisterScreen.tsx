@@ -126,6 +126,8 @@ export default function RegisterScreen({ navigation }: RegisterScreenProps) {
           placeholder={t('auth.passwordPlaceholderLong')}
           placeholderTextColor={colors.placeholder}
           secureTextEntry
+          autoCapitalize="none"
+          autoCorrect={false}
           value={password}
           onChangeText={setPassword}
           accessibilityLabel={t('auth.passwordPlaceholder')}
