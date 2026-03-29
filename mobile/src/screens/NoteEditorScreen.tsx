@@ -28,6 +28,7 @@ import AssigneePicker from '../components/AssigneePicker';
 import { buildCollaborators, VALIDATION, type Collaborator, type NoteType, type NoteItem, type UpdateNoteRequest, type Label } from '@jot/shared';
 import { useUsers } from '../store/UsersContext';
 import { useTheme } from '../theme/ThemeContext';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 
 type EditorRouteProp = RouteProp<RootStackParamList, 'NoteEditor'>;
@@ -91,6 +92,7 @@ export default function NoteEditorScreen() {
   const { usersById } = useUsers();
 
   const { colors, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
   const { data: existingNote } = useOfflineNote(noteId);
   const createMutation = useCreateNote();
   const updateMutation = useUpdateNote();
@@ -683,7 +685,7 @@ export default function NoteEditorScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 0}
     >
-      <View style={[styles.header, { backgroundColor: noteBackground, borderBottomColor: hasNoteColor ? 'transparent' : colors.borderLight }]}>
+      <View style={[styles.header, { backgroundColor: noteBackground, borderBottomColor: hasNoteColor ? 'transparent' : colors.borderLight, paddingTop: insets.top + 12 }]}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -958,7 +960,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: Platform.OS === 'ios' ? 56 : 16,
     paddingBottom: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
