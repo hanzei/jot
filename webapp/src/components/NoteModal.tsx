@@ -284,7 +284,7 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
             ? [assignedUser.first_name, assignedUser.last_name].filter(Boolean).join(' ') || assignedUser.username
             : '?';
           return (
-          <div className="relative flex-shrink-0">
+          <div className="relative flex-shrink-0 ml-1">
             {item.assignedTo ? (
               <button
                 onClick={() => setShowAssigneePicker(true)}
