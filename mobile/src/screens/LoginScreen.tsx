@@ -107,6 +107,8 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
           placeholder={t('auth.passwordPlaceholder')}
           placeholderTextColor={colors.placeholder}
           secureTextEntry
+          autoCapitalize="none"
+          autoCorrect={false}
           value={password}
           onChangeText={setPassword}
           accessibilityLabel={t('auth.passwordPlaceholder')}
