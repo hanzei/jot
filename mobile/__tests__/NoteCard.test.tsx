@@ -114,7 +114,7 @@ describe('NoteCard', () => {
           text: 'Child task',
           completed: false,
           position: 1,
-          indent_level: 2,
+          indent_level: 1,
           assigned_to: '',
           created_at: '2024-01-01T00:00:00Z',
           updated_at: '2024-01-01T00:00:00Z',
@@ -131,7 +131,36 @@ describe('NoteCard', () => {
       Array.isArray(style) ? Object.assign({}, ...style) : (style as Record<string, unknown>);
 
     expect(flattenStyle(parentRow.props.style).marginLeft).toBe(0);
-    expect(flattenStyle(childRow.props.style).marginLeft).toBe(2 * VALIDATION.INDENT_PX_PER_LEVEL);
+    expect(flattenStyle(childRow.props.style).marginLeft).toBe(1 * VALIDATION.INDENT_PX_PER_LEVEL);
+  });
+
+  it('clamps negative todo preview indentation to zero', () => {
+    const todoWithNegativeIndent: Note = {
+      ...baseNote,
+      note_type: 'todo',
+      content: '',
+      items: [
+        {
+          id: 'item-negative-indent',
+          note_id: 'note-1',
+          text: 'Task with invalid indent',
+          completed: false,
+          position: 0,
+          indent_level: -2,
+          assigned_to: '',
+          created_at: '2024-01-01T00:00:00Z',
+          updated_at: '2024-01-01T00:00:00Z',
+        },
+      ],
+    };
+
+    const { getByTestId } = render(<NoteCard note={todoWithNegativeIndent} onPress={jest.fn()} />);
+    const row = getByTestId('note-card-todo-row-item-negative-indent');
+
+    const flattenStyle = (style: unknown): Record<string, unknown> =>
+      Array.isArray(style) ? Object.assign({}, ...style) : (style as Record<string, unknown>);
+
+    expect(flattenStyle(row.props.style).marginLeft).toBe(0);
   });
 
   it('renders label chips', () => {
