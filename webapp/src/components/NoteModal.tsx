@@ -206,8 +206,8 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
             type="text"
             data-testid="todo-item-input"
             placeholder={placeholder}
-            size={Math.max((item.text || placeholder).length, 1) + 1}
-            className={`field-sizing-content p-1 bg-transparent border-none outline-none min-w-0 placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white ${
+            size={Math.max((item.text || placeholder).length, 1)}
+            className={`field-sizing-content py-1 pl-1 pr-0 bg-transparent border-none outline-none min-w-0 placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white ${
               isCompleted ? 'line-through text-gray-500 dark:text-gray-400' : ''
             }`}
             value={item.text}
@@ -303,7 +303,7 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
             ? [assignedUser.first_name, assignedUser.last_name].filter(Boolean).join(' ') || assignedUser.username
             : '?';
           return (
-          <div className="relative flex-shrink-0">
+          <div className={`relative flex-shrink-0 ${item.assignedTo || !isCompleted ? 'ml-1' : ''}`}>
             {item.assignedTo ? (
               <button
                 onClick={() => setShowAssigneePicker(true)}
