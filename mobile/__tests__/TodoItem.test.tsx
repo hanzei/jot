@@ -87,6 +87,14 @@ describe('TodoItem', () => {
     expect(StyleSheet.flatten(row.props.style)?.marginLeft).toBe(0);
   });
 
+  it('uses multiline text input for wrapping long text', () => {
+    const { getByTestId } = render(
+      <TodoItem text="A very long task text that should wrap to the next line" completed={false} />,
+    );
+
+    expect(getByTestId('todo-item-text').props.multiline).toBe(true);
+  });
+
   it('shows assign button when shared with collaborators', () => {
     const onAssignPress = jest.fn();
     const { getByTestId } = render(

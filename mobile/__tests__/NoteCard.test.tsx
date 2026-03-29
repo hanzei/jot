@@ -158,6 +158,32 @@ describe('NoteCard', () => {
     expect(StyleSheet.flatten(row.props.style)?.marginLeft).toBe(0);
   });
 
+  it('allows todo preview text to wrap instead of truncating', () => {
+    const longTodoNote: Note = {
+      ...baseNote,
+      note_type: 'todo',
+      content: '',
+      items: [
+        {
+          id: 'item-wrap',
+          note_id: 'note-1',
+          text: 'This is a very long todo item that should wrap to multiple lines in note previews on mobile',
+          completed: false,
+          position: 0,
+          indent_level: 0,
+          assigned_to: '',
+          created_at: '2024-01-01T00:00:00Z',
+          updated_at: '2024-01-01T00:00:00Z',
+        },
+      ],
+    };
+
+    const { getByText } = render(<NoteCard note={longTodoNote} onPress={jest.fn()} />);
+    const todoText = getByText(longTodoNote.items?.[0]?.text ?? '');
+
+    expect(todoText.props.numberOfLines).toBeUndefined();
+  });
+
   it('renders label chips', () => {
     const noteWithLabels: Note = {
       ...baseNote,

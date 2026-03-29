@@ -291,14 +291,14 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
               return (
                 <>
                   {uncompletedItems.map((item) => (
-                      <div key={item.id} className="flex items-center text-sm" style={{ marginLeft: item.indent_level * VALIDATION.INDENT_PX_PER_LEVEL }}>
+                      <div key={item.id} className="flex items-start min-w-0 text-sm" style={{ marginLeft: item.indent_level * VALIDATION.INDENT_PX_PER_LEVEL }}>
                         <input
                           type="checkbox"
                           checked={item.completed}
                           readOnly
-                          className="h-4 w-4 text-blue-600 rounded mr-2"
+                          className="h-4 w-4 text-blue-600 rounded mr-2 mt-0.5 flex-shrink-0"
                         />
-                        <span className="text-gray-700 dark:text-gray-200">
+                        <span className="min-w-0 whitespace-pre-wrap break-words text-gray-700 dark:text-gray-200">
                           {item.text}
                         </span>
                       </div>
