@@ -1,5 +1,7 @@
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
+import { StyleSheet } from 'react-native';
+import { VALIDATION } from '@jot/shared';
 import TodoItem from '../src/components/TodoItem';
 import type { Collaborator } from '@jot/shared';
 
@@ -65,6 +67,24 @@ describe('TodoItem', () => {
       ? Object.assign({}, ...textInput.props.style)
       : textInput.props.style;
     expect(flatStyle.textDecorationLine).toBe('line-through');
+  });
+
+  it('uses shared indent spacing for positive indent levels', () => {
+    const { getByTestId } = render(
+      <TodoItem text="Indented task" completed={false} indentLevel={1} />,
+    );
+
+    const row = getByTestId('todo-item-row');
+    expect(StyleSheet.flatten(row.props.style)?.marginLeft).toBe(VALIDATION.INDENT_PX_PER_LEVEL);
+  });
+
+  it('clamps negative indent levels to zero', () => {
+    const { getByTestId } = render(
+      <TodoItem text="Invalid indent task" completed={false} indentLevel={-2} />,
+    );
+
+    const row = getByTestId('todo-item-row');
+    expect(StyleSheet.flatten(row.props.style)?.marginLeft).toBe(0);
   });
 
   it('shows assign button when shared with collaborators', () => {

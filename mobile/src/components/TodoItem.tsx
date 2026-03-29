@@ -5,7 +5,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useTranslation } from 'react-i18next';
 import UserAvatar from './UserAvatar';
 import { useTheme } from '../theme/ThemeContext';
-import type { Collaborator } from '@jot/shared';
+import { VALIDATION, type Collaborator } from '@jot/shared';
 
 interface TodoItemProps {
   text: string;
@@ -48,9 +48,13 @@ function TodoItem({
   const { t } = useTranslation();
   const showAssignUI = isShared && collaborators && collaborators.length > 0 && onAssignPress;
   const assignedUser = assignedTo ? collaborators?.find((c) => c.userId === assignedTo) : undefined;
+  const normalizedIndentLevel = Math.max(0, indentLevel);
 
   return (
-    <View style={[styles.container, { marginLeft: indentLevel * 24 }]}>
+    <View
+      style={[styles.container, { marginLeft: normalizedIndentLevel * VALIDATION.INDENT_PX_PER_LEVEL }]}
+      testID="todo-item-row"
+    >
       {showDragHandle && onDrag && (
         <TouchableOpacity
           onPressIn={onDrag}
