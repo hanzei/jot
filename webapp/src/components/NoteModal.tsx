@@ -99,6 +99,11 @@ interface TodoItem {
   originalPosition?: number;
 }
 
+interface QueuedAutoSaveRequest {
+  noteId: string;
+  updateData: UpdateNoteRequest;
+}
+
 interface SortableItemProps {
   id: string;
   index: number;
@@ -376,8 +381,17 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   // Use useRef for timeout management instead of global window property
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const errorTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const noteIdRef = useRef<string | null>(note?.id ?? null);
+  const autoSaveDraftRef = useRef<Omit<UpdateNoteRequest, 'items'>>({
+    title: '',
+    content: '',
+    pinned: false,
+    archived: false,
+    color: '#ffffff',
+    checked_items_collapsed: false,
+  });
   const itemsRef = useRef<TodoItem[]>([]);
-  const pendingAutoSaveItemsRef = useRef<TodoItem[] | null>(null);
+  const pendingAutoSaveRequestRef = useRef<QueuedAutoSaveRequest | null>(null);
   const itemInputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
   const contentRef = useRef<HTMLTextAreaElement>(null);
   const savingRef = useRef(false);
@@ -400,6 +414,30 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       coordinateGetter: sortableKeyboardCoordinates,
     })
   );
+
+  const mapItemsForAutoSave = useCallback((sourceItems: TodoItem[]) => sourceItems.map((item) => ({
+    text: item.text,
+    position: item.position,
+    completed: item.completed,
+    indent_level: item.indentLevel,
+    assigned_to: item.assignedTo,
+  })), []);
+
+  const buildAutoSaveRequest = useCallback((sourceItems: TodoItem[]): UpdateNoteRequest => ({
+    ...autoSaveDraftRef.current,
+    items: mapItemsForAutoSave(sourceItems),
+  }), [mapItemsForAutoSave]);
+
+  const commitItems = useCallback((nextItems: TodoItem[]) => {
+    itemsRef.current = nextItems;
+    setItems(nextItems);
+    if (savingRef.current && noteIdRef.current) {
+      pendingAutoSaveRequestRef.current = {
+        noteId: noteIdRef.current,
+        updateData: buildAutoSaveRequest(nextItems),
+      };
+    }
+  }, [buildAutoSaveRequest]);
 
   // Separate completed and uncompleted items with memoization
   const { uncompletedItems, completedItems, completedItemTexts } = useMemo(() => {
@@ -451,16 +489,15 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       setPinned(note.pinned);
       setArchived(note.archived);
       setCheckedItemsCollapsed(note.checked_items_collapsed);
-      setItems(
-        note.items?.map((item, index) => ({
-          id: item.id || `existing_${item.position}_${index}`,
-          text: item.text,
-          completed: item.completed,
-          position: item.position,
-          indentLevel: item.indent_level ?? 0,
-          assignedTo: item.assigned_to ?? '',
-        })) || []
-      );
+      const mappedItems = note.items?.map((item, index) => ({
+        id: item.id || `existing_${item.position}_${index}`,
+        text: item.text,
+        completed: item.completed,
+        position: item.position,
+        indentLevel: item.indent_level ?? 0,
+        assignedTo: item.assigned_to ?? '',
+      })) || [];
+      commitItems(mappedItems);
       setNoteLabels(note.labels ?? []);
     } else {
       setTitle('');
@@ -469,10 +506,25 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       setColor('#ffffff');
       setPinned(false);
       setArchived(false);
-      setItems([]);
+      commitItems([]);
       setNoteLabels([]);
     }
-  }, [note]);
+  }, [commitItems, note]);
+
+  useEffect(() => {
+    noteIdRef.current = note?.id ?? null;
+  }, [note?.id]);
+
+  useEffect(() => {
+    autoSaveDraftRef.current = {
+      title,
+      content,
+      pinned,
+      archived,
+      color,
+      checked_items_collapsed: checkedItemsCollapsed,
+    };
+  }, [archived, checkedItemsCollapsed, color, content, pinned, title]);
 
   useEffect(() => {
     return () => {
@@ -507,10 +559,6 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       }
     };
   }, [noteType, resizeContentTextarea]);
-
-  useEffect(() => {
-    itemsRef.current = items;
-  }, [items]);
 
   // Helper function to show error messages with auto-dismiss
   const showError = useCallback((message: string) => {
@@ -574,8 +622,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       }
       return item;
     });
-    itemsRef.current = updatedItems;
-    setItems(updatedItems);
+    commitItems(updatedItems);
     await autoSaveNote(updatedItems);
   };
 
@@ -608,7 +655,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
 
       // Combine with completed items to create new items array
       const newItems = [...updatedUncompletedItems, ...completedItems];
-      setItems(newItems);
+      commitItems(newItems);
 
       // Auto-save if editing an existing note
       await autoSaveNote(newItems);
@@ -616,16 +663,18 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   };
 
   const addTodoItem = () => {
+    const currentItems = itemsRef.current;
+    const uncompletedCount = currentItems.filter(item => !item.completed).length;
     const newItem: TodoItem = {
       id: generateItemId(),
       text: '',
       completed: false,
-      position: uncompletedItems.length,
+      position: uncompletedCount,
       indentLevel: 0,
       assignedTo: '',
     };
-    const newItems = [...items, newItem];
-    setItems(newItems);
+    const newItems = [...currentItems, newItem];
+    commitItems(newItems);
     autoSaveNote(newItems);
     return newItem.id;
   };
@@ -653,8 +702,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     const renumbered = newItems.map(item =>
       item.completed ? item : { ...item, position: pos++ }
     );
-    itemsRef.current = renumbered;
-    setItems(renumbered);
+    commitItems(renumbered);
     autoSaveNote(renumbered);
     return newItem.id;
   };
@@ -735,7 +783,8 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     const currentItem = uncompletedItems[index];
     if (!currentItem) return;
 
-    const insertAfterPos = items.findIndex(item => item.id === currentItem.id);
+    const currentItems = itemsRef.current;
+    const insertAfterPos = currentItems.findIndex(item => item.id === currentItem.id);
 
     const firstLineText = (before + lines[0]).slice(0, VALIDATION.ITEM_TEXT_MAX_LENGTH);
 
@@ -762,7 +811,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       }
     }
 
-    const updatedItems = items.map(item =>
+    const updatedItems = currentItems.map(item =>
       item.id === currentItem.id ? { ...item, text: firstLineText } : item
     );
     updatedItems.splice(insertAfterPos + 1, 0, ...newItems);
@@ -772,7 +821,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       item.completed ? item : { ...item, position: pos++ }
     );
 
-    setItems(renumbered);
+    commitItems(renumbered);
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
       saveTimeoutRef.current = undefined;
@@ -791,7 +840,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   };
 
   const removeTodoItem = (itemId: string) => {
-    const newItems = items.filter(item => item.id !== itemId);
+    const newItems = itemsRef.current.filter(item => item.id !== itemId);
     
     let uncompletedCount = 0;
     const updatedItems = newItems.map((item) => {
@@ -801,7 +850,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       return item;
     });
     
-    setItems(updatedItems);
+    commitItems(updatedItems);
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
       saveTimeoutRef.current = undefined;
@@ -824,58 +873,51 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   }, []);
 
   const autoSaveNote = async (updatedItems: TodoItem[]) => {
-    if (!note) return;
+    if (!noteIdRef.current) return;
     // Cancel any pending debounced text-save snapshot so it can't overwrite
     // a newer structural update (indent, insert, reorder, completion, etc.).
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
       saveTimeoutRef.current = undefined;
     }
+    const nextRequest: QueuedAutoSaveRequest = {
+      noteId: noteIdRef.current,
+      updateData: buildAutoSaveRequest(updatedItems),
+    };
     if (savingRef.current) {
-      pendingAutoSaveItemsRef.current = updatedItems;
+      pendingAutoSaveRequestRef.current = nextRequest;
       return;
     }
     
     savingRef.current = true;
     markDirty();
     try {
-      const updateData: UpdateNoteRequest = {
-        title,
-        content,
-        pinned,
-        archived,
-        color,
-        checked_items_collapsed: checkedItemsCollapsed,
-        items: updatedItems.map((item) => ({
-          text: item.text,
-          position: item.position,
-          completed: item.completed,
-          indent_level: item.indentLevel,
-          assigned_to: item.assignedTo,
-        })),
-      };
-      await notes.update(note.id, updateData);
+      await notes.update(nextRequest.noteId, nextRequest.updateData);
       onRefresh?.();
       flashSaved();
+      let pendingRequest = pendingAutoSaveRequestRef.current;
+      while (pendingRequest) {
+        pendingAutoSaveRequestRef.current = null;
+        await notes.update(pendingRequest.noteId, pendingRequest.updateData);
+        onRefresh?.();
+        flashSaved();
+        pendingRequest = pendingAutoSaveRequestRef.current;
+      }
     } catch (error) {
       console.error('Failed to auto-save note:', error);
       showError(t('note.failedSaveChanges'));
     } finally {
       savingRef.current = false;
-      const pendingItems = pendingAutoSaveItemsRef.current;
-      if (pendingItems) {
-        pendingAutoSaveItemsRef.current = null;
-        await autoSaveNote(pendingItems);
-      }
     }
   };
 
   // Helper function to handle item completion
   const handleItemCompletion = async (itemId: string) => {
-    const itemToComplete = items.find(item => item.id === itemId);
+    const currentItems = itemsRef.current;
+    const itemToComplete = currentItems.find(item => item.id === itemId);
     if (!itemToComplete || itemToComplete.completed) return;
     
-    const updatedItems = items.map(item => {
+    const updatedItems = currentItems.map(item => {
       if (item.id === itemId) {
         return {
           ...item,
@@ -886,18 +928,19 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       return item;
     });
     
-    setItems(updatedItems);
+    commitItems(updatedItems);
     await autoSaveNote(updatedItems);
   };
 
   // Helper function to handle item un-completion
   const handleItemUncompletion = async (itemId: string) => {
-    const itemToUncomplete = items.find(item => item.id === itemId);
+    const currentItems = itemsRef.current;
+    const itemToUncomplete = currentItems.find(item => item.id === itemId);
     if (!itemToUncomplete || !itemToUncomplete.completed) return;
     
-    const finalItems = restoreItemPosition(items, itemToUncomplete);
+    const finalItems = restoreItemPosition(currentItems, itemToUncomplete);
     
-    setItems(finalItems);
+    commitItems(finalItems);
     await autoSaveNote(finalItems);
   };
 
@@ -910,15 +953,16 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       return;
     }
     
+    const currentItems = itemsRef.current;
     const textValue = newText.slice(0, VALIDATION.ITEM_TEXT_MAX_LENGTH);
-    const updatedItems = items.map(item => {
+    const updatedItems = currentItems.map(item => {
       if (item.id === itemId) {
         return { ...item, text: textValue };
       }
       return item;
     });
     
-    setItems(updatedItems);
+    commitItems(updatedItems);
     markDirty();
     
     // Auto-save text changes if editing an existing note (with debouncing)
@@ -974,10 +1018,11 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
 
     if (!completedItem) {
       // No matching completed item — fall back to just updating the text
-      const updatedItems = items.map(item =>
+      const currentItems = itemsRef.current;
+      const updatedItems = currentItems.map(item =>
         item.id === currentItemId ? { ...item, text: suggestionText } : item
       );
-      setItems(updatedItems);
+      commitItems(updatedItems);
       if (saveTimeoutRef.current) {
         clearTimeout(saveTimeoutRef.current);
         saveTimeoutRef.current = undefined;
@@ -993,7 +1038,8 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     );
 
     // Remove the placeholder and the matched completed item from the full list
-    const filtered = items.filter(
+    const currentItems = itemsRef.current;
+    const filtered = currentItems.filter(
       item => item.id !== currentItemId && item.id !== completedItem.id
     );
 
@@ -1014,7 +1060,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     ].map((item, i) => ({ ...item, position: i }));
 
     const newItems = [...newUncompleted, ...remainingCompleted];
-    setItems(newItems);
+    commitItems(newItems);
 
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
@@ -1038,10 +1084,10 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   }, [note?.is_shared, note?.user_id, note?.shared_with, usersById]);
 
   const assignItem = async (itemId: string, userId: string) => {
-    const updatedItems = items.map(item =>
+    const updatedItems = itemsRef.current.map(item =>
       item.id === itemId ? { ...item, assignedTo: userId } : item,
     );
-    setItems(updatedItems);
+    commitItems(updatedItems);
     await autoSaveNote(updatedItems);
   };
 

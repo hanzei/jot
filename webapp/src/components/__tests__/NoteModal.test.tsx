@@ -514,6 +514,61 @@ describe('NoteModal', () => {
       }))
     })
 
+    it('queued autosave retries use latest note fields while a save is in-flight', async () => {
+      const todoNote = createMockNote({
+        note_type: 'todo',
+        title: 'Initial title',
+        items: [
+          {
+            id: 'item1',
+            note_id: '1',
+            text: 'parent',
+            completed: false,
+            position: 0,
+            indent_level: 0,
+            assigned_to: '',
+            created_at: '2023-01-01T00:00:00Z',
+            updated_at: '2023-01-01T00:00:00Z',
+          },
+        ],
+      })
+
+      let resolveFirstUpdate: (() => void) | null = null
+      mockNotesUpdate.mockImplementationOnce(() => new Promise(resolve => {
+        resolveFirstUpdate = () => resolve({})
+      }))
+
+      renderNoteModal({ ...defaultProps, note: todoNote })
+
+      const todoInput = screen.getByDisplayValue('parent')
+      const titleInput = screen.getByDisplayValue('Initial title')
+
+      // Start first autosave and keep it in-flight.
+      fireEvent.keyDown(todoInput, { key: 'Tab', code: 'Tab' })
+
+      // Change non-item draft fields while autosave is still in-flight.
+      fireEvent.change(titleInput, { target: { value: 'Updated title while saving' } })
+
+      // Queue another autosave with updated item + title snapshot.
+      fireEvent.keyDown(todoInput, { key: 'Enter', code: 'Enter' })
+
+      // Release first request, then flush queued retry.
+      resolveFirstUpdate?.()
+      await vi.runAllTimersAsync()
+
+      expect(mockNotesUpdate).toHaveBeenCalledTimes(2)
+      expect(mockNotesUpdate).toHaveBeenLastCalledWith(
+        '1',
+        expect.objectContaining({
+          title: 'Updated title while saving',
+          items: [
+            expect.objectContaining({ text: 'parent', position: 0, completed: false, indent_level: 1 }),
+            expect.objectContaining({ text: '', position: 1, completed: false, indent_level: 1 }),
+          ],
+        }),
+      )
+    })
+
     it('pressing a key other than Enter on a todo item does not create a new item', async () => {
       renderNoteModal(defaultProps)
 
