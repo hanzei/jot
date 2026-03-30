@@ -113,7 +113,7 @@ function TodoPreview({ items, hasColor }: { items: NoteItem[]; hasColor?: boolea
             testID={`note-card-todo-row-${item.id}`}
           >
             <Ionicons name="square-outline" size={14} color={hasColor ? '#999' : colors.iconMuted} />
-            <Text style={[styles.todoText, { color: hasColor ? '#666' : colors.textSecondary }]} numberOfLines={1}>
+            <Text style={[styles.todoText, { color: hasColor ? '#666' : colors.textSecondary }]}>
               {item.text}
             </Text>
           </View>
@@ -235,13 +235,14 @@ const styles = StyleSheet.create({
   },
   todoRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: 6,
     paddingVertical: 1,
   },
   todoText: {
     fontSize: 13,
     flex: 1,
+    flexShrink: 1,
   },
   completedCount: {
     fontSize: 12,

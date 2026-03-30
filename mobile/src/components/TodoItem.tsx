@@ -90,6 +90,9 @@ function TodoItem({
         returnKeyType="next"
         onSubmitEditing={onSubmitEditing}
         blurOnSubmit={false}
+        multiline
+        submitBehavior="submit"
+        textAlignVertical="top"
         onKeyPress={({ nativeEvent }) => {
           if (nativeEvent.key === 'Backspace' && text === '') {
             onBackspaceOnEmpty?.();
@@ -125,7 +128,6 @@ function TodoItem({
           </View>
         </TouchableOpacity>
       ) : null}
-      <View style={styles.spacer} />
       {editable && onDelete && (
         <TouchableOpacity onPress={onDelete} style={styles.deleteBtn} testID="todo-item-delete">
           <Ionicons name="close" size={18} color={colors.iconMuted} />
@@ -138,7 +140,7 @@ function TodoItem({
 const styles = StyleSheet.create({
   container: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     paddingVertical: 4,
     minHeight: 40,
   },
@@ -151,19 +153,18 @@ const styles = StyleSheet.create({
     marginRight: 8,
   },
   textInput: {
-    flexShrink: 1,
+    flex: 1,
+    minWidth: 0,
     fontSize: 16,
     paddingVertical: 4,
-  },
-  spacer: {
-    flex: 1,
+    paddingRight: 4,
   },
   completedText: {
     textDecorationLine: 'line-through' as const,
   },
   deleteBtn: {
     padding: 4,
-    marginLeft: 4,
+    marginLeft: 'auto',
   },
   assignBtn: {
     padding: 4,
