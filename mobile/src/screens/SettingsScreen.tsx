@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -96,6 +96,7 @@ export default function SettingsScreen() {
   const [aboutError, setAboutError] = useState('');
   const [aboutExpanded, setAboutExpanded] = useState(false);
   const [activeServerUrl, setActiveServerUrl] = useState<string | null>(null);
+  const previousServerUrlRef = useRef<string | null | undefined>(undefined);
 
   useEffect(() => {
     let mounted = true;
@@ -103,12 +104,41 @@ export default function SettingsScreen() {
       try {
         const activeServer = await getActiveServer();
         if (mounted) {
-          setActiveServerUrl(activeServer?.serverUrl ?? null);
+          const nextServerUrl = activeServer?.serverUrl ?? null;
+          const previousServerUrl = previousServerUrlRef.current;
+          setActiveServerUrl(nextServerUrl);
+          if (previousServerUrl !== nextServerUrl) {
+            previousServerUrlRef.current = nextServerUrl;
+            setSessions([]);
+            setSessionsError('');
+            setSessionsLoading(true);
+            setAboutInfo(null);
+            setAboutError('');
+            void listSessions()
+              .then((nextSessions) => {
+                if (mounted) {
+                  setSessions(nextSessions);
+                }
+              })
+              .catch(() => {
+                if (mounted) {
+                  setSessionsError('settings.sessionsLoadFailed');
+                }
+              })
+              .finally(() => {
+                if (mounted) {
+                  setSessionsLoading(false);
+                }
+              });
+          }
         }
       } catch (error) {
         console.warn('Failed to load active server in settings:', error);
         if (mounted) {
           setActiveServerUrl(null);
+          setSessions([]);
+          setSessionsLoading(false);
+          setSessionsError('settings.sessionsLoadFailed');
         }
       }
     };
@@ -133,14 +163,6 @@ export default function SettingsScreen() {
     setProfileSuccess('');
     setPasswordSuccess('');
   }, [settings?.language]);
-
-  useEffect(() => {
-    setSessionsLoading(true);
-    listSessions()
-      .then(setSessions)
-      .catch(() => setSessionsError('settings.sessionsLoadFailed'))
-      .finally(() => setSessionsLoading(false));
-  }, []);
 
   const handleRevokeSession = useCallback(async (id: string) => {
     setRevokingId(id);
