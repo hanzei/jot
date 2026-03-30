@@ -5,7 +5,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   Alert,
-  Platform,
   Modal,
   Pressable,
   TextInput,
@@ -194,7 +193,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
     <View style={[styles.container, { backgroundColor: colors.surface }]}>
       <DrawerContentScrollView
         {...props}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={{ paddingTop: insets.top + 8 }}
       >
         {/* User profile section */}
         <View style={styles.profileSection}>
@@ -404,9 +403,6 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-  },
-  scrollContent: {
-    paddingTop: Platform.OS === 'ios' ? 0 : 8,
   },
   profileSection: {
     paddingHorizontal: 20,

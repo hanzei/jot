@@ -9,6 +9,7 @@ import {
 } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useTranslation } from 'react-i18next';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import UserAvatar from './UserAvatar';
 import { useTheme } from '../theme/ThemeContext';
 import { displayName, type Collaborator } from '@jot/shared';
@@ -30,6 +31,7 @@ export default function AssigneePicker({
 }: AssigneePickerProps) {
   const { colors } = useTheme();
   const { t } = useTranslation();
+  const insets = useSafeAreaInsets();
 
   return (
     <Modal
@@ -44,7 +46,16 @@ export default function AssigneePicker({
         activeOpacity={1}
         onPress={onClose}
       >
-        <View style={[styles.sheet, { backgroundColor: colors.sheetBackground }]} onStartShouldSetResponder={() => true}>
+        <View
+          style={[
+            styles.sheet,
+            {
+              backgroundColor: colors.sheetBackground,
+              paddingBottom: Math.max(insets.bottom + 12, 32),
+            },
+          ]}
+          onStartShouldSetResponder={() => true}
+        >
           <View style={[styles.header, { borderBottomColor: colors.borderLight }]}>
             <Text style={[styles.headerTitle, { color: colors.text }]}>{t('note.assignItem')}</Text>
             <TouchableOpacity
@@ -123,7 +134,6 @@ const styles = StyleSheet.create({
   sheet: {
     borderTopLeftRadius: 16,
     borderTopRightRadius: 16,
-    paddingBottom: 32,
     maxHeight: '60%',
   },
   header: {
