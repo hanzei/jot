@@ -476,4 +476,25 @@ describe('NotesListScreen sorting', () => {
     expect(refetch).toHaveBeenCalledTimes(1);
     expect(refreshUsers).toHaveBeenCalledTimes(1);
   });
+
+  it('retry button on error state reloads notes and users', async () => {
+    const refetch = jest.fn().mockResolvedValue(undefined);
+    const refreshUsers = jest.fn().mockResolvedValue(undefined);
+    mockUseOfflineNotes.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      refetch,
+      isRefetching: false,
+    });
+    mockUseUsers.mockReturnValue({ refreshUsers });
+
+    render(<NotesListScreen variant="notes" />);
+    fireEvent.press(screen.getByTestId('retry-fetch'));
+
+    await waitFor(() => {
+      expect(refetch).toHaveBeenCalledTimes(1);
+      expect(refreshUsers).toHaveBeenCalledTimes(1);
+    });
+  });
 });

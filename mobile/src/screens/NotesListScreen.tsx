@@ -670,7 +670,9 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
           <Text style={[styles.emptySubtext, { color: colors.textMuted }]}>{t('dashboard.checkConnection')}</Text>
           <TouchableOpacity
             style={[styles.retryButton, { backgroundColor: colors.primary }]}
-            onPress={() => refetch()}
+            onPress={() => {
+              void handleRefresh();
+            }}
             testID="retry-fetch"
             accessibilityRole="button"
             accessibilityLabel={t('common.retry')}
