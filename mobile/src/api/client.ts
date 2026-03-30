@@ -246,28 +246,30 @@ export async function switchActiveServer(serverId: string): Promise<boolean> {
     return false;
   };
 
-  const switched = await switchRegisteredServer(serverId);
-  if (!switched) {
-    return failPreCommit();
-  }
-
-  const active = await getActiveServer();
-  if (!active) {
-    markServerSwitchLifecycleDegraded('active_server_missing_after_switch');
-    return true;
-  }
-
   try {
+    const switched = await switchRegisteredServer(serverId);
+    if (!switched) {
+      return failPreCommit();
+    }
+
+    const active = await getActiveServer();
+    if (!active) {
+      markServerSwitchLifecycleDegraded('active_server_missing_after_switch');
+      return true;
+    }
+
+    applyServerUrl(active.serverUrl);
     activeServerId = active.serverId;
     sessionCache = undefined;
-    applyServerUrl(active.serverUrl);
     clearServerSwitchLifecycleDegraded();
     completeServerSwitchLifecycle();
     return true;
   } catch (error) {
-    console.warn('Server switch entered degraded state:', error);
-    markServerSwitchLifecycleDegraded('post_commit_switch_initialization_failed');
-    return true;
+    if (isServerSwitchInProgressInternal()) {
+      abortServerSwitchLifecycle();
+    }
+    console.warn('Server switch failed before commit:', error);
+    return false;
   } finally {
     // Ensure we never keep stale controllers for the previous generation.
     cancelInflightControllersForGeneration(previousGenerationId);

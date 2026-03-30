@@ -50,6 +50,9 @@ export function isSyncDrainPaused(): boolean {
 }
 
 export function beginServerSwitchLifecycle(): { previousGenerationId: number; nextGenerationId: number } {
+  if (lifecycleState.isSwitching) {
+    throw new Error('Server switch already in progress');
+  }
   const previousGenerationId = lifecycleState.generationId;
   const nextGenerationId = previousGenerationId + 1;
   lifecycleState = {

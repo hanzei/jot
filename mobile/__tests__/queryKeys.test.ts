@@ -32,6 +32,7 @@ describe('query key scoping', () => {
 
   it('scopes note and notes keys by active server', async () => {
     const firstNotesKey = notesQueryKey({ archived: true });
+    const firstLocalNotesKey = notesLocalQueryKey({ archived: true });
     const firstNoteKey = noteQueryKey('note-1');
     const firstLocalNoteKey = noteLocalQueryKey('note-1');
     const firstLabelsKey = labelsQueryKey();
@@ -57,6 +58,7 @@ describe('query key scoping', () => {
     expect(firstLocalNoteKey[1]).not.toEqual(secondLocalNoteKey[1]);
     expect(firstLabelsKey[1]).not.toEqual(secondLabelsKey[1]);
     expect(firstSharesKey[1]).not.toEqual(secondSharesKey[1]);
+    expect(firstLocalNotesKey[1]).not.toEqual(secondLocalNotesKey[1]);
     expect(secondLocalNotesKey[0]).toBe('notes-local');
   });
 });

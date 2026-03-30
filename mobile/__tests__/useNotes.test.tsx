@@ -4,6 +4,7 @@ import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useNotes, useNote, useCreateNote, useUpdateNote, useDeleteNote, useDuplicateNote } from '../src/hooks/useNotes';
 import * as notesApi from '../src/api/notes';
 import * as noteQueriesModule from '../src/db/noteQueries';
+import * as clientModule from '../src/api/client';
 
 jest.mock('../src/api/notes');
 
@@ -46,6 +47,7 @@ jest.mock('../src/api/client', () => ({
 
 const mockNotesApi = notesApi as jest.Mocked<typeof notesApi>;
 const mockNoteQueries = noteQueriesModule as jest.Mocked<typeof noteQueriesModule>;
+const mockClientModule = clientModule as jest.Mocked<typeof clientModule>;
 
 function createWrapper() {
   const queryClient = new QueryClient({
@@ -141,6 +143,19 @@ describe('useNotes hooks', () => {
 
       expect(result.current.data).toEqual(newNote);
       expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), newNote);
+    });
+
+    it('blocks write when server switch is in progress', async () => {
+      mockClientModule.isServerSwitchInProgress.mockReturnValue(true);
+
+      const { result } = renderHook(() => useCreateNote(), { wrapper: createWrapper() });
+
+      await expect(
+        result.current.mutateAsync({ title: 'Blocked', content: '', note_type: 'text' }),
+      ).rejects.toThrow('Server switch in progress; write blocked');
+
+      expect(mockNotesApi.createNote).not.toHaveBeenCalled();
+      expect(mockNoteQueries.saveNote).not.toHaveBeenCalled();
     });
   });
 

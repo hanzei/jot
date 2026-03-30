@@ -7,7 +7,7 @@ import { SSEConnectionManager } from '../api/events';
 import type { SSEEvent } from '@jot/shared';
 import { useNetworkStatus } from './useNetworkStatus';
 import { saveNote, markLocalNoteDeleted } from '../db/noteQueries';
-import { isSseQuiesced } from '../store/serverSwitchLifecycle';
+import { isSseQuiesced, subscribeToServerSwitchLifecycle } from '../store/serverSwitchLifecycle';
 import {
   noteLocalQueryKey,
   noteQueryKey,
@@ -100,9 +100,18 @@ export function useSSE(onNoteUpdatedByOther?: SSENotificationCallback): void {
     };
 
     const subscription = AppState.addEventListener('change', handleAppStateChange);
+    const lifecycleUnsubscribe = subscribeToServerSwitchLifecycle((state) => {
+      if (!isAuthenticated || !isConnected) {
+        return;
+      }
+      if (!state.isSwitching && !state.isSseQuiesced) {
+        startConnection();
+      }
+    });
 
     return () => {
       subscription.remove();
+      lifecycleUnsubscribe();
       stopConnection();
     };
   }, [isAuthenticated, isConnected, startConnection, stopConnection]);

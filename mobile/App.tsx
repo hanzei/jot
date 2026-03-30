@@ -165,6 +165,9 @@ function NavigationWrapper() {
     if (getActiveServerId() === targetServerId && !isServerSwitchInProgress()) {
       return true;
     }
+    if (isServerSwitchInProgress() && getActiveServerId() !== targetServerId) {
+      return false;
+    }
 
     const switched = await switchActiveServer(targetServerId);
     if (!switched) {
