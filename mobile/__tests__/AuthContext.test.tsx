@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, waitFor, act, fireEvent, cleanup } from '@testing-library/react-native';
+import { render, waitFor, act, fireEvent, cleanup, configure } from '@testing-library/react-native';
 import { Text, TouchableOpacity } from 'react-native';
 import { AuthProvider, useAuth } from '../src/store/AuthContext';
 import { auth, getStoredSession, setOnUnauthorized, clearStoredSession, cacheAuthProfile, getCachedAuthProfile, clearCachedProfile } from '../src/api/client';
@@ -70,6 +70,7 @@ function LoginTrigger() {
 }
 
 let revalidateFn: (() => Promise<boolean>) | null = null;
+const CI_WAIT_TIMEOUT_MS = 4000;
 
 function RevalidateConsumer() {
   const { user, isAuthenticated, isLoading, revalidateSession } = useAuth();
@@ -87,6 +88,10 @@ const mockUser = { id: '1', username: 'testuser', first_name: '', last_name: '',
 const mockSettings = { user_id: '1', language: 'en', theme: 'system' as const, note_sort: 'manual' as const, updated_at: '' };
 
 describe('AuthContext', () => {
+  beforeAll(() => {
+    configure({ asyncUtilTimeout: CI_WAIT_TIMEOUT_MS });
+  });
+
   beforeEach(() => {
     jest.clearAllMocks();
     mockGetStoredSession.mockResolvedValue(null);
@@ -97,8 +102,11 @@ describe('AuthContext', () => {
     cleanup();
   });
 
+  afterAll(() => {
+    configure({ asyncUtilTimeout: 1000 });
+  });
+
   it('starts with isLoading true and no user', async () => {
-    mockClientModule.initializeServerContext.mockResolvedValueOnce(undefined);
     const { getByTestId, unmount } = render(
       <AuthProvider>
         <TestConsumer />
@@ -109,7 +117,7 @@ describe('AuthContext', () => {
 
     await waitFor(() => {
       expect(getByTestId('loading').props.children).toBe('false');
-    }, { timeout: 4000 });
+    });
     expect(getByTestId('loading').props.children).toBe('false');
     expect(getByTestId('authenticated').props.children).toBe('false');
     expect(getByTestId('username').props.children).toBe('none');
@@ -413,9 +421,10 @@ describe('AuthContext', () => {
 
     const updatedResponse = { user: { ...mockUser, username: 'revalidated' }, settings: mockSettings };
     mockAuth.me.mockResolvedValue(updatedResponse);
+    expect(revalidateFn).not.toBeNull();
 
     await act(async () => {
-      await revalidateFn?.();
+      await revalidateFn!();
     });
 
     expect(getByTestId('authenticated').props.children).toBe('true');
@@ -439,9 +448,10 @@ describe('AuthContext', () => {
     });
 
     mockAuth.me.mockRejectedValueOnce({ response: { status: 401 } });
+    expect(revalidateFn).not.toBeNull();
 
     await act(async () => {
-      await revalidateFn?.();
+      await revalidateFn!();
     });
 
     expect(getByTestId('authenticated').props.children).toBe('false');
@@ -465,9 +475,10 @@ describe('AuthContext', () => {
     });
 
     mockAuth.me.mockRejectedValueOnce(new Error('Network Error'));
+    expect(revalidateFn).not.toBeNull();
 
     await act(async () => {
-      await revalidateFn?.();
+      await revalidateFn!();
     });
 
     // User stays authenticated on network error
