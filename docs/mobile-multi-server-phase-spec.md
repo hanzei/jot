@@ -69,7 +69,7 @@ Secure storage contract:
 - Session/profile values are stored in **namespaced per-server SecureStore keys**.
 - Do not use raw URL strings directly as long key names; use a stable short suffix (e.g., hash of canonical URL).
 
-There is exactly one active server at a time.
+There is at most one active server at a time (zero is allowed when the server registry is empty).
 
 ## Phase Plan
 
@@ -99,7 +99,7 @@ Tasks:
     - `{ success: false, code: 'SERVER_ADD_ERROR', message, retryable: false, details? }`
 - `removeServer(serverId, options?)` contract must define explicit data-safety behavior for the per-server SQLite DB and offline sync queue:
   - removal of the currently active server must also define post-removal selection behavior:
-    - preferred: switch to the most recently used remaining server; otherwise transition to unauthenticated/no-server-selected state.
+    - preferred: switch to the most recently used remaining server; otherwise transition to an unauthenticated state with zero active servers.
   - before removal, check unsynced state (`sync_queue` pending count and unsynced local entities in that server DB).
   - default behavior (no override): prevent removal when unsynced data exists and return a typed error result:
     - `{ success: false, code: 'UNSYNCED_DATA', message, retryable: false, pendingCount, canForceRemove: true }`
