@@ -64,6 +64,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
   const fabBottom = Math.max(insets.bottom + 20, 20);
+  const listBottomPadding = variant === 'notes' ? fabBottom + 60 : 80;
 
   const [contextMenuNote, setContextMenuNote] = useState<Note | null>(null);
   const [colorPickerNote, setColorPickerNote] = useState<Note | null>(null);
@@ -772,7 +773,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
             refreshControl={
               <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={colors.primary} />
             }
-            contentContainerStyle={styles.listContent}
+            contentContainerStyle={[styles.listContent, { paddingBottom: listBottomPadding }]}
             testID="notes-section-list"
           >
             {displayPinned.length > 0 && (
@@ -810,7 +811,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
             refreshControl={
               <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={colors.primary} />
             }
-            contentContainerStyle={styles.listContent}
+            contentContainerStyle={[styles.listContent, { paddingBottom: listBottomPadding }]}
             testID="notes-section-list"
           >
             {displayPinned.length > 0 && (
@@ -857,7 +858,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
           refreshControl={
             <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={colors.primary} />
           }
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[styles.listContent, { paddingBottom: listBottomPadding }]}
           ListEmptyComponent={listEmptyComponent}
           testID="notes-flat-list"
         />
@@ -869,7 +870,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
           refreshControl={
             <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={colors.primary} />
           }
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[styles.listContent, { paddingBottom: listBottomPadding }]}
           ListEmptyComponent={listEmptyComponent}
           testID="notes-flat-list"
         />
@@ -1078,9 +1079,7 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     paddingBottom: 4,
   },
-  listContent: {
-    paddingBottom: 80,
-  },
+  listContent: {},
   retryButton: {
     marginTop: 16,
     paddingHorizontal: 24,
