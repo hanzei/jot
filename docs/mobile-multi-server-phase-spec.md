@@ -25,7 +25,7 @@ Define a coding-agent-ready implementation plan for adding multi-server support 
 
 ## Canonical Server Identity
 
-Server uniqueness uses a **canonical normalized URL** and is **origin-only** for identity (scheme + host + explicit port).
+Server uniqueness uses a **canonical normalized URL** and is **origin-only** for identity (scheme + host + non-default port only).
 
 Canonicalization rules:
 
@@ -33,12 +33,21 @@ Canonicalization rules:
 2. Require `http://` or `https://`.
 3. Parse with URL parser.
 4. Lowercase scheme + host.
-5. Normalize to `scheme://host[:port]` (drop path/query/hash for identity).
-6. Remove trailing slash if present.
+5. Drop path/query/hash for identity (origin-only matching).
+6. Normalize default ports as implicit:
+   - `http://host:80` -> `http://host`
+   - `https://host:443` -> `https://host`
+7. Preserve explicit non-default ports (for example `:8080`).
+8. Remove trailing slash if present.
 
 Two server entries that normalize to the same canonical origin are duplicates and must not both exist.
 
 Implementation requirement: deep-link server matching, duplicate checks, storage migration, and active-server resolution must all call the same canonicalization helper to avoid drift.
+
+Alignment note:
+
+- Current `webapp/src/utils/deepLink.ts` and `mobile/App.tsx` currently normalize origins with slightly different formatting details (for example lowercase handling and default-port treatment).
+- When implementing this spec, update both call sites in lockstep to call the shared helper so the default-port and casing rules above are enforced consistently.
 
 ## Data Model Contract
 
@@ -75,19 +84,47 @@ Tasks:
   - `getActiveServer()`
   - `addServer(url)`
   - `switchServer(serverId)`
-  - `removeServer(serverId)`
+  - `removeServer(serverId, options?)`
   - `renameServer(serverId, label)`
 - Add duplicate prevention on `addServer(url)` using canonical URL.
-- `addServer(url)` should return a deterministic result shape that supports duplicate UX (example):
-  - `{ ok: true, serverId }`
-  - `{ ok: false, reason: 'duplicate', existingServerId }`
+- `addServer(url)` should return a deterministic structured result with explicit outcomes (for Phase 3 UI messaging/actions):
+  - success:
+    - `{ success: true, serverId }`
+  - failure:
+    - `{ success: false, code: 'INVALID_URL', message, retryable: false, details? }` (URL parse/canonicalization failed before network probe)
+    - `{ success: false, code: 'DUPLICATE', message, retryable: false, existingServerId }`
+    - `{ success: false, code: 'NETWORK_ERROR', message, retryable: true, details? }`
+    - `{ success: false, code: 'INVALID_ENDPOINT', message, retryable: false, details? }`
+    - `{ success: false, code: 'AUTH_REQUIRED', message, retryable: false, details? }` (server requires auth for discovery/probe endpoint)
+    - `{ success: false, code: 'SERVER_ADD_ERROR', message, retryable: false, details? }`
+- `removeServer(serverId, options?)` contract must define explicit data-safety behavior for the per-server SQLite DB and offline sync queue:
+  - removal of the currently active server must also define post-removal selection behavior:
+    - preferred: switch to the most recently used remaining server; otherwise transition to unauthenticated/no-server-selected state.
+  - before removal, check unsynced state (`sync_queue` pending count and unsynced local entities in that server DB).
+  - default behavior (no override): prevent removal when unsynced data exists and return a typed error result:
+    - `{ success: false, code: 'UNSYNCED_DATA', message, retryable: false, pendingCount, canForceRemove: true }`
+  - optional forced removal path:
+    - `options.forceRemove === true` requires explicit caller confirmation and permanently deletes the server's SQLite DB + queue + account registry entry + namespaced secure storage keys.
+  - optional archival path:
+    - `options.archiveBeforeRemove === true` moves the server DB to an archive location, records archive metadata in the account registry/context, and removes the active entry without destroying archived data.
+  - `options.forceRemove` and `options.archiveBeforeRemove` are mutually exclusive; passing both returns:
+    - `{ success: false, code: 'INVALID_REMOVE_OPTIONS', message, retryable: false }`
+  - successful result must make side effects observable:
+    - `{ success: true, action: 'removed' | 'archived', deletedDb: boolean, archivedDbPath?: string }`
 - Add one-time migration from old global keys into first server entry.
+- Add one-time offline-data migration from legacy `jot.db` into the first server DB:
+  - routine examples: `migrateLegacySqliteToServer(legacyDbPath, serverId)` or `migrateSyncQueueAndNotes(legacyDbPath, targetDbPath)`.
+  - invoke from one centralized startup hook and only when migration state is not completed (idempotent via persisted migration marker/version).
+  - `addServer(url)` first-server path should call the same centralized hook, not a separate copy, to avoid double migration attempts.
+  - migration requirements: create backup, validate schema, atomic copy/import, deduplicate records, and log errors.
+  - post-success behavior must be explicit: archive/rename legacy `jot.db` (do not continue using it as active DB) so migration is not repeated.
 - Keep backward-safe fallback if migration data is missing/corrupt.
 
 Acceptance:
 
 - Existing single-server users retain access after upgrade.
 - Attempting to add duplicate URL is blocked and returns deterministic duplicate result.
+- Legacy `jot.db` notes/sync queue are migrated (or safely backed up + skipped with explicit error state if migration fails).
 
 ### Phase 2: API/Auth Refactor to Active Server
 
@@ -137,13 +174,17 @@ Recommended implementation:
 
 - Use **one SQLite DB file per server** (preferred over account_id columns for this scope).
 - DB filename must be filesystem-safe and derived (e.g., `jot_<hash(canonicalServerUrl)>.db`), never raw URL text.
-- Remount/rebind SQLite provider on server switch.
-- Ensure sync queue is per-server DB and drained only for active server.
+- Adopt dynamic per-server DB management (option A): open/look up DB handles keyed by canonical-server hash (for example with `openDatabaseAsync`) and route all DB operations through the active server DB handle.
+- Remount/rebind SQLite provider (or equivalent DB context) on server switch.
+- Ensure all queries touching `notes`, `note_items`, and `sync_queue` use the active server DB handle.
+- Ensure sync queue enqueue/dequeue/drain workers run only for the active server DB context.
+- Explicitly run the legacy `jot.db` -> per-server DB migration routine from Phase 1 before steady-state per-server routing.
 
 Acceptance:
 
 - Notes/sync queue for server A remain isolated from server B.
 - Switching servers never shows other server’s offline notes.
+- Legacy single-DB installs either migrate data successfully or preserve a backup + explicit recovery/error state.
 
 ### Phase 5: Cache/SSE/Sync Lifecycle on Switch
 
@@ -151,18 +192,38 @@ Acceptance:
 
 Tasks:
 
-- On switch:
-  - disconnect SSE
-  - clear or server-scope React Query caches
-  - reset auth/user/settings state
-  - initialize active server context
-  - reconnect SSE if authenticated
+- Define and implement a gated server-switch transaction with explicit ordering:
+  1. Enter transition lock (`switchGenerationId`) and block new writes for old server context.
+     - reads may continue for old context until commit, but any data handlers must be generation-gated.
+  2. Quiesce realtime ingress:
+     - set SSE to quiesce state and disconnect old server EventSource.
+     - during quiesce, discard or buffer incoming old-generation events (choose one behavior and document it; default recommendation: discard old-generation events).
+  3. Handle in-flight API requests:
+     - cancel active requests for old server via abort/cancel mechanism.
+     - ignore late old-generation responses by generation guard so they cannot mutate new context.
+  4. Handle offline sync worker:
+     - pause old-server queue drain before context switch.
+     - default: do not block switch waiting for upload; keep pending entries in old server DB and resume when switching back.
+     - optional mode may allow waiting for drain with timeout + retry prompt before switch commit.
+  5. Commit context switch:
+     - clear server-scoped React Query caches
+     - reset server-scoped auth/user/settings state (do not reset device-global preferences unless explicitly intended)
+     - initialize active server context (network + DB handle/provider + account registry state)
+     - rebind/remount DB provider/handle before allowing destination-server queries
+  6. Resume destination context:
+     - reconnect SSE only after destination context is initialized and authenticated
+     - resume sync worker for destination server only
+- Define error/retry behavior per step:
+  - pre-commit failure: abort switch and keep old server active.
+  - post-commit initialization failure: keep new server selected but mark degraded state and surface retry action.
+  - all retries must remain generation-gated to prevent cross-server mutations.
 - Scope query keys by active server key where practical.
 
 Acceptance:
 
 - No stale cross-server UI data after switch.
 - SSE reconnects only for active server.
+- In-flight old-server responses/events cannot mutate new-server state.
 
 ### Phase 6: Deep Links + Auth Entry UX
 
