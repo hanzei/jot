@@ -63,6 +63,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   const { colors } = useTheme();
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
+  const fabBottom = Math.max(insets.bottom + 20, 20);
 
   const [contextMenuNote, setContextMenuNote] = useState<Note | null>(null);
   const [colorPickerNote, setColorPickerNote] = useState<Note | null>(null);
@@ -719,7 +720,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
         </View>
         {variant === 'notes' && (
           <TouchableOpacity
-            style={[styles.fab, { backgroundColor: colors.primary }]}
+            style={[styles.fab, { backgroundColor: colors.primary, bottom: fabBottom }]}
             onPress={handleCreateNote}
             testID="create-note-fab"
             accessibilityLabel={t('dashboard.newNote')}
@@ -876,7 +877,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
 
       {variant === 'notes' && (
         <TouchableOpacity
-          style={[styles.fab, { backgroundColor: colors.primary }]}
+          style={[styles.fab, { backgroundColor: colors.primary, bottom: fabBottom }]}
           onPress={handleCreateNote}
           testID="create-note-fab"
           accessibilityLabel={t('dashboard.newNote')}
@@ -1094,7 +1095,6 @@ const styles = StyleSheet.create({
   fab: {
     position: 'absolute',
     right: 20,
-    bottom: 20,
     width: 56,
     height: 56,
     borderRadius: 28,
