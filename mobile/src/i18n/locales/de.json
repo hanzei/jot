@@ -258,6 +258,21 @@
     "wrongServerTitle": "Falscher Server",
     "wrongServerMessage": "Dieser Link verweist auf {{targetServer}}, aber du bist mit {{currentServer}} verbunden."
   },
+  "serverPicker": {
+    "open": "Server wechseln",
+    "title": "Server auswählen",
+    "noServers": "Noch keine Server hinzugefügt.",
+    "addPlaceholder": "Server-URL hinzufügen (https://...)",
+    "addButton": "Server hinzufügen",
+    "working": "Wird verarbeitet...",
+    "urlRequired": "Server-URL ist erforderlich",
+    "invalidUrl": "Ungültige Server-URL. Verwende http:// oder https://",
+    "addFailed": "Server konnte nicht hinzugefügt werden",
+    "switchFailed": "Serverwechsel fehlgeschlagen",
+    "duplicateTitle": "Server bereits hinzugefügt",
+    "duplicateMessage": "Dieser Server ist bereits in deiner Liste.",
+    "switchToExisting": "Zu vorhandenem wechseln"
+  },
   "offline": {
     "message": "Du bist offline. Änderungen werden synchronisiert, sobald du wieder verbunden bist."
   },

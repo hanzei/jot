@@ -17,6 +17,21 @@
     "logoutConfirmMessage": "Are you sure you want to log out?",
     "openMenu": "Open menu"
   },
+  "serverPicker": {
+    "open": "Switch server",
+    "title": "Servers",
+    "noServers": "No servers configured yet.",
+    "addPlaceholder": "Add server URL (https://...)",
+    "addButton": "Add server",
+    "working": "Working...",
+    "urlRequired": "Server URL is required.",
+    "invalidUrl": "Server URL must start with http:// or https://.",
+    "addFailed": "Failed to add server.",
+    "switchFailed": "Failed to switch server.",
+    "duplicateTitle": "Server already added",
+    "duplicateMessage": "That server already exists in your list.",
+    "switchToExisting": "Switch to existing"
+  },
   "auth": {
     "signInTitle": "Sign in to Jot",
     "signInSubtitle": "Sign in to your account",

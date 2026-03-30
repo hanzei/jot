@@ -261,6 +261,21 @@
   "offline": {
     "message": "Jesteś offline. Zmiany zostaną zsynchronizowane po ponownym połączeniu."
   },
+  "serverPicker": {
+    "open": "Przełącz serwer",
+    "title": "Serwery",
+    "noServers": "Nie dodano jeszcze serwerów.",
+    "addPlaceholder": "Dodaj URL serwera",
+    "addButton": "Dodaj i przełącz",
+    "working": "Zapisywanie...",
+    "urlRequired": "URL serwera jest wymagany.",
+    "invalidUrl": "Wprowadź prawidłowy URL serwera z http:// lub https://.",
+    "duplicateTitle": "Serwer już dodany",
+    "duplicateMessage": "Ten serwer jest już na liście.",
+    "switchToExisting": "Przełącz na istniejący",
+    "switchFailed": "Nie udało się przełączyć serwera.",
+    "addFailed": "Nie udało się dodać serwera."
+  },
   "import": {
     "title": "Importuj z Google Keep",
     "description": "Prześlij plik eksportu Google Keep. Wyeksportuj notatki z Google Takeout i prześlij archiwum .zip lub pojedynczy plik .json.",

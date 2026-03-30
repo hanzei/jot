@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert, Linking } from 'react-native';
+import { ActivityIndicator, Alert, Linking, Text, TouchableOpacity, View } from 'react-native';
 import {
   NavigationContainer,
   DefaultTheme,
@@ -19,8 +19,15 @@ import { UsersProvider } from './src/store/UsersContext';
 import { OfflineProvider } from './src/store/OfflineContext';
 import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
 import RootNavigator, { type RootStackParamList } from './src/navigation/RootNavigator';
-import { getBaseUrl, getStoredServerUrl, restoreServerUrl } from './src/api/client';
-import { migrateDatabase } from './src/db/schema';
+import {
+  getActiveServerId,
+  getBaseUrl,
+  getStoredServerUrl,
+  initializeServerContext,
+  restoreServerUrl,
+  subscribeToClientActiveServerChanges,
+} from './src/api/client';
+import { getDatabaseNameForServer, initializeServerDatabase } from './src/db/serverDatabase';
 import { canonicalizeServerOrigin } from '@jot/shared';
 import './src/i18n';
 
@@ -267,11 +274,82 @@ function NavigationWrapper() {
 }
 
 export default function App() {
+  const [activeServerId, setActiveServerId] = React.useState<string | null>(null);
+  const [isServerContextReady, setIsServerContextReady] = React.useState(false);
+  const [serverContextInitError, setServerContextInitError] = React.useState<string | null>(null);
+  const [serverContextInitAttempt, setServerContextInitAttempt] = React.useState(0);
+
+  React.useEffect(() => {
+    let isMounted = true;
+    const unsubscribe = subscribeToClientActiveServerChanges((nextServerId) => {
+      if (!isMounted) {
+        return;
+      }
+      setActiveServerId(nextServerId);
+      queryClient.clear();
+    });
+
+    void (async () => {
+      try {
+        await initializeServerContext();
+        if (!isMounted) {
+          return;
+        }
+        setActiveServerId(getActiveServerId());
+        setIsServerContextReady(true);
+        setServerContextInitError(null);
+      } catch (error) {
+        console.warn('Failed to initialize server context:', error);
+        if (!isMounted) {
+          return;
+        }
+        setServerContextInitError('server_context_init_failed');
+      }
+    })();
+
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
+  }, [serverContextInitAttempt]);
+
+  const databaseName = getDatabaseNameForServer(activeServerId);
+  const handleDatabaseInit = async (db: Parameters<typeof initializeServerDatabase>[0]) =>
+    initializeServerDatabase(db, activeServerId);
+
+  if (!isServerContextReady) {
+    return (
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          {serverContextInitError ? (
+            <View style={{ alignItems: 'center', paddingHorizontal: 24 }}>
+              <Text style={{ textAlign: 'center', marginBottom: 12 }}>
+                Failed to initialize server context.
+              </Text>
+              <TouchableOpacity
+                onPress={() => setServerContextInitAttempt((prev) => prev + 1)}
+                style={{ paddingHorizontal: 14, paddingVertical: 10 }}
+              >
+                <Text>Retry</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <ActivityIndicator size="large" />
+          )}
+        </View>
+      </GestureHandlerRootView>
+    );
+  }
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <QueryClientProvider client={queryClient}>
-        <SQLiteProvider databaseName="jot.db" onInit={migrateDatabase}>
-          <AuthProvider>
+        <AuthProvider>
+          <SQLiteProvider
+            key={`sqlite-${databaseName}`}
+            databaseName={databaseName}
+            onInit={handleDatabaseInit}
+          >
             <MobileI18nProvider>
               <ThemeProvider>
                 <UsersProvider>
@@ -281,8 +359,8 @@ export default function App() {
                 </UsersProvider>
               </ThemeProvider>
             </MobileI18nProvider>
-          </AuthProvider>
-        </SQLiteProvider>
+          </SQLiteProvider>
+        </AuthProvider>
       </QueryClientProvider>
     </GestureHandlerRootView>
   );

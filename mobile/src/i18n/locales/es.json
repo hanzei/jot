@@ -17,6 +17,21 @@
     "logoutConfirmMessage": "¿Seguro que quieres cerrar sesión?",
     "openMenu": "Abrir menú"
   },
+  "serverPicker": {
+    "open": "Cambiar servidor",
+    "title": "Servidores",
+    "noServers": "Aún no hay servidores guardados.",
+    "addPlaceholder": "Añadir URL de servidor",
+    "addButton": "Añadir servidor",
+    "working": "Procesando...",
+    "urlRequired": "La URL del servidor es obligatoria.",
+    "invalidUrl": "La URL del servidor no es válida.",
+    "addFailed": "No se pudo añadir el servidor.",
+    "switchFailed": "No se pudo cambiar de servidor.",
+    "duplicateTitle": "Servidor ya añadido",
+    "duplicateMessage": "Este servidor ya existe en tu lista.",
+    "switchToExisting": "Cambiar al existente"
+  },
   "auth": {
     "signInTitle": "Iniciar sesión en Jot",
     "signInSubtitle": "Inicia sesión en tu cuenta",

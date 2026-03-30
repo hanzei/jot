@@ -258,6 +258,21 @@
     "wrongServerTitle": "Mauvais serveur",
     "wrongServerMessage": "Ce lien cible {{targetServer}}, mais vous êtes connecté à {{currentServer}}."
   },
+  "serverPicker": {
+    "open": "Changer de serveur",
+    "title": "Sélectionner un serveur",
+    "noServers": "Aucun serveur configuré",
+    "addPlaceholder": "https://votre-serveur.exemple.com",
+    "addButton": "Ajouter un serveur",
+    "working": "Traitement...",
+    "urlRequired": "L'URL du serveur est requise",
+    "invalidUrl": "URL du serveur invalide. Utilisez http:// ou https://",
+    "switchFailed": "Impossible de changer de serveur",
+    "addFailed": "Impossible d'ajouter le serveur",
+    "duplicateTitle": "Serveur déjà ajouté",
+    "duplicateMessage": "Ce serveur existe déjà. Souhaitez-vous y basculer ?",
+    "switchToExisting": "Basculer vers l'existant"
+  },
   "offline": {
     "message": "Vous êtes hors ligne. Les modifications seront synchronisées lors de la reconnexion."
   },

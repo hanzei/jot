@@ -17,6 +17,21 @@
     "logoutConfirmMessage": "Sei sicuro di voler uscire?",
     "openMenu": "Apri menu"
   },
+  "serverPicker": {
+    "open": "Cambia server",
+    "title": "Server",
+    "noServers": "Nessun server aggiunto",
+    "addPlaceholder": "Aggiungi URL server",
+    "addButton": "Aggiungi server",
+    "working": "Caricamento...",
+    "switchFailed": "Impossibile cambiare server",
+    "addFailed": "Impossibile aggiungere server",
+    "urlRequired": "L'URL del server è obbligatorio",
+    "invalidUrl": "Inserisci un URL server valido",
+    "duplicateTitle": "Server già aggiunto",
+    "duplicateMessage": "Questo server esiste già. Vuoi passare alla voce esistente?",
+    "switchToExisting": "Passa a esistente"
+  },
   "auth": {
     "signInTitle": "Accedi a Jot",
     "signInSubtitle": "Accedi al tuo account",
