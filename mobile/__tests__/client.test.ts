@@ -30,16 +30,19 @@ jest.mock('axios', () => {
     },
     defaults: { headers: { common: {} } },
   };
+  const mockIsCancel = (value: unknown): boolean =>
+    value instanceof MockCanceledError || Boolean((value as { __CANCEL__?: boolean })?.__CANCEL__);
   const mockAxios = {
     create: jest.fn(() => mockInstance),
     __mockInstance: mockInstance,
+    isCancel: mockIsCancel,
   };
   return {
     __esModule: true,
     default: mockAxios,
     AxiosHeaders: jest.fn(),
     CanceledError: MockCanceledError,
-    isCancel: (value: unknown) => value instanceof MockCanceledError || Boolean((value as { __CANCEL__?: boolean })?.__CANCEL__),
+    isCancel: mockIsCancel,
   };
 });
 
@@ -67,7 +70,6 @@ const mockSecureStore = SecureStore as unknown as {
 
 describe('API Client', () => {
   const memory = new Map<string, string>();
-  let serverId: string;
 
   const getActiveTestServerId = async (): Promise<string> => {
     const active = await getActiveServer();
@@ -90,7 +92,6 @@ describe('API Client', () => {
     if (!active) {
       throw new Error('missing active server after setup');
     }
-    serverId = active.serverId;
   });
 
   beforeEach(() => {
@@ -220,7 +221,8 @@ describe('API Client', () => {
     });
 
     it('returns null when no token stored', async () => {
-      memory.delete(getServerScopedStorageKey(serverId, 'session'));
+      const activeServerId = await getActiveTestServerId();
+      memory.delete(getServerScopedStorageKey(activeServerId, 'session'));
       await clearStoredSession();
       const result = await getStoredSession();
       expect(result).toBeNull();
@@ -299,13 +301,13 @@ describe('API Client', () => {
 
       const requestUse = mockAxiosInstance.interceptors.request.use;
       const responseUse = mockAxiosInstance.interceptors.response.use;
-      if (requestUse.mock.calls.length === 0 || responseUse.mock.calls.length === 0) {
-        throw new Error('Axios interceptors were not registered');
+      if (requestUse.mock.calls.length !== 1 || responseUse.mock.calls.length !== 1) {
+        throw new Error('Expected exactly one axios request and response interceptor registration');
       }
-      const requestInterceptor = requestUse.mock.calls[requestUse.mock.calls.length - 1]?.[0] as (
+      const requestInterceptor = requestUse.mock.calls[0]?.[0] as (
         config: Record<string, unknown>,
       ) => Promise<Record<string, unknown>>;
-      const responseSuccessInterceptor = responseUse.mock.calls[responseUse.mock.calls.length - 1]?.[0] as (
+      const responseSuccessInterceptor = responseUse.mock.calls[0]?.[0] as (
         response: { config: Record<string, unknown> },
       ) => { config: Record<string, unknown> };
 
