@@ -15,13 +15,14 @@ export function mapWebPathToMobilePath(pathname: string): string {
   return '';
 }
 
-export function buildMobileDeepLink(pathname: string, serverOrigin: string): string {
+export function buildMobileDeepLink(pathname: string, serverOrigin: string): string | null {
   const mobilePath = mapWebPathToMobilePath(pathname);
   const normalizedOrigin = canonicalizeServerOrigin(serverOrigin);
+  if (!normalizedOrigin) {
+    return null;
+  }
   const base = mobilePath ? `jot://${mobilePath}` : 'jot://';
   const url = new URL(base);
-  if (normalizedOrigin) {
-    url.searchParams.set('server', normalizedOrigin);
-  }
+  url.searchParams.set('server', normalizedOrigin);
   return url.toString();
 }

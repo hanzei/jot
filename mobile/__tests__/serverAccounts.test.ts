@@ -81,6 +81,8 @@ describe('serverAccounts registry', () => {
     expect(memory.get('jot_session')).toBeUndefined();
     expect(memory.get('jot_cached_profile')).toBeUndefined();
     expect(memory.get('jot_server_registry_migrated_v1')).toBe('1');
+    expect(memory.get(getServerScopedStorageKey(serverId, 'session'))).toBe('legacy-token');
+    expect(memory.get(getServerScopedStorageKey(serverId, 'cached_profile'))).toBe('{"legacy":true}');
   });
 
   it('deduplicates by canonical origin', async () => {

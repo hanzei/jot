@@ -14,7 +14,7 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import { AuthStackParamList } from '../navigation/AuthStack';
-import { ensureActiveServer } from '../api/client';
+import { setServerUrl } from '../api/client';
 import { useServerUrl } from '../hooks/useServerUrl';
 import { VALIDATION } from '@jot/shared';
 import { displayMessage } from '../i18n/utils';
@@ -27,7 +27,7 @@ export default function RegisterScreen({ navigation }: RegisterScreenProps) {
   const { register } = useAuth();
   const { colors } = useTheme();
   const { t } = useTranslation();
-  const { serverUrl, setServerUrl, validateServerUrl } = useServerUrl();
+  const { serverUrl, setServerUrl: setServerUrlInput, validateServerUrl } = useServerUrl();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -66,7 +66,7 @@ export default function RegisterScreen({ navigation }: RegisterScreenProps) {
     setError('');
     setLoading(true);
     try {
-      await ensureActiveServer(serverUrl.trim());
+      await setServerUrl(serverUrl.trim());
       await register(username.trim(), password);
     } catch (err: unknown) {
       const response = (err as { response?: { status?: number; data?: string } })?.response;
@@ -103,7 +103,7 @@ export default function RegisterScreen({ navigation }: RegisterScreenProps) {
           autoCorrect={false}
           keyboardType="url"
           value={serverUrl}
-          onChangeText={setServerUrl}
+          onChangeText={setServerUrlInput}
           accessibilityLabel={t('auth.serverUrlPlaceholder')}
           testID="server-url-input"
         />

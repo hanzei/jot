@@ -42,8 +42,8 @@ describe('deepLink utilities', () => {
       );
     });
 
-    it('omits server query when origin is invalid', () => {
-      expect(buildMobileDeepLink('/notes/note-123', 'notaurl')).toBe('jot://notes/note-123');
+    it('returns null when origin is invalid', () => {
+      expect(buildMobileDeepLink('/notes/note-123', 'notaurl')).toBeNull();
     });
   });
 });

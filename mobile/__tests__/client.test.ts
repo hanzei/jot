@@ -7,8 +7,9 @@ import {
   cacheAuthProfile,
   getCachedAuthProfile,
   clearCachedProfile,
-  ensureActiveServer,
+  setServerUrl,
 } from '../src/api/client';
+import { getActiveServer, getServerScopedStorageKey } from '../src/store/serverAccounts';
 
 jest.mock('axios', () => {
   const mockInstance = {
@@ -45,6 +46,15 @@ const mockSecureStore = SecureStore as unknown as {
 
 describe('API Client', () => {
   const memory = new Map<string, string>();
+  let serverId: string;
+
+  const getActiveTestServerId = async (): Promise<string> => {
+    const active = await getActiveServer();
+    if (!active) {
+      throw new Error('missing active server');
+    }
+    return active.serverId;
+  };
 
   beforeAll(async () => {
     mockSecureStore.getItemAsync.mockImplementation(async (key: string) => memory.get(key) ?? null);
@@ -54,11 +64,17 @@ describe('API Client', () => {
     mockSecureStore.deleteItemAsync.mockImplementation(async (key: string) => {
       memory.delete(key);
     });
-    await ensureActiveServer('https://test.example.com');
+    await setServerUrl('https://test.example.com');
+    const active = await getActiveServer();
+    if (!active) {
+      throw new Error('missing active server after setup');
+    }
+    serverId = active.serverId;
   });
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockSecureStore.getItemAsync.mockImplementation(async (key: string) => memory.get(key) ?? null);
     for (const key of Array.from(memory.keys())) {
       if (/^jot_server_v1_.*_(session|cached_profile)$/.test(key)) {
         memory.delete(key);
@@ -171,13 +187,16 @@ describe('API Client', () => {
 
   describe('getStoredSession', () => {
     it('returns token from secure store', async () => {
-      mockSecureStore.getItemAsync.mockResolvedValueOnce('stored-token');
+      await setServerUrl('https://session-check.example.com');
+      const sessionServerId = await getActiveTestServerId();
+      memory.set(getServerScopedStorageKey(sessionServerId, 'session'), 'stored-token');
       const result = await getStoredSession();
       expect(result).toBe('stored-token');
     });
 
     it('returns null when no token stored', async () => {
-      mockSecureStore.getItemAsync.mockResolvedValueOnce(null);
+      memory.delete(getServerScopedStorageKey(serverId, 'session'));
+      await clearStoredSession();
       const result = await getStoredSession();
       expect(result).toBeNull();
     });
@@ -211,19 +230,22 @@ describe('API Client', () => {
   describe('getCachedAuthProfile', () => {
     it('returns parsed profile from secure store', async () => {
       const profile = { user: { id: '1', username: 'test' }, settings: { theme: 'system', note_sort: 'manual' } };
-      mockSecureStore.getItemAsync.mockResolvedValueOnce(JSON.stringify(profile));
+      const activeServerId = await getActiveTestServerId();
+      memory.set(getServerScopedStorageKey(activeServerId, 'cached_profile'), JSON.stringify(profile));
       const result = await getCachedAuthProfile();
       expect(result).toEqual(profile);
     });
 
     it('returns null when nothing cached', async () => {
-      mockSecureStore.getItemAsync.mockResolvedValueOnce(null);
+      const activeServerId = await getActiveTestServerId();
+      memory.delete(getServerScopedStorageKey(activeServerId, 'cached_profile'));
       const result = await getCachedAuthProfile();
       expect(result).toBeNull();
     });
 
     it('returns null on parse error', async () => {
-      mockSecureStore.getItemAsync.mockResolvedValueOnce('not-json');
+      const activeServerId = await getActiveTestServerId();
+      memory.set(getServerScopedStorageKey(activeServerId, 'cached_profile'), 'not-json');
       const result = await getCachedAuthProfile();
       expect(result).toBeNull();
     });

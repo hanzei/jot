@@ -25,6 +25,7 @@ function getDefaultBaseUrl(): string {
 let currentBaseUrl = process.env.EXPO_PUBLIC_API_URL || getDefaultBaseUrl();
 let activeServerId: string | null = null;
 let serverContextReady = false;
+let sessionCache: string | null | undefined;
 
 export function getBaseUrl(): string {
   return currentBaseUrl;
@@ -106,6 +107,7 @@ export async function switchActiveServer(serverId: string): Promise<boolean> {
     return false;
   }
   activeServerId = active.serverId;
+  sessionCache = undefined;
   applyServerUrl(active.serverUrl);
   return true;
 }
@@ -135,6 +137,7 @@ async function activateServerUrl(url: string): Promise<string> {
     throw new Error('Unable to resolve active server.');
   }
   activeServerId = active.serverId;
+  sessionCache = undefined;
   applyServerUrl(active.serverUrl);
   return active.serverUrl;
 }
@@ -148,6 +151,7 @@ export function restoreServerUrl(url: string): void {
   // Clear activeServerId so auth requests during login do not reuse another
   // server's session cookie.
   activeServerId = null;
+  sessionCache = undefined;
   applyServerUrl(canonical);
 }
 
@@ -155,8 +159,11 @@ export async function setServerUrl(url: string): Promise<void> {
   await activateServerUrl(url);
 }
 
+/**
+ * @deprecated Use `setServerUrl` as the primary API for activating a server URL.
+ */
 export async function ensureActiveServer(url: string): Promise<void> {
-  await activateServerUrl(url);
+  await setServerUrl(url);
 }
 
 function extractSessionCookie(setCookieHeader: string | string[] | undefined): string | null {
@@ -171,7 +178,11 @@ function extractSessionCookie(setCookieHeader: string | string[] | undefined): s
 
 // Attach stored session cookie to every request
 api.interceptors.request.use(async (config) => {
-  const token = await getStoredSession();
+  let token = sessionCache;
+  if (token === undefined) {
+    token = await getStoredSession();
+    sessionCache = token ?? null;
+  }
   if (token) {
     if (!config.headers) {
       config.headers = new AxiosHeaders();
@@ -212,6 +223,7 @@ async function storeSessionFromResponse(headers: Record<string, string | string[
   const serverId = await resolveActiveServerId();
   if (serverId) {
     await setServerStorageValue(serverId, SESSION_KEY, token);
+    sessionCache = token;
   }
 }
 
@@ -283,19 +295,27 @@ export const auth = {
 };
 
 export async function getStoredSession(): Promise<string | null> {
+  if (sessionCache !== undefined) {
+    return sessionCache;
+  }
   const serverId = await resolveActiveServerId();
   if (!serverId) {
+    sessionCache = null;
     return null;
   }
-  return getServerStorageValue(serverId, SESSION_KEY);
+  const token = await getServerStorageValue(serverId, SESSION_KEY);
+  sessionCache = token ?? null;
+  return sessionCache;
 }
 
 export async function clearStoredSession(): Promise<void> {
   const serverId = await resolveActiveServerId();
   if (!serverId) {
+    sessionCache = null;
     return;
   }
   await deleteServerStorageValue(serverId, SESSION_KEY);
+  sessionCache = null;
 }
 
 export async function initializeServerContext(): Promise<void> {
