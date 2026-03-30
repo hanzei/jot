@@ -13,6 +13,14 @@ import {
 import { getActiveServer, getServerScopedStorageKey } from '../src/store/serverAccounts';
 
 jest.mock('axios', () => {
+  class MockCanceledError extends Error {
+    code = 'ERR_CANCELED';
+    __CANCEL__ = true;
+    constructor(message?: string) {
+      super(message);
+      this.name = 'CanceledError';
+    }
+  }
   const mockInstance = {
     post: jest.fn(),
     get: jest.fn(),
@@ -30,6 +38,8 @@ jest.mock('axios', () => {
     __esModule: true,
     default: mockAxios,
     AxiosHeaders: jest.fn(),
+    CanceledError: MockCanceledError,
+    isCancel: (value: unknown) => value instanceof MockCanceledError || Boolean((value as { __CANCEL__?: boolean })?.__CANCEL__),
   };
 });
 
@@ -84,7 +94,11 @@ describe('API Client', () => {
   });
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    mockAxiosInstance.post.mockClear();
+    mockAxiosInstance.get.mockClear();
+    mockSecureStore.getItemAsync.mockClear();
+    mockSecureStore.setItemAsync.mockClear();
+    mockSecureStore.deleteItemAsync.mockClear();
     mockSecureStore.getItemAsync.mockImplementation(async (key: string) => memory.get(key) ?? null);
     for (const key of Array.from(memory.keys())) {
       if (/^jot_server_v1_.*_(session|cached_profile)$/.test(key)) {
@@ -285,6 +299,9 @@ describe('API Client', () => {
 
       const requestUse = mockAxiosInstance.interceptors.request.use;
       const responseUse = mockAxiosInstance.interceptors.response.use;
+      if (requestUse.mock.calls.length === 0 || responseUse.mock.calls.length === 0) {
+        throw new Error('Axios interceptors were not registered');
+      }
       const requestInterceptor = requestUse.mock.calls[requestUse.mock.calls.length - 1]?.[0] as (
         config: Record<string, unknown>,
       ) => Promise<Record<string, unknown>>;
