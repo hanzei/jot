@@ -21,6 +21,7 @@ import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
 import RootNavigator, { type RootStackParamList } from './src/navigation/RootNavigator';
 import { getBaseUrl, getStoredServerUrl, restoreServerUrl } from './src/api/client';
 import { migrateDatabase } from './src/db/schema';
+import { canonicalizeServerOrigin } from '@jot/shared';
 import './src/i18n';
 
 const queryClient = new QueryClient({
@@ -39,15 +40,7 @@ function isJotSchemeUrl(url: string): boolean {
 }
 
 function normalizeServerOrigin(url: string): string | null {
-  try {
-    const parsed = new URL(url);
-    if (!parsed.protocol || !parsed.host) {
-      return null;
-    }
-    return `${parsed.protocol}//${parsed.host}`.toLowerCase();
-  } catch {
-    return null;
-  }
+  return canonicalizeServerOrigin(url);
 }
 
 function parseDeepLink(url: string): { path: string; hasServerParam: boolean; serverOrigin: string | null } {

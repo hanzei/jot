@@ -1,6 +1,17 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import type { User, UserSettings } from '@jot/shared';
-import { auth, getStoredSession, clearStoredSession, setOnUnauthorized, getStoredServerUrl, restoreServerUrl, cacheAuthProfile, getCachedAuthProfile, clearCachedProfile } from '../api/client';
+import {
+  auth,
+  getStoredSession,
+  clearStoredSession,
+  setOnUnauthorized,
+  getStoredServerUrl,
+  restoreServerUrl,
+  cacheAuthProfile,
+  getCachedAuthProfile,
+  clearCachedProfile,
+  initializeServerContext,
+} from '../api/client';
 
 interface AuthState {
   user: User | null;
@@ -44,6 +55,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     async function restoreSession() {
       try {
+        await initializeServerContext();
         const storedUrl = await getStoredServerUrl();
         if (storedUrl) restoreServerUrl(storedUrl);
         const token = await getStoredSession();

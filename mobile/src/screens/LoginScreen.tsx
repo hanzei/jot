@@ -14,7 +14,7 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import { AuthStackParamList } from '../navigation/AuthStack';
-import { restoreServerUrl, setServerUrl as configureServerUrl } from '../api/client';
+import { ensureActiveServer } from '../api/client';
 import { useServerUrl } from '../hooks/useServerUrl';
 import { displayMessage } from '../i18n/utils';
 
@@ -46,9 +46,8 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
     setError('');
     setLoading(true);
     try {
-      restoreServerUrl(serverUrl.trim());
+      await ensureActiveServer(serverUrl.trim());
       await login(username.trim(), password);
-      await configureServerUrl(serverUrl.trim());
     } catch (err: unknown) {
       const response = (err as { response?: { status?: number; data?: string } })?.response;
       if (!response) {

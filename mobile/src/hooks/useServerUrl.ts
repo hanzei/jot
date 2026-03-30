@@ -1,9 +1,10 @@
 import { useState, useEffect } from 'react';
 import { getBaseUrl, getStoredServerUrl } from '../api/client';
+import { canonicalizeServerOrigin } from '@jot/shared';
 
 export function validateServerUrl(url: string): string | null {
   if (!url.trim()) return 'auth.serverUrlRequired';
-  if (!/^https?:\/\/.+/.test(url.trim())) return 'auth.serverUrlProtocol';
+  if (!canonicalizeServerOrigin(url)) return 'auth.serverUrlProtocol';
   return null;
 }
 

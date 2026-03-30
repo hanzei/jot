@@ -54,7 +54,7 @@ describe('API Client', () => {
         username: 'test',
         password: 'pass',
       });
-      expect(mockSecureStore.setItemAsync).toHaveBeenCalledWith('jot_session', 'abc123');
+      expect(mockSecureStore.setItemAsync).toHaveBeenCalledWith(expect.stringMatching(/^jot_server_v1_.*_session$/), 'abc123');
       expect(result).toEqual(mockResponse.data);
     });
 
@@ -91,7 +91,7 @@ describe('API Client', () => {
         username: 'newuser',
         password: 'pass',
       });
-      expect(mockSecureStore.setItemAsync).toHaveBeenCalledWith('jot_session', 'def456');
+      expect(mockSecureStore.setItemAsync).toHaveBeenCalledWith(expect.stringMatching(/^jot_server_v1_.*_session$/), 'def456');
       expect(result).toEqual(mockResponse.data);
     });
 
@@ -109,8 +109,8 @@ describe('API Client', () => {
       await auth.logout();
 
       expect(mockAxiosInstance.post).toHaveBeenCalledWith('/logout');
-      expect(mockSecureStore.deleteItemAsync).toHaveBeenCalledWith('jot_session');
-      expect(mockSecureStore.deleteItemAsync).toHaveBeenCalledWith('jot_cached_profile');
+      expect(mockSecureStore.deleteItemAsync).toHaveBeenCalledWith(expect.stringMatching(/^jot_server_v1_.*_session$/));
+      expect(mockSecureStore.deleteItemAsync).toHaveBeenCalledWith(expect.stringMatching(/^jot_server_v1_.*_cached_profile$/));
     });
 
     it('clears stored session and cached profile even when server call fails', async () => {
@@ -118,8 +118,8 @@ describe('API Client', () => {
 
       await auth.logout();
 
-      expect(mockSecureStore.deleteItemAsync).toHaveBeenCalledWith('jot_session');
-      expect(mockSecureStore.deleteItemAsync).toHaveBeenCalledWith('jot_cached_profile');
+      expect(mockSecureStore.deleteItemAsync).toHaveBeenCalledWith(expect.stringMatching(/^jot_server_v1_.*_session$/));
+      expect(mockSecureStore.deleteItemAsync).toHaveBeenCalledWith(expect.stringMatching(/^jot_server_v1_.*_cached_profile$/));
     });
   });
 
@@ -160,7 +160,7 @@ describe('API Client', () => {
   describe('clearStoredSession', () => {
     it('deletes token from secure store', async () => {
       await clearStoredSession();
-      expect(mockSecureStore.deleteItemAsync).toHaveBeenCalledWith('jot_session');
+      expect(mockSecureStore.deleteItemAsync).toHaveBeenCalledWith(expect.stringMatching(/^jot_server_v1_.*_session$/));
     });
   });
 
@@ -169,7 +169,7 @@ describe('API Client', () => {
       const profile = { user: { id: '1', username: 'test' }, settings: { theme: 'system', note_sort: 'manual' } };
       await cacheAuthProfile(profile as Parameters<typeof cacheAuthProfile>[0]);
       expect(mockSecureStore.setItemAsync).toHaveBeenCalledWith(
-        'jot_cached_profile',
+        expect.stringMatching(/^jot_server_v1_.*_cached_profile$/),
         JSON.stringify(profile),
       );
     });
@@ -206,7 +206,7 @@ describe('API Client', () => {
   describe('clearCachedProfile', () => {
     it('deletes cached profile from secure store', async () => {
       await clearCachedProfile();
-      expect(mockSecureStore.deleteItemAsync).toHaveBeenCalledWith('jot_cached_profile');
+      expect(mockSecureStore.deleteItemAsync).toHaveBeenCalledWith(expect.stringMatching(/^jot_server_v1_.*_cached_profile$/));
     });
   });
 });

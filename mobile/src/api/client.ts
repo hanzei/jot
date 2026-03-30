@@ -1,11 +1,19 @@
 import axios, { AxiosHeaders } from 'axios';
-import * as SecureStore from 'expo-secure-store';
 import { Platform } from 'react-native';
 import type { AuthResponse, LoginRequest, RegisterRequest } from '@jot/shared';
+import { canonicalizeServerOrigin } from '@jot/shared';
+import {
+  addServer,
+  ensureServerRegistryMigrated,
+  getActiveServer,
+  getServerStorageValue,
+  setServerStorageValue,
+  deleteServerStorageValue,
+  switchServer as switchRegisteredServer,
+} from '../store/serverAccounts';
 
-const SESSION_KEY = 'jot_session';
-const SERVER_URL_KEY = 'jot_server_url';
-const CACHED_PROFILE_KEY = 'jot_cached_profile';
+const SESSION_KEY = 'session';
+const CACHED_PROFILE_KEY = 'cached_profile';
 
 function getDefaultBaseUrl(): string {
   if (Platform.OS === 'android') {
@@ -15,13 +23,22 @@ function getDefaultBaseUrl(): string {
 }
 
 let currentBaseUrl = process.env.EXPO_PUBLIC_API_URL || getDefaultBaseUrl();
+let activeServerId: string | null = null;
+let serverContextReady = false;
 
 export function getBaseUrl(): string {
   return currentBaseUrl;
 }
 
 export async function getStoredServerUrl(): Promise<string | null> {
-  return SecureStore.getItemAsync(SERVER_URL_KEY);
+  await ensureServerContextReady();
+  const active = await getActiveServer();
+  if (!active) {
+    return null;
+  }
+  activeServerId = active.serverId;
+  applyServerUrl(active.serverUrl);
+  return active.serverUrl;
 }
 
 const platformLabel: Record<string, string> = {
@@ -42,26 +59,104 @@ const api = axios.create({
 });
 
 function applyServerUrl(url: string): string {
-  const normalized = url.replace(/\/+$/, '');
+  const normalized = canonicalizeServerOrigin(url);
+  if (!normalized) {
+    throw new Error(`Invalid server URL: ${url}`);
+  }
   currentBaseUrl = normalized;
   api.defaults.baseURL = `${normalized}/api/v1`;
   return normalized;
 }
 
+async function ensureServerContextReady(): Promise<void> {
+  if (serverContextReady) {
+    return;
+  }
+  await ensureServerRegistryMigrated();
+  const active = await getActiveServer();
+  if (active) {
+    activeServerId = active.serverId;
+    applyServerUrl(active.serverUrl);
+  }
+  serverContextReady = true;
+}
+
+async function resolveActiveServerId(): Promise<string | null> {
+  await ensureServerContextReady();
+  if (activeServerId) {
+    return activeServerId;
+  }
+  const active = await getActiveServer();
+  if (!active) {
+    return null;
+  }
+  activeServerId = active.serverId;
+  applyServerUrl(active.serverUrl);
+  return active.serverId;
+}
+
+export async function switchActiveServer(serverId: string): Promise<boolean> {
+  await ensureServerContextReady();
+  const switched = await switchRegisteredServer(serverId);
+  if (!switched) {
+    return false;
+  }
+  const active = await getActiveServer();
+  if (!active) {
+    return false;
+  }
+  activeServerId = active.serverId;
+  applyServerUrl(active.serverUrl);
+  return true;
+}
+
+async function activateServerUrl(url: string): Promise<string> {
+  await ensureServerContextReady();
+  const canonical = canonicalizeServerOrigin(url);
+  if (!canonical) {
+    throw new Error(`Invalid server URL: ${url}`);
+  }
+
+  const addResult = await addServer(canonical);
+  if (!addResult.success && addResult.code !== 'DUPLICATE') {
+    throw new Error(addResult.message);
+  }
+  const serverId = addResult.success ? addResult.serverId : addResult.existingServerId;
+  if (!serverId) {
+    throw new Error('Unable to determine server account ID.');
+  }
+
+  const switched = await switchRegisteredServer(serverId);
+  if (!switched) {
+    throw new Error('Unable to switch active server.');
+  }
+  const active = await getActiveServer();
+  if (!active) {
+    throw new Error('Unable to resolve active server.');
+  }
+  activeServerId = active.serverId;
+  applyServerUrl(active.serverUrl);
+  return active.serverUrl;
+}
+
 /** Updates the in-memory base URL without writing to storage (used on session restore). */
 export function restoreServerUrl(url: string): void {
-  applyServerUrl(url);
+  const canonical = canonicalizeServerOrigin(url);
+  if (!canonical) {
+    throw new Error(`Invalid server URL: ${url}`);
+  }
+  // Clear activeServerId so auth requests during login do not reuse another
+  // server's session cookie.
+  activeServerId = null;
+  applyServerUrl(canonical);
 }
 
 export async function setServerUrl(url: string): Promise<void> {
-  const normalized = url.replace(/\/+$/, '');
-  try {
-    new URL(normalized);
-  } catch {
-    throw new Error(`Invalid server URL: ${normalized}`);
-  }
-  applyServerUrl(normalized);
-  await SecureStore.setItemAsync(SERVER_URL_KEY, normalized);
+  await activateServerUrl(url);
+}
+
+export async function ensureActiveServer(url: string): Promise<void> {
+  await activateServerUrl(url);
 }
 
 function extractSessionCookie(setCookieHeader: string | string[] | undefined): string | null {
@@ -76,7 +171,7 @@ function extractSessionCookie(setCookieHeader: string | string[] | undefined): s
 
 // Attach stored session cookie to every request
 api.interceptors.request.use(async (config) => {
-  const token = await SecureStore.getItemAsync(SESSION_KEY);
+  const token = await getStoredSession();
   if (token) {
     if (!config.headers) {
       config.headers = new AxiosHeaders();
@@ -100,7 +195,7 @@ api.interceptors.response.use(
       const url: string = error.config?.url || '';
       const isAuthEndpoint = url === '/login' || url === '/register' || url === '/logout' || url === '/me';
       if (!isAuthEndpoint) {
-        await SecureStore.deleteItemAsync(SESSION_KEY);
+        await clearStoredSession();
         await clearCachedProfile();
         onUnauthorized?.();
       }
@@ -111,14 +206,22 @@ api.interceptors.response.use(
 
 async function storeSessionFromResponse(headers: Record<string, string | string[] | undefined>): Promise<void> {
   const token = extractSessionCookie(headers['set-cookie']);
-  if (token) {
-    await SecureStore.setItemAsync(SESSION_KEY, token);
+  if (!token) {
+    return;
+  }
+  const serverId = await resolveActiveServerId();
+  if (serverId) {
+    await setServerStorageValue(serverId, SESSION_KEY, token);
   }
 }
 
 export async function cacheAuthProfile(response: AuthResponse): Promise<void> {
   try {
-    await SecureStore.setItemAsync(CACHED_PROFILE_KEY, JSON.stringify(response));
+    const serverId = await resolveActiveServerId();
+    if (!serverId) {
+      return;
+    }
+    await setServerStorageValue(serverId, CACHED_PROFILE_KEY, JSON.stringify(response));
   } catch {
     // Best-effort: profile caching is not critical
   }
@@ -126,7 +229,11 @@ export async function cacheAuthProfile(response: AuthResponse): Promise<void> {
 
 export async function getCachedAuthProfile(): Promise<AuthResponse | null> {
   try {
-    const raw = await SecureStore.getItemAsync(CACHED_PROFILE_KEY);
+    const serverId = await resolveActiveServerId();
+    if (!serverId) {
+      return null;
+    }
+    const raw = await getServerStorageValue(serverId, CACHED_PROFILE_KEY);
     if (!raw) return null;
     return JSON.parse(raw) as AuthResponse;
   } catch {
@@ -136,7 +243,11 @@ export async function getCachedAuthProfile(): Promise<AuthResponse | null> {
 
 export async function clearCachedProfile(): Promise<void> {
   try {
-    await SecureStore.deleteItemAsync(CACHED_PROFILE_KEY);
+    const serverId = await resolveActiveServerId();
+    if (!serverId) {
+      return;
+    }
+    await deleteServerStorageValue(serverId, CACHED_PROFILE_KEY);
   } catch {
     // Best-effort
   }
@@ -161,7 +272,7 @@ export const auth = {
     } catch {
       // Best-effort: always clear local session even if server call fails
     }
-    await SecureStore.deleteItemAsync(SESSION_KEY);
+    await clearStoredSession();
     await clearCachedProfile();
   },
 
@@ -172,11 +283,23 @@ export const auth = {
 };
 
 export async function getStoredSession(): Promise<string | null> {
-  return SecureStore.getItemAsync(SESSION_KEY);
+  const serverId = await resolveActiveServerId();
+  if (!serverId) {
+    return null;
+  }
+  return getServerStorageValue(serverId, SESSION_KEY);
 }
 
 export async function clearStoredSession(): Promise<void> {
-  await SecureStore.deleteItemAsync(SESSION_KEY);
+  const serverId = await resolveActiveServerId();
+  if (!serverId) {
+    return;
+  }
+  await deleteServerStorageValue(serverId, SESSION_KEY);
+}
+
+export async function initializeServerContext(): Promise<void> {
+  await ensureServerContextReady();
 }
 
 export default api;

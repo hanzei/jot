@@ -14,6 +14,7 @@ jest.mock('../src/api/client', () => ({
   getStoredSession: jest.fn(),
   getStoredServerUrl: jest.fn().mockResolvedValue(null),
   restoreServerUrl: jest.fn(),
+  initializeServerContext: jest.fn().mockResolvedValue(undefined),
   clearStoredSession: jest.fn(),
   setOnUnauthorized: jest.fn(),
   cacheAuthProfile: jest.fn().mockResolvedValue(undefined),

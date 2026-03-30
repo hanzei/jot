@@ -32,5 +32,14 @@ describe('deepLink utilities', () => {
         'jot://?server=https%3A%2F%2Fjot.example.com',
       );
     });
+
+    it('normalizes casing and strips default ports', () => {
+      expect(buildMobileDeepLink('/notes/note-123', 'HTTPS://JOT.EXAMPLE.COM:443/path')).toBe(
+        'jot://notes/note-123?server=https%3A%2F%2Fjot.example.com',
+      );
+      expect(buildMobileDeepLink('/notes/note-123', 'http://jot.example.com:80')).toBe(
+        'jot://notes/note-123?server=http%3A%2F%2Fjot.example.com',
+      );
+    });
   });
 });
