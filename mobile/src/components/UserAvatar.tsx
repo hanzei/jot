@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useState } from 'react';
 import { View, Text, Image, StyleSheet } from 'react-native';
 import { getAvatarColor } from '@jot/shared';
 import { useActiveServerBaseUrl } from '../hooks/useActiveServerBaseUrl';
@@ -20,10 +20,6 @@ export default function UserAvatar({ userId, username, hasProfileIcon, size = 'm
   const baseUrl = useActiveServerBaseUrl();
   const dimension = SIZE_MAP[size];
   const fontSize = size === 'small' ? 10 : 15;
-
-  useEffect(() => {
-    setImageError(false);
-  }, [baseUrl, userId, hasProfileIcon]);
 
   const safeUsername = username || 'U';
   const bgColor = getAvatarColor(safeUsername);
