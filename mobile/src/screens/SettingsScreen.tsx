@@ -105,7 +105,8 @@ export default function SettingsScreen() {
         if (mounted) {
           setActiveServerUrl(activeServer?.serverUrl ?? null);
         }
-      } catch {
+      } catch (error) {
+        console.warn('Failed to load active server in settings:', error);
         if (mounted) {
           setActiveServerUrl(null);
         }

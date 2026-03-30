@@ -148,7 +148,7 @@
     "importSection": "Importer",
     "importDescription": "Importez des notes depuis des exports Google Keep.",
     "importButton": "Importer depuis Google Keep",
-    "currentServerSection": "Server",
+    "currentServerSection": "Serveur",
     "currentServerLabel": "Serveur actif",
     "noServerConfigured": "Aucun serveur configuré"
   },
