@@ -66,6 +66,7 @@ describe('useNotes hooks', () => {
     jest.clearAllMocks();
     // Restore default online state after any test that changed it
     mockUseNetworkStatus.mockReturnValue({ isConnected: true });
+    mockClientModule.isServerSwitchInProgress.mockReturnValue(false);
   });
 
   describe('useNotes', () => {
