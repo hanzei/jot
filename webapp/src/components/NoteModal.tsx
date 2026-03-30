@@ -657,27 +657,10 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     return newItem.id;
   };
 
-  const shouldHandleTodoVerticalNavigation = (textarea: HTMLTextAreaElement): boolean => {
-    if (textarea.value.includes('\n')) {
-      return false;
-    }
-
-    const computedStyles = window.getComputedStyle(textarea);
-    let computedLineHeight = Number.parseFloat(computedStyles.lineHeight);
-    if (!Number.isFinite(computedLineHeight) || computedLineHeight <= 0) {
-      const fontSize = Number.parseFloat(computedStyles.fontSize);
-      computedLineHeight = Number.isFinite(fontSize) && fontSize > 0
-        ? fontSize * 1.2
-        : 19.2;
-    }
-
-    return textarea.scrollHeight <= computedLineHeight + 2;
-  };
-
   const handleItemKeyDown = (index: number, e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
       if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
-      if (!shouldHandleTodoVerticalNavigation(e.currentTarget)) return;
+      if (e.currentTarget.value.includes('\n')) return;
       const targetIndex = e.key === 'ArrowUp' ? index - 1 : index + 1;
       if (targetIndex < 0 || targetIndex >= uncompletedItems.length) return;
 
