@@ -376,6 +376,8 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   // Use useRef for timeout management instead of global window property
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const errorTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
+  const itemsRef = useRef<TodoItem[]>([]);
+  const pendingAutoSaveItemsRef = useRef<TodoItem[] | null>(null);
   const itemInputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
   const contentRef = useRef<HTMLTextAreaElement>(null);
   const savingRef = useRef(false);
@@ -506,6 +508,10 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     };
   }, [noteType, resizeContentTextarea]);
 
+  useEffect(() => {
+    itemsRef.current = items;
+  }, [items]);
+
   // Helper function to show error messages with auto-dismiss
   const showError = useCallback((message: string) => {
     setErrorMessage(message);
@@ -557,13 +563,18 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   const MAX_INDENT = 1;
 
   const indentTodoItem = async (itemId: string, delta: 1 | -1) => {
-    const updatedItems = items.map(item => {
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = undefined;
+    }
+    const updatedItems = itemsRef.current.map(item => {
       if (item.id === itemId) {
         const newLevel = Math.max(0, Math.min(MAX_INDENT, item.indentLevel + delta));
         return { ...item, indentLevel: newLevel };
       }
       return item;
     });
+    itemsRef.current = updatedItems;
     setItems(updatedItems);
     await autoSaveNote(updatedItems);
   };
@@ -619,23 +630,30 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     return newItem.id;
   };
 
-  const insertTodoItemAfter = (afterIndex: number, indentLevel: number = 0) => {
+  const insertTodoItemAfter = (afterItemId: string) => {
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = undefined;
+    }
+    const currentItems = itemsRef.current;
+    const afterItemPos = currentItems.findIndex(item => item.id === afterItemId);
+    const sourceIndentLevel = afterItemPos >= 0 ? currentItems[afterItemPos].indentLevel : 0;
     const newItem: TodoItem = {
       id: generateItemId(),
       text: '',
       completed: false,
       position: 0,
-      indentLevel: Math.max(0, Math.min(MAX_INDENT, indentLevel)),
+      indentLevel: Math.max(0, Math.min(MAX_INDENT, sourceIndentLevel)),
       assignedTo: '',
     };
-    const afterItemId = uncompletedItems[afterIndex]?.id;
-    const afterItemPos = items.findIndex(item => item.id === afterItemId);
-    const newItems = [...items];
-    newItems.splice(afterItemPos + 1, 0, newItem);
+    const insertPos = afterItemPos >= 0 ? afterItemPos + 1 : currentItems.length;
+    const newItems = [...currentItems];
+    newItems.splice(insertPos, 0, newItem);
     let pos = 0;
     const renumbered = newItems.map(item =>
       item.completed ? item : { ...item, position: pos++ }
     );
+    itemsRef.current = renumbered;
     setItems(renumbered);
     autoSaveNote(renumbered);
     return newItem.id;
@@ -666,8 +684,8 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
 
     if (e.key === 'Enter') {
       e.preventDefault();
-      const currentIndentLevel = uncompletedItems[index]?.indentLevel ?? 0;
-      const newId = insertTodoItemAfter(index, currentIndentLevel);
+      const currentItem = uncompletedItems[index];
+      const newId = insertTodoItemAfter(currentItem?.id ?? '');
       setTimeout(() => {
         itemInputRefs.current.get(newId)?.focus();
       }, 0);
@@ -807,7 +825,16 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
 
   const autoSaveNote = async (updatedItems: TodoItem[]) => {
     if (!note) return;
-    if (savingRef.current) return;
+    // Cancel any pending debounced text-save snapshot so it can't overwrite
+    // a newer structural update (indent, insert, reorder, completion, etc.).
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = undefined;
+    }
+    if (savingRef.current) {
+      pendingAutoSaveItemsRef.current = updatedItems;
+      return;
+    }
     
     savingRef.current = true;
     markDirty();
@@ -835,6 +862,11 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       showError(t('note.failedSaveChanges'));
     } finally {
       savingRef.current = false;
+      const pendingItems = pendingAutoSaveItemsRef.current;
+      if (pendingItems) {
+        pendingAutoSaveItemsRef.current = null;
+        await autoSaveNote(pendingItems);
+      }
     }
   };
 
@@ -896,6 +928,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       }
       
       saveTimeoutRef.current = setTimeout(async () => {
+        saveTimeoutRef.current = undefined;
         await autoSaveNote(updatedItems);
       }, VALIDATION.AUTO_SAVE_TIMEOUT_MS);
     }

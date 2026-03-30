@@ -422,6 +422,98 @@ describe('NoteModal', () => {
       expect(inputsAfter[1]).toHaveFocus()
     })
 
+    it('pressing Tab then Enter quickly keeps indentation on the new item', async () => {
+      renderNoteModal(defaultProps)
+
+      fireEvent.click(screen.getByText('Todo List'))
+      fireEvent.click(screen.getByText('Add item'))
+
+      const inputs = screen.getAllByTestId('todo-item-input')
+      fireEvent.change(inputs[0], { target: { value: 'parent' } })
+
+      // Simulate quick sequential key presses on the same input.
+      fireEvent.keyDown(inputs[0], { key: 'Tab', code: 'Tab' })
+      fireEvent.keyDown(inputs[0], { key: 'Enter', code: 'Enter' })
+      await vi.runAllTimersAsync()
+
+      const rowsAfter = screen.getAllByTestId('todo-item-row')
+      expect(rowsAfter).toHaveLength(2)
+      expect(rowsAfter[0].style.marginLeft).toBe(`${VALIDATION.INDENT_PX_PER_LEVEL}px`)
+      expect(rowsAfter[1].style.marginLeft).toBe(`${VALIDATION.INDENT_PX_PER_LEVEL}px`)
+    })
+
+    it('persisted update keeps inherited indent after quick Tab then Enter on existing note', async () => {
+      const todoNote = createMockNote({
+        note_type: 'todo',
+        items: [
+          {
+            id: 'item1',
+            note_id: '1',
+            text: 'parent',
+            completed: false,
+            position: 0,
+            indent_level: 0,
+            assigned_to: '',
+            created_at: '2023-01-01T00:00:00Z',
+            updated_at: '2023-01-01T00:00:00Z',
+          },
+        ],
+      })
+
+      renderNoteModal({ ...defaultProps, note: todoNote })
+      const inputs = screen.getAllByTestId('todo-item-input')
+
+      fireEvent.keyDown(inputs[0], { key: 'Tab', code: 'Tab' })
+      fireEvent.keyDown(inputs[0], { key: 'Enter', code: 'Enter' })
+      await vi.runAllTimersAsync()
+
+      expect(mockNotesUpdate).toHaveBeenLastCalledWith('1', expect.objectContaining({
+        items: [
+          expect.objectContaining({ text: 'parent', position: 0, completed: false, indent_level: 1 }),
+          expect.objectContaining({ text: '', position: 1, completed: false, indent_level: 1 }),
+        ],
+      }))
+    })
+
+    it('debounced text autosave does not overwrite quick Tab then Enter changes', async () => {
+      const todoNote = createMockNote({
+        note_type: 'todo',
+        items: [
+          {
+            id: 'item1',
+            note_id: '1',
+            text: '',
+            completed: false,
+            position: 0,
+            indent_level: 0,
+            assigned_to: '',
+            created_at: '2023-01-01T00:00:00Z',
+            updated_at: '2023-01-01T00:00:00Z',
+          },
+        ],
+      })
+
+      renderNoteModal({ ...defaultProps, note: todoNote })
+      const inputs = screen.getAllByTestId('todo-item-input')
+
+      // Arms debounced text autosave.
+      fireEvent.change(inputs[0], { target: { value: 'parent' } })
+
+      // Quickly apply indent and insertion before debounce flush.
+      fireEvent.keyDown(inputs[0], { key: 'Tab', code: 'Tab' })
+      fireEvent.keyDown(inputs[0], { key: 'Enter', code: 'Enter' })
+
+      // Flush pending timers and async work.
+      await vi.runAllTimersAsync()
+
+      expect(mockNotesUpdate).toHaveBeenLastCalledWith('1', expect.objectContaining({
+        items: [
+          expect.objectContaining({ text: 'parent', position: 0, completed: false, indent_level: 1 }),
+          expect.objectContaining({ text: '', position: 1, completed: false, indent_level: 1 }),
+        ],
+      }))
+    })
+
     it('pressing a key other than Enter on a todo item does not create a new item', async () => {
       renderNoteModal(defaultProps)
 
