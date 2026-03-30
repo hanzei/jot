@@ -619,13 +619,13 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     return newItem.id;
   };
 
-  const insertTodoItemAfter = (afterIndex: number) => {
+  const insertTodoItemAfter = (afterIndex: number, indentLevel: number = 0) => {
     const newItem: TodoItem = {
       id: generateItemId(),
       text: '',
       completed: false,
       position: 0,
-      indentLevel: 0,
+      indentLevel: Math.max(0, Math.min(MAX_INDENT, indentLevel)),
       assignedTo: '',
     };
     const afterItemId = uncompletedItems[afterIndex]?.id;
@@ -666,7 +666,8 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
 
     if (e.key === 'Enter') {
       e.preventDefault();
-      const newId = insertTodoItemAfter(index);
+      const currentIndentLevel = uncompletedItems[index]?.indentLevel ?? 0;
+      const newId = insertTodoItemAfter(index, currentIndentLevel);
       setTimeout(() => {
         itemInputRefs.current.get(newId)?.focus();
       }, 0);

@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { type ReactNode } from 'react'
 import NoteModal from '../NoteModal'
 import { ToastProvider } from '../Toast'
-import type { Note, NoteItem } from '@jot/shared'
+import { VALIDATION, type Note, type NoteItem } from '@jot/shared'
 import { createMockNote } from '@/utils/__tests__/test-helpers'
 
 // Mock the API module
@@ -389,6 +389,36 @@ describe('NoteModal', () => {
       expect(inputsAfter[2]).toHaveValue('second')
 
       // Focus moves to the newly inserted item
+      expect(inputsAfter[1]).toHaveFocus()
+    })
+
+    it('pressing Enter on an indented item creates an equally indented item below it', async () => {
+      renderNoteModal(defaultProps)
+
+      fireEvent.click(screen.getByText('Todo List'))
+      fireEvent.click(screen.getByText('Add item'))
+
+      let inputs = screen.getAllByTestId('todo-item-input')
+      let rows = screen.getAllByTestId('todo-item-row')
+      expect(inputs).toHaveLength(1)
+
+      fireEvent.change(inputs[0], { target: { value: 'parent' } })
+
+      // Indent the current item with Tab.
+      fireEvent.keyDown(inputs[0], { key: 'Tab', code: 'Tab' })
+
+      inputs = screen.getAllByTestId('todo-item-input')
+      rows = screen.getAllByTestId('todo-item-row')
+      expect(rows[0].style.marginLeft).toBe(`${VALIDATION.INDENT_PX_PER_LEVEL}px`)
+
+      // Press Enter on the indented item.
+      fireEvent.keyDown(inputs[0], { key: 'Enter', code: 'Enter' })
+      await vi.runAllTimersAsync()
+
+      const inputsAfter = screen.getAllByTestId('todo-item-input')
+      const rowsAfter = screen.getAllByTestId('todo-item-row')
+      expect(inputsAfter).toHaveLength(2)
+      expect(rowsAfter[1].style.marginLeft).toBe(`${VALIDATION.INDENT_PX_PER_LEVEL}px`)
       expect(inputsAfter[1]).toHaveFocus()
     })
 
