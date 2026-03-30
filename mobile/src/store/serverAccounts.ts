@@ -130,20 +130,6 @@ async function deleteLegacyKeys(): Promise<void> {
   ]);
 }
 
-async function backfillLegacyAuthToScopedKeys(serverId: string): Promise<void> {
-  const [legacySession, legacyCachedProfile] = await Promise.all([
-    SecureStore.getItemAsync(LEGACY_SESSION_KEY),
-    SecureStore.getItemAsync(LEGACY_CACHED_PROFILE_KEY),
-  ]);
-
-  if (legacySession) {
-    await SecureStore.setItemAsync(buildServerStorageKey(serverId, 'session'), legacySession);
-  }
-  if (legacyCachedProfile) {
-    await SecureStore.setItemAsync(buildServerStorageKey(serverId, 'cached_profile'), legacyCachedProfile);
-  }
-}
-
 function buildServerStorageKey(serverId: string, key: 'session' | 'cached_profile' | 'server_url'): string {
   return `${SERVER_STORAGE_PREFIX}_${serverId}_${key}`;
 }
@@ -300,9 +286,6 @@ export async function ensureServerRegistryMigrated(): Promise<void> {
         servers: state.servers,
       });
     }
-    if (activeServerId) {
-      await backfillLegacyAuthToScopedKeys(activeServerId);
-    }
     // If registry already exists but migration marker is missing (for example
     // from an interrupted run), still clean up legacy keys.
     await deleteLegacyKeys();
@@ -329,7 +312,6 @@ export async function ensureServerRegistryMigrated(): Promise<void> {
     servers: [entry],
   });
   await SecureStore.setItemAsync(buildServerStorageKey(serverId, 'server_url'), canonical);
-  await backfillLegacyAuthToScopedKeys(serverId);
 
   await deleteLegacyKeys();
   await SecureStore.setItemAsync(LEGACY_MIGRATION_KEY, '1');

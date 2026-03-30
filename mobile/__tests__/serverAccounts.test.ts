@@ -43,10 +43,8 @@ describe('serverAccounts registry', () => {
     expect(memory.get('jot_server_url')).toBeUndefined();
     expect(memory.get('jot_session')).toBeUndefined();
     expect(memory.get('jot_cached_profile')).toBeUndefined();
-    expect(memory.get(getServerScopedStorageKey(active!.serverId, 'session'))).toBe('legacy-token');
-    expect(memory.get(getServerScopedStorageKey(active!.serverId, 'cached_profile'))).toBe(
-      '{"user":{"id":"1"},"settings":{"theme":"system"}}',
-    );
+    expect(memory.get(getServerScopedStorageKey(active!.serverId, 'session'))).toBeUndefined();
+    expect(memory.get(getServerScopedStorageKey(active!.serverId, 'cached_profile'))).toBeUndefined();
   });
 
   it('cleans up legacy keys when legacy URL is invalid', async () => {
@@ -81,8 +79,8 @@ describe('serverAccounts registry', () => {
     expect(memory.get('jot_session')).toBeUndefined();
     expect(memory.get('jot_cached_profile')).toBeUndefined();
     expect(memory.get('jot_server_registry_migrated_v1')).toBe('1');
-    expect(memory.get(getServerScopedStorageKey(serverId, 'session'))).toBe('legacy-token');
-    expect(memory.get(getServerScopedStorageKey(serverId, 'cached_profile'))).toBe('{"legacy":true}');
+    expect(memory.get(getServerScopedStorageKey(serverId, 'session'))).toBeUndefined();
+    expect(memory.get(getServerScopedStorageKey(serverId, 'cached_profile'))).toBeUndefined();
   });
 
   it('deduplicates by canonical origin', async () => {
