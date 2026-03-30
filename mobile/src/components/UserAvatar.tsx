@@ -30,11 +30,13 @@ export default function UserAvatar({ userId, username, hasProfileIcon, size = 'm
   const bgColor = getAvatarColor(safeUsername);
   const letter = safeUsername.charAt(0).toUpperCase();
 
-  if (hasProfileIcon && !imageError) {
+  if (hasProfileIcon && userId && !imageError) {
     return (
       <Image
         source={{ uri: `${baseUrl}/api/v1/users/${userId}/profile-icon` }}
         style={[styles.avatar, { width: dimension, height: dimension, borderRadius: dimension / 2 }]}
+        accessibilityRole="image"
+        accessibilityLabel={`${safeUsername} profile picture`}
         onError={() => setImageError(true)}
       />
     );
@@ -46,6 +48,8 @@ export default function UserAvatar({ userId, username, hasProfileIcon, size = 'm
         styles.avatar,
         { width: dimension, height: dimension, borderRadius: dimension / 2, backgroundColor: bgColor },
       ]}
+      accessibilityRole="image"
+      accessibilityLabel={`${safeUsername} avatar initials`}
     >
       <Text style={[styles.letter, { fontSize }]}>{letter}</Text>
     </View>

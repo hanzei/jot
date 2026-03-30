@@ -221,12 +221,14 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
     }
     serverSwitchingRef.current = true;
     setIsServerActionPending(true);
+    let switchedSuccessfully = false;
     try {
       const switched = await switchActiveServer(serverId);
       if (!switched) {
         Alert.alert(t('common.error'), t('serverPicker.switchFailed'));
         return;
       }
+      switchedSuccessfully = true;
       await revalidateSession();
       setIsServerPickerVisible(false);
       props.navigation.closeDrawer();
@@ -235,9 +237,17 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
     } finally {
       setIsServerActionPending(false);
       serverSwitchingRef.current = false;
-      await refreshServerPickerData();
+      if (switchedSuccessfully) {
+        try {
+          await loadServerPickerData();
+        } catch (error) {
+          console.warn('Failed to refresh server picker data after successful switch:', error);
+        }
+      } else {
+        await refreshServerPickerData();
+      }
     }
-  }, [isServerActionPending, props.navigation, revalidateSession, refreshServerPickerData, t]);
+  }, [isServerActionPending, loadServerPickerData, props.navigation, revalidateSession, refreshServerPickerData, t]);
 
   const handleAddServer = useCallback(async () => {
     if (isServerActionPending) {
@@ -418,7 +428,10 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
       </DrawerContentScrollView>
 
       {/* Settings & Logout pinned to bottom */}
-      <View style={[styles.bottomSection, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+      <View
+        style={[styles.bottomSection, { paddingBottom: Math.max(insets.bottom, 16) }]}
+        testID="drawer-bottom-section"
+      >
         <View style={[styles.divider, { backgroundColor: colors.divider }]} />
         <TouchableOpacity
           style={styles.settingsButton}

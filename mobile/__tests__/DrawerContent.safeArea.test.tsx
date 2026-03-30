@@ -1,6 +1,5 @@
 import React from 'react';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
-import { Text } from 'react-native';
 import type { DrawerContentComponentProps } from '@react-navigation/drawer';
 import DrawerContent from '../src/components/DrawerContent';
 
@@ -9,6 +8,7 @@ const mockListServers = jest.fn();
 const mockGetActiveServer = jest.fn();
 const mockAddServer = jest.fn();
 const mockUserAvatar = jest.fn();
+let mockHasProfileIcon = true;
 
 jest.mock('../src/store/AuthContext', () => ({
   useAuth: () => ({
@@ -18,7 +18,7 @@ jest.mock('../src/store/AuthContext', () => ({
       first_name: 'Alice',
       last_name: 'Smith',
       role: 'user',
-      has_profile_icon: true,
+      has_profile_icon: mockHasProfileIcon,
       created_at: '2026-01-01T00:00:00Z',
       updated_at: '2026-01-01T00:00:00Z',
     },
@@ -30,8 +30,10 @@ jest.mock('../src/store/AuthContext', () => ({
 jest.mock('../src/components/UserAvatar', () => ({
   __esModule: true,
   default: (props: unknown) => {
+    const ReactLocal = jest.requireActual('react');
+    const { Text } = jest.requireActual('react-native');
     mockUserAvatar(props);
-    return <Text testID="drawer-user-avatar" />;
+    return ReactLocal.createElement(Text, { testID: 'drawer-user-avatar' });
   },
 }));
 
@@ -68,7 +70,7 @@ jest.mock('react-i18next', () => ({
 }));
 
 jest.mock('react-native-safe-area-context', () => ({
-  useSafeAreaInsets: () => ({ top: 24, bottom: 0, left: 0, right: 0 }),
+  useSafeAreaInsets: () => ({ top: 24, bottom: 34, left: 0, right: 0 }),
 }));
 
 jest.mock('@react-navigation/native', () => ({
@@ -99,6 +101,7 @@ jest.mock('@react-navigation/drawer', () => {
 describe('DrawerContent safe-area spacing', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockHasProfileIcon = true;
     mockListServers.mockResolvedValue([]);
     mockGetActiveServer.mockResolvedValue(null);
     mockAddServer.mockResolvedValue({ success: true, serverId: 'srv_new' });
@@ -129,6 +132,31 @@ describe('DrawerContent safe-area spacing', () => {
     const scrollView = getByTestId('drawer-scroll-view');
 
     expect(scrollView.props.contentContainerStyle).toEqual({ paddingTop: 32 });
+  });
+
+  it('applies bottom inset padding to footer actions', () => {
+    const props = {
+      state: {
+        index: 0,
+        key: 'drawer-key',
+        routeNames: ['Notes', 'MyTodo', 'Archived', 'Trash'],
+        routes: [{ key: 'notes-key', name: 'Notes' }],
+        stale: false,
+        type: 'drawer',
+        history: [],
+      },
+      navigation: {
+        navigate: jest.fn(),
+        closeDrawer: jest.fn(),
+        dispatch: jest.fn(),
+      },
+      descriptors: {},
+      progress: {},
+    } as unknown as DrawerContentComponentProps;
+
+    const { getByTestId } = render(<DrawerContent {...props} />);
+    const bottomSection = getByTestId('drawer-bottom-section');
+    expect(bottomSection.props.style).toEqual(expect.arrayContaining([expect.objectContaining({ paddingBottom: 34 })]));
   });
 
   it('opens server picker from profile section', async () => {
@@ -189,5 +217,35 @@ describe('DrawerContent safe-area spacing', () => {
       hasProfileIcon: true,
       size: 'large',
     });
+  });
+
+  it('passes false hasProfileIcon to drawer avatar when icon is absent', () => {
+    mockHasProfileIcon = false;
+    const props = {
+      state: {
+        index: 0,
+        key: 'drawer-key',
+        routeNames: ['Notes', 'MyTodo', 'Archived', 'Trash'],
+        routes: [{ key: 'notes-key', name: 'Notes' }],
+        stale: false,
+        type: 'drawer',
+        history: [],
+      },
+      navigation: {
+        navigate: jest.fn(),
+        closeDrawer: jest.fn(),
+        dispatch: jest.fn(),
+      },
+      descriptors: {},
+      progress: {},
+    } as unknown as DrawerContentComponentProps;
+
+    render(<DrawerContent {...props} />);
+    expect(mockUserAvatar).toHaveBeenCalledWith(expect.objectContaining({
+      userId: 'user-1',
+      username: 'alice',
+      hasProfileIcon: false,
+      size: 'large',
+    }));
   });
 });
