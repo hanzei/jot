@@ -533,9 +533,9 @@ describe('NoteModal', () => {
         ],
       })
 
-      let resolveFirstUpdate: (() => void) | null = null
+      let resolveFirstUpdate: ((value: unknown) => void) | undefined
       mockNotesUpdate.mockImplementationOnce(() => new Promise(resolve => {
-        resolveFirstUpdate = () => resolve({})
+        resolveFirstUpdate = resolve
       }))
 
       renderNoteModal({ ...defaultProps, note: todoNote })
@@ -553,7 +553,7 @@ describe('NoteModal', () => {
       fireEvent.keyDown(todoInput, { key: 'Enter', code: 'Enter' })
 
       // Release first request, then flush queued retry.
-      resolveFirstUpdate?.()
+      resolveFirstUpdate?.({})
       await vi.runAllTimersAsync()
 
       expect(mockNotesUpdate).toHaveBeenCalledTimes(2)
