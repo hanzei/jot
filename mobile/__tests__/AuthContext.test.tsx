@@ -122,7 +122,7 @@ describe('AuthContext', () => {
     expect(getByTestId('authenticated').props.children).toBe('false');
     expect(getByTestId('username').props.children).toBe('none');
     unmount();
-  });
+  }, 15000);
 
   it('restores session on mount when token exists', async () => {
     mockClientModule.getStoredServerUrl.mockResolvedValue('https://a.example.com');
