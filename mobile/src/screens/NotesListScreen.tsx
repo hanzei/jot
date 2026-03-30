@@ -652,26 +652,33 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
 
   if (isError) {
     const errorContent = (
-      <View
-        style={[
-          styles.emptyContainer,
-          { backgroundColor: colors.background },
-        ]}
+      <ScrollView
+        refreshControl={
+          <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={colors.primary} />
+        }
+        contentContainerStyle={styles.errorScrollContent}
         testID="notes-error-state"
       >
-        <Ionicons name="cloud-offline-outline" size={64} color={colors.handleColor} />
-        <Text style={[styles.emptyTitle, { color: colors.text }]}>{t('dashboard.failedLoadNotes')}</Text>
-        <Text style={[styles.emptySubtext, { color: colors.textMuted }]}>{t('dashboard.checkConnection')}</Text>
-        <TouchableOpacity
-          style={[styles.retryButton, { backgroundColor: colors.primary }]}
-          onPress={() => refetch()}
-          testID="retry-fetch"
-          accessibilityRole="button"
-          accessibilityLabel={t('common.retry')}
+        <View
+          style={[
+            styles.emptyContainer,
+            { backgroundColor: colors.background },
+          ]}
         >
-          <Text style={styles.retryText}>{t('common.retry')}</Text>
-        </TouchableOpacity>
-      </View>
+          <Ionicons name="cloud-offline-outline" size={64} color={colors.handleColor} />
+          <Text style={[styles.emptyTitle, { color: colors.text }]}>{t('dashboard.failedLoadNotes')}</Text>
+          <Text style={[styles.emptySubtext, { color: colors.textMuted }]}>{t('dashboard.checkConnection')}</Text>
+          <TouchableOpacity
+            style={[styles.retryButton, { backgroundColor: colors.primary }]}
+            onPress={() => refetch()}
+            testID="retry-fetch"
+            accessibilityRole="button"
+            accessibilityLabel={t('common.retry')}
+          >
+            <Text style={styles.retryText}>{t('common.retry')}</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
     );
 
     return (
@@ -700,25 +707,33 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
             </Text>
           </View>
         )}
-        <View style={styles.emptyContent}>
-          <Ionicons
-            name={emptyIcon}
-            size={64}
-            color={colors.handleColor}
-          />
-          <Text style={[styles.emptyTitle, { color: colors.text }]}>
-            {variant === 'notes' && t('dashboard.noNotesYet')}
-            {variant === 'my-todo' && t('dashboard.noAssignedTodos')}
-            {variant === 'archived' && t('dashboard.noArchivedNotes')}
-            {variant === 'trash' && t('dashboard.noBinnedNotes')}
-          </Text>
-          <Text style={[styles.emptySubtext, { color: colors.textMuted }]}>
-            {variant === 'notes' && t('dashboard.createFirstNote')}
-            {variant === 'my-todo' && t('dashboard.noMyTodoNotes')}
-            {variant === 'archived' && t('dashboard.archivedNotesWillAppear')}
-            {variant === 'trash' && t('dashboard.deletedNotesWillAppear')}
-          </Text>
-        </View>
+        <ScrollView
+          refreshControl={
+            <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={colors.primary} />
+          }
+          contentContainerStyle={styles.emptyScrollContent}
+          testID="notes-empty-state"
+        >
+          <View style={styles.emptyContent}>
+            <Ionicons
+              name={emptyIcon}
+              size={64}
+              color={colors.handleColor}
+            />
+            <Text style={[styles.emptyTitle, { color: colors.text }]}>
+              {variant === 'notes' && t('dashboard.noNotesYet')}
+              {variant === 'my-todo' && t('dashboard.noAssignedTodos')}
+              {variant === 'archived' && t('dashboard.noArchivedNotes')}
+              {variant === 'trash' && t('dashboard.noBinnedNotes')}
+            </Text>
+            <Text style={[styles.emptySubtext, { color: colors.textMuted }]}>
+              {variant === 'notes' && t('dashboard.createFirstNote')}
+              {variant === 'my-todo' && t('dashboard.noMyTodoNotes')}
+              {variant === 'archived' && t('dashboard.archivedNotesWillAppear')}
+              {variant === 'trash' && t('dashboard.deletedNotesWillAppear')}
+            </Text>
+          </View>
+        </ScrollView>
         {variant === 'notes' && (
           <TouchableOpacity
             style={[styles.fab, { backgroundColor: colors.primary, bottom: fabBottom }]}
@@ -922,10 +937,16 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   emptyContent: {
-    flex: 1,
+    minHeight: 420,
     justifyContent: 'center',
     alignItems: 'center',
     padding: 32,
+  },
+  emptyScrollContent: {
+    flexGrow: 1,
+  },
+  errorScrollContent: {
+    flexGrow: 1,
   },
   emptyContainer: {
     flex: 1,
