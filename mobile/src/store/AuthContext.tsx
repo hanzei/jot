@@ -1,6 +1,17 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import type { User, UserSettings } from '@jot/shared';
-import { auth, getStoredSession, clearStoredSession, setOnUnauthorized, getStoredServerUrl, restoreServerUrl, cacheAuthProfile, getCachedAuthProfile, clearCachedProfile } from '../api/client';
+import {
+  auth,
+  getStoredSession,
+  clearStoredSession,
+  setOnUnauthorized,
+  getStoredServerUrl,
+  restoreServerUrl,
+  cacheAuthProfile,
+  getCachedAuthProfile,
+  clearCachedProfile,
+  initializeServerContext,
+} from '../api/client';
 
 interface AuthState {
   user: User | null;
@@ -19,7 +30,12 @@ const AuthContext = createContext<AuthState | undefined>(undefined);
 
 function isUnauthorizedError(error: unknown): boolean {
   const status = (error as { response?: { status?: number } })?.response?.status;
-  return status === 401 || status === 403;
+  return status === 401;
+}
+
+function isHttpResponseError(error: unknown): boolean {
+  const status = (error as { response?: { status?: number } })?.response?.status;
+  return typeof status === 'number';
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -44,6 +60,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
 
     async function restoreSession() {
       try {
+        await initializeServerContext();
         const storedUrl = await getStoredServerUrl();
         if (storedUrl) restoreServerUrl(storedUrl);
         const token = await getStoredSession();
@@ -60,6 +77,9 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         if (isUnauthorizedError(error)) {
           await clearStoredSession();
           await clearCachedProfile();
+          clearAuth();
+        } else if (isHttpResponseError(error)) {
+          clearAuth();
         } else {
           // Network error — try to restore from cached profile
           const cached = await getCachedAuthProfile();
@@ -79,7 +99,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
     return () => {
       cancelled = true;
     };
-  }, []);
+  }, [clearAuth]);
 
   const login = useCallback(async (username: string, password: string) => {
     const response = await auth.login({ username, password });

@@ -188,7 +188,7 @@ describe('NoteModal', () => {
       expect(deepLink.protocol).toBe('jot:')
       expect(deepLink.hostname).toBe('notes')
       expect(deepLink.pathname).toBe(`/${note.id}`)
-      expect(deepLink.searchParams.get('server')).toBe(window.location.origin)
+      expect(deepLink.searchParams.get('server')).toBe(window.location.origin.toLowerCase())
     })
 
     it('renders mobile app toolbar link before share action', () => {

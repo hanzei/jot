@@ -179,7 +179,7 @@ const NavigationHeader = ({ title = 'Jot', onLogout, children, username, isAdmin
           </div>
 
           {/* Mobile app CTA on small screens */}
-          {showMobileAppBanner && (
+          {showMobileAppBanner && openInAppHref && (
             <div className="order-4 w-full sm:hidden" data-testid="open-mobile-app-banner">
               <div className="rounded-md border border-blue-200 bg-blue-50 p-3 dark:border-blue-900 dark:bg-blue-900/30">
                 <p className="text-sm text-blue-800 dark:text-blue-200">{t('nav.openMobileAppDescription')}</p>

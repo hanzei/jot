@@ -14,7 +14,7 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import { AuthStackParamList } from '../navigation/AuthStack';
-import { restoreServerUrl, setServerUrl as configureServerUrl } from '../api/client';
+import { setServerUrl } from '../api/client';
 import { useServerUrl } from '../hooks/useServerUrl';
 import { displayMessage } from '../i18n/utils';
 
@@ -26,7 +26,7 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
   const { login } = useAuth();
   const { colors } = useTheme();
   const { t } = useTranslation();
-  const { serverUrl, setServerUrl, validateServerUrl } = useServerUrl();
+  const { serverUrl, setServerUrl: setServerUrlInput, validateServerUrl } = useServerUrl();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -46,9 +46,8 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
     setError('');
     setLoading(true);
     try {
-      restoreServerUrl(serverUrl.trim());
+      await setServerUrl(serverUrl.trim());
       await login(username.trim(), password);
-      await configureServerUrl(serverUrl.trim());
     } catch (err: unknown) {
       const response = (err as { response?: { status?: number; data?: string } })?.response;
       if (!response) {
@@ -85,7 +84,7 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
           autoCorrect={false}
           keyboardType="url"
           value={serverUrl}
-          onChangeText={setServerUrl}
+          onChangeText={setServerUrlInput}
           accessibilityLabel={t('auth.serverUrlPlaceholder')}
           testID="server-url-input"
         />
