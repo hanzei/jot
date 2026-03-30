@@ -290,8 +290,10 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
 
               return (
                 <>
-                  {uncompletedItems.map((item) => (
-                      <div key={item.id} className="flex items-start min-w-0 text-sm" style={{ marginLeft: item.indent_level * VALIDATION.INDENT_PX_PER_LEVEL }}>
+                  {uncompletedItems.map((item) => {
+                    const normalizedIndentLevel = Math.max(0, Number(item.indent_level) || 0);
+                    return (
+                      <div key={item.id} className="flex items-start min-w-0 text-sm" style={{ marginLeft: normalizedIndentLevel * VALIDATION.INDENT_PX_PER_LEVEL }}>
                         <input
                           type="checkbox"
                           checked={item.completed}
@@ -302,7 +304,8 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
                           {item.text}
                         </span>
                       </div>
-                  ))}
+                    );
+                  })}
                   {completedItems.length > 0 && (
                     <div className="text-xs text-gray-500 dark:text-gray-400 mt-2">
                       {t('note.moreCompletedItems', { count: completedItems.length })}

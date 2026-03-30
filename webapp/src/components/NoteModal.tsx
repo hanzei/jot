@@ -261,7 +261,7 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
                   setSelectedSuggestionIndex(prev => Math.max(prev - 1, -1));
                   return;
                 }
-                if (e.key === 'Enter') {
+                if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
                   const idxToAccept = selectedSuggestionIndex >= 0 ? selectedSuggestionIndex : 0;
                   selectSuggestion(suggestions[idxToAccept]);
@@ -660,7 +660,22 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   const handleItemKeyDown = (index: number, e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
       if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
-      if (e.currentTarget.value.includes('\n')) return;
+      const textarea = e.currentTarget;
+      if (textarea.value.includes('\n')) return;
+
+      // Treat visually wrapped content as multiline so Arrow keys move caret
+      // within the current textarea instead of jumping focus to another row.
+      const styles = window.getComputedStyle(textarea);
+      const parsedLineHeight = Number.parseFloat(styles.lineHeight);
+      const lineHeight = Number.isFinite(parsedLineHeight) && parsedLineHeight > 0
+        ? parsedLineHeight
+        : 19.2;
+      const verticalPadding =
+        (Number.parseFloat(styles.paddingTop) || 0) +
+        (Number.parseFloat(styles.paddingBottom) || 0);
+      const singleLineHeight = lineHeight + verticalPadding;
+      if (textarea.scrollHeight > singleLineHeight + 2) return;
+
       const targetIndex = e.key === 'ArrowUp' ? index - 1 : index + 1;
       if (targetIndex < 0 || targetIndex >= uncompletedItems.length) return;
 

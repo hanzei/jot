@@ -162,10 +162,11 @@ describe('NoteEditorScreen todo submit behavior', () => {
     fireEvent.press(getByTestId('toggle-note-type'));
     fireEvent.press(getByTestId('add-todo-item'));
 
+    const baselineCount = getAllByTestId('todo-item-text').length;
     const firstInput = getAllByTestId('todo-item-text')[0];
     fireEvent.changeText(firstInput, 'Buy milk');
     fireEvent(firstInput, 'submitEditing');
 
-    expect(getAllByTestId('todo-item-text')).toHaveLength(2);
+    expect(getAllByTestId('todo-item-text').length).toBe(baselineCount + 1);
   });
 });
