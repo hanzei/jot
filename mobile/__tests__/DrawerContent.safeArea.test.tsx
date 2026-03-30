@@ -1,5 +1,6 @@
 import React from 'react';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { Text } from 'react-native';
 import type { DrawerContentComponentProps } from '@react-navigation/drawer';
 import DrawerContent from '../src/components/DrawerContent';
 
@@ -7,6 +8,7 @@ const mockSwitchActiveServer = jest.fn();
 const mockListServers = jest.fn();
 const mockGetActiveServer = jest.fn();
 const mockAddServer = jest.fn();
+const mockUserAvatar = jest.fn();
 
 jest.mock('../src/store/AuthContext', () => ({
   useAuth: () => ({
@@ -16,13 +18,21 @@ jest.mock('../src/store/AuthContext', () => ({
       first_name: 'Alice',
       last_name: 'Smith',
       role: 'user',
-      has_profile_icon: false,
+      has_profile_icon: true,
       created_at: '2026-01-01T00:00:00Z',
       updated_at: '2026-01-01T00:00:00Z',
     },
     logout: jest.fn(),
     revalidateSession: jest.fn(async () => true),
   }),
+}));
+
+jest.mock('../src/components/UserAvatar', () => ({
+  __esModule: true,
+  default: (props: unknown) => {
+    mockUserAvatar(props);
+    return <Text testID="drawer-user-avatar" />;
+  },
 }));
 
 jest.mock('../src/hooks/useLabels', () => ({
@@ -148,6 +158,36 @@ describe('DrawerContent safe-area spacing', () => {
     await waitFor(() => {
       expect(mockListServers).toHaveBeenCalled();
       expect(mockGetActiveServer).toHaveBeenCalled();
+    });
+  });
+
+  it('renders drawer avatar from profile icon state', () => {
+    const props = {
+      state: {
+        index: 0,
+        key: 'drawer-key',
+        routeNames: ['Notes', 'MyTodo', 'Archived', 'Trash'],
+        routes: [{ key: 'notes-key', name: 'Notes' }],
+        stale: false,
+        type: 'drawer',
+        history: [],
+      },
+      navigation: {
+        navigate: jest.fn(),
+        closeDrawer: jest.fn(),
+        dispatch: jest.fn(),
+      },
+      descriptors: {},
+      progress: {},
+    } as unknown as DrawerContentComponentProps;
+
+    const { getByTestId } = render(<DrawerContent {...props} />);
+    expect(getByTestId('drawer-user-avatar')).toBeTruthy();
+    expect(mockUserAvatar).toHaveBeenCalledWith({
+      userId: 'user-1',
+      username: 'alice',
+      hasProfileIcon: true,
+      size: 'large',
     });
   });
 });

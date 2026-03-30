@@ -6,20 +6,21 @@ import { useActiveServerBaseUrl } from '../hooks/useActiveServerBaseUrl';
 const SIZE_MAP = {
   small: 24,
   medium: 36,
+  large: 52,
 };
 
 interface UserAvatarProps {
   userId: string;
   username: string;
   hasProfileIcon?: boolean;
-  size?: 'small' | 'medium';
+  size?: 'small' | 'medium' | 'large';
 }
 
 export default function UserAvatar({ userId, username, hasProfileIcon, size = 'medium' }: UserAvatarProps) {
   const [imageError, setImageError] = useState(false);
   const baseUrl = useActiveServerBaseUrl();
   const dimension = SIZE_MAP[size];
-  const fontSize = size === 'small' ? 10 : 15;
+  const fontSize = size === 'small' ? 10 : size === 'medium' ? 15 : 22;
 
   useEffect(() => {
     setImageError(false);

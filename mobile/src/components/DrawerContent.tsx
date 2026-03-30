@@ -19,6 +19,7 @@ import { useDeleteLabel, useLabels, useRenameLabel } from '../hooks/useLabels';
 import { useTheme } from '../theme/ThemeContext';
 import { addServer, getActiveServer, listServers, type ServerAccountEntry } from '../store/serverAccounts';
 import { switchActiveServer } from '../api/client';
+import UserAvatar from './UserAvatar';
 
 import type { Label } from '@jot/shared';
 import type { MainDrawerParamList } from '../navigation/MainDrawer';
@@ -291,10 +292,6 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
     ? [user.first_name, user.last_name].filter(Boolean).join(' ') || user.username
     : '';
 
-  const initials = user
-    ? (user.first_name?.[0] ?? user.username?.[0] ?? '').toUpperCase()
-    : '';
-
   const isNotesActiveWithoutLabel = activeRoute === 'Notes' && !activeLabelId;
 
   return (
@@ -311,9 +308,12 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
           accessibilityLabel={t('serverPicker.open')}
           testID="drawer-profile-button"
         >
-          <View style={[styles.avatar, { backgroundColor: colors.primary }]}>
-            <Text style={styles.avatarText}>{initials}</Text>
-          </View>
+          <UserAvatar
+            userId={user?.id ?? ''}
+            username={user?.username ?? ''}
+            hasProfileIcon={user?.has_profile_icon}
+            size="large"
+          />
           <View style={styles.profileTextWrap}>
             <Text style={[styles.displayName, { color: colors.text }]} numberOfLines={1}>{displayName}</Text>
             {user && displayName !== user.username && (
@@ -648,18 +648,6 @@ const styles = StyleSheet.create({
   },
   profileTextWrap: {
     flex: 1,
-  },
-  avatar: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  avatarText: {
-    color: '#fff',
-    fontSize: 22,
-    fontWeight: '600',
   },
   displayName: {
     fontSize: 16,
