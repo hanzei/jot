@@ -1,5 +1,5 @@
 import React from 'react';
-import { ActivityIndicator, Alert, Linking, View } from 'react-native';
+import { ActivityIndicator, Alert, Linking, Text, TouchableOpacity, View } from 'react-native';
 import {
   NavigationContainer,
   DefaultTheme,
@@ -276,6 +276,8 @@ function NavigationWrapper() {
 export default function App() {
   const [activeServerId, setActiveServerId] = React.useState<string | null>(null);
   const [isServerContextReady, setIsServerContextReady] = React.useState(false);
+  const [serverContextInitError, setServerContextInitError] = React.useState<string | null>(null);
+  const [serverContextInitAttempt, setServerContextInitAttempt] = React.useState(0);
 
   React.useEffect(() => {
     let isMounted = true;
@@ -288,21 +290,20 @@ export default function App() {
     });
 
     void (async () => {
-      let didFinish = false;
       try {
         await initializeServerContext();
-        didFinish = true;
+        if (!isMounted) {
+          return;
+        }
+        setActiveServerId(getActiveServerId());
+        setIsServerContextReady(true);
+        setServerContextInitError(null);
       } catch (error) {
         console.warn('Failed to initialize server context:', error);
-      }
-
-      if (!isMounted) {
-        return;
-      }
-      setActiveServerId(getActiveServerId());
-      setIsServerContextReady(true);
-      if (!didFinish) {
-        queryClient.clear();
+        if (!isMounted) {
+          return;
+        }
+        setServerContextInitError('server_context_init_failed');
       }
     })();
 
@@ -310,7 +311,7 @@ export default function App() {
       isMounted = false;
       unsubscribe();
     };
-  }, []);
+  }, [serverContextInitAttempt]);
 
   const databaseName = getDatabaseNameForServer(activeServerId);
   const handleDatabaseInit = async (db: Parameters<typeof initializeServerDatabase>[0]) =>
@@ -320,7 +321,21 @@ export default function App() {
     return (
       <GestureHandlerRootView style={{ flex: 1 }}>
         <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-          <ActivityIndicator size="large" />
+          {serverContextInitError ? (
+            <View style={{ alignItems: 'center', paddingHorizontal: 24 }}>
+              <Text style={{ textAlign: 'center', marginBottom: 12 }}>
+                Failed to initialize server context.
+              </Text>
+              <TouchableOpacity
+                onPress={() => setServerContextInitAttempt((prev) => prev + 1)}
+                style={{ paddingHorizontal: 14, paddingVertical: 10 }}
+              >
+                <Text>Retry</Text>
+              </TouchableOpacity>
+            </View>
+          ) : (
+            <ActivityIndicator size="large" />
+          )}
         </View>
       </GestureHandlerRootView>
     );

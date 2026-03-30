@@ -37,13 +37,7 @@ async function getRowCountIfExists(db: SQLiteDatabase, tableName: string): Promi
   return row?.count ?? 0;
 }
 
-async function hasLegacyDataToMigrate(db: SQLiteDatabase): Promise<boolean> {
-  const notesCount = await getRowCountIfExists(db, 'notes');
-  const queueCount = await getRowCountIfExists(db, 'sync_queue');
-  return notesCount > 0 || queueCount > 0;
-}
-
-async function hasTargetData(db: SQLiteDatabase): Promise<boolean> {
+async function hasData(db: SQLiteDatabase): Promise<boolean> {
   const notesCount = await getRowCountIfExists(db, 'notes');
   const queueCount = await getRowCountIfExists(db, 'sync_queue');
   return notesCount > 0 || queueCount > 0;
@@ -75,7 +69,11 @@ async function archiveLegacyDbIfPresent(): Promise<void> {
     const sidecarTo = `${archiveUri}${suffix}`;
     const sidecarInfo = await FileSystem.getInfoAsync(sidecarFrom);
     if (sidecarInfo.exists) {
-      await FileSystem.moveAsync({ from: sidecarFrom, to: sidecarTo });
+      try {
+        await FileSystem.moveAsync({ from: sidecarFrom, to: sidecarTo });
+      } catch (error) {
+        console.warn(`Failed to move SQLite sidecar file (${suffix}) during archive:`, error);
+      }
     }
   }
 }
@@ -98,7 +96,7 @@ async function migrateLegacySqliteToServerDb(targetDb: SQLiteDatabase, activeSer
     return;
   }
 
-  const targetHasRows = await hasTargetData(targetDb);
+  const targetHasRows = await hasData(targetDb);
   if (targetHasRows) {
     await archiveLegacyDbIfPresent();
     await SecureStore.setItemAsync(LEGACY_MIGRATION_MARKER_KEY, '1');
@@ -108,7 +106,7 @@ async function migrateLegacySqliteToServerDb(targetDb: SQLiteDatabase, activeSer
   const legacyDb = await openDatabaseAsync(LEGACY_DATABASE_NAME);
   try {
     await legacyDb.execAsync('PRAGMA wal_checkpoint(FULL);');
-    const shouldMigrate = await hasLegacyDataToMigrate(legacyDb);
+    const shouldMigrate = await hasData(legacyDb);
     if (shouldMigrate) {
       await backupDatabaseAsync({ sourceDatabase: legacyDb, destDatabase: targetDb });
       await migrateDatabase(targetDb);

@@ -198,10 +198,21 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
     setActiveServerId(activeServer?.serverId ?? null);
   }, []);
 
+  const refreshServerPickerData = useCallback(async () => {
+    try {
+      await loadServerPickerData();
+      return true;
+    } catch (error) {
+      console.warn('Failed to load server picker data:', error);
+      Alert.alert(t('common.error'), t('serverPicker.loadFailed'));
+      return false;
+    }
+  }, [loadServerPickerData, t]);
+
   const handleOpenServerPicker = useCallback(() => {
     setIsServerPickerVisible(true);
-    void loadServerPickerData();
-  }, [loadServerPickerData]);
+    void refreshServerPickerData();
+  }, [refreshServerPickerData]);
 
   const handleSwitchToServer = useCallback(async (serverId: string) => {
     if (isServerActionPending || serverSwitchingRef.current) {
@@ -223,9 +234,9 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
     } finally {
       setIsServerActionPending(false);
       serverSwitchingRef.current = false;
-      await loadServerPickerData();
+      await refreshServerPickerData();
     }
-  }, [isServerActionPending, loadServerPickerData, props.navigation, revalidateSession, t]);
+  }, [isServerActionPending, props.navigation, revalidateSession, refreshServerPickerData, t]);
 
   const handleAddServer = useCallback(async () => {
     if (isServerActionPending) {
@@ -272,9 +283,9 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
       Alert.alert(t('common.error'), t('serverPicker.addFailed'));
     } finally {
       setIsServerActionPending(false);
-      await loadServerPickerData();
+      await refreshServerPickerData();
     }
-  }, [handleSwitchToServer, isServerActionPending, loadServerPickerData, newServerUrl, t]);
+  }, [handleSwitchToServer, isServerActionPending, newServerUrl, refreshServerPickerData, t]);
 
   const displayName = user
     ? [user.first_name, user.last_name].filter(Boolean).join(' ') || user.username

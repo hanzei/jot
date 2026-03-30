@@ -262,7 +262,7 @@
     "open": "Changer de serveur",
     "title": "Sélectionner un serveur",
     "noServers": "Aucun serveur configuré",
-    "addPlaceholder": "https://your-server.example.com",
+    "addPlaceholder": "https://votre-serveur.exemple.com",
     "addButton": "Ajouter un serveur",
     "working": "Traitement...",
     "urlRequired": "L'URL du serveur est requise",

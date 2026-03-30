@@ -30,6 +30,7 @@ let serverContextInitPromise: Promise<void> | null = null;
 let sessionCache: string | null | undefined;
 type ActiveServerChangeListener = (serverId: string | null) => void;
 const activeServerChangeListeners = new Set<ActiveServerChangeListener>();
+const serverUrlById = new Map<string, string>();
 
 export function getBaseUrl(): string {
   return currentBaseUrl;
@@ -50,6 +51,33 @@ export function subscribeToClientActiveServerChanges(listener: ActiveServerChang
   return () => {
     activeServerChangeListeners.delete(listener);
   };
+}
+
+async function applyActiveServerState(serverId: string | null): Promise<void> {
+  if (!serverId) {
+    activeServerId = null;
+    sessionCache = undefined;
+    notifyActiveServerChange(null);
+    return;
+  }
+
+  let serverUrl = serverUrlById.get(serverId);
+  if (!serverUrl) {
+    const active = await getActiveServer();
+    if (!active || active.serverId !== serverId) {
+      activeServerId = null;
+      sessionCache = undefined;
+      notifyActiveServerChange(null);
+      return;
+    }
+    serverUrl = active.serverUrl;
+    serverUrlById.set(active.serverId, active.serverUrl);
+  }
+
+  applyServerUrl(serverUrl);
+  activeServerId = serverId;
+  sessionCache = undefined;
+  notifyActiveServerChange(serverId);
 }
 
 export async function getStoredServerUrl(): Promise<string | null> {
@@ -99,17 +127,12 @@ async function ensureServerContextReady(): Promise<void> {
       await ensureServerRegistryMigrated();
       const active = await getActiveServer();
       if (active) {
-        activeServerId = active.serverId;
-        applyServerUrl(active.serverUrl);
+        serverUrlById.set(active.serverId, active.serverUrl);
+        await applyActiveServerState(active.serverId);
       }
       subscribeToActiveServerChanges((serverId) => {
-        activeServerId = serverId;
-        sessionCache = undefined;
-        notifyActiveServerChange(serverId);
+        void applyActiveServerState(serverId);
       });
-      if (active) {
-        notifyActiveServerChange(active.serverId);
-      }
       serverContextReady = true;
     })();
   }
@@ -129,6 +152,7 @@ async function resolveActiveServerId(): Promise<string | null> {
   if (!active) {
     return null;
   }
+  serverUrlById.set(active.serverId, active.serverUrl);
   activeServerId = active.serverId;
   applyServerUrl(active.serverUrl);
   return active.serverId;
