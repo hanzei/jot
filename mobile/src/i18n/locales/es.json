@@ -270,6 +270,9 @@
     "missingServerMessage": "Este enlace no especifica una URL del servidor. Se abrirá en {{server}}.",
     "invalidServerTitle": "Enlace profundo ignorado",
     "invalidServerMessage": "Este enlace tiene una URL del servidor no válida.",
+    "unknownServerTitle": "Servidor no agregado",
+    "unknownServerMessage": "Este enlace apunta a {{server}}, que no está en tu lista de servidores.",
+    "addAndSwitchAction": "Agregar y cambiar",
     "wrongServerTitle": "Servidor incorrecto",
     "wrongServerMessage": "Este enlace apunta a {{targetServer}}, pero estás conectado a {{currentServer}}."
   },

@@ -270,6 +270,9 @@
     "missingServerMessage": "Deze link bevat geen server-URL. Wordt geopend op {{server}}.",
     "invalidServerTitle": "Deep link genegeerd",
     "invalidServerMessage": "Deze link bevat een ongeldige server-URL.",
+    "unknownServerTitle": "Onbekende server",
+    "unknownServerMessage": "Deze link verwijst naar {{server}}, maar die server staat nog niet in je lijst.",
+    "addAndSwitchAction": "Toevoegen en wisselen",
     "wrongServerTitle": "Verkeerde server",
     "wrongServerMessage": "Deze link verwijst naar {{targetServer}}, maar je bent verbonden met {{currentServer}}."
   },

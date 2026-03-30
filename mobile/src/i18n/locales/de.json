@@ -255,6 +255,9 @@
     "missingServerMessage": "Dieser Link enthält keine Server-URL. Er wird auf {{server}} geöffnet.",
     "invalidServerTitle": "Deep-Link ignoriert",
     "invalidServerMessage": "Dieser Link enthält eine ungültige Server-URL.",
+    "unknownServerTitle": "Unbekannter Server",
+    "unknownServerMessage": "Dieser Link verweist auf {{server}}, der noch nicht hinzugefügt wurde.",
+    "addAndSwitchAction": "Hinzufügen und wechseln",
     "wrongServerTitle": "Falscher Server",
     "wrongServerMessage": "Dieser Link verweist auf {{targetServer}}, aber du bist mit {{currentServer}} verbunden."
   },

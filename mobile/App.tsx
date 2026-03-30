@@ -23,12 +23,14 @@ import {
   getActiveServerId,
   getBaseUrl,
   getStoredServerUrl,
+  isServerSwitchInProgress,
   initializeServerContext,
-  restoreServerUrl,
+  switchActiveServer,
   subscribeToClientActiveServerChanges,
 } from './src/api/client';
 import { getDatabaseNameForServer, initializeServerDatabase } from './src/db/serverDatabase';
 import { canonicalizeServerOrigin } from '@jot/shared';
+import { addServer, listServers } from './src/store/serverAccounts';
 import './src/i18n';
 
 const queryClient = new QueryClient({
@@ -89,11 +91,12 @@ function isProtectedDeepLinkPath(path: string): boolean {
 
 function NavigationWrapper() {
   const { colors, isDark } = useTheme();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, revalidateSession } = useAuth();
   const { t } = useTranslation();
   const navigationRef = React.useMemo(() => createNavigationContainerRef<RootStackParamList>(), []);
   const pendingDeepLinkUrlRef = React.useRef<string | null>(null);
   const warnedDeepLinkUrlsRef = React.useRef<Set<string>>(new Set());
+  const deepLinkServerPromptInFlightRef = React.useRef<Promise<boolean> | null>(null);
   const wasAuthenticatedRef = React.useRef(isAuthenticated);
   const [isNavReady, setIsNavReady] = React.useState(false);
 
@@ -115,14 +118,74 @@ function NavigationWrapper() {
     if (!storedUrl) {
       return null;
     }
-    restoreServerUrl(storedUrl);
     return normalizeServerOrigin(storedUrl);
   }, []);
 
-  const evaluateIncomingDeepLink = React.useCallback(async (url: string): Promise<'allow' | 'stash' | 'ignore'> => {
+  const promptToAddUnknownDeepLinkServer = React.useCallback((serverOrigin: string): Promise<boolean> => {
+    if (deepLinkServerPromptInFlightRef.current) {
+      return deepLinkServerPromptInFlightRef.current;
+    }
+    const promptPromise = new Promise<boolean>((resolve) => {
+      Alert.alert(
+        t('deepLink.unknownServerTitle'),
+        t('deepLink.unknownServerMessage', { server: serverOrigin }),
+        [
+          { text: t('common.cancel'), style: 'cancel', onPress: () => resolve(false) },
+          { text: t('deepLink.addAndSwitchAction'), onPress: () => resolve(true) },
+        ],
+      );
+    }).finally(() => {
+      deepLinkServerPromptInFlightRef.current = null;
+    });
+    deepLinkServerPromptInFlightRef.current = promptPromise;
+    return promptPromise;
+  }, [t]);
+
+  const ensureDeepLinkServerContext = React.useCallback(async (serverOrigin: string): Promise<boolean> => {
+    const knownServers = await listServers();
+    let targetServerId = knownServers.find((entry) => entry.serverUrl === serverOrigin)?.serverId ?? null;
+
+    if (!targetServerId) {
+      const shouldAddServer = await promptToAddUnknownDeepLinkServer(serverOrigin);
+      if (!shouldAddServer) {
+        return false;
+      }
+      const addResult = await addServer(serverOrigin);
+      if (!addResult.success && addResult.code !== 'DUPLICATE') {
+        Alert.alert(t('common.error'), addResult.message || t('serverPicker.addFailed'));
+        return false;
+      }
+      targetServerId = addResult.success ? addResult.serverId : addResult.existingServerId ?? null;
+      if (!targetServerId) {
+        Alert.alert(t('common.error'), t('serverPicker.addFailed'));
+        return false;
+      }
+    }
+
+    if (getActiveServerId() === targetServerId && !isServerSwitchInProgress()) {
+      return true;
+    }
+    if (isServerSwitchInProgress() && getActiveServerId() !== targetServerId) {
+      return false;
+    }
+
+    const switched = await switchActiveServer(targetServerId);
+    if (!switched) {
+      Alert.alert(t('common.error'), t('serverPicker.switchFailed'));
+      return false;
+    }
+    await revalidateSession();
+    return true;
+  }, [promptToAddUnknownDeepLinkServer, revalidateSession, t]);
+
+  const evaluateIncomingDeepLink = React.useCallback(async (
+    url: string,
+    options?: { allowStash?: boolean },
+  ): Promise<'allow' | 'stash' | 'ignore'> => {
     const { path, hasServerParam, serverOrigin } = parseDeepLink(url);
     const configuredServerOrigin = await resolveStoredServerOrigin();
     const serverLabel = configuredServerOrigin ?? normalizeServerOrigin(getBaseUrl()) ?? getBaseUrl();
+    const allowStash = options?.allowStash ?? true;
 
     if (!hasServerParam && !warnedDeepLinkUrlsRef.current.has(url)) {
       warnedDeepLinkUrlsRef.current.add(url);
@@ -143,27 +206,20 @@ function NavigationWrapper() {
       return 'ignore';
     }
 
-    if (serverOrigin && configuredServerOrigin && serverOrigin !== configuredServerOrigin) {
-      if (!warnedDeepLinkUrlsRef.current.has(url)) {
-        warnedDeepLinkUrlsRef.current.add(url);
-        Alert.alert(
-          t('deepLink.wrongServerTitle'),
-          t('deepLink.wrongServerMessage', {
-            targetServer: serverOrigin,
-            currentServer: configuredServerOrigin,
-          }),
-        );
+    if (serverOrigin) {
+      const switched = await ensureDeepLinkServerContext(serverOrigin);
+      if (!switched) {
+        return 'ignore';
       }
-      return 'ignore';
     }
 
-    if (!isAuthenticated && isProtectedDeepLinkPath(path)) {
+    if (allowStash && !isAuthenticated && isProtectedDeepLinkPath(path)) {
       pendingDeepLinkUrlRef.current = url;
       return 'stash';
     }
 
     return 'allow';
-  }, [isAuthenticated, resolveStoredServerOrigin, t]);
+  }, [ensureDeepLinkServerContext, isAuthenticated, resolveStoredServerOrigin, t]);
 
   const linking = React.useMemo<LinkingOptions<RootStackParamList>>(
     () => ({
@@ -241,12 +297,11 @@ function NavigationWrapper() {
         return;
       }
 
-      const { hasServerParam, serverOrigin } = parseDeepLink(pendingUrl);
-      const configuredServerOrigin = await resolveStoredServerOrigin();
+      const decision = await evaluateIncomingDeepLink(pendingUrl, { allowStash: false });
       if (cancelled) {
         return;
       }
-      if (hasServerParam && (!serverOrigin || (configuredServerOrigin && serverOrigin !== configuredServerOrigin))) {
+      if (decision !== 'allow') {
         pendingDeepLinkUrlRef.current = null;
         return;
       }
@@ -264,7 +319,7 @@ function NavigationWrapper() {
     return () => {
       cancelled = true;
     };
-  }, [isAuthenticated, isNavReady, linking.config, navigationRef, resolveStoredServerOrigin]);
+  }, [evaluateIncomingDeepLink, isAuthenticated, isNavReady, linking.config, navigationRef]);
 
   return (
     <NavigationContainer ref={navigationRef} theme={navigationTheme} linking={linking} onReady={() => setIsNavReady(true)}>

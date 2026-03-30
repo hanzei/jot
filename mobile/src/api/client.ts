@@ -1,4 +1,4 @@
-import axios, { AxiosHeaders } from 'axios';
+import axios, { AxiosHeaders, CanceledError, type InternalAxiosRequestConfig } from 'axios';
 import { Platform } from 'react-native';
 import type { AuthResponse, LoginRequest, RegisterRequest } from '@jot/shared';
 import { canonicalizeServerOrigin } from '@jot/shared';
@@ -12,6 +12,16 @@ import {
   switchServer as switchRegisteredServer,
   subscribeToActiveServerChanges,
 } from '../store/serverAccounts';
+import {
+  beginServerSwitchLifecycle,
+  abortServerSwitchLifecycle,
+  clearServerSwitchLifecycleDegraded,
+  completeServerSwitchLifecycle,
+  getCurrentSwitchGenerationId,
+  isServerSwitchInProgress as isServerSwitchInProgressInternal,
+  markServerSwitchLifecycleDegraded,
+  registerGenerationCancelHandler,
+} from '../store/serverSwitchLifecycle';
 
 const SESSION_KEY = 'session';
 const CACHED_PROFILE_KEY = 'cached_profile';
@@ -32,12 +42,23 @@ type ActiveServerChangeListener = (serverId: string | null) => void;
 const activeServerChangeListeners = new Set<ActiveServerChangeListener>();
 const serverUrlById = new Map<string, string>();
 
+interface SwitchAwareAxiosRequestConfig extends InternalAxiosRequestConfig {
+  __serverSwitchGenerationId?: number;
+  __serverSwitchAbortController?: AbortController;
+}
+
+const inflightControllersByGeneration = new Map<number, Set<AbortController>>();
+
 export function getBaseUrl(): string {
   return currentBaseUrl;
 }
 
 export function getActiveServerId(): string | null {
   return activeServerId;
+}
+
+export function isServerSwitchInProgress(): boolean {
+  return isServerSwitchInProgressInternal();
 }
 
 function notifyActiveServerChange(serverId: string | null): void {
@@ -52,6 +73,51 @@ export function subscribeToClientActiveServerChanges(listener: ActiveServerChang
     activeServerChangeListeners.delete(listener);
   };
 }
+
+function trackInflightController(generationId: number, controller: AbortController): void {
+  const bucket = inflightControllersByGeneration.get(generationId);
+  if (bucket) {
+    bucket.add(controller);
+    return;
+  }
+  inflightControllersByGeneration.set(generationId, new Set([controller]));
+}
+
+function releaseInflightController(generationId: number | undefined, controller: AbortController | undefined): void {
+  if (generationId === undefined || !controller) {
+    return;
+  }
+  const bucket = inflightControllersByGeneration.get(generationId);
+  if (!bucket) {
+    return;
+  }
+  bucket.delete(controller);
+  if (bucket.size === 0) {
+    inflightControllersByGeneration.delete(generationId);
+  }
+}
+
+function cancelInflightControllersForGeneration(generationId: number): void {
+  const bucket = inflightControllersByGeneration.get(generationId);
+  if (!bucket) {
+    return;
+  }
+  for (const controller of bucket) {
+    controller.abort();
+  }
+  inflightControllersByGeneration.delete(generationId);
+}
+
+function isCurrentRequestGeneration(generationId: number | undefined): boolean {
+  if (generationId === undefined) {
+    return true;
+  }
+  return generationId === getCurrentSwitchGenerationId();
+}
+
+registerGenerationCancelHandler((generationId) => {
+  cancelInflightControllersForGeneration(generationId);
+});
 
 async function applyActiveServerState(serverId: string | null): Promise<void> {
   if (!serverId) {
@@ -160,18 +226,54 @@ async function resolveActiveServerId(): Promise<string | null> {
 
 export async function switchActiveServer(serverId: string): Promise<boolean> {
   await ensureServerContextReady();
-  const switched = await switchRegisteredServer(serverId);
-  if (!switched) {
-    return false;
+  const previousActiveServerId = activeServerId;
+  if (previousActiveServerId === serverId) {
+    return true;
   }
-  const active = await getActiveServer();
-  if (!active) {
+
+  const { previousGenerationId } = beginServerSwitchLifecycle();
+
+  const failPreCommit = async (): Promise<boolean> => {
+    if (previousActiveServerId) {
+      await switchRegisteredServer(previousActiveServerId).catch(() => {});
+      const previousActiveServer = await getActiveServer().catch(() => null);
+      if (previousActiveServer) {
+        activeServerId = previousActiveServer.serverId;
+        applyServerUrl(previousActiveServer.serverUrl);
+      }
+    }
+    abortServerSwitchLifecycle();
     return false;
+  };
+
+  try {
+    const switched = await switchRegisteredServer(serverId);
+    if (!switched) {
+      return failPreCommit();
+    }
+
+    const active = await getActiveServer();
+    if (!active) {
+      markServerSwitchLifecycleDegraded('active_server_missing_after_switch');
+      return true;
+    }
+
+    applyServerUrl(active.serverUrl);
+    activeServerId = active.serverId;
+    sessionCache = undefined;
+    clearServerSwitchLifecycleDegraded();
+    completeServerSwitchLifecycle();
+    return true;
+  } catch (error) {
+    if (isServerSwitchInProgressInternal()) {
+      abortServerSwitchLifecycle();
+    }
+    console.warn('Server switch failed before commit:', error);
+    return false;
+  } finally {
+    // Ensure we never keep stale controllers for the previous generation.
+    cancelInflightControllersForGeneration(previousGenerationId);
   }
-  activeServerId = active.serverId;
-  sessionCache = undefined;
-  applyServerUrl(active.serverUrl);
-  return true;
 }
 
 async function activateServerUrl(url: string): Promise<string> {
@@ -190,7 +292,7 @@ async function activateServerUrl(url: string): Promise<string> {
     throw new Error('Unable to determine server account ID.');
   }
 
-  const switched = await switchRegisteredServer(serverId);
+  const switched = await switchActiveServer(serverId);
   if (!switched) {
     throw new Error('Unable to switch active server.');
   }
@@ -240,6 +342,27 @@ function extractSessionCookie(setCookieHeader: string | string[] | undefined): s
 
 // Attach stored session cookie to every request
 api.interceptors.request.use(async (config) => {
+  const method = (config.method || 'get').toUpperCase();
+  if (isServerSwitchInProgressInternal() && method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
+    throw new CanceledError('Server switch in progress; write request blocked.');
+  }
+
+  const switchAwareConfig = config as SwitchAwareAxiosRequestConfig;
+  const generationId = getCurrentSwitchGenerationId();
+  const controller = new AbortController();
+  const existingSignal = config.signal;
+  if (existingSignal) {
+    if (existingSignal.aborted) {
+      controller.abort();
+    } else {
+      existingSignal.addEventListener?.('abort', () => controller.abort(), { once: true });
+    }
+  }
+  switchAwareConfig.signal = controller.signal;
+  switchAwareConfig.__serverSwitchGenerationId = generationId;
+  switchAwareConfig.__serverSwitchAbortController = controller;
+  trackInflightController(generationId, controller);
+
   let token = sessionCache;
   if (token === undefined) {
     token = await getStoredSession();
@@ -262,10 +385,28 @@ export function setOnUnauthorized(cb: (() => void) | null): void {
 }
 
 api.interceptors.response.use(
-  (response) => response,
+  (response) => {
+    const config = response.config as SwitchAwareAxiosRequestConfig;
+    releaseInflightController(config.__serverSwitchGenerationId, config.__serverSwitchAbortController);
+    if (!isCurrentRequestGeneration(config.__serverSwitchGenerationId)) {
+      throw new CanceledError('Discarded stale response after server switch.');
+    }
+    return response;
+  },
   async (error) => {
+    const config = error?.config as SwitchAwareAxiosRequestConfig | undefined;
+    releaseInflightController(config?.__serverSwitchGenerationId, config?.__serverSwitchAbortController);
+
+    if (!isCurrentRequestGeneration(config?.__serverSwitchGenerationId)) {
+      throw new CanceledError('Discarded stale error response after server switch.');
+    }
+
+    if (axios.isCancel(error) || error instanceof CanceledError) {
+      return Promise.reject(error);
+    }
+
     if (error.response?.status === 401) {
-      const url: string = error.config?.url || '';
+      const url: string = config?.url || '';
       const isAuthEndpoint = url === '/login' || url === '/register' || url === '/logout' || url === '/me';
       if (!isAuthEndpoint) {
         await clearStoredSession();
