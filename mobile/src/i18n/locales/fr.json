@@ -255,6 +255,9 @@
     "missingServerMessage": "Ce lien ne précise pas d'URL de serveur. Ouverture sur {{server}}.",
     "invalidServerTitle": "Lien profond ignoré",
     "invalidServerMessage": "Ce lien contient une URL de serveur invalide.",
+    "unknownServerTitle": "Serveur inconnu",
+    "unknownServerMessage": "Ce lien cible {{server}}, qui n'est pas encore ajouté.",
+    "addAndSwitchAction": "Ajouter et basculer",
     "wrongServerTitle": "Mauvais serveur",
     "wrongServerMessage": "Ce lien cible {{targetServer}}, mais vous êtes connecté à {{currentServer}}."
   },

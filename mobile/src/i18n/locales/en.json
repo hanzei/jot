@@ -270,6 +270,9 @@
     "missingServerMessage": "This link does not specify a server URL. Opening it on {{server}}.",
     "invalidServerTitle": "Deep link ignored",
     "invalidServerMessage": "This link has an invalid server URL.",
+    "unknownServerTitle": "Unknown server",
+    "unknownServerMessage": "This link targets {{server}}, which is not in your server list yet.",
+    "addAndSwitchAction": "Add and switch",
     "wrongServerTitle": "Wrong server",
     "wrongServerMessage": "This link targets {{targetServer}}, but you are connected to {{currentServer}}."
   },

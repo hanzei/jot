@@ -12,6 +12,8 @@ import { useSQLiteContext } from 'expo-sqlite';
 import { useQueryClient } from '@tanstack/react-query';
 import { drainQueue } from '../db/syncQueue';
 import { useAuth } from './AuthContext';
+import { isSyncDrainPaused } from './serverSwitchLifecycle';
+import { noteLocalQueryKey, noteLocalQueryScopeKey, notesLocalQueryScopeKey } from '../hooks/queryKeys';
 
 interface OfflineContextValue {
   isConnected: boolean;
@@ -28,6 +30,7 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
   const isDrainingRef = useRef(false);
 
   const handleReconnect = useCallback(async () => {
+    if (isSyncDrainPaused()) return;
     // Re-validate session with the server (handles offline-authenticated users
     // and refreshes user/settings for all returning-online users).
     const stillAuthenticated = await revalidateSession();
@@ -38,7 +41,7 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
     try {
       const { idMappings, discardedOperations } = await drainQueue(db);
       for (const { localId, serverNote } of idMappings) {
-        queryClient.setQueryData(['note-local', localId], serverNote);
+        queryClient.setQueryData(noteLocalQueryKey(localId), serverNote);
       }
       if (discardedOperations.length > 0) {
         console.warn(
@@ -46,8 +49,8 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
           discardedOperations,
         );
       }
-      queryClient.invalidateQueries({ queryKey: ['notes-local'] });
-      queryClient.invalidateQueries({ queryKey: ['note-local'] });
+      queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+      queryClient.invalidateQueries({ queryKey: noteLocalQueryScopeKey() });
     } catch (err) {
       console.warn('Queue drain failed:', err);
     } finally {

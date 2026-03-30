@@ -271,7 +271,10 @@
     "invalidServerTitle": "Link profondo ignorato",
     "invalidServerMessage": "Questo link contiene un URL server non valido.",
     "wrongServerTitle": "Server errato",
-    "wrongServerMessage": "Questo link punta a {{targetServer}}, ma sei connesso a {{currentServer}}."
+    "wrongServerMessage": "Questo link punta a {{targetServer}}, ma sei connesso a {{currentServer}}.",
+    "unknownServerTitle": "Server non configurato",
+    "unknownServerMessage": "Questo link punta a {{server}}, che non è ancora stato aggiunto.",
+    "addAndSwitchAction": "Aggiungi e passa"
   },
   "offline": {
     "message": "Sei offline. Le modifiche verranno sincronizzate quando ti riconnetterai."

@@ -39,6 +39,11 @@ jest.mock('../src/store/AuthContext', () => ({
   useAuth: jest.fn().mockReturnValue({ user: { id: 'test-user-id', username: 'testuser' }, isAuthenticated: true }),
 }));
 
+jest.mock('../src/api/client', () => ({
+  isServerSwitchInProgress: jest.fn(() => false),
+  getActiveServerId: jest.fn(() => 'test-server-id'),
+}));
+
 const mockNotesApi = notesApi as jest.Mocked<typeof notesApi>;
 const mockNoteQueries = noteQueriesModule as jest.Mocked<typeof noteQueriesModule>;
 

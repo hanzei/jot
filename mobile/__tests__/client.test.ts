@@ -8,6 +8,7 @@ import {
   getCachedAuthProfile,
   clearCachedProfile,
   setServerUrl,
+  switchActiveServer,
 } from '../src/api/client';
 import { getActiveServer, getServerScopedStorageKey } from '../src/store/serverAccounts';
 
@@ -36,7 +37,17 @@ jest.mock('react-native', () => ({
   Platform: { OS: 'ios' },
 }));
 
-const mockAxiosInstance = (axios as unknown as { __mockInstance: Record<string, jest.Mock> }).__mockInstance;
+type MockAxiosInstance = {
+  post: jest.Mock;
+  get: jest.Mock;
+  interceptors: {
+    request: { use: jest.Mock };
+    response: { use: jest.Mock };
+  };
+  defaults: { headers: { common: Record<string, unknown> } };
+};
+
+const mockAxiosInstance = (axios as unknown as { __mockInstance: MockAxiosInstance }).__mockInstance;
 
 const mockSecureStore = SecureStore as unknown as {
   getItemAsync: jest.Mock;
@@ -255,6 +266,40 @@ describe('API Client', () => {
     it('deletes cached profile from secure store', async () => {
       await clearCachedProfile();
       expect(mockSecureStore.deleteItemAsync).toHaveBeenCalledWith(expect.stringMatching(/^jot_server_v1_.*_cached_profile$/));
+    });
+  });
+
+  describe('switch lifecycle request guarding', () => {
+    it('cancels in-flight old-generation requests when switching servers', async () => {
+      await setServerUrl('https://switch-a.example.com');
+      const firstServer = await getActiveServer();
+      if (!firstServer) {
+        throw new Error('missing first server');
+      }
+
+      await setServerUrl('https://switch-b.example.com');
+      const secondServer = await getActiveServer();
+      if (!secondServer) {
+        throw new Error('missing second server');
+      }
+
+      const requestUse = mockAxiosInstance.interceptors.request.use;
+      const responseUse = mockAxiosInstance.interceptors.response.use;
+      const requestInterceptor = requestUse.mock.calls[requestUse.mock.calls.length - 1]?.[0] as (
+        config: Record<string, unknown>,
+      ) => Promise<Record<string, unknown>>;
+      const responseSuccessInterceptor = responseUse.mock.calls[responseUse.mock.calls.length - 1]?.[0] as (
+        response: { config: Record<string, unknown> },
+      ) => { config: Record<string, unknown> };
+
+      const staleConfig = await requestInterceptor({ method: 'get', headers: {} });
+
+      await switchActiveServer(firstServer.serverId);
+      const switched = await switchActiveServer(secondServer.serverId);
+      expect(switched).toBe(true);
+
+      expect((staleConfig.signal as AbortSignal).aborted).toBe(true);
+      expect(() => responseSuccessInterceptor({ config: staleConfig })).toThrow('Discarded stale response after server switch.');
     });
   });
 });

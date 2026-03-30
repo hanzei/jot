@@ -5,6 +5,15 @@ import { getLabels, addLabelToNote, removeLabelFromNote, renameLabel, deleteLabe
 import { getNotes } from '../api/notes';
 import { saveNote, saveNotes, renameLabelInLocalNotes, deleteLabelFromLocalNotes } from '../db/noteQueries';
 import { useNetworkStatus } from './useNetworkStatus';
+import {
+  labelsQueryKey,
+  noteLocalQueryKey,
+  noteLocalQueryScopeKey,
+  noteQueryKey,
+  noteQueryScopeKey,
+  notesLocalQueryScopeKey,
+  notesQueryScopeKey,
+} from './queryKeys';
 
 type LabelSyncScope = { archived?: true; trashed?: true; my_todo?: true } | undefined;
 
@@ -47,7 +56,7 @@ async function syncLocalNotesAfterLabelMutation(db: SQLiteDatabase) {
 
 export function useLabels() {
   return useQuery({
-    queryKey: ['labels'],
+    queryKey: labelsQueryKey(),
     queryFn: getLabels,
   });
 }
@@ -60,12 +69,12 @@ export function useAddLabelToNote() {
       addLabelToNote(noteId, name),
     onSuccess: async (updatedNote, { noteId }) => {
       await saveNote(db, updatedNote);
-      queryClient.invalidateQueries({ queryKey: ['notes'] });
-      queryClient.invalidateQueries({ queryKey: ['notes-local'] });
-      queryClient.invalidateQueries({ queryKey: ['note', noteId] });
-      queryClient.invalidateQueries({ queryKey: ['note-local', noteId] });
+      queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
+      queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+      queryClient.invalidateQueries({ queryKey: noteQueryKey(noteId) });
+      queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
       // Invalidate labels list since a new label name may have been created
-      queryClient.invalidateQueries({ queryKey: ['labels'] });
+      queryClient.invalidateQueries({ queryKey: labelsQueryKey() });
     },
   });
 }
@@ -78,11 +87,11 @@ export function useRemoveLabelFromNote() {
       removeLabelFromNote(noteId, labelId),
     onSuccess: async (updatedNote, { noteId }) => {
       await saveNote(db, updatedNote);
-      queryClient.invalidateQueries({ queryKey: ['notes'] });
-      queryClient.invalidateQueries({ queryKey: ['notes-local'] });
-      queryClient.invalidateQueries({ queryKey: ['note', noteId] });
-      queryClient.invalidateQueries({ queryKey: ['note-local', noteId] });
-      queryClient.invalidateQueries({ queryKey: ['labels'] });
+      queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
+      queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+      queryClient.invalidateQueries({ queryKey: noteQueryKey(noteId) });
+      queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
+      queryClient.invalidateQueries({ queryKey: labelsQueryKey() });
     },
   });
 }
@@ -113,11 +122,11 @@ export function useRenameLabel() {
       return updatedLabel;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['labels'] });
-      queryClient.invalidateQueries({ queryKey: ['notes'] });
-      queryClient.invalidateQueries({ queryKey: ['notes-local'] });
-      queryClient.invalidateQueries({ queryKey: ['note'] });
-      queryClient.invalidateQueries({ queryKey: ['note-local'] });
+      queryClient.invalidateQueries({ queryKey: labelsQueryKey() });
+      queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
+      queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+      queryClient.invalidateQueries({ queryKey: noteQueryScopeKey() });
+      queryClient.invalidateQueries({ queryKey: noteLocalQueryScopeKey() });
     },
   });
 }
@@ -147,11 +156,11 @@ export function useDeleteLabel() {
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['labels'] });
-      queryClient.invalidateQueries({ queryKey: ['notes'] });
-      queryClient.invalidateQueries({ queryKey: ['notes-local'] });
-      queryClient.invalidateQueries({ queryKey: ['note'] });
-      queryClient.invalidateQueries({ queryKey: ['note-local'] });
+      queryClient.invalidateQueries({ queryKey: labelsQueryKey() });
+      queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
+      queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+      queryClient.invalidateQueries({ queryKey: noteQueryScopeKey() });
+      queryClient.invalidateQueries({ queryKey: noteLocalQueryScopeKey() });
     },
   });
 }

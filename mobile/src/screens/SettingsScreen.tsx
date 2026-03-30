@@ -39,6 +39,7 @@ import i18n from '../i18n';
 import { SUPPORTED_LANGUAGES, getLanguagePreference, resolveLanguage, type LanguagePreference } from '../i18n/language';
 import { displayMessage, getCurrentLocale } from '../i18n/utils';
 import { saveNotes } from '../db/noteQueries';
+import { notesLocalQueryScopeKey, notesQueryScopeKey } from '../hooks/queryKeys';
 
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
@@ -171,8 +172,8 @@ export default function SettingsScreen() {
       } catch (syncErr) {
         console.warn('Post-import notes sync failed:', syncErr);
       } finally {
-        queryClient.invalidateQueries({ queryKey: ['notes-local'] });
-        queryClient.invalidateQueries({ queryKey: ['notes'] });
+        queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+        queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
       }
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: string } })?.response?.data;

@@ -8,6 +8,11 @@ jest.mock('react-native', () => ({
 jest.mock('../src/api/client', () => ({
   getStoredSession: jest.fn(),
   getBaseUrl: jest.fn().mockReturnValue('http://localhost:8080'),
+  isServerSwitchInProgress: jest.fn(() => false),
+}));
+jest.mock('../src/store/serverSwitchLifecycle', () => ({
+  getCurrentSwitchGenerationId: jest.fn(() => 1),
+  isSseQuiesced: jest.fn(() => false),
 }));
 
 import { getStoredSession } from '../src/api/client';
