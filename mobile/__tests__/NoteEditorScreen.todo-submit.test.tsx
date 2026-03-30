@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, fireEvent } from '@testing-library/react-native';
+import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import NoteEditorScreen from '../src/screens/NoteEditorScreen';
 
 const mockUseRoute = jest.fn();
@@ -25,7 +25,7 @@ jest.mock('@react-navigation/native', () => ({
   useFocusEffect: jest.fn(),
 }));
 
-jest.mock('@react-navigation/native-stack', () => ({
+jest.mock('@react-navigation/elements', () => ({
   __esModule: true,
   useHeaderHeight: () => 56,
 }));
@@ -156,7 +156,7 @@ describe('NoteEditorScreen todo submit behavior', () => {
     mockDuplicateMutateAsync.mockResolvedValue({ id: 'duplicate-note-id' });
   });
 
-  it('creates a new todo item when submitting existing todo text input', () => {
+  it('creates a new todo item when submitting existing todo text input', async () => {
     const { getByTestId, getAllByTestId } = render(<NoteEditorScreen />);
 
     fireEvent.press(getByTestId('toggle-note-type'));
@@ -167,6 +167,8 @@ describe('NoteEditorScreen todo submit behavior', () => {
     fireEvent.changeText(firstInput, 'Buy milk');
     fireEvent(firstInput, 'submitEditing');
 
-    expect(getAllByTestId('todo-item-text').length).toBe(baselineCount + 1);
+    await waitFor(() => {
+      expect(getAllByTestId('todo-item-text').length).toBe(baselineCount + 1);
+    });
   });
 });
