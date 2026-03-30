@@ -3,6 +3,10 @@ import { render, fireEvent } from '@testing-library/react-native';
 import AssigneePicker from '../src/components/AssigneePicker';
 import type { Collaborator } from '@jot/shared';
 
+jest.mock('react-native-safe-area-context', () => ({
+  useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
+}));
+
 const collaborators: Collaborator[] = [
   { userId: 'u1', username: 'alice', firstName: 'Alice', lastName: 'Smith' },
   { userId: 'u2', username: 'bob', firstName: 'Bob' },
