@@ -10,6 +10,7 @@ import {
   setServerStorageValue,
   deleteServerStorageValue,
   switchServer as switchRegisteredServer,
+  subscribeToActiveServerChanges,
 } from '../store/serverAccounts';
 
 const SESSION_KEY = 'session';
@@ -26,9 +27,28 @@ let currentBaseUrl = process.env.EXPO_PUBLIC_API_URL || getDefaultBaseUrl();
 let activeServerId: string | null = null;
 let serverContextReady = false;
 let sessionCache: string | null | undefined;
+type ActiveServerChangeListener = (serverId: string | null) => void;
+const activeServerChangeListeners = new Set<ActiveServerChangeListener>();
 
 export function getBaseUrl(): string {
   return currentBaseUrl;
+}
+
+export function getActiveServerId(): string | null {
+  return activeServerId;
+}
+
+function notifyActiveServerChange(serverId: string | null): void {
+  for (const listener of activeServerChangeListeners) {
+    listener(serverId);
+  }
+}
+
+export function subscribeToClientActiveServerChanges(listener: ActiveServerChangeListener): () => void {
+  activeServerChangeListeners.add(listener);
+  return () => {
+    activeServerChangeListeners.delete(listener);
+  };
 }
 
 export async function getStoredServerUrl(): Promise<string | null> {
@@ -78,6 +98,14 @@ async function ensureServerContextReady(): Promise<void> {
   if (active) {
     activeServerId = active.serverId;
     applyServerUrl(active.serverUrl);
+  }
+  subscribeToActiveServerChanges((serverId) => {
+    activeServerId = serverId;
+    sessionCache = undefined;
+    notifyActiveServerChange(serverId);
+  });
+  if (active) {
+    notifyActiveServerChange(active.serverId);
   }
   serverContextReady = true;
 }

@@ -4,6 +4,11 @@ jest.mock('expo-secure-store', () => ({
   deleteItemAsync: jest.fn().mockResolvedValue(undefined),
 }));
 
+jest.mock('expo-file-system/legacy', () => ({
+  getInfoAsync: jest.fn().mockResolvedValue({ exists: false, isDirectory: false }),
+  moveAsync: jest.fn().mockResolvedValue(undefined),
+}));
+
 jest.mock('expo-localization', () => ({
   getLocales: jest.fn(() => [{ languageTag: 'en-US', languageCode: 'en' }]),
 }));

@@ -1,7 +1,12 @@
 import React from 'react';
-import { render } from '@testing-library/react-native';
+import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import type { DrawerContentComponentProps } from '@react-navigation/drawer';
 import DrawerContent from '../src/components/DrawerContent';
+
+const mockSwitchActiveServer = jest.fn();
+const mockListServers = jest.fn();
+const mockGetActiveServer = jest.fn();
+const mockAddServer = jest.fn();
 
 jest.mock('../src/store/AuthContext', () => ({
   useAuth: () => ({
@@ -16,6 +21,7 @@ jest.mock('../src/store/AuthContext', () => ({
       updated_at: '2026-01-01T00:00:00Z',
     },
     logout: jest.fn(),
+    revalidateSession: jest.fn(async () => true),
   }),
 }));
 
@@ -61,6 +67,16 @@ jest.mock('@react-navigation/native', () => ({
   },
 }));
 
+jest.mock('../src/api/client', () => ({
+  switchActiveServer: (...args: unknown[]) => mockSwitchActiveServer(...args),
+}));
+
+jest.mock('../src/store/serverAccounts', () => ({
+  listServers: (...args: unknown[]) => mockListServers(...args),
+  getActiveServer: (...args: unknown[]) => mockGetActiveServer(...args),
+  addServer: (...args: unknown[]) => mockAddServer(...args),
+}));
+
 jest.mock('@react-navigation/drawer', () => {
   const { View } = jest.requireActual('react-native');
   const ReactLocal = jest.requireActual('react');
@@ -71,6 +87,14 @@ jest.mock('@react-navigation/drawer', () => {
 });
 
 describe('DrawerContent safe-area spacing', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockListServers.mockResolvedValue([]);
+    mockGetActiveServer.mockResolvedValue(null);
+    mockAddServer.mockResolvedValue({ success: true, serverId: 'srv_new' });
+    mockSwitchActiveServer.mockResolvedValue(true);
+  });
+
   it('applies top inset padding to drawer scroll content', () => {
     const props = {
       state: {
@@ -95,5 +119,35 @@ describe('DrawerContent safe-area spacing', () => {
     const scrollView = getByTestId('drawer-scroll-view');
 
     expect(scrollView.props.contentContainerStyle).toEqual({ paddingTop: 32 });
+  });
+
+  it('opens server picker from profile section', async () => {
+    const props = {
+      state: {
+        index: 0,
+        key: 'drawer-key',
+        routeNames: ['Notes', 'MyTodo', 'Archived', 'Trash'],
+        routes: [{ key: 'notes-key', name: 'Notes' }],
+        stale: false,
+        type: 'drawer',
+        history: [],
+      },
+      navigation: {
+        navigate: jest.fn(),
+        closeDrawer: jest.fn(),
+        dispatch: jest.fn(),
+      },
+      descriptors: {},
+      progress: {},
+    } as unknown as DrawerContentComponentProps;
+
+    const { getByTestId, findByTestId } = render(<DrawerContent {...props} />);
+    fireEvent.press(getByTestId('drawer-profile-button'));
+
+    await findByTestId('server-picker-modal');
+    await waitFor(() => {
+      expect(mockListServers).toHaveBeenCalled();
+      expect(mockGetActiveServer).toHaveBeenCalled();
+    });
   });
 });

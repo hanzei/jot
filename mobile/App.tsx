@@ -19,8 +19,14 @@ import { UsersProvider } from './src/store/UsersContext';
 import { OfflineProvider } from './src/store/OfflineContext';
 import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
 import RootNavigator, { type RootStackParamList } from './src/navigation/RootNavigator';
-import { getBaseUrl, getStoredServerUrl, restoreServerUrl } from './src/api/client';
-import { migrateDatabase } from './src/db/schema';
+import {
+  getActiveServerId,
+  getBaseUrl,
+  getStoredServerUrl,
+  restoreServerUrl,
+  subscribeToClientActiveServerChanges,
+} from './src/api/client';
+import { getDatabaseNameForServer, initializeServerDatabase } from './src/db/serverDatabase';
 import { canonicalizeServerOrigin } from '@jot/shared';
 import './src/i18n';
 
@@ -267,10 +273,31 @@ function NavigationWrapper() {
 }
 
 export default function App() {
+  const [activeServerId, setActiveServerId] = React.useState<string | null>(() => getActiveServerId());
+
+  React.useEffect(() => subscribeToClientActiveServerChanges((nextServerId) => {
+    setActiveServerId(nextServerId);
+    queryClient.clear();
+  }), []);
+
+  const databaseName = React.useMemo(
+    () => getDatabaseNameForServer(activeServerId),
+    [activeServerId],
+  );
+
+  const handleDatabaseInit = React.useCallback(
+    async (db: Parameters<typeof initializeServerDatabase>[0]) => initializeServerDatabase(db, activeServerId),
+    [activeServerId],
+  );
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <QueryClientProvider client={queryClient}>
-        <SQLiteProvider databaseName="jot.db" onInit={migrateDatabase}>
+        <SQLiteProvider
+          key={`sqlite-${databaseName}`}
+          databaseName={databaseName}
+          onInit={handleDatabaseInit}
+        >
           <AuthProvider>
             <MobileI18nProvider>
               <ThemeProvider>

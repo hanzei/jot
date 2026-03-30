@@ -17,6 +17,21 @@
     "logoutConfirmMessage": "Weet je zeker dat je wilt uitloggen?",
     "openMenu": "Menu openen"
   },
+  "serverPicker": {
+    "open": "Server kiezen",
+    "title": "Servers",
+    "noServers": "Nog geen servers toegevoegd.",
+    "addPlaceholder": "Voeg server-URL toe",
+    "addButton": "Toevoegen",
+    "working": "Bezig...",
+    "urlRequired": "Server-URL is vereist.",
+    "invalidUrl": "Voer een geldige server-URL in (http:// of https://).",
+    "addFailed": "Server toevoegen mislukt.",
+    "switchFailed": "Server wisselen mislukt.",
+    "duplicateTitle": "Server al toegevoegd",
+    "duplicateMessage": "Deze server bestaat al in je lijst.",
+    "switchToExisting": "Naar bestaande server"
+  },
   "auth": {
     "signInTitle": "Inloggen bij Jot",
     "signInSubtitle": "Log in op je account",

@@ -25,6 +25,8 @@ interface ServerRegistryState {
   servers: ServerAccountEntry[];
 }
 
+type ActiveServerListener = (serverId: string | null) => void;
+
 const REGISTRY_KEY = 'jot_server_registry_v1';
 const LEGACY_SERVER_URL_KEY = 'jot_server_url';
 const LEGACY_SESSION_KEY = 'jot_session';
@@ -32,6 +34,7 @@ const LEGACY_CACHED_PROFILE_KEY = 'jot_cached_profile';
 const LEGACY_MIGRATION_KEY = 'jot_server_registry_migrated_v1';
 
 export const SERVER_STORAGE_PREFIX = 'jot_server_v1';
+const activeServerListeners = new Set<ActiveServerListener>();
 
 function nowIso(): string {
   return new Date().toISOString();
@@ -122,6 +125,25 @@ async function saveRegistryState(state: ServerRegistryState): Promise<void> {
   );
 }
 
+function notifyActiveServerListeners(serverId: string | null): void {
+  for (const listener of activeServerListeners) {
+    listener(serverId);
+  }
+}
+
+function notifyActiveServerChanged(previousServerId: string | null, nextServerId: string | null): void {
+  if (previousServerId !== nextServerId) {
+    notifyActiveServerListeners(nextServerId);
+  }
+}
+
+export function subscribeToActiveServerChanges(listener: ActiveServerListener): () => void {
+  activeServerListeners.add(listener);
+  return () => {
+    activeServerListeners.delete(listener);
+  };
+}
+
 async function deleteLegacyKeys(): Promise<void> {
   await Promise.all([
     SecureStore.deleteItemAsync(LEGACY_SERVER_URL_KEY),
@@ -161,10 +183,13 @@ async function touchServerAsActive(serverId: string): Promise<void> {
         }
       : entry,
   );
-  await saveRegistryState({
+  const previousServerId = state.activeServerId;
+  const nextState = {
     activeServerId: serverId,
     servers: nextServers,
-  });
+  };
+  await saveRegistryState(nextState);
+  notifyActiveServerChanged(previousServerId, nextState.activeServerId);
 }
 
 export async function switchServer(serverId: string): Promise<boolean> {
@@ -233,10 +258,12 @@ export async function addServer(url: string): Promise<AddServerResult> {
     serverUrl: canonical,
     lastUsedAt: now,
   };
-  await saveRegistryState({
+  const nextState = {
     activeServerId: state.activeServerId ?? serverId,
     servers: [...state.servers, nextEntry],
-  });
+  };
+  await saveRegistryState(nextState);
+  notifyActiveServerChanged(state.activeServerId, nextState.activeServerId);
   await SecureStore.setItemAsync(buildServerStorageKey(serverId, 'server_url'), canonical);
 
   return {
@@ -256,10 +283,12 @@ export async function removeServer(serverId: string): Promise<boolean> {
   if (state.activeServerId === serverId) {
     nextActiveServerId = nextServers.length > 0 ? sortByRecentUse(nextServers)[0].serverId : null;
   }
-  await saveRegistryState({
+  const nextState = {
     activeServerId: nextActiveServerId,
     servers: nextServers,
-  });
+  };
+  await saveRegistryState(nextState);
+  notifyActiveServerChanged(state.activeServerId, nextState.activeServerId);
 
   await Promise.all([
     SecureStore.deleteItemAsync(buildServerStorageKey(serverId, 'session')),
@@ -285,6 +314,7 @@ export async function ensureServerRegistryMigrated(): Promise<void> {
         activeServerId,
         servers: state.servers,
       });
+      notifyActiveServerChanged(state.activeServerId, activeServerId);
     }
     // If registry already exists but migration marker is missing (for example
     // from an interrupted run), still clean up legacy keys.
@@ -311,6 +341,7 @@ export async function ensureServerRegistryMigrated(): Promise<void> {
     activeServerId: serverId,
     servers: [entry],
   });
+  notifyActiveServerChanged(state.activeServerId, serverId);
   await SecureStore.setItemAsync(buildServerStorageKey(serverId, 'server_url'), canonical);
 
   await deleteLegacyKeys();
