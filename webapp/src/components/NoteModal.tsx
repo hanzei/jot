@@ -111,9 +111,9 @@ interface SortableItemProps {
   onUpdateTodoItem: (index: number, field: 'text' | 'completed', value: string | boolean) => Promise<void>;
   onRemoveTodoItem: (itemId: string) => void;
   isCompleted?: boolean;
-  onKeyDown?: (index: number, e: React.KeyboardEvent<HTMLInputElement>) => void;
-  onPaste?: (index: number, e: React.ClipboardEvent<HTMLInputElement>) => void;
-  inputRef?: React.RefCallback<HTMLInputElement>;
+  onKeyDown?: (index: number, e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
+  onPaste?: (index: number, e: React.ClipboardEvent<HTMLTextAreaElement>) => void;
+  inputRef?: React.RefCallback<HTMLTextAreaElement>;
   onIndentChange?: (itemId: string, delta: 1 | -1) => void;
   isShared?: boolean;
   collaborators?: Collaborator[];
@@ -129,6 +129,7 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
   const suggestionsRef = useRef<HTMLDivElement>(null);
+  const todoTextRef = useRef<HTMLTextAreaElement | null>(null);
   const closeAssigneePicker = useCallback(() => setShowAssigneePicker(false), []);
   const {
     attributes,
@@ -151,6 +152,21 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
   const assignedUser = item.assignedTo ? usersById?.get(item.assignedTo) : undefined;
   const showAssignUI = isShared && collaborators && collaborators.length > 0 && onAssignItem;
   const placeholder = item.text ? '' : t('note.itemPlaceholder');
+  const autoResizeTodoText = useCallback((textarea: HTMLTextAreaElement | null) => {
+    if (!textarea) return;
+    textarea.style.height = 'auto';
+    textarea.style.height = `${textarea.scrollHeight}px`;
+  }, []);
+
+  const setTodoTextRef = useCallback((textarea: HTMLTextAreaElement | null) => {
+    todoTextRef.current = textarea;
+    autoResizeTodoText(textarea);
+    inputRef?.(textarea);
+  }, [autoResizeTodoText, inputRef]);
+
+  useEffect(() => {
+    autoResizeTodoText(todoTextRef.current);
+  }, [item.text, autoResizeTodoText]);
 
   const suggestions = useMemo(() => {
     const trimmed = item.text.trim();
@@ -182,7 +198,7 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
       ref={setNodeRef}
       style={style}
       data-testid="todo-item-row"
-      className={`group/item flex items-center gap-2 ${isDragging ? 'opacity-50' : ''} ${
+      className={`group/item flex items-start gap-2 ${isDragging ? 'opacity-50' : ''} ${
         isCompleted ? 'opacity-60' : ''
       }`}
       {...attributes}
@@ -203,19 +219,19 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
         type="checkbox"
         checked={item.completed}
         onChange={(e) => onUpdateTodoItem(index, 'completed', e.target.checked)}
-        className="h-4 w-4 text-blue-600 rounded"
+        className="h-4 w-4 text-blue-600 rounded mt-1"
       />
-      <div className="flex items-center min-w-0">
-        <div className="relative min-w-0">
-          <input
-            type="text"
+      <div className="flex flex-1 items-start min-w-0">
+        <div className="relative min-w-0 flex-1">
+          <textarea
             data-testid="todo-item-input"
             placeholder={placeholder}
-            size={Math.max((item.text || placeholder).length, 1)}
-            className={`field-sizing-content py-1 pl-1 pr-0 bg-transparent border-none outline-none min-w-0 placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white ${
+            rows={1}
+            className={`w-full py-1 pl-1 pr-0 bg-transparent border-none outline-none min-w-0 resize-none overflow-hidden whitespace-pre-wrap break-words placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white ${
               isCompleted ? 'line-through text-gray-500 dark:text-gray-400' : ''
             }`}
             value={item.text}
+            onInput={(e) => autoResizeTodoText(e.currentTarget)}
             onChange={(e) => {
               onUpdateTodoItem(index, 'text', e.target.value);
               if (e.target.value.trim()) setShowSuggestions(true);
@@ -250,7 +266,7 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
                   setSelectedSuggestionIndex(prev => Math.max(prev - 1, -1));
                   return;
                 }
-                if (e.key === 'Enter') {
+                if (e.key === 'Enter' && !e.shiftKey) {
                   e.preventDefault();
                   const idxToAccept = selectedSuggestionIndex >= 0 ? selectedSuggestionIndex : 0;
                   selectSuggestion(suggestions[idxToAccept]);
@@ -271,7 +287,7 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
               if (onKeyDown) onKeyDown(index, e);
             }}
             onPaste={(e) => onPaste?.(index, e)}
-            ref={inputRef}
+            ref={setTodoTextRef}
           />
           {showSuggestions && suggestions.length > 0 && !isCompleted && (
             <div
@@ -392,7 +408,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   });
   const itemsRef = useRef<TodoItem[]>([]);
   const pendingAutoSaveRequestRef = useRef<QueuedAutoSaveRequest | null>(null);
-  const itemInputRefs = useRef<Map<string, HTMLInputElement>>(new Map());
+  const itemInputRefs = useRef<Map<string, HTMLTextAreaElement>>(new Map());
   const contentRef = useRef<HTMLTextAreaElement>(null);
   const savingRef = useRef(false);
   const savedTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -707,9 +723,25 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     return newItem.id;
   };
 
-  const handleItemKeyDown = (index: number, e: React.KeyboardEvent<HTMLInputElement>) => {
+  const handleItemKeyDown = (index: number, e: React.KeyboardEvent<HTMLTextAreaElement>) => {
     if (e.key === 'ArrowUp' || e.key === 'ArrowDown') {
       if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
+      const textarea = e.currentTarget;
+      if (textarea.value.includes('\n')) return;
+
+      // Treat visually wrapped content as multiline so Arrow keys move caret
+      // within the current textarea instead of jumping focus to another row.
+      const styles = window.getComputedStyle(textarea);
+      const parsedLineHeight = Number.parseFloat(styles.lineHeight);
+      const lineHeight = Number.isFinite(parsedLineHeight) && parsedLineHeight > 0
+        ? parsedLineHeight
+        : 19.2;
+      const verticalPadding =
+        (Number.parseFloat(styles.paddingTop) || 0) +
+        (Number.parseFloat(styles.paddingBottom) || 0);
+      const singleLineHeight = lineHeight + verticalPadding;
+      if (textarea.scrollHeight > singleLineHeight + 2) return;
+
       const targetIndex = e.key === 'ArrowUp' ? index - 1 : index + 1;
       if (targetIndex < 0 || targetIndex >= uncompletedItems.length) return;
 
@@ -718,7 +750,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       const el = itemInputRefs.current.get(targetItem.id);
       if (el) {
         const cursorPos = Math.min(
-          (e.target as HTMLInputElement).selectionStart ?? 0,
+          (e.target as HTMLTextAreaElement).selectionStart ?? 0,
           el.value.length
         );
         el.focus();
@@ -729,6 +761,10 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
 
     if (e.repeat) return;
     if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
+
+    if (e.key === 'Enter' && e.shiftKey) {
+      return;
+    }
 
     if (e.key === 'Enter') {
       e.preventDefault();
@@ -763,7 +799,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     }
   };
 
-  const handleItemPaste = (index: number, e: React.ClipboardEvent<HTMLInputElement>) => {
+  const handleItemPaste = (index: number, e: React.ClipboardEvent<HTMLTextAreaElement>) => {
     const text = e.clipboardData.getData('text');
     const rawLines = text.split(/\r\n|\r|\n/);
     const lines = rawLines.filter(l => l.trim().length > 0);

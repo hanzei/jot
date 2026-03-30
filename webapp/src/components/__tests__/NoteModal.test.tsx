@@ -326,6 +326,17 @@ describe('NoteModal', () => {
       expect(screen.getByText('Add item')).toBeInTheDocument()
     })
 
+    it('uses multiline todo textarea so long text can wrap', async () => {
+      renderNoteModal(defaultProps)
+
+      fireEvent.click(screen.getByText('Todo List'))
+      fireEvent.click(screen.getByText('Add item'))
+
+      const todoInput = screen.getByTestId('todo-item-input')
+      expect(todoInput.tagName).toBe('TEXTAREA')
+      expect(todoInput).toHaveAttribute('rows', '1')
+    })
+
     it('renders existing todo items', async () => {
       const todoNote = createMockNote({
         note_type: 'todo',
