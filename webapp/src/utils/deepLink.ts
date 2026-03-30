@@ -17,9 +17,11 @@ export function mapWebPathToMobilePath(pathname: string): string {
 
 export function buildMobileDeepLink(pathname: string, serverOrigin: string): string {
   const mobilePath = mapWebPathToMobilePath(pathname);
-  const normalizedOrigin = canonicalizeServerOrigin(serverOrigin) ?? serverOrigin;
+  const normalizedOrigin = canonicalizeServerOrigin(serverOrigin);
   const base = mobilePath ? `jot://${mobilePath}` : 'jot://';
   const url = new URL(base);
-  url.searchParams.set('server', normalizedOrigin);
+  if (normalizedOrigin) {
+    url.searchParams.set('server', normalizedOrigin);
+  }
   return url.toString();
 }

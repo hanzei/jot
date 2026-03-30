@@ -122,6 +122,14 @@ async function saveRegistryState(state: ServerRegistryState): Promise<void> {
   );
 }
 
+async function deleteLegacyKeys(): Promise<void> {
+  await Promise.all([
+    SecureStore.deleteItemAsync(LEGACY_SERVER_URL_KEY),
+    SecureStore.deleteItemAsync(LEGACY_SESSION_KEY),
+    SecureStore.deleteItemAsync(LEGACY_CACHED_PROFILE_KEY),
+  ]);
+}
+
 function buildServerStorageKey(serverId: string, key: 'session' | 'cached_profile' | 'server_url'): string {
   return `${SERVER_STORAGE_PREFIX}_${serverId}_${key}`;
 }
@@ -276,6 +284,9 @@ export async function ensureServerRegistryMigrated(): Promise<void> {
         servers: state.servers,
       });
     }
+    // If registry already exists but migration marker is missing (for example
+    // from an interrupted run), still clean up legacy keys.
+    await deleteLegacyKeys();
     await SecureStore.setItemAsync(LEGACY_MIGRATION_KEY, '1');
     return;
   }
@@ -283,6 +294,7 @@ export async function ensureServerRegistryMigrated(): Promise<void> {
   const legacyServerUrl = await SecureStore.getItemAsync(LEGACY_SERVER_URL_KEY);
   const canonical = legacyServerUrl ? canonicalizeServerOrigin(legacyServerUrl) : null;
   if (!canonical) {
+    await deleteLegacyKeys();
     await SecureStore.setItemAsync(LEGACY_MIGRATION_KEY, '1');
     return;
   }
@@ -310,11 +322,7 @@ export async function ensureServerRegistryMigrated(): Promise<void> {
     await SecureStore.setItemAsync(buildServerStorageKey(serverId, 'cached_profile'), legacyCachedProfile);
   }
 
-  await Promise.all([
-    SecureStore.deleteItemAsync(LEGACY_SERVER_URL_KEY),
-    SecureStore.deleteItemAsync(LEGACY_SESSION_KEY),
-    SecureStore.deleteItemAsync(LEGACY_CACHED_PROFILE_KEY),
-  ]);
+  await deleteLegacyKeys();
   await SecureStore.setItemAsync(LEGACY_MIGRATION_KEY, '1');
 }
 

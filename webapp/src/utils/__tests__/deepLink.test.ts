@@ -41,5 +41,9 @@ describe('deepLink utilities', () => {
         'jot://notes/note-123?server=http%3A%2F%2Fjot.example.com',
       );
     });
+
+    it('omits server query when origin is invalid', () => {
+      expect(buildMobileDeepLink('/notes/note-123', 'notaurl')).toBe('jot://notes/note-123');
+    });
   });
 });

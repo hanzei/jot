@@ -49,6 +49,40 @@ describe('serverAccounts registry', () => {
     );
   });
 
+  it('cleans up legacy keys when legacy URL is invalid', async () => {
+    memory.set('jot_server_url', 'not-a-valid-url');
+    memory.set('jot_session', 'legacy-token');
+    memory.set('jot_cached_profile', '{"legacy":true}');
+
+    await ensureServerRegistryMigrated();
+
+    expect(memory.get('jot_server_url')).toBeUndefined();
+    expect(memory.get('jot_session')).toBeUndefined();
+    expect(memory.get('jot_cached_profile')).toBeUndefined();
+    expect(memory.get('jot_server_registry_migrated_v1')).toBe('1');
+  });
+
+  it('cleans up legacy keys when registry exists without migration marker', async () => {
+    const serverId = 'srv_manual01';
+    memory.set(
+      'jot_server_registry_v1',
+      JSON.stringify({
+        activeServerId: serverId,
+        servers: [{ serverId, serverUrl: 'https://existing.example.com', lastUsedAt: '2026-01-01T00:00:00.000Z' }],
+      }),
+    );
+    memory.set('jot_server_url', 'https://legacy.example.com');
+    memory.set('jot_session', 'legacy-token');
+    memory.set('jot_cached_profile', '{"legacy":true}');
+
+    await ensureServerRegistryMigrated();
+
+    expect(memory.get('jot_server_url')).toBeUndefined();
+    expect(memory.get('jot_session')).toBeUndefined();
+    expect(memory.get('jot_cached_profile')).toBeUndefined();
+    expect(memory.get('jot_server_registry_migrated_v1')).toBe('1');
+  });
+
   it('deduplicates by canonical origin', async () => {
     await ensureServerRegistryMigrated();
     const first = await addServer('https://example.com/path');
