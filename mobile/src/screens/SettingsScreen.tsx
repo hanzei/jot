@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -23,7 +23,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
-import { getBaseUrl } from '../api/client';
+import { subscribeToClientActiveServerChanges } from '../api/client';
 import { importKeepFile, getNotes } from '../api/notes';
 import {
   updateMe,
@@ -40,6 +40,8 @@ import { SUPPORTED_LANGUAGES, getLanguagePreference, resolveLanguage, type Langu
 import { displayMessage, getCurrentLocale } from '../i18n/utils';
 import { saveNotes } from '../db/noteQueries';
 import { notesLocalQueryScopeKey, notesQueryScopeKey } from '../hooks/queryKeys';
+import { getActiveServer } from '../store/serverAccounts';
+import { useActiveServerBaseUrl } from '../hooks/useActiveServerBaseUrl';
 
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
@@ -49,6 +51,7 @@ export default function SettingsScreen() {
   const { user, settings, setUser, setSettings } = useAuth();
   const { colors } = useTheme();
   const { t } = useTranslation();
+  const activeServerBaseUrl = useActiveServerBaseUrl();
 
   const [firstName, setFirstName] = useState(user?.first_name ?? '');
   const [lastName, setLastName] = useState(user?.last_name ?? '');
@@ -92,6 +95,64 @@ export default function SettingsScreen() {
   const [aboutLoading, setAboutLoading] = useState(false);
   const [aboutError, setAboutError] = useState('');
   const [aboutExpanded, setAboutExpanded] = useState(false);
+  const [activeServerUrl, setActiveServerUrl] = useState<string | null>(null);
+  const previousServerUrlRef = useRef<string | null | undefined>(undefined);
+
+  useEffect(() => {
+    let mounted = true;
+    const loadActiveServer = async () => {
+      try {
+        const activeServer = await getActiveServer();
+        if (mounted) {
+          const nextServerUrl = activeServer?.serverUrl ?? null;
+          const previousServerUrl = previousServerUrlRef.current;
+          setActiveServerUrl(nextServerUrl);
+          if (previousServerUrl !== nextServerUrl) {
+            previousServerUrlRef.current = nextServerUrl;
+            setSessions([]);
+            setSessionsError('');
+            setSessionsLoading(true);
+            setAboutInfo(null);
+            setAboutError('');
+            void listSessions()
+              .then((nextSessions) => {
+                if (mounted) {
+                  setSessions(nextSessions);
+                }
+              })
+              .catch(() => {
+                if (mounted) {
+                  setSessionsError('settings.sessionsLoadFailed');
+                }
+              })
+              .finally(() => {
+                if (mounted) {
+                  setSessionsLoading(false);
+                }
+              });
+          }
+        }
+      } catch (error) {
+        console.warn('Failed to load active server in settings:', error);
+        if (mounted) {
+          setActiveServerUrl(null);
+          setSessions([]);
+          setSessionsLoading(false);
+          setSessionsError('settings.sessionsLoadFailed');
+        }
+      }
+    };
+
+    void loadActiveServer();
+    const unsubscribe = subscribeToClientActiveServerChanges(() => {
+      void loadActiveServer();
+    });
+
+    return () => {
+      mounted = false;
+      unsubscribe();
+    };
+  }, []);
 
   useEffect(() => {
     setLanguagePref(getLanguagePreference(settings?.language));
@@ -102,14 +163,6 @@ export default function SettingsScreen() {
     setProfileSuccess('');
     setPasswordSuccess('');
   }, [settings?.language]);
-
-  useEffect(() => {
-    setSessionsLoading(true);
-    listSessions()
-      .then(setSessions)
-      .catch(() => setSessionsError('settings.sessionsLoadFailed'))
-      .finally(() => setSessionsLoading(false));
-  }, []);
 
   const handleRevokeSession = useCallback(async (id: string) => {
     setRevokingId(id);
@@ -387,7 +440,7 @@ export default function SettingsScreen() {
               <View>
                 {hasProfileIcon && user ? (
                   <Image
-                    source={{ uri: `${getBaseUrl()}/api/v1/users/${user.id}/profile-icon?v=${iconVersion}` }}
+                    source={{ uri: `${activeServerBaseUrl}/api/v1/users/${user.id}/profile-icon?v=${iconVersion}` }}
                     style={styles.profileAvatar}
                   />
                 ) : (
@@ -720,6 +773,15 @@ export default function SettingsScreen() {
             )}
           </View>
 
+          {/* Server */}
+          <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('settings.currentServerSection')}</Text>
+            <Text style={[styles.label, styles.serverLabel, { color: colors.icon }]}>{t('settings.currentServerLabel')}</Text>
+            <Text style={[styles.serverValue, { color: colors.text }]}>
+              {activeServerUrl ?? t('settings.noServerConfigured')}
+            </Text>
+          </View>
+
           {/* About */}
           <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('settings.aboutSection')}</Text>
@@ -757,6 +819,10 @@ export default function SettingsScreen() {
                 <View style={[styles.aboutDivider, { backgroundColor: colors.divider }]} />
                 <View style={styles.aboutSection}>
                   <Text style={[styles.aboutSectionTitle, { color: colors.textMuted }]}>{t('about.serverInfo')}</Text>
+                  <AboutRow
+                    label={t('about.serverOrigin')}
+                    value={activeServerUrl ?? t('settings.noServerConfigured')}
+                  />
                   {aboutLoading && <ActivityIndicator size="small" color={colors.primary} />}
                   {aboutError !== '' && (
                     <Text style={[styles.errorText, { color: colors.error }]}>{displayMessage(t, aboutError)}</Text>
@@ -1052,6 +1118,14 @@ const styles = StyleSheet.create({
   },
   preferenceLabel: {
     marginTop: 16,
+  },
+  serverLabel: {
+    marginTop: 0,
+  },
+  serverValue: {
+    fontSize: 14,
+    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
+    marginTop: 2,
   },
   aboutToggle: {
     flexDirection: 'row',

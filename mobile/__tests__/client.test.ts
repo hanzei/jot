@@ -321,4 +321,45 @@ describe('API Client', () => {
       expect(() => responseSuccessInterceptor({ config: staleConfig })).toThrow('Discarded stale response after server switch.');
     });
   });
+
+  describe('server-scoped auth/session isolation across two servers', () => {
+    it('stores and reads session cookies independently per active server', async () => {
+      await setServerUrl('https://isolation-a.example.com');
+      const serverA = await getActiveServer();
+      if (!serverA) {
+        throw new Error('missing server A');
+      }
+
+      await setServerUrl('https://isolation-b.example.com');
+      const serverB = await getActiveServer();
+      if (!serverB) {
+        throw new Error('missing server B');
+      }
+
+      mockAxiosInstance.post
+        .mockResolvedValueOnce({
+          data: { user: { id: 'a', username: 'usera' }, settings: { theme: 'system', note_sort: 'manual' } },
+          headers: { 'set-cookie': ['jot_session=token-a; Path=/; HttpOnly'] },
+        })
+        .mockResolvedValueOnce({
+          data: { user: { id: 'b', username: 'userb' }, settings: { theme: 'system', note_sort: 'manual' } },
+          headers: { 'set-cookie': ['jot_session=token-b; Path=/; HttpOnly'] },
+        });
+
+      await switchActiveServer(serverA.serverId);
+      await auth.login({ username: 'usera', password: 'pass' });
+
+      await switchActiveServer(serverB.serverId);
+      await auth.login({ username: 'userb', password: 'pass' });
+
+      expect(memory.get(getServerScopedStorageKey(serverA.serverId, 'session'))).toBe('token-a');
+      expect(memory.get(getServerScopedStorageKey(serverB.serverId, 'session'))).toBe('token-b');
+
+      await switchActiveServer(serverA.serverId);
+      expect(await getStoredSession()).toBe('token-a');
+
+      await switchActiveServer(serverB.serverId);
+      expect(await getStoredSession()).toBe('token-b');
+    });
+  });
 });

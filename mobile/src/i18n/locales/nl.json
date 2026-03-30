@@ -162,7 +162,10 @@
     "aboutButton": "Over Jot",
     "importSection": "Importeren",
     "importDescription": "Importeer notities uit Google Keep-exports.",
-    "importButton": "Importeren uit Google Keep"
+    "importButton": "Importeren uit Google Keep",
+    "currentServerSection": "Server",
+    "currentServerLabel": "Actieve server",
+    "noServerConfigured": "Geen server geconfigureerd"
   },
   "about": {
     "clientInfo": "Clientinformatie",
@@ -175,7 +178,8 @@
     "commit": "Commit",
     "buildTime": "Bouwtijd",
     "goVersion": "Go-versie",
-    "failedLoad": "Serverinformatie laden mislukt"
+    "failedLoad": "Serverinformatie laden mislukt",
+    "serverOrigin": "Serveroorsprong"
   },
   "note": {
     "share": "Delen",

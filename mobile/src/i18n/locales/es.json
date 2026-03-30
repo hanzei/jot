@@ -162,7 +162,10 @@
     "aboutButton": "Acerca de Jot",
     "importSection": "Importar",
     "importDescription": "Importa notas desde exportaciones de Google Keep.",
-    "importButton": "Importar desde Google Keep"
+    "importButton": "Importar desde Google Keep",
+    "currentServerSection": "Servidor",
+    "currentServerLabel": "Servidor activo",
+    "noServerConfigured": "No hay servidor configurado"
   },
   "about": {
     "clientInfo": "Información del cliente",
@@ -175,7 +178,8 @@
     "commit": "Commit",
     "buildTime": "Fecha de compilación",
     "goVersion": "Versión de Go",
-    "failedLoad": "Error al cargar la información del servidor"
+    "failedLoad": "Error al cargar la información del servidor",
+    "serverOrigin": "Origen del servidor"
   },
   "note": {
     "share": "Compartir",

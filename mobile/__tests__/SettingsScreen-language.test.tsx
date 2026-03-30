@@ -51,6 +51,11 @@ jest.mock('../src/api/notes', () => ({
 
 jest.mock('../src/api/client', () => ({
   getBaseUrl: jest.fn(() => 'http://localhost:8080'),
+  subscribeToClientActiveServerChanges: jest.fn(() => () => {}),
+}));
+
+jest.mock('../src/store/serverAccounts', () => ({
+  getActiveServer: jest.fn(async () => ({ serverUrl: 'https://active.example.com' })),
 }));
 
 const mockUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;
@@ -195,5 +200,17 @@ describe('SettingsScreen language selection', () => {
     });
 
     expect(setSettings).toHaveBeenCalledWith(expect.objectContaining({ theme: 'dark' }));
+  });
+
+  it('shows active server identity in the server section', async () => {
+    const { getByText } = render(<SettingsScreen />);
+
+    await waitFor(() => {
+      expect(mockListSessions).toHaveBeenCalled();
+    });
+
+    expect(getByText('Server')).toBeTruthy();
+    expect(getByText('Active server')).toBeTruthy();
+    expect(getByText('https://active.example.com')).toBeTruthy();
   });
 });

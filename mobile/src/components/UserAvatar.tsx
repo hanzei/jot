@@ -1,7 +1,7 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, Image, StyleSheet } from 'react-native';
 import { getAvatarColor } from '@jot/shared';
-import { getBaseUrl } from '../api/client';
+import { useActiveServerBaseUrl } from '../hooks/useActiveServerBaseUrl';
 
 const SIZE_MAP = {
   small: 24,
@@ -17,8 +17,13 @@ interface UserAvatarProps {
 
 export default function UserAvatar({ userId, username, hasProfileIcon, size = 'medium' }: UserAvatarProps) {
   const [imageError, setImageError] = useState(false);
+  const baseUrl = useActiveServerBaseUrl();
   const dimension = SIZE_MAP[size];
   const fontSize = size === 'small' ? 10 : 15;
+
+  useEffect(() => {
+    setImageError(false);
+  }, [baseUrl, userId, hasProfileIcon]);
 
   const safeUsername = username || 'U';
   const bgColor = getAvatarColor(safeUsername);
@@ -27,7 +32,7 @@ export default function UserAvatar({ userId, username, hasProfileIcon, size = 'm
   if (hasProfileIcon && !imageError) {
     return (
       <Image
-        source={{ uri: `${getBaseUrl()}/api/v1/users/${userId}/profile-icon` }}
+        source={{ uri: `${baseUrl}/api/v1/users/${userId}/profile-icon` }}
         style={[styles.avatar, { width: dimension, height: dimension, borderRadius: dimension / 2 }]}
         onError={() => setImageError(true)}
       />
