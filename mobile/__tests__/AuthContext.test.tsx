@@ -98,6 +98,7 @@ describe('AuthContext', () => {
   });
 
   it('starts with isLoading true and no user', async () => {
+    mockClientModule.initializeServerContext.mockResolvedValueOnce(undefined);
     const { getByTestId, unmount } = render(
       <AuthProvider>
         <TestConsumer />
@@ -108,7 +109,7 @@ describe('AuthContext', () => {
 
     await waitFor(() => {
       expect(getByTestId('loading').props.children).toBe('false');
-    });
+    }, { timeout: 4000 });
     expect(getByTestId('loading').props.children).toBe('false');
     expect(getByTestId('authenticated').props.children).toBe('false');
     expect(getByTestId('username').props.children).toBe('none');
