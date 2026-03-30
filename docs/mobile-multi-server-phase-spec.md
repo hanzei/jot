@@ -171,9 +171,15 @@ Acceptance:
 Tasks:
 
 - Deep link handling:
-  - deep-link contract: `jot://...?...&server=<encodedServerUrl>`
-  - `server` query param value is the full server URL string before canonicalization.
+  - deep-link contract: `jot://...?...&server=<encodedServerOrigin>`
+  - `server` query param value is an origin-only value: `scheme://host[:port]` (no path/query/hash).
   - `server` value must be URL-encoded in the link and URL-decoded before canonicalization.
+  - this matches current behavior in webapp deep-link generation and mobile deep-link parsing/matching.
+  - if full server URL/path matching is ever adopted, it must be a coordinated change across:
+    - `webapp/src/utils/deepLink.ts` (`buildMobileDeepLink` + origin normalization behavior)
+    - `mobile/App.tsx` (`parseDeepLink`, `normalizeServerOrigin`, and server comparison flow)
+    - backward compatibility handling for existing origin-only links
+  - path-based server identity in deep-link `server` values is currently out of scope.
   - if `server` matches existing canonical URL: switch and continue.
   - if unknown: prompt add/switch flow before protected navigation.
   - if invalid URL: reject with user-facing error.
