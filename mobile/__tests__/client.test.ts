@@ -1,6 +1,14 @@
 import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
-import { auth, getStoredSession, clearStoredSession, cacheAuthProfile, getCachedAuthProfile, clearCachedProfile } from '../src/api/client';
+import {
+  auth,
+  getStoredSession,
+  clearStoredSession,
+  cacheAuthProfile,
+  getCachedAuthProfile,
+  clearCachedProfile,
+  ensureActiveServer,
+} from '../src/api/client';
 
 jest.mock('axios', () => {
   const mockInstance = {
@@ -36,8 +44,26 @@ const mockSecureStore = SecureStore as unknown as {
 };
 
 describe('API Client', () => {
+  const memory = new Map<string, string>();
+
+  beforeAll(async () => {
+    mockSecureStore.getItemAsync.mockImplementation(async (key: string) => memory.get(key) ?? null);
+    mockSecureStore.setItemAsync.mockImplementation(async (key: string, value: string) => {
+      memory.set(key, value);
+    });
+    mockSecureStore.deleteItemAsync.mockImplementation(async (key: string) => {
+      memory.delete(key);
+    });
+    await ensureActiveServer('https://test.example.com');
+  });
+
   beforeEach(() => {
     jest.clearAllMocks();
+    for (const key of Array.from(memory.keys())) {
+      if (/^jot_server_v1_.*_(session|cached_profile)$/.test(key)) {
+        memory.delete(key);
+      }
+    }
   });
 
   describe('auth.login', () => {
