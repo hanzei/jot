@@ -31,18 +31,23 @@ interface NavItem {
 }
 
 function extractErrorMessage(error: unknown, fallback: string) {
-  if (
-    typeof error === 'object' &&
-    error !== null &&
-    'response' in error &&
-    typeof error.response === 'object' &&
-    error.response !== null &&
-    'data' in error.response &&
-    typeof error.response.data === 'string'
-  ) {
-    const message = error.response.data.trim();
-    if (message) {
-      return message;
+  if (typeof error === 'object' && error !== null && 'response' in error) {
+    const response = error.response;
+    if (typeof response === 'object' && response !== null && 'data' in response) {
+      const { data } = response as { data?: unknown };
+      if (typeof data === 'string') {
+        const message = data.trim();
+        if (message) {
+          return message;
+        }
+      } else if (typeof data === 'object' && data !== null) {
+        const objectData = data as { message?: unknown; error?: unknown; detail?: unknown };
+        for (const candidate of [objectData.message, objectData.error, objectData.detail]) {
+          if (typeof candidate === 'string' && candidate.trim()) {
+            return candidate.trim();
+          }
+        }
+      }
     }
   }
 
@@ -262,21 +267,14 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
       }
 
       setNewServerUrl('');
-      const switched = await switchActiveServer(result.serverId);
-      if (!switched) {
-        Alert.alert(t('common.error'), t('serverPicker.switchFailed'));
-        return;
-      }
-      await revalidateSession();
-      setIsServerPickerVisible(false);
-      props.navigation.closeDrawer();
+      await handleSwitchToServer(result.serverId);
     } catch {
       Alert.alert(t('common.error'), t('serverPicker.addFailed'));
     } finally {
       setIsServerActionPending(false);
       await loadServerPickerData();
     }
-  }, [isServerActionPending, loadServerPickerData, newServerUrl, props.navigation, revalidateSession, t]);
+  }, [handleSwitchToServer, isServerActionPending, loadServerPickerData, newServerUrl, t]);
 
   const displayName = user
     ? [user.first_name, user.last_name].filter(Boolean).join(' ') || user.username

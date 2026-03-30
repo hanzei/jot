@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert, Linking } from 'react-native';
+import { ActivityIndicator, Alert, Linking, View } from 'react-native';
 import {
   NavigationContainer,
   DefaultTheme,
@@ -23,6 +23,7 @@ import {
   getActiveServerId,
   getBaseUrl,
   getStoredServerUrl,
+  initializeServerContext,
   restoreServerUrl,
   subscribeToClientActiveServerChanges,
 } from './src/api/client';
@@ -273,32 +274,67 @@ function NavigationWrapper() {
 }
 
 export default function App() {
-  const [activeServerId, setActiveServerId] = React.useState<string | null>(() => getActiveServerId());
+  const [activeServerId, setActiveServerId] = React.useState<string | null>(null);
+  const [isServerContextReady, setIsServerContextReady] = React.useState(false);
 
-  React.useEffect(() => subscribeToClientActiveServerChanges((nextServerId) => {
-    setActiveServerId(nextServerId);
-    queryClient.clear();
-  }), []);
+  React.useEffect(() => {
+    let isMounted = true;
+    const unsubscribe = subscribeToClientActiveServerChanges((nextServerId) => {
+      if (!isMounted) {
+        return;
+      }
+      setActiveServerId(nextServerId);
+      queryClient.clear();
+    });
 
-  const databaseName = React.useMemo(
-    () => getDatabaseNameForServer(activeServerId),
-    [activeServerId],
-  );
+    void (async () => {
+      let didFinish = false;
+      try {
+        await initializeServerContext();
+        didFinish = true;
+      } catch (error) {
+        console.warn('Failed to initialize server context:', error);
+      }
 
-  const handleDatabaseInit = React.useCallback(
-    async (db: Parameters<typeof initializeServerDatabase>[0]) => initializeServerDatabase(db, activeServerId),
-    [activeServerId],
-  );
+      if (!isMounted) {
+        return;
+      }
+      setActiveServerId(getActiveServerId());
+      setIsServerContextReady(true);
+      if (!didFinish) {
+        queryClient.clear();
+      }
+    })();
+
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
+  }, []);
+
+  const databaseName = getDatabaseNameForServer(activeServerId);
+  const handleDatabaseInit = async (db: Parameters<typeof initializeServerDatabase>[0]) =>
+    initializeServerDatabase(db, activeServerId);
+
+  if (!isServerContextReady) {
+    return (
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+          <ActivityIndicator size="large" />
+        </View>
+      </GestureHandlerRootView>
+    );
+  }
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <QueryClientProvider client={queryClient}>
-        <SQLiteProvider
-          key={`sqlite-${databaseName}`}
-          databaseName={databaseName}
-          onInit={handleDatabaseInit}
-        >
-          <AuthProvider>
+        <AuthProvider>
+          <SQLiteProvider
+            key={`sqlite-${databaseName}`}
+            databaseName={databaseName}
+            onInit={handleDatabaseInit}
+          >
             <MobileI18nProvider>
               <ThemeProvider>
                 <UsersProvider>
@@ -308,8 +344,8 @@ export default function App() {
                 </UsersProvider>
               </ThemeProvider>
             </MobileI18nProvider>
-          </AuthProvider>
-        </SQLiteProvider>
+          </SQLiteProvider>
+        </AuthProvider>
       </QueryClientProvider>
     </GestureHandlerRootView>
   );

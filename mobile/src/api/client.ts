@@ -26,6 +26,7 @@ function getDefaultBaseUrl(): string {
 let currentBaseUrl = process.env.EXPO_PUBLIC_API_URL || getDefaultBaseUrl();
 let activeServerId: string | null = null;
 let serverContextReady = false;
+let serverContextInitPromise: Promise<void> | null = null;
 let sessionCache: string | null | undefined;
 type ActiveServerChangeListener = (serverId: string | null) => void;
 const activeServerChangeListeners = new Set<ActiveServerChangeListener>();
@@ -93,21 +94,30 @@ async function ensureServerContextReady(): Promise<void> {
   if (serverContextReady) {
     return;
   }
-  await ensureServerRegistryMigrated();
-  const active = await getActiveServer();
-  if (active) {
-    activeServerId = active.serverId;
-    applyServerUrl(active.serverUrl);
+  if (!serverContextInitPromise) {
+    serverContextInitPromise = (async () => {
+      await ensureServerRegistryMigrated();
+      const active = await getActiveServer();
+      if (active) {
+        activeServerId = active.serverId;
+        applyServerUrl(active.serverUrl);
+      }
+      subscribeToActiveServerChanges((serverId) => {
+        activeServerId = serverId;
+        sessionCache = undefined;
+        notifyActiveServerChange(serverId);
+      });
+      if (active) {
+        notifyActiveServerChange(active.serverId);
+      }
+      serverContextReady = true;
+    })();
   }
-  subscribeToActiveServerChanges((serverId) => {
-    activeServerId = serverId;
-    sessionCache = undefined;
-    notifyActiveServerChange(serverId);
-  });
-  if (active) {
-    notifyActiveServerChange(active.serverId);
+  try {
+    await serverContextInitPromise;
+  } finally {
+    serverContextInitPromise = null;
   }
-  serverContextReady = true;
 }
 
 async function resolveActiveServerId(): Promise<string | null> {

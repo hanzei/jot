@@ -13,6 +13,13 @@ jest.mock('expo-localization', () => ({
   getLocales: jest.fn(() => [{ languageTag: 'en-US', languageCode: 'en' }]),
 }));
 
+const mockDb = {
+  execAsync: jest.fn().mockResolvedValue(undefined),
+  runAsync: jest.fn().mockResolvedValue({ lastInsertRowId: 1, changes: 1 }),
+  getFirstAsync: jest.fn().mockResolvedValue(null),
+  getAllAsync: jest.fn().mockResolvedValue([]),
+};
+
 jest.mock('expo-sqlite', () => ({
   SQLiteProvider: ({ children, onInit }) => {
     // Run onInit asynchronously to simulate DB initialization
@@ -24,14 +31,10 @@ jest.mock('expo-sqlite', () => ({
     return ready ? children : null;
   },
   useSQLiteContext: () => mockDb,
+  openDatabaseAsync: jest.fn().mockResolvedValue(mockDb),
+  backupDatabaseAsync: jest.fn().mockResolvedValue(undefined),
+  defaultDatabaseDirectory: 'file:///db',
 }));
-
-const mockDb = {
-  execAsync: jest.fn().mockResolvedValue(undefined),
-  runAsync: jest.fn().mockResolvedValue({ lastInsertRowId: 1, changes: 1 }),
-  getFirstAsync: jest.fn().mockResolvedValue(null),
-  getAllAsync: jest.fn().mockResolvedValue([]),
-};
 
 global.mockDb = mockDb;
 

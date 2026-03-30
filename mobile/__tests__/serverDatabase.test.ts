@@ -2,11 +2,6 @@ import * as SecureStore from 'expo-secure-store';
 import * as SQLite from 'expo-sqlite';
 import * as FileSystem from 'expo-file-system/legacy';
 import { getDatabaseNameForServer, initializeServerDatabase } from '../src/db/serverDatabase';
-import { migrateDatabase } from '../src/db/schema';
-
-jest.mock('../src/db/schema', () => ({
-  migrateDatabase: jest.fn().mockResolvedValue(undefined),
-}));
 
 describe('server database isolation', () => {
   const mockSecureStore = SecureStore as unknown as {
@@ -22,14 +17,13 @@ describe('server database isolation', () => {
     getInfoAsync: jest.Mock;
     moveAsync: jest.Mock;
   };
-  const mockMigrateDatabase = migrateDatabase as jest.Mock;
-
   const store = new Map<string, string>();
 
   const makeDb = () => ({
     execAsync: jest.fn().mockResolvedValue(undefined),
     closeAsync: jest.fn().mockResolvedValue(undefined),
     getFirstAsync: jest.fn().mockResolvedValue({ count: 0 }),
+    getAllAsync: jest.fn().mockResolvedValue([{ name: 'created_at' }, { name: 'updated_at' }, { name: 'assigned_to' }]),
     runAsync: jest.fn().mockResolvedValue({}),
   });
 
@@ -54,7 +48,7 @@ describe('server database isolation', () => {
     const targetDb = makeDb();
     await initializeServerDatabase(targetDb as unknown as Parameters<typeof initializeServerDatabase>[0], 'srv_1234abcd');
 
-    expect(mockMigrateDatabase).toHaveBeenCalledWith(targetDb);
+    expect(targetDb.execAsync).toHaveBeenCalled();
     expect(mockSecureStore.setItemAsync).toHaveBeenCalledWith('jot_sqlite_legacy_migrated_v1', '1');
     expect(mockSQLite.openDatabaseAsync).not.toHaveBeenCalled();
   });
@@ -63,7 +57,7 @@ describe('server database isolation', () => {
     const targetDb = makeDb();
     await initializeServerDatabase(targetDb as unknown as Parameters<typeof initializeServerDatabase>[0], null);
 
-    expect(mockMigrateDatabase).toHaveBeenCalledWith(targetDb);
+    expect(targetDb.execAsync).toHaveBeenCalled();
     expect(mockSecureStore.setItemAsync).not.toHaveBeenCalledWith('jot_sqlite_legacy_migrated_v1', '1');
   });
 
