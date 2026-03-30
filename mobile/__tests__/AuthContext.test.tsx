@@ -106,9 +106,9 @@ describe('AuthContext', () => {
 
     expect(getByTestId('loading').props.children).toBe('true');
 
-    // Flush the async restoreSession effect (resolved getStoredSession promise)
-    await act(async () => {});
-
+    await waitFor(() => {
+      expect(getByTestId('loading').props.children).toBe('false');
+    });
     expect(getByTestId('loading').props.children).toBe('false');
     expect(getByTestId('authenticated').props.children).toBe('false');
     expect(getByTestId('username').props.children).toBe('none');
