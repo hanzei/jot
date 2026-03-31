@@ -6,7 +6,9 @@ const mockUseRoute = jest.fn();
 const mockGoBack = jest.fn();
 const mockReplace = jest.fn();
 const mockNavigate = jest.fn();
-const mockSetOptions = jest.fn();
+const mockDispatch = jest.fn();
+const mockSetParams = jest.fn();
+const mockNavigationAddListener = jest.fn().mockReturnValue(jest.fn());
 const mockCreateMutateAsync = jest.fn();
 const mockUpdateMutateAsync = jest.fn();
 const mockDeleteMutateAsync = jest.fn();
@@ -20,7 +22,9 @@ jest.mock('@react-navigation/native', () => ({
     goBack: mockGoBack,
     replace: mockReplace,
     navigate: mockNavigate,
-    setOptions: mockSetOptions,
+    dispatch: mockDispatch,
+    setParams: mockSetParams,
+    addListener: mockNavigationAddListener,
   }),
   useFocusEffect: jest.fn(),
 }));
@@ -87,6 +91,11 @@ jest.mock('../src/store/SSEContext', () => ({
   useSSESubscription: jest.fn(),
 }));
 
+jest.mock('../src/components/LabelPicker', () => ({
+  __esModule: true,
+  default: () => null,
+}));
+
 jest.mock('react-i18next', () => ({
   __esModule: true,
   useTranslation: () => ({
@@ -148,6 +157,7 @@ jest.mock('../src/i18n', () => ({
 describe('NoteEditorScreen todo submit behavior', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockNavigationAddListener.mockReturnValue(jest.fn());
     mockUseRoute.mockReturnValue({ params: { noteId: null } });
     mockUseOfflineNote.mockReturnValue({ data: null });
     mockCreateMutateAsync.mockResolvedValue({ id: 'created-note-id' });
@@ -195,6 +205,18 @@ describe('NoteEditorScreen todo submit behavior', () => {
 
     mockUseRoute.mockReturnValue({ params: { noteId: 'note-123' } });
     mockUseOfflineNote.mockReturnValue({ data: existingNote });
+
+    const { unmount } = render(<NoteEditorScreen />);
+    unmount();
+
+    await waitFor(() => {
+      expect(mockUpdateMutateAsync).not.toHaveBeenCalled();
+    });
+  });
+
+  it('does not persist when existing note is still hydrating and user leaves', async () => {
+    mockUseRoute.mockReturnValue({ params: { noteId: 'note-456' } });
+    mockUseOfflineNote.mockReturnValue({ data: null });
 
     const { unmount } = render(<NoteEditorScreen />);
     unmount();

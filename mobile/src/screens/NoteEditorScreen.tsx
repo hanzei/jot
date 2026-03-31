@@ -199,9 +199,10 @@ export default function NoteEditorScreen() {
   }, [existingNote?.id, noteId, navigation]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const flushSave = useCallback(async (unmounting = false): Promise<boolean> => {
-    // Skip save if editing an existing note that hasn't hydrated yet
-    if (noteIdRef.current && !isInitializedRef.current) return false;
     if (!hasPendingChangesRef.current) return true;
+    // If an existing note has local edits flagged but hasn't hydrated yet,
+    // treat this as a failed flush so callers can retry after hydration.
+    if (noteIdRef.current && !isInitializedRef.current) return false;
 
     // Serialize mutations: chain onto any in-flight save to prevent concurrent writes
     const predecessor = saveInFlightRef.current;
@@ -289,6 +290,47 @@ export default function NoteEditorScreen() {
     hasPendingChangesRef.current = true;
     scheduleUpdate();
   }, [scheduleUpdate]);
+
+  const flushPendingChanges = useCallback(async (): Promise<boolean> => {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+    }
+    return flushSave();
+  }, [flushSave]);
+
+  // Keep input refs bounded to currently rendered items.
+  useEffect(() => {
+    const activeItemIds = new Set(items.map((item) => item.id));
+    for (const id of itemInputRefsMap.current.keys()) {
+      if (!activeItemIds.has(id)) {
+        itemInputRefsMap.current.delete(id);
+      }
+    }
+  }, [items]);
+
+  // Intercept navigation away to flush pending edits before leaving the screen.
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', (event) => {
+      if (intentionalExitRef.current || !hasPendingChangesRef.current) {
+        return;
+      }
+      event.preventDefault();
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+        debounceRef.current = null;
+      }
+      void (async () => {
+        const saveSucceeded = await flushSave();
+        if (!saveSucceeded) {
+          return;
+        }
+        intentionalExitRef.current = true;
+        navigation.dispatch(event.data.action);
+      })();
+    });
+    return unsubscribe;
+  }, [flushSave, navigation]);
 
   // Flush pending save on unmount (prevent data loss), skip if intentionally exiting
   useEffect(() => {
@@ -528,6 +570,10 @@ export default function NoteEditorScreen() {
 
   const handleTogglePin = useCallback(async () => {
     if (!noteId) return;
+    const saveSucceeded = await flushPendingChanges();
+    if (!saveSucceeded) {
+      return;
+    }
     const newPinned = !pinnedRef.current;
     setPinned(newPinned);
     try {
@@ -546,10 +592,14 @@ export default function NoteEditorScreen() {
       setPinned(!newPinned);
       Alert.alert(t('common.error'), t('note.failedUpdate'));
     }
-  }, [noteId, t, updateMutation]);
+  }, [flushPendingChanges, noteId, t, updateMutation]);
 
   const handleToggleArchive = useCallback(async () => {
     if (!noteId) return;
+    const saveSucceeded = await flushPendingChanges();
+    if (!saveSucceeded) {
+      return;
+    }
     const newArchived = !archivedRef.current;
     setArchived(newArchived);
     try {
@@ -568,9 +618,13 @@ export default function NoteEditorScreen() {
       setArchived(!newArchived);
       Alert.alert(t('common.error'), t('note.failedUpdate'));
     }
-  }, [noteId, t, updateMutation]);
+  }, [flushPendingChanges, noteId, t, updateMutation]);
 
   const handleColorSelect = useCallback(async (selectedColor: string) => {
+    const saveSucceeded = await flushPendingChanges();
+    if (!saveSucceeded) {
+      return;
+    }
     const prevColor = colorRef.current;
     setColor(selectedColor);
     if (!noteId) return;
@@ -590,7 +644,7 @@ export default function NoteEditorScreen() {
       setColor(prevColor);
       Alert.alert(t('common.error'), t('note.failedColorUpdate'));
     }
-  }, [noteId, t, updateMutation]);
+  }, [flushPendingChanges, noteId, t, updateMutation]);
 
   const handleToggleNoteType = useCallback(() => {
     if (hasCreated) return;
@@ -646,7 +700,12 @@ export default function NoteEditorScreen() {
     (reorderedUnchecked: LocalItem[]) => {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
       // Merge reordered unchecked with existing checked items
-      setItems([...reorderedUnchecked, ...checkedItemsRef.current]);
+      setItems(
+        [...reorderedUnchecked, ...checkedItemsRef.current].map((item, index) => ({
+          ...item,
+          position: index,
+        })),
+      );
       markDirtyAndScheduleUpdate();
     },
     [markDirtyAndScheduleUpdate],
