@@ -40,18 +40,14 @@ func (h *LabelsHandler) publishLabelNoteUpdates(ctx context.Context, noteIDs []s
 		return
 	}
 
+	// Labels are per-user: only the acting user's view changes, so we publish only to them.
 	for _, noteID := range noteIDs {
 		note, err := h.noteStore.GetByIDAnyState(ctx, noteID, userID)
 		if err != nil {
 			continue
 		}
 
-		audienceIDs, err := h.noteStore.GetNoteAudienceIDs(ctx, noteID)
-		if err != nil {
-			continue
-		}
-
-		h.hub.Publish(audienceIDs, sse.Event{
+		h.hub.Publish([]string{userID}, sse.Event{
 			Type:         sse.EventNoteUpdated,
 			NoteID:       noteID,
 			Note:         note,
@@ -192,15 +188,12 @@ func (h *LabelsHandler) AddLabel(w http.ResponseWriter, r *http.Request) (int, a
 	}
 
 	if h.hub != nil {
-		audienceIDs, audErr := h.noteStore.GetNoteAudienceIDs(r.Context(), noteID)
-		if audErr == nil {
-			h.hub.Publish(audienceIDs, sse.Event{
-				Type:         sse.EventNoteUpdated,
-				NoteID:       noteID,
-				Note:         note,
-				SourceUserID: user.ID,
-			})
-		}
+		h.hub.Publish([]string{user.ID}, sse.Event{
+			Type:         sse.EventNoteUpdated,
+			NoteID:       noteID,
+			Note:         note,
+			SourceUserID: user.ID,
+		})
 	}
 
 	return http.StatusOK, note, nil
@@ -241,15 +234,12 @@ func (h *LabelsHandler) RemoveLabel(w http.ResponseWriter, r *http.Request) (int
 	}
 
 	if h.hub != nil {
-		audienceIDs, audErr := h.noteStore.GetNoteAudienceIDs(r.Context(), noteID)
-		if audErr == nil {
-			h.hub.Publish(audienceIDs, sse.Event{
-				Type:         sse.EventNoteUpdated,
-				NoteID:       noteID,
-				Note:         note,
-				SourceUserID: user.ID,
-			})
-		}
+		h.hub.Publish([]string{user.ID}, sse.Event{
+			Type:         sse.EventNoteUpdated,
+			NoteID:       noteID,
+			Note:         note,
+			SourceUserID: user.ID,
+		})
 	}
 
 	return http.StatusOK, note, nil
