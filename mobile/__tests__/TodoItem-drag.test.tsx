@@ -1,5 +1,5 @@
 import React from 'react';
-import { render } from '@testing-library/react-native';
+import { fireEvent, render } from '@testing-library/react-native';
 import TodoItem from '../src/components/TodoItem';
 
 describe('TodoItem drag handle', () => {
