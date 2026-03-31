@@ -76,6 +76,9 @@ jest.mock('../src/hooks/useNotes', () => ({
   useDeleteNote: () => ({
     mutateAsync: mockDeleteMutateAsync,
   }),
+  useRestoreNote: () => ({
+    mutateAsync: jest.fn(),
+  }),
   useDuplicateNote: () => ({
     mutateAsync: mockDuplicateMutateAsync,
   }),
@@ -146,6 +149,13 @@ jest.mock('../src/store/UsersContext', () => ({
   __esModule: true,
   useUsers: () => ({
     usersById: new Map(),
+  }),
+}));
+
+jest.mock('../src/hooks/useToast', () => ({
+  __esModule: true,
+  useToast: () => ({
+    showToast: jest.fn(),
   }),
 }));
 

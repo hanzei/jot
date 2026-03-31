@@ -93,6 +93,10 @@ jest.mock('../src/theme/ThemeContext', () => ({
   useTheme: jest.fn(),
 }));
 
+jest.mock('../src/hooks/useToast', () => ({
+  useToast: jest.fn(),
+}));
+
 jest.mock('../src/api/settings', () => ({
   updateMe: jest.fn(),
 }));
@@ -136,6 +140,7 @@ const notesHooks = jest.requireMock('../src/hooks/useNotes') as {
 const mockUseUsers = jest.requireMock('../src/store/UsersContext').useUsers as jest.Mock;
 const mockUseAuth = jest.requireMock('../src/store/AuthContext').useAuth as jest.Mock;
 const mockUseTheme = jest.requireMock('../src/theme/ThemeContext').useTheme as jest.Mock;
+const mockUseToast = jest.requireMock('../src/hooks/useToast').useToast as jest.Mock;
 const mockUpdateMe = jest.requireMock('../src/api/settings').updateMe as jest.Mock;
 
 const mockMutateAsync = jest.fn();
@@ -203,6 +208,7 @@ describe('NotesListScreen sorting', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockUseToast.mockReturnValue({ showToast: jest.fn() });
     notesHooks.useUpdateNote.mockReturnValue({ mutateAsync: mockMutateAsync });
     notesHooks.useDeleteNote.mockReturnValue({ mutateAsync: mockMutateAsync });
     notesHooks.useRestoreNote.mockReturnValue({ mutateAsync: mockMutateAsync });
@@ -430,6 +436,71 @@ describe('NotesListScreen sorting', () => {
 
     await waitFor(() => {
       expect(screen.queryByTestId('clear-search')).toBeNull();
+    });
+  });
+
+  it('pull-to-refresh on empty state reloads notes and users', async () => {
+    const refetch = jest.fn().mockResolvedValue(undefined);
+    const refreshUsers = jest.fn().mockResolvedValue(undefined);
+    mockUseOfflineNotes.mockReturnValue({
+      data: [],
+      isLoading: false,
+      isError: false,
+      refetch,
+      isRefetching: false,
+    });
+    mockUseUsers.mockReturnValue({ refreshUsers });
+
+    render(<NotesListScreen variant="notes" />);
+
+    const emptyState = screen.getByTestId('notes-empty-state');
+    const onRefresh = emptyState.props.refreshControl.props.onRefresh as () => Promise<void>;
+    await onRefresh();
+
+    expect(refetch).toHaveBeenCalledTimes(1);
+    expect(refreshUsers).toHaveBeenCalledTimes(1);
+  });
+
+  it('pull-to-refresh on error state reloads notes and users', async () => {
+    const refetch = jest.fn().mockResolvedValue(undefined);
+    const refreshUsers = jest.fn().mockResolvedValue(undefined);
+    mockUseOfflineNotes.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      refetch,
+      isRefetching: false,
+    });
+    mockUseUsers.mockReturnValue({ refreshUsers });
+
+    render(<NotesListScreen variant="notes" />);
+
+    const errorState = screen.getByTestId('notes-error-state');
+    const onRefresh = errorState.props.refreshControl.props.onRefresh as () => Promise<void>;
+    await onRefresh();
+
+    expect(refetch).toHaveBeenCalledTimes(1);
+    expect(refreshUsers).toHaveBeenCalledTimes(1);
+  });
+
+  it('retry button on error state reloads notes and users', async () => {
+    const refetch = jest.fn().mockResolvedValue(undefined);
+    const refreshUsers = jest.fn().mockResolvedValue(undefined);
+    mockUseOfflineNotes.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      refetch,
+      isRefetching: false,
+    });
+    mockUseUsers.mockReturnValue({ refreshUsers });
+
+    render(<NotesListScreen variant="notes" />);
+    fireEvent.press(screen.getByTestId('retry-fetch'));
+
+    await waitFor(() => {
+      expect(refetch).toHaveBeenCalledTimes(1);
+      expect(refreshUsers).toHaveBeenCalledTimes(1);
     });
   });
 });
