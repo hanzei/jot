@@ -125,14 +125,6 @@ STATIC_DIR=../webapp/build/         # Frontend build directory (optional)
 REGISTRATION_ENABLED=true           # Set to "false" to disable public registration; admins can still create users (optional)
 ```
 
-## Database upgrade note
-
-SQLite foreign-key enforcement is enabled on every runtime connection.
-
-On upgrade, startup runs a one-time migration that deletes rows with missing parent records before verifying foreign-key integrity. Existing valid rows are preserved, but invalid orphaned references (for example orphaned note items, note-label links, note shares, sessions, user settings, notes, or labels) are removed.
-
-If you want to audit or restore those orphaned rows, back up `jot.db` before starting a build that includes this change.
-
 ## API Reference
 
 The full interactive API reference is available via Swagger UI at `http://localhost:8080/api/docs/index.html` when the server is running.
