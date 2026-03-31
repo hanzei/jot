@@ -176,13 +176,30 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
     );
   }, [deleteLabel, handleDeleteLabelSuccess, t]);
 
+  const resetLongPressHandled = useCallback(() => {
+    longPressHandledRef.current = false;
+  }, []);
+
   const openLabelMenu = useCallback((label: Label) => {
     Alert.alert(label.name, t('labels.menuOptions', { name: label.name }), [
-      { text: t('labels.rename'), onPress: () => openRenameModal(label) },
-      { text: t('labels.delete'), style: 'destructive', onPress: () => handleDeleteLabel(label) },
-      { text: t('common.cancel'), style: 'cancel' },
-    ]);
-  }, [handleDeleteLabel, openRenameModal, t]);
+      {
+        text: t('labels.rename'),
+        onPress: () => {
+          resetLongPressHandled();
+          openRenameModal(label);
+        },
+      },
+      {
+        text: t('labels.delete'),
+        style: 'destructive',
+        onPress: () => {
+          resetLongPressHandled();
+          handleDeleteLabel(label);
+        },
+      },
+      { text: t('common.cancel'), style: 'cancel', onPress: resetLongPressHandled },
+    ], { cancelable: true, onDismiss: resetLongPressHandled });
+  }, [handleDeleteLabel, openRenameModal, resetLongPressHandled, t]);
 
   const handleLabelLongPress = useCallback((label: Label) => {
     longPressHandledRef.current = true;
@@ -394,8 +411,9 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
                     <TouchableOpacity
                       style={styles.labelMenuButton}
                       onPress={() => openLabelMenu(label)}
+                      hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
                       accessibilityRole="button"
-                      accessibilityLabel={t('labels.menuOptions', { name: label.name })}
+                      accessibilityLabel={`${label.name}. ${t('labels.menuOptions')}`}
                       testID={`drawer-label-menu-${label.id}`}
                     >
                       <Ionicons
@@ -726,7 +744,7 @@ const styles = StyleSheet.create({
     paddingRight: 8,
   },
   labelMenuButton: {
-    padding: 8,
+    padding: 10,
     borderRadius: 8,
   },
   navDivider: {

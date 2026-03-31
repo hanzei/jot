@@ -91,7 +91,7 @@ jest.mock('@react-navigation/drawer', () => {
   };
 });
 
-describe('DrawerContent safe-area spacing', () => {
+describe('DrawerContent', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockLabelsData.length = 0;
@@ -99,6 +99,10 @@ describe('DrawerContent safe-area spacing', () => {
     mockGetActiveServer.mockResolvedValue(null);
     mockAddServer.mockResolvedValue({ success: true, serverId: 'srv_new' });
     mockSwitchActiveServer.mockResolvedValue(true);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   it('applies top inset padding to drawer scroll content', () => {
@@ -189,7 +193,8 @@ describe('DrawerContent safe-area spacing', () => {
     const { getByTestId } = render(<DrawerContent {...props} />);
     fireEvent.press(getByTestId('drawer-label-menu-label-1'));
 
-    const alertCall = alertSpy.mock.calls[alertSpy.mock.calls.length - 1];
+    expect(alertSpy).toHaveBeenCalledTimes(1);
+    const alertCall = alertSpy.mock.calls[0];
     const buttons = (alertCall?.[2] as Array<{ text?: string }> | undefined) ?? [];
 
     expect(alertCall?.[0]).toBe('Work');
@@ -197,8 +202,94 @@ describe('DrawerContent safe-area spacing', () => {
     expect(buttons.map((button) => button.text)).toEqual(
       expect.arrayContaining(['labels.rename', 'labels.delete', 'common.cancel']),
     );
+  });
 
-    alertSpy.mockRestore();
+  it('opens label action menu from long press', () => {
+    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(jest.fn());
+    mockLabelsData.push({
+      id: 'label-1',
+      user_id: 'user-1',
+      name: 'Work',
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    });
+
+    const navigate = jest.fn();
+    const props = {
+      state: {
+        index: 0,
+        key: 'drawer-key',
+        routeNames: ['Notes', 'MyTodo', 'Archived', 'Trash'],
+        routes: [{ key: 'notes-key', name: 'Notes' }],
+        stale: false,
+        type: 'drawer',
+        history: [],
+      },
+      navigation: {
+        navigate,
+        closeDrawer: jest.fn(),
+        dispatch: jest.fn(),
+      },
+      descriptors: {},
+      progress: {},
+    } as unknown as DrawerContentComponentProps;
+
+    const { getByTestId } = render(<DrawerContent {...props} />);
+    fireEvent(getByTestId('drawer-label-label-1'), 'onLongPress');
+
+    expect(alertSpy).toHaveBeenCalledTimes(1);
+    const alertCall = alertSpy.mock.calls[0];
+    const buttons = (alertCall?.[2] as Array<{ text?: string }> | undefined) ?? [];
+
+    expect(alertCall?.[0]).toBe('Work');
+    expect(alertCall?.[1]).toBe('labels.menuOptions');
+    expect(buttons.map((button) => button.text)).toEqual(
+      expect.arrayContaining(['labels.rename', 'labels.delete', 'common.cancel']),
+    );
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it('navigates on first tap after a long press menu is canceled', () => {
+    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(jest.fn());
+    mockLabelsData.push({
+      id: 'label-1',
+      user_id: 'user-1',
+      name: 'Work',
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    });
+
+    const navigate = jest.fn();
+    const closeDrawer = jest.fn();
+    const props = {
+      state: {
+        index: 0,
+        key: 'drawer-key',
+        routeNames: ['Notes', 'MyTodo', 'Archived', 'Trash'],
+        routes: [{ key: 'notes-key', name: 'Notes' }],
+        stale: false,
+        type: 'drawer',
+        history: [],
+      },
+      navigation: {
+        navigate,
+        closeDrawer,
+        dispatch: jest.fn(),
+      },
+      descriptors: {},
+      progress: {},
+    } as unknown as DrawerContentComponentProps;
+
+    const { getByTestId } = render(<DrawerContent {...props} />);
+    fireEvent(getByTestId('drawer-label-label-1'), 'onLongPress');
+    expect(alertSpy).toHaveBeenCalledTimes(1);
+    const onDismiss = (alertSpy.mock.calls[0]?.[3] as { onDismiss?: () => void } | undefined)?.onDismiss;
+    onDismiss?.();
+
+    fireEvent.press(getByTestId('drawer-label-label-1'));
+
+    expect(navigate).toHaveBeenCalledWith('Notes', { labelId: 'label-1', labelName: 'Work' });
+    expect(closeDrawer).toHaveBeenCalled();
   });
 
   it('navigates to label notes when label row is pressed', () => {
