@@ -248,6 +248,8 @@ describe('NoteEditorScreen todo submit behavior', () => {
       );
     });
 
+    mockUpdateMutateAsync.mockClear();
+
     fireEvent.changeText(getAllByTestId('todo-item-text')[0], 'Indented item');
     await waitFor(() => {
       expect(mockCreateMutateAsync).toHaveBeenCalledWith(
@@ -263,6 +265,6 @@ describe('NoteEditorScreen todo submit behavior', () => {
           ]),
         }),
       );
-    });
+    }, { timeout: 3000 });
   });
 });

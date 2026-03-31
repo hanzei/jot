@@ -436,15 +436,19 @@ export default function NoteEditorScreen() {
 
   const handleIndentItem = useCallback(
     (index: number, delta: 1 | -1) => {
+      let changed = false;
       setItems((prev) =>
         prev.map((item, i) => {
           if (i !== index) return item;
           const nextIndentLevel = Math.max(0, Math.min(MAX_TODO_ITEM_INDENT, item.indent_level + delta));
           if (nextIndentLevel === item.indent_level) return item;
+          changed = true;
           return { ...item, indent_level: nextIndentLevel };
         }),
       );
-      scheduleUpdate();
+      if (changed) {
+        scheduleUpdate();
+      }
     },
     [scheduleUpdate],
   );
