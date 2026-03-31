@@ -875,7 +875,7 @@ export default function NoteEditorScreen() {
         contentContainerStyle={styles.scrollContentContainer}
         keyboardShouldPersistTaps="handled"
         enableOnAndroid
-        extraScrollHeight={24}
+        extraScrollHeight={72}
         keyboardOpeningTime={0}
       >
         <TextInput
