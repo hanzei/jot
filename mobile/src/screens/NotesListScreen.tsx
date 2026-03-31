@@ -710,6 +710,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
           </View>
         )}
         <ScrollView
+          style={styles.emptyScroll}
           refreshControl={
             <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={colors.primary} />
           }
@@ -939,13 +940,18 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   emptyContent: {
-    minHeight: 420,
+    width: '100%',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 32,
   },
+  emptyScroll: {
+    flex: 1,
+  },
   emptyScrollContent: {
     flexGrow: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
   },
   errorScrollContent: {
     flexGrow: 1,
