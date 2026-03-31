@@ -6,7 +6,7 @@ import SettingsScreen from '../src/screens/SettingsScreen';
 import MobileI18nProvider from '../src/i18n/MobileI18nProvider';
 import i18n from '../src/i18n';
 import { useAuth } from '../src/store/AuthContext';
-import { updateMe, listSessions } from '../src/api/settings';
+import { updateMe, listSessions, getAboutInfo } from '../src/api/settings';
 
 jest.mock('../src/store/AuthContext', () => ({
   useAuth: jest.fn(),
@@ -61,6 +61,7 @@ jest.mock('../src/store/serverAccounts', () => ({
 const mockUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;
 const mockUpdateMe = updateMe as jest.MockedFunction<typeof updateMe>;
 const mockListSessions = listSessions as jest.MockedFunction<typeof listSessions>;
+const mockGetAboutInfo = getAboutInfo as jest.MockedFunction<typeof getAboutInfo>;
 
 const user = {
   id: 'user-1',
@@ -112,6 +113,12 @@ describe('SettingsScreen language selection', () => {
     setSettings.mockClear();
     setUser.mockClear();
     mockListSessions.mockResolvedValue([]);
+    mockGetAboutInfo.mockResolvedValue({
+      version: 'dev',
+      commit: 'deadbeef',
+      build_time: '2026-01-02T00:00:00Z',
+      go_version: 'go1.25.0',
+    });
     mockUseAuth.mockImplementation(
       () =>
         ({
@@ -209,9 +216,13 @@ describe('SettingsScreen language selection', () => {
       expect(mockListSessions).toHaveBeenCalled();
     });
 
-    expect(queryByText(i18n.t('settings.currentServerLabel'))).toBeNull();
+    expect(queryByText(i18n.t('about.serverOrigin'))).toBeNull();
+    expect(queryByText('https://active.example.com')).toBeNull();
     fireEvent.press(getByTestId('settings-about-toggle'));
-    expect(getByText(i18n.t('about.serverOrigin'))).toBeTruthy();
-    expect(getByText('https://active.example.com')).toBeTruthy();
+    await waitFor(() => {
+      expect(getByText(i18n.t('about.serverOrigin'))).toBeTruthy();
+      expect(getByText('https://active.example.com')).toBeTruthy();
+      expect(getByText('deadbeef')).toBeTruthy();
+    });
   });
 });
