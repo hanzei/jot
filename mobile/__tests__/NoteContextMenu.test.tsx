@@ -132,4 +132,72 @@ describe('NoteContextMenu labels action', () => {
 
     expect(queryByTestId('context-label')).toBeNull();
   });
+
+  it('renders label action in my-todo context for synced notes', () => {
+    const { getByTestId } = render(
+      <NoteContextMenu
+        visible
+        note={baseNote}
+        viewContext="my-todo"
+        onClose={jest.fn()}
+        onPin={jest.fn()}
+        onArchive={jest.fn()}
+        onUnarchive={jest.fn()}
+        onDuplicate={jest.fn()}
+        onMoveToTrash={jest.fn()}
+        onRestore={jest.fn()}
+        onDeletePermanently={jest.fn()}
+        onChangeColor={jest.fn()}
+        onShare={jest.fn()}
+        onManageLabels={jest.fn()}
+      />,
+    );
+
+    expect(getByTestId('context-label')).toBeTruthy();
+  });
+
+  it('renders label action in archived context for synced notes', () => {
+    const { getByTestId } = render(
+      <NoteContextMenu
+        visible
+        note={baseNote}
+        viewContext="archived"
+        onClose={jest.fn()}
+        onPin={jest.fn()}
+        onArchive={jest.fn()}
+        onUnarchive={jest.fn()}
+        onDuplicate={jest.fn()}
+        onMoveToTrash={jest.fn()}
+        onRestore={jest.fn()}
+        onDeletePermanently={jest.fn()}
+        onChangeColor={jest.fn()}
+        onShare={jest.fn()}
+        onManageLabels={jest.fn()}
+      />,
+    );
+
+    expect(getByTestId('context-label')).toBeTruthy();
+  });
+
+  it('does not render label action when callback is omitted', () => {
+    const { queryByTestId } = render(
+      <NoteContextMenu
+        visible
+        note={baseNote}
+        viewContext="notes"
+        onClose={jest.fn()}
+        onPin={jest.fn()}
+        onArchive={jest.fn()}
+        onUnarchive={jest.fn()}
+        onDuplicate={jest.fn()}
+        onMoveToTrash={jest.fn()}
+        onRestore={jest.fn()}
+        onDeletePermanently={jest.fn()}
+        onChangeColor={jest.fn()}
+        onShare={jest.fn()}
+      />,
+    );
+
+    expect(queryByTestId('context-label')).toBeNull();
+  });
 });

@@ -126,6 +126,14 @@ export default function NoteContextMenu({
       onPress: () => { onClose(); onDuplicate(note); },
       testId: 'context-duplicate',
     });
+    if (onManageLabels && !isLocalId(note.id)) {
+      actions.push({
+        icon: 'pricetag-outline',
+        label: t('labels.title'),
+        onPress: () => { onClose(); onManageLabels(note); },
+        testId: 'context-label',
+      });
+    }
     actions.push({
       icon: 'trash-outline',
       label: t('note.moveToTrash'),
