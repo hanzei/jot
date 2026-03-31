@@ -1,12 +1,12 @@
 import React from 'react';
-import { Text } from 'react-native';
+import { Alert, Text } from 'react-native';
 import { render, fireEvent, waitFor } from '@testing-library/react-native';
 import { useTranslation } from 'react-i18next';
 import SettingsScreen from '../src/screens/SettingsScreen';
 import MobileI18nProvider from '../src/i18n/MobileI18nProvider';
 import i18n from '../src/i18n';
 import { useAuth } from '../src/store/AuthContext';
-import { updateMe, listSessions } from '../src/api/settings';
+import { updateMe, listSessions, revokeSession } from '../src/api/settings';
 
 jest.mock('../src/store/AuthContext', () => ({
   useAuth: jest.fn(),
@@ -61,6 +61,7 @@ jest.mock('../src/store/serverAccounts', () => ({
 const mockUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;
 const mockUpdateMe = updateMe as jest.MockedFunction<typeof updateMe>;
 const mockListSessions = listSessions as jest.MockedFunction<typeof listSessions>;
+const mockRevokeSession = revokeSession as jest.MockedFunction<typeof revokeSession>;
 
 const user = {
   id: 'user-1',
@@ -101,6 +102,12 @@ function TranslationProbe() {
 }
 
 describe('SettingsScreen language selection', () => {
+  const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(jest.fn());
+
+  afterAll(() => {
+    alertSpy.mockRestore();
+  });
+
   beforeEach(async () => {
     currentSettings = {
       user_id: 'user-1',
@@ -111,7 +118,26 @@ describe('SettingsScreen language selection', () => {
     };
     setSettings.mockClear();
     setUser.mockClear();
-    mockListSessions.mockResolvedValue([]);
+    mockListSessions.mockResolvedValue([
+      {
+        id: 'current-session',
+        browser: 'Mobile Safari',
+        os: 'iOS',
+        is_current: true,
+        created_at: '2026-01-02T00:00:00Z',
+        expires_at: '2026-02-02T00:00:00Z',
+      },
+      {
+        id: 'other-session',
+        browser: 'Chrome',
+        os: 'Android',
+        is_current: false,
+        created_at: '2026-01-01T00:00:00Z',
+        expires_at: '2026-02-01T00:00:00Z',
+      },
+    ]);
+    mockRevokeSession.mockResolvedValue(undefined);
+    alertSpy.mockClear();
     mockUseAuth.mockImplementation(
       () =>
         ({
@@ -212,5 +238,60 @@ describe('SettingsScreen language selection', () => {
     expect(getByText('Server')).toBeTruthy();
     expect(getByText('Active server')).toBeTruthy();
     expect(getByText('https://active.example.com')).toBeTruthy();
+  });
+
+  it('asks for confirmation before revoking a session', async () => {
+    const { getByTestId } = render(<SettingsScreen />);
+
+    await waitFor(() => {
+      expect(mockListSessions).toHaveBeenCalled();
+    });
+
+    fireEvent.press(getByTestId('settings-revoke-session-other-session'));
+
+    expect(alertSpy).toHaveBeenCalledWith(
+      'Revoke session',
+      'Are you sure you want to revoke this session?',
+      expect.arrayContaining([
+        expect.objectContaining({
+          text: 'Cancel',
+          style: 'cancel',
+        }),
+        expect.objectContaining({
+          text: 'Revoke',
+          style: 'destructive',
+          onPress: expect.any(Function),
+        }),
+      ]),
+    );
+    expect(mockRevokeSession).not.toHaveBeenCalled();
+
+    const [, , actions] = alertSpy.mock.calls[0] as [string, string, Array<{ text: string; onPress?: () => void }>];
+    const revokeAction = actions.find(action => action.text === 'Revoke');
+    expect(revokeAction).toBeDefined();
+    revokeAction?.onPress?.();
+
+    await waitFor(() => {
+      expect(mockRevokeSession).toHaveBeenCalledWith('other-session');
+    });
+  });
+
+  it('does not revoke when the confirmation is cancelled', async () => {
+    const { getByTestId } = render(<SettingsScreen />);
+
+    await waitFor(() => {
+      expect(mockListSessions).toHaveBeenCalled();
+    });
+
+    fireEvent.press(getByTestId('settings-revoke-session-other-session'));
+
+    const [, , actions] = alertSpy.mock.calls[0] as [string, string, Array<{ text: string; onPress?: () => void }>];
+    const cancelAction = actions.find(action => action.text === 'Cancel');
+    expect(cancelAction).toBeDefined();
+    cancelAction?.onPress?.();
+
+    await waitFor(() => {
+      expect(mockRevokeSession).not.toHaveBeenCalled();
+    });
   });
 });

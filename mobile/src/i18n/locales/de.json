@@ -140,6 +140,8 @@
     "sessionsBrowserOnOS": "{{browser}} auf {{os}}",
     "sessionsCurrent": "Aktuell",
     "sessionsRevoke": "Widerrufen",
+    "sessionsRevokeConfirmTitle": "Sitzung widerrufen",
+    "sessionsRevokeConfirmMessage": "Möchtest du diese Sitzung wirklich widerrufen?",
     "sessionsRevoking": "Widerrufen...",
     "sessionsRevokeFailed": "Sitzung konnte nicht widerrufen werden",
     "sessionsNone": "Keine aktiven Sitzungen gefunden.",

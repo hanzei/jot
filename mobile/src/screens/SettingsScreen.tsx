@@ -12,6 +12,7 @@ import {
   KeyboardAvoidingView,
   Modal,
   Pressable,
+  Alert,
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -164,7 +165,7 @@ export default function SettingsScreen() {
     setPasswordSuccess('');
   }, [settings?.language]);
 
-  const handleRevokeSession = useCallback(async (id: string) => {
+  const revokeSessionById = useCallback(async (id: string) => {
     setRevokingId(id);
     try {
       await revokeSession(id);
@@ -176,6 +177,26 @@ export default function SettingsScreen() {
       setRevokingId(null);
     }
   }, []);
+
+  const handleRevokeSession = useCallback((id: string) => {
+    Alert.alert(
+      t('settings.sessionsRevokeConfirmTitle'),
+      t('settings.sessionsRevokeConfirmMessage'),
+      [
+        {
+          text: t('common.cancel'),
+          style: 'cancel',
+        },
+        {
+          text: t('settings.sessionsRevoke'),
+          style: 'destructive',
+          onPress: () => {
+            void revokeSessionById(id);
+          },
+        },
+      ],
+    );
+  }, [revokeSessionById, t]);
 
   const handleSelectImportFile = useCallback(async () => {
     setImportError('');
@@ -641,6 +662,7 @@ export default function SettingsScreen() {
                         onPress={() => handleRevokeSession(session.id)}
                         disabled={revokingId === session.id}
                         style={styles.revokeButton}
+                        testID={`settings-revoke-session-${session.id}`}
                         accessibilityLabel={t('settings.sessionsRevoke')}
                         accessibilityRole="button"
                       >
