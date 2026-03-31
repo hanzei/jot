@@ -1,5 +1,8 @@
 import React from 'react';
-import { render, fireEvent, waitFor } from '@testing-library/react-native';
+import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
+import { PanResponder, StyleSheet } from 'react-native';
+import type { GestureResponderEvent, PanResponderGestureState } from 'react-native';
+import { VALIDATION } from '@jot/shared';
 import NoteEditorScreen from '../src/screens/NoteEditorScreen';
 
 const mockUseRoute = jest.fn();
@@ -12,6 +15,20 @@ const mockUpdateMutateAsync = jest.fn();
 const mockDeleteMutateAsync = jest.fn();
 const mockDuplicateMutateAsync = jest.fn();
 const mockUseOfflineNote = jest.fn();
+const mockGestureResponderEvent = {} as GestureResponderEvent;
+const createPanState = (dx: number, dy: number): PanResponderGestureState => ({
+  stateID: 1,
+  moveX: 0,
+  moveY: 0,
+  x0: 0,
+  y0: 0,
+  dx,
+  dy,
+  vx: 0,
+  vy: 0,
+  numberActiveTouches: 1,
+  _accountsForMovesUpTo: 0,
+});
 
 jest.mock('@react-navigation/native', () => ({
   __esModule: true,
@@ -146,6 +163,17 @@ jest.mock('../src/i18n', () => ({
 }));
 
 describe('NoteEditorScreen todo submit behavior', () => {
+  function getPanResponderConfig(createSpy: jest.SpiedFunction<typeof PanResponder.create>, callsBefore: number) {
+    return createSpy.mock.calls
+      .slice(callsBefore)
+      .map(([config]) => config)
+      .find((config) => typeof config.onPanResponderRelease === 'function');
+  }
+
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   beforeEach(() => {
     jest.clearAllMocks();
     mockUseRoute.mockReturnValue({ params: { noteId: null } });
@@ -169,6 +197,72 @@ describe('NoteEditorScreen todo submit behavior', () => {
 
     await waitFor(() => {
       expect(getAllByTestId('todo-item-text').length).toBe(baselineCount + 1);
+    });
+  });
+
+  it('updates todo indentation from horizontal swipe gesture', async () => {
+    const panResponderSpy = jest.spyOn(PanResponder, 'create');
+    const callsBefore = panResponderSpy.mock.calls.length;
+    const { getByTestId, getAllByTestId } = render(<NoteEditorScreen />);
+
+    fireEvent.press(getByTestId('toggle-note-type'));
+    fireEvent.press(getByTestId('add-todo-item'));
+
+    expect(StyleSheet.flatten(getAllByTestId('todo-item-row')[0].props.style)?.marginLeft).toBe(0);
+
+    const panResponderConfig = getPanResponderConfig(panResponderSpy, callsBefore);
+    expect(panResponderConfig).toBeDefined();
+    await act(async () => {
+      panResponderConfig?.onPanResponderRelease?.(mockGestureResponderEvent, createPanState(60, 0));
+    });
+
+    await waitFor(() => {
+      expect(StyleSheet.flatten(getAllByTestId('todo-item-row')[0].props.style)?.marginLeft).toBe(
+        VALIDATION.INDENT_PX_PER_LEVEL,
+      );
+    });
+
+    const updatedPanResponderConfig = getPanResponderConfig(panResponderSpy, callsBefore);
+    expect(updatedPanResponderConfig).toBeDefined();
+    await act(async () => {
+      updatedPanResponderConfig?.onPanResponderRelease?.(mockGestureResponderEvent, createPanState(-60, 0));
+    });
+
+    await waitFor(() => {
+      expect(StyleSheet.flatten(getAllByTestId('todo-item-row')[0].props.style)?.marginLeft).toBe(0);
+    });
+
+    await waitFor(() => {
+      expect(mockCreateMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          items: expect.arrayContaining([
+            expect.objectContaining({
+              text: '',
+              position: 0,
+              completed: false,
+              indent_level: 0,
+              assigned_to: '',
+            }),
+          ]),
+        }),
+      );
+    });
+
+    fireEvent.changeText(getAllByTestId('todo-item-text')[0], 'Indented item');
+    await waitFor(() => {
+      expect(mockCreateMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          items: expect.arrayContaining([
+            expect.objectContaining({
+              text: 'Indented item',
+              position: 0,
+              completed: false,
+              indent_level: 0,
+              assigned_to: '',
+            }),
+          ]),
+        }),
+      );
     });
   });
 });
