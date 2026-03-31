@@ -12,6 +12,7 @@ import {
   KeyboardAvoidingView,
   Modal,
   Pressable,
+  Alert,
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -96,7 +97,15 @@ export default function SettingsScreen() {
   const [aboutError, setAboutError] = useState('');
   const [aboutExpanded, setAboutExpanded] = useState(false);
   const [activeServerUrl, setActiveServerUrl] = useState<string | null>(null);
+  const isMountedRef = useRef(true);
   const previousServerUrlRef = useRef<string | null | undefined>(undefined);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -164,18 +173,47 @@ export default function SettingsScreen() {
     setPasswordSuccess('');
   }, [settings?.language]);
 
-  const handleRevokeSession = useCallback(async (id: string) => {
+  const revokeSessionById = useCallback(async (id: string) => {
     setRevokingId(id);
     try {
       await revokeSession(id);
+      if (!isMountedRef.current) {
+        return;
+      }
       setSessionsError('');
       setSessions(prev => prev.filter(s => s.id !== id));
     } catch {
+      if (!isMountedRef.current) {
+        return;
+      }
       setSessionsError('settings.sessionsRevokeFailed');
     } finally {
-      setRevokingId(null);
+      if (isMountedRef.current) {
+        setRevokingId(null);
+      }
     }
   }, []);
+
+  const handleRevokeSession = useCallback((id: string) => {
+    Alert.alert(
+      t('settings.sessionsRevokeConfirmTitle'),
+      t('settings.sessionsRevokeConfirmMessage'),
+      [
+        {
+          text: t('common.cancel'),
+          style: 'cancel',
+          onPress: () => undefined,
+        },
+        {
+          text: t('settings.sessionsRevoke'),
+          style: 'destructive',
+          onPress: () => {
+            void revokeSessionById(id);
+          },
+        },
+      ],
+    );
+  }, [revokeSessionById, t]);
 
   const handleSelectImportFile = useCallback(async () => {
     setImportError('');
@@ -641,6 +679,7 @@ export default function SettingsScreen() {
                         onPress={() => handleRevokeSession(session.id)}
                         disabled={revokingId === session.id}
                         style={styles.revokeButton}
+                        testID={`settings-revoke-session-${session.id}`}
                         accessibilityLabel={t('settings.sessionsRevoke')}
                         accessibilityRole="button"
                       >

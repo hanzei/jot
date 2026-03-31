@@ -155,6 +155,8 @@
     "sessionsBrowserOnOS": "{{browser}} en {{os}}",
     "sessionsCurrent": "Actual",
     "sessionsRevoke": "Revocar",
+    "sessionsRevokeConfirmTitle": "Revocar sesión",
+    "sessionsRevokeConfirmMessage": "¿Seguro que quieres revocar esta sesión?",
     "sessionsRevoking": "Revocando...",
     "sessionsRevokeFailed": "Error al revocar la sesión",
     "sessionsNone": "No se encontraron sesiones activas.",
