@@ -7,6 +7,13 @@ on:
   push:
     branches: [master]
   pull_request:
+    paths:
+      - 'server/**'
+      - 'webapp/**'
+      - 'shared/**'
+      - 'Dockerfile'
+      - 'docker-compose.yml'
+      - '.github/workflows/docker.yml'
 
 jobs:
   docker:
@@ -19,8 +26,6 @@ jobs:
           - platform: linux/arm64
             runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
-    if: github.event_name == 'push' || github.event_name == 'pull_request'
-
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
