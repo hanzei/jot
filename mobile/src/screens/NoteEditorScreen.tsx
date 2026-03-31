@@ -3,15 +3,12 @@ import {
   View,
   Text,
   TextInput,
-  ScrollView,
   TouchableOpacity,
   Alert,
   StyleSheet,
-  KeyboardAvoidingView,
-  Platform,
-  type TextInputProps,
   type TextInput as TextInputType,
 } from 'react-native';
+import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import DraggableFlatList, { ScaleDecorator } from 'react-native-draggable-flatlist';
 import * as Haptics from 'expo-haptics';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -37,8 +34,6 @@ import { getCompletedSectionDividerColor, isWhiteHexColor } from '../utils/color
 type EditorRouteProp = RouteProp<RootStackParamList, 'NoteEditor'>;
 type EditorNavProp = NativeStackNavigationProp<RootStackParamList, 'NoteEditor'>;
 
-const IOS_KEYBOARD_VERTICAL_OFFSET = 88;
-const FOCUSED_INPUT_KEYBOARD_MARGIN = 120;
 
 interface LocalItem {
   id: string;
@@ -160,7 +155,6 @@ export default function NoteEditorScreen() {
 
   const titleInputRef = useRef<TextInputType>(null);
   const contentInputRef = useRef<TextInputType>(null);
-  const scrollViewRef = useRef<ScrollView>(null);
   const itemInputRefsMap = useRef(new Map<string, React.RefObject<TextInputType | null>>());
 
   const getItemRef = useCallback((id: string): React.RefObject<TextInputType | null> => {
@@ -783,25 +777,6 @@ export default function NoteEditorScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
   }, []);
 
-  const handleTodoItemFocus = useCallback<NonNullable<TextInputProps['onFocus']>>((event) => {
-    const nativeTarget = event.nativeEvent.target;
-    if (nativeTarget == null) return;
-
-    // Use ScrollView's native keyboard helper so focused todo inputs stay visible.
-    const responder = scrollViewRef.current?.getScrollResponder?.();
-    if (
-      responder &&
-      typeof responder.scrollResponderScrollNativeHandleToKeyboard === 'function'
-    ) {
-      responder.scrollResponderScrollNativeHandleToKeyboard(
-        nativeTarget,
-        FOCUSED_INPUT_KEYBOARD_MARGIN,
-        true,
-      );
-      return;
-    }
-  }, []);
-
   const renderTodoItem = useCallback(
     ({ item, drag, isActive }: { item: LocalItem; drag: () => void; isActive: boolean }) => {
       const originalIndex = itemIndexMapRef.current.get(item.id);
@@ -827,14 +802,13 @@ export default function NoteEditorScreen() {
               onSubmitEditing={() => handleInsertItemAfter(originalIndex)}
               onBackspaceOnEmpty={() => handleBackspaceOnEmpty(originalIndex)}
               onAssignPress={() => openAssigneePicker(item.id)}
-              onFocus={handleTodoItemFocus}
               onIndent={(delta) => handleIndentItem(originalIndex, delta)}
             />
           </View>
         </ScaleDecorator>
       );
     },
-    [getItemRef, handleToggleItem, handleItemTextChange, handleDeleteItem, handleInsertItemAfter, handleBackspaceOnEmpty, isNoteShared, collaborators, openAssigneePicker, handleIndentItem, isDark, colors, handleTodoItemFocus],
+    [getItemRef, handleToggleItem, handleItemTextChange, handleDeleteItem, handleInsertItemAfter, handleBackspaceOnEmpty, isNoteShared, collaborators, openAssigneePicker, handleIndentItem, isDark, colors],
   );
 
   const hasNoteColor = !!color && !isWhiteHexColor(color);
@@ -844,11 +818,7 @@ export default function NoteEditorScreen() {
     : colors.borderLight;
 
   return (
-    <KeyboardAvoidingView
-      style={[styles.container, { backgroundColor: noteBackground }]}
-      behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? IOS_KEYBOARD_VERTICAL_OFFSET : 0}
-    >
+    <View style={[styles.container, { backgroundColor: noteBackground }]}>
       <View style={[styles.header, { backgroundColor: noteBackground, borderBottomColor: hasNoteColor ? 'transparent' : colors.borderLight, paddingTop: insets.top + 12 }]}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
@@ -900,11 +870,13 @@ export default function NoteEditorScreen() {
         </TouchableOpacity>
       )}
 
-      <ScrollView
-        ref={scrollViewRef}
+      <KeyboardAwareScrollView
         style={styles.scrollContent}
         contentContainerStyle={styles.scrollContentContainer}
         keyboardShouldPersistTaps="handled"
+        enableOnAndroid
+        extraScrollHeight={24}
+        keyboardOpeningTime={0}
       >
         <TextInput
           ref={titleInputRef}
@@ -989,7 +961,6 @@ export default function NoteEditorScreen() {
                         onSubmitEditing={() => handleInsertItemAfter(originalIndex)}
                         onBackspaceOnEmpty={() => handleBackspaceOnEmpty(originalIndex)}
                         onAssignPress={() => openAssigneePicker(item.id)}
-                        onFocus={handleTodoItemFocus}
                         onIndent={(delta) => handleIndentItem(originalIndex, delta)}
                       />
                     );
@@ -998,7 +969,7 @@ export default function NoteEditorScreen() {
             )}
           </View>
         )}
-      </ScrollView>
+      </KeyboardAwareScrollView>
 
       <View style={[styles.toolbar, { backgroundColor: noteBackground, borderTopColor: hasNoteColor ? 'transparent' : colors.border, paddingBottom: insets.bottom || 8 }]}>
         {/* Color picker button */}
@@ -1116,7 +1087,7 @@ export default function NoteEditorScreen() {
           setAssigningItemId(null);
         }}
       />
-    </KeyboardAvoidingView>
+    </View>
   );
 }
 
@@ -1151,9 +1122,9 @@ const styles = StyleSheet.create({
   },
   scrollContent: {
     flex: 1,
-    paddingHorizontal: 16,
   },
   scrollContentContainer: {
+    paddingHorizontal: 16,
     paddingBottom: 96,
   },
   titleInput: {
