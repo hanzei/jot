@@ -126,6 +126,7 @@ export default function NoteEditorScreen() {
   const isMountedRef = useRef(true);
   const isInitializedRef = useRef(false);
   const intentionalExitRef = useRef(false);
+  const hasPendingChangesRef = useRef(false);
   const saveInFlightRef = useRef<Promise<boolean> | null>(null);
   const tempIdCounterRef = useRef(0);
 
@@ -204,7 +205,9 @@ export default function NoteEditorScreen() {
   }, [existingNote?.id, noteId, navigation]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const flushSave = useCallback(async (unmounting = false): Promise<boolean> => {
-    // Skip save if editing an existing note that hasn't hydrated yet
+    if (!hasPendingChangesRef.current) return true;
+    // If an existing note has local edits flagged but hasn't hydrated yet,
+    // treat this as a failed flush so callers can retry after hydration.
     if (noteIdRef.current && !isInitializedRef.current) return false;
 
     // Serialize mutations: chain onto any in-flight save to prevent concurrent writes
@@ -223,7 +226,10 @@ export default function NoteEditorScreen() {
       const currentColor = colorRef.current;
 
       if (!currentNoteId) {
-        if (!currentTitle && !currentContent && currentItems.length === 0) return true;
+        if (!currentTitle && !currentContent && currentItems.length === 0) {
+          hasPendingChangesRef.current = false;
+          return true;
+        }
         const newNote = await createMutateRef.current({
           title: currentTitle,
           content: currentContent,
@@ -231,6 +237,7 @@ export default function NoteEditorScreen() {
           color: !isWhiteHexColor(currentColor) ? currentColor : undefined,
           items: currentNoteType === 'todo' ? serializeItems(currentItems) : undefined,
         });
+        hasPendingChangesRef.current = false;
         if (!isMountedRef.current || unmounting) return true;
         setNoteId(newNote.id);
         setHasCreated(true);
@@ -251,6 +258,7 @@ export default function NoteEditorScreen() {
           id: currentNoteId,
           data: updateData,
         });
+        hasPendingChangesRef.current = false;
         if (!isMountedRef.current || unmounting) return true;
         setSaveError(null);
       }
@@ -284,6 +292,52 @@ export default function NoteEditorScreen() {
     }, VALIDATION.AUTO_SAVE_TIMEOUT_MS);
   }, [flushSave]);
 
+  const markDirtyAndScheduleUpdate = useCallback(() => {
+    hasPendingChangesRef.current = true;
+    scheduleUpdate();
+  }, [scheduleUpdate]);
+
+  const flushPendingChanges = useCallback(async (): Promise<boolean> => {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+    }
+    return flushSave();
+  }, [flushSave]);
+
+  // Keep input refs bounded to currently rendered items.
+  useEffect(() => {
+    const activeItemIds = new Set(items.map((item) => item.id));
+    for (const id of itemInputRefsMap.current.keys()) {
+      if (!activeItemIds.has(id)) {
+        itemInputRefsMap.current.delete(id);
+      }
+    }
+  }, [items]);
+
+  // Intercept navigation away to flush pending edits before leaving the screen.
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', (event) => {
+      if (intentionalExitRef.current || !hasPendingChangesRef.current) {
+        return;
+      }
+      event.preventDefault();
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+        debounceRef.current = null;
+      }
+      void (async () => {
+        const saveSucceeded = await flushSave();
+        if (!saveSucceeded) {
+          return;
+        }
+        intentionalExitRef.current = true;
+        navigation.dispatch(event.data.action);
+      })();
+    });
+    return unsubscribe;
+  }, [flushSave, navigation]);
+
   // Flush pending save on unmount (prevent data loss), skip if intentionally exiting
   useEffect(() => {
     isMountedRef.current = true;
@@ -293,7 +347,7 @@ export default function NoteEditorScreen() {
         clearTimeout(debounceRef.current);
         debounceRef.current = null;
       }
-      if (!intentionalExitRef.current) {
+      if (!intentionalExitRef.current && hasPendingChangesRef.current) {
         flushSave(true);
       }
     };
@@ -303,18 +357,18 @@ export default function NoteEditorScreen() {
     (newTitle: string) => {
       if (newTitle.length > VALIDATION.TITLE_MAX_LENGTH) return;
       setTitle(newTitle);
-      scheduleUpdate();
+      markDirtyAndScheduleUpdate();
     },
-    [scheduleUpdate],
+    [markDirtyAndScheduleUpdate],
   );
 
   const handleContentChange = useCallback(
     (newContent: string) => {
       if (newContent.length > VALIDATION.CONTENT_MAX_LENGTH) return;
       setContent(newContent);
-      scheduleUpdate();
+      markDirtyAndScheduleUpdate();
     },
-    [scheduleUpdate],
+    [markDirtyAndScheduleUpdate],
   );
 
   const handleToggleItem = useCallback(
@@ -322,16 +376,16 @@ export default function NoteEditorScreen() {
       setItems((prev) =>
         prev.map((item, i) => (i === index ? { ...item, completed: !item.completed } : item)),
       );
-      scheduleUpdate();
+      markDirtyAndScheduleUpdate();
     },
-    [scheduleUpdate],
+    [markDirtyAndScheduleUpdate],
   );
 
   const handleItemTextChange = useCallback(
     (index: number, text: string) => {
       if (!text.includes('\n')) {
         setItems((prev) => prev.map((item, i) => (i === index ? { ...item, text } : item)));
-        scheduleUpdate();
+        markDirtyAndScheduleUpdate();
         return;
       }
 
@@ -341,7 +395,7 @@ export default function NoteEditorScreen() {
       if (lines.length <= 1) {
         const singleText = (lines[0] ?? '').slice(0, VALIDATION.ITEM_TEXT_MAX_LENGTH);
         setItems((prev) => prev.map((item, i) => (i === index ? { ...item, text: singleText } : item)));
-        scheduleUpdate();
+        markDirtyAndScheduleUpdate();
         return;
       }
 
@@ -353,7 +407,7 @@ export default function NoteEditorScreen() {
             i === index ? { ...item, text: lines.join(' ').slice(0, VALIDATION.ITEM_TEXT_MAX_LENGTH) } : item,
           ),
         );
-        scheduleUpdate();
+        markDirtyAndScheduleUpdate();
         return;
       }
 
@@ -376,21 +430,21 @@ export default function NoteEditorScreen() {
         updated.splice(index + 1, 0, ...newItems);
         return updated.map((item, i) => ({ ...item, position: i }));
       });
-      scheduleUpdate();
+      markDirtyAndScheduleUpdate();
 
       const lastId = newIds[newIds.length - 1];
       const lastItemRef = getItemRef(lastId);
       setTimeout(() => lastItemRef.current?.focus(), 50);
     },
-    [scheduleUpdate, getItemRef],
+    [markDirtyAndScheduleUpdate, getItemRef],
   );
 
   const handleDeleteItem = useCallback(
     (index: number) => {
       setItems((prev) => prev.filter((_, i) => i !== index));
-      scheduleUpdate();
+      markDirtyAndScheduleUpdate();
     },
-    [scheduleUpdate],
+    [markDirtyAndScheduleUpdate],
   );
 
   const handleAddItem = useCallback(() => {
@@ -400,9 +454,9 @@ export default function NoteEditorScreen() {
       ...prev,
       { id: newId, text: '', completed: false, position: prev.length, indent_level: 0, assigned_to: '' },
     ]);
-    scheduleUpdate();
+    markDirtyAndScheduleUpdate();
     setTimeout(() => newItemRef.current?.focus(), 50);
-  }, [scheduleUpdate, getItemRef]);
+  }, [markDirtyAndScheduleUpdate, getItemRef]);
 
   const handleInsertItemAfter = useCallback((index: number) => {
     const newId = nextTempId();
@@ -419,9 +473,9 @@ export default function NoteEditorScreen() {
       const next = [...prev.slice(0, index + 1), newItem, ...prev.slice(index + 1)];
       return next.map((item, i) => ({ ...item, position: i }));
     });
-    scheduleUpdate();
+    markDirtyAndScheduleUpdate();
     setTimeout(() => newItemRef.current?.focus(), 50);
-  }, [scheduleUpdate, getItemRef]);
+  }, [markDirtyAndScheduleUpdate, getItemRef]);
 
   const handleBackspaceOnEmpty = useCallback((index: number) => {
     let focusTargetId: string | null = null;
@@ -431,11 +485,11 @@ export default function NoteEditorScreen() {
       focusTargetId = index > 0 ? (prev[index - 1]?.id ?? null) : null;
       return prev.filter((_, i) => i !== index);
     });
-    scheduleUpdate();
+    markDirtyAndScheduleUpdate();
     setTimeout(() => {
       if (focusTargetId) itemInputRefsMap.current.get(focusTargetId)?.current?.focus();
     }, 50);
-  }, [scheduleUpdate]);
+  }, [markDirtyAndScheduleUpdate]);
 
   const handleIndentItem = useCallback(
     (index: number, delta: 1 | -1) => {
@@ -450,10 +504,10 @@ export default function NoteEditorScreen() {
         }),
       );
       if (changed) {
-        scheduleUpdate();
+        markDirtyAndScheduleUpdate();
       }
     },
-    [scheduleUpdate],
+    [markDirtyAndScheduleUpdate],
   );
 
   const handleTitleSubmit = useCallback(() => {
@@ -470,16 +524,16 @@ export default function NoteEditorScreen() {
           ...prev,
           { id: newId, text: '', completed: false, position: prev.length, indent_level: 0, assigned_to: '' },
         ]);
-        scheduleUpdate();
+        markDirtyAndScheduleUpdate();
         setTimeout(() => newItemRef.current?.focus(), 50);
       }
     }
-  }, [scheduleUpdate, getItemRef]);
+  }, [markDirtyAndScheduleUpdate, getItemRef]);
 
   const handleToggleCollapsed = useCallback(() => {
     setCheckedItemsCollapsed((prev) => !prev);
-    scheduleUpdate();
-  }, [scheduleUpdate]);
+    markDirtyAndScheduleUpdate();
+  }, [markDirtyAndScheduleUpdate]);
 
   const collaborators = useMemo<Collaborator[]>(() => {
     if (!existingNote) return [];
@@ -497,9 +551,9 @@ export default function NoteEditorScreen() {
       setItems((prev) =>
         prev.map((item) => (item.id === itemId ? { ...item, assigned_to: userId } : item)),
       );
-      scheduleUpdate();
+      markDirtyAndScheduleUpdate();
     },
-    [scheduleUpdate],
+    [markDirtyAndScheduleUpdate],
   );
 
   const openAssigneePicker = useCallback((itemId: string) => {
@@ -552,6 +606,10 @@ export default function NoteEditorScreen() {
 
   const handleTogglePin = useCallback(async () => {
     if (!noteId) return;
+    const saveSucceeded = await flushPendingChanges();
+    if (!saveSucceeded) {
+      return;
+    }
     const newPinned = !pinnedRef.current;
     setPinned(newPinned);
     try {
@@ -570,10 +628,14 @@ export default function NoteEditorScreen() {
       setPinned(!newPinned);
       Alert.alert(t('common.error'), t('note.failedUpdate'));
     }
-  }, [noteId, t, updateMutation]);
+  }, [flushPendingChanges, noteId, t, updateMutation]);
 
   const handleToggleArchive = useCallback(async () => {
     if (!noteId) return;
+    const saveSucceeded = await flushPendingChanges();
+    if (!saveSucceeded) {
+      return;
+    }
     const newArchived = !archivedRef.current;
     setArchived(newArchived);
     try {
@@ -618,9 +680,13 @@ export default function NoteEditorScreen() {
       setArchived(!newArchived);
       Alert.alert(t('common.error'), t('note.failedUpdate'));
     }
-  }, [noteId, showToast, t, updateMutation]);
+  }, [flushPendingChanges, noteId, showToast, t, updateMutation]);
 
   const handleColorSelect = useCallback(async (selectedColor: string) => {
+    const saveSucceeded = await flushPendingChanges();
+    if (!saveSucceeded) {
+      return;
+    }
     const prevColor = colorRef.current;
     setColor(selectedColor);
     if (!noteId) return;
@@ -640,7 +706,7 @@ export default function NoteEditorScreen() {
       setColor(prevColor);
       Alert.alert(t('common.error'), t('note.failedColorUpdate'));
     }
-  }, [noteId, t, updateMutation]);
+  }, [flushPendingChanges, noteId, t, updateMutation]);
 
   const handleToggleNoteType = useCallback(() => {
     if (hasCreated) return;
@@ -696,10 +762,15 @@ export default function NoteEditorScreen() {
     (reorderedUnchecked: LocalItem[]) => {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
       // Merge reordered unchecked with existing checked items
-      setItems([...reorderedUnchecked, ...checkedItemsRef.current]);
-      scheduleUpdate();
+      setItems(
+        [...reorderedUnchecked, ...checkedItemsRef.current].map((item, index) => ({
+          ...item,
+          position: index,
+        })),
+      );
+      markDirtyAndScheduleUpdate();
     },
-    [scheduleUpdate],
+    [markDirtyAndScheduleUpdate],
   );
 
   const handleTodoDragStart = useCallback(() => {
