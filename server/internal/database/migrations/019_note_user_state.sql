@@ -38,16 +38,16 @@ CREATE TABLE note_labels_new (
     id         TEXT     NOT NULL PRIMARY KEY,
     note_id    TEXT     NOT NULL REFERENCES notes(id)  ON DELETE CASCADE,
     label_id   TEXT     NOT NULL REFERENCES labels(id) ON DELETE CASCADE,
-    user_id    TEXT     NOT NULL DEFAULT '',
+    user_id    TEXT     NOT NULL REFERENCES users(id)  ON DELETE CASCADE,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     UNIQUE(note_id, label_id, user_id)
 );
 
+-- Only migrate rows whose note still exists; orphaned note_labels are dropped.
 INSERT INTO note_labels_new (id, note_id, label_id, user_id, created_at)
-SELECT nl.id, nl.note_id, nl.label_id,
-       COALESCE((SELECT n.user_id FROM notes n WHERE n.id = nl.note_id), ''),
-       nl.created_at
-FROM note_labels nl;
+SELECT nl.id, nl.note_id, nl.label_id, n.user_id, nl.created_at
+FROM note_labels nl
+INNER JOIN notes n ON n.id = nl.note_id;
 
 DROP TABLE note_labels;
 ALTER TABLE note_labels_new RENAME TO note_labels;

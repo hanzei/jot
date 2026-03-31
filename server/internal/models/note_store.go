@@ -34,36 +34,43 @@ func (s *NoteStore) Create(ctx context.Context, userID string, title, content st
 		return nil, fmt.Errorf("failed to generate note ID: %w", err)
 	}
 
-	// Shift existing unpinned notes down to make room at position 0
-	shiftQuery := `UPDATE note_user_state SET position = position + 1
-	               WHERE user_id = ? AND pinned = FALSE AND archived = FALSE
-	               AND note_id IN (SELECT id FROM notes WHERE deleted_at IS NULL)`
-	_, err = s.db.ExecContext(ctx, shiftQuery, userID)
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	// Shift existing unpinned notes down to make room at position 0.
+	if _, err = tx.ExecContext(ctx,
+		`UPDATE note_user_state SET position = position + 1
+		 WHERE user_id = ? AND pinned = FALSE AND archived = FALSE
+		 AND note_id IN (SELECT id FROM notes WHERE deleted_at IS NULL)`,
+		userID,
+	); err != nil {
 		return nil, fmt.Errorf("failed to shift existing notes: %w", err)
 	}
 
-	// New notes go at position 0 (first position)
 	nextPosition := 0
 
-	query := `INSERT INTO notes (id, user_id, title, content, note_type)
-			  VALUES (?, ?, ?, ?, ?) RETURNING created_at, updated_at`
-
 	var note Note
-	err = s.db.QueryRowContext(ctx, query, noteID, userID, title, content, noteType).Scan(
-		&note.CreatedAt, &note.UpdatedAt,
-	)
-	if err != nil {
+	if err = tx.QueryRowContext(ctx,
+		`INSERT INTO notes (id, user_id, title, content, note_type)
+		 VALUES (?, ?, ?, ?, ?) RETURNING created_at, updated_at`,
+		noteID, userID, title, content, noteType,
+	).Scan(&note.CreatedAt, &note.UpdatedAt); err != nil {
 		return nil, fmt.Errorf("failed to create note: %w", err)
 	}
 
-	_, err = s.db.ExecContext(ctx,
+	if _, err = tx.ExecContext(ctx,
 		`INSERT INTO note_user_state (note_id, user_id, color, pinned, archived, position, unpinned_position, checked_items_collapsed)
 		 VALUES (?, ?, ?, FALSE, FALSE, ?, ?, FALSE)`,
 		noteID, userID, color, nextPosition, nextPosition,
-	)
-	if err != nil {
+	); err != nil {
 		return nil, fmt.Errorf("failed to create note user state: %w", err)
+	}
+
+	if err = tx.Commit(); err != nil {
+		return nil, fmt.Errorf("failed to commit note creation: %w", err)
 	}
 
 	note.ID = noteID
@@ -418,22 +425,28 @@ func (s *NoteStore) Update(ctx context.Context, id string, userID string, title,
 	resolvedArchived := deref(archived, currentNote.Archived)
 	resolvedCheckedItemsCollapsed := deref(checkedItemsCollapsed, currentNote.CheckedItemsCollapsed)
 
-	// Shared fields (visible to all collaborators) live in the notes table.
-	sharedUpdate := `UPDATE notes SET title = ?, content = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
-	// Per-user fields live in note_user_state.
-	perUserUpdate := `UPDATE note_user_state SET pinned = ?, archived = ?, color = ?, checked_items_collapsed = ?, updated_at = CURRENT_TIMESTAMP
-	                  WHERE note_id = ? AND user_id = ?`
-
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	if _, err = tx.ExecContext(ctx, sharedUpdate, resolvedTitle, resolvedContent, id); err != nil {
-		return fmt.Errorf("failed to update note: %w", err)
+	// Only update shared fields (title/content) when the caller explicitly
+	// provided at least one — skipping avoids overwriting concurrent edits
+	// when only per-user fields (color, pinned, etc.) are changing.
+	if title != nil || content != nil {
+		if _, err = tx.ExecContext(ctx,
+			`UPDATE notes SET title = ?, content = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+			resolvedTitle, resolvedContent, id,
+		); err != nil {
+			return fmt.Errorf("failed to update note: %w", err)
+		}
 	}
-	result, err := tx.ExecContext(ctx, perUserUpdate,
+
+	// Per-user fields live in note_user_state.
+	result, err := tx.ExecContext(ctx,
+		`UPDATE note_user_state SET pinned = ?, archived = ?, color = ?, checked_items_collapsed = ?, updated_at = CURRENT_TIMESTAMP
+		 WHERE note_id = ? AND user_id = ?`,
 		resolvedPinned, resolvedArchived, resolvedColor, resolvedCheckedItemsCollapsed, id, userID,
 	)
 	if err != nil {
@@ -689,7 +702,10 @@ func (s *NoteStore) MoveToTrash(ctx context.Context, id string, userID string) e
 		return fmt.Errorf("failed to reset note user state on trash: %w", err)
 	}
 
-	return tx.Commit()
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit move to trash: %w", err)
+	}
+	return nil
 }
 
 // RestoreFromTrash clears deleted_at and places the restored note at position 0
@@ -995,30 +1011,19 @@ func (s *NoteStore) CreateItemWithCompleted(ctx context.Context, noteID string, 
 }
 
 func (s *NoteStore) HasAccess(ctx context.Context, noteID string, userID string) (bool, error) {
-	query := `SELECT COUNT(*) FROM active_notes WHERE id = ? AND user_id = ?
-			  UNION ALL
-			  SELECT COUNT(*) FROM note_shares WHERE note_id = ? AND shared_with_user_id = ?
-			    AND EXISTS (SELECT 1 FROM active_notes WHERE id = note_shares.note_id)`
-
-	rows, err := s.db.QueryContext(ctx, query, noteID, userID, noteID, userID)
+	// Use the same predicate as GetByID: a note_user_state row exists for both
+	// owners and collaborators, so this is a single consistent access check.
+	var count int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM note_user_state nus
+		 INNER JOIN active_notes n ON n.id = nus.note_id
+		 WHERE nus.note_id = ? AND nus.user_id = ?`,
+		noteID, userID,
+	).Scan(&count)
 	if err != nil {
 		return false, fmt.Errorf("failed to check access: %w", err)
 	}
-
-	scanInt := func(rows *sql.Rows) (int, error) {
-		var v int
-		return v, rows.Scan(&v)
-	}
-	counts, err := collectRows(rows, scanInt)
-	if err != nil {
-		return false, fmt.Errorf("failed to scan access counts: %w", err)
-	}
-
-	totalCount := 0
-	for _, c := range counts {
-		totalCount += c
-	}
-	return totalCount > 0, nil
+	return count > 0, nil
 }
 
 func (s *NoteStore) IsOwner(ctx context.Context, noteID string, userID string) (bool, error) {

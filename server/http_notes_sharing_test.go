@@ -223,8 +223,6 @@ func TestPerUserNoteState(t *testing.T) {
 		owner := ts.createTestUser(t, "owner", "password123", false)
 		collab := ts.createTestUser(t, "collab", "password123", false)
 
-		other, err := owner.Client.CreateNote(t.Context(), &client.CreateNoteRequest{Title: "Other Note"})
-		require.NoError(t, err)
 		note, err := owner.Client.CreateNote(t.Context(), &client.CreateNoteRequest{Title: "Shared Note"})
 		require.NoError(t, err)
 		require.NoError(t, owner.Client.ShareNote(t.Context(), note.ID, collab.User.ID))
@@ -241,8 +239,6 @@ func TestPerUserNoteState(t *testing.T) {
 		collabNote, err := collab.Client.GetNote(t.Context(), note.ID)
 		require.NoError(t, err)
 		assert.True(t, collabNote.Pinned, "collaborator should see the note as pinned")
-
-		_ = other
 	})
 
 	t.Run("labels applied by collaborator are only visible to that collaborator", func(t *testing.T) {

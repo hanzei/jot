@@ -180,11 +180,11 @@ func (s *NoteStore) ClearUserAssignmentsTx(ctx context.Context, tx *sql.Tx, user
 		return fmt.Errorf("failed to clear assignments on unshared notes: %w", err)
 	}
 
-	// Remove all per-user state for the deleted user.
-	// note_user_state.user_id has ON DELETE CASCADE, so this is a no-op when FK
-	// enforcement is on (see PRAGMA foreign_keys = ON in database.go), but is
-	// kept as an explicit safety net for any code path that runs without FK
-	// enforcement or to handle owned notes that share the same user_id column.
+	// Both deletes below are safety nets: note_user_state.user_id and
+	// note_labels.user_id both carry ON DELETE CASCADE, so FK enforcement
+	// (PRAGMA foreign_keys = ON in database.go) handles them automatically.
+	// The explicit deletes guard against any future code path where FK
+	// enforcement might not be active.
 	if _, err := tx.ExecContext(ctx,
 		`DELETE FROM note_user_state WHERE user_id = ?`,
 		userID,
@@ -192,9 +192,6 @@ func (s *NoteStore) ClearUserAssignmentsTx(ctx context.Context, tx *sql.Tx, user
 		return fmt.Errorf("failed to delete note user state for deleted user: %w", err)
 	}
 
-	// Remove all note labels applied by the deleted user.
-	// note_labels.user_id has no FK constraint, so FK cascades never clean these
-	// up automatically — this delete is always required.
 	if _, err := tx.ExecContext(ctx,
 		`DELETE FROM note_labels WHERE user_id = ?`,
 		userID,
