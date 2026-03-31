@@ -97,7 +97,12 @@
       "created_at": "Data di creazione"
     },
     "sortAccessibilityLabel": "Ordina per {{sortLabel}}",
-    "sortDisabledNotice": "Il riordinamento manuale è disattivato. Le note sono ordinate per {{sortLabel}}, quindi il trascinamento non è disponibile."
+    "sortDisabledNotice": "Il riordinamento manuale è disattivato. Le note sono ordinate per {{sortLabel}}, quindi il trascinamento non è disponibile.",
+    "noteArchived": "Nota archiviata",
+    "noteUnarchived": "Nota ripristinata dall'archivio",
+    "noteDeleted": "Nota spostata nel cestino",
+    "noteRestored": "Nota ripristinata",
+    "undo": "Annulla"
   },
   "settings": {
     "title": "Impostazioni",
@@ -155,6 +160,8 @@
     "sessionsBrowserOnOS": "{{browser}} su {{os}}",
     "sessionsCurrent": "Corrente",
     "sessionsRevoke": "Revoca",
+    "sessionsRevokeConfirmTitle": "Revoca sessione",
+    "sessionsRevokeConfirmMessage": "Vuoi davvero revocare questa sessione?",
     "sessionsRevoking": "Revoca in corso...",
     "sessionsRevokeFailed": "Impossibile revocare la sessione",
     "sessionsNone": "Nessuna sessione attiva trovata.",

@@ -1,12 +1,19 @@
 import React from 'react';
+import { Alert } from 'react-native';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import type { DrawerContentComponentProps } from '@react-navigation/drawer';
 import DrawerContent from '../src/components/DrawerContent';
+import type { Label } from '@jot/shared';
 
 const mockSwitchActiveServer = jest.fn();
 const mockListServers = jest.fn();
 const mockGetActiveServer = jest.fn();
 const mockAddServer = jest.fn();
+const mockLabelsData: Label[] = [];
+const mockRenameLabelMutateAsync = jest.fn();
+const mockDeleteLabelMutateAsync = jest.fn();
+const mockUserAvatar = jest.fn();
+let mockHasProfileIcon = true;
 
 jest.mock('../src/store/AuthContext', () => ({
   useAuth: () => ({
@@ -16,7 +23,7 @@ jest.mock('../src/store/AuthContext', () => ({
       first_name: 'Alice',
       last_name: 'Smith',
       role: 'user',
-      has_profile_icon: false,
+      has_profile_icon: mockHasProfileIcon,
       created_at: '2026-01-01T00:00:00Z',
       updated_at: '2026-01-01T00:00:00Z',
     },
@@ -25,10 +32,20 @@ jest.mock('../src/store/AuthContext', () => ({
   }),
 }));
 
+jest.mock('../src/components/UserAvatar', () => ({
+  __esModule: true,
+  default: (props: unknown) => {
+    const ReactLocal = jest.requireActual('react');
+    const { Text } = jest.requireActual('react-native');
+    mockUserAvatar(props);
+    return ReactLocal.createElement(Text, { testID: 'drawer-user-avatar' });
+  },
+}));
+
 jest.mock('../src/hooks/useLabels', () => ({
-  useLabels: () => ({ data: [] }),
-  useRenameLabel: () => ({ mutateAsync: jest.fn(), isPending: false }),
-  useDeleteLabel: () => ({ mutateAsync: jest.fn(), isPending: false }),
+  useLabels: () => ({ data: mockLabelsData }),
+  useRenameLabel: () => ({ mutateAsync: mockRenameLabelMutateAsync, isPending: false }),
+  useDeleteLabel: () => ({ mutateAsync: mockDeleteLabelMutateAsync, isPending: false }),
 }));
 
 jest.mock('../src/theme/ThemeContext', () => ({
@@ -58,7 +75,7 @@ jest.mock('react-i18next', () => ({
 }));
 
 jest.mock('react-native-safe-area-context', () => ({
-  useSafeAreaInsets: () => ({ top: 24, bottom: 0, left: 0, right: 0 }),
+  useSafeAreaInsets: () => ({ top: 24, bottom: 34, left: 0, right: 0 }),
 }));
 
 jest.mock('@react-navigation/native', () => ({
@@ -86,34 +103,42 @@ jest.mock('@react-navigation/drawer', () => {
   };
 });
 
-describe('DrawerContent safe-area spacing', () => {
+const makeProps = (): DrawerContentComponentProps => ({
+  state: {
+    index: 0,
+    key: 'drawer-key',
+    routeNames: ['Notes', 'MyTodo', 'Archived', 'Trash'],
+    routes: [{ key: 'notes-key', name: 'Notes' }],
+    stale: false,
+    type: 'drawer',
+    history: [],
+  },
+  navigation: {
+    navigate: jest.fn(),
+    closeDrawer: jest.fn(),
+    dispatch: jest.fn(),
+  },
+  descriptors: {},
+  progress: {},
+} as unknown as DrawerContentComponentProps);
+
+describe('DrawerContent', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockLabelsData.length = 0;
+    mockHasProfileIcon = true;
     mockListServers.mockResolvedValue([]);
     mockGetActiveServer.mockResolvedValue(null);
     mockAddServer.mockResolvedValue({ success: true, serverId: 'srv_new' });
     mockSwitchActiveServer.mockResolvedValue(true);
   });
 
+  afterEach(() => {
+    jest.restoreAllMocks();
+  });
+
   it('applies top inset padding to drawer scroll content', () => {
-    const props = {
-      state: {
-        index: 0,
-        key: 'drawer-key',
-        routeNames: ['Notes', 'MyTodo', 'Archived', 'Trash'],
-        routes: [{ key: 'notes-key', name: 'Notes' }],
-        stale: false,
-        type: 'drawer',
-        history: [],
-      },
-      navigation: {
-        navigate: jest.fn(),
-        closeDrawer: jest.fn(),
-        dispatch: jest.fn(),
-      },
-      descriptors: {},
-      progress: {},
-    } as unknown as DrawerContentComponentProps;
+    const props = makeProps();
 
     const { getByTestId } = render(<DrawerContent {...props} />);
     const scrollView = getByTestId('drawer-scroll-view');
@@ -121,25 +146,16 @@ describe('DrawerContent safe-area spacing', () => {
     expect(scrollView.props.contentContainerStyle).toEqual({ paddingTop: 32 });
   });
 
+  it('applies bottom inset padding to footer actions', () => {
+    const props = makeProps();
+
+    const { getByTestId } = render(<DrawerContent {...props} />);
+    const bottomSection = getByTestId('drawer-bottom-section');
+    expect(bottomSection.props.style).toEqual(expect.arrayContaining([expect.objectContaining({ paddingBottom: 34 })]));
+  });
+
   it('opens server picker from profile section', async () => {
-    const props = {
-      state: {
-        index: 0,
-        key: 'drawer-key',
-        routeNames: ['Notes', 'MyTodo', 'Archived', 'Trash'],
-        routes: [{ key: 'notes-key', name: 'Notes' }],
-        stale: false,
-        type: 'drawer',
-        history: [],
-      },
-      navigation: {
-        navigate: jest.fn(),
-        closeDrawer: jest.fn(),
-        dispatch: jest.fn(),
-      },
-      descriptors: {},
-      progress: {},
-    } as unknown as DrawerContentComponentProps;
+    const props = makeProps();
 
     const { getByTestId, findByTestId } = render(<DrawerContent {...props} />);
     fireEvent.press(getByTestId('drawer-profile-button'));
@@ -149,5 +165,136 @@ describe('DrawerContent safe-area spacing', () => {
       expect(mockListServers).toHaveBeenCalled();
       expect(mockGetActiveServer).toHaveBeenCalled();
     });
+  });
+
+  it('renders drawer avatar from profile icon state', () => {
+    const props = makeProps();
+
+    const { getByTestId } = render(<DrawerContent {...props} />);
+    expect(getByTestId('drawer-user-avatar')).toBeTruthy();
+    expect(mockUserAvatar).toHaveBeenCalledWith({
+      userId: 'user-1',
+      username: 'alice',
+      hasProfileIcon: true,
+      size: 'large',
+    });
+  });
+
+  it('passes false hasProfileIcon to drawer avatar when icon is absent', () => {
+    mockHasProfileIcon = false;
+    const props = makeProps();
+
+    render(<DrawerContent {...props} />);
+    expect(mockUserAvatar).toHaveBeenCalledWith(expect.objectContaining({
+      userId: 'user-1',
+      username: 'alice',
+      hasProfileIcon: false,
+      size: 'large',
+    }));
+  });
+
+  it('opens label action menu from explicit menu button', () => {
+    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(jest.fn());
+    mockLabelsData.push({
+      id: 'label-1',
+      user_id: 'user-1',
+      name: 'Work',
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    });
+
+    const props = makeProps();
+
+    const { getByTestId } = render(<DrawerContent {...props} />);
+    fireEvent.press(getByTestId('drawer-label-menu-label-1'));
+
+    expect(alertSpy).toHaveBeenCalledTimes(1);
+    const alertCall = alertSpy.mock.calls[0];
+    const buttons = (alertCall?.[2] as Array<{ text?: string }> | undefined) ?? [];
+
+    expect(alertCall?.[0]).toBe('Work');
+    expect(alertCall?.[1]).toBe('labels.menuOptions');
+    expect(buttons.map((button) => button.text)).toEqual(
+      expect.arrayContaining(['labels.rename', 'labels.delete', 'common.cancel']),
+    );
+  });
+
+  it('opens label action menu from long press', () => {
+    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(jest.fn());
+    mockLabelsData.push({
+      id: 'label-1',
+      user_id: 'user-1',
+      name: 'Work',
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    });
+
+    const navigate = jest.fn();
+    const props = makeProps();
+    props.navigation.navigate = navigate;
+
+    const { getByTestId } = render(<DrawerContent {...props} />);
+    fireEvent(getByTestId('drawer-label-label-1'), 'onLongPress');
+
+    expect(alertSpy).toHaveBeenCalledTimes(1);
+    const alertCall = alertSpy.mock.calls[0];
+    const buttons = (alertCall?.[2] as Array<{ text?: string }> | undefined) ?? [];
+
+    expect(alertCall?.[0]).toBe('Work');
+    expect(alertCall?.[1]).toBe('labels.menuOptions');
+    expect(buttons.map((button) => button.text)).toEqual(
+      expect.arrayContaining(['labels.rename', 'labels.delete', 'common.cancel']),
+    );
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it('navigates on first tap after a long press menu is canceled', () => {
+    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(jest.fn());
+    mockLabelsData.push({
+      id: 'label-1',
+      user_id: 'user-1',
+      name: 'Work',
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    });
+
+    const navigate = jest.fn();
+    const closeDrawer = jest.fn();
+    const props = makeProps();
+    props.navigation.navigate = navigate;
+    props.navigation.closeDrawer = closeDrawer;
+
+    const { getByTestId } = render(<DrawerContent {...props} />);
+    fireEvent(getByTestId('drawer-label-label-1'), 'onLongPress');
+    expect(alertSpy).toHaveBeenCalledTimes(1);
+    const onDismiss = (alertSpy.mock.calls[0]?.[3] as { onDismiss?: () => void } | undefined)?.onDismiss;
+    onDismiss?.();
+
+    fireEvent.press(getByTestId('drawer-label-label-1'));
+
+    expect(navigate).toHaveBeenCalledWith('Notes', { labelId: 'label-1', labelName: 'Work' });
+    expect(closeDrawer).toHaveBeenCalled();
+  });
+
+  it('navigates to label notes when label row is pressed', () => {
+    mockLabelsData.push({
+      id: 'label-1',
+      user_id: 'user-1',
+      name: 'Work',
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    });
+
+    const navigate = jest.fn();
+    const closeDrawer = jest.fn();
+    const props = makeProps();
+    props.navigation.navigate = navigate;
+    props.navigation.closeDrawer = closeDrawer;
+
+    const { getByTestId } = render(<DrawerContent {...props} />);
+    fireEvent.press(getByTestId('drawer-label-label-1'));
+
+    expect(navigate).toHaveBeenCalledWith('Notes', { labelId: 'label-1', labelName: 'Work' });
+    expect(closeDrawer).toHaveBeenCalled();
   });
 });
