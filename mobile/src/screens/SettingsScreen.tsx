@@ -97,7 +97,15 @@ export default function SettingsScreen() {
   const [aboutError, setAboutError] = useState('');
   const [aboutExpanded, setAboutExpanded] = useState(false);
   const [activeServerUrl, setActiveServerUrl] = useState<string | null>(null);
+  const isMountedRef = useRef(true);
   const previousServerUrlRef = useRef<string | null | undefined>(undefined);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
 
   useEffect(() => {
     let mounted = true;
@@ -169,12 +177,20 @@ export default function SettingsScreen() {
     setRevokingId(id);
     try {
       await revokeSession(id);
+      if (!isMountedRef.current) {
+        return;
+      }
       setSessionsError('');
       setSessions(prev => prev.filter(s => s.id !== id));
     } catch {
+      if (!isMountedRef.current) {
+        return;
+      }
       setSessionsError('settings.sessionsRevokeFailed');
     } finally {
-      setRevokingId(null);
+      if (isMountedRef.current) {
+        setRevokingId(null);
+      }
     }
   }, []);
 
