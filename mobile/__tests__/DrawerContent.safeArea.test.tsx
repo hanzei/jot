@@ -98,6 +98,25 @@ jest.mock('@react-navigation/drawer', () => {
   };
 });
 
+const makeProps = (): DrawerContentComponentProps => ({
+  state: {
+    index: 0,
+    key: 'drawer-key',
+    routeNames: ['Notes', 'MyTodo', 'Archived', 'Trash'],
+    routes: [{ key: 'notes-key', name: 'Notes' }],
+    stale: false,
+    type: 'drawer',
+    history: [],
+  },
+  navigation: {
+    navigate: jest.fn(),
+    closeDrawer: jest.fn(),
+    dispatch: jest.fn(),
+  },
+  descriptors: {},
+  progress: {},
+} as unknown as DrawerContentComponentProps);
+
 describe('DrawerContent safe-area spacing', () => {
   beforeEach(() => {
     jest.clearAllMocks();
@@ -109,24 +128,7 @@ describe('DrawerContent safe-area spacing', () => {
   });
 
   it('applies top inset padding to drawer scroll content', () => {
-    const props = {
-      state: {
-        index: 0,
-        key: 'drawer-key',
-        routeNames: ['Notes', 'MyTodo', 'Archived', 'Trash'],
-        routes: [{ key: 'notes-key', name: 'Notes' }],
-        stale: false,
-        type: 'drawer',
-        history: [],
-      },
-      navigation: {
-        navigate: jest.fn(),
-        closeDrawer: jest.fn(),
-        dispatch: jest.fn(),
-      },
-      descriptors: {},
-      progress: {},
-    } as unknown as DrawerContentComponentProps;
+    const props = makeProps();
 
     const { getByTestId } = render(<DrawerContent {...props} />);
     const scrollView = getByTestId('drawer-scroll-view');
@@ -135,24 +137,7 @@ describe('DrawerContent safe-area spacing', () => {
   });
 
   it('applies bottom inset padding to footer actions', () => {
-    const props = {
-      state: {
-        index: 0,
-        key: 'drawer-key',
-        routeNames: ['Notes', 'MyTodo', 'Archived', 'Trash'],
-        routes: [{ key: 'notes-key', name: 'Notes' }],
-        stale: false,
-        type: 'drawer',
-        history: [],
-      },
-      navigation: {
-        navigate: jest.fn(),
-        closeDrawer: jest.fn(),
-        dispatch: jest.fn(),
-      },
-      descriptors: {},
-      progress: {},
-    } as unknown as DrawerContentComponentProps;
+    const props = makeProps();
 
     const { getByTestId } = render(<DrawerContent {...props} />);
     const bottomSection = getByTestId('drawer-bottom-section');
@@ -160,24 +145,7 @@ describe('DrawerContent safe-area spacing', () => {
   });
 
   it('opens server picker from profile section', async () => {
-    const props = {
-      state: {
-        index: 0,
-        key: 'drawer-key',
-        routeNames: ['Notes', 'MyTodo', 'Archived', 'Trash'],
-        routes: [{ key: 'notes-key', name: 'Notes' }],
-        stale: false,
-        type: 'drawer',
-        history: [],
-      },
-      navigation: {
-        navigate: jest.fn(),
-        closeDrawer: jest.fn(),
-        dispatch: jest.fn(),
-      },
-      descriptors: {},
-      progress: {},
-    } as unknown as DrawerContentComponentProps;
+    const props = makeProps();
 
     const { getByTestId, findByTestId } = render(<DrawerContent {...props} />);
     fireEvent.press(getByTestId('drawer-profile-button'));
@@ -190,24 +158,7 @@ describe('DrawerContent safe-area spacing', () => {
   });
 
   it('renders drawer avatar from profile icon state', () => {
-    const props = {
-      state: {
-        index: 0,
-        key: 'drawer-key',
-        routeNames: ['Notes', 'MyTodo', 'Archived', 'Trash'],
-        routes: [{ key: 'notes-key', name: 'Notes' }],
-        stale: false,
-        type: 'drawer',
-        history: [],
-      },
-      navigation: {
-        navigate: jest.fn(),
-        closeDrawer: jest.fn(),
-        dispatch: jest.fn(),
-      },
-      descriptors: {},
-      progress: {},
-    } as unknown as DrawerContentComponentProps;
+    const props = makeProps();
 
     const { getByTestId } = render(<DrawerContent {...props} />);
     expect(getByTestId('drawer-user-avatar')).toBeTruthy();
@@ -221,24 +172,7 @@ describe('DrawerContent safe-area spacing', () => {
 
   it('passes false hasProfileIcon to drawer avatar when icon is absent', () => {
     mockHasProfileIcon = false;
-    const props = {
-      state: {
-        index: 0,
-        key: 'drawer-key',
-        routeNames: ['Notes', 'MyTodo', 'Archived', 'Trash'],
-        routes: [{ key: 'notes-key', name: 'Notes' }],
-        stale: false,
-        type: 'drawer',
-        history: [],
-      },
-      navigation: {
-        navigate: jest.fn(),
-        closeDrawer: jest.fn(),
-        dispatch: jest.fn(),
-      },
-      descriptors: {},
-      progress: {},
-    } as unknown as DrawerContentComponentProps;
+    const props = makeProps();
 
     render(<DrawerContent {...props} />);
     expect(mockUserAvatar).toHaveBeenCalledWith(expect.objectContaining({

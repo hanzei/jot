@@ -10,7 +10,7 @@ const SIZE_MAP = {
 };
 
 interface UserAvatarProps {
-  userId: string;
+  userId?: string;
   username: string;
   hasProfileIcon?: boolean;
   size?: 'small' | 'medium' | 'large';
