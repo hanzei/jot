@@ -155,7 +155,7 @@
     "sessionsBrowserOnOS": "{{browser}} em {{os}}",
     "sessionsCurrent": "Atual",
     "sessionsRevoke": "Revogar",
-    "sessionsRevokeConfirmTitle": "Revogar sessão?",
+    "sessionsRevokeConfirmTitle": "Revogar sessão",
     "sessionsRevokeConfirmMessage": "Tem certeza de que deseja revogar esta sessão?",
     "sessionsRevoking": "Revogando...",
     "sessionsRevokeFailed": "Falha ao revogar a sessão",

@@ -1,6 +1,6 @@
 import React from 'react';
 import { Alert, Text } from 'react-native';
-import { render, fireEvent, waitFor } from '@testing-library/react-native';
+import { render, fireEvent, waitFor, act } from '@testing-library/react-native';
 import { useTranslation } from 'react-i18next';
 import SettingsScreen from '../src/screens/SettingsScreen';
 import MobileI18nProvider from '../src/i18n/MobileI18nProvider';
@@ -118,6 +118,7 @@ describe('SettingsScreen language selection', () => {
     };
     setSettings.mockClear();
     setUser.mockClear();
+    mockRevokeSession.mockClear();
     mockListSessions.mockResolvedValue([
       {
         id: 'current-session',
@@ -269,7 +270,9 @@ describe('SettingsScreen language selection', () => {
     const [, , actions] = alertSpy.mock.calls[0] as [string, string, Array<{ text: string; onPress?: () => void }>];
     const revokeAction = actions.find(action => action.text === 'Revoke');
     expect(revokeAction).toBeDefined();
-    revokeAction?.onPress?.();
+    await act(async () => {
+      revokeAction?.onPress?.();
+    });
 
     await waitFor(() => {
       expect(mockRevokeSession).toHaveBeenCalledWith('other-session');

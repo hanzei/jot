@@ -186,6 +186,7 @@ export default function SettingsScreen() {
         {
           text: t('common.cancel'),
           style: 'cancel',
+          onPress: () => undefined,
         },
         {
           text: t('settings.sessionsRevoke'),
