@@ -1,12 +1,17 @@
 import React from 'react';
+import { Alert } from 'react-native';
 import { fireEvent, render, waitFor } from '@testing-library/react-native';
 import type { DrawerContentComponentProps } from '@react-navigation/drawer';
 import DrawerContent from '../src/components/DrawerContent';
+import type { Label } from '@jot/shared';
 
 const mockSwitchActiveServer = jest.fn();
 const mockListServers = jest.fn();
 const mockGetActiveServer = jest.fn();
 const mockAddServer = jest.fn();
+const mockLabelsData: Label[] = [];
+const mockRenameLabelMutateAsync = jest.fn();
+const mockDeleteLabelMutateAsync = jest.fn();
 const mockUserAvatar = jest.fn();
 let mockHasProfileIcon = true;
 
@@ -38,9 +43,9 @@ jest.mock('../src/components/UserAvatar', () => ({
 }));
 
 jest.mock('../src/hooks/useLabels', () => ({
-  useLabels: () => ({ data: [] }),
-  useRenameLabel: () => ({ mutateAsync: jest.fn(), isPending: false }),
-  useDeleteLabel: () => ({ mutateAsync: jest.fn(), isPending: false }),
+  useLabels: () => ({ data: mockLabelsData }),
+  useRenameLabel: () => ({ mutateAsync: mockRenameLabelMutateAsync, isPending: false }),
+  useDeleteLabel: () => ({ mutateAsync: mockDeleteLabelMutateAsync, isPending: false }),
 }));
 
 jest.mock('../src/theme/ThemeContext', () => ({
@@ -117,14 +122,19 @@ const makeProps = (): DrawerContentComponentProps => ({
   progress: {},
 } as unknown as DrawerContentComponentProps);
 
-describe('DrawerContent safe-area spacing', () => {
+describe('DrawerContent', () => {
   beforeEach(() => {
     jest.clearAllMocks();
+    mockLabelsData.length = 0;
     mockHasProfileIcon = true;
     mockListServers.mockResolvedValue([]);
     mockGetActiveServer.mockResolvedValue(null);
     mockAddServer.mockResolvedValue({ success: true, serverId: 'srv_new' });
     mockSwitchActiveServer.mockResolvedValue(true);
+  });
+
+  afterEach(() => {
+    jest.restoreAllMocks();
   });
 
   it('applies top inset padding to drawer scroll content', () => {
@@ -181,5 +191,110 @@ describe('DrawerContent safe-area spacing', () => {
       hasProfileIcon: false,
       size: 'large',
     }));
+  });
+
+  it('opens label action menu from explicit menu button', () => {
+    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(jest.fn());
+    mockLabelsData.push({
+      id: 'label-1',
+      user_id: 'user-1',
+      name: 'Work',
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    });
+
+    const props = makeProps();
+
+    const { getByTestId } = render(<DrawerContent {...props} />);
+    fireEvent.press(getByTestId('drawer-label-menu-label-1'));
+
+    expect(alertSpy).toHaveBeenCalledTimes(1);
+    const alertCall = alertSpy.mock.calls[0];
+    const buttons = (alertCall?.[2] as Array<{ text?: string }> | undefined) ?? [];
+
+    expect(alertCall?.[0]).toBe('Work');
+    expect(alertCall?.[1]).toBe('labels.menuOptions');
+    expect(buttons.map((button) => button.text)).toEqual(
+      expect.arrayContaining(['labels.rename', 'labels.delete', 'common.cancel']),
+    );
+  });
+
+  it('opens label action menu from long press', () => {
+    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(jest.fn());
+    mockLabelsData.push({
+      id: 'label-1',
+      user_id: 'user-1',
+      name: 'Work',
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    });
+
+    const navigate = jest.fn();
+    const props = makeProps();
+    props.navigation.navigate = navigate;
+
+    const { getByTestId } = render(<DrawerContent {...props} />);
+    fireEvent(getByTestId('drawer-label-label-1'), 'onLongPress');
+
+    expect(alertSpy).toHaveBeenCalledTimes(1);
+    const alertCall = alertSpy.mock.calls[0];
+    const buttons = (alertCall?.[2] as Array<{ text?: string }> | undefined) ?? [];
+
+    expect(alertCall?.[0]).toBe('Work');
+    expect(alertCall?.[1]).toBe('labels.menuOptions');
+    expect(buttons.map((button) => button.text)).toEqual(
+      expect.arrayContaining(['labels.rename', 'labels.delete', 'common.cancel']),
+    );
+    expect(navigate).not.toHaveBeenCalled();
+  });
+
+  it('navigates on first tap after a long press menu is canceled', () => {
+    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(jest.fn());
+    mockLabelsData.push({
+      id: 'label-1',
+      user_id: 'user-1',
+      name: 'Work',
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    });
+
+    const navigate = jest.fn();
+    const closeDrawer = jest.fn();
+    const props = makeProps();
+    props.navigation.navigate = navigate;
+    props.navigation.closeDrawer = closeDrawer;
+
+    const { getByTestId } = render(<DrawerContent {...props} />);
+    fireEvent(getByTestId('drawer-label-label-1'), 'onLongPress');
+    expect(alertSpy).toHaveBeenCalledTimes(1);
+    const onDismiss = (alertSpy.mock.calls[0]?.[3] as { onDismiss?: () => void } | undefined)?.onDismiss;
+    onDismiss?.();
+
+    fireEvent.press(getByTestId('drawer-label-label-1'));
+
+    expect(navigate).toHaveBeenCalledWith('Notes', { labelId: 'label-1', labelName: 'Work' });
+    expect(closeDrawer).toHaveBeenCalled();
+  });
+
+  it('navigates to label notes when label row is pressed', () => {
+    mockLabelsData.push({
+      id: 'label-1',
+      user_id: 'user-1',
+      name: 'Work',
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    });
+
+    const navigate = jest.fn();
+    const closeDrawer = jest.fn();
+    const props = makeProps();
+    props.navigation.navigate = navigate;
+    props.navigation.closeDrawer = closeDrawer;
+
+    const { getByTestId } = render(<DrawerContent {...props} />);
+    fireEvent.press(getByTestId('drawer-label-label-1'));
+
+    expect(navigate).toHaveBeenCalledWith('Notes', { labelId: 'label-1', labelName: 'Work' });
+    expect(closeDrawer).toHaveBeenCalled();
   });
 });

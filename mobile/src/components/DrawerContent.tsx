@@ -177,14 +177,35 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
     );
   }, [deleteLabel, handleDeleteLabelSuccess, t]);
 
+  const resetLongPressHandled = useCallback(() => {
+    longPressHandledRef.current = false;
+  }, []);
+
+  const openLabelMenu = useCallback((label: Label) => {
+    Alert.alert(label.name, t('labels.menuOptions', { name: label.name }), [
+      {
+        text: t('labels.rename'),
+        onPress: () => {
+          resetLongPressHandled();
+          openRenameModal(label);
+        },
+      },
+      {
+        text: t('labels.delete'),
+        style: 'destructive',
+        onPress: () => {
+          resetLongPressHandled();
+          handleDeleteLabel(label);
+        },
+      },
+      { text: t('common.cancel'), style: 'cancel', onPress: resetLongPressHandled },
+    ], { cancelable: true, onDismiss: resetLongPressHandled });
+  }, [handleDeleteLabel, openRenameModal, resetLongPressHandled, t]);
+
   const handleLabelLongPress = useCallback((label: Label) => {
     longPressHandledRef.current = true;
-    Alert.alert(label.name, t('labels.menuOptions', { name: label.name }), [
-      { text: t('labels.rename'), onPress: () => openRenameModal(label) },
-      { text: t('labels.delete'), style: 'destructive', onPress: () => handleDeleteLabel(label) },
-      { text: t('common.cancel'), style: 'cancel' },
-    ]);
-  }, [handleDeleteLabel, openRenameModal, t]);
+    openLabelMenu(label);
+  }, [openLabelMenu]);
 
   const handleSettingsPress = useCallback(() => {
     props.navigation.dispatch(
@@ -371,29 +392,47 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
               {labels.map((label) => {
                 const isActive = activeLabelId === label.id;
                 return (
-                  <TouchableOpacity
+                  <View
                     key={label.id}
-                    style={[styles.navItem, isActive && { backgroundColor: colors.primaryLight }]}
-                    onPress={() => handleLabelPress(label.id, label.name)}
-                    onLongPress={() => handleLabelLongPress(label)}
-                    delayLongPress={250}
-                    testID={`drawer-label-${label.id}`}
-                    accessibilityLabel={label.name}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: isActive }}
+                    style={[styles.labelRow, isActive && { backgroundColor: colors.primaryLight }]}
                   >
-                    <Ionicons
-                      name={isActive ? 'pricetag' : 'pricetag-outline'}
-                      size={22}
-                      color={isActive ? colors.primary : colors.icon}
-                    />
-                    <Text
-                      style={[styles.navItemText, { color: colors.icon }, isActive && { color: colors.primary, fontWeight: '600' }]}
-                      numberOfLines={1}
+                    <TouchableOpacity
+                      style={[styles.navItem, styles.labelNavItem]}
+                      onPress={() => handleLabelPress(label.id, label.name)}
+                      onLongPress={() => handleLabelLongPress(label)}
+                      delayLongPress={250}
+                      testID={`drawer-label-${label.id}`}
+                      accessibilityLabel={label.name}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: isActive }}
                     >
-                      {label.name}
-                    </Text>
-                  </TouchableOpacity>
+                      <Ionicons
+                        name={isActive ? 'pricetag' : 'pricetag-outline'}
+                        size={22}
+                        color={isActive ? colors.primary : colors.icon}
+                      />
+                      <Text
+                        style={[styles.navItemText, { color: colors.icon }, isActive && { color: colors.primary, fontWeight: '600' }]}
+                        numberOfLines={1}
+                      >
+                        {label.name}
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.labelMenuButton}
+                      onPress={() => openLabelMenu(label)}
+                      hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${label.name}. ${t('labels.menuOptions', { name: label.name })}`}
+                      testID={`drawer-label-menu-${label.id}`}
+                    >
+                      <Ionicons
+                        name="ellipsis-vertical"
+                        size={18}
+                        color={isActive ? colors.primary : colors.icon}
+                      />
+                    </TouchableOpacity>
+                  </View>
                 );
               })}
             </>
@@ -694,6 +733,20 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '400',
     flexShrink: 1,
+  },
+  labelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 10,
+    paddingRight: 6,
+  },
+  labelNavItem: {
+    flex: 1,
+    paddingRight: 8,
+  },
+  labelMenuButton: {
+    padding: 10,
+    borderRadius: 8,
   },
   navDivider: {
     height: 1,
