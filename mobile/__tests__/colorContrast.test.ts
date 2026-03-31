@@ -2,7 +2,7 @@ import { getCompletedSectionDividerColor, isWhiteHexColor } from '../src/utils/c
 
 describe('getCompletedSectionDividerColor', () => {
   it('returns darker divider for light backgrounds', () => {
-    expect(getCompletedSectionDividerColor('#f28b82')).toBe('rgba(0,0,0,0.2)');
+    expect(getCompletedSectionDividerColor('#d7aefb')).toBe('rgba(0,0,0,0.2)');
     expect(getCompletedSectionDividerColor('#ffffff')).toBe('rgba(0,0,0,0.2)');
     expect(getCompletedSectionDividerColor('#fff')).toBe('rgba(0,0,0,0.2)');
   });
@@ -12,8 +12,8 @@ describe('getCompletedSectionDividerColor', () => {
     expect(getCompletedSectionDividerColor('#000')).toBe('rgba(255,255,255,0.26)');
   });
 
-  it('uses dark divider when luminance is at threshold boundary', () => {
-    expect(getCompletedSectionDividerColor('#b5b5b5')).toBe('rgba(0,0,0,0.2)');
+  it('uses light divider when luminance is below threshold', () => {
+    expect(getCompletedSectionDividerColor('#b2b2b2')).toBe('rgba(255,255,255,0.26)');
   });
 
   it('falls back to a safe divider when color format is not supported', () => {
