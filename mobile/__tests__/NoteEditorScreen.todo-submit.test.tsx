@@ -171,4 +171,36 @@ describe('NoteEditorScreen todo submit behavior', () => {
       expect(getAllByTestId('todo-item-text').length).toBe(baselineCount + 1);
     });
   });
+
+  it('does not persist unchanged existing note when leaving editor', async () => {
+    const existingNote = {
+      id: 'note-123',
+      user_id: 'u1',
+      title: 'Existing title',
+      content: 'Existing content',
+      note_type: 'text',
+      color: '#ffffff',
+      pinned: false,
+      archived: false,
+      position: 0,
+      checked_items_collapsed: false,
+      is_shared: false,
+      deleted_at: null,
+      created_at: '2026-01-01T00:00:00.000Z',
+      updated_at: '2026-01-01T00:00:00.000Z',
+      labels: [],
+      shared_with: [],
+      items: [],
+    };
+
+    mockUseRoute.mockReturnValue({ params: { noteId: 'note-123' } });
+    mockUseOfflineNote.mockReturnValue({ data: existingNote });
+
+    const { unmount } = render(<NoteEditorScreen />);
+    unmount();
+
+    await waitFor(() => {
+      expect(mockUpdateMutateAsync).not.toHaveBeenCalled();
+    });
+  });
 });

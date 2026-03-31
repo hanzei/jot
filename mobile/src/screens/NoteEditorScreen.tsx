@@ -120,6 +120,7 @@ export default function NoteEditorScreen() {
   const isMountedRef = useRef(true);
   const isInitializedRef = useRef(false);
   const intentionalExitRef = useRef(false);
+  const hasPendingChangesRef = useRef(false);
   const saveInFlightRef = useRef<Promise<boolean> | null>(null);
   const tempIdCounterRef = useRef(0);
 
@@ -200,6 +201,7 @@ export default function NoteEditorScreen() {
   const flushSave = useCallback(async (unmounting = false): Promise<boolean> => {
     // Skip save if editing an existing note that hasn't hydrated yet
     if (noteIdRef.current && !isInitializedRef.current) return false;
+    if (!hasPendingChangesRef.current) return true;
 
     // Serialize mutations: chain onto any in-flight save to prevent concurrent writes
     const predecessor = saveInFlightRef.current;
@@ -217,7 +219,10 @@ export default function NoteEditorScreen() {
       const currentColor = colorRef.current;
 
       if (!currentNoteId) {
-        if (!currentTitle && !currentContent && currentItems.length === 0) return true;
+        if (!currentTitle && !currentContent && currentItems.length === 0) {
+          hasPendingChangesRef.current = false;
+          return true;
+        }
         const newNote = await createMutateRef.current({
           title: currentTitle,
           content: currentContent,
@@ -225,6 +230,7 @@ export default function NoteEditorScreen() {
           color: currentColor !== '#ffffff' ? currentColor : undefined,
           items: currentNoteType === 'todo' ? serializeItems(currentItems) : undefined,
         });
+        hasPendingChangesRef.current = false;
         if (!isMountedRef.current || unmounting) return true;
         setNoteId(newNote.id);
         setHasCreated(true);
@@ -245,6 +251,7 @@ export default function NoteEditorScreen() {
           id: currentNoteId,
           data: updateData,
         });
+        hasPendingChangesRef.current = false;
         if (!isMountedRef.current || unmounting) return true;
         setSaveError(null);
       }
@@ -278,6 +285,11 @@ export default function NoteEditorScreen() {
     }, VALIDATION.AUTO_SAVE_TIMEOUT_MS);
   }, [flushSave]);
 
+  const markDirtyAndScheduleUpdate = useCallback(() => {
+    hasPendingChangesRef.current = true;
+    scheduleUpdate();
+  }, [scheduleUpdate]);
+
   // Flush pending save on unmount (prevent data loss), skip if intentionally exiting
   useEffect(() => {
     isMountedRef.current = true;
@@ -287,7 +299,7 @@ export default function NoteEditorScreen() {
         clearTimeout(debounceRef.current);
         debounceRef.current = null;
       }
-      if (!intentionalExitRef.current) {
+      if (!intentionalExitRef.current && hasPendingChangesRef.current) {
         flushSave(true);
       }
     };
@@ -297,18 +309,18 @@ export default function NoteEditorScreen() {
     (newTitle: string) => {
       if (newTitle.length > VALIDATION.TITLE_MAX_LENGTH) return;
       setTitle(newTitle);
-      scheduleUpdate();
+      markDirtyAndScheduleUpdate();
     },
-    [scheduleUpdate],
+    [markDirtyAndScheduleUpdate],
   );
 
   const handleContentChange = useCallback(
     (newContent: string) => {
       if (newContent.length > VALIDATION.CONTENT_MAX_LENGTH) return;
       setContent(newContent);
-      scheduleUpdate();
+      markDirtyAndScheduleUpdate();
     },
-    [scheduleUpdate],
+    [markDirtyAndScheduleUpdate],
   );
 
   const handleToggleItem = useCallback(
@@ -316,16 +328,16 @@ export default function NoteEditorScreen() {
       setItems((prev) =>
         prev.map((item, i) => (i === index ? { ...item, completed: !item.completed } : item)),
       );
-      scheduleUpdate();
+      markDirtyAndScheduleUpdate();
     },
-    [scheduleUpdate],
+    [markDirtyAndScheduleUpdate],
   );
 
   const handleItemTextChange = useCallback(
     (index: number, text: string) => {
       if (!text.includes('\n')) {
         setItems((prev) => prev.map((item, i) => (i === index ? { ...item, text } : item)));
-        scheduleUpdate();
+        markDirtyAndScheduleUpdate();
         return;
       }
 
@@ -335,7 +347,7 @@ export default function NoteEditorScreen() {
       if (lines.length <= 1) {
         const singleText = (lines[0] ?? '').slice(0, VALIDATION.ITEM_TEXT_MAX_LENGTH);
         setItems((prev) => prev.map((item, i) => (i === index ? { ...item, text: singleText } : item)));
-        scheduleUpdate();
+        markDirtyAndScheduleUpdate();
         return;
       }
 
@@ -347,7 +359,7 @@ export default function NoteEditorScreen() {
             i === index ? { ...item, text: lines.join(' ').slice(0, VALIDATION.ITEM_TEXT_MAX_LENGTH) } : item,
           ),
         );
-        scheduleUpdate();
+        markDirtyAndScheduleUpdate();
         return;
       }
 
@@ -370,21 +382,21 @@ export default function NoteEditorScreen() {
         updated.splice(index + 1, 0, ...newItems);
         return updated.map((item, i) => ({ ...item, position: i }));
       });
-      scheduleUpdate();
+      markDirtyAndScheduleUpdate();
 
       const lastId = newIds[newIds.length - 1];
       const lastItemRef = getItemRef(lastId);
       setTimeout(() => lastItemRef.current?.focus(), 50);
     },
-    [scheduleUpdate, getItemRef],
+    [markDirtyAndScheduleUpdate, getItemRef],
   );
 
   const handleDeleteItem = useCallback(
     (index: number) => {
       setItems((prev) => prev.filter((_, i) => i !== index));
-      scheduleUpdate();
+      markDirtyAndScheduleUpdate();
     },
-    [scheduleUpdate],
+    [markDirtyAndScheduleUpdate],
   );
 
   const handleAddItem = useCallback(() => {
@@ -394,9 +406,9 @@ export default function NoteEditorScreen() {
       ...prev,
       { id: newId, text: '', completed: false, position: prev.length, indent_level: 0, assigned_to: '' },
     ]);
-    scheduleUpdate();
+    markDirtyAndScheduleUpdate();
     setTimeout(() => newItemRef.current?.focus(), 50);
-  }, [scheduleUpdate, getItemRef]);
+  }, [markDirtyAndScheduleUpdate, getItemRef]);
 
   const handleInsertItemAfter = useCallback((index: number) => {
     const newId = nextTempId();
@@ -413,9 +425,9 @@ export default function NoteEditorScreen() {
       const next = [...prev.slice(0, index + 1), newItem, ...prev.slice(index + 1)];
       return next.map((item, i) => ({ ...item, position: i }));
     });
-    scheduleUpdate();
+    markDirtyAndScheduleUpdate();
     setTimeout(() => newItemRef.current?.focus(), 50);
-  }, [scheduleUpdate, getItemRef]);
+  }, [markDirtyAndScheduleUpdate, getItemRef]);
 
   const handleBackspaceOnEmpty = useCallback((index: number) => {
     let focusTargetId: string | null = null;
@@ -425,11 +437,11 @@ export default function NoteEditorScreen() {
       focusTargetId = index > 0 ? (prev[index - 1]?.id ?? null) : null;
       return prev.filter((_, i) => i !== index);
     });
-    scheduleUpdate();
+    markDirtyAndScheduleUpdate();
     setTimeout(() => {
       if (focusTargetId) itemInputRefsMap.current.get(focusTargetId)?.current?.focus();
     }, 50);
-  }, [scheduleUpdate]);
+  }, [markDirtyAndScheduleUpdate]);
 
   const handleTitleSubmit = useCallback(() => {
     if (noteTypeRef.current === 'text') {
@@ -445,16 +457,16 @@ export default function NoteEditorScreen() {
           ...prev,
           { id: newId, text: '', completed: false, position: prev.length, indent_level: 0, assigned_to: '' },
         ]);
-        scheduleUpdate();
+        markDirtyAndScheduleUpdate();
         setTimeout(() => newItemRef.current?.focus(), 50);
       }
     }
-  }, [scheduleUpdate, getItemRef]);
+  }, [markDirtyAndScheduleUpdate, getItemRef]);
 
   const handleToggleCollapsed = useCallback(() => {
     setCheckedItemsCollapsed((prev) => !prev);
-    scheduleUpdate();
-  }, [scheduleUpdate]);
+    markDirtyAndScheduleUpdate();
+  }, [markDirtyAndScheduleUpdate]);
 
   const collaborators = useMemo<Collaborator[]>(() => {
     if (!existingNote) return [];
@@ -472,9 +484,9 @@ export default function NoteEditorScreen() {
       setItems((prev) =>
         prev.map((item) => (item.id === itemId ? { ...item, assigned_to: userId } : item)),
       );
-      scheduleUpdate();
+      markDirtyAndScheduleUpdate();
     },
-    [scheduleUpdate],
+    [markDirtyAndScheduleUpdate],
   );
 
   const openAssigneePicker = useCallback((itemId: string) => {
@@ -635,9 +647,9 @@ export default function NoteEditorScreen() {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
       // Merge reordered unchecked with existing checked items
       setItems([...reorderedUnchecked, ...checkedItemsRef.current]);
-      scheduleUpdate();
+      markDirtyAndScheduleUpdate();
     },
-    [scheduleUpdate],
+    [markDirtyAndScheduleUpdate],
   );
 
   const handleTodoDragStart = useCallback(() => {
