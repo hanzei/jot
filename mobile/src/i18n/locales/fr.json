@@ -82,7 +82,12 @@
       "created_at": "Date de création"
     },
     "sortAccessibilityLabel": "Trier par {{sortLabel}}",
-    "sortDisabledNotice": "Le tri manuel est désactivé. Les notes sont triées par {{sortLabel}}, le glisser-déposer n'est donc pas disponible."
+    "sortDisabledNotice": "Le tri manuel est désactivé. Les notes sont triées par {{sortLabel}}, le glisser-déposer n'est donc pas disponible.",
+    "noteArchived": "Note archivée",
+    "noteUnarchived": "Note désarchivée",
+    "noteDeleted": "Note déplacée vers la corbeille",
+    "noteRestored": "Note restaurée",
+    "undo": "Annuler"
   },
   "settings": {
     "title": "Paramètres",
@@ -140,6 +145,8 @@
     "sessionsBrowserOnOS": "{{browser}} sur {{os}}",
     "sessionsCurrent": "Actuelle",
     "sessionsRevoke": "Révoquer",
+    "sessionsRevokeConfirmTitle": "Révoquer la session",
+    "sessionsRevokeConfirmMessage": "Êtes-vous sûr de vouloir révoquer cette session ?",
     "sessionsRevoking": "Révocation...",
     "sessionsRevokeFailed": "Impossible de révoquer la session",
     "sessionsNone": "Aucune session active trouvée.",

@@ -7,6 +7,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../store/AuthContext';
 import { useUsers } from '../store/UsersContext';
 import UserAvatar from './UserAvatar';
+import { isWhiteHexColor } from '../utils/colorContrast';
 
 interface NoteCardProps {
   note: Note;
@@ -131,7 +132,7 @@ function TodoPreview({ items, hasColor }: { items: NoteItem[]; hasColor?: boolea
 function NoteCard({ note, onPress, onLongPress, onMenuPress }: NoteCardProps) {
   const { colors } = useTheme();
   const { t } = useTranslation();
-  const hasColor = !!(note.color && note.color !== '#ffffff');
+  const hasColor = !!(note.color && !isWhiteHexColor(note.color));
 
   return (
     <TouchableOpacity

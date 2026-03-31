@@ -82,7 +82,12 @@
       "created_at": "Data utworzenia"
     },
     "sortAccessibilityLabel": "Sortuj według {{sortLabel}}",
-    "sortDisabledNotice": "Ręczne sortowanie jest wyłączone. Notatki są posortowane według {{sortLabel}}, więc przeciąganie i upuszczanie jest niedostępne."
+    "sortDisabledNotice": "Ręczne sortowanie jest wyłączone. Notatki są posortowane według {{sortLabel}}, więc przeciąganie i upuszczanie jest niedostępne.",
+    "noteArchived": "Notatka zarchiwizowana",
+    "noteUnarchived": "Notatka przywrócona z archiwum",
+    "noteDeleted": "Notatka przeniesiona do kosza",
+    "noteRestored": "Notatka przywrócona",
+    "undo": "Cofnij"
   },
   "settings": {
     "title": "Ustawienia",
@@ -140,6 +145,8 @@
     "sessionsBrowserOnOS": "{{browser}} na {{os}}",
     "sessionsCurrent": "Bieżąca",
     "sessionsRevoke": "Unieważnij",
+    "sessionsRevokeConfirmTitle": "Unieważnij sesję",
+    "sessionsRevokeConfirmMessage": "Czy na pewno chcesz unieważnić tę sesję?",
     "sessionsRevoking": "Unieważnianie...",
     "sessionsRevokeFailed": "Nie udało się unieważnić sesji",
     "sessionsNone": "Nie znaleziono aktywnych sesji.",

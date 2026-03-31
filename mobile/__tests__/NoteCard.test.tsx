@@ -223,6 +223,14 @@ describe('NoteCard', () => {
     expect(StyleSheet.flatten(card.props.style)?.backgroundColor).toBe('#fff');
   });
 
+  it('treats shorthand white note color as default background', () => {
+    const shorthandWhiteNote: Note = { ...baseNote, color: '#fff' };
+    const { getByTestId } = render(<NoteCard note={shorthandWhiteNote} onPress={jest.fn()} />);
+
+    const card = getByTestId('note-card-note-1');
+    expect(StyleSheet.flatten(card.props.style)?.backgroundColor).toBe('#fff');
+  });
+
   it('does not render title when empty', () => {
     const noTitleNote: Note = { ...baseNote, title: '' };
     const { queryByText } = render(<NoteCard note={noTitleNote} onPress={jest.fn()} />);
