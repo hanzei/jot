@@ -6,7 +6,7 @@ import SettingsScreen from '../src/screens/SettingsScreen';
 import MobileI18nProvider from '../src/i18n/MobileI18nProvider';
 import i18n from '../src/i18n';
 import { useAuth } from '../src/store/AuthContext';
-import { updateMe, listSessions, revokeSession } from '../src/api/settings';
+import { updateMe, listSessions, getAboutInfo, revokeSession } from '../src/api/settings';
 
 jest.mock('../src/store/AuthContext', () => ({
   useAuth: jest.fn(),
@@ -61,6 +61,7 @@ jest.mock('../src/store/serverAccounts', () => ({
 const mockUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;
 const mockUpdateMe = updateMe as jest.MockedFunction<typeof updateMe>;
 const mockListSessions = listSessions as jest.MockedFunction<typeof listSessions>;
+const mockGetAboutInfo = getAboutInfo as jest.MockedFunction<typeof getAboutInfo>;
 const mockRevokeSession = revokeSession as jest.MockedFunction<typeof revokeSession>;
 
 const user = {
@@ -137,6 +138,12 @@ describe('SettingsScreen language selection', () => {
         expires_at: '2026-02-01T00:00:00Z',
       },
     ]);
+    mockGetAboutInfo.mockResolvedValue({
+      version: 'dev',
+      commit: 'deadbeef',
+      build_time: '2026-01-02T00:00:00Z',
+      go_version: 'go1.25.0',
+    });
     mockRevokeSession.mockResolvedValue(undefined);
     alertSpy.mockClear();
     mockUseAuth.mockImplementation(
@@ -229,16 +236,21 @@ describe('SettingsScreen language selection', () => {
     expect(setSettings).toHaveBeenCalledWith(expect.objectContaining({ theme: 'dark' }));
   });
 
-  it('shows active server identity in the server section', async () => {
-    const { getByText } = render(<SettingsScreen />);
+  it('shows active server identity in the about section only', async () => {
+    const { getByTestId, getByText, queryByText } = render(<SettingsScreen />);
 
     await waitFor(() => {
       expect(mockListSessions).toHaveBeenCalled();
     });
 
-    expect(getByText('Server')).toBeTruthy();
-    expect(getByText('Active server')).toBeTruthy();
-    expect(getByText('https://active.example.com')).toBeTruthy();
+    expect(queryByText(i18n.t('about.serverOrigin'))).toBeNull();
+    expect(queryByText('https://active.example.com')).toBeNull();
+    fireEvent.press(getByTestId('settings-about-toggle'));
+    await waitFor(() => {
+      expect(getByText(i18n.t('about.serverOrigin'))).toBeTruthy();
+      expect(getByText('https://active.example.com')).toBeTruthy();
+      expect(getByText('deadbeef')).toBeTruthy();
+    });
   });
 
   it('asks for confirmation before revoking a session', async () => {
