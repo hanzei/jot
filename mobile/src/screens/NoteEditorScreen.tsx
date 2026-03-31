@@ -9,6 +9,7 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
+  type TextInputProps,
   type TextInput as TextInputType,
 } from 'react-native';
 import DraggableFlatList, { ScaleDecorator } from 'react-native-draggable-flatlist';
@@ -17,10 +18,11 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
-import { useCreateNote, useUpdateNote, useDeleteNote, useDuplicateNote } from '../hooks/useNotes';
+import { useCreateNote, useUpdateNote, useDeleteNote, useRestoreNote, useDuplicateNote } from '../hooks/useNotes';
 import { useOfflineNote } from '../hooks/useOfflineNotes';
 import { isLocalId } from '../db/noteQueries';
 import { useSSESubscription } from '../store/SSEContext';
+import { useToast } from '../hooks/useToast';
 import TodoItem from '../components/TodoItem';
 import ColorPicker from '../components/ColorPicker';
 import LabelPicker from '../components/LabelPicker';
@@ -28,10 +30,15 @@ import AssigneePicker from '../components/AssigneePicker';
 import { buildCollaborators, VALIDATION, type Collaborator, type NoteType, type NoteItem, type UpdateNoteRequest, type Label } from '@jot/shared';
 import { useUsers } from '../store/UsersContext';
 import { useTheme } from '../theme/ThemeContext';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { RootStackParamList } from '../navigation/RootNavigator';
+import { getCompletedSectionDividerColor, isWhiteHexColor } from '../utils/colorContrast';
 
 type EditorRouteProp = RouteProp<RootStackParamList, 'NoteEditor'>;
 type EditorNavProp = NativeStackNavigationProp<RootStackParamList, 'NoteEditor'>;
+
+const IOS_KEYBOARD_VERTICAL_OFFSET = 88;
+const FOCUSED_INPUT_KEYBOARD_MARGIN = 120;
 
 interface LocalItem {
   id: string;
@@ -41,6 +48,8 @@ interface LocalItem {
   indent_level: number;
   assigned_to: string;
 }
+
+const MAX_TODO_ITEM_INDENT = 1;
 
 function toLocalItems(serverItems: NoteItem[]): LocalItem[] {
   return [...serverItems]
@@ -89,12 +98,15 @@ export default function NoteEditorScreen() {
   const [assigningItemId, setAssigningItemId] = useState<string | null>(null);
   const [syncToast, setSyncToast] = useState<string | null>(null);
   const { usersById } = useUsers();
+  const { showToast } = useToast();
 
   const { colors, isDark } = useTheme();
+  const insets = useSafeAreaInsets();
   const { data: existingNote } = useOfflineNote(noteId);
   const createMutation = useCreateNote();
   const updateMutation = useUpdateNote();
   const deleteMutation = useDeleteNote();
+  const restoreMutation = useRestoreNote();
   const duplicateMutation = useDuplicateNote();
 
   // Show a toast when another user updates this note while editor is open
@@ -118,6 +130,7 @@ export default function NoteEditorScreen() {
   const isMountedRef = useRef(true);
   const isInitializedRef = useRef(false);
   const intentionalExitRef = useRef(false);
+  const hasPendingChangesRef = useRef(false);
   const saveInFlightRef = useRef<Promise<boolean> | null>(null);
   const tempIdCounterRef = useRef(0);
 
@@ -147,6 +160,7 @@ export default function NoteEditorScreen() {
 
   const titleInputRef = useRef<TextInputType>(null);
   const contentInputRef = useRef<TextInputType>(null);
+  const scrollViewRef = useRef<ScrollView>(null);
   const itemInputRefsMap = useRef(new Map<string, React.RefObject<TextInputType | null>>());
 
   const getItemRef = useCallback((id: string): React.RefObject<TextInputType | null> => {
@@ -196,7 +210,9 @@ export default function NoteEditorScreen() {
   }, [existingNote?.id, noteId, navigation]); // eslint-disable-line react-hooks/exhaustive-deps
 
   const flushSave = useCallback(async (unmounting = false): Promise<boolean> => {
-    // Skip save if editing an existing note that hasn't hydrated yet
+    if (!hasPendingChangesRef.current) return true;
+    // If an existing note has local edits flagged but hasn't hydrated yet,
+    // treat this as a failed flush so callers can retry after hydration.
     if (noteIdRef.current && !isInitializedRef.current) return false;
 
     // Serialize mutations: chain onto any in-flight save to prevent concurrent writes
@@ -215,14 +231,18 @@ export default function NoteEditorScreen() {
       const currentColor = colorRef.current;
 
       if (!currentNoteId) {
-        if (!currentTitle && !currentContent && currentItems.length === 0) return true;
+        if (!currentTitle && !currentContent && currentItems.length === 0) {
+          hasPendingChangesRef.current = false;
+          return true;
+        }
         const newNote = await createMutateRef.current({
           title: currentTitle,
           content: currentContent,
           note_type: currentNoteType,
-          color: currentColor !== '#ffffff' ? currentColor : undefined,
+          color: !isWhiteHexColor(currentColor) ? currentColor : undefined,
           items: currentNoteType === 'todo' ? serializeItems(currentItems) : undefined,
         });
+        hasPendingChangesRef.current = false;
         if (!isMountedRef.current || unmounting) return true;
         setNoteId(newNote.id);
         setHasCreated(true);
@@ -243,6 +263,7 @@ export default function NoteEditorScreen() {
           id: currentNoteId,
           data: updateData,
         });
+        hasPendingChangesRef.current = false;
         if (!isMountedRef.current || unmounting) return true;
         setSaveError(null);
       }
@@ -276,6 +297,52 @@ export default function NoteEditorScreen() {
     }, VALIDATION.AUTO_SAVE_TIMEOUT_MS);
   }, [flushSave]);
 
+  const markDirtyAndScheduleUpdate = useCallback(() => {
+    hasPendingChangesRef.current = true;
+    scheduleUpdate();
+  }, [scheduleUpdate]);
+
+  const flushPendingChanges = useCallback(async (): Promise<boolean> => {
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+    }
+    return flushSave();
+  }, [flushSave]);
+
+  // Keep input refs bounded to currently rendered items.
+  useEffect(() => {
+    const activeItemIds = new Set(items.map((item) => item.id));
+    for (const id of itemInputRefsMap.current.keys()) {
+      if (!activeItemIds.has(id)) {
+        itemInputRefsMap.current.delete(id);
+      }
+    }
+  }, [items]);
+
+  // Intercept navigation away to flush pending edits before leaving the screen.
+  useEffect(() => {
+    const unsubscribe = navigation.addListener('beforeRemove', (event) => {
+      if (intentionalExitRef.current || !hasPendingChangesRef.current) {
+        return;
+      }
+      event.preventDefault();
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+        debounceRef.current = null;
+      }
+      void (async () => {
+        const saveSucceeded = await flushSave();
+        if (!saveSucceeded) {
+          return;
+        }
+        intentionalExitRef.current = true;
+        navigation.dispatch(event.data.action);
+      })();
+    });
+    return unsubscribe;
+  }, [flushSave, navigation]);
+
   // Flush pending save on unmount (prevent data loss), skip if intentionally exiting
   useEffect(() => {
     isMountedRef.current = true;
@@ -285,7 +352,7 @@ export default function NoteEditorScreen() {
         clearTimeout(debounceRef.current);
         debounceRef.current = null;
       }
-      if (!intentionalExitRef.current) {
+      if (!intentionalExitRef.current && hasPendingChangesRef.current) {
         flushSave(true);
       }
     };
@@ -295,18 +362,18 @@ export default function NoteEditorScreen() {
     (newTitle: string) => {
       if (newTitle.length > VALIDATION.TITLE_MAX_LENGTH) return;
       setTitle(newTitle);
-      scheduleUpdate();
+      markDirtyAndScheduleUpdate();
     },
-    [scheduleUpdate],
+    [markDirtyAndScheduleUpdate],
   );
 
   const handleContentChange = useCallback(
     (newContent: string) => {
       if (newContent.length > VALIDATION.CONTENT_MAX_LENGTH) return;
       setContent(newContent);
-      scheduleUpdate();
+      markDirtyAndScheduleUpdate();
     },
-    [scheduleUpdate],
+    [markDirtyAndScheduleUpdate],
   );
 
   const handleToggleItem = useCallback(
@@ -314,16 +381,16 @@ export default function NoteEditorScreen() {
       setItems((prev) =>
         prev.map((item, i) => (i === index ? { ...item, completed: !item.completed } : item)),
       );
-      scheduleUpdate();
+      markDirtyAndScheduleUpdate();
     },
-    [scheduleUpdate],
+    [markDirtyAndScheduleUpdate],
   );
 
   const handleItemTextChange = useCallback(
     (index: number, text: string) => {
       if (!text.includes('\n')) {
         setItems((prev) => prev.map((item, i) => (i === index ? { ...item, text } : item)));
-        scheduleUpdate();
+        markDirtyAndScheduleUpdate();
         return;
       }
 
@@ -333,7 +400,7 @@ export default function NoteEditorScreen() {
       if (lines.length <= 1) {
         const singleText = (lines[0] ?? '').slice(0, VALIDATION.ITEM_TEXT_MAX_LENGTH);
         setItems((prev) => prev.map((item, i) => (i === index ? { ...item, text: singleText } : item)));
-        scheduleUpdate();
+        markDirtyAndScheduleUpdate();
         return;
       }
 
@@ -345,7 +412,7 @@ export default function NoteEditorScreen() {
             i === index ? { ...item, text: lines.join(' ').slice(0, VALIDATION.ITEM_TEXT_MAX_LENGTH) } : item,
           ),
         );
-        scheduleUpdate();
+        markDirtyAndScheduleUpdate();
         return;
       }
 
@@ -368,21 +435,25 @@ export default function NoteEditorScreen() {
         updated.splice(index + 1, 0, ...newItems);
         return updated.map((item, i) => ({ ...item, position: i }));
       });
-      scheduleUpdate();
+      markDirtyAndScheduleUpdate();
 
       const lastId = newIds[newIds.length - 1];
       const lastItemRef = getItemRef(lastId);
       setTimeout(() => lastItemRef.current?.focus(), 50);
     },
-    [scheduleUpdate, getItemRef],
+    [markDirtyAndScheduleUpdate, getItemRef],
   );
 
   const handleDeleteItem = useCallback(
     (index: number) => {
+      const removedItemId = itemsRef.current[index]?.id;
       setItems((prev) => prev.filter((_, i) => i !== index));
-      scheduleUpdate();
+      if (removedItemId) {
+        itemInputRefsMap.current.delete(removedItemId);
+      }
+      markDirtyAndScheduleUpdate();
     },
-    [scheduleUpdate],
+    [markDirtyAndScheduleUpdate],
   );
 
   const handleAddItem = useCallback(() => {
@@ -392,9 +463,9 @@ export default function NoteEditorScreen() {
       ...prev,
       { id: newId, text: '', completed: false, position: prev.length, indent_level: 0, assigned_to: '' },
     ]);
-    scheduleUpdate();
+    markDirtyAndScheduleUpdate();
     setTimeout(() => newItemRef.current?.focus(), 50);
-  }, [scheduleUpdate, getItemRef]);
+  }, [markDirtyAndScheduleUpdate, getItemRef]);
 
   const handleInsertItemAfter = useCallback((index: number) => {
     const newId = nextTempId();
@@ -411,23 +482,60 @@ export default function NoteEditorScreen() {
       const next = [...prev.slice(0, index + 1), newItem, ...prev.slice(index + 1)];
       return next.map((item, i) => ({ ...item, position: i }));
     });
-    scheduleUpdate();
+    markDirtyAndScheduleUpdate();
     setTimeout(() => newItemRef.current?.focus(), 50);
-  }, [scheduleUpdate, getItemRef]);
+  }, [markDirtyAndScheduleUpdate, getItemRef]);
 
   const handleBackspaceOnEmpty = useCallback((index: number) => {
-    let focusTargetId: string | null = null;
-    setItems((prev) => {
-      const item = prev[index];
-      if (!item || item.text !== '') return prev;
-      focusTargetId = index > 0 ? (prev[index - 1]?.id ?? null) : null;
-      return prev.filter((_, i) => i !== index);
-    });
-    scheduleUpdate();
+    const currentItems = itemsRef.current;
+    const item = currentItems[index];
+    if (!item || item.text !== '') {
+      return;
+    }
+    const removedItemId = item.id;
+    const focusTargetId = index > 0 ? (currentItems[index - 1]?.id ?? null) : null;
+    setItems((prev) => prev.filter((_, i) => i !== index));
+    itemInputRefsMap.current.delete(removedItemId);
+    markDirtyAndScheduleUpdate();
     setTimeout(() => {
       if (focusTargetId) itemInputRefsMap.current.get(focusTargetId)?.current?.focus();
     }, 50);
-  }, [scheduleUpdate]);
+  }, [markDirtyAndScheduleUpdate]);
+
+  const handleIndentItem = useCallback(
+    (index: number, delta: 1 | -1) => {
+      let changed = false;
+      setItems((prev) =>
+        prev.map((item, i) => {
+          if (i !== index) return item;
+          const nextIndentLevel = Math.max(0, Math.min(MAX_TODO_ITEM_INDENT, item.indent_level + delta));
+          if (nextIndentLevel === item.indent_level) return item;
+          changed = true;
+          return { ...item, indent_level: nextIndentLevel };
+        }),
+      );
+      if (changed) {
+        markDirtyAndScheduleUpdate();
+      }
+    },
+    [markDirtyAndScheduleUpdate],
+  );
+
+  const buildMetadataUpdateData = useCallback((overrides: Partial<UpdateNoteRequest>): UpdateNoteRequest => {
+    const data: UpdateNoteRequest = {
+      title: titleRef.current,
+      content: contentRef.current,
+      pinned: pinnedRef.current,
+      archived: archivedRef.current,
+      color: colorRef.current,
+      checked_items_collapsed: checkedItemsCollapsedRef.current,
+      ...overrides,
+    };
+    if (noteTypeRef.current === 'todo') {
+      data.items = serializeItems(itemsRef.current);
+    }
+    return data;
+  }, []);
 
   const handleTitleSubmit = useCallback(() => {
     if (noteTypeRef.current === 'text') {
@@ -443,16 +551,16 @@ export default function NoteEditorScreen() {
           ...prev,
           { id: newId, text: '', completed: false, position: prev.length, indent_level: 0, assigned_to: '' },
         ]);
-        scheduleUpdate();
+        markDirtyAndScheduleUpdate();
         setTimeout(() => newItemRef.current?.focus(), 50);
       }
     }
-  }, [scheduleUpdate, getItemRef]);
+  }, [markDirtyAndScheduleUpdate, getItemRef]);
 
   const handleToggleCollapsed = useCallback(() => {
     setCheckedItemsCollapsed((prev) => !prev);
-    scheduleUpdate();
-  }, [scheduleUpdate]);
+    markDirtyAndScheduleUpdate();
+  }, [markDirtyAndScheduleUpdate]);
 
   const collaborators = useMemo<Collaborator[]>(() => {
     if (!existingNote) return [];
@@ -470,9 +578,9 @@ export default function NoteEditorScreen() {
       setItems((prev) =>
         prev.map((item) => (item.id === itemId ? { ...item, assigned_to: userId } : item)),
       );
-      scheduleUpdate();
+      markDirtyAndScheduleUpdate();
     },
-    [scheduleUpdate],
+    [markDirtyAndScheduleUpdate],
   );
 
   const openAssigneePicker = useCallback((itemId: string) => {
@@ -502,6 +610,17 @@ export default function NoteEditorScreen() {
               try { await saveInFlightRef.current; } catch { /* already handled */ }
             }
             await deleteMutation.mutateAsync(noteId);
+            showToast(t('dashboard.noteDeleted'), 'success', {
+              label: t('dashboard.undo'),
+              onPress: async () => {
+                try {
+                  await restoreMutation.mutateAsync(noteId);
+                  showToast(t('dashboard.noteRestored'));
+                } catch {
+                  showToast(t('note.failedRestore'), 'error');
+                }
+              },
+            });
             navigation.goBack();
           } catch {
             intentionalExitRef.current = false;
@@ -510,73 +629,90 @@ export default function NoteEditorScreen() {
         },
       },
     ]);
-  }, [deleteMutation, navigation, noteId, t]);
+  }, [deleteMutation, navigation, noteId, restoreMutation, showToast, t]);
 
   const handleTogglePin = useCallback(async () => {
     if (!noteId) return;
+    const saveSucceeded = await flushPendingChanges();
+    if (!saveSucceeded) {
+      return;
+    }
     const newPinned = !pinnedRef.current;
     setPinned(newPinned);
     try {
       await updateMutation.mutateAsync({
         id: noteId,
-        data: {
-          title: titleRef.current,
-          content: contentRef.current,
-          pinned: newPinned,
-          archived: archivedRef.current,
-          color: colorRef.current,
-          checked_items_collapsed: checkedItemsCollapsedRef.current,
-        },
+        data: buildMetadataUpdateData({ pinned: newPinned }),
       });
     } catch {
       setPinned(!newPinned);
       Alert.alert(t('common.error'), t('note.failedUpdate'));
     }
-  }, [noteId, t, updateMutation]);
+  }, [buildMetadataUpdateData, flushPendingChanges, noteId, t, updateMutation]);
 
   const handleToggleArchive = useCallback(async () => {
     if (!noteId) return;
+    const saveSucceeded = await flushPendingChanges();
+    if (!saveSucceeded) {
+      return;
+    }
     const newArchived = !archivedRef.current;
     setArchived(newArchived);
     try {
       await updateMutation.mutateAsync({
         id: noteId,
-        data: {
-          title: titleRef.current,
-          content: contentRef.current,
-          pinned: pinnedRef.current,
-          archived: newArchived,
-          color: colorRef.current,
-          checked_items_collapsed: checkedItemsCollapsedRef.current,
-        },
+        data: buildMetadataUpdateData({ archived: newArchived }),
       });
+      if (newArchived) {
+        showToast(t('dashboard.noteArchived'), 'success', {
+          label: t('dashboard.undo'),
+          onPress: async () => {
+            try {
+              await updateMutation.mutateAsync({
+                id: noteId,
+                data: {
+                  title: titleRef.current,
+                  content: contentRef.current,
+                  pinned: pinnedRef.current,
+                  archived: false,
+                  color: colorRef.current,
+                  checked_items_collapsed: checkedItemsCollapsedRef.current,
+                },
+              });
+              setArchived(false);
+              showToast(t('dashboard.noteUnarchived'));
+            } catch {
+              showToast(t('note.failedUnarchive'), 'error');
+            }
+          },
+        });
+      } else {
+        showToast(t('dashboard.noteUnarchived'));
+      }
     } catch {
       setArchived(!newArchived);
       Alert.alert(t('common.error'), t('note.failedUpdate'));
     }
-  }, [noteId, t, updateMutation]);
+  }, [buildMetadataUpdateData, flushPendingChanges, noteId, showToast, t, updateMutation]);
 
   const handleColorSelect = useCallback(async (selectedColor: string) => {
+    const saveSucceeded = await flushPendingChanges();
+    if (!saveSucceeded) {
+      return;
+    }
     const prevColor = colorRef.current;
     setColor(selectedColor);
     if (!noteId) return;
     try {
       await updateMutation.mutateAsync({
         id: noteId,
-        data: {
-          title: titleRef.current,
-          content: contentRef.current,
-          pinned: pinnedRef.current,
-          archived: archivedRef.current,
-          color: selectedColor,
-          checked_items_collapsed: checkedItemsCollapsedRef.current,
-        },
+        data: buildMetadataUpdateData({ color: selectedColor }),
       });
     } catch {
       setColor(prevColor);
       Alert.alert(t('common.error'), t('note.failedColorUpdate'));
     }
-  }, [noteId, t, updateMutation]);
+  }, [buildMetadataUpdateData, flushPendingChanges, noteId, t, updateMutation]);
 
   const handleToggleNoteType = useCallback(() => {
     if (hasCreated) return;
@@ -632,14 +768,38 @@ export default function NoteEditorScreen() {
     (reorderedUnchecked: LocalItem[]) => {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
       // Merge reordered unchecked with existing checked items
-      setItems([...reorderedUnchecked, ...checkedItemsRef.current]);
-      scheduleUpdate();
+      setItems(
+        [...reorderedUnchecked, ...checkedItemsRef.current].map((item, index) => ({
+          ...item,
+          position: index,
+        })),
+      );
+      markDirtyAndScheduleUpdate();
     },
-    [scheduleUpdate],
+    [markDirtyAndScheduleUpdate],
   );
 
   const handleTodoDragStart = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
+  }, []);
+
+  const handleTodoItemFocus = useCallback<NonNullable<TextInputProps['onFocus']>>((event) => {
+    const nativeTarget = event.nativeEvent.target;
+    if (nativeTarget == null) return;
+
+    // Use ScrollView's native keyboard helper so focused todo inputs stay visible.
+    const responder = scrollViewRef.current?.getScrollResponder?.();
+    if (
+      responder &&
+      typeof responder.scrollResponderScrollNativeHandleToKeyboard === 'function'
+    ) {
+      responder.scrollResponderScrollNativeHandleToKeyboard(
+        nativeTarget,
+        FOCUSED_INPUT_KEYBOARD_MARGIN,
+        true,
+      );
+      return;
+    }
   }, []);
 
   const renderTodoItem = useCallback(
@@ -654,6 +814,7 @@ export default function NoteEditorScreen() {
               inputRef={itemRef}
               text={item.text}
               completed={item.completed}
+              isActive={isActive}
               indentLevel={item.indent_level}
               showDragHandle
               assignedTo={item.assigned_to}
@@ -666,24 +827,29 @@ export default function NoteEditorScreen() {
               onSubmitEditing={() => handleInsertItemAfter(originalIndex)}
               onBackspaceOnEmpty={() => handleBackspaceOnEmpty(originalIndex)}
               onAssignPress={() => openAssigneePicker(item.id)}
+              onFocus={handleTodoItemFocus}
+              onIndent={(delta) => handleIndentItem(originalIndex, delta)}
             />
           </View>
         </ScaleDecorator>
       );
     },
-    [getItemRef, handleToggleItem, handleItemTextChange, handleDeleteItem, handleInsertItemAfter, handleBackspaceOnEmpty, isNoteShared, collaborators, openAssigneePicker, isDark, colors],
+    [getItemRef, handleToggleItem, handleItemTextChange, handleDeleteItem, handleInsertItemAfter, handleBackspaceOnEmpty, isNoteShared, collaborators, openAssigneePicker, handleIndentItem, isDark, colors, handleTodoItemFocus],
   );
 
-  const hasNoteColor = color && color !== '#ffffff';
+  const hasNoteColor = !!color && !isWhiteHexColor(color);
   const noteBackground = hasNoteColor ? color : colors.surface;
+  const completedSectionDividerColor = hasNoteColor
+    ? getCompletedSectionDividerColor(noteBackground)
+    : colors.borderLight;
 
   return (
     <KeyboardAvoidingView
       style={[styles.container, { backgroundColor: noteBackground }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 0}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? IOS_KEYBOARD_VERTICAL_OFFSET : 0}
     >
-      <View style={[styles.header, { backgroundColor: noteBackground, borderBottomColor: hasNoteColor ? 'transparent' : colors.borderLight }]}>
+      <View style={[styles.header, { backgroundColor: noteBackground, borderBottomColor: hasNoteColor ? 'transparent' : colors.borderLight, paddingTop: insets.top + 12 }]}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
@@ -735,7 +901,9 @@ export default function NoteEditorScreen() {
       )}
 
       <ScrollView
+        ref={scrollViewRef}
         style={styles.scrollContent}
+        contentContainerStyle={styles.scrollContentContainer}
         keyboardShouldPersistTaps="handled"
       >
         <TextInput
@@ -784,7 +952,7 @@ export default function NoteEditorScreen() {
             </TouchableOpacity>
 
             {checkedItems.length > 0 && (
-              <View style={[styles.checkedSection, { borderTopColor: colors.borderLight }]}>
+              <View style={[styles.checkedSection, { borderTopColor: completedSectionDividerColor }]} testID="checked-items-section">
                 <TouchableOpacity
                   style={styles.checkedHeader}
                   onPress={handleToggleCollapsed}
@@ -810,6 +978,7 @@ export default function NoteEditorScreen() {
                         inputRef={getItemRef(item.id)}
                         text={item.text}
                         completed={item.completed}
+                        isActive={false}
                         indentLevel={item.indent_level}
                         assignedTo={item.assigned_to}
                         isShared={!!isNoteShared}
@@ -820,6 +989,8 @@ export default function NoteEditorScreen() {
                         onSubmitEditing={() => handleInsertItemAfter(originalIndex)}
                         onBackspaceOnEmpty={() => handleBackspaceOnEmpty(originalIndex)}
                         onAssignPress={() => openAssigneePicker(item.id)}
+                        onFocus={handleTodoItemFocus}
+                        onIndent={(delta) => handleIndentItem(originalIndex, delta)}
                       />
                     );
                   })}
@@ -829,7 +1000,7 @@ export default function NoteEditorScreen() {
         )}
       </ScrollView>
 
-      <View style={[styles.toolbar, { backgroundColor: noteBackground, borderTopColor: hasNoteColor ? 'transparent' : colors.border }]}>
+      <View style={[styles.toolbar, { backgroundColor: noteBackground, borderTopColor: hasNoteColor ? 'transparent' : colors.border, paddingBottom: insets.bottom || 8 }]}>
         {/* Color picker button */}
         <TouchableOpacity
           onPress={() => setColorPickerVisible(true)}
@@ -958,7 +1129,6 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     paddingHorizontal: 16,
-    paddingTop: Platform.OS === 'ios' ? 56 : 16,
     paddingBottom: 12,
     borderBottomWidth: StyleSheet.hairlineWidth,
   },
@@ -982,6 +1152,9 @@ const styles = StyleSheet.create({
   scrollContent: {
     flex: 1,
     paddingHorizontal: 16,
+  },
+  scrollContentContainer: {
+    paddingBottom: 96,
   },
   titleInput: {
     fontSize: 22,
@@ -1027,7 +1200,6 @@ const styles = StyleSheet.create({
     borderTopWidth: StyleSheet.hairlineWidth,
     paddingHorizontal: 8,
     paddingVertical: 8,
-    paddingBottom: Platform.OS === 'ios' ? 24 : 8,
     gap: 2,
   },
   toolbarBtn: {

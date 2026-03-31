@@ -1,5 +1,5 @@
 import React from 'react';
-import { Alert, Linking } from 'react-native';
+import { ActivityIndicator, Alert, Linking, Text, TouchableOpacity, View } from 'react-native';
 import {
   NavigationContainer,
   DefaultTheme,
@@ -12,6 +12,7 @@ import {
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SQLiteProvider } from 'expo-sqlite';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { AuthProvider, useAuth } from './src/store/AuthContext';
 import MobileI18nProvider from './src/i18n/MobileI18nProvider';
@@ -19,8 +20,19 @@ import { UsersProvider } from './src/store/UsersContext';
 import { OfflineProvider } from './src/store/OfflineContext';
 import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
 import RootNavigator, { type RootStackParamList } from './src/navigation/RootNavigator';
-import { getBaseUrl, getStoredServerUrl, restoreServerUrl } from './src/api/client';
-import { migrateDatabase } from './src/db/schema';
+import { ToastProvider } from './src/components/Toast';
+import {
+  getActiveServerId,
+  getBaseUrl,
+  getStoredServerUrl,
+  isServerSwitchInProgress,
+  initializeServerContext,
+  switchActiveServer,
+  subscribeToClientActiveServerChanges,
+} from './src/api/client';
+import { getDatabaseNameForServer, initializeServerDatabase } from './src/db/serverDatabase';
+import { canonicalizeServerOrigin } from '@jot/shared';
+import { addServer, listServers } from './src/store/serverAccounts';
 import './src/i18n';
 
 const queryClient = new QueryClient({
@@ -39,15 +51,7 @@ function isJotSchemeUrl(url: string): boolean {
 }
 
 function normalizeServerOrigin(url: string): string | null {
-  try {
-    const parsed = new URL(url);
-    if (!parsed.protocol || !parsed.host) {
-      return null;
-    }
-    return `${parsed.protocol}//${parsed.host}`.toLowerCase();
-  } catch {
-    return null;
-  }
+  return canonicalizeServerOrigin(url);
 }
 
 function parseDeepLink(url: string): { path: string; hasServerParam: boolean; serverOrigin: string | null } {
@@ -89,11 +93,12 @@ function isProtectedDeepLinkPath(path: string): boolean {
 
 function NavigationWrapper() {
   const { colors, isDark } = useTheme();
-  const { isAuthenticated } = useAuth();
+  const { isAuthenticated, revalidateSession } = useAuth();
   const { t } = useTranslation();
   const navigationRef = React.useMemo(() => createNavigationContainerRef<RootStackParamList>(), []);
   const pendingDeepLinkUrlRef = React.useRef<string | null>(null);
   const warnedDeepLinkUrlsRef = React.useRef<Set<string>>(new Set());
+  const deepLinkServerPromptInFlightRef = React.useRef<Promise<boolean> | null>(null);
   const wasAuthenticatedRef = React.useRef(isAuthenticated);
   const [isNavReady, setIsNavReady] = React.useState(false);
 
@@ -115,14 +120,74 @@ function NavigationWrapper() {
     if (!storedUrl) {
       return null;
     }
-    restoreServerUrl(storedUrl);
     return normalizeServerOrigin(storedUrl);
   }, []);
 
-  const evaluateIncomingDeepLink = React.useCallback(async (url: string): Promise<'allow' | 'stash' | 'ignore'> => {
+  const promptToAddUnknownDeepLinkServer = React.useCallback((serverOrigin: string): Promise<boolean> => {
+    if (deepLinkServerPromptInFlightRef.current) {
+      return deepLinkServerPromptInFlightRef.current;
+    }
+    const promptPromise = new Promise<boolean>((resolve) => {
+      Alert.alert(
+        t('deepLink.unknownServerTitle'),
+        t('deepLink.unknownServerMessage', { server: serverOrigin }),
+        [
+          { text: t('common.cancel'), style: 'cancel', onPress: () => resolve(false) },
+          { text: t('deepLink.addAndSwitchAction'), onPress: () => resolve(true) },
+        ],
+      );
+    }).finally(() => {
+      deepLinkServerPromptInFlightRef.current = null;
+    });
+    deepLinkServerPromptInFlightRef.current = promptPromise;
+    return promptPromise;
+  }, [t]);
+
+  const ensureDeepLinkServerContext = React.useCallback(async (serverOrigin: string): Promise<boolean> => {
+    const knownServers = await listServers();
+    let targetServerId = knownServers.find((entry) => entry.serverUrl === serverOrigin)?.serverId ?? null;
+
+    if (!targetServerId) {
+      const shouldAddServer = await promptToAddUnknownDeepLinkServer(serverOrigin);
+      if (!shouldAddServer) {
+        return false;
+      }
+      const addResult = await addServer(serverOrigin);
+      if (!addResult.success && addResult.code !== 'DUPLICATE') {
+        Alert.alert(t('common.error'), addResult.message || t('serverPicker.addFailed'));
+        return false;
+      }
+      targetServerId = addResult.success ? addResult.serverId : addResult.existingServerId ?? null;
+      if (!targetServerId) {
+        Alert.alert(t('common.error'), t('serverPicker.addFailed'));
+        return false;
+      }
+    }
+
+    if (getActiveServerId() === targetServerId && !isServerSwitchInProgress()) {
+      return true;
+    }
+    if (isServerSwitchInProgress() && getActiveServerId() !== targetServerId) {
+      return false;
+    }
+
+    const switched = await switchActiveServer(targetServerId);
+    if (!switched) {
+      Alert.alert(t('common.error'), t('serverPicker.switchFailed'));
+      return false;
+    }
+    await revalidateSession();
+    return true;
+  }, [promptToAddUnknownDeepLinkServer, revalidateSession, t]);
+
+  const evaluateIncomingDeepLink = React.useCallback(async (
+    url: string,
+    options?: { allowStash?: boolean },
+  ): Promise<'allow' | 'stash' | 'ignore'> => {
     const { path, hasServerParam, serverOrigin } = parseDeepLink(url);
     const configuredServerOrigin = await resolveStoredServerOrigin();
     const serverLabel = configuredServerOrigin ?? normalizeServerOrigin(getBaseUrl()) ?? getBaseUrl();
+    const allowStash = options?.allowStash ?? true;
 
     if (!hasServerParam && !warnedDeepLinkUrlsRef.current.has(url)) {
       warnedDeepLinkUrlsRef.current.add(url);
@@ -143,27 +208,20 @@ function NavigationWrapper() {
       return 'ignore';
     }
 
-    if (serverOrigin && configuredServerOrigin && serverOrigin !== configuredServerOrigin) {
-      if (!warnedDeepLinkUrlsRef.current.has(url)) {
-        warnedDeepLinkUrlsRef.current.add(url);
-        Alert.alert(
-          t('deepLink.wrongServerTitle'),
-          t('deepLink.wrongServerMessage', {
-            targetServer: serverOrigin,
-            currentServer: configuredServerOrigin,
-          }),
-        );
+    if (serverOrigin) {
+      const switched = await ensureDeepLinkServerContext(serverOrigin);
+      if (!switched) {
+        return 'ignore';
       }
-      return 'ignore';
     }
 
-    if (!isAuthenticated && isProtectedDeepLinkPath(path)) {
+    if (allowStash && !isAuthenticated && isProtectedDeepLinkPath(path)) {
       pendingDeepLinkUrlRef.current = url;
       return 'stash';
     }
 
     return 'allow';
-  }, [isAuthenticated, resolveStoredServerOrigin, t]);
+  }, [ensureDeepLinkServerContext, isAuthenticated, resolveStoredServerOrigin, t]);
 
   const linking = React.useMemo<LinkingOptions<RootStackParamList>>(
     () => ({
@@ -241,12 +299,11 @@ function NavigationWrapper() {
         return;
       }
 
-      const { hasServerParam, serverOrigin } = parseDeepLink(pendingUrl);
-      const configuredServerOrigin = await resolveStoredServerOrigin();
+      const decision = await evaluateIncomingDeepLink(pendingUrl, { allowStash: false });
       if (cancelled) {
         return;
       }
-      if (hasServerParam && (!serverOrigin || (configuredServerOrigin && serverOrigin !== configuredServerOrigin))) {
+      if (decision !== 'allow') {
         pendingDeepLinkUrlRef.current = null;
         return;
       }
@@ -264,7 +321,7 @@ function NavigationWrapper() {
     return () => {
       cancelled = true;
     };
-  }, [isAuthenticated, isNavReady, linking.config, navigationRef, resolveStoredServerOrigin]);
+  }, [evaluateIncomingDeepLink, isAuthenticated, isNavReady, linking.config, navigationRef]);
 
   return (
     <NavigationContainer ref={navigationRef} theme={navigationTheme} linking={linking} onReady={() => setIsNavReady(true)}>
@@ -274,23 +331,100 @@ function NavigationWrapper() {
 }
 
 export default function App() {
+  const [activeServerId, setActiveServerId] = React.useState<string | null>(null);
+  const [isServerContextReady, setIsServerContextReady] = React.useState(false);
+  const [serverContextInitError, setServerContextInitError] = React.useState<string | null>(null);
+  const [serverContextInitAttempt, setServerContextInitAttempt] = React.useState(0);
+
+  React.useEffect(() => {
+    let isMounted = true;
+    const unsubscribe = subscribeToClientActiveServerChanges((nextServerId) => {
+      if (!isMounted) {
+        return;
+      }
+      setActiveServerId(nextServerId);
+      queryClient.clear();
+    });
+
+    void (async () => {
+      try {
+        await initializeServerContext();
+        if (!isMounted) {
+          return;
+        }
+        setActiveServerId(getActiveServerId());
+        setIsServerContextReady(true);
+        setServerContextInitError(null);
+      } catch (error) {
+        console.warn('Failed to initialize server context:', error);
+        if (!isMounted) {
+          return;
+        }
+        setServerContextInitError('server_context_init_failed');
+      }
+    })();
+
+    return () => {
+      isMounted = false;
+      unsubscribe();
+    };
+  }, [serverContextInitAttempt]);
+
+  const databaseName = getDatabaseNameForServer(activeServerId);
+  const handleDatabaseInit = async (db: Parameters<typeof initializeServerDatabase>[0]) =>
+    initializeServerDatabase(db, activeServerId);
+
+  if (!isServerContextReady) {
+    return (
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <SafeAreaProvider>
+          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+            {serverContextInitError ? (
+              <View style={{ alignItems: 'center', paddingHorizontal: 24 }}>
+                <Text style={{ textAlign: 'center', marginBottom: 12 }}>
+                  Failed to initialize server context.
+                </Text>
+                <TouchableOpacity
+                  onPress={() => setServerContextInitAttempt((prev) => prev + 1)}
+                  style={{ paddingHorizontal: 14, paddingVertical: 10 }}
+                >
+                  <Text>Retry</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <ActivityIndicator size="large" />
+            )}
+          </View>
+        </SafeAreaProvider>
+      </GestureHandlerRootView>
+    );
+  }
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <QueryClientProvider client={queryClient}>
-        <SQLiteProvider databaseName="jot.db" onInit={migrateDatabase}>
+      <SafeAreaProvider>
+        <QueryClientProvider client={queryClient}>
           <AuthProvider>
-            <MobileI18nProvider>
-              <ThemeProvider>
-                <UsersProvider>
-                  <OfflineProvider>
-                    <NavigationWrapper />
-                  </OfflineProvider>
-                </UsersProvider>
-              </ThemeProvider>
-            </MobileI18nProvider>
+            <SQLiteProvider
+              key={`sqlite-${databaseName}`}
+              databaseName={databaseName}
+              onInit={handleDatabaseInit}
+            >
+              <MobileI18nProvider>
+                <ThemeProvider>
+                  <UsersProvider>
+                    <OfflineProvider>
+                      <ToastProvider>
+                        <NavigationWrapper />
+                      </ToastProvider>
+                    </OfflineProvider>
+                  </UsersProvider>
+                </ThemeProvider>
+              </MobileI18nProvider>
+            </SQLiteProvider>
           </AuthProvider>
-        </SQLiteProvider>
-      </QueryClientProvider>
+        </QueryClientProvider>
+      </SafeAreaProvider>
     </GestureHandlerRootView>
   );
 }

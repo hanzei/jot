@@ -6,6 +6,12 @@ import { getLocalNotes, getLocalNote, saveNotes, saveNote, markLocalNoteDeleted,
 import { getNotes, getNote } from '../api/notes';
 import type { GetNotesParams, Note } from '@jot/shared';
 import { useNetworkStatus } from './useNetworkStatus';
+import {
+  noteLocalQueryKey,
+  noteLocalQueryScopeKey,
+  notesLocalQueryKey,
+  notesLocalQueryScopeKey,
+} from './queryKeys';
 
 export function useOfflineNotes(params?: GetNotesParams) {
   const db = useSQLiteContext();
@@ -16,7 +22,7 @@ export function useOfflineNotes(params?: GetNotesParams) {
 
   // Primary query: reads from local SQLite (instant on subsequent launches)
   const query = useQuery<Note[]>({
-    queryKey: ['notes-local', params],
+    queryKey: notesLocalQueryKey(params),
     queryFn: () => getLocalNotes(db, params),
     staleTime: Infinity,
     gcTime: Infinity,
@@ -30,7 +36,7 @@ export function useOfflineNotes(params?: GetNotesParams) {
       // (e.g., archived, deleted, or label-changed on another device).
       const serverIds = new Set(serverNotes.map((n) => n.id));
       await removeLocalNotesNotIn(db, serverIds, paramsRef.current);
-      queryClient.invalidateQueries({ queryKey: ['notes-local', paramsRef.current] });
+      queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
     } catch (err) {
       // Log for debugging; local data is used as fallback
       console.warn('Background notes sync failed:', err);
@@ -62,7 +68,7 @@ export function useOfflineNote(id: string | null) {
   const { isConnected } = useNetworkStatus();
 
   const query = useQuery<Note | null>({
-    queryKey: ['note-local', id],
+    queryKey: noteLocalQueryKey(id),
     queryFn: () => (id ? getLocalNote(db, id) : null),
     enabled: id !== null,
     staleTime: Infinity,
@@ -78,13 +84,13 @@ export function useOfflineNote(id: string | null) {
         const serverNote = await getNote(id);
         if (cancelled) return;
         await saveNote(db, serverNote);
-        queryClient.invalidateQueries({ queryKey: ['note-local', id] });
+        queryClient.invalidateQueries({ queryKey: noteLocalQueryScopeKey() });
       } catch (err) {
         const status = axios.isAxiosError(err) ? err.response?.status : undefined;
         if ((status === 404 || status === 410) && !cancelled) {
           // Note no longer exists on server — tombstone it locally
           await markLocalNoteDeleted(db, id);
-          queryClient.invalidateQueries({ queryKey: ['note-local', id] });
+          queryClient.invalidateQueries({ queryKey: noteLocalQueryScopeKey() });
         }
         // Other errors: log for debugging; local cache is used as fallback
         if (status !== 404 && status !== 410) {

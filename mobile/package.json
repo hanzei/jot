@@ -2,6 +2,7 @@
   "name": "jot-mobile",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "main": "index.tsx",
   "scripts": {
     "start": "expo start",

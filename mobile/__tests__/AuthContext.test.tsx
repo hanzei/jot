@@ -1,5 +1,5 @@
 import React from 'react';
-import { render, waitFor, act, fireEvent, cleanup } from '@testing-library/react-native';
+import { render, waitFor, act, fireEvent, cleanup, configure } from '@testing-library/react-native';
 import { Text, TouchableOpacity } from 'react-native';
 import { AuthProvider, useAuth } from '../src/store/AuthContext';
 import { auth, getStoredSession, setOnUnauthorized, clearStoredSession, cacheAuthProfile, getCachedAuthProfile, clearCachedProfile } from '../src/api/client';
@@ -14,6 +14,7 @@ jest.mock('../src/api/client', () => ({
   getStoredSession: jest.fn(),
   getStoredServerUrl: jest.fn().mockResolvedValue(null),
   restoreServerUrl: jest.fn(),
+  initializeServerContext: jest.fn().mockResolvedValue(undefined),
   clearStoredSession: jest.fn(),
   setOnUnauthorized: jest.fn(),
   cacheAuthProfile: jest.fn().mockResolvedValue(undefined),
@@ -33,6 +34,11 @@ const mockClearStoredSession = clearStoredSession as jest.Mock;
 const mockCacheAuthProfile = cacheAuthProfile as jest.Mock;
 const mockGetCachedAuthProfile = getCachedAuthProfile as jest.Mock;
 const mockClearCachedProfile = clearCachedProfile as jest.Mock;
+const mockClientModule = jest.requireMock('../src/api/client') as {
+  getStoredServerUrl: jest.Mock;
+  restoreServerUrl: jest.Mock;
+  initializeServerContext: jest.Mock;
+};
 
 function TestConsumer() {
   const { user, isAuthenticated, isLoading, logout } = useAuth();
@@ -64,6 +70,7 @@ function LoginTrigger() {
 }
 
 let revalidateFn: (() => Promise<boolean>) | null = null;
+const CI_WAIT_TIMEOUT_MS = 4000;
 
 function RevalidateConsumer() {
   const { user, isAuthenticated, isLoading, revalidateSession } = useAuth();
@@ -81,13 +88,22 @@ const mockUser = { id: '1', username: 'testuser', first_name: '', last_name: '',
 const mockSettings = { user_id: '1', language: 'en', theme: 'system' as const, note_sort: 'manual' as const, updated_at: '' };
 
 describe('AuthContext', () => {
+  beforeAll(() => {
+    configure({ asyncUtilTimeout: CI_WAIT_TIMEOUT_MS });
+  });
+
   beforeEach(() => {
     jest.clearAllMocks();
     mockGetStoredSession.mockResolvedValue(null);
+    mockClientModule.getStoredServerUrl.mockResolvedValue(null);
   });
 
   afterEach(() => {
     cleanup();
+  });
+
+  afterAll(() => {
+    configure({ asyncUtilTimeout: 1000 });
   });
 
   it('starts with isLoading true and no user', async () => {
@@ -99,16 +115,17 @@ describe('AuthContext', () => {
 
     expect(getByTestId('loading').props.children).toBe('true');
 
-    // Flush the async restoreSession effect (resolved getStoredSession promise)
-    await act(async () => {});
-
+    await waitFor(() => {
+      expect(getByTestId('loading').props.children).toBe('false');
+    });
     expect(getByTestId('loading').props.children).toBe('false');
     expect(getByTestId('authenticated').props.children).toBe('false');
     expect(getByTestId('username').props.children).toBe('none');
     unmount();
-  });
+  }, 15000);
 
   it('restores session on mount when token exists', async () => {
+    mockClientModule.getStoredServerUrl.mockResolvedValue('https://a.example.com');
     mockGetStoredSession.mockResolvedValue('existing-token');
     mockAuth.me.mockResolvedValue({ user: { ...mockUser, username: 'restored' }, settings: mockSettings });
 
@@ -124,6 +141,8 @@ describe('AuthContext', () => {
 
     expect(getByTestId('authenticated').props.children).toBe('true');
     expect(getByTestId('username').props.children).toBe('restored');
+    expect(mockClientModule.initializeServerContext).toHaveBeenCalled();
+    expect(mockClientModule.restoreServerUrl).toHaveBeenCalledWith('https://a.example.com');
     unmount();
   });
 
@@ -347,6 +366,27 @@ describe('AuthContext', () => {
     unmount();
   });
 
+  it('does not restore cached profile on 403 during session restore', async () => {
+    mockGetStoredSession.mockResolvedValue('existing-token');
+    mockAuth.me.mockRejectedValue({ response: { status: 403 } });
+    mockGetCachedAuthProfile.mockResolvedValue({ user: { ...mockUser, username: 'cached' }, settings: mockSettings });
+
+    const { getByTestId, unmount } = render(
+      <AuthProvider>
+        <TestConsumer />
+      </AuthProvider>,
+    );
+
+    await waitFor(() => {
+      expect(getByTestId('loading').props.children).toBe('false');
+    });
+
+    expect(getByTestId('authenticated').props.children).toBe('false');
+    expect(getByTestId('username').props.children).toBe('none');
+    expect(mockGetCachedAuthProfile).not.toHaveBeenCalled();
+    unmount();
+  });
+
   it('caches profile on successful login', async () => {
     const response = { user: mockUser, settings: mockSettings };
     mockAuth.login.mockResolvedValue(response);
@@ -381,9 +421,10 @@ describe('AuthContext', () => {
 
     const updatedResponse = { user: { ...mockUser, username: 'revalidated' }, settings: mockSettings };
     mockAuth.me.mockResolvedValue(updatedResponse);
+    expect(revalidateFn).not.toBeNull();
 
     await act(async () => {
-      await revalidateFn?.();
+      await revalidateFn!();
     });
 
     expect(getByTestId('authenticated').props.children).toBe('true');
@@ -407,9 +448,10 @@ describe('AuthContext', () => {
     });
 
     mockAuth.me.mockRejectedValueOnce({ response: { status: 401 } });
+    expect(revalidateFn).not.toBeNull();
 
     await act(async () => {
-      await revalidateFn?.();
+      await revalidateFn!();
     });
 
     expect(getByTestId('authenticated').props.children).toBe('false');
@@ -433,9 +475,10 @@ describe('AuthContext', () => {
     });
 
     mockAuth.me.mockRejectedValueOnce(new Error('Network Error'));
+    expect(revalidateFn).not.toBeNull();
 
     await act(async () => {
-      await revalidateFn?.();
+      await revalidateFn!();
     });
 
     // User stays authenticated on network error

@@ -53,6 +53,11 @@
     "tabMyTodo": "Meine Aufgaben",
     "tabArchive": "Archiv",
     "tabBin": "Papierkorb",
+    "noteArchived": "Notiz archiviert",
+    "noteUnarchived": "Notiz aus Archiv geholt",
+    "noteDeleted": "Notiz in den Papierkorb verschoben",
+    "noteRestored": "Notiz wiederhergestellt",
+    "undo": "Rückgängig",
     "pinned": "Angeheftet",
     "otherNotes": "Weitere Notizen",
     "noNotesYet": "Noch keine Notizen",
@@ -140,6 +145,8 @@
     "sessionsBrowserOnOS": "{{browser}} auf {{os}}",
     "sessionsCurrent": "Aktuell",
     "sessionsRevoke": "Widerrufen",
+    "sessionsRevokeConfirmTitle": "Sitzung widerrufen",
+    "sessionsRevokeConfirmMessage": "Möchtest du diese Sitzung wirklich widerrufen?",
     "sessionsRevoking": "Widerrufen...",
     "sessionsRevokeFailed": "Sitzung konnte nicht widerrufen werden",
     "sessionsNone": "Keine aktiven Sitzungen gefunden.",
@@ -147,7 +154,10 @@
     "aboutButton": "Info zu Jot",
     "importSection": "Importieren",
     "importDescription": "Notizen aus Google Keep-Exporten importieren.",
-    "importButton": "Aus Google Keep importieren"
+    "importButton": "Aus Google Keep importieren",
+    "currentServerSection": "Server",
+    "currentServerLabel": "Aktiver Server",
+    "noServerConfigured": "Kein Server konfiguriert"
   },
   "about": {
     "clientInfo": "Client-Info",
@@ -160,7 +170,8 @@
     "commit": "Commit",
     "buildTime": "Erstellungszeit",
     "goVersion": "Go-Version",
-    "failedLoad": "Serverinformationen konnten nicht geladen werden"
+    "failedLoad": "Serverinformationen konnten nicht geladen werden",
+    "serverOrigin": "Server-Ursprung"
   },
   "note": {
     "share": "Teilen",
@@ -255,8 +266,26 @@
     "missingServerMessage": "Dieser Link enthält keine Server-URL. Er wird auf {{server}} geöffnet.",
     "invalidServerTitle": "Deep-Link ignoriert",
     "invalidServerMessage": "Dieser Link enthält eine ungültige Server-URL.",
+    "unknownServerTitle": "Unbekannter Server",
+    "unknownServerMessage": "Dieser Link verweist auf {{server}}, der noch nicht hinzugefügt wurde.",
+    "addAndSwitchAction": "Hinzufügen und wechseln",
     "wrongServerTitle": "Falscher Server",
     "wrongServerMessage": "Dieser Link verweist auf {{targetServer}}, aber du bist mit {{currentServer}} verbunden."
+  },
+  "serverPicker": {
+    "open": "Server wechseln",
+    "title": "Server auswählen",
+    "noServers": "Noch keine Server hinzugefügt.",
+    "addPlaceholder": "Server-URL hinzufügen (https://...)",
+    "addButton": "Server hinzufügen",
+    "working": "Wird verarbeitet...",
+    "urlRequired": "Server-URL ist erforderlich",
+    "invalidUrl": "Ungültige Server-URL. Verwende http:// oder https://",
+    "addFailed": "Server konnte nicht hinzugefügt werden",
+    "switchFailed": "Serverwechsel fehlgeschlagen",
+    "duplicateTitle": "Server bereits hinzugefügt",
+    "duplicateMessage": "Dieser Server ist bereits in deiner Liste.",
+    "switchToExisting": "Zu vorhandenem wechseln"
   },
   "offline": {
     "message": "Du bist offline. Änderungen werden synchronisiert, sobald du wieder verbunden bist."

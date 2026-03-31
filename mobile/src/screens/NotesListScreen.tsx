@@ -24,12 +24,14 @@ import { useUpdateNote, useDeleteNote, useRestoreNote, usePermanentDeleteNote, u
 import { useOfflineNotes } from '../hooks/useOfflineNotes';
 import { useUsers } from '../store/UsersContext';
 import { useAuth } from '../store/AuthContext';
+import { useToast } from '../hooks/useToast';
 import { useTheme } from '../theme/ThemeContext';
 import { isLocalId } from '../db/noteQueries';
 import SkeletonNoteList from '../components/SkeletonNoteList';
 import NoteCard from '../components/NoteCard';
 import NoteContextMenu, { ContextMenuViewContext } from '../components/NoteContextMenu';
 import ColorPicker from '../components/ColorPicker';
+import LabelPicker from '../components/LabelPicker';
 import type { Note, NoteSort } from '@jot/shared';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { NOTE_SORT_OPTIONS, getNoteSortLabel, normalizeNoteSort, sortNotesForDisplay } from '../utils/noteSort';
@@ -62,10 +64,14 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   const { isConnected } = useNetworkStatus();
   const { colors } = useTheme();
   const { t } = useTranslation();
+  const { showToast } = useToast();
   const insets = useSafeAreaInsets();
+  const fabBottom = Math.max(insets.bottom + 20, 20);
+  const listBottomPadding = variant === 'notes' ? fabBottom + 60 : 80;
 
   const [contextMenuNote, setContextMenuNote] = useState<Note | null>(null);
   const [colorPickerNote, setColorPickerNote] = useState<Note | null>(null);
+  const [labelPickerNote, setLabelPickerNote] = useState<Note | null>(null);
   const [localOrder, setLocalOrder] = useState<LocalReorderState>({ pinned: null, unpinned: null });
   const [sortMode, setSortMode] = useState<NoteSort>(() => normalizeNoteSort(settings?.note_sort));
   const [isSortControlsOpen, setIsSortControlsOpen] = useState(false);
@@ -208,10 +214,31 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
           checked_items_collapsed: note.checked_items_collapsed,
         },
       });
+      showToast(t('dashboard.noteArchived'), 'success', {
+        label: t('dashboard.undo'),
+        onPress: async () => {
+          try {
+            await updateNote.mutateAsync({
+              id: note.id,
+              data: {
+                title: note.title,
+                content: note.content,
+                pinned: note.pinned,
+                archived: false,
+                color: note.color,
+                checked_items_collapsed: note.checked_items_collapsed,
+              },
+            });
+            showToast(t('dashboard.noteUnarchived'));
+          } catch {
+            showToast(t('note.failedUnarchive'), 'error');
+          }
+        },
+      });
     } catch {
       Alert.alert(t('common.error'), t('note.failedArchive'));
     }
-  }, [t, updateNote]);
+  }, [showToast, t, updateNote]);
 
   const handleUnarchive = useCallback(async (note: Note) => {
     try {
@@ -226,26 +253,39 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
           checked_items_collapsed: note.checked_items_collapsed,
         },
       });
+      showToast(t('dashboard.noteUnarchived'));
     } catch {
       Alert.alert(t('common.error'), t('note.failedUnarchive'));
     }
-  }, [t, updateNote]);
+  }, [showToast, t, updateNote]);
 
   const handleMoveToTrash = useCallback(async (note: Note) => {
     try {
       await deleteNote.mutateAsync(note.id);
+      showToast(t('dashboard.noteDeleted'), 'success', {
+        label: t('dashboard.undo'),
+        onPress: async () => {
+          try {
+            await restoreNote.mutateAsync(note.id);
+            showToast(t('dashboard.noteRestored'));
+          } catch {
+            showToast(t('note.failedRestore'), 'error');
+          }
+        },
+      });
     } catch {
       Alert.alert(t('common.error'), t('note.failedMoveToTrash'));
     }
-  }, [deleteNote, t]);
+  }, [deleteNote, restoreNote, showToast, t]);
 
   const handleRestore = useCallback(async (note: Note) => {
     try {
       await restoreNote.mutateAsync(note.id);
+      showToast(t('dashboard.noteRestored'));
     } catch {
       Alert.alert(t('common.error'), t('note.failedRestore'));
     }
-  }, [restoreNote, t]);
+  }, [restoreNote, showToast, t]);
 
   const handleDuplicate = useCallback(async (note: Note) => {
     if (isLocalId(note.id)) {
@@ -338,6 +378,10 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   const handleShare = useCallback((note: Note) => {
     navigation.navigate('Share', { noteId: note.id });
   }, [navigation]);
+
+  const handleManageLabels = useCallback((note: Note) => {
+    setLabelPickerNote(note);
+  }, []);
 
   const handleColorSelect = useCallback(async (color: string) => {
     if (!colorPickerNote) return;
@@ -650,26 +694,35 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
 
   if (isError) {
     const errorContent = (
-      <View
-        style={[
-          styles.emptyContainer,
-          { backgroundColor: colors.background },
-        ]}
+      <ScrollView
+        refreshControl={
+          <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={colors.primary} />
+        }
+        contentContainerStyle={styles.errorScrollContent}
         testID="notes-error-state"
       >
-        <Ionicons name="cloud-offline-outline" size={64} color={colors.handleColor} />
-        <Text style={[styles.emptyTitle, { color: colors.text }]}>{t('dashboard.failedLoadNotes')}</Text>
-        <Text style={[styles.emptySubtext, { color: colors.textMuted }]}>{t('dashboard.checkConnection')}</Text>
-        <TouchableOpacity
-          style={[styles.retryButton, { backgroundColor: colors.primary }]}
-          onPress={() => refetch()}
-          testID="retry-fetch"
-          accessibilityRole="button"
-          accessibilityLabel={t('common.retry')}
+        <View
+          style={[
+            styles.emptyContainer,
+            { backgroundColor: colors.background },
+          ]}
         >
-          <Text style={styles.retryText}>{t('common.retry')}</Text>
-        </TouchableOpacity>
-      </View>
+          <Ionicons name="cloud-offline-outline" size={64} color={colors.handleColor} />
+          <Text style={[styles.emptyTitle, { color: colors.text }]}>{t('dashboard.failedLoadNotes')}</Text>
+          <Text style={[styles.emptySubtext, { color: colors.textMuted }]}>{t('dashboard.checkConnection')}</Text>
+          <TouchableOpacity
+            style={[styles.retryButton, { backgroundColor: colors.primary }]}
+            onPress={() => {
+              void handleRefresh();
+            }}
+            testID="retry-fetch"
+            accessibilityRole="button"
+            accessibilityLabel={t('common.retry')}
+          >
+            <Text style={styles.retryText}>{t('common.retry')}</Text>
+          </TouchableOpacity>
+        </View>
+      </ScrollView>
     );
 
     return (
@@ -698,28 +751,37 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
             </Text>
           </View>
         )}
-        <View style={styles.emptyContent}>
-          <Ionicons
-            name={emptyIcon}
-            size={64}
-            color={colors.handleColor}
-          />
-          <Text style={[styles.emptyTitle, { color: colors.text }]}>
-            {variant === 'notes' && t('dashboard.noNotesYet')}
-            {variant === 'my-todo' && t('dashboard.noAssignedTodos')}
-            {variant === 'archived' && t('dashboard.noArchivedNotes')}
-            {variant === 'trash' && t('dashboard.noBinnedNotes')}
-          </Text>
-          <Text style={[styles.emptySubtext, { color: colors.textMuted }]}>
-            {variant === 'notes' && t('dashboard.createFirstNote')}
-            {variant === 'my-todo' && t('dashboard.noMyTodoNotes')}
-            {variant === 'archived' && t('dashboard.archivedNotesWillAppear')}
-            {variant === 'trash' && t('dashboard.deletedNotesWillAppear')}
-          </Text>
-        </View>
+        <ScrollView
+          style={styles.emptyScroll}
+          refreshControl={
+            <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={colors.primary} />
+          }
+          contentContainerStyle={styles.emptyScrollContent}
+          testID="notes-empty-state"
+        >
+          <View style={styles.emptyContent}>
+            <Ionicons
+              name={emptyIcon}
+              size={64}
+              color={colors.handleColor}
+            />
+            <Text style={[styles.emptyTitle, { color: colors.text }]}>
+              {variant === 'notes' && t('dashboard.noNotesYet')}
+              {variant === 'my-todo' && t('dashboard.noAssignedTodos')}
+              {variant === 'archived' && t('dashboard.noArchivedNotes')}
+              {variant === 'trash' && t('dashboard.noBinnedNotes')}
+            </Text>
+            <Text style={[styles.emptySubtext, { color: colors.textMuted }]}>
+              {variant === 'notes' && t('dashboard.createFirstNote')}
+              {variant === 'my-todo' && t('dashboard.noMyTodoNotes')}
+              {variant === 'archived' && t('dashboard.archivedNotesWillAppear')}
+              {variant === 'trash' && t('dashboard.deletedNotesWillAppear')}
+            </Text>
+          </View>
+        </ScrollView>
         {variant === 'notes' && (
           <TouchableOpacity
-            style={[styles.fab, { backgroundColor: colors.primary }]}
+            style={[styles.fab, { backgroundColor: colors.primary, bottom: fabBottom }]}
             onPress={handleCreateNote}
             testID="create-note-fab"
             accessibilityLabel={t('dashboard.newNote')}
@@ -771,7 +833,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
             refreshControl={
               <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={colors.primary} />
             }
-            contentContainerStyle={styles.listContent}
+            contentContainerStyle={[styles.listContent, { paddingBottom: listBottomPadding }]}
             testID="notes-section-list"
           >
             {displayPinned.length > 0 && (
@@ -809,7 +871,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
             refreshControl={
               <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={colors.primary} />
             }
-            contentContainerStyle={styles.listContent}
+            contentContainerStyle={[styles.listContent, { paddingBottom: listBottomPadding }]}
             testID="notes-section-list"
           >
             {displayPinned.length > 0 && (
@@ -856,7 +918,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
           refreshControl={
             <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={colors.primary} />
           }
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[styles.listContent, { paddingBottom: listBottomPadding }]}
           ListEmptyComponent={listEmptyComponent}
           testID="notes-flat-list"
         />
@@ -868,7 +930,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
           refreshControl={
             <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={colors.primary} />
           }
-          contentContainerStyle={styles.listContent}
+          contentContainerStyle={[styles.listContent, { paddingBottom: listBottomPadding }]}
           ListEmptyComponent={listEmptyComponent}
           testID="notes-flat-list"
         />
@@ -876,7 +938,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
 
       {variant === 'notes' && (
         <TouchableOpacity
-          style={[styles.fab, { backgroundColor: colors.primary }]}
+          style={[styles.fab, { backgroundColor: colors.primary, bottom: fabBottom }]}
           onPress={handleCreateNote}
           testID="create-note-fab"
           accessibilityLabel={t('dashboard.newNote')}
@@ -900,6 +962,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
         onDeletePermanently={handleDeletePermanently}
         onChangeColor={handleChangeColor}
         onShare={handleShare}
+        onManageLabels={handleManageLabels}
       />
 
       <ColorPicker
@@ -908,6 +971,15 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
         onSelect={handleColorSelect}
         onClose={() => setColorPickerNote(null)}
       />
+
+      {labelPickerNote && (
+        <LabelPicker
+          visible
+          noteId={labelPickerNote.id}
+          noteLabels={labelPickerNote.labels ?? []}
+          onClose={() => setLabelPickerNote(null)}
+        />
+      )}
     </View>
   );
 }
@@ -920,10 +992,21 @@ const styles = StyleSheet.create({
     flex: 1,
   },
   emptyContent: {
-    flex: 1,
+    width: '100%',
     justifyContent: 'center',
     alignItems: 'center',
     padding: 32,
+  },
+  emptyScroll: {
+    flex: 1,
+  },
+  emptyScrollContent: {
+    flexGrow: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  errorScrollContent: {
+    flexGrow: 1,
   },
   emptyContainer: {
     flex: 1,
@@ -1077,9 +1160,7 @@ const styles = StyleSheet.create({
     paddingTop: 16,
     paddingBottom: 4,
   },
-  listContent: {
-    paddingBottom: 80,
-  },
+  listContent: {},
   retryButton: {
     marginTop: 16,
     paddingHorizontal: 24,
@@ -1094,7 +1175,6 @@ const styles = StyleSheet.create({
   fab: {
     position: 'absolute',
     right: 20,
-    bottom: 20,
     width: 56,
     height: 56,
     borderRadius: 28,

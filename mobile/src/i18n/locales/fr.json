@@ -82,7 +82,12 @@
       "created_at": "Date de création"
     },
     "sortAccessibilityLabel": "Trier par {{sortLabel}}",
-    "sortDisabledNotice": "Le tri manuel est désactivé. Les notes sont triées par {{sortLabel}}, le glisser-déposer n'est donc pas disponible."
+    "sortDisabledNotice": "Le tri manuel est désactivé. Les notes sont triées par {{sortLabel}}, le glisser-déposer n'est donc pas disponible.",
+    "noteArchived": "Note archivée",
+    "noteUnarchived": "Note désarchivée",
+    "noteDeleted": "Note déplacée vers la corbeille",
+    "noteRestored": "Note restaurée",
+    "undo": "Annuler"
   },
   "settings": {
     "title": "Paramètres",
@@ -140,6 +145,8 @@
     "sessionsBrowserOnOS": "{{browser}} sur {{os}}",
     "sessionsCurrent": "Actuelle",
     "sessionsRevoke": "Révoquer",
+    "sessionsRevokeConfirmTitle": "Révoquer la session",
+    "sessionsRevokeConfirmMessage": "Êtes-vous sûr de vouloir révoquer cette session ?",
     "sessionsRevoking": "Révocation...",
     "sessionsRevokeFailed": "Impossible de révoquer la session",
     "sessionsNone": "Aucune session active trouvée.",
@@ -147,7 +154,10 @@
     "aboutButton": "À propos de Jot",
     "importSection": "Importer",
     "importDescription": "Importez des notes depuis des exports Google Keep.",
-    "importButton": "Importer depuis Google Keep"
+    "importButton": "Importer depuis Google Keep",
+    "currentServerSection": "Serveur",
+    "currentServerLabel": "Serveur actif",
+    "noServerConfigured": "Aucun serveur configuré"
   },
   "about": {
     "clientInfo": "Infos client",
@@ -160,7 +170,8 @@
     "commit": "Commit",
     "buildTime": "Date de compilation",
     "goVersion": "Version de Go",
-    "failedLoad": "Impossible de charger les informations du serveur"
+    "failedLoad": "Impossible de charger les informations du serveur",
+    "serverOrigin": "Origine du serveur"
   },
   "note": {
     "share": "Partager",
@@ -255,8 +266,26 @@
     "missingServerMessage": "Ce lien ne précise pas d'URL de serveur. Ouverture sur {{server}}.",
     "invalidServerTitle": "Lien profond ignoré",
     "invalidServerMessage": "Ce lien contient une URL de serveur invalide.",
+    "unknownServerTitle": "Serveur inconnu",
+    "unknownServerMessage": "Ce lien cible {{server}}, qui n'est pas encore ajouté.",
+    "addAndSwitchAction": "Ajouter et basculer",
     "wrongServerTitle": "Mauvais serveur",
     "wrongServerMessage": "Ce lien cible {{targetServer}}, mais vous êtes connecté à {{currentServer}}."
+  },
+  "serverPicker": {
+    "open": "Changer de serveur",
+    "title": "Sélectionner un serveur",
+    "noServers": "Aucun serveur configuré",
+    "addPlaceholder": "https://votre-serveur.exemple.com",
+    "addButton": "Ajouter un serveur",
+    "working": "Traitement...",
+    "urlRequired": "L'URL du serveur est requise",
+    "invalidUrl": "URL du serveur invalide. Utilisez http:// ou https://",
+    "switchFailed": "Impossible de changer de serveur",
+    "addFailed": "Impossible d'ajouter le serveur",
+    "duplicateTitle": "Serveur déjà ajouté",
+    "duplicateMessage": "Ce serveur existe déjà. Souhaitez-vous y basculer ?",
+    "switchToExisting": "Basculer vers l'existant"
   },
   "offline": {
     "message": "Vous êtes hors ligne. Les modifications seront synchronisées lors de la reconnexion."

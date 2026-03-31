@@ -2,11 +2,12 @@ import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useTranslation } from 'react-i18next';
-import type { Note, NoteItem, User } from '@jot/shared';
+import { VALIDATION, type Note, type NoteItem, type User } from '@jot/shared';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../store/AuthContext';
 import { useUsers } from '../store/UsersContext';
 import UserAvatar from './UserAvatar';
+import { isWhiteHexColor } from '../utils/colorContrast';
 
 interface NoteCardProps {
   note: Note;
@@ -104,14 +105,21 @@ function TodoPreview({ items, hasColor }: { items: NoteItem[]; hasColor?: boolea
 
   return (
     <View style={styles.todoPreview}>
-      {uncompleted.map((item) => (
-        <View key={item.id} style={styles.todoRow}>
-          <Ionicons name="square-outline" size={14} color={hasColor ? '#999' : colors.iconMuted} />
-          <Text style={[styles.todoText, { color: hasColor ? '#666' : colors.textSecondary }]} numberOfLines={1}>
-            {item.text}
-          </Text>
-        </View>
-      ))}
+      {uncompleted.map((item) => {
+        const indentLevel = Math.max(0, item.indent_level ?? 0);
+        return (
+          <View
+            key={item.id}
+            style={[styles.todoRow, { marginLeft: indentLevel * VALIDATION.INDENT_PX_PER_LEVEL }]}
+            testID={`note-card-todo-row-${item.id}`}
+          >
+            <Ionicons name="square-outline" size={14} color={hasColor ? '#999' : colors.iconMuted} />
+            <Text style={[styles.todoText, { color: hasColor ? '#666' : colors.textSecondary }]}>
+              {item.text}
+            </Text>
+          </View>
+        );
+      })}
       {completedCount > 0 && (
         <Text style={[styles.completedCount, { color: hasColor ? '#999' : colors.textMuted }]}>
           {t('note.moreCompletedItems', { count: completedCount })}
@@ -124,7 +132,7 @@ function TodoPreview({ items, hasColor }: { items: NoteItem[]; hasColor?: boolea
 function NoteCard({ note, onPress, onLongPress, onMenuPress }: NoteCardProps) {
   const { colors } = useTheme();
   const { t } = useTranslation();
-  const hasColor = !!(note.color && note.color !== '#ffffff');
+  const hasColor = !!(note.color && !isWhiteHexColor(note.color));
 
   return (
     <TouchableOpacity
@@ -228,13 +236,14 @@ const styles = StyleSheet.create({
   },
   todoRow: {
     flexDirection: 'row',
-    alignItems: 'center',
+    alignItems: 'flex-start',
     gap: 6,
     paddingVertical: 1,
   },
   todoText: {
     fontSize: 13,
     flex: 1,
+    flexShrink: 1,
   },
   completedCount: {
     fontSize: 12,

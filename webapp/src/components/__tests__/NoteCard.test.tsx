@@ -541,6 +541,31 @@ describe('NoteCard', () => {
 
       expect(screen.getByText(longText)).toBeInTheDocument()
     })
+
+    it('applies wrapping classes for long todo preview text', () => {
+      const todoNote = createMockNote({
+        note_type: 'todo',
+        items: [
+          {
+            id: 'item-wrap',
+            note_id: '1',
+            text: 'very long todo content that should wrap in preview',
+            completed: false,
+            position: 0,
+            indent_level: 0,
+            assigned_to: '',
+            created_at: '2023-01-01T00:00:00Z',
+            updated_at: '2023-01-01T00:00:00Z',
+          },
+        ],
+      })
+
+      const { container } = renderNoteCard({ ...defaultProps, note: todoNote })
+      const textSpan = container.querySelector('span.text-gray-700')
+      expect(textSpan).toBeTruthy()
+      expect(textSpan).toHaveClass('whitespace-pre-wrap')
+      expect(textSpan).toHaveClass('break-words')
+    })
   })
 
   describe('Loading States and Error Handling', () => {

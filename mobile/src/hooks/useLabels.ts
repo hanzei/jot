@@ -5,8 +5,24 @@ import { getLabels, addLabelToNote, removeLabelFromNote, renameLabel, deleteLabe
 import { getNotes } from '../api/notes';
 import { saveNote, saveNotes, renameLabelInLocalNotes, deleteLabelFromLocalNotes } from '../db/noteQueries';
 import { useNetworkStatus } from './useNetworkStatus';
+import { isServerSwitchInProgress } from '../api/client';
+import {
+  labelsQueryKey,
+  noteLocalQueryKey,
+  noteLocalQueryScopeKey,
+  noteQueryKey,
+  noteQueryScopeKey,
+  notesLocalQueryScopeKey,
+  notesQueryScopeKey,
+} from './queryKeys';
 
 type LabelSyncScope = { archived?: true; trashed?: true; my_todo?: true } | undefined;
+
+function assertSwitchWriteAllowed(): void {
+  if (isServerSwitchInProgress()) {
+    throw new Error('Server switch in progress; write blocked');
+  }
+}
 
 function describeLabelSyncScope(scope: LabelSyncScope): string {
   if (scope?.archived) {
@@ -47,7 +63,7 @@ async function syncLocalNotesAfterLabelMutation(db: SQLiteDatabase) {
 
 export function useLabels() {
   return useQuery({
-    queryKey: ['labels'],
+    queryKey: labelsQueryKey(),
     queryFn: getLabels,
   });
 }
@@ -56,16 +72,18 @@ export function useAddLabelToNote() {
   const queryClient = useQueryClient();
   const db = useSQLiteContext();
   return useMutation({
-    mutationFn: ({ noteId, name }: { noteId: string; name: string }) =>
-      addLabelToNote(noteId, name),
+    mutationFn: ({ noteId, name }: { noteId: string; name: string }) => {
+      assertSwitchWriteAllowed();
+      return addLabelToNote(noteId, name);
+    },
     onSuccess: async (updatedNote, { noteId }) => {
       await saveNote(db, updatedNote);
-      queryClient.invalidateQueries({ queryKey: ['notes'] });
-      queryClient.invalidateQueries({ queryKey: ['notes-local'] });
-      queryClient.invalidateQueries({ queryKey: ['note', noteId] });
-      queryClient.invalidateQueries({ queryKey: ['note-local', noteId] });
+      queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
+      queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+      queryClient.invalidateQueries({ queryKey: noteQueryKey(noteId) });
+      queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
       // Invalidate labels list since a new label name may have been created
-      queryClient.invalidateQueries({ queryKey: ['labels'] });
+      queryClient.invalidateQueries({ queryKey: labelsQueryKey() });
     },
   });
 }
@@ -74,15 +92,17 @@ export function useRemoveLabelFromNote() {
   const queryClient = useQueryClient();
   const db = useSQLiteContext();
   return useMutation({
-    mutationFn: ({ noteId, labelId }: { noteId: string; labelId: string }) =>
-      removeLabelFromNote(noteId, labelId),
+    mutationFn: ({ noteId, labelId }: { noteId: string; labelId: string }) => {
+      assertSwitchWriteAllowed();
+      return removeLabelFromNote(noteId, labelId);
+    },
     onSuccess: async (updatedNote, { noteId }) => {
       await saveNote(db, updatedNote);
-      queryClient.invalidateQueries({ queryKey: ['notes'] });
-      queryClient.invalidateQueries({ queryKey: ['notes-local'] });
-      queryClient.invalidateQueries({ queryKey: ['note', noteId] });
-      queryClient.invalidateQueries({ queryKey: ['note-local', noteId] });
-      queryClient.invalidateQueries({ queryKey: ['labels'] });
+      queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
+      queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+      queryClient.invalidateQueries({ queryKey: noteQueryKey(noteId) });
+      queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
+      queryClient.invalidateQueries({ queryKey: labelsQueryKey() });
     },
   });
 }
@@ -96,6 +116,7 @@ export function useRenameLabel() {
 
   return useMutation({
     mutationFn: async ({ labelId, name }: { labelId: string; name: string }) => {
+      assertSwitchWriteAllowed();
       if (!isConnectedRef.current) {
         throw new Error('Label management requires an internet connection');
       }
@@ -113,11 +134,11 @@ export function useRenameLabel() {
       return updatedLabel;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['labels'] });
-      queryClient.invalidateQueries({ queryKey: ['notes'] });
-      queryClient.invalidateQueries({ queryKey: ['notes-local'] });
-      queryClient.invalidateQueries({ queryKey: ['note'] });
-      queryClient.invalidateQueries({ queryKey: ['note-local'] });
+      queryClient.invalidateQueries({ queryKey: labelsQueryKey() });
+      queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
+      queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+      queryClient.invalidateQueries({ queryKey: noteQueryScopeKey() });
+      queryClient.invalidateQueries({ queryKey: noteLocalQueryScopeKey() });
     },
   });
 }
@@ -131,6 +152,7 @@ export function useDeleteLabel() {
 
   return useMutation({
     mutationFn: async ({ labelId }: { labelId: string }) => {
+      assertSwitchWriteAllowed();
       if (!isConnectedRef.current) {
         throw new Error('Label management requires an internet connection');
       }
@@ -147,11 +169,11 @@ export function useDeleteLabel() {
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['labels'] });
-      queryClient.invalidateQueries({ queryKey: ['notes'] });
-      queryClient.invalidateQueries({ queryKey: ['notes-local'] });
-      queryClient.invalidateQueries({ queryKey: ['note'] });
-      queryClient.invalidateQueries({ queryKey: ['note-local'] });
+      queryClient.invalidateQueries({ queryKey: labelsQueryKey() });
+      queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
+      queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+      queryClient.invalidateQueries({ queryKey: noteQueryScopeKey() });
+      queryClient.invalidateQueries({ queryKey: noteLocalQueryScopeKey() });
     },
   });
 }

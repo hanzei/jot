@@ -1,13 +1,6 @@
-const NOTE_PATH_PATTERN = /^\/notes\/([^/?#]+)\/?$/;
+import { canonicalizeServerOrigin } from '@jot/shared';
 
-function normalizeServerOrigin(origin: string): string {
-  try {
-    const parsed = new URL(origin);
-    return `${parsed.protocol}//${parsed.host}`;
-  } catch {
-    return origin;
-  }
-}
+const NOTE_PATH_PATTERN = /^\/notes\/([^/?#]+)\/?$/;
 
 export function mapWebPathToMobilePath(pathname: string): string {
   if (pathname === '/settings' || pathname === '/settings/') {
@@ -22,9 +15,12 @@ export function mapWebPathToMobilePath(pathname: string): string {
   return '';
 }
 
-export function buildMobileDeepLink(pathname: string, serverOrigin: string): string {
+export function buildMobileDeepLink(pathname: string, serverOrigin: string): string | null {
   const mobilePath = mapWebPathToMobilePath(pathname);
-  const normalizedOrigin = normalizeServerOrigin(serverOrigin);
+  const normalizedOrigin = canonicalizeServerOrigin(serverOrigin);
+  if (!normalizedOrigin) {
+    return null;
+  }
   const base = mobilePath ? `jot://${mobilePath}` : 'jot://';
   const url = new URL(base);
   url.searchParams.set('server', normalizedOrigin);
