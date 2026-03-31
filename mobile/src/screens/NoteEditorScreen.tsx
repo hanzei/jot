@@ -504,10 +504,10 @@ export default function NoteEditorScreen() {
         }),
       );
       if (changed) {
-        scheduleUpdate();
+        markDirtyAndScheduleUpdate();
       }
     },
-    [scheduleUpdate],
+    [markDirtyAndScheduleUpdate],
   );
 
   const handleTitleSubmit = useCallback(() => {
