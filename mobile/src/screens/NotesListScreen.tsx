@@ -380,9 +380,6 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   }, [navigation]);
 
   const handleManageLabels = useCallback((note: Note) => {
-    if (isLocalId(note.id)) {
-      return;
-    }
     setLabelPickerNote(note);
   }, []);
 

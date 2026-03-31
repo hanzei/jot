@@ -62,6 +62,18 @@ export default function NoteContextMenu({
 
   if (!note) return null;
 
+  const createLabelAction = (currentNote: Note): Action | null => {
+    if (!onManageLabels || isLocalId(currentNote.id)) {
+      return null;
+    }
+    return {
+      icon: 'pricetag-outline',
+      label: t('labels.title'),
+      onPress: () => { onClose(); onManageLabels(currentNote); },
+      testId: 'context-label',
+    };
+  };
+
   const actions: Action[] = [];
 
   if (viewContext === 'notes' || viewContext === 'my-todo') {
@@ -98,13 +110,9 @@ export default function NoteContextMenu({
       onPress: () => { onClose(); onDuplicate(note); },
       testId: 'context-duplicate',
     });
-    if (onManageLabels && !isLocalId(note.id)) {
-      actions.push({
-        icon: 'pricetag-outline',
-        label: t('labels.title'),
-        onPress: () => { onClose(); onManageLabels(note); },
-        testId: 'context-label',
-      });
+    const labelAction = createLabelAction(note);
+    if (labelAction) {
+      actions.push(labelAction);
     }
     actions.push({
       icon: 'trash-outline',
@@ -126,13 +134,9 @@ export default function NoteContextMenu({
       onPress: () => { onClose(); onDuplicate(note); },
       testId: 'context-duplicate',
     });
-    if (onManageLabels && !isLocalId(note.id)) {
-      actions.push({
-        icon: 'pricetag-outline',
-        label: t('labels.title'),
-        onPress: () => { onClose(); onManageLabels(note); },
-        testId: 'context-label',
-      });
+    const labelAction = createLabelAction(note);
+    if (labelAction) {
+      actions.push(labelAction);
     }
     actions.push({
       icon: 'trash-outline',
