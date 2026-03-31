@@ -20,6 +20,7 @@ interface TodoItemProps {
   completed: boolean;
   indentLevel?: number;
   editable?: boolean;
+  isActive?: boolean;
   showDragHandle?: boolean;
   assignedTo?: string;
   isShared?: boolean;
@@ -48,6 +49,7 @@ function TodoItem({
   completed,
   indentLevel = 0,
   editable = true,
+  isActive = false,
   showDragHandle = false,
   assignedTo,
   isShared,
@@ -98,6 +100,7 @@ function TodoItem({
       {showDragHandle && onDrag && (
         <TouchableOpacity
           onLongPress={onDrag}
+          disabled={isActive}
           style={styles.dragHandle}
           testID="todo-item-drag-handle"
           accessibilityLabel={t('note.dragToReorder')}

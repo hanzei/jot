@@ -487,18 +487,15 @@ export default function NoteEditorScreen() {
   }, [markDirtyAndScheduleUpdate, getItemRef]);
 
   const handleBackspaceOnEmpty = useCallback((index: number) => {
-    let focusTargetId: string | null = null;
-    let removedItemId: string | null = null;
-    setItems((prev) => {
-      const item = prev[index];
-      if (!item || item.text !== '') return prev;
-      removedItemId = item.id;
-      focusTargetId = index > 0 ? (prev[index - 1]?.id ?? null) : null;
-      return prev.filter((_, i) => i !== index);
-    });
-    if (removedItemId) {
-      itemInputRefsMap.current.delete(removedItemId);
+    const currentItems = itemsRef.current;
+    const item = currentItems[index];
+    if (!item || item.text !== '') {
+      return;
     }
+    const removedItemId = item.id;
+    const focusTargetId = index > 0 ? (currentItems[index - 1]?.id ?? null) : null;
+    setItems((prev) => prev.filter((_, i) => i !== index));
+    itemInputRefsMap.current.delete(removedItemId);
     markDirtyAndScheduleUpdate();
     setTimeout(() => {
       if (focusTargetId) itemInputRefsMap.current.get(focusTargetId)?.current?.focus();
@@ -817,6 +814,7 @@ export default function NoteEditorScreen() {
               inputRef={itemRef}
               text={item.text}
               completed={item.completed}
+              isActive={isActive}
               indentLevel={item.indent_level}
               showDragHandle
               assignedTo={item.assigned_to}
@@ -980,6 +978,7 @@ export default function NoteEditorScreen() {
                         inputRef={getItemRef(item.id)}
                         text={item.text}
                         completed={item.completed}
+                        isActive={false}
                         indentLevel={item.indent_level}
                         assignedTo={item.assigned_to}
                         isShared={!!isNoteShared}
