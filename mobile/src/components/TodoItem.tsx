@@ -1,10 +1,12 @@
-import React from 'react';
+import React, { useEffect, useMemo, useRef } from 'react';
 import {
   View,
   TextInput,
   StyleSheet,
+  PanResponder,
   type TextInputProps,
   type TextInput as TextInputType,
+  type PanResponderGestureState,
 } from 'react-native';
 import { TouchableOpacity } from 'react-native-gesture-handler';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -31,6 +33,14 @@ interface TodoItemProps {
   onBackspaceOnEmpty?: () => void;
   onAssignPress?: () => void;
   onFocus?: TextInputProps['onFocus'];
+  onIndent?: (delta: 1 | -1) => void;
+}
+
+const INDENT_SWIPE_THRESHOLD_PX = 50;
+const SWIPE_ACTIVATION_PX = 10;
+
+function isHorizontalSwipe(gestureState: PanResponderGestureState): boolean {
+  return Math.abs(gestureState.dx) > Math.abs(gestureState.dy) && Math.abs(gestureState.dx) >= SWIPE_ACTIVATION_PX;
 }
 
 function TodoItem({
@@ -51,17 +61,39 @@ function TodoItem({
   onBackspaceOnEmpty,
   onAssignPress,
   onFocus,
+  onIndent,
 }: TodoItemProps) {
   const { colors } = useTheme();
   const { t } = useTranslation();
   const showAssignUI = isShared && collaborators && collaborators.length > 0 && onAssignPress;
   const assignedUser = assignedTo ? collaborators?.find((c) => c.userId === assignedTo) : undefined;
   const normalizedIndentLevel = Math.max(0, indentLevel);
+  const onIndentRef = useRef(onIndent);
+  useEffect(() => {
+    onIndentRef.current = onIndent;
+  }, [onIndent]);
+  const panResponder = useMemo(
+    () =>
+      PanResponder.create({
+        onMoveShouldSetPanResponder: (_event, gestureState) => {
+          if (!editable || !onIndentRef.current) return false;
+          return isHorizontalSwipe(gestureState);
+        },
+        onPanResponderRelease: (_event, gestureState) => {
+          if (!editable || !onIndentRef.current) return;
+          if (!isHorizontalSwipe(gestureState)) return;
+          if (Math.abs(gestureState.dx) < INDENT_SWIPE_THRESHOLD_PX) return;
+          onIndentRef.current(gestureState.dx > 0 ? 1 : -1);
+        },
+      }),
+    [editable],
+  );
 
   return (
     <View
       style={[styles.container, { marginLeft: normalizedIndentLevel * VALIDATION.INDENT_PX_PER_LEVEL }]}
       testID="todo-item-row"
+      {...panResponder.panHandlers}
     >
       {showDragHandle && onDrag && (
         <TouchableOpacity
