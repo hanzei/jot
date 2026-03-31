@@ -30,6 +30,7 @@ import SkeletonNoteList from '../components/SkeletonNoteList';
 import NoteCard from '../components/NoteCard';
 import NoteContextMenu, { ContextMenuViewContext } from '../components/NoteContextMenu';
 import ColorPicker from '../components/ColorPicker';
+import LabelPicker from '../components/LabelPicker';
 import type { Note, NoteSort } from '@jot/shared';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { NOTE_SORT_OPTIONS, getNoteSortLabel, normalizeNoteSort, sortNotesForDisplay } from '../utils/noteSort';
@@ -68,6 +69,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
 
   const [contextMenuNote, setContextMenuNote] = useState<Note | null>(null);
   const [colorPickerNote, setColorPickerNote] = useState<Note | null>(null);
+  const [labelPickerNote, setLabelPickerNote] = useState<Note | null>(null);
   const [localOrder, setLocalOrder] = useState<LocalReorderState>({ pinned: null, unpinned: null });
   const [sortMode, setSortMode] = useState<NoteSort>(() => normalizeNoteSort(settings?.note_sort));
   const [isSortControlsOpen, setIsSortControlsOpen] = useState(false);
@@ -340,6 +342,13 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   const handleShare = useCallback((note: Note) => {
     navigation.navigate('Share', { noteId: note.id });
   }, [navigation]);
+
+  const handleManageLabels = useCallback((note: Note) => {
+    if (isLocalId(note.id)) {
+      return;
+    }
+    setLabelPickerNote(note);
+  }, []);
 
   const handleColorSelect = useCallback(async (color: string) => {
     if (!colorPickerNote) return;
@@ -902,6 +911,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
         onDeletePermanently={handleDeletePermanently}
         onChangeColor={handleChangeColor}
         onShare={handleShare}
+        onManageLabels={handleManageLabels}
       />
 
       <ColorPicker
@@ -910,6 +920,15 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
         onSelect={handleColorSelect}
         onClose={() => setColorPickerNote(null)}
       />
+
+      {labelPickerNote && (
+        <LabelPicker
+          visible
+          noteId={labelPickerNote.id}
+          noteLabels={labelPickerNote.labels ?? []}
+          onClose={() => setLabelPickerNote(null)}
+        />
+      )}
     </View>
   );
 }
