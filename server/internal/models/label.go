@@ -85,7 +85,7 @@ func (s *LabelStore) GetLabelNoteIDs(ctx context.Context, labelID, userID string
 		return nil, fmt.Errorf("check label ownership: %w", err)
 	}
 
-	rows, err := s.db.QueryContext(ctx, `SELECT note_id FROM note_labels WHERE label_id = ?`, labelID)
+	rows, err := s.db.QueryContext(ctx, `SELECT note_id FROM note_labels WHERE label_id = ? AND user_id = ?`, labelID, userID)
 	if err != nil {
 		return nil, fmt.Errorf("get label note IDs: %w", err)
 	}
