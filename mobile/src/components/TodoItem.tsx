@@ -3,8 +3,7 @@ import {
   View,
   TextInput,
   StyleSheet,
-  type NativeSyntheticEvent,
-  type TextInputFocusEventData,
+  type TextInputProps,
   type TextInput as TextInputType,
 } from 'react-native';
 import { TouchableOpacity } from 'react-native-gesture-handler';
@@ -31,7 +30,7 @@ interface TodoItemProps {
   onSubmitEditing?: () => void;
   onBackspaceOnEmpty?: () => void;
   onAssignPress?: () => void;
-  onFocus?: (event: NativeSyntheticEvent<TextInputFocusEventData>) => void;
+  onFocus?: TextInputProps['onFocus'];
 }
 
 function TodoItem({
@@ -66,7 +65,7 @@ function TodoItem({
     >
       {showDragHandle && onDrag && (
         <TouchableOpacity
-          onPressIn={onDrag}
+          onLongPress={onDrag}
           style={styles.dragHandle}
           testID="todo-item-drag-handle"
           accessibilityLabel={t('note.dragToReorder')}

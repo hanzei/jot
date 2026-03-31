@@ -9,8 +9,7 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
-  type NativeSyntheticEvent,
-  type TextInputFocusEventData,
+  type TextInputProps,
   type TextInput as TextInputType,
 } from 'react-native';
 import DraggableFlatList, { ScaleDecorator } from 'react-native-draggable-flatlist';
@@ -35,6 +34,9 @@ import type { RootStackParamList } from '../navigation/RootNavigator';
 
 type EditorRouteProp = RouteProp<RootStackParamList, 'NoteEditor'>;
 type EditorNavProp = NativeStackNavigationProp<RootStackParamList, 'NoteEditor'>;
+
+const IOS_KEYBOARD_VERTICAL_OFFSET = 88;
+const FOCUSED_INPUT_KEYBOARD_MARGIN = 120;
 
 interface LocalItem {
   id: string;
@@ -384,7 +386,11 @@ export default function NoteEditorScreen() {
 
   const handleDeleteItem = useCallback(
     (index: number) => {
+      const removedItemId = itemsRef.current[index]?.id;
       setItems((prev) => prev.filter((_, i) => i !== index));
+      if (removedItemId) {
+        itemInputRefsMap.current.delete(removedItemId);
+      }
       scheduleUpdate();
     },
     [scheduleUpdate],
@@ -422,17 +428,38 @@ export default function NoteEditorScreen() {
 
   const handleBackspaceOnEmpty = useCallback((index: number) => {
     let focusTargetId: string | null = null;
+    let removedItemId: string | null = null;
     setItems((prev) => {
       const item = prev[index];
       if (!item || item.text !== '') return prev;
+      removedItemId = item.id;
       focusTargetId = index > 0 ? (prev[index - 1]?.id ?? null) : null;
       return prev.filter((_, i) => i !== index);
     });
+    if (removedItemId) {
+      itemInputRefsMap.current.delete(removedItemId);
+    }
     scheduleUpdate();
     setTimeout(() => {
       if (focusTargetId) itemInputRefsMap.current.get(focusTargetId)?.current?.focus();
     }, 50);
   }, [scheduleUpdate]);
+
+  const buildMetadataUpdateData = useCallback((overrides: Partial<UpdateNoteRequest>): UpdateNoteRequest => {
+    const data: UpdateNoteRequest = {
+      title: titleRef.current,
+      content: contentRef.current,
+      pinned: pinnedRef.current,
+      archived: archivedRef.current,
+      color: colorRef.current,
+      checked_items_collapsed: checkedItemsCollapsedRef.current,
+      ...overrides,
+    };
+    if (noteTypeRef.current === 'todo') {
+      data.items = serializeItems(itemsRef.current);
+    }
+    return data;
+  }, []);
 
   const handleTitleSubmit = useCallback(() => {
     if (noteTypeRef.current === 'text') {
@@ -524,20 +551,13 @@ export default function NoteEditorScreen() {
     try {
       await updateMutation.mutateAsync({
         id: noteId,
-        data: {
-          title: titleRef.current,
-          content: contentRef.current,
-          pinned: newPinned,
-          archived: archivedRef.current,
-          color: colorRef.current,
-          checked_items_collapsed: checkedItemsCollapsedRef.current,
-        },
+        data: buildMetadataUpdateData({ pinned: newPinned }),
       });
     } catch {
       setPinned(!newPinned);
       Alert.alert(t('common.error'), t('note.failedUpdate'));
     }
-  }, [noteId, t, updateMutation]);
+  }, [buildMetadataUpdateData, noteId, t, updateMutation]);
 
   const handleToggleArchive = useCallback(async () => {
     if (!noteId) return;
@@ -546,20 +566,13 @@ export default function NoteEditorScreen() {
     try {
       await updateMutation.mutateAsync({
         id: noteId,
-        data: {
-          title: titleRef.current,
-          content: contentRef.current,
-          pinned: pinnedRef.current,
-          archived: newArchived,
-          color: colorRef.current,
-          checked_items_collapsed: checkedItemsCollapsedRef.current,
-        },
+        data: buildMetadataUpdateData({ archived: newArchived }),
       });
     } catch {
       setArchived(!newArchived);
       Alert.alert(t('common.error'), t('note.failedUpdate'));
     }
-  }, [noteId, t, updateMutation]);
+  }, [buildMetadataUpdateData, noteId, t, updateMutation]);
 
   const handleColorSelect = useCallback(async (selectedColor: string) => {
     const prevColor = colorRef.current;
@@ -568,20 +581,13 @@ export default function NoteEditorScreen() {
     try {
       await updateMutation.mutateAsync({
         id: noteId,
-        data: {
-          title: titleRef.current,
-          content: contentRef.current,
-          pinned: pinnedRef.current,
-          archived: archivedRef.current,
-          color: selectedColor,
-          checked_items_collapsed: checkedItemsCollapsedRef.current,
-        },
+        data: buildMetadataUpdateData({ color: selectedColor }),
       });
     } catch {
       setColor(prevColor);
       Alert.alert(t('common.error'), t('note.failedColorUpdate'));
     }
-  }, [noteId, t, updateMutation]);
+  }, [buildMetadataUpdateData, noteId, t, updateMutation]);
 
   const handleToggleNoteType = useCallback(() => {
     if (hasCreated) return;
@@ -647,7 +653,7 @@ export default function NoteEditorScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
   }, []);
 
-  const handleTodoItemFocus = useCallback((event: NativeSyntheticEvent<TextInputFocusEventData>) => {
+  const handleTodoItemFocus = useCallback<NonNullable<TextInputProps['onFocus']>>((event) => {
     const nativeTarget = event.nativeEvent.target;
     if (nativeTarget == null) return;
 
@@ -657,11 +663,13 @@ export default function NoteEditorScreen() {
       responder &&
       typeof responder.scrollResponderScrollNativeHandleToKeyboard === 'function'
     ) {
-      responder.scrollResponderScrollNativeHandleToKeyboard(nativeTarget, 120, true);
+      responder.scrollResponderScrollNativeHandleToKeyboard(
+        nativeTarget,
+        FOCUSED_INPUT_KEYBOARD_MARGIN,
+        true,
+      );
       return;
     }
-
-    scrollViewRef.current?.scrollToEnd({ animated: true });
   }, []);
 
   const renderTodoItem = useCallback(
@@ -704,7 +712,7 @@ export default function NoteEditorScreen() {
     <KeyboardAvoidingView
       style={[styles.container, { backgroundColor: noteBackground }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 0}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? IOS_KEYBOARD_VERTICAL_OFFSET : 0}
     >
       <View style={[styles.header, { backgroundColor: noteBackground, borderBottomColor: hasNoteColor ? 'transparent' : colors.borderLight, paddingTop: insets.top + 12 }]}>
         <TouchableOpacity
