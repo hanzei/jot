@@ -1,5 +1,12 @@
 import React from 'react';
-import { View, TextInput, StyleSheet, type TextInput as TextInputType } from 'react-native';
+import {
+  View,
+  TextInput,
+  StyleSheet,
+  type NativeSyntheticEvent,
+  type TextInputFocusEventData,
+  type TextInput as TextInputType,
+} from 'react-native';
 import { TouchableOpacity } from 'react-native-gesture-handler';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useTranslation } from 'react-i18next';
@@ -24,6 +31,7 @@ interface TodoItemProps {
   onSubmitEditing?: () => void;
   onBackspaceOnEmpty?: () => void;
   onAssignPress?: () => void;
+  onFocus?: (event: NativeSyntheticEvent<TextInputFocusEventData>) => void;
 }
 
 function TodoItem({
@@ -43,6 +51,7 @@ function TodoItem({
   onSubmitEditing,
   onBackspaceOnEmpty,
   onAssignPress,
+  onFocus,
 }: TodoItemProps) {
   const { colors } = useTheme();
   const { t } = useTranslation();
@@ -90,6 +99,7 @@ function TodoItem({
         returnKeyType="next"
         onSubmitEditing={onSubmitEditing}
         blurOnSubmit={false}
+        onFocus={onFocus}
         multiline
         submitBehavior="submit"
         textAlignVertical="top"

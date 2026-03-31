@@ -9,6 +9,8 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
+  type NativeSyntheticEvent,
+  type TextInputFocusEventData,
   type TextInput as TextInputType,
 } from 'react-native';
 import DraggableFlatList, { ScaleDecorator } from 'react-native-draggable-flatlist';
@@ -149,6 +151,7 @@ export default function NoteEditorScreen() {
 
   const titleInputRef = useRef<TextInputType>(null);
   const contentInputRef = useRef<TextInputType>(null);
+  const scrollViewRef = useRef<ScrollView>(null);
   const itemInputRefsMap = useRef(new Map<string, React.RefObject<TextInputType | null>>());
 
   const getItemRef = useCallback((id: string): React.RefObject<TextInputType | null> => {
@@ -644,6 +647,23 @@ export default function NoteEditorScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
   }, []);
 
+  const handleTodoItemFocus = useCallback((event: NativeSyntheticEvent<TextInputFocusEventData>) => {
+    const nativeTarget = event.nativeEvent.target;
+    if (nativeTarget == null) return;
+
+    // Use ScrollView's native keyboard helper so focused todo inputs stay visible.
+    const responder = scrollViewRef.current?.getScrollResponder?.();
+    if (
+      responder &&
+      typeof responder.scrollResponderScrollNativeHandleToKeyboard === 'function'
+    ) {
+      responder.scrollResponderScrollNativeHandleToKeyboard(nativeTarget, 120, true);
+      return;
+    }
+
+    scrollViewRef.current?.scrollToEnd({ animated: true });
+  }, []);
+
   const renderTodoItem = useCallback(
     ({ item, drag, isActive }: { item: LocalItem; drag: () => void; isActive: boolean }) => {
       const originalIndex = itemIndexMapRef.current.get(item.id);
@@ -668,12 +688,13 @@ export default function NoteEditorScreen() {
               onSubmitEditing={() => handleInsertItemAfter(originalIndex)}
               onBackspaceOnEmpty={() => handleBackspaceOnEmpty(originalIndex)}
               onAssignPress={() => openAssigneePicker(item.id)}
+              onFocus={handleTodoItemFocus}
             />
           </View>
         </ScaleDecorator>
       );
     },
-    [getItemRef, handleToggleItem, handleItemTextChange, handleDeleteItem, handleInsertItemAfter, handleBackspaceOnEmpty, isNoteShared, collaborators, openAssigneePicker, isDark, colors],
+    [getItemRef, handleToggleItem, handleItemTextChange, handleDeleteItem, handleInsertItemAfter, handleBackspaceOnEmpty, isNoteShared, collaborators, openAssigneePicker, isDark, colors, handleTodoItemFocus],
   );
 
   const hasNoteColor = color && color !== '#ffffff';
@@ -737,7 +758,9 @@ export default function NoteEditorScreen() {
       )}
 
       <ScrollView
+        ref={scrollViewRef}
         style={styles.scrollContent}
+        contentContainerStyle={styles.scrollContentContainer}
         keyboardShouldPersistTaps="handled"
       >
         <TextInput
@@ -822,6 +845,7 @@ export default function NoteEditorScreen() {
                         onSubmitEditing={() => handleInsertItemAfter(originalIndex)}
                         onBackspaceOnEmpty={() => handleBackspaceOnEmpty(originalIndex)}
                         onAssignPress={() => openAssigneePicker(item.id)}
+                        onFocus={handleTodoItemFocus}
                       />
                     );
                   })}
@@ -983,6 +1007,9 @@ const styles = StyleSheet.create({
   scrollContent: {
     flex: 1,
     paddingHorizontal: 16,
+  },
+  scrollContentContainer: {
+    paddingBottom: 96,
   },
   titleInput: {
     fontSize: 22,
