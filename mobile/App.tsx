@@ -12,6 +12,7 @@ import {
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { SQLiteProvider } from 'expo-sqlite';
+import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { useTranslation } from 'react-i18next';
 import { AuthProvider, useAuth } from './src/store/AuthContext';
 import MobileI18nProvider from './src/i18n/MobileI18nProvider';
@@ -376,50 +377,54 @@ export default function App() {
   if (!isServerContextReady) {
     return (
       <GestureHandlerRootView style={{ flex: 1 }}>
-        <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
-          {serverContextInitError ? (
-            <View style={{ alignItems: 'center', paddingHorizontal: 24 }}>
-              <Text style={{ textAlign: 'center', marginBottom: 12 }}>
-                Failed to initialize server context.
-              </Text>
-              <TouchableOpacity
-                onPress={() => setServerContextInitAttempt((prev) => prev + 1)}
-                style={{ paddingHorizontal: 14, paddingVertical: 10 }}
-              >
-                <Text>Retry</Text>
-              </TouchableOpacity>
-            </View>
-          ) : (
-            <ActivityIndicator size="large" />
-          )}
-        </View>
+        <SafeAreaProvider>
+          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+            {serverContextInitError ? (
+              <View style={{ alignItems: 'center', paddingHorizontal: 24 }}>
+                <Text style={{ textAlign: 'center', marginBottom: 12 }}>
+                  Failed to initialize server context.
+                </Text>
+                <TouchableOpacity
+                  onPress={() => setServerContextInitAttempt((prev) => prev + 1)}
+                  style={{ paddingHorizontal: 14, paddingVertical: 10 }}
+                >
+                  <Text>Retry</Text>
+                </TouchableOpacity>
+              </View>
+            ) : (
+              <ActivityIndicator size="large" />
+            )}
+          </View>
+        </SafeAreaProvider>
       </GestureHandlerRootView>
     );
   }
 
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
-      <QueryClientProvider client={queryClient}>
-        <AuthProvider>
-          <SQLiteProvider
-            key={`sqlite-${databaseName}`}
-            databaseName={databaseName}
-            onInit={handleDatabaseInit}
-          >
-            <MobileI18nProvider>
-              <ThemeProvider>
-                <UsersProvider>
-                  <OfflineProvider>
-                    <ToastProvider>
-                      <NavigationWrapper />
-                    </ToastProvider>
-                  </OfflineProvider>
-                </UsersProvider>
-              </ThemeProvider>
-            </MobileI18nProvider>
-          </SQLiteProvider>
-        </AuthProvider>
-      </QueryClientProvider>
+      <SafeAreaProvider>
+        <QueryClientProvider client={queryClient}>
+          <AuthProvider>
+            <SQLiteProvider
+              key={`sqlite-${databaseName}`}
+              databaseName={databaseName}
+              onInit={handleDatabaseInit}
+            >
+              <MobileI18nProvider>
+                <ThemeProvider>
+                  <UsersProvider>
+                    <OfflineProvider>
+                      <ToastProvider>
+                        <NavigationWrapper />
+                      </ToastProvider>
+                    </OfflineProvider>
+                  </UsersProvider>
+                </ThemeProvider>
+              </MobileI18nProvider>
+            </SQLiteProvider>
+          </AuthProvider>
+        </QueryClientProvider>
+      </SafeAreaProvider>
     </GestureHandlerRootView>
   );
 }

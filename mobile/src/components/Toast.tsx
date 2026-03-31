@@ -169,6 +169,9 @@ function ToastItem({ toast, onDismiss }: { toast: ToastMessage; onDismiss: (id: 
           disabled={isActionInFlight}
           style={styles.actionButton}
           testID={`toast-action-${toast.id}`}
+          accessibilityRole="button"
+          accessibilityLabel={toast.action.label}
+          accessibilityHint={t('dashboard.toastActionHint', { action: toast.action.label })}
         >
           <Text style={[styles.actionText, { color: colors.primary }]}>{toast.action.label}</Text>
         </TouchableOpacity>
