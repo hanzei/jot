@@ -45,6 +45,8 @@ interface LocalItem {
   assigned_to: string;
 }
 
+const MAX_TODO_ITEM_INDENT = 1;
+
 function toLocalItems(serverItems: NoteItem[]): LocalItem[] {
   return [...serverItems]
     .sort((a, b) => a.position - b.position)
@@ -489,6 +491,25 @@ export default function NoteEditorScreen() {
     }, 50);
   }, [markDirtyAndScheduleUpdate]);
 
+  const handleIndentItem = useCallback(
+    (index: number, delta: 1 | -1) => {
+      let changed = false;
+      setItems((prev) =>
+        prev.map((item, i) => {
+          if (i !== index) return item;
+          const nextIndentLevel = Math.max(0, Math.min(MAX_TODO_ITEM_INDENT, item.indent_level + delta));
+          if (nextIndentLevel === item.indent_level) return item;
+          changed = true;
+          return { ...item, indent_level: nextIndentLevel };
+        }),
+      );
+      if (changed) {
+        scheduleUpdate();
+      }
+    },
+    [scheduleUpdate],
+  );
+
   const handleTitleSubmit = useCallback(() => {
     if (noteTypeRef.current === 'text') {
       contentInputRef.current?.focus();
@@ -780,12 +801,13 @@ export default function NoteEditorScreen() {
               onSubmitEditing={() => handleInsertItemAfter(originalIndex)}
               onBackspaceOnEmpty={() => handleBackspaceOnEmpty(originalIndex)}
               onAssignPress={() => openAssigneePicker(item.id)}
+              onIndent={(delta) => handleIndentItem(originalIndex, delta)}
             />
           </View>
         </ScaleDecorator>
       );
     },
-    [getItemRef, handleToggleItem, handleItemTextChange, handleDeleteItem, handleInsertItemAfter, handleBackspaceOnEmpty, isNoteShared, collaborators, openAssigneePicker, isDark, colors],
+    [getItemRef, handleToggleItem, handleItemTextChange, handleDeleteItem, handleInsertItemAfter, handleBackspaceOnEmpty, isNoteShared, collaborators, openAssigneePicker, handleIndentItem, isDark, colors],
   );
 
   const hasNoteColor = !!color && !isWhiteHexColor(color);
@@ -937,6 +959,7 @@ export default function NoteEditorScreen() {
                         onSubmitEditing={() => handleInsertItemAfter(originalIndex)}
                         onBackspaceOnEmpty={() => handleBackspaceOnEmpty(originalIndex)}
                         onAssignPress={() => openAssigneePicker(item.id)}
+                        onIndent={(delta) => handleIndentItem(originalIndex, delta)}
                       />
                     );
                   })}
