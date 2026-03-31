@@ -384,7 +384,6 @@ func logrusRequestLogger(next http.Handler) http.Handler {
 		next.ServeHTTP(ww, r)
 		logrus.WithFields(logrus.Fields{
 			"status":   ww.Status(),
-			"bytes":    ww.BytesWritten(),
 			"duration": time.Since(start).String(),
 			"method":   r.Method,
 			"path":     r.URL.Path,
