@@ -30,6 +30,7 @@ import { useUsers } from '../store/UsersContext';
 import { useTheme } from '../theme/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { RootStackParamList } from '../navigation/RootNavigator';
+import { getCompletedSectionDividerColor, isWhiteHexColor } from '../utils/colorContrast';
 
 type EditorRouteProp = RouteProp<RootStackParamList, 'NoteEditor'>;
 type EditorNavProp = NativeStackNavigationProp<RootStackParamList, 'NoteEditor'>;
@@ -224,7 +225,7 @@ export default function NoteEditorScreen() {
           title: currentTitle,
           content: currentContent,
           note_type: currentNoteType,
-          color: currentColor !== '#ffffff' ? currentColor : undefined,
+          color: !isWhiteHexColor(currentColor) ? currentColor : undefined,
           items: currentNoteType === 'todo' ? serializeItems(currentItems) : undefined,
         });
         if (!isMountedRef.current || unmounting) return true;
@@ -694,8 +695,11 @@ export default function NoteEditorScreen() {
     [getItemRef, handleToggleItem, handleItemTextChange, handleDeleteItem, handleInsertItemAfter, handleBackspaceOnEmpty, isNoteShared, collaborators, openAssigneePicker, handleIndentItem, isDark, colors],
   );
 
-  const hasNoteColor = color && color !== '#ffffff';
+  const hasNoteColor = !!color && !isWhiteHexColor(color);
   const noteBackground = hasNoteColor ? color : colors.surface;
+  const completedSectionDividerColor = hasNoteColor
+    ? getCompletedSectionDividerColor(noteBackground)
+    : colors.borderLight;
 
   return (
     <KeyboardAvoidingView
@@ -804,7 +808,7 @@ export default function NoteEditorScreen() {
             </TouchableOpacity>
 
             {checkedItems.length > 0 && (
-              <View style={[styles.checkedSection, { borderTopColor: colors.borderLight }]}>
+              <View style={[styles.checkedSection, { borderTopColor: completedSectionDividerColor }]} testID="checked-items-section">
                 <TouchableOpacity
                   style={styles.checkedHeader}
                   onPress={handleToggleCollapsed}

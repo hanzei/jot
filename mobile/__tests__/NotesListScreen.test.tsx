@@ -432,4 +432,69 @@ describe('NotesListScreen sorting', () => {
       expect(screen.queryByTestId('clear-search')).toBeNull();
     });
   });
+
+  it('pull-to-refresh on empty state reloads notes and users', async () => {
+    const refetch = jest.fn().mockResolvedValue(undefined);
+    const refreshUsers = jest.fn().mockResolvedValue(undefined);
+    mockUseOfflineNotes.mockReturnValue({
+      data: [],
+      isLoading: false,
+      isError: false,
+      refetch,
+      isRefetching: false,
+    });
+    mockUseUsers.mockReturnValue({ refreshUsers });
+
+    render(<NotesListScreen variant="notes" />);
+
+    const emptyState = screen.getByTestId('notes-empty-state');
+    const onRefresh = emptyState.props.refreshControl.props.onRefresh as () => Promise<void>;
+    await onRefresh();
+
+    expect(refetch).toHaveBeenCalledTimes(1);
+    expect(refreshUsers).toHaveBeenCalledTimes(1);
+  });
+
+  it('pull-to-refresh on error state reloads notes and users', async () => {
+    const refetch = jest.fn().mockResolvedValue(undefined);
+    const refreshUsers = jest.fn().mockResolvedValue(undefined);
+    mockUseOfflineNotes.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      refetch,
+      isRefetching: false,
+    });
+    mockUseUsers.mockReturnValue({ refreshUsers });
+
+    render(<NotesListScreen variant="notes" />);
+
+    const errorState = screen.getByTestId('notes-error-state');
+    const onRefresh = errorState.props.refreshControl.props.onRefresh as () => Promise<void>;
+    await onRefresh();
+
+    expect(refetch).toHaveBeenCalledTimes(1);
+    expect(refreshUsers).toHaveBeenCalledTimes(1);
+  });
+
+  it('retry button on error state reloads notes and users', async () => {
+    const refetch = jest.fn().mockResolvedValue(undefined);
+    const refreshUsers = jest.fn().mockResolvedValue(undefined);
+    mockUseOfflineNotes.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      refetch,
+      isRefetching: false,
+    });
+    mockUseUsers.mockReturnValue({ refreshUsers });
+
+    render(<NotesListScreen variant="notes" />);
+    fireEvent.press(screen.getByTestId('retry-fetch'));
+
+    await waitFor(() => {
+      expect(refetch).toHaveBeenCalledTimes(1);
+      expect(refreshUsers).toHaveBeenCalledTimes(1);
+    });
+  });
 });
