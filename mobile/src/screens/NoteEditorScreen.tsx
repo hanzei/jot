@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   Alert,
   StyleSheet,
+  Keyboard,
   type TextInput as TextInputType,
 } from 'react-native';
 import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
@@ -156,6 +157,9 @@ export default function NoteEditorScreen() {
   const titleInputRef = useRef<TextInputType>(null);
   const contentInputRef = useRef<TextInputType>(null);
   const itemInputRefsMap = useRef(new Map<string, React.RefObject<TextInputType | null>>());
+  // eslint-disable-next-line @typescript-eslint/no-explicit-any
+  const kascvRef = useRef<any>(null);
+  const scrollOffsetRef = useRef(0);
 
   const getItemRef = useCallback((id: string): React.RefObject<TextInputType | null> => {
     if (!itemInputRefsMap.current.has(id)) {
@@ -351,6 +355,25 @@ export default function NoteEditorScreen() {
       }
     };
   }, [flushSave]);
+
+  useEffect(() => {
+    const sub = Keyboard.addListener('keyboardDidShow', (e) => {
+      const kascv = kascvRef.current;
+      if (!kascv) return;
+      const focusedInput = TextInput.State.currentlyFocusedInput?.();
+      if (!focusedInput) return;
+      // eslint-disable-next-line @typescript-eslint/no-explicit-any
+      (focusedInput as any).measureInWindow((_x: number, pageY: number, _w: number, h: number) => {
+        const keyboardTop = e.endCoordinates.screenY;
+        const MARGIN = 24;
+        const inputBottom = pageY + h;
+        if (inputBottom > keyboardTop - MARGIN) {
+          kascv.scrollToPosition(0, scrollOffsetRef.current + (inputBottom - keyboardTop + MARGIN), true);
+        }
+      });
+    });
+    return () => sub.remove();
+  }, []);
 
   const handleTitleChange = useCallback(
     (newTitle: string) => {
@@ -871,12 +894,15 @@ export default function NoteEditorScreen() {
       )}
 
       <KeyboardAwareScrollView
+        ref={kascvRef}
         style={styles.scrollContent}
         contentContainerStyle={styles.scrollContentContainer}
         keyboardShouldPersistTaps="handled"
         enableOnAndroid
-        extraScrollHeight={72}
+        extraScrollHeight={24}
         keyboardOpeningTime={0}
+        onScroll={(e) => { scrollOffsetRef.current = e.nativeEvent.contentOffset.y; }}
+        scrollEventThrottle={16}
       >
         <TextInput
           ref={titleInputRef}
