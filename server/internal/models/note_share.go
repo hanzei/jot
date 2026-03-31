@@ -83,7 +83,7 @@ func (s *NoteStore) UnshareNote(ctx context.Context, noteID string, sharedWithUs
 	}
 
 	if _, err = tx.ExecContext(ctx,
-		`UPDATE note_items SET assigned_to = '' WHERE note_id = ? AND assigned_to = ?`,
+		`UPDATE note_items SET assigned_to = NULL WHERE note_id = ? AND assigned_to = ?`,
 		noteID, sharedWithUserID,
 	); err != nil {
 		return fmt.Errorf("failed to clear assignments for unshared user: %w", err)
@@ -96,7 +96,7 @@ func (s *NoteStore) UnshareNote(ctx context.Context, noteID string, sharedWithUs
 
 	if remainingShares == 0 {
 		if _, err = tx.ExecContext(ctx,
-			`UPDATE note_items SET assigned_to = '' WHERE note_id = ? AND assigned_to != ''`,
+			`UPDATE note_items SET assigned_to = NULL WHERE note_id = ? AND assigned_to IS NOT NULL`,
 			noteID,
 		); err != nil {
 			return fmt.Errorf("failed to clear all assignments: %w", err)
@@ -110,13 +110,13 @@ func (s *NoteStore) UnshareNote(ctx context.Context, noteID string, sharedWithUs
 	return nil
 }
 
-// ClearUserAssignmentsTx clears all item assignments related to a deleted user
+// ClearUserAssignmentsTx clears all share relationships related to a deleted user
 // within an existing transaction. It:
 //  1. Removes note_shares rows where the user is the sharee (shared_with_user_id).
 //  2. Removes note_shares rows where the user is the sharer (shared_by_user_id).
-//  3. Clears items directly assigned to the deleted user.
-//  4. Clears all remaining assignments on notes that no longer have any shares,
-//     enforcing the invariant that unshared notes cannot have assignments.
+//
+// Assignments to the deleted user are cleared automatically by the FK
+// ON DELETE SET NULL constraint on note_items.assigned_to.
 func (s *NoteStore) ClearUserAssignmentsTx(ctx context.Context, tx *sql.Tx, userID string) error {
 	if _, err := tx.ExecContext(
 		ctx,
@@ -132,23 +132,6 @@ func (s *NoteStore) ClearUserAssignmentsTx(ctx context.Context, tx *sql.Tx, user
 		userID,
 	); err != nil {
 		return fmt.Errorf("failed to remove shares created by deleted user: %w", err)
-	}
-
-	if _, err := tx.ExecContext(
-		ctx,
-		`UPDATE note_items SET assigned_to = '' WHERE assigned_to = ?`,
-		userID,
-	); err != nil {
-		return fmt.Errorf("failed to clear deleted user assignments: %w", err)
-	}
-
-	if _, err := tx.ExecContext(
-		ctx,
-		`UPDATE note_items SET assigned_to = ''
-		 WHERE assigned_to != ''
-		   AND note_id NOT IN (SELECT DISTINCT note_id FROM note_shares)`,
-	); err != nil {
-		return fmt.Errorf("failed to clear assignments on unshared notes: %w", err)
 	}
 
 	return nil
