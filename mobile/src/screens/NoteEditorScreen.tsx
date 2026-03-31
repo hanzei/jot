@@ -17,10 +17,11 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
-import { useCreateNote, useUpdateNote, useDeleteNote, useDuplicateNote } from '../hooks/useNotes';
+import { useCreateNote, useUpdateNote, useDeleteNote, useRestoreNote, useDuplicateNote } from '../hooks/useNotes';
 import { useOfflineNote } from '../hooks/useOfflineNotes';
 import { isLocalId } from '../db/noteQueries';
 import { useSSESubscription } from '../store/SSEContext';
+import { useToast } from '../hooks/useToast';
 import TodoItem from '../components/TodoItem';
 import ColorPicker from '../components/ColorPicker';
 import LabelPicker from '../components/LabelPicker';
@@ -90,6 +91,7 @@ export default function NoteEditorScreen() {
   const [assigningItemId, setAssigningItemId] = useState<string | null>(null);
   const [syncToast, setSyncToast] = useState<string | null>(null);
   const { usersById } = useUsers();
+  const { showToast } = useToast();
 
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
@@ -97,6 +99,7 @@ export default function NoteEditorScreen() {
   const createMutation = useCreateNote();
   const updateMutation = useUpdateNote();
   const deleteMutation = useDeleteNote();
+  const restoreMutation = useRestoreNote();
   const duplicateMutation = useDuplicateNote();
 
   // Show a toast when another user updates this note while editor is open
@@ -504,6 +507,17 @@ export default function NoteEditorScreen() {
               try { await saveInFlightRef.current; } catch { /* already handled */ }
             }
             await deleteMutation.mutateAsync(noteId);
+            showToast(t('dashboard.noteDeleted'), 'success', {
+              label: t('dashboard.undo'),
+              onPress: async () => {
+                try {
+                  await restoreMutation.mutateAsync(noteId);
+                  showToast(t('dashboard.noteRestored'));
+                } catch {
+                  showToast(t('note.failedRestore'), 'error');
+                }
+              },
+            });
             navigation.goBack();
           } catch {
             intentionalExitRef.current = false;
@@ -512,7 +526,7 @@ export default function NoteEditorScreen() {
         },
       },
     ]);
-  }, [deleteMutation, navigation, noteId, t]);
+  }, [deleteMutation, navigation, noteId, restoreMutation, showToast, t]);
 
   const handleTogglePin = useCallback(async () => {
     if (!noteId) return;
@@ -552,11 +566,37 @@ export default function NoteEditorScreen() {
           checked_items_collapsed: checkedItemsCollapsedRef.current,
         },
       });
+      if (newArchived) {
+        showToast(t('dashboard.noteArchived'), 'success', {
+          label: t('dashboard.undo'),
+          onPress: async () => {
+            try {
+              await updateMutation.mutateAsync({
+                id: noteId,
+                data: {
+                  title: titleRef.current,
+                  content: contentRef.current,
+                  pinned: pinnedRef.current,
+                  archived: false,
+                  color: colorRef.current,
+                  checked_items_collapsed: checkedItemsCollapsedRef.current,
+                },
+              });
+              setArchived(false);
+              showToast(t('dashboard.noteUnarchived'));
+            } catch {
+              showToast(t('note.failedUnarchive'), 'error');
+            }
+          },
+        });
+      } else {
+        showToast(t('dashboard.noteUnarchived'));
+      }
     } catch {
       setArchived(!newArchived);
       Alert.alert(t('common.error'), t('note.failedUpdate'));
     }
-  }, [noteId, t, updateMutation]);
+  }, [noteId, showToast, t, updateMutation]);
 
   const handleColorSelect = useCallback(async (selectedColor: string) => {
     const prevColor = colorRef.current;

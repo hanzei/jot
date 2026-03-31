@@ -97,7 +97,12 @@
       "created_at": "Aanmaakdatum"
     },
     "sortAccessibilityLabel": "Sorteren op {{sortLabel}}",
-    "sortDisabledNotice": "Handmatig sorteren is uitgeschakeld. Notities zijn gesorteerd op {{sortLabel}}, dus slepen en neerzetten is niet beschikbaar."
+    "sortDisabledNotice": "Handmatig sorteren is uitgeschakeld. Notities zijn gesorteerd op {{sortLabel}}, dus slepen en neerzetten is niet beschikbaar.",
+    "noteArchived": "Notitie gearchiveerd",
+    "noteUnarchived": "Notitie uit archief gehaald",
+    "noteDeleted": "Notitie naar prullenbak verplaatst",
+    "noteRestored": "Notitie hersteld",
+    "undo": "Ongedaan maken"
   },
   "settings": {
     "title": "Instellingen",

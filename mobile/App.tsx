@@ -19,6 +19,7 @@ import { UsersProvider } from './src/store/UsersContext';
 import { OfflineProvider } from './src/store/OfflineContext';
 import { ThemeProvider, useTheme } from './src/theme/ThemeContext';
 import RootNavigator, { type RootStackParamList } from './src/navigation/RootNavigator';
+import { ToastProvider } from './src/components/Toast';
 import {
   getActiveServerId,
   getBaseUrl,
@@ -409,7 +410,9 @@ export default function App() {
               <ThemeProvider>
                 <UsersProvider>
                   <OfflineProvider>
-                    <NavigationWrapper />
+                    <ToastProvider>
+                      <NavigationWrapper />
+                    </ToastProvider>
                   </OfflineProvider>
                 </UsersProvider>
               </ThemeProvider>

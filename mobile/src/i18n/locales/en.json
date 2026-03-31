@@ -97,7 +97,12 @@
       "created_at": "Date created"
     },
     "sortAccessibilityLabel": "Sort by {{sortLabel}}",
-    "sortDisabledNotice": "Manual reorder is off. Notes are sorted by {{sortLabel}}, so drag-and-drop is unavailable."
+    "sortDisabledNotice": "Manual reorder is off. Notes are sorted by {{sortLabel}}, so drag-and-drop is unavailable.",
+    "noteArchived": "Note archived",
+    "noteUnarchived": "Note unarchived",
+    "noteDeleted": "Note moved to trash",
+    "noteRestored": "Note restored",
+    "undo": "Undo"
   },
   "settings": {
     "title": "Settings",
