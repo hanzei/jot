@@ -9,6 +9,7 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
+  type TextInputProps,
   type TextInput as TextInputType,
 } from 'react-native';
 import DraggableFlatList, { ScaleDecorator } from 'react-native-draggable-flatlist';
@@ -35,6 +36,9 @@ import { getCompletedSectionDividerColor, isWhiteHexColor } from '../utils/color
 
 type EditorRouteProp = RouteProp<RootStackParamList, 'NoteEditor'>;
 type EditorNavProp = NativeStackNavigationProp<RootStackParamList, 'NoteEditor'>;
+
+const IOS_KEYBOARD_VERTICAL_OFFSET = 88;
+const FOCUSED_INPUT_KEYBOARD_MARGIN = 120;
 
 interface LocalItem {
   id: string;
@@ -156,6 +160,7 @@ export default function NoteEditorScreen() {
 
   const titleInputRef = useRef<TextInputType>(null);
   const contentInputRef = useRef<TextInputType>(null);
+  const scrollViewRef = useRef<ScrollView>(null);
   const itemInputRefsMap = useRef(new Map<string, React.RefObject<TextInputType | null>>());
 
   const getItemRef = useCallback((id: string): React.RefObject<TextInputType | null> => {
@@ -441,7 +446,11 @@ export default function NoteEditorScreen() {
 
   const handleDeleteItem = useCallback(
     (index: number) => {
+      const removedItemId = itemsRef.current[index]?.id;
       setItems((prev) => prev.filter((_, i) => i !== index));
+      if (removedItemId) {
+        itemInputRefsMap.current.delete(removedItemId);
+      }
       markDirtyAndScheduleUpdate();
     },
     [markDirtyAndScheduleUpdate],
@@ -478,13 +487,15 @@ export default function NoteEditorScreen() {
   }, [markDirtyAndScheduleUpdate, getItemRef]);
 
   const handleBackspaceOnEmpty = useCallback((index: number) => {
-    let focusTargetId: string | null = null;
-    setItems((prev) => {
-      const item = prev[index];
-      if (!item || item.text !== '') return prev;
-      focusTargetId = index > 0 ? (prev[index - 1]?.id ?? null) : null;
-      return prev.filter((_, i) => i !== index);
-    });
+    const currentItems = itemsRef.current;
+    const item = currentItems[index];
+    if (!item || item.text !== '') {
+      return;
+    }
+    const removedItemId = item.id;
+    const focusTargetId = index > 0 ? (currentItems[index - 1]?.id ?? null) : null;
+    setItems((prev) => prev.filter((_, i) => i !== index));
+    itemInputRefsMap.current.delete(removedItemId);
     markDirtyAndScheduleUpdate();
     setTimeout(() => {
       if (focusTargetId) itemInputRefsMap.current.get(focusTargetId)?.current?.focus();
@@ -509,6 +520,22 @@ export default function NoteEditorScreen() {
     },
     [markDirtyAndScheduleUpdate],
   );
+
+  const buildMetadataUpdateData = useCallback((overrides: Partial<UpdateNoteRequest>): UpdateNoteRequest => {
+    const data: UpdateNoteRequest = {
+      title: titleRef.current,
+      content: contentRef.current,
+      pinned: pinnedRef.current,
+      archived: archivedRef.current,
+      color: colorRef.current,
+      checked_items_collapsed: checkedItemsCollapsedRef.current,
+      ...overrides,
+    };
+    if (noteTypeRef.current === 'todo') {
+      data.items = serializeItems(itemsRef.current);
+    }
+    return data;
+  }, []);
 
   const handleTitleSubmit = useCallback(() => {
     if (noteTypeRef.current === 'text') {
@@ -615,20 +642,13 @@ export default function NoteEditorScreen() {
     try {
       await updateMutation.mutateAsync({
         id: noteId,
-        data: {
-          title: titleRef.current,
-          content: contentRef.current,
-          pinned: newPinned,
-          archived: archivedRef.current,
-          color: colorRef.current,
-          checked_items_collapsed: checkedItemsCollapsedRef.current,
-        },
+        data: buildMetadataUpdateData({ pinned: newPinned }),
       });
     } catch {
       setPinned(!newPinned);
       Alert.alert(t('common.error'), t('note.failedUpdate'));
     }
-  }, [flushPendingChanges, noteId, t, updateMutation]);
+  }, [buildMetadataUpdateData, flushPendingChanges, noteId, t, updateMutation]);
 
   const handleToggleArchive = useCallback(async () => {
     if (!noteId) return;
@@ -641,14 +661,7 @@ export default function NoteEditorScreen() {
     try {
       await updateMutation.mutateAsync({
         id: noteId,
-        data: {
-          title: titleRef.current,
-          content: contentRef.current,
-          pinned: pinnedRef.current,
-          archived: newArchived,
-          color: colorRef.current,
-          checked_items_collapsed: checkedItemsCollapsedRef.current,
-        },
+        data: buildMetadataUpdateData({ archived: newArchived }),
       });
       if (newArchived) {
         showToast(t('dashboard.noteArchived'), 'success', {
@@ -680,7 +693,7 @@ export default function NoteEditorScreen() {
       setArchived(!newArchived);
       Alert.alert(t('common.error'), t('note.failedUpdate'));
     }
-  }, [flushPendingChanges, noteId, showToast, t, updateMutation]);
+  }, [buildMetadataUpdateData, flushPendingChanges, noteId, showToast, t, updateMutation]);
 
   const handleColorSelect = useCallback(async (selectedColor: string) => {
     const saveSucceeded = await flushPendingChanges();
@@ -693,20 +706,13 @@ export default function NoteEditorScreen() {
     try {
       await updateMutation.mutateAsync({
         id: noteId,
-        data: {
-          title: titleRef.current,
-          content: contentRef.current,
-          pinned: pinnedRef.current,
-          archived: archivedRef.current,
-          color: selectedColor,
-          checked_items_collapsed: checkedItemsCollapsedRef.current,
-        },
+        data: buildMetadataUpdateData({ color: selectedColor }),
       });
     } catch {
       setColor(prevColor);
       Alert.alert(t('common.error'), t('note.failedColorUpdate'));
     }
-  }, [flushPendingChanges, noteId, t, updateMutation]);
+  }, [buildMetadataUpdateData, flushPendingChanges, noteId, t, updateMutation]);
 
   const handleToggleNoteType = useCallback(() => {
     if (hasCreated) return;
@@ -777,6 +783,25 @@ export default function NoteEditorScreen() {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
   }, []);
 
+  const handleTodoItemFocus = useCallback<NonNullable<TextInputProps['onFocus']>>((event) => {
+    const nativeTarget = event.nativeEvent.target;
+    if (nativeTarget == null) return;
+
+    // Use ScrollView's native keyboard helper so focused todo inputs stay visible.
+    const responder = scrollViewRef.current?.getScrollResponder?.();
+    if (
+      responder &&
+      typeof responder.scrollResponderScrollNativeHandleToKeyboard === 'function'
+    ) {
+      responder.scrollResponderScrollNativeHandleToKeyboard(
+        nativeTarget,
+        FOCUSED_INPUT_KEYBOARD_MARGIN,
+        true,
+      );
+      return;
+    }
+  }, []);
+
   const renderTodoItem = useCallback(
     ({ item, drag, isActive }: { item: LocalItem; drag: () => void; isActive: boolean }) => {
       const originalIndex = itemIndexMapRef.current.get(item.id);
@@ -789,6 +814,7 @@ export default function NoteEditorScreen() {
               inputRef={itemRef}
               text={item.text}
               completed={item.completed}
+              isActive={isActive}
               indentLevel={item.indent_level}
               showDragHandle
               assignedTo={item.assigned_to}
@@ -801,13 +827,14 @@ export default function NoteEditorScreen() {
               onSubmitEditing={() => handleInsertItemAfter(originalIndex)}
               onBackspaceOnEmpty={() => handleBackspaceOnEmpty(originalIndex)}
               onAssignPress={() => openAssigneePicker(item.id)}
+              onFocus={handleTodoItemFocus}
               onIndent={(delta) => handleIndentItem(originalIndex, delta)}
             />
           </View>
         </ScaleDecorator>
       );
     },
-    [getItemRef, handleToggleItem, handleItemTextChange, handleDeleteItem, handleInsertItemAfter, handleBackspaceOnEmpty, isNoteShared, collaborators, openAssigneePicker, handleIndentItem, isDark, colors],
+    [getItemRef, handleToggleItem, handleItemTextChange, handleDeleteItem, handleInsertItemAfter, handleBackspaceOnEmpty, isNoteShared, collaborators, openAssigneePicker, handleIndentItem, isDark, colors, handleTodoItemFocus],
   );
 
   const hasNoteColor = !!color && !isWhiteHexColor(color);
@@ -820,7 +847,7 @@ export default function NoteEditorScreen() {
     <KeyboardAvoidingView
       style={[styles.container, { backgroundColor: noteBackground }]}
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
-      keyboardVerticalOffset={Platform.OS === 'ios' ? 88 : 0}
+      keyboardVerticalOffset={Platform.OS === 'ios' ? IOS_KEYBOARD_VERTICAL_OFFSET : 0}
     >
       <View style={[styles.header, { backgroundColor: noteBackground, borderBottomColor: hasNoteColor ? 'transparent' : colors.borderLight, paddingTop: insets.top + 12 }]}>
         <TouchableOpacity
@@ -874,7 +901,9 @@ export default function NoteEditorScreen() {
       )}
 
       <ScrollView
+        ref={scrollViewRef}
         style={styles.scrollContent}
+        contentContainerStyle={styles.scrollContentContainer}
         keyboardShouldPersistTaps="handled"
       >
         <TextInput
@@ -949,6 +978,7 @@ export default function NoteEditorScreen() {
                         inputRef={getItemRef(item.id)}
                         text={item.text}
                         completed={item.completed}
+                        isActive={false}
                         indentLevel={item.indent_level}
                         assignedTo={item.assigned_to}
                         isShared={!!isNoteShared}
@@ -959,6 +989,7 @@ export default function NoteEditorScreen() {
                         onSubmitEditing={() => handleInsertItemAfter(originalIndex)}
                         onBackspaceOnEmpty={() => handleBackspaceOnEmpty(originalIndex)}
                         onAssignPress={() => openAssigneePicker(item.id)}
+                        onFocus={handleTodoItemFocus}
                         onIndent={(delta) => handleIndentItem(originalIndex, delta)}
                       />
                     );
@@ -1121,6 +1152,9 @@ const styles = StyleSheet.create({
   scrollContent: {
     flex: 1,
     paddingHorizontal: 16,
+  },
+  scrollContentContainer: {
+    paddingBottom: 96,
   },
   titleInput: {
     fontSize: 22,

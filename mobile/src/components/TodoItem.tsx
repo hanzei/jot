@@ -4,6 +4,7 @@ import {
   TextInput,
   StyleSheet,
   PanResponder,
+  type TextInputProps,
   type TextInput as TextInputType,
   type PanResponderGestureState,
 } from 'react-native';
@@ -19,6 +20,7 @@ interface TodoItemProps {
   completed: boolean;
   indentLevel?: number;
   editable?: boolean;
+  isActive?: boolean;
   showDragHandle?: boolean;
   assignedTo?: string;
   isShared?: boolean;
@@ -31,6 +33,7 @@ interface TodoItemProps {
   onSubmitEditing?: () => void;
   onBackspaceOnEmpty?: () => void;
   onAssignPress?: () => void;
+  onFocus?: TextInputProps['onFocus'];
   onIndent?: (delta: 1 | -1) => void;
 }
 
@@ -46,6 +49,7 @@ function TodoItem({
   completed,
   indentLevel = 0,
   editable = true,
+  isActive = false,
   showDragHandle = false,
   assignedTo,
   isShared,
@@ -58,6 +62,7 @@ function TodoItem({
   onSubmitEditing,
   onBackspaceOnEmpty,
   onAssignPress,
+  onFocus,
   onIndent,
 }: TodoItemProps) {
   const { colors } = useTheme();
@@ -94,7 +99,8 @@ function TodoItem({
     >
       {showDragHandle && onDrag && (
         <TouchableOpacity
-          onPressIn={onDrag}
+          onLongPress={onDrag}
+          disabled={isActive}
           style={styles.dragHandle}
           testID="todo-item-drag-handle"
           accessibilityLabel={t('note.dragToReorder')}
@@ -127,6 +133,7 @@ function TodoItem({
         returnKeyType="next"
         onSubmitEditing={onSubmitEditing}
         blurOnSubmit={false}
+        onFocus={onFocus}
         multiline
         submitBehavior="submit"
         textAlignVertical="top"
