@@ -97,6 +97,7 @@ export default function SettingsScreen() {
   const [aboutExpanded, setAboutExpanded] = useState(false);
   const [activeServerUrl, setActiveServerUrl] = useState<string | null>(null);
   const previousServerUrlRef = useRef<string | null | undefined>(undefined);
+  const aboutRequestSeqRef = useRef(0);
 
   useEffect(() => {
     let mounted = true;
@@ -109,11 +110,13 @@ export default function SettingsScreen() {
           setActiveServerUrl(nextServerUrl);
           if (previousServerUrl !== nextServerUrl) {
             previousServerUrlRef.current = nextServerUrl;
+            aboutRequestSeqRef.current += 1;
             setSessions([]);
             setSessionsError('');
             setSessionsLoading(true);
             setAboutInfo(null);
             setAboutError('');
+            setAboutLoading(false);
             void listSessions()
               .then((nextSessions) => {
                 if (mounted) {
@@ -135,10 +138,13 @@ export default function SettingsScreen() {
       } catch (error) {
         console.warn('Failed to load active server in settings:', error);
         if (mounted) {
+          aboutRequestSeqRef.current += 1;
+          previousServerUrlRef.current = null;
           setActiveServerUrl(null);
           setSessions([]);
           setSessionsLoading(false);
           setSessionsError('settings.sessionsLoadFailed');
+          setAboutLoading(false);
         }
       }
     };
@@ -238,11 +244,28 @@ export default function SettingsScreen() {
 
   useEffect(() => {
     if (aboutExpanded && !aboutInfo && !aboutError) {
+      let cancelled = false;
+      const requestId = ++aboutRequestSeqRef.current;
       setAboutLoading(true);
       getAboutInfo()
-        .then(setAboutInfo)
-        .catch(() => setAboutError('about.failedLoad'))
-        .finally(() => setAboutLoading(false));
+        .then((nextAboutInfo) => {
+          if (!cancelled && aboutRequestSeqRef.current === requestId) {
+            setAboutInfo(nextAboutInfo);
+          }
+        })
+        .catch(() => {
+          if (!cancelled && aboutRequestSeqRef.current === requestId) {
+            setAboutError('about.failedLoad');
+          }
+        })
+        .finally(() => {
+          if (!cancelled && aboutRequestSeqRef.current === requestId) {
+            setAboutLoading(false);
+          }
+        });
+      return () => {
+        cancelled = true;
+      };
     }
   }, [aboutExpanded, aboutInfo, aboutError]);
 
@@ -773,15 +796,6 @@ export default function SettingsScreen() {
             )}
           </View>
 
-          {/* Server */}
-          <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
-            <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('settings.currentServerSection')}</Text>
-            <Text style={[styles.label, styles.serverLabel, { color: colors.icon }]}>{t('settings.currentServerLabel')}</Text>
-            <Text style={[styles.serverValue, { color: colors.text }]}>
-              {activeServerUrl ?? t('settings.noServerConfigured')}
-            </Text>
-          </View>
-
           {/* About */}
           <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('settings.aboutSection')}</Text>
@@ -1118,14 +1132,6 @@ const styles = StyleSheet.create({
   },
   preferenceLabel: {
     marginTop: 16,
-  },
-  serverLabel: {
-    marginTop: 0,
-  },
-  serverValue: {
-    fontSize: 14,
-    fontFamily: Platform.OS === 'ios' ? 'Menlo' : 'monospace',
-    marginTop: 2,
   },
   aboutToggle: {
     flexDirection: 'row',

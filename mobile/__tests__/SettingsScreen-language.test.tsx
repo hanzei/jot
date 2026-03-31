@@ -202,15 +202,16 @@ describe('SettingsScreen language selection', () => {
     expect(setSettings).toHaveBeenCalledWith(expect.objectContaining({ theme: 'dark' }));
   });
 
-  it('shows active server identity in the server section', async () => {
-    const { getByText } = render(<SettingsScreen />);
+  it('shows active server identity in the about section only', async () => {
+    const { getByTestId, getByText, queryByText } = render(<SettingsScreen />);
 
     await waitFor(() => {
       expect(mockListSessions).toHaveBeenCalled();
     });
 
-    expect(getByText('Server')).toBeTruthy();
-    expect(getByText('Active server')).toBeTruthy();
+    expect(queryByText(i18n.t('settings.currentServerLabel'))).toBeNull();
+    fireEvent.press(getByTestId('settings-about-toggle'));
+    expect(getByText(i18n.t('about.serverOrigin'))).toBeTruthy();
     expect(getByText('https://active.example.com')).toBeTruthy();
   });
 });
