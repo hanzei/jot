@@ -93,6 +93,10 @@ jest.mock('../src/theme/ThemeContext', () => ({
   useTheme: jest.fn(),
 }));
 
+jest.mock('../src/hooks/useToast', () => ({
+  useToast: jest.fn(),
+}));
+
 jest.mock('../src/api/settings', () => ({
   updateMe: jest.fn(),
 }));
@@ -136,6 +140,7 @@ const notesHooks = jest.requireMock('../src/hooks/useNotes') as {
 const mockUseUsers = jest.requireMock('../src/store/UsersContext').useUsers as jest.Mock;
 const mockUseAuth = jest.requireMock('../src/store/AuthContext').useAuth as jest.Mock;
 const mockUseTheme = jest.requireMock('../src/theme/ThemeContext').useTheme as jest.Mock;
+const mockUseToast = jest.requireMock('../src/hooks/useToast').useToast as jest.Mock;
 const mockUpdateMe = jest.requireMock('../src/api/settings').updateMe as jest.Mock;
 
 const mockMutateAsync = jest.fn();
@@ -203,6 +208,7 @@ describe('NotesListScreen sorting', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockUseToast.mockReturnValue({ showToast: jest.fn() });
     notesHooks.useUpdateNote.mockReturnValue({ mutateAsync: mockMutateAsync });
     notesHooks.useDeleteNote.mockReturnValue({ mutateAsync: mockMutateAsync });
     notesHooks.useRestoreNote.mockReturnValue({ mutateAsync: mockMutateAsync });

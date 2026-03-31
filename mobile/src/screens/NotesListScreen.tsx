@@ -24,6 +24,7 @@ import { useUpdateNote, useDeleteNote, useRestoreNote, usePermanentDeleteNote, u
 import { useOfflineNotes } from '../hooks/useOfflineNotes';
 import { useUsers } from '../store/UsersContext';
 import { useAuth } from '../store/AuthContext';
+import { useToast } from '../hooks/useToast';
 import { useTheme } from '../theme/ThemeContext';
 import { isLocalId } from '../db/noteQueries';
 import SkeletonNoteList from '../components/SkeletonNoteList';
@@ -62,6 +63,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   const { isConnected } = useNetworkStatus();
   const { colors } = useTheme();
   const { t } = useTranslation();
+  const { showToast } = useToast();
   const insets = useSafeAreaInsets();
   const fabBottom = Math.max(insets.bottom + 20, 20);
   const listBottomPadding = variant === 'notes' ? fabBottom + 60 : 80;
@@ -210,10 +212,31 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
           checked_items_collapsed: note.checked_items_collapsed,
         },
       });
+      showToast(t('dashboard.noteArchived'), 'success', {
+        label: t('dashboard.undo'),
+        onPress: async () => {
+          try {
+            await updateNote.mutateAsync({
+              id: note.id,
+              data: {
+                title: note.title,
+                content: note.content,
+                pinned: note.pinned,
+                archived: false,
+                color: note.color,
+                checked_items_collapsed: note.checked_items_collapsed,
+              },
+            });
+            showToast(t('dashboard.noteUnarchived'));
+          } catch {
+            showToast(t('note.failedUnarchive'), 'error');
+          }
+        },
+      });
     } catch {
       Alert.alert(t('common.error'), t('note.failedArchive'));
     }
-  }, [t, updateNote]);
+  }, [showToast, t, updateNote]);
 
   const handleUnarchive = useCallback(async (note: Note) => {
     try {
@@ -228,26 +251,39 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
           checked_items_collapsed: note.checked_items_collapsed,
         },
       });
+      showToast(t('dashboard.noteUnarchived'));
     } catch {
       Alert.alert(t('common.error'), t('note.failedUnarchive'));
     }
-  }, [t, updateNote]);
+  }, [showToast, t, updateNote]);
 
   const handleMoveToTrash = useCallback(async (note: Note) => {
     try {
       await deleteNote.mutateAsync(note.id);
+      showToast(t('dashboard.noteDeleted'), 'success', {
+        label: t('dashboard.undo'),
+        onPress: async () => {
+          try {
+            await restoreNote.mutateAsync(note.id);
+            showToast(t('dashboard.noteRestored'));
+          } catch {
+            showToast(t('note.failedRestore'), 'error');
+          }
+        },
+      });
     } catch {
       Alert.alert(t('common.error'), t('note.failedMoveToTrash'));
     }
-  }, [deleteNote, t]);
+  }, [deleteNote, restoreNote, showToast, t]);
 
   const handleRestore = useCallback(async (note: Note) => {
     try {
       await restoreNote.mutateAsync(note.id);
+      showToast(t('dashboard.noteRestored'));
     } catch {
       Alert.alert(t('common.error'), t('note.failedRestore'));
     }
-  }, [restoreNote, t]);
+  }, [restoreNote, showToast, t]);
 
   const handleDuplicate = useCallback(async (note: Note) => {
     if (isLocalId(note.id)) {
