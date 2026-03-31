@@ -333,21 +333,6 @@ docker compose up -d
 
 Persistent data is mounted at `/data` (default `docker-compose.yml` maps host `./data` to `/data`).
 
-### CI Workflows
-
-CI is split into per-component workflows in `.github/workflows/`:
-
-| Workflow | File | Triggers |
-|----------|------|----------|
-| Server — CI | `server-ci.yml` | push to `master`; PRs touching `server/**` or `.github/workflows/**` |
-| Shared — CI | `shared-ci.yml` | push to `master`; PRs touching `shared/**` or `.github/workflows/**` |
-| Webapp — CI | `webapp-ci.yml` | push to `master`; PRs touching `webapp/**`, `shared/**`, or `.github/workflows/**` |
-| Mobile — CI | `mobile-ci.yml` | push to `master`; PRs touching `mobile/**`, `shared/**`, or `.github/workflows/**` |
-| Mobile — APK Build | `mobile-apk.yml` | push to `master` and `v*` tags; PRs touching `mobile/**`, `shared/**`, or `.github/workflows/**` |
-| Docker | `docker.yml` | push to `master`; all PRs |
-| Release | `release.yml` | push tags `v*` |
-| Claude Code | `claude.yml` | issue/PR comment and review events, plus issues opened/assigned, when `@claude` is mentioned |
-
 **Workflow pinning policy:** In GitHub Actions workflows, pin every external action `uses:` reference (`owner/repo@...`) to a full commit SHA and add an inline comment with the intended major version tag (for example, `# v6`). Do not use floating action refs such as `@v4`, `@v6`, `@main`, or `@latest`.
 
 ### CI Checklist (before opening a PR)
