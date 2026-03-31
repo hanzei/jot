@@ -423,7 +423,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
                       onPress={() => openLabelMenu(label)}
                       hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
                       accessibilityRole="button"
-                      accessibilityLabel={`${label.name}. ${t('labels.menuOptions')}`}
+                      accessibilityLabel={`${label.name}. ${t('labels.menuOptions', { name: label.name })}`}
                       testID={`drawer-label-menu-${label.id}`}
                     >
                       <Ionicons
