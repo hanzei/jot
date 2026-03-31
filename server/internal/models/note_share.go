@@ -180,20 +180,21 @@ func (s *NoteStore) ClearUserAssignmentsTx(ctx context.Context, tx *sql.Tx, user
 		return fmt.Errorf("failed to clear assignments on unshared notes: %w", err)
 	}
 
-	// Remove per-user state for notes the user was collaborating on (not owning).
+	// Remove all per-user state for the deleted user. FK cascades are disabled in
+	// this project, so we must clean up both owned and shared note state explicitly.
 	if _, err := tx.ExecContext(ctx,
-		`DELETE FROM note_user_state WHERE user_id = ? AND note_id NOT IN (SELECT id FROM notes WHERE user_id = ?)`,
-		userID, userID,
+		`DELETE FROM note_user_state WHERE user_id = ?`,
+		userID,
 	); err != nil {
-		return fmt.Errorf("failed to delete note user state for deleted user's shared notes: %w", err)
+		return fmt.Errorf("failed to delete note user state for deleted user: %w", err)
 	}
 
-	// Remove note labels the user applied to shared notes.
+	// Remove all note labels applied by the deleted user.
 	if _, err := tx.ExecContext(ctx,
-		`DELETE FROM note_labels WHERE user_id = ? AND note_id NOT IN (SELECT id FROM notes WHERE user_id = ?)`,
-		userID, userID,
+		`DELETE FROM note_labels WHERE user_id = ?`,
+		userID,
 	); err != nil {
-		return fmt.Errorf("failed to delete note labels for deleted user's shared notes: %w", err)
+		return fmt.Errorf("failed to delete note labels for deleted user: %w", err)
 	}
 
 	return nil
