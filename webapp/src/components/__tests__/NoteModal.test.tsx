@@ -952,6 +952,112 @@ describe('NoteModal', () => {
     })
   })
 
+  describe('Dashboard update on property changes', () => {
+    it('autosaves and calls onRefresh when title changes on an existing note', async () => {
+      const note = createMockNote()
+      const onRefresh = vi.fn()
+      renderNoteModal({ ...defaultProps, onRefresh, note })
+
+      const titleInput = screen.getByDisplayValue('Test Note')
+      fireEvent.change(titleInput, { target: { value: 'New Title' } })
+      await vi.runAllTimersAsync()
+
+      expect(mockNotesUpdate).toHaveBeenCalledWith('1', expect.objectContaining({ title: 'New Title' }))
+      expect(onRefresh).toHaveBeenCalled()
+    })
+
+    it('does not autosave title on new notes (no note id)', async () => {
+      renderNoteModal(defaultProps)
+
+      const titleInput = screen.getByPlaceholderText('Note title...')
+      fireEvent.change(titleInput, { target: { value: 'Some Title' } })
+      await vi.runAllTimersAsync()
+
+      expect(mockNotesUpdate).not.toHaveBeenCalled()
+    })
+
+    it('autosaves and calls onRefresh when content changes on an existing note', async () => {
+      const note = createMockNote()
+      const onRefresh = vi.fn()
+      renderNoteModal({ ...defaultProps, onRefresh, note })
+
+      const contentInput = screen.getByDisplayValue('Test content')
+      fireEvent.change(contentInput, { target: { value: 'Updated content' } })
+      await vi.runAllTimersAsync()
+
+      expect(mockNotesUpdate).toHaveBeenCalledWith('1', expect.objectContaining({ content: 'Updated content' }))
+      expect(onRefresh).toHaveBeenCalled()
+    })
+
+    it('does not autosave content on new notes (no note id)', async () => {
+      renderNoteModal(defaultProps)
+
+      const contentInput = screen.getByPlaceholderText('Take a note...')
+      fireEvent.change(contentInput, { target: { value: 'Some content' } })
+      await vi.runAllTimersAsync()
+
+      expect(mockNotesUpdate).not.toHaveBeenCalled()
+    })
+
+    it('autosaves and calls onRefresh immediately when color changes on an existing note', async () => {
+      const note = createMockNote()
+      const onRefresh = vi.fn()
+      renderNoteModal({ ...defaultProps, onRefresh, note })
+
+      fireEvent.click(screen.getByTitle('Coral'))
+      await vi.runAllTimersAsync()
+
+      expect(mockNotesUpdate).toHaveBeenCalledWith('1', expect.objectContaining({ color: '#f28b82' }))
+      expect(onRefresh).toHaveBeenCalled()
+    })
+
+    it('does not autosave color on new notes', async () => {
+      renderNoteModal(defaultProps)
+
+      fireEvent.click(screen.getByTitle('Coral'))
+      await vi.runAllTimersAsync()
+
+      expect(mockNotesUpdate).not.toHaveBeenCalled()
+    })
+
+    it('title autosave debounces rapid changes and sends only the latest value', async () => {
+      const note = createMockNote()
+      const onRefresh = vi.fn()
+      renderNoteModal({ ...defaultProps, onRefresh, note })
+
+      const titleInput = screen.getByDisplayValue('Test Note')
+      fireEvent.change(titleInput, { target: { value: 'First' } })
+      fireEvent.change(titleInput, { target: { value: 'Second' } })
+      fireEvent.change(titleInput, { target: { value: 'Final' } })
+      await vi.runAllTimersAsync()
+
+      expect(mockNotesUpdate).toHaveBeenCalledTimes(1)
+      expect(mockNotesUpdate).toHaveBeenCalledWith('1', expect.objectContaining({ title: 'Final' }))
+      expect(onRefresh).toHaveBeenCalled()
+    })
+
+    it('color change cancels a pending title debounce and the save includes both changes', async () => {
+      const note = createMockNote()
+      const onRefresh = vi.fn()
+      renderNoteModal({ ...defaultProps, onRefresh, note })
+
+      // Start a title debounce
+      const titleInput = screen.getByDisplayValue('Test Note')
+      fireEvent.change(titleInput, { target: { value: 'Updated Title' } })
+
+      // Immediately click a color — should cancel the title debounce and save both
+      fireEvent.click(screen.getByTitle('Coral'))
+      await vi.runAllTimersAsync()
+
+      // The color save should have included the updated title
+      expect(mockNotesUpdate).toHaveBeenCalledWith('1', expect.objectContaining({
+        title: 'Updated Title',
+        color: '#f28b82',
+      }))
+      expect(onRefresh).toHaveBeenCalled()
+    })
+  })
+
   describe('Basic Modal Operations', () => {
     it('handles close button click', () => {
       const onClose = vi.fn()

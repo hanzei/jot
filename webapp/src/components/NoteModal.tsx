@@ -219,7 +219,7 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
         type="checkbox"
         checked={item.completed}
         onChange={(e) => onUpdateTodoItem(index, 'completed', e.target.checked)}
-        className="h-4 w-4 text-blue-600 rounded mt-1"
+        className="h-4 w-4 text-blue-600 rounded mt-0.5 flex-shrink-0"
       />
       <div className="flex flex-1 items-start min-w-0">
         <div className="relative min-w-0 flex-1">
@@ -227,7 +227,7 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
             data-testid="todo-item-input"
             placeholder={placeholder}
             rows={1}
-            className={`w-full py-1 pl-1 pr-0 bg-transparent border-none outline-none min-w-0 resize-none overflow-hidden whitespace-pre-wrap break-words placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white ${
+            className={`w-full pt-0 pb-1 pl-1 pr-0 bg-transparent border-none outline-none min-w-0 resize-none overflow-hidden whitespace-pre-wrap break-words placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white ${
               isCompleted ? 'line-through text-gray-500 dark:text-gray-400' : ''
             }`}
             value={item.text}
@@ -680,13 +680,17 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
 
   const addTodoItem = () => {
     const currentItems = itemsRef.current;
-    const uncompletedCount = currentItems.filter(item => !item.completed).length;
+    const uncompletedItems = currentItems.filter(item => !item.completed);
+    const lastUncompletedItem = uncompletedItems[uncompletedItems.length - 1];
+    const indentLevel = lastUncompletedItem
+      ? Math.max(0, Math.min(MAX_INDENT, lastUncompletedItem.indentLevel))
+      : 0;
     const newItem: TodoItem = {
       id: generateItemId(),
       text: '',
       completed: false,
-      position: uncompletedCount,
-      indentLevel: 0,
+      position: uncompletedItems.length,
+      indentLevel,
       assignedTo: '',
     };
     const newItems = [...currentItems, newItem];
@@ -1538,7 +1542,14 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                   return;
                 }
                 setTitle(newTitle);
-                if (note) markDirty();
+                if (note) {
+                  markDirty();
+                  if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+                  saveTimeoutRef.current = setTimeout(async () => {
+                    saveTimeoutRef.current = undefined;
+                    await autoSaveNote(itemsRef.current);
+                  }, VALIDATION.AUTO_SAVE_TIMEOUT_MS);
+                }
               }}
               onKeyDown={(e) => {
                 if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
@@ -1584,7 +1595,14 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                     return;
                   }
                   setContent(newContent);
-                  if (note) markDirty();
+                  if (note) {
+                    markDirty();
+                    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+                    saveTimeoutRef.current = setTimeout(async () => {
+                      saveTimeoutRef.current = undefined;
+                      await autoSaveNote(itemsRef.current);
+                    }, VALIDATION.AUTO_SAVE_TIMEOUT_MS);
+                  }
                 }}
               />
             ) : (
@@ -1704,20 +1722,6 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
               </div>
             </div>
 
-            {/* Color selector */}
-            <div className="flex space-x-2">
-              {colors.map((colorOption) => (
-                <button
-                  key={colorOption.value}
-                  onClick={() => setColor(colorOption.value)}
-                  className={`w-8 h-8 rounded-full border-2 ${colorOption.class} ${
-                    color === colorOption.value ? 'ring-2 ring-blue-500' : ''
-                  }`}
-                  title={colorOption.name}
-                  aria-label={colorOption.name}
-                />
-              ))}
-            </div>
 
             {/* Sharing info */}
             {note?.is_shared && (() => {
@@ -1739,6 +1743,29 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                 </div>
               );
             })()}
+
+            {/* Color selector */}
+            <div className="flex space-x-2">
+              {colors.map((colorOption) => (
+                <button
+                  key={colorOption.value}
+                  onClick={() => {
+                    const newColor = colorOption.value;
+                    setColor(newColor);
+                    if (note) {
+                      markDirty();
+                      autoSaveDraftRef.current = { ...autoSaveDraftRef.current, color: newColor };
+                      autoSaveNote(itemsRef.current);
+                    }
+                  }}
+                  className={`w-8 h-8 rounded-full border-2 ${colorOption.class} ${
+                    color === colorOption.value ? 'ring-2 ring-blue-500' : ''
+                  }`}
+                  title={colorOption.name}
+                  aria-label={colorOption.name}
+                />
+              ))}
+            </div>
           </div>
 
           {/* Footer */}

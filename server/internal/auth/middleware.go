@@ -4,8 +4,8 @@ import (
 	"context"
 	"net/http"
 
+	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/hanzei/jot/server/internal/models"
-	"github.com/sirupsen/logrus"
 )
 
 type contextKey string
@@ -21,8 +21,10 @@ func (s *SessionService) AuthMiddleware(next http.Handler) http.Handler {
 			return
 		}
 		if err := s.RenewSessionIfExpiringSoon(r.Context(), w, session); err != nil {
-			logrus.WithError(err).Warn("failed to renew session")
+			logutil.FromContext(r.Context()).WithError(err).Warn("failed to renew session")
 		}
+
+		logutil.FromContext(r.Context()).AddField("user_id", user.ID)
 
 		ctx := context.WithValue(r.Context(), UserContextKey, user)
 		ctx = context.WithValue(ctx, SessionTokenContextKey, session.Token)
