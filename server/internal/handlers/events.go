@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/hanzei/jot/server/internal/auth"
+	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/hanzei/jot/server/internal/sse"
-	"github.com/sirupsen/logrus"
 )
 
 // EventsHandler streams SSE events to authenticated clients.
@@ -73,7 +73,7 @@ func (h *EventsHandler) ServeSSE(w http.ResponseWriter, r *http.Request) {
 			}
 			data, err := json.Marshal(event)
 			if err != nil {
-				logrus.WithError(err).WithField("type", event.Type).WithField("note_id", event.NoteID).Error("failed to marshal SSE event")
+				logutil.FromContext(r.Context()).WithError(err).WithField("type", event.Type).WithField("note_id", event.NoteID).Error("failed to marshal SSE event")
 				continue
 			}
 			if _, err := fmt.Fprintf(w, "data: %s\n\n", data); err != nil {

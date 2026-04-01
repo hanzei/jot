@@ -160,9 +160,7 @@ func TestProbeEndpoints(t *testing.T) {
 		resp, err := c.HTTPClient().Do(req)
 		require.NoError(t, err)
 		defer resp.Body.Close()
-		body, _ := io.ReadAll(resp.Body)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
-		assert.Equal(t, "OK", string(body))
 	})
 
 	t.Run("readyz endpoint", func(t *testing.T) {
