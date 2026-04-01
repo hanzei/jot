@@ -21,6 +21,7 @@ import (
 	"github.com/hanzei/jot/server/internal/config"
 	"github.com/hanzei/jot/server/internal/database"
 	"github.com/hanzei/jot/server/internal/handlers"
+	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/hanzei/jot/server/internal/models"
 	"github.com/hanzei/jot/server/internal/sse"
 	"github.com/sirupsen/logrus"
@@ -122,7 +123,8 @@ func New(cfg *config.Config) (*Server, error) {
 }
 
 func (s *Server) setupRoutes() error {
-	s.router.Use(logrusRequestLogger)
+	s.router.Use(middleware.RequestID)
+	s.router.Use(requestLoggerMiddleware)
 	s.router.Use(middleware.Recoverer)
 	s.router.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{s.cfg.CORSAllowedOrigin},
@@ -259,7 +261,7 @@ func FileServer(r chi.Router, path string, root *os.Root) {
 			}
 			defer func() {
 				if err := indexFile.Close(); err != nil {
-					logrus.WithError(err).Error("Failed to close index file")
+					logutil.FromContext(req.Context()).WithError(err).Error("Failed to close index file")
 				}
 			}()
 
@@ -269,7 +271,7 @@ func FileServer(r chi.Router, path string, root *os.Root) {
 		}
 		defer func() {
 			if err := file.Close(); err != nil {
-				logrus.WithError(err).Error("Failed to close file")
+				logutil.FromContext(req.Context()).WithError(err).Error("Failed to close file")
 			}
 		}()
 
@@ -283,11 +285,11 @@ func (s *Server) wrapHandler(handler func(w http.ResponseWriter, r *http.Request
 	return func(w http.ResponseWriter, r *http.Request) {
 		statusCode, body, err := handler(w, r)
 		if err != nil {
-			entry := logrus.WithError(err).WithField("status_code", statusCode).WithField("method", r.Method).WithField("path", r.URL.Path)
+			log := logutil.FromContext(r.Context()).WithError(err).WithField("status_code", statusCode)
 			if statusCode >= 500 {
-				entry.Error("HTTP handler error")
+				log.Error("HTTP handler error")
 			} else {
-				entry.Warn("HTTP handler error")
+				log.Warn("HTTP handler error")
 			}
 			msg := err.Error()
 			if statusCode >= 500 {
@@ -300,7 +302,7 @@ func (s *Server) wrapHandler(handler func(w http.ResponseWriter, r *http.Request
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(statusCode)
 			if err := json.NewEncoder(w).Encode(body); err != nil {
-				logrus.WithError(err).WithField("method", r.Method).WithField("path", r.URL.Path).Error("failed to encode response body")
+				logutil.FromContext(r.Context()).WithError(err).Error("failed to encode response body")
 			}
 		} else if statusCode > 0 {
 			w.WriteHeader(statusCode)
@@ -309,10 +311,10 @@ func (s *Server) wrapHandler(handler func(w http.ResponseWriter, r *http.Request
 }
 
 // handleLive serves the liveness probe response.
-func (s *Server) handleLive(w http.ResponseWriter, _ *http.Request) {
+func (s *Server) handleLive(w http.ResponseWriter, r *http.Request) {
 	w.WriteHeader(http.StatusOK)
 	if _, err := w.Write([]byte("OK")); err != nil {
-		logrus.WithError(err).Error("failed to write health check response")
+		logutil.FromContext(r.Context()).WithError(err).Error("failed to write health check response")
 	}
 }
 
@@ -327,14 +329,14 @@ func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	if err := s.db.PingContext(ctx); err != nil {
-		logrus.WithError(err).Warn("Readiness check failed")
+		logutil.FromContext(r.Context()).WithError(err).Warn("Readiness check failed")
 		http.Error(w, "NOT READY", http.StatusServiceUnavailable)
 		return
 	}
 
 	w.WriteHeader(http.StatusOK)
 	if _, err := w.Write([]byte("OK")); err != nil {
-		logrus.WithError(err).Error("Failed to write readiness response")
+		logutil.FromContext(r.Context()).WithError(err).Error("Failed to write readiness response")
 	}
 }
 
@@ -382,18 +384,25 @@ func (s *Server) GetDB() *database.DB {
 	return s.db
 }
 
-func logrusRequestLogger(next http.Handler) http.Handler {
+func requestLoggerMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
-		next.ServeHTTP(ww, r)
-		logrus.WithFields(logrus.Fields{
+
+		entry := logrus.WithFields(logrus.Fields{
+			"request_id": middleware.GetReqID(r.Context()),
+			"method":     r.Method,
+			"path":       r.URL.Path,
+		})
+		rl := logutil.NewRequestLogger(entry)
+		next.ServeHTTP(ww, r.WithContext(logutil.NewContext(r.Context(), rl)))
+
+		// After next returns, rl may have been enriched by AuthMiddleware with user_id.
+		rl.WithFields(logrus.Fields{
 			"status":   ww.Status(),
 			"duration": time.Since(start).String(),
-			"method":   r.Method,
-			"path":     r.URL.Path,
-			"remote":   r.RemoteAddr,
-		}).Info("request completed")
+		})
+		rl.Info("request completed")
 	})
 }
 
