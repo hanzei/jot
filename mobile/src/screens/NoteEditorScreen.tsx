@@ -3,13 +3,13 @@ import {
   View,
   Text,
   TextInput,
+  ScrollView,
   TouchableOpacity,
   Alert,
   StyleSheet,
   Keyboard,
   type TextInput as TextInputType,
 } from 'react-native';
-import { KeyboardAwareScrollView } from 'react-native-keyboard-aware-scroll-view';
 import DraggableFlatList, { ScaleDecorator } from 'react-native-draggable-flatlist';
 import * as Haptics from 'expo-haptics';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -157,9 +157,10 @@ export default function NoteEditorScreen() {
   const titleInputRef = useRef<TextInputType>(null);
   const contentInputRef = useRef<TextInputType>(null);
   const itemInputRefsMap = useRef(new Map<string, React.RefObject<TextInputType | null>>());
-  // eslint-disable-next-line @typescript-eslint/no-explicit-any
-  const kascvRef = useRef<any>(null);
+  const scrollViewRef = useRef<ScrollView>(null);
   const scrollOffsetRef = useRef(0);
+  const keyboardScreenYRef = useRef(0);
+  const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   const getItemRef = useCallback((id: string): React.RefObject<TextInputType | null> => {
     if (!itemInputRefsMap.current.has(id)) {
@@ -357,28 +358,35 @@ export default function NoteEditorScreen() {
   }, [flushSave]);
 
   useEffect(() => {
-    const sub = Keyboard.addListener('keyboardDidShow', (e) => {
-      const kascv = kascvRef.current;
-      if (!kascv) return;
-      const focusedInput = TextInput.State.currentlyFocusedInput?.();
-      if (!focusedInput) return;
-      // Delay until after KeyboardAwareScrollView's setState re-render adds
-      // paddingBottom on Android — without this the content isn't yet tall
-      // enough to scroll to the target position and the scroll is clamped to 0.
-      setTimeout(() => {
-        // eslint-disable-next-line @typescript-eslint/no-explicit-any
-        (focusedInput as any).measureInWindow((_x: number, pageY: number, _w: number, h: number) => {
-          const keyboardTop = e.endCoordinates.screenY;
-          const MARGIN = 24;
-          const inputBottom = pageY + h;
-          if (inputBottom > keyboardTop - MARGIN) {
-            kascv.scrollToPosition(0, scrollOffsetRef.current + (inputBottom - keyboardTop + MARGIN), true);
-          }
-        });
-      }, 50);
+    const showSub = Keyboard.addListener('keyboardDidShow', (e) => {
+      keyboardScreenYRef.current = e.endCoordinates.screenY;
+      setKeyboardHeight(e.endCoordinates.height);
     });
-    return () => sub.remove();
+    const hideSub = Keyboard.addListener('keyboardDidHide', () => {
+      setKeyboardHeight(0);
+    });
+    return () => { showSub.remove(); hideSub.remove(); };
   }, []);
+
+  // Scroll to the focused input after the re-render that adds keyboard
+  // paddingBottom — this guarantees the content is tall enough to scroll.
+  useEffect(() => {
+    if (keyboardHeight === 0 || !scrollViewRef.current) return;
+    const focusedInput = TextInput.State.currentlyFocusedInput?.();
+    if (!focusedInput) return;
+    // eslint-disable-next-line @typescript-eslint/no-explicit-any
+    (focusedInput as any).measureInWindow((_x: number, pageY: number, _w: number, h: number) => {
+      const keyboardTop = keyboardScreenYRef.current;
+      const MARGIN = 72;
+      const inputBottom = pageY + h;
+      if (inputBottom > keyboardTop - MARGIN) {
+        scrollViewRef.current?.scrollTo({
+          y: scrollOffsetRef.current + (inputBottom - keyboardTop + MARGIN),
+          animated: true,
+        });
+      }
+    });
+  }, [keyboardHeight]);
 
   const handleTitleChange = useCallback(
     (newTitle: string) => {
@@ -898,14 +906,14 @@ export default function NoteEditorScreen() {
         </TouchableOpacity>
       )}
 
-      <KeyboardAwareScrollView
-        ref={kascvRef}
+      <ScrollView
+        ref={scrollViewRef}
         style={styles.scrollContent}
-        contentContainerStyle={styles.scrollContentContainer}
+        contentContainerStyle={[
+          styles.scrollContentContainer,
+          keyboardHeight > 0 && { paddingBottom: keyboardHeight + 96 },
+        ]}
         keyboardShouldPersistTaps="handled"
-        enableOnAndroid
-        extraScrollHeight={24}
-        keyboardOpeningTime={0}
         onScroll={(e) => { scrollOffsetRef.current = e.nativeEvent.contentOffset.y; }}
         scrollEventThrottle={16}
       >
@@ -1000,7 +1008,7 @@ export default function NoteEditorScreen() {
             )}
           </View>
         )}
-      </KeyboardAwareScrollView>
+      </ScrollView>
 
       <View style={[styles.toolbar, { backgroundColor: noteBackground, borderTopColor: hasNoteColor ? 'transparent' : colors.border, paddingBottom: insets.bottom || 8 }]}>
         {/* Color picker button */}
