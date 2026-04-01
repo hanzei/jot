@@ -1704,21 +1704,6 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
               </div>
             </div>
 
-            {/* Color selector */}
-            <div className="flex space-x-2">
-              {colors.map((colorOption) => (
-                <button
-                  key={colorOption.value}
-                  onClick={() => setColor(colorOption.value)}
-                  className={`w-8 h-8 rounded-full border-2 ${colorOption.class} ${
-                    color === colorOption.value ? 'ring-2 ring-blue-500' : ''
-                  }`}
-                  title={colorOption.name}
-                  aria-label={colorOption.name}
-                />
-              ))}
-            </div>
-
             {/* Sharing info */}
             {note?.is_shared && (() => {
               const avatars = buildShareAvatars(note, currentUserId, usersById);
@@ -1739,6 +1724,21 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                 </div>
               );
             })()}
+
+            {/* Color selector */}
+            <div className="flex space-x-2">
+              {colors.map((colorOption) => (
+                <button
+                  key={colorOption.value}
+                  onClick={() => setColor(colorOption.value)}
+                  className={`w-8 h-8 rounded-full border-2 ${colorOption.class} ${
+                    color === colorOption.value ? 'ring-2 ring-blue-500' : ''
+                  }`}
+                  title={colorOption.name}
+                  aria-label={colorOption.name}
+                />
+              ))}
+            </div>
           </div>
 
           {/* Footer */}
