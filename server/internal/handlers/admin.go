@@ -14,23 +14,26 @@ import (
 )
 
 type AdminHandler struct {
-	userStore  *models.UserStore
-	noteStore  *models.NoteStore
-	statsStore *models.AdminStatsStore
-	dbPath     string
+	userStore         *models.UserStore
+	noteStore         *models.NoteStore
+	statsStore        *models.AdminStatsStore
+	userSettingsStore *models.UserSettingsStore
+	dbPath            string
 }
 
 func NewAdminHandler(
 	userStore *models.UserStore,
 	noteStore *models.NoteStore,
 	statsStore *models.AdminStatsStore,
+	userSettingsStore *models.UserSettingsStore,
 	dbPath string,
 ) *AdminHandler {
 	return &AdminHandler{
-		userStore:  userStore,
-		noteStore:  noteStore,
-		statsStore: statsStore,
-		dbPath:     dbPath,
+		userStore:         userStore,
+		noteStore:         noteStore,
+		statsStore:        statsStore,
+		userSettingsStore: userSettingsStore,
+		dbPath:            dbPath,
 	}
 }
 
@@ -131,6 +134,10 @@ func (h *AdminHandler) CreateUser(w http.ResponseWriter, r *http.Request) (int, 
 		if errors.Is(err, models.ErrUsernameTaken) {
 			return http.StatusConflict, nil, models.ErrUsernameTaken
 		}
+		return http.StatusInternalServerError, nil, err
+	}
+
+	if _, err := h.userSettingsStore.GetOrCreate(r.Context(), user.ID); err != nil {
 		return http.StatusInternalServerError, nil, err
 	}
 

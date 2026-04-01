@@ -1207,6 +1207,18 @@ func (s *NoteStore) AddLabelToNote(ctx context.Context, noteID, labelID, userID 
 		return ErrNoteNoAccess
 	}
 
+	// Verify the label exists and belongs to this user.
+	var count int
+	if err = s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM labels WHERE id = ? AND user_id = ?`,
+		labelID, userID,
+	).Scan(&count); err != nil {
+		return fmt.Errorf("failed to verify label ownership: %w", err)
+	}
+	if count == 0 {
+		return ErrLabelNotFoundOrNotOwned
+	}
+
 	id, err := generateID()
 	if err != nil {
 		return fmt.Errorf("failed to generate note_label ID: %w", err)
