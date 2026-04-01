@@ -136,7 +136,7 @@ func (s *Server) setupRoutes() error {
 		MaxAge:           300,
 	}))
 
-	s.router.Get("/livez", s.handleLive)
+	s.router.Get("/livez", s.wrapHandler(s.handleLive))
 	s.router.Get("/readyz", s.handleReady)
 
 	cop := http.NewCrossOriginProtection()
@@ -312,11 +312,8 @@ func (s *Server) wrapHandler(handler func(w http.ResponseWriter, r *http.Request
 }
 
 // handleLive serves the liveness probe response.
-func (s *Server) handleLive(w http.ResponseWriter, r *http.Request) {
-	w.WriteHeader(http.StatusOK)
-	if _, err := w.Write([]byte("OK")); err != nil {
-		logutil.FromContext(r.Context()).WithError(err).Error("failed to write health check response")
-	}
+func (s *Server) handleLive(_ http.ResponseWriter, _ *http.Request) (int, any, error) {
+	return http.StatusOK, nil, nil
 }
 
 // handleReady serves the readiness probe response.
