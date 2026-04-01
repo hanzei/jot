@@ -255,6 +255,7 @@ Migration files live in `server/internal/database/migrations/` and are named `NN
 - Unit tests alongside source: e.g., `server/internal/models/note_test.go`
 - Tests spin up an `httptest.Server` against a temporary SQLite database (`/tmp/test_*.db`)
 - Helper types: `TestResponse`, `TestUser`, `TestServer`
+- Use `t.Run` subtests for grouping related cases; do not use `_` as a separator in top-level test function names (e.g. use `TestCreateNote` with `t.Run("success", ...)` subtests, not `TestCreateNote_Success`)
 - Run: `task test-server`
 
 ---

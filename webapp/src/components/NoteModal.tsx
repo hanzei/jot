@@ -1360,7 +1360,22 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
 
   const handleCloseRequest = async () => {
     if (hasUnsavedChanges()) {
-      // Auto-save before closing if there are unsaved changes
+      if (savingRef.current) {
+        // An auto-save is already in flight. Flush any pending debounced
+        // text-save into the queue so the in-flight save picks up the latest
+        // non-item edits (title, content, color, …) before the component
+        // unmounts and the cleanup effect cancels the timer.
+        if (saveTimeoutRef.current && noteIdRef.current) {
+          clearTimeout(saveTimeoutRef.current);
+          saveTimeoutRef.current = undefined;
+          pendingAutoSaveRequestRef.current = {
+            noteId: noteIdRef.current,
+            updateData: buildAutoSaveRequest(itemsRef.current),
+          };
+        }
+        onClose();
+        return;
+      }
       await handleSave();
     } else {
       onClose();
