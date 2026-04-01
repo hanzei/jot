@@ -160,6 +160,7 @@ export default function NoteEditorScreen() {
   const scrollViewRef = useRef<ScrollView>(null);
   const scrollOffsetRef = useRef(0);
   const keyboardScreenYRef = useRef(0);
+  const keyboardHideTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const [keyboardHeight, setKeyboardHeight] = useState(0);
 
   const getItemRef = useCallback((id: string): React.RefObject<TextInputType | null> => {
@@ -359,13 +360,25 @@ export default function NoteEditorScreen() {
 
   useEffect(() => {
     const showSub = Keyboard.addListener('keyboardDidShow', (e) => {
+      if (keyboardHideTimerRef.current) {
+        clearTimeout(keyboardHideTimerRef.current);
+        keyboardHideTimerRef.current = null;
+      }
       keyboardScreenYRef.current = e.endCoordinates.screenY;
       setKeyboardHeight(e.endCoordinates.height);
     });
     const hideSub = Keyboard.addListener('keyboardDidHide', () => {
-      setKeyboardHeight(0);
+      // Delay removing paddingBottom so a brief hide/show cycle during focus
+      // switching doesn't collapse the content and reset scroll to 0.
+      keyboardHideTimerRef.current = setTimeout(() => {
+        setKeyboardHeight(0);
+      }, 300);
     });
-    return () => { showSub.remove(); hideSub.remove(); };
+    return () => {
+      showSub.remove();
+      hideSub.remove();
+      if (keyboardHideTimerRef.current) clearTimeout(keyboardHideTimerRef.current);
+    };
   }, []);
 
   // Scroll to the focused input after the re-render that adds keyboard
@@ -944,6 +957,7 @@ export default function NoteEditorScreen() {
             textAlignVertical="top"
             maxLength={VALIDATION.CONTENT_MAX_LENGTH}
             editable={!isHydrating}
+
             testID="note-content-input"
           />
         ) : (
@@ -1000,6 +1014,7 @@ export default function NoteEditorScreen() {
                         onSubmitEditing={() => handleInsertItemAfter(originalIndex)}
                         onBackspaceOnEmpty={() => handleBackspaceOnEmpty(originalIndex)}
                         onAssignPress={() => openAssigneePicker(item.id)}
+            
                         onIndent={(delta) => handleIndentItem(originalIndex, delta)}
                       />
                     );
