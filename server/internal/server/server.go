@@ -259,21 +259,21 @@ func FileServer(r chi.Router, path string, root *os.Root) {
 				http.NotFound(w, req)
 				return
 			}
-			defer func() {
+			defer func(ctx context.Context) {
 				if err := indexFile.Close(); err != nil {
-					logutil.FromContext(req.Context()).WithError(err).Error("Failed to close index file")
+					logutil.FromContext(ctx).WithError(err).Error("Failed to close index file")
 				}
-			}()
+			}(req.Context())
 
 			w.Header().Set("Content-Type", "text/html")
 			http.ServeContent(w, req, "index.html", time.Time{}, indexFile)
 			return
 		}
-		defer func() {
+		defer func(ctx context.Context) {
 			if err := file.Close(); err != nil {
-				logutil.FromContext(req.Context()).WithError(err).Error("Failed to close file")
+				logutil.FromContext(ctx).WithError(err).Error("Failed to close file")
 			}
-		}()
+		}(req.Context())
 
 		// File exists, serve it via the traversal-safe FS
 		fs := http.StripPrefix(pathPrefix, fileServer)
