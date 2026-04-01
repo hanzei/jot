@@ -161,7 +161,7 @@ func duplicateItemsTx(ctx context.Context, tx *sql.Tx, noteID string, items []No
 		if _, err = tx.ExecContext(ctx,
 			`INSERT INTO note_items (id, note_id, text, completed, position, indent_level, assigned_to)
 			 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-			itemID, noteID, item.Text, item.Completed, item.Position, item.IndentLevel, "",
+			itemID, noteID, item.Text, item.Completed, item.Position, item.IndentLevel, nullableAssignedTo(""),
 		); err != nil {
 			return fmt.Errorf("failed to duplicate note item: %w", err)
 		}
@@ -897,13 +897,19 @@ func (s *NoteStore) PurgeOldTrashedNotes(ctx context.Context, olderThan time.Dur
 	return tx.Commit()
 }
 
+func nullableAssignedTo(s string) sql.NullString {
+	return sql.NullString{String: s, Valid: s != ""}
+}
+
 func scanNoteItem(rows *sql.Rows) (NoteItem, error) {
 	var item NoteItem
+	var assignedTo sql.NullString
 	err := rows.Scan(
 		&item.ID, &item.NoteID, &item.Text, &item.Completed,
-		&item.Position, &item.IndentLevel, &item.AssignedTo,
+		&item.Position, &item.IndentLevel, &assignedTo,
 		&item.CreatedAt, &item.UpdatedAt,
 	)
+	item.AssignedTo = assignedTo.String
 	return item, err
 }
 
@@ -934,7 +940,9 @@ func (s *NoteStore) CreateItem(ctx context.Context, noteID string, text string, 
 			  VALUES (?, ?, ?, ?, ?, ?) RETURNING completed, created_at, updated_at`
 
 	var item NoteItem
-	err = s.db.QueryRowContext(ctx, query, itemID, noteID, text, position, indentLevel, assignedTo).Scan(
+	err = s.db.QueryRowContext(ctx, query, itemID, noteID, text, position, indentLevel,
+		nullableAssignedTo(assignedTo),
+	).Scan(
 		&item.Completed, &item.CreatedAt, &item.UpdatedAt,
 	)
 	if err != nil {
@@ -992,7 +1000,9 @@ func (s *NoteStore) CreateItemWithCompleted(ctx context.Context, noteID string, 
 	query := `INSERT INTO note_items (id, note_id, text, position, completed, indent_level, assigned_to)
 			  VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING created_at, updated_at`
 	var item NoteItem
-	err = s.db.QueryRowContext(ctx, query, itemID, noteID, text, position, completed, indentLevel, assignedTo).Scan(
+	err = s.db.QueryRowContext(ctx, query, itemID, noteID, text, position, completed, indentLevel,
+		nullableAssignedTo(assignedTo),
+	).Scan(
 		&item.CreatedAt, &item.UpdatedAt,
 	)
 	if err != nil {
