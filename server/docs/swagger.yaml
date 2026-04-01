@@ -120,13 +120,6 @@ definitions:
       user_id:
         type: string
     type: object
-  handlers.ShareNoteResponse:
-    properties:
-      message:
-        type: string
-      success:
-        type: boolean
-    type: object
   handlers.UpdateNoteItem:
     properties:
       assigned_to:
@@ -1171,13 +1164,9 @@ paths:
         required: true
         schema:
           $ref: '#/definitions/handlers.ShareNoteRequest'
-      produces:
-      - application/json
       responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/handlers.ShareNoteResponse'
+        "204":
+          description: No Content
         "400":
           description: bad request
           schema:
@@ -1258,13 +1247,9 @@ paths:
         name: user_id
         required: true
         type: string
-      produces:
-      - application/json
       responses:
-        "200":
-          description: OK
-          schema:
-            $ref: '#/definitions/handlers.ShareNoteResponse'
+        "204":
+          description: No Content
         "400":
           description: bad request
           schema:
