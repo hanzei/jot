@@ -872,6 +872,10 @@ paths:
           description: unauthorized
           schema:
             type: string
+        "404":
+          description: label not found
+          schema:
+            type: string
         "500":
           description: internal server error
           schema:
@@ -1064,6 +1068,10 @@ paths:
             type: string
         "403":
           description: no access to note
+          schema:
+            type: string
+        "404":
+          description: label not found
           schema:
             type: string
         "500":

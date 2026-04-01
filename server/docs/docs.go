@@ -706,6 +706,12 @@ const docTemplate = `{
                             "type": "string"
                         }
                     },
+                    "404": {
+                        "description": "label not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
                     "500": {
                         "description": "internal server error",
                         "schema": {
@@ -1157,6 +1163,12 @@ const docTemplate = `{
                             "type": "string"
                         }
                     },
+                    "404": {
+                        "description": "label not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
                     "500": {
                         "description": "internal server error",
                         "schema": {
@@ -1291,9 +1303,6 @@ const docTemplate = `{
                 "consumes": [
                     "application/json"
                 ],
-                "produces": [
-                    "application/json"
-                ],
                 "tags": [
                     "sharing"
                 ],
@@ -1425,9 +1434,6 @@ const docTemplate = `{
                     {
                         "CookieAuth": []
                     }
-                ],
-                "produces": [
-                    "application/json"
                 ],
                 "tags": [
                     "sharing"

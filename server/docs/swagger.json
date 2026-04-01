@@ -699,6 +699,12 @@
                             "type": "string"
                         }
                     },
+                    "404": {
+                        "description": "label not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
                     "500": {
                         "description": "internal server error",
                         "schema": {
@@ -1150,6 +1156,12 @@
                             "type": "string"
                         }
                     },
+                    "404": {
+                        "description": "label not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
                     "500": {
                         "description": "internal server error",
                         "schema": {
@@ -1284,9 +1296,6 @@
                 "consumes": [
                     "application/json"
                 ],
-                "produces": [
-                    "application/json"
-                ],
                 "tags": [
                     "sharing"
                 ],
@@ -1418,9 +1427,6 @@
                     {
                         "CookieAuth": []
                     }
-                ],
-                "produces": [
-                    "application/json"
                 ],
                 "tags": [
                     "sharing"
