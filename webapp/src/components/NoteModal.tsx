@@ -1360,7 +1360,12 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
 
   const handleCloseRequest = async () => {
     if (hasUnsavedChanges()) {
-      // Auto-save before closing if there are unsaved changes
+      if (savingRef.current) {
+        // An auto-save is already in flight; close the modal now and let the
+        // background save complete on its own.
+        onClose();
+        return;
+      }
       await handleSave();
     } else {
       onClose();

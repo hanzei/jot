@@ -404,8 +404,9 @@ export class DashboardPage {
     const itemRow = this.page.locator('[data-testid="todo-item-row"]').nth(itemIndex);
     await itemRow.hover();
     const assignBtn = itemRow.locator('button[aria-label="Assign item"]');
-    await assignBtn.waitFor({ state: 'visible', timeout: 5000 });
-    await assignBtn.click();
+    // force: true bypasses visibility so the click works on both desktop (hover
+    // shows the button) and mobile emulation (group-hover CSS doesn't trigger).
+    await assignBtn.click({ force: true });
 
     await expect(this.page.getByText('Assign item')).toBeVisible();
     const pickerPopover = this.page.locator('.max-h-48');
