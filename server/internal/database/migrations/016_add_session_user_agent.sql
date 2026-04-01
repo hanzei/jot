@@ -1,1 +1,0 @@
-ALTER TABLE sessions ADD COLUMN user_agent TEXT NOT NULL DEFAULT '';
