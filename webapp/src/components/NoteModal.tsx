@@ -219,7 +219,7 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
         type="checkbox"
         checked={item.completed}
         onChange={(e) => onUpdateTodoItem(index, 'completed', e.target.checked)}
-        className="h-4 w-4 text-blue-600 rounded mt-1"
+        className="h-4 w-4 text-blue-600 rounded mt-0.5 flex-shrink-0"
       />
       <div className="flex flex-1 items-start min-w-0">
         <div className="relative min-w-0 flex-1">
@@ -227,7 +227,7 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
             data-testid="todo-item-input"
             placeholder={placeholder}
             rows={1}
-            className={`w-full py-1 pl-1 pr-0 bg-transparent border-none outline-none min-w-0 resize-none overflow-hidden whitespace-pre-wrap break-words placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white ${
+            className={`w-full pt-0 pb-1 pl-1 pr-0 bg-transparent border-none outline-none min-w-0 resize-none overflow-hidden whitespace-pre-wrap break-words placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white ${
               isCompleted ? 'line-through text-gray-500 dark:text-gray-400' : ''
             }`}
             value={item.text}
