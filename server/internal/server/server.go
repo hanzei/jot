@@ -490,6 +490,13 @@ func (s *Server) BeginShutdown() {
 	s.shuttingDown.Store(true)
 }
 
+// StopBackgroundTasks cancels the server context and waits for all background
+// goroutines to finish. It is intended for use in tests that bypass Start/Shutdown.
+func (s *Server) StopBackgroundTasks() {
+	s.cancel()
+	s.bgWg.Wait()
+}
+
 // startPeriodicTask starts a background goroutine tracked by wg that calls fn on every interval.
 // If runNow is true, fn is also called once immediately before the first tick.
 func startPeriodicTask(wg *sync.WaitGroup, ctx context.Context, interval time.Duration, runNow bool, fn func() error, logMsg string) {

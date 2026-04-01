@@ -71,8 +71,9 @@ func setupTestServer(t *testing.T) *TestServer {
 func setupTestServerWithConfig(t *testing.T, customize func(*config.Config)) *TestServer {
 	t.Helper()
 
+	prevLogOutput := logrus.StandardLogger().Out
 	logrus.SetOutput(&testLogWriter{t: t})
-	t.Cleanup(func() { logrus.SetOutput(os.Stderr) })
+	t.Cleanup(func() { logrus.SetOutput(prevLogOutput) })
 
 	tmpDir := t.TempDir()
 	require.NoError(t, os.WriteFile(tmpDir+"/index.html", []byte("<html><body>jot test app</body></html>"), 0o600))
@@ -94,6 +95,7 @@ func setupTestServerWithConfig(t *testing.T, customize func(*config.Config)) *Te
 
 	t.Cleanup(func() {
 		httpServer.Close()
+		ts.Server.StopBackgroundTasks()
 		_ = ts.Server.GetDB().Close()
 	})
 
