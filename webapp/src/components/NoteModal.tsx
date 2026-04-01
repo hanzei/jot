@@ -1538,7 +1538,14 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                   return;
                 }
                 setTitle(newTitle);
-                if (note) markDirty();
+                if (note) {
+                  markDirty();
+                  if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+                  saveTimeoutRef.current = setTimeout(async () => {
+                    saveTimeoutRef.current = undefined;
+                    await autoSaveNote(itemsRef.current);
+                  }, VALIDATION.AUTO_SAVE_TIMEOUT_MS);
+                }
               }}
               onKeyDown={(e) => {
                 if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
@@ -1584,7 +1591,14 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                     return;
                   }
                   setContent(newContent);
-                  if (note) markDirty();
+                  if (note) {
+                    markDirty();
+                    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+                    saveTimeoutRef.current = setTimeout(async () => {
+                      saveTimeoutRef.current = undefined;
+                      await autoSaveNote(itemsRef.current);
+                    }, VALIDATION.AUTO_SAVE_TIMEOUT_MS);
+                  }
                 }}
               />
             ) : (
@@ -1709,7 +1723,15 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
               {colors.map((colorOption) => (
                 <button
                   key={colorOption.value}
-                  onClick={() => setColor(colorOption.value)}
+                  onClick={() => {
+                    const newColor = colorOption.value;
+                    setColor(newColor);
+                    if (note) {
+                      markDirty();
+                      autoSaveDraftRef.current = { ...autoSaveDraftRef.current, color: newColor };
+                      autoSaveNote(itemsRef.current);
+                    }
+                  }}
                   className={`w-8 h-8 rounded-full border-2 ${colorOption.class} ${
                     color === colorOption.value ? 'ring-2 ring-blue-500' : ''
                   }`}
