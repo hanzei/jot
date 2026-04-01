@@ -179,6 +179,9 @@ func (h *LabelsHandler) AddLabel(w http.ResponseWriter, r *http.Request) (int, a
 		if errors.Is(err, models.ErrNoteNoAccess) {
 			return http.StatusForbidden, nil, errors.New("no access to note")
 		}
+		if errors.Is(err, models.ErrLabelNotFoundOrNotOwned) {
+			return http.StatusNotFound, nil, errors.New("label not found")
+		}
 		return http.StatusInternalServerError, nil, err
 	}
 
