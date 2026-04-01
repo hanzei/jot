@@ -65,11 +65,12 @@ func (s *AdminStatsStore) GetStats(ctx context.Context) (*AdminStats, error) {
 	if err := s.db.QueryRowContext(ctx, `
 		SELECT
 			COUNT(*),
-			COALESCE(SUM(CASE WHEN note_type = ? THEN 1 ELSE 0 END), 0),
-			COALESCE(SUM(CASE WHEN note_type = ? THEN 1 ELSE 0 END), 0),
-			COALESCE(SUM(CASE WHEN deleted_at IS NOT NULL THEN 1 ELSE 0 END), 0),
-			COALESCE(SUM(CASE WHEN archived = 1 AND deleted_at IS NULL THEN 1 ELSE 0 END), 0)
-		FROM notes
+			COALESCE(SUM(CASE WHEN n.note_type = ? THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN n.note_type = ? THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN n.deleted_at IS NOT NULL THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN nus.archived = 1 AND n.deleted_at IS NULL THEN 1 ELSE 0 END), 0)
+		FROM notes n
+		LEFT JOIN note_user_state nus ON n.id = nus.note_id AND nus.user_id = n.user_id
 	`, NoteTypeText, NoteTypeTodo).Scan(
 		&stats.Notes.Total,
 		&stats.Notes.Text,
@@ -101,7 +102,7 @@ func (s *AdminStatsStore) GetStats(ctx context.Context) (*AdminStats, error) {
 		SELECT
 			COUNT(*),
 			COALESCE(SUM(CASE WHEN completed = 1 THEN 1 ELSE 0 END), 0),
-			COALESCE(SUM(CASE WHEN assigned_to <> '' THEN 1 ELSE 0 END), 0)
+			COALESCE(SUM(CASE WHEN assigned_to IS NOT NULL THEN 1 ELSE 0 END), 0)
 		FROM note_items
 	`).Scan(&stats.TodoItems.Total, &stats.TodoItems.Completed, &stats.TodoItems.Assigned); err != nil {
 		return nil, fmt.Errorf("count note items: %w", err)

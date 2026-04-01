@@ -27,7 +27,7 @@ tasks:
   test-server:
     desc: Run server tests
     dir: server
-    cmd: go test -v ./...
+    cmd: go test ./...
 
   test-webapp:
     desc: Run webapp tests
@@ -38,7 +38,7 @@ tasks:
     desc: Run server tests with coverage
     dir: server
     cmds:
-      - go test -v -coverprofile=coverage.out ./...
+      - go test -coverprofile=coverage.out ./...
       - go tool cover -html=coverage.out -o coverage.html
 
   lint:

@@ -52,6 +52,32 @@ func (h *NotesHandler) publishNoteEvent(ctx context.Context, noteID string, even
 	})
 }
 
+// publishPersonalizedNoteEvent fetches each audience member's personalized view of a note
+// and sends them an individual SSE event. Used when shared fields (title, content, items)
+// change so every collaborator receives the update with their own per-user state intact.
+// Errors are logged but never fail the HTTP request.
+func (h *NotesHandler) publishPersonalizedNoteEvent(ctx context.Context, noteID string, audienceIDs []string, sourceUserID string) {
+	if h.hub == nil {
+		return
+	}
+	for _, uid := range audienceIDs {
+		n, err := h.noteStore.GetByID(ctx, noteID, uid)
+		if err != nil {
+			logrus.WithError(err).WithFields(logrus.Fields{
+				"note_id": noteID,
+				"user_id": uid,
+			}).Warn("failed to fetch personalized note for SSE publish")
+			continue
+		}
+		h.hub.Publish([]string{uid}, sse.Event{
+			Type:         sse.EventNoteUpdated,
+			NoteID:       noteID,
+			Note:         n,
+			SourceUserID: sourceUserID,
+		})
+	}
+}
+
 func (h *NotesHandler) publishDeletedNoteEvent(noteID string, audienceIDs []string, sourceUserID string) {
 	if h.hub == nil || len(audienceIDs) == 0 {
 		return
@@ -482,8 +508,37 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 		return http.StatusInternalServerError, nil, err
 	}
 
-	h.publishNoteEvent(r.Context(), id, sse.EventNoteUpdated, note, user.ID)
+	// Title, content, and items are shared fields: every collaborator must receive
+	// their own personalized copy of the note (preserving their per-user state).
+	// Per-user-only changes (color, pinned, archived, checked_items_collapsed) only
+	// need to be delivered to the acting user.
+	hasSharedFieldChange := req.Title != nil || req.Content != nil || len(req.Items) > 0
+	h.publishUpdateEvent(r.Context(), id, note, user.ID, hasSharedFieldChange)
+
 	return http.StatusOK, note, nil
+}
+
+// publishUpdateEvent sends SSE notifications after a note update. If shared fields
+// changed, every collaborator gets a personalized event; otherwise only the acting
+// user is notified.
+func (h *NotesHandler) publishUpdateEvent(ctx context.Context, noteID string, note *models.Note, userID string, sharedFieldChanged bool) {
+	if sharedFieldChanged {
+		audienceIDs, err := h.noteStore.GetNoteAudienceIDs(ctx, noteID)
+		if err != nil {
+			logrus.WithError(err).WithField("note_id", noteID).Error("failed to get note audience for SSE publish")
+			return
+		}
+		h.publishPersonalizedNoteEvent(ctx, noteID, audienceIDs, userID)
+		return
+	}
+	if h.hub != nil {
+		h.hub.Publish([]string{userID}, sse.Event{
+			Type:         sse.EventNoteUpdated,
+			NoteID:       noteID,
+			Note:         note,
+			SourceUserID: userID,
+		})
+	}
 }
 
 // DeleteNote godoc

@@ -84,19 +84,27 @@ func TestDuplicateNoteEndpoint(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, updatedSource.Items, 2)
 
+		// Collaborator sets their own per-user state on the shared note before duplicating.
+		_, err = collaborator.Client.UpdateNote(t.Context(), source.ID, &client.UpdateNoteRequest{
+			Color: client.Ptr("#00bcd4"),
+		})
+		require.NoError(t, err)
+		_, err = collaborator.Client.AddLabel(t.Context(), source.ID, "collab-label")
+		require.NoError(t, err)
+
 		duplicated, err := collaborator.Client.DuplicateNote(t.Context(), source.ID)
 		require.NoError(t, err)
 
 		assert.Equal(t, collaborator.User.ID, duplicated.UserID)
 		assert.Equal(t, "Copy of Shared Tasks", duplicated.Title)
 		assert.Equal(t, client.NoteTypeTodo, duplicated.NoteType)
-		assert.Equal(t, source.Color, duplicated.Color)
+		assert.Equal(t, "#00bcd4", duplicated.Color)
 		assert.False(t, duplicated.Pinned)
 		assert.False(t, duplicated.Archived)
 		assert.False(t, duplicated.IsShared)
 		assert.Empty(t, duplicated.SharedWith)
 		require.Len(t, duplicated.Labels, 1)
-		assert.Equal(t, "ops", duplicated.Labels[0].Name)
+		assert.Equal(t, "collab-label", duplicated.Labels[0].Name)
 		require.Len(t, duplicated.Items, 2)
 		assert.Equal(t, "Outline release", duplicated.Items[0].Text)
 		assert.Equal(t, 0, duplicated.Items[0].Position)

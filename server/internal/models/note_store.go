@@ -34,26 +34,43 @@ func (s *NoteStore) Create(ctx context.Context, userID string, title, content st
 		return nil, fmt.Errorf("failed to generate note ID: %w", err)
 	}
 
-	// Shift existing unpinned notes down to make room at position 0
-	shiftQuery := `UPDATE notes SET position = position + 1 WHERE user_id = ? AND pinned = FALSE AND archived = FALSE AND deleted_at IS NULL`
-	_, err = s.db.ExecContext(ctx, shiftQuery, userID)
+	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	// Shift existing unpinned notes down to make room at position 0.
+	if _, err = tx.ExecContext(ctx,
+		`UPDATE note_user_state SET position = position + 1
+		 WHERE user_id = ? AND pinned = FALSE AND archived = FALSE
+		 AND note_id IN (SELECT id FROM notes WHERE deleted_at IS NULL)`,
+		userID,
+	); err != nil {
 		return nil, fmt.Errorf("failed to shift existing notes: %w", err)
 	}
 
-	// New notes go at position 0 (first position)
 	nextPosition := 0
 
-	query := `INSERT INTO notes (id, user_id, title, content, note_type, color, position, unpinned_position, checked_items_collapsed)
-			  VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?) RETURNING pinned, archived, created_at, updated_at`
-
 	var note Note
-	err = s.db.QueryRowContext(ctx, query, noteID, userID, title, content, noteType, color, nextPosition, nextPosition, false).Scan(
-		&note.Pinned, &note.Archived,
-		&note.CreatedAt, &note.UpdatedAt,
-	)
-	if err != nil {
+	if err = tx.QueryRowContext(ctx,
+		`INSERT INTO notes (id, user_id, title, content, note_type)
+		 VALUES (?, ?, ?, ?, ?) RETURNING created_at, updated_at`,
+		noteID, userID, title, content, noteType,
+	).Scan(&note.CreatedAt, &note.UpdatedAt); err != nil {
 		return nil, fmt.Errorf("failed to create note: %w", err)
+	}
+
+	if _, err = tx.ExecContext(ctx,
+		`INSERT INTO note_user_state (note_id, user_id, color, pinned, archived, position, unpinned_position, checked_items_collapsed)
+		 VALUES (?, ?, ?, FALSE, FALSE, ?, ?, FALSE)`,
+		noteID, userID, color, nextPosition, nextPosition,
+	); err != nil {
+		return nil, fmt.Errorf("failed to create note user state: %w", err)
+	}
+
+	if err = tx.Commit(); err != nil {
+		return nil, fmt.Errorf("failed to commit note creation: %w", err)
 	}
 
 	note.ID = noteID
@@ -87,85 +104,40 @@ func (s *NoteStore) Duplicate(ctx context.Context, source *Note, userID string) 
 	}
 
 	if _, err = tx.ExecContext(ctx,
-		`UPDATE notes
-		 SET position = position + 1
-		 WHERE user_id = ? AND pinned = FALSE AND archived = FALSE AND deleted_at IS NULL`,
+		`UPDATE note_user_state SET position = position + 1
+		 WHERE user_id = ? AND pinned = FALSE AND archived = FALSE
+		 AND note_id IN (SELECT id FROM notes WHERE deleted_at IS NULL)`,
 		userID,
 	); err != nil {
 		return nil, fmt.Errorf("failed to shift existing notes: %w", err)
 	}
 
 	const nextPosition = 0
-	query := `INSERT INTO notes (id, user_id, title, content, note_type, color, pinned, archived, position, unpinned_position, checked_items_collapsed)
-			  VALUES (?, ?, ?, ?, ?, ?, FALSE, FALSE, ?, ?, ?)`
-
 	if _, err = tx.ExecContext(ctx,
-		query,
+		`INSERT INTO notes (id, user_id, title, content, note_type) VALUES (?, ?, ?, ?, ?)`,
 		noteID,
 		userID,
 		duplicateNoteTitle(source.Title),
 		source.Content,
 		source.NoteType,
-		source.Color,
-		nextPosition,
-		nextPosition,
-		source.CheckedItemsCollapsed,
 	); err != nil {
 		return nil, fmt.Errorf("failed to create duplicated note: %w", err)
 	}
 
-	for _, item := range source.Items {
-		itemID, itemErr := generateID()
-		if itemErr != nil {
-			return nil, fmt.Errorf("failed to generate note item ID: %w", itemErr)
-		}
-
-		if _, itemErr = tx.ExecContext(ctx,
-			`INSERT INTO note_items (id, note_id, text, completed, position, indent_level, assigned_to)
-			 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-			itemID,
-			noteID,
-			item.Text,
-			item.Completed,
-			item.Position,
-			item.IndentLevel,
-			"",
-		); itemErr != nil {
-			return nil, fmt.Errorf("failed to duplicate note item: %w", itemErr)
-		}
+	if _, err = tx.ExecContext(ctx,
+		`INSERT INTO note_user_state (note_id, user_id, color, pinned, archived, position, unpinned_position, checked_items_collapsed)
+		 VALUES (?, ?, ?, FALSE, FALSE, ?, ?, ?)`,
+		noteID, userID, source.Color, nextPosition, nextPosition, source.CheckedItemsCollapsed,
+	); err != nil {
+		return nil, fmt.Errorf("failed to create duplicated note user state: %w", err)
 	}
 
-	for _, label := range source.Labels {
-		labelID, labelErr := generateID()
-		if labelErr != nil {
-			return nil, fmt.Errorf("failed to generate label ID: %w", labelErr)
-		}
+	if err = duplicateItemsTx(ctx, tx, noteID, source.Items); err != nil {
+		return nil, err
+	}
 
-		var resolvedLabelID string
-		if labelErr = tx.QueryRowContext(ctx,
-			`INSERT INTO labels (id, user_id, name) VALUES (?, ?, ?)
-			 ON CONFLICT(user_id, name) DO UPDATE SET name=excluded.name
-			 RETURNING id`,
-			labelID,
-			userID,
-			label.Name,
-		).Scan(&resolvedLabelID); labelErr != nil {
-			return nil, fmt.Errorf("failed to get or create duplicated label: %w", labelErr)
-		}
-
-		noteLabelID, noteLabelErr := generateID()
-		if noteLabelErr != nil {
-			return nil, fmt.Errorf("failed to generate note label ID: %w", noteLabelErr)
-		}
-
-		if _, noteLabelErr = tx.ExecContext(ctx,
-			`INSERT OR IGNORE INTO note_labels (id, note_id, label_id) VALUES (?, ?, ?)`,
-			noteLabelID,
-			noteID,
-			resolvedLabelID,
-		); noteLabelErr != nil {
-			return nil, fmt.Errorf("failed to attach duplicated label to note: %w", noteLabelErr)
-		}
+	if err = duplicateLabelsTx(ctx, tx, noteID, userID, source.Labels); err != nil {
+		return nil, err
 	}
 
 	if err = tx.Commit(); err != nil {
@@ -180,29 +152,80 @@ func (s *NoteStore) Duplicate(ctx context.Context, source *Note, userID string) 
 	return duplicated, nil
 }
 
+func duplicateItemsTx(ctx context.Context, tx *sql.Tx, noteID string, items []NoteItem) error {
+	for _, item := range items {
+		itemID, err := generateID()
+		if err != nil {
+			return fmt.Errorf("failed to generate note item ID: %w", err)
+		}
+		if _, err = tx.ExecContext(ctx,
+			`INSERT INTO note_items (id, note_id, text, completed, position, indent_level, assigned_to)
+			 VALUES (?, ?, ?, ?, ?, ?, ?)`,
+			itemID, noteID, item.Text, item.Completed, item.Position, item.IndentLevel, nullableAssignedTo(""),
+		); err != nil {
+			return fmt.Errorf("failed to duplicate note item: %w", err)
+		}
+	}
+	return nil
+}
+
+func duplicateLabelsTx(ctx context.Context, tx *sql.Tx, noteID, userID string, labels []Label) error {
+	for _, label := range labels {
+		labelID, err := generateID()
+		if err != nil {
+			return fmt.Errorf("failed to generate label ID: %w", err)
+		}
+		var resolvedLabelID string
+		if err = tx.QueryRowContext(ctx,
+			`INSERT INTO labels (id, user_id, name) VALUES (?, ?, ?)
+			 ON CONFLICT(user_id, name) DO UPDATE SET name=excluded.name
+			 RETURNING id`,
+			labelID, userID, label.Name,
+		).Scan(&resolvedLabelID); err != nil {
+			return fmt.Errorf("failed to get or create duplicated label: %w", err)
+		}
+		noteLabelID, err := generateID()
+		if err != nil {
+			return fmt.Errorf("failed to generate note label ID: %w", err)
+		}
+		if _, err = tx.ExecContext(ctx,
+			`INSERT OR IGNORE INTO note_labels (id, note_id, label_id, user_id) VALUES (?, ?, ?, ?)`,
+			noteLabelID, noteID, resolvedLabelID, userID,
+		); err != nil {
+			return fmt.Errorf("failed to attach duplicated label to note: %w", err)
+		}
+	}
+	return nil
+}
+
 func buildGetByUserIDQuery(userID string, archived bool, trashed bool, search string, labelID string, myTodo bool) (string, []any) {
+	const selectCols = `SELECT DISTINCT n.id, n.user_id, n.title, n.content, n.note_type,
+				  nus.color, nus.pinned, nus.archived, nus.position, nus.unpinned_position, nus.checked_items_collapsed,
+				  n.deleted_at, n.created_at, n.updated_at`
+
 	var query string
 	var args []any
 	if trashed {
-		query = `SELECT DISTINCT n.id, n.user_id, n.title, n.content, n.note_type, n.color, n.pinned, n.archived, n.position, n.unpinned_position, n.checked_items_collapsed, n.deleted_at, n.created_at, n.updated_at
+		query = selectCols + `
 				  FROM notes n
+				  INNER JOIN note_user_state nus ON n.id = nus.note_id AND nus.user_id = ?
 				  LEFT JOIN note_items ni ON n.id = ni.note_id
 				  WHERE n.user_id = ? AND n.deleted_at IS NOT NULL`
-		args = []any{userID}
+		args = []any{userID, userID}
 	} else if myTodo {
-		query = `SELECT DISTINCT n.id, n.user_id, n.title, n.content, n.note_type, n.color, n.pinned, n.archived, n.position, n.unpinned_position, n.checked_items_collapsed, n.deleted_at, n.created_at, n.updated_at
+		query = selectCols + `
 				  FROM active_notes n
+				  INNER JOIN note_user_state nus ON n.id = nus.note_id AND nus.user_id = ?
 				  INNER JOIN note_items ni ON n.id = ni.note_id
-				  LEFT JOIN note_shares ns ON n.id = ns.note_id
-				  WHERE (n.user_id = ? OR ns.shared_with_user_id = ?) AND ni.assigned_to = ?`
-		args = []any{userID, userID, userID}
+				  WHERE ni.assigned_to = ?`
+		args = []any{userID, userID}
 	} else {
-		query = `SELECT DISTINCT n.id, n.user_id, n.title, n.content, n.note_type, n.color, n.pinned, n.archived, n.position, n.unpinned_position, n.checked_items_collapsed, n.deleted_at, n.created_at, n.updated_at
+		query = selectCols + `
 				  FROM active_notes n
-				  LEFT JOIN note_shares ns ON n.id = ns.note_id
+				  INNER JOIN note_user_state nus ON n.id = nus.note_id AND nus.user_id = ?
 				  LEFT JOIN note_items ni ON n.id = ni.note_id
-				  WHERE (n.user_id = ? OR ns.shared_with_user_id = ?) AND n.archived = ?`
-		args = []any{userID, userID, archived}
+				  WHERE nus.archived = ?`
+		args = []any{userID, archived}
 	}
 	if search != "" {
 		query += ` AND (n.title LIKE ? OR n.content LIKE ? OR ni.text LIKE ?)`
@@ -210,10 +233,10 @@ func buildGetByUserIDQuery(userID string, archived bool, trashed bool, search st
 		args = append(args, searchTerm, searchTerm, searchTerm)
 	}
 	if labelID != "" {
-		query += ` AND n.id IN (SELECT note_id FROM note_labels WHERE label_id = ?)`
-		args = append(args, labelID)
+		query += ` AND n.id IN (SELECT note_id FROM note_labels WHERE label_id = ? AND user_id = ?)`
+		args = append(args, labelID, userID)
 	}
-	query += ` ORDER BY n.pinned DESC, n.position ASC`
+	query += ` ORDER BY nus.pinned DESC, nus.position ASC`
 	return query, args
 }
 
@@ -269,7 +292,7 @@ func (s *NoteStore) GetByUserID(ctx context.Context, userID string, archived boo
 		for i, n := range notes {
 			noteIDs[i] = n.ID
 		}
-		labelsMap, labelsErr := s.getLabelsByNoteIDs(ctx, noteIDs)
+		labelsMap, labelsErr := s.getLabelsByNoteIDs(ctx, noteIDs, userID)
 		if labelsErr != nil {
 			return nil, fmt.Errorf("failed to batch-load note labels: %w", labelsErr)
 		}
@@ -284,19 +307,15 @@ func (s *NoteStore) GetByUserID(ctx context.Context, userID string, archived boo
 }
 
 func (s *NoteStore) GetByID(ctx context.Context, id string, userID string) (*Note, error) {
-	hasAccess, err := s.HasAccess(ctx, id, userID)
-	if err != nil {
-		return nil, fmt.Errorf("failed to check access: %w", err)
-	}
-	if !hasAccess {
-		return nil, ErrNoteNotFound
-	}
-
-	query := `SELECT id, user_id, title, content, note_type, color, pinned, archived, position, unpinned_position, checked_items_collapsed, deleted_at, created_at, updated_at
-			  FROM active_notes WHERE id = ?`
+	query := `SELECT n.id, n.user_id, n.title, n.content, n.note_type,
+			  nus.color, nus.pinned, nus.archived, nus.position, nus.unpinned_position, nus.checked_items_collapsed,
+			  n.deleted_at, n.created_at, n.updated_at
+			  FROM active_notes n
+			  INNER JOIN note_user_state nus ON n.id = nus.note_id AND nus.user_id = ?
+			  WHERE n.id = ?`
 
 	var note Note
-	err = s.db.QueryRowContext(ctx, query, id).Scan(
+	err := s.db.QueryRowContext(ctx, query, userID, id).Scan(
 		&note.ID, &note.UserID, &note.Title, &note.Content,
 		&note.NoteType, &note.Color, &note.Pinned, &note.Archived, &note.Position, &note.UnpinnedPosition, &note.CheckedItemsCollapsed,
 		&note.DeletedAt, &note.CreatedAt, &note.UpdatedAt,
@@ -308,7 +327,7 @@ func (s *NoteStore) GetByID(ctx context.Context, id string, userID string) (*Not
 		return nil, fmt.Errorf("failed to get note: %w", err)
 	}
 
-	if err := s.populateNoteDetails(ctx, &note); err != nil {
+	if err := s.populateNoteDetails(ctx, &note, userID); err != nil {
 		return nil, err
 	}
 	return &note, nil
@@ -332,11 +351,15 @@ func (s *NoteStore) GetByIDAnyState(ctx context.Context, id string, userID strin
 		return nil, ErrNoteNotFound
 	}
 
-	query := `SELECT id, user_id, title, content, note_type, color, pinned, archived, position, unpinned_position, checked_items_collapsed, deleted_at, created_at, updated_at
-			  FROM notes WHERE id = ? AND user_id = ?`
+	query := `SELECT n.id, n.user_id, n.title, n.content, n.note_type,
+			  nus.color, nus.pinned, nus.archived, nus.position, nus.unpinned_position, nus.checked_items_collapsed,
+			  n.deleted_at, n.created_at, n.updated_at
+			  FROM notes n
+			  INNER JOIN note_user_state nus ON n.id = nus.note_id AND nus.user_id = ?
+			  WHERE n.id = ? AND n.user_id = ?`
 
 	var ownedNote Note
-	err = s.db.QueryRowContext(ctx, query, id, userID).Scan(
+	err = s.db.QueryRowContext(ctx, query, userID, id, userID).Scan(
 		&ownedNote.ID, &ownedNote.UserID, &ownedNote.Title, &ownedNote.Content,
 		&ownedNote.NoteType, &ownedNote.Color, &ownedNote.Pinned, &ownedNote.Archived, &ownedNote.Position, &ownedNote.UnpinnedPosition, &ownedNote.CheckedItemsCollapsed,
 		&ownedNote.DeletedAt, &ownedNote.CreatedAt, &ownedNote.UpdatedAt,
@@ -348,13 +371,13 @@ func (s *NoteStore) GetByIDAnyState(ctx context.Context, id string, userID strin
 		return nil, fmt.Errorf("failed to get note in any state: %w", err)
 	}
 
-	if err := s.populateNoteDetails(ctx, &ownedNote); err != nil {
+	if err := s.populateNoteDetails(ctx, &ownedNote, userID); err != nil {
 		return nil, err
 	}
 	return &ownedNote, nil
 }
 
-func (s *NoteStore) populateNoteDetails(ctx context.Context, note *Note) error {
+func (s *NoteStore) populateNoteDetails(ctx context.Context, note *Note, userID string) error {
 	if note.NoteType == NoteTypeTodo {
 		var items []NoteItem
 		items, err := s.getItemsByNoteID(ctx, note.ID)
@@ -371,7 +394,7 @@ func (s *NoteStore) populateNoteDetails(ctx context.Context, note *Note) error {
 	note.SharedWith = shares
 	note.IsShared = len(shares) > 0
 
-	labels, err := s.GetNoteLabels(ctx, note.ID)
+	labels, err := s.GetNoteLabels(ctx, note.ID, userID)
 	if err != nil {
 		return fmt.Errorf("failed to get note labels: %w", err)
 	}
@@ -389,7 +412,7 @@ func (s *NoteStore) Update(ctx context.Context, id string, userID string, title,
 		return ErrNoteNoAccess
 	}
 
-	// Get current note state to merge partial updates and check if pinned status is changing
+	// Get current note state (per-user view) to merge partial updates and detect pin changes.
 	currentNote, err := s.GetByID(ctx, id, userID)
 	if err != nil {
 		return fmt.Errorf("failed to get current note: %w", err)
@@ -402,36 +425,32 @@ func (s *NoteStore) Update(ctx context.Context, id string, userID string, title,
 	resolvedArchived := deref(archived, currentNote.Archived)
 	resolvedCheckedItemsCollapsed := deref(checkedItemsCollapsed, currentNote.CheckedItemsCollapsed)
 
-	updateQuery := `UPDATE notes SET title = ?, content = ?, pinned = ?, archived = ?, color = ?, checked_items_collapsed = ?, updated_at = CURRENT_TIMESTAMP
-			  WHERE id = ?`
-
-	if currentNote.Pinned == resolvedPinned {
-		// No pin change: simple update, no transaction needed.
-		var result sql.Result
-		result, err = s.db.ExecContext(ctx, updateQuery, resolvedTitle, resolvedContent, resolvedPinned, resolvedArchived, resolvedColor, resolvedCheckedItemsCollapsed, id)
-		if err != nil {
-			return fmt.Errorf("failed to update note: %w", err)
-		}
-		rowsAffected, rowsErr := result.RowsAffected()
-		if rowsErr != nil {
-			return fmt.Errorf("failed to get rows affected: %w", rowsErr)
-		}
-		if rowsAffected == 0 {
-			return ErrNoteNotFound
-		}
-		return nil
-	}
-
-	// Pin state is changing: run note update + position repair atomically.
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	result, err := tx.ExecContext(ctx, updateQuery, resolvedTitle, resolvedContent, resolvedPinned, resolvedArchived, resolvedColor, resolvedCheckedItemsCollapsed, id)
+	// Only update shared fields (title/content) when the caller explicitly
+	// provided at least one — skipping avoids overwriting concurrent edits
+	// when only per-user fields (color, pinned, etc.) are changing.
+	if title != nil || content != nil {
+		if _, err = tx.ExecContext(ctx,
+			`UPDATE notes SET title = ?, content = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+			resolvedTitle, resolvedContent, id,
+		); err != nil {
+			return fmt.Errorf("failed to update note: %w", err)
+		}
+	}
+
+	// Per-user fields live in note_user_state.
+	result, err := tx.ExecContext(ctx,
+		`UPDATE note_user_state SET pinned = ?, archived = ?, color = ?, checked_items_collapsed = ?, updated_at = CURRENT_TIMESTAMP
+		 WHERE note_id = ? AND user_id = ?`,
+		resolvedPinned, resolvedArchived, resolvedColor, resolvedCheckedItemsCollapsed, id, userID,
+	)
 	if err != nil {
-		return fmt.Errorf("failed to update note: %w", err)
+		return fmt.Errorf("failed to update note user state: %w", err)
 	}
 	rowsAffected, err := result.RowsAffected()
 	if err != nil {
@@ -441,8 +460,10 @@ func (s *NoteStore) Update(ctx context.Context, id string, userID string, title,
 		return ErrNoteNotFound
 	}
 
-	if err = s.handlePinStatusChangeTx(ctx, tx, id, currentNote.UserID, currentNote, resolvedPinned); err != nil {
-		return err
+	if currentNote.Pinned != resolvedPinned {
+		if err = s.handlePinStatusChangeTx(ctx, tx, id, userID, currentNote, resolvedPinned); err != nil {
+			return err
+		}
 	}
 
 	return tx.Commit()
@@ -457,16 +478,19 @@ func (s *NoteStore) handlePinStatusChangeTx(ctx context.Context, tx *sql.Tx, id,
 }
 
 // handlePinningTx stores the current position as unpinned_position and moves the note to the end of the pinned list.
-func (s *NoteStore) handlePinningTx(ctx context.Context, tx *sql.Tx, id, ownerID string, currentNote *Note) error {
+func (s *NoteStore) handlePinningTx(ctx context.Context, tx *sql.Tx, id, userID string, currentNote *Note) error {
 	var maxPosition int
-	posQuery := `SELECT COALESCE(MAX(position), -1) FROM active_notes WHERE user_id = ? AND pinned = TRUE AND archived = FALSE AND id != ?`
-	if err := tx.QueryRowContext(ctx, posQuery, ownerID, id).Scan(&maxPosition); err != nil {
+	posQuery := `SELECT COALESCE(MAX(nus.position), -1)
+	             FROM note_user_state nus
+	             INNER JOIN notes n ON nus.note_id = n.id AND n.deleted_at IS NULL
+	             WHERE nus.user_id = ? AND nus.pinned = TRUE AND nus.archived = FALSE AND nus.note_id != ?`
+	if err := tx.QueryRowContext(ctx, posQuery, userID, id).Scan(&maxPosition); err != nil {
 		return fmt.Errorf("failed to get max position: %w", err)
 	}
 
 	if _, err := tx.ExecContext(ctx,
-		`UPDATE notes SET position = ?, unpinned_position = ? WHERE id = ?`,
-		maxPosition+1, currentNote.Position, id,
+		`UPDATE note_user_state SET position = ?, unpinned_position = ? WHERE note_id = ? AND user_id = ?`,
+		maxPosition+1, currentNote.Position, id, userID,
 	); err != nil {
 		return fmt.Errorf("failed to update position: %w", err)
 	}
@@ -474,7 +498,7 @@ func (s *NoteStore) handlePinningTx(ctx context.Context, tx *sql.Tx, id, ownerID
 }
 
 // handleUnpinningTx restores the note to its saved unpinned_position, or appends it to the end of the unpinned list.
-func (s *NoteStore) handleUnpinningTx(ctx context.Context, tx *sql.Tx, id, ownerID string, currentNote *Note) error {
+func (s *NoteStore) handleUnpinningTx(ctx context.Context, tx *sql.Tx, id, userID string, currentNote *Note) error {
 	var targetPosition int
 
 	if currentNote.UnpinnedPosition != nil {
@@ -482,25 +506,30 @@ func (s *NoteStore) handleUnpinningTx(ctx context.Context, tx *sql.Tx, id, owner
 
 		// Shift other unpinned notes to make room
 		if _, err := tx.ExecContext(ctx,
-			`UPDATE notes SET position = position + 1
-			 WHERE user_id = ? AND pinned = FALSE AND archived = FALSE AND deleted_at IS NULL AND position >= ?`,
-			ownerID, targetPosition,
+			`UPDATE note_user_state SET position = position + 1
+			 WHERE user_id = ? AND pinned = FALSE AND archived = FALSE
+			 AND note_id IN (SELECT id FROM notes WHERE deleted_at IS NULL)
+			 AND note_id != ? AND position >= ?`,
+			userID, id, targetPosition,
 		); err != nil {
 			return fmt.Errorf("failed to shift notes: %w", err)
 		}
 	} else {
 		// No saved position, add to end
 		var maxPosition int
-		posQuery := `SELECT COALESCE(MAX(position), -1) FROM active_notes WHERE user_id = ? AND pinned = FALSE AND archived = FALSE AND id != ?`
-		if err := tx.QueryRowContext(ctx, posQuery, ownerID, id).Scan(&maxPosition); err != nil {
+		posQuery := `SELECT COALESCE(MAX(nus.position), -1)
+		             FROM note_user_state nus
+		             INNER JOIN notes n ON nus.note_id = n.id AND n.deleted_at IS NULL
+		             WHERE nus.user_id = ? AND nus.pinned = FALSE AND nus.archived = FALSE AND nus.note_id != ?`
+		if err := tx.QueryRowContext(ctx, posQuery, userID, id).Scan(&maxPosition); err != nil {
 			return fmt.Errorf("failed to get max position: %w", err)
 		}
 		targetPosition = maxPosition + 1
 	}
 
 	if _, err := tx.ExecContext(ctx,
-		`UPDATE notes SET position = ?, unpinned_position = NULL WHERE id = ?`,
-		targetPosition, id,
+		`UPDATE note_user_state SET position = ?, unpinned_position = NULL WHERE note_id = ? AND user_id = ?`,
+		targetPosition, id, userID,
 	); err != nil {
 		return fmt.Errorf("failed to update position: %w", err)
 	}
@@ -526,6 +555,7 @@ func (s *NoteStore) Delete(ctx context.Context, id string, userID string) error 
 		`DELETE FROM note_items WHERE note_id = ?`,
 		`DELETE FROM note_labels WHERE note_id = ?`,
 		`DELETE FROM note_shares WHERE note_id = ?`,
+		`DELETE FROM note_user_state WHERE note_id = ?`,
 	} {
 		if _, err = tx.ExecContext(ctx, q, id); err != nil {
 			return fmt.Errorf("failed to delete dependent rows: %w", err)
@@ -619,6 +649,7 @@ func deleteNoteDependenciesTx(ctx context.Context, tx *sql.Tx, noteIDs []string)
 		`DELETE FROM note_items WHERE note_id IN (` + placeholders + `)`,
 		`DELETE FROM note_labels WHERE note_id IN (` + placeholders + `)`,
 		`DELETE FROM note_shares WHERE note_id IN (` + placeholders + `)`,
+		`DELETE FROM note_user_state WHERE note_id IN (` + placeholders + `)`,
 	} {
 		if _, err := tx.ExecContext(ctx, q, args...); err != nil {
 			return fmt.Errorf("failed to delete dependent rows: %w", err)
@@ -629,7 +660,7 @@ func deleteNoteDependenciesTx(ctx context.Context, tx *sql.Tx, noteIDs []string)
 }
 
 // MoveToTrash soft-deletes a note by setting deleted_at to the current time.
-// The note is unpinned and unarchived so it doesn't appear in those filtered views.
+// Only the owner can move a note to trash; it disappears from all collaborators' views.
 func (s *NoteStore) MoveToTrash(ctx context.Context, id string, userID string) error {
 	isOwner, err := s.IsOwner(ctx, id, userID)
 	if err != nil {
@@ -639,8 +670,14 @@ func (s *NoteStore) MoveToTrash(ctx context.Context, id string, userID string) e
 		return ErrNoteNotOwnedByUser
 	}
 
-	result, err := s.db.ExecContext(ctx,
-		`UPDATE notes SET deleted_at = CURRENT_TIMESTAMP, pinned = FALSE, archived = FALSE, updated_at = CURRENT_TIMESTAMP
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	result, err := tx.ExecContext(ctx,
+		`UPDATE notes SET deleted_at = CURRENT_TIMESTAMP, updated_at = CURRENT_TIMESTAMP
 		 WHERE id = ? AND user_id = ? AND deleted_at IS NULL`,
 		id, userID,
 	)
@@ -656,6 +693,18 @@ func (s *NoteStore) MoveToTrash(ctx context.Context, id string, userID string) e
 		return ErrNoteNotOwnedByUser
 	}
 
+	// Reset all collaborators' per-user state so the note won't appear pinned/archived on restore.
+	if _, err = tx.ExecContext(ctx,
+		`UPDATE note_user_state SET pinned = FALSE, archived = FALSE, updated_at = CURRENT_TIMESTAMP
+		 WHERE note_id = ?`,
+		id,
+	); err != nil {
+		return fmt.Errorf("failed to reset note user state on trash: %w", err)
+	}
+
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("failed to commit move to trash: %w", err)
+	}
 	return nil
 }
 
@@ -679,7 +728,7 @@ func (s *NoteStore) RestoreFromTrash(ctx context.Context, id string, userID stri
 	// Restore the note first — if it's not actually in the trash we bail out
 	// before shifting any positions.
 	result, err := tx.ExecContext(ctx,
-		`UPDATE notes SET deleted_at = NULL, pinned = FALSE, archived = FALSE, position = 0, updated_at = CURRENT_TIMESTAMP
+		`UPDATE notes SET deleted_at = NULL, updated_at = CURRENT_TIMESTAMP
 		 WHERE id = ? AND user_id = ? AND deleted_at IS NOT NULL`,
 		id, userID,
 	)
@@ -695,10 +744,23 @@ func (s *NoteStore) RestoreFromTrash(ctx context.Context, id string, userID stri
 		return ErrNoteNotInTrash
 	}
 
-	// Shift existing active unpinned notes down to make room at position 0.
-	shiftQuery := `UPDATE notes SET position = position + 1
-	               WHERE user_id = ? AND pinned = FALSE AND archived = FALSE AND deleted_at IS NULL AND id != ?`
-	if _, err = tx.ExecContext(ctx, shiftQuery, userID, id); err != nil {
+	// Reset all collaborators' per-user state so the restored note lands at position 0,
+	// unpinned and unarchived, for every user who has access.
+	if _, err = tx.ExecContext(ctx,
+		`UPDATE note_user_state SET pinned = FALSE, archived = FALSE, position = 0, unpinned_position = NULL, updated_at = CURRENT_TIMESTAMP
+		 WHERE note_id = ?`,
+		id,
+	); err != nil {
+		return fmt.Errorf("failed to reset note user state on restore: %w", err)
+	}
+
+	// Shift each collaborator's existing active unpinned notes down to make room at position 0.
+	shiftQuery := `UPDATE note_user_state SET position = position + 1
+	               WHERE note_id != ?
+	               AND pinned = FALSE AND archived = FALSE
+	               AND note_id IN (SELECT id FROM notes WHERE deleted_at IS NULL)
+	               AND user_id IN (SELECT user_id FROM note_user_state WHERE note_id = ?)`
+	if _, err = tx.ExecContext(ctx, shiftQuery, id, id); err != nil {
 		return fmt.Errorf("failed to shift notes after restore: %w", err)
 	}
 
@@ -821,6 +883,7 @@ func (s *NoteStore) PurgeOldTrashedNotes(ctx context.Context, olderThan time.Dur
 		`DELETE FROM note_items WHERE note_id IN (` + subquery + `)`,
 		`DELETE FROM note_labels WHERE note_id IN (` + subquery + `)`,
 		`DELETE FROM note_shares WHERE note_id IN (` + subquery + `)`,
+		`DELETE FROM note_user_state WHERE note_id IN (` + subquery + `)`,
 	} {
 		if _, err = tx.ExecContext(ctx, q, cutoff); err != nil {
 			return fmt.Errorf("failed to purge dependent rows: %w", err)
@@ -834,13 +897,19 @@ func (s *NoteStore) PurgeOldTrashedNotes(ctx context.Context, olderThan time.Dur
 	return tx.Commit()
 }
 
+func nullableAssignedTo(s string) sql.NullString {
+	return sql.NullString{String: s, Valid: s != ""}
+}
+
 func scanNoteItem(rows *sql.Rows) (NoteItem, error) {
 	var item NoteItem
+	var assignedTo sql.NullString
 	err := rows.Scan(
 		&item.ID, &item.NoteID, &item.Text, &item.Completed,
-		&item.Position, &item.IndentLevel, &item.AssignedTo,
+		&item.Position, &item.IndentLevel, &assignedTo,
 		&item.CreatedAt, &item.UpdatedAt,
 	)
+	item.AssignedTo = assignedTo.String
 	return item, err
 }
 
@@ -871,7 +940,9 @@ func (s *NoteStore) CreateItem(ctx context.Context, noteID string, text string, 
 			  VALUES (?, ?, ?, ?, ?, ?) RETURNING completed, created_at, updated_at`
 
 	var item NoteItem
-	err = s.db.QueryRowContext(ctx, query, itemID, noteID, text, position, indentLevel, assignedTo).Scan(
+	err = s.db.QueryRowContext(ctx, query, itemID, noteID, text, position, indentLevel,
+		nullableAssignedTo(assignedTo),
+	).Scan(
 		&item.Completed, &item.CreatedAt, &item.UpdatedAt,
 	)
 	if err != nil {
@@ -929,7 +1000,9 @@ func (s *NoteStore) CreateItemWithCompleted(ctx context.Context, noteID string, 
 	query := `INSERT INTO note_items (id, note_id, text, position, completed, indent_level, assigned_to)
 			  VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING created_at, updated_at`
 	var item NoteItem
-	err = s.db.QueryRowContext(ctx, query, itemID, noteID, text, position, completed, indentLevel, assignedTo).Scan(
+	err = s.db.QueryRowContext(ctx, query, itemID, noteID, text, position, completed, indentLevel,
+		nullableAssignedTo(assignedTo),
+	).Scan(
 		&item.CreatedAt, &item.UpdatedAt,
 	)
 	if err != nil {
@@ -948,30 +1021,19 @@ func (s *NoteStore) CreateItemWithCompleted(ctx context.Context, noteID string, 
 }
 
 func (s *NoteStore) HasAccess(ctx context.Context, noteID string, userID string) (bool, error) {
-	query := `SELECT COUNT(*) FROM active_notes WHERE id = ? AND user_id = ?
-			  UNION ALL
-			  SELECT COUNT(*) FROM note_shares WHERE note_id = ? AND shared_with_user_id = ?
-			    AND EXISTS (SELECT 1 FROM active_notes WHERE id = note_shares.note_id)`
-
-	rows, err := s.db.QueryContext(ctx, query, noteID, userID, noteID, userID)
+	// Use the same predicate as GetByID: a note_user_state row exists for both
+	// owners and collaborators, so this is a single consistent access check.
+	var count int
+	err := s.db.QueryRowContext(ctx,
+		`SELECT COUNT(*) FROM note_user_state nus
+		 INNER JOIN active_notes n ON n.id = nus.note_id
+		 WHERE nus.note_id = ? AND nus.user_id = ?`,
+		noteID, userID,
+	).Scan(&count)
 	if err != nil {
 		return false, fmt.Errorf("failed to check access: %w", err)
 	}
-
-	scanInt := func(rows *sql.Rows) (int, error) {
-		var v int
-		return v, rows.Scan(&v)
-	}
-	counts, err := collectRows(rows, scanInt)
-	if err != nil {
-		return false, fmt.Errorf("failed to scan access counts: %w", err)
-	}
-
-	totalCount := 0
-	for _, c := range counts {
-		totalCount += c
-	}
-	return totalCount > 0, nil
+	return count > 0, nil
 }
 
 func (s *NoteStore) IsOwner(ctx context.Context, noteID string, userID string) (bool, error) {
@@ -1015,10 +1077,13 @@ func (s *NoteStore) ReorderNotes(ctx context.Context, userID string, noteIDs []s
 		}
 	}()
 
-	// Update positions for each note, enforcing ownership within the transaction.
+	// Update positions in note_user_state, enforcing access via the state row's user_id.
 	for i, noteID := range noteIDs {
 		var result sql.Result
-		result, err = tx.ExecContext(ctx, "UPDATE notes SET position = ? WHERE id = ? AND user_id = ?", i, noteID, userID)
+		result, err = tx.ExecContext(ctx,
+			"UPDATE note_user_state SET position = ? WHERE note_id = ? AND user_id = ?",
+			i, noteID, userID,
+		)
 		if err != nil {
 			return fmt.Errorf("failed to update position for note %s: %w", noteID, err)
 		}
@@ -1065,14 +1130,14 @@ func (s *NoteStore) GetNoteAudienceIDs(ctx context.Context, noteID string) ([]st
 	return ids, nil
 }
 
-// GetNoteLabels returns all labels attached to a note.
-func (s *NoteStore) GetNoteLabels(ctx context.Context, noteID string) ([]Label, error) {
+// GetNoteLabels returns labels attached to a note by a specific user.
+func (s *NoteStore) GetNoteLabels(ctx context.Context, noteID string, userID string) ([]Label, error) {
 	query := `SELECT l.id, l.user_id, l.name, l.created_at, l.updated_at
 			  FROM labels l
 			  JOIN note_labels nl ON l.id = nl.label_id
-			  WHERE nl.note_id = ?
+			  WHERE nl.note_id = ? AND nl.user_id = ?
 			  ORDER BY l.name ASC`
-	rows, err := s.db.QueryContext(ctx, query, noteID)
+	rows, err := s.db.QueryContext(ctx, query, noteID, userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get note labels: %w", err)
 	}
@@ -1087,22 +1152,23 @@ func (s *NoteStore) GetNoteLabels(ctx context.Context, noteID string) ([]Label, 
 	return labels, nil
 }
 
-// getLabelsByNoteIDs batch-loads labels for a set of note IDs, returning a map of noteID -> []Label.
-func (s *NoteStore) getLabelsByNoteIDs(ctx context.Context, noteIDs []string) (map[string][]Label, error) {
+// getLabelsByNoteIDs batch-loads labels for a set of note IDs for a specific user, returning a map of noteID -> []Label.
+func (s *NoteStore) getLabelsByNoteIDs(ctx context.Context, noteIDs []string, userID string) (map[string][]Label, error) {
 	if len(noteIDs) == 0 {
 		return map[string][]Label{}, nil
 	}
 
 	placeholders := slices.Repeat([]string{"?"}, len(noteIDs))
-	args := make([]any, len(noteIDs))
-	for i, id := range noteIDs {
-		args[i] = id
+	args := make([]any, 0, len(noteIDs)+1)
+	for _, id := range noteIDs {
+		args = append(args, id)
 	}
+	args = append(args, userID)
 
 	query := `SELECT nl.note_id, l.id, l.user_id, l.name, l.created_at, l.updated_at
 			  FROM labels l
 			  JOIN note_labels nl ON l.id = nl.label_id
-			  WHERE nl.note_id IN (` + strings.Join(placeholders, ",") + `)
+			  WHERE nl.note_id IN (` + strings.Join(placeholders, ",") + `) AND nl.user_id = ?
 			  ORDER BY nl.note_id, l.name ASC` // #nosec G202 -- only "?" placeholders are joined, no user input
 
 	rows, err := s.db.QueryContext(ctx, query, args...)
@@ -1146,8 +1212,8 @@ func (s *NoteStore) AddLabelToNote(ctx context.Context, noteID, labelID, userID 
 		return fmt.Errorf("failed to generate note_label ID: %w", err)
 	}
 	_, err = s.db.ExecContext(ctx,
-		`INSERT OR IGNORE INTO note_labels (id, note_id, label_id) VALUES (?, ?, ?)`,
-		id, noteID, labelID,
+		`INSERT OR IGNORE INTO note_labels (id, note_id, label_id, user_id) VALUES (?, ?, ?, ?)`,
+		id, noteID, labelID, userID,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to add label to note: %w", err)
@@ -1166,8 +1232,8 @@ func (s *NoteStore) RemoveLabelFromNote(ctx context.Context, noteID, labelID, us
 	}
 
 	_, err = s.db.ExecContext(ctx,
-		`DELETE FROM note_labels WHERE note_id = ? AND label_id = ?`,
-		noteID, labelID,
+		`DELETE FROM note_labels WHERE note_id = ? AND label_id = ? AND user_id = ?`,
+		noteID, labelID, userID,
 	)
 	if err != nil {
 		return fmt.Errorf("failed to remove label from note: %w", err)

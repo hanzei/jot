@@ -160,6 +160,209 @@ func TestSearchUsersEndpoint(t *testing.T) {
 	})
 }
 
+// TestPerUserNoteState verifies that per-user fields (color, pinned, archived, labels)
+// are isolated per collaborator while shared fields (title, content, items) are visible to all.
+func TestPerUserNoteState(t *testing.T) {
+	t.Run("collaborator color change does not affect owner", func(t *testing.T) {
+		ts := setupTestServer(t)
+		owner := ts.createTestUser(t, "owner", "password123", false)
+		collab := ts.createTestUser(t, "collab", "password123", false)
+
+		note, err := owner.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
+			Title: "Shared Note",
+			Color: "#ff0000",
+		})
+		require.NoError(t, err)
+		require.NoError(t, owner.Client.ShareNote(t.Context(), note.ID, collab.User.ID))
+
+		_, err = collab.Client.UpdateNote(t.Context(), note.ID, &client.UpdateNoteRequest{
+			Color: client.Ptr("#0000ff"),
+		})
+		require.NoError(t, err)
+
+		ownerNote, err := owner.Client.GetNote(t.Context(), note.ID)
+		require.NoError(t, err)
+		assert.Equal(t, "#ff0000", ownerNote.Color, "owner color should be unchanged")
+
+		collabNote, err := collab.Client.GetNote(t.Context(), note.ID)
+		require.NoError(t, err)
+		assert.Equal(t, "#0000ff", collabNote.Color, "collaborator should see their own color")
+	})
+
+	t.Run("collaborator archive does not affect owner", func(t *testing.T) {
+		ts := setupTestServer(t)
+		owner := ts.createTestUser(t, "owner", "password123", false)
+		collab := ts.createTestUser(t, "collab", "password123", false)
+
+		note, err := owner.Client.CreateNote(t.Context(), &client.CreateNoteRequest{Title: "Shared Note"})
+		require.NoError(t, err)
+		require.NoError(t, owner.Client.ShareNote(t.Context(), note.ID, collab.User.ID))
+
+		_, err = collab.Client.UpdateNote(t.Context(), note.ID, &client.UpdateNoteRequest{
+			Archived: client.Ptr(true),
+		})
+		require.NoError(t, err)
+
+		ownerNotes, err := owner.Client.ListNotes(t.Context(), nil)
+		require.NoError(t, err)
+		ids := make([]string, len(ownerNotes))
+		for i, n := range ownerNotes {
+			ids[i] = n.ID
+		}
+		assert.Contains(t, ids, note.ID, "owner should still see note in active list")
+
+		collabNotes, err := collab.Client.ListNotes(t.Context(), nil)
+		require.NoError(t, err)
+		for _, n := range collabNotes {
+			assert.NotEqual(t, note.ID, n.ID, "collaborator should not see archived note in active list")
+		}
+	})
+
+	t.Run("collaborator pin does not affect owner", func(t *testing.T) {
+		ts := setupTestServer(t)
+		owner := ts.createTestUser(t, "owner", "password123", false)
+		collab := ts.createTestUser(t, "collab", "password123", false)
+
+		note, err := owner.Client.CreateNote(t.Context(), &client.CreateNoteRequest{Title: "Shared Note"})
+		require.NoError(t, err)
+		require.NoError(t, owner.Client.ShareNote(t.Context(), note.ID, collab.User.ID))
+
+		_, err = collab.Client.UpdateNote(t.Context(), note.ID, &client.UpdateNoteRequest{
+			Pinned: client.Ptr(true),
+		})
+		require.NoError(t, err)
+
+		ownerNote, err := owner.Client.GetNote(t.Context(), note.ID)
+		require.NoError(t, err)
+		assert.False(t, ownerNote.Pinned, "owner should not see the note as pinned")
+
+		collabNote, err := collab.Client.GetNote(t.Context(), note.ID)
+		require.NoError(t, err)
+		assert.True(t, collabNote.Pinned, "collaborator should see the note as pinned")
+	})
+
+	t.Run("labels applied by collaborator are only visible to that collaborator", func(t *testing.T) {
+		ts := setupTestServer(t)
+		owner := ts.createTestUser(t, "owner", "password123", false)
+		collab := ts.createTestUser(t, "collab", "password123", false)
+
+		note, err := owner.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
+			Title:  "Shared Note",
+			Labels: []string{"owner-label"},
+		})
+		require.NoError(t, err)
+		require.NoError(t, owner.Client.ShareNote(t.Context(), note.ID, collab.User.ID))
+
+		_, err = collab.Client.AddLabel(t.Context(), note.ID, "collab-label")
+		require.NoError(t, err)
+
+		ownerNote, err := owner.Client.GetNote(t.Context(), note.ID)
+		require.NoError(t, err)
+		require.Len(t, ownerNote.Labels, 1)
+		assert.Equal(t, "owner-label", ownerNote.Labels[0].Name)
+
+		collabNote, err := collab.Client.GetNote(t.Context(), note.ID)
+		require.NoError(t, err)
+		require.Len(t, collabNote.Labels, 1)
+		assert.Equal(t, "collab-label", collabNote.Labels[0].Name)
+	})
+
+	t.Run("shared fields title and content are visible to all collaborators", func(t *testing.T) {
+		ts := setupTestServer(t)
+		owner := ts.createTestUser(t, "owner", "password123", false)
+		collab := ts.createTestUser(t, "collab", "password123", false)
+
+		note, err := owner.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
+			Title:   "Original Title",
+			Content: "Original Content",
+		})
+		require.NoError(t, err)
+		require.NoError(t, owner.Client.ShareNote(t.Context(), note.ID, collab.User.ID))
+
+		_, err = collab.Client.UpdateNote(t.Context(), note.ID, &client.UpdateNoteRequest{
+			Title:   client.Ptr("Updated Title"),
+			Content: client.Ptr("Updated Content"),
+		})
+		require.NoError(t, err)
+
+		ownerNote, err := owner.Client.GetNote(t.Context(), note.ID)
+		require.NoError(t, err)
+		assert.Equal(t, "Updated Title", ownerNote.Title)
+		assert.Equal(t, "Updated Content", ownerNote.Content)
+	})
+
+	t.Run("collaborator can reorder notes independently from owner", func(t *testing.T) {
+		ts := setupTestServer(t)
+		owner := ts.createTestUser(t, "owner", "password123", false)
+		collab := ts.createTestUser(t, "collab", "password123", false)
+
+		noteA, err := owner.Client.CreateNote(t.Context(), &client.CreateNoteRequest{Title: "Note A"})
+		require.NoError(t, err)
+		noteB, err := owner.Client.CreateNote(t.Context(), &client.CreateNoteRequest{Title: "Note B"})
+		require.NoError(t, err)
+		require.NoError(t, owner.Client.ShareNote(t.Context(), noteA.ID, collab.User.ID))
+		require.NoError(t, owner.Client.ShareNote(t.Context(), noteB.ID, collab.User.ID))
+
+		// Collaborator reorders: noteB before noteA.
+		err = collab.Client.ReorderNotes(t.Context(), []string{noteB.ID, noteA.ID})
+		require.NoError(t, err)
+
+		collabNotes, err := collab.Client.ListNotes(t.Context(), nil)
+		require.NoError(t, err)
+		require.GreaterOrEqual(t, len(collabNotes), 2)
+		collabIDs := make([]string, 0, 2)
+		for _, n := range collabNotes {
+			if n.ID == noteA.ID || n.ID == noteB.ID {
+				collabIDs = append(collabIDs, n.ID)
+			}
+		}
+		require.Len(t, collabIDs, 2)
+		assert.Equal(t, noteB.ID, collabIDs[0], "collaborator should see noteB first")
+		assert.Equal(t, noteA.ID, collabIDs[1], "collaborator should see noteA second")
+
+		ownerNotes, err := owner.Client.ListNotes(t.Context(), nil)
+		require.NoError(t, err)
+		ownerIDs := make([]string, 0, 2)
+		for _, n := range ownerNotes {
+			if n.ID == noteA.ID || n.ID == noteB.ID {
+				ownerIDs = append(ownerIDs, n.ID)
+			}
+		}
+		require.Len(t, ownerIDs, 2)
+		assert.Equal(t, noteB.ID, ownerIDs[0], "owner's order is unchanged: noteB was created second and shifted noteA to position 1, so noteB appears first")
+	})
+
+	t.Run("unshare cleans up collaborator state so re-share starts fresh", func(t *testing.T) {
+		ts := setupTestServer(t)
+		owner := ts.createTestUser(t, "owner", "password123", false)
+		collab := ts.createTestUser(t, "collab", "password123", false)
+
+		note, err := owner.Client.CreateNote(t.Context(), &client.CreateNoteRequest{Title: "Shared Note"})
+		require.NoError(t, err)
+		require.NoError(t, owner.Client.ShareNote(t.Context(), note.ID, collab.User.ID))
+
+		_, err = collab.Client.UpdateNote(t.Context(), note.ID, &client.UpdateNoteRequest{
+			Color: client.Ptr("#ff0000"),
+		})
+		require.NoError(t, err)
+		_, err = collab.Client.AddLabel(t.Context(), note.ID, "collab-label")
+		require.NoError(t, err)
+
+		collabNote, err := collab.Client.GetNote(t.Context(), note.ID)
+		require.NoError(t, err)
+		assert.Equal(t, "#ff0000", collabNote.Color)
+		require.Len(t, collabNote.Labels, 1)
+
+		require.NoError(t, owner.Client.UnshareNote(t.Context(), note.ID, collab.User.ID))
+		require.NoError(t, owner.Client.ShareNote(t.Context(), note.ID, collab.User.ID))
+
+		collabNote, err = collab.Client.GetNote(t.Context(), note.ID)
+		require.NoError(t, err)
+		assert.Equal(t, "#ffffff", collabNote.Color, "color should reset to default after re-share")
+		assert.Empty(t, collabNote.Labels, "labels should be cleared after re-share")
+	})
+}
+
 func TestEdgeCases(t *testing.T) {
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "user", "password123", false)
