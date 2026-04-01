@@ -362,15 +362,20 @@ export default function NoteEditorScreen() {
       if (!kascv) return;
       const focusedInput = TextInput.State.currentlyFocusedInput?.();
       if (!focusedInput) return;
-      // eslint-disable-next-line @typescript-eslint/no-explicit-any
-      (focusedInput as any).measureInWindow((_x: number, pageY: number, _w: number, h: number) => {
-        const keyboardTop = e.endCoordinates.screenY;
-        const MARGIN = 24;
-        const inputBottom = pageY + h;
-        if (inputBottom > keyboardTop - MARGIN) {
-          kascv.scrollToPosition(0, scrollOffsetRef.current + (inputBottom - keyboardTop + MARGIN), true);
-        }
-      });
+      // Delay until after KeyboardAwareScrollView's setState re-render adds
+      // paddingBottom on Android — without this the content isn't yet tall
+      // enough to scroll to the target position and the scroll is clamped to 0.
+      setTimeout(() => {
+        // eslint-disable-next-line @typescript-eslint/no-explicit-any
+        (focusedInput as any).measureInWindow((_x: number, pageY: number, _w: number, h: number) => {
+          const keyboardTop = e.endCoordinates.screenY;
+          const MARGIN = 24;
+          const inputBottom = pageY + h;
+          if (inputBottom > keyboardTop - MARGIN) {
+            kascv.scrollToPosition(0, scrollOffsetRef.current + (inputBottom - keyboardTop + MARGIN), true);
+          }
+        });
+      }, 50);
     });
     return () => sub.remove();
   }, []);
