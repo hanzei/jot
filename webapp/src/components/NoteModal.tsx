@@ -680,13 +680,17 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
 
   const addTodoItem = () => {
     const currentItems = itemsRef.current;
-    const uncompletedCount = currentItems.filter(item => !item.completed).length;
+    const uncompletedItems = currentItems.filter(item => !item.completed);
+    const lastUncompletedItem = uncompletedItems[uncompletedItems.length - 1];
+    const indentLevel = lastUncompletedItem
+      ? Math.max(0, Math.min(MAX_INDENT, lastUncompletedItem.indentLevel))
+      : 0;
     const newItem: TodoItem = {
       id: generateItemId(),
       text: '',
       completed: false,
-      position: uncompletedCount,
-      indentLevel: 0,
+      position: uncompletedItems.length,
+      indentLevel,
       assignedTo: '',
     };
     const newItems = [...currentItems, newItem];
