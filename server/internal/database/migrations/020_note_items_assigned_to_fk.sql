@@ -13,10 +13,11 @@ CREATE TABLE note_items_new (
 );
 
 INSERT INTO note_items_new
-    SELECT id, note_id, text, completed, position, indent_level,
-           NULLIF(assigned_to, ''),
-           created_at, updated_at
-    FROM note_items;
+    SELECT ni.id, ni.note_id, ni.text, ni.completed, ni.position, ni.indent_level,
+           u.id,
+           ni.created_at, ni.updated_at
+    FROM note_items ni
+    LEFT JOIN users u ON u.id = NULLIF(ni.assigned_to, '');
 
 DROP TABLE note_items;
 ALTER TABLE note_items_new RENAME TO note_items;

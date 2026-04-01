@@ -161,7 +161,7 @@ func duplicateItemsTx(ctx context.Context, tx *sql.Tx, noteID string, items []No
 		if _, err = tx.ExecContext(ctx,
 			`INSERT INTO note_items (id, note_id, text, completed, position, indent_level, assigned_to)
 			 VALUES (?, ?, ?, ?, ?, ?, ?)`,
-			itemID, noteID, item.Text, item.Completed, item.Position, item.IndentLevel, sql.NullString{},
+			itemID, noteID, item.Text, item.Completed, item.Position, item.IndentLevel, nullableAssignedTo(""),
 		); err != nil {
 			return fmt.Errorf("failed to duplicate note item: %w", err)
 		}
@@ -897,6 +897,10 @@ func (s *NoteStore) PurgeOldTrashedNotes(ctx context.Context, olderThan time.Dur
 	return tx.Commit()
 }
 
+func nullableAssignedTo(s string) sql.NullString {
+	return sql.NullString{String: s, Valid: s != ""}
+}
+
 func scanNoteItem(rows *sql.Rows) (NoteItem, error) {
 	var item NoteItem
 	var assignedTo sql.NullString
@@ -937,7 +941,7 @@ func (s *NoteStore) CreateItem(ctx context.Context, noteID string, text string, 
 
 	var item NoteItem
 	err = s.db.QueryRowContext(ctx, query, itemID, noteID, text, position, indentLevel,
-		sql.NullString{String: assignedTo, Valid: assignedTo != ""},
+		nullableAssignedTo(assignedTo),
 	).Scan(
 		&item.Completed, &item.CreatedAt, &item.UpdatedAt,
 	)
@@ -997,7 +1001,7 @@ func (s *NoteStore) CreateItemWithCompleted(ctx context.Context, noteID string, 
 			  VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING created_at, updated_at`
 	var item NoteItem
 	err = s.db.QueryRowContext(ctx, query, itemID, noteID, text, position, completed, indentLevel,
-		sql.NullString{String: assignedTo, Valid: assignedTo != ""},
+		nullableAssignedTo(assignedTo),
 	).Scan(
 		&item.CreatedAt, &item.UpdatedAt,
 	)
