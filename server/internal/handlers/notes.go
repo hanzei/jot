@@ -236,6 +236,7 @@ func (h *NotesHandler) GetNotes(w http.ResponseWriter, r *http.Request) (int, an
 //	@Success	201		{object}	models.Note
 //	@Failure	400		{string}	string	"bad request"
 //	@Failure	401		{string}	string	"unauthorized"
+//	@Failure	404		{string}	string	"label not found"
 //	@Failure	500		{string}	string	"internal server error"
 //	@Router		/notes [post]
 func (h *NotesHandler) CreateNote(w http.ResponseWriter, r *http.Request) (int, any, error) {

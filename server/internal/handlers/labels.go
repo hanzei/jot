@@ -150,6 +150,7 @@ func (h *LabelsHandler) RenameLabel(w http.ResponseWriter, r *http.Request) (int
 //	@Failure	400		{string}	string	"bad request"
 //	@Failure	401		{string}	string	"unauthorized"
 //	@Failure	403		{string}	string	"no access to note"
+//	@Failure	404		{string}	string	"label not found"
 //	@Failure	500		{string}	string	"internal server error"
 //	@Router		/notes/{id}/labels [post]
 func (h *LabelsHandler) AddLabel(w http.ResponseWriter, r *http.Request) (int, any, error) {

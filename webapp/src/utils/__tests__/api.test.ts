@@ -510,24 +510,20 @@ describe('API Module', () => {
     describe('sharing functionality', () => {
       it('shares note with user', async () => {
         const shareData: ShareNoteRequest = { user_id: 'abcdefghijklmnopqrstuv' }
-        const shareResponse = { success: true, message: 'Note shared' }
-        mockPost.mockResolvedValue({ data: shareResponse })
+        mockPost.mockResolvedValue({})
 
-        const result = await notes.share('1', shareData)
+        await notes.share('1', shareData)
 
         expect(mockPost).toHaveBeenCalledWith('/notes/1/share', shareData)
-        expect(result).toEqual(shareResponse)
       })
 
       it('unshares note', async () => {
         const unshareUserId = 'abcdefghijklmnopqrstuv'
-        const unshareResponse = { success: true, message: 'Note unshared' }
-        mockDelete.mockResolvedValue({ data: unshareResponse })
+        mockDelete.mockResolvedValue({})
 
-        const result = await notes.unshare('1', unshareUserId)
+        await notes.unshare('1', unshareUserId)
 
         expect(mockDelete).toHaveBeenCalledWith('/notes/1/shares/abcdefghijklmnopqrstuv')
-        expect(result).toEqual(unshareResponse)
       })
 
       it('gets note shares', async () => {
@@ -740,7 +736,7 @@ describe('API Module', () => {
         const newUser: CreateUserRequest = {
           username: 'newuser',
           password: 'password123',
-          role: 'invalidrole'
+          role: 'invalidrole' as unknown as CreateUserRequest['role']
         }
 
         await expect(admin.createUser(newUser)).rejects.toThrow('Invalid role')
