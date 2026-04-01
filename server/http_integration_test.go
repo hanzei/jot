@@ -23,10 +23,22 @@ import (
 	"github.com/hanzei/jot/server/internal/config"
 	"github.com/hanzei/jot/server/internal/models"
 	"github.com/hanzei/jot/server/internal/server"
+	"github.com/sirupsen/logrus"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/bcrypt"
 )
+
+// testLogWriter forwards logrus output to t.Log() so logs are hidden on success
+// and visible on test failure or when running with -v.
+type testLogWriter struct {
+	t *testing.T
+}
+
+func (w *testLogWriter) Write(p []byte) (n int, err error) {
+	w.t.Log(strings.TrimRight(string(p), "\n"))
+	return len(p), nil
+}
 
 // TestUser bundles a user model with a typed API client.
 type TestUser struct {
@@ -58,6 +70,9 @@ func setupTestServer(t *testing.T) *TestServer {
 
 func setupTestServerWithConfig(t *testing.T, customize func(*config.Config)) *TestServer {
 	t.Helper()
+
+	logrus.SetOutput(&testLogWriter{t: t})
+	t.Cleanup(func() { logrus.SetOutput(os.Stderr) })
 
 	tmpDir := t.TempDir()
 	require.NoError(t, os.WriteFile(tmpDir+"/index.html", []byte("<html><body>jot test app</body></html>"), 0o600))
