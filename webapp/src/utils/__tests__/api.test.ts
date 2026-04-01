@@ -736,7 +736,7 @@ describe('API Module', () => {
         const newUser: CreateUserRequest = {
           username: 'newuser',
           password: 'password123',
-          role: 'invalidrole'
+          role: 'invalidrole' as unknown as CreateUserRequest['role']
         }
 
         await expect(admin.createUser(newUser)).rejects.toThrow('Invalid role')
