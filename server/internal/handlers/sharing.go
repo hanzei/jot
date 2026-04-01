@@ -15,27 +15,21 @@ type ShareNoteRequest struct {
 	UserID string `json:"user_id"`
 }
 
-type ShareNoteResponse struct {
-	Success bool   `json:"success"`
-	Message string `json:"message"`
-}
-
 // ShareNote godoc
 //
 //	@Summary	Share a note with another user
 //	@Tags		sharing
 //	@Security	CookieAuth
 //	@Accept		json
-//	@Produce	json
-//	@Param		id		path		string				true	"Note ID"
-//	@Param		body	body		ShareNoteRequest	true	"User ID to share with"
-//	@Success	200		{object}	ShareNoteResponse
-//	@Failure	400		{string}	string	"bad request"
-//	@Failure	401		{string}	string	"unauthorized"
-//	@Failure	403		{string}	string	"not owner"
-//	@Failure	404		{string}	string	"not found"
-//	@Failure	409		{string}	string	"already shared"
-//	@Failure	500		{string}	string	"internal server error"
+//	@Param		id		path	string				true	"Note ID"
+//	@Param		body	body	ShareNoteRequest	true	"User ID to share with"
+//	@Success	204
+//	@Failure	400	{string}	string	"bad request"
+//	@Failure	401	{string}	string	"unauthorized"
+//	@Failure	403	{string}	string	"not owner"
+//	@Failure	404	{string}	string	"not found"
+//	@Failure	409	{string}	string	"already shared"
+//	@Failure	500	{string}	string	"internal server error"
 //	@Router		/notes/{id}/share [post]
 func (h *NotesHandler) ShareNote(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
@@ -87,17 +81,12 @@ func (h *NotesHandler) ShareNote(w http.ResponseWriter, r *http.Request) (int, a
 		return http.StatusInternalServerError, nil, err
 	}
 
-	resp := ShareNoteResponse{
-		Success: true,
-		Message: "Note shared successfully",
-	}
-
 	// Fetch the note to include in the SSE payload; audience now includes the new target.
 	if sharedNote, err := h.noteStore.GetByID(r.Context(), id, user.ID); err == nil {
 		h.publishNoteEvent(r.Context(), id, sse.EventNoteShared, sharedNote, user.ID)
 	}
 
-	return http.StatusOK, resp, nil
+	return http.StatusNoContent, nil, nil
 }
 
 // UnshareNote godoc
@@ -105,15 +94,14 @@ func (h *NotesHandler) ShareNote(w http.ResponseWriter, r *http.Request) (int, a
 //	@Summary	Remove a share from a note
 //	@Tags		sharing
 //	@Security	CookieAuth
-//	@Produce	json
-//	@Param		id		path		string	true	"Note ID"
-//	@Param		user_id	path		string	true	"User ID to unshare with"
-//	@Success	200		{object}	ShareNoteResponse
-//	@Failure	400		{string}	string	"bad request"
-//	@Failure	401		{string}	string	"unauthorized"
-//	@Failure	403		{string}	string	"not owner"
-//	@Failure	404		{string}	string	"not found"
-//	@Failure	500		{string}	string	"internal server error"
+//	@Param		id		path	string	true	"Note ID"
+//	@Param		user_id	path	string	true	"User ID to unshare with"
+//	@Success	204
+//	@Failure	400	{string}	string	"bad request"
+//	@Failure	401	{string}	string	"unauthorized"
+//	@Failure	403	{string}	string	"not owner"
+//	@Failure	404	{string}	string	"not found"
+//	@Failure	500	{string}	string	"internal server error"
 //	@Router		/notes/{id}/shares/{user_id} [delete]
 func (h *NotesHandler) UnshareNote(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
@@ -167,10 +155,7 @@ func (h *NotesHandler) UnshareNote(w http.ResponseWriter, r *http.Request) (int,
 		})
 	}
 
-	return http.StatusOK, ShareNoteResponse{
-		Success: true,
-		Message: "Note unshared successfully",
-	}, nil
+	return http.StatusNoContent, nil, nil
 }
 
 // GetNoteShares godoc

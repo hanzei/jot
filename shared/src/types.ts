@@ -9,12 +9,14 @@ export interface AboutInfo {
   go_version?: string;
 }
 
+export type UserRole = 'user' | 'admin';
+
 export interface User {
   id: string;
   username: string;
   first_name: string;
   last_name: string;
-  role: string;
+  role: UserRole;
   has_profile_icon: boolean;
   created_at: string;
   updated_at: string;
@@ -134,7 +136,7 @@ export interface UpdateNoteRequest {
 export interface CreateUserRequest {
   username: string;
   password: string;
-  role: string;
+  role: UserRole;
 }
 
 export interface UserListResponse {
@@ -200,11 +202,6 @@ export interface ShareNoteRequest {
   user_id: string;
 }
 
-export interface ShareNoteResponse {
-  success: boolean;
-  message: string;
-}
-
 export interface ImportResponse {
   imported: number;
   skipped: number;
@@ -216,7 +213,7 @@ export interface EmptyTrashResponse {
 }
 
 export interface UpdateUserRoleRequest {
-  role: string;
+  role: UserRole;
 }
 
 export interface ActiveSession {
