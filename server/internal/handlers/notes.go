@@ -168,6 +168,9 @@ func (h *NotesHandler) createNoteLabels(ctx context.Context, noteID, userID stri
 			return http.StatusInternalServerError, fmt.Errorf("get or create label: %w", err)
 		}
 		if err = h.noteStore.AddLabelToNote(ctx, noteID, label.ID, userID); err != nil {
+			if errors.Is(err, models.ErrLabelNotFoundOrNotOwned) {
+				return http.StatusNotFound, fmt.Errorf("label not found: %w", err)
+			}
 			return http.StatusInternalServerError, fmt.Errorf("add label to note: %w", err)
 		}
 	}
