@@ -124,6 +124,7 @@ func New(cfg *config.Config) (*Server, error) {
 func (s *Server) setupRoutes() error {
 	s.router.Use(logrusRequestLogger)
 	s.router.Use(middleware.Recoverer)
+	s.router.Use(securityHeaders(s.cfg.CookieSecure))
 	s.router.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{s.cfg.CORSAllowedOrigin},
 		AllowedMethods:   []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodOptions},
@@ -132,7 +133,6 @@ func (s *Server) setupRoutes() error {
 		AllowCredentials: true,
 		MaxAge:           300,
 	}))
-	s.router.Use(securityHeaders(s.cfg.CookieSecure))
 
 	s.router.Get("/livez", s.handleLive)
 	s.router.Get("/readyz", s.handleReady)
