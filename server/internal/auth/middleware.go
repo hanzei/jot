@@ -24,7 +24,7 @@ func (s *SessionService) AuthMiddleware(next http.Handler) http.Handler {
 			logutil.FromContext(r.Context()).WithError(err).Warn("failed to renew session")
 		}
 
-		logutil.FromContext(r.Context()).WithField("user_id", user.ID)
+		logutil.FromContext(r.Context()).AddField("user_id", user.ID)
 
 		ctx := context.WithValue(r.Context(), UserContextKey, user)
 		ctx = context.WithValue(ctx, SessionTokenContextKey, session.Token)

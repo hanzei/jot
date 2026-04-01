@@ -419,8 +419,7 @@ func requestLoggerMiddleware(next http.Handler) http.Handler {
 		rl.WithFields(logrus.Fields{
 			"status":   ww.Status(),
 			"duration": time.Since(start).String(),
-		})
-		rl.Info("request completed")
+		}).Info("request completed")
 	})
 }
 

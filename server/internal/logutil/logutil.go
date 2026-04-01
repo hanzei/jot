@@ -8,9 +8,11 @@ import (
 
 type contextKey struct{}
 
-// RequestLogger is a mutable logger holder stored in request context.
-// Storing it as a pointer means inner middleware can enrich it and the
-// outer request-logger middleware sees the updated entry after next returns.
+// RequestLogger holds a logrus entry that is stored in request context.
+// AddField permanently enriches the shared logger (used by middleware to attach
+// request-scoped metadata such as user_id). WithField/WithFields/WithError return
+// derived loggers without mutating the shared entry, so per-call fields like
+// error and status_code do not leak into the final "request completed" log line.
 type RequestLogger struct {
 	entry *logrus.Entry
 }
@@ -20,22 +22,29 @@ func NewRequestLogger(entry *logrus.Entry) *RequestLogger {
 	return &RequestLogger{entry: entry}
 }
 
-// WithField enriches the logger in-place and returns rl for chaining.
-func (rl *RequestLogger) WithField(key string, value any) *RequestLogger {
+// AddField permanently enriches the shared logger in-place.
+// Use this in middleware to attach request-scoped metadata (e.g. user_id)
+// that should appear on every subsequent log line for this request.
+func (rl *RequestLogger) AddField(key string, value any) {
 	rl.entry = rl.entry.WithField(key, value)
-	return rl
 }
 
-// WithFields enriches the logger in-place and returns rl for chaining.
+// WithField returns a derived logger with the given field added.
+// The shared logger is not mutated.
+func (rl *RequestLogger) WithField(key string, value any) *RequestLogger {
+	return &RequestLogger{entry: rl.entry.WithField(key, value)}
+}
+
+// WithFields returns a derived logger with the given fields added.
+// The shared logger is not mutated.
 func (rl *RequestLogger) WithFields(fields logrus.Fields) *RequestLogger {
-	rl.entry = rl.entry.WithFields(fields)
-	return rl
+	return &RequestLogger{entry: rl.entry.WithFields(fields)}
 }
 
-// WithError enriches the logger in-place and returns rl for chaining.
+// WithError returns a derived logger with the error field added.
+// The shared logger is not mutated.
 func (rl *RequestLogger) WithError(err error) *RequestLogger {
-	rl.entry = rl.entry.WithError(err)
-	return rl
+	return &RequestLogger{entry: rl.entry.WithError(err)}
 }
 
 func (rl *RequestLogger) Debug(args ...any) { rl.entry.Debug(args...) }
