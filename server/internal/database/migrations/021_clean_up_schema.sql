@@ -4,6 +4,8 @@
 -- Table recreation is required because the active_notes view and idx_notes_position
 -- index reference columns being removed and SQLite cannot drop those first.
 
+PRAGMA foreign_keys = OFF;
+
 DROP VIEW active_notes;
 
 CREATE TABLE notes_new (
@@ -64,3 +66,5 @@ ALTER TABLE sessions_new RENAME TO sessions;
 
 CREATE INDEX idx_sessions_user_id    ON sessions(user_id);
 CREATE INDEX idx_sessions_expires_at ON sessions(expires_at);
+
+PRAGMA foreign_keys = ON;
