@@ -7,6 +7,7 @@ import MobileI18nProvider from '../src/i18n/MobileI18nProvider';
 import i18n from '../src/i18n';
 import { useAuth } from '../src/store/AuthContext';
 import { updateMe, listSessions, getAboutInfo, revokeSession } from '../src/api/settings';
+import type { User } from '@jot/shared';
 
 jest.mock('../src/store/AuthContext', () => ({
   useAuth: jest.fn(),
@@ -64,7 +65,7 @@ const mockListSessions = listSessions as jest.MockedFunction<typeof listSessions
 const mockGetAboutInfo = getAboutInfo as jest.MockedFunction<typeof getAboutInfo>;
 const mockRevokeSession = revokeSession as jest.MockedFunction<typeof revokeSession>;
 
-const user = {
+const user: User = {
   id: 'user-1',
   username: 'alice',
   first_name: 'Alice',
