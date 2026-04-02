@@ -106,6 +106,10 @@ export class DashboardPage {
     }).click();
   }
 
+  async closeNoteModal() {
+    await this.closeActiveDialog();
+  }
+
   private async openNoteMenu(title: string) {
     const card = this.page.locator('[data-testid="note-card"]').filter({
       has: this.page.locator('h3').getByText(title, { exact: true }),
