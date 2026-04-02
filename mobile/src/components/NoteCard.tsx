@@ -8,6 +8,7 @@ import { useAuth } from '../store/AuthContext';
 import { useUsers } from '../store/UsersContext';
 import UserAvatar from './UserAvatar';
 import { isWhiteHexColor } from '../utils/colorContrast';
+import LinkText from './LinkText';
 
 interface NoteCardProps {
   note: Note;
@@ -114,9 +115,7 @@ function TodoPreview({ items, hasColor }: { items: NoteItem[]; hasColor?: boolea
             testID={`note-card-todo-row-${item.id}`}
           >
             <Ionicons name="square-outline" size={14} color={hasColor ? '#999' : colors.iconMuted} />
-            <Text style={[styles.todoText, { color: hasColor ? '#666' : colors.textSecondary }]}>
-              {item.text}
-            </Text>
+            <LinkText text={item.text} style={[styles.todoText, { color: hasColor ? '#666' : colors.textSecondary }]} />
           </View>
         );
       })}
