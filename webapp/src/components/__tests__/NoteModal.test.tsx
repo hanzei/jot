@@ -87,7 +87,6 @@ vi.mock('@dnd-kit/utilities', () => ({
 
 // Mock console.error to silence error logs in tests
 const mockConsoleError = vi.fn()
-vi.spyOn(console, 'error').mockImplementation(mockConsoleError)
 
 const createMockTodoItems = (): NoteItem[] => [
   {
@@ -124,15 +123,28 @@ const defaultProps = {
   onRefresh: vi.fn(),
 }
 
+const mockMobileMatchMedia = () => {
+  vi.spyOn(window, 'matchMedia').mockImplementation((query: string) => ({
+    matches: query === '(pointer: coarse)',
+    media: query,
+    onchange: null,
+    addListener: () => {},
+    removeListener: () => {},
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    dispatchEvent: () => false,
+  }))
+}
+
 describe('NoteModal', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.spyOn(console, 'error').mockImplementation(mockConsoleError)
     vi.useFakeTimers()
     localStorage.clear()
   })
 
   afterEach(() => {
-    mockConsoleError.mockClear()
     vi.useRealTimers()
     vi.restoreAllMocks()
   })
@@ -178,16 +190,7 @@ describe('NoteModal', () => {
     })
 
     it('renders mobile app toolbar link on mobile devices', () => {
-      vi.spyOn(window, 'matchMedia').mockImplementation((query: string) => ({
-        matches: query === '(pointer: coarse)',
-        media: query,
-        onchange: null,
-        addListener: () => {},
-        removeListener: () => {},
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-      }))
+      mockMobileMatchMedia()
 
       const note = createMockNote()
       renderNoteModal({ ...defaultProps, note })
@@ -204,16 +207,7 @@ describe('NoteModal', () => {
     })
 
     it('renders mobile app toolbar link before share action on mobile devices', () => {
-      vi.spyOn(window, 'matchMedia').mockImplementation((query: string) => ({
-        matches: query === '(pointer: coarse)',
-        media: query,
-        onchange: null,
-        addListener: () => {},
-        removeListener: () => {},
-        addEventListener: () => {},
-        removeEventListener: () => {},
-        dispatchEvent: () => false,
-      }))
+      mockMobileMatchMedia()
 
       const note = createMockNote()
       renderNoteModal({ ...defaultProps, note, onShare: vi.fn(), isOwner: true })
