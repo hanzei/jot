@@ -318,6 +318,16 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   }, [openNoteFromUrl]);
 
   const handleSSEEvent = useCallback((event: SSEEvent) => {
+    if (event.type === 'profile_icon_updated' && event.user) {
+      const updatedUser = event.user;
+      setUsersById(prev => {
+        const next = new Map(prev);
+        next.set(updatedUser.id, updatedUser);
+        return next;
+      });
+      return;
+    }
+
     const currentUserLostAccess =
       event.type === 'note_deleted' ||
       (event.type === 'note_unshared' && event.target_user_id === user?.id);

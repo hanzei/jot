@@ -338,6 +338,7 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
                   username={assignedUser?.username || '?'}
                   userId={item.assignedTo}
                   hasProfileIcon={assignedUser?.has_profile_icon}
+                  iconVersion={assignedUser?.updated_at}
                   className="w-5 h-5"
                 />
               </button>
@@ -1736,6 +1737,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                         username={a.username}
                         userId={a.userId}
                         hasProfileIcon={a.hasProfileIcon}
+                        iconVersion={a.iconVersion}
                         className={`w-6 h-6 ring-2 ring-white dark:ring-slate-800 ${index > 0 ? '-ml-1' : ''}`}
                       />
                     </div>

@@ -349,6 +349,7 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
                   username={a.username}
                   userId={a.userId}
                   hasProfileIcon={a.hasProfileIcon}
+                  iconVersion={a.iconVersion}
                   className={`w-5 h-5 ring-2 ring-white dark:ring-slate-800 ${index > 0 ? '-ml-1' : ''}`}
                 />
               </div>

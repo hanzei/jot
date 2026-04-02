@@ -230,12 +230,14 @@ export type SSEEventType =
   | 'note_updated'
   | 'note_deleted'
   | 'note_shared'
-  | 'note_unshared';
+  | 'note_unshared'
+  | 'profile_icon_updated';
 
 export interface SSEEvent {
   type: SSEEventType;
-  note_id: string;
-  note: Note | null;
+  note_id?: string;
+  note?: Note | null;
   source_user_id: string;
   target_user_id?: string;
+  user?: User;
 }
