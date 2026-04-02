@@ -16,20 +16,26 @@ function LinkText({ text, style }: LinkTextProps) {
 
   return (
     <Text style={style}>
-      {parts.map((part, i) =>
-        URL_TEST_REGEX.test(part) ? (
-          <Text
-            key={i}
-            style={[styles.link, { color: colors.primary }]}
-            onPress={() => Linking.openURL(part)}
-            suppressHighlighting
-          >
-            {part}
+      {parts.map((part, i) => {
+        if (!URL_TEST_REGEX.test(part)) {
+          return <Text key={i}>{part}</Text>;
+        }
+        const m = part.match(/^(https?:\/\/\S+?)([).,!?:;]+)?$/i);
+        const url = m?.[1] ?? part;
+        const trailing = m?.[2] ?? '';
+        return (
+          <Text key={i}>
+            <Text
+              style={[styles.link, { color: colors.primary }]}
+              onPress={() => Linking.openURL(url)}
+              suppressHighlighting
+            >
+              {url}
+            </Text>
+            {trailing}
           </Text>
-        ) : (
-          <Text key={i}>{part}</Text>
-        )
-      )}
+        );
+      })}
     </Text>
   );
 }
