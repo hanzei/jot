@@ -105,7 +105,7 @@ func (s *SessionService) setSessionCookie(w http.ResponseWriter, value string, m
 		Path:     "/",
 		HttpOnly: true,
 		Secure:   s.cookieSecure,
-		SameSite: http.SameSiteLaxMode,
+		SameSite: http.SameSiteStrictMode,
 		MaxAge:   maxAge,
 	})
 }
