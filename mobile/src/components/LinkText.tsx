@@ -10,6 +10,16 @@ interface LinkTextProps {
   style?: StyleProp<TextStyle>;
 }
 
+async function openUrl(url: string) {
+  try {
+    const supported = await Linking.canOpenURL(url);
+    if (!supported) return;
+    await Linking.openURL(url);
+  } catch (e) {
+    console.warn('LinkText: failed to open url', url, e);
+  }
+}
+
 function LinkText({ text, style }: LinkTextProps) {
   const { colors } = useTheme();
   const parts = text.split(URL_SPLIT_REGEX);
@@ -27,7 +37,7 @@ function LinkText({ text, style }: LinkTextProps) {
           <Text key={i}>
             <Text
               style={[styles.link, { color: colors.primary }]}
-              onPress={() => Linking.openURL(url)}
+              onPress={() => void openUrl(url)}
               suppressHighlighting
             >
               {url}
