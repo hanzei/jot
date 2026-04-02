@@ -143,7 +143,7 @@ function NavigationWrapper() {
     return promptPromise;
   }, [t]);
 
-  const ensureDeepLinkServerContext = React.useCallback(async (serverOrigin: string): Promise<boolean> => {
+  const ensureDeepLinkServerContext = React.useCallback(async (serverOrigin: string): Promise<boolean | 'needs-auth'> => {
     const knownServers = await listServers();
     let targetServerId = knownServers.find((entry) => entry.serverUrl === serverOrigin)?.serverId ?? null;
 
@@ -176,8 +176,8 @@ function NavigationWrapper() {
       Alert.alert(t('common.error'), t('serverPicker.switchFailed'));
       return false;
     }
-    await revalidateSession();
-    return true;
+    const isNowAuthenticated = await revalidateSession();
+    return isNowAuthenticated ? true : 'needs-auth';
   }, [promptToAddUnknownDeepLinkServer, revalidateSession, t]);
 
   const evaluateIncomingDeepLink = React.useCallback(async (
@@ -209,8 +209,15 @@ function NavigationWrapper() {
     }
 
     if (serverOrigin) {
-      const switched = await ensureDeepLinkServerContext(serverOrigin);
-      if (!switched) {
+      const serverCtxResult = await ensureDeepLinkServerContext(serverOrigin);
+      if (!serverCtxResult) {
+        return 'ignore';
+      }
+      if (serverCtxResult === 'needs-auth') {
+        if (allowStash && isProtectedDeepLinkPath(path)) {
+          pendingDeepLinkUrlRef.current = url;
+          return 'stash';
+        }
         return 'ignore';
       }
     }
