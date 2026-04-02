@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/hanzei/jot/server/internal/auth"
@@ -131,6 +132,16 @@ func normalizeCreateNoteRequest(req *CreateNoteRequest) (int, error) {
 		return http.StatusBadRequest, errors.New("note must have a title, content, or items")
 	}
 
+	if utf8.RuneCountInString(req.Title) > noteTitleMaxLength {
+		return http.StatusBadRequest, fmt.Errorf("title must be %d characters or fewer", noteTitleMaxLength)
+	}
+	if utf8.RuneCountInString(req.Content) > noteContentMaxLength {
+		return http.StatusBadRequest, fmt.Errorf("content must be %d characters or fewer", noteContentMaxLength)
+	}
+	if len(req.Items) > noteItemsMaxCount {
+		return http.StatusBadRequest, fmt.Errorf("note cannot have more than %d items", noteItemsMaxCount)
+	}
+
 	if len(req.Items) > 0 {
 		if req.NoteType == "" {
 			req.NoteType = models.NoteTypeTodo
@@ -178,6 +189,9 @@ func (h *NotesHandler) createTodoItems(ctx context.Context, noteID string, items
 	for _, item := range items {
 		if item.IndentLevel < 0 || item.IndentLevel > 1 {
 			return http.StatusBadRequest, errors.New("indent_level must be 0 or 1")
+		}
+		if utf8.RuneCountInString(item.Text) > noteItemTextMaxLength {
+			return http.StatusBadRequest, fmt.Errorf("item text must be %d characters or fewer", noteItemTextMaxLength)
 		}
 		if _, err := h.noteStore.CreateItemWithCompleted(ctx, noteID, item.Text, item.Position, item.Completed, item.IndentLevel, ""); err != nil {
 			return http.StatusInternalServerError, err
@@ -367,9 +381,16 @@ func (h *NotesHandler) DuplicateNote(w http.ResponseWriter, r *http.Request) (in
 }
 
 func (h *NotesHandler) validateTodoItems(ctx context.Context, noteID string, items []UpdateNoteItem) (int, error) {
+	if len(items) > noteItemsMaxCount {
+		return http.StatusBadRequest, fmt.Errorf("note cannot have more than %d items", noteItemsMaxCount)
+	}
+
 	for _, item := range items {
 		if item.IndentLevel < 0 || item.IndentLevel > 1 {
 			return http.StatusBadRequest, errors.New("indent_level must be 0 or 1")
+		}
+		if utf8.RuneCountInString(item.Text) > noteItemTextMaxLength {
+			return http.StatusBadRequest, fmt.Errorf("item text must be %d characters or fewer", noteItemTextMaxLength)
 		}
 	}
 
@@ -480,6 +501,13 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 	var req UpdateNoteRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		return http.StatusBadRequest, nil, err
+	}
+
+	if req.Title != nil && utf8.RuneCountInString(*req.Title) > noteTitleMaxLength {
+		return http.StatusBadRequest, nil, fmt.Errorf("title must be %d characters or fewer", noteTitleMaxLength)
+	}
+	if req.Content != nil && utf8.RuneCountInString(*req.Content) > noteContentMaxLength {
+		return http.StatusBadRequest, nil, fmt.Errorf("content must be %d characters or fewer", noteContentMaxLength)
 	}
 
 	// Validate items before persisting any changes so invalid assigned_to

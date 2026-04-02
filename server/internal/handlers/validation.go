@@ -5,18 +5,28 @@ import (
 	"fmt"
 	"regexp"
 	"strings"
+	"unicode/utf8"
 )
 
 var usernameRegex = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 
-// Keep in sync with shared/src/constants.ts PASSWORD_MIN_LENGTH for clients.
-const passwordMinLength = 4
+// Keep in sync with shared/src/constants.ts VALIDATION and PASSWORD_MIN_LENGTH for clients.
+// All character limits are measured in Unicode code points (utf8.RuneCountInString).
+// noteItemsMaxCount is a server-only resource cap with no shared-constants counterpart.
+const (
+	passwordMinLength     = 4
+	noteTitleMaxLength    = 200
+	noteContentMaxLength  = 10000
+	noteItemTextMaxLength = 500
+	noteItemsMaxCount     = 500
+)
 
 func validateUsername(username string) error {
-	if len(username) < 2 {
+	n := utf8.RuneCountInString(username)
+	if n < 2 {
 		return errors.New("username must be at least 2 characters")
 	}
-	if len(username) > 30 {
+	if n > 30 {
 		return errors.New("username must be 30 characters or fewer")
 	}
 
@@ -39,4 +49,13 @@ func validatePassword(password string) error {
 		return fmt.Errorf("password must be at least %d characters", passwordMinLength)
 	}
 	return nil
+}
+
+// truncateRunes returns s truncated to at most max Unicode code points.
+func truncateRunes(s string, max int) string {
+	if utf8.RuneCountInString(s) <= max {
+		return s
+	}
+	runes := []rune(s)
+	return string(runes[:max])
 }
