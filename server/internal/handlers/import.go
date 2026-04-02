@@ -10,6 +10,7 @@ import (
 	"io"
 	"net/http"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/hanzei/jot/server/internal/auth"
 	"github.com/hanzei/jot/server/internal/models"
@@ -58,6 +59,21 @@ func keepColorToHex(color string) string {
 }
 
 func (h *NotesHandler) importKeepNote(ctx context.Context, userID string, kn keepNote) error {
+	if utf8.RuneCountInString(kn.Title) > noteTitleMaxLength {
+		return fmt.Errorf("title exceeds %d character limit", noteTitleMaxLength)
+	}
+	if utf8.RuneCountInString(kn.TextContent) > noteContentMaxLength {
+		return fmt.Errorf("content exceeds %d character limit", noteContentMaxLength)
+	}
+	if len(kn.ListContent) > noteItemsMaxCount {
+		return fmt.Errorf("note has more than %d items", noteItemsMaxCount)
+	}
+	for _, item := range kn.ListContent {
+		if utf8.RuneCountInString(item.Text) > noteItemTextMaxLength {
+			return fmt.Errorf("item text exceeds %d character limit", noteItemTextMaxLength)
+		}
+	}
+
 	noteType := models.NoteTypeText
 	if len(kn.ListContent) > 0 {
 		noteType = models.NoteTypeTodo
@@ -80,7 +96,7 @@ func (h *NotesHandler) importKeepNote(ctx context.Context, userID string, kn kee
 
 	if kn.IsPinned || kn.IsArchived {
 		f := false
-		if err := h.noteStore.Update(ctx, note.ID, userID, &kn.Title, &kn.TextContent, &color, &kn.IsPinned, &kn.IsArchived, &f); err != nil {
+		if err := h.noteStore.Update(ctx, note.ID, userID, nil, nil, nil, &kn.IsPinned, &kn.IsArchived, &f); err != nil {
 			return err
 		}
 	}
@@ -155,11 +171,11 @@ func (h *NotesHandler) importKeepNotes(ctx context.Context, userID string, keepN
 			continue
 		}
 		if err := h.importKeepNote(ctx, userID, kn); err != nil {
-			title := kn.Title
-			if title == "" {
-				title = fmt.Sprintf("note #%d", i+1)
+			label := truncateRunes(kn.Title, noteTitleMaxLength)
+			if label == "" {
+				label = fmt.Sprintf("note #%d", i+1)
 			}
-			importErrors = append(importErrors, fmt.Sprintf("failed to import %q: %v", title, err))
+			importErrors = append(importErrors, fmt.Sprintf("failed to import %q: %v", label, err))
 			continue
 		}
 		imported++

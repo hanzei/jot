@@ -50,3 +50,12 @@ func validatePassword(password string) error {
 	}
 	return nil
 }
+
+// truncateRunes returns s truncated to at most max Unicode code points.
+func truncateRunes(s string, max int) string {
+	if utf8.RuneCountInString(s) <= max {
+		return s
+	}
+	runes := []rune(s)
+	return string(runes[:max])
+}
