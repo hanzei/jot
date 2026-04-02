@@ -976,7 +976,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
         <LabelPicker
           visible
           noteId={labelPickerNote.id}
-          noteLabels={labelPickerNote.labels ?? []}
+          noteLabels={(notes?.find((n) => n.id === labelPickerNote.id) ?? labelPickerNote).labels ?? []}
           onClose={() => setLabelPickerNote(null)}
         />
       )}
