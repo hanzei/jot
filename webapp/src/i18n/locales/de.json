@@ -381,6 +381,7 @@
     "login": "Anmelden - Jot",
     "register": "Konto erstellen - Jot",
     "notes": "Jot",
+    "note": "{{title}} - Jot",
     "myTodo": "Meine Aufgaben - Jot",
     "archive": "Archiv - Jot",
     "bin": "Papierkorb - Jot",

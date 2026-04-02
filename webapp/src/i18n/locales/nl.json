@@ -381,6 +381,7 @@
     "login": "Inloggen - Jot",
     "register": "Account aanmaken - Jot",
     "notes": "Jot",
+    "note": "{{title}} - Jot",
     "myTodo": "Mijn taken - Jot",
     "archive": "Archief - Jot",
     "bin": "Prullenbak - Jot",
