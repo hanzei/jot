@@ -1,0 +1,1 @@
+Self-hosted note-taking app with offline support

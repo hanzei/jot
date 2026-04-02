@@ -21,7 +21,8 @@
         "backgroundColor": "#ffffff"
       },
       "package": "com.jot.app",
-      "softwareKeyboardLayoutMode": "resize"
+      "softwareKeyboardLayoutMode": "resize",
+      "versionCode": 1
     },
     "plugins": [
       "expo-localization"

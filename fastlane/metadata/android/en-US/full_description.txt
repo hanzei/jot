@@ -1,0 +1,11 @@
+Jot is a self-hosted note-taking app. Connect it to your own Jot server to keep your notes private and under your control.
+
+Features:
+- Text notes and todo lists
+- Labels and color-coding for organization
+- Pin and archive notes
+- Offline support with local SQLite storage
+- Sync with your self-hosted Jot server
+- Share notes with other users on your server
+- Dark, light, and system themes
+- Multiple language support
