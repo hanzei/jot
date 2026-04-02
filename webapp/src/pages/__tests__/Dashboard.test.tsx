@@ -1755,6 +1755,48 @@ describe('Dashboard', () => {
       })
     })
 
+    it('sets note title in page title when a note with a title is opened', async () => {
+      const mockNote = createMockNote({ id: 'abc123', title: 'My Important Note' })
+      vi.mocked(notes.getById).mockResolvedValue(mockNote)
+
+      renderDashboard(['/notes/abc123'])
+
+      await waitFor(() => {
+        expect(screen.getByTestId('note-modal')).toBeInTheDocument()
+        expect(document.title).toBe('My Important Note - Jot')
+      })
+    })
+
+    it('keeps section title when a note without a title is opened', async () => {
+      const mockNote = createMockNote({ id: 'abc123', title: '' })
+      vi.mocked(notes.getById).mockResolvedValue(mockNote)
+
+      renderDashboard(['/notes/abc123'])
+
+      await waitFor(() => {
+        expect(screen.getByTestId('note-modal')).toBeInTheDocument()
+        expect(document.title).toBe('Jot')
+      })
+    })
+
+    it('restores section title when note modal is closed', async () => {
+      const user = userEvent.setup()
+      const mockNote = createMockNote({ id: 'abc123', title: 'My Important Note' })
+      vi.mocked(notes.getById).mockResolvedValue(mockNote)
+
+      renderDashboard(['/notes/abc123'])
+
+      await waitFor(() => {
+        expect(document.title).toBe('My Important Note - Jot')
+      })
+
+      await user.click(screen.getByTestId('modal-close'))
+
+      await waitFor(() => {
+        expect(document.title).toBe('Jot')
+      })
+    })
+
     it('switching from My Todo to Notes clears my_todo filter', async () => {
       const user = userEvent.setup()
       const mockGetAll = vi.mocked(notes.getAll)

@@ -381,6 +381,7 @@
     "login": "Connexion - Jot",
     "register": "Créer un compte - Jot",
     "notes": "Jot",
+    "note": "{{title}} - Jot",
     "myTodo": "Mes tâches - Jot",
     "archive": "Archive - Jot",
     "bin": "Corbeille - Jot",

@@ -381,6 +381,7 @@
     "login": "Accedi - Jot",
     "register": "Crea account - Jot",
     "notes": "Jot",
+    "note": "{{title}} - Jot",
     "myTodo": "Le mie attività - Jot",
     "archive": "Archivio - Jot",
     "bin": "Cestino - Jot",
