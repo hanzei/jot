@@ -106,6 +106,10 @@ export class DashboardPage {
     }).click();
   }
 
+  async closeNoteModal() {
+    await this.closeActiveDialog();
+  }
+
   private async openNoteMenu(title: string) {
     const card = this.page.locator('[data-testid="note-card"]').filter({
       has: this.page.locator('h3').getByText(title, { exact: true }),
@@ -180,6 +184,11 @@ export class DashboardPage {
   async duplicateCurrentNoteFromModal() {
     const activeDialog = this.page.getByRole('dialog').last();
     await activeDialog.getByRole('button', { name: 'Duplicate' }).click();
+  }
+
+  async archiveCurrentNoteFromModal() {
+    const activeDialog = this.page.getByRole('dialog').last();
+    await activeDialog.getByRole('button', { name: 'Archive note' }).click();
   }
 
   async search(query: string) {

@@ -21,7 +21,7 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { updateMe } from '../api/settings';
 import { useTranslation } from 'react-i18next';
 import { useUpdateNote, useDeleteNote, useRestoreNote, usePermanentDeleteNote, useReorderNotes, useDuplicateNote } from '../hooks/useNotes';
-import { useOfflineNotes } from '../hooks/useOfflineNotes';
+import { useOfflineNotes, useOfflineNote } from '../hooks/useOfflineNotes';
 import { useUsers } from '../store/UsersContext';
 import { useAuth } from '../store/AuthContext';
 import { useToast } from '../hooks/useToast';
@@ -106,6 +106,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   }), [variant, debouncedSearch, labelId, user?.id]);
 
   const { data: notes, isLoading, isError, refetch, isRefetching } = useOfflineNotes(params);
+  const { data: labelPickerNoteData } = useOfflineNote(labelPickerNote?.id ?? null);
   const isSearchLoading = isLoading && !notes && !!debouncedSearch;
   const updateNote = useUpdateNote();
   const deleteNote = useDeleteNote();
@@ -976,7 +977,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
         <LabelPicker
           visible
           noteId={labelPickerNote.id}
-          noteLabels={labelPickerNote.labels ?? []}
+          noteLabels={(labelPickerNoteData ?? labelPickerNote).labels ?? []}
           onClose={() => setLabelPickerNote(null)}
         />
       )}

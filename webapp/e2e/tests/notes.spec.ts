@@ -28,6 +28,17 @@ test.describe('Notes', () => {
     await dashboardPage.expectNoteNotVisible('Original Title');
   });
 
+  test('sets page title to note title when a note is opened', async ({ dashboardPage, page }) => {
+    await dashboardPage.goto();
+    await dashboardPage.createNote('My Page Title Note', 'Some content');
+
+    await dashboardPage.openNote('My Page Title Note');
+    await expect(page).toHaveTitle('My Page Title Note - Jot');
+
+    await dashboardPage.closeNoteModal();
+    await expect(page).toHaveTitle('Jot');
+  });
+
   test('deletes a note', async ({ dashboardPage }) => {
     await dashboardPage.goto();
     await dashboardPage.createNote('Note to Delete');
@@ -150,6 +161,19 @@ test.describe('Notes', () => {
 
     await dashboardPage.goto();
     await dashboardPage.expectNoteVisible('To Unarchive');
+  });
+
+  test('archiving a note from within the modal closes the modal', async ({ dashboardPage, page }) => {
+    await dashboardPage.goto();
+    await dashboardPage.createNote('Modal Archive Test');
+
+    await dashboardPage.openNote('Modal Archive Test');
+    await expect(page.getByRole('dialog').getByRole('button', { name: 'Close' })).toBeVisible();
+
+    await dashboardPage.archiveCurrentNoteFromModal();
+
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await dashboardPage.expectNoteNotVisible('Modal Archive Test');
   });
 
   test('creates a todo note with items', async ({ dashboardPage }) => {

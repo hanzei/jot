@@ -381,6 +381,7 @@
     "login": "Sign In - Jot",
     "register": "Create Account - Jot",
     "notes": "Jot",
+    "note": "{{title}} - Jot",
     "myTodo": "My Todo - Jot",
     "archive": "Archive - Jot",
     "bin": "Bin - Jot",

@@ -171,7 +171,9 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   );
 
   useEffect(() => {
-    if (showBin) {
+    if (isModalOpen && editingNote?.title) {
+      document.title = t('pageTitle.note', { title: editingNote.title });
+    } else if (showBin) {
       document.title = t('pageTitle.bin');
     } else if (showArchived) {
       document.title = t('pageTitle.archive');
@@ -180,7 +182,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     } else {
       document.title = t('pageTitle.notes');
     }
-  }, [showArchived, showBin, showMyTodo, t]);
+  }, [editingNote?.title, isModalOpen, showArchived, showBin, showMyTodo, t]);
 
   const loadLabels = useCallback(async () => {
     try {
