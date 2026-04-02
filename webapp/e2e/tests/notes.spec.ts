@@ -152,6 +152,19 @@ test.describe('Notes', () => {
     await dashboardPage.expectNoteVisible('To Unarchive');
   });
 
+  test('archiving a note from within the modal closes the modal', async ({ dashboardPage, page }) => {
+    await dashboardPage.goto();
+    await dashboardPage.createNote('Modal Archive Test');
+
+    await dashboardPage.openNote('Modal Archive Test');
+    await expect(page.getByRole('dialog')).toBeVisible();
+
+    await dashboardPage.archiveCurrentNoteFromModal();
+
+    await expect(page.getByRole('dialog')).toHaveCount(0);
+    await dashboardPage.expectNoteNotVisible('Modal Archive Test');
+  });
+
   test('creates a todo note with items', async ({ dashboardPage }) => {
     await dashboardPage.goto();
     await dashboardPage.createTodoNote('Shopping List', ['Apples', 'Bread', 'Milk']);
