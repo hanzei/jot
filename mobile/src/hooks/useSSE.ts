@@ -7,6 +7,13 @@ import { SSEConnectionManager } from '../api/events';
 import type { SSEEvent } from '@jot/shared';
 import { useNetworkStatus } from './useNetworkStatus';
 import { saveNote, markLocalNoteDeleted } from '../db/noteQueries';
+import { isSseQuiesced, subscribeToServerSwitchLifecycle } from '../store/serverSwitchLifecycle';
+import {
+  noteLocalQueryKey,
+  noteQueryKey,
+  notesLocalQueryScopeKey,
+  notesQueryScopeKey,
+} from './queryKeys';
 
 export type SSENotificationCallback = (event: SSEEvent) => void;
 
@@ -20,11 +27,13 @@ export function useSSE(onNoteUpdatedByOther?: SSENotificationCallback): void {
   onNoteUpdatedRef.current = onNoteUpdatedByOther;
   const dbRef = useRef(db);
   dbRef.current = db;
-
   const userIdRef = useRef(user?.id);
   userIdRef.current = user?.id;
 
   const startConnection = useCallback(() => {
+    if (isSseQuiesced()) {
+      return;
+    }
     if (managerRef.current) {
       managerRef.current.disconnect();
     }
@@ -33,14 +42,9 @@ export function useSSE(onNoteUpdatedByOther?: SSENotificationCallback): void {
     managerRef.current = manager;
 
     manager.connect((event: SSEEvent) => {
-      // Skip events from the current user (already handled by optimistic updates)
-      if (event.source_user_id === userIdRef.current) {
-        return;
-      }
-
       // All event types require refreshing the notes list
-      queryClient.invalidateQueries({ queryKey: ['notes'] });
-      queryClient.invalidateQueries({ queryKey: ['notes-local'] });
+      queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
+      queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
 
       // Per-event-type extras
       if (event.type === 'note_updated') {
@@ -48,20 +52,25 @@ export function useSSE(onNoteUpdatedByOther?: SSENotificationCallback): void {
           // Persist the updated note to SQLite so offline reads stay current
           saveNote(dbRef.current, event.note).catch(() => {});
         }
-        queryClient.invalidateQueries({ queryKey: ['note', event.note_id] });
-        queryClient.invalidateQueries({ queryKey: ['note-local', event.note_id] });
-        onNoteUpdatedRef.current?.(event);
+        queryClient.invalidateQueries({ queryKey: noteQueryKey(event.note_id) });
+        queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(event.note_id) });
+        // Only notify subscribers about updates from other users. Updates from
+        // the current user (possibly from another device) are handled by query
+        // invalidation above and don't need an "updated by someone else" toast.
+        if (event.source_user_id !== userIdRef.current) {
+          onNoteUpdatedRef.current?.(event);
+        }
       } else if (event.type === 'note_deleted') {
         // Tombstone the note in SQLite so it disappears from offline views
         markLocalNoteDeleted(dbRef.current, event.note_id).catch(() => {});
-        queryClient.removeQueries({ queryKey: ['note', event.note_id] });
-        queryClient.removeQueries({ queryKey: ['note-local', event.note_id] });
+        queryClient.removeQueries({ queryKey: noteQueryKey(event.note_id) });
+        queryClient.removeQueries({ queryKey: noteLocalQueryKey(event.note_id) });
       }
     });
 
     // Catch up on anything missed while disconnected
-    queryClient.invalidateQueries({ queryKey: ['notes'] });
-    queryClient.invalidateQueries({ queryKey: ['notes-local'] });
+    queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
+    queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
   }, [queryClient]);
 
   const stopConnection = useCallback(() => {
@@ -90,9 +99,18 @@ export function useSSE(onNoteUpdatedByOther?: SSENotificationCallback): void {
     };
 
     const subscription = AppState.addEventListener('change', handleAppStateChange);
+    const lifecycleUnsubscribe = subscribeToServerSwitchLifecycle((state) => {
+      if (!isAuthenticated || !isConnected) {
+        return;
+      }
+      if (!state.isSwitching && !state.isSseQuiesced) {
+        startConnection();
+      }
+    });
 
     return () => {
       subscription.remove();
+      lifecycleUnsubscribe();
       stopConnection();
     };
   }, [isAuthenticated, isConnected, startConnection, stopConnection]);

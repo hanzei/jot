@@ -1,6 +1,7 @@
 import EventSource from 'react-native-sse';
 import { getBaseUrl, getStoredSession } from './client';
 import type { SSEEvent } from '@jot/shared';
+import { getCurrentSwitchGenerationId, isSseQuiesced } from '../store/serverSwitchLifecycle';
 
 const BASE_RECONNECT_DELAY_MS = 3000;
 const MAX_RECONNECT_DELAY_MS = 60000;
@@ -13,11 +14,13 @@ export class SSEConnectionManager {
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
   private closed = false;
   private reconnectDelay = BASE_RECONNECT_DELAY_MS;
+  private generationId = getCurrentSwitchGenerationId();
 
   async connect(onEvent: SSECallback): Promise<void> {
     this.callback = onEvent;
     this.closed = false;
     this.reconnectDelay = BASE_RECONNECT_DELAY_MS;
+    this.generationId = getCurrentSwitchGenerationId();
 
     await this.openConnection();
   }
@@ -25,12 +28,13 @@ export class SSEConnectionManager {
   private async openConnection(): Promise<void> {
     try {
       if (this.closed) return;
+      if (isSseQuiesced()) return;
 
       this.cleanup();
 
       const token = await getStoredSession();
       // Re-check after async gap — disconnect() may have been called
-      if (this.closed || !token) return;
+      if (this.closed || !token || isSseQuiesced()) return;
 
       const url = `${getBaseUrl()}/api/v1/events`;
       this.es = new EventSource(url, {
@@ -43,6 +47,9 @@ export class SSEConnectionManager {
         // Reset backoff on successful message
         this.reconnectDelay = BASE_RECONNECT_DELAY_MS;
         if (!event.data) return;
+        if (this.generationId !== getCurrentSwitchGenerationId() || isSseQuiesced()) {
+          return;
+        }
         try {
           const parsed: SSEEvent = JSON.parse(event.data as string);
           this.callback?.(parsed);
@@ -69,6 +76,7 @@ export class SSEConnectionManager {
 
   private scheduleReconnect(): void {
     if (this.closed) return;
+    if (isSseQuiesced()) return;
     this.clearReconnectTimer();
     const delay = this.reconnectDelay;
     this.reconnectDelay = Math.min(this.reconnectDelay * 2, MAX_RECONNECT_DELAY_MS);

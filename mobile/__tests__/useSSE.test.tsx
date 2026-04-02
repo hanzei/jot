@@ -5,6 +5,7 @@ import { AppState, AppStateStatus } from 'react-native';
 import { useSSE } from '../src/hooks/useSSE';
 import { SSEConnectionManager } from '../src/api/events';
 import type { SSEEvent } from '@jot/shared';
+import { noteQueryKey, notesQueryScopeKey } from '../src/hooks/queryKeys';
 
 jest.mock('react-native', () => ({
   Platform: { OS: 'ios' },
@@ -109,7 +110,7 @@ describe('useSSE', () => {
       });
     });
 
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['notes'] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: notesQueryScopeKey() });
   });
 
   it('invalidates notes list and specific note on note_updated event', () => {
@@ -128,8 +129,8 @@ describe('useSSE', () => {
       });
     });
 
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['notes'] });
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['note', 'note-123'] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: notesQueryScopeKey() });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: noteQueryKey('note-123') });
   });
 
   it('invalidates notes list and removes note query on note_deleted event', () => {
@@ -149,11 +150,11 @@ describe('useSSE', () => {
       });
     });
 
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['notes'] });
-    expect(removeSpy).toHaveBeenCalledWith({ queryKey: ['note', 'note-123'] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: notesQueryScopeKey() });
+    expect(removeSpy).toHaveBeenCalledWith({ queryKey: noteQueryKey('note-123') });
   });
 
-  it('skips events from the current user', () => {
+  it('invalidates queries for same-user events to support cross-device sync', () => {
     const { queryClient, Wrapper } = createWrapper();
     const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
 
@@ -164,17 +165,37 @@ describe('useSSE', () => {
 
     act(() => {
       capturedCallback?.({
-        type: 'note_created',
-        note_id: 'new-note',
+        type: 'note_updated',
+        note_id: 'note-123',
         note: null,
-        source_user_id: 'current-user', // Same as mock user
+        source_user_id: 'current-user', // Same user, different device
       });
     });
 
-    expect(invalidateSpy).not.toHaveBeenCalled();
+    // Queries must be invalidated so another device of the same user sees the change
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: notesQueryScopeKey() });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: noteQueryKey('note-123') });
   });
 
-  it('calls notification callback on note_updated from other user', () => {
+  it('does not call notification callback for same-user events', () => {
+    const { Wrapper } = createWrapper();
+    const onNotify = jest.fn();
+
+    renderHook(() => useSSE(onNotify), { wrapper: Wrapper });
+
+    act(() => {
+      capturedCallback?.({
+        type: 'note_updated',
+        note_id: 'note-123',
+        note: null,
+        source_user_id: 'current-user', // Same user — should not show "updated by another user" toast
+      });
+    });
+
+    expect(onNotify).not.toHaveBeenCalled();
+  });
+
+  it('calls notification callback on note_updated from another user', () => {
     const { Wrapper } = createWrapper();
     const onNotify = jest.fn();
 
@@ -211,7 +232,7 @@ describe('useSSE', () => {
       });
     });
 
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['notes'] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: notesQueryScopeKey() });
 
     invalidateSpy.mockClear();
 
@@ -225,7 +246,7 @@ describe('useSSE', () => {
       });
     });
 
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: ['notes'] });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: notesQueryScopeKey() });
   });
 
   it('does not start connection when offline', () => {

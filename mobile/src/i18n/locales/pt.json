@@ -17,6 +17,21 @@
     "logoutConfirmMessage": "Tem certeza de que deseja sair?",
     "openMenu": "Abrir menu"
   },
+  "serverPicker": {
+    "open": "Alternar servidor",
+    "title": "Selecionar servidor",
+    "noServers": "Nenhum servidor adicionado ainda.",
+    "addPlaceholder": "Adicionar URL do servidor",
+    "addButton": "Adicionar servidor",
+    "working": "Aplicando...",
+    "urlRequired": "A URL do servidor é obrigatória.",
+    "invalidUrl": "A URL do servidor é inválida.",
+    "addFailed": "Falha ao adicionar servidor.",
+    "switchFailed": "Falha ao alternar servidor.",
+    "duplicateTitle": "Servidor já adicionado",
+    "duplicateMessage": "Este servidor já existe na sua lista.",
+    "switchToExisting": "Alternar para existente"
+  },
   "auth": {
     "signInTitle": "Entrar no Jot",
     "signInSubtitle": "Entre na sua conta",
@@ -64,6 +79,11 @@
     "archivedNotesWillAppear": "As notas arquivadas aparecerão aqui",
     "deletedNotesWillAppear": "As notas excluídas aparecerão aqui",
     "binInfo": "Os itens na lixeira são excluídos automaticamente após 7 dias",
+    "noteArchived": "Nota arquivada",
+    "noteUnarchived": "Nota desarquivada",
+    "noteDeleted": "Nota movida para a lixeira",
+    "noteRestored": "Nota restaurada",
+    "undo": "Desfazer",
     "emptyTrash": "Esvaziar lixeira",
     "emptyTrashConfirmMessage_one": "Excluir permanentemente a {{count}} nota na lixeira? Esta ação não pode ser desfeita.",
     "emptyTrashConfirmMessage_other": "Excluir permanentemente as {{count}} notas na lixeira? Esta ação não pode ser desfeita.",
@@ -140,6 +160,8 @@
     "sessionsBrowserOnOS": "{{browser}} em {{os}}",
     "sessionsCurrent": "Atual",
     "sessionsRevoke": "Revogar",
+    "sessionsRevokeConfirmTitle": "Revogar sessão",
+    "sessionsRevokeConfirmMessage": "Tem certeza de que deseja revogar esta sessão?",
     "sessionsRevoking": "Revogando...",
     "sessionsRevokeFailed": "Falha ao revogar a sessão",
     "sessionsNone": "Nenhuma sessão ativa encontrada.",
@@ -147,7 +169,10 @@
     "aboutButton": "Sobre o Jot",
     "importSection": "Importar",
     "importDescription": "Importe notas de exportações do Google Keep.",
-    "importButton": "Importar do Google Keep"
+    "importButton": "Importar do Google Keep",
+    "currentServerSection": "Servidor",
+    "currentServerLabel": "Servidor ativo",
+    "noServerConfigured": "Nenhum servidor configurado"
   },
   "about": {
     "clientInfo": "Informações do cliente",
@@ -160,7 +185,8 @@
     "commit": "Commit",
     "buildTime": "Data de compilação",
     "goVersion": "Versão do Go",
-    "failedLoad": "Falha ao carregar informações do servidor"
+    "failedLoad": "Falha ao carregar informações do servidor",
+    "serverOrigin": "Origem do servidor"
   },
   "note": {
     "share": "Compartilhar",
@@ -255,6 +281,9 @@
     "missingServerMessage": "Este link não especifica a URL do servidor. Será aberto em {{server}}.",
     "invalidServerTitle": "Link profundo ignorado",
     "invalidServerMessage": "Este link tem uma URL de servidor inválida.",
+    "unknownServerTitle": "Servidor do link não configurado",
+    "unknownServerMessage": "Este link aponta para {{server}}. Deseja adicionar e alternar para esse servidor?",
+    "addAndSwitchAction": "Adicionar e alternar",
     "wrongServerTitle": "Servidor incorreto",
     "wrongServerMessage": "Este link aponta para {{targetServer}}, mas você está conectado a {{currentServer}}."
   },

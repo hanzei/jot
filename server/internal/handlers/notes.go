@@ -7,12 +7,13 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/hanzei/jot/server/internal/auth"
+	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/hanzei/jot/server/internal/models"
 	"github.com/hanzei/jot/server/internal/sse"
-	"github.com/sirupsen/logrus"
 )
 
 const queryTrue = "true"
@@ -41,7 +42,7 @@ func (h *NotesHandler) publishNoteEvent(ctx context.Context, noteID string, even
 	}
 	audienceIDs, err := h.noteStore.GetNoteAudienceIDs(ctx, noteID)
 	if err != nil {
-		logrus.WithError(err).WithField("note_id", noteID).Error("failed to get note audience for SSE publish")
+		logutil.FromContext(ctx).WithError(err).WithField("note_id", noteID).Error("failed to get note audience for SSE publish")
 		return
 	}
 	h.hub.Publish(audienceIDs, sse.Event{
@@ -50,6 +51,29 @@ func (h *NotesHandler) publishNoteEvent(ctx context.Context, noteID string, even
 		Note:         note,
 		SourceUserID: sourceUserID,
 	})
+}
+
+// publishPersonalizedNoteEvent fetches each audience member's personalized view of a note
+// and sends them an individual SSE event. Used when shared fields (title, content, items)
+// change so every collaborator receives the update with their own per-user state intact.
+// Errors are logged but never fail the HTTP request.
+func (h *NotesHandler) publishPersonalizedNoteEvent(ctx context.Context, noteID string, audienceIDs []string, sourceUserID string) {
+	if h.hub == nil {
+		return
+	}
+	for _, uid := range audienceIDs {
+		n, err := h.noteStore.GetByID(ctx, noteID, uid)
+		if err != nil {
+			logutil.FromContext(ctx).WithError(err).WithField("note_id", noteID).WithField("user_id", uid).Warn("failed to fetch personalized note for SSE publish")
+			continue
+		}
+		h.hub.Publish([]string{uid}, sse.Event{
+			Type:         sse.EventNoteUpdated,
+			NoteID:       noteID,
+			Note:         n,
+			SourceUserID: sourceUserID,
+		})
+	}
 }
 
 func (h *NotesHandler) publishDeletedNoteEvent(noteID string, audienceIDs []string, sourceUserID string) {
@@ -134,6 +158,16 @@ func normalizeCreateNoteRequest(req *CreateNoteRequest) (int, error) {
 		return http.StatusBadRequest, errors.New("note must have a title, content, or items")
 	}
 
+	if utf8.RuneCountInString(req.Title) > noteTitleMaxLength {
+		return http.StatusBadRequest, fmt.Errorf("title must be %d characters or fewer", noteTitleMaxLength)
+	}
+	if utf8.RuneCountInString(req.Content) > noteContentMaxLength {
+		return http.StatusBadRequest, fmt.Errorf("content must be %d characters or fewer", noteContentMaxLength)
+	}
+	if len(req.Items) > noteItemsMaxCount {
+		return http.StatusBadRequest, fmt.Errorf("note cannot have more than %d items", noteItemsMaxCount)
+	}
+
 	if len(req.Items) > 0 {
 		if req.NoteType == "" {
 			req.NoteType = models.NoteTypeTodo
@@ -174,6 +208,9 @@ func (h *NotesHandler) createNoteLabels(ctx context.Context, noteID, userID stri
 			return http.StatusInternalServerError, fmt.Errorf("get or create label: %w", err)
 		}
 		if err = h.noteStore.AddLabelToNote(ctx, noteID, label.ID, userID); err != nil {
+			if errors.Is(err, models.ErrLabelNotFoundOrNotOwned) {
+				return http.StatusNotFound, fmt.Errorf("label not found: %w", err)
+			}
 			return http.StatusInternalServerError, fmt.Errorf("add label to note: %w", err)
 		}
 	}
@@ -184,6 +221,9 @@ func (h *NotesHandler) createTodoItems(ctx context.Context, noteID string, items
 	for _, item := range items {
 		if item.IndentLevel < 0 || item.IndentLevel > 1 {
 			return http.StatusBadRequest, errors.New("indent_level must be 0 or 1")
+		}
+		if utf8.RuneCountInString(item.Text) > noteItemTextMaxLength {
+			return http.StatusBadRequest, fmt.Errorf("item text must be %d characters or fewer", noteItemTextMaxLength)
 		}
 		if _, err := h.noteStore.CreateItemWithCompleted(ctx, noteID, item.Text, item.Position, item.Completed, item.IndentLevel, ""); err != nil {
 			return http.StatusInternalServerError, err
@@ -239,6 +279,7 @@ func (h *NotesHandler) GetNotes(w http.ResponseWriter, r *http.Request) (int, an
 //	@Success	201		{object}	models.Note
 //	@Failure	400		{string}	string	"bad request"
 //	@Failure	401		{string}	string	"unauthorized"
+//	@Failure	404		{string}	string	"label not found"
 //	@Failure	500		{string}	string	"internal server error"
 //	@Router		/notes [post]
 func (h *NotesHandler) CreateNote(w http.ResponseWriter, r *http.Request) (int, any, error) {
@@ -372,9 +413,16 @@ func (h *NotesHandler) DuplicateNote(w http.ResponseWriter, r *http.Request) (in
 }
 
 func (h *NotesHandler) validateTodoItems(ctx context.Context, noteID string, items []UpdateNoteItem) (int, error) {
+	if len(items) > noteItemsMaxCount {
+		return http.StatusBadRequest, fmt.Errorf("note cannot have more than %d items", noteItemsMaxCount)
+	}
+
 	for _, item := range items {
 		if item.IndentLevel < 0 || item.IndentLevel > 1 {
 			return http.StatusBadRequest, errors.New("indent_level must be 0 or 1")
+		}
+		if utf8.RuneCountInString(item.Text) > noteItemTextMaxLength {
+			return http.StatusBadRequest, fmt.Errorf("item text must be %d characters or fewer", noteItemTextMaxLength)
 		}
 	}
 
@@ -487,6 +535,13 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 		return http.StatusBadRequest, nil, err
 	}
 
+	if req.Title != nil && utf8.RuneCountInString(*req.Title) > noteTitleMaxLength {
+		return http.StatusBadRequest, nil, fmt.Errorf("title must be %d characters or fewer", noteTitleMaxLength)
+	}
+	if req.Content != nil && utf8.RuneCountInString(*req.Content) > noteContentMaxLength {
+		return http.StatusBadRequest, nil, fmt.Errorf("content must be %d characters or fewer", noteContentMaxLength)
+	}
+
 	// Validate items before persisting any changes so invalid assigned_to
 	// values are rejected before note metadata is committed.
 	if len(req.Items) > 0 {
@@ -514,8 +569,37 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 		return http.StatusInternalServerError, nil, err
 	}
 
-	h.publishNoteEvent(r.Context(), id, sse.EventNoteUpdated, note, user.ID)
+	// Title, content, and items are shared fields: every collaborator must receive
+	// their own personalized copy of the note (preserving their per-user state).
+	// Per-user-only changes (color, pinned, archived, checked_items_collapsed) only
+	// need to be delivered to the acting user.
+	hasSharedFieldChange := req.Title != nil || req.Content != nil || len(req.Items) > 0
+	h.publishUpdateEvent(r.Context(), id, note, user.ID, hasSharedFieldChange)
+
 	return http.StatusOK, note, nil
+}
+
+// publishUpdateEvent sends SSE notifications after a note update. If shared fields
+// changed, every collaborator gets a personalized event; otherwise only the acting
+// user is notified.
+func (h *NotesHandler) publishUpdateEvent(ctx context.Context, noteID string, note *models.Note, userID string, sharedFieldChanged bool) {
+	if sharedFieldChanged {
+		audienceIDs, err := h.noteStore.GetNoteAudienceIDs(ctx, noteID)
+		if err != nil {
+			logutil.FromContext(ctx).WithError(err).WithField("note_id", noteID).Error("failed to get note audience for SSE publish")
+			return
+		}
+		h.publishPersonalizedNoteEvent(ctx, noteID, audienceIDs, userID)
+		return
+	}
+	if h.hub != nil {
+		h.hub.Publish([]string{userID}, sse.Event{
+			Type:         sse.EventNoteUpdated,
+			NoteID:       noteID,
+			Note:         note,
+			SourceUserID: userID,
+		})
+	}
 }
 
 // DeleteNote godoc

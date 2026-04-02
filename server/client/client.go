@@ -10,7 +10,13 @@ import (
 	"net/http"
 	"net/http/cookiejar"
 	"strings"
+	"time"
 )
+
+// DefaultTimeout is the HTTP client timeout applied by New.
+// It bounds every request (including response-body read) so that CLI tools
+// and scripts do not hang indefinitely when the server is unreachable.
+const DefaultTimeout = 30 * time.Second
 
 // Error is an API error with the HTTP status code and response body.
 type Error struct {
@@ -40,18 +46,46 @@ type Client struct {
 }
 
 // New creates a new Jot API client pointed at baseURL (e.g. "http://localhost:8080").
-// The default HTTP client has no timeout; callers should use context deadlines or
-// [WithHTTPClient] with a configured Timeout for production use.
+// The underlying HTTP client is configured with [DefaultTimeout].
+// Use [WithHTTPClient] to override the client when a different timeout or
+// transport is required (e.g. tests that need longer deadlines or SSE streams).
 func New(baseURL string) *Client {
 	jar, err := cookiejar.New(nil)
 	if err != nil {
 		panic(err)
 	}
-	c := &Client{
-		baseURL:    strings.TrimRight(baseURL, "/"),
-		httpClient: &http.Client{Jar: jar},
+	return &Client{
+		baseURL: strings.TrimRight(baseURL, "/"),
+		httpClient: &http.Client{
+			Jar:     jar,
+			Timeout: DefaultTimeout,
+		},
+	}
+}
+
+// WithHTTPClient replaces the underlying HTTP client and returns the receiver.
+// The caller's cookie jar is preserved: the receiver's existing jar takes
+// precedence (so in-flight session cookies are not discarded), falling back to
+// the provided client's jar, and only creating a fresh jar if neither has one.
+// Pass a client whose Timeout is 0 to disable the default timeout (e.g. for
+// long-lived SSE connections).
+func (c *Client) WithHTTPClient(httpClient *http.Client) *Client {
+	clone := *httpClient // shallow copy; avoids mutating the caller's value
+
+	switch {
+	case c.httpClient != nil && c.httpClient.Jar != nil:
+		clone.Jar = c.httpClient.Jar // preserve receiver's existing session cookies
+	case httpClient.Jar != nil:
+		clone.Jar = httpClient.Jar // use caller-supplied jar if present
+	default:
+		jar, err := cookiejar.New(nil)
+		if err != nil {
+			panic(err)
+		}
+		clone.Jar = jar
 	}
 
+	c.httpClient = &clone
 	return c
 }
 

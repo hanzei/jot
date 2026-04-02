@@ -7,6 +7,8 @@
 
 # Go build outputs
 server/jot
+server/jotctl
+server/server
 jot-server
 
 # Test binary, built with `go test -c`

@@ -12,6 +12,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useTranslation } from 'react-i18next';
 import type { Note } from '@jot/shared';
 import { useTheme } from '../theme/ThemeContext';
+import { isLocalId } from '../db/noteQueries';
 
 export type ContextMenuViewContext = 'notes' | 'archived' | 'trash' | 'my-todo';
 
@@ -29,6 +30,7 @@ interface NoteContextMenuProps {
   onDeletePermanently: (note: Note) => void;
   onChangeColor: (note: Note) => void;
   onShare: (note: Note) => void;
+  onManageLabels?: (note: Note) => void;
 }
 
 interface Action {
@@ -53,11 +55,24 @@ export default function NoteContextMenu({
   onDeletePermanently,
   onChangeColor,
   onShare,
+  onManageLabels,
 }: NoteContextMenuProps) {
   const { colors } = useTheme();
   const { t } = useTranslation();
 
   if (!note) return null;
+
+  const createLabelAction = (currentNote: Note): Action | null => {
+    if (!onManageLabels || isLocalId(currentNote.id)) {
+      return null;
+    }
+    return {
+      icon: 'pricetag-outline',
+      label: t('labels.title'),
+      onPress: () => { onClose(); onManageLabels(currentNote); },
+      testId: 'context-label',
+    };
+  };
 
   const actions: Action[] = [];
 
@@ -95,6 +110,10 @@ export default function NoteContextMenu({
       onPress: () => { onClose(); onDuplicate(note); },
       testId: 'context-duplicate',
     });
+    const labelAction = createLabelAction(note);
+    if (labelAction) {
+      actions.push(labelAction);
+    }
     actions.push({
       icon: 'trash-outline',
       label: t('note.moveToTrash'),
@@ -115,6 +134,10 @@ export default function NoteContextMenu({
       onPress: () => { onClose(); onDuplicate(note); },
       testId: 'context-duplicate',
     });
+    const labelAction = createLabelAction(note);
+    if (labelAction) {
+      actions.push(labelAction);
+    }
     actions.push({
       icon: 'trash-outline',
       label: t('note.moveToTrash'),

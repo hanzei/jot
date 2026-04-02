@@ -17,6 +17,21 @@
     "logoutConfirmMessage": "Weet je zeker dat je wilt uitloggen?",
     "openMenu": "Menu openen"
   },
+  "serverPicker": {
+    "open": "Server kiezen",
+    "title": "Servers",
+    "noServers": "Nog geen servers toegevoegd.",
+    "addPlaceholder": "Voeg server-URL toe",
+    "addButton": "Toevoegen",
+    "working": "Bezig...",
+    "urlRequired": "Server-URL is vereist.",
+    "invalidUrl": "Voer een geldige server-URL in (http:// of https://).",
+    "addFailed": "Server toevoegen mislukt.",
+    "switchFailed": "Server wisselen mislukt.",
+    "duplicateTitle": "Server al toegevoegd",
+    "duplicateMessage": "Deze server bestaat al in je lijst.",
+    "switchToExisting": "Naar bestaande server"
+  },
   "auth": {
     "signInTitle": "Inloggen bij Jot",
     "signInSubtitle": "Log in op je account",
@@ -82,7 +97,12 @@
       "created_at": "Aanmaakdatum"
     },
     "sortAccessibilityLabel": "Sorteren op {{sortLabel}}",
-    "sortDisabledNotice": "Handmatig sorteren is uitgeschakeld. Notities zijn gesorteerd op {{sortLabel}}, dus slepen en neerzetten is niet beschikbaar."
+    "sortDisabledNotice": "Handmatig sorteren is uitgeschakeld. Notities zijn gesorteerd op {{sortLabel}}, dus slepen en neerzetten is niet beschikbaar.",
+    "noteArchived": "Notitie gearchiveerd",
+    "noteUnarchived": "Notitie uit archief gehaald",
+    "noteDeleted": "Notitie naar prullenbak verplaatst",
+    "noteRestored": "Notitie hersteld",
+    "undo": "Ongedaan maken"
   },
   "settings": {
     "title": "Instellingen",
@@ -140,6 +160,8 @@
     "sessionsBrowserOnOS": "{{browser}} op {{os}}",
     "sessionsCurrent": "Huidig",
     "sessionsRevoke": "Intrekken",
+    "sessionsRevokeConfirmTitle": "Sessie intrekken",
+    "sessionsRevokeConfirmMessage": "Weet je zeker dat je deze sessie wilt intrekken?",
     "sessionsRevoking": "Intrekken...",
     "sessionsRevokeFailed": "Sessie intrekken mislukt",
     "sessionsNone": "Geen actieve sessies gevonden.",
@@ -147,7 +169,10 @@
     "aboutButton": "Over Jot",
     "importSection": "Importeren",
     "importDescription": "Importeer notities uit Google Keep-exports.",
-    "importButton": "Importeren uit Google Keep"
+    "importButton": "Importeren uit Google Keep",
+    "currentServerSection": "Server",
+    "currentServerLabel": "Actieve server",
+    "noServerConfigured": "Geen server geconfigureerd"
   },
   "about": {
     "clientInfo": "Clientinformatie",
@@ -160,7 +185,8 @@
     "commit": "Commit",
     "buildTime": "Bouwtijd",
     "goVersion": "Go-versie",
-    "failedLoad": "Serverinformatie laden mislukt"
+    "failedLoad": "Serverinformatie laden mislukt",
+    "serverOrigin": "Serveroorsprong"
   },
   "note": {
     "share": "Delen",
@@ -255,6 +281,9 @@
     "missingServerMessage": "Deze link bevat geen server-URL. Wordt geopend op {{server}}.",
     "invalidServerTitle": "Deep link genegeerd",
     "invalidServerMessage": "Deze link bevat een ongeldige server-URL.",
+    "unknownServerTitle": "Onbekende server",
+    "unknownServerMessage": "Deze link verwijst naar {{server}}, maar die server staat nog niet in je lijst.",
+    "addAndSwitchAction": "Toevoegen en wisselen",
     "wrongServerTitle": "Verkeerde server",
     "wrongServerMessage": "Deze link verwijst naar {{targetServer}}, maar je bent verbonden met {{currentServer}}."
   },

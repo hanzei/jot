@@ -17,6 +17,21 @@
     "logoutConfirmMessage": "¿Seguro que quieres cerrar sesión?",
     "openMenu": "Abrir menú"
   },
+  "serverPicker": {
+    "open": "Cambiar servidor",
+    "title": "Servidores",
+    "noServers": "Aún no hay servidores guardados.",
+    "addPlaceholder": "Añadir URL de servidor",
+    "addButton": "Añadir servidor",
+    "working": "Procesando...",
+    "urlRequired": "La URL del servidor es obligatoria.",
+    "invalidUrl": "La URL del servidor no es válida.",
+    "addFailed": "No se pudo añadir el servidor.",
+    "switchFailed": "No se pudo cambiar de servidor.",
+    "duplicateTitle": "Servidor ya añadido",
+    "duplicateMessage": "Este servidor ya existe en tu lista.",
+    "switchToExisting": "Cambiar al existente"
+  },
   "auth": {
     "signInTitle": "Iniciar sesión en Jot",
     "signInSubtitle": "Inicia sesión en tu cuenta",
@@ -70,6 +85,11 @@
     "trashEmptied": "Papelera vaciada",
     "emptyTrashFailed": "Error al vaciar la papelera",
     "emptyTrashOffline": "Vaciar papelera no está disponible sin conexión",
+    "noteArchived": "Nota archivada",
+    "noteUnarchived": "Nota desarchivada",
+    "noteDeleted": "Nota movida a la papelera",
+    "noteRestored": "Nota restaurada",
+    "undo": "Deshacer",
     "noSearchResults": "No hay notas que coincidan con \"{{query}}\"",
     "noNotesForLabel": "No hay notas para esta etiqueta",
     "tryDifferentKeywords": "Prueba con otras palabras clave",
@@ -140,6 +160,8 @@
     "sessionsBrowserOnOS": "{{browser}} en {{os}}",
     "sessionsCurrent": "Actual",
     "sessionsRevoke": "Revocar",
+    "sessionsRevokeConfirmTitle": "Revocar sesión",
+    "sessionsRevokeConfirmMessage": "¿Seguro que quieres revocar esta sesión?",
     "sessionsRevoking": "Revocando...",
     "sessionsRevokeFailed": "Error al revocar la sesión",
     "sessionsNone": "No se encontraron sesiones activas.",
@@ -147,7 +169,10 @@
     "aboutButton": "Acerca de Jot",
     "importSection": "Importar",
     "importDescription": "Importa notas desde exportaciones de Google Keep.",
-    "importButton": "Importar desde Google Keep"
+    "importButton": "Importar desde Google Keep",
+    "currentServerSection": "Servidor",
+    "currentServerLabel": "Servidor activo",
+    "noServerConfigured": "No hay servidor configurado"
   },
   "about": {
     "clientInfo": "Información del cliente",
@@ -160,7 +185,8 @@
     "commit": "Commit",
     "buildTime": "Fecha de compilación",
     "goVersion": "Versión de Go",
-    "failedLoad": "Error al cargar la información del servidor"
+    "failedLoad": "Error al cargar la información del servidor",
+    "serverOrigin": "Origen del servidor"
   },
   "note": {
     "share": "Compartir",
@@ -255,6 +281,9 @@
     "missingServerMessage": "Este enlace no especifica una URL del servidor. Se abrirá en {{server}}.",
     "invalidServerTitle": "Enlace profundo ignorado",
     "invalidServerMessage": "Este enlace tiene una URL del servidor no válida.",
+    "unknownServerTitle": "Servidor no agregado",
+    "unknownServerMessage": "Este enlace apunta a {{server}}, que no está en tu lista de servidores.",
+    "addAndSwitchAction": "Agregar y cambiar",
     "wrongServerTitle": "Servidor incorrecto",
     "wrongServerMessage": "Este enlace apunta a {{targetServer}}, pero estás conectado a {{currentServer}}."
   },

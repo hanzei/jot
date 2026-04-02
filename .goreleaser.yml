@@ -3,7 +3,8 @@ version: 2
 project_name: jot
 
 builds:
-  - dir: server
+  - id: server
+    dir: server
     env:
       - CGO_ENABLED=1
     goos:
@@ -23,8 +24,31 @@ builds:
           - CGO_ENABLED=1
           - CC=aarch64-linux-gnu-gcc
 
+  - id: jotctl
+    dir: server
+    main: ./cmd/jotctl
+    binary: jotctl
+    env:
+      - CGO_ENABLED=0
+    goos:
+      - linux
+    goarch:
+      - amd64
+      - arm64
+    ldflags:
+      - -s -w
+      - -X 'github.com/hanzei/jot/server/cmd/jotctl/cmd.version={{.Version}}'
+      - -X 'github.com/hanzei/jot/server/cmd/jotctl/cmd.commit={{.ShortCommit}}'
+      - -X 'github.com/hanzei/jot/server/cmd/jotctl/cmd.buildTime={{.Date}}'
+
 archives:
-  - format: tar.gz
+  - id: server
+    ids: [server]
+    format: tar.gz
+  - id: jotctl
+    ids: [jotctl]
+    name_template: "jotctl_{{ .Version }}_{{ .Os }}_{{ .Arch }}"
+    format: tar.gz
 
 checksum:
   name_template: checksums.txt

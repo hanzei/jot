@@ -1,34 +1,42 @@
-import React, { useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, Image, StyleSheet } from 'react-native';
 import { getAvatarColor } from '@jot/shared';
-import { getBaseUrl } from '../api/client';
+import { useActiveServerBaseUrl } from '../hooks/useActiveServerBaseUrl';
 
 const SIZE_MAP = {
   small: 24,
   medium: 36,
+  large: 52,
 };
 
 interface UserAvatarProps {
-  userId: string;
+  userId?: string;
   username: string;
   hasProfileIcon?: boolean;
-  size?: 'small' | 'medium';
+  size?: 'small' | 'medium' | 'large';
 }
 
 export default function UserAvatar({ userId, username, hasProfileIcon, size = 'medium' }: UserAvatarProps) {
   const [imageError, setImageError] = useState(false);
+  const baseUrl = useActiveServerBaseUrl();
   const dimension = SIZE_MAP[size];
-  const fontSize = size === 'small' ? 10 : 15;
+  const fontSize = size === 'small' ? 10 : size === 'medium' ? 15 : 22;
+
+  useEffect(() => {
+    setImageError(false);
+  }, [baseUrl, userId, hasProfileIcon]);
 
   const safeUsername = username || 'U';
   const bgColor = getAvatarColor(safeUsername);
   const letter = safeUsername.charAt(0).toUpperCase();
 
-  if (hasProfileIcon && !imageError) {
+  if (hasProfileIcon && userId && !imageError) {
     return (
       <Image
-        source={{ uri: `${getBaseUrl()}/api/v1/users/${userId}/profile-icon` }}
+        source={{ uri: `${baseUrl}/api/v1/users/${userId}/profile-icon` }}
         style={[styles.avatar, { width: dimension, height: dimension, borderRadius: dimension / 2 }]}
+        accessibilityRole="image"
+        accessibilityLabel={`${safeUsername} profile picture`}
         onError={() => setImageError(true)}
       />
     );
@@ -40,6 +48,8 @@ export default function UserAvatar({ userId, username, hasProfileIcon, size = 'm
         styles.avatar,
         { width: dimension, height: dimension, borderRadius: dimension / 2, backgroundColor: bgColor },
       ]}
+      accessibilityRole="image"
+      accessibilityLabel={`${safeUsername} avatar initials`}
     >
       <Text style={[styles.letter, { fontSize }]}>{letter}</Text>
     </View>

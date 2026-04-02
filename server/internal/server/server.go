@@ -21,6 +21,7 @@ import (
 	"github.com/hanzei/jot/server/internal/config"
 	"github.com/hanzei/jot/server/internal/database"
 	"github.com/hanzei/jot/server/internal/handlers"
+	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/hanzei/jot/server/internal/models"
 	"github.com/hanzei/jot/server/internal/sse"
 	"github.com/sirupsen/logrus"
@@ -87,7 +88,7 @@ func New(cfg *config.Config) (*Server, error) {
 	notesHandler := handlers.NewNotesHandler(noteStore, userStore, labelStore, hub)
 	labelsHandler := handlers.NewLabelsHandler(noteStore, labelStore, hub)
 	eventsHandler := handlers.NewEventsHandler(hub)
-	adminHandler := handlers.NewAdminHandler(userStore, noteStore, adminStatsStore, cfg.DBPath)
+	adminHandler := handlers.NewAdminHandler(userStore, noteStore, adminStatsStore, userSettingsStore, cfg.DBPath)
 	sessionsHandler := handlers.NewSessionsHandler(sessionStore)
 
 	s := &Server{
@@ -122,8 +123,10 @@ func New(cfg *config.Config) (*Server, error) {
 }
 
 func (s *Server) setupRoutes() error {
-	s.router.Use(logrusRequestLogger)
+	s.router.Use(middleware.RequestID)
+	s.router.Use(requestLoggerMiddleware)
 	s.router.Use(middleware.Recoverer)
+	s.router.Use(securityHeaders(s.cfg.CookieSecure))
 	s.router.Use(cors.Handler(cors.Options{
 		AllowedOrigins:   []string{s.cfg.CORSAllowedOrigin},
 		AllowedMethods:   []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodOptions},
@@ -133,7 +136,7 @@ func (s *Server) setupRoutes() error {
 		MaxAge:           300,
 	}))
 
-	s.router.Get("/livez", s.handleLive)
+	s.router.Get("/livez", s.wrapHandler(s.handleLive))
 	s.router.Get("/readyz", s.handleReady)
 
 	cop := http.NewCrossOriginProtection()
@@ -257,21 +260,21 @@ func FileServer(r chi.Router, path string, root *os.Root) {
 				http.NotFound(w, req)
 				return
 			}
-			defer func() {
+			defer func(ctx context.Context) {
 				if err := indexFile.Close(); err != nil {
-					logrus.WithError(err).Error("Failed to close index file")
+					logutil.FromContext(ctx).WithError(err).Error("Failed to close index file")
 				}
-			}()
+			}(req.Context())
 
 			w.Header().Set("Content-Type", "text/html")
 			http.ServeContent(w, req, "index.html", time.Time{}, indexFile)
 			return
 		}
-		defer func() {
+		defer func(ctx context.Context) {
 			if err := file.Close(); err != nil {
-				logrus.WithError(err).Error("Failed to close file")
+				logutil.FromContext(ctx).WithError(err).Error("Failed to close file")
 			}
-		}()
+		}(req.Context())
 
 		// File exists, serve it via the traversal-safe FS
 		fs := http.StripPrefix(pathPrefix, fileServer)
@@ -283,7 +286,12 @@ func (s *Server) wrapHandler(handler func(w http.ResponseWriter, r *http.Request
 	return func(w http.ResponseWriter, r *http.Request) {
 		statusCode, body, err := handler(w, r)
 		if err != nil {
-			logrus.WithError(err).WithField("status_code", statusCode).WithField("method", r.Method).WithField("path", r.URL.Path).Error("HTTP handler error")
+			log := logutil.FromContext(r.Context()).WithError(err).WithField("status_code", statusCode)
+			if statusCode >= 500 {
+				log.Error("HTTP handler error")
+			} else {
+				log.Warn("HTTP handler error")
+			}
 			msg := err.Error()
 			if statusCode >= 500 {
 				msg = "internal server error"
@@ -295,7 +303,7 @@ func (s *Server) wrapHandler(handler func(w http.ResponseWriter, r *http.Request
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(statusCode)
 			if err := json.NewEncoder(w).Encode(body); err != nil {
-				logrus.WithError(err).WithField("method", r.Method).WithField("path", r.URL.Path).Error("failed to encode response body")
+				logutil.FromContext(r.Context()).WithError(err).Error("failed to encode response body")
 			}
 		} else if statusCode > 0 {
 			w.WriteHeader(statusCode)
@@ -304,11 +312,8 @@ func (s *Server) wrapHandler(handler func(w http.ResponseWriter, r *http.Request
 }
 
 // handleLive serves the liveness probe response.
-func (s *Server) handleLive(w http.ResponseWriter, _ *http.Request) {
-	w.WriteHeader(http.StatusOK)
-	if _, err := w.Write([]byte("OK")); err != nil {
-		logrus.WithError(err).Error("failed to write health check response")
-	}
+func (s *Server) handleLive(_ http.ResponseWriter, _ *http.Request) (int, any, error) {
+	return http.StatusOK, nil, nil
 }
 
 // handleReady serves the readiness probe response.
@@ -322,14 +327,14 @@ func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	if err := s.db.PingContext(ctx); err != nil {
-		logrus.WithError(err).Warn("Readiness check failed")
+		logutil.FromContext(r.Context()).WithError(err).Warn("Readiness check failed")
 		http.Error(w, "NOT READY", http.StatusServiceUnavailable)
 		return
 	}
 
 	w.WriteHeader(http.StatusOK)
 	if _, err := w.Write([]byte("OK")); err != nil {
-		logrus.WithError(err).Error("Failed to write readiness response")
+		logutil.FromContext(r.Context()).WithError(err).Error("Failed to write readiness response")
 	}
 }
 
@@ -377,18 +382,40 @@ func (s *Server) GetDB() *database.DB {
 	return s.db
 }
 
-func logrusRequestLogger(next http.Handler) http.Handler {
+func securityHeaders(cookieSecure bool) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			h := w.Header()
+			h.Set("X-Content-Type-Options", "nosniff")
+			h.Set("X-Frame-Options", "DENY")
+			h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
+			h.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+			h.Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; frame-ancestors 'none'")
+			if cookieSecure {
+				h.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+func requestLoggerMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
-		next.ServeHTTP(ww, r)
-		logrus.WithFields(logrus.Fields{
+
+		entry := logrus.WithFields(logrus.Fields{
+			"request_id": middleware.GetReqID(r.Context()),
+			"method":     r.Method,
+			"path":       r.URL.Path,
+		})
+		rl := logutil.NewRequestLogger(entry)
+		next.ServeHTTP(ww, r.WithContext(logutil.NewContext(r.Context(), rl)))
+
+		// After next returns, rl may have been enriched by AuthMiddleware with user_id.
+		rl.WithFields(logrus.Fields{
 			"status":   ww.Status(),
-			"bytes":    ww.BytesWritten(),
 			"duration": time.Since(start).String(),
-			"method":   r.Method,
-			"path":     r.URL.Path,
-			"remote":   r.RemoteAddr,
 		}).Info("request completed")
 	})
 }
@@ -484,6 +511,13 @@ func (s *Server) setStartResult(startErr error) {
 
 func (s *Server) BeginShutdown() {
 	s.shuttingDown.Store(true)
+}
+
+// StopBackgroundTasks cancels the server context and waits for all background
+// goroutines to finish. It is intended for use in tests that bypass Start/Shutdown.
+func (s *Server) StopBackgroundTasks() {
+	s.cancel()
+	s.bgWg.Wait()
 }
 
 // startPeriodicTask starts a background goroutine tracked by wg that calls fn on every interval.

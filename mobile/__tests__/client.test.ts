@@ -1,8 +1,26 @@
 import axios from 'axios';
 import * as SecureStore from 'expo-secure-store';
-import { auth, getStoredSession, clearStoredSession, cacheAuthProfile, getCachedAuthProfile, clearCachedProfile } from '../src/api/client';
+import {
+  auth,
+  getStoredSession,
+  clearStoredSession,
+  cacheAuthProfile,
+  getCachedAuthProfile,
+  clearCachedProfile,
+  setServerUrl,
+  switchActiveServer,
+} from '../src/api/client';
+import { getActiveServer, getServerScopedStorageKey } from '../src/store/serverAccounts';
 
 jest.mock('axios', () => {
+  class MockCanceledError extends Error {
+    code = 'ERR_CANCELED';
+    __CANCEL__ = true;
+    constructor(message?: string) {
+      super(message);
+      this.name = 'CanceledError';
+    }
+  }
   const mockInstance = {
     post: jest.fn(),
     get: jest.fn(),
@@ -12,14 +30,19 @@ jest.mock('axios', () => {
     },
     defaults: { headers: { common: {} } },
   };
+  const mockIsCancel = (value: unknown): boolean =>
+    value instanceof MockCanceledError || Boolean((value as { __CANCEL__?: boolean })?.__CANCEL__);
   const mockAxios = {
     create: jest.fn(() => mockInstance),
     __mockInstance: mockInstance,
+    isCancel: mockIsCancel,
   };
   return {
     __esModule: true,
     default: mockAxios,
     AxiosHeaders: jest.fn(),
+    CanceledError: MockCanceledError,
+    isCancel: mockIsCancel,
   };
 });
 
@@ -27,7 +50,17 @@ jest.mock('react-native', () => ({
   Platform: { OS: 'ios' },
 }));
 
-const mockAxiosInstance = (axios as unknown as { __mockInstance: Record<string, jest.Mock> }).__mockInstance;
+type MockAxiosInstance = {
+  post: jest.Mock;
+  get: jest.Mock;
+  interceptors: {
+    request: { use: jest.Mock };
+    response: { use: jest.Mock };
+  };
+  defaults: { headers: { common: Record<string, unknown> } };
+};
+
+const mockAxiosInstance = (axios as unknown as { __mockInstance: MockAxiosInstance }).__mockInstance;
 
 const mockSecureStore = SecureStore as unknown as {
   getItemAsync: jest.Mock;
@@ -36,8 +69,43 @@ const mockSecureStore = SecureStore as unknown as {
 };
 
 describe('API Client', () => {
+  const memory = new Map<string, string>();
+
+  const getActiveTestServerId = async (): Promise<string> => {
+    const active = await getActiveServer();
+    if (!active) {
+      throw new Error('missing active server');
+    }
+    return active.serverId;
+  };
+
+  beforeAll(async () => {
+    mockSecureStore.getItemAsync.mockImplementation(async (key: string) => memory.get(key) ?? null);
+    mockSecureStore.setItemAsync.mockImplementation(async (key: string, value: string) => {
+      memory.set(key, value);
+    });
+    mockSecureStore.deleteItemAsync.mockImplementation(async (key: string) => {
+      memory.delete(key);
+    });
+    await setServerUrl('https://test.example.com');
+    const active = await getActiveServer();
+    if (!active) {
+      throw new Error('missing active server after setup');
+    }
+  });
+
   beforeEach(() => {
-    jest.clearAllMocks();
+    mockAxiosInstance.post.mockClear();
+    mockAxiosInstance.get.mockClear();
+    mockSecureStore.getItemAsync.mockClear();
+    mockSecureStore.setItemAsync.mockClear();
+    mockSecureStore.deleteItemAsync.mockClear();
+    mockSecureStore.getItemAsync.mockImplementation(async (key: string) => memory.get(key) ?? null);
+    for (const key of Array.from(memory.keys())) {
+      if (/^jot_server_v1_.*_(session|cached_profile)$/.test(key)) {
+        memory.delete(key);
+      }
+    }
   });
 
   describe('auth.login', () => {
@@ -54,7 +122,7 @@ describe('API Client', () => {
         username: 'test',
         password: 'pass',
       });
-      expect(mockSecureStore.setItemAsync).toHaveBeenCalledWith('jot_session', 'abc123');
+      expect(mockSecureStore.setItemAsync).toHaveBeenCalledWith(expect.stringMatching(/^jot_server_v1_.*_session$/), 'abc123');
       expect(result).toEqual(mockResponse.data);
     });
 
@@ -91,7 +159,7 @@ describe('API Client', () => {
         username: 'newuser',
         password: 'pass',
       });
-      expect(mockSecureStore.setItemAsync).toHaveBeenCalledWith('jot_session', 'def456');
+      expect(mockSecureStore.setItemAsync).toHaveBeenCalledWith(expect.stringMatching(/^jot_server_v1_.*_session$/), 'def456');
       expect(result).toEqual(mockResponse.data);
     });
 
@@ -109,8 +177,8 @@ describe('API Client', () => {
       await auth.logout();
 
       expect(mockAxiosInstance.post).toHaveBeenCalledWith('/logout');
-      expect(mockSecureStore.deleteItemAsync).toHaveBeenCalledWith('jot_session');
-      expect(mockSecureStore.deleteItemAsync).toHaveBeenCalledWith('jot_cached_profile');
+      expect(mockSecureStore.deleteItemAsync).toHaveBeenCalledWith(expect.stringMatching(/^jot_server_v1_.*_session$/));
+      expect(mockSecureStore.deleteItemAsync).toHaveBeenCalledWith(expect.stringMatching(/^jot_server_v1_.*_cached_profile$/));
     });
 
     it('clears stored session and cached profile even when server call fails', async () => {
@@ -118,8 +186,8 @@ describe('API Client', () => {
 
       await auth.logout();
 
-      expect(mockSecureStore.deleteItemAsync).toHaveBeenCalledWith('jot_session');
-      expect(mockSecureStore.deleteItemAsync).toHaveBeenCalledWith('jot_cached_profile');
+      expect(mockSecureStore.deleteItemAsync).toHaveBeenCalledWith(expect.stringMatching(/^jot_server_v1_.*_session$/));
+      expect(mockSecureStore.deleteItemAsync).toHaveBeenCalledWith(expect.stringMatching(/^jot_server_v1_.*_cached_profile$/));
     });
   });
 
@@ -145,13 +213,17 @@ describe('API Client', () => {
 
   describe('getStoredSession', () => {
     it('returns token from secure store', async () => {
-      mockSecureStore.getItemAsync.mockResolvedValueOnce('stored-token');
+      await setServerUrl('https://session-check.example.com');
+      const sessionServerId = await getActiveTestServerId();
+      memory.set(getServerScopedStorageKey(sessionServerId, 'session'), 'stored-token');
       const result = await getStoredSession();
       expect(result).toBe('stored-token');
     });
 
     it('returns null when no token stored', async () => {
-      mockSecureStore.getItemAsync.mockResolvedValueOnce(null);
+      const activeServerId = await getActiveTestServerId();
+      memory.delete(getServerScopedStorageKey(activeServerId, 'session'));
+      await clearStoredSession();
       const result = await getStoredSession();
       expect(result).toBeNull();
     });
@@ -160,7 +232,7 @@ describe('API Client', () => {
   describe('clearStoredSession', () => {
     it('deletes token from secure store', async () => {
       await clearStoredSession();
-      expect(mockSecureStore.deleteItemAsync).toHaveBeenCalledWith('jot_session');
+      expect(mockSecureStore.deleteItemAsync).toHaveBeenCalledWith(expect.stringMatching(/^jot_server_v1_.*_session$/));
     });
   });
 
@@ -169,7 +241,7 @@ describe('API Client', () => {
       const profile = { user: { id: '1', username: 'test' }, settings: { theme: 'system', note_sort: 'manual' } };
       await cacheAuthProfile(profile as Parameters<typeof cacheAuthProfile>[0]);
       expect(mockSecureStore.setItemAsync).toHaveBeenCalledWith(
-        'jot_cached_profile',
+        expect.stringMatching(/^jot_server_v1_.*_cached_profile$/),
         JSON.stringify(profile),
       );
     });
@@ -185,19 +257,22 @@ describe('API Client', () => {
   describe('getCachedAuthProfile', () => {
     it('returns parsed profile from secure store', async () => {
       const profile = { user: { id: '1', username: 'test' }, settings: { theme: 'system', note_sort: 'manual' } };
-      mockSecureStore.getItemAsync.mockResolvedValueOnce(JSON.stringify(profile));
+      const activeServerId = await getActiveTestServerId();
+      memory.set(getServerScopedStorageKey(activeServerId, 'cached_profile'), JSON.stringify(profile));
       const result = await getCachedAuthProfile();
       expect(result).toEqual(profile);
     });
 
     it('returns null when nothing cached', async () => {
-      mockSecureStore.getItemAsync.mockResolvedValueOnce(null);
+      const activeServerId = await getActiveTestServerId();
+      memory.delete(getServerScopedStorageKey(activeServerId, 'cached_profile'));
       const result = await getCachedAuthProfile();
       expect(result).toBeNull();
     });
 
     it('returns null on parse error', async () => {
-      mockSecureStore.getItemAsync.mockResolvedValueOnce('not-json');
+      const activeServerId = await getActiveTestServerId();
+      memory.set(getServerScopedStorageKey(activeServerId, 'cached_profile'), 'not-json');
       const result = await getCachedAuthProfile();
       expect(result).toBeNull();
     });
@@ -206,7 +281,85 @@ describe('API Client', () => {
   describe('clearCachedProfile', () => {
     it('deletes cached profile from secure store', async () => {
       await clearCachedProfile();
-      expect(mockSecureStore.deleteItemAsync).toHaveBeenCalledWith('jot_cached_profile');
+      expect(mockSecureStore.deleteItemAsync).toHaveBeenCalledWith(expect.stringMatching(/^jot_server_v1_.*_cached_profile$/));
+    });
+  });
+
+  describe('switch lifecycle request guarding', () => {
+    it('cancels in-flight old-generation requests when switching servers', async () => {
+      await setServerUrl('https://switch-a.example.com');
+      const firstServer = await getActiveServer();
+      if (!firstServer) {
+        throw new Error('missing first server');
+      }
+
+      await setServerUrl('https://switch-b.example.com');
+      const secondServer = await getActiveServer();
+      if (!secondServer) {
+        throw new Error('missing second server');
+      }
+
+      const requestUse = mockAxiosInstance.interceptors.request.use;
+      const responseUse = mockAxiosInstance.interceptors.response.use;
+      if (requestUse.mock.calls.length !== 1 || responseUse.mock.calls.length !== 1) {
+        throw new Error('Expected exactly one axios request and response interceptor registration');
+      }
+      const requestInterceptor = requestUse.mock.calls[0]?.[0] as (
+        config: Record<string, unknown>,
+      ) => Promise<Record<string, unknown>>;
+      const responseSuccessInterceptor = responseUse.mock.calls[0]?.[0] as (
+        response: { config: Record<string, unknown> },
+      ) => { config: Record<string, unknown> };
+
+      const staleConfig = await requestInterceptor({ method: 'get', headers: {} });
+
+      await switchActiveServer(firstServer.serverId);
+      const switched = await switchActiveServer(secondServer.serverId);
+      expect(switched).toBe(true);
+
+      expect((staleConfig.signal as AbortSignal).aborted).toBe(true);
+      expect(() => responseSuccessInterceptor({ config: staleConfig })).toThrow('Discarded stale response after server switch.');
+    });
+  });
+
+  describe('server-scoped auth/session isolation across two servers', () => {
+    it('stores and reads session cookies independently per active server', async () => {
+      await setServerUrl('https://isolation-a.example.com');
+      const serverA = await getActiveServer();
+      if (!serverA) {
+        throw new Error('missing server A');
+      }
+
+      await setServerUrl('https://isolation-b.example.com');
+      const serverB = await getActiveServer();
+      if (!serverB) {
+        throw new Error('missing server B');
+      }
+
+      mockAxiosInstance.post
+        .mockResolvedValueOnce({
+          data: { user: { id: 'a', username: 'usera' }, settings: { theme: 'system', note_sort: 'manual' } },
+          headers: { 'set-cookie': ['jot_session=token-a; Path=/; HttpOnly'] },
+        })
+        .mockResolvedValueOnce({
+          data: { user: { id: 'b', username: 'userb' }, settings: { theme: 'system', note_sort: 'manual' } },
+          headers: { 'set-cookie': ['jot_session=token-b; Path=/; HttpOnly'] },
+        });
+
+      await switchActiveServer(serverA.serverId);
+      await auth.login({ username: 'usera', password: 'pass' });
+
+      await switchActiveServer(serverB.serverId);
+      await auth.login({ username: 'userb', password: 'pass' });
+
+      expect(memory.get(getServerScopedStorageKey(serverA.serverId, 'session'))).toBe('token-a');
+      expect(memory.get(getServerScopedStorageKey(serverB.serverId, 'session'))).toBe('token-b');
+
+      await switchActiveServer(serverA.serverId);
+      expect(await getStoredSession()).toBe('token-a');
+
+      await switchActiveServer(serverB.serverId);
+      expect(await getStoredSession()).toBe('token-b');
     });
   });
 });

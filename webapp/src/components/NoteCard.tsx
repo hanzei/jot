@@ -13,6 +13,7 @@ import { useTranslation } from 'react-i18next';
 import { VALIDATION, type Note, type User } from '@jot/shared';
 import { notes } from '@/utils/api';
 import LetterAvatar from '@/components/LetterAvatar';
+import LinkText from '@/components/LinkText';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { useToast } from '@/hooks/useToast';
 import { buildShareAvatars } from '@/utils/shareAvatars';
@@ -290,19 +291,22 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
 
               return (
                 <>
-                  {uncompletedItems.map((item) => (
-                      <div key={item.id} className="flex items-center text-sm" style={{ marginLeft: item.indent_level * VALIDATION.INDENT_PX_PER_LEVEL }}>
+                  {uncompletedItems.map((item) => {
+                    const normalizedIndentLevel = Math.max(0, Number(item.indent_level) || 0);
+                    return (
+                      <div key={item.id} className="flex items-start min-w-0 text-sm" style={{ marginLeft: normalizedIndentLevel * VALIDATION.INDENT_PX_PER_LEVEL }}>
                         <input
                           type="checkbox"
                           checked={item.completed}
                           readOnly
-                          className="h-4 w-4 text-blue-600 rounded mr-2"
+                          className="h-4 w-4 text-blue-600 rounded mr-2 mt-0.5 flex-shrink-0"
                         />
-                        <span className="text-gray-700 dark:text-gray-200">
-                          {item.text}
+                        <span className="min-w-0 whitespace-pre-wrap break-words text-gray-700 dark:text-gray-200">
+                          <LinkText text={item.text} />
                         </span>
                       </div>
-                  ))}
+                    );
+                  })}
                   {completedItems.length > 0 && (
                     <div className="text-xs text-gray-500 dark:text-gray-400 mt-2">
                       {t('note.moreCompletedItems', { count: completedItems.length })}

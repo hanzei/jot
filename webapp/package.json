@@ -2,6 +2,7 @@
   "name": "jot-webapp",
   "version": "0.1.0",
   "private": true,
+  "license": "MIT",
   "type": "module",
   "dependencies": {
     "@jot/shared": "file:../shared",

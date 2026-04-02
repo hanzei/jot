@@ -52,12 +52,18 @@ jest.mock('@tanstack/react-query', () => ({
   }),
 }));
 
+jest.mock('../src/hooks/queryKeys', () => ({
+  notesLocalQueryScopeKey: jest.fn(() => ['notes-local', 'test-scope']),
+  notesQueryScopeKey: jest.fn(() => ['notes', 'test-scope']),
+}));
+
 jest.mock('expo-document-picker', () => ({
   getDocumentAsync: jest.fn(),
 }));
 
 jest.mock('../src/api/client', () => ({
   getBaseUrl: jest.fn(() => 'http://localhost:8080'),
+  subscribeToClientActiveServerChanges: jest.fn(() => () => {}),
 }));
 
 const mockUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;
@@ -141,8 +147,8 @@ describe('SettingsScreen import section', () => {
       expect(mockGetNotes).toHaveBeenCalled();
       expect(mockSaveNotes).toHaveBeenCalled();
     });
-    expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: ['notes-local'] });
-    expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: ['notes'] });
+    expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: ['notes-local', 'test-scope'] });
+    expect(mockInvalidateQueries).toHaveBeenCalledWith({ queryKey: ['notes', 'test-scope'] });
     await waitFor(() => {
       expect(getByText(/Imported 2 notes/i)).toBeTruthy();
     });

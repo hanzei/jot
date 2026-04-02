@@ -699,6 +699,12 @@
                             "type": "string"
                         }
                     },
+                    "404": {
+                        "description": "label not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
                     "500": {
                         "description": "internal server error",
                         "schema": {
@@ -1150,6 +1156,12 @@
                             "type": "string"
                         }
                     },
+                    "404": {
+                        "description": "label not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
                     "500": {
                         "description": "internal server error",
                         "schema": {
@@ -1284,9 +1296,6 @@
                 "consumes": [
                     "application/json"
                 ],
-                "produces": [
-                    "application/json"
-                ],
                 "tags": [
                     "sharing"
                 ],
@@ -1310,11 +1319,8 @@
                     }
                 ],
                 "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/handlers.ShareNoteResponse"
-                        }
+                    "204": {
+                        "description": "No Content"
                     },
                     "400": {
                         "description": "bad request",
@@ -1422,9 +1428,6 @@
                         "CookieAuth": []
                     }
                 ],
-                "produces": [
-                    "application/json"
-                ],
                 "tags": [
                     "sharing"
                 ],
@@ -1446,11 +1449,8 @@
                     }
                 ],
                 "responses": {
-                    "200": {
-                        "description": "OK",
-                        "schema": {
-                            "$ref": "#/definitions/handlers.ShareNoteResponse"
-                        }
+                    "204": {
+                        "description": "No Content"
                     },
                     "400": {
                         "description": "bad request",
@@ -2104,17 +2104,6 @@
             "properties": {
                 "user_id": {
                     "type": "string"
-                }
-            }
-        },
-        "handlers.ShareNoteResponse": {
-            "type": "object",
-            "properties": {
-                "message": {
-                    "type": "string"
-                },
-                "success": {
-                    "type": "boolean"
                 }
             }
         },

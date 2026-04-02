@@ -42,15 +42,22 @@ func (s *NoteStore) GetNoteShares(ctx context.Context, noteID string) ([]NoteSha
 }
 
 func (s *NoteStore) ShareNote(ctx context.Context, noteID string, sharedByUserID, sharedWithUserID string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
 	shareID, err := generateID()
 	if err != nil {
 		return fmt.Errorf("failed to generate share ID: %w", err)
 	}
 
-	query := `INSERT INTO note_shares (id, note_id, shared_with_user_id, shared_by_user_id, permission_level)
-			  VALUES (?, ?, ?, ?, 'edit')`
-
-	_, err = s.db.ExecContext(ctx, query, shareID, noteID, sharedWithUserID, sharedByUserID)
+	_, err = tx.ExecContext(ctx,
+		`INSERT INTO note_shares (id, note_id, shared_with_user_id, shared_by_user_id, permission_level)
+		 VALUES (?, ?, ?, ?, 'edit')`,
+		shareID, noteID, sharedWithUserID, sharedByUserID,
+	)
 	if err != nil {
 		if isUniqueConstraintError(err) {
 			return ErrNoteAlreadyShared
@@ -58,7 +65,14 @@ func (s *NoteStore) ShareNote(ctx context.Context, noteID string, sharedByUserID
 		return fmt.Errorf("failed to share note: %w", err)
 	}
 
-	return nil
+	if _, err = tx.ExecContext(ctx,
+		`INSERT OR IGNORE INTO note_user_state (note_id, user_id) VALUES (?, ?)`,
+		noteID, sharedWithUserID,
+	); err != nil {
+		return fmt.Errorf("failed to create note user state for collaborator: %w", err)
+	}
+
+	return tx.Commit()
 }
 
 func (s *NoteStore) UnshareNote(ctx context.Context, noteID string, sharedWithUserID string) error {
@@ -83,7 +97,7 @@ func (s *NoteStore) UnshareNote(ctx context.Context, noteID string, sharedWithUs
 	}
 
 	if _, err = tx.ExecContext(ctx,
-		`UPDATE note_items SET assigned_to = '' WHERE note_id = ? AND assigned_to = ?`,
+		`UPDATE note_items SET assigned_to = NULL WHERE note_id = ? AND assigned_to = ?`,
 		noteID, sharedWithUserID,
 	); err != nil {
 		return fmt.Errorf("failed to clear assignments for unshared user: %w", err)
@@ -96,11 +110,26 @@ func (s *NoteStore) UnshareNote(ctx context.Context, noteID string, sharedWithUs
 
 	if remainingShares == 0 {
 		if _, err = tx.ExecContext(ctx,
-			`UPDATE note_items SET assigned_to = '' WHERE note_id = ? AND assigned_to != ''`,
+			`UPDATE note_items SET assigned_to = NULL WHERE note_id = ? AND assigned_to IS NOT NULL`,
 			noteID,
 		); err != nil {
 			return fmt.Errorf("failed to clear all assignments: %w", err)
 		}
+	}
+
+	// Remove per-user state and labels for the unshared collaborator.
+	if _, err = tx.ExecContext(ctx,
+		`DELETE FROM note_user_state WHERE note_id = ? AND user_id = ?`,
+		noteID, sharedWithUserID,
+	); err != nil {
+		return fmt.Errorf("failed to delete note user state for unshared user: %w", err)
+	}
+
+	if _, err = tx.ExecContext(ctx,
+		`DELETE FROM note_labels WHERE note_id = ? AND user_id = ?`,
+		noteID, sharedWithUserID,
+	); err != nil {
+		return fmt.Errorf("failed to delete note labels for unshared user: %w", err)
 	}
 
 	if err = tx.Commit(); err != nil {
@@ -110,12 +139,14 @@ func (s *NoteStore) UnshareNote(ctx context.Context, noteID string, sharedWithUs
 	return nil
 }
 
-// ClearUserAssignmentsTx clears all item assignments related to a deleted user
-// within an existing transaction. It:
-//  1. Removes note_shares rows where the user is the sharee (shared_with_user_id).
-//  2. Removes note_shares rows where the user is the sharer (shared_by_user_id).
-//  3. Clears items directly assigned to the deleted user.
-//  4. Clears all remaining assignments on notes that no longer have any shares,
+// ClearUserAssignmentsTx clears all share relationships and orphaned assignments
+// related to a deleted user within an existing transaction. It runs after the
+// user row has been deleted (and FK ON DELETE CASCADE has already removed the
+// user's note_shares rows and FK ON DELETE SET NULL has already nulled
+// note_items.assigned_to for items assigned to the deleted user). It:
+//  1. Removes any remaining note_shares rows where the user was the sharee.
+//  2. Removes any remaining note_shares rows where the user was the sharer.
+//  3. Clears assignments from other users on notes that are now fully unshared,
 //     enforcing the invariant that unshared notes cannot have assignments.
 func (s *NoteStore) ClearUserAssignmentsTx(ctx context.Context, tx *sql.Tx, userID string) error {
 	if _, err := tx.ExecContext(
@@ -136,19 +167,30 @@ func (s *NoteStore) ClearUserAssignmentsTx(ctx context.Context, tx *sql.Tx, user
 
 	if _, err := tx.ExecContext(
 		ctx,
-		`UPDATE note_items SET assigned_to = '' WHERE assigned_to = ?`,
-		userID,
-	); err != nil {
-		return fmt.Errorf("failed to clear deleted user assignments: %w", err)
-	}
-
-	if _, err := tx.ExecContext(
-		ctx,
-		`UPDATE note_items SET assigned_to = ''
-		 WHERE assigned_to != ''
+		`UPDATE note_items SET assigned_to = NULL
+		 WHERE assigned_to IS NOT NULL
 		   AND note_id NOT IN (SELECT DISTINCT note_id FROM note_shares)`,
 	); err != nil {
 		return fmt.Errorf("failed to clear assignments on unshared notes: %w", err)
+	}
+
+	// Both deletes below are safety nets: note_user_state.user_id and
+	// note_labels.user_id both carry ON DELETE CASCADE, so FK enforcement
+	// (PRAGMA foreign_keys = ON in database.go) handles them automatically.
+	// The explicit deletes guard against any future code path where FK
+	// enforcement might not be active.
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM note_user_state WHERE user_id = ?`,
+		userID,
+	); err != nil {
+		return fmt.Errorf("failed to delete note user state for deleted user: %w", err)
+	}
+
+	if _, err := tx.ExecContext(ctx,
+		`DELETE FROM note_labels WHERE user_id = ?`,
+		userID,
+	); err != nil {
+		return fmt.Errorf("failed to delete note labels for deleted user: %w", err)
 	}
 
 	return nil

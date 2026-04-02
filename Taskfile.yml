@@ -27,7 +27,7 @@ tasks:
   test-server:
     desc: Run server tests
     dir: server
-    cmd: go test -v ./...
+    cmd: go test ./...
 
   test-webapp:
     desc: Run webapp tests
@@ -38,7 +38,7 @@ tasks:
     desc: Run server tests with coverage
     dir: server
     cmds:
-      - go test -v -coverprofile=coverage.out ./...
+      - go test -coverprofile=coverage.out ./...
       - go tool cover -html=coverage.out -o coverage.html
 
   lint:
@@ -89,6 +89,18 @@ tasks:
     desc: Run shared package linting
     dir: shared
     cmd: npm run lint && npm run typecheck
+
+  build-jotctl:
+    desc: Build the jotctl admin CLI binary
+    dir: server
+    vars:
+      COMMIT:
+        sh: git rev-parse --short HEAD
+      BUILD_TIME:
+        sh: date -u +%Y-%m-%dT%H:%M:%SZ
+      LDFLAGS: "-X 'github.com/hanzei/jot/server/cmd/jotctl/cmd.version=dev' -X 'github.com/hanzei/jot/server/cmd/jotctl/cmd.commit={{.COMMIT}}' -X 'github.com/hanzei/jot/server/cmd/jotctl/cmd.buildTime={{.BUILD_TIME}}'"
+    cmds:
+      - go build -buildvcs=false -ldflags "{{.LDFLAGS}}" -o jotctl ./cmd/jotctl
 
   clean:
     desc: Remove generated files and node packages

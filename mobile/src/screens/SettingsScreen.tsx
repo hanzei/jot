@@ -1,4 +1,4 @@
-import React, { useState, useCallback, useEffect } from 'react';
+import React, { useState, useCallback, useEffect, useRef } from 'react';
 import {
   View,
   Text,
@@ -12,6 +12,7 @@ import {
   KeyboardAvoidingView,
   Modal,
   Pressable,
+  Alert,
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -23,7 +24,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
-import { getBaseUrl } from '../api/client';
+import { subscribeToClientActiveServerChanges } from '../api/client';
 import { importKeepFile, getNotes } from '../api/notes';
 import {
   updateMe,
@@ -39,6 +40,9 @@ import i18n from '../i18n';
 import { SUPPORTED_LANGUAGES, getLanguagePreference, resolveLanguage, type LanguagePreference } from '../i18n/language';
 import { displayMessage, getCurrentLocale } from '../i18n/utils';
 import { saveNotes } from '../db/noteQueries';
+import { notesLocalQueryScopeKey, notesQueryScopeKey } from '../hooks/queryKeys';
+import { getActiveServer } from '../store/serverAccounts';
+import { useActiveServerBaseUrl } from '../hooks/useActiveServerBaseUrl';
 
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
@@ -48,6 +52,7 @@ export default function SettingsScreen() {
   const { user, settings, setUser, setSettings } = useAuth();
   const { colors } = useTheme();
   const { t } = useTranslation();
+  const activeServerBaseUrl = useActiveServerBaseUrl();
 
   const [firstName, setFirstName] = useState(user?.first_name ?? '');
   const [lastName, setLastName] = useState(user?.last_name ?? '');
@@ -91,6 +96,78 @@ export default function SettingsScreen() {
   const [aboutLoading, setAboutLoading] = useState(false);
   const [aboutError, setAboutError] = useState('');
   const [aboutExpanded, setAboutExpanded] = useState(false);
+  const [activeServerUrl, setActiveServerUrl] = useState<string | null>(null);
+  const isMountedRef = useRef(true);
+  const previousServerUrlRef = useRef<string | null | undefined>(undefined);
+  const aboutRequestSeqRef = useRef(0);
+
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => {
+      isMountedRef.current = false;
+    };
+  }, []);
+
+  useEffect(() => {
+    let mounted = true;
+    const loadActiveServer = async () => {
+      try {
+        const activeServer = await getActiveServer();
+        if (mounted) {
+          const nextServerUrl = activeServer?.serverUrl ?? null;
+          const previousServerUrl = previousServerUrlRef.current;
+          setActiveServerUrl(nextServerUrl);
+          if (previousServerUrl !== nextServerUrl) {
+            previousServerUrlRef.current = nextServerUrl;
+            aboutRequestSeqRef.current += 1;
+            setSessions([]);
+            setSessionsError('');
+            setSessionsLoading(true);
+            setAboutInfo(null);
+            setAboutError('');
+            setAboutLoading(false);
+            void listSessions()
+              .then((nextSessions) => {
+                if (mounted) {
+                  setSessions(nextSessions);
+                }
+              })
+              .catch(() => {
+                if (mounted) {
+                  setSessionsError('settings.sessionsLoadFailed');
+                }
+              })
+              .finally(() => {
+                if (mounted) {
+                  setSessionsLoading(false);
+                }
+              });
+          }
+        }
+      } catch (error) {
+        console.warn('Failed to load active server in settings:', error);
+        if (mounted) {
+          aboutRequestSeqRef.current += 1;
+          previousServerUrlRef.current = null;
+          setActiveServerUrl(null);
+          setSessions([]);
+          setSessionsLoading(false);
+          setSessionsError('settings.sessionsLoadFailed');
+          setAboutLoading(false);
+        }
+      }
+    };
+
+    void loadActiveServer();
+    const unsubscribe = subscribeToClientActiveServerChanges(() => {
+      void loadActiveServer();
+    });
+
+    return () => {
+      mounted = false;
+      unsubscribe();
+    };
+  }, []);
 
   useEffect(() => {
     setLanguagePref(getLanguagePreference(settings?.language));
@@ -102,26 +179,47 @@ export default function SettingsScreen() {
     setPasswordSuccess('');
   }, [settings?.language]);
 
-  useEffect(() => {
-    setSessionsLoading(true);
-    listSessions()
-      .then(setSessions)
-      .catch(() => setSessionsError('settings.sessionsLoadFailed'))
-      .finally(() => setSessionsLoading(false));
-  }, []);
-
-  const handleRevokeSession = useCallback(async (id: string) => {
+  const revokeSessionById = useCallback(async (id: string) => {
     setRevokingId(id);
     try {
       await revokeSession(id);
+      if (!isMountedRef.current) {
+        return;
+      }
       setSessionsError('');
       setSessions(prev => prev.filter(s => s.id !== id));
     } catch {
+      if (!isMountedRef.current) {
+        return;
+      }
       setSessionsError('settings.sessionsRevokeFailed');
     } finally {
-      setRevokingId(null);
+      if (isMountedRef.current) {
+        setRevokingId(null);
+      }
     }
   }, []);
+
+  const handleRevokeSession = useCallback((id: string) => {
+    Alert.alert(
+      t('settings.sessionsRevokeConfirmTitle'),
+      t('settings.sessionsRevokeConfirmMessage'),
+      [
+        {
+          text: t('common.cancel'),
+          style: 'cancel',
+          onPress: () => undefined,
+        },
+        {
+          text: t('settings.sessionsRevoke'),
+          style: 'destructive',
+          onPress: () => {
+            void revokeSessionById(id);
+          },
+        },
+      ],
+    );
+  }, [revokeSessionById, t]);
 
   const handleSelectImportFile = useCallback(async () => {
     setImportError('');
@@ -171,8 +269,8 @@ export default function SettingsScreen() {
       } catch (syncErr) {
         console.warn('Post-import notes sync failed:', syncErr);
       } finally {
-        queryClient.invalidateQueries({ queryKey: ['notes-local'] });
-        queryClient.invalidateQueries({ queryKey: ['notes'] });
+        queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+        queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
       }
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: string } })?.response?.data;
@@ -184,11 +282,28 @@ export default function SettingsScreen() {
 
   useEffect(() => {
     if (aboutExpanded && !aboutInfo && !aboutError) {
+      let cancelled = false;
+      const requestId = ++aboutRequestSeqRef.current;
       setAboutLoading(true);
       getAboutInfo()
-        .then(setAboutInfo)
-        .catch(() => setAboutError('about.failedLoad'))
-        .finally(() => setAboutLoading(false));
+        .then((nextAboutInfo) => {
+          if (!cancelled && aboutRequestSeqRef.current === requestId) {
+            setAboutInfo(nextAboutInfo);
+          }
+        })
+        .catch(() => {
+          if (!cancelled && aboutRequestSeqRef.current === requestId) {
+            setAboutError('about.failedLoad');
+          }
+        })
+        .finally(() => {
+          if (!cancelled && aboutRequestSeqRef.current === requestId) {
+            setAboutLoading(false);
+          }
+        });
+      return () => {
+        cancelled = true;
+      };
     }
   }, [aboutExpanded, aboutInfo, aboutError]);
 
@@ -386,7 +501,7 @@ export default function SettingsScreen() {
               <View>
                 {hasProfileIcon && user ? (
                   <Image
-                    source={{ uri: `${getBaseUrl()}/api/v1/users/${user.id}/profile-icon?v=${iconVersion}` }}
+                    source={{ uri: `${activeServerBaseUrl}/api/v1/users/${user.id}/profile-icon?v=${iconVersion}` }}
                     style={styles.profileAvatar}
                   />
                 ) : (
@@ -587,6 +702,7 @@ export default function SettingsScreen() {
                         onPress={() => handleRevokeSession(session.id)}
                         disabled={revokingId === session.id}
                         style={styles.revokeButton}
+                        testID={`settings-revoke-session-${session.id}`}
                         accessibilityLabel={t('settings.sessionsRevoke')}
                         accessibilityRole="button"
                       >
@@ -756,6 +872,10 @@ export default function SettingsScreen() {
                 <View style={[styles.aboutDivider, { backgroundColor: colors.divider }]} />
                 <View style={styles.aboutSection}>
                   <Text style={[styles.aboutSectionTitle, { color: colors.textMuted }]}>{t('about.serverInfo')}</Text>
+                  <AboutRow
+                    label={t('about.serverOrigin')}
+                    value={activeServerUrl ?? t('settings.noServerConfigured')}
+                  />
                   {aboutLoading && <ActivityIndicator size="small" color={colors.primary} />}
                   {aboutError !== '' && (
                     <Text style={[styles.errorText, { color: colors.error }]}>{displayMessage(t, aboutError)}</Text>

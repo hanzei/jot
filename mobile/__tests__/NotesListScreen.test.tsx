@@ -1,9 +1,9 @@
 import React from 'react';
 import { Alert } from 'react-native';
-import { fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
+import { act, fireEvent, render, screen, waitFor, within } from '@testing-library/react-native';
 import NotesListScreen from '../src/screens/NotesListScreen';
 import { lightColors } from '../src/theme/colors';
-import type { NoteSort } from '@jot/shared';
+import type { Label, NoteSort } from '@jot/shared';
 
 jest.mock('@react-navigation/native', () => {
   const mockDispatch = jest.fn();
@@ -70,6 +70,7 @@ jest.mock('react-native-draggable-flatlist', () => {
 
 jest.mock('../src/hooks/useOfflineNotes', () => ({
   useOfflineNotes: jest.fn(),
+  useOfflineNote: jest.fn(),
 }));
 
 jest.mock('../src/hooks/useNotes', () => ({
@@ -93,6 +94,10 @@ jest.mock('../src/theme/ThemeContext', () => ({
   useTheme: jest.fn(),
 }));
 
+jest.mock('../src/hooks/useToast', () => ({
+  useToast: jest.fn(),
+}));
+
 jest.mock('../src/api/settings', () => ({
   updateMe: jest.fn(),
 }));
@@ -113,7 +118,7 @@ jest.mock('../src/components/NoteCard', () => {
 
 jest.mock('../src/components/NoteContextMenu', () => ({
   __esModule: true,
-  default: () => null,
+  default: jest.fn(() => null),
 }));
 
 jest.mock('../src/components/ColorPicker', () => ({
@@ -121,7 +126,23 @@ jest.mock('../src/components/ColorPicker', () => ({
   default: () => null,
 }));
 
+jest.mock('../src/components/LabelPicker', () => {
+  const ReactNative = jest.requireActual<typeof import('react-native')>('react-native');
+  function MockLabelPicker({ visible, noteLabels }: { visible: boolean; noteLabels: Array<{ id: string; name: string }> }) {
+    if (!visible) return null;
+    return (
+      <ReactNative.View testID="label-picker">
+        {noteLabels.map((l) => (
+          <ReactNative.Text key={l.id} testID={`label-picker-label-${l.id}`}>{l.name}</ReactNative.Text>
+        ))}
+      </ReactNative.View>
+    );
+  }
+  return { __esModule: true, default: MockLabelPicker };
+});
+
 const mockUseOfflineNotes = jest.requireMock('../src/hooks/useOfflineNotes').useOfflineNotes as jest.Mock;
+const mockUseOfflineNote = jest.requireMock('../src/hooks/useOfflineNotes').useOfflineNote as jest.Mock;
 const navigationModule = jest.requireMock('@react-navigation/native') as {
   __mockDispatch: jest.Mock;
 };
@@ -136,7 +157,9 @@ const notesHooks = jest.requireMock('../src/hooks/useNotes') as {
 const mockUseUsers = jest.requireMock('../src/store/UsersContext').useUsers as jest.Mock;
 const mockUseAuth = jest.requireMock('../src/store/AuthContext').useAuth as jest.Mock;
 const mockUseTheme = jest.requireMock('../src/theme/ThemeContext').useTheme as jest.Mock;
+const mockUseToast = jest.requireMock('../src/hooks/useToast').useToast as jest.Mock;
 const mockUpdateMe = jest.requireMock('../src/api/settings').updateMe as jest.Mock;
+const mockNoteContextMenu = jest.requireMock('../src/components/NoteContextMenu').default as jest.Mock;
 
 const mockMutateAsync = jest.fn();
 const mockUser = {
@@ -161,6 +184,7 @@ const buildNote = (overrides: Partial<{
   id: string;
   title: string;
   pinned: boolean;
+  labels: Label[];
   created_at: string;
   updated_at: string;
 }> = {}) => ({
@@ -203,6 +227,7 @@ describe('NotesListScreen sorting', () => {
 
   beforeEach(() => {
     jest.clearAllMocks();
+    mockUseToast.mockReturnValue({ showToast: jest.fn() });
     notesHooks.useUpdateNote.mockReturnValue({ mutateAsync: mockMutateAsync });
     notesHooks.useDeleteNote.mockReturnValue({ mutateAsync: mockMutateAsync });
     notesHooks.useRestoreNote.mockReturnValue({ mutateAsync: mockMutateAsync });
@@ -223,6 +248,7 @@ describe('NotesListScreen sorting', () => {
       refetch: jest.fn(),
       isRefetching: false,
     });
+    mockUseOfflineNote.mockReturnValue({ data: null });
   });
 
   it('normalizes an unsupported saved sort preference back to manual', () => {
@@ -431,5 +457,187 @@ describe('NotesListScreen sorting', () => {
     await waitFor(() => {
       expect(screen.queryByTestId('clear-search')).toBeNull();
     });
+  });
+
+  it('pull-to-refresh on empty state reloads notes and users', async () => {
+    const refetch = jest.fn().mockResolvedValue(undefined);
+    const refreshUsers = jest.fn().mockResolvedValue(undefined);
+    mockUseOfflineNotes.mockReturnValue({
+      data: [],
+      isLoading: false,
+      isError: false,
+      refetch,
+      isRefetching: false,
+    });
+    mockUseUsers.mockReturnValue({ refreshUsers });
+
+    render(<NotesListScreen variant="notes" />);
+
+    const emptyState = screen.getByTestId('notes-empty-state');
+    const onRefresh = emptyState.props.refreshControl.props.onRefresh as () => Promise<void>;
+    await onRefresh();
+
+    expect(refetch).toHaveBeenCalledTimes(1);
+    expect(refreshUsers).toHaveBeenCalledTimes(1);
+  });
+
+  it('pull-to-refresh on error state reloads notes and users', async () => {
+    const refetch = jest.fn().mockResolvedValue(undefined);
+    const refreshUsers = jest.fn().mockResolvedValue(undefined);
+    mockUseOfflineNotes.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      refetch,
+      isRefetching: false,
+    });
+    mockUseUsers.mockReturnValue({ refreshUsers });
+
+    render(<NotesListScreen variant="notes" />);
+
+    const errorState = screen.getByTestId('notes-error-state');
+    const onRefresh = errorState.props.refreshControl.props.onRefresh as () => Promise<void>;
+    await onRefresh();
+
+    expect(refetch).toHaveBeenCalledTimes(1);
+    expect(refreshUsers).toHaveBeenCalledTimes(1);
+  });
+
+  it('retry button on error state reloads notes and users', async () => {
+    const refetch = jest.fn().mockResolvedValue(undefined);
+    const refreshUsers = jest.fn().mockResolvedValue(undefined);
+    mockUseOfflineNotes.mockReturnValue({
+      data: undefined,
+      isLoading: false,
+      isError: true,
+      refetch,
+      isRefetching: false,
+    });
+    mockUseUsers.mockReturnValue({ refreshUsers });
+
+    render(<NotesListScreen variant="notes" />);
+    fireEvent.press(screen.getByTestId('retry-fetch'));
+
+    await waitFor(() => {
+      expect(refetch).toHaveBeenCalledTimes(1);
+      expect(refreshUsers).toHaveBeenCalledTimes(1);
+    });
+  });
+});
+
+describe('NotesListScreen label picker', () => {
+  const baseOfflineNotes = (notes: ReturnType<typeof buildNote>[]) => ({
+    data: notes,
+    isLoading: false,
+    isError: false,
+    refetch: jest.fn(),
+    isRefetching: false,
+  });
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockUseToast.mockReturnValue({ showToast: jest.fn() });
+    notesHooks.useUpdateNote.mockReturnValue({ mutateAsync: mockMutateAsync });
+    notesHooks.useDeleteNote.mockReturnValue({ mutateAsync: mockMutateAsync });
+    notesHooks.useRestoreNote.mockReturnValue({ mutateAsync: mockMutateAsync });
+    notesHooks.usePermanentDeleteNote.mockReturnValue({ mutateAsync: mockMutateAsync });
+    notesHooks.useReorderNotes.mockReturnValue({ mutateAsync: mockMutateAsync });
+    notesHooks.useDuplicateNote.mockReturnValue({ mutateAsync: mockMutateAsync });
+    mockUseUsers.mockReturnValue({ refreshUsers: jest.fn() });
+    mockUseTheme.mockReturnValue({ colors: lightColors });
+    mockUseAuth.mockReturnValue({
+      user: mockUser,
+      settings: baseSettings,
+      setSettings: jest.fn(),
+    });
+    mockNoteContextMenu.mockReturnValue(null);
+    mockUseOfflineNote.mockReturnValue({ data: null });
+  });
+
+  it('passes updated noteLabels to LabelPicker when notes data refreshes after a mutation', async () => {
+    const label1: Label = {
+      id: 'l1',
+      name: 'Work',
+      user_id: 'user-1',
+      created_at: '2024-01-01T00:00:00Z',
+      updated_at: '2024-01-01T00:00:00Z',
+    };
+    const label2: Label = {
+      id: 'l2',
+      name: 'Personal',
+      user_id: 'user-1',
+      created_at: '2024-01-01T00:00:00Z',
+      updated_at: '2024-01-01T00:00:00Z',
+    };
+    const note = buildNote({ id: 'note-1', labels: [label1] });
+
+    mockUseOfflineNotes.mockReturnValue(baseOfflineNotes([note]));
+    mockUseOfflineNote.mockReturnValue({ data: note });
+
+    const { rerender } = render(<NotesListScreen variant="notes" />);
+
+    // Retrieve the onManageLabels callback passed to NoteContextMenu and open the picker
+    const contextMenuProps = mockNoteContextMenu.mock.lastCall[0] as {
+      onManageLabels: (n: typeof note) => void;
+    };
+    await act(async () => {
+      contextMenuProps.onManageLabels(note);
+    });
+
+    // LabelPicker is open and shows the initial label
+    expect(screen.getByTestId('label-picker')).toBeTruthy();
+    expect(screen.getByTestId('label-picker-label-l1')).toBeTruthy();
+    expect(screen.queryByTestId('label-picker-label-l2')).toBeNull();
+
+    // Simulate the per-note query updating after the label mutation
+    const updatedNote = { ...note, labels: [label1, label2] };
+    mockUseOfflineNote.mockReturnValue({ data: updatedNote });
+    await act(async () => {
+      rerender(<NotesListScreen variant="notes" />);
+    });
+
+    // LabelPicker should remain open and reflect the updated labels
+    expect(screen.getByTestId('label-picker')).toBeTruthy();
+    expect(screen.getByTestId('label-picker-label-l1')).toBeTruthy();
+    expect(screen.getByTestId('label-picker-label-l2')).toBeTruthy();
+  });
+
+  it('shows updated noteLabels when the note drops out of the label-filtered notes list', async () => {
+    const filterLabel: Label = {
+      id: 'l1',
+      name: 'Work',
+      user_id: 'user-1',
+      created_at: '2024-01-01T00:00:00Z',
+      updated_at: '2024-01-01T00:00:00Z',
+    };
+    const note = buildNote({ id: 'note-1', labels: [filterLabel] });
+
+    // Label-filtered view: notes list contains the note initially
+    mockUseOfflineNotes.mockReturnValue(baseOfflineNotes([note]));
+    mockUseOfflineNote.mockReturnValue({ data: note });
+
+    const { rerender } = render(<NotesListScreen variant="notes" labelId="l1" />);
+
+    const contextMenuProps = mockNoteContextMenu.mock.lastCall[0] as {
+      onManageLabels: (n: typeof note) => void;
+    };
+    await act(async () => {
+      contextMenuProps.onManageLabels(note);
+    });
+
+    expect(screen.getByTestId('label-picker-label-l1')).toBeTruthy();
+
+    // After removing the filter label, the note disappears from the scoped notes list
+    // but useOfflineNote (unscoped) still returns the updated note
+    const updatedNote = { ...note, labels: [] };
+    mockUseOfflineNotes.mockReturnValue(baseOfflineNotes([]));
+    mockUseOfflineNote.mockReturnValue({ data: updatedNote });
+    await act(async () => {
+      rerender(<NotesListScreen variant="notes" labelId="l1" />);
+    });
+
+    // LabelPicker stays open with the accurate (now-empty) label list from per-note cache
+    expect(screen.getByTestId('label-picker')).toBeTruthy();
+    expect(screen.queryByTestId('label-picker-label-l1')).toBeNull();
   });
 });

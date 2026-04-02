@@ -4,9 +4,22 @@ jest.mock('expo-secure-store', () => ({
   deleteItemAsync: jest.fn().mockResolvedValue(undefined),
 }));
 
+jest.mock('expo-file-system/legacy', () => ({
+  getInfoAsync: jest.fn().mockResolvedValue({ exists: false, isDirectory: false }),
+  moveAsync: jest.fn().mockResolvedValue(undefined),
+}));
+
 jest.mock('expo-localization', () => ({
   getLocales: jest.fn(() => [{ languageTag: 'en-US', languageCode: 'en' }]),
 }));
+
+const mockDb = {
+  execAsync: jest.fn().mockResolvedValue(undefined),
+  runAsync: jest.fn().mockResolvedValue({ lastInsertRowId: 1, changes: 1 }),
+  getFirstAsync: jest.fn().mockResolvedValue(null),
+  getAllAsync: jest.fn().mockResolvedValue([]),
+  closeAsync: jest.fn().mockResolvedValue(undefined),
+};
 
 jest.mock('expo-sqlite', () => ({
   SQLiteProvider: ({ children, onInit }) => {
@@ -19,14 +32,10 @@ jest.mock('expo-sqlite', () => ({
     return ready ? children : null;
   },
   useSQLiteContext: () => mockDb,
+  openDatabaseAsync: jest.fn().mockResolvedValue(mockDb),
+  backupDatabaseAsync: jest.fn().mockResolvedValue(undefined),
+  defaultDatabaseDirectory: 'file:///db',
 }));
-
-const mockDb = {
-  execAsync: jest.fn().mockResolvedValue(undefined),
-  runAsync: jest.fn().mockResolvedValue({ lastInsertRowId: 1, changes: 1 }),
-  getFirstAsync: jest.fn().mockResolvedValue(null),
-  getAllAsync: jest.fn().mockResolvedValue([]),
-};
 
 global.mockDb = mockDb;
 

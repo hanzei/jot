@@ -5,7 +5,6 @@ import {
   TouchableOpacity,
   StyleSheet,
   Alert,
-  Platform,
   Modal,
   Pressable,
   TextInput,
@@ -18,6 +17,9 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '../store/AuthContext';
 import { useDeleteLabel, useLabels, useRenameLabel } from '../hooks/useLabels';
 import { useTheme } from '../theme/ThemeContext';
+import { addServer, getActiveServer, listServers, type ServerAccountEntry } from '../store/serverAccounts';
+import { switchActiveServer } from '../api/client';
+import UserAvatar from './UserAvatar';
 
 import type { Label } from '@jot/shared';
 import type { MainDrawerParamList } from '../navigation/MainDrawer';
@@ -30,18 +32,23 @@ interface NavItem {
 }
 
 function extractErrorMessage(error: unknown, fallback: string) {
-  if (
-    typeof error === 'object' &&
-    error !== null &&
-    'response' in error &&
-    typeof error.response === 'object' &&
-    error.response !== null &&
-    'data' in error.response &&
-    typeof error.response.data === 'string'
-  ) {
-    const message = error.response.data.trim();
-    if (message) {
-      return message;
+  if (typeof error === 'object' && error !== null && 'response' in error) {
+    const response = error.response;
+    if (typeof response === 'object' && response !== null && 'data' in response) {
+      const { data } = response as { data?: unknown };
+      if (typeof data === 'string') {
+        const message = data.trim();
+        if (message) {
+          return message;
+        }
+      } else if (typeof data === 'object' && data !== null) {
+        const objectData = data as { message?: unknown; error?: unknown; detail?: unknown };
+        for (const candidate of [objectData.message, objectData.error, objectData.detail]) {
+          if (typeof candidate === 'string' && candidate.trim()) {
+            return candidate.trim();
+          }
+        }
+      }
     }
   }
 
@@ -52,7 +59,7 @@ function extractErrorMessage(error: unknown, fallback: string) {
   return fallback;
 }
 export default function DrawerContent(props: DrawerContentComponentProps) {
-  const { user, logout } = useAuth();
+  const { user, logout, revalidateSession } = useAuth();
   const { data: labels } = useLabels();
   const renameLabel = useRenameLabel();
   const deleteLabel = useDeleteLabel();
@@ -69,6 +76,12 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
   ];
   const [renameLabelTarget, setRenameLabelTarget] = useState<Label | null>(null);
   const [renameValue, setRenameValue] = useState('');
+  const [isServerPickerVisible, setIsServerPickerVisible] = useState(false);
+  const [servers, setServers] = useState<ServerAccountEntry[]>([]);
+  const [activeServerId, setActiveServerId] = useState<string | null>(null);
+  const [newServerUrl, setNewServerUrl] = useState('');
+  const [isServerActionPending, setIsServerActionPending] = useState(false);
+  const serverSwitchingRef = useRef(false);
   const longPressHandledRef = useRef(false);
 
   const activeRoute = props.state.routes[props.state.index]?.name;
@@ -164,14 +177,35 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
     );
   }, [deleteLabel, handleDeleteLabelSuccess, t]);
 
+  const resetLongPressHandled = useCallback(() => {
+    longPressHandledRef.current = false;
+  }, []);
+
+  const openLabelMenu = useCallback((label: Label) => {
+    Alert.alert(label.name, t('labels.menuOptions', { name: label.name }), [
+      {
+        text: t('labels.rename'),
+        onPress: () => {
+          resetLongPressHandled();
+          openRenameModal(label);
+        },
+      },
+      {
+        text: t('labels.delete'),
+        style: 'destructive',
+        onPress: () => {
+          resetLongPressHandled();
+          handleDeleteLabel(label);
+        },
+      },
+      { text: t('common.cancel'), style: 'cancel', onPress: resetLongPressHandled },
+    ], { cancelable: true, onDismiss: resetLongPressHandled });
+  }, [handleDeleteLabel, openRenameModal, resetLongPressHandled, t]);
+
   const handleLabelLongPress = useCallback((label: Label) => {
     longPressHandledRef.current = true;
-    Alert.alert(label.name, t('labels.menuOptions', { name: label.name }), [
-      { text: t('labels.rename'), onPress: () => openRenameModal(label) },
-      { text: t('labels.delete'), style: 'destructive', onPress: () => handleDeleteLabel(label) },
-      { text: t('common.cancel'), style: 'cancel' },
-    ]);
-  }, [handleDeleteLabel, openRenameModal, t]);
+    openLabelMenu(label);
+  }, [openLabelMenu]);
 
   const handleSettingsPress = useCallback(() => {
     props.navigation.dispatch(
@@ -180,12 +214,113 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
     props.navigation.closeDrawer();
   }, [props.navigation]);
 
+  const loadServerPickerData = useCallback(async () => {
+    const [serverList, activeServer] = await Promise.all([listServers(), getActiveServer()]);
+    setServers(serverList);
+    setActiveServerId(activeServer?.serverId ?? null);
+  }, []);
+
+  const refreshServerPickerData = useCallback(async () => {
+    try {
+      await loadServerPickerData();
+      return true;
+    } catch (error) {
+      console.warn('Failed to load server picker data:', error);
+      Alert.alert(t('common.error'), t('serverPicker.loadFailed'));
+      return false;
+    }
+  }, [loadServerPickerData, t]);
+
+  const handleOpenServerPicker = useCallback(() => {
+    setIsServerPickerVisible(true);
+    void refreshServerPickerData();
+  }, [refreshServerPickerData]);
+
+  const handleSwitchToServer = useCallback(async (serverId: string) => {
+    if (isServerActionPending || serverSwitchingRef.current) {
+      return;
+    }
+    serverSwitchingRef.current = true;
+    setIsServerActionPending(true);
+    let switchedSuccessfully = false;
+    try {
+      const switched = await switchActiveServer(serverId);
+      if (!switched) {
+        Alert.alert(t('common.error'), t('serverPicker.switchFailed'));
+        return;
+      }
+      switchedSuccessfully = true;
+      await revalidateSession();
+      setIsServerPickerVisible(false);
+      props.navigation.closeDrawer();
+    } catch {
+      Alert.alert(t('common.error'), t('serverPicker.switchFailed'));
+    } finally {
+      setIsServerActionPending(false);
+      serverSwitchingRef.current = false;
+      if (switchedSuccessfully) {
+        try {
+          await loadServerPickerData();
+        } catch (error) {
+          console.warn('Failed to refresh server picker data after successful switch:', error);
+        }
+      } else {
+        await refreshServerPickerData();
+      }
+    }
+  }, [isServerActionPending, loadServerPickerData, props.navigation, revalidateSession, refreshServerPickerData, t]);
+
+  const handleAddServer = useCallback(async () => {
+    if (isServerActionPending) {
+      return;
+    }
+
+    const candidateUrl = newServerUrl.trim();
+    if (!candidateUrl) {
+      Alert.alert(t('common.error'), t('serverPicker.urlRequired'));
+      return;
+    }
+
+    setIsServerActionPending(true);
+    try {
+      const result = await addServer(candidateUrl);
+      if (!result.success) {
+        if (result.code === 'DUPLICATE' && result.existingServerId) {
+          Alert.alert(
+            t('serverPicker.duplicateTitle'),
+            t('serverPicker.duplicateMessage'),
+            [
+              { text: t('common.cancel'), style: 'cancel' },
+              {
+                text: t('serverPicker.switchToExisting'),
+                onPress: () => {
+                  void handleSwitchToServer(result.existingServerId!);
+                },
+              },
+            ],
+          );
+          return;
+        }
+        if (result.code === 'INVALID_URL') {
+          Alert.alert(t('common.error'), t('serverPicker.invalidUrl'));
+          return;
+        }
+        Alert.alert(t('common.error'), result.message || t('serverPicker.addFailed'));
+        return;
+      }
+
+      setNewServerUrl('');
+      await handleSwitchToServer(result.serverId);
+    } catch {
+      Alert.alert(t('common.error'), t('serverPicker.addFailed'));
+    } finally {
+      setIsServerActionPending(false);
+      await refreshServerPickerData();
+    }
+  }, [handleSwitchToServer, isServerActionPending, newServerUrl, refreshServerPickerData, t]);
+
   const displayName = user
     ? [user.first_name, user.last_name].filter(Boolean).join(' ') || user.username
-    : '';
-
-  const initials = user
-    ? (user.first_name?.[0] ?? user.username?.[0] ?? '').toUpperCase()
     : '';
 
   const isNotesActiveWithoutLabel = activeRoute === 'Notes' && !activeLabelId;
@@ -194,18 +329,33 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
     <View style={[styles.container, { backgroundColor: colors.surface }]}>
       <DrawerContentScrollView
         {...props}
-        contentContainerStyle={styles.scrollContent}
+        contentContainerStyle={{ paddingTop: insets.top + 8 }}
       >
         {/* User profile section */}
-        <View style={styles.profileSection}>
-          <View style={[styles.avatar, { backgroundColor: colors.primary }]}>
-            <Text style={styles.avatarText}>{initials}</Text>
+        <TouchableOpacity
+          style={styles.profileSection}
+          onPress={handleOpenServerPicker}
+          accessibilityRole="button"
+          accessibilityLabel={t('serverPicker.open')}
+          testID="drawer-profile-button"
+        >
+          <UserAvatar
+            userId={user?.id ?? ''}
+            username={user?.username ?? ''}
+            hasProfileIcon={user?.has_profile_icon}
+            size="large"
+          />
+          <View style={styles.profileTextWrap}>
+            <Text style={[styles.displayName, { color: colors.text }]} numberOfLines={1}>{displayName}</Text>
+            {user && displayName !== user.username && (
+              <Text style={[styles.username, { color: colors.textSecondary }]} numberOfLines={1}>@{user.username}</Text>
+            )}
+            <Text style={[styles.serverPickerHint, { color: colors.textSecondary }]} numberOfLines={1}>
+              {t('serverPicker.open')}
+            </Text>
           </View>
-          <Text style={[styles.displayName, { color: colors.text }]} numberOfLines={1}>{displayName}</Text>
-          {user && displayName !== user.username && (
-            <Text style={[styles.username, { color: colors.textSecondary }]} numberOfLines={1}>@{user.username}</Text>
-          )}
-        </View>
+          <Ionicons name="chevron-forward" size={18} color={colors.textSecondary} />
+        </TouchableOpacity>
 
         <View style={[styles.divider, { backgroundColor: colors.divider }]} />
 
@@ -242,29 +392,47 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
               {labels.map((label) => {
                 const isActive = activeLabelId === label.id;
                 return (
-                  <TouchableOpacity
+                  <View
                     key={label.id}
-                    style={[styles.navItem, isActive && { backgroundColor: colors.primaryLight }]}
-                    onPress={() => handleLabelPress(label.id, label.name)}
-                    onLongPress={() => handleLabelLongPress(label)}
-                    delayLongPress={250}
-                    testID={`drawer-label-${label.id}`}
-                    accessibilityLabel={label.name}
-                    accessibilityRole="button"
-                    accessibilityState={{ selected: isActive }}
+                    style={[styles.labelRow, isActive && { backgroundColor: colors.primaryLight }]}
                   >
-                    <Ionicons
-                      name={isActive ? 'pricetag' : 'pricetag-outline'}
-                      size={22}
-                      color={isActive ? colors.primary : colors.icon}
-                    />
-                    <Text
-                      style={[styles.navItemText, { color: colors.icon }, isActive && { color: colors.primary, fontWeight: '600' }]}
-                      numberOfLines={1}
+                    <TouchableOpacity
+                      style={[styles.navItem, styles.labelNavItem]}
+                      onPress={() => handleLabelPress(label.id, label.name)}
+                      onLongPress={() => handleLabelLongPress(label)}
+                      delayLongPress={250}
+                      testID={`drawer-label-${label.id}`}
+                      accessibilityLabel={label.name}
+                      accessibilityRole="button"
+                      accessibilityState={{ selected: isActive }}
                     >
-                      {label.name}
-                    </Text>
-                  </TouchableOpacity>
+                      <Ionicons
+                        name={isActive ? 'pricetag' : 'pricetag-outline'}
+                        size={22}
+                        color={isActive ? colors.primary : colors.icon}
+                      />
+                      <Text
+                        style={[styles.navItemText, { color: colors.icon }, isActive && { color: colors.primary, fontWeight: '600' }]}
+                        numberOfLines={1}
+                      >
+                        {label.name}
+                      </Text>
+                    </TouchableOpacity>
+                    <TouchableOpacity
+                      style={styles.labelMenuButton}
+                      onPress={() => openLabelMenu(label)}
+                      hitSlop={{ top: 8, right: 8, bottom: 8, left: 8 }}
+                      accessibilityRole="button"
+                      accessibilityLabel={`${label.name}. ${t('labels.menuOptions', { name: label.name })}`}
+                      testID={`drawer-label-menu-${label.id}`}
+                    >
+                      <Ionicons
+                        name="ellipsis-vertical"
+                        size={18}
+                        color={isActive ? colors.primary : colors.icon}
+                      />
+                    </TouchableOpacity>
+                  </View>
                 );
               })}
             </>
@@ -299,7 +467,10 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
       </DrawerContentScrollView>
 
       {/* Settings & Logout pinned to bottom */}
-      <View style={[styles.bottomSection, { paddingBottom: Math.max(insets.bottom, 16) }]}>
+      <View
+        style={[styles.bottomSection, { paddingBottom: Math.max(insets.bottom, 16) }]}
+        testID="drawer-bottom-section"
+      >
         <View style={[styles.divider, { backgroundColor: colors.divider }]} />
         <TouchableOpacity
           style={styles.settingsButton}
@@ -397,6 +568,121 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
           </Pressable>
         </Pressable>
       </Modal>
+
+      <Modal
+        visible={isServerPickerVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (!isServerActionPending) {
+            setIsServerPickerVisible(false);
+          }
+        }}
+      >
+        <Pressable
+          style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}
+          onPress={() => {
+            if (!isServerActionPending) {
+              setIsServerPickerVisible(false);
+            }
+          }}
+        >
+          <Pressable
+            style={[styles.modalCard, { backgroundColor: colors.surface, borderColor: colors.borderLight }]}
+            onPress={(event) => event.stopPropagation()}
+            testID="server-picker-modal"
+          >
+            <Text style={[styles.modalTitle, { color: colors.text }]}>
+              {t('serverPicker.title')}
+            </Text>
+
+            <View style={styles.serverList}>
+              {servers.length === 0 ? (
+                <Text style={[styles.serverRowSubtext, { color: colors.textSecondary }]}>
+                  {t('serverPicker.noServers')}
+                </Text>
+              ) : (
+                servers.map((server) => {
+                  const isActive = server.serverId === activeServerId;
+                  return (
+                    <TouchableOpacity
+                      key={server.serverId}
+                      style={[styles.serverRow, { borderColor: colors.borderLight }]}
+                      onPress={() => {
+                        if (!isActive) {
+                          void handleSwitchToServer(server.serverId);
+                        }
+                      }}
+                      disabled={isServerActionPending}
+                      testID={`server-picker-row-${server.serverId}`}
+                    >
+                      <View style={styles.serverRowContent}>
+                        <Text style={[styles.serverRowTitle, { color: colors.text }]} numberOfLines={1}>
+                          {server.displayName || server.serverUrl}
+                        </Text>
+                        <Text style={[styles.serverRowSubtext, { color: colors.textSecondary }]} numberOfLines={1}>
+                          {server.serverUrl}
+                        </Text>
+                      </View>
+                      {isActive ? <Ionicons name="checkmark-circle" size={20} color={colors.primary} /> : null}
+                    </TouchableOpacity>
+                  );
+                })
+              )}
+            </View>
+
+            <TextInput
+              style={[styles.modalInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.background }]}
+              value={newServerUrl}
+              onChangeText={setNewServerUrl}
+              placeholder={t('serverPicker.addPlaceholder')}
+              placeholderTextColor={colors.placeholder}
+              autoCapitalize="none"
+              autoCorrect={false}
+              keyboardType="url"
+              editable={!isServerActionPending}
+              returnKeyType="done"
+              onSubmitEditing={() => {
+                void handleAddServer();
+              }}
+              testID="server-picker-add-input"
+            />
+
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalSecondaryButton, { borderColor: colors.border }]}
+                onPress={() => {
+                  if (!isServerActionPending) {
+                    setIsServerPickerVisible(false);
+                  }
+                }}
+                disabled={isServerActionPending}
+              >
+                <Text style={[styles.modalSecondaryText, { color: colors.textSecondary }]}>
+                  {t('common.close')}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.modalButton,
+                  styles.modalPrimaryButton,
+                  { backgroundColor: colors.primary },
+                  !newServerUrl.trim() && styles.modalButtonDisabled,
+                ]}
+                onPress={() => {
+                  void handleAddServer();
+                }}
+                disabled={!newServerUrl.trim() || isServerActionPending}
+                testID="server-picker-add-submit"
+              >
+                <Text style={styles.modalPrimaryText}>
+                  {isServerActionPending ? t('serverPicker.working') : t('serverPicker.addButton')}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
     </View>
   );
 }
@@ -405,25 +691,15 @@ const styles = StyleSheet.create({
   container: {
     flex: 1,
   },
-  scrollContent: {
-    paddingTop: Platform.OS === 'ios' ? 0 : 8,
-  },
   profileSection: {
     paddingHorizontal: 20,
     paddingVertical: 16,
-  },
-  avatar: {
-    width: 52,
-    height: 52,
-    borderRadius: 26,
-    justifyContent: 'center',
+    flexDirection: 'row',
     alignItems: 'center',
-    marginBottom: 12,
+    gap: 12,
   },
-  avatarText: {
-    color: '#fff',
-    fontSize: 22,
-    fontWeight: '600',
+  profileTextWrap: {
+    flex: 1,
   },
   displayName: {
     fontSize: 16,
@@ -432,6 +708,10 @@ const styles = StyleSheet.create({
   username: {
     fontSize: 13,
     marginTop: 2,
+  },
+  serverPickerHint: {
+    fontSize: 12,
+    marginTop: 4,
   },
   divider: {
     height: 1,
@@ -453,6 +733,20 @@ const styles = StyleSheet.create({
     fontSize: 15,
     fontWeight: '400',
     flexShrink: 1,
+  },
+  labelRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    borderRadius: 10,
+    paddingRight: 6,
+  },
+  labelNavItem: {
+    flex: 1,
+    paddingRight: 8,
+  },
+  labelMenuButton: {
+    padding: 10,
+    borderRadius: 8,
   },
   navDivider: {
     height: 1,
@@ -508,6 +802,31 @@ const styles = StyleSheet.create({
   },
   modalSecondaryText: {
     fontWeight: '500',
+  },
+  serverList: {
+    marginBottom: 12,
+    gap: 8,
+  },
+  serverRow: {
+    borderWidth: 1,
+    borderRadius: 10,
+    paddingHorizontal: 12,
+    paddingVertical: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    gap: 12,
+  },
+  serverRowContent: {
+    flex: 1,
+  },
+  serverRowTitle: {
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  serverRowSubtext: {
+    fontSize: 12,
+    marginTop: 2,
   },
   settingsButton: {
     flexDirection: 'row',

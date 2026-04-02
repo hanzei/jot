@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { ServerConfig, AboutInfo, AuthResponse, LoginRequest, RegisterRequest, Note, CreateNoteRequest, UpdateNoteRequest, User, CreateUserRequest, UserListResponse, AdminStatsResponse, ShareNoteRequest, ShareNoteResponse, NoteShare, ImportResponse, UpdateMeRequest, ChangePasswordRequest, UpdateUserRoleRequest, Label, ActiveSession, EmptyTrashResponse } from '@jot/shared';
+import type { ServerConfig, AboutInfo, AuthResponse, LoginRequest, RegisterRequest, Note, CreateNoteRequest, UpdateNoteRequest, User, CreateUserRequest, UserListResponse, AdminStatsResponse, ShareNoteRequest, NoteShare, ImportResponse, UpdateMeRequest, ChangePasswordRequest, UpdateUserRoleRequest, Label, ActiveSession, EmptyTrashResponse } from '@jot/shared';
 
 const api = axios.create({
   baseURL: '/api/v1',
@@ -69,11 +69,11 @@ export const notes = {
   duplicate: (id: string): Promise<Note> =>
     api.post(`/notes/${id}/duplicate`).then(res => res.data),
 
-  share: (id: string, data: ShareNoteRequest): Promise<ShareNoteResponse> =>
-    api.post(`/notes/${id}/share`, data).then(res => res.data),
+  share: (id: string, data: ShareNoteRequest): Promise<void> =>
+    api.post(`/notes/${id}/share`, data).then(() => undefined),
 
-  unshare: (id: string, userId: string): Promise<ShareNoteResponse> =>
-    api.delete(`/notes/${id}/shares/${userId}`).then(res => res.data),
+  unshare: (id: string, userId: string): Promise<void> =>
+    api.delete(`/notes/${id}/shares/${userId}`).then(() => undefined),
 
   getShares: (id: string): Promise<NoteShare[]> =>
     api.get(`/notes/${id}/shares`).then(res => res.data),

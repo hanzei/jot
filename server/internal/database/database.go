@@ -41,6 +41,12 @@ func New(dbPath string) (*DB, error) {
 		return nil, fmt.Errorf("failed to enable WAL mode: %w", err)
 	}
 
+	// Enforce foreign key constraints. SQLite disables FK enforcement by default;
+	// this pragma enables it for the lifetime of the connection.
+	if _, err := db.ExecContext(ctx, `PRAGMA foreign_keys = ON`); err != nil {
+		return nil, fmt.Errorf("failed to enable foreign key enforcement: %w", err)
+	}
+
 	d := &DB{DB: db}
 	if err := d.runMigrations(ctx); err != nil {
 		return nil, fmt.Errorf("failed to run migrations: %w", err)

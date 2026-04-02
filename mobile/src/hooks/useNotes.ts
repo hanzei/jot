@@ -33,17 +33,32 @@ import {
 import { enqueueOperation } from '../db/syncQueue';
 import { useNetworkStatus } from './useNetworkStatus';
 import { useAuth } from '../store/AuthContext';
+import { isServerSwitchInProgress } from '../api/client';
+import {
+  noteLocalQueryKey,
+  noteQueryKey,
+  notesQueryKey,
+  notesLocalQueryScopeKey,
+  noteSharesQueryKey,
+  notesQueryScopeKey,
+} from './queryKeys';
+
+function assertSwitchWriteAllowed(): void {
+  if (isServerSwitchInProgress()) {
+    throw new Error('Server switch in progress; write blocked');
+  }
+}
 
 export function useNotes(params?: GetNotesParams) {
   return useQuery<Note[]>({
-    queryKey: ['notes', params],
+    queryKey: notesQueryKey(params),
     queryFn: () => getNotes(params),
   });
 }
 
 export function useNote(id: string | null) {
   return useQuery<Note>({
-    queryKey: ['note', id],
+    queryKey: noteQueryKey(id),
     queryFn: () => getNote(id!),
     enabled: id !== null,
   });
@@ -59,6 +74,7 @@ export function useCreateNote() {
 
   return useMutation({
     mutationFn: async (data: CreateNoteRequest): Promise<Note> => {
+      assertSwitchWriteAllowed();
       if (isConnectedRef.current) {
         const note = await createNote(data);
         await saveNote(db, note);
@@ -107,8 +123,8 @@ export function useCreateNote() {
       return localNote;
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['notes-local'] });
-      queryClient.invalidateQueries({ queryKey: ['notes'] });
+      queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+      queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
     },
   });
 }
@@ -122,6 +138,7 @@ export function useUpdateNote() {
 
   return useMutation({
     mutationFn: async ({ id, data }: { id: string; data: UpdateNoteRequest }): Promise<Note> => {
+      assertSwitchWriteAllowed();
       if (isConnectedRef.current) {
         const updatedNote = await updateNote(id, data);
         await saveNote(db, updatedNote);
@@ -175,10 +192,10 @@ export function useUpdateNote() {
       return { ...existing, ...data, updated_at: now, items: updatedItems };
     },
     onSuccess: (updatedNote) => {
-      queryClient.setQueryData(['note', updatedNote.id], updatedNote);
-      queryClient.setQueryData(['note-local', updatedNote.id], updatedNote);
-      queryClient.invalidateQueries({ queryKey: ['notes-local'] });
-      queryClient.invalidateQueries({ queryKey: ['notes'] });
+      queryClient.setQueryData(noteQueryKey(updatedNote.id), updatedNote);
+      queryClient.setQueryData(noteLocalQueryKey(updatedNote.id), updatedNote);
+      queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+      queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
     },
   });
 }
@@ -192,6 +209,7 @@ export function useDeleteNote() {
 
   return useMutation({
     mutationFn: async (id: string): Promise<void> => {
+      assertSwitchWriteAllowed();
       if (isConnectedRef.current) {
         await deleteNote(id);
         await markLocalNoteDeleted(db, id);
@@ -205,10 +223,10 @@ export function useDeleteNote() {
       }
     },
     onSuccess: (_data, id) => {
-      queryClient.removeQueries({ queryKey: ['note', id] });
-      queryClient.removeQueries({ queryKey: ['note-local', id] });
-      queryClient.invalidateQueries({ queryKey: ['notes-local'] });
-      queryClient.invalidateQueries({ queryKey: ['notes'] });
+      queryClient.removeQueries({ queryKey: noteQueryKey(id) });
+      queryClient.removeQueries({ queryKey: noteLocalQueryKey(id) });
+      queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+      queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
     },
   });
 }
@@ -222,6 +240,7 @@ export function useDuplicateNote() {
 
   return useMutation({
     mutationFn: async (id: string): Promise<Note> => {
+      assertSwitchWriteAllowed();
       if (!isConnectedRef.current) {
         throw new Error('Note duplication requires an internet connection');
       }
@@ -231,10 +250,10 @@ export function useDuplicateNote() {
       return duplicatedNote;
     },
     onSuccess: (duplicatedNote) => {
-      queryClient.setQueryData(['note', duplicatedNote.id], duplicatedNote);
-      queryClient.setQueryData(['note-local', duplicatedNote.id], duplicatedNote);
-      queryClient.invalidateQueries({ queryKey: ['notes-local'] });
-      queryClient.invalidateQueries({ queryKey: ['notes'] });
+      queryClient.setQueryData(noteQueryKey(duplicatedNote.id), duplicatedNote);
+      queryClient.setQueryData(noteLocalQueryKey(duplicatedNote.id), duplicatedNote);
+      queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+      queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
     },
   });
 }
@@ -248,6 +267,7 @@ export function useRestoreNote() {
 
   return useMutation({
     mutationFn: async (id: string): Promise<void> => {
+      assertSwitchWriteAllowed();
       if (isConnectedRef.current) {
         await restoreNote(id);
         await markLocalNoteRestored(db, id);
@@ -261,10 +281,10 @@ export function useRestoreNote() {
       }
     },
     onSuccess: (_data, id) => {
-      queryClient.removeQueries({ queryKey: ['note', id] });
-      queryClient.removeQueries({ queryKey: ['note-local', id] });
-      queryClient.invalidateQueries({ queryKey: ['notes-local'] });
-      queryClient.invalidateQueries({ queryKey: ['notes'] });
+      queryClient.removeQueries({ queryKey: noteQueryKey(id) });
+      queryClient.removeQueries({ queryKey: noteLocalQueryKey(id) });
+      queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+      queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
     },
   });
 }
@@ -278,6 +298,7 @@ export function usePermanentDeleteNote() {
 
   return useMutation({
     mutationFn: async (id: string): Promise<void> => {
+      assertSwitchWriteAllowed();
       if (isConnectedRef.current) {
         await permanentDeleteNote(id);
         await permanentDeleteLocalNote(db, id);
@@ -291,10 +312,10 @@ export function usePermanentDeleteNote() {
       }
     },
     onSuccess: (_data, id) => {
-      queryClient.removeQueries({ queryKey: ['note', id] });
-      queryClient.removeQueries({ queryKey: ['note-local', id] });
-      queryClient.invalidateQueries({ queryKey: ['notes-local'] });
-      queryClient.invalidateQueries({ queryKey: ['notes'] });
+      queryClient.removeQueries({ queryKey: noteQueryKey(id) });
+      queryClient.removeQueries({ queryKey: noteLocalQueryKey(id) });
+      queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+      queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
     },
   });
 }
@@ -308,6 +329,7 @@ export function useReorderNotes() {
 
   return useMutation({
     mutationFn: async (noteIds: string[]): Promise<void> => {
+      assertSwitchWriteAllowed();
       if (isConnectedRef.current) {
         await reorderNotes(noteIds);
         // Update positions in local DB to match the new order
@@ -328,15 +350,15 @@ export function useReorderNotes() {
       }
     },
     onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: ['notes-local'] });
-      queryClient.invalidateQueries({ queryKey: ['notes'] });
+      queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+      queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
     },
   });
 }
 
 export function useNoteShares(noteId: string | null) {
   return useQuery<NoteShare[]>({
-    queryKey: ['noteShares', noteId],
+    queryKey: noteSharesQueryKey(noteId),
     queryFn: () => getNoteShares(noteId!),
     enabled: noteId !== null,
   });
@@ -348,9 +370,9 @@ export function useShareNote() {
     mutationFn: ({ noteId, userId }: { noteId: string; userId: string }) =>
       shareNote(noteId, userId),
     onSuccess: (_data, { noteId }) => {
-      queryClient.invalidateQueries({ queryKey: ['noteShares', noteId] });
-      queryClient.invalidateQueries({ queryKey: ['note', noteId] });
-      queryClient.invalidateQueries({ queryKey: ['notes'] });
+      queryClient.invalidateQueries({ queryKey: noteSharesQueryKey(noteId) });
+      queryClient.invalidateQueries({ queryKey: noteQueryKey(noteId) });
+      queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
     },
   });
 }
@@ -361,9 +383,9 @@ export function useUnshareNote() {
     mutationFn: ({ noteId, userId }: { noteId: string; userId: string }) =>
       unshareNote(noteId, userId),
     onSuccess: (_data, { noteId }) => {
-      queryClient.invalidateQueries({ queryKey: ['noteShares', noteId] });
-      queryClient.invalidateQueries({ queryKey: ['note', noteId] });
-      queryClient.invalidateQueries({ queryKey: ['notes'] });
+      queryClient.invalidateQueries({ queryKey: noteSharesQueryKey(noteId) });
+      queryClient.invalidateQueries({ queryKey: noteQueryKey(noteId) });
+      queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
     },
   });
 }

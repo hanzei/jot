@@ -3,7 +3,7 @@ import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import NoteCard from '../NoteCard'
 import { ToastProvider } from '../Toast'
-import type { Note, NoteItem } from '@jot/shared'
+import type { Note, NoteItem, User } from '@jot/shared'
 import { notes } from '@/utils/api'
 import { createMockNote } from '@/utils/__tests__/test-helpers'
 
@@ -358,7 +358,7 @@ describe('NoteCard', () => {
     })
 
     it('renders profile icon image when user has one', () => {
-      const usersMap = new Map([['user2', { id: 'user2', username: 'alice', first_name: 'Alice', last_name: '', role: 'user', has_profile_icon: true, created_at: '', updated_at: '' }]])
+      const usersMap = new Map<string, User>([['user2', { id: 'user2', username: 'alice', first_name: 'Alice', last_name: '', role: 'user', has_profile_icon: true, created_at: '', updated_at: '' }]])
       const sharedNote = createMockNote({
         is_shared: true,
         shared_with: [{
@@ -540,6 +540,31 @@ describe('NoteCard', () => {
       renderNoteCard({ ...defaultProps, note: longTextTodoNote })
 
       expect(screen.getByText(longText)).toBeInTheDocument()
+    })
+
+    it('applies wrapping classes for long todo preview text', () => {
+      const todoNote = createMockNote({
+        note_type: 'todo',
+        items: [
+          {
+            id: 'item-wrap',
+            note_id: '1',
+            text: 'very long todo content that should wrap in preview',
+            completed: false,
+            position: 0,
+            indent_level: 0,
+            assigned_to: '',
+            created_at: '2023-01-01T00:00:00Z',
+            updated_at: '2023-01-01T00:00:00Z',
+          },
+        ],
+      })
+
+      const { container } = renderNoteCard({ ...defaultProps, note: todoNote })
+      const textSpan = container.querySelector('span.text-gray-700')
+      expect(textSpan).toBeTruthy()
+      expect(textSpan).toHaveClass('whitespace-pre-wrap')
+      expect(textSpan).toHaveClass('break-words')
     })
   })
 

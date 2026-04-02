@@ -17,6 +17,21 @@
     "logoutConfirmMessage": "Are you sure you want to log out?",
     "openMenu": "Open menu"
   },
+  "serverPicker": {
+    "open": "Switch server",
+    "title": "Servers",
+    "noServers": "No servers configured yet.",
+    "addPlaceholder": "Add server URL (https://...)",
+    "addButton": "Add server",
+    "working": "Working...",
+    "urlRequired": "Server URL is required.",
+    "invalidUrl": "Server URL must start with http:// or https://.",
+    "addFailed": "Failed to add server.",
+    "switchFailed": "Failed to switch server.",
+    "duplicateTitle": "Server already added",
+    "duplicateMessage": "That server already exists in your list.",
+    "switchToExisting": "Switch to existing"
+  },
   "auth": {
     "signInTitle": "Sign in to Jot",
     "signInSubtitle": "Sign in to your account",
@@ -82,7 +97,12 @@
       "created_at": "Date created"
     },
     "sortAccessibilityLabel": "Sort by {{sortLabel}}",
-    "sortDisabledNotice": "Manual reorder is off. Notes are sorted by {{sortLabel}}, so drag-and-drop is unavailable."
+    "sortDisabledNotice": "Manual reorder is off. Notes are sorted by {{sortLabel}}, so drag-and-drop is unavailable.",
+    "noteArchived": "Note archived",
+    "noteUnarchived": "Note unarchived",
+    "noteDeleted": "Note moved to trash",
+    "noteRestored": "Note restored",
+    "undo": "Undo"
   },
   "settings": {
     "title": "Settings",
@@ -140,9 +160,14 @@
     "sessionsBrowserOnOS": "{{browser}} on {{os}}",
     "sessionsCurrent": "Current",
     "sessionsRevoke": "Revoke",
+    "sessionsRevokeConfirmTitle": "Revoke session",
+    "sessionsRevokeConfirmMessage": "Are you sure you want to revoke this session?",
     "sessionsRevoking": "Revoking...",
     "sessionsRevokeFailed": "Failed to revoke session",
     "sessionsNone": "No active sessions found.",
+    "currentServerSection": "Server",
+    "currentServerLabel": "Active server",
+    "noServerConfigured": "No server configured",
     "aboutSection": "About",
     "aboutButton": "About Jot",
     "importSection": "Import",
@@ -156,6 +181,7 @@
     "role": "Role",
     "accountCreated": "Account Created",
     "serverInfo": "Server Info",
+    "serverOrigin": "Server origin",
     "appVersion": "Version",
     "commit": "Commit",
     "buildTime": "Build Time",
@@ -255,6 +281,9 @@
     "missingServerMessage": "This link does not specify a server URL. Opening it on {{server}}.",
     "invalidServerTitle": "Deep link ignored",
     "invalidServerMessage": "This link has an invalid server URL.",
+    "unknownServerTitle": "Unknown server",
+    "unknownServerMessage": "This link targets {{server}}, which is not in your server list yet.",
+    "addAndSwitchAction": "Add and switch",
     "wrongServerTitle": "Wrong server",
     "wrongServerMessage": "This link targets {{targetServer}}, but you are connected to {{currentServer}}."
   },

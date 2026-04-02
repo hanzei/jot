@@ -82,7 +82,12 @@
       "created_at": "Data utworzenia"
     },
     "sortAccessibilityLabel": "Sortuj według {{sortLabel}}",
-    "sortDisabledNotice": "Ręczne sortowanie jest wyłączone. Notatki są posortowane według {{sortLabel}}, więc przeciąganie i upuszczanie jest niedostępne."
+    "sortDisabledNotice": "Ręczne sortowanie jest wyłączone. Notatki są posortowane według {{sortLabel}}, więc przeciąganie i upuszczanie jest niedostępne.",
+    "noteArchived": "Notatka zarchiwizowana",
+    "noteUnarchived": "Notatka przywrócona z archiwum",
+    "noteDeleted": "Notatka przeniesiona do kosza",
+    "noteRestored": "Notatka przywrócona",
+    "undo": "Cofnij"
   },
   "settings": {
     "title": "Ustawienia",
@@ -140,6 +145,8 @@
     "sessionsBrowserOnOS": "{{browser}} na {{os}}",
     "sessionsCurrent": "Bieżąca",
     "sessionsRevoke": "Unieważnij",
+    "sessionsRevokeConfirmTitle": "Unieważnij sesję",
+    "sessionsRevokeConfirmMessage": "Czy na pewno chcesz unieważnić tę sesję?",
     "sessionsRevoking": "Unieważnianie...",
     "sessionsRevokeFailed": "Nie udało się unieważnić sesji",
     "sessionsNone": "Nie znaleziono aktywnych sesji.",
@@ -147,7 +154,10 @@
     "aboutButton": "O Jot",
     "importSection": "Importuj",
     "importDescription": "Importuj notatki z eksportów Google Keep.",
-    "importButton": "Importuj z Google Keep"
+    "importButton": "Importuj z Google Keep",
+    "currentServerSection": "Serwer",
+    "currentServerLabel": "Aktywny serwer",
+    "noServerConfigured": "Brak skonfigurowanego serwera"
   },
   "about": {
     "clientInfo": "Informacje o kliencie",
@@ -160,7 +170,8 @@
     "commit": "Commit",
     "buildTime": "Czas kompilacji",
     "goVersion": "Wersja Go",
-    "failedLoad": "Nie udało się załadować informacji o serwerze"
+    "failedLoad": "Nie udało się załadować informacji o serwerze",
+    "serverOrigin": "Pochodzenie serwera"
   },
   "note": {
     "share": "Udostępnij",
@@ -256,10 +267,28 @@
     "invalidServerTitle": "Link głęboki zignorowany",
     "invalidServerMessage": "Ten link ma nieprawidłowy adres URL serwera.",
     "wrongServerTitle": "Nieprawidłowy serwer",
-    "wrongServerMessage": "Ten link prowadzi do {{targetServer}}, ale jesteś połączony z {{currentServer}}."
+    "wrongServerMessage": "Ten link prowadzi do {{targetServer}}, ale jesteś połączony z {{currentServer}}.",
+    "unknownServerTitle": "Nieznany serwer",
+    "unknownServerMessage": "Ten link wskazuje serwer {{server}}, który nie został jeszcze dodany.",
+    "addAndSwitchAction": "Dodaj i przełącz"
   },
   "offline": {
     "message": "Jesteś offline. Zmiany zostaną zsynchronizowane po ponownym połączeniu."
+  },
+  "serverPicker": {
+    "open": "Przełącz serwer",
+    "title": "Serwery",
+    "noServers": "Nie dodano jeszcze serwerów.",
+    "addPlaceholder": "Dodaj URL serwera",
+    "addButton": "Dodaj i przełącz",
+    "working": "Zapisywanie...",
+    "urlRequired": "URL serwera jest wymagany.",
+    "invalidUrl": "Wprowadź prawidłowy URL serwera z http:// lub https://.",
+    "duplicateTitle": "Serwer już dodany",
+    "duplicateMessage": "Ten serwer jest już na liście.",
+    "switchToExisting": "Przełącz na istniejący",
+    "switchFailed": "Nie udało się przełączyć serwera.",
+    "addFailed": "Nie udało się dodać serwera."
   },
   "import": {
     "title": "Importuj z Google Keep",

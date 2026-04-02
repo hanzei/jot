@@ -40,18 +40,14 @@ func (h *LabelsHandler) publishLabelNoteUpdates(ctx context.Context, noteIDs []s
 		return
 	}
 
+	// Labels are per-user: only the acting user's view changes, so we publish only to them.
 	for _, noteID := range noteIDs {
 		note, err := h.noteStore.GetByIDAnyState(ctx, noteID, userID)
 		if err != nil {
 			continue
 		}
 
-		audienceIDs, err := h.noteStore.GetNoteAudienceIDs(ctx, noteID)
-		if err != nil {
-			continue
-		}
-
-		h.hub.Publish(audienceIDs, sse.Event{
+		h.hub.Publish([]string{userID}, sse.Event{
 			Type:         sse.EventNoteUpdated,
 			NoteID:       noteID,
 			Note:         note,
@@ -154,6 +150,7 @@ func (h *LabelsHandler) RenameLabel(w http.ResponseWriter, r *http.Request) (int
 //	@Failure	400		{string}	string	"bad request"
 //	@Failure	401		{string}	string	"unauthorized"
 //	@Failure	403		{string}	string	"no access to note"
+//	@Failure	404		{string}	string	"label not found"
 //	@Failure	500		{string}	string	"internal server error"
 //	@Router		/notes/{id}/labels [post]
 func (h *LabelsHandler) AddLabel(w http.ResponseWriter, r *http.Request) (int, any, error) {
@@ -183,6 +180,9 @@ func (h *LabelsHandler) AddLabel(w http.ResponseWriter, r *http.Request) (int, a
 		if errors.Is(err, models.ErrNoteNoAccess) {
 			return http.StatusForbidden, nil, errors.New("no access to note")
 		}
+		if errors.Is(err, models.ErrLabelNotFoundOrNotOwned) {
+			return http.StatusNotFound, nil, errors.New("label not found")
+		}
 		return http.StatusInternalServerError, nil, err
 	}
 
@@ -192,15 +192,12 @@ func (h *LabelsHandler) AddLabel(w http.ResponseWriter, r *http.Request) (int, a
 	}
 
 	if h.hub != nil {
-		audienceIDs, audErr := h.noteStore.GetNoteAudienceIDs(r.Context(), noteID)
-		if audErr == nil {
-			h.hub.Publish(audienceIDs, sse.Event{
-				Type:         sse.EventNoteUpdated,
-				NoteID:       noteID,
-				Note:         note,
-				SourceUserID: user.ID,
-			})
-		}
+		h.hub.Publish([]string{user.ID}, sse.Event{
+			Type:         sse.EventNoteUpdated,
+			NoteID:       noteID,
+			Note:         note,
+			SourceUserID: user.ID,
+		})
 	}
 
 	return http.StatusOK, note, nil
@@ -241,15 +238,12 @@ func (h *LabelsHandler) RemoveLabel(w http.ResponseWriter, r *http.Request) (int
 	}
 
 	if h.hub != nil {
-		audienceIDs, audErr := h.noteStore.GetNoteAudienceIDs(r.Context(), noteID)
-		if audErr == nil {
-			h.hub.Publish(audienceIDs, sse.Event{
-				Type:         sse.EventNoteUpdated,
-				NoteID:       noteID,
-				Note:         note,
-				SourceUserID: user.ID,
-			})
-		}
+		h.hub.Publish([]string{user.ID}, sse.Event{
+			Type:         sse.EventNoteUpdated,
+			NoteID:       noteID,
+			Note:         note,
+			SourceUserID: user.ID,
+		})
 	}
 
 	return http.StatusOK, note, nil

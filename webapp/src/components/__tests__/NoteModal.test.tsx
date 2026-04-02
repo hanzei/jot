@@ -3,7 +3,7 @@ import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { type ReactNode } from 'react'
 import NoteModal from '../NoteModal'
 import { ToastProvider } from '../Toast'
-import type { Note, NoteItem } from '@jot/shared'
+import { VALIDATION, type Note, type NoteItem } from '@jot/shared'
 import { createMockNote } from '@/utils/__tests__/test-helpers'
 
 // Mock the API module
@@ -87,7 +87,6 @@ vi.mock('@dnd-kit/utilities', () => ({
 
 // Mock console.error to silence error logs in tests
 const mockConsoleError = vi.fn()
-vi.spyOn(console, 'error').mockImplementation(mockConsoleError)
 
 const createMockTodoItems = (): NoteItem[] => [
   {
@@ -124,16 +123,30 @@ const defaultProps = {
   onRefresh: vi.fn(),
 }
 
+const mockMobileMatchMedia = () => {
+  vi.spyOn(window, 'matchMedia').mockImplementation((query: string) => ({
+    matches: query === '(pointer: coarse)',
+    media: query,
+    onchange: null,
+    addListener: () => {},
+    removeListener: () => {},
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    dispatchEvent: () => false,
+  }))
+}
+
 describe('NoteModal', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.spyOn(console, 'error').mockImplementation(mockConsoleError)
     vi.useFakeTimers()
     localStorage.clear()
   })
 
   afterEach(() => {
-    mockConsoleError.mockClear()
     vi.useRealTimers()
+    vi.restoreAllMocks()
   })
 
   describe('Basic Rendering', () => {
@@ -176,7 +189,9 @@ describe('NoteModal', () => {
       expect(screen.getByText(/Last edited:/)).toBeInTheDocument()
     })
 
-    it('renders permanent mobile app toolbar link in note modal', () => {
+    it('renders mobile app toolbar link on mobile devices', () => {
+      mockMobileMatchMedia()
+
       const note = createMockNote()
       renderNoteModal({ ...defaultProps, note })
 
@@ -188,16 +203,24 @@ describe('NoteModal', () => {
       expect(deepLink.protocol).toBe('jot:')
       expect(deepLink.hostname).toBe('notes')
       expect(deepLink.pathname).toBe(`/${note.id}`)
-      expect(deepLink.searchParams.get('server')).toBe(window.location.origin)
+      expect(deepLink.searchParams.get('server')).toBe(window.location.origin.toLowerCase())
     })
 
-    it('renders mobile app toolbar link before share action', () => {
+    it('renders mobile app toolbar link before share action on mobile devices', () => {
+      mockMobileMatchMedia()
+
       const note = createMockNote()
       renderNoteModal({ ...defaultProps, note, onShare: vi.fn(), isOwner: true })
 
       const mobileLink = screen.getByTestId('note-open-mobile-app-toolbar-link')
       const shareButton = screen.getByRole('button', { name: 'Share' })
       expect(mobileLink.compareDocumentPosition(shareButton) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
+    })
+
+    it('does not render mobile app toolbar link on non-mobile devices', () => {
+      const note = createMockNote()
+      renderNoteModal({ ...defaultProps, note })
+      expect(screen.queryByTestId('note-open-mobile-app-toolbar-link')).not.toBeInTheDocument()
     })
 
     it('does not render mobile app toolbar link for new note', () => {
@@ -326,6 +349,17 @@ describe('NoteModal', () => {
       expect(screen.getByText('Add item')).toBeInTheDocument()
     })
 
+    it('uses multiline todo textarea so long text can wrap', async () => {
+      renderNoteModal(defaultProps)
+
+      fireEvent.click(screen.getByText('Todo List'))
+      fireEvent.click(screen.getByText('Add item'))
+
+      const todoInput = screen.getByTestId('todo-item-input')
+      expect(todoInput.tagName).toBe('TEXTAREA')
+      expect(todoInput).toHaveAttribute('rows', '1')
+    })
+
     it('renders existing todo items', async () => {
       const todoNote = createMockNote({
         note_type: 'todo',
@@ -390,6 +424,183 @@ describe('NoteModal', () => {
 
       // Focus moves to the newly inserted item
       expect(inputsAfter[1]).toHaveFocus()
+    })
+
+    it('pressing Enter on an indented item creates an equally indented item below it', async () => {
+      renderNoteModal(defaultProps)
+
+      fireEvent.click(screen.getByText('Todo List'))
+      fireEvent.click(screen.getByText('Add item'))
+
+      let inputs = screen.getAllByTestId('todo-item-input')
+      let rows = screen.getAllByTestId('todo-item-row')
+      expect(inputs).toHaveLength(1)
+
+      fireEvent.change(inputs[0], { target: { value: 'parent' } })
+
+      // Indent the current item with Tab.
+      fireEvent.keyDown(inputs[0], { key: 'Tab', code: 'Tab' })
+
+      inputs = screen.getAllByTestId('todo-item-input')
+      rows = screen.getAllByTestId('todo-item-row')
+      expect(rows[0].style.marginLeft).toBe(`${VALIDATION.INDENT_PX_PER_LEVEL}px`)
+
+      // Press Enter on the indented item.
+      fireEvent.keyDown(inputs[0], { key: 'Enter', code: 'Enter' })
+      await vi.runAllTimersAsync()
+
+      const inputsAfter = screen.getAllByTestId('todo-item-input')
+      const rowsAfter = screen.getAllByTestId('todo-item-row')
+      expect(inputsAfter).toHaveLength(2)
+      expect(rowsAfter[1].style.marginLeft).toBe(`${VALIDATION.INDENT_PX_PER_LEVEL}px`)
+      expect(inputsAfter[1]).toHaveFocus()
+    })
+
+    it('pressing Tab then Enter quickly keeps indentation on the new item', async () => {
+      renderNoteModal(defaultProps)
+
+      fireEvent.click(screen.getByText('Todo List'))
+      fireEvent.click(screen.getByText('Add item'))
+
+      const inputs = screen.getAllByTestId('todo-item-input')
+      fireEvent.change(inputs[0], { target: { value: 'parent' } })
+
+      // Simulate quick sequential key presses on the same input.
+      fireEvent.keyDown(inputs[0], { key: 'Tab', code: 'Tab' })
+      fireEvent.keyDown(inputs[0], { key: 'Enter', code: 'Enter' })
+      await vi.runAllTimersAsync()
+
+      const rowsAfter = screen.getAllByTestId('todo-item-row')
+      expect(rowsAfter).toHaveLength(2)
+      expect(rowsAfter[0].style.marginLeft).toBe(`${VALIDATION.INDENT_PX_PER_LEVEL}px`)
+      expect(rowsAfter[1].style.marginLeft).toBe(`${VALIDATION.INDENT_PX_PER_LEVEL}px`)
+    })
+
+    it('persisted update keeps inherited indent after quick Tab then Enter on existing note', async () => {
+      const todoNote = createMockNote({
+        note_type: 'todo',
+        items: [
+          {
+            id: 'item1',
+            note_id: '1',
+            text: 'parent',
+            completed: false,
+            position: 0,
+            indent_level: 0,
+            assigned_to: '',
+            created_at: '2023-01-01T00:00:00Z',
+            updated_at: '2023-01-01T00:00:00Z',
+          },
+        ],
+      })
+
+      renderNoteModal({ ...defaultProps, note: todoNote })
+      const inputs = screen.getAllByTestId('todo-item-input')
+
+      fireEvent.keyDown(inputs[0], { key: 'Tab', code: 'Tab' })
+      fireEvent.keyDown(inputs[0], { key: 'Enter', code: 'Enter' })
+      await vi.runAllTimersAsync()
+
+      expect(mockNotesUpdate).toHaveBeenLastCalledWith('1', expect.objectContaining({
+        items: [
+          expect.objectContaining({ text: 'parent', position: 0, completed: false, indent_level: 1 }),
+          expect.objectContaining({ text: '', position: 1, completed: false, indent_level: 1 }),
+        ],
+      }))
+    })
+
+    it('debounced text autosave does not overwrite quick Tab then Enter changes', async () => {
+      const todoNote = createMockNote({
+        note_type: 'todo',
+        items: [
+          {
+            id: 'item1',
+            note_id: '1',
+            text: '',
+            completed: false,
+            position: 0,
+            indent_level: 0,
+            assigned_to: '',
+            created_at: '2023-01-01T00:00:00Z',
+            updated_at: '2023-01-01T00:00:00Z',
+          },
+        ],
+      })
+
+      renderNoteModal({ ...defaultProps, note: todoNote })
+      const inputs = screen.getAllByTestId('todo-item-input')
+
+      // Arms debounced text autosave.
+      fireEvent.change(inputs[0], { target: { value: 'parent' } })
+
+      // Quickly apply indent and insertion before debounce flush.
+      fireEvent.keyDown(inputs[0], { key: 'Tab', code: 'Tab' })
+      fireEvent.keyDown(inputs[0], { key: 'Enter', code: 'Enter' })
+
+      // Flush pending timers and async work.
+      await vi.runAllTimersAsync()
+
+      expect(mockNotesUpdate).toHaveBeenLastCalledWith('1', expect.objectContaining({
+        items: [
+          expect.objectContaining({ text: 'parent', position: 0, completed: false, indent_level: 1 }),
+          expect.objectContaining({ text: '', position: 1, completed: false, indent_level: 1 }),
+        ],
+      }))
+    })
+
+    it('queued autosave retries use latest note fields while a save is in-flight', async () => {
+      const todoNote = createMockNote({
+        note_type: 'todo',
+        title: 'Initial title',
+        items: [
+          {
+            id: 'item1',
+            note_id: '1',
+            text: 'parent',
+            completed: false,
+            position: 0,
+            indent_level: 0,
+            assigned_to: '',
+            created_at: '2023-01-01T00:00:00Z',
+            updated_at: '2023-01-01T00:00:00Z',
+          },
+        ],
+      })
+
+      let resolveFirstUpdate: ((value: unknown) => void) | undefined
+      mockNotesUpdate.mockImplementationOnce(() => new Promise(resolve => {
+        resolveFirstUpdate = resolve
+      }))
+
+      renderNoteModal({ ...defaultProps, note: todoNote })
+
+      const todoInput = screen.getByDisplayValue('parent')
+      const titleInput = screen.getByDisplayValue('Initial title')
+
+      // Start first autosave and keep it in-flight.
+      fireEvent.keyDown(todoInput, { key: 'Tab', code: 'Tab' })
+
+      // Change non-item draft fields while autosave is still in-flight.
+      fireEvent.change(titleInput, { target: { value: 'Updated title while saving' } })
+
+      // Queue another autosave with updated item + title snapshot.
+      fireEvent.keyDown(todoInput, { key: 'Enter', code: 'Enter' })
+
+      // Release first request, then flush queued retry.
+      resolveFirstUpdate?.({})
+      await vi.runAllTimersAsync()
+
+      expect(mockNotesUpdate).toHaveBeenCalledTimes(2)
+      expect(mockNotesUpdate).toHaveBeenLastCalledWith(
+        '1',
+        expect.objectContaining({
+          title: 'Updated title while saving',
+          items: [
+            expect.objectContaining({ text: 'parent', position: 0, completed: false, indent_level: 1 }),
+            expect.objectContaining({ text: '', position: 1, completed: false, indent_level: 1 }),
+          ],
+        }),
+      )
     })
 
     it('pressing a key other than Enter on a todo item does not create a new item', async () => {
@@ -651,6 +862,103 @@ describe('NoteModal', () => {
         ],
       }))
     })
+
+    it('saves existing todo note on close when item text changed', async () => {
+      const todoNote = createMockNote({
+        note_type: 'todo',
+        content: '',
+        items: [
+          {
+            id: 'item1',
+            note_id: '1',
+            text: 'Original item',
+            completed: false,
+            position: 0,
+            indent_level: 0,
+            assigned_to: '',
+            created_at: '2023-01-01T00:00:00Z',
+            updated_at: '2023-01-01T00:00:00Z',
+          },
+        ],
+      })
+      const onSave = vi.fn()
+      renderNoteModal({ ...defaultProps, note: todoNote, onSave })
+
+      const input = screen.getByDisplayValue('Original item')
+      fireEvent.change(input, { target: { value: 'Updated item' } })
+
+      fireEvent.click(screen.getByRole('button', { name: 'Close' }))
+      await vi.runAllTimersAsync()
+
+      expect(mockNotesUpdate).toHaveBeenCalledWith('1', expect.objectContaining({
+        items: [expect.objectContaining({ text: 'Updated item', completed: false })],
+      }))
+      expect(onSave).toHaveBeenCalled()
+    })
+  })
+
+  describe('Text note textarea sizing', () => {
+    it('sizes existing text note content after load and edit', () => {
+      const note = createMockNote({ content: 'Existing long content', note_type: 'text' })
+      renderNoteModal({ ...defaultProps, note })
+
+      const contentInput = screen.getByDisplayValue('Existing long content') as HTMLTextAreaElement
+      Object.defineProperty(contentInput, 'scrollHeight', {
+        configurable: true,
+        value: 500,
+      })
+
+      // Trigger resize after loading existing note content.
+      fireEvent.change(contentInput, { target: { value: 'Existing long content with update' } })
+
+      expect(contentInput.style.height).toBe('320px')
+      expect(contentInput.style.overflowY).toBe('auto')
+    })
+
+    it('grows up to the maximum height and becomes scrollable', () => {
+      renderNoteModal(defaultProps)
+
+      const contentInput = screen.getByPlaceholderText('Take a note...') as HTMLTextAreaElement
+      Object.defineProperty(contentInput, 'scrollHeight', {
+        configurable: true,
+        value: 500,
+      })
+
+      fireEvent.change(contentInput, { target: { value: 'Very long content' } })
+
+      expect(contentInput.style.height).toBe('320px')
+      expect(contentInput.style.overflowY).toBe('auto')
+    })
+
+    it('uses content height when within min and max bounds', () => {
+      renderNoteModal(defaultProps)
+
+      const contentInput = screen.getByPlaceholderText('Take a note...') as HTMLTextAreaElement
+      Object.defineProperty(contentInput, 'scrollHeight', {
+        configurable: true,
+        value: 180,
+      })
+
+      fireEvent.change(contentInput, { target: { value: 'Medium length content' } })
+
+      expect(contentInput.style.height).toBe('180px')
+      expect(contentInput.style.overflowY).toBe('hidden')
+    })
+
+    it('keeps a sensible minimum height for short content', () => {
+      renderNoteModal(defaultProps)
+
+      const contentInput = screen.getByPlaceholderText('Take a note...') as HTMLTextAreaElement
+      Object.defineProperty(contentInput, 'scrollHeight', {
+        configurable: true,
+        value: 40,
+      })
+
+      fireEvent.change(contentInput, { target: { value: 'Short' } })
+
+      expect(contentInput.style.height).toBe('96px')
+      expect(contentInput.style.overflowY).toBe('hidden')
+    })
   })
 
 
@@ -664,6 +972,112 @@ describe('NoteModal', () => {
       const note = createMockNote()
       renderNoteModal({ ...defaultProps, note })
       expect(screen.getByRole('button', { name: 'Add labels' })).toBeInTheDocument()
+    })
+  })
+
+  describe('Dashboard update on property changes', () => {
+    it('autosaves and calls onRefresh when title changes on an existing note', async () => {
+      const note = createMockNote()
+      const onRefresh = vi.fn()
+      renderNoteModal({ ...defaultProps, onRefresh, note })
+
+      const titleInput = screen.getByDisplayValue('Test Note')
+      fireEvent.change(titleInput, { target: { value: 'New Title' } })
+      await vi.runAllTimersAsync()
+
+      expect(mockNotesUpdate).toHaveBeenCalledWith('1', expect.objectContaining({ title: 'New Title' }))
+      expect(onRefresh).toHaveBeenCalled()
+    })
+
+    it('does not autosave title on new notes (no note id)', async () => {
+      renderNoteModal(defaultProps)
+
+      const titleInput = screen.getByPlaceholderText('Note title...')
+      fireEvent.change(titleInput, { target: { value: 'Some Title' } })
+      await vi.runAllTimersAsync()
+
+      expect(mockNotesUpdate).not.toHaveBeenCalled()
+    })
+
+    it('autosaves and calls onRefresh when content changes on an existing note', async () => {
+      const note = createMockNote()
+      const onRefresh = vi.fn()
+      renderNoteModal({ ...defaultProps, onRefresh, note })
+
+      const contentInput = screen.getByDisplayValue('Test content')
+      fireEvent.change(contentInput, { target: { value: 'Updated content' } })
+      await vi.runAllTimersAsync()
+
+      expect(mockNotesUpdate).toHaveBeenCalledWith('1', expect.objectContaining({ content: 'Updated content' }))
+      expect(onRefresh).toHaveBeenCalled()
+    })
+
+    it('does not autosave content on new notes (no note id)', async () => {
+      renderNoteModal(defaultProps)
+
+      const contentInput = screen.getByPlaceholderText('Take a note...')
+      fireEvent.change(contentInput, { target: { value: 'Some content' } })
+      await vi.runAllTimersAsync()
+
+      expect(mockNotesUpdate).not.toHaveBeenCalled()
+    })
+
+    it('autosaves and calls onRefresh immediately when color changes on an existing note', async () => {
+      const note = createMockNote()
+      const onRefresh = vi.fn()
+      renderNoteModal({ ...defaultProps, onRefresh, note })
+
+      fireEvent.click(screen.getByTitle('Coral'))
+      await vi.runAllTimersAsync()
+
+      expect(mockNotesUpdate).toHaveBeenCalledWith('1', expect.objectContaining({ color: '#f28b82' }))
+      expect(onRefresh).toHaveBeenCalled()
+    })
+
+    it('does not autosave color on new notes', async () => {
+      renderNoteModal(defaultProps)
+
+      fireEvent.click(screen.getByTitle('Coral'))
+      await vi.runAllTimersAsync()
+
+      expect(mockNotesUpdate).not.toHaveBeenCalled()
+    })
+
+    it('title autosave debounces rapid changes and sends only the latest value', async () => {
+      const note = createMockNote()
+      const onRefresh = vi.fn()
+      renderNoteModal({ ...defaultProps, onRefresh, note })
+
+      const titleInput = screen.getByDisplayValue('Test Note')
+      fireEvent.change(titleInput, { target: { value: 'First' } })
+      fireEvent.change(titleInput, { target: { value: 'Second' } })
+      fireEvent.change(titleInput, { target: { value: 'Final' } })
+      await vi.runAllTimersAsync()
+
+      expect(mockNotesUpdate).toHaveBeenCalledTimes(1)
+      expect(mockNotesUpdate).toHaveBeenCalledWith('1', expect.objectContaining({ title: 'Final' }))
+      expect(onRefresh).toHaveBeenCalled()
+    })
+
+    it('color change cancels a pending title debounce and the save includes both changes', async () => {
+      const note = createMockNote()
+      const onRefresh = vi.fn()
+      renderNoteModal({ ...defaultProps, onRefresh, note })
+
+      // Start a title debounce
+      const titleInput = screen.getByDisplayValue('Test Note')
+      fireEvent.change(titleInput, { target: { value: 'Updated Title' } })
+
+      // Immediately click a color — should cancel the title debounce and save both
+      fireEvent.click(screen.getByTitle('Coral'))
+      await vi.runAllTimersAsync()
+
+      // The color save should have included the updated title
+      expect(mockNotesUpdate).toHaveBeenCalledWith('1', expect.objectContaining({
+        title: 'Updated Title',
+        color: '#f28b82',
+      }))
+      expect(onRefresh).toHaveBeenCalled()
     })
   })
 

@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"mime/multipart"
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/hanzei/jot/server/client"
@@ -15,9 +16,17 @@ import (
 
 // keepNoteJSON is a minimal valid Google Keep JSON payload.
 type keepNoteJSON struct {
-	Title       string `json:"title"`
-	TextContent string `json:"textContent"`
-	IsTrashed   bool   `json:"isTrashed"`
+	Title       string             `json:"title"`
+	TextContent string             `json:"textContent"`
+	ListContent []keepNoteItemJSON `json:"listContent,omitempty"`
+	IsTrashed   bool               `json:"isTrashed"`
+	IsPinned    bool               `json:"isPinned"`
+	IsArchived  bool               `json:"isArchived"`
+}
+
+type keepNoteItemJSON struct {
+	Text      string `json:"text"`
+	IsChecked bool   `json:"isChecked"`
 }
 
 func marshalKeepNote(t *testing.T, kn keepNoteJSON) []byte {
@@ -163,4 +172,104 @@ func TestImportNotesAppearInNotesList(t *testing.T) {
 		}
 	}
 	assert.True(t, found, "imported note should appear in the notes list")
+}
+
+func TestImportPinnedAndArchivedNote(t *testing.T) {
+	ts := setupTestServer(t)
+	user := ts.createTestUser(t, "importpinuser", "password123", false)
+
+	t.Run("pinned note is imported as pinned", func(t *testing.T) {
+		data := marshalKeepNote(t, keepNoteJSON{Title: "Pinned Import", IsPinned: true})
+		result, err := user.Client.ImportNotes(t.Context(), "note.json", bytes.NewReader(data))
+		require.NoError(t, err)
+		assert.Equal(t, 1, result.Imported)
+
+		notes, err := user.Client.ListNotes(t.Context(), nil)
+		require.NoError(t, err)
+		var found bool
+		for _, n := range notes {
+			if n.Title == "Pinned Import" {
+				found = true
+				assert.True(t, n.Pinned)
+				break
+			}
+		}
+		assert.True(t, found)
+	})
+
+	t.Run("archived note is imported as archived", func(t *testing.T) {
+		data := marshalKeepNote(t, keepNoteJSON{Title: "Archived Import", IsArchived: true})
+		result, err := user.Client.ImportNotes(t.Context(), "note.json", bytes.NewReader(data))
+		require.NoError(t, err)
+		assert.Equal(t, 1, result.Imported)
+
+		notes, err := user.Client.ListNotes(t.Context(), &client.ListNotesOptions{Archived: true})
+		require.NoError(t, err)
+		var found bool
+		for _, n := range notes {
+			if n.Title == "Archived Import" {
+				found = true
+				assert.True(t, n.Archived)
+				break
+			}
+		}
+		assert.True(t, found)
+	})
+}
+
+func TestImportValidation(t *testing.T) {
+	ts := setupTestServer(t)
+	user := ts.createTestUser(t, "importvaluser", "password123", false)
+
+	t.Run("title exceeding max is skipped with error", func(t *testing.T) {
+		data := marshalKeepNote(t, keepNoteJSON{Title: strings.Repeat("a", 201)})
+		result, err := user.Client.ImportNotes(t.Context(), "note.json", bytes.NewReader(data))
+		require.NoError(t, err)
+		assert.Equal(t, 0, result.Imported)
+		assert.Len(t, result.Errors, 1)
+	})
+
+	t.Run("content exceeding max is skipped with error", func(t *testing.T) {
+		data := marshalKeepNote(t, keepNoteJSON{TextContent: strings.Repeat("a", 10001)})
+		result, err := user.Client.ImportNotes(t.Context(), "note.json", bytes.NewReader(data))
+		require.NoError(t, err)
+		assert.Equal(t, 0, result.Imported)
+		assert.Len(t, result.Errors, 1)
+	})
+
+	t.Run("too many items is skipped with error", func(t *testing.T) {
+		items := make([]keepNoteItemJSON, 501)
+		for i := range items {
+			items[i] = keepNoteItemJSON{Text: "item"}
+		}
+		data := marshalKeepNote(t, keepNoteJSON{Title: "Many Items", ListContent: items})
+		result, err := user.Client.ImportNotes(t.Context(), "note.json", bytes.NewReader(data))
+		require.NoError(t, err)
+		assert.Equal(t, 0, result.Imported)
+		assert.Len(t, result.Errors, 1)
+	})
+
+	t.Run("item text exceeding max is skipped with error", func(t *testing.T) {
+		data := marshalKeepNote(t, keepNoteJSON{
+			Title:       "Todo",
+			ListContent: []keepNoteItemJSON{{Text: strings.Repeat("a", 501)}},
+		})
+		result, err := user.Client.ImportNotes(t.Context(), "note.json", bytes.NewReader(data))
+		require.NoError(t, err)
+		assert.Equal(t, 0, result.Imported)
+		assert.Len(t, result.Errors, 1)
+	})
+
+	t.Run("valid note alongside invalid note imports only the valid one", func(t *testing.T) {
+		valid := marshalKeepNote(t, keepNoteJSON{Title: "Good Note", TextContent: "ok"})
+		invalid := marshalKeepNote(t, keepNoteJSON{Title: strings.Repeat("x", 201)})
+		zipData := buildZip(t, map[string][]byte{
+			"valid.json":   valid,
+			"invalid.json": invalid,
+		})
+		result, err := user.Client.ImportNotes(t.Context(), "export.zip", bytes.NewReader(zipData))
+		require.NoError(t, err)
+		assert.Equal(t, 1, result.Imported)
+		assert.Len(t, result.Errors, 1)
+	})
 }
