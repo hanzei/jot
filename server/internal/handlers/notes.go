@@ -469,23 +469,6 @@ func (h *NotesHandler) updateTodoItems(ctx context.Context, noteID string, userI
 	return nil
 }
 
-// validateUpdateNoteFields checks the field length constraints for an update request.
-func validateUpdateNoteFields(req *UpdateNoteRequest) (int, error) {
-	if req.Title != nil && utf8.RuneCountInString(*req.Title) > noteTitleMaxLength {
-		return http.StatusBadRequest, fmt.Errorf("title must be %d characters or fewer", noteTitleMaxLength)
-	}
-	if req.Content != nil && utf8.RuneCountInString(*req.Content) > noteContentMaxLength {
-		return http.StatusBadRequest, fmt.Errorf("content must be %d characters or fewer", noteContentMaxLength)
-	}
-	return http.StatusOK, nil
-}
-
-// updateNoteAffectsSharedFields reports whether the request changes fields that are
-// visible to all collaborators (title, content, items), requiring personalized SSE events.
-func updateNoteAffectsSharedFields(req *UpdateNoteRequest) bool {
-	return req.Title != nil || req.Content != nil || len(req.Items) > 0
-}
-
 // UpdateNote godoc
 //
 //	@Summary	Update a note
@@ -520,8 +503,11 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 		return http.StatusBadRequest, nil, err
 	}
 
-	if status, err := validateUpdateNoteFields(&req); err != nil {
-		return status, nil, err
+	if req.Title != nil && utf8.RuneCountInString(*req.Title) > noteTitleMaxLength {
+		return http.StatusBadRequest, nil, fmt.Errorf("title must be %d characters or fewer", noteTitleMaxLength)
+	}
+	if req.Content != nil && utf8.RuneCountInString(*req.Content) > noteContentMaxLength {
+		return http.StatusBadRequest, nil, fmt.Errorf("content must be %d characters or fewer", noteContentMaxLength)
 	}
 
 	// Validate items before persisting any changes so invalid assigned_to
@@ -555,7 +541,8 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 	// their own personalized copy of the note (preserving their per-user state).
 	// Per-user-only changes (color, pinned, archived, checked_items_collapsed) only
 	// need to be delivered to the acting user.
-	h.publishUpdateEvent(r.Context(), id, note, user.ID, updateNoteAffectsSharedFields(&req))
+	hasSharedFieldChange := req.Title != nil || req.Content != nil || len(req.Items) > 0
+	h.publishUpdateEvent(r.Context(), id, note, user.ID, hasSharedFieldChange)
 
 	return http.StatusOK, note, nil
 }
