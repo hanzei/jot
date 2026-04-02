@@ -260,7 +260,6 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     flexWrap: 'wrap',
     gap: 4,
-    flex: 1,
   },
   labelChip: {
     borderRadius: 10,
