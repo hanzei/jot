@@ -70,6 +70,7 @@ jest.mock('react-native-draggable-flatlist', () => {
 
 jest.mock('../src/hooks/useOfflineNotes', () => ({
   useOfflineNotes: jest.fn(),
+  useOfflineNote: jest.fn(),
 }));
 
 jest.mock('../src/hooks/useNotes', () => ({
@@ -141,6 +142,7 @@ jest.mock('../src/components/LabelPicker', () => {
 });
 
 const mockUseOfflineNotes = jest.requireMock('../src/hooks/useOfflineNotes').useOfflineNotes as jest.Mock;
+const mockUseOfflineNote = jest.requireMock('../src/hooks/useOfflineNotes').useOfflineNote as jest.Mock;
 const navigationModule = jest.requireMock('@react-navigation/native') as {
   __mockDispatch: jest.Mock;
 };
@@ -246,6 +248,7 @@ describe('NotesListScreen sorting', () => {
       refetch: jest.fn(),
       isRefetching: false,
     });
+    mockUseOfflineNote.mockReturnValue({ data: null });
   });
 
   it('normalizes an unsupported saved sort preference back to manual', () => {
@@ -548,6 +551,7 @@ describe('NotesListScreen label picker', () => {
       setSettings: jest.fn(),
     });
     mockNoteContextMenu.mockReturnValue(null);
+    mockUseOfflineNote.mockReturnValue({ data: null });
   });
 
   it('passes updated noteLabels to LabelPicker when notes data refreshes after a mutation', async () => {
@@ -568,6 +572,7 @@ describe('NotesListScreen label picker', () => {
     const note = buildNote({ id: 'note-1', labels: [label1] });
 
     mockUseOfflineNotes.mockReturnValue(baseOfflineNotes([note]));
+    mockUseOfflineNote.mockReturnValue({ data: note });
 
     const { rerender } = render(<NotesListScreen variant="notes" />);
 
@@ -584,9 +589,9 @@ describe('NotesListScreen label picker', () => {
     expect(screen.getByTestId('label-picker-label-l1')).toBeTruthy();
     expect(screen.queryByTestId('label-picker-label-l2')).toBeNull();
 
-    // Simulate the notes query refetching after the label mutation with an updated note
+    // Simulate the per-note query updating after the label mutation
     const updatedNote = { ...note, labels: [label1, label2] };
-    mockUseOfflineNotes.mockReturnValue(baseOfflineNotes([updatedNote]));
+    mockUseOfflineNote.mockReturnValue({ data: updatedNote });
     await act(async () => {
       rerender(<NotesListScreen variant="notes" />);
     });
@@ -595,5 +600,44 @@ describe('NotesListScreen label picker', () => {
     expect(screen.getByTestId('label-picker')).toBeTruthy();
     expect(screen.getByTestId('label-picker-label-l1')).toBeTruthy();
     expect(screen.getByTestId('label-picker-label-l2')).toBeTruthy();
+  });
+
+  it('shows updated noteLabels when the note drops out of the label-filtered notes list', async () => {
+    const filterLabel: Label = {
+      id: 'l1',
+      name: 'Work',
+      user_id: 'user-1',
+      created_at: '2024-01-01T00:00:00Z',
+      updated_at: '2024-01-01T00:00:00Z',
+    };
+    const note = buildNote({ id: 'note-1', labels: [filterLabel] });
+
+    // Label-filtered view: notes list contains the note initially
+    mockUseOfflineNotes.mockReturnValue(baseOfflineNotes([note]));
+    mockUseOfflineNote.mockReturnValue({ data: note });
+
+    const { rerender } = render(<NotesListScreen variant="notes" labelId="l1" />);
+
+    const contextMenuProps = mockNoteContextMenu.mock.lastCall[0] as {
+      onManageLabels: (n: typeof note) => void;
+    };
+    await act(async () => {
+      contextMenuProps.onManageLabels(note);
+    });
+
+    expect(screen.getByTestId('label-picker-label-l1')).toBeTruthy();
+
+    // After removing the filter label, the note disappears from the scoped notes list
+    // but useOfflineNote (unscoped) still returns the updated note
+    const updatedNote = { ...note, labels: [] };
+    mockUseOfflineNotes.mockReturnValue(baseOfflineNotes([]));
+    mockUseOfflineNote.mockReturnValue({ data: updatedNote });
+    await act(async () => {
+      rerender(<NotesListScreen variant="notes" labelId="l1" />);
+    });
+
+    // LabelPicker stays open with the accurate (now-empty) label list from per-note cache
+    expect(screen.getByTestId('label-picker')).toBeTruthy();
+    expect(screen.queryByTestId('label-picker-label-l1')).toBeNull();
   });
 });
