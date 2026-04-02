@@ -134,6 +134,7 @@ describe('NoteModal', () => {
   afterEach(() => {
     mockConsoleError.mockClear()
     vi.useRealTimers()
+    vi.restoreAllMocks()
   })
 
   describe('Basic Rendering', () => {
@@ -176,7 +177,18 @@ describe('NoteModal', () => {
       expect(screen.getByText(/Last edited:/)).toBeInTheDocument()
     })
 
-    it('renders permanent mobile app toolbar link in note modal', () => {
+    it('renders mobile app toolbar link on mobile devices', () => {
+      vi.spyOn(window, 'matchMedia').mockImplementation((query: string) => ({
+        matches: query === '(pointer: coarse)',
+        media: query,
+        onchange: null,
+        addListener: () => {},
+        removeListener: () => {},
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        dispatchEvent: () => false,
+      }))
+
       const note = createMockNote()
       renderNoteModal({ ...defaultProps, note })
 
@@ -191,13 +203,30 @@ describe('NoteModal', () => {
       expect(deepLink.searchParams.get('server')).toBe(window.location.origin.toLowerCase())
     })
 
-    it('renders mobile app toolbar link before share action', () => {
+    it('renders mobile app toolbar link before share action on mobile devices', () => {
+      vi.spyOn(window, 'matchMedia').mockImplementation((query: string) => ({
+        matches: query === '(pointer: coarse)',
+        media: query,
+        onchange: null,
+        addListener: () => {},
+        removeListener: () => {},
+        addEventListener: () => {},
+        removeEventListener: () => {},
+        dispatchEvent: () => false,
+      }))
+
       const note = createMockNote()
       renderNoteModal({ ...defaultProps, note, onShare: vi.fn(), isOwner: true })
 
       const mobileLink = screen.getByTestId('note-open-mobile-app-toolbar-link')
       const shareButton = screen.getByRole('button', { name: 'Share' })
       expect(mobileLink.compareDocumentPosition(shareButton) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
+    })
+
+    it('does not render mobile app toolbar link on non-mobile devices', () => {
+      const note = createMockNote()
+      renderNoteModal({ ...defaultProps, note })
+      expect(screen.queryByTestId('note-open-mobile-app-toolbar-link')).not.toBeInTheDocument()
     })
 
     it('does not render mobile app toolbar link for new note', () => {

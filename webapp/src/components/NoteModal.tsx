@@ -490,7 +490,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   }));
 
   const noteDeepLinkHref = useMemo(() => {
-    if (!note?.id) {
+    if (!note?.id || !window.matchMedia('(pointer: coarse)').matches) {
       return null;
     }
     return buildMobileDeepLink(`/notes/${note.id}`, window.location.origin);
