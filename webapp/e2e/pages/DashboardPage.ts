@@ -182,6 +182,11 @@ export class DashboardPage {
     await activeDialog.getByRole('button', { name: 'Duplicate' }).click();
   }
 
+  async archiveCurrentNoteFromModal() {
+    const activeDialog = this.page.getByRole('dialog').last();
+    await activeDialog.getByRole('button', { name: 'Archive note' }).click();
+  }
+
   async search(query: string) {
     await this.page.fill('[aria-label="Search notes"]', query);
   }

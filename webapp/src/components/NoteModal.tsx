@@ -1282,11 +1282,15 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
         })) : undefined,
       };
       await notes.update(note.id, updateData);
-      onRefresh?.();
       showToast(
         newArchivedState ? t('dashboard.noteArchived') : t('dashboard.noteUnarchived'),
         'success'
       );
+      if (newArchivedState) {
+        onClose();
+      } else {
+        onRefresh?.();
+      }
     } catch (error) {
       console.error('Failed to update archive status:', error);
       setArchived(!newArchivedState);
