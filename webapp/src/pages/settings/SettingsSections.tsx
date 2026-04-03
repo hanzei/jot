@@ -348,7 +348,7 @@ export const PreferencesInfoColumn = ({
                 <button
                   type="button"
                   onClick={() => onRequestRevokeSession(session)}
-                  disabled={revokingSessionId === session.id}
+                  disabled={revokingSessionId !== null}
                   className="ml-4 flex-shrink-0 text-sm text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 disabled:opacity-50"
                 >
                   {revokingSessionId === session.id ? t('settings.sessionsRevoking') : t('settings.sessionsRevoke')}

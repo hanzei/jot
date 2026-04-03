@@ -108,7 +108,6 @@ const Settings = ({ onLogout }: SettingsProps) => {
   };
 
   const handleRequestRevokeSession = (session: ActiveSession) => {
-    if (revokingSessionId) return;
     setSessionPendingRevoke(session);
   };
 
