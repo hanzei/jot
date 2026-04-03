@@ -22,7 +22,7 @@ func TestLoadDefaults(t *testing.T) {
 	assert.Equal(t, 8080, cfg.Port)
 	assert.Equal(t, "./jot.db", cfg.DBPath)
 	assert.Contains(t, cfg.StaticDir, filepath.Join("webapp", "build"))
-	assert.Equal(t, "http://localhost:5173", cfg.CORSAllowedOrigin)
+	assert.Empty(t, cfg.CORSAllowedOrigin)
 	assert.True(t, cfg.CookieSecure)
 	assert.True(t, cfg.RegistrationEnabled)
 }
@@ -140,4 +140,13 @@ func TestLoadRegistrationExplicitTrue(t *testing.T) {
 	cfg, err := Load()
 	require.NoError(t, err)
 	assert.True(t, cfg.RegistrationEnabled)
+}
+
+func TestLoadCORSAllowedOriginSet(t *testing.T) {
+	t.Setenv("CORS_ALLOWED_ORIGIN", "https://app.example.com")
+	t.Setenv("STATIC_DIR", "/tmp/static")
+
+	cfg, err := Load()
+	require.NoError(t, err)
+	assert.Equal(t, "https://app.example.com", cfg.CORSAllowedOrigin)
 }

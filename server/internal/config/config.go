@@ -23,7 +23,6 @@ func Load() (*Config, error) {
 	cfg := &Config{
 		Port:                8080,
 		DBPath:              "./jot.db",
-		CORSAllowedOrigin:   "http://localhost:5173",
 		CookieSecure:        true,
 		RegistrationEnabled: true,
 	}
@@ -53,9 +52,7 @@ func Load() (*Config, error) {
 		cfg.StaticDir = filepath.Join(workDir, "..", "webapp", "build")
 	}
 
-	if v := os.Getenv("CORS_ALLOWED_ORIGIN"); v != "" {
-		cfg.CORSAllowedOrigin = v
-	}
+	cfg.CORSAllowedOrigin = os.Getenv("CORS_ALLOWED_ORIGIN")
 
 	switch os.Getenv("COOKIE_SECURE") {
 	case "false":
