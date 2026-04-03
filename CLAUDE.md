@@ -249,6 +249,13 @@ Migration files live in `server/internal/database/migrations/` and are named `NN
 - JSON fields: snake_case (`note_type`, `user_id`)
 - Error wrapping: `fmt.Errorf("context: %w", err)`
 
+### Error Handling (Go)
+
+- Every error that crosses a function boundary must be wrapped with a short, lowercase description of the operation that failed: `return nil, fmt.Errorf("get note by id: %w", err)`.
+- Never use bare `return err` or `return nil, err` when returning up the call stack — always add context.
+- Do **not** wrap sentinel errors (`sql.ErrNoRows`, `ErrNoteNotFound`, etc.) that callers identify with `errors.Is` for control flow. Pass them through unwrapped so callers can still match on them.
+- Do not wrap errors inside `defer` functions or inside log statements.
+
 ### Server Tests
 
 - Integration tests live in `server/` root (for example: `http_integration_test.go`, `http_notes_sharing_test.go`, `http_labels_test.go`, `http_import_test.go`, `http_profile_icon_test.go`)

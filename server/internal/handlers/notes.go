@@ -194,7 +194,7 @@ func (h *NotesHandler) createTodoItems(ctx context.Context, noteID string, items
 			return http.StatusBadRequest, fmt.Errorf("item text must be %d characters or fewer", noteItemTextMaxLength)
 		}
 		if _, err := h.noteStore.CreateItemWithCompleted(ctx, noteID, item.Text, item.Position, item.Completed, item.IndentLevel, ""); err != nil {
-			return http.StatusInternalServerError, err
+			return http.StatusInternalServerError, fmt.Errorf("create todo item: %w", err)
 		}
 	}
 	return http.StatusOK, nil
@@ -230,7 +230,7 @@ func (h *NotesHandler) GetNotes(w http.ResponseWriter, r *http.Request) (int, an
 
 	notes, err := h.noteStore.GetByUserID(r.Context(), user.ID, archived, trashed, search, labelID, myTodo)
 	if err != nil {
-		return http.StatusInternalServerError, nil, err
+		return http.StatusInternalServerError, nil, fmt.Errorf("get notes: %w", err)
 	}
 
 	return http.StatusOK, notes, nil
@@ -267,7 +267,7 @@ func (h *NotesHandler) CreateNote(w http.ResponseWriter, r *http.Request) (int, 
 
 	note, err := h.noteStore.Create(r.Context(), user.ID, req.Title, req.Content, req.NoteType, req.Color)
 	if err != nil {
-		return http.StatusInternalServerError, nil, err
+		return http.StatusInternalServerError, nil, fmt.Errorf("create note: %w", err)
 	}
 
 	needRefetch := false
@@ -330,7 +330,7 @@ func (h *NotesHandler) GetNote(w http.ResponseWriter, r *http.Request) (int, any
 		if errors.Is(err, models.ErrNoteNotFound) {
 			return http.StatusNotFound, nil, err
 		}
-		return http.StatusInternalServerError, nil, err
+		return http.StatusInternalServerError, nil, fmt.Errorf("get note: %w", err)
 	}
 
 	return http.StatusOK, note, nil
@@ -368,12 +368,12 @@ func (h *NotesHandler) DuplicateNote(w http.ResponseWriter, r *http.Request) (in
 		if errors.Is(err, models.ErrNoteNotFound) {
 			return http.StatusNotFound, nil, err
 		}
-		return http.StatusInternalServerError, nil, err
+		return http.StatusInternalServerError, nil, fmt.Errorf("get note: %w", err)
 	}
 
 	duplicatedNote, err := h.noteStore.Duplicate(r.Context(), sourceNote, user.ID)
 	if err != nil {
-		return http.StatusInternalServerError, nil, err
+		return http.StatusInternalServerError, nil, fmt.Errorf("duplicate note: %w", err)
 	}
 
 	h.publishNoteEvent(r.Context(), duplicatedNote.ID, sse.EventNoteCreated, duplicatedNote, user.ID)
@@ -451,18 +451,18 @@ func (h *NotesHandler) validateItemAssignments(ctx context.Context, noteID strin
 func (h *NotesHandler) updateTodoItems(ctx context.Context, noteID string, userID string, items []UpdateNoteItem) error {
 	currentNote, err := h.noteStore.GetByID(ctx, noteID, userID)
 	if err != nil {
-		return err
+		return fmt.Errorf("get note: %w", err)
 	}
 
 	if currentNote.NoteType == models.NoteTypeTodo {
 		if err := h.noteStore.DeleteItemsByNoteID(ctx, noteID); err != nil {
-			return err
+			return fmt.Errorf("delete note items: %w", err)
 		}
 
 		for _, item := range items {
 			_, err := h.noteStore.CreateItemWithCompleted(ctx, noteID, item.Text, item.Position, item.Completed, item.IndentLevel, item.AssignedTo)
 			if err != nil {
-				return err
+				return fmt.Errorf("create note item: %w", err)
 			}
 		}
 	}
@@ -523,18 +523,18 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 		if errors.Is(err, models.ErrNoteNotFound) || errors.Is(err, models.ErrNoteNoAccess) {
 			return http.StatusNotFound, nil, err
 		}
-		return http.StatusInternalServerError, nil, err
+		return http.StatusInternalServerError, nil, fmt.Errorf("update note: %w", err)
 	}
 
 	if len(req.Items) > 0 {
 		if updateErr := h.updateTodoItems(r.Context(), id, user.ID, req.Items); updateErr != nil {
-			return http.StatusInternalServerError, nil, updateErr
+			return http.StatusInternalServerError, nil, fmt.Errorf("update todo items: %w", updateErr)
 		}
 	}
 
 	note, err := h.noteStore.GetByID(r.Context(), id, user.ID)
 	if err != nil {
-		return http.StatusInternalServerError, nil, err
+		return http.StatusInternalServerError, nil, fmt.Errorf("get note: %w", err)
 	}
 
 	// Title, content, and items are shared fields: every collaborator must receive
@@ -608,7 +608,7 @@ func (h *NotesHandler) DeleteNote(w http.ResponseWriter, r *http.Request) (int, 
 			if errors.Is(err, models.ErrNoteNotInTrash) {
 				return http.StatusNotFound, nil, err
 			}
-			return http.StatusInternalServerError, nil, err
+			return http.StatusInternalServerError, nil, fmt.Errorf("delete note from trash: %w", err)
 		}
 	} else {
 		err := h.noteStore.MoveToTrash(r.Context(), id, user.ID)
@@ -616,7 +616,7 @@ func (h *NotesHandler) DeleteNote(w http.ResponseWriter, r *http.Request) (int, 
 			if errors.Is(err, models.ErrNoteNotOwnedByUser) {
 				return http.StatusNotFound, nil, err
 			}
-			return http.StatusInternalServerError, nil, err
+			return http.StatusInternalServerError, nil, fmt.Errorf("move note to trash: %w", err)
 		}
 	}
 
@@ -645,7 +645,7 @@ func (h *NotesHandler) EmptyTrash(w http.ResponseWriter, r *http.Request) (int, 
 
 	deletedNotes, err := h.noteStore.EmptyTrash(r.Context(), user.ID)
 	if err != nil {
-		return http.StatusInternalServerError, nil, err
+		return http.StatusInternalServerError, nil, fmt.Errorf("empty trash: %w", err)
 	}
 
 	for _, deletedNote := range deletedNotes {
@@ -687,12 +687,12 @@ func (h *NotesHandler) RestoreNote(w http.ResponseWriter, r *http.Request) (int,
 		if errors.Is(err, models.ErrNoteNotOwnedByUser) || errors.Is(err, models.ErrNoteNotInTrash) {
 			return http.StatusNotFound, nil, err
 		}
-		return http.StatusInternalServerError, nil, err
+		return http.StatusInternalServerError, nil, fmt.Errorf("restore note: %w", err)
 	}
 
 	note, err := h.noteStore.GetByID(r.Context(), id, user.ID)
 	if err != nil {
-		return http.StatusInternalServerError, nil, err
+		return http.StatusInternalServerError, nil, fmt.Errorf("get note: %w", err)
 	}
 
 	h.publishNoteEvent(r.Context(), id, sse.EventNoteUpdated, note, user.ID)
@@ -736,7 +736,7 @@ func (h *NotesHandler) ReorderNotes(w http.ResponseWriter, r *http.Request) (int
 		if errors.Is(err, models.ErrNoteNoAccess) {
 			return http.StatusForbidden, nil, err
 		}
-		return http.StatusInternalServerError, nil, err
+		return http.StatusInternalServerError, nil, fmt.Errorf("reorder notes: %w", err)
 	}
 
 	return http.StatusNoContent, nil, nil
