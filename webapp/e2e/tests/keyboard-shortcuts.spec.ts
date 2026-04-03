@@ -59,11 +59,11 @@ test.describe('Keyboard shortcuts help dialog', () => {
     await dashboardPage.goto();
 
     await page.getByRole('button', { name: 'Profile menu' }).click();
-    await page.getByRole('button', { name: 'Keyboard shortcuts' }).click();
+    await page.getByRole('menuitem', { name: /Keyboard shortcuts/ }).click();
 
     const shortcutsDialog = page.getByTestId('keyboard-shortcuts-dialog');
     await expect(shortcutsDialog).toBeVisible();
-    await expect(shortcutsDialog.getByText('Keyboard shortcuts')).toBeVisible();
+    await expect(shortcutsDialog.getByRole('heading', { name: 'Keyboard shortcuts' })).toBeVisible();
   });
 
   test('opens notes/todo/archive/bin views with d/t/a/b', async ({ authenticatedUser, page, dashboardPage }) => {

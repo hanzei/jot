@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { fireEvent, render, screen } from '@testing-library/react'
+import { fireEvent, render, screen, within } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import NavigationHeader from '../NavigationHeader'
 import { buildMobileDeepLink } from '@/utils/deepLink'
@@ -23,8 +23,9 @@ describe('NavigationHeader', () => {
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'Profile menu' }))
-    expect(screen.getByRole('button', { name: 'Keyboard shortcuts' })).toBeInTheDocument()
-    expect(screen.getByText('?')).toBeInTheDocument()
+    const shortcutsMenuItem = screen.getByRole('menuitem', { name: /Keyboard shortcuts/ })
+    expect(shortcutsMenuItem).toBeInTheDocument()
+    expect(within(shortcutsMenuItem).getByText('?')).toBeInTheDocument()
   })
 
   it('does not show keyboard shortcuts menu item when callback is missing', () => {
@@ -35,7 +36,7 @@ describe('NavigationHeader', () => {
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'Profile menu' }))
-    expect(screen.queryByRole('button', { name: 'Keyboard shortcuts' })).not.toBeInTheDocument()
+    expect(screen.queryByRole('menuitem', { name: /Keyboard shortcuts/ })).not.toBeInTheDocument()
   })
 
   it('calls keyboard shortcuts callback from profile menu', () => {
@@ -47,7 +48,7 @@ describe('NavigationHeader', () => {
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'Profile menu' }))
-    fireEvent.click(screen.getByRole('button', { name: 'Keyboard shortcuts' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /Keyboard shortcuts/ }))
     expect(onOpenKeyboardShortcuts).toHaveBeenCalledTimes(1)
   })
 
