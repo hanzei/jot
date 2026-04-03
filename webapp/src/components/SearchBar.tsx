@@ -7,11 +7,12 @@ interface SearchBarProps {
   onChange: (value: string) => void;
   onSubmit?: () => void;
   inputRef?: Ref<HTMLInputElement>;
+  shortcutHint?: string;
   // Escape always clears non-empty input; this flag additionally prevents parent/global Escape handlers.
   stopEscapePropagation?: boolean;
 }
 
-const SearchBar = ({ value, onChange, onSubmit, inputRef, stopEscapePropagation = false }: SearchBarProps) => {
+const SearchBar = ({ value, onChange, onSubmit, inputRef, shortcutHint, stopEscapePropagation = false }: SearchBarProps) => {
   const { t } = useTranslation();
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -39,11 +40,20 @@ const SearchBar = ({ value, onChange, onSubmit, inputRef, stopEscapePropagation 
             type="text"
             placeholder={t('dashboard.searchPlaceholder')}
             aria-label={t('dashboard.searchAriaLabel')}
-            className="w-full pl-9 sm:pl-10 pr-4 py-2 text-sm sm:text-base border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent"
+            className={`w-full pl-9 sm:pl-10 ${shortcutHint ? 'pr-20 sm:pr-24' : 'pr-4'} py-2 text-sm sm:text-base border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent`}
             value={value}
             onChange={(e) => onChange(e.target.value)}
             onKeyDown={handleKeyDown}
           />
+          {shortcutHint && (
+            <kbd
+              data-testid="search-shortcut-hint"
+              aria-hidden="true"
+              className="pointer-events-none absolute right-3 top-1/2 -translate-y-1/2 inline-flex rounded border border-gray-300 dark:border-slate-600 bg-gray-100 dark:bg-slate-700 px-1.5 py-0.5 font-mono text-xs text-gray-600 dark:text-gray-300"
+            >
+              {shortcutHint}
+            </kbd>
+          )}
         </div>
       </form>
     </div>

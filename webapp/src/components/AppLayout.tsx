@@ -72,6 +72,7 @@ const AppLayout = ({
         adminLinkActive={adminLinkActive}
         settingsLinkActive={settingsLinkActive}
         onToggleSidebar={toggleSidebar}
+        onOpenKeyboardShortcuts={() => setIsKeyboardShortcutsOpen(true)}
       >
         {searchBar}
       </NavigationHeader>
