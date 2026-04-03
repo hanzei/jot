@@ -53,7 +53,7 @@ func TestTaskAssignment(t *testing.T) {
 		assert.Empty(t, note.Items[0].AssignedTo)
 	})
 
-	t.Run("reject assigned_to on note creation", func(t *testing.T) {
+	t.Run("assigned_to is ignored on note creation", func(t *testing.T) {
 		ts := setupTestServer(t)
 		user := ts.createTestUser(t, "user1", "password123", false)
 
@@ -73,11 +73,13 @@ func TestTaskAssignment(t *testing.T) {
 		resp, err := user.Client.HTTPClient().Do(req)
 		require.NoError(t, err)
 		defer resp.Body.Close()
-		require.Equal(t, http.StatusBadRequest, resp.StatusCode)
+		require.Equal(t, http.StatusCreated, resp.StatusCode)
 
 		respBody, err := io.ReadAll(resp.Body)
 		require.NoError(t, err)
-		assert.Contains(t, string(respBody), "assigned_to is not allowed when creating note items")
+		var note client.Note
+		require.NoError(t, json.Unmarshal(respBody, &note))
+		assert.Empty(t, note.Items[0].AssignedTo, "assigned_to should be ignored on create")
 	})
 
 	t.Run("assign item to shared user on update", func(t *testing.T) {
