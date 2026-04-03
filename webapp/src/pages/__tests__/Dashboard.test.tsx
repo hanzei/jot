@@ -294,6 +294,17 @@ describe('Dashboard', () => {
   })
 
   describe('Search Functionality', () => {
+    it('focuses search when Meta+F is pressed', async () => {
+      renderDashboard()
+
+      await waitFor(() => {
+        expect(screen.getByPlaceholderText('Search notes...')).toBeInTheDocument()
+      })
+
+      fireEvent.keyDown(window, { key: 'f', metaKey: true })
+      expect(screen.getByPlaceholderText('Search notes...')).toHaveFocus()
+    })
+
     it('renders search input', async () => {
       renderDashboard()
       
