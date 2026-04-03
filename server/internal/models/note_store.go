@@ -1066,6 +1066,10 @@ func (s *NoteStore) ReorderNotes(ctx context.Context, userID string, noteIDs []s
 		return nil
 	}
 
+	if hasDuplicateNoteIDs(noteIDs) {
+		return fmt.Errorf("duplicate note ID in reorder payload: %w", ErrInvalidReorderList)
+	}
+
 	// Start transaction
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
@@ -1076,6 +1080,24 @@ func (s *NoteStore) ReorderNotes(ctx context.Context, userID string, noteIDs []s
 			logrus.WithError(rollbackErr).Error("Failed to rollback transaction")
 		}
 	}()
+
+	requestedRows, err := collectRequestedReorderRowsTx(ctx, tx, userID, noteIDs)
+	if err != nil {
+		return fmt.Errorf("failed to validate reorder payload notes: %w", err)
+	}
+
+	targetPinned, err := validateRequestedReorderRows(noteIDs, requestedRows)
+	if err != nil {
+		return err
+	}
+
+	groupRows, err := collectTargetReorderGroupRowsTx(ctx, tx, userID, targetPinned)
+	if err != nil {
+		return fmt.Errorf("failed to validate reorder payload group: %w", err)
+	}
+	if err = validateReorderGroupCoverage(noteIDs, groupRows); err != nil {
+		return err
+	}
 
 	// Update positions in note_user_state, enforcing access via the state row's user_id.
 	for i, noteID := range noteIDs {
@@ -1104,6 +1126,112 @@ func (s *NoteStore) ReorderNotes(ctx context.Context, userID string, noteIDs []s
 	}
 
 	return nil
+}
+
+type reorderRequestedRow struct {
+	noteID string
+	pinned bool
+}
+
+func hasDuplicateNoteIDs(noteIDs []string) bool {
+	seen := make(map[string]struct{}, len(noteIDs))
+	for _, noteID := range noteIDs {
+		if _, ok := seen[noteID]; ok {
+			return true
+		}
+		seen[noteID] = struct{}{}
+	}
+	return false
+}
+
+func collectRequestedReorderRowsTx(ctx context.Context, tx *sql.Tx, userID string, noteIDs []string) ([]reorderRequestedRow, error) {
+	placeholders, args := buildInClauseArgs(noteIDs)
+	queryArgs := make([]any, 0, len(args)+1)
+	queryArgs = append(queryArgs, userID)
+	queryArgs = append(queryArgs, args...)
+
+	return collectRowsFromQuery(
+		ctx,
+		tx,
+		`SELECT nus.note_id, nus.pinned
+		 FROM note_user_state nus
+		 INNER JOIN active_notes n ON n.id = nus.note_id
+		 WHERE nus.user_id = ? AND nus.note_id IN (`+placeholders+`)`, // #nosec G202 -- only generated "?" placeholders are concatenated
+		queryArgs,
+		func(rows *sql.Rows) (reorderRequestedRow, error) {
+			var row reorderRequestedRow
+			return row, rows.Scan(&row.noteID, &row.pinned)
+		},
+	)
+}
+
+func validateRequestedReorderRows(noteIDs []string, requestedRows []reorderRequestedRow) (bool, error) {
+	if len(requestedRows) != len(noteIDs) {
+		return false, fmt.Errorf("no access to one or more notes: %w", ErrNoteNoAccess)
+	}
+
+	requestedPinnedByID := make(map[string]bool, len(requestedRows))
+	for _, row := range requestedRows {
+		requestedPinnedByID[row.noteID] = row.pinned
+	}
+
+	targetPinned, ok := requestedPinnedByID[noteIDs[0]]
+	if !ok {
+		return false, fmt.Errorf("missing first note in reorder payload: %w", ErrNoteNoAccess)
+	}
+	for _, noteID := range noteIDs[1:] {
+		pinned, exists := requestedPinnedByID[noteID]
+		if !exists {
+			return false, fmt.Errorf("missing requested note in reorder payload: %w", ErrNoteNoAccess)
+		}
+		if pinned != targetPinned {
+			return false, fmt.Errorf("reorder payload mixes pinned and unpinned notes: %w", ErrInvalidReorderList)
+		}
+	}
+
+	return targetPinned, nil
+}
+
+func collectTargetReorderGroupRowsTx(ctx context.Context, tx *sql.Tx, userID string, targetPinned bool) ([]string, error) {
+	return collectRowsFromQuery(
+		ctx,
+		tx,
+		`SELECT nus.note_id
+		 FROM note_user_state nus
+		 INNER JOIN active_notes n ON n.id = nus.note_id
+		 WHERE nus.user_id = ? AND nus.archived = FALSE AND nus.pinned = ?`,
+		[]any{userID, targetPinned},
+		func(rows *sql.Rows) (string, error) {
+			var id string
+			return id, rows.Scan(&id)
+		},
+	)
+}
+
+func validateReorderGroupCoverage(noteIDs []string, groupRows []string) error {
+	if len(groupRows) != len(noteIDs) {
+		return fmt.Errorf("reorder payload must include every note in the target group: %w", ErrInvalidReorderList)
+	}
+
+	groupSet := make(map[string]struct{}, len(groupRows))
+	for _, id := range groupRows {
+		groupSet[id] = struct{}{}
+	}
+	for _, noteID := range noteIDs {
+		if _, exists := groupSet[noteID]; !exists {
+			return fmt.Errorf("reorder payload contains note outside the target group: %w", ErrInvalidReorderList)
+		}
+	}
+
+	return nil
+}
+
+func collectRowsFromQuery[T any](ctx context.Context, tx *sql.Tx, query string, args []any, scanFn func(rows *sql.Rows) (T, error)) ([]T, error) {
+	rows, err := tx.QueryContext(ctx, query, args...)
+	if err != nil {
+		return nil, err
+	}
+	return collectRows(rows, scanFn)
 }
 
 // GetNoteAudienceIDs returns the owner's user ID plus all shared_with user IDs for a note.

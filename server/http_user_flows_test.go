@@ -65,6 +65,79 @@ func TestReorderNotesEndpoint(t *testing.T) {
 			assert.Equal(t, beforeNotes[i].Position, afterNotes[i].Position)
 		}
 	})
+
+	t.Run("including unknown note ID returns 403 and leaves order unchanged", func(t *testing.T) {
+		beforeNotes, err := user.Client.ListNotes(t.Context(), nil)
+		require.NoError(t, err)
+		require.Len(t, beforeNotes, 3)
+
+		err = user.Client.ReorderNotes(t.Context(), []string{note1, "abcdefghijklmnopqrstuv"})
+		assert.Equal(t, http.StatusForbidden, client.StatusCode(err))
+
+		afterNotes, err := user.Client.ListNotes(t.Context(), nil)
+		require.NoError(t, err)
+		require.Len(t, afterNotes, 3)
+		for i := range beforeNotes {
+			assert.Equal(t, beforeNotes[i].ID, afterNotes[i].ID)
+			assert.Equal(t, beforeNotes[i].Position, afterNotes[i].Position)
+		}
+	})
+
+	t.Run("duplicate note IDs in payload returns 400 and leaves order unchanged", func(t *testing.T) {
+		beforeNotes, err := user.Client.ListNotes(t.Context(), nil)
+		require.NoError(t, err)
+		require.Len(t, beforeNotes, 3)
+
+		err = user.Client.ReorderNotes(t.Context(), []string{note1, note1, note2})
+		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
+
+		afterNotes, err := user.Client.ListNotes(t.Context(), nil)
+		require.NoError(t, err)
+		require.Len(t, afterNotes, 3)
+		for i := range beforeNotes {
+			assert.Equal(t, beforeNotes[i].ID, afterNotes[i].ID)
+			assert.Equal(t, beforeNotes[i].Position, afterNotes[i].Position)
+		}
+	})
+
+	t.Run("partial payload returns 400 and leaves order unchanged", func(t *testing.T) {
+		beforeNotes, err := user.Client.ListNotes(t.Context(), nil)
+		require.NoError(t, err)
+		require.Len(t, beforeNotes, 3)
+
+		err = user.Client.ReorderNotes(t.Context(), []string{note3, note1})
+		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
+
+		afterNotes, err := user.Client.ListNotes(t.Context(), nil)
+		require.NoError(t, err)
+		require.Len(t, afterNotes, 3)
+		for i := range beforeNotes {
+			assert.Equal(t, beforeNotes[i].ID, afterNotes[i].ID)
+			assert.Equal(t, beforeNotes[i].Position, afterNotes[i].Position)
+		}
+	})
+
+	t.Run("mixing pinned and unpinned note IDs returns 400 and leaves order unchanged", func(t *testing.T) {
+		_, err := user.Client.UpdateNote(t.Context(), note1, &client.UpdateNoteRequest{
+			Pinned: client.Ptr(true),
+		})
+		require.NoError(t, err)
+
+		beforeNotes, err := user.Client.ListNotes(t.Context(), nil)
+		require.NoError(t, err)
+		require.Len(t, beforeNotes, 3)
+
+		err = user.Client.ReorderNotes(t.Context(), []string{note1, note2, note3})
+		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
+
+		afterNotes, err := user.Client.ListNotes(t.Context(), nil)
+		require.NoError(t, err)
+		require.Len(t, afterNotes, 3)
+		for i := range beforeNotes {
+			assert.Equal(t, beforeNotes[i].ID, afterNotes[i].ID)
+			assert.Equal(t, beforeNotes[i].Position, afterNotes[i].Position)
+		}
+	})
 }
 
 func TestRemoveLabelEndpoint(t *testing.T) {
