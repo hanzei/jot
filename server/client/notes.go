@@ -76,6 +76,9 @@ func (c *Client) UpdateNote(ctx context.Context, id string, req *UpdateNoteReque
 	if req == nil {
 		return nil, errors.New("request must not be nil")
 	}
+	if req.Items != nil && len(req.Items) == 0 {
+		return nil, errors.New("request items cannot be an empty slice in typed client; use raw HTTP PATCH with {\"items\":[]} to clear todo items")
+	}
 	var note Note
 	if err := c.doJSON(ctx, http.MethodPatch, fmt.Sprintf("/api/v1/notes/%s", id), req, &note); err != nil {
 		return nil, err
