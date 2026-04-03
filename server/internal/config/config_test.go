@@ -22,7 +22,7 @@ func TestLoadDefaults(t *testing.T) {
 	assert.Equal(t, 8080, cfg.Port)
 	assert.Equal(t, "./jot.db", cfg.DBPath)
 	assert.Contains(t, cfg.StaticDir, filepath.Join("webapp", "build"))
-	assert.Equal(t, "", cfg.CORSAllowedOrigin)
+	assert.Empty(t, cfg.CORSAllowedOrigin)
 	assert.True(t, cfg.CookieSecure)
 	assert.True(t, cfg.RegistrationEnabled)
 }
