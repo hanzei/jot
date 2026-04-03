@@ -1,6 +1,8 @@
 package main
 
 import (
+	"encoding/json"
+	"io"
 	"net/http"
 	"strings"
 	"testing"
@@ -140,5 +142,39 @@ func TestNoteValidation(t *testing.T) {
 			_, err = user.Client.UpdateNote(t.Context(), note.ID, &client.UpdateNoteRequest{Items: items})
 			assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 		})
+	})
+
+	t.Run("update with explicit empty items clears todo items", func(t *testing.T) {
+		note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
+			Items: []client.CreateNoteItem{
+				{Text: "only item", Position: 0},
+			},
+		})
+		require.NoError(t, err)
+		require.Len(t, note.Items, 1)
+
+		req, err := http.NewRequestWithContext(
+			t.Context(),
+			http.MethodPatch,
+			ts.HTTPServer.URL+"/api/v1/notes/"+note.ID,
+			strings.NewReader(`{"items":[]}`),
+		)
+		require.NoError(t, err)
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := user.Client.HTTPClient().Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		require.Equal(t, http.StatusOK, resp.StatusCode)
+
+		body, err := io.ReadAll(resp.Body)
+		require.NoError(t, err)
+		var updated client.Note
+		require.NoError(t, json.Unmarshal(body, &updated))
+		assert.Len(t, updated.Items, 0)
+
+		reloaded, err := user.Client.GetNote(t.Context(), note.ID)
+		require.NoError(t, err)
+		assert.Len(t, reloaded.Items, 0)
 	})
 }

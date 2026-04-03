@@ -134,6 +134,9 @@ type CreateNoteItem struct {
 
 // UpdateNoteRequest is the body for PATCH /api/v1/notes/{id}.
 // Nil pointer fields are omitted and keep their server-side values.
+//
+// Note: Items uses `omitempty`, so an empty slice marshals as omitted.
+// To send an explicit JSON empty array (`"items":[]`) use a raw request.
 type UpdateNoteRequest struct {
 	Title                 *string          `json:"title,omitempty"`
 	Content               *string          `json:"content,omitempty"`

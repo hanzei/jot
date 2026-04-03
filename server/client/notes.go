@@ -66,8 +66,12 @@ func (c *Client) GetNote(ctx context.Context, id string) (*Note, error) {
 	return &note, nil
 }
 
-// UpdateNote partially updates a note. Only non-nil fields are changed;
-// omitted (nil) fields keep their current server-side values.
+// UpdateNote partially updates a note. Pointer fields update when non-nil, and
+// omitted (nil) pointer fields keep their current server-side values.
+//
+// Note: UpdateNoteRequest.Items uses `omitempty`; an empty slice is omitted from
+// JSON and does not clear items via this typed client. To send an explicit
+// empty array (`"items":[]`) and clear all todo items, use a raw HTTP request.
 func (c *Client) UpdateNote(ctx context.Context, id string, req *UpdateNoteRequest) (*Note, error) {
 	if req == nil {
 		return nil, errors.New("request must not be nil")
