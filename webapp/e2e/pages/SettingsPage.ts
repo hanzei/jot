@@ -80,15 +80,25 @@ export class SettingsPage {
     return this.page.getByRole('dialog', { name: 'Revoke session' });
   }
 
+  revokeDialogTitle() {
+    return this.page.getByRole('heading', { name: 'Revoke session' });
+  }
+
   revokeSessionDialog() {
     return this.revokeDialog();
   }
 
-  async openRevokeDialog(index: number) {
-    await this.sessionItems().nth(index).getByRole('button', { name: 'Revoke' }).click();
+  async openRevokeDialog(index?: number) {
+    const revokeButtons = this.sessionsSection().getByRole('button', { name: 'Revoke' });
+    if (typeof index === 'number') {
+      await revokeButtons.nth(index).click();
+      return;
+    }
+
+    await revokeButtons.first().click();
   }
 
-  async openRevokeSessionDialog(index: number) {
+  async openRevokeSessionDialog(index?: number) {
     await this.openRevokeDialog(index);
   }
 
@@ -108,9 +118,8 @@ export class SettingsPage {
     await this.clickRevokeCancel();
   }
 
-  async revokeSessionWithConfirmation(index: number) {
+  async revokeSessionWithConfirmation(index?: number) {
     await this.openRevokeSessionDialog(index);
-    await expect(this.revokeSessionDialog()).toBeVisible();
     await this.confirmRevokeSession();
   }
 

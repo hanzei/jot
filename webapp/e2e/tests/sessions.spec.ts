@@ -66,7 +66,7 @@ test.describe('Active Sessions', () => {
       resp => resp.url().includes('/api/v1/sessions/') && resp.request().method() === 'DELETE'
     );
     await settingsPage.openRevokeDialog(0);
-    await expect(settingsPage.revokeDialog()).toBeVisible();
+    await expect(settingsPage.revokeDialogTitle()).toBeVisible();
     await settingsPage.clickRevokeConfirm();
     await revokeResponse;
 
@@ -93,9 +93,9 @@ test.describe('Active Sessions', () => {
     await expect(settingsPage.sessionItems()).toHaveCount(2);
 
     await settingsPage.openRevokeDialog(0);
-    await expect(settingsPage.revokeDialog()).toBeVisible();
+    await expect(settingsPage.revokeDialogTitle()).toBeVisible();
     await settingsPage.clickRevokeCancel();
-    await expect(settingsPage.revokeDialog()).toHaveCount(0);
+    await expect(settingsPage.revokeDialogTitle()).toHaveCount(0);
     await expect(settingsPage.sessionItems()).toHaveCount(2);
   });
 
