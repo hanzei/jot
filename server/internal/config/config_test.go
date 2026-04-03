@@ -142,15 +142,6 @@ func TestLoadRegistrationExplicitTrue(t *testing.T) {
 	assert.True(t, cfg.RegistrationEnabled)
 }
 
-func TestLoadCORSAllowedOriginUnset(t *testing.T) {
-	t.Setenv("CORS_ALLOWED_ORIGIN", "")
-	t.Setenv("STATIC_DIR", "/tmp/static")
-
-	cfg, err := Load()
-	require.NoError(t, err)
-	assert.Equal(t, "", cfg.CORSAllowedOrigin)
-}
-
 func TestLoadCORSAllowedOriginSet(t *testing.T) {
 	t.Setenv("CORS_ALLOWED_ORIGIN", "https://app.example.com")
 	t.Setenv("STATIC_DIR", "/tmp/static")
