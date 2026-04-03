@@ -3,6 +3,18 @@ import { render, screen, fireEvent, createEvent } from '@testing-library/react'
 import SearchBar from '../SearchBar'
 
 describe('SearchBar', () => {
+  it('renders shortcut hint when provided', () => {
+    render(
+      <SearchBar
+        value=""
+        onChange={vi.fn()}
+        shortcutHint="Ctrl + F"
+      />
+    )
+
+    expect(screen.getByTestId('search-shortcut-hint')).toHaveTextContent('Ctrl + F')
+  })
+
   it('clears the input value when Escape is pressed', () => {
     const onChange = vi.fn()
 

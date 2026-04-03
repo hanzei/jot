@@ -784,6 +784,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
           value={searchQuery}
           onChange={setSearchQuery}
           inputRef={searchInputRef}
+          shortcutHint={t('keyboardShortcuts.focusSearchKey')}
           stopEscapePropagation={true}
         />
       </div>

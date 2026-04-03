@@ -302,6 +302,14 @@ describe('Dashboard', () => {
       })
     })
 
+    it('renders keyboard shortcut hint in dashboard search input', async () => {
+      renderDashboard()
+
+      await waitFor(() => {
+        expect(screen.getByTestId('search-shortcut-hint')).toHaveTextContent('Ctrl + F')
+      })
+    })
+
     it('handles search input changes', async () => {
       const user = userEvent.setup()
       renderDashboard()

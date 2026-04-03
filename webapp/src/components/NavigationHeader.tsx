@@ -18,6 +18,7 @@ interface NavigationHeaderProps {
   adminLinkActive?: boolean;
   settingsLinkActive?: boolean;
   onToggleSidebar?: () => void;
+  onOpenKeyboardShortcuts?: () => void;
 }
 
 interface ProfileMenuProps {
@@ -29,9 +30,10 @@ interface ProfileMenuProps {
   adminLinkActive: boolean | undefined;
   settingsLinkActive: boolean | undefined;
   onLogout: () => void;
+  onOpenKeyboardShortcuts?: () => void;
 }
 
-const ProfileMenu = ({ iconSrc, displayUsername, firstName, baseUsername, showAdminLink, adminLinkActive, settingsLinkActive, onLogout }: ProfileMenuProps) => {
+const ProfileMenu = ({ iconSrc, displayUsername, firstName, baseUsername, showAdminLink, adminLinkActive, settingsLinkActive, onLogout, onOpenKeyboardShortcuts }: ProfileMenuProps) => {
   const { t } = useTranslation();
   const [showLogoutConfirm, setShowLogoutConfirm] = useState(false);
 
@@ -79,6 +81,20 @@ const ProfileMenu = ({ iconSrc, displayUsername, firstName, baseUsername, showAd
                 </Link>
               </MenuItem>
             )}
+            {onOpenKeyboardShortcuts && (
+              <MenuItem>
+                <button
+                  type="button"
+                  onClick={onOpenKeyboardShortcuts}
+                  className="flex w-full items-center justify-between px-4 py-2 text-sm text-gray-700 dark:text-gray-200 data-[focus]:bg-gray-100 dark:data-[focus]:bg-slate-700"
+                >
+                  <span>{t('keyboardShortcuts.title')}</span>
+                  <kbd className="inline-flex rounded border border-gray-300 dark:border-slate-600 bg-gray-100 dark:bg-slate-700 px-1.5 py-0.5 font-mono text-xs text-gray-600 dark:text-gray-300">
+                    {t('keyboardShortcuts.helpKey')}
+                  </kbd>
+                </button>
+              </MenuItem>
+            )}
             <MenuItem>
               <button
                 onClick={() => setShowLogoutConfirm(true)}
@@ -106,7 +122,7 @@ const ProfileMenu = ({ iconSrc, displayUsername, firstName, baseUsername, showAd
   );
 };
 
-const NavigationHeader = ({ title = 'Jot', onLogout, children, username, isAdmin: showAdminLink, adminLinkActive, settingsLinkActive, onToggleSidebar }: NavigationHeaderProps) => {
+const NavigationHeader = ({ title = 'Jot', onLogout, children, username, isAdmin: showAdminLink, adminLinkActive, settingsLinkActive, onToggleSidebar, onOpenKeyboardShortcuts }: NavigationHeaderProps) => {
   const { t } = useTranslation();
   const location = useLocation();
   const [showMobileAppBanner, setShowMobileAppBanner] = useState(() => !isMobileAppBannerDismissed());
@@ -131,6 +147,7 @@ const NavigationHeader = ({ title = 'Jot', onLogout, children, username, isAdmin
     adminLinkActive,
     settingsLinkActive,
     onLogout,
+    onOpenKeyboardShortcuts,
   };
 
   const openInAppHref = buildMobileDeepLink(location.pathname, window.location.origin);
