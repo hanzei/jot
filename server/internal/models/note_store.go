@@ -276,7 +276,7 @@ func (s *NoteStore) GetByUserID(ctx context.Context, userID string, archived boo
 }
 
 // populateNoteItemsAndDefaults converts scanned notes to []*Note, loading todo items
-// for each todo note and initialising slice fields to non-nil defaults.
+// for each todo note and initializing slice fields to non-nil defaults.
 func (s *NoteStore) populateNoteItemsAndDefaults(ctx context.Context, scannedNotes []Note) ([]*Note, error) {
 	notes := make([]*Note, 0, len(scannedNotes))
 	for i := range scannedNotes {
