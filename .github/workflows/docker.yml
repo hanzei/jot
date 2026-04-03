@@ -47,7 +47,7 @@ jobs:
           images: hanzei/jot
           tags: |
             type=raw,value=unstable,enable={{is_default_branch}}
-            type=sha,format=long
+            type=sha
 
       - name: Get build date
         id: build-date
@@ -112,7 +112,7 @@ jobs:
           images: hanzei/jot
           tags: |
             type=raw,value=unstable,enable={{is_default_branch}}
-            type=sha,format=long
+            type=sha
 
       - name: Create manifest list and push
         working-directory: /tmp/digests
