@@ -46,7 +46,7 @@ jobs:
         with:
           images: hanzei/jot
           tags: |
-            type=raw,value=nightly,enable={{is_default_branch}}
+            type=raw,value=unstable,enable={{is_default_branch}}
             type=sha
 
       - name: Get build date
@@ -111,7 +111,7 @@ jobs:
         with:
           images: hanzei/jot
           tags: |
-            type=raw,value=nightly,enable={{is_default_branch}}
+            type=raw,value=unstable,enable={{is_default_branch}}
             type=sha
 
       - name: Create manifest list and push
