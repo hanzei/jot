@@ -171,10 +171,10 @@ func TestNoteValidation(t *testing.T) {
 		require.NoError(t, err)
 		var updated client.Note
 		require.NoError(t, json.Unmarshal(body, &updated))
-		assert.Len(t, updated.Items, 0)
+		assert.Empty(t, updated.Items)
 
 		reloaded, err := user.Client.GetNote(t.Context(), note.ID)
 		require.NoError(t, err)
-		assert.Len(t, reloaded.Items, 0)
+		assert.Empty(t, reloaded.Items)
 	})
 }
