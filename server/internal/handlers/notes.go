@@ -156,6 +156,10 @@ func normalizeCreateNoteRequest(req *CreateNoteRequest) (int, error) {
 		req.Color = models.DefaultNoteColor
 	}
 
+	if err := validateColor(req.Color); err != nil {
+		return http.StatusBadRequest, err
+	}
+
 	return http.StatusOK, nil
 }
 
@@ -508,6 +512,15 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 	}
 	if req.Content != nil && utf8.RuneCountInString(*req.Content) > noteContentMaxLength {
 		return http.StatusBadRequest, nil, fmt.Errorf("content must be %d characters or fewer", noteContentMaxLength)
+	}
+
+	if req.Color != nil {
+		if *req.Color == "" {
+			*req.Color = models.DefaultNoteColor
+		}
+		if err := validateColor(*req.Color); err != nil {
+			return http.StatusBadRequest, nil, err
+		}
 	}
 
 	// Validate items before persisting any changes so invalid assigned_to

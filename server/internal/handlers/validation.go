@@ -10,6 +10,8 @@ import (
 
 var usernameRegex = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 
+var hexColorRegex = regexp.MustCompile(`^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$`)
+
 // Keep in sync with shared/src/constants.ts VALIDATION and PASSWORD_MIN_LENGTH for clients.
 // All character limits are measured in Unicode code points (utf8.RuneCountInString).
 // noteItemsMaxCount is a server-only resource cap with no shared-constants counterpart.
@@ -47,6 +49,13 @@ func validateUsername(username string) error {
 func validatePassword(password string) error {
 	if len(password) < passwordMinLength {
 		return fmt.Errorf("password must be at least %d characters", passwordMinLength)
+	}
+	return nil
+}
+
+func validateColor(color string) error {
+	if !hexColorRegex.MatchString(color) {
+		return errors.New("color must be a valid CSS hex color (e.g. #fff or #ffffff)")
 	}
 	return nil
 }
