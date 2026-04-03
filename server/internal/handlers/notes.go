@@ -384,6 +384,24 @@ func (h *NotesHandler) DuplicateNote(w http.ResponseWriter, r *http.Request) (in
 	return http.StatusCreated, duplicatedNote, nil
 }
 
+func normalizeUpdateNoteRequest(req *UpdateNoteRequest) (int, error) {
+	if req.Title != nil && utf8.RuneCountInString(*req.Title) > noteTitleMaxLength {
+		return http.StatusBadRequest, fmt.Errorf("title must be %d characters or fewer", noteTitleMaxLength)
+	}
+	if req.Content != nil && utf8.RuneCountInString(*req.Content) > noteContentMaxLength {
+		return http.StatusBadRequest, fmt.Errorf("content must be %d characters or fewer", noteContentMaxLength)
+	}
+	if req.Color != nil {
+		if *req.Color == "" {
+			*req.Color = models.DefaultNoteColor
+		}
+		if err := validateColor(*req.Color); err != nil {
+			return http.StatusBadRequest, err
+		}
+	}
+	return http.StatusOK, nil
+}
+
 func (h *NotesHandler) validateTodoItems(ctx context.Context, noteID string, items []UpdateNoteItem) (int, error) {
 	if len(items) > noteItemsMaxCount {
 		return http.StatusBadRequest, fmt.Errorf("note cannot have more than %d items", noteItemsMaxCount)
@@ -507,20 +525,8 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 		return http.StatusBadRequest, nil, err
 	}
 
-	if req.Title != nil && utf8.RuneCountInString(*req.Title) > noteTitleMaxLength {
-		return http.StatusBadRequest, nil, fmt.Errorf("title must be %d characters or fewer", noteTitleMaxLength)
-	}
-	if req.Content != nil && utf8.RuneCountInString(*req.Content) > noteContentMaxLength {
-		return http.StatusBadRequest, nil, fmt.Errorf("content must be %d characters or fewer", noteContentMaxLength)
-	}
-
-	if req.Color != nil {
-		if *req.Color == "" {
-			*req.Color = models.DefaultNoteColor
-		}
-		if err := validateColor(*req.Color); err != nil {
-			return http.StatusBadRequest, nil, err
-		}
+	if status, err := normalizeUpdateNoteRequest(&req); err != nil {
+		return status, nil, err
 	}
 
 	// Validate items before persisting any changes so invalid assigned_to
