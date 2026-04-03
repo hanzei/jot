@@ -263,34 +263,41 @@ func (s *NoteStore) GetByUserID(ctx context.Context, userID string, archived boo
 		return nil, fmt.Errorf("failed to scan notes: %w", err)
 	}
 
-	notes := make([]*Note, 0, len(scannedNotes))
-	for i := range scannedNotes {
-		note := &scannedNotes[i]
-
-		if note.NoteType == NoteTypeTodo {
-			items, itemsErr := s.getItemsByNoteID(ctx, note.ID)
-			if itemsErr != nil {
-				return nil, fmt.Errorf("failed to get note items: %w", itemsErr)
-			}
-			note.Items = items
-		}
-
-		note.SharedWith = []NoteShare{}
-		note.IsShared = false
-		note.Labels = []Label{}
-
-		notes = append(notes, note)
+	notes, err := s.populateNoteItemsAndDefaults(ctx, scannedNotes)
+	if err != nil {
+		return nil, err
 	}
 
-	if err := s.batchPopulateNotes(ctx, notes, userID); err != nil {
+	if err := s.batchLoadSharesAndLabels(ctx, notes, userID); err != nil {
 		return nil, err
 	}
 
 	return notes, nil
 }
 
-// batchPopulateNotes batch-loads shares and labels for a slice of notes, updating each note in place.
-func (s *NoteStore) batchPopulateNotes(ctx context.Context, notes []*Note, userID string) error {
+// populateNoteItemsAndDefaults converts scanned notes to []*Note, loading todo items
+// for each todo note and initialising slice fields to non-nil defaults.
+func (s *NoteStore) populateNoteItemsAndDefaults(ctx context.Context, scannedNotes []Note) ([]*Note, error) {
+	notes := make([]*Note, 0, len(scannedNotes))
+	for i := range scannedNotes {
+		note := &scannedNotes[i]
+		if note.NoteType == NoteTypeTodo {
+			items, err := s.getItemsByNoteID(ctx, note.ID)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get note items: %w", err)
+			}
+			note.Items = items
+		}
+		note.SharedWith = []NoteShare{}
+		note.IsShared = false
+		note.Labels = []Label{}
+		notes = append(notes, note)
+	}
+	return notes, nil
+}
+
+// batchLoadSharesAndLabels batch-loads shares and labels for a slice of notes, updating each note in place.
+func (s *NoteStore) batchLoadSharesAndLabels(ctx context.Context, notes []*Note, userID string) error {
 	if len(notes) == 0 {
 		return nil
 	}
