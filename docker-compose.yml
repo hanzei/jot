@@ -4,9 +4,6 @@ services:
   jot:
     image: hanzei/jot:latest
     container_name: jot
-    environment:
-      - DB_PATH=/data/jot.db
-      - STATIC_DIR=/app/webapp/build
     volumes:
       - ./data:/data
     ports:
