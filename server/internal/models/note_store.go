@@ -275,23 +275,32 @@ func (s *NoteStore) GetByUserID(ctx context.Context, userID string, archived boo
 			note.Items = items
 		}
 
-		shares, sharesErr := s.GetNoteShares(ctx, note.ID)
-		if sharesErr != nil {
-			return nil, fmt.Errorf("failed to get note shares: %w", sharesErr)
-		}
-		note.SharedWith = shares
-		note.IsShared = len(shares) > 0
+		note.SharedWith = []NoteShare{}
+		note.IsShared = false
 		note.Labels = []Label{}
 
 		notes = append(notes, note)
 	}
 
-	// Batch-load labels for all notes in a single query.
 	if len(notes) > 0 {
 		noteIDs := make([]string, len(notes))
 		for i, n := range notes {
 			noteIDs[i] = n.ID
 		}
+
+		// Batch-load shares for all notes in a single query.
+		sharesMap, sharesErr := s.getSharesByNoteIDs(ctx, noteIDs)
+		if sharesErr != nil {
+			return nil, fmt.Errorf("failed to batch-load note shares: %w", sharesErr)
+		}
+		for _, n := range notes {
+			if shares, ok := sharesMap[n.ID]; ok {
+				n.SharedWith = shares
+				n.IsShared = true
+			}
+		}
+
+		// Batch-load labels for all notes in a single query.
 		labelsMap, labelsErr := s.getLabelsByNoteIDs(ctx, noteIDs, userID)
 		if labelsErr != nil {
 			return nil, fmt.Errorf("failed to batch-load note labels: %w", labelsErr)

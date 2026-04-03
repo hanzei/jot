@@ -438,3 +438,43 @@ func TestEdgeCases(t *testing.T) {
 		assert.Equal(t, "#ffffff", updated.Color)
 	})
 }
+
+// TestBatchLoadNoteShares verifies that GET /notes returns correct share data
+// for all notes when multiple notes are shared, exercising the batch-load path.
+func TestBatchLoadNoteShares(t *testing.T) {
+	ts := setupTestServer(t)
+	owner := ts.createTestUser(t, "batchowner", "password123", false)
+	collaborator := ts.createTestUser(t, "batchcollab", "password123", false)
+
+	// Create 3 notes and share each with the collaborator.
+	noteIDs := make([]string, 3)
+	for i := range noteIDs {
+		note, err := owner.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
+			Title:   "Shared Note",
+			Content: "content",
+		})
+		require.NoError(t, err)
+		noteIDs[i] = note.ID
+		require.NoError(t, owner.Client.ShareNote(t.Context(), note.ID, collaborator.User.ID))
+	}
+
+	t.Run("list notes returns shares for every note", func(t *testing.T) {
+		notes, err := owner.Client.ListNotes(t.Context(), nil)
+		require.NoError(t, err)
+
+		// Index returned notes by ID for O(1) lookup.
+		byID := make(map[string]client.Note, len(notes))
+		for _, n := range notes {
+			byID[n.ID] = n
+		}
+
+		for _, id := range noteIDs {
+			n, ok := byID[id]
+			require.True(t, ok, "note %s missing from list response", id)
+			assert.True(t, n.IsShared, "note %s should be marked as shared", id)
+			require.Len(t, n.SharedWith, 1, "note %s should have exactly one share", id)
+			assert.Equal(t, collaborator.User.ID, n.SharedWith[0].SharedWithUserID,
+				"note %s share should be for the collaborator", id)
+		}
+	})
+}

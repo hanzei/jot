@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+	"slices"
+	"strings"
 )
 
 func scanNoteShare(rows *sql.Rows) (NoteShare, error) {
@@ -194,4 +196,50 @@ func (s *NoteStore) ClearUserAssignmentsTx(ctx context.Context, tx *sql.Tx, user
 	}
 
 	return nil
+}
+
+const sharesBatchSize = 500
+
+// getSharesByNoteIDs batch-loads note shares for a set of note IDs, returning a map of noteID -> []NoteShare.
+func (s *NoteStore) getSharesByNoteIDs(ctx context.Context, noteIDs []string) (map[string][]NoteShare, error) {
+	if len(noteIDs) == 0 {
+		return map[string][]NoteShare{}, nil
+	}
+
+	result := map[string][]NoteShare{}
+
+	for chunk := range slices.Chunk(noteIDs, sharesBatchSize) {
+		placeholders := strings.Join(slices.Repeat([]string{"?"}, len(chunk)), ",")
+		args := make([]any, len(chunk))
+		for i, id := range chunk {
+			args[i] = id
+		}
+
+		query := `SELECT ns.id, ns.note_id, ns.shared_with_user_id, ns.shared_by_user_id,
+				  ns.permission_level, u.username, u.first_name, u.last_name,
+				  u.profile_icon IS NOT NULL AS has_profile_icon,
+				  ns.created_at, ns.updated_at
+				  FROM note_shares ns
+				  JOIN users u ON ns.shared_with_user_id = u.id
+				  WHERE ns.note_id IN (` + placeholders + `)
+				  ORDER BY ns.note_id, u.username` // #nosec G202 -- only "?" placeholders are joined, no user input
+
+		rows, err := s.db.QueryContext(ctx, query, args...)
+		if err != nil {
+			return nil, fmt.Errorf("failed to batch-get note shares: %w", err)
+		}
+
+		for share, err := range scanRows(rows, scanNoteShare) {
+			if err != nil {
+				_ = rows.Close()
+				return nil, fmt.Errorf("failed to scan note share: %w", err)
+			}
+			result[share.NoteID] = append(result[share.NoteID], share)
+		}
+		if err := rows.Close(); err != nil {
+			return nil, fmt.Errorf("failed to close note shares rows: %w", err)
+		}
+	}
+
+	return result, nil
 }
