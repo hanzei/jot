@@ -76,8 +76,51 @@ export class SettingsPage {
     return this.sessionsSection().locator('li');
   }
 
-  async revokeSession(index: number) {
-    await this.sessionItems().nth(index).getByRole('button', { name: 'Revoke' }).click();
+  revokeDialog() {
+    return this.page.getByRole('dialog', { name: 'Revoke session' });
+  }
+
+  revokeDialogTitle() {
+    return this.page.getByRole('heading', { name: 'Revoke session' });
+  }
+
+  revokeSessionDialog() {
+    return this.revokeDialog();
+  }
+
+  async openRevokeDialog(index?: number) {
+    const revokeButtons = this.sessionsSection().getByRole('button', { name: 'Revoke' });
+    if (typeof index === 'number') {
+      await revokeButtons.nth(index).click();
+      return;
+    }
+
+    await revokeButtons.first().click();
+  }
+
+  async openRevokeSessionDialog(index?: number) {
+    await this.openRevokeDialog(index);
+  }
+
+  async clickRevokeConfirm() {
+    await this.revokeDialog().getByRole('button', { name: 'Revoke' }).click();
+  }
+
+  async confirmRevokeSession() {
+    await this.clickRevokeConfirm();
+  }
+
+  async clickRevokeCancel() {
+    await this.revokeDialog().getByRole('button', { name: 'Cancel' }).click();
+  }
+
+  async cancelRevokeSession() {
+    await this.clickRevokeCancel();
+  }
+
+  async revokeSessionWithConfirmation(index?: number) {
+    await this.openRevokeSessionDialog(index);
+    await this.confirmRevokeSession();
   }
 
   async openSidebar() {

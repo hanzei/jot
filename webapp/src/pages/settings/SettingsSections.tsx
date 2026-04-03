@@ -286,7 +286,7 @@ interface PreferencesInfoColumnProps {
   sessionsError: string;
   activeSessions: ActiveSession[];
   revokingSessionId: string | null;
-  onRevokeSession: (sessionId: string) => void | Promise<void>;
+  onRequestRevokeSession: (session: ActiveSession) => void;
   displayMsg: (msg: string) => string;
   languagePref: LanguagePreference;
   onLanguageChange: (pref: LanguagePreference) => void;
@@ -302,7 +302,7 @@ export const PreferencesInfoColumn = ({
   sessionsError,
   activeSessions,
   revokingSessionId,
-  onRevokeSession,
+  onRequestRevokeSession,
   displayMsg,
   languagePref,
   onLanguageChange,
@@ -347,8 +347,8 @@ export const PreferencesInfoColumn = ({
               {!session.is_current && (
                 <button
                   type="button"
-                  onClick={() => onRevokeSession(session.id)}
-                  disabled={revokingSessionId === session.id}
+                  onClick={() => onRequestRevokeSession(session)}
+                  disabled={revokingSessionId !== null}
                   className="ml-4 flex-shrink-0 text-sm text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 disabled:opacity-50"
                 >
                   {revokingSessionId === session.id ? t('settings.sessionsRevoking') : t('settings.sessionsRevoke')}
