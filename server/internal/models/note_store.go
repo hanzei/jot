@@ -133,11 +133,11 @@ func (s *NoteStore) Duplicate(ctx context.Context, source *Note, userID string) 
 	}
 
 	if err = duplicateItemsTx(ctx, tx, noteID, source.Items); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("duplicate note items: %w", err)
 	}
 
 	if err = duplicateLabelsTx(ctx, tx, noteID, userID, source.Labels); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("duplicate note labels: %w", err)
 	}
 
 	if err = tx.Commit(); err != nil {
@@ -328,7 +328,7 @@ func (s *NoteStore) GetByID(ctx context.Context, id string, userID string) (*Not
 	}
 
 	if err := s.populateNoteDetails(ctx, &note, userID); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("populate note details: %w", err)
 	}
 	return &note, nil
 }
@@ -372,7 +372,7 @@ func (s *NoteStore) GetByIDAnyState(ctx context.Context, id string, userID strin
 	}
 
 	if err := s.populateNoteDetails(ctx, &ownedNote, userID); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("populate note details: %w", err)
 	}
 	return &ownedNote, nil
 }
@@ -462,11 +462,14 @@ func (s *NoteStore) Update(ctx context.Context, id string, userID string, title,
 
 	if currentNote.Pinned != resolvedPinned {
 		if err = s.handlePinStatusChangeTx(ctx, tx, id, userID, currentNote, resolvedPinned); err != nil {
-			return err
+			return fmt.Errorf("handle pin status change: %w", err)
 		}
 	}
 
-	return tx.Commit()
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("commit note update: %w", err)
+	}
+	return nil
 }
 
 // handlePinStatusChangeTx updates note positions when a note is pinned or unpinned within a transaction.
@@ -576,7 +579,10 @@ func (s *NoteStore) Delete(ctx context.Context, id string, userID string) error 
 		return ErrNoteNotOwnedByUser
 	}
 
-	return tx.Commit()
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("commit note delete: %w", err)
+	}
+	return nil
 }
 
 func buildInClauseArgs(ids []string) (string, []any) {
@@ -781,7 +787,7 @@ func (s *NoteStore) DeleteFromTrash(ctx context.Context, id string, userID strin
 	defer func() { _ = tx.Rollback() }()
 
 	if err = deleteNoteDependenciesTx(ctx, tx, []string{id}); err != nil {
-		return err
+		return fmt.Errorf("delete note dependencies: %w", err)
 	}
 
 	result, err := tx.ExecContext(ctx,
@@ -800,7 +806,10 @@ func (s *NoteStore) DeleteFromTrash(ctx context.Context, id string, userID strin
 		return ErrNoteNotInTrash
 	}
 
-	return tx.Commit()
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("commit delete from trash: %w", err)
+	}
+	return nil
 }
 
 // EmptyTrash permanently removes all notes the user currently has in the trash.
@@ -815,7 +824,7 @@ func (s *NoteStore) EmptyTrash(ctx context.Context, userID string) ([]DeletedNot
 
 	noteIDs, err := s.getTrashedOwnedNoteIDsTx(ctx, tx, userID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get trashed note IDs: %w", err)
 	}
 	if len(noteIDs) == 0 {
 		if err = tx.Commit(); err != nil {
@@ -826,11 +835,11 @@ func (s *NoteStore) EmptyTrash(ctx context.Context, userID string) ([]DeletedNot
 
 	audienceMap, err := s.getNoteAudiencesTx(ctx, tx, noteIDs)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get note audiences: %w", err)
 	}
 
 	if err = deleteNoteDependenciesTx(ctx, tx, noteIDs); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("delete note dependencies: %w", err)
 	}
 
 	placeholders, args := buildInClauseArgs(noteIDs)
@@ -894,7 +903,10 @@ func (s *NoteStore) PurgeOldTrashedNotes(ctx context.Context, olderThan time.Dur
 		return fmt.Errorf("failed to purge old trashed notes: %w", err)
 	}
 
-	return tx.Commit()
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("commit purge old trashed notes: %w", err)
+	}
+	return nil
 }
 
 func nullableAssignedTo(s string) sql.NullString {
