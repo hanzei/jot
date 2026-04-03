@@ -56,7 +56,6 @@ func main() {
 	if err != nil {
 		logrus.WithError(err).Fatal("Failed to load configuration")
 	}
-
 	s, err := server.New(cfg)
 	if err != nil {
 		logrus.WithError(err).Fatal("Failed to initialize server")
