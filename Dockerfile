@@ -51,7 +51,7 @@ RUN --mount=type=cache,id=gomodcache-${TARGETARCH},target=/go/pkg/mod \
     -o main .
 
 # Production stage
-FROM alpine:latest
+FROM alpine:3.22
 
 # Install runtime dependencies
 RUN apk --no-cache add ca-certificates
