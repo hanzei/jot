@@ -68,6 +68,7 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
             type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
+            type=raw,value=stable,enable=${{ !contains(github.ref_name, '-') }}
 
       - name: Get build date
         id: build-date
@@ -132,6 +133,7 @@ jobs:
             type=semver,pattern={{major}}.{{minor}}
             type=semver,pattern={{major}}
             type=raw,value=latest,enable=${{ !contains(github.ref_name, '-') }}
+            type=raw,value=stable,enable=${{ !contains(github.ref_name, '-') }}
 
       - name: Create manifest list and push
         working-directory: /tmp/digests
