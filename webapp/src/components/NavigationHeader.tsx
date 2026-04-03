@@ -86,7 +86,7 @@ const ProfileMenu = ({ iconSrc, displayUsername, firstName, baseUsername, showAd
                 <button
                   type="button"
                   onClick={onOpenKeyboardShortcuts}
-                  className="flex w-full items-center justify-between px-4 py-2 text-sm text-gray-700 dark:text-gray-200 data-[focus]:bg-gray-100 dark:data-[focus]:bg-slate-700"
+                  className="flex w-full items-center justify-start gap-2 px-4 py-2 text-sm text-gray-700 dark:text-gray-200 data-[focus]:bg-gray-100 dark:data-[focus]:bg-slate-700"
                 >
                   <span>{t('keyboardShortcuts.title')}</span>
                   <kbd className="inline-flex rounded border border-gray-300 dark:border-slate-600 bg-gray-100 dark:bg-slate-700 px-1.5 py-0.5 font-mono text-xs text-gray-600 dark:text-gray-300">
