@@ -20,6 +20,7 @@ var ErrNoteNotInTrash = errors.New("note not found in trash or not owned by user
 var ErrNoteShareNotFound = errors.New("note share not found")
 var ErrNoteAlreadyShared = errors.New("note already shared with user")
 var ErrInvalidReorderList = errors.New("invalid note reorder list")
+var ErrNoteNotReorderable = errors.New("note is not reorderable")
 
 // DeletedNoteAudience describes which users should receive a note_deleted SSE
 // event after a permanent delete succeeds.

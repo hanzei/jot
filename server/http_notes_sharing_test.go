@@ -291,54 +291,6 @@ func TestPerUserNoteState(t *testing.T) {
 		assert.Equal(t, "Updated Content", ownerNote.Content)
 	})
 
-	t.Run("collaborator can reorder notes independently from owner", func(t *testing.T) {
-		ts := setupTestServer(t)
-		owner := ts.createTestUser(t, "owner", "password123", false)
-		collab := ts.createTestUser(t, "collab", "password123", false)
-		unshared, err := owner.Client.CreateNote(t.Context(), &client.CreateNoteRequest{Title: "Owner-only"})
-		require.NoError(t, err)
-
-		noteA, err := owner.Client.CreateNote(t.Context(), &client.CreateNoteRequest{Title: "Note A"})
-		require.NoError(t, err)
-		noteB, err := owner.Client.CreateNote(t.Context(), &client.CreateNoteRequest{Title: "Note B"})
-		require.NoError(t, err)
-		require.NoError(t, owner.Client.ShareNote(t.Context(), noteA.ID, collab.User.ID))
-		require.NoError(t, owner.Client.ShareNote(t.Context(), noteB.ID, collab.User.ID))
-
-		// Collaborator reorders: noteB before noteA.
-		err = collab.Client.ReorderNotes(t.Context(), []string{noteB.ID, noteA.ID})
-		require.NoError(t, err)
-
-		collabNotes, err := collab.Client.ListNotes(t.Context(), nil)
-		require.NoError(t, err)
-		require.GreaterOrEqual(t, len(collabNotes), 2)
-		collabIDs := make([]string, 0, 2)
-		for _, n := range collabNotes {
-			if n.ID == noteA.ID || n.ID == noteB.ID {
-				collabIDs = append(collabIDs, n.ID)
-			}
-		}
-		require.Len(t, collabIDs, 2)
-		assert.Equal(t, noteB.ID, collabIDs[0], "collaborator should see noteB first")
-		assert.Equal(t, noteA.ID, collabIDs[1], "collaborator should see noteA second")
-
-		// Shared-note reorder payload must include all collaborator-visible unpinned notes.
-		// Because the collaborator cannot see owner's private note, this remains valid.
-		err = collab.Client.ReorderNotes(t.Context(), []string{noteA.ID, noteB.ID})
-		require.NoError(t, err)
-
-		ownerNotes, err := owner.Client.ListNotes(t.Context(), nil)
-		require.NoError(t, err)
-		ownerIDs := make([]string, 0, 3)
-		for _, n := range ownerNotes {
-			if n.ID == noteA.ID || n.ID == noteB.ID || n.ID == unshared.ID {
-				ownerIDs = append(ownerIDs, n.ID)
-			}
-		}
-		require.Len(t, ownerIDs, 3)
-		assert.Equal(t, noteB.ID, ownerIDs[0], "owner's order remains independent from collaborator reorders")
-	})
-
 	t.Run("unshare cleans up collaborator state so re-share starts fresh", func(t *testing.T) {
 		ts := setupTestServer(t)
 		owner := ts.createTestUser(t, "owner", "password123", false)
@@ -368,6 +320,65 @@ func TestPerUserNoteState(t *testing.T) {
 		assert.Equal(t, "#ffffff", collabNote.Color, "color should reset to default after re-share")
 		assert.Empty(t, collabNote.Labels, "labels should be cleared after re-share")
 	})
+}
+
+func TestCollaboratorReorderIndependentFromOwner(t *testing.T) {
+	ts := setupTestServer(t)
+	owner := ts.createTestUser(t, "owner", "password123", false)
+	collab := ts.createTestUser(t, "collab", "password123", false)
+	unshared, err := owner.Client.CreateNote(t.Context(), &client.CreateNoteRequest{Title: "Owner-only"})
+	require.NoError(t, err)
+
+	noteA, err := owner.Client.CreateNote(t.Context(), &client.CreateNoteRequest{Title: "Note A"})
+	require.NoError(t, err)
+	noteB, err := owner.Client.CreateNote(t.Context(), &client.CreateNoteRequest{Title: "Note B"})
+	require.NoError(t, err)
+	require.NoError(t, owner.Client.ShareNote(t.Context(), noteA.ID, collab.User.ID))
+	require.NoError(t, owner.Client.ShareNote(t.Context(), noteB.ID, collab.User.ID))
+
+	// Collaborator reorders: noteB before noteA.
+	err = collab.Client.ReorderNotes(t.Context(), []string{noteB.ID, noteA.ID})
+	require.NoError(t, err)
+
+	collabNotes, err := collab.Client.ListNotes(t.Context(), nil)
+	require.NoError(t, err)
+	require.GreaterOrEqual(t, len(collabNotes), 2)
+	collabIDs := make([]string, 0, 2)
+	for _, n := range collabNotes {
+		if n.ID == noteA.ID || n.ID == noteB.ID {
+			collabIDs = append(collabIDs, n.ID)
+		}
+	}
+	require.Len(t, collabIDs, 2)
+	assert.Equal(t, noteB.ID, collabIDs[0], "collaborator should see noteB first")
+	assert.Equal(t, noteA.ID, collabIDs[1], "collaborator should see noteA second")
+
+	// Shared-note reorder payload must include all collaborator-visible unpinned notes.
+	// Because the collaborator cannot see owner's private note, this remains valid.
+	err = collab.Client.ReorderNotes(t.Context(), []string{noteA.ID, noteB.ID})
+	require.NoError(t, err)
+
+	collabNotes, err = collab.Client.ListNotes(t.Context(), nil)
+	require.NoError(t, err)
+	collabIDs = collabIDs[:0]
+	for _, n := range collabNotes {
+		if n.ID == noteA.ID || n.ID == noteB.ID {
+			collabIDs = append(collabIDs, n.ID)
+		}
+	}
+	require.Len(t, collabIDs, 2)
+	assert.Equal(t, []string{noteA.ID, noteB.ID}, collabIDs, "second collaborator reorder should apply for collaborator")
+
+	ownerNotes, err := owner.Client.ListNotes(t.Context(), nil)
+	require.NoError(t, err)
+	ownerIDs := make([]string, 0, 3)
+	for _, n := range ownerNotes {
+		if n.ID == noteA.ID || n.ID == noteB.ID || n.ID == unshared.ID {
+			ownerIDs = append(ownerIDs, n.ID)
+		}
+	}
+	require.Len(t, ownerIDs, 3)
+	assert.Equal(t, []string{noteB.ID, noteA.ID, unshared.ID}, ownerIDs, "owner order remains independent from collaborator reorders")
 }
 
 func TestEdgeCases(t *testing.T) {

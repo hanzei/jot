@@ -1085,8 +1085,12 @@ func (s *NoteStore) ReorderNotes(ctx context.Context, userID string, noteIDs []s
 	if err != nil {
 		return fmt.Errorf("failed to validate reorder payload notes: %w", err)
 	}
+	requestedStateByID, err := collectRequestedReorderStateByIDTx(ctx, tx, userID, noteIDs)
+	if err != nil {
+		return fmt.Errorf("failed to classify reorder payload notes: %w", err)
+	}
 
-	targetPinned, err := validateRequestedReorderRows(noteIDs, requestedRows)
+	targetPinned, err := validateRequestedReorderRows(noteIDs, requestedRows, requestedStateByID)
 	if err != nil {
 		return err
 	}
@@ -1165,9 +1169,65 @@ func collectRequestedReorderRowsTx(ctx context.Context, tx *sql.Tx, userID strin
 	)
 }
 
-func validateRequestedReorderRows(noteIDs []string, requestedRows []reorderRequestedRow) (bool, error) {
+type reorderRequestedState struct {
+	hasUserState bool
+	isActive     bool
+}
+
+func collectRequestedReorderStateByIDTx(ctx context.Context, tx *sql.Tx, userID string, noteIDs []string) (map[string]reorderRequestedState, error) {
+	placeholders, args := buildInClauseArgs(noteIDs)
+	queryArgs := make([]any, 0, len(args)+1)
+	queryArgs = append(queryArgs, userID)
+	queryArgs = append(queryArgs, args...)
+
+	rows, err := tx.QueryContext(
+		ctx,
+		`SELECT nus.note_id, 1 AS has_user_state,
+		        CASE WHEN n.deleted_at IS NULL THEN 1 ELSE 0 END AS is_active
+		 FROM note_user_state nus
+		 INNER JOIN notes n ON n.id = nus.note_id
+		 WHERE nus.user_id = ? AND nus.note_id IN (`+placeholders+`)`, // #nosec G202 -- only generated "?" placeholders are concatenated
+		queryArgs...,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer func() { _ = rows.Close() }()
+
+	stateByID := make(map[string]reorderRequestedState, len(noteIDs))
+	for rows.Next() {
+		var noteID string
+		var hasUserStateInt int
+		var isActiveInt int
+		if err = rows.Scan(&noteID, &hasUserStateInt, &isActiveInt); err != nil {
+			return nil, err
+		}
+		stateByID[noteID] = reorderRequestedState{
+			hasUserState: hasUserStateInt == 1,
+			isActive:     isActiveInt == 1,
+		}
+	}
+	if err = rows.Err(); err != nil {
+		return nil, err
+	}
+	return stateByID, nil
+}
+
+func validateRequestedReorderRows(noteIDs []string, requestedRows []reorderRequestedRow, requestedStateByID map[string]reorderRequestedState) (bool, error) {
 	if len(requestedRows) != len(noteIDs) {
-		return false, fmt.Errorf("no access to one or more notes: %w", ErrNoteNoAccess)
+		for _, noteID := range noteIDs {
+			if !IsValidID(noteID) {
+				return false, fmt.Errorf("invalid note ID in reorder payload: %w", ErrNoteNoAccess)
+			}
+			state, exists := requestedStateByID[noteID]
+			if !exists || !state.hasUserState {
+				return false, fmt.Errorf("no access to note %s: %w", noteID, ErrNoteNoAccess)
+			}
+			if !state.isActive {
+				return false, fmt.Errorf("note %s is not reorderable: %w", noteID, ErrNoteNotReorderable)
+			}
+		}
+		return false, fmt.Errorf("missing requested note in reorder payload: %w", ErrInvalidReorderList)
 	}
 
 	requestedPinnedByID := make(map[string]bool, len(requestedRows))

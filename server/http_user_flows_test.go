@@ -117,6 +117,26 @@ func TestReorderNotesEndpoint(t *testing.T) {
 		}
 	})
 
+	t.Run("including owned trashed note returns 400 not reorderable", func(t *testing.T) {
+		trashed := createNote(t, "Trashed", user)
+		require.NoError(t, user.Client.DeleteNote(t.Context(), trashed))
+
+		beforeNotes, err := user.Client.ListNotes(t.Context(), nil)
+		require.NoError(t, err)
+		require.Len(t, beforeNotes, 3)
+
+		err = user.Client.ReorderNotes(t.Context(), []string{note1, note2, trashed})
+		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
+
+		afterNotes, err := user.Client.ListNotes(t.Context(), nil)
+		require.NoError(t, err)
+		require.Len(t, afterNotes, 3)
+		for i := range beforeNotes {
+			assert.Equal(t, beforeNotes[i].ID, afterNotes[i].ID)
+			assert.Equal(t, beforeNotes[i].Position, afterNotes[i].Position)
+		}
+	})
+
 	t.Run("mixing pinned and unpinned note IDs returns 400 and leaves order unchanged", func(t *testing.T) {
 		_, err := user.Client.UpdateNote(t.Context(), note1, &client.UpdateNoteRequest{
 			Pinned: client.Ptr(true),
