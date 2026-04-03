@@ -152,6 +152,8 @@
     "sessionsCurrent": "Bieżąca",
     "sessionsRevoke": "Unieważnij",
     "sessionsRevoking": "Unieważnianie...",
+    "sessionsRevokeConfirmTitle": "Unieważnij sesję",
+    "sessionsRevokeConfirmMessage": "Czy na pewno chcesz unieważnić \"{{session}}\"?",
     "sessionsRevokeFailed": "Nie udało się unieważnić sesji.",
     "sessionsNone": "Nie znaleziono aktywnych sesji.",
     "aboutSection": "O aplikacji",

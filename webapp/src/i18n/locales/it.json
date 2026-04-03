@@ -152,6 +152,8 @@
     "sessionsCurrent": "Corrente",
     "sessionsRevoke": "Revoca",
     "sessionsRevoking": "Revoca in corso...",
+    "sessionsRevokeConfirmTitle": "Revoca sessione",
+    "sessionsRevokeConfirmMessage": "Sei sicuro di voler revocare \"{{session}}\"?",
     "sessionsRevokeFailed": "Impossibile revocare la sessione.",
     "sessionsNone": "Nessuna sessione attiva trovata.",
     "aboutSection": "Informazioni",

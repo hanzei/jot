@@ -67,10 +67,42 @@ test.describe('Active Sessions', () => {
     );
     const revokeButton = settingsPage.sessionsSection().getByRole('button', { name: 'Revoke' });
     await revokeButton.click();
+    await expect(page.getByRole('heading', { name: 'Revoke session' })).toBeVisible();
+    const revokeDialog = page.getByRole('dialog', { name: 'Revoke session' });
+    await revokeDialog.getByRole('button', { name: 'Revoke' }).click();
     await revokeResponse;
 
     await expect(settingsPage.sessionItems()).toHaveCount(1);
     await expect(settingsPage.sessionItems().first().getByText('Current')).toBeVisible();
+  });
+
+  test('canceling revoke confirmation keeps the session active', async ({
+    authenticatedUser,
+    settingsPage,
+    page,
+    browser,
+  }) => {
+    // Create a second session
+    const secondContext = await browser.newContext();
+    const secondPage = await secondContext.newPage();
+    await secondPage.goto('/login');
+    await secondPage.getByPlaceholder('Username').fill(authenticatedUser.username);
+    await secondPage.getByPlaceholder('Password').fill(authenticatedUser.password);
+    await secondPage.getByRole('button', { name: 'Sign in' }).click();
+    await expect(secondPage).toHaveURL('/');
+    await secondContext.close();
+
+    await settingsPage.goto();
+    await expect(settingsPage.sessionItems()).toHaveCount(2);
+
+    const revokeButton = settingsPage.sessionsSection().getByRole('button', { name: 'Revoke' });
+    await revokeButton.click();
+    await expect(page.getByRole('heading', { name: 'Revoke session' })).toBeVisible();
+    const revokeDialog = page.getByRole('dialog', { name: 'Revoke session' });
+    await revokeDialog.getByRole('button', { name: 'Cancel' }).click();
+
+    await expect(page.getByRole('heading', { name: 'Revoke session' })).toHaveCount(0);
+    await expect(settingsPage.sessionItems()).toHaveCount(2);
   });
 
   test('current session has no revoke button', async ({ authenticatedUser, settingsPage }) => {
