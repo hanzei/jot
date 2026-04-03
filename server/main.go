@@ -56,6 +56,9 @@ func main() {
 	if err != nil {
 		logrus.WithError(err).Fatal("Failed to load configuration")
 	}
+	if cfg.CORSAllowedOrigin == "" {
+		logrus.Warn("CORS_ALLOWED_ORIGIN is not set; all cross-origin requests will be rejected")
+	}
 
 	s, err := server.New(cfg)
 	if err != nil {
