@@ -282,37 +282,46 @@ func (s *NoteStore) GetByUserID(ctx context.Context, userID string, archived boo
 		notes = append(notes, note)
 	}
 
-	if len(notes) > 0 {
-		noteIDs := make([]string, len(notes))
-		for i, n := range notes {
-			noteIDs[i] = n.ID
-		}
-
-		// Batch-load shares for all notes in a single query.
-		sharesMap, sharesErr := s.getSharesByNoteIDs(ctx, noteIDs)
-		if sharesErr != nil {
-			return nil, fmt.Errorf("failed to batch-load note shares: %w", sharesErr)
-		}
-		for _, n := range notes {
-			if shares, ok := sharesMap[n.ID]; ok {
-				n.SharedWith = shares
-				n.IsShared = true
-			}
-		}
-
-		// Batch-load labels for all notes in a single query.
-		labelsMap, labelsErr := s.getLabelsByNoteIDs(ctx, noteIDs, userID)
-		if labelsErr != nil {
-			return nil, fmt.Errorf("failed to batch-load note labels: %w", labelsErr)
-		}
-		for _, n := range notes {
-			if lbls, ok := labelsMap[n.ID]; ok {
-				n.Labels = lbls
-			}
-		}
+	if err := s.batchPopulateNotes(ctx, notes, userID); err != nil {
+		return nil, err
 	}
 
 	return notes, nil
+}
+
+// batchPopulateNotes batch-loads shares and labels for a slice of notes, updating each note in place.
+func (s *NoteStore) batchPopulateNotes(ctx context.Context, notes []*Note, userID string) error {
+	if len(notes) == 0 {
+		return nil
+	}
+
+	noteIDs := make([]string, len(notes))
+	for i, n := range notes {
+		noteIDs[i] = n.ID
+	}
+
+	sharesMap, err := s.getSharesByNoteIDs(ctx, noteIDs)
+	if err != nil {
+		return fmt.Errorf("failed to batch-load note shares: %w", err)
+	}
+	for _, n := range notes {
+		if shares, ok := sharesMap[n.ID]; ok {
+			n.SharedWith = shares
+			n.IsShared = true
+		}
+	}
+
+	labelsMap, err := s.getLabelsByNoteIDs(ctx, noteIDs, userID)
+	if err != nil {
+		return fmt.Errorf("failed to batch-load note labels: %w", err)
+	}
+	for _, n := range notes {
+		if lbls, ok := labelsMap[n.ID]; ok {
+			n.Labels = lbls
+		}
+	}
+
+	return nil
 }
 
 func (s *NoteStore) GetByID(ctx context.Context, id string, userID string) (*Note, error) {
