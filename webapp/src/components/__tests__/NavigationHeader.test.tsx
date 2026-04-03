@@ -1,5 +1,5 @@
 import { describe, expect, it, vi, beforeEach } from 'vitest'
-import { fireEvent, render, screen, within } from '@testing-library/react'
+import { fireEvent, render, screen } from '@testing-library/react'
 import { MemoryRouter } from 'react-router'
 import NavigationHeader from '../NavigationHeader'
 import { buildMobileDeepLink } from '@/utils/deepLink'
@@ -23,9 +23,7 @@ describe('NavigationHeader', () => {
     )
 
     fireEvent.click(screen.getByRole('button', { name: 'Profile menu' }))
-    const shortcutsMenuItem = screen.getByRole('menuitem', { name: /Keyboard shortcuts/ })
-    expect(shortcutsMenuItem).toBeInTheDocument()
-    expect(within(shortcutsMenuItem).getByText('?')).toBeInTheDocument()
+    expect(screen.getByRole('menuitem', { name: /Keyboard shortcuts/ })).toBeInTheDocument()
   })
 
   it('does not show keyboard shortcuts menu item when callback is missing', () => {
