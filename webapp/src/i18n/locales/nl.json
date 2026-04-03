@@ -4,6 +4,7 @@
   },
   "nav": {
     "profileMenu": "Profielmenu",
+    "toggleSidebar": "Zijbalk wisselen",
     "settings": "Instellingen",
     "admin": "Admin",
     "logout": "Uitloggen",

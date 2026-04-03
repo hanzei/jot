@@ -4,6 +4,7 @@
   },
   "nav": {
     "profileMenu": "Menú de perfil",
+    "toggleSidebar": "Alternar barra lateral",
     "settings": "Ajustes",
     "admin": "Admin",
     "logout": "Cerrar sesión",

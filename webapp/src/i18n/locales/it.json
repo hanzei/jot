@@ -4,6 +4,7 @@
   },
   "nav": {
     "profileMenu": "Menu profilo",
+    "toggleSidebar": "Attiva/disattiva barra laterale",
     "settings": "Impostazioni",
     "admin": "Admin",
     "logout": "Esci",
