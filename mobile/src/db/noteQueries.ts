@@ -328,26 +328,57 @@ export async function removeLocalNotesNotIn(
   serverIds: Set<string>,
   params?: GetNotesParams,
 ): Promise<void> {
-  const args: (string | number | null)[] = [];
-
   // my_todo is a cross-cutting filter (overlaps with the main "notes" scope),
   // so we must not remove notes that may still belong in other views.
   if (params?.my_todo) return;
 
-  let sql = "DELETE FROM notes WHERE id NOT LIKE 'local_%'";
+  const scopeArgs: (string | number | null)[] = [];
+  let scopedWhereSql = "id NOT LIKE 'local_%'";
 
   if (params?.archived) {
-    sql += ' AND archived = 1 AND deleted_at IS NULL';
+    scopedWhereSql += ' AND archived = 1 AND deleted_at IS NULL';
   } else if (params?.trashed) {
-    sql += ' AND deleted_at IS NOT NULL';
+    scopedWhereSql += ' AND deleted_at IS NOT NULL';
   } else {
-    sql += ' AND archived = 0 AND deleted_at IS NULL';
+    scopedWhereSql += ' AND archived = 0 AND deleted_at IS NULL';
   }
 
   if (params?.search) {
-    sql += ' AND (title LIKE ? OR content LIKE ?)';
-    args.push(`%${params.search}%`, `%${params.search}%`);
+    scopedWhereSql += ' AND (title LIKE ? OR content LIKE ?)';
+    scopeArgs.push(`%${params.search}%`, `%${params.search}%`);
   }
+
+  if (params?.label) {
+    // Label-filtered lists are not represented in SQL columns, so scope pruning by
+    // parsing labels_json and deleting only notes that matched this label scope.
+    const scopedRows = await db.getAllAsync<Pick<NoteRow, 'id' | 'labels_json'>>(
+      `SELECT id, labels_json FROM notes WHERE ${scopedWhereSql}`,
+      scopeArgs,
+    );
+
+    const candidateIds = scopedRows
+      .filter((row) => {
+        try {
+          const labels = JSON.parse(row.labels_json) as Label[];
+          return labels.some((label) => label.id === params.label);
+        } catch {
+          return false;
+        }
+      })
+      .map((row) => row.id)
+      .filter((id) => !serverIds.has(id));
+
+    if (candidateIds.length === 0) {
+      return;
+    }
+
+    const placeholders = candidateIds.map(() => '?').join(', ');
+    await db.runAsync(`DELETE FROM notes WHERE id IN (${placeholders})`, candidateIds);
+    return;
+  }
+
+  let sql = `DELETE FROM notes WHERE ${scopedWhereSql}`;
+  const args = [...scopeArgs];
 
   if (serverIds.size > 0) {
     const placeholders = Array.from(serverIds).map(() => '?').join(', ');

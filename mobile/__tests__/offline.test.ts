@@ -2,7 +2,7 @@
  * Tests for offline support: local note queries, sync queue, and ID utilities.
  */
 
-import { generateLocalId, isLocalId, replaceLocalNoteId } from '../src/db/noteQueries';
+import { generateLocalId, isLocalId, replaceLocalNoteId, removeLocalNotesNotIn } from '../src/db/noteQueries';
 import { drainQueue } from '../src/db/syncQueue';
 import api from '../src/api/client';
 
@@ -171,5 +171,64 @@ describe('drainQueue', () => {
 
     expect(mockReplaceLocalNoteId).toHaveBeenCalledWith(db, 'local_temp_1', serverNote);
     expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [8]);
+  });
+});
+
+// ── removeLocalNotesNotIn label scope ───────────────────────────────────────
+
+describe('removeLocalNotesNotIn', () => {
+  beforeEach(() => {
+    jest.clearAllMocks();
+  });
+
+  it('deletes only notes that matched the label filter but are missing from serverIds', async () => {
+    const db = {
+      getAllAsync: jest.fn().mockResolvedValue([
+        {
+          id: 'note-label-removed',
+          labels_json: JSON.stringify([{ id: 'l1', name: 'Work' }]),
+        },
+        {
+          id: 'note-other-label',
+          labels_json: JSON.stringify([{ id: 'l2', name: 'Personal' }]),
+        },
+      ]),
+      runAsync: jest.fn().mockResolvedValue(undefined),
+    };
+
+    await removeLocalNotesNotIn(
+      db as never,
+      new Set<string>(['note-still-on-server']),
+      { label: 'l1' },
+    );
+
+    expect(db.getAllAsync).toHaveBeenCalledWith(
+      expect.stringContaining('SELECT id, labels_json FROM notes WHERE'),
+      [],
+    );
+    expect(db.runAsync).toHaveBeenCalledWith(
+      'DELETE FROM notes WHERE id IN (?)',
+      ['note-label-removed'],
+    );
+  });
+
+  it('does not delete non-label-matching notes in a label-filtered sync', async () => {
+    const db = {
+      getAllAsync: jest.fn().mockResolvedValue([
+        {
+          id: 'note-unrelated',
+          labels_json: JSON.stringify([{ id: 'l2', name: 'Personal' }]),
+        },
+      ]),
+      runAsync: jest.fn().mockResolvedValue(undefined),
+    };
+
+    await removeLocalNotesNotIn(
+      db as never,
+      new Set<string>(),
+      { label: 'l1' },
+    );
+
+    expect(db.runAsync).not.toHaveBeenCalled();
   });
 });

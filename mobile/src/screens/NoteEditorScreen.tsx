@@ -133,6 +133,7 @@ export default function NoteEditorScreen() {
   const hasPendingChangesRef = useRef(false);
   const saveInFlightRef = useRef<Promise<boolean> | null>(null);
   const tempIdCounterRef = useRef(0);
+  const requiresHydrationRef = useRef(initialNoteId !== null);
 
   // Refs for current state to avoid stale closures in debounced save
   const noteIdRef = useRef(noteId);
@@ -213,7 +214,7 @@ export default function NoteEditorScreen() {
     if (!hasPendingChangesRef.current) return true;
     // If an existing note has local edits flagged but hasn't hydrated yet,
     // treat this as a failed flush so callers can retry after hydration.
-    if (noteIdRef.current && !isInitializedRef.current) return false;
+    if (requiresHydrationRef.current && noteIdRef.current && !isInitializedRef.current) return false;
 
     // Serialize mutations: chain onto any in-flight save to prevent concurrent writes
     const predecessor = saveInFlightRef.current;
@@ -244,6 +245,7 @@ export default function NoteEditorScreen() {
         });
         hasPendingChangesRef.current = false;
         if (!isMountedRef.current || unmounting) return true;
+        noteIdRef.current = newNote.id;
         setNoteId(newNote.id);
         setHasCreated(true);
         setSaveError(null);
@@ -702,17 +704,23 @@ export default function NoteEditorScreen() {
     }
     const prevColor = colorRef.current;
     setColor(selectedColor);
-    if (!noteId) return;
+    const currentNoteId = noteIdRef.current;
+    if (!currentNoteId) {
+      // Newly-created notes may not have committed noteId into render state yet.
+      // Keep this change dirty so autosave (or beforeRemove flush) persists color.
+      markDirtyAndScheduleUpdate();
+      return;
+    }
     try {
       await updateMutation.mutateAsync({
-        id: noteId,
+        id: currentNoteId,
         data: buildMetadataUpdateData({ color: selectedColor }),
       });
     } catch {
       setColor(prevColor);
       Alert.alert(t('common.error'), t('note.failedColorUpdate'));
     }
-  }, [buildMetadataUpdateData, flushPendingChanges, noteId, t, updateMutation]);
+  }, [buildMetadataUpdateData, flushPendingChanges, markDirtyAndScheduleUpdate, t, updateMutation]);
 
   const handleToggleNoteType = useCallback(() => {
     if (hasCreated) return;
