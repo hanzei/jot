@@ -83,7 +83,7 @@ const mockStats: AdminStatsResponse = {
 const renderAdmin = (onLogout = vi.fn()) => {
   return render(
     <MemoryRouter>
-      <Admin onLogout={onLogout} />
+      <Admin onLogout={onLogout} passwordMinLength={10} />
     </MemoryRouter>
   )
 }

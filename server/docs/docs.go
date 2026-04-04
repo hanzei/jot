@@ -1665,6 +1665,12 @@ const docTemplate = `{
                             }
                         }
                     },
+                    "400": {
+                        "description": "search query too long",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
                     "401": {
                         "description": "unauthorized",
                         "schema": {
