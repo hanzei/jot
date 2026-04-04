@@ -744,7 +744,9 @@ describe('Dashboard', () => {
       
       await waitFor(() => {
         expect(screen.getByText('No notes yet')).toBeInTheDocument()
+        expect(screen.getByText('Click "New Note" to create your first note')).toBeInTheDocument()
         expect(screen.getByText('Create your first note')).toBeInTheDocument()
+        expect(screen.getByTestId('dashboard-empty-state')).toBeInTheDocument()
       })
     })
 
@@ -761,6 +763,7 @@ describe('Dashboard', () => {
 
       await waitFor(() => {
         expect(screen.getByText('No archived notes')).toBeInTheDocument()
+        expect(screen.getByText('Notes you archive will appear here.')).toBeInTheDocument()
       })
     })
 
@@ -1599,6 +1602,23 @@ describe('Dashboard', () => {
       expect(mockGetAll).toHaveBeenCalledWith(true, '', false, '', false)
     })
   })
+
+  it('shows label-specific empty state and hides create-first-note CTA when label has no notes', async () => {
+    vi.mocked(notes.getAll).mockResolvedValue([])
+
+    render(
+      <MemoryRouter initialEntries={['/?label=label-work']}>
+        <ToastProvider><Dashboard onLogout={vi.fn()} /></ToastProvider>
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByTestId('dashboard-empty-state')).toBeInTheDocument()
+      expect(screen.getByText('No notes for this label')).toBeInTheDocument()
+      expect(screen.getByText('Notes tagged with this label will appear here.')).toBeInTheDocument()
+      expect(screen.queryByText('Create your first note')).not.toBeInTheDocument()
+    })
+  })
   })
 
   describe('Real-time label updates', () => {
@@ -1742,6 +1762,7 @@ describe('Dashboard', () => {
       await user.click(screen.getByRole('button', { name: 'My Todo' }))
 
       await waitFor(() => {
+        expect(screen.getByText('No assigned to-do items')).toBeInTheDocument()
         expect(screen.getByText('No to-do items assigned to you yet. When someone assigns a to-do item to you in a shared note, it will appear here.')).toBeInTheDocument()
       })
     })
@@ -1864,5 +1885,6 @@ describe('Dashboard', () => {
         expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-work', false)
       })
     })
+
   })
 })
