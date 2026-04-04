@@ -233,8 +233,8 @@ func (h *NotesHandler) GetNotes(w http.ResponseWriter, r *http.Request) (int, an
 	labelID := q.Get("label")
 	myTodo := q.Get("my_todo") == queryTrue
 
-	if utf8.RuneCountInString(search) > searchQueryMaxLength {
-		return http.StatusBadRequest, nil, fmt.Errorf("search query must be %d characters or fewer", searchQueryMaxLength)
+	if err := validateSearchQuery(search); err != nil {
+		return http.StatusBadRequest, nil, err
 	}
 
 	notes, err := h.noteStore.GetByUserID(r.Context(), user.ID, archived, trashed, search, labelID, myTodo)

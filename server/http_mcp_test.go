@@ -44,7 +44,7 @@ func callTool(t *testing.T, sess *mcp.ClientSession, name string, args any, dst 
 
 func TestMCPListNotes(t *testing.T) {
 	ts := setupTestServer(t)
-	tu := ts.createTestUser(t, "mcpuser", "password", false)
+	tu := ts.createTestUser(t, "mcpuser", "password123", false)
 	sess := setupMCPSession(t, ts, tu)
 
 	var notes []client.Note
@@ -54,7 +54,7 @@ func TestMCPListNotes(t *testing.T) {
 
 func TestMCPCreateAndGetNote(t *testing.T) {
 	ts := setupTestServer(t)
-	tu := ts.createTestUser(t, "mcpuser2", "password", false)
+	tu := ts.createTestUser(t, "mcpuser2", "password123", false)
 	sess := setupMCPSession(t, ts, tu)
 
 	var created client.Note
@@ -75,7 +75,7 @@ func TestMCPCreateAndGetNote(t *testing.T) {
 
 func TestMCPUpdateNote(t *testing.T) {
 	ts := setupTestServer(t)
-	tu := ts.createTestUser(t, "mcpuser3", "password", false)
+	tu := ts.createTestUser(t, "mcpuser3", "password123", false)
 	sess := setupMCPSession(t, ts, tu)
 
 	var created client.Note
@@ -96,7 +96,7 @@ func TestMCPUpdateNote(t *testing.T) {
 
 func TestMCPDeleteNote(t *testing.T) {
 	ts := setupTestServer(t)
-	tu := ts.createTestUser(t, "mcpuser4", "password", false)
+	tu := ts.createTestUser(t, "mcpuser4", "password123", false)
 	sess := setupMCPSession(t, ts, tu)
 
 	var created client.Note
@@ -118,7 +118,7 @@ func TestMCPDeleteNote(t *testing.T) {
 
 func TestMCPLabelCRUD(t *testing.T) {
 	ts := setupTestServer(t)
-	tu := ts.createTestUser(t, "mcpuser5", "password", false)
+	tu := ts.createTestUser(t, "mcpuser5", "password123", false)
 	sess := setupMCPSession(t, ts, tu)
 
 	// Initially no labels.
@@ -167,7 +167,7 @@ func TestMCPLabelCRUD(t *testing.T) {
 // removes a trashed note from the trash entirely.
 func TestMCPPermanentDelete(t *testing.T) {
 	ts := setupTestServer(t)
-	tu := ts.createTestUser(t, "mcpuser6", "password", false)
+	tu := ts.createTestUser(t, "mcpuser6", "password123", false)
 	sess := setupMCPSession(t, ts, tu)
 
 	var created client.Note
@@ -189,8 +189,8 @@ func TestMCPPermanentDelete(t *testing.T) {
 // notes via MCP tools.
 func TestMCPCrossUserIsolation(t *testing.T) {
 	ts := setupTestServer(t)
-	alice := ts.createTestUser(t, "alice_mcp", "password", false)
-	bob := ts.createTestUser(t, "bob_mcp", "password", false)
+	alice := ts.createTestUser(t, "alice_mcp", "password123", false)
+	bob := ts.createTestUser(t, "bob_mcp", "password123", false)
 
 	aliceSess := setupMCPSession(t, ts, alice)
 	bobSess := setupMCPSession(t, ts, bob)

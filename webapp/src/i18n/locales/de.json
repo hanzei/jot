@@ -12,7 +12,8 @@
     "logoutConfirmMessage": "Möchtest du dich wirklich abmelden?",
     "openMobileApp": "In mobiler App öffnen",
     "openMobileAppDescription": "Lieber die native mobile App verwenden?",
-    "dismissMobileAppBanner": "Ausblenden"
+    "dismissMobileAppBanner": "Ausblenden",
+    "skipToMainContent": "Zum Hauptinhalt springen"
   },
   "auth": {
     "signInTitle": "Bei Jot anmelden",
@@ -36,7 +37,7 @@
     "usernameChars": "Benutzername darf nur Buchstaben, Zahlen, Unterstriche und Bindestriche enthalten",
     "usernameEdge": "Benutzername darf nicht mit Unterstrich oder Bindestrich beginnen oder enden",
     "passwordsNoMatch": "Passwörter stimmen nicht überein",
-    "passwordMin": "Passwort muss mindestens 4 Zeichen lang sein"
+    "passwordMin": "Passwort muss mindestens {{min}} Zeichen lang sein"
   },
   "dashboard": {
     "newNote": "Neue Notiz",
@@ -116,7 +117,7 @@
     "currentPasswordLabel": "Aktuelles Passwort",
     "newPasswordLabel": "Neues Passwort",
     "confirmNewPasswordLabel": "Neues Passwort bestätigen",
-    "newPasswordPlaceholder": "Mindestens 4 Zeichen",
+    "newPasswordPlaceholder": "Mindestens {{min}} Zeichen",
     "passwordsNoMatch": "Neue Passwörter stimmen nicht überein.",
     "failedChangePassword": "Passwort konnte nicht geändert werden.",
     "changing": "Ändern...",
@@ -199,6 +200,8 @@
     "binDescription": "Papierkorb öffnen",
     "helpKey": "?",
     "helpDescription": "Hilfe zu Tastenkombinationen öffnen",
+    "openNoteKey": "Enter",
+    "openNoteDescription": "Die fokussierte Notiz öffnen",
     "escapeKey": "Esc",
     "escapeDescription": "Aktives Modal oder Dialog schließen"
   },
@@ -299,6 +302,7 @@
     "lastEdited": "Zuletzt bearbeitet: {{date}}",
     "saving": "Speichern...",
     "saved": "Gespeichert",
+    "colorPickerLabel": "Notizenfarbe auswählen",
     "colorWhite": "Weiß",
     "colorCoral": "Koralle",
     "colorYellow": "Gelb",

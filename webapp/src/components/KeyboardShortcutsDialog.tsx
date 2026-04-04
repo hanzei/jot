@@ -51,6 +51,11 @@ export default function KeyboardShortcutsDialog({ isOpen, onClose }: KeyboardSho
       description: t('keyboardShortcuts.helpDescription'),
     },
     {
+      id: 'open-note',
+      key: t('keyboardShortcuts.openNoteKey'),
+      description: t('keyboardShortcuts.openNoteDescription'),
+    },
+    {
       id: 'escape',
       key: t('keyboardShortcuts.escapeKey'),
       description: t('keyboardShortcuts.escapeDescription'),

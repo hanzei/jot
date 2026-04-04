@@ -25,14 +25,16 @@ type AuthHandler struct {
 	sessionService      *auth.SessionService
 	userSettingsStore   *models.UserSettingsStore
 	registrationEnabled bool
+	passwordMinLength   int
 }
 
-func NewAuthHandler(userStore *models.UserStore, sessionService *auth.SessionService, userSettingsStore *models.UserSettingsStore, registrationEnabled bool) *AuthHandler {
+func NewAuthHandler(userStore *models.UserStore, sessionService *auth.SessionService, userSettingsStore *models.UserSettingsStore, registrationEnabled bool, passwordMinLength int) *AuthHandler {
 	return &AuthHandler{
 		userStore:           userStore,
 		sessionService:      sessionService,
 		userSettingsStore:   userSettingsStore,
 		registrationEnabled: registrationEnabled,
+		passwordMinLength:   passwordMinLength,
 	}
 }
 
@@ -78,7 +80,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) (int, any
 		return http.StatusBadRequest, nil, err
 	}
 
-	if err := validatePassword(req.Password); err != nil {
+	if err := validatePassword(req.Password, h.passwordMinLength); err != nil {
 		return http.StatusBadRequest, nil, err
 	}
 
@@ -353,7 +355,7 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) (in
 		return http.StatusBadRequest, nil, errors.New("current_password and new_password are required")
 	}
 
-	if err := validatePassword(req.NewPassword); err != nil {
+	if err := validatePassword(req.NewPassword, h.passwordMinLength); err != nil {
 		return http.StatusBadRequest, nil, err
 	}
 
