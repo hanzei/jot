@@ -148,6 +148,60 @@ func TestCreateLabel(t *testing.T) {
 	})
 }
 
+func TestGetLabelCounts(t *testing.T) {
+	ts := setupTestServer(t)
+	user := ts.createTestUser(t, "countlabels", "password123", false)
+
+	activeNote, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
+		Title: "Active with work and personal", Content: "content",
+	})
+	require.NoError(t, err)
+	archivedNote, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
+		Title: "Archived with work", Content: "content",
+	})
+	require.NoError(t, err)
+	trashedNote, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
+		Title: "Trashed with work", Content: "content",
+	})
+	require.NoError(t, err)
+
+	_, err = user.Client.AddLabel(t.Context(), activeNote.ID, "work")
+	require.NoError(t, err)
+	_, err = user.Client.AddLabel(t.Context(), activeNote.ID, "personal")
+	require.NoError(t, err)
+	_, err = user.Client.AddLabel(t.Context(), archivedNote.ID, "work")
+	require.NoError(t, err)
+	_, err = user.Client.AddLabel(t.Context(), trashedNote.ID, "work")
+	require.NoError(t, err)
+
+	_, err = user.Client.UpdateNote(t.Context(), archivedNote.ID, &client.UpdateNoteRequest{Archived: boolPtr(true)})
+	require.NoError(t, err)
+	err = user.Client.DeleteNote(t.Context(), trashedNote.ID, false)
+	require.NoError(t, err)
+
+	labels, err := user.Client.ListLabels(t.Context())
+	require.NoError(t, err)
+	require.Len(t, labels, 2)
+	labelIDByName := map[string]string{}
+	for _, l := range labels {
+		labelIDByName[l.Name] = l.ID
+	}
+
+	t.Run("returns active plus archived counts, excluding trashed notes", func(t *testing.T) {
+		counts, err := user.Client.GetLabelCounts(t.Context())
+		require.NoError(t, err)
+		assert.Equal(t, 2, counts[labelIDByName["work"]])
+		assert.Equal(t, 1, counts[labelIDByName["personal"]])
+	})
+
+	t.Run("unauthenticated request returns 401", func(t *testing.T) {
+		c := ts.newClient()
+		_, err := c.GetLabelCounts(t.Context())
+		require.Error(t, err)
+		assert.Equal(t, http.StatusUnauthorized, client.StatusCode(err))
+	})
+}
+
 // createNoteWithLabelsFixture creates a fresh server and user for a label test.
 func createNoteWithLabelsFixture(t *testing.T) *TestUser {
 	t.Helper()

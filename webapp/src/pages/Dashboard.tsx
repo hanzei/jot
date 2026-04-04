@@ -212,16 +212,9 @@ export default function Dashboard({ onLogout }: DashboardProps) {
 
   const loadLabelCounts = useCallback(async () => {
     try {
-      const activeNotes = await notes.getAll(false, '', false);
+      const counts = await labelsApi.getCounts();
       if (!isMountedRef.current) {
         return;
-      }
-
-      const counts: Record<string, number> = {};
-      for (const note of activeNotes) {
-        for (const label of note.labels ?? []) {
-          counts[label.id] = (counts[label.id] ?? 0) + 1;
-        }
       }
       setLabelCounts(counts);
     } catch (error) {

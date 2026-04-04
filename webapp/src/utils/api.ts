@@ -98,6 +98,9 @@ export const labels = {
   getAll: (): Promise<Label[]> =>
     api.get('/labels').then(res => res.data),
 
+  getCounts: (): Promise<Record<string, number>> =>
+    api.get('/labels/counts').then(res => res.data),
+
   create: (name: string): Promise<Label> =>
     api.post('/labels', { name }).then(res => res.data),
 

@@ -36,6 +36,8 @@ type RenameLabelRequest struct {
 	Name string `json:"name"`
 }
 
+type LabelCountsResponse map[string]int
+
 func (h *LabelsHandler) publishLabelNoteUpdates(ctx context.Context, noteIDs []string, userID string) {
 	if h.hub == nil {
 		return
@@ -79,6 +81,30 @@ func (h *LabelsHandler) GetLabels(w http.ResponseWriter, r *http.Request) (int, 
 	}
 
 	return http.StatusOK, labels, nil
+}
+
+// GetLabelCounts godoc
+//
+//	@Summary	Get note counts per label for the current user
+//	@Tags		labels
+//	@Security	CookieAuth
+//	@Produce	json
+//	@Success	200	{object}	LabelCountsResponse
+//	@Failure	401	{string}	string	"unauthorized"
+//	@Failure	500	{string}	string	"internal server error"
+//	@Router		/labels/counts [get]
+func (h *LabelsHandler) GetLabelCounts(w http.ResponseWriter, r *http.Request) (int, any, error) {
+	user, ok := auth.GetUserFromContext(r.Context())
+	if !ok {
+		return http.StatusUnauthorized, nil, errors.New("unauthorized")
+	}
+
+	counts, err := h.labelStore.GetLabelCounts(r.Context(), user.ID)
+	if err != nil {
+		return http.StatusInternalServerError, nil, fmt.Errorf("get label counts: %w", err)
+	}
+
+	return http.StatusOK, counts, nil
 }
 
 // CreateLabel godoc

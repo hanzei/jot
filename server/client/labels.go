@@ -15,6 +15,15 @@ func (c *Client) ListLabels(ctx context.Context) ([]Label, error) {
 	return labels, nil
 }
 
+// ListLabelCounts returns note counts per label for the authenticated user.
+func (c *Client) ListLabelCounts(ctx context.Context) (map[string]int, error) {
+	counts := map[string]int{}
+	if err := c.doJSON(ctx, http.MethodGet, "/api/v1/labels/counts", nil, &counts); err != nil {
+		return nil, err
+	}
+	return counts, nil
+}
+
 // CreateLabel creates a label (or returns the existing one with the same name).
 func (c *Client) CreateLabel(ctx context.Context, name string) (*Label, error) {
 	var label Label

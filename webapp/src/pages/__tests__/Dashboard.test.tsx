@@ -26,6 +26,7 @@ vi.mock('@/utils/api', () => ({
   labels: {
     getAll: vi.fn().mockResolvedValue([]),
     create: vi.fn(),
+    getCounts: vi.fn().mockResolvedValue({}),
   },
   users: {
     search: vi.fn().mockResolvedValue([]),
@@ -1054,8 +1055,8 @@ describe('Dashboard', () => {
       await user.click(screen.getByTestId('refresh-1'))
 
       await waitFor(() => {
-        // Refresh triggers reloading both visible notes and sidebar label counts.
-        expect(mockGetAll.mock.calls.length).toBeGreaterThanOrEqual(initialCalls + 2)
+        // Refresh should trigger at least one additional notes fetch.
+        expect(mockGetAll.mock.calls.length).toBeGreaterThanOrEqual(initialCalls + 1)
       })
     })
   })
@@ -1361,7 +1362,7 @@ describe('Dashboard', () => {
     })
   })
 
-  it('does not render labels section when no labels exist', async () => {
+  it('renders new label action when no labels exist', async () => {
     vi.mocked(labels.getAll).mockResolvedValue([])
 
     render(
@@ -1376,6 +1377,7 @@ describe('Dashboard', () => {
       expect(screen.getByText('New Note')).toBeInTheDocument()
     })
 
+    expect(screen.getByRole('button', { name: '+ New Label' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: 'work' })).not.toBeInTheDocument()
   })
 
