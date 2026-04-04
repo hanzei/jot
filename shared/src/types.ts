@@ -1,5 +1,6 @@
 export interface ServerConfig {
   registration_enabled: boolean;
+  password_min_length: number;
 }
 
 export interface AboutInfo {

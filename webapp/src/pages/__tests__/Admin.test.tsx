@@ -83,7 +83,7 @@ const mockStats: AdminStatsResponse = {
 const renderAdmin = (onLogout = vi.fn()) => {
   return render(
     <MemoryRouter>
-      <Admin onLogout={onLogout} />
+      <Admin onLogout={onLogout} passwordMinLength={10} />
     </MemoryRouter>
   )
 }
@@ -199,7 +199,7 @@ describe('Admin', () => {
       const dialog = await openCreateModal(user)
 
       expect(within(dialog).getByText('2–30 characters. Letters, numbers, underscores, and hyphens.')).toBeInTheDocument()
-      expect(within(dialog).getByText('At least 4 characters')).toBeInTheDocument()
+      expect(within(dialog).getByText('At least 10 characters')).toBeInTheDocument()
       expect(within(dialog).getByText(`0/${VALIDATION.USERNAME_MAX_LENGTH}`)).toBeInTheDocument()
 
       expect(within(dialog).getByRole('button', { name: 'Create User' })).toBeEnabled()
@@ -237,7 +237,7 @@ describe('Admin', () => {
       await user.type(passwordInput, '123')
       await user.tab()
 
-      expect(within(dialog).getByText('Password must be at least 4 characters')).toBeInTheDocument()
+      expect(within(dialog).getByText('Password must be at least 10 characters')).toBeInTheDocument()
       expect(within(dialog).getByRole('button', { name: 'Create User' })).toBeDisabled()
     })
 
@@ -288,7 +288,7 @@ describe('Admin', () => {
       const dialog = await openCreateModal(user)
 
       await user.type(within(dialog).getByLabelText('Username'), 'new_user')
-      await user.type(within(dialog).getByLabelText('Password'), 'abcd')
+      await user.type(within(dialog).getByLabelText('Password'), 'abcd123456')
 
       const submitButton = within(dialog).getByRole('button', { name: 'Create User' })
       expect(submitButton).toBeEnabled()
@@ -298,7 +298,7 @@ describe('Admin', () => {
       await waitFor(() => {
         expect(admin.createUser).toHaveBeenCalledWith({
           username: 'new_user',
-          password: 'abcd',
+          password: 'abcd123456',
           role: 'user',
         })
       })
@@ -316,7 +316,7 @@ describe('Admin', () => {
 
       const dialog = await openCreateModal(user)
       await user.type(within(dialog).getByLabelText('Username'), 'new_user')
-      await user.type(within(dialog).getByLabelText('Password'), 'abcd')
+      await user.type(within(dialog).getByLabelText('Password'), 'abcd123456')
       await user.click(within(dialog).getByRole('button', { name: 'Create User' }))
 
       await waitFor(() => {
@@ -337,7 +337,7 @@ describe('Admin', () => {
 
       const dialog = await openCreateModal(user)
       await user.type(within(dialog).getByLabelText('Username'), 'new_user')
-      await user.type(within(dialog).getByLabelText('Password'), 'abcd')
+      await user.type(within(dialog).getByLabelText('Password'), 'abcd123456')
       await user.click(within(dialog).getByRole('button', { name: 'Create User' }))
 
       await waitFor(() => {

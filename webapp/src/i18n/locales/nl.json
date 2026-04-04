@@ -36,7 +36,7 @@
     "usernameChars": "Gebruikersnaam mag alleen letters, cijfers, underscores en koppeltekens bevatten",
     "usernameEdge": "Gebruikersnaam mag niet beginnen of eindigen met een underscore of koppelteken",
     "passwordsNoMatch": "Wachtwoorden komen niet overeen",
-    "passwordMin": "Wachtwoord moet minimaal 4 tekens bevatten"
+    "passwordMin": "Wachtwoord moet minimaal {{min}} tekens bevatten"
   },
   "dashboard": {
     "newNote": "Nieuwe notitie",
@@ -110,7 +110,7 @@
     "currentPasswordLabel": "Huidig wachtwoord",
     "newPasswordLabel": "Nieuw wachtwoord",
     "confirmNewPasswordLabel": "Nieuw wachtwoord bevestigen",
-    "newPasswordPlaceholder": "Minimaal 4 tekens",
+    "newPasswordPlaceholder": "Minimaal {{min}} tekens",
     "passwordsNoMatch": "Nieuwe wachtwoorden komen niet overeen.",
     "failedChangePassword": "Wachtwoord wijzigen mislukt.",
     "changing": "Wijzigen...",

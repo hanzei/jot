@@ -12,6 +12,7 @@ import { useNavigationLinkTabs } from '@/hooks/useNavigationTabs';
 
 interface AdminProps {
   onLogout: () => void;
+  passwordMinLength: number;
 }
 
 interface StatCardProps {
@@ -54,7 +55,7 @@ const StatCardSkeleton = () => (
   </div>
 );
 
-const Admin = ({ onLogout }: AdminProps) => {
+const Admin = ({ onLogout, passwordMinLength }: AdminProps) => {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const currentUser = getUser();
@@ -426,6 +427,7 @@ const Admin = ({ onLogout }: AdminProps) => {
 
           {showCreateModal && (
             <CreateUserModal
+              passwordMinLength={passwordMinLength}
               onClose={() => setShowCreateModal(false)}
               onSuccess={handleCreateUserSuccess}
             />

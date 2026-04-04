@@ -2,18 +2,19 @@ import { useState } from 'react';
 import { Dialog, DialogPanel, DialogTitle } from '@headlessui/react';
 import { XMarkIcon } from '@heroicons/react/24/outline';
 import { useTranslation } from 'react-i18next';
-import { PASSWORD_MIN_LENGTH, ROLES, VALIDATION, type User, type CreateUserRequest } from '@jot/shared';
+import { ROLES, VALIDATION, type User, type CreateUserRequest } from '@jot/shared';
 import { admin, isAxiosError } from '@/utils/api';
 import { getUsernameValidationError, isPasswordTooShort } from '@/utils/userValidation';
 
 interface CreateUserModalProps {
+  passwordMinLength: number;
   onClose: () => void;
   onSuccess: (user: User) => void;
 }
 
 type CreateUserField = 'username' | 'password';
 
-export default function CreateUserModal({ onClose, onSuccess }: CreateUserModalProps) {
+export default function CreateUserModal({ passwordMinLength, onClose, onSuccess }: CreateUserModalProps) {
   const { t } = useTranslation();
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
@@ -42,7 +43,7 @@ export default function CreateUserModal({ onClose, onSuccess }: CreateUserModalP
 
   const validatePassword = (password: string): string => {
     if (isPasswordTooShort(password)) {
-      return t('admin.passwordMin', { min: PASSWORD_MIN_LENGTH });
+      return t('admin.passwordMin', { min: passwordMinLength });
     }
     return '';
   };
@@ -161,7 +162,7 @@ export default function CreateUserModal({ onClose, onSuccess }: CreateUserModalP
                     id="create-password"
                     type="password"
                     required
-                    minLength={PASSWORD_MIN_LENGTH}
+                    minLength={passwordMinLength}
                     value={formData.password}
                     onBlur={() => handleFieldBlur('password')}
                     onChange={(e) => {
@@ -175,7 +176,7 @@ export default function CreateUserModal({ onClose, onSuccess }: CreateUserModalP
                     }`}
                   />
                   <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                    {t('admin.passwordHint', { min: PASSWORD_MIN_LENGTH })}
+                    {t('admin.passwordHint', { min: passwordMinLength })}
                   </p>
                   {passwordFieldError && (
                     <p className="mt-1 text-sm text-red-600 dark:text-red-400">{passwordFieldError}</p>

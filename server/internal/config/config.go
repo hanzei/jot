@@ -15,6 +15,7 @@ type Config struct {
 	CORSAllowedOrigin   string
 	CookieSecure        bool
 	RegistrationEnabled bool
+	PasswordMinLength   int
 }
 
 // Load reads configuration from environment variables, applying defaults
@@ -25,6 +26,7 @@ func Load() (*Config, error) {
 		DBPath:              "./jot.db",
 		CookieSecure:        true,
 		RegistrationEnabled: true,
+		PasswordMinLength:   10,
 	}
 
 	if v := os.Getenv("PORT"); v != "" {
@@ -65,6 +67,17 @@ func Load() (*Config, error) {
 
 	if os.Getenv("REGISTRATION_ENABLED") == "false" {
 		cfg.RegistrationEnabled = false
+	}
+
+	if v := os.Getenv("PASSWORD_MIN_LENGTH"); v != "" {
+		n, err := strconv.Atoi(v)
+		if err != nil {
+			return nil, fmt.Errorf("invalid PASSWORD_MIN_LENGTH value %q: must be a number", v)
+		}
+		if n < 1 || n > 72 {
+			return nil, fmt.Errorf("invalid PASSWORD_MIN_LENGTH value %d: must be between 1 and 72", n)
+		}
+		cfg.PasswordMinLength = n
 	}
 
 	return cfg, nil
