@@ -26,6 +26,10 @@ export default function LabelPicker({ note, selectedLabels, onLocalChange, onRef
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   const labelButtonRefs = useRef<(HTMLButtonElement | null)[]>([]);
+  const hasAutoFocused = useRef(false);
+
+  // Effective focused index, clamped to valid range (derived in render, no setState needed).
+  const effectiveFocusedIndex = allLabels.length === 0 ? 0 : Math.min(focusedLabelIndex, allLabels.length - 1);
 
   const isLocalMode = !note;
   const currentLabelIds = new Set(
@@ -59,15 +63,12 @@ export default function LabelPicker({ note, selectedLabels, onLocalChange, onRef
     if (creating) inputRef.current?.focus();
   }, [creating]);
 
-  // Auto-focus the first label when labels load, and keep focusedLabelIndex in bounds.
+  // Auto-focus the first label the first time labels load (keyboard-open UX).
   useEffect(() => {
-    if (allLabels.length === 0) return;
-    setFocusedLabelIndex(prev => {
-      const clamped = Math.min(prev, allLabels.length - 1);
-      if (prev !== clamped) return clamped;
-      return prev;
-    });
-    labelButtonRefs.current[0]?.focus();
+    if (allLabels.length > 0 && !hasAutoFocused.current) {
+      hasAutoFocused.current = true;
+      labelButtonRefs.current[0]?.focus();
+    }
   }, [allLabels.length]);
 
   const handleLabelKeyDown = useCallback((e: React.KeyboardEvent, index: number) => {
@@ -171,7 +172,7 @@ export default function LabelPicker({ note, selectedLabels, onLocalChange, onRef
           ref={el => { labelButtonRefs.current[index] = el; }}
           role="checkbox"
           aria-checked={isSelected(label)}
-          tabIndex={index === focusedLabelIndex ? 0 : -1}
+          tabIndex={index === effectiveFocusedIndex ? 0 : -1}
           onClick={() => { setFocusedLabelIndex(index); toggleLabel(label); }}
           onKeyDown={(e) => handleLabelKeyDown(e, index)}
           className="flex items-center w-full px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-slate-700"
