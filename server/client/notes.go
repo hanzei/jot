@@ -69,15 +69,13 @@ func (c *Client) GetNote(ctx context.Context, id string) (*Note, error) {
 // UpdateNote partially updates a note. Pointer fields update when non-nil, and
 // omitted (nil) pointer fields keep their current server-side values.
 //
-// Note: UpdateNoteRequest.Items uses `omitempty`; an empty slice is omitted from
-// JSON and does not clear items via this typed client. To send an explicit
-// empty array (`"items":[]`) and clear all todo items, use a raw HTTP request.
+// Note: UpdateNoteRequest.Items is a pointer-to-slice with `omitempty`.
+// - nil pointer omits "items" (no item update)
+// - pointer to empty slice sends `"items":[]` (clear all items)
+// - pointer to non-empty slice sends replacement items
 func (c *Client) UpdateNote(ctx context.Context, id string, req *UpdateNoteRequest) (*Note, error) {
 	if req == nil {
 		return nil, errors.New("request must not be nil")
-	}
-	if req.Items != nil && len(req.Items) == 0 {
-		return nil, errors.New("request items cannot be an empty slice in typed client; use raw HTTP PATCH with {\"items\":[]} to clear todo items")
 	}
 	var note Note
 	if err := c.doJSON(ctx, http.MethodPatch, fmt.Sprintf("/api/v1/notes/%s", id), req, &note); err != nil {

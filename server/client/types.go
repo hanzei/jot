@@ -135,16 +135,18 @@ type CreateNoteItem struct {
 // UpdateNoteRequest is the body for PATCH /api/v1/notes/{id}.
 // Nil pointer fields are omitted and keep their server-side values.
 //
-// Note: Items uses `omitempty`, so an empty slice marshals as omitted.
-// To send an explicit JSON empty array (`"items":[]`) use a raw request.
+// Items is a pointer to support tri-state update semantics with `omitempty`:
+// - nil pointer: omit "items" (do not change existing todo items)
+// - pointer to empty slice: send "items":[] (clear all todo items)
+// - pointer to non-empty slice: replace todo items
 type UpdateNoteRequest struct {
-	Title                 *string          `json:"title,omitempty"`
-	Content               *string          `json:"content,omitempty"`
-	Pinned                *bool            `json:"pinned,omitempty"`
-	Archived              *bool            `json:"archived,omitempty"`
-	Color                 *string          `json:"color,omitempty"`
-	CheckedItemsCollapsed *bool            `json:"checked_items_collapsed,omitempty"`
-	Items                 []UpdateNoteItem `json:"items,omitempty"`
+	Title                 *string           `json:"title,omitempty"`
+	Content               *string           `json:"content,omitempty"`
+	Pinned                *bool             `json:"pinned,omitempty"`
+	Archived              *bool             `json:"archived,omitempty"`
+	Color                 *string           `json:"color,omitempty"`
+	CheckedItemsCollapsed *bool             `json:"checked_items_collapsed,omitempty"`
+	Items                 *[]UpdateNoteItem `json:"items,omitempty"`
 }
 
 // UpdateNoteItem describes a checklist item in an update request.

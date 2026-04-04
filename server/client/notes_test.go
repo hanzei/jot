@@ -1,6 +1,7 @@
 package client
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/stretchr/testify/assert"
@@ -8,14 +9,36 @@ import (
 )
 
 func TestUpdateNoteRejectsExplicitEmptyItemsSlice(t *testing.T) {
-	c := New("http://example.com")
-	req := &UpdateNoteRequest{
-		Items: []UpdateNoteItem{},
+	tests := []struct {
+		name     string
+		req      UpdateNoteRequest
+		contains string
+	}{
+		{
+			name: "omits items when pointer is nil",
+			req: UpdateNoteRequest{
+				Title: ptr("updated"),
+			},
+			contains: `"title":"updated"`,
+		},
+		{
+			name: "encodes empty items array when pointer targets empty slice",
+			req: UpdateNoteRequest{
+				Items: ptr([]UpdateNoteItem{}),
+			},
+			contains: `"items":[]`,
+		},
 	}
 
-	note, err := c.UpdateNote(t.Context(), "note-id", req)
-	require.Error(t, err)
-	assert.Nil(t, note)
-	assert.Contains(t, err.Error(), "cannot be an empty slice")
-	assert.Contains(t, err.Error(), "raw HTTP PATCH")
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			data, err := json.Marshal(tt.req)
+			require.NoError(t, err)
+			assert.Contains(t, string(data), tt.contains)
+		})
+	}
+}
+
+func ptr[T any](v T) *T {
+	return &v
 }

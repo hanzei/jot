@@ -110,10 +110,11 @@ func TestNoteValidation(t *testing.T) {
 			})
 			require.NoError(t, err)
 
+			updateItems := []client.UpdateNoteItem{
+				{Text: strings.Repeat("a", 501), Position: 0},
+			}
 			_, err = user.Client.UpdateNote(t.Context(), note.ID, &client.UpdateNoteRequest{
-				Items: []client.UpdateNoteItem{
-					{Text: strings.Repeat("a", 501), Position: 0},
-				},
+				Items: &updateItems,
 			})
 			assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 		})
@@ -139,7 +140,7 @@ func TestNoteValidation(t *testing.T) {
 			for i := range items {
 				items[i] = client.UpdateNoteItem{Text: "item", Position: i}
 			}
-			_, err = user.Client.UpdateNote(t.Context(), note.ID, &client.UpdateNoteRequest{Items: items})
+			_, err = user.Client.UpdateNote(t.Context(), note.ID, &client.UpdateNoteRequest{Items: &items})
 			assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 		})
 	})

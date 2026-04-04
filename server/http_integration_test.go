@@ -500,7 +500,7 @@ func TestAdminStatsEndpoint(t *testing.T) {
 	archived := true
 	_, err = adminUser.Client.UpdateNote(t.Context(), archivedTodoNote.ID, &client.UpdateNoteRequest{
 		Archived: &archived,
-		Items: []client.UpdateNoteItem{
+		Items: &[]client.UpdateNoteItem{
 			{Text: "First todo", Position: 0, Completed: true, AssignedTo: member1.User.ID},
 			{Text: "Second todo", Position: 1, Completed: false, AssignedTo: ""},
 		},
@@ -508,7 +508,7 @@ func TestAdminStatsEndpoint(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = adminUser.Client.UpdateNote(t.Context(), activeTodoNote.ID, &client.UpdateNoteRequest{
-		Items: []client.UpdateNoteItem{
+		Items: &[]client.UpdateNoteItem{
 			{Text: "Assigned todo", Position: 0, Completed: false, AssignedTo: member2.User.ID},
 		},
 	})
@@ -876,7 +876,7 @@ func TestTodoItemIndentLevel(t *testing.T) {
 		_, err := user.Client.UpdateNote(t.Context(), created.ID, &client.UpdateNoteRequest{
 			Title: client.Ptr("Indent Test"),
 			Color: client.Ptr("#ffffff"),
-			Items: []client.UpdateNoteItem{
+			Items: &[]client.UpdateNoteItem{
 				{Text: "top level", Position: 0, IndentLevel: 0},
 				{Text: "indented once", Position: 1, IndentLevel: 1},
 				{Text: "promoted to top", Position: 2, IndentLevel: 0},
@@ -920,7 +920,7 @@ func TestTodoItemIndentLevel(t *testing.T) {
 		_, err := user.Client.UpdateNote(t.Context(), created.ID, &client.UpdateNoteRequest{
 			Title: client.Ptr("Indent Test"),
 			Color: client.Ptr("#ffffff"),
-			Items: []client.UpdateNoteItem{
+			Items: &[]client.UpdateNoteItem{
 				{Text: "top level", Position: 0, IndentLevel: 0},
 				{Text: "too deep", Position: 1, IndentLevel: 2},
 			},
