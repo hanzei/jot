@@ -36,7 +36,7 @@
     "usernameChars": "Nazwa użytkownika może zawierać tylko litery, cyfry, podkreślenia i myślniki",
     "usernameEdge": "Nazwa użytkownika nie może zaczynać się ani kończyć podkreśleniem lub myślnikiem",
     "passwordsNoMatch": "Hasła nie są zgodne",
-    "passwordMin": "Hasło musi mieć co najmniej 4 znaki"
+    "passwordMin": "Hasło musi mieć co najmniej {{min}} znaków"
   },
   "dashboard": {
     "newNote": "Nowa notatka",
@@ -110,7 +110,7 @@
     "currentPasswordLabel": "Aktualne hasło",
     "newPasswordLabel": "Nowe hasło",
     "confirmNewPasswordLabel": "Potwierdź nowe hasło",
-    "newPasswordPlaceholder": "Co najmniej 4 znaki",
+    "newPasswordPlaceholder": "Co najmniej {{min}} znaków",
     "passwordsNoMatch": "Nowe hasła nie są zgodne.",
     "failedChangePassword": "Zmiana hasła nie powiodła się.",
     "changing": "Zmienianie...",
