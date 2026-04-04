@@ -9,13 +9,64 @@ import (
 	"strings"
 )
 
+// SSENoteData is the Data payload for note-related SSE events.
+type SSENoteData struct {
+	NoteID string `json:"note_id"`
+	Note   *Note  `json:"note"`
+}
+
+// SSEProfileIconData is the Data payload for profile_icon_updated SSE events.
+type SSEProfileIconData struct {
+	User *User `json:"user"`
+}
+
 // SSEEvent is a single event received from the server-sent events stream.
+// Depending on Type, either NoteData or ProfileData will be non-nil.
 type SSEEvent struct {
-	Type         string  `json:"type"`
-	NoteID       string  `json:"note_id,omitempty"`
-	SourceUserID string  `json:"source_user_id"`
-	TargetUserID string  `json:"target_user_id,omitempty"`
-	User         *User   `json:"user,omitempty"`
+	Type         string
+	SourceUserID string
+	TargetUserID string
+	NoteData     *SSENoteData        // set for note_created/updated/deleted/shared/unshared
+	ProfileData  *SSEProfileIconData // set for profile_icon_updated
+}
+
+// sseEventWire is the raw JSON shape of an SSE event envelope.
+type sseEventWire struct {
+	Type         string          `json:"type"`
+	SourceUserID string          `json:"source_user_id"`
+	TargetUserID string          `json:"target_user_id,omitempty"`
+	Data         json.RawMessage `json:"data,omitempty"`
+}
+
+func parseSSEEvent(raw []byte) (SSEEvent, bool) {
+	var wire sseEventWire
+	if err := json.Unmarshal(raw, &wire); err != nil {
+		return SSEEvent{}, false
+	}
+	ev := SSEEvent{
+		Type:         wire.Type,
+		SourceUserID: wire.SourceUserID,
+		TargetUserID: wire.TargetUserID,
+	}
+	switch wire.Type {
+	case "note_created", "note_updated", "note_deleted", "note_shared", "note_unshared":
+		var d SSENoteData
+		if len(wire.Data) > 0 {
+			if err := json.Unmarshal(wire.Data, &d); err != nil {
+				return SSEEvent{}, false
+			}
+		}
+		ev.NoteData = &d
+	case "profile_icon_updated":
+		var d SSEProfileIconData
+		if len(wire.Data) > 0 {
+			if err := json.Unmarshal(wire.Data, &d); err != nil {
+				return SSEEvent{}, false
+			}
+		}
+		ev.ProfileData = &d
+	}
+	return ev, true
 }
 
 // SubscribeSSE opens a long-lived SSE connection and sends each parsed event
@@ -47,8 +98,8 @@ func (c *Client) SubscribeSSE(ctx context.Context) (<-chan SSEEvent, error) {
 			if !strings.HasPrefix(line, "data: ") {
 				continue
 			}
-			var event SSEEvent
-			if err := json.Unmarshal([]byte(strings.TrimPrefix(line, "data: ")), &event); err != nil {
+			event, ok := parseSSEEvent([]byte(strings.TrimPrefix(line, "data: ")))
+			if !ok {
 				continue
 			}
 			select {

@@ -62,9 +62,10 @@ func TestProfileIconUploadSendsSSEToCollaborator(t *testing.T) {
 	require.True(t, found, "collaborator should receive profile_icon_updated SSE event")
 	assert.Equal(t, string(sse.EventProfileIconUpdated), event.Type)
 	assert.Equal(t, iconOwner.User.ID, event.SourceUserID)
-	require.NotNil(t, event.User, "event should carry updated user data")
-	assert.Equal(t, iconOwner.User.ID, event.User.ID)
-	assert.True(t, event.User.HasProfileIcon)
+	require.NotNil(t, event.ProfileData, "event should carry profile icon data")
+	require.NotNil(t, event.ProfileData.User, "event should carry updated user data")
+	assert.Equal(t, iconOwner.User.ID, event.ProfileData.User.ID)
+	assert.True(t, event.ProfileData.User.HasProfileIcon)
 }
 
 func TestProfileIconDeleteSendsSSEToCollaborator(t *testing.T) {
@@ -97,8 +98,9 @@ func TestProfileIconDeleteSendsSSEToCollaborator(t *testing.T) {
 
 	require.True(t, found, "collaborator should receive profile_icon_updated SSE event on delete")
 	assert.Equal(t, iconOwner.User.ID, event.SourceUserID)
-	require.NotNil(t, event.User)
-	assert.False(t, event.User.HasProfileIcon)
+	require.NotNil(t, event.ProfileData)
+	require.NotNil(t, event.ProfileData.User)
+	assert.False(t, event.ProfileData.User.HasProfileIcon)
 }
 
 func TestProfileIconUploadNoSSEToNonCollaborator(t *testing.T) {

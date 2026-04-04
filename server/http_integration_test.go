@@ -697,7 +697,9 @@ func TestSSEEndpoint(t *testing.T) { //nolint:gocognit
 		case event := <-eventCh:
 			assert.Equal(t, "note_created", event["type"])
 			assert.Equal(t, user.User.ID, event["source_user_id"])
-			assert.Equal(t, note.ID, event["note_id"])
+			data, _ := event["data"].(map[string]any)
+			require.NotNil(t, data, "event should have a data field")
+			assert.Equal(t, note.ID, data["note_id"])
 		case <-sseCtx.Done():
 			t.Fatal("timed out waiting for SSE event after note creation")
 		}

@@ -320,8 +320,8 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   }, [openNoteFromUrl]);
 
   const handleSSEEvent = useCallback((event: SSEEvent) => {
-    if (event.type === 'profile_icon_updated' && event.user) {
-      const updatedUser = event.user;
+    if (event.type === 'profile_icon_updated') {
+      const updatedUser = event.data.user;
       setUsersById(prev => {
         const next = new Map(prev);
         next.set(updatedUser.id, updatedUser);
@@ -330,17 +330,18 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       return;
     }
 
+    const { note_id } = event.data;
     const currentUserLostAccess =
       event.type === 'note_deleted' ||
       (event.type === 'note_unshared' && event.target_user_id === user?.id);
 
     if (currentUserLostAccess) {
-      if (editingNote && event.note_id === editingNote.id) {
+      if (editingNote && note_id === editingNote.id) {
         setIsModalOpen(false);
         setEditingNote(null);
         restoreReturnUrl();
       }
-      if (sharingNote && event.note_id === sharingNote.id) {
+      if (sharingNote && note_id === sharingNote.id) {
         setIsShareModalOpen(false);
         setSharingNote(null);
       }

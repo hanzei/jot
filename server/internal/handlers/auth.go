@@ -630,7 +630,7 @@ func (h *AuthHandler) publishProfileIconEvent(ctx context.Context, user *models.
 	h.hub.Publish(collaboratorIDs, sse.Event{
 		Type:         sse.EventProfileIconUpdated,
 		SourceUserID: user.ID,
-		User:         user,
+		Data:         sse.ProfileIconEventData{User: user},
 	})
 }
 
