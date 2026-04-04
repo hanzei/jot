@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router'
 import Login from '../Login'
 import { auth } from '@/utils/api'
 import { setUser, setSettings } from '@/utils/auth'
+import i18n from '@/i18n'
 
 vi.mock('@/utils/api', () => ({
   auth: {
@@ -39,21 +40,30 @@ describe('Login', () => {
   it('shows logo and registration link when registration is enabled', () => {
     renderLogin()
 
-    expect(screen.getByAltText('Jot logo')).toBeInTheDocument()
-    expect(screen.getByRole('link', { name: 'create a new account' })).toHaveAttribute('href', '/register')
+    expect(screen.getByRole('img', { name: i18n.t('auth.logoAlt') })).toBeInTheDocument()
+    expect(screen.getByRole('link', { name: i18n.t('auth.createNewAccount') })).toHaveAttribute('href', '/register')
+  })
+
+  it('hides registration link when registration is disabled', () => {
+    renderLogin({ registrationEnabled: false })
+
+    expect(screen.queryByRole('link', { name: i18n.t('auth.createNewAccount') })).not.toBeInTheDocument()
   })
 
   it('toggles password visibility', async () => {
     const user = userEvent.setup()
     renderLogin()
 
-    const passwordInput = screen.getByLabelText('Password')
+    const passwordLabel = i18n.t('auth.passwordPlaceholder')
+    const showPasswordLabel = `${i18n.t('auth.showPassword')} (${passwordLabel})`
+    const hidePasswordLabel = `${i18n.t('auth.hidePassword')} (${passwordLabel})`
+    const passwordInput = screen.getByLabelText(passwordLabel)
     expect(passwordInput).toHaveAttribute('type', 'password')
 
-    await user.click(screen.getByRole('button', { name: 'Show password' }))
+    await user.click(screen.getByRole('button', { name: showPasswordLabel }))
     expect(passwordInput).toHaveAttribute('type', 'text')
 
-    await user.click(screen.getByRole('button', { name: 'Hide password' }))
+    await user.click(screen.getByRole('button', { name: hidePasswordLabel }))
     expect(passwordInput).toHaveAttribute('type', 'password')
   })
 
@@ -61,15 +71,24 @@ describe('Login', () => {
     const user = userEvent.setup()
     const onLogin = vi.fn()
     vi.mocked(auth.login).mockResolvedValue({
-      user: { id: 'u1', username: 'jotuser', role: 'user' },
+      user: {
+        id: 'u1',
+        username: 'jotuser',
+        first_name: '',
+        last_name: '',
+        role: 'user',
+        has_profile_icon: false,
+        created_at: '',
+        updated_at: '',
+      },
       settings: { user_id: 'u1', language: 'system', theme: 'system', note_sort: 'manual', updated_at: '' },
     })
 
     renderLogin({ onLogin })
 
-    await user.type(screen.getByLabelText('Username'), 'jotuser')
-    await user.type(screen.getByLabelText('Password'), 'secret')
-    await user.click(screen.getByRole('button', { name: 'Sign in' }))
+    await user.type(screen.getByLabelText(i18n.t('auth.usernamePlaceholder')), 'jotuser')
+    await user.type(screen.getByLabelText(i18n.t('auth.passwordPlaceholder')), 'secret')
+    await user.click(screen.getByRole('button', { name: i18n.t('auth.signIn') }))
 
     await waitFor(() => {
       expect(auth.login).toHaveBeenCalledWith({ username: 'jotuser', password: 'secret' })
@@ -87,9 +106,9 @@ describe('Login', () => {
 
     renderLogin()
 
-    await user.type(screen.getByLabelText('Username'), 'jotuser')
-    await user.type(screen.getByLabelText('Password'), 'wrong')
-    await user.click(screen.getByRole('button', { name: 'Sign in' }))
+    await user.type(screen.getByLabelText(i18n.t('auth.usernamePlaceholder')), 'jotuser')
+    await user.type(screen.getByLabelText(i18n.t('auth.passwordPlaceholder')), 'wrong')
+    await user.click(screen.getByRole('button', { name: i18n.t('auth.signIn') }))
 
     const alert = await screen.findByRole('alert')
     expect(alert).toHaveTextContent('Invalid credentials')

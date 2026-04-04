@@ -35,11 +35,14 @@ export default function Register({ onRegister }: RegisterProps) {
   const passwordStrength = password.length === 0
     ? null
     : password.length < PASSWORD_MIN_LENGTH
-      ? t('auth.passwordStrengthWeak', { defaultValue: 'Weak' })
+      ? t('auth.passwordStrengthWeak')
       : password.length < 8
-        ? t('auth.passwordStrengthFair', { defaultValue: 'Fair' })
-        : t('auth.passwordStrengthStrong', { defaultValue: 'Strong' });
+        ? t('auth.passwordStrengthFair')
+        : t('auth.passwordStrengthStrong');
   const passwordsMismatch = confirmPassword.length > 0 && password !== confirmPassword;
+  const usernameMessageId = 'register-username-message';
+  const passwordMessageId = 'register-password-message';
+  const confirmPasswordMessageId = 'register-confirm-password-message';
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
@@ -89,7 +92,7 @@ export default function Register({ onRegister }: RegisterProps) {
       <div className="max-w-md w-full space-y-8">
         <div>
           <div className="mx-auto flex h-14 w-14 items-center justify-center rounded-2xl bg-white shadow-sm ring-1 ring-gray-200 dark:bg-slate-800 dark:ring-slate-700">
-            <img src="/icon.svg" alt="Jot logo" className="h-9 w-9" />
+            <img src="/icon.svg" alt={t('auth.logoAlt')} className="h-9 w-9" />
           </div>
           <h2 className="mt-6 text-center text-3xl font-extrabold text-gray-900 dark:text-white">
             {t('auth.createAccountTitle')}
@@ -116,6 +119,8 @@ export default function Register({ onRegister }: RegisterProps) {
                 type="text"
                 autoComplete="username"
                 required
+                aria-invalid={usernameValidationMessage ? 'true' : 'false'}
+                aria-describedby={usernameMessageId}
                 className={`mt-1 appearance-none relative block w-full px-3 py-2 border placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white bg-white dark:bg-slate-700 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm ${
                   usernameValidationMessage
                     ? 'border-red-300 dark:border-red-600'
@@ -126,7 +131,7 @@ export default function Register({ onRegister }: RegisterProps) {
                 onChange={(e) => setUsername(e.target.value)}
               />
               <div className="mt-1 flex items-center justify-between text-xs">
-                <p className={usernameValidationMessage ? 'text-red-600 dark:text-red-400' : 'text-gray-500 dark:text-gray-400'}>
+                <p id={usernameMessageId} className={usernameValidationMessage ? 'text-red-600 dark:text-red-400' : 'text-gray-500 dark:text-gray-400'}>
                   {usernameValidationMessage || t('auth.usernamePlaceholderLong')}
                 </p>
                 <span className={username.length > VALIDATION.USERNAME_MAX_LENGTH ? 'text-red-600 dark:text-red-400' : 'text-gray-500 dark:text-gray-400'}>
@@ -145,6 +150,8 @@ export default function Register({ onRegister }: RegisterProps) {
                   type={showPassword ? 'text' : 'password'}
                   autoComplete="new-password"
                   required
+                  aria-invalid={passwordTooShort ? 'true' : 'false'}
+                  aria-describedby={passwordMessageId}
                   className={`appearance-none relative block w-full px-3 py-2 pr-10 border placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white bg-white dark:bg-slate-700 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm ${
                     passwordTooShort
                       ? 'border-red-300 dark:border-red-600'
@@ -157,19 +164,20 @@ export default function Register({ onRegister }: RegisterProps) {
                 <button
                   type="button"
                   onClick={() => setShowPassword((current) => !current)}
-                  className="absolute inset-y-0 right-0 flex items-center px-3 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 focus:outline-none"
+                  className="absolute inset-y-0 right-0 z-10 flex items-center px-3 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-slate-700 rounded-r-md"
+                  aria-pressed={showPassword}
                   aria-label={showPassword
-                    ? t('auth.hidePassword', { defaultValue: 'Hide password' })
-                    : t('auth.showPassword', { defaultValue: 'Show password' })}
+                    ? `${t('auth.hidePassword')} (${t('auth.passwordPlaceholder')})`
+                    : `${t('auth.showPassword')} (${t('auth.passwordPlaceholder')})`}
                 >
                   {showPassword ? <EyeSlashIcon className="h-5 w-5" /> : <EyeIcon className="h-5 w-5" />}
                 </button>
               </div>
-              <p className={`mt-1 text-xs ${passwordTooShort ? 'text-red-600 dark:text-red-400' : 'text-gray-500 dark:text-gray-400'}`}>
+              <p id={passwordMessageId} className={`mt-1 text-xs ${passwordTooShort ? 'text-red-600 dark:text-red-400' : 'text-gray-500 dark:text-gray-400'}`}>
                 {passwordTooShort
                   ? t('auth.passwordMin')
-                  : t('auth.passwordHint', { defaultValue: 'At least {{min}} characters', min: PASSWORD_MIN_LENGTH })}
-                {passwordStrength ? ` • ${t('auth.passwordStrength', { defaultValue: 'Strength' })}: ${passwordStrength}` : ''}
+                  : t('auth.passwordHint', { min: PASSWORD_MIN_LENGTH })}
+                {passwordStrength ? ` • ${t('auth.passwordStrength')}: ${passwordStrength}` : ''}
               </p>
             </div>
             <div>
@@ -183,6 +191,8 @@ export default function Register({ onRegister }: RegisterProps) {
                   type={showConfirmPassword ? 'text' : 'password'}
                   autoComplete="new-password"
                   required
+                  aria-invalid={passwordsMismatch ? 'true' : 'false'}
+                  aria-describedby={passwordsMismatch ? confirmPasswordMessageId : undefined}
                   className={`appearance-none relative block w-full px-3 py-2 pr-10 border placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white bg-white dark:bg-slate-700 rounded-md focus:outline-none focus:ring-blue-500 focus:border-blue-500 sm:text-sm ${
                     passwordsMismatch
                       ? 'border-red-300 dark:border-red-600'
@@ -195,16 +205,17 @@ export default function Register({ onRegister }: RegisterProps) {
                 <button
                   type="button"
                   onClick={() => setShowConfirmPassword((current) => !current)}
-                  className="absolute inset-y-0 right-0 flex items-center px-3 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 focus:outline-none"
+                  className="absolute inset-y-0 right-0 z-10 flex items-center px-3 text-gray-500 hover:text-gray-700 dark:text-gray-400 dark:hover:text-gray-200 focus:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1 dark:focus-visible:ring-offset-slate-700 rounded-r-md"
+                  aria-pressed={showConfirmPassword}
                   aria-label={showConfirmPassword
-                    ? t('auth.hidePassword', { defaultValue: 'Hide password' })
-                    : t('auth.showPassword', { defaultValue: 'Show password' })}
+                    ? `${t('auth.hidePassword')} (${t('auth.confirmPasswordPlaceholder')})`
+                    : `${t('auth.showPassword')} (${t('auth.confirmPasswordPlaceholder')})`}
                 >
                   {showConfirmPassword ? <EyeSlashIcon className="h-5 w-5" /> : <EyeIcon className="h-5 w-5" />}
                 </button>
               </div>
               {passwordsMismatch && (
-                <p className="mt-1 text-xs text-red-600 dark:text-red-400">
+                <p id={confirmPasswordMessageId} className="mt-1 text-xs text-red-600 dark:text-red-400">
                   {t('auth.passwordsNoMatch')}
                 </p>
               )}

@@ -5,6 +5,7 @@ import { MemoryRouter } from 'react-router'
 import Register from '../Register'
 import { auth } from '@/utils/api'
 import { setUser, setSettings } from '@/utils/auth'
+import i18n from '@/i18n'
 
 vi.mock('@/utils/api', () => ({
   auth: {
@@ -24,6 +25,8 @@ const renderRegister = (onRegister = vi.fn()) => render(
 )
 
 describe('Register', () => {
+  const t = i18n.t.bind(i18n)
+
   beforeEach(() => {
     vi.clearAllMocks()
   })
@@ -32,43 +35,51 @@ describe('Register', () => {
     const user = userEvent.setup()
     renderRegister()
 
-    expect(screen.getByAltText('Jot logo')).toBeInTheDocument()
+    expect(screen.getByAltText(t('auth.logoAlt'))).toBeInTheDocument()
 
-    const passwordInput = screen.getByLabelText('Password')
-    const confirmInput = screen.getByLabelText('Confirm password')
-    const toggleButtons = screen.getAllByRole('button', { name: 'Show password' })
+    const passwordInput = screen.getByLabelText(t('auth.passwordPlaceholder'))
+    const confirmInput = screen.getByLabelText(t('auth.confirmPasswordPlaceholder'))
+    const passwordToggleButton = screen.getByRole('button', {
+      name: `${t('auth.showPassword')} (${t('auth.passwordPlaceholder')})`,
+    })
+    const confirmPasswordToggleButton = screen.getByRole('button', {
+      name: `${t('auth.showPassword')} (${t('auth.confirmPasswordPlaceholder')})`,
+    })
     expect(passwordInput).toHaveAttribute('type', 'password')
     expect(confirmInput).toHaveAttribute('type', 'password')
 
-    await user.click(toggleButtons[0])
+    await user.click(passwordToggleButton)
     expect(passwordInput).toHaveAttribute('type', 'text')
+    expect(passwordToggleButton).toHaveAttribute('aria-pressed', 'true')
 
-    await user.click(toggleButtons[1])
+    await user.click(confirmPasswordToggleButton)
     expect(confirmInput).toHaveAttribute('type', 'text')
+    expect(confirmPasswordToggleButton).toHaveAttribute('aria-pressed', 'true')
   })
 
   it('shows inline username and password validation while typing', async () => {
     const user = userEvent.setup()
     renderRegister()
 
-    const usernameInput = screen.getByLabelText('Username')
-    const passwordInput = screen.getByLabelText('Password')
-    const confirmInput = screen.getByLabelText('Confirm password')
+    const usernameInput = screen.getByLabelText(t('auth.usernamePlaceholder'))
+    const passwordInput = screen.getByLabelText(t('auth.passwordPlaceholder'))
+    const confirmInput = screen.getByLabelText(t('auth.confirmPasswordPlaceholder'))
 
     await user.type(usernameInput, 'a')
-    expect(screen.getByText('Username must be at least 2 characters')).toBeInTheDocument()
+    expect(screen.getByText(t('auth.usernameMin'))).toBeInTheDocument()
 
     await user.clear(usernameInput)
     await user.type(usernameInput, 'valid_user')
-    expect(screen.getByText('valid_user')).toBeInTheDocument()
+    expect(usernameInput).toHaveValue('valid_user')
+    expect(screen.getByText(t('auth.usernamePlaceholderLong'))).toBeInTheDocument()
     expect(screen.getByText('10/30')).toBeInTheDocument()
 
     await user.type(passwordInput, '123')
-    expect(screen.getByText('Password must be at least 4 characters')).toBeInTheDocument()
-    expect(screen.getByText('Strength: Weak', { exact: false })).toBeInTheDocument()
+    expect(screen.getByText(new RegExp(t('auth.passwordMin')))).toBeInTheDocument()
+    expect(screen.getByText(new RegExp(`${t('auth.passwordStrength')}:\\s*${t('auth.passwordStrengthWeak')}`, 'i'))).toBeInTheDocument()
 
     await user.type(confirmInput, 'xxx')
-    expect(screen.getByText('Passwords do not match')).toBeInTheDocument()
+    expect(screen.getByText(t('auth.passwordsNoMatch'))).toBeInTheDocument()
   })
 
   it('shows styled alert when register API fails', async () => {
@@ -78,10 +89,10 @@ describe('Register', () => {
     })
     renderRegister()
 
-    await user.type(screen.getByLabelText('Username'), 'valid_user')
-    await user.type(screen.getByLabelText('Password'), 'validpass')
-    await user.type(screen.getByLabelText('Confirm password'), 'validpass')
-    await user.click(screen.getByRole('button', { name: 'Create account' }))
+    await user.type(screen.getByLabelText(t('auth.usernamePlaceholder')), 'valid_user')
+    await user.type(screen.getByLabelText(t('auth.passwordPlaceholder')), 'validpass')
+    await user.type(screen.getByLabelText(t('auth.confirmPasswordPlaceholder')), 'validpass')
+    await user.click(screen.getByRole('button', { name: t('auth.createAccount') }))
 
     const alert = await screen.findByRole('alert')
     expect(alert).toHaveTextContent('Username taken')
@@ -92,15 +103,24 @@ describe('Register', () => {
     const user = userEvent.setup()
     const onRegister = vi.fn()
     vi.mocked(auth.register).mockResolvedValue({
-      user: { id: 'u1', username: 'valid_user', role: 'user' },
+      user: {
+        id: 'u1',
+        username: 'valid_user',
+        role: 'user',
+        first_name: '',
+        last_name: '',
+        has_profile_icon: false,
+        created_at: '',
+        updated_at: '',
+      },
       settings: { user_id: 'u1', language: 'system', theme: 'system', note_sort: 'manual', updated_at: '' },
     })
     renderRegister(onRegister)
 
-    await user.type(screen.getByLabelText('Username'), 'valid_user')
-    await user.type(screen.getByLabelText('Password'), 'validpass')
-    await user.type(screen.getByLabelText('Confirm password'), 'validpass')
-    await user.click(screen.getByRole('button', { name: 'Create account' }))
+    await user.type(screen.getByLabelText(t('auth.usernamePlaceholder')), 'valid_user')
+    await user.type(screen.getByLabelText(t('auth.passwordPlaceholder')), 'validpass')
+    await user.type(screen.getByLabelText(t('auth.confirmPasswordPlaceholder')), 'validpass')
+    await user.click(screen.getByRole('button', { name: t('auth.createAccount') }))
 
     await waitFor(() => {
       expect(auth.register).toHaveBeenCalledWith({ username: 'valid_user', password: 'validpass' })

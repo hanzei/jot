@@ -36,7 +36,15 @@
     "usernameChars": "Username can only contain letters, numbers, underscores, and hyphens",
     "usernameEdge": "Username cannot start or end with underscore or hyphen",
     "passwordsNoMatch": "Passwords do not match",
-    "passwordMin": "Password must be at least 4 characters"
+    "passwordMin": "Password must be at least 4 characters",
+    "showPassword": "Show password",
+    "hidePassword": "Hide password",
+    "passwordHint": "At least {{min}} characters",
+    "passwordStrength": "Strength",
+    "passwordStrengthWeak": "Weak",
+    "passwordStrengthFair": "Fair",
+    "passwordStrengthStrong": "Strong",
+    "logoAlt": "Jot logo"
   },
   "dashboard": {
     "newNote": "New Note",

@@ -36,7 +36,15 @@
     "usernameChars": "Nazwa użytkownika może zawierać tylko litery, cyfry, podkreślenia i myślniki",
     "usernameEdge": "Nazwa użytkownika nie może zaczynać się ani kończyć podkreśleniem lub myślnikiem",
     "passwordsNoMatch": "Hasła nie są zgodne",
-    "passwordMin": "Hasło musi mieć co najmniej 4 znaki"
+    "passwordMin": "Hasło musi mieć co najmniej 4 znaki",
+    "showPassword": "Pokaż hasło",
+    "hidePassword": "Ukryj hasło",
+    "passwordHint": "Co najmniej {{min}} znaków",
+    "passwordStrength": "Siła",
+    "passwordStrengthWeak": "Słabe",
+    "passwordStrengthFair": "Średnie",
+    "passwordStrengthStrong": "Silne",
+    "logoAlt": "Logo Jot"
   },
   "dashboard": {
     "newNote": "Nowa notatka",
