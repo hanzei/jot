@@ -138,6 +138,11 @@ export default function LabelPicker({ note, selectedLabels, onLocalChange, onRef
           updated_at: new Date().toISOString(),
         };
         onLocalChange?.([...(selectedLabels ?? []), placeholder]);
+        // Prevent the auto-focus effect from firing when allLabels.length changes
+        // due to this creation — the Enter key that triggered creation is still
+        // being processed and auto-focusing a button would deliver its keyup to
+        // the button, toggling the label back off.
+        hasAutoFocused.current = true;
         setAllLabels(prev => [...prev, placeholder]);
       }
       setNewName('');
@@ -150,6 +155,7 @@ export default function LabelPicker({ note, selectedLabels, onLocalChange, onRef
       labelsApi.getAll().then(setAllLabels).catch((err: Error) => onError?.(err.message));
       setNewName('');
       setCreating(false);
+      hasAutoFocused.current = true; // suppress auto-focus from the async label refresh
       onNoteUpdate?.(updatedNote);
       onRefresh?.();
     } catch (err) {
