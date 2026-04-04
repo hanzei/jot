@@ -171,7 +171,12 @@ describe('Admin', () => {
     })
   })
 
-  describe('Create user form validation', () => {
+  describe('Create user modal', () => {
+    const openCreateModal = async (user: ReturnType<typeof userEvent.setup>) => {
+      await user.click(screen.getByRole('button', { name: /^Create User$/ }))
+      return screen.getByRole('dialog', { name: 'Create New User' })
+    }
+
     it('shows helper text and username counter', async () => {
       const user = userEvent.setup()
       renderAdmin()
@@ -180,14 +185,13 @@ describe('Admin', () => {
         expect(screen.getByText('regularuser')).toBeInTheDocument()
       })
 
-      await user.click(screen.getByRole('button', { name: /^Create User$/ }))
+      const dialog = await openCreateModal(user)
 
-      expect(screen.getByText('2–30 characters. Letters, numbers, underscores, and hyphens.')).toBeInTheDocument()
-      expect(screen.getByText('At least 4 characters')).toBeInTheDocument()
-      expect(screen.getByText(`0/${VALIDATION.USERNAME_MAX_LENGTH}`)).toBeInTheDocument()
+      expect(within(dialog).getByText('2–30 characters. Letters, numbers, underscores, and hyphens.')).toBeInTheDocument()
+      expect(within(dialog).getByText('At least 4 characters')).toBeInTheDocument()
+      expect(within(dialog).getByText(`0/${VALIDATION.USERNAME_MAX_LENGTH}`)).toBeInTheDocument()
 
-      const submitButton = screen.getByRole('button', { name: 'Create User' })
-      expect(submitButton).toBeEnabled()
+      expect(within(dialog).getByRole('button', { name: 'Create User' })).toBeEnabled()
     })
 
     it('shows username validation errors only after blur', async () => {
@@ -198,14 +202,14 @@ describe('Admin', () => {
         expect(screen.getByText('regularuser')).toBeInTheDocument()
       })
 
-      await user.click(screen.getByRole('button', { name: /^Create User$/ }))
+      const dialog = await openCreateModal(user)
 
-      const usernameInput = screen.getByLabelText('Username')
+      const usernameInput = within(dialog).getByLabelText('Username')
       await user.type(usernameInput, 'bad*name')
-      expect(screen.queryByText('Username can only contain letters, numbers, underscores, and hyphens')).not.toBeInTheDocument()
+      expect(within(dialog).queryByText('Username can only contain letters, numbers, underscores, and hyphens')).not.toBeInTheDocument()
 
       await user.tab()
-      expect(screen.getByText('Username can only contain letters, numbers, underscores, and hyphens')).toBeInTheDocument()
+      expect(within(dialog).getByText('Username can only contain letters, numbers, underscores, and hyphens')).toBeInTheDocument()
     })
 
     it('shows password validation error on blur', async () => {
@@ -216,14 +220,14 @@ describe('Admin', () => {
         expect(screen.getByText('regularuser')).toBeInTheDocument()
       })
 
-      await user.click(screen.getByRole('button', { name: /^Create User$/ }))
+      const dialog = await openCreateModal(user)
 
-      const passwordInput = screen.getByLabelText('Password')
+      const passwordInput = within(dialog).getByLabelText('Password')
       await user.type(passwordInput, '123')
       await user.tab()
 
-      expect(screen.getByText('Password must be at least 4 characters')).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: 'Create User' })).toBeDisabled()
+      expect(within(dialog).getByText('Password must be at least 4 characters')).toBeInTheDocument()
+      expect(within(dialog).getByRole('button', { name: 'Create User' })).toBeDisabled()
     })
 
     it('shows username edge validation error on blur', async () => {
@@ -234,13 +238,13 @@ describe('Admin', () => {
         expect(screen.getByText('regularuser')).toBeInTheDocument()
       })
 
-      await user.click(screen.getByRole('button', { name: /^Create User$/ }))
+      const dialog = await openCreateModal(user)
 
-      const usernameInput = screen.getByLabelText('Username')
+      const usernameInput = within(dialog).getByLabelText('Username')
       await user.type(usernameInput, '-validchars')
       await user.tab()
 
-      expect(screen.getByText('Username cannot start or end with underscore or hyphen')).toBeInTheDocument()
+      expect(within(dialog).getByText('Username cannot start or end with underscore or hyphen')).toBeInTheDocument()
     })
 
     it('turns username counter red when over the max length', async () => {
@@ -251,12 +255,12 @@ describe('Admin', () => {
         expect(screen.getByText('regularuser')).toBeInTheDocument()
       })
 
-      await user.click(screen.getByRole('button', { name: /^Create User$/ }))
+      const dialog = await openCreateModal(user)
 
-      const usernameInput = screen.getByLabelText('Username')
+      const usernameInput = within(dialog).getByLabelText('Username')
       await user.type(usernameInput, 'a'.repeat(VALIDATION.USERNAME_MAX_LENGTH + 1))
 
-      const counter = screen.getByText(`${VALIDATION.USERNAME_MAX_LENGTH + 1}/${VALIDATION.USERNAME_MAX_LENGTH}`)
+      const counter = within(dialog).getByText(`${VALIDATION.USERNAME_MAX_LENGTH + 1}/${VALIDATION.USERNAME_MAX_LENGTH}`)
       expect(counter).toHaveClass('text-red-600')
     })
 
@@ -280,12 +284,12 @@ describe('Admin', () => {
         expect(screen.getByText('regularuser')).toBeInTheDocument()
       })
 
-      await user.click(screen.getByRole('button', { name: /^Create User$/ }))
+      const dialog = await openCreateModal(user)
 
-      await user.type(screen.getByLabelText('Username'), 'new_user')
-      await user.type(screen.getByLabelText('Password'), 'abcd')
+      await user.type(within(dialog).getByLabelText('Username'), 'new_user')
+      await user.type(within(dialog).getByLabelText('Password'), 'abcd')
 
-      const submitButton = screen.getByRole('button', { name: 'Create User' })
+      const submitButton = within(dialog).getByRole('button', { name: 'Create User' })
       expect(submitButton).toBeEnabled()
 
       await user.click(submitButton)
@@ -296,6 +300,36 @@ describe('Admin', () => {
           password: 'abcd',
           role: 'user',
         })
+      })
+    })
+
+    it('closes modal after successful user creation', async () => {
+      const user = userEvent.setup()
+      const newUser: User = {
+        id: 'user4',
+        username: 'new_user',
+        first_name: '',
+        last_name: '',
+        role: 'user',
+        created_at: '2023-01-04T00:00:00Z',
+        updated_at: '2023-01-04T00:00:00Z',
+        has_profile_icon: false,
+      }
+      vi.mocked(admin.createUser).mockResolvedValue(newUser)
+
+      renderAdmin()
+
+      await waitFor(() => {
+        expect(screen.getByText('regularuser')).toBeInTheDocument()
+      })
+
+      const dialog = await openCreateModal(user)
+      await user.type(within(dialog).getByLabelText('Username'), 'new_user')
+      await user.type(within(dialog).getByLabelText('Password'), 'abcd')
+      await user.click(within(dialog).getByRole('button', { name: 'Create User' }))
+
+      await waitFor(() => {
+        expect(screen.queryByRole('dialog', { name: 'Create New User' })).not.toBeInTheDocument()
       })
     })
 
@@ -310,13 +344,13 @@ describe('Admin', () => {
         expect(screen.getByText('regularuser')).toBeInTheDocument()
       })
 
-      await user.click(screen.getByRole('button', { name: /^Create User$/ }))
-      await user.type(screen.getByLabelText('Username'), 'new_user')
-      await user.type(screen.getByLabelText('Password'), 'abcd')
-      await user.click(screen.getByRole('button', { name: 'Create User' }))
+      const dialog = await openCreateModal(user)
+      await user.type(within(dialog).getByLabelText('Username'), 'new_user')
+      await user.type(within(dialog).getByLabelText('Password'), 'abcd')
+      await user.click(within(dialog).getByRole('button', { name: 'Create User' }))
 
       await waitFor(() => {
-        expect(screen.getByRole('alert')).toHaveTextContent('username already exists')
+        expect(within(dialog).getByRole('alert')).toHaveTextContent('username already exists')
       })
     })
   })
