@@ -155,10 +155,11 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
       data-testid="note-card"
       data-note-card="true"
       tabIndex={0}
-      aria-label={note.title || t('note.untitledNote')}
+      aria-label={note.title || t('share.untitledNote')}
       className={`note-card ${getColorClass(note.color)} p-4 relative group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1 ${isUpdating ? 'opacity-50' : ''
         }`}
       onKeyDown={(e) => {
+        if (e.target !== e.currentTarget) return;
         if (!inBin && (e.key === 'Enter' || e.key === ' ')) {
           e.preventDefault();
           onEdit(note);

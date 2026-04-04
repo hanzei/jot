@@ -13,7 +13,7 @@
     "openMobileApp": "Openen in mobiele app",
     "openMobileAppDescription": "Liever de native mobiele ervaring?",
     "dismissMobileAppBanner": "Verbergen",
-    "skipToMainContent": "Skip to main content"
+    "skipToMainContent": "Ga naar hoofdinhoud"
   },
   "auth": {
     "signInTitle": "Inloggen bij Jot",
@@ -195,7 +195,7 @@
     "helpKey": "?",
     "helpDescription": "Hulp bij sneltoetsen openen",
     "openNoteKey": "Enter",
-    "openNoteDescription": "Open the focused note",
+    "openNoteDescription": "De gefocuste notitie openen",
     "escapeKey": "Esc",
     "escapeDescription": "Het actieve modaal of dialoogvenster sluiten"
   },
@@ -296,7 +296,7 @@
     "lastEdited": "Laatst bewerkt: {{date}}",
     "saving": "Opslaan...",
     "saved": "Opgeslagen",
-    "colorPickerLabel": "Select note color",
+    "colorPickerLabel": "Notitiekleur selecteren",
     "colorWhite": "Wit",
     "colorCoral": "Koraal",
     "colorYellow": "Geel",

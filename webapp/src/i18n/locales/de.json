@@ -13,7 +13,7 @@
     "openMobileApp": "In mobiler App öffnen",
     "openMobileAppDescription": "Lieber die native mobile App verwenden?",
     "dismissMobileAppBanner": "Ausblenden",
-    "skipToMainContent": "Skip to main content"
+    "skipToMainContent": "Zum Hauptinhalt springen"
   },
   "auth": {
     "signInTitle": "Bei Jot anmelden",
@@ -195,7 +195,7 @@
     "helpKey": "?",
     "helpDescription": "Hilfe zu Tastenkombinationen öffnen",
     "openNoteKey": "Enter",
-    "openNoteDescription": "Open the focused note",
+    "openNoteDescription": "Die fokussierte Notiz öffnen",
     "escapeKey": "Esc",
     "escapeDescription": "Aktives Modal oder Dialog schließen"
   },
@@ -296,7 +296,7 @@
     "lastEdited": "Zuletzt bearbeitet: {{date}}",
     "saving": "Speichern...",
     "saved": "Gespeichert",
-    "colorPickerLabel": "Select note color",
+    "colorPickerLabel": "Notizenfarbe auswählen",
     "colorWhite": "Weiß",
     "colorCoral": "Koralle",
     "colorYellow": "Gelb",
