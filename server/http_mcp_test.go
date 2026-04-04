@@ -163,6 +163,51 @@ func TestMCPLabelCRUD(t *testing.T) {
 	assert.Empty(t, labels)
 }
 
+// TestMCPPermanentDelete verifies that the permanent flag on delete_note
+// removes a trashed note from the trash entirely.
+func TestMCPPermanentDelete(t *testing.T) {
+	ts := setupTestServer(t)
+	tu := ts.createTestUser(t, "mcpuser6", "password", false)
+	sess := setupMCPSession(t, ts, tu)
+
+	var created client.Note
+	callTool(t, sess, "create_note", map[string]any{"title": "permanent delete"}, &created)
+
+	// soft-delete first
+	callTool(t, sess, "delete_note", map[string]any{"id": created.ID}, nil)
+
+	// permanently delete
+	callTool(t, sess, "delete_note", map[string]any{"id": created.ID, "permanent": true}, nil)
+
+	// should be absent from both active and trashed lists
+	var trashed []client.Note
+	callTool(t, sess, "list_notes", map[string]any{"trashed": true}, &trashed)
+	assert.Empty(t, trashed)
+}
+
+// TestMCPCrossUserIsolation verifies that a user cannot access another user's
+// notes via MCP tools.
+func TestMCPCrossUserIsolation(t *testing.T) {
+	ts := setupTestServer(t)
+	alice := ts.createTestUser(t, "alice_mcp", "password", false)
+	bob := ts.createTestUser(t, "bob_mcp", "password", false)
+
+	aliceSess := setupMCPSession(t, ts, alice)
+	bobSess := setupMCPSession(t, ts, bob)
+
+	// Alice creates a note.
+	var aliceNote client.Note
+	callTool(t, aliceSess, "create_note", map[string]any{"title": "Alice's note"}, &aliceNote)
+
+	// Bob tries to get Alice's note — should get a tool error.
+	result, err := bobSess.CallTool(t.Context(), &mcp.CallToolParams{
+		Name:      "get_note",
+		Arguments: map[string]any{"id": aliceNote.ID},
+	})
+	require.NoError(t, err)
+	assert.True(t, result.IsError, "expected tool error when accessing another user's note")
+}
+
 func TestMCPUnauthenticated(t *testing.T) {
 	ts := setupTestServer(t)
 

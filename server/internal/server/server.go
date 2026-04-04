@@ -22,9 +22,9 @@ import (
 	"github.com/hanzei/jot/server/internal/database"
 	"github.com/hanzei/jot/server/internal/handlers"
 	"github.com/hanzei/jot/server/internal/logutil"
+	"github.com/hanzei/jot/server/internal/mcphandler"
 	"github.com/hanzei/jot/server/internal/models"
 	"github.com/hanzei/jot/server/internal/sse"
-	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/sirupsen/logrus"
 	httpSwagger "github.com/swaggo/http-swagger/v2"
 )
@@ -204,12 +204,7 @@ func (s *Server) setupRoutes() error {
 			r.Get("/sessions", s.wrapHandler(s.sessionsHandler.ListSessions))
 			r.Delete("/sessions/{id}", s.wrapHandler(s.sessionsHandler.RevokeSession))
 
-			mcpHandler := mcp.NewStreamableHTTPHandler(s.buildMCPServer, &mcp.StreamableHTTPOptions{
-				// Jot's existing CORS middleware and cop.Handler already provide
-				// equivalent cross-origin protection for this route.
-				DisableLocalhostProtection: true,
-			})
-			r.Handle("/mcp", mcpHandler)
+			r.Handle("/mcp", mcphandler.New(s.noteStore, s.labelStore).NewStreamableHTTPHandler())
 		})
 
 		r.Group(func(r chi.Router) {
