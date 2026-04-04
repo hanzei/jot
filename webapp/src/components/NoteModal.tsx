@@ -206,7 +206,7 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
       {!isCompleted && (
         <div
           {...listeners}
-          className="cursor-grab active:cursor-grabbing p-1 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
+          className="cursor-grab active:cursor-grabbing p-1 text-gray-400 dark:text-gray-300 hover:text-gray-600 dark:hover:text-gray-100"
         >
           <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
             <path d="M7 2a2 2 0 1 1 .001 4.001A2 2 0 0 1 7 2zm0 6a2 2 0 1 1 .001 4.001A2 2 0 0 1 7 8zm0 6a2 2 0 1 1 .001 4.001A2 2 0 0 1 7 14zm6-8a2 2 0 1 1-.001-4.001A2 2 0 0 1 13 6zm0 2a2 2 0 1 1 .001 4.001A2 2 0 0 1 13 8zm0 6a2 2 0 1 1 .001 4.001A2 2 0 0 1 13 14z" />
@@ -345,11 +345,11 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
               !isCompleted && (
                 <button
                   onClick={() => setShowAssigneePicker(true)}
-                  className="w-5 h-5 rounded-full border border-dashed border-gray-300 dark:border-slate-600 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors opacity-0 group-hover/item:opacity-100 focus:opacity-100 focus-visible:ring-2 focus-visible:ring-blue-500 touch-visible"
+                  className="w-5 h-5 rounded-full border border-dashed border-gray-300 dark:border-gray-400 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-white/10 transition-colors opacity-0 group-hover/item:opacity-100 focus:opacity-100 focus-visible:ring-2 focus-visible:ring-blue-500 touch-visible"
                   title={t('note.assignItem')}
                   aria-label={t('note.assignItem')}
                 >
-                  <UserPlusIcon className="h-3 w-3 text-gray-400 dark:text-gray-500" aria-hidden="true" />
+                  <UserPlusIcon className="h-3 w-3 text-gray-400 dark:text-gray-300" aria-hidden="true" />
                 </button>
               )
             )}
@@ -368,7 +368,7 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
 
       <button
         onClick={() => onRemoveTodoItem(item.id)}
-        className="ml-auto p-1 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
+        className="ml-auto p-1 text-gray-400 dark:text-gray-300 hover:text-gray-600 dark:hover:text-gray-100"
       >
         <TrashIcon className="h-4 w-4" />
       </button>
@@ -1403,7 +1403,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
           }`}
         >
           {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-slate-600">
+          <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-white/20">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
               {note ? t('note.editNote') : t('note.newNote')}
             </h2>
@@ -1659,7 +1659,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
 
                 {/* Completed items section */}
                 {completedItems.length > 0 && (
-                  <div className="border-t border-gray-200 dark:border-slate-600 pt-3">
+                  <div className="border-t border-gray-200 dark:border-white/20 pt-3">
                     <button
                       onClick={handleToggleCompleted}
                       className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-white mb-2"
@@ -1773,7 +1773,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
           </div>
 
           {/* Footer */}
-          <div className="flex justify-between items-center p-4 border-t border-gray-200 dark:border-slate-600">
+          <div className="flex justify-between items-center p-4 border-t border-gray-200 dark:border-white/20">
             {note && (
               <p className="text-sm text-gray-500 dark:text-gray-400">
                 {t('note.lastEdited', { date: new Date(note.updated_at).toLocaleString(i18n.resolvedLanguage) })}
