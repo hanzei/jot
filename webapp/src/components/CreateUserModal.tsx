@@ -62,10 +62,6 @@ export default function CreateUserModal({ onClose, onSuccess }: CreateUserModalP
     setTouched(prev => ({ ...prev, [field]: true }));
   };
 
-  const handleClose = () => {
-    onClose();
-  };
-
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setError('');
@@ -78,7 +74,7 @@ export default function CreateUserModal({ onClose, onSuccess }: CreateUserModalP
     try {
       const newUser = await admin.createUser(formData);
       onSuccess(newUser);
-      handleClose();
+      onClose();
     } catch (err: unknown) {
       if (isAxiosError(err)) {
         const msg = typeof err.response?.data === 'string' ? err.response.data.trim() : '';
@@ -92,7 +88,7 @@ export default function CreateUserModal({ onClose, onSuccess }: CreateUserModalP
   };
 
   return (
-    <Dialog open={true} onClose={loading ? () => {} : handleClose} className="relative z-50">
+    <Dialog open={true} onClose={loading ? () => {} : onClose} className="relative z-50">
       <div className="fixed inset-0 bg-black/25 dark:bg-black/50" aria-hidden="true" />
       <div className="fixed inset-0 overflow-y-auto">
         <div className="flex min-h-full items-center justify-center p-4">
@@ -102,7 +98,7 @@ export default function CreateUserModal({ onClose, onSuccess }: CreateUserModalP
                 {t('admin.createNewUser')}
               </DialogTitle>
               <button
-                onClick={handleClose}
+                onClick={onClose}
                 disabled={loading}
                 aria-label={t('common.close')}
                 className="text-gray-400 hover:text-gray-600 dark:hover:text-gray-300 disabled:opacity-50"
@@ -187,8 +183,9 @@ export default function CreateUserModal({ onClose, onSuccess }: CreateUserModalP
                 </div>
 
                 <div>
-                  <label className="flex items-center">
+                  <label htmlFor="create-admin-role" className="flex items-center">
                     <input
+                      id="create-admin-role"
                       type="checkbox"
                       checked={formData.role === ROLES.ADMIN}
                       onChange={(e) => setFormData({ ...formData, role: e.target.checked ? ROLES.ADMIN : ROLES.USER })}
@@ -206,7 +203,7 @@ export default function CreateUserModal({ onClose, onSuccess }: CreateUserModalP
               <div className="flex justify-end gap-2 px-6 py-4 border-t border-gray-200 dark:border-slate-700">
                 <button
                   type="button"
-                  onClick={handleClose}
+                  onClick={onClose}
                   disabled={loading}
                   className="px-3 py-2 text-sm font-medium text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 border border-gray-300 dark:border-slate-600 rounded-md hover:bg-gray-50 dark:hover:bg-slate-600 disabled:opacity-50"
                 >

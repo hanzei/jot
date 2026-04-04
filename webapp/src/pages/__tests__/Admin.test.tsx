@@ -172,6 +172,17 @@ describe('Admin', () => {
   })
 
   describe('Create user modal', () => {
+    const newUser: User = {
+      id: 'user4',
+      username: 'new_user',
+      first_name: '',
+      last_name: '',
+      role: 'user',
+      created_at: '2023-01-04T00:00:00Z',
+      updated_at: '2023-01-04T00:00:00Z',
+      has_profile_icon: false,
+    }
+
     const openCreateModal = async (user: ReturnType<typeof userEvent.setup>) => {
       await user.click(screen.getByRole('button', { name: /^Create User$/ }))
       return screen.getByRole('dialog', { name: 'Create New User' })
@@ -266,16 +277,6 @@ describe('Admin', () => {
 
     it('enables submit for valid fields and creates a user', async () => {
       const user = userEvent.setup()
-      const newUser: User = {
-        id: 'user4',
-        username: 'new_user',
-        first_name: '',
-        last_name: '',
-        role: 'user',
-        created_at: '2023-01-04T00:00:00Z',
-        updated_at: '2023-01-04T00:00:00Z',
-        has_profile_icon: false,
-      }
       vi.mocked(admin.createUser).mockResolvedValue(newUser)
 
       renderAdmin()
@@ -305,16 +306,6 @@ describe('Admin', () => {
 
     it('closes modal after successful user creation', async () => {
       const user = userEvent.setup()
-      const newUser: User = {
-        id: 'user4',
-        username: 'new_user',
-        first_name: '',
-        last_name: '',
-        role: 'user',
-        created_at: '2023-01-04T00:00:00Z',
-        updated_at: '2023-01-04T00:00:00Z',
-        has_profile_icon: false,
-      }
       vi.mocked(admin.createUser).mockResolvedValue(newUser)
 
       renderAdmin()
