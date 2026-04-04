@@ -71,8 +71,8 @@ func TestHub_Unsubscribe(t *testing.T) {
 func TestHub_Publish(t *testing.T) { //nolint:gocognit
 	event := Event{
 		Type:         EventNoteCreated,
-		NoteID:       "note1",
 		SourceUserID: "user1",
+		Data:         NoteEventData{NoteID: "note1"},
 	}
 
 	t.Run("delivers event to subscribed user", func(t *testing.T) {
@@ -207,7 +207,7 @@ func TestHub_ConcurrentAccess(t *testing.T) {
 			go func() {
 				defer wg.Done()
 				ch, unsub := h.Subscribe("user1")
-				h.Publish([]string{"user1"}, Event{Type: EventNoteUpdated, NoteID: "n1", SourceUserID: "u1"})
+				h.Publish([]string{"user1"}, Event{Type: EventNoteUpdated, SourceUserID: "u1", Data: NoteEventData{NoteID: "n1"}})
 				// Drain any delivered event so the channel doesn't block unsubscribe.
 				select {
 				case <-ch:
@@ -222,7 +222,7 @@ func TestHub_ConcurrentAccess(t *testing.T) {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				h.Publish([]string{"user1", "user2"}, Event{Type: EventNoteDeleted, NoteID: "n2", SourceUserID: "u2"})
+				h.Publish([]string{"user1", "user2"}, Event{Type: EventNoteDeleted, SourceUserID: "u2", Data: NoteEventData{NoteID: "n2"}})
 			}()
 		}
 
