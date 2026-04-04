@@ -531,7 +531,10 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 
 	// Validate items before persisting any changes so invalid assigned_to
 	// values are rejected before note metadata is committed.
-	if len(req.Items) > 0 {
+	// req.Items can be either:
+	// - nil: "items" omitted from payload (do not touch existing items)
+	// - empty/non-empty slice: "items" explicitly provided (replace items)
+	if req.Items != nil {
 		if status, err := h.validateTodoItems(r.Context(), id, req.Items); err != nil {
 			return status, nil, err
 		}
@@ -545,7 +548,7 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 		return http.StatusInternalServerError, nil, fmt.Errorf("update note: %w", err)
 	}
 
-	if len(req.Items) > 0 {
+	if req.Items != nil {
 		if updateErr := h.updateTodoItems(r.Context(), id, user.ID, req.Items); updateErr != nil {
 			return http.StatusInternalServerError, nil, fmt.Errorf("update todo items: %w", updateErr)
 		}
@@ -560,7 +563,7 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 	// their own personalized copy of the note (preserving their per-user state).
 	// Per-user-only changes (color, pinned, archived, checked_items_collapsed) only
 	// need to be delivered to the acting user.
-	hasSharedFieldChange := req.Title != nil || req.Content != nil || len(req.Items) > 0
+	hasSharedFieldChange := req.Title != nil || req.Content != nil || req.Items != nil
 	h.publishUpdateEvent(r.Context(), id, note, user.ID, hasSharedFieldChange)
 
 	return http.StatusOK, note, nil

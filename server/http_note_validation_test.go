@@ -108,10 +108,11 @@ func TestNoteValidation(t *testing.T) {
 			})
 			require.NoError(t, err)
 
+			updateItems := []client.UpdateNoteItem{
+				{Text: strings.Repeat("a", 501), Position: 0},
+			}
 			_, err = user.Client.UpdateNote(t.Context(), note.ID, &client.UpdateNoteRequest{
-				Items: []client.UpdateNoteItem{
-					{Text: strings.Repeat("a", 501), Position: 0},
-				},
+				Items: &updateItems,
 			})
 			assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 		})
@@ -217,8 +218,29 @@ func TestNoteValidation(t *testing.T) {
 			for i := range items {
 				items[i] = client.UpdateNoteItem{Text: "item", Position: i}
 			}
-			_, err = user.Client.UpdateNote(t.Context(), note.ID, &client.UpdateNoteRequest{Items: items})
+			_, err = user.Client.UpdateNote(t.Context(), note.ID, &client.UpdateNoteRequest{Items: &items})
 			assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 		})
+	})
+
+	t.Run("update with explicit empty items clears todo items", func(t *testing.T) {
+		note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
+			Items: []client.CreateNoteItem{
+				{Text: "only item", Position: 0},
+			},
+		})
+		require.NoError(t, err)
+		require.Len(t, note.Items, 1)
+
+		emptyItems := []client.UpdateNoteItem{}
+		updated, err := user.Client.UpdateNote(t.Context(), note.ID, &client.UpdateNoteRequest{
+			Items: &emptyItems,
+		})
+		require.NoError(t, err)
+		assert.Empty(t, updated.Items)
+
+		reloaded, err := user.Client.GetNote(t.Context(), note.ID)
+		require.NoError(t, err)
+		assert.Empty(t, reloaded.Items)
 	})
 }

@@ -92,7 +92,7 @@ func TestTaskAssignment(t *testing.T) {
 
 		_, err := owner.Client.UpdateNote(t.Context(), noteID, &client.UpdateNoteRequest{
 			Title: client.Ptr("Shared Todo"),
-			Items: []client.UpdateNoteItem{
+			Items: &[]client.UpdateNoteItem{
 				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: collabID},
 				{Text: "Item 2", Position: 1, IndentLevel: 0},
 			},
@@ -114,7 +114,7 @@ func TestTaskAssignment(t *testing.T) {
 
 		_, err := owner.Client.UpdateNote(t.Context(), noteID, &client.UpdateNoteRequest{
 			Title: client.Ptr("Shared Todo"),
-			Items: []client.UpdateNoteItem{
+			Items: &[]client.UpdateNoteItem{
 				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: owner.User.ID},
 			},
 		})
@@ -140,7 +140,7 @@ func TestTaskAssignment(t *testing.T) {
 
 		_, err = owner.Client.UpdateNote(t.Context(), note.ID, &client.UpdateNoteRequest{
 			Title: client.Ptr("Solo Todo"),
-			Items: []client.UpdateNoteItem{
+			Items: &[]client.UpdateNoteItem{
 				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: owner.User.ID},
 			},
 		})
@@ -158,7 +158,7 @@ func TestTaskAssignment(t *testing.T) {
 
 		_, err := owner.Client.UpdateNote(t.Context(), noteID, &client.UpdateNoteRequest{
 			Title: client.Ptr("Shared Todo"),
-			Items: []client.UpdateNoteItem{
+			Items: &[]client.UpdateNoteItem{
 				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: outsider.User.ID},
 			},
 		})
@@ -175,7 +175,7 @@ func TestTaskAssignment(t *testing.T) {
 
 		_, err := owner.Client.UpdateNote(t.Context(), noteID, &client.UpdateNoteRequest{
 			Title: client.Ptr("Shared Todo"),
-			Items: []client.UpdateNoteItem{
+			Items: &[]client.UpdateNoteItem{
 				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: "short"},
 			},
 		})
@@ -192,7 +192,7 @@ func TestTaskAssignment(t *testing.T) {
 
 		_, err := collaborator.Client.UpdateNote(t.Context(), noteID, &client.UpdateNoteRequest{
 			Title: client.Ptr("Shared Todo"),
-			Items: []client.UpdateNoteItem{
+			Items: &[]client.UpdateNoteItem{
 				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: owner.User.ID},
 				{Text: "Item 2", Position: 1, IndentLevel: 0},
 			},
@@ -213,7 +213,7 @@ func TestTaskAssignment(t *testing.T) {
 
 		_, err := owner.Client.UpdateNote(t.Context(), noteID, &client.UpdateNoteRequest{
 			Title: client.Ptr("Shared Todo"),
-			Items: []client.UpdateNoteItem{
+			Items: &[]client.UpdateNoteItem{
 				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: collabID},
 			},
 		})
@@ -223,7 +223,7 @@ func TestTaskAssignment(t *testing.T) {
 
 		_, err = owner.Client.UpdateNote(t.Context(), noteID, &client.UpdateNoteRequest{
 			Title: client.Ptr("Shared Todo"),
-			Items: []client.UpdateNoteItem{
+			Items: &[]client.UpdateNoteItem{
 				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: ""},
 			},
 		})
@@ -242,7 +242,7 @@ func TestTaskAssignment(t *testing.T) {
 
 		_, err := owner.Client.UpdateNote(t.Context(), noteID, &client.UpdateNoteRequest{
 			Title: client.Ptr("Shared Todo"),
-			Items: []client.UpdateNoteItem{
+			Items: &[]client.UpdateNoteItem{
 				{Text: "Item 1", Position: 0, IndentLevel: 0, Completed: true, AssignedTo: collabID},
 			},
 		})
@@ -265,7 +265,7 @@ func TestMyTodoFilter(t *testing.T) {
 
 		_, err := owner.Client.UpdateNote(t.Context(), noteID, &client.UpdateNoteRequest{
 			Title: client.Ptr("Shared Todo"),
-			Items: []client.UpdateNoteItem{
+			Items: &[]client.UpdateNoteItem{
 				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: collabID},
 				{Text: "Item 2", Position: 1, IndentLevel: 0},
 			},
@@ -288,7 +288,7 @@ func TestMyTodoFilter(t *testing.T) {
 
 		_, err := owner.Client.UpdateNote(t.Context(), noteID, &client.UpdateNoteRequest{
 			Title: client.Ptr("Shared Todo"),
-			Items: []client.UpdateNoteItem{
+			Items: &[]client.UpdateNoteItem{
 				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: owner.User.ID},
 				{Text: "Item 2", Position: 1, IndentLevel: 0},
 			},
@@ -329,7 +329,7 @@ func TestMyTodoFilter(t *testing.T) {
 
 		_, err := owner.Client.UpdateNote(t.Context(), noteID, &client.UpdateNoteRequest{
 			Title: client.Ptr("Shared Todo"),
-			Items: []client.UpdateNoteItem{
+			Items: &[]client.UpdateNoteItem{
 				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: owner.User.ID},
 			},
 		})
@@ -351,7 +351,7 @@ func TestMyTodoFilter(t *testing.T) {
 
 		_, err := owner.Client.UpdateNote(t.Context(), noteID, &client.UpdateNoteRequest{
 			Title: client.Ptr("Shared Todo"),
-			Items: []client.UpdateNoteItem{
+			Items: &[]client.UpdateNoteItem{
 				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: collabID},
 			},
 		})
@@ -388,7 +388,7 @@ func TestTaskAssignmentUnshareCleanup(t *testing.T) {
 
 		_, err = owner.Client.UpdateNote(t.Context(), note.ID, &client.UpdateNoteRequest{
 			Title: client.Ptr("Shared Todo"),
-			Items: []client.UpdateNoteItem{
+			Items: &[]client.UpdateNoteItem{
 				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: collab1.User.ID},
 				{Text: "Item 2", Position: 1, IndentLevel: 0, AssignedTo: collab2.User.ID},
 			},
@@ -412,7 +412,7 @@ func TestTaskAssignmentUnshareCleanup(t *testing.T) {
 
 		_, err := owner.Client.UpdateNote(t.Context(), noteID, &client.UpdateNoteRequest{
 			Title: client.Ptr("Shared Todo"),
-			Items: []client.UpdateNoteItem{
+			Items: &[]client.UpdateNoteItem{
 				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: owner.User.ID},
 				{Text: "Item 2", Position: 1, IndentLevel: 0, AssignedTo: collab.User.ID},
 			},
@@ -451,7 +451,7 @@ func TestTaskAssignmentUserDeletion(t *testing.T) {
 
 		_, err = owner.Client.UpdateNote(t.Context(), note.ID, &client.UpdateNoteRequest{
 			Title: client.Ptr("Shared Todo"),
-			Items: []client.UpdateNoteItem{
+			Items: &[]client.UpdateNoteItem{
 				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: collab1.User.ID},
 				{Text: "Item 2", Position: 1, IndentLevel: 0, AssignedTo: collab2.User.ID},
 			},
@@ -476,7 +476,7 @@ func TestTaskAssignmentUserDeletion(t *testing.T) {
 
 		_, err := owner.Client.UpdateNote(t.Context(), noteID, &client.UpdateNoteRequest{
 			Title: client.Ptr("Shared Todo"),
-			Items: []client.UpdateNoteItem{
+			Items: &[]client.UpdateNoteItem{
 				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: owner.User.ID},
 				{Text: "Item 2", Position: 1, IndentLevel: 0, AssignedTo: collabID},
 			},
