@@ -2596,6 +2596,9 @@ const docTemplate = `{
         "server.configResponse": {
             "type": "object",
             "properties": {
+                "password_min_length": {
+                    "type": "integer"
+                },
                 "registration_enabled": {
                     "type": "boolean"
                 }

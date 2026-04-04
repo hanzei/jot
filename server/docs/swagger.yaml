@@ -432,6 +432,8 @@ definitions:
     type: object
   server.configResponse:
     properties:
+      password_min_length:
+        type: integer
       registration_enabled:
         type: boolean
     type: object
