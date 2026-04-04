@@ -4,6 +4,7 @@
   },
   "nav": {
     "profileMenu": "Profile menu",
+    "toggleSidebar": "Toggle sidebar",
     "settings": "Settings",
     "admin": "Admin",
     "logout": "Logout",
@@ -11,7 +12,8 @@
     "logoutConfirmMessage": "Are you sure you want to log out?",
     "openMobileApp": "Open in mobile app",
     "openMobileAppDescription": "Prefer the native mobile experience?",
-    "dismissMobileAppBanner": "Dismiss"
+    "dismissMobileAppBanner": "Dismiss",
+    "skipToMainContent": "Skip to main content"
   },
   "auth": {
     "signInTitle": "Sign in to Jot",
@@ -35,7 +37,7 @@
     "usernameChars": "Username can only contain letters, numbers, underscores, and hyphens",
     "usernameEdge": "Username cannot start or end with underscore or hyphen",
     "passwordsNoMatch": "Passwords do not match",
-    "passwordMin": "Password must be at least 4 characters"
+    "passwordMin": "Password must be at least {{min}} characters"
   },
   "dashboard": {
     "newNote": "New Note",
@@ -109,7 +111,7 @@
     "currentPasswordLabel": "Current Password",
     "newPasswordLabel": "New Password",
     "confirmNewPasswordLabel": "Confirm New Password",
-    "newPasswordPlaceholder": "At least 4 characters",
+    "newPasswordPlaceholder": "At least {{min}} characters",
     "passwordsNoMatch": "New passwords do not match.",
     "failedChangePassword": "Failed to change password.",
     "changing": "Changing...",
@@ -152,6 +154,8 @@
     "sessionsCurrent": "Current",
     "sessionsRevoke": "Revoke",
     "sessionsRevoking": "Revoking...",
+    "sessionsRevokeConfirmTitle": "Revoke session",
+    "sessionsRevokeConfirmMessage": "Are you sure you want to revoke \"{{session}}\"?",
     "sessionsRevokeFailed": "Failed to revoke session.",
     "sessionsNone": "No active sessions found.",
     "aboutSection": "About",
@@ -190,6 +194,8 @@
     "binDescription": "Open bin view",
     "helpKey": "?",
     "helpDescription": "Open keyboard shortcuts help",
+    "openNoteKey": "Enter",
+    "openNoteDescription": "Open the focused note",
     "escapeKey": "Esc",
     "escapeDescription": "Close the active modal or dialog"
   },
@@ -290,6 +296,7 @@
     "lastEdited": "Last edited: {{date}}",
     "saving": "Saving...",
     "saved": "Saved",
+    "colorPickerLabel": "Select note color",
     "colorWhite": "White",
     "colorCoral": "Coral",
     "colorYellow": "Yellow",

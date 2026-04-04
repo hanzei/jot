@@ -156,6 +156,10 @@ func normalizeCreateNoteRequest(req *CreateNoteRequest) (int, error) {
 		req.Color = models.DefaultNoteColor
 	}
 
+	if err := validateColor(req.Color); err != nil {
+		return http.StatusBadRequest, err
+	}
+
 	return http.StatusOK, nil
 }
 
@@ -194,7 +198,7 @@ func (h *NotesHandler) createTodoItems(ctx context.Context, noteID string, items
 			return http.StatusBadRequest, fmt.Errorf("item text must be %d characters or fewer", noteItemTextMaxLength)
 		}
 		if _, err := h.noteStore.CreateItemWithCompleted(ctx, noteID, item.Text, item.Position, item.Completed, item.IndentLevel, ""); err != nil {
-			return http.StatusInternalServerError, err
+			return http.StatusInternalServerError, fmt.Errorf("create todo item: %w", err)
 		}
 	}
 	return http.StatusOK, nil
@@ -212,6 +216,7 @@ func (h *NotesHandler) createTodoItems(ctx context.Context, noteID string, items
 //	@Param		label		query		string	false	"Filter by label ID"
 //	@Param		my_todo		query		boolean	false	"Return only notes with todos assigned to current user"
 //	@Success	200			{array}		models.Note
+//	@Failure	400			{string}	string	"search query too long"
 //	@Failure	401			{string}	string	"unauthorized"
 //	@Failure	500			{string}	string	"internal server error"
 //	@Router		/notes [get]
@@ -228,9 +233,13 @@ func (h *NotesHandler) GetNotes(w http.ResponseWriter, r *http.Request) (int, an
 	labelID := q.Get("label")
 	myTodo := q.Get("my_todo") == queryTrue
 
+	if err := validateSearchQuery(search); err != nil {
+		return http.StatusBadRequest, nil, err
+	}
+
 	notes, err := h.noteStore.GetByUserID(r.Context(), user.ID, archived, trashed, search, labelID, myTodo)
 	if err != nil {
-		return http.StatusInternalServerError, nil, err
+		return http.StatusInternalServerError, nil, fmt.Errorf("get notes: %w", err)
 	}
 
 	return http.StatusOK, notes, nil
@@ -267,7 +276,7 @@ func (h *NotesHandler) CreateNote(w http.ResponseWriter, r *http.Request) (int, 
 
 	note, err := h.noteStore.Create(r.Context(), user.ID, req.Title, req.Content, req.NoteType, req.Color)
 	if err != nil {
-		return http.StatusInternalServerError, nil, err
+		return http.StatusInternalServerError, nil, fmt.Errorf("create note: %w", err)
 	}
 
 	needRefetch := false
@@ -330,7 +339,7 @@ func (h *NotesHandler) GetNote(w http.ResponseWriter, r *http.Request) (int, any
 		if errors.Is(err, models.ErrNoteNotFound) {
 			return http.StatusNotFound, nil, err
 		}
-		return http.StatusInternalServerError, nil, err
+		return http.StatusInternalServerError, nil, fmt.Errorf("get note: %w", err)
 	}
 
 	return http.StatusOK, note, nil
@@ -368,16 +377,34 @@ func (h *NotesHandler) DuplicateNote(w http.ResponseWriter, r *http.Request) (in
 		if errors.Is(err, models.ErrNoteNotFound) {
 			return http.StatusNotFound, nil, err
 		}
-		return http.StatusInternalServerError, nil, err
+		return http.StatusInternalServerError, nil, fmt.Errorf("get note: %w", err)
 	}
 
 	duplicatedNote, err := h.noteStore.Duplicate(r.Context(), sourceNote, user.ID)
 	if err != nil {
-		return http.StatusInternalServerError, nil, err
+		return http.StatusInternalServerError, nil, fmt.Errorf("duplicate note: %w", err)
 	}
 
 	h.publishNoteEvent(r.Context(), duplicatedNote.ID, sse.EventNoteCreated, duplicatedNote, user.ID)
 	return http.StatusCreated, duplicatedNote, nil
+}
+
+func normalizeUpdateNoteRequest(req *UpdateNoteRequest) (int, error) {
+	if req.Title != nil && utf8.RuneCountInString(*req.Title) > noteTitleMaxLength {
+		return http.StatusBadRequest, fmt.Errorf("title must be %d characters or fewer", noteTitleMaxLength)
+	}
+	if req.Content != nil && utf8.RuneCountInString(*req.Content) > noteContentMaxLength {
+		return http.StatusBadRequest, fmt.Errorf("content must be %d characters or fewer", noteContentMaxLength)
+	}
+	if req.Color != nil {
+		if *req.Color == "" {
+			*req.Color = models.DefaultNoteColor
+		}
+		if err := validateColor(*req.Color); err != nil {
+			return http.StatusBadRequest, err
+		}
+	}
+	return http.StatusOK, nil
 }
 
 func (h *NotesHandler) validateTodoItems(ctx context.Context, noteID string, items []UpdateNoteItem) (int, error) {
@@ -451,18 +478,18 @@ func (h *NotesHandler) validateItemAssignments(ctx context.Context, noteID strin
 func (h *NotesHandler) updateTodoItems(ctx context.Context, noteID string, userID string, items []UpdateNoteItem) error {
 	currentNote, err := h.noteStore.GetByID(ctx, noteID, userID)
 	if err != nil {
-		return err
+		return fmt.Errorf("get note: %w", err)
 	}
 
 	if currentNote.NoteType == models.NoteTypeTodo {
 		if err := h.noteStore.DeleteItemsByNoteID(ctx, noteID); err != nil {
-			return err
+			return fmt.Errorf("delete note items: %w", err)
 		}
 
 		for _, item := range items {
 			_, err := h.noteStore.CreateItemWithCompleted(ctx, noteID, item.Text, item.Position, item.Completed, item.IndentLevel, item.AssignedTo)
 			if err != nil {
-				return err
+				return fmt.Errorf("create note item: %w", err)
 			}
 		}
 	}
@@ -503,16 +530,16 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 		return http.StatusBadRequest, nil, err
 	}
 
-	if req.Title != nil && utf8.RuneCountInString(*req.Title) > noteTitleMaxLength {
-		return http.StatusBadRequest, nil, fmt.Errorf("title must be %d characters or fewer", noteTitleMaxLength)
-	}
-	if req.Content != nil && utf8.RuneCountInString(*req.Content) > noteContentMaxLength {
-		return http.StatusBadRequest, nil, fmt.Errorf("content must be %d characters or fewer", noteContentMaxLength)
+	if status, err := normalizeUpdateNoteRequest(&req); err != nil {
+		return status, nil, err
 	}
 
 	// Validate items before persisting any changes so invalid assigned_to
 	// values are rejected before note metadata is committed.
-	if len(req.Items) > 0 {
+	// req.Items can be either:
+	// - nil: "items" omitted from payload (do not touch existing items)
+	// - empty/non-empty slice: "items" explicitly provided (replace items)
+	if req.Items != nil {
 		if status, err := h.validateTodoItems(r.Context(), id, req.Items); err != nil {
 			return status, nil, err
 		}
@@ -523,25 +550,25 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 		if errors.Is(err, models.ErrNoteNotFound) || errors.Is(err, models.ErrNoteNoAccess) {
 			return http.StatusNotFound, nil, err
 		}
-		return http.StatusInternalServerError, nil, err
+		return http.StatusInternalServerError, nil, fmt.Errorf("update note: %w", err)
 	}
 
-	if len(req.Items) > 0 {
+	if req.Items != nil {
 		if updateErr := h.updateTodoItems(r.Context(), id, user.ID, req.Items); updateErr != nil {
-			return http.StatusInternalServerError, nil, updateErr
+			return http.StatusInternalServerError, nil, fmt.Errorf("update todo items: %w", updateErr)
 		}
 	}
 
 	note, err := h.noteStore.GetByID(r.Context(), id, user.ID)
 	if err != nil {
-		return http.StatusInternalServerError, nil, err
+		return http.StatusInternalServerError, nil, fmt.Errorf("get note: %w", err)
 	}
 
 	// Title, content, and items are shared fields: every collaborator must receive
 	// their own personalized copy of the note (preserving their per-user state).
 	// Per-user-only changes (color, pinned, archived, checked_items_collapsed) only
 	// need to be delivered to the acting user.
-	hasSharedFieldChange := req.Title != nil || req.Content != nil || len(req.Items) > 0
+	hasSharedFieldChange := req.Title != nil || req.Content != nil || req.Items != nil
 	h.publishUpdateEvent(r.Context(), id, note, user.ID, hasSharedFieldChange)
 
 	return http.StatusOK, note, nil
@@ -608,7 +635,7 @@ func (h *NotesHandler) DeleteNote(w http.ResponseWriter, r *http.Request) (int, 
 			if errors.Is(err, models.ErrNoteNotInTrash) {
 				return http.StatusNotFound, nil, err
 			}
-			return http.StatusInternalServerError, nil, err
+			return http.StatusInternalServerError, nil, fmt.Errorf("delete note from trash: %w", err)
 		}
 	} else {
 		err := h.noteStore.MoveToTrash(r.Context(), id, user.ID)
@@ -616,7 +643,7 @@ func (h *NotesHandler) DeleteNote(w http.ResponseWriter, r *http.Request) (int, 
 			if errors.Is(err, models.ErrNoteNotOwnedByUser) {
 				return http.StatusNotFound, nil, err
 			}
-			return http.StatusInternalServerError, nil, err
+			return http.StatusInternalServerError, nil, fmt.Errorf("move note to trash: %w", err)
 		}
 	}
 
@@ -645,7 +672,7 @@ func (h *NotesHandler) EmptyTrash(w http.ResponseWriter, r *http.Request) (int, 
 
 	deletedNotes, err := h.noteStore.EmptyTrash(r.Context(), user.ID)
 	if err != nil {
-		return http.StatusInternalServerError, nil, err
+		return http.StatusInternalServerError, nil, fmt.Errorf("empty trash: %w", err)
 	}
 
 	for _, deletedNote := range deletedNotes {
@@ -687,12 +714,12 @@ func (h *NotesHandler) RestoreNote(w http.ResponseWriter, r *http.Request) (int,
 		if errors.Is(err, models.ErrNoteNotOwnedByUser) || errors.Is(err, models.ErrNoteNotInTrash) {
 			return http.StatusNotFound, nil, err
 		}
-		return http.StatusInternalServerError, nil, err
+		return http.StatusInternalServerError, nil, fmt.Errorf("restore note: %w", err)
 	}
 
 	note, err := h.noteStore.GetByID(r.Context(), id, user.ID)
 	if err != nil {
-		return http.StatusInternalServerError, nil, err
+		return http.StatusInternalServerError, nil, fmt.Errorf("get note: %w", err)
 	}
 
 	h.publishNoteEvent(r.Context(), id, sse.EventNoteUpdated, note, user.ID)
@@ -736,7 +763,7 @@ func (h *NotesHandler) ReorderNotes(w http.ResponseWriter, r *http.Request) (int
 		if errors.Is(err, models.ErrNoteNoAccess) {
 			return http.StatusForbidden, nil, err
 		}
-		return http.StatusInternalServerError, nil, err
+		return http.StatusInternalServerError, nil, fmt.Errorf("reorder notes: %w", err)
 	}
 
 	return http.StatusNoContent, nil, nil

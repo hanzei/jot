@@ -5,12 +5,14 @@ import i18n from '@/i18n';
 import { auth, users, labels as labelsApi, sessions as sessionsApi, isAxiosError } from '@/utils/api';
 import { getUser, setUser, removeUser, getSettings, setSettings, isAdmin } from '@/utils/auth';
 import { getLanguagePreference, resolveLanguage, LanguagePreference } from '@/utils/language';
+import { isPasswordTooShort } from '@/utils/userValidation';
 import { getThemePreference, applyTheme, ThemePreference } from '@/utils/theme';
 import AppLayout from '@/components/AppLayout';
 import SearchBar from '@/components/SearchBar';
 import ImportModal from '@/components/ImportModal';
 import AboutModal from '@/components/AboutModal';
 import SidebarLabels from '@/components/SidebarLabels';
+import ConfirmDialog from '@/components/ConfirmDialog';
 import { useToast } from '@/hooks/useToast';
 import { useNavigationLinkTabs } from '@/hooks/useNavigationTabs';
 import type { ActiveSession, Label } from '@jot/shared';
@@ -18,9 +20,10 @@ import { IdentitySecurityColumn, PreferencesInfoColumn } from './settings/Settin
 
 interface SettingsProps {
   onLogout: () => void;
+  passwordMinLength: number;
 }
 
-const Settings = ({ onLogout }: SettingsProps) => {
+const Settings = ({ onLogout, passwordMinLength }: SettingsProps) => {
   const { t } = useTranslation();
   const { showToast } = useToast();
   useEffect(() => { document.title = t('pageTitle.settings'); }, [t]);
@@ -55,6 +58,7 @@ const Settings = ({ onLogout }: SettingsProps) => {
   const [sessionsLoading, setSessionsLoading] = useState(true);
   const [sessionsError, setSessionsError] = useState('');
   const [revokingSessionId, setRevokingSessionId] = useState<string | null>(null);
+  const [sessionPendingRevoke, setSessionPendingRevoke] = useState<ActiveSession | null>(null);
   const [labelsList, setLabelsList] = useState<Label[]>([]);
 
   const loadSessions = useCallback(async () => {
@@ -105,6 +109,17 @@ const Settings = ({ onLogout }: SettingsProps) => {
     }
   };
 
+  const handleRequestRevokeSession = (session: ActiveSession) => {
+    setSessionPendingRevoke(session);
+  };
+
+  const handleConfirmRevokeSession = async () => {
+    if (!sessionPendingRevoke) return;
+    const sessionID = sessionPendingRevoke.id;
+    setSessionPendingRevoke(null);
+    await handleRevokeSession(sessionID);
+  };
+
   useEffect(() => {
     auth.me().then(({ settings: serverSettings }) => {
       setSettings(serverSettings);
@@ -130,6 +145,11 @@ const Settings = ({ onLogout }: SettingsProps) => {
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
     setPasswordError('');
+
+    if (isPasswordTooShort(newPassword, passwordMinLength)) {
+      setPasswordError(t('auth.passwordMin', { min: passwordMinLength }));
+      return;
+    }
 
     if (newPassword !== confirmPassword) {
       setPasswordError('settings.passwordsNoMatch');
@@ -274,6 +294,13 @@ const Settings = ({ onLogout }: SettingsProps) => {
   };
 
   const { tabs: navigationTabs, bottomTabs: bottomNavigationTabs } = useNavigationLinkTabs();
+  const sessionPendingRevokeLabel = sessionPendingRevoke
+    ? (
+      sessionPendingRevoke.os !== 'Unknown'
+        ? t('settings.sessionsBrowserOnOS', { browser: sessionPendingRevoke.browser, os: sessionPendingRevoke.os })
+        : sessionPendingRevoke.browser
+    )
+    : '';
 
   const searchBar = (
     <SearchBar
@@ -341,6 +368,7 @@ const Settings = ({ onLogout }: SettingsProps) => {
                 onConfirmPasswordChange: setConfirmPassword,
                 passwordSaving,
                 passwordError,
+                passwordMinLength,
                 onPasswordSubmit: handlePasswordChange,
               }}
               displayMsg={displayMsg}
@@ -352,7 +380,7 @@ const Settings = ({ onLogout }: SettingsProps) => {
               sessionsError={sessionsError}
               activeSessions={activeSessions}
               revokingSessionId={revokingSessionId}
-              onRevokeSession={handleRevokeSession}
+              onRequestRevokeSession={handleRequestRevokeSession}
               displayMsg={displayMsg}
               languagePref={languagePref}
               onLanguageChange={handleLanguageChange}
@@ -364,6 +392,15 @@ const Settings = ({ onLogout }: SettingsProps) => {
           </div>
         </div>
       </div>
+
+      <ConfirmDialog
+        open={Boolean(sessionPendingRevoke)}
+        title={t('settings.sessionsRevokeConfirmTitle')}
+        message={t('settings.sessionsRevokeConfirmMessage', { session: sessionPendingRevokeLabel })}
+        confirmLabel={t('settings.sessionsRevoke')}
+        onConfirm={handleConfirmRevokeSession}
+        onCancel={() => setSessionPendingRevoke(null)}
+      />
 
       <ImportModal
         isOpen={isImportModalOpen}

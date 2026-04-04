@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 
 	"github.com/go-chi/chi/v5"
@@ -56,7 +57,7 @@ func (h *NotesHandler) ShareNote(w http.ResponseWriter, r *http.Request) (int, a
 
 	isOwner, err := h.noteStore.IsOwner(r.Context(), id, user.ID)
 	if err != nil {
-		return http.StatusInternalServerError, nil, err
+		return http.StatusInternalServerError, nil, fmt.Errorf("check note ownership: %w", err)
 	}
 	if !isOwner {
 		return http.StatusForbidden, nil, errors.New("not owner")
@@ -70,7 +71,7 @@ func (h *NotesHandler) ShareNote(w http.ResponseWriter, r *http.Request) (int, a
 		if errors.Is(lookupErr, models.ErrUserNotFound) {
 			return http.StatusNotFound, nil, lookupErr
 		}
-		return http.StatusInternalServerError, nil, lookupErr
+		return http.StatusInternalServerError, nil, fmt.Errorf("get user: %w", lookupErr)
 	}
 
 	err = h.noteStore.ShareNote(r.Context(), id, user.ID, req.UserID)
@@ -78,7 +79,7 @@ func (h *NotesHandler) ShareNote(w http.ResponseWriter, r *http.Request) (int, a
 		if errors.Is(err, models.ErrNoteAlreadyShared) {
 			return http.StatusConflict, nil, err
 		}
-		return http.StatusInternalServerError, nil, err
+		return http.StatusInternalServerError, nil, fmt.Errorf("share note: %w", err)
 	}
 
 	// Fetch the note to include in the SSE payload; audience now includes the new target.
@@ -128,7 +129,7 @@ func (h *NotesHandler) UnshareNote(w http.ResponseWriter, r *http.Request) (int,
 
 	isOwner, err := h.noteStore.IsOwner(r.Context(), id, user.ID)
 	if err != nil {
-		return http.StatusInternalServerError, nil, err
+		return http.StatusInternalServerError, nil, fmt.Errorf("check note ownership: %w", err)
 	}
 	if !isOwner {
 		return http.StatusForbidden, nil, errors.New("not owner")
@@ -142,7 +143,7 @@ func (h *NotesHandler) UnshareNote(w http.ResponseWriter, r *http.Request) (int,
 		if errors.Is(err, models.ErrNoteShareNotFound) {
 			return http.StatusNotFound, nil, err
 		}
-		return http.StatusInternalServerError, nil, err
+		return http.StatusInternalServerError, nil, fmt.Errorf("unshare note: %w", err)
 	}
 
 	if audienceErr == nil && h.hub != nil {
@@ -187,7 +188,7 @@ func (h *NotesHandler) GetNoteShares(w http.ResponseWriter, r *http.Request) (in
 
 	isOwner, err := h.noteStore.IsOwner(r.Context(), id, user.ID)
 	if err != nil {
-		return http.StatusInternalServerError, nil, err
+		return http.StatusInternalServerError, nil, fmt.Errorf("check note ownership: %w", err)
 	}
 	if !isOwner {
 		return http.StatusForbidden, nil, errors.New("not owner")
@@ -195,7 +196,7 @@ func (h *NotesHandler) GetNoteShares(w http.ResponseWriter, r *http.Request) (in
 
 	shares, err := h.noteStore.GetNoteShares(r.Context(), id)
 	if err != nil {
-		return http.StatusInternalServerError, nil, err
+		return http.StatusInternalServerError, nil, fmt.Errorf("get note shares: %w", err)
 	}
 
 	return http.StatusOK, shares, nil

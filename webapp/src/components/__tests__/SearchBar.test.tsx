@@ -1,8 +1,26 @@
 import { describe, it, expect, vi } from 'vitest'
 import { render, screen, fireEvent, createEvent } from '@testing-library/react'
+import { VALIDATION } from '@jot/shared'
 import SearchBar from '../SearchBar'
 
 describe('SearchBar', () => {
+  it('has maxLength set to SEARCH_QUERY_MAX_LENGTH', () => {
+    render(<SearchBar value="" onChange={vi.fn()} />)
+    expect(screen.getByRole('textbox')).toHaveAttribute('maxLength', String(VALIDATION.SEARCH_QUERY_MAX_LENGTH))
+  })
+
+  it('renders shortcut hint when provided', () => {
+    render(
+      <SearchBar
+        value=""
+        onChange={vi.fn()}
+        shortcutHint="Ctrl + F"
+      />
+    )
+
+    expect(screen.getByTestId('search-shortcut-hint')).toHaveTextContent('Ctrl + F')
+  })
+
   it('clears the input value when Escape is pressed', () => {
     const onChange = vi.fn()
 
