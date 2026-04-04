@@ -216,6 +216,7 @@ func (h *NotesHandler) createTodoItems(ctx context.Context, noteID string, items
 //	@Param		label		query		string	false	"Filter by label ID"
 //	@Param		my_todo		query		boolean	false	"Return only notes with todos assigned to current user"
 //	@Success	200			{array}		models.Note
+//	@Failure	400			{string}	string	"search query too long"
 //	@Failure	401			{string}	string	"unauthorized"
 //	@Failure	500			{string}	string	"internal server error"
 //	@Router		/notes [get]
@@ -231,6 +232,10 @@ func (h *NotesHandler) GetNotes(w http.ResponseWriter, r *http.Request) (int, an
 	search := q.Get("search")
 	labelID := q.Get("label")
 	myTodo := q.Get("my_todo") == queryTrue
+
+	if utf8.RuneCountInString(search) > searchQueryMaxLength {
+		return http.StatusBadRequest, nil, fmt.Errorf("search query must be %d characters or fewer", searchQueryMaxLength)
+	}
 
 	notes, err := h.noteStore.GetByUserID(r.Context(), user.ID, archived, trashed, search, labelID, myTodo)
 	if err != nil {

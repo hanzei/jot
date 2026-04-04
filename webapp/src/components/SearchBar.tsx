@@ -1,6 +1,7 @@
 import type { Ref } from 'react';
 import { useTranslation } from 'react-i18next';
 import { MagnifyingGlassIcon } from '@heroicons/react/24/outline';
+import { VALIDATION } from '@jot/shared';
 
 interface SearchBarProps {
   value: string;
@@ -44,6 +45,7 @@ const SearchBar = ({ value, onChange, onSubmit, inputRef, shortcutHint, stopEsca
             value={value}
             onChange={(e) => onChange(e.target.value)}
             onKeyDown={handleKeyDown}
+            maxLength={VALIDATION.SEARCH_QUERY_MAX_LENGTH}
           />
           {shortcutHint && (
             <kbd
