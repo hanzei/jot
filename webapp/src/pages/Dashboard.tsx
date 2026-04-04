@@ -40,6 +40,7 @@ interface DashboardProps {
 }
 
 const SEARCH_DEBOUNCE_MS = 300;
+const isApplePlatform = () => typeof navigator !== 'undefined' && /mac|iphone|ipad|ipod/i.test(navigator.platform);
 
 export default function Dashboard({ onLogout }: DashboardProps) {
   const { t } = useTranslation();
@@ -735,6 +736,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   );
   const dragReorderingDisabled = showArchived || showBin || showMyTodo || noteSort !== 'manual';
   const activeSortLabel = t(`dashboard.sortOption.${noteSort}`);
+  const focusSearchShortcutHint = isApplePlatform() ? '⌘ + F' : t('keyboardShortcuts.focusSearchKey');
 
   if (loading) {
     return (
@@ -784,6 +786,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
           value={searchQuery}
           onChange={setSearchQuery}
           inputRef={searchInputRef}
+          shortcutHint={focusSearchShortcutHint}
           stopEscapePropagation={true}
         />
       </div>

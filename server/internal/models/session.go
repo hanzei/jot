@@ -46,7 +46,7 @@ func generateSessionToken() (string, error) {
 func (s *SessionStore) Create(ctx context.Context, userID, userAgent string) (*Session, error) {
 	token, err := generateSessionToken()
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("create session: %w", err)
 	}
 
 	if runes := []rune(userAgent); len(runes) > maxUserAgentLength {
