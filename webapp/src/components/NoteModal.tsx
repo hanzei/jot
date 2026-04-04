@@ -1391,6 +1391,46 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     }
   };
 
+  // Stable ref always holds the latest handler so the listener never goes stale.
+  const modalShortcutRef = useRef<((e: KeyboardEvent) => void) | null>(null);
+  modalShortcutRef.current = (e: KeyboardEvent) => {
+    if (!(e.ctrlKey || e.metaKey) || !e.shiftKey) return;
+    if (e.defaultPrevented) return;
+    if (showDeleteConfirm) return;
+
+    const key = e.key === 'Backspace' ? 'backspace' : e.key.toLowerCase();
+
+    if (key === 'p') {
+      if (!note) return;
+      e.preventDefault();
+      handlePinToggle();
+    } else if (key === 'a') {
+      if (!note) return;
+      e.preventDefault();
+      handleArchiveToggle();
+    } else if (key === 'd') {
+      if (!note || !onDuplicate) return;
+      e.preventDefault();
+      handleDuplicate();
+    } else if (key === 'backspace') {
+      if (!note || !onDelete || !isOwner) return;
+      e.preventDefault();
+      handleDelete();
+    } else if (key === 'l') {
+      e.preventDefault();
+      setShowLabelPicker(v => !v);
+    } else if (key === 'c') {
+      e.preventDefault();
+      colorPickerRef.current?.querySelector<HTMLButtonElement>('button[tabindex="0"]')?.focus();
+    }
+  };
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => modalShortcutRef.current?.(e);
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
 
   return (
     <>
