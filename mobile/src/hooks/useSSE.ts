@@ -43,7 +43,13 @@ export function useSSE(onNoteUpdatedByOther?: SSENotificationCallback): void {
 
     manager.connect((event: SSEEvent) => {
       // Note-related events require refreshing the notes list
-      if (event.type !== 'profile_icon_updated') {
+      if (
+        event.type === 'note_created' ||
+        event.type === 'note_updated' ||
+        event.type === 'note_deleted' ||
+        event.type === 'note_shared' ||
+        event.type === 'note_unshared'
+      ) {
         queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
         queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
       }
