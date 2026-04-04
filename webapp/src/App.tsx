@@ -16,7 +16,7 @@ function App() {
   const [isAuth, setIsAuth] = useState(false);
   const [loading, setLoading] = useState(true);
   const [registrationEnabled, setRegistrationEnabled] = useState(true);
-  const [passwordMinLength, setPasswordMinLength] = useState(VALIDATION.PASSWORD_MIN_LENGTH);
+  const [passwordMinLength, setPasswordMinLength] = useState<number>(VALIDATION.PASSWORD_MIN_LENGTH);
 
   useEffect(() => {
     applyTheme(getThemePreference());
