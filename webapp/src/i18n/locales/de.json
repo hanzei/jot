@@ -4,6 +4,7 @@
   },
   "nav": {
     "profileMenu": "Profilmenü",
+    "toggleSidebar": "Seitenleiste umschalten",
     "settings": "Einstellungen",
     "admin": "Admin",
     "logout": "Abmelden",
@@ -152,6 +153,8 @@
     "sessionsCurrent": "Aktuell",
     "sessionsRevoke": "Widerrufen",
     "sessionsRevoking": "Widerrufen...",
+    "sessionsRevokeConfirmTitle": "Sitzung widerrufen",
+    "sessionsRevokeConfirmMessage": "Möchtest du \"{{session}}\" wirklich widerrufen?",
     "sessionsRevokeFailed": "Sitzung konnte nicht widerrufen werden.",
     "sessionsNone": "Keine aktiven Sitzungen gefunden.",
     "aboutSection": "Info",

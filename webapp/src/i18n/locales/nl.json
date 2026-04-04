@@ -4,6 +4,7 @@
   },
   "nav": {
     "profileMenu": "Profielmenu",
+    "toggleSidebar": "Zijbalk wisselen",
     "settings": "Instellingen",
     "admin": "Admin",
     "logout": "Uitloggen",
@@ -152,6 +153,8 @@
     "sessionsCurrent": "Huidig",
     "sessionsRevoke": "Intrekken",
     "sessionsRevoking": "Intrekken...",
+    "sessionsRevokeConfirmTitle": "Sessie intrekken",
+    "sessionsRevokeConfirmMessage": "Weet je zeker dat je \"{{session}}\" wilt intrekken?",
     "sessionsRevokeFailed": "Sessie intrekken mislukt.",
     "sessionsNone": "Geen actieve sessies gevonden.",
     "aboutSection": "Over",

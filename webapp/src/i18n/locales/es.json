@@ -4,6 +4,7 @@
   },
   "nav": {
     "profileMenu": "Menú de perfil",
+    "toggleSidebar": "Alternar barra lateral",
     "settings": "Ajustes",
     "admin": "Admin",
     "logout": "Cerrar sesión",
@@ -152,6 +153,8 @@
     "sessionsCurrent": "Actual",
     "sessionsRevoke": "Revocar",
     "sessionsRevoking": "Revocando...",
+    "sessionsRevokeConfirmTitle": "Revocar sesión",
+    "sessionsRevokeConfirmMessage": "¿Seguro que quieres revocar \"{{session}}\"?",
     "sessionsRevokeFailed": "Error al revocar la sesión.",
     "sessionsNone": "No se encontraron sesiones activas.",
     "aboutSection": "Acerca de",

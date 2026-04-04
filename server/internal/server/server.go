@@ -127,21 +127,29 @@ func (s *Server) setupRoutes() error {
 	s.router.Use(requestLoggerMiddleware)
 	s.router.Use(middleware.Recoverer)
 	s.router.Use(securityHeaders(s.cfg.CookieSecure))
-	s.router.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{s.cfg.CORSAllowedOrigin},
+
+	corsOpts := cors.Options{
 		AllowedMethods:   []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodOptions},
 		AllowedHeaders:   []string{"Accept", "Content-Type"},
 		ExposedHeaders:   []string{"Link"},
 		AllowCredentials: true,
 		MaxAge:           300,
-	}))
+	}
+	if s.cfg.CORSAllowedOrigin != "" {
+		corsOpts.AllowedOrigins = []string{s.cfg.CORSAllowedOrigin}
+	} else {
+		corsOpts.AllowOriginFunc = func(_ *http.Request, _ string) bool { return false }
+	}
+	s.router.Use(cors.Handler(corsOpts))
 
 	s.router.Get("/livez", s.wrapHandler(s.handleLive))
 	s.router.Get("/readyz", s.handleReady)
 
 	cop := http.NewCrossOriginProtection()
-	if err := cop.AddTrustedOrigin(s.cfg.CORSAllowedOrigin); err != nil {
-		return fmt.Errorf("add trusted origin %q: %w", s.cfg.CORSAllowedOrigin, err)
+	if s.cfg.CORSAllowedOrigin != "" {
+		if err := cop.AddTrustedOrigin(s.cfg.CORSAllowedOrigin); err != nil {
+			return fmt.Errorf("add trusted origin %q: %w", s.cfg.CORSAllowedOrigin, err)
+		}
 	}
 	s.router.Route("/api/v1", func(r chi.Router) {
 		r.Use(cop.Handler)

@@ -119,7 +119,7 @@ export interface CreateNoteRequest {
   content: string;
   note_type: NoteType;
   color?: string;
-  items?: { text: string; position: number; completed?: boolean; indent_level?: number; assigned_to?: string }[];
+  items?: { text: string; position: number; completed?: boolean; indent_level?: number }[];
   labels?: string[];
 }
 

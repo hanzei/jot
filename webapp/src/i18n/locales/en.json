@@ -4,6 +4,7 @@
   },
   "nav": {
     "profileMenu": "Profile menu",
+    "toggleSidebar": "Toggle sidebar",
     "settings": "Settings",
     "admin": "Admin",
     "logout": "Logout",
@@ -152,6 +153,8 @@
     "sessionsCurrent": "Current",
     "sessionsRevoke": "Revoke",
     "sessionsRevoking": "Revoking...",
+    "sessionsRevokeConfirmTitle": "Revoke session",
+    "sessionsRevokeConfirmMessage": "Are you sure you want to revoke \"{{session}}\"?",
     "sessionsRevokeFailed": "Failed to revoke session.",
     "sessionsNone": "No active sessions found.",
     "aboutSection": "About",

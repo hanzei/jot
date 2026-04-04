@@ -12,7 +12,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func createSharedTodoNote(t *testing.T, ts *TestServer, owner *TestUser, sharedWith *TestUser) (string, string) {
+func createSharedTodoNote(t *testing.T, _ *TestServer, owner *TestUser, sharedWith *TestUser) (string, string) {
 	t.Helper()
 
 	note, err := owner.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
