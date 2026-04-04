@@ -55,6 +55,17 @@ test.describe('Labels on Note Creation', () => {
     await expect(card.getByText('alpha')).toBeVisible();
     await expect(card.getByText('beta')).toBeVisible();
   });
+
+  test('can create a sidebar label and show count after assigning it', async ({ dashboardPage, isMobile }) => {
+    test.skip(isMobile, 'Sidebar label management is covered on desktop only.');
+    await dashboardPage.goto();
+
+    await dashboardPage.createSidebarLabel('taxonomy');
+    await dashboardPage.expectSidebarLabelCount('taxonomy', 0);
+
+    await dashboardPage.createNoteWithLabels('Sidebar Counted Note', 'content', ['taxonomy']);
+    await dashboardPage.expectSidebarLabelCount('taxonomy', 1);
+  });
 });
 
 test.describe('Label Filtering', () => {

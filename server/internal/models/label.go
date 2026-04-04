@@ -51,16 +51,23 @@ func (s *LabelStore) GetLabels(ctx context.Context, userID string) ([]Label, err
 	return labels, nil
 }
 
-// GetLabelCounts returns a map of label ID to note count for non-trashed notes.
-// Counts include both active and archived notes that are still visible in label filters.
+// GetLabelCounts returns a map of label ID to note count for active notes.
+// Counts exclude archived and trashed notes to match the default notes view.
 func (s *LabelStore) GetLabelCounts(ctx context.Context, userID string) (map[string]int, error) {
 	rows, err := s.db.QueryContext(ctx, `
-		SELECT l.id, COUNT(nl.note_id) AS note_count
+		SELECT l.id, COUNT(nus.note_id) AS note_count
 		FROM labels l
-		LEFT JOIN note_labels nl ON nl.label_id = l.id AND nl.user_id = l.user_id
-		LEFT JOIN notes n ON n.id = nl.note_id
+		LEFT JOIN note_labels nl
+			ON nl.label_id = l.id AND nl.user_id = l.user_id
+		LEFT JOIN notes n
+			ON n.id = nl.note_id
+			AND n.user_id = l.user_id
+			AND n.deleted_at IS NULL
+		LEFT JOIN note_user_state nus
+			ON nus.note_id = n.id
+			AND nus.user_id = l.user_id
+			AND nus.archived = FALSE
 		WHERE l.user_id = ?
-		  AND (n.id IS NULL OR n.deleted_at IS NULL)
 		GROUP BY l.id
 	`, userID)
 	if err != nil {

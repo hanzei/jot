@@ -174,9 +174,10 @@ func TestGetLabelCounts(t *testing.T) {
 	_, err = user.Client.AddLabel(t.Context(), trashedNote.ID, "work")
 	require.NoError(t, err)
 
-	_, err = user.Client.UpdateNote(t.Context(), archivedNote.ID, &client.UpdateNoteRequest{Archived: boolPtr(true)})
+	archived := true
+	_, err = user.Client.UpdateNote(t.Context(), archivedNote.ID, &client.UpdateNoteRequest{Archived: &archived})
 	require.NoError(t, err)
-	err = user.Client.DeleteNote(t.Context(), trashedNote.ID, false)
+	err = user.Client.DeleteNote(t.Context(), trashedNote.ID)
 	require.NoError(t, err)
 
 	labels, err := user.Client.ListLabels(t.Context())
@@ -187,16 +188,16 @@ func TestGetLabelCounts(t *testing.T) {
 		labelIDByName[l.Name] = l.ID
 	}
 
-	t.Run("returns active plus archived counts, excluding trashed notes", func(t *testing.T) {
-		counts, err := user.Client.GetLabelCounts(t.Context())
+	t.Run("returns active-note counts, excluding archived and trashed notes", func(t *testing.T) {
+		counts, err := user.Client.ListLabelCounts(t.Context())
 		require.NoError(t, err)
-		assert.Equal(t, 2, counts[labelIDByName["work"]])
+		assert.Equal(t, 1, counts[labelIDByName["work"]])
 		assert.Equal(t, 1, counts[labelIDByName["personal"]])
 	})
 
 	t.Run("unauthenticated request returns 401", func(t *testing.T) {
 		c := ts.newClient()
-		_, err := c.GetLabelCounts(t.Context())
+		_, err := c.ListLabelCounts(t.Context())
 		require.Error(t, err)
 		assert.Equal(t, http.StatusUnauthorized, client.StatusCode(err))
 	})

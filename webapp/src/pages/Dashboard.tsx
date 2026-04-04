@@ -210,6 +210,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     }
   }, []);
 
+  // Sidebar label counts reflect the default notes view (active, non-archived notes).
   const loadLabelCounts = useCallback(async () => {
     try {
       const counts = await labelsApi.getCounts();
@@ -494,18 +495,16 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   };
 
   const handleNoteUpdate = () => {
-    loadNotes();
+    void Promise.all([loadNotes(), loadLabelCounts()]);
     loadLabels();
-    loadLabelCounts();
     setIsModalOpen(false);
     setEditingNote(null);
     restoreReturnUrl();
   };
 
   const handleNoteRefresh = () => {
-    loadNotes();
+    void Promise.all([loadNotes(), loadLabelCounts()]);
     loadLabels();
-    loadLabelCounts();
   };
 
   const handleDeleteNote = async (noteId: string) => {

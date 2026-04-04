@@ -1193,7 +1193,7 @@ describe('Dashboard', () => {
       
       // Should handle multiple API calls
       await waitFor(() => {
-        expect(mockGetAll).toHaveBeenCalledTimes(5) // Initial notes + counts + 3 switches
+        expect(mockGetAll).toHaveBeenCalledTimes(4) // Initial notes + 3 switches
       })
     })
 
@@ -1312,10 +1312,10 @@ describe('Dashboard', () => {
       },
     ]
     vi.mocked(labels.getAll).mockResolvedValue(countedLabels)
-    vi.mocked(notes.getAll).mockResolvedValue([
-      createMockNote({ id: 'note-1', labels: [countedLabels[0]] }),
-      createMockNote({ id: 'note-2', labels: [countedLabels[0], countedLabels[1]] }),
-    ])
+    vi.mocked(labels.getCounts).mockResolvedValue({
+      'label-work': 2,
+      'label-personal': 1,
+    })
 
     render(
       <MemoryRouter initialEntries={['/']}>
