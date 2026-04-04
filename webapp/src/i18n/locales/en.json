@@ -12,7 +12,8 @@
     "logoutConfirmMessage": "Are you sure you want to log out?",
     "openMobileApp": "Open in mobile app",
     "openMobileAppDescription": "Prefer the native mobile experience?",
-    "dismissMobileAppBanner": "Dismiss"
+    "dismissMobileAppBanner": "Dismiss",
+    "skipToMainContent": "Skip to main content"
   },
   "auth": {
     "signInTitle": "Sign in to Jot",
@@ -193,6 +194,8 @@
     "binDescription": "Open bin view",
     "helpKey": "?",
     "helpDescription": "Open keyboard shortcuts help",
+    "openNoteKey": "Enter",
+    "openNoteDescription": "Open the focused note",
     "escapeKey": "Esc",
     "escapeDescription": "Close the active modal or dialog"
   },
@@ -293,6 +296,7 @@
     "lastEdited": "Last edited: {{date}}",
     "saving": "Saving...",
     "saved": "Saved",
+    "colorPickerLabel": "Select note color",
     "colorWhite": "White",
     "colorCoral": "Coral",
     "colorYellow": "Yellow",

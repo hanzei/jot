@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from 'react';
+import { useState, useEffect, useRef, useCallback } from 'react';
 import { PlusIcon } from '@heroicons/react/24/outline';
 import { useTranslation } from 'react-i18next';
 import type { Label, Note } from '@jot/shared';
@@ -22,8 +22,10 @@ export default function LabelPicker({ note, selectedLabels, onLocalChange, onRef
   const [allLabels, setAllLabels] = useState<Label[]>([]);
   const [creating, setCreating] = useState(false);
   const [newName, setNewName] = useState('');
+  const [focusedLabelIndex, setFocusedLabelIndex] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  const labelButtonRefs = useRef<(HTMLButtonElement | null)[]>([]);
 
   const isLocalMode = !note;
   const currentLabelIds = new Set(
@@ -56,6 +58,34 @@ export default function LabelPicker({ note, selectedLabels, onLocalChange, onRef
   useEffect(() => {
     if (creating) inputRef.current?.focus();
   }, [creating]);
+
+  // Auto-focus the first label when labels load, and keep focusedLabelIndex in bounds.
+  useEffect(() => {
+    if (allLabels.length === 0) return;
+    setFocusedLabelIndex(prev => {
+      const clamped = Math.min(prev, allLabels.length - 1);
+      if (prev !== clamped) return clamped;
+      return prev;
+    });
+    labelButtonRefs.current[0]?.focus();
+  }, [allLabels.length]);
+
+  const handleLabelKeyDown = useCallback((e: React.KeyboardEvent, index: number) => {
+    if (e.key === 'ArrowDown') {
+      e.preventDefault();
+      const nextIndex = Math.min(allLabels.length - 1, index + 1);
+      setFocusedLabelIndex(nextIndex);
+      labelButtonRefs.current[nextIndex]?.focus();
+    } else if (e.key === 'ArrowUp') {
+      e.preventDefault();
+      const nextIndex = Math.max(0, index - 1);
+      setFocusedLabelIndex(nextIndex);
+      labelButtonRefs.current[nextIndex]?.focus();
+    } else if (e.key === 'Escape') {
+      e.preventDefault();
+      onClose();
+    }
+  }, [allLabels.length, onClose]);
 
   const isSelected = (label: Label) =>
     currentLabelIds.has(label.id) || currentLabelNames.has(label.name);
@@ -135,12 +165,15 @@ export default function LabelPicker({ note, selectedLabels, onLocalChange, onRef
         <p className="px-3 py-2 text-xs text-gray-500 dark:text-gray-400">{t('labels.noLabels')}</p>
       )}
 
-      {allLabels.map(label => (
+      {allLabels.map((label, index) => (
         <button
           key={label.id}
+          ref={el => { labelButtonRefs.current[index] = el; }}
           role="checkbox"
           aria-checked={isSelected(label)}
-          onClick={() => toggleLabel(label)}
+          tabIndex={index === focusedLabelIndex ? 0 : -1}
+          onClick={() => { setFocusedLabelIndex(index); toggleLabel(label); }}
+          onKeyDown={(e) => handleLabelKeyDown(e, index)}
           className="flex items-center w-full px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 hover:bg-gray-100 dark:hover:bg-slate-700"
         >
           <input

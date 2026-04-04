@@ -70,6 +70,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const user = getUser();
   const isMountedRef = useRef(true);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const lastFocusedElementRef = useRef<Element | null>(null);
   const openNoteIdRef = useRef<string | null>(null);
   const returnPathRef = useRef('/');
   const noteSortUpdateRequestIdRef = useRef(0);
@@ -359,6 +360,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   };
 
   const handleCreateNote = useCallback(() => {
+    lastFocusedElementRef.current = document.activeElement;
     setEditingNote(null);
     setIsModalOpen(true);
   }, []);
@@ -374,6 +376,21 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       }
 
       if (loading) {
+        return;
+      }
+
+      // Arrow key navigation between note cards (runs before other guards)
+      const isArrowKey = event.key === 'ArrowLeft' || event.key === 'ArrowRight' ||
+        event.key === 'ArrowUp' || event.key === 'ArrowDown';
+      if (isArrowKey && document.activeElement?.getAttribute('data-note-card') === 'true') {
+        event.preventDefault();
+        const cards = Array.from(document.querySelectorAll<HTMLElement>('[data-note-card="true"]'));
+        const currentIndex = cards.indexOf(document.activeElement as HTMLElement);
+        if (event.key === 'ArrowLeft' || event.key === 'ArrowUp') {
+          cards[Math.max(0, currentIndex - 1)]?.focus();
+        } else {
+          cards[Math.min(cards.length - 1, currentIndex + 1)]?.focus();
+        }
         return;
       }
 
@@ -470,6 +487,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     if (!openNoteIdRef.current) {
       returnPathRef.current = window.location.pathname + window.location.search;
     }
+    lastFocusedElementRef.current = document.activeElement;
     openNoteIdRef.current = note.id;
     setEditingNote(note);
     setIsModalOpen(true);
@@ -482,6 +500,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     setIsModalOpen(false);
     setEditingNote(null);
     restoreReturnUrl();
+    (lastFocusedElementRef.current as HTMLElement | null)?.focus();
   };
 
   const handleNoteRefresh = () => {
@@ -1022,6 +1041,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
               setIsModalOpen(false);
               setEditingNote(null);
               restoreReturnUrl();
+              (lastFocusedElementRef.current as HTMLElement | null)?.focus();
             }}
             onSave={handleNoteUpdate}
             onRefresh={handleNoteRefresh}
