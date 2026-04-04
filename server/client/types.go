@@ -248,9 +248,8 @@ type SessionInfo struct {
 
 // ServerConfig holds public server configuration returned by GET /api/v1/config.
 type ServerConfig struct {
-	RegistrationEnabled  bool `json:"registration_enabled"`
-	PasswordMinLength    int  `json:"password_min_length"`
-	SearchQueryMaxLength int  `json:"search_query_max_length"`
+	RegistrationEnabled bool `json:"registration_enabled"`
+	PasswordMinLength   int  `json:"password_min_length"`
 }
 
 // Ptr returns a pointer to v; useful for building UpdateUserRequest fields.

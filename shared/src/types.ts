@@ -1,7 +1,6 @@
 export interface ServerConfig {
   registration_enabled: boolean;
   password_min_length: number;
-  search_query_max_length: number;
 }
 
 export interface AboutInfo {

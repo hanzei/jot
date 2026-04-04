@@ -21,8 +21,7 @@ const (
 	noteContentMaxLength  = 10000
 	noteItemTextMaxLength = 500
 	noteItemsMaxCount     = 500
-	// SearchQueryMaxLength is exported so server.go can include it in the /config response.
-	SearchQueryMaxLength = 500
+	searchQueryMaxLength  = 500
 )
 
 func validateUsername(username string) error {
@@ -56,8 +55,8 @@ func validatePassword(password string, minLength int) error {
 }
 
 func validateSearchQuery(q string) error {
-	if utf8.RuneCountInString(q) > SearchQueryMaxLength {
-		return fmt.Errorf("search query must be %d characters or fewer", SearchQueryMaxLength)
+	if utf8.RuneCountInString(q) > searchQueryMaxLength {
+		return fmt.Errorf("search query must be %d characters or fewer", searchQueryMaxLength)
 	}
 	return nil
 }

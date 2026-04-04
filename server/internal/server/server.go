@@ -366,9 +366,8 @@ func (s *Server) handleAbout(_ http.ResponseWriter, _ *http.Request) (int, any, 
 }
 
 type configResponse struct {
-	RegistrationEnabled  bool `json:"registration_enabled"`
-	PasswordMinLength    int  `json:"password_min_length"`
-	SearchQueryMaxLength int  `json:"search_query_max_length"`
+	RegistrationEnabled bool `json:"registration_enabled"`
+	PasswordMinLength   int  `json:"password_min_length"`
 }
 
 // handleConfig godoc
@@ -380,9 +379,8 @@ type configResponse struct {
 //	@Router		/config [get]
 func (s *Server) handleConfig(_ http.ResponseWriter, _ *http.Request) (int, any, error) {
 	return http.StatusOK, configResponse{
-		RegistrationEnabled:  s.cfg.RegistrationEnabled,
-		PasswordMinLength:    s.cfg.PasswordMinLength,
-		SearchQueryMaxLength: handlers.SearchQueryMaxLength,
+		RegistrationEnabled: s.cfg.RegistrationEnabled,
+		PasswordMinLength:   s.cfg.PasswordMinLength,
 	}, nil
 }
 

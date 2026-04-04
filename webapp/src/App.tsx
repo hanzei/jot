@@ -17,7 +17,6 @@ function App() {
   const [loading, setLoading] = useState(true);
   const [registrationEnabled, setRegistrationEnabled] = useState(true);
   const [passwordMinLength, setPasswordMinLength] = useState(VALIDATION.PASSWORD_MIN_LENGTH);
-  const [searchQueryMaxLength, setSearchQueryMaxLength] = useState(VALIDATION.SEARCH_QUERY_MAX_LENGTH);
 
   useEffect(() => {
     applyTheme(getThemePreference());
@@ -30,7 +29,6 @@ function App() {
       .then((cfg) => {
         setRegistrationEnabled(cfg.registration_enabled);
         setPasswordMinLength(cfg.password_min_length);
-        setSearchQueryMaxLength(cfg.search_query_max_length);
       })
       .catch(() => { /* keep defaults if config fetch fails */ });
 
@@ -70,25 +68,25 @@ function App() {
       <div className="min-h-screen bg-gray-50 dark:bg-slate-900">
         <OfflineNotification />
         <Routes>
-          <Route 
-            path="/login" 
-            element={!isAuth ? <Login onLogin={() => setIsAuth(true)} registrationEnabled={registrationEnabled} /> : <Navigate to="/" />} 
+          <Route
+            path="/login"
+            element={!isAuth ? <Login onLogin={() => setIsAuth(true)} registrationEnabled={registrationEnabled} /> : <Navigate to="/" />}
           />
           <Route
             path="/register"
             element={!isAuth && registrationEnabled ? <Register onRegister={() => setIsAuth(true)} passwordMinLength={passwordMinLength} /> : <Navigate to={isAuth ? "/" : "/login"} />}
           />
-          <Route element={isAuth ? <Dashboard onLogout={() => setIsAuth(false)} searchQueryMaxLength={searchQueryMaxLength} /> : <Navigate to="/login" />}>
+          <Route element={isAuth ? <Dashboard onLogout={() => setIsAuth(false)} /> : <Navigate to="/login" />}>
             <Route index element={null} />
             <Route path="notes/:noteId" element={null} />
           </Route>
           <Route
             path="/admin"
-            element={isAuth && isAdmin() ? <Admin onLogout={() => setIsAuth(false)} passwordMinLength={passwordMinLength} searchQueryMaxLength={searchQueryMaxLength} /> : <Navigate to="/" />}
+            element={isAuth && isAdmin() ? <Admin onLogout={() => setIsAuth(false)} passwordMinLength={passwordMinLength} /> : <Navigate to="/" />}
           />
           <Route
             path="/settings"
-            element={isAuth ? <Settings onLogout={() => setIsAuth(false)} passwordMinLength={passwordMinLength} searchQueryMaxLength={searchQueryMaxLength} /> : <Navigate to="/login" />}
+            element={isAuth ? <Settings onLogout={() => setIsAuth(false)} passwordMinLength={passwordMinLength} /> : <Navigate to="/login" />}
           />
         </Routes>
       </div>

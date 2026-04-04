@@ -249,14 +249,6 @@ func TestConfigEndpoint(t *testing.T) {
 		assert.Equal(t, 4, cfg.PasswordMinLength)
 	})
 
-	t.Run("returns search_query_max_length", func(t *testing.T) {
-		ts := setupTestServer(t)
-		c := ts.newClient()
-
-		cfg, err := c.Config(t.Context())
-		require.NoError(t, err)
-		assert.Equal(t, 500, cfg.SearchQueryMaxLength)
-	})
 }
 
 // Auth endpoint tests

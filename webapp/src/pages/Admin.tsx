@@ -13,7 +13,6 @@ import { getUsernameValidationError, isPasswordTooShort } from '@/utils/userVali
 interface AdminProps {
   onLogout: () => void;
   passwordMinLength: number;
-  searchQueryMaxLength: number;
 }
 
 type CreateUserField = 'username' | 'password';
@@ -58,7 +57,7 @@ const StatCardSkeleton = () => (
   </div>
 );
 
-const Admin = ({ onLogout, passwordMinLength, searchQueryMaxLength }: AdminProps) => {
+const Admin = ({ onLogout, passwordMinLength }: AdminProps) => {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const currentUser = getUser();
@@ -310,7 +309,6 @@ const Admin = ({ onLogout, passwordMinLength, searchQueryMaxLength }: AdminProps
       onChange={setSearchQuery}
       onSubmit={handleSearch}
       stopEscapePropagation={true}
-      maxLength={searchQueryMaxLength}
     />
   );
 

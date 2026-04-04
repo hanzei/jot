@@ -21,10 +21,9 @@ import { IdentitySecurityColumn, PreferencesInfoColumn } from './settings/Settin
 interface SettingsProps {
   onLogout: () => void;
   passwordMinLength: number;
-  searchQueryMaxLength: number;
 }
 
-const Settings = ({ onLogout, passwordMinLength, searchQueryMaxLength }: SettingsProps) => {
+const Settings = ({ onLogout, passwordMinLength }: SettingsProps) => {
   const { t } = useTranslation();
   const { showToast } = useToast();
   useEffect(() => { document.title = t('pageTitle.settings'); }, [t]);
@@ -309,7 +308,6 @@ const Settings = ({ onLogout, passwordMinLength, searchQueryMaxLength }: Setting
       onChange={setSearchQuery}
       onSubmit={handleSearch}
       stopEscapePropagation={true}
-      maxLength={searchQueryMaxLength}
     />
   );
   const sidebarChildren = (

@@ -216,6 +216,7 @@ func (h *NotesHandler) createTodoItems(ctx context.Context, noteID string, items
 //	@Param		label		query		string	false	"Filter by label ID"
 //	@Param		my_todo		query		boolean	false	"Return only notes with todos assigned to current user"
 //	@Success	200			{array}		models.Note
+//	@Failure	400			{string}	string	"search query too long"
 //	@Failure	401			{string}	string	"unauthorized"
 //	@Failure	500			{string}	string	"internal server error"
 //	@Router		/notes [get]
