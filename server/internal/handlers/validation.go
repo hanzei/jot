@@ -21,6 +21,7 @@ const (
 	noteContentMaxLength  = 10000
 	noteItemTextMaxLength = 500
 	noteItemsMaxCount     = 500
+	searchQueryMaxLength  = 200
 )
 
 func validateUsername(username string) error {
