@@ -4,6 +4,7 @@
   },
   "nav": {
     "profileMenu": "Profilmenü",
+    "toggleSidebar": "Seitenleiste umschalten",
     "settings": "Einstellungen",
     "admin": "Admin",
     "logout": "Abmelden",

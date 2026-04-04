@@ -1,6 +1,16 @@
 import { test, expect } from '../fixtures';
 
 test.describe('Keyboard shortcuts help dialog', () => {
+  test('focuses search with Cmd+F', async ({ authenticatedUser, page, dashboardPage }) => {
+    void authenticatedUser;
+    await dashboardPage.goto();
+
+    await page.locator('body').click();
+    await page.keyboard.press('Meta+F');
+
+    await expect(page.locator('form[role="search"] input')).toBeFocused();
+  });
+
   test('focuses search with Ctrl+F', async ({ authenticatedUser, page, dashboardPage }) => {
     void authenticatedUser;
     await dashboardPage.goto();
@@ -52,6 +62,18 @@ test.describe('Keyboard shortcuts help dialog', () => {
 
     await page.keyboard.press('Escape');
     await expect(shortcutsDialog).toBeHidden();
+  });
+
+  test('opens from profile menu keyboard shortcuts item', async ({ authenticatedUser, page, dashboardPage }) => {
+    void authenticatedUser;
+    await dashboardPage.goto();
+
+    await page.getByRole('button', { name: 'Profile menu' }).click();
+    await page.getByRole('menuitem', { name: /Keyboard shortcuts/ }).click();
+
+    const shortcutsDialog = page.getByTestId('keyboard-shortcuts-dialog');
+    await expect(shortcutsDialog).toBeVisible();
+    await expect(shortcutsDialog.getByRole('heading', { name: 'Keyboard shortcuts' })).toBeVisible();
   });
 
   test('opens notes/todo/archive/bin views with d/t/a/b', async ({ authenticatedUser, page, dashboardPage }) => {
