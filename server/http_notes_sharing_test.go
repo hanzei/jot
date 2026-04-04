@@ -439,76 +439,39 @@ func TestEdgeCases(t *testing.T) {
 	})
 }
 
-// TestBatchLoadNoteShares verifies that GET /notes returns correct share data
-// for all notes when multiple notes are shared, exercising the batch-load path.
-func TestBatchLoadNoteShares(t *testing.T) {
+// TestBatchLoadNoteSharesChunkBoundary verifies that getSharesByNoteIDs correctly
+// stitches results across the 500-ID chunk boundary when listing notes.
+func TestBatchLoadNoteSharesChunkBoundary(t *testing.T) {
 	ts := setupTestServer(t)
-	owner := ts.createTestUser(t, "batchowner", "password123", false)
-	collaborator := ts.createTestUser(t, "batchcollab", "password123", false)
+	owner := ts.createTestUser(t, "chunkowner", "password123", false)
+	collab := ts.createTestUser(t, "chunkcollab", "password123", false)
 
-	// Create 3 notes and share each with the collaborator.
-	noteIDs := make([]string, 3)
-	for i := range noteIDs {
+	const total = 501
+	createdIDs := make([]string, total)
+	for i := range createdIDs {
 		note, err := owner.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-			Title:   "Shared Note",
+			Title:   "Chunk Note",
 			Content: "content",
 		})
 		require.NoError(t, err)
-		noteIDs[i] = note.ID
-		require.NoError(t, owner.Client.ShareNote(t.Context(), note.ID, collaborator.User.ID))
+		createdIDs[i] = note.ID
+		require.NoError(t, owner.Client.ShareNote(t.Context(), note.ID, collab.User.ID))
 	}
 
-	t.Run("list notes returns shares for every note", func(t *testing.T) {
-		notes, err := owner.Client.ListNotes(t.Context(), nil)
-		require.NoError(t, err)
+	notes, err := owner.Client.ListNotes(t.Context(), nil)
+	require.NoError(t, err)
 
-		// Index returned notes by ID for O(1) lookup.
-		byID := make(map[string]client.Note, len(notes))
-		for _, n := range notes {
-			byID[n.ID] = n
-		}
+	byID := make(map[string]client.Note, len(notes))
+	for _, n := range notes {
+		byID[n.ID] = n
+	}
 
-		for _, id := range noteIDs {
-			n, ok := byID[id]
-			require.True(t, ok, "note %s missing from list response", id)
-			assert.True(t, n.IsShared, "note %s should be marked as shared", id)
-			require.Len(t, n.SharedWith, 1, "note %s should have exactly one share", id)
-			assert.Equal(t, collaborator.User.ID, n.SharedWith[0].SharedWithUserID,
-				"note %s share should be for the collaborator", id)
-		}
-	})
-
-	t.Run("chunk boundary: 501 notes all have correct shares", func(t *testing.T) {
-		chunkOwner := ts.createTestUser(t, "chunkowner", "password123", false)
-		chunkCollab := ts.createTestUser(t, "chunkcollab", "password123", false)
-
-		const total = 501
-		createdIDs := make([]string, total)
-		for i := range createdIDs {
-			note, err := chunkOwner.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-				Title:   "Chunk Note",
-				Content: "content",
-			})
-			require.NoError(t, err)
-			createdIDs[i] = note.ID
-			require.NoError(t, chunkOwner.Client.ShareNote(t.Context(), note.ID, chunkCollab.User.ID))
-		}
-
-		notes, err := chunkOwner.Client.ListNotes(t.Context(), nil)
-		require.NoError(t, err)
-
-		byID := make(map[string]client.Note, len(notes))
-		for _, n := range notes {
-			byID[n.ID] = n
-		}
-
-		for _, id := range createdIDs {
-			n, ok := byID[id]
-			require.True(t, ok, "note %s missing from list response", id)
-			assert.True(t, n.IsShared, "note %s should be marked as shared", id)
-			require.Len(t, n.SharedWith, 1, "note %s should have exactly one share", id)
-			assert.Equal(t, chunkCollab.User.ID, n.SharedWith[0].SharedWithUserID,
-				"note %s share should be for the collaborator", id)
-		}
-	})
+	for _, id := range createdIDs {
+		n, ok := byID[id]
+		require.True(t, ok, "note %s missing from list response", id)
+		assert.True(t, n.IsShared, "note %s should be marked as shared", id)
+		require.Len(t, n.SharedWith, 1, "note %s should have exactly one share", id)
+		assert.Equal(t, collab.User.ID, n.SharedWith[0].SharedWithUserID,
+			"note %s share should be for the collaborator", id)
+	}
 }
