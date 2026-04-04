@@ -165,7 +165,7 @@ export async function getLocalNotes(db: SQLiteDatabase, params?: GetNotesParams)
   if (todoIds.length > 0) {
     const placeholders = todoIds.map(() => '?').join(', ');
     const itemRows = await db.getAllAsync<NoteItemRow>(
-      `SELECT * FROM note_items WHERE note_id IN (${placeholders}) ORDER BY position ASC`,
+      `SELECT * FROM note_items WHERE note_id IN (${placeholders}) ORDER BY note_id ASC, position ASC`,
       todoIds,
     );
     for (const itemRow of itemRows) {

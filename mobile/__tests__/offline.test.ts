@@ -203,7 +203,9 @@ describe('removeLocalNotesNotIn', () => {
     );
 
     expect(db.getAllAsync).toHaveBeenCalledWith(
-      expect.stringContaining('SELECT id, labels_json FROM notes WHERE'),
+      expect.stringContaining(
+        "SELECT id, labels_json FROM notes WHERE id NOT LIKE 'local_%' AND archived = 0 AND deleted_at IS NULL",
+      ),
       [],
     );
     expect(db.runAsync).toHaveBeenCalledWith(

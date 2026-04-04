@@ -190,6 +190,7 @@ export default function NoteEditorScreen() {
         setItems(toLocalItems(existingNote.items));
       }
       isInitializedRef.current = true;
+      requiresHydrationRef.current = false;
     }
   }, [existingNote]);
 
