@@ -81,6 +81,43 @@ func (h *LabelsHandler) GetLabels(w http.ResponseWriter, r *http.Request) (int, 
 	return http.StatusOK, labels, nil
 }
 
+// CreateLabel godoc
+//
+//	@Summary	Create or return an existing label
+//	@Tags		labels
+//	@Security	CookieAuth
+//	@Accept		json
+//	@Produce	json
+//	@Param		body	body		AddLabelRequest	true	"Label name"
+//	@Success	200		{object}	models.Label
+//	@Failure	400		{string}	string	"bad request"
+//	@Failure	401		{string}	string	"unauthorized"
+//	@Failure	500		{string}	string	"internal server error"
+//	@Router		/labels [post]
+func (h *LabelsHandler) CreateLabel(w http.ResponseWriter, r *http.Request) (int, any, error) {
+	user, ok := auth.GetUserFromContext(r.Context())
+	if !ok {
+		return http.StatusUnauthorized, nil, errors.New("unauthorized")
+	}
+
+	var req AddLabelRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return http.StatusBadRequest, nil, errors.New("invalid request body")
+	}
+
+	req.Name = strings.TrimSpace(req.Name)
+	if req.Name == "" {
+		return http.StatusBadRequest, nil, errors.New("label name is required")
+	}
+
+	label, err := h.labelStore.GetOrCreateLabel(r.Context(), user.ID, req.Name)
+	if err != nil {
+		return http.StatusInternalServerError, nil, fmt.Errorf("get or create label: %w", err)
+	}
+
+	return http.StatusOK, label, nil
+}
+
 // RenameLabel godoc
 //
 //	@Summary	Rename a label

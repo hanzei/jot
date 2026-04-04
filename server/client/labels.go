@@ -15,6 +15,17 @@ func (c *Client) ListLabels(ctx context.Context) ([]Label, error) {
 	return labels, nil
 }
 
+// CreateLabel creates a label (or returns the existing one with the same name).
+func (c *Client) CreateLabel(ctx context.Context, name string) (*Label, error) {
+	var label Label
+	if err := c.doJSON(ctx, http.MethodPost, "/api/v1/labels", map[string]string{
+		"name": name,
+	}, &label); err != nil {
+		return nil, err
+	}
+	return &label, nil
+}
+
 // AddLabel creates or finds a label by name and attaches it to a note.
 // Returns the updated note.
 func (c *Client) AddLabel(ctx context.Context, noteID, name string) (*Note, error) {

@@ -92,6 +92,62 @@ func TestGetNotesByLabel(t *testing.T) {
 	})
 }
 
+func TestCreateLabel(t *testing.T) {
+	ts := setupTestServer(t)
+	user := ts.createTestUser(t, "createlabel", "password123", false)
+
+	t.Run("create label happy path", func(t *testing.T) {
+		label, err := user.Client.CreateLabel(t.Context(), "planning")
+		require.NoError(t, err)
+		require.NotNil(t, label)
+		assert.Equal(t, "planning", label.Name)
+
+		labels, err := user.Client.ListLabels(t.Context())
+		require.NoError(t, err)
+		require.Len(t, labels, 1)
+		assert.Equal(t, "planning", labels[0].Name)
+		assert.Equal(t, label.ID, labels[0].ID)
+	})
+
+	t.Run("creating same label twice returns existing label", func(t *testing.T) {
+		first, err := user.Client.CreateLabel(t.Context(), "existing")
+		require.NoError(t, err)
+		second, err := user.Client.CreateLabel(t.Context(), "existing")
+		require.NoError(t, err)
+
+		assert.Equal(t, first.ID, second.ID)
+
+		labels, err := user.Client.ListLabels(t.Context())
+		require.NoError(t, err)
+		existingCount := 0
+		for _, l := range labels {
+			if l.Name == "existing" {
+				existingCount++
+			}
+		}
+		assert.Equal(t, 1, existingCount)
+	})
+
+	t.Run("trims whitespace from label name", func(t *testing.T) {
+		label, err := user.Client.CreateLabel(t.Context(), "  trimmed  ")
+		require.NoError(t, err)
+		assert.Equal(t, "trimmed", label.Name)
+	})
+
+	t.Run("empty label name returns 400", func(t *testing.T) {
+		_, err := user.Client.CreateLabel(t.Context(), "   ")
+		require.Error(t, err)
+		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
+	})
+
+	t.Run("unauthenticated request returns 401", func(t *testing.T) {
+		c := ts.newClient()
+		_, err := c.CreateLabel(t.Context(), "unauth")
+		require.Error(t, err)
+		assert.Equal(t, http.StatusUnauthorized, client.StatusCode(err))
+	})
+}
+
 // createNoteWithLabelsFixture creates a fresh server and user for a label test.
 func createNoteWithLabelsFixture(t *testing.T) *TestUser {
 	t.Helper()

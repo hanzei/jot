@@ -25,6 +25,7 @@ vi.mock('@/utils/api', () => ({
   },
   labels: {
     getAll: vi.fn().mockResolvedValue([]),
+    create: vi.fn(),
   },
   users: {
     search: vi.fn().mockResolvedValue([]),
@@ -1049,11 +1050,12 @@ describe('Dashboard', () => {
       await waitFor(() => {
         expect(screen.getByTestId('refresh-1')).toBeInTheDocument()
       })
+      const initialCalls = mockGetAll.mock.calls.length
       await user.click(screen.getByTestId('refresh-1'))
 
       await waitFor(() => {
-        // Should call getAll again to refresh
-        expect(mockGetAll).toHaveBeenCalledTimes(2)
+        // Refresh triggers reloading both visible notes and sidebar label counts.
+        expect(mockGetAll.mock.calls.length).toBeGreaterThanOrEqual(initialCalls + 2)
       })
     })
   })
@@ -1190,7 +1192,7 @@ describe('Dashboard', () => {
       
       // Should handle multiple API calls
       await waitFor(() => {
-        expect(mockGetAll).toHaveBeenCalledTimes(4) // Initial + 3 switches
+        expect(mockGetAll).toHaveBeenCalledTimes(5) // Initial notes + counts + 3 switches
       })
     })
 
@@ -1288,6 +1290,74 @@ describe('Dashboard', () => {
     await waitFor(() => {
       expect(screen.getByRole('button', { name: 'work' })).toBeInTheDocument()
       expect(screen.getByRole('button', { name: 'personal' })).toBeInTheDocument()
+    })
+  })
+
+  it('shows label counts next to each label', async () => {
+    const countedLabels: Label[] = [
+      {
+        id: 'label-work',
+        user_id: 'user1',
+        name: 'work',
+        created_at: '2024-01-01T00:00:00Z',
+        updated_at: '2024-01-01T00:00:00Z',
+      },
+      {
+        id: 'label-personal',
+        user_id: 'user1',
+        name: 'personal',
+        created_at: '2024-01-01T00:00:00Z',
+        updated_at: '2024-01-01T00:00:00Z',
+      },
+    ]
+    vi.mocked(labels.getAll).mockResolvedValue(countedLabels)
+    vi.mocked(notes.getAll).mockResolvedValue([
+      createMockNote({ id: 'note-1', labels: [countedLabels[0]] }),
+      createMockNote({ id: 'note-2', labels: [countedLabels[0], countedLabels[1]] }),
+    ])
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <ToastProvider>
+          <Dashboard onLogout={vi.fn()} />
+        </ToastProvider>
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByTestId('label-count-label-work')).toHaveTextContent('2')
+      expect(screen.getByTestId('label-count-label-personal')).toHaveTextContent('1')
+    })
+  })
+
+  it('creates a new label from sidebar new label control', async () => {
+    const user = userEvent.setup()
+    vi.mocked(labels.create).mockResolvedValue({
+      id: 'label-new',
+      user_id: 'user1',
+      name: 'important',
+      created_at: '2024-01-01T00:00:00Z',
+      updated_at: '2024-01-01T00:00:00Z',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <ToastProvider>
+          <Dashboard onLogout={vi.fn()} />
+        </ToastProvider>
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '+ New Label' })).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('button', { name: '+ New Label' }))
+    const createInput = await screen.findByRole('textbox', { name: 'New label name' })
+    await user.type(createInput, 'important{enter}')
+
+    await waitFor(() => {
+      expect(labels.create).toHaveBeenCalledWith('important')
     })
   })
 
