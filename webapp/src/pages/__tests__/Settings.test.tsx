@@ -1,11 +1,11 @@
-import { render, screen, waitFor } from '@testing-library/react'
+import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { MemoryRouter } from 'react-router'
 import { type ReactNode } from 'react'
 import Settings from '../Settings'
 import { ToastProvider } from '@/components/Toast'
-import { users, auth, labels as labelsApi, isAxiosError } from '@/utils/api'
+import { users, auth, labels as labelsApi, sessions, isAxiosError } from '@/utils/api'
 import * as authUtils from '@/utils/auth'
 import type { UserSettings } from '@jot/shared'
 import i18n from '@/i18n'
@@ -81,11 +81,20 @@ const defaultSettings: UserSettings = {
   updated_at: '',
 }
 
+const activeSession = {
+  id: 'session-1',
+  browser: 'Chrome',
+  os: 'Linux',
+  is_current: false,
+  created_at: '2023-01-01T00:00:00Z',
+  expires_at: '2023-02-01T00:00:00Z',
+}
+
 const renderSettings = (onLogout = vi.fn()) => {
   return render(
     <MemoryRouter>
       <ToastProvider>
-        <Settings onLogout={onLogout} />
+        <Settings onLogout={onLogout} passwordMinLength={10} />
       </ToastProvider>
     </MemoryRouter>
   )
@@ -361,6 +370,55 @@ describe('Settings', () => {
 
       await waitFor(() => {
         expect(screen.getByRole('alert')).toHaveTextContent('Logout failed')
+      })
+    })
+  })
+
+  describe('Session revocation confirmation', () => {
+    it('opens confirmation dialog before revoking a session', async () => {
+      const user = userEvent.setup()
+      vi.mocked(sessions.list).mockResolvedValue([activeSession])
+
+      renderSettings()
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: 'Revoke' })).toBeInTheDocument()
+      })
+
+      await user.click(screen.getByRole('button', { name: 'Revoke' }))
+
+      expect(screen.getByRole('heading', { name: 'Revoke session' })).toBeInTheDocument()
+      expect(sessions.revoke).not.toHaveBeenCalled()
+    })
+
+    it('revokes session only after confirming', async () => {
+      const user = userEvent.setup()
+      vi.mocked(sessions.list).mockResolvedValue([activeSession])
+
+      renderSettings()
+
+      await user.click(await screen.findByRole('button', { name: 'Revoke' }))
+      const confirmDialog = screen.getByRole('dialog', { name: 'Revoke session' })
+      await user.click(within(confirmDialog).getByRole('button', { name: 'Revoke' }))
+
+      await waitFor(() => {
+        expect(sessions.revoke).toHaveBeenCalledWith('session-1')
+      })
+    })
+
+    it('does not revoke when confirmation is canceled', async () => {
+      const user = userEvent.setup()
+      vi.mocked(sessions.list).mockResolvedValue([activeSession])
+
+      renderSettings()
+
+      await user.click(await screen.findByRole('button', { name: 'Revoke' }))
+      const confirmDialog = screen.getByRole('dialog', { name: 'Revoke session' })
+      await user.click(within(confirmDialog).getByRole('button', { name: 'Cancel' }))
+
+      expect(sessions.revoke).not.toHaveBeenCalled()
+      await waitFor(() => {
+        expect(screen.queryByRole('heading', { name: 'Revoke session' })).not.toBeInTheDocument()
       })
     })
   })

@@ -646,6 +646,12 @@ const docTemplate = `{
                             }
                         }
                     },
+                    "400": {
+                        "description": "search query too long",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
                     "401": {
                         "description": "unauthorized",
                         "schema": {
@@ -1659,6 +1665,12 @@ const docTemplate = `{
                             }
                         }
                     },
+                    "400": {
+                        "description": "search query too long",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
                     "401": {
                         "description": "unauthorized",
                         "schema": {
@@ -2584,6 +2596,9 @@ const docTemplate = `{
         "server.configResponse": {
             "type": "object",
             "properties": {
+                "password_min_length": {
+                    "type": "integer"
+                },
                 "registration_enabled": {
                     "type": "boolean"
                 }

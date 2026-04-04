@@ -22,6 +22,7 @@ import (
 	"github.com/hanzei/jot/server/internal/database"
 	"github.com/hanzei/jot/server/internal/handlers"
 	"github.com/hanzei/jot/server/internal/logutil"
+	"github.com/hanzei/jot/server/internal/mcphandler"
 	"github.com/hanzei/jot/server/internal/models"
 	"github.com/hanzei/jot/server/internal/sse"
 	"github.com/sirupsen/logrus"
@@ -59,6 +60,8 @@ type Server struct {
 	eventsHandler   *handlers.EventsHandler
 	adminHandler    *handlers.AdminHandler
 	sessionsHandler *handlers.SessionsHandler
+	noteStore       *models.NoteStore
+	labelStore      *models.LabelStore
 }
 
 func New(cfg *config.Config) (*Server, error) {
@@ -84,11 +87,11 @@ func New(cfg *config.Config) (*Server, error) {
 
 	hub := sse.NewHub()
 
-	authHandler := handlers.NewAuthHandler(userStore, noteStore, sessionService, userSettingsStore, hub, cfg.RegistrationEnabled)
+	authHandler := handlers.NewAuthHandler(userStore, noteStore, sessionService, userSettingsStore, hub, cfg.RegistrationEnabled, cfg.PasswordMinLength)
 	notesHandler := handlers.NewNotesHandler(noteStore, userStore, labelStore, hub)
 	labelsHandler := handlers.NewLabelsHandler(noteStore, labelStore, hub)
 	eventsHandler := handlers.NewEventsHandler(hub)
-	adminHandler := handlers.NewAdminHandler(userStore, noteStore, adminStatsStore, userSettingsStore, cfg.DBPath)
+	adminHandler := handlers.NewAdminHandler(userStore, noteStore, adminStatsStore, userSettingsStore, cfg.DBPath, cfg.PasswordMinLength)
 	sessionsHandler := handlers.NewSessionsHandler(sessionStore)
 
 	s := &Server{
@@ -105,6 +108,8 @@ func New(cfg *config.Config) (*Server, error) {
 		eventsHandler:   eventsHandler,
 		adminHandler:    adminHandler,
 		sessionsHandler: sessionsHandler,
+		noteStore:       noteStore,
+		labelStore:      labelStore,
 	}
 
 	startPeriodicTask(&s.bgWg, ctx, time.Hour, false, func() error {
@@ -127,21 +132,29 @@ func (s *Server) setupRoutes() error {
 	s.router.Use(requestLoggerMiddleware)
 	s.router.Use(middleware.Recoverer)
 	s.router.Use(securityHeaders(s.cfg.CookieSecure))
-	s.router.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{s.cfg.CORSAllowedOrigin},
+
+	corsOpts := cors.Options{
 		AllowedMethods:   []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodOptions},
 		AllowedHeaders:   []string{"Accept", "Content-Type"},
 		ExposedHeaders:   []string{"Link"},
 		AllowCredentials: true,
 		MaxAge:           300,
-	}))
+	}
+	if s.cfg.CORSAllowedOrigin != "" {
+		corsOpts.AllowedOrigins = []string{s.cfg.CORSAllowedOrigin}
+	} else {
+		corsOpts.AllowOriginFunc = func(_ *http.Request, _ string) bool { return false }
+	}
+	s.router.Use(cors.Handler(corsOpts))
 
 	s.router.Get("/livez", s.wrapHandler(s.handleLive))
 	s.router.Get("/readyz", s.handleReady)
 
 	cop := http.NewCrossOriginProtection()
-	if err := cop.AddTrustedOrigin(s.cfg.CORSAllowedOrigin); err != nil {
-		return fmt.Errorf("add trusted origin %q: %w", s.cfg.CORSAllowedOrigin, err)
+	if s.cfg.CORSAllowedOrigin != "" {
+		if err := cop.AddTrustedOrigin(s.cfg.CORSAllowedOrigin); err != nil {
+			return fmt.Errorf("add trusted origin %q: %w", s.cfg.CORSAllowedOrigin, err)
+		}
 	}
 	s.router.Route("/api/v1", func(r chi.Router) {
 		r.Use(cop.Handler)
@@ -190,6 +203,8 @@ func (s *Server) setupRoutes() error {
 
 			r.Get("/sessions", s.wrapHandler(s.sessionsHandler.ListSessions))
 			r.Delete("/sessions/{id}", s.wrapHandler(s.sessionsHandler.RevokeSession))
+
+			r.Handle("/mcp", mcphandler.New(s.noteStore, s.labelStore).NewStreamableHTTPHandler())
 		})
 
 		r.Group(func(r chi.Router) {
@@ -359,6 +374,7 @@ func (s *Server) handleAbout(_ http.ResponseWriter, _ *http.Request) (int, any, 
 
 type configResponse struct {
 	RegistrationEnabled bool `json:"registration_enabled"`
+	PasswordMinLength   int  `json:"password_min_length"`
 }
 
 // handleConfig godoc
@@ -371,6 +387,7 @@ type configResponse struct {
 func (s *Server) handleConfig(_ http.ResponseWriter, _ *http.Request) (int, any, error) {
 	return http.StatusOK, configResponse{
 		RegistrationEnabled: s.cfg.RegistrationEnabled,
+		PasswordMinLength:   s.cfg.PasswordMinLength,
 	}, nil
 }
 

@@ -294,11 +294,30 @@ describe('Dashboard', () => {
   })
 
   describe('Search Functionality', () => {
+    it('focuses search when Meta+F is pressed', async () => {
+      renderDashboard()
+
+      await waitFor(() => {
+        expect(screen.getByPlaceholderText('Search notes...')).toBeInTheDocument()
+      })
+
+      fireEvent.keyDown(window, { key: 'f', metaKey: true })
+      expect(screen.getByPlaceholderText('Search notes...')).toHaveFocus()
+    })
+
     it('renders search input', async () => {
       renderDashboard()
       
       await waitFor(() => {
         expect(screen.getByPlaceholderText('Search notes...')).toBeInTheDocument()
+      })
+    })
+
+    it('renders keyboard shortcut hint in dashboard search input', async () => {
+      renderDashboard()
+
+      await waitFor(() => {
+        expect(screen.getByTestId('search-shortcut-hint')).toHaveTextContent('Ctrl + F')
       })
     })
 

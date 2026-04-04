@@ -15,6 +15,41 @@ describe('NavigationHeader', () => {
     localStorage.clear()
   })
 
+  it('shows keyboard shortcuts menu item when callback is provided', () => {
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <NavigationHeader onLogout={vi.fn()} onOpenKeyboardShortcuts={vi.fn()} />
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Profile menu' }))
+    expect(screen.getByRole('menuitem', { name: /Keyboard shortcuts/ })).toBeInTheDocument()
+  })
+
+  it('does not show keyboard shortcuts menu item when callback is missing', () => {
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <NavigationHeader onLogout={vi.fn()} />
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Profile menu' }))
+    expect(screen.queryByRole('menuitem', { name: /Keyboard shortcuts/ })).not.toBeInTheDocument()
+  })
+
+  it('calls keyboard shortcuts callback from profile menu', () => {
+    const onOpenKeyboardShortcuts = vi.fn()
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <NavigationHeader onLogout={vi.fn()} onOpenKeyboardShortcuts={onOpenKeyboardShortcuts} />
+      </MemoryRouter>,
+    )
+
+    fireEvent.click(screen.getByRole('button', { name: 'Profile menu' }))
+    fireEvent.click(screen.getByRole('menuitem', { name: /Keyboard shortcuts/ }))
+    expect(onOpenKeyboardShortcuts).toHaveBeenCalledTimes(1)
+  })
+
   it('shows mobile app banner by default', () => {
     render(
       <MemoryRouter initialEntries={['/notes/note-1']}>

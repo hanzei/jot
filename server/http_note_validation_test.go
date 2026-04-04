@@ -108,12 +108,93 @@ func TestNoteValidation(t *testing.T) {
 			})
 			require.NoError(t, err)
 
+			updateItems := []client.UpdateNoteItem{
+				{Text: strings.Repeat("a", 501), Position: 0},
+			}
 			_, err = user.Client.UpdateNote(t.Context(), note.ID, &client.UpdateNoteRequest{
-				Items: []client.UpdateNoteItem{
-					{Text: strings.Repeat("a", 501), Position: 0},
-				},
+				Items: &updateItems,
 			})
 			assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
+		})
+	})
+
+	t.Run("color validation", func(t *testing.T) {
+		t.Run("invalid color on create returns 400", func(t *testing.T) {
+			for _, color := range []string{"red", "#gggggg", "#12345", "ffffff", "#1234567"} {
+				_, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
+					Title: "test",
+					Color: color,
+				})
+				assert.Equal(t, http.StatusBadRequest, client.StatusCode(err), "expected 400 for color %q", color)
+			}
+		})
+
+		t.Run("valid 3-digit hex on create succeeds", func(t *testing.T) {
+			note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
+				Title: "test",
+				Color: "#fff",
+			})
+			require.NoError(t, err)
+			assert.Equal(t, "#fff", note.Color)
+		})
+
+		t.Run("valid 6-digit hex on create succeeds", func(t *testing.T) {
+			note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
+				Title: "test",
+				Color: "#1a2b3c",
+			})
+			require.NoError(t, err)
+			assert.Equal(t, "#1a2b3c", note.Color)
+		})
+
+		t.Run("empty color on create uses default", func(t *testing.T) {
+			note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
+				Title: "test",
+				Color: "",
+			})
+			require.NoError(t, err)
+			assert.Equal(t, "#ffffff", note.Color)
+		})
+
+		t.Run("invalid color on update returns 400", func(t *testing.T) {
+			note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{Title: "test"})
+			require.NoError(t, err)
+
+			for _, color := range []string{"red", "#gggggg", "#12345", "ffffff", "#1234567"} {
+				c := color
+				_, err := user.Client.UpdateNote(t.Context(), note.ID, &client.UpdateNoteRequest{Color: &c})
+				assert.Equal(t, http.StatusBadRequest, client.StatusCode(err), "expected 400 for color %q", color)
+			}
+		})
+
+		t.Run("valid 3-digit hex on update succeeds", func(t *testing.T) {
+			note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{Title: "test"})
+			require.NoError(t, err)
+
+			color := "#abc"
+			updated, err := user.Client.UpdateNote(t.Context(), note.ID, &client.UpdateNoteRequest{Color: &color})
+			require.NoError(t, err)
+			assert.Equal(t, "#abc", updated.Color)
+		})
+
+		t.Run("valid 6-digit hex on update succeeds", func(t *testing.T) {
+			note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{Title: "test"})
+			require.NoError(t, err)
+
+			color := "#FFFFFF"
+			updated, err := user.Client.UpdateNote(t.Context(), note.ID, &client.UpdateNoteRequest{Color: &color})
+			require.NoError(t, err)
+			assert.Equal(t, "#FFFFFF", updated.Color)
+		})
+
+		t.Run("empty string color on update uses default", func(t *testing.T) {
+			note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{Title: "test", Color: "#abc"})
+			require.NoError(t, err)
+
+			empty := ""
+			updated, err := user.Client.UpdateNote(t.Context(), note.ID, &client.UpdateNoteRequest{Color: &empty})
+			require.NoError(t, err)
+			assert.Equal(t, "#ffffff", updated.Color)
 		})
 	})
 
@@ -137,8 +218,29 @@ func TestNoteValidation(t *testing.T) {
 			for i := range items {
 				items[i] = client.UpdateNoteItem{Text: "item", Position: i}
 			}
-			_, err = user.Client.UpdateNote(t.Context(), note.ID, &client.UpdateNoteRequest{Items: items})
+			_, err = user.Client.UpdateNote(t.Context(), note.ID, &client.UpdateNoteRequest{Items: &items})
 			assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 		})
+	})
+
+	t.Run("update with explicit empty items clears todo items", func(t *testing.T) {
+		note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
+			Items: []client.CreateNoteItem{
+				{Text: "only item", Position: 0},
+			},
+		})
+		require.NoError(t, err)
+		require.Len(t, note.Items, 1)
+
+		emptyItems := []client.UpdateNoteItem{}
+		updated, err := user.Client.UpdateNote(t.Context(), note.ID, &client.UpdateNoteRequest{
+			Items: &emptyItems,
+		})
+		require.NoError(t, err)
+		assert.Empty(t, updated.Items)
+
+		reloaded, err := user.Client.GetNote(t.Context(), note.ID)
+		require.NoError(t, err)
+		assert.Empty(t, reloaded.Items)
 	})
 }

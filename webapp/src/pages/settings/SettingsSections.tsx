@@ -64,6 +64,7 @@ interface PasswordFormProps {
   onConfirmPasswordChange: (value: string) => void;
   passwordSaving: boolean;
   passwordError: string;
+  passwordMinLength: number;
   onPasswordSubmit: (e: FormEvent<HTMLFormElement>) => void;
 }
 
@@ -100,6 +101,7 @@ export const IdentitySecurityColumn = ({
     onConfirmPasswordChange,
     passwordSaving,
     passwordError,
+    passwordMinLength,
     onPasswordSubmit,
   },
   displayMsg,
@@ -242,7 +244,7 @@ export const IdentitySecurityColumn = ({
             value={newPassword}
             onChange={(e) => onNewPasswordChange(e.target.value)}
             className="mt-1 block w-full border border-gray-300 dark:border-slate-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-            placeholder={t('settings.newPasswordPlaceholder')}
+            placeholder={t('settings.newPasswordPlaceholder', { min: passwordMinLength })}
           />
         </div>
 
@@ -286,7 +288,7 @@ interface PreferencesInfoColumnProps {
   sessionsError: string;
   activeSessions: ActiveSession[];
   revokingSessionId: string | null;
-  onRevokeSession: (sessionId: string) => void | Promise<void>;
+  onRequestRevokeSession: (session: ActiveSession) => void;
   displayMsg: (msg: string) => string;
   languagePref: LanguagePreference;
   onLanguageChange: (pref: LanguagePreference) => void;
@@ -302,7 +304,7 @@ export const PreferencesInfoColumn = ({
   sessionsError,
   activeSessions,
   revokingSessionId,
-  onRevokeSession,
+  onRequestRevokeSession,
   displayMsg,
   languagePref,
   onLanguageChange,
@@ -347,8 +349,8 @@ export const PreferencesInfoColumn = ({
               {!session.is_current && (
                 <button
                   type="button"
-                  onClick={() => onRevokeSession(session.id)}
-                  disabled={revokingSessionId === session.id}
+                  onClick={() => onRequestRevokeSession(session)}
+                  disabled={revokingSessionId !== null}
                   className="ml-4 flex-shrink-0 text-sm text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 disabled:opacity-50"
                 >
                   {revokingSessionId === session.id ? t('settings.sessionsRevoking') : t('settings.sessionsRevoke')}

@@ -40,6 +40,7 @@ interface DashboardProps {
 }
 
 const SEARCH_DEBOUNCE_MS = 300;
+const isApplePlatform = () => typeof navigator !== 'undefined' && /mac|iphone|ipad|ipod/i.test(navigator.platform);
 
 export default function Dashboard({ onLogout }: DashboardProps) {
   const { t } = useTranslation();
@@ -69,6 +70,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const user = getUser();
   const isMountedRef = useRef(true);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const lastFocusedElementRef = useRef<Element | null>(null);
   const openNoteIdRef = useRef<string | null>(null);
   const returnPathRef = useRef('/');
   const noteSortUpdateRequestIdRef = useRef(0);
@@ -369,6 +371,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   };
 
   const handleCreateNote = useCallback(() => {
+    lastFocusedElementRef.current = document.activeElement;
     setEditingNote(null);
     setIsModalOpen(true);
   }, []);
@@ -384,6 +387,42 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       }
 
       if (loading) {
+        return;
+      }
+
+      // Arrow key navigation between note cards (runs before other guards)
+      const isArrowKey = event.key === 'ArrowLeft' || event.key === 'ArrowRight' ||
+        event.key === 'ArrowUp' || event.key === 'ArrowDown';
+      if (isArrowKey && document.activeElement?.getAttribute('data-note-card') === 'true') {
+        event.preventDefault();
+        const cards = Array.from(document.querySelectorAll<HTMLElement>('[data-note-card="true"]'));
+        const currentCard = document.activeElement as HTMLElement;
+        const currentIndex = cards.indexOf(currentCard);
+        if (event.key === 'ArrowLeft') {
+          cards[Math.max(0, currentIndex - 1)]?.focus();
+        } else if (event.key === 'ArrowRight') {
+          cards[Math.min(cards.length - 1, currentIndex + 1)]?.focus();
+        } else {
+          // Grid-aware Up/Down: find the nearest card in the target direction
+          const currentRect = currentCard.getBoundingClientRect();
+          const currentCenterX = currentRect.left + currentRect.width / 2;
+          const currentCenterY = currentRect.top + currentRect.height / 2;
+          const goingUp = event.key === 'ArrowUp';
+          let bestCard: HTMLElement | null = null;
+          let bestScore = Infinity;
+          for (const card of cards) {
+            if (card === currentCard) continue;
+            const rect = card.getBoundingClientRect();
+            const centerY = rect.top + rect.height / 2;
+            if (goingUp ? centerY > currentCenterY : centerY < currentCenterY) continue;
+            const dy = Math.abs(centerY - currentCenterY);
+            const dx = Math.abs(rect.left + rect.width / 2 - currentCenterX);
+            // Prefer cards that are more directly above/below (weight vertical distance heavily)
+            const score = dy + dx * 0.5;
+            if (score < bestScore) { bestScore = score; bestCard = card; }
+          }
+          (bestCard ?? (goingUp ? cards[Math.max(0, currentIndex - 1)] : cards[Math.min(cards.length - 1, currentIndex + 1)]))?.focus();
+        }
         return;
       }
 
@@ -480,6 +519,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     if (!openNoteIdRef.current) {
       returnPathRef.current = window.location.pathname + window.location.search;
     }
+    lastFocusedElementRef.current = document.activeElement;
     openNoteIdRef.current = note.id;
     setEditingNote(note);
     setIsModalOpen(true);
@@ -492,6 +532,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     setIsModalOpen(false);
     setEditingNote(null);
     restoreReturnUrl();
+    (lastFocusedElementRef.current as HTMLElement | null)?.focus();
   };
 
   const handleNoteRefresh = () => {
@@ -746,6 +787,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   );
   const dragReorderingDisabled = showArchived || showBin || showMyTodo || noteSort !== 'manual';
   const activeSortLabel = t(`dashboard.sortOption.${noteSort}`);
+  const focusSearchShortcutHint = isApplePlatform() ? '⌘ + F' : t('keyboardShortcuts.focusSearchKey');
 
   if (loading) {
     return (
@@ -795,6 +837,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
           value={searchQuery}
           onChange={setSearchQuery}
           inputRef={searchInputRef}
+          shortcutHint={focusSearchShortcutHint}
           stopEscapePropagation={true}
         />
       </div>
@@ -1030,6 +1073,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
               setIsModalOpen(false);
               setEditingNote(null);
               restoreReturnUrl();
+              (lastFocusedElementRef.current as HTMLElement | null)?.focus();
             }}
             onSave={handleNoteUpdate}
             onRefresh={handleNoteRefresh}

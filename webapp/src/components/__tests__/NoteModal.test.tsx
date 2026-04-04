@@ -838,6 +838,28 @@ describe('NoteModal', () => {
       }))
     })
 
+    it('removing the only todo item from an existing note sends empty items array', async () => {
+      const todoNote = createMockNote({
+        note_type: 'todo',
+        items: [
+          { id: 'item1', note_id: '1', text: '', completed: false, position: 0, indent_level: 0, assigned_to: '', created_at: '', updated_at: '' },
+        ],
+      })
+      mockNotesUpdate.mockClear()
+      renderNoteModal({ ...defaultProps, note: todoNote })
+
+      const inputs = screen.getAllByTestId('todo-item-input')
+      expect(inputs).toHaveLength(1)
+
+      // Press Backspace on the only empty item
+      fireEvent.keyDown(inputs[0], { key: 'Backspace', code: 'Backspace' })
+
+      expect(screen.queryAllByTestId('todo-item-input')).toHaveLength(0)
+      expect(mockNotesUpdate).toHaveBeenCalledWith('1', expect.objectContaining({
+        items: [],
+      }))
+    })
+
     it('preserves completed state when creating a new todo note', async () => {
       renderNoteModal(defaultProps)
 

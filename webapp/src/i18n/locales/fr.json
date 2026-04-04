@@ -4,6 +4,7 @@
   },
   "nav": {
     "profileMenu": "Menu profil",
+    "toggleSidebar": "Basculer la barre latérale",
     "settings": "Paramètres",
     "admin": "Admin",
     "logout": "Se déconnecter",
@@ -11,7 +12,8 @@
     "logoutConfirmMessage": "Êtes-vous sûr de vouloir vous déconnecter ?",
     "openMobileApp": "Ouvrir dans l’app mobile",
     "openMobileAppDescription": "Vous préférez l’expérience mobile native ?",
-    "dismissMobileAppBanner": "Masquer"
+    "dismissMobileAppBanner": "Masquer",
+    "skipToMainContent": "Aller au contenu principal"
   },
   "auth": {
     "signInTitle": "Se connecter à Jot",
@@ -35,7 +37,7 @@
     "usernameChars": "Le nom d'utilisateur ne peut contenir que des lettres, des chiffres, des tirets bas et des tirets",
     "usernameEdge": "Le nom d'utilisateur ne peut pas commencer ou se terminer par un tiret bas ou un tiret",
     "passwordsNoMatch": "Les mots de passe ne correspondent pas",
-    "passwordMin": "Le mot de passe doit comporter au moins 4 caractères"
+    "passwordMin": "Le mot de passe doit comporter au moins {{min}} caractères"
   },
   "dashboard": {
     "newNote": "Nouvelle note",
@@ -109,7 +111,7 @@
     "currentPasswordLabel": "Mot de passe actuel",
     "newPasswordLabel": "Nouveau mot de passe",
     "confirmNewPasswordLabel": "Confirmer le nouveau mot de passe",
-    "newPasswordPlaceholder": "Au moins 4 caractères",
+    "newPasswordPlaceholder": "Au moins {{min}} caractères",
     "passwordsNoMatch": "Les nouveaux mots de passe ne correspondent pas.",
     "failedChangePassword": "Impossible de changer le mot de passe.",
     "changing": "Modification...",
@@ -152,6 +154,8 @@
     "sessionsCurrent": "Actuelle",
     "sessionsRevoke": "Révoquer",
     "sessionsRevoking": "Révocation...",
+    "sessionsRevokeConfirmTitle": "Révoquer la session",
+    "sessionsRevokeConfirmMessage": "Êtes-vous sûr de vouloir révoquer \"{{session}}\" ?",
     "sessionsRevokeFailed": "Impossible de révoquer la session.",
     "sessionsNone": "Aucune session active trouvée.",
     "aboutSection": "À propos",
@@ -190,6 +194,8 @@
     "binDescription": "Ouvrir la vue de la corbeille",
     "helpKey": "?",
     "helpDescription": "Ouvrir l'aide des raccourcis clavier",
+    "openNoteKey": "Enter",
+    "openNoteDescription": "Ouvrir la note en surbrillance",
     "escapeKey": "Échap",
     "escapeDescription": "Fermer la fenêtre modale ou la boîte de dialogue active"
   },
@@ -290,6 +296,7 @@
     "lastEdited": "Dernière modification : {{date}}",
     "saving": "Enregistrement...",
     "saved": "Enregistré",
+    "colorPickerLabel": "Sélectionner la couleur de la note",
     "colorWhite": "Blanc",
     "colorCoral": "Corail",
     "colorYellow": "Jaune",

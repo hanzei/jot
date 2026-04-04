@@ -133,11 +133,11 @@ func (s *NoteStore) Duplicate(ctx context.Context, source *Note, userID string) 
 	}
 
 	if err = duplicateItemsTx(ctx, tx, noteID, source.Items); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("duplicate note items: %w", err)
 	}
 
 	if err = duplicateLabelsTx(ctx, tx, noteID, userID, source.Labels); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("duplicate note labels: %w", err)
 	}
 
 	if err = tx.Commit(); err != nil {
@@ -263,47 +263,72 @@ func (s *NoteStore) GetByUserID(ctx context.Context, userID string, archived boo
 		return nil, fmt.Errorf("failed to scan notes: %w", err)
 	}
 
-	notes := make([]*Note, 0, len(scannedNotes))
-	for i := range scannedNotes {
-		note := &scannedNotes[i]
-
-		if note.NoteType == NoteTypeTodo {
-			items, itemsErr := s.getItemsByNoteID(ctx, note.ID)
-			if itemsErr != nil {
-				return nil, fmt.Errorf("failed to get note items: %w", itemsErr)
-			}
-			note.Items = items
-		}
-
-		shares, sharesErr := s.GetNoteShares(ctx, note.ID)
-		if sharesErr != nil {
-			return nil, fmt.Errorf("failed to get note shares: %w", sharesErr)
-		}
-		note.SharedWith = shares
-		note.IsShared = len(shares) > 0
-		note.Labels = []Label{}
-
-		notes = append(notes, note)
+	notes, err := s.populateNoteItemsAndDefaults(ctx, scannedNotes)
+	if err != nil {
+		return nil, err
 	}
 
-	// Batch-load labels for all notes in a single query.
-	if len(notes) > 0 {
-		noteIDs := make([]string, len(notes))
-		for i, n := range notes {
-			noteIDs[i] = n.ID
-		}
-		labelsMap, labelsErr := s.getLabelsByNoteIDs(ctx, noteIDs, userID)
-		if labelsErr != nil {
-			return nil, fmt.Errorf("failed to batch-load note labels: %w", labelsErr)
-		}
-		for _, n := range notes {
-			if lbls, ok := labelsMap[n.ID]; ok {
-				n.Labels = lbls
-			}
-		}
+	if err := s.batchLoadSharesAndLabels(ctx, notes, userID); err != nil {
+		return nil, err
 	}
 
 	return notes, nil
+}
+
+// populateNoteItemsAndDefaults converts scanned notes to []*Note, loading todo items
+// for each todo note and initializing slice fields to non-nil defaults.
+func (s *NoteStore) populateNoteItemsAndDefaults(ctx context.Context, scannedNotes []Note) ([]*Note, error) {
+	notes := make([]*Note, 0, len(scannedNotes))
+	for i := range scannedNotes {
+		note := &scannedNotes[i]
+		if note.NoteType == NoteTypeTodo {
+			items, err := s.getItemsByNoteID(ctx, note.ID)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get note items: %w", err)
+			}
+			note.Items = items
+		}
+		note.SharedWith = []NoteShare{}
+		note.IsShared = false
+		note.Labels = []Label{}
+		notes = append(notes, note)
+	}
+	return notes, nil
+}
+
+// batchLoadSharesAndLabels batch-loads shares and labels for a slice of notes, updating each note in place.
+func (s *NoteStore) batchLoadSharesAndLabels(ctx context.Context, notes []*Note, userID string) error {
+	if len(notes) == 0 {
+		return nil
+	}
+
+	noteIDs := make([]string, len(notes))
+	for i, n := range notes {
+		noteIDs[i] = n.ID
+	}
+
+	sharesMap, err := s.getSharesByNoteIDs(ctx, noteIDs)
+	if err != nil {
+		return fmt.Errorf("failed to batch-load note shares: %w", err)
+	}
+	for _, n := range notes {
+		if shares, ok := sharesMap[n.ID]; ok {
+			n.SharedWith = shares
+			n.IsShared = true
+		}
+	}
+
+	labelsMap, err := s.getLabelsByNoteIDs(ctx, noteIDs, userID)
+	if err != nil {
+		return fmt.Errorf("failed to batch-load note labels: %w", err)
+	}
+	for _, n := range notes {
+		if lbls, ok := labelsMap[n.ID]; ok {
+			n.Labels = lbls
+		}
+	}
+
+	return nil
 }
 
 func (s *NoteStore) GetByID(ctx context.Context, id string, userID string) (*Note, error) {
@@ -328,7 +353,7 @@ func (s *NoteStore) GetByID(ctx context.Context, id string, userID string) (*Not
 	}
 
 	if err := s.populateNoteDetails(ctx, &note, userID); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("populate note details: %w", err)
 	}
 	return &note, nil
 }
@@ -372,7 +397,7 @@ func (s *NoteStore) GetByIDAnyState(ctx context.Context, id string, userID strin
 	}
 
 	if err := s.populateNoteDetails(ctx, &ownedNote, userID); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("populate note details: %w", err)
 	}
 	return &ownedNote, nil
 }
@@ -462,11 +487,14 @@ func (s *NoteStore) Update(ctx context.Context, id string, userID string, title,
 
 	if currentNote.Pinned != resolvedPinned {
 		if err = s.handlePinStatusChangeTx(ctx, tx, id, userID, currentNote, resolvedPinned); err != nil {
-			return err
+			return fmt.Errorf("handle pin status change: %w", err)
 		}
 	}
 
-	return tx.Commit()
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("commit note update: %w", err)
+	}
+	return nil
 }
 
 // handlePinStatusChangeTx updates note positions when a note is pinned or unpinned within a transaction.
@@ -576,7 +604,10 @@ func (s *NoteStore) Delete(ctx context.Context, id string, userID string) error 
 		return ErrNoteNotOwnedByUser
 	}
 
-	return tx.Commit()
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("commit note delete: %w", err)
+	}
+	return nil
 }
 
 func buildInClauseArgs(ids []string) (string, []any) {
@@ -781,7 +812,7 @@ func (s *NoteStore) DeleteFromTrash(ctx context.Context, id string, userID strin
 	defer func() { _ = tx.Rollback() }()
 
 	if err = deleteNoteDependenciesTx(ctx, tx, []string{id}); err != nil {
-		return err
+		return fmt.Errorf("delete note dependencies: %w", err)
 	}
 
 	result, err := tx.ExecContext(ctx,
@@ -800,7 +831,10 @@ func (s *NoteStore) DeleteFromTrash(ctx context.Context, id string, userID strin
 		return ErrNoteNotInTrash
 	}
 
-	return tx.Commit()
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("commit delete from trash: %w", err)
+	}
+	return nil
 }
 
 // EmptyTrash permanently removes all notes the user currently has in the trash.
@@ -815,7 +849,7 @@ func (s *NoteStore) EmptyTrash(ctx context.Context, userID string) ([]DeletedNot
 
 	noteIDs, err := s.getTrashedOwnedNoteIDsTx(ctx, tx, userID)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get trashed note IDs: %w", err)
 	}
 	if len(noteIDs) == 0 {
 		if err = tx.Commit(); err != nil {
@@ -826,11 +860,11 @@ func (s *NoteStore) EmptyTrash(ctx context.Context, userID string) ([]DeletedNot
 
 	audienceMap, err := s.getNoteAudiencesTx(ctx, tx, noteIDs)
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("get note audiences: %w", err)
 	}
 
 	if err = deleteNoteDependenciesTx(ctx, tx, noteIDs); err != nil {
-		return nil, err
+		return nil, fmt.Errorf("delete note dependencies: %w", err)
 	}
 
 	placeholders, args := buildInClauseArgs(noteIDs)
@@ -894,7 +928,10 @@ func (s *NoteStore) PurgeOldTrashedNotes(ctx context.Context, olderThan time.Dur
 		return fmt.Errorf("failed to purge old trashed notes: %w", err)
 	}
 
-	return tx.Commit()
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("commit purge old trashed notes: %w", err)
+	}
+	return nil
 }
 
 func nullableAssignedTo(s string) sql.NullString {
