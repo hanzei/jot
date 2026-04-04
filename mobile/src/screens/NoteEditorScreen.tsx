@@ -158,6 +158,8 @@ export default function NoteEditorScreen() {
   createMutateRef.current = createMutation.mutateAsync;
   const updateMutateRef = useRef(updateMutation.mutateAsync);
   updateMutateRef.current = updateMutation.mutateAsync;
+  const isHydratingRef = useRef(initialNoteId !== null && !existingNote);
+  isHydratingRef.current = initialNoteId !== null && !existingNote;
 
   const titleInputRef = useRef<TextInputType>(null);
   const contentInputRef = useRef<TextInputType>(null);
@@ -709,6 +711,12 @@ export default function NoteEditorScreen() {
     if (!currentNoteId) {
       // Newly-created notes may not have committed noteId into render state yet.
       // Keep this change dirty so autosave (or beforeRemove flush) persists color.
+      markDirtyAndScheduleUpdate();
+      return;
+    }
+    if (isHydratingRef.current) {
+      // Existing note data is still loading; avoid sending a metadata-only update
+      // with placeholder refs that could overwrite hydrated title/content.
       markDirtyAndScheduleUpdate();
       return;
     }
