@@ -104,9 +104,8 @@ describe('useSSE', () => {
     act(() => {
       capturedCallback?.({
         type: 'note_created',
-        note_id: 'new-note',
-        note: null,
         source_user_id: 'other-user',
+        data: { note_id: 'new-note', note: null },
       });
     });
 
