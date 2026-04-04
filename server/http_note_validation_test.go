@@ -1,8 +1,6 @@
 package main
 
 import (
-	"encoding/json"
-	"io"
 	"net/http"
 	"strings"
 	"testing"
@@ -234,24 +232,11 @@ func TestNoteValidation(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, note.Items, 1)
 
-		req, err := http.NewRequestWithContext(
-			t.Context(),
-			http.MethodPatch,
-			ts.HTTPServer.URL+"/api/v1/notes/"+note.ID,
-			strings.NewReader(`{"items":[]}`),
-		)
+		emptyItems := []client.UpdateNoteItem{}
+		updated, err := user.Client.UpdateNote(t.Context(), note.ID, &client.UpdateNoteRequest{
+			Items: &emptyItems,
+		})
 		require.NoError(t, err)
-		req.Header.Set("Content-Type", "application/json")
-
-		resp, err := user.Client.HTTPClient().Do(req)
-		require.NoError(t, err)
-		defer resp.Body.Close()
-		require.Equal(t, http.StatusOK, resp.StatusCode)
-
-		body, err := io.ReadAll(resp.Body)
-		require.NoError(t, err)
-		var updated client.Note
-		require.NoError(t, json.Unmarshal(body, &updated))
 		assert.Empty(t, updated.Items)
 
 		reloaded, err := user.Client.GetNote(t.Context(), note.ID)
