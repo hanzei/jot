@@ -121,7 +121,7 @@ func TestProfileIconUploadNoSSEToNonCollaborator(t *testing.T) {
 
 	_, found := waitForSSEEvent(ch, func(e client.SSEEvent) bool {
 		return e.Type == string(sse.EventProfileIconUpdated) && e.SourceUserID == iconOwner.User.ID
-	}, 300*time.Millisecond)
+	}, 750*time.Millisecond)
 
 	assert.False(t, found, "non-collaborator should NOT receive profile_icon_updated SSE event")
 }

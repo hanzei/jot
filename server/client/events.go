@@ -93,6 +93,7 @@ func (c *Client) SubscribeSSE(ctx context.Context) (<-chan SSEEvent, error) {
 		defer resp.Body.Close()
 		defer close(ch)
 		scanner := bufio.NewScanner(resp.Body)
+		scanner.Buffer(make([]byte, 64*1024), 512*1024)
 		for scanner.Scan() {
 			line := scanner.Text()
 			if !strings.HasPrefix(line, "data: ") {
@@ -106,6 +107,8 @@ func (c *Client) SubscribeSSE(ctx context.Context) (<-chan SSEEvent, error) {
 			case ch <- event:
 			case <-ctx.Done():
 				return
+			default:
+				// channel full; drop event rather than block
 			}
 		}
 	}()
