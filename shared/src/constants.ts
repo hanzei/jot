@@ -13,6 +13,7 @@ export const VALIDATION = {
   USERNAME_MIN_LENGTH: 2,
   USERNAME_MAX_LENGTH: 30,
   PASSWORD_MIN_LENGTH,
+  PAT_NAME_MAX_LENGTH: 100,
 } as const;
 
 export const ROLES = {

@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import i18n from '@/i18n';
-import { auth, users, labels as labelsApi, sessions as sessionsApi, isAxiosError } from '@/utils/api';
+import { auth, users, labels as labelsApi, sessions as sessionsApi, pats as patsApi, isAxiosError } from '@/utils/api';
 import { getUser, setUser, removeUser, getSettings, setSettings, isAdmin } from '@/utils/auth';
 import { getLanguagePreference, resolveLanguage, LanguagePreference } from '@/utils/language';
 import { getThemePreference, applyTheme, ThemePreference } from '@/utils/theme';
@@ -10,11 +10,12 @@ import AppLayout from '@/components/AppLayout';
 import SearchBar from '@/components/SearchBar';
 import ImportModal from '@/components/ImportModal';
 import AboutModal from '@/components/AboutModal';
+import NewPATModal from '@/components/NewPATModal';
 import SidebarLabels from '@/components/SidebarLabels';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { useToast } from '@/hooks/useToast';
 import { useNavigationLinkTabs } from '@/hooks/useNavigationTabs';
-import type { ActiveSession, Label } from '@jot/shared';
+import type { ActiveSession, Label, PersonalAccessToken } from '@jot/shared';
 import { IdentitySecurityColumn, PreferencesInfoColumn } from './settings/SettingsSections';
 
 interface SettingsProps {
@@ -58,6 +59,12 @@ const Settings = ({ onLogout }: SettingsProps) => {
   const [revokingSessionId, setRevokingSessionId] = useState<string | null>(null);
   const [sessionPendingRevoke, setSessionPendingRevoke] = useState<ActiveSession | null>(null);
   const [labelsList, setLabelsList] = useState<Label[]>([]);
+  const [patsList, setPatsList] = useState<PersonalAccessToken[]>([]);
+  const [patsLoading, setPatsLoading] = useState(true);
+  const [patsError, setPatsError] = useState('');
+  const [creatingPAT, setCreatingPAT] = useState(false);
+  const [revokingPATIds, setRevokingPATIds] = useState<Set<string>>(new Set());
+  const [newlyCreatedPAT, setNewlyCreatedPAT] = useState<PersonalAccessToken | null>(null);
 
   const loadSessions = useCallback(async () => {
     setSessionsLoading(true);
@@ -75,6 +82,56 @@ const Settings = ({ onLogout }: SettingsProps) => {
   useEffect(() => {
     loadSessions();
   }, [loadSessions]);
+
+  useEffect(() => {
+    let mounted = true;
+    patsApi.list()
+      .then((data) => {
+        if (mounted) setPatsList(data);
+      })
+      .catch(() => {
+        if (mounted) setPatsError('settings.patsLoadError');
+      })
+      .finally(() => {
+        if (mounted) setPatsLoading(false);
+      });
+    return () => { mounted = false; };
+  }, []);
+
+  const handleCreatePAT = async (name: string) => {
+    setCreatingPAT(true);
+    setPatsError('');
+    try {
+      const pat = await patsApi.create({ name });
+      setPatsList(prev => [pat, ...prev]);
+      setNewlyCreatedPAT(pat);
+    } catch (err: unknown) {
+      if (isAxiosError(err)) {
+        const msg = typeof err.response?.data === 'string' ? err.response.data.trim() : '';
+        setPatsError(msg || 'settings.patsCreateError');
+      } else {
+        setPatsError('settings.patsCreateError');
+      }
+    } finally {
+      setCreatingPAT(false);
+    }
+  };
+
+  const handleRevokePAT = async (id: string) => {
+    setRevokingPATIds(prev => new Set(prev).add(id));
+    try {
+      await patsApi.revoke(id);
+      setPatsList(prev => prev.filter(p => p.id !== id));
+    } catch {
+      showToast(t('settings.patsRevokeError'), 'error');
+    } finally {
+      setRevokingPATIds(prev => {
+        const next = new Set(prev);
+        next.delete(id);
+        return next;
+      });
+    }
+  };
 
   useEffect(() => {
     let mounted = true;
@@ -363,6 +420,16 @@ const Settings = ({ onLogout }: SettingsProps) => {
                 passwordError,
                 onPasswordSubmit: handlePasswordChange,
               }}
+              patsSection={{
+                pats: patsList,
+                patsLoading,
+                patsError,
+                creatingPAT,
+                revokingPATIds,
+                onCreatePAT: handleCreatePAT,
+                onRevokePAT: handleRevokePAT,
+                displayMsg,
+              }}
               displayMsg={displayMsg}
             />
 
@@ -403,6 +470,13 @@ const Settings = ({ onLogout }: SettingsProps) => {
       <AboutModal
         isOpen={isAboutModalOpen}
         onClose={() => setIsAboutModalOpen(false)}
+      />
+
+      <NewPATModal
+        open={Boolean(newlyCreatedPAT)}
+        tokenName={newlyCreatedPAT?.name ?? ''}
+        token={newlyCreatedPAT?.token ?? ''}
+        onClose={() => setNewlyCreatedPAT(null)}
       />
     </AppLayout>
   );

@@ -239,3 +239,15 @@ export interface SSEEvent {
   source_user_id: string;
   target_user_id?: string;
 }
+
+export interface PersonalAccessToken {
+  id: string;
+  name: string;
+  created_at: string;
+  /** Only present in the create response; never returned by list. */
+  token?: string;
+}
+
+export interface CreatePATRequest {
+  name: string;
+}

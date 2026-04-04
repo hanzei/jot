@@ -13,6 +13,7 @@ import {
   Modal,
   Pressable,
   Alert,
+  Share,
 } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -34,8 +35,12 @@ import {
   getAboutInfo,
   listSessions,
   revokeSession,
+  listPATs,
+  createPAT,
+  revokePAT,
 } from '../api/settings';
-import type { ThemePreference, AboutInfo, ActiveSession, ImportResponse } from '@jot/shared';
+import { VALIDATION } from '@jot/shared';
+import type { ThemePreference, AboutInfo, ActiveSession, PersonalAccessToken, ImportResponse } from '@jot/shared';
 import i18n from '../i18n';
 import { SUPPORTED_LANGUAGES, getLanguagePreference, resolveLanguage, type LanguagePreference } from '../i18n/language';
 import { displayMessage, getCurrentLocale } from '../i18n/utils';
@@ -87,6 +92,13 @@ export default function SettingsScreen() {
   const [sessionsError, setSessionsError] = useState('');
   const [revokingId, setRevokingId] = useState<string | null>(null);
 
+  const [pats, setPats] = useState<PersonalAccessToken[]>([]);
+  const [patsLoading, setPatsLoading] = useState(true);
+  const [patsError, setPatsError] = useState('');
+  const [newPATName, setNewPATName] = useState('');
+  const [creatingPAT, setCreatingPAT] = useState(false);
+  const [revokingPATId, setRevokingPATId] = useState<string | null>(null);
+
   const [selectedImportFile, setSelectedImportFile] = useState<DocumentPicker.DocumentPickerAsset | null>(null);
   const [importing, setImporting] = useState(false);
   const [importError, setImportError] = useState('');
@@ -123,6 +135,9 @@ export default function SettingsScreen() {
             setSessions([]);
             setSessionsError('');
             setSessionsLoading(true);
+            setPats([]);
+            setPatsError('');
+            setPatsLoading(true);
             setAboutInfo(null);
             setAboutError('');
             setAboutLoading(false);
@@ -142,6 +157,22 @@ export default function SettingsScreen() {
                   setSessionsLoading(false);
                 }
               });
+            void listPATs()
+              .then((nextPATs) => {
+                if (mounted) {
+                  setPats(nextPATs);
+                }
+              })
+              .catch(() => {
+                if (mounted) {
+                  setPatsError('settings.patsLoadError');
+                }
+              })
+              .finally(() => {
+                if (mounted) {
+                  setPatsLoading(false);
+                }
+              });
           }
         }
       } catch (error) {
@@ -153,6 +184,9 @@ export default function SettingsScreen() {
           setSessions([]);
           setSessionsLoading(false);
           setSessionsError('settings.sessionsLoadFailed');
+          setPats([]);
+          setPatsLoading(false);
+          setPatsError('settings.patsLoadError');
           setAboutLoading(false);
         }
       }
@@ -220,6 +254,57 @@ export default function SettingsScreen() {
       ],
     );
   }, [revokeSessionById, t]);
+
+  const handleCreatePAT = useCallback(async () => {
+    const name = newPATName.trim();
+    if (!name || creatingPAT) return;
+    setCreatingPAT(true);
+    setPatsError('');
+    try {
+      const pat = await createPAT({ name });
+      if (!isMountedRef.current) return;
+      setPats(prev => [pat, ...prev]);
+      setNewPATName('');
+      if (pat.token) {
+        void Share.share({
+          message: pat.token,
+          title: t('settings.patsNewTokenTitle'),
+        });
+      }
+    } catch {
+      if (!isMountedRef.current) return;
+      setPatsError('settings.patsCreateError');
+    } finally {
+      if (isMountedRef.current) setCreatingPAT(false);
+    }
+  }, [newPATName, creatingPAT, t]);
+
+  const handleRevokePAT = useCallback((id: string, name: string) => {
+    Alert.alert(
+      t('settings.patsRevokeConfirmTitle'),
+      t('settings.patsRevokeConfirmMessage', { name }),
+      [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('settings.patsRevoke'),
+          style: 'destructive',
+          onPress: async () => {
+            setRevokingPATId(id);
+            try {
+              await revokePAT(id);
+              if (!isMountedRef.current) return;
+              setPats(prev => prev.filter(p => p.id !== id));
+            } catch {
+              if (!isMountedRef.current) return;
+              setPatsError('settings.patsRevokeError');
+            } finally {
+              if (isMountedRef.current) setRevokingPATId(null);
+            }
+          },
+        },
+      ],
+    );
+  }, [t]);
 
   const handleSelectImportFile = useCallback(async () => {
     setImportError('');
@@ -715,6 +800,77 @@ export default function SettingsScreen() {
                         </Text>
                       </TouchableOpacity>
                     )}
+                  </View>
+                ))}
+              </View>
+            )}
+          </View>
+
+          {/* Personal Access Tokens */}
+          <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('settings.patsSection')}</Text>
+            <Text style={[styles.sessionsDescription, { color: colors.textSecondary }]}>
+              {t('settings.patsDescription')}
+            </Text>
+            <View style={styles.patCreateRow}>
+              <TextInput
+                style={[styles.patNameInput, { backgroundColor: colors.inputBackground, borderColor: colors.border, color: colors.text }]}
+                value={newPATName}
+                onChangeText={setNewPATName}
+                placeholder={t('settings.patsNamePlaceholder')}
+                placeholderTextColor={colors.textMuted}
+                maxLength={VALIDATION.PAT_NAME_MAX_LENGTH}
+                returnKeyType="done"
+                onSubmitEditing={() => { void handleCreatePAT(); }}
+              />
+              <TouchableOpacity
+                style={[styles.patCreateButton, { backgroundColor: colors.primary }, (creatingPAT || !newPATName.trim()) && styles.buttonDisabled]}
+                onPress={() => { void handleCreatePAT(); }}
+                disabled={creatingPAT || !newPATName.trim()}
+                accessibilityRole="button"
+                accessibilityLabel={t('settings.patsCreate')}
+              >
+                <Text style={styles.patCreateButtonText}>
+                  {creatingPAT ? t('settings.patsCreating') : t('settings.patsCreate')}
+                </Text>
+              </TouchableOpacity>
+            </View>
+            {patsError !== '' && (
+              <Text style={[styles.errorText, { color: colors.error }]}>{displayMessage(t, patsError)}</Text>
+            )}
+            {patsLoading ? (
+              <ActivityIndicator size="small" color={colors.primary} style={styles.sessionsLoader} />
+            ) : pats.length === 0 ? (
+              <Text style={[styles.sessionsDescription, { color: colors.textSecondary }]}>
+                {t('settings.patsNone')}
+              </Text>
+            ) : (
+              <View style={styles.sessionsList}>
+                {pats.map((pat) => (
+                  <View key={pat.id} style={[styles.sessionItem, { borderColor: colors.border }]}>
+                    <View style={styles.sessionInfo}>
+                      <Text style={[styles.sessionBrowser, { color: colors.text }]}>{pat.name}</Text>
+                      <Text style={[styles.sessionDate, { color: colors.textMuted }]}>
+                        {new Date(pat.created_at).toLocaleDateString(currentLocale, {
+                          year: 'numeric', month: 'short', day: 'numeric',
+                        })}
+                      </Text>
+                    </View>
+                    <TouchableOpacity
+                      onPress={() => handleRevokePAT(pat.id, pat.name)}
+                      disabled={revokingPATId === pat.id}
+                      style={styles.revokeButton}
+                      accessibilityRole="button"
+                      accessibilityLabel={t('settings.patsRevoke')}
+                    >
+                      <Text style={[
+                        styles.revokeText,
+                        { color: colors.error },
+                        revokingPATId === pat.id && styles.buttonDisabled,
+                      ]}>
+                        {revokingPATId === pat.id ? t('settings.patsRevoking') : t('settings.patsRevoke')}
+                      </Text>
+                    </TouchableOpacity>
                   </View>
                 ))}
               </View>
@@ -1267,5 +1423,29 @@ const styles = StyleSheet.create({
   revokeText: {
     fontSize: 14,
     fontWeight: '500',
+  },
+  patCreateRow: {
+    flexDirection: 'row',
+    gap: 8,
+    marginBottom: 12,
+  },
+  patNameInput: {
+    flex: 1,
+    borderWidth: 1,
+    borderRadius: 8,
+    paddingHorizontal: 12,
+    paddingVertical: 8,
+    fontSize: 14,
+  },
+  patCreateButton: {
+    borderRadius: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 8,
+    justifyContent: 'center',
+  },
+  patCreateButtonText: {
+    color: '#ffffff',
+    fontSize: 14,
+    fontWeight: '600',
   },
 });

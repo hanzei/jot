@@ -22,6 +22,7 @@ const (
 	noteItemTextMaxLength = 500
 	noteItemsMaxCount     = 500
 	searchQueryMaxLength  = 200
+	patNameMaxLength      = 100
 )
 
 func validateUsername(username string) error {
@@ -57,6 +58,17 @@ func validatePassword(password string) error {
 func validateColor(color string) error {
 	if !hexColorRegex.MatchString(color) {
 		return errors.New("color must be a valid CSS hex color (e.g. #fff or #ffffff)")
+	}
+	return nil
+}
+
+func validatePATName(name string) error {
+	n := utf8.RuneCountInString(name)
+	if n == 0 {
+		return errors.New("token name must not be empty")
+	}
+	if n > patNameMaxLength {
+		return fmt.Errorf("token name must be %d characters or fewer", patNameMaxLength)
 	}
 	return nil
 }
