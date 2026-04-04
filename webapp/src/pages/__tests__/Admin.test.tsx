@@ -183,7 +183,7 @@ describe('Admin', () => {
       await user.click(screen.getByRole('button', { name: /^Create User$/ }))
 
       expect(screen.getByText('2–30 characters. Letters, numbers, underscores, and hyphens.')).toBeInTheDocument()
-      expect(screen.getByText('At least 4 characters')).toBeInTheDocument()
+      expect(screen.getByText('At least 10 characters')).toBeInTheDocument()
       expect(screen.getByText(`0/${VALIDATION.USERNAME_MAX_LENGTH}`)).toBeInTheDocument()
 
       const submitButton = screen.getByRole('button', { name: 'Create User' })
@@ -222,7 +222,7 @@ describe('Admin', () => {
       await user.type(passwordInput, '123')
       await user.tab()
 
-      expect(screen.getByText('Password must be at least 4 characters')).toBeInTheDocument()
+      expect(screen.getByText('Password must be at least 10 characters')).toBeInTheDocument()
       expect(screen.getByRole('button', { name: 'Create User' })).toBeDisabled()
     })
 
@@ -283,7 +283,7 @@ describe('Admin', () => {
       await user.click(screen.getByRole('button', { name: /^Create User$/ }))
 
       await user.type(screen.getByLabelText('Username'), 'new_user')
-      await user.type(screen.getByLabelText('Password'), 'abcd')
+      await user.type(screen.getByLabelText('Password'), 'abcd123456')
 
       const submitButton = screen.getByRole('button', { name: 'Create User' })
       expect(submitButton).toBeEnabled()
@@ -293,7 +293,7 @@ describe('Admin', () => {
       await waitFor(() => {
         expect(admin.createUser).toHaveBeenCalledWith({
           username: 'new_user',
-          password: 'abcd',
+          password: 'abcd123456',
           role: 'user',
         })
       })
@@ -312,7 +312,7 @@ describe('Admin', () => {
 
       await user.click(screen.getByRole('button', { name: /^Create User$/ }))
       await user.type(screen.getByLabelText('Username'), 'new_user')
-      await user.type(screen.getByLabelText('Password'), 'abcd')
+      await user.type(screen.getByLabelText('Password'), 'abcd123456')
       await user.click(screen.getByRole('button', { name: 'Create User' }))
 
       await waitFor(() => {
