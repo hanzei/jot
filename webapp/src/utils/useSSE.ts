@@ -1,7 +1,7 @@
 import { useEffect, useRef } from 'react';
-import type { SSEEventType, SSEEvent } from '@jot/shared';
+import type { SSEEvent } from '@jot/shared';
 
-export type { SSEEventType, SSEEvent };
+export type { SSEEvent };
 
 interface UseSSEOptions {
   onEvent: (event: SSEEvent) => void;
