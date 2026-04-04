@@ -12,7 +12,8 @@
     "logoutConfirmMessage": "Czy na pewno chcesz się wylogować?",
     "openMobileApp": "Otwórz w aplikacji mobilnej",
     "openMobileAppDescription": "Wolisz natywne doświadczenie mobilne?",
-    "dismissMobileAppBanner": "Ukryj"
+    "dismissMobileAppBanner": "Ukryj",
+    "skipToMainContent": "Przejdź do głównej treści"
   },
   "auth": {
     "signInTitle": "Zaloguj się do Jot",
@@ -193,6 +194,8 @@
     "binDescription": "Otwórz widok kosza",
     "helpKey": "?",
     "helpDescription": "Otwórz pomoc skrótów klawiszowych",
+    "openNoteKey": "Enter",
+    "openNoteDescription": "Otwórz zaznaczoną notatkę",
     "escapeKey": "Esc",
     "escapeDescription": "Zamknij aktywne okno modalne lub dialog"
   },
@@ -293,6 +296,7 @@
     "lastEdited": "Ostatnia edycja: {{date}}",
     "saving": "Zapisywanie...",
     "saved": "Zapisano",
+    "colorPickerLabel": "Wybierz kolor notatki",
     "colorWhite": "Biały",
     "colorCoral": "Koral",
     "colorYellow": "Żółty",

@@ -12,7 +12,8 @@
     "logoutConfirmMessage": "Möchtest du dich wirklich abmelden?",
     "openMobileApp": "In mobiler App öffnen",
     "openMobileAppDescription": "Lieber die native mobile App verwenden?",
-    "dismissMobileAppBanner": "Ausblenden"
+    "dismissMobileAppBanner": "Ausblenden",
+    "skipToMainContent": "Zum Hauptinhalt springen"
   },
   "auth": {
     "signInTitle": "Bei Jot anmelden",
@@ -193,6 +194,8 @@
     "binDescription": "Papierkorb öffnen",
     "helpKey": "?",
     "helpDescription": "Hilfe zu Tastenkombinationen öffnen",
+    "openNoteKey": "Enter",
+    "openNoteDescription": "Die fokussierte Notiz öffnen",
     "escapeKey": "Esc",
     "escapeDescription": "Aktives Modal oder Dialog schließen"
   },
@@ -293,6 +296,7 @@
     "lastEdited": "Zuletzt bearbeitet: {{date}}",
     "saving": "Speichern...",
     "saved": "Gespeichert",
+    "colorPickerLabel": "Notizenfarbe auswählen",
     "colorWhite": "Weiß",
     "colorCoral": "Koralle",
     "colorYellow": "Gelb",

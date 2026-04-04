@@ -410,6 +410,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   const pendingAutoSaveRequestRef = useRef<QueuedAutoSaveRequest | null>(null);
   const itemInputRefs = useRef<Map<string, HTMLTextAreaElement>>(new Map());
   const contentRef = useRef<HTMLTextAreaElement>(null);
+  const colorPickerRef = useRef<HTMLDivElement>(null);
   const savingRef = useRef(false);
   const savedTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const resizeContentTextarea = useCallback((textarea: HTMLTextAreaElement | null) => {
@@ -1390,6 +1391,46 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     }
   };
 
+  // Stable ref always holds the latest handler so the listener never goes stale.
+  const modalShortcutRef = useRef<((e: KeyboardEvent) => void) | null>(null);
+  modalShortcutRef.current = (e: KeyboardEvent) => {
+    if (!(e.ctrlKey || e.metaKey) || !e.shiftKey) return;
+    if (e.defaultPrevented) return;
+    if (showDeleteConfirm) return;
+
+    const key = e.key === 'Backspace' ? 'backspace' : e.key.toLowerCase();
+
+    if (key === 'p') {
+      if (!note) return;
+      e.preventDefault();
+      handlePinToggle();
+    } else if (key === 'a') {
+      if (!note) return;
+      e.preventDefault();
+      handleArchiveToggle();
+    } else if (key === 'd') {
+      if (!note || !onDuplicate) return;
+      e.preventDefault();
+      handleDuplicate();
+    } else if (key === 'backspace') {
+      if (!note || !onDelete || !isOwner) return;
+      e.preventDefault();
+      handleDelete();
+    } else if (key === 'l') {
+      e.preventDefault();
+      setShowLabelPicker(v => !v);
+    } else if (key === 'c') {
+      e.preventDefault();
+      colorPickerRef.current?.querySelector<HTMLButtonElement>('button[tabindex="0"]')?.focus();
+    }
+  };
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => modalShortcutRef.current?.(e);
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
 
   return (
     <>
@@ -1749,10 +1790,35 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
             })()}
 
             {/* Color selector */}
-            <div className="flex space-x-2">
+            <div
+              ref={colorPickerRef}
+              role="group"
+              aria-label={t('note.colorPickerLabel')}
+              className="flex space-x-2"
+              onKeyDown={(e) => {
+                if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+                e.preventDefault();
+                const currentIndex = colors.findIndex(c => c.value === color);
+                const nextIndex = currentIndex === -1
+                  ? (e.key === 'ArrowLeft' ? colors.length - 1 : 0)
+                  : e.key === 'ArrowLeft'
+                    ? Math.max(0, currentIndex - 1)
+                    : Math.min(colors.length - 1, currentIndex + 1);
+                if (nextIndex === currentIndex) return;
+                const nextColor = colors[nextIndex].value;
+                setColor(nextColor);
+                if (note) {
+                  markDirty();
+                  autoSaveDraftRef.current = { ...autoSaveDraftRef.current, color: nextColor };
+                  autoSaveNote(itemsRef.current);
+                }
+                colorPickerRef.current?.querySelectorAll<HTMLButtonElement>('button')[nextIndex]?.focus();
+              }}
+            >
               {colors.map((colorOption) => (
                 <button
                   key={colorOption.value}
+                  tabIndex={colorOption.value === color ? 0 : -1}
                   onClick={() => {
                     const newColor = colorOption.value;
                     setColor(newColor);
@@ -1767,6 +1833,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                   }`}
                   title={colorOption.name}
                   aria-label={colorOption.name}
+                  aria-pressed={color === colorOption.value}
                 />
               ))}
             </div>
