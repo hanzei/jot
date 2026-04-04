@@ -1,7 +1,8 @@
 import React from 'react';
-import { fireEvent, render, waitFor } from '@testing-library/react-native';
+import { cleanup, fireEvent, render, waitFor } from '@testing-library/react-native';
 import LoginScreen from '../src/screens/LoginScreen';
 import RegisterScreen from '../src/screens/RegisterScreen';
+import i18n from '../src/i18n';
 import { useAuth } from '../src/store/AuthContext';
 import { getBaseUrl, getStoredServerUrl, probeServerReachability, setServerUrl } from '../src/api/client';
 
@@ -27,7 +28,7 @@ describe('Auth first-run server setup flow', () => {
   const mockRegister = jest.fn();
 
   beforeEach(() => {
-    jest.clearAllMocks();
+    jest.resetAllMocks();
 
     mockUseAuth.mockReturnValue({
       user: null,
@@ -49,6 +50,10 @@ describe('Auth first-run server setup flow', () => {
       canonicalUrl: 'http://localhost:8080',
     });
     mockSetServerUrl.mockResolvedValue(undefined);
+  });
+
+  afterEach(() => {
+    cleanup();
   });
 
   function renderLoginScreen() {
@@ -96,7 +101,7 @@ describe('Auth first-run server setup flow', () => {
     fireEvent.changeText(getByTestId('login-server-setup-input'), 'not-a-url');
     fireEvent.press(getByTestId('login-server-setup-submit'));
 
-    expect(getByText('Server URL must start with http:// or https://')).toBeTruthy();
+    expect(getByText(i18n.t('auth.serverUrlProtocol'))).toBeTruthy();
     expect(mockProbeServerReachability).not.toHaveBeenCalled();
   });
 
@@ -121,7 +126,7 @@ describe('Auth first-run server setup flow', () => {
     fireEvent.press(getByTestId('login-server-setup-submit'));
 
     await waitFor(() => {
-      expect(getByText("Couldn't reach that server. Check the URL and your connection, then try again.")).toBeTruthy();
+      expect(getByText(i18n.t('auth.serverSetupConnectionFailed'))).toBeTruthy();
     });
     expect(getByTestId('login-server-setup-step')).toBeTruthy();
     expect(queryByTestId('username-input')).toBeNull();
@@ -135,7 +140,7 @@ describe('Auth first-run server setup flow', () => {
   });
 
   it('moves to login form after reachable server and keeps login flow working', async () => {
-    const { getByTestId, queryByTestId } = renderLoginScreen();
+    const { getByTestId, findByTestId } = renderLoginScreen();
 
     await waitFor(() => {
       expect(getByTestId('login-server-setup-step')).toBeTruthy();
@@ -145,9 +150,9 @@ describe('Auth first-run server setup flow', () => {
     fireEvent.press(getByTestId('login-server-setup-submit'));
 
     await waitFor(() => {
-      expect(queryByTestId('login-server-setup-step')).toBeNull();
-      expect(getByTestId('username-input')).toBeTruthy();
+      expect(mockSetServerUrl).toHaveBeenCalledWith('http://localhost:8080');
     });
+    expect(await findByTestId('username-input')).toBeTruthy();
 
     fireEvent.changeText(getByTestId('username-input'), 'alice');
     fireEvent.changeText(getByTestId('password-input'), 'pass1234');
@@ -159,7 +164,7 @@ describe('Auth first-run server setup flow', () => {
   });
 
   it('moves to register form after reachable server and keeps registration working', async () => {
-    const { getByTestId, queryByTestId } = renderRegisterScreen();
+    const { getByTestId, findByTestId } = renderRegisterScreen();
 
     await waitFor(() => {
       expect(getByTestId('register-server-setup-step')).toBeTruthy();
@@ -169,9 +174,9 @@ describe('Auth first-run server setup flow', () => {
     fireEvent.press(getByTestId('register-server-setup-submit'));
 
     await waitFor(() => {
-      expect(queryByTestId('register-server-setup-step')).toBeNull();
-      expect(getByTestId('username-input')).toBeTruthy();
+      expect(mockSetServerUrl).toHaveBeenCalledWith('http://localhost:8080');
     });
+    expect(await findByTestId('username-input')).toBeTruthy();
 
     fireEvent.changeText(getByTestId('username-input'), 'new_user');
     fireEvent.changeText(getByTestId('password-input'), 'pass1234');
@@ -180,6 +185,38 @@ describe('Auth first-run server setup flow', () => {
     await waitFor(() => {
       expect(mockRegister).toHaveBeenCalledWith('new_user', 'pass1234');
     });
+  });
+
+  it('shows register setup connection error and retry path', async () => {
+    mockProbeServerReachability
+      .mockResolvedValueOnce({
+        ok: false,
+        reason: 'UNREACHABLE',
+      })
+      .mockResolvedValueOnce({
+        ok: true,
+        canonicalUrl: 'http://192.168.1.50:8080',
+      });
+
+    const { getByTestId, getByText, findByTestId } = renderRegisterScreen();
+
+    await waitFor(() => {
+      expect(getByTestId('register-server-setup-step')).toBeTruthy();
+    });
+
+    fireEvent.changeText(getByTestId('register-server-setup-input'), 'http://192.168.1.50:8080');
+    fireEvent.press(getByTestId('register-server-setup-submit'));
+
+    await waitFor(() => {
+      expect(getByText(i18n.t('auth.serverSetupConnectionFailed'))).toBeTruthy();
+    });
+
+    fireEvent.press(getByTestId('register-server-setup-submit'));
+
+    await waitFor(() => {
+      expect(mockSetServerUrl).toHaveBeenCalledWith('http://192.168.1.50:8080');
+    });
+    expect(await findByTestId('username-input')).toBeTruthy();
   });
 
   it('skips setup when a server is already configured', async () => {
@@ -194,5 +231,40 @@ describe('Auth first-run server setup flow', () => {
     expect(queryByTestId('login-server-setup-step')).toBeNull();
     expect(mockProbeServerReachability).not.toHaveBeenCalled();
     expect(mockSetServerUrl).not.toHaveBeenCalled();
+  });
+
+  it('shows invalid-api message when server is reachable but incompatible', async () => {
+    mockProbeServerReachability.mockResolvedValueOnce({
+      ok: false,
+      reason: 'AUTH_ENDPOINT_UNAVAILABLE',
+    });
+    const { getByTestId, getByText } = renderLoginScreen();
+
+    await waitFor(() => {
+      expect(getByTestId('login-server-setup-step')).toBeTruthy();
+    });
+
+    fireEvent.changeText(getByTestId('login-server-setup-input'), 'http://localhost:8080');
+    fireEvent.press(getByTestId('login-server-setup-submit'));
+
+    await waitFor(() => {
+      expect(getByText(i18n.t('auth.serverSetupConnectionInvalidServer'))).toBeTruthy();
+    });
+  });
+
+  it('shows connection error when server activation fails after probe success', async () => {
+    mockSetServerUrl.mockRejectedValueOnce(new Error('switch failed'));
+    const { getByTestId, getByText } = renderLoginScreen();
+
+    await waitFor(() => {
+      expect(getByTestId('login-server-setup-step')).toBeTruthy();
+    });
+
+    fireEvent.changeText(getByTestId('login-server-setup-input'), 'http://localhost:8080');
+    fireEvent.press(getByTestId('login-server-setup-submit'));
+
+    await waitFor(() => {
+      expect(getByText(i18n.t('auth.serverSetupConnectionFailed'))).toBeTruthy();
+    });
   });
 });

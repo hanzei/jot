@@ -67,7 +67,15 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
         <Text style={[styles.subtitle, { color: colors.textSecondary }]}>{t('auth.signInSubtitle')}</Text>
 
         <ServerSetupGate testPrefix="login">
-          {error ? <Text style={[styles.error, { color: colors.error }]}>{error}</Text> : null}
+          {error ? (
+            <Text
+              style={[styles.error, { color: colors.error }]}
+              accessibilityRole="alert"
+              accessibilityLiveRegion="polite"
+            >
+              {error}
+            </Text>
+          ) : null}
 
           <TextInput
             style={[styles.input, { backgroundColor: colors.inputBackground, borderColor: colors.inputBorder, color: colors.text }]}
@@ -99,6 +107,9 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
             onPress={handleLogin}
             disabled={loading}
             testID="login-button"
+            accessibilityRole="button"
+            accessibilityLabel={loading ? t('auth.signingIn') : t('auth.signIn')}
+            accessibilityState={{ disabled: loading, busy: loading }}
           >
             {loading ? (
               <ActivityIndicator color="#fff" />
@@ -111,6 +122,8 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
             onPress={() => navigation.navigate('Register')}
             style={styles.link}
             testID="create-account-link"
+            accessibilityRole="button"
+            accessibilityLabel={t('auth.createAccountLink')}
           >
             <Text style={[styles.linkText, { color: colors.primary }]}>{t('auth.createAccountLink')}</Text>
           </TouchableOpacity>

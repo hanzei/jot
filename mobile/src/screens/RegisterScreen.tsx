@@ -88,7 +88,15 @@ export default function RegisterScreen({ navigation }: RegisterScreenProps) {
         <Text style={[styles.title, { color: colors.text }]}>{t('auth.createAccountTitle')}</Text>
 
         <ServerSetupGate testPrefix="register">
-          {error ? <Text style={[styles.error, { color: colors.error }]}>{error}</Text> : null}
+        {error ? (
+          <Text
+            style={[styles.error, { color: colors.error }]}
+            accessibilityRole="alert"
+            accessibilityLiveRegion="polite"
+          >
+            {error}
+          </Text>
+        ) : null}
 
           <TextInput
             style={[styles.input, { backgroundColor: colors.inputBackground, borderColor: colors.inputBorder, color: colors.text }]}
@@ -120,6 +128,9 @@ export default function RegisterScreen({ navigation }: RegisterScreenProps) {
             onPress={handleRegister}
             disabled={loading}
             testID="register-button"
+            accessibilityRole="button"
+            accessibilityLabel={loading ? t('auth.creatingAccount') : t('auth.createAccount')}
+            accessibilityState={{ disabled: loading, busy: loading }}
           >
             {loading ? (
               <ActivityIndicator color="#fff" />
@@ -132,6 +143,8 @@ export default function RegisterScreen({ navigation }: RegisterScreenProps) {
             onPress={() => navigation.goBack()}
             style={styles.link}
             testID="login-link"
+            accessibilityRole="link"
+            accessibilityLabel={t('auth.alreadyHaveAccount')}
           >
             <Text style={[styles.linkText, { color: colors.primary }]}>{t('auth.alreadyHaveAccount')}</Text>
           </TouchableOpacity>

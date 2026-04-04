@@ -101,7 +101,11 @@ export default function ServerSetupGate({ children, testPrefix }: ServerSetupGat
   if (isCheckingExistingServer) {
     return (
       <View style={styles.loadingContainer} testID={`${testPrefix}-server-setup-loading`}>
-        <ActivityIndicator color={colors.primary} />
+        <ActivityIndicator
+          color={colors.primary}
+          accessibilityLabel={t('common.loading')}
+          accessibilityRole="progressbar"
+        />
       </View>
     );
   }
@@ -138,7 +142,12 @@ export default function ServerSetupGate({ children, testPrefix }: ServerSetupGat
       <Text style={[styles.setupHelper, { color: colors.textSecondary }]}>{helperExamples}</Text>
 
       {setupError ? (
-        <Text style={[styles.error, { color: colors.error }]} testID={`${testPrefix}-server-setup-error`}>
+        <Text
+          style={[styles.error, { color: colors.error }]}
+          testID={`${testPrefix}-server-setup-error`}
+          accessibilityRole="alert"
+          accessibilityLiveRegion="polite"
+        >
           {setupError}
         </Text>
       ) : null}
@@ -148,7 +157,9 @@ export default function ServerSetupGate({ children, testPrefix }: ServerSetupGat
         onPress={handleSaveServer}
         disabled={isSavingServer}
         testID={`${testPrefix}-server-setup-submit`}
+        accessibilityRole="button"
         accessibilityLabel={t('auth.serverSetupSubmitA11yLabel')}
+        accessibilityState={{ disabled: isSavingServer, busy: isSavingServer }}
       >
         {isSavingServer ? (
           <ActivityIndicator color="#fff" />

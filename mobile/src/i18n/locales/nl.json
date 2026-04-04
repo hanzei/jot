@@ -59,7 +59,18 @@
     "passwordRequired": "Wachtwoord is vereist",
     "createAccountLink": "Account aanmaken",
     "alreadyHaveAccount": "Heb je al een account? Inloggen",
-    "unableToConnect": "Kan geen verbinding maken met de server"
+    "unableToConnect": "Kan geen verbinding maken met de server",
+    "serverSetupTitle": "Stel je server in",
+    "serverSetupDescription": "Voer de URL van je Jot-server in om door te gaan. Je kunt later meer servers toevoegen of wisselen.",
+    "serverSetupContinue": "Doorgaan",
+    "serverSetupInputA11yLabel": "Invoer server-URL",
+    "serverSetupSubmitA11yLabel": "Server valideren en doorgaan",
+    "serverSetupConnectionFailed": "Kon die server niet bereiken. Controleer de URL en je verbinding en probeer het opnieuw.",
+    "serverSetupConnectionInvalidServer": "Verbonden, maar dit lijkt geen compatibel Jot API-eindpunt.",
+    "serverSetupExampleLocalhost": "Voorbeeld: http://localhost:8080 (iOS-simulator)",
+    "serverSetupExampleAndroidEmulator": "Voorbeeld: http://10.0.2.2:8080 (Android-emulator)",
+    "serverSetupExampleLan": "Voorbeeld: http://192.168.1.42:8080 (LAN)",
+    "serverSetupExampleHosted": "Voorbeeld: https://notes.example.com (zelfgehost domein)"
   },
   "dashboard": {
     "newNote": "Nieuwe notitie",
