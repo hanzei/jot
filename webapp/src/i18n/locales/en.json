@@ -110,7 +110,7 @@
     "currentPasswordLabel": "Current Password",
     "newPasswordLabel": "New Password",
     "confirmNewPasswordLabel": "Confirm New Password",
-    "newPasswordPlaceholder": "At least 4 characters",
+    "newPasswordPlaceholder": "At least {{min}} characters",
     "passwordsNoMatch": "New passwords do not match.",
     "failedChangePassword": "Failed to change password.",
     "changing": "Changing...",

@@ -368,6 +368,7 @@ const Settings = ({ onLogout, passwordMinLength }: SettingsProps) => {
                 onConfirmPasswordChange: setConfirmPassword,
                 passwordSaving,
                 passwordError,
+                passwordMinLength,
                 onPasswordSubmit: handlePasswordChange,
               }}
               displayMsg={displayMsg}

@@ -26,6 +26,7 @@ type UserInfo struct {
 //	@Produce	json
 //	@Param		search	query		string	false	"Filter by username, first name, or last name (case-insensitive substring match)"
 //	@Success	200		{array}		UserInfo
+//	@Failure	400		{string}	string	"search query too long"
 //	@Failure	401		{string}	string	"unauthorized"
 //	@Failure	500		{string}	string	"internal server error"
 //	@Router		/users [get]

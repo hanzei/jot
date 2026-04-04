@@ -110,7 +110,7 @@
     "currentPasswordLabel": "Mot de passe actuel",
     "newPasswordLabel": "Nouveau mot de passe",
     "confirmNewPasswordLabel": "Confirmer le nouveau mot de passe",
-    "newPasswordPlaceholder": "Au moins 4 caractères",
+    "newPasswordPlaceholder": "Au moins {{min}} caractères",
     "passwordsNoMatch": "Les nouveaux mots de passe ne correspondent pas.",
     "failedChangePassword": "Impossible de changer le mot de passe.",
     "changing": "Modification...",

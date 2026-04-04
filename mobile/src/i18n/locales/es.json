@@ -121,7 +121,7 @@
     "currentPasswordRequired": "La contraseña actual es obligatoria",
     "newPasswordLabel": "Nueva contraseña",
     "confirmNewPasswordLabel": "Confirmar nueva contraseña",
-    "newPasswordPlaceholder": "Al menos 4 caracteres",
+    "newPasswordPlaceholder": "Al menos {{min}} caracteres",
     "passwordsNoMatch": "Las nuevas contraseñas no coinciden.",
     "failedChangePassword": "Error al cambiar la contraseña",
     "changing": "Cambiando...",

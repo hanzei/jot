@@ -339,7 +339,7 @@ export default function SettingsScreen() {
       setPasswordError(t('settings.passwordsNoMatch'));
       return;
     }
-    if (newPassword.length < VALIDATION.PASSWORD_MIN_LENGTH) {
+    if ([...newPassword].length < VALIDATION.PASSWORD_MIN_LENGTH) {
       setPasswordError(t('auth.passwordMin', { min: VALIDATION.PASSWORD_MIN_LENGTH }));
       return;
     }
@@ -621,7 +621,7 @@ export default function SettingsScreen() {
               style={[styles.input, { color: colors.text, borderColor: colors.border, backgroundColor: colors.inputBackground }]}
               value={newPassword}
               onChangeText={setNewPassword}
-              placeholder={t('settings.newPasswordPlaceholder')}
+              placeholder={t('settings.newPasswordPlaceholder', { min: VALIDATION.PASSWORD_MIN_LENGTH })}
               placeholderTextColor={colors.placeholder}
               secureTextEntry
               autoCapitalize="none"

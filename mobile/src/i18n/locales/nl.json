@@ -121,7 +121,7 @@
     "currentPasswordRequired": "Huidig wachtwoord is vereist",
     "newPasswordLabel": "Nieuw wachtwoord",
     "confirmNewPasswordLabel": "Nieuw wachtwoord bevestigen",
-    "newPasswordPlaceholder": "Minimaal 4 tekens",
+    "newPasswordPlaceholder": "Minimaal {{min}} tekens",
     "passwordsNoMatch": "Nieuwe wachtwoorden komen niet overeen.",
     "failedChangePassword": "Wachtwoord wijzigen mislukt",
     "changing": "Wijzigen...",
