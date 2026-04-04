@@ -7,8 +7,12 @@ import { validateServerUrl } from '../hooks/useServerUrl';
 import { displayMessage } from '../i18n/utils';
 
 interface ServerSetupGateProps {
-  children: React.ReactNode;
+  children?: React.ReactNode;
   testPrefix: string;
+  existingServerUrl?: string | null;
+  skipStoredServerCheck?: boolean;
+  onServerReady?: (serverUrl: string) => void;
+  setupFooter?: React.ReactNode;
 }
 
 function getProbeErrorMessage(t: (key: string) => string, reason: 'INVALID_URL' | 'UNREACHABLE' | 'AUTH_ENDPOINT_UNAVAILABLE'): string {
@@ -21,7 +25,14 @@ function getProbeErrorMessage(t: (key: string) => string, reason: 'INVALID_URL' 
   return t('auth.serverSetupConnectionFailed');
 }
 
-export default function ServerSetupGate({ children, testPrefix }: ServerSetupGateProps) {
+export default function ServerSetupGate({
+  children,
+  testPrefix,
+  existingServerUrl = null,
+  skipStoredServerCheck = false,
+  onServerReady,
+  setupFooter,
+}: ServerSetupGateProps) {
   const { colors } = useTheme();
   const { t } = useTranslation();
   const [serverUrlInput, setServerUrlInput] = useState(getBaseUrl);
@@ -32,6 +43,24 @@ export default function ServerSetupGate({ children, testPrefix }: ServerSetupGat
 
   useEffect(() => {
     let mounted = true;
+
+    if (existingServerUrl) {
+      setServerUrlInput(existingServerUrl);
+      setIsServerReady(true);
+      setIsCheckingExistingServer(false);
+      return () => {
+        mounted = false;
+      };
+    }
+
+    if (skipStoredServerCheck) {
+      setServerUrlInput(getBaseUrl());
+      setIsServerReady(false);
+      setIsCheckingExistingServer(false);
+      return () => {
+        mounted = false;
+      };
+    }
 
     getStoredServerUrl()
       .then((stored) => {
@@ -60,7 +89,7 @@ export default function ServerSetupGate({ children, testPrefix }: ServerSetupGat
     return () => {
       mounted = false;
     };
-  }, []);
+  }, [existingServerUrl, skipStoredServerCheck]);
 
   const helperExamples = useMemo(
     () =>
@@ -91,6 +120,7 @@ export default function ServerSetupGate({ children, testPrefix }: ServerSetupGat
       await activateServerUrl(probe.canonicalUrl);
       setServerUrlInput(probe.canonicalUrl);
       setIsServerReady(true);
+      onServerReady?.(probe.canonicalUrl);
     } catch {
       setSetupError(t('auth.serverSetupConnectionFailed'));
     } finally {
@@ -111,7 +141,7 @@ export default function ServerSetupGate({ children, testPrefix }: ServerSetupGat
   }
 
   if (isServerReady) {
-    return <>{children}</>;
+    return <>{children ?? null}</>;
   }
 
   return (
@@ -167,6 +197,8 @@ export default function ServerSetupGate({ children, testPrefix }: ServerSetupGat
           <Text style={styles.buttonText}>{t('auth.serverSetupContinue')}</Text>
         )}
       </TouchableOpacity>
+
+      {setupFooter ? <View style={styles.setupFooter}>{setupFooter}</View> : null}
     </View>
   );
 }
@@ -223,5 +255,8 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 8,
     fontSize: 14,
+  },
+  setupFooter: {
+    marginTop: 12,
   },
 });

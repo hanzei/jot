@@ -86,6 +86,10 @@ jest.mock('@react-navigation/native', () => ({
 
 jest.mock('../src/api/client', () => ({
   switchActiveServer: (...args: unknown[]) => mockSwitchActiveServer(...args),
+  getBaseUrl: jest.fn(() => 'http://localhost:8080'),
+  getStoredServerUrl: jest.fn(async () => null),
+  probeServerReachability: jest.fn(async () => ({ ok: true, canonicalUrl: 'http://localhost:8080' })),
+  setServerUrl: jest.fn(async () => undefined),
 }));
 
 jest.mock('../src/store/serverAccounts', () => ({
@@ -165,6 +169,42 @@ describe('DrawerContent', () => {
       expect(mockListServers).toHaveBeenCalled();
       expect(mockGetActiveServer).toHaveBeenCalled();
     });
+  });
+
+  it('opens guided add-server setup flow from server picker', async () => {
+    const props = makeProps();
+
+    const { getByTestId, findByTestId, queryByTestId } = render(<DrawerContent {...props} />);
+    fireEvent.press(getByTestId('drawer-profile-button'));
+    await findByTestId('server-picker-modal');
+
+    fireEvent.press(getByTestId('server-picker-add-submit'));
+
+    await findByTestId('server-setup-modal');
+    expect(queryByTestId('server-picker-modal')).toBeNull();
+    expect(getByTestId('server-picker-add-server-setup-step')).toBeTruthy();
+    expect(queryByTestId('server-picker-add-input')).toBeNull();
+  });
+
+  it('closes setup flow and returns to dashboard when canceled', async () => {
+    const props = makeProps();
+    const closeDrawer = jest.fn();
+    props.navigation.closeDrawer = closeDrawer;
+
+    const { getByTestId, findByTestId, queryByTestId } = render(<DrawerContent {...props} />);
+    fireEvent.press(getByTestId('drawer-profile-button'));
+    await findByTestId('server-picker-modal');
+
+    fireEvent.press(getByTestId('server-picker-add-submit'));
+    await findByTestId('server-setup-modal');
+
+    fireEvent.press(getByTestId('server-picker-add-cancel'));
+
+    await waitFor(() => {
+      expect(queryByTestId('server-setup-modal')).toBeNull();
+    });
+    expect(queryByTestId('server-picker-modal')).toBeNull();
+    expect(closeDrawer).toHaveBeenCalled();
   });
 
   it('renders drawer avatar from profile icon state', () => {
