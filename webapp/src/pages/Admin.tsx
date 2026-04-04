@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, type ReactNode } from 'react';
-import { PASSWORD_MIN_LENGTH, ROLES, VALIDATION, type User, type CreateUserRequest, type AdminStatsResponse } from '@jot/shared';
+import { ROLES, VALIDATION, type User, type CreateUserRequest, type AdminStatsResponse } from '@jot/shared';
 import { useTranslation } from 'react-i18next';
 import { admin, auth, isAxiosError } from '@/utils/api';
 import { isAdmin, removeUser, getUser } from '@/utils/auth';
@@ -12,6 +12,8 @@ import { getUsernameValidationError, isPasswordTooShort } from '@/utils/userVali
 
 interface AdminProps {
   onLogout: () => void;
+  passwordMinLength: number;
+  searchQueryMaxLength: number;
 }
 
 type CreateUserField = 'username' | 'password';
@@ -56,7 +58,7 @@ const StatCardSkeleton = () => (
   </div>
 );
 
-const Admin = ({ onLogout }: AdminProps) => {
+const Admin = ({ onLogout, passwordMinLength, searchQueryMaxLength }: AdminProps) => {
   const { t, i18n } = useTranslation();
   const navigate = useNavigate();
   const currentUser = getUser();
@@ -180,8 +182,8 @@ const Admin = ({ onLogout }: AdminProps) => {
   };
 
   const validatePassword = (password: string): string => {
-    if (isPasswordTooShort(password)) {
-      return t('admin.passwordMin', { min: PASSWORD_MIN_LENGTH });
+    if (isPasswordTooShort(password, passwordMinLength)) {
+      return t('admin.passwordMin', { min: passwordMinLength });
     }
     return '';
   };
@@ -308,6 +310,7 @@ const Admin = ({ onLogout }: AdminProps) => {
       onChange={setSearchQuery}
       onSubmit={handleSearch}
       stopEscapePropagation={true}
+      maxLength={searchQueryMaxLength}
     />
   );
 
@@ -382,7 +385,7 @@ const Admin = ({ onLogout }: AdminProps) => {
                       id="create-password"
                       type="password"
                       required
-                      minLength={PASSWORD_MIN_LENGTH}
+                      minLength={passwordMinLength}
                       value={formData.password}
                       onBlur={() => handleCreateFieldBlur('password')}
                       onChange={(e) => {
@@ -396,7 +399,7 @@ const Admin = ({ onLogout }: AdminProps) => {
                       }`}
                     />
                     <p className="mt-1 text-xs text-gray-500 dark:text-gray-400">
-                      {t('admin.passwordHint', { min: PASSWORD_MIN_LENGTH })}
+                      {t('admin.passwordHint', { min: passwordMinLength })}
                     </p>
                     {passwordFieldError && (
                       <p className="mt-1 text-sm text-red-600 dark:text-red-400">{passwordFieldError}</p>

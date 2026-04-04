@@ -36,7 +36,7 @@
     "usernameChars": "Gebruikersnaam mag alleen letters, cijfers, underscores en koppeltekens bevatten",
     "usernameEdge": "Gebruikersnaam mag niet beginnen of eindigen met een underscore of koppelteken",
     "passwordsNoMatch": "Wachtwoorden komen niet overeen",
-    "passwordMin": "Wachtwoord moet minimaal 4 tekens bevatten"
+    "passwordMin": "Wachtwoord moet minimaal {{min}} tekens bevatten"
   },
   "dashboard": {
     "newNote": "Nieuwe notitie",

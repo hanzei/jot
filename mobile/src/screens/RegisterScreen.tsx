@@ -52,7 +52,7 @@ export default function RegisterScreen({ navigation }: RegisterScreenProps) {
       return t('auth.usernameEdge');
     }
     if (!password.trim()) return t('auth.passwordRequired');
-    if (password.length < VALIDATION.PASSWORD_MIN_LENGTH) return t('auth.passwordMin');
+    if (password.length < VALIDATION.PASSWORD_MIN_LENGTH) return t('auth.passwordMin', { min: VALIDATION.PASSWORD_MIN_LENGTH });
     return null;
   };
 

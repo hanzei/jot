@@ -7,9 +7,10 @@ import { getUsernameValidationError, isPasswordTooShort } from '@/utils/userVali
 
 interface RegisterProps {
   onRegister: () => void;
+  passwordMinLength: number;
 }
 
-export default function Register({ onRegister }: RegisterProps) {
+export default function Register({ onRegister, passwordMinLength }: RegisterProps) {
   const { t } = useTranslation();
   useEffect(() => { document.title = t('pageTitle.register'); }, [t]);
   const [username, setUsername] = useState('');
@@ -42,8 +43,8 @@ export default function Register({ onRegister }: RegisterProps) {
       return;
     }
 
-    if (isPasswordTooShort(password)) {
-      setError(t('auth.passwordMin'));
+    if (isPasswordTooShort(password, passwordMinLength)) {
+      setError(t('auth.passwordMin', { min: passwordMinLength }));
       setLoading(false);
       return;
     }

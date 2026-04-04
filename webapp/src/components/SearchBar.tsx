@@ -10,9 +10,10 @@ interface SearchBarProps {
   shortcutHint?: string;
   // Escape always clears non-empty input; this flag additionally prevents parent/global Escape handlers.
   stopEscapePropagation?: boolean;
+  maxLength?: number;
 }
 
-const SearchBar = ({ value, onChange, onSubmit, inputRef, shortcutHint, stopEscapePropagation = false }: SearchBarProps) => {
+const SearchBar = ({ value, onChange, onSubmit, inputRef, shortcutHint, stopEscapePropagation = false, maxLength }: SearchBarProps) => {
   const { t } = useTranslation();
 
   const handleSubmit = (e: React.FormEvent) => {
@@ -44,6 +45,7 @@ const SearchBar = ({ value, onChange, onSubmit, inputRef, shortcutHint, stopEsca
             value={value}
             onChange={(e) => onChange(e.target.value)}
             onKeyDown={handleKeyDown}
+            maxLength={maxLength}
           />
           {shortcutHint && (
             <kbd

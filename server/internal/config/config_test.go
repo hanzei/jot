@@ -15,6 +15,7 @@ func TestLoadDefaults(t *testing.T) {
 	t.Setenv("CORS_ALLOWED_ORIGIN", "")
 	t.Setenv("COOKIE_SECURE", "")
 	t.Setenv("REGISTRATION_ENABLED", "")
+	t.Setenv("PASSWORD_MIN_LENGTH", "")
 
 	cfg, err := Load()
 	require.NoError(t, err)
@@ -25,6 +26,7 @@ func TestLoadDefaults(t *testing.T) {
 	assert.Empty(t, cfg.CORSAllowedOrigin)
 	assert.True(t, cfg.CookieSecure)
 	assert.True(t, cfg.RegistrationEnabled)
+	assert.Equal(t, 10, cfg.PasswordMinLength)
 }
 
 func TestLoadCustomValues(t *testing.T) {
@@ -34,6 +36,7 @@ func TestLoadCustomValues(t *testing.T) {
 	t.Setenv("CORS_ALLOWED_ORIGIN", "https://example.com")
 	t.Setenv("COOKIE_SECURE", "false")
 	t.Setenv("REGISTRATION_ENABLED", "false")
+	t.Setenv("PASSWORD_MIN_LENGTH", "4")
 
 	cfg, err := Load()
 	require.NoError(t, err)
@@ -44,6 +47,7 @@ func TestLoadCustomValues(t *testing.T) {
 	assert.Equal(t, "https://example.com", cfg.CORSAllowedOrigin)
 	assert.False(t, cfg.CookieSecure)
 	assert.False(t, cfg.RegistrationEnabled)
+	assert.Equal(t, 4, cfg.PasswordMinLength)
 }
 
 func TestLoadInvalidPort(t *testing.T) {
@@ -149,4 +153,43 @@ func TestLoadCORSAllowedOriginSet(t *testing.T) {
 	cfg, err := Load()
 	require.NoError(t, err)
 	assert.Equal(t, "https://app.example.com", cfg.CORSAllowedOrigin)
+}
+
+func TestLoadPasswordMinLength(t *testing.T) {
+	t.Setenv("STATIC_DIR", "/tmp/static")
+
+	t.Run("default", func(t *testing.T) {
+		t.Setenv("PASSWORD_MIN_LENGTH", "")
+		cfg, err := Load()
+		require.NoError(t, err)
+		assert.Equal(t, 10, cfg.PasswordMinLength)
+	})
+
+	t.Run("custom", func(t *testing.T) {
+		t.Setenv("PASSWORD_MIN_LENGTH", "4")
+		cfg, err := Load()
+		require.NoError(t, err)
+		assert.Equal(t, 4, cfg.PasswordMinLength)
+	})
+
+	t.Run("non-numeric", func(t *testing.T) {
+		t.Setenv("PASSWORD_MIN_LENGTH", "notanumber")
+		_, err := Load()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid PASSWORD_MIN_LENGTH value")
+	})
+
+	t.Run("zero", func(t *testing.T) {
+		t.Setenv("PASSWORD_MIN_LENGTH", "0")
+		_, err := Load()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "must be at least 1")
+	})
+
+	t.Run("negative", func(t *testing.T) {
+		t.Setenv("PASSWORD_MIN_LENGTH", "-1")
+		_, err := Load()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "must be at least 1")
+	})
 }

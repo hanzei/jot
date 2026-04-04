@@ -36,7 +36,7 @@
     "usernameChars": "Username can only contain letters, numbers, underscores, and hyphens",
     "usernameEdge": "Username cannot start or end with underscore or hyphen",
     "passwordsNoMatch": "Passwords do not match",
-    "passwordMin": "Password must be at least 4 characters"
+    "passwordMin": "Password must be at least {{min}} characters"
   },
   "dashboard": {
     "newNote": "New Note",

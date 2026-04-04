@@ -19,9 +19,11 @@ import { IdentitySecurityColumn, PreferencesInfoColumn } from './settings/Settin
 
 interface SettingsProps {
   onLogout: () => void;
+  passwordMinLength: number;
+  searchQueryMaxLength: number;
 }
 
-const Settings = ({ onLogout }: SettingsProps) => {
+const Settings = ({ onLogout, passwordMinLength, searchQueryMaxLength }: SettingsProps) => {
   const { t } = useTranslation();
   const { showToast } = useToast();
   useEffect(() => { document.title = t('pageTitle.settings'); }, [t]);
@@ -143,6 +145,11 @@ const Settings = ({ onLogout }: SettingsProps) => {
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
     setPasswordError('');
+
+    if (newPassword.length < passwordMinLength) {
+      setPasswordError(t('auth.passwordMin', { min: passwordMinLength }));
+      return;
+    }
 
     if (newPassword !== confirmPassword) {
       setPasswordError('settings.passwordsNoMatch');
@@ -301,6 +308,7 @@ const Settings = ({ onLogout }: SettingsProps) => {
       onChange={setSearchQuery}
       onSubmit={handleSearch}
       stopEscapePropagation={true}
+      maxLength={searchQueryMaxLength}
     />
   );
   const sidebarChildren = (

@@ -37,12 +37,13 @@ import {
 
 interface DashboardProps {
   onLogout: () => void;
+  searchQueryMaxLength: number;
 }
 
 const SEARCH_DEBOUNCE_MS = 300;
 const isApplePlatform = () => typeof navigator !== 'undefined' && /mac|iphone|ipad|ipod/i.test(navigator.platform);
 
-export default function Dashboard({ onLogout }: DashboardProps) {
+export default function Dashboard({ onLogout, searchQueryMaxLength }: DashboardProps) {
   const { t } = useTranslation();
   const { showToast } = useToast();
   const { noteId: noteIdParam } = useParams<{ noteId?: string }>();
@@ -788,6 +789,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
           inputRef={searchInputRef}
           shortcutHint={focusSearchShortcutHint}
           stopEscapePropagation={true}
+          maxLength={searchQueryMaxLength}
         />
       </div>
       <div className="flex w-full flex-col gap-3 sm:w-auto sm:flex-row sm:items-center sm:justify-end">

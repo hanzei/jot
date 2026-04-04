@@ -36,7 +36,7 @@
     "usernameChars": "O nome de usuário só pode conter letras, números, sublinhados e hífens",
     "usernameEdge": "O nome de usuário não pode começar ou terminar com sublinhado ou hífen",
     "passwordsNoMatch": "As senhas não coincidem",
-    "passwordMin": "A senha deve ter pelo menos 4 caracteres"
+    "passwordMin": "A senha deve ter pelo menos {{min}} caracteres"
   },
   "dashboard": {
     "newNote": "Nova nota",

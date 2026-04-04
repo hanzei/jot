@@ -50,7 +50,7 @@
     "usernameMax": "Username must be 30 characters or fewer",
     "usernameChars": "Username can only contain letters, numbers, underscores, and hyphens",
     "usernameEdge": "Username cannot start or end with underscore or hyphen",
-    "passwordMin": "Password must be at least 4 characters",
+    "passwordMin": "Password must be at least {{min}} characters",
     "serverUrlPlaceholder": "Server URL",
     "serverUrlRequired": "Server URL is required",
     "serverUrlProtocol": "Server URL must start with http:// or https://",

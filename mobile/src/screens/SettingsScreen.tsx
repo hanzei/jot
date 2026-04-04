@@ -35,6 +35,7 @@ import {
   listSessions,
   revokeSession,
 } from '../api/settings';
+import { VALIDATION } from '@jot/shared';
 import type { ThemePreference, AboutInfo, ActiveSession, ImportResponse } from '@jot/shared';
 import i18n from '../i18n';
 import { SUPPORTED_LANGUAGES, getLanguagePreference, resolveLanguage, type LanguagePreference } from '../i18n/language';
@@ -338,8 +339,8 @@ export default function SettingsScreen() {
       setPasswordError(t('settings.passwordsNoMatch'));
       return;
     }
-    if (newPassword.length < 4) {
-      setPasswordError(t('auth.passwordMin'));
+    if (newPassword.length < VALIDATION.PASSWORD_MIN_LENGTH) {
+      setPasswordError(t('auth.passwordMin', { min: VALIDATION.PASSWORD_MIN_LENGTH }));
       return;
     }
 

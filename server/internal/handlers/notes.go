@@ -232,6 +232,10 @@ func (h *NotesHandler) GetNotes(w http.ResponseWriter, r *http.Request) (int, an
 	labelID := q.Get("label")
 	myTodo := q.Get("my_todo") == queryTrue
 
+	if err := validateSearchQuery(search); err != nil {
+		return http.StatusBadRequest, nil, err
+	}
+
 	notes, err := h.noteStore.GetByUserID(r.Context(), user.ID, archived, trashed, search, labelID, myTodo)
 	if err != nil {
 		return http.StatusInternalServerError, nil, fmt.Errorf("get notes: %w", err)

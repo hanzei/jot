@@ -12,15 +12,17 @@ var usernameRegex = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 
 var hexColorRegex = regexp.MustCompile(`^#([0-9a-fA-F]{3}|[0-9a-fA-F]{6})$`)
 
-// Keep in sync with shared/src/constants.ts VALIDATION and PASSWORD_MIN_LENGTH for clients.
+// Keep in sync with shared/src/constants.ts VALIDATION for clients.
 // All character limits are measured in Unicode code points (utf8.RuneCountInString).
 // noteItemsMaxCount is a server-only resource cap with no shared-constants counterpart.
+// passwordMinLength is configurable via config.Config.PasswordMinLength (env PASSWORD_MIN_LENGTH).
 const (
-	passwordMinLength     = 4
 	noteTitleMaxLength    = 200
 	noteContentMaxLength  = 10000
 	noteItemTextMaxLength = 500
 	noteItemsMaxCount     = 500
+	// SearchQueryMaxLength is exported so server.go can include it in the /config response.
+	SearchQueryMaxLength = 500
 )
 
 func validateUsername(username string) error {
@@ -46,9 +48,16 @@ func validateUsername(username string) error {
 	return nil
 }
 
-func validatePassword(password string) error {
-	if len(password) < passwordMinLength {
-		return fmt.Errorf("password must be at least %d characters", passwordMinLength)
+func validatePassword(password string, minLength int) error {
+	if utf8.RuneCountInString(password) < minLength {
+		return fmt.Errorf("password must be at least %d characters", minLength)
+	}
+	return nil
+}
+
+func validateSearchQuery(q string) error {
+	if utf8.RuneCountInString(q) > SearchQueryMaxLength {
+		return fmt.Errorf("search query must be %d characters or fewer", SearchQueryMaxLength)
 	}
 	return nil
 }

@@ -50,7 +50,7 @@
     "usernameMax": "El nombre de usuario no puede superar los 30 caracteres",
     "usernameChars": "El nombre de usuario solo puede contener letras, números, guiones bajos y guiones",
     "usernameEdge": "El nombre de usuario no puede empezar ni terminar con guión bajo o guión",
-    "passwordMin": "La contraseña debe tener al menos 4 caracteres",
+    "passwordMin": "La contraseña debe tener al menos {{min}} caracteres",
     "serverUrlPlaceholder": "URL del servidor",
     "serverUrlRequired": "La URL del servidor es obligatoria",
     "serverUrlProtocol": "La URL del servidor debe empezar con http:// o https://",

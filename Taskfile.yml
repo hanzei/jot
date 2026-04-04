@@ -12,6 +12,7 @@ tasks:
       LDFLAGS: "-X 'github.com/hanzei/jot/server/internal/server.commit={{.COMMIT}}' -X 'github.com/hanzei/jot/server/internal/server.version=dev' -X 'github.com/hanzei/jot/server/internal/server.buildTime={{.BUILD_TIME}}'"
     env:
       CORS_ALLOWED_ORIGIN: http://localhost:5173
+      PASSWORD_MIN_LENGTH: "4"
     cmds:
       - rm -f jot
       - go build -buildvcs=false -ldflags "{{.LDFLAGS}}" -o jot .
