@@ -68,9 +68,13 @@ func toolTextResult(data []byte) *mcp.CallToolResult {
 	}
 }
 
-// toolError wraps an error message as a text MCP result with IsError set.
-// This produces a tool-level error (visible to the model) rather than a
-// protocol error.
+// toolError returns a tool-level error from a [mcp.ToolHandlerFor] handler.
+//
+// Its return signature matches [mcp.ToolHandlerFor]: (*CallToolResult, Out, error).
+// Returning a non-nil error from a ToolHandlerFor handler is treated by the
+// SDK as a tool execution failure, not a protocol error — the SDK sets
+// CallToolResult.IsError to true and surfaces the error message to the model.
+// This is distinct from a protocol error, which would abort the MCP session.
 func toolError(format string, args ...any) (*mcp.CallToolResult, any, error) {
 	return nil, nil, fmt.Errorf(format, args...)
 }

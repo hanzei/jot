@@ -3,7 +3,6 @@ package mcphandler
 import (
 	"context"
 	"encoding/json"
-	"fmt"
 
 	"github.com/hanzei/jot/server/internal/models"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -167,7 +166,10 @@ func (h *Handler) handleDeleteNote(userID string) mcp.ToolHandlerFor[deleteNoteI
 		if err != nil {
 			return toolError("delete note: %w", err)
 		}
-		msg := fmt.Sprintf(`{"id":%q,"deleted":true,"permanent":%v}`, in.ID, in.Permanent)
-		return toolTextResult([]byte(msg)), nil, nil
+		data, err := json.Marshal(map[string]any{"id": in.ID, "deleted": true, "permanent": in.Permanent})
+		if err != nil {
+			return toolError("marshal response: %w", err)
+		}
+		return toolTextResult(data), nil, nil
 	}
 }

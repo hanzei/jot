@@ -94,7 +94,10 @@ func (h *Handler) handleDeleteLabel(userID string) mcp.ToolHandlerFor[deleteLabe
 		if err := h.labelStore.DeleteLabel(ctx, in.ID, userID); err != nil {
 			return toolError("delete label: %w", err)
 		}
-		data, _ := json.Marshal(map[string]any{"id": in.ID, "deleted": true})
+		data, err := json.Marshal(map[string]any{"id": in.ID, "deleted": true})
+		if err != nil {
+			return toolError("marshal response: %w", err)
+		}
 		return toolTextResult(data), nil, nil
 	}
 }
