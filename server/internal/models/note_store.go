@@ -1229,7 +1229,7 @@ func validateRequestedReorderRows(noteIDs []string, requestedRows []reorderReque
 	if len(requestedRows) != len(noteIDs) {
 		for _, noteID := range noteIDs {
 			if !IsValidID(noteID) {
-				return false, fmt.Errorf("invalid note ID in reorder payload: %w", ErrNoteNoAccess)
+				return false, fmt.Errorf("invalid note ID in reorder payload: %w", ErrInvalidReorderList)
 			}
 			state, exists := requestedStateByID[noteID]
 			if !exists || !state.hasUserState {

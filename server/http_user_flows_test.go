@@ -83,6 +83,23 @@ func TestReorderNotesEndpoint(t *testing.T) {
 		}
 	})
 
+	t.Run("including malformed note ID returns 400 and leaves order unchanged", func(t *testing.T) {
+		beforeNotes, err := user.Client.ListNotes(t.Context(), nil)
+		require.NoError(t, err)
+		require.Len(t, beforeNotes, 3)
+
+		err = user.Client.ReorderNotes(t.Context(), []string{note1, "invalid-id"})
+		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
+
+		afterNotes, err := user.Client.ListNotes(t.Context(), nil)
+		require.NoError(t, err)
+		require.Len(t, afterNotes, 3)
+		for i := range beforeNotes {
+			assert.Equal(t, beforeNotes[i].ID, afterNotes[i].ID)
+			assert.Equal(t, beforeNotes[i].Position, afterNotes[i].Position)
+		}
+	})
+
 	t.Run("duplicate note IDs in payload returns 400 and leaves order unchanged", func(t *testing.T) {
 		beforeNotes, err := user.Client.ListNotes(t.Context(), nil)
 		require.NoError(t, err)
