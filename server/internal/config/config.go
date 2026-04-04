@@ -74,8 +74,8 @@ func Load() (*Config, error) {
 		if err != nil {
 			return nil, fmt.Errorf("invalid PASSWORD_MIN_LENGTH value %q: must be a number", v)
 		}
-		if n < 1 {
-			return nil, fmt.Errorf("invalid PASSWORD_MIN_LENGTH value %d: must be at least 1", n)
+		if n < 1 || n > 72 {
+			return nil, fmt.Errorf("invalid PASSWORD_MIN_LENGTH value %d: must be between 1 and 72", n)
 		}
 		cfg.PasswordMinLength = n
 	}

@@ -183,13 +183,27 @@ func TestLoadPasswordMinLength(t *testing.T) {
 		t.Setenv("PASSWORD_MIN_LENGTH", "0")
 		_, err := Load()
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "must be at least 1")
+		assert.Contains(t, err.Error(), "must be between 1 and 72")
 	})
 
 	t.Run("negative", func(t *testing.T) {
 		t.Setenv("PASSWORD_MIN_LENGTH", "-1")
 		_, err := Load()
 		require.Error(t, err)
-		assert.Contains(t, err.Error(), "must be at least 1")
+		assert.Contains(t, err.Error(), "must be between 1 and 72")
+	})
+
+	t.Run("too high", func(t *testing.T) {
+		t.Setenv("PASSWORD_MIN_LENGTH", "73")
+		_, err := Load()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "must be between 1 and 72")
+	})
+
+	t.Run("max valid", func(t *testing.T) {
+		t.Setenv("PASSWORD_MIN_LENGTH", "72")
+		cfg, err := Load()
+		require.NoError(t, err)
+		assert.Equal(t, 72, cfg.PasswordMinLength)
 	})
 }
