@@ -3,6 +3,8 @@ import {
   TOAST_ACTION_AUTO_DISMISS_MS,
 } from '../../src/utils/toastTiming';
 
+test.use({ video: 'on' });
+
 test.describe('Toast timing', () => {
   test.beforeEach(async ({ authenticatedUser }) => {
     void authenticatedUser;
