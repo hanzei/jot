@@ -180,6 +180,12 @@ describe('Auth first-run server setup flow', () => {
 
     fireEvent.changeText(getByTestId('username-input'), 'new_user');
     fireEvent.changeText(getByTestId('password-input'), 'pass1234');
+
+    await waitFor(() => {
+      expect(getByTestId('username-input').props.value).toBe('new_user');
+      expect(getByTestId('password-input').props.value).toBe('pass1234');
+    });
+
     fireEvent.press(getByTestId('register-button'));
 
     await waitFor(() => {
