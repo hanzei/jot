@@ -263,47 +263,72 @@ func (s *NoteStore) GetByUserID(ctx context.Context, userID string, archived boo
 		return nil, fmt.Errorf("failed to scan notes: %w", err)
 	}
 
-	notes := make([]*Note, 0, len(scannedNotes))
-	for i := range scannedNotes {
-		note := &scannedNotes[i]
-
-		if note.NoteType == NoteTypeTodo {
-			items, itemsErr := s.getItemsByNoteID(ctx, note.ID)
-			if itemsErr != nil {
-				return nil, fmt.Errorf("failed to get note items: %w", itemsErr)
-			}
-			note.Items = items
-		}
-
-		shares, sharesErr := s.GetNoteShares(ctx, note.ID)
-		if sharesErr != nil {
-			return nil, fmt.Errorf("failed to get note shares: %w", sharesErr)
-		}
-		note.SharedWith = shares
-		note.IsShared = len(shares) > 0
-		note.Labels = []Label{}
-
-		notes = append(notes, note)
+	notes, err := s.populateNoteItemsAndDefaults(ctx, scannedNotes)
+	if err != nil {
+		return nil, err
 	}
 
-	// Batch-load labels for all notes in a single query.
-	if len(notes) > 0 {
-		noteIDs := make([]string, len(notes))
-		for i, n := range notes {
-			noteIDs[i] = n.ID
-		}
-		labelsMap, labelsErr := s.getLabelsByNoteIDs(ctx, noteIDs, userID)
-		if labelsErr != nil {
-			return nil, fmt.Errorf("failed to batch-load note labels: %w", labelsErr)
-		}
-		for _, n := range notes {
-			if lbls, ok := labelsMap[n.ID]; ok {
-				n.Labels = lbls
-			}
-		}
+	if err := s.batchLoadSharesAndLabels(ctx, notes, userID); err != nil {
+		return nil, err
 	}
 
 	return notes, nil
+}
+
+// populateNoteItemsAndDefaults converts scanned notes to []*Note, loading todo items
+// for each todo note and initializing slice fields to non-nil defaults.
+func (s *NoteStore) populateNoteItemsAndDefaults(ctx context.Context, scannedNotes []Note) ([]*Note, error) {
+	notes := make([]*Note, 0, len(scannedNotes))
+	for i := range scannedNotes {
+		note := &scannedNotes[i]
+		if note.NoteType == NoteTypeTodo {
+			items, err := s.getItemsByNoteID(ctx, note.ID)
+			if err != nil {
+				return nil, fmt.Errorf("failed to get note items: %w", err)
+			}
+			note.Items = items
+		}
+		note.SharedWith = []NoteShare{}
+		note.IsShared = false
+		note.Labels = []Label{}
+		notes = append(notes, note)
+	}
+	return notes, nil
+}
+
+// batchLoadSharesAndLabels batch-loads shares and labels for a slice of notes, updating each note in place.
+func (s *NoteStore) batchLoadSharesAndLabels(ctx context.Context, notes []*Note, userID string) error {
+	if len(notes) == 0 {
+		return nil
+	}
+
+	noteIDs := make([]string, len(notes))
+	for i, n := range notes {
+		noteIDs[i] = n.ID
+	}
+
+	sharesMap, err := s.getSharesByNoteIDs(ctx, noteIDs)
+	if err != nil {
+		return fmt.Errorf("failed to batch-load note shares: %w", err)
+	}
+	for _, n := range notes {
+		if shares, ok := sharesMap[n.ID]; ok {
+			n.SharedWith = shares
+			n.IsShared = true
+		}
+	}
+
+	labelsMap, err := s.getLabelsByNoteIDs(ctx, noteIDs, userID)
+	if err != nil {
+		return fmt.Errorf("failed to batch-load note labels: %w", err)
+	}
+	for _, n := range notes {
+		if lbls, ok := labelsMap[n.ID]; ok {
+			n.Labels = lbls
+		}
+	}
+
+	return nil
 }
 
 func (s *NoteStore) GetByID(ctx context.Context, id string, userID string) (*Note, error) {

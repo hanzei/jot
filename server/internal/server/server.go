@@ -22,6 +22,7 @@ import (
 	"github.com/hanzei/jot/server/internal/database"
 	"github.com/hanzei/jot/server/internal/handlers"
 	"github.com/hanzei/jot/server/internal/logutil"
+	"github.com/hanzei/jot/server/internal/mcphandler"
 	"github.com/hanzei/jot/server/internal/models"
 	"github.com/hanzei/jot/server/internal/sse"
 	"github.com/sirupsen/logrus"
@@ -59,6 +60,8 @@ type Server struct {
 	eventsHandler   *handlers.EventsHandler
 	adminHandler    *handlers.AdminHandler
 	sessionsHandler *handlers.SessionsHandler
+	noteStore       *models.NoteStore
+	labelStore      *models.LabelStore
 }
 
 func New(cfg *config.Config) (*Server, error) {
@@ -105,6 +108,8 @@ func New(cfg *config.Config) (*Server, error) {
 		eventsHandler:   eventsHandler,
 		adminHandler:    adminHandler,
 		sessionsHandler: sessionsHandler,
+		noteStore:       noteStore,
+		labelStore:      labelStore,
 	}
 
 	startPeriodicTask(&s.bgWg, ctx, time.Hour, false, func() error {
@@ -198,6 +203,8 @@ func (s *Server) setupRoutes() error {
 
 			r.Get("/sessions", s.wrapHandler(s.sessionsHandler.ListSessions))
 			r.Delete("/sessions/{id}", s.wrapHandler(s.sessionsHandler.RevokeSession))
+
+			r.Handle("/mcp", mcphandler.New(s.noteStore, s.labelStore).NewStreamableHTTPHandler())
 		})
 
 		r.Group(func(r chi.Router) {
