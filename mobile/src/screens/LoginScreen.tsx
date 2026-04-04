@@ -14,8 +14,7 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import { AuthStackParamList } from '../navigation/AuthStack';
-import { setServerUrl } from '../api/client';
-import { useServerUrl } from '../hooks/useServerUrl';
+import ServerSetupGate from '../components/ServerSetupGate';
 import { displayMessage } from '../i18n/utils';
 
 type LoginScreenProps = {
@@ -26,18 +25,12 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
   const { login } = useAuth();
   const { colors } = useTheme();
   const { t } = useTranslation();
-  const { serverUrl, setServerUrl: setServerUrlInput, validateServerUrl } = useServerUrl();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
   const handleLogin = async () => {
-    const urlError = validateServerUrl(serverUrl);
-    if (urlError) {
-      setError(displayMessage(t, urlError));
-      return;
-    }
     if (!username.trim() || !password.trim()) {
       setError(t('auth.usernamePasswordRequired'));
       return;
@@ -46,7 +39,6 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
     setError('');
     setLoading(true);
     try {
-      await setServerUrl(serverUrl.trim());
       await login(username.trim(), password);
     } catch (err: unknown) {
       const response = (err as { response?: { status?: number; data?: string } })?.response;
@@ -74,66 +66,55 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
         <Text style={[styles.title, { color: colors.text }]}>Jot</Text>
         <Text style={[styles.subtitle, { color: colors.textSecondary }]}>{t('auth.signInSubtitle')}</Text>
 
-        {error ? <Text style={[styles.error, { color: colors.error }]}>{error}</Text> : null}
+        <ServerSetupGate testPrefix="login">
+          {error ? <Text style={[styles.error, { color: colors.error }]}>{error}</Text> : null}
 
-        <TextInput
-          style={[styles.input, { backgroundColor: colors.inputBackground, borderColor: colors.inputBorder, color: colors.text }]}
-          placeholder={t('auth.serverUrlPlaceholder')}
-          placeholderTextColor={colors.placeholder}
-          autoCapitalize="none"
-          autoCorrect={false}
-          keyboardType="url"
-          value={serverUrl}
-          onChangeText={setServerUrlInput}
-          accessibilityLabel={t('auth.serverUrlPlaceholder')}
-          testID="server-url-input"
-        />
+          <TextInput
+            style={[styles.input, { backgroundColor: colors.inputBackground, borderColor: colors.inputBorder, color: colors.text }]}
+            placeholder={t('auth.usernamePlaceholder')}
+            placeholderTextColor={colors.placeholder}
+            autoCapitalize="none"
+            autoCorrect={false}
+            value={username}
+            onChangeText={setUsername}
+            accessibilityLabel={t('settings.usernameLabel')}
+            testID="username-input"
+          />
 
-        <TextInput
-          style={[styles.input, { backgroundColor: colors.inputBackground, borderColor: colors.inputBorder, color: colors.text }]}
-          placeholder={t('auth.usernamePlaceholder')}
-          placeholderTextColor={colors.placeholder}
-          autoCapitalize="none"
-          autoCorrect={false}
-          value={username}
-          onChangeText={setUsername}
-          accessibilityLabel={t('settings.usernameLabel')}
-          testID="username-input"
-        />
+          <TextInput
+            style={[styles.input, { backgroundColor: colors.inputBackground, borderColor: colors.inputBorder, color: colors.text }]}
+            placeholder={t('auth.passwordPlaceholder')}
+            placeholderTextColor={colors.placeholder}
+            secureTextEntry
+            autoCapitalize="none"
+            autoCorrect={false}
+            value={password}
+            onChangeText={setPassword}
+            accessibilityLabel={t('auth.passwordPlaceholder')}
+            testID="password-input"
+          />
 
-        <TextInput
-          style={[styles.input, { backgroundColor: colors.inputBackground, borderColor: colors.inputBorder, color: colors.text }]}
-          placeholder={t('auth.passwordPlaceholder')}
-          placeholderTextColor={colors.placeholder}
-          secureTextEntry
-          autoCapitalize="none"
-          autoCorrect={false}
-          value={password}
-          onChangeText={setPassword}
-          accessibilityLabel={t('auth.passwordPlaceholder')}
-          testID="password-input"
-        />
+          <TouchableOpacity
+            style={[styles.button, { backgroundColor: colors.primary }, loading && styles.buttonDisabled]}
+            onPress={handleLogin}
+            disabled={loading}
+            testID="login-button"
+          >
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.buttonText}>{t('auth.signIn')}</Text>
+            )}
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.button, { backgroundColor: colors.primary }, loading && styles.buttonDisabled]}
-          onPress={handleLogin}
-          disabled={loading}
-          testID="login-button"
-        >
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.buttonText}>{t('auth.signIn')}</Text>
-          )}
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          onPress={() => navigation.navigate('Register')}
-          style={styles.link}
-          testID="create-account-link"
-        >
-          <Text style={[styles.linkText, { color: colors.primary }]}>{t('auth.createAccountLink')}</Text>
-        </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => navigation.navigate('Register')}
+            style={styles.link}
+            testID="create-account-link"
+          >
+            <Text style={[styles.linkText, { color: colors.primary }]}>{t('auth.createAccountLink')}</Text>
+          </TouchableOpacity>
+        </ServerSetupGate>
       </View>
     </KeyboardAvoidingView>
   );

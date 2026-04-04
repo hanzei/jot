@@ -42,6 +42,10 @@ type ActiveServerChangeListener = (serverId: string | null) => void;
 const activeServerChangeListeners = new Set<ActiveServerChangeListener>();
 const serverUrlById = new Map<string, string>();
 
+export type ServerReachabilityResult =
+  | { ok: true; canonicalUrl: string }
+  | { ok: false; reason: 'INVALID_URL' | 'UNREACHABLE' | 'AUTH_ENDPOINT_UNAVAILABLE' };
+
 interface SwitchAwareAxiosRequestConfig extends InternalAxiosRequestConfig {
   __serverSwitchGenerationId?: number;
   __serverSwitchAbortController?: AbortController;
@@ -164,6 +168,29 @@ const platformLabel: Record<string, string> = {
   windows: 'Windows',
   macos: 'macOS',
 };
+
+export async function probeServerReachability(url: string): Promise<ServerReachabilityResult> {
+  const canonical = canonicalizeServerOrigin(url);
+  if (!canonical) {
+    return { ok: false, reason: 'INVALID_URL' };
+  }
+
+  try {
+    const response = await axios.get(`${canonical}/api/v1/me`, {
+      timeout: 5000,
+      headers: {
+        'User-Agent': `JotMobile/1.0 (${platformLabel[Platform.OS] ?? Platform.OS})`,
+      },
+      validateStatus: () => true,
+    });
+    if (response.status === 200 || response.status === 401 || response.status === 403) {
+      return { ok: true, canonicalUrl: canonical };
+    }
+    return { ok: false, reason: 'AUTH_ENDPOINT_UNAVAILABLE' };
+  } catch {
+    return { ok: false, reason: 'UNREACHABLE' };
+  }
+}
 
 const api = axios.create({
   baseURL: `${currentBaseUrl}/api/v1`,
