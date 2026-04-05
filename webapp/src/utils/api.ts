@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { ServerConfig, AboutInfo, AuthResponse, LoginRequest, RegisterRequest, Note, CreateNoteRequest, UpdateNoteRequest, User, CreateUserRequest, UserListResponse, AdminStatsResponse, ShareNoteRequest, NoteShare, ImportResponse, UpdateMeRequest, ChangePasswordRequest, UpdateUserRoleRequest, Label, ActiveSession, EmptyTrashResponse } from '@jot/shared';
+import type { ServerConfig, AboutInfo, AuthResponse, LoginRequest, RegisterRequest, Note, CreateNoteRequest, UpdateNoteRequest, User, CreateUserRequest, UserListResponse, AdminStatsResponse, ShareNoteRequest, NoteShare, ImportResponse, UpdateMeRequest, ChangePasswordRequest, UpdateUserRoleRequest, Label, ActiveSession, EmptyTrashResponse, PersonalAccessToken, CreatePATRequest } from '@jot/shared';
 
 const api = axios.create({
   baseURL: '/api/v1',
@@ -131,6 +131,17 @@ export const sessions = {
 
   revoke: (id: string): Promise<void> =>
     api.delete(`/sessions/${id}`).then(() => undefined),
+};
+
+export const pats = {
+  list: (): Promise<PersonalAccessToken[]> =>
+    api.get('/pats').then(res => res.data),
+
+  create: (data: CreatePATRequest): Promise<PersonalAccessToken> =>
+    api.post('/pats', data).then(res => res.data),
+
+  revoke: (id: string): Promise<void> =>
+    api.delete(`/pats/${id}`).then(() => undefined),
 };
 
 export const about = {

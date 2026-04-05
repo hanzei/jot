@@ -38,6 +38,11 @@ vi.mock('@/utils/api', () => ({
     list: vi.fn().mockResolvedValue([]),
     revoke: vi.fn().mockResolvedValue(undefined),
   },
+  pats: {
+    list: vi.fn().mockResolvedValue([]),
+    create: vi.fn(),
+    revoke: vi.fn().mockResolvedValue(undefined),
+  },
   isAxiosError: vi.fn(),
 }))
 
@@ -94,7 +99,7 @@ const renderSettings = (onLogout = vi.fn()) => {
   return render(
     <MemoryRouter>
       <ToastProvider>
-        <Settings onLogout={onLogout} />
+        <Settings onLogout={onLogout} passwordMinLength={10} />
       </ToastProvider>
     </MemoryRouter>
   )

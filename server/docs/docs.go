@@ -1498,6 +1498,126 @@ const docTemplate = `{
                 }
             }
         },
+        "/pats": {
+            "get": {
+                "security": [
+                    {
+                        "CookieAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "pats"
+                ],
+                "summary": "List personal access tokens for the current user",
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/handlers.patResponse"
+                            }
+                        }
+                    },
+                    "401": {
+                        "description": "unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            },
+            "post": {
+                "security": [
+                    {
+                        "CookieAuth": []
+                    }
+                ],
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "pats"
+                ],
+                "summary": "Create a new personal access token",
+                "parameters": [
+                    {
+                        "description": "Token name",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.createPATRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "201": {
+                        "description": "Created",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.patResponse"
+                        }
+                    },
+                    "400": {
+                        "description": "bad request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "401": {
+                        "description": "unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
+        "/pats/{id}": {
+            "delete": {
+                "security": [
+                    {
+                        "CookieAuth": []
+                    }
+                ],
+                "tags": [
+                    "pats"
+                ],
+                "summary": "Revoke a personal access token",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "PAT ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    }
+                ],
+                "responses": {
+                    "204": {
+                        "description": "no content"
+                    },
+                    "401": {
+                        "description": "unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
         "/register": {
             "post": {
                 "consumes": [
@@ -1663,6 +1783,12 @@ const docTemplate = `{
                             "items": {
                                 "$ref": "#/definitions/handlers.UserInfo"
                             }
+                        }
+                    },
+                    "400": {
+                        "description": "search query too long",
+                        "schema": {
+                            "type": "string"
                         }
                     },
                     "401": {
@@ -2255,6 +2381,31 @@ const docTemplate = `{
                 }
             }
         },
+        "handlers.createPATRequest": {
+            "type": "object",
+            "properties": {
+                "name": {
+                    "type": "string"
+                }
+            }
+        },
+        "handlers.patResponse": {
+            "type": "object",
+            "properties": {
+                "created_at": {
+                    "type": "string"
+                },
+                "id": {
+                    "type": "string"
+                },
+                "name": {
+                    "type": "string"
+                },
+                "token": {
+                    "type": "string"
+                }
+            }
+        },
         "models.AdminLabelStats": {
             "type": "object",
             "properties": {
@@ -2590,6 +2741,9 @@ const docTemplate = `{
         "server.configResponse": {
             "type": "object",
             "properties": {
+                "password_min_length": {
+                    "type": "integer"
+                },
                 "registration_enabled": {
                     "type": "boolean"
                 }

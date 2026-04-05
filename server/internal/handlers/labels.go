@@ -48,11 +48,10 @@ func (h *LabelsHandler) publishLabelNoteUpdates(ctx context.Context, noteIDs []s
 			continue
 		}
 
-		h.hub.Publish([]string{userID}, sse.Event{
+		h.hub.Publish(ctx, []string{userID}, sse.Event{
 			Type:         sse.EventNoteUpdated,
-			NoteID:       noteID,
-			Note:         note,
 			SourceUserID: userID,
+			Data:         sse.NoteEventData{NoteID: noteID, Note: note},
 		})
 	}
 }
@@ -193,11 +192,10 @@ func (h *LabelsHandler) AddLabel(w http.ResponseWriter, r *http.Request) (int, a
 	}
 
 	if h.hub != nil {
-		h.hub.Publish([]string{user.ID}, sse.Event{
+		h.hub.Publish(r.Context(), []string{user.ID}, sse.Event{
 			Type:         sse.EventNoteUpdated,
-			NoteID:       noteID,
-			Note:         note,
 			SourceUserID: user.ID,
+			Data:         sse.NoteEventData{NoteID: noteID, Note: note},
 		})
 	}
 
@@ -239,11 +237,10 @@ func (h *LabelsHandler) RemoveLabel(w http.ResponseWriter, r *http.Request) (int
 	}
 
 	if h.hub != nil {
-		h.hub.Publish([]string{user.ID}, sse.Event{
+		h.hub.Publish(r.Context(), []string{user.ID}, sse.Event{
 			Type:         sse.EventNoteUpdated,
-			NoteID:       noteID,
-			Note:         note,
 			SourceUserID: user.ID,
+			Data:         sse.NoteEventData{NoteID: noteID, Note: note},
 		})
 	}
 

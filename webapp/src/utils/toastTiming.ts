@@ -1,0 +1,3 @@
+export const TOAST_AUTO_DISMISS_MS = 4000;
+export const TOAST_ACTION_AUTO_DISMISS_MS = 7000;
+export const TOAST_EXIT_ANIMATION_MS = 200;

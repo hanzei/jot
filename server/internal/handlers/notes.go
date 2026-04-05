@@ -14,24 +14,70 @@ import (
 	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/hanzei/jot/server/internal/models"
 	"github.com/hanzei/jot/server/internal/sse"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/metric"
 )
 
 const queryTrue = "true"
 
 type NotesHandler struct {
-	noteStore  *models.NoteStore
-	userStore  *models.UserStore
-	labelStore *models.LabelStore
-	hub        *sse.Hub
+	noteStore     *models.NoteStore
+	userStore     *models.UserStore
+	labelStore    *models.LabelStore
+	hub           *sse.Hub
+	notesCreated  metric.Int64Counter
+	notesUpdated  metric.Int64Counter
+	notesDeleted  metric.Int64Counter
+	notesRestored metric.Int64Counter
 }
 
-func NewNotesHandler(noteStore *models.NoteStore, userStore *models.UserStore, labelStore *models.LabelStore, hub *sse.Hub) *NotesHandler {
-	return &NotesHandler{
-		noteStore:  noteStore,
-		userStore:  userStore,
-		labelStore: labelStore,
-		hub:        hub,
+// NewNotesHandler creates a NotesHandler with OTel instruments initialized from
+// the global MeterProvider. Returns an error if any instrument cannot be created.
+func NewNotesHandler(noteStore *models.NoteStore, userStore *models.UserStore, labelStore *models.LabelStore, hub *sse.Hub) (*NotesHandler, error) {
+	meter := otel.GetMeterProvider().Meter("github.com/hanzei/jot/server")
+
+	notesCreated, err := meter.Int64Counter(
+		"notes.created",
+		metric.WithDescription("Total notes created"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create notes.created instrument: %w", err)
 	}
+
+	notesUpdated, err := meter.Int64Counter(
+		"notes.updated",
+		metric.WithDescription("Total notes updated"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create notes.updated instrument: %w", err)
+	}
+
+	notesDeleted, err := meter.Int64Counter(
+		"notes.deleted",
+		metric.WithDescription("Total notes deleted or moved to trash"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create notes.deleted instrument: %w", err)
+	}
+
+	notesRestored, err := meter.Int64Counter(
+		"notes.restored",
+		metric.WithDescription("Total notes restored from trash"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create notes.restored instrument: %w", err)
+	}
+
+	return &NotesHandler{
+		noteStore:     noteStore,
+		userStore:     userStore,
+		labelStore:    labelStore,
+		hub:           hub,
+		notesCreated:  notesCreated,
+		notesUpdated:  notesUpdated,
+		notesDeleted:  notesDeleted,
+		notesRestored: notesRestored,
+	}, nil
 }
 
 // publishNoteEvent fetches the note's audience and publishes an SSE event.
@@ -45,11 +91,10 @@ func (h *NotesHandler) publishNoteEvent(ctx context.Context, noteID string, even
 		logutil.FromContext(ctx).WithError(err).WithField("note_id", noteID).Error("failed to get note audience for SSE publish")
 		return
 	}
-	h.hub.Publish(audienceIDs, sse.Event{
+	h.hub.Publish(ctx, audienceIDs, sse.Event{
 		Type:         eventType,
-		NoteID:       noteID,
-		Note:         note,
 		SourceUserID: sourceUserID,
+		Data:         sse.NoteEventData{NoteID: noteID, Note: note},
 	})
 }
 
@@ -67,25 +112,23 @@ func (h *NotesHandler) publishPersonalizedNoteEvent(ctx context.Context, noteID 
 			logutil.FromContext(ctx).WithError(err).WithField("note_id", noteID).WithField("user_id", uid).Warn("failed to fetch personalized note for SSE publish")
 			continue
 		}
-		h.hub.Publish([]string{uid}, sse.Event{
+		h.hub.Publish(ctx, []string{uid}, sse.Event{
 			Type:         sse.EventNoteUpdated,
-			NoteID:       noteID,
-			Note:         n,
 			SourceUserID: sourceUserID,
+			Data:         sse.NoteEventData{NoteID: noteID, Note: n},
 		})
 	}
 }
 
-func (h *NotesHandler) publishDeletedNoteEvent(noteID string, audienceIDs []string, sourceUserID string) {
+func (h *NotesHandler) publishDeletedNoteEvent(ctx context.Context, noteID string, audienceIDs []string, sourceUserID string) {
 	if h.hub == nil || len(audienceIDs) == 0 {
 		return
 	}
 
-	h.hub.Publish(audienceIDs, sse.Event{
+	h.hub.Publish(ctx, audienceIDs, sse.Event{
 		Type:         sse.EventNoteDeleted,
-		NoteID:       noteID,
-		Note:         nil,
 		SourceUserID: sourceUserID,
+		Data:         sse.NoteEventData{NoteID: noteID},
 	})
 }
 
@@ -233,8 +276,8 @@ func (h *NotesHandler) GetNotes(w http.ResponseWriter, r *http.Request) (int, an
 	labelID := q.Get("label")
 	myTodo := q.Get("my_todo") == queryTrue
 
-	if utf8.RuneCountInString(search) > searchQueryMaxLength {
-		return http.StatusBadRequest, nil, fmt.Errorf("search query must be %d characters or fewer", searchQueryMaxLength)
+	if err := validateSearchQuery(search); err != nil {
+		return http.StatusBadRequest, nil, err
 	}
 
 	notes, err := h.noteStore.GetByUserID(r.Context(), user.ID, archived, trashed, search, labelID, myTodo)
@@ -303,6 +346,7 @@ func (h *NotesHandler) CreateNote(w http.ResponseWriter, r *http.Request) (int, 
 		note = updatedNote
 	}
 
+	h.notesCreated.Add(r.Context(), 1)
 	h.publishNoteEvent(r.Context(), note.ID, sse.EventNoteCreated, note, user.ID)
 	return http.StatusCreated, note, nil
 }
@@ -386,6 +430,7 @@ func (h *NotesHandler) DuplicateNote(w http.ResponseWriter, r *http.Request) (in
 	}
 
 	h.publishNoteEvent(r.Context(), duplicatedNote.ID, sse.EventNoteCreated, duplicatedNote, user.ID)
+	h.notesCreated.Add(r.Context(), 1)
 	return http.StatusCreated, duplicatedNote, nil
 }
 
@@ -571,6 +616,7 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 	hasSharedFieldChange := req.Title != nil || req.Content != nil || req.Items != nil
 	h.publishUpdateEvent(r.Context(), id, note, user.ID, hasSharedFieldChange)
 
+	h.notesUpdated.Add(r.Context(), 1)
 	return http.StatusOK, note, nil
 }
 
@@ -588,11 +634,10 @@ func (h *NotesHandler) publishUpdateEvent(ctx context.Context, noteID string, no
 		return
 	}
 	if h.hub != nil {
-		h.hub.Publish([]string{userID}, sse.Event{
+		h.hub.Publish(ctx, []string{userID}, sse.Event{
 			Type:         sse.EventNoteUpdated,
-			NoteID:       noteID,
-			Note:         note,
 			SourceUserID: userID,
+			Data:         sse.NoteEventData{NoteID: noteID, Note: note},
 		})
 	}
 }
@@ -648,9 +693,10 @@ func (h *NotesHandler) DeleteNote(w http.ResponseWriter, r *http.Request) (int, 
 	}
 
 	if audienceErr == nil {
-		h.publishDeletedNoteEvent(id, audienceIDs, user.ID)
+		h.publishDeletedNoteEvent(r.Context(), id, audienceIDs, user.ID)
 	}
 
+	h.notesDeleted.Add(r.Context(), 1)
 	return http.StatusNoContent, nil, nil
 }
 
@@ -676,7 +722,8 @@ func (h *NotesHandler) EmptyTrash(w http.ResponseWriter, r *http.Request) (int, 
 	}
 
 	for _, deletedNote := range deletedNotes {
-		h.publishDeletedNoteEvent(deletedNote.NoteID, deletedNote.AudienceIDs, user.ID)
+		h.publishDeletedNoteEvent(r.Context(), deletedNote.NoteID, deletedNote.AudienceIDs, user.ID)
+		h.notesDeleted.Add(r.Context(), 1)
 	}
 
 	return http.StatusOK, EmptyTrashResponse{Deleted: len(deletedNotes)}, nil
@@ -722,6 +769,7 @@ func (h *NotesHandler) RestoreNote(w http.ResponseWriter, r *http.Request) (int,
 		return http.StatusInternalServerError, nil, fmt.Errorf("get note: %w", err)
 	}
 
+	h.notesRestored.Add(r.Context(), 1)
 	h.publishNoteEvent(r.Context(), id, sse.EventNoteUpdated, note, user.ID)
 	return http.StatusOK, note, nil
 }
