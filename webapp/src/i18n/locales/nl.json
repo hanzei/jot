@@ -37,7 +37,11 @@
     "usernameChars": "Gebruikersnaam mag alleen letters, cijfers, underscores en koppeltekens bevatten",
     "usernameEdge": "Gebruikersnaam mag niet beginnen of eindigen met een underscore of koppelteken",
     "passwordsNoMatch": "Wachtwoorden komen niet overeen",
-    "passwordMin": "Wachtwoord moet minimaal {{min}} tekens bevatten"
+    "passwordMin": "Wachtwoord moet minimaal {{min}} tekens bevatten",
+    "showPassword": "Wachtwoord tonen",
+    "hidePassword": "Wachtwoord verbergen",
+    "passwordHint": "Minimaal {{min}} tekens",
+    "logoAlt": "Jot-logo"
   },
   "dashboard": {
     "newNote": "Nieuwe notitie",

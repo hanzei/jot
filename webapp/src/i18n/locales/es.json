@@ -37,7 +37,11 @@
     "usernameChars": "El nombre de usuario solo puede contener letras, números, guiones bajos y guiones",
     "usernameEdge": "El nombre de usuario no puede empezar ni terminar con guión bajo o guión",
     "passwordsNoMatch": "Las contraseñas no coinciden",
-    "passwordMin": "La contraseña debe tener al menos {{min}} caracteres"
+    "passwordMin": "La contraseña debe tener al menos {{min}} caracteres",
+    "showPassword": "Mostrar contraseña",
+    "hidePassword": "Ocultar contraseña",
+    "passwordHint": "Al menos {{min}} caracteres",
+    "logoAlt": "Logotipo de Jot"
   },
   "dashboard": {
     "newNote": "Nueva nota",

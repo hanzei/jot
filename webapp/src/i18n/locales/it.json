@@ -37,7 +37,11 @@
     "usernameChars": "Il nome utente può contenere solo lettere, numeri, trattini bassi e trattini",
     "usernameEdge": "Il nome utente non può iniziare o terminare con trattino basso o trattino",
     "passwordsNoMatch": "Le password non corrispondono",
-    "passwordMin": "La password deve contenere almeno {{min}} caratteri"
+    "passwordMin": "La password deve contenere almeno {{min}} caratteri",
+    "showPassword": "Mostra password",
+    "hidePassword": "Nascondi password",
+    "passwordHint": "Almeno {{min}} caratteri",
+    "logoAlt": "Logo Jot"
   },
   "dashboard": {
     "newNote": "Nuova nota",
