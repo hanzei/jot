@@ -28,6 +28,7 @@ import (
 	"github.com/sirupsen/logrus"
 	httpSwagger "github.com/swaggo/http-swagger/v2"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -325,6 +326,9 @@ func (s *Server) wrapHandler(handler func(w http.ResponseWriter, r *http.Request
 			log := logutil.FromContext(r.Context()).WithError(err).WithField("status_code", statusCode)
 			if statusCode >= 500 {
 				log.Error("HTTP handler error")
+				span := trace.SpanFromContext(r.Context())
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
 			} else {
 				log.Warn("HTTP handler error")
 			}
@@ -460,6 +464,12 @@ func requestLoggerMiddleware(next http.Handler) http.Handler {
 			"method":     r.Method,
 			"path":       r.URL.Path,
 		})
+		if sc := trace.SpanFromContext(r.Context()).SpanContext(); sc.IsValid() {
+			entry = entry.WithFields(logrus.Fields{
+				"trace_id": sc.TraceID().String(),
+				"span_id":  sc.SpanID().String(),
+			})
+		}
 		rl := logutil.NewRequestLogger(entry)
 		next.ServeHTTP(ww, r.WithContext(logutil.NewContext(r.Context(), rl)))
 
