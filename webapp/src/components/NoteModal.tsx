@@ -206,7 +206,7 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
       {!isCompleted && (
         <div
           {...listeners}
-          className="cursor-grab active:cursor-grabbing p-1 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
+          className="cursor-grab active:cursor-grabbing p-1 text-gray-400 dark:text-gray-300 hover:text-gray-600 dark:hover:text-gray-100"
         >
           <svg className="w-4 h-4" fill="currentColor" viewBox="0 0 20 20">
             <path d="M7 2a2 2 0 1 1 .001 4.001A2 2 0 0 1 7 2zm0 6a2 2 0 1 1 .001 4.001A2 2 0 0 1 7 8zm0 6a2 2 0 1 1 .001 4.001A2 2 0 0 1 7 14zm6-8a2 2 0 1 1-.001-4.001A2 2 0 0 1 13 6zm0 2a2 2 0 1 1 .001 4.001A2 2 0 0 1 13 8zm0 6a2 2 0 1 1 .001 4.001A2 2 0 0 1 13 14z" />
@@ -338,6 +338,7 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
                   username={assignedUser?.username || '?'}
                   userId={item.assignedTo}
                   hasProfileIcon={assignedUser?.has_profile_icon}
+                  iconVersion={assignedUser?.updated_at}
                   className="w-5 h-5"
                 />
               </button>
@@ -345,11 +346,11 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
               !isCompleted && (
                 <button
                   onClick={() => setShowAssigneePicker(true)}
-                  className="w-5 h-5 rounded-full border border-dashed border-gray-300 dark:border-slate-600 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-slate-700 transition-colors opacity-0 group-hover/item:opacity-100 focus:opacity-100 focus-visible:ring-2 focus-visible:ring-blue-500 touch-visible"
+                  className="w-5 h-5 rounded-full border border-dashed border-gray-300 dark:border-gray-400 flex items-center justify-center hover:bg-gray-100 dark:hover:bg-white/10 transition-colors opacity-0 group-hover/item:opacity-100 focus:opacity-100 focus-visible:ring-2 focus-visible:ring-blue-500 touch-visible"
                   title={t('note.assignItem')}
                   aria-label={t('note.assignItem')}
                 >
-                  <UserPlusIcon className="h-3 w-3 text-gray-400 dark:text-gray-500" aria-hidden="true" />
+                  <UserPlusIcon className="h-3 w-3 text-gray-400 dark:text-gray-300" aria-hidden="true" />
                 </button>
               )
             )}
@@ -368,7 +369,7 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
 
       <button
         onClick={() => onRemoveTodoItem(item.id)}
-        className="ml-auto p-1 text-gray-400 dark:text-gray-500 hover:text-gray-600 dark:hover:text-gray-300"
+        className="ml-auto p-1 text-gray-400 dark:text-gray-300 hover:text-gray-600 dark:hover:text-gray-100"
       >
         <TrashIcon className="h-4 w-4" />
       </button>
@@ -410,6 +411,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   const pendingAutoSaveRequestRef = useRef<QueuedAutoSaveRequest | null>(null);
   const itemInputRefs = useRef<Map<string, HTMLTextAreaElement>>(new Map());
   const contentRef = useRef<HTMLTextAreaElement>(null);
+  const colorPickerRef = useRef<HTMLDivElement>(null);
   const savingRef = useRef(false);
   const savedTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const resizeContentTextarea = useCallback((textarea: HTMLTextAreaElement | null) => {
@@ -1390,6 +1392,46 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     }
   };
 
+  // Stable ref always holds the latest handler so the listener never goes stale.
+  const modalShortcutRef = useRef<((e: KeyboardEvent) => void) | null>(null);
+  modalShortcutRef.current = (e: KeyboardEvent) => {
+    if (!(e.ctrlKey || e.metaKey) || !e.shiftKey) return;
+    if (e.defaultPrevented) return;
+    if (showDeleteConfirm) return;
+
+    const key = e.key === 'Backspace' ? 'backspace' : e.key.toLowerCase();
+
+    if (key === 'p') {
+      if (!note) return;
+      e.preventDefault();
+      handlePinToggle();
+    } else if (key === 'a') {
+      if (!note) return;
+      e.preventDefault();
+      handleArchiveToggle();
+    } else if (key === 'd') {
+      if (!note || !onDuplicate) return;
+      e.preventDefault();
+      handleDuplicate();
+    } else if (key === 'backspace') {
+      if (!note || !onDelete || !isOwner) return;
+      e.preventDefault();
+      handleDelete();
+    } else if (key === 'l') {
+      e.preventDefault();
+      setShowLabelPicker(v => !v);
+    } else if (key === 'c') {
+      e.preventDefault();
+      colorPickerRef.current?.querySelector<HTMLButtonElement>('button[tabindex="0"]')?.focus();
+    }
+  };
+
+  useEffect(() => {
+    const handler = (e: KeyboardEvent) => modalShortcutRef.current?.(e);
+    window.addEventListener('keydown', handler);
+    return () => window.removeEventListener('keydown', handler);
+  }, []);
+
 
   return (
     <>
@@ -1403,7 +1445,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
           }`}
         >
           {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-slate-600">
+          <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-white/20">
             <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
               {note ? t('note.editNote') : t('note.newNote')}
             </h2>
@@ -1659,7 +1701,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
 
                 {/* Completed items section */}
                 {completedItems.length > 0 && (
-                  <div className="border-t border-gray-200 dark:border-slate-600 pt-3">
+                  <div className="border-t border-gray-200 dark:border-white/20 pt-3">
                     <button
                       onClick={handleToggleCompleted}
                       className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-white mb-2"
@@ -1740,6 +1782,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                         username={a.username}
                         userId={a.userId}
                         hasProfileIcon={a.hasProfileIcon}
+                        iconVersion={a.iconVersion}
                         className={`w-6 h-6 ring-2 ring-white dark:ring-slate-800 ${index > 0 ? '-ml-1' : ''}`}
                       />
                     </div>
@@ -1749,10 +1792,35 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
             })()}
 
             {/* Color selector */}
-            <div className="flex space-x-2">
+            <div
+              ref={colorPickerRef}
+              role="group"
+              aria-label={t('note.colorPickerLabel')}
+              className="flex space-x-2"
+              onKeyDown={(e) => {
+                if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+                e.preventDefault();
+                const currentIndex = colors.findIndex(c => c.value === color);
+                const nextIndex = currentIndex === -1
+                  ? (e.key === 'ArrowLeft' ? colors.length - 1 : 0)
+                  : e.key === 'ArrowLeft'
+                    ? Math.max(0, currentIndex - 1)
+                    : Math.min(colors.length - 1, currentIndex + 1);
+                if (nextIndex === currentIndex) return;
+                const nextColor = colors[nextIndex].value;
+                setColor(nextColor);
+                if (note) {
+                  markDirty();
+                  autoSaveDraftRef.current = { ...autoSaveDraftRef.current, color: nextColor };
+                  autoSaveNote(itemsRef.current);
+                }
+                colorPickerRef.current?.querySelectorAll<HTMLButtonElement>('button')[nextIndex]?.focus();
+              }}
+            >
               {colors.map((colorOption) => (
                 <button
                   key={colorOption.value}
+                  tabIndex={colorOption.value === color ? 0 : -1}
                   onClick={() => {
                     const newColor = colorOption.value;
                     setColor(newColor);
@@ -1767,13 +1835,14 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                   }`}
                   title={colorOption.name}
                   aria-label={colorOption.name}
+                  aria-pressed={color === colorOption.value}
                 />
               ))}
             </div>
           </div>
 
           {/* Footer */}
-          <div className="flex justify-between items-center p-4 border-t border-gray-200 dark:border-slate-600">
+          <div className="flex justify-between items-center p-4 border-t border-gray-200 dark:border-white/20">
             {note && (
               <p className="text-sm text-gray-500 dark:text-gray-400">
                 {t('note.lastEdited', { date: new Date(note.updated_at).toLocaleString(i18n.resolvedLanguage) })}

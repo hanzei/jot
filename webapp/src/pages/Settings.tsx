@@ -5,6 +5,7 @@ import i18n from '@/i18n';
 import { auth, users, labels as labelsApi, sessions as sessionsApi, isAxiosError } from '@/utils/api';
 import { getUser, setUser, removeUser, getSettings, setSettings, isAdmin } from '@/utils/auth';
 import { getLanguagePreference, resolveLanguage, LanguagePreference } from '@/utils/language';
+import { isPasswordTooShort } from '@/utils/userValidation';
 import { getThemePreference, applyTheme, ThemePreference } from '@/utils/theme';
 import AppLayout from '@/components/AppLayout';
 import SearchBar from '@/components/SearchBar';
@@ -19,9 +20,10 @@ import { IdentitySecurityColumn, PreferencesInfoColumn } from './settings/Settin
 
 interface SettingsProps {
   onLogout: () => void;
+  passwordMinLength: number;
 }
 
-const Settings = ({ onLogout }: SettingsProps) => {
+const Settings = ({ onLogout, passwordMinLength }: SettingsProps) => {
   const { t } = useTranslation();
   const { showToast } = useToast();
   useEffect(() => { document.title = t('pageTitle.settings'); }, [t]);
@@ -143,6 +145,11 @@ const Settings = ({ onLogout }: SettingsProps) => {
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
     setPasswordError('');
+
+    if (isPasswordTooShort(newPassword, passwordMinLength)) {
+      setPasswordError(t('auth.passwordMin', { min: passwordMinLength }));
+      return;
+    }
 
     if (newPassword !== confirmPassword) {
       setPasswordError('settings.passwordsNoMatch');
@@ -361,6 +368,7 @@ const Settings = ({ onLogout }: SettingsProps) => {
                 onConfirmPasswordChange: setConfirmPassword,
                 passwordSaving,
                 passwordError,
+                passwordMinLength,
                 onPasswordSubmit: handlePasswordChange,
               }}
               displayMsg={displayMsg}
