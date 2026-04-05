@@ -6,6 +6,7 @@ import Register from '../Register'
 import { auth } from '@/utils/api'
 import { setUser, setSettings } from '@/utils/auth'
 import i18n from '@/i18n'
+import { VALIDATION } from '@jot/shared'
 
 vi.mock('@/utils/api', () => ({
   auth: {
@@ -20,7 +21,7 @@ vi.mock('@/utils/auth', () => ({
 
 const renderRegister = (onRegister = vi.fn()) => render(
   <MemoryRouter>
-    <Register onRegister={onRegister} />
+    <Register onRegister={onRegister} passwordMinLength={VALIDATION.PASSWORD_MIN_LENGTH} />
   </MemoryRouter>
 )
 
@@ -74,8 +75,10 @@ describe('Register', () => {
     expect(screen.getByText(t('auth.usernamePlaceholderLong'))).toBeInTheDocument()
     expect(screen.getByText('10/30')).toBeInTheDocument()
 
-    await user.type(passwordInput, '123')
-    expect(screen.getByText(new RegExp(t('auth.passwordMin')))).toBeInTheDocument()
+    await user.type(passwordInput, '123456789')
+    expect(
+      screen.getByText(new RegExp(t('auth.passwordMin', { min: VALIDATION.PASSWORD_MIN_LENGTH }))),
+    ).toBeInTheDocument()
 
     await user.type(confirmInput, 'xxx')
     expect(screen.getByText(t('auth.passwordsNoMatch'))).toBeInTheDocument()
@@ -89,8 +92,8 @@ describe('Register', () => {
     renderRegister()
 
     await user.type(screen.getByLabelText(t('auth.usernamePlaceholder')), 'valid_user')
-    await user.type(screen.getByLabelText(t('auth.passwordPlaceholder')), 'validpass')
-    await user.type(screen.getByLabelText(t('auth.confirmPasswordPlaceholder')), 'validpass')
+    await user.type(screen.getByLabelText(t('auth.passwordPlaceholder')), 'validpass123')
+    await user.type(screen.getByLabelText(t('auth.confirmPasswordPlaceholder')), 'validpass123')
     await user.click(screen.getByRole('button', { name: t('auth.createAccount') }))
 
     const alert = await screen.findByRole('alert')
@@ -117,12 +120,12 @@ describe('Register', () => {
     renderRegister(onRegister)
 
     await user.type(screen.getByLabelText(t('auth.usernamePlaceholder')), 'valid_user')
-    await user.type(screen.getByLabelText(t('auth.passwordPlaceholder')), 'validpass')
-    await user.type(screen.getByLabelText(t('auth.confirmPasswordPlaceholder')), 'validpass')
+    await user.type(screen.getByLabelText(t('auth.passwordPlaceholder')), 'validpass123')
+    await user.type(screen.getByLabelText(t('auth.confirmPasswordPlaceholder')), 'validpass123')
     await user.click(screen.getByRole('button', { name: t('auth.createAccount') }))
 
     await waitFor(() => {
-      expect(auth.register).toHaveBeenCalledWith({ username: 'valid_user', password: 'validpass' })
+      expect(auth.register).toHaveBeenCalledWith({ username: 'valid_user', password: 'validpass123' })
       expect(setUser).toHaveBeenCalled()
       expect(setSettings).toHaveBeenCalled()
       expect(onRegister).toHaveBeenCalled()

@@ -5,13 +5,14 @@ import { EyeIcon, EyeSlashIcon, ExclamationTriangleIcon } from '@heroicons/react
 import { auth } from '@/utils/api';
 import { setUser, setSettings } from '@/utils/auth';
 import { getUsernameValidationError, isPasswordTooShort } from '@/utils/userValidation';
-import { PASSWORD_MIN_LENGTH, VALIDATION } from '@jot/shared';
+import { VALIDATION } from '@jot/shared';
 
 interface RegisterProps {
   onRegister: () => void;
+  passwordMinLength: number;
 }
 
-export default function Register({ onRegister }: RegisterProps) {
+export default function Register({ onRegister, passwordMinLength }: RegisterProps) {
   const { t } = useTranslation();
   useEffect(() => { document.title = t('pageTitle.register'); }, [t]);
   const [username, setUsername] = useState('');
@@ -61,8 +62,8 @@ export default function Register({ onRegister }: RegisterProps) {
       return;
     }
 
-    if (isPasswordTooShort(password)) {
-      setError(t('auth.passwordMin'));
+    if (isPasswordTooShort(password, passwordMinLength)) {
+      setError(t('auth.passwordMin', { min: passwordMinLength }));
       setLoading(false);
       return;
     }
@@ -168,8 +169,8 @@ export default function Register({ onRegister }: RegisterProps) {
               </div>
               <p id={passwordMessageId} className={`mt-1 text-xs ${passwordTooShort ? 'text-red-600 dark:text-red-400' : 'text-gray-500 dark:text-gray-400'}`}>
                 {passwordTooShort
-                  ? t('auth.passwordMin')
-                  : t('auth.passwordHint', { min: PASSWORD_MIN_LENGTH })}
+                  ? t('auth.passwordMin', { min: passwordMinLength })
+                  : t('auth.passwordHint', { min: passwordMinLength })}
               </p>
             </div>
             <div>

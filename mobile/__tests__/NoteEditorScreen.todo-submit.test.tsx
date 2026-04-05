@@ -331,4 +331,27 @@ describe('NoteEditorScreen todo submit behavior', () => {
       );
     }, { timeout: 3000 });
   });
+
+  it('keeps dirty state for color change when note id is not yet available', async () => {
+    const { getByTestId } = render(<NoteEditorScreen />);
+
+    fireEvent.changeText(getByTestId('note-title-input'), 'Draft note');
+
+    const colorButton = getByTestId('toolbar-color-btn');
+    fireEvent.press(colorButton);
+    const swatch = await waitFor(() => getByTestId('color-swatch-f28b82'));
+    fireEvent.press(swatch);
+
+    await waitFor(
+      () => {
+        expect(mockCreateMutateAsync).toHaveBeenCalledWith(
+          expect.objectContaining({
+            title: 'Draft note',
+            color: '#f28b82',
+          }),
+        );
+      },
+      { timeout: VALIDATION.AUTO_SAVE_TIMEOUT_MS + 2000 },
+    );
+  });
 });
