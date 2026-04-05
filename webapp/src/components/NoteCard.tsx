@@ -77,7 +77,26 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
       onRefresh?.();
       showToast(
         willArchive ? t('dashboard.noteArchived') : t('dashboard.noteUnarchived'),
-        'success'
+        'success',
+        {
+          label: t('dashboard.undo'),
+          onClick: async () => {
+            try {
+              await notes.update(note.id, {
+                title: note.title,
+                content: note.content,
+                pinned: note.pinned,
+                archived: !willArchive,
+                color: note.color,
+                checked_items_collapsed: note.checked_items_collapsed,
+              });
+              onRefresh?.();
+            } catch (undoError) {
+              console.error('Failed to undo archive toggle:', undoError);
+              showToast(t('note.failedArchive'), 'error');
+            }
+          },
+        }
       );
     } catch (error) {
       console.error('Failed to toggle archive:', error);
@@ -102,7 +121,26 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
       onRefresh?.();
       showToast(
         willPin ? t('dashboard.notePinned') : t('dashboard.noteUnpinned'),
-        'success'
+        'success',
+        {
+          label: t('dashboard.undo'),
+          onClick: async () => {
+            try {
+              await notes.update(note.id, {
+                title: note.title,
+                content: note.content,
+                pinned: !willPin,
+                archived: note.archived,
+                color: note.color,
+                checked_items_collapsed: note.checked_items_collapsed,
+              });
+              onRefresh?.();
+            } catch (undoError) {
+              console.error('Failed to undo pin toggle:', undoError);
+              showToast(t('note.failedPin'), 'error');
+            }
+          },
+        }
       );
     } catch (error) {
       console.error('Failed to toggle pin:', error);

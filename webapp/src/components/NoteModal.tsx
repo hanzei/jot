@@ -1253,7 +1253,34 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       onRefresh?.();
       showToast(
         newPinnedState ? t('dashboard.notePinned') : t('dashboard.noteUnpinned'),
-        'success'
+        'success',
+        {
+          label: t('dashboard.undo'),
+          onClick: async () => {
+            try {
+              await notes.update(note.id, {
+                title,
+                content,
+                pinned: !newPinnedState,
+                archived,
+                color,
+                checked_items_collapsed: checkedItemsCollapsed,
+                items: note.note_type === 'todo' ? items.map((item, idx) => ({
+                  text: item.text,
+                  position: idx,
+                  completed: item.completed,
+                  indent_level: item.indentLevel,
+                  assigned_to: item.assignedTo,
+                })) : undefined,
+              });
+              setPinned(!newPinnedState);
+              onRefresh?.();
+            } catch (undoError) {
+              console.error('Failed to undo pin status update:', undoError);
+              showToast(t('note.failedPin'), 'error');
+            }
+          },
+        }
       );
     } catch (error) {
       console.error('Failed to update pin status:', error);
@@ -1286,7 +1313,34 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       await notes.update(note.id, updateData);
       showToast(
         newArchivedState ? t('dashboard.noteArchived') : t('dashboard.noteUnarchived'),
-        'success'
+        'success',
+        {
+          label: t('dashboard.undo'),
+          onClick: async () => {
+            try {
+              await notes.update(note.id, {
+                title,
+                content,
+                pinned,
+                archived: !newArchivedState,
+                color,
+                checked_items_collapsed: checkedItemsCollapsed,
+                items: note.note_type === 'todo' ? items.map((item, idx) => ({
+                  text: item.text,
+                  position: idx,
+                  completed: item.completed,
+                  indent_level: item.indentLevel,
+                  assigned_to: item.assignedTo,
+                })) : undefined,
+              });
+              setArchived(!newArchivedState);
+              onRefresh?.();
+            } catch (undoError) {
+              console.error('Failed to undo archive status update:', undoError);
+              showToast(t('note.failedArchive'), 'error');
+            }
+          },
+        }
       );
       if (newArchivedState) {
         onClose();
