@@ -173,114 +173,9 @@ Do not maintain endpoint tables in this file. Use the generated OpenAPI spec as 
 
 If handler annotations or request/response types change, regenerate docs with `task gen-docs`.
 
-### Database Schema
-
-**users**
-- `id` TEXT PK — 22-char random ID
-- `username` TEXT UNIQUE — 2–30 chars, alphanumeric/underscore/hyphen
-- `password_hash` TEXT — bcrypt
-- `role` TEXT — `'user'` or `'admin'`
-- `first_name`, `last_name` TEXT
-- `profile_icon`, `profile_icon_content_type` BLOB/TEXT (nullable)
-- `created_at`, `updated_at` DATETIME
-
-**notes**
-- `id` TEXT PK
-- `user_id` TEXT FK → users (owner)
-- `title`, `content` TEXT
-- `note_type` TEXT — `'text'` or `'todo'`
-- `deleted_at` DATETIME (nullable soft-delete/trash marker)
-- `created_at`, `updated_at` DATETIME
-
-**note_user_state** (per-user UI state for each note — separate from note content)
-- `note_id` TEXT FK → notes
-- `user_id` TEXT FK → users
-- `color` TEXT — hex color (default `#ffffff`)
-- `pinned`, `archived` BOOLEAN
-- `position` INTEGER — display order
-- `unpinned_position` INTEGER (nullable) — saved position restored when unpinning
-- `checked_items_collapsed` BOOLEAN — UI state for todo notes
-- `created_at`, `updated_at` DATETIME
-- PRIMARY KEY (`note_id`, `user_id`)
-
-**note_items** (todo list items)
-- `id` TEXT PK
-- `note_id` TEXT FK → notes
-- `text` TEXT
-- `completed` BOOLEAN
-- `position` INTEGER
-- `indent_level` INTEGER
-- `assigned_to` TEXT FK → users (nullable)
-- `created_at`, `updated_at` DATETIME
-
-**note_shares**
-- `id` TEXT PK
-- `note_id`, `shared_with_user_id`, `shared_by_user_id` TEXT FKs
-- `permission_level` TEXT — `'edit'` (only level currently)
-- `created_at`, `updated_at` DATETIME
-- UNIQUE(`note_id`, `shared_with_user_id`)
-
-**labels**
-- `id` TEXT PK
-- `user_id` TEXT FK → users
-- `name` TEXT (NOCASE collation)
-- `created_at`, `updated_at` DATETIME
-- UNIQUE(`user_id`, `name`)
-
-**note_labels**
-- `id` TEXT PK
-- `note_id` TEXT FK → notes
-- `label_id` TEXT FK → labels
-- `user_id` TEXT FK → users
-- `created_at` DATETIME
-- UNIQUE(`note_id`, `label_id`, `user_id`)
-
-**sessions**
-- `token` TEXT PK (64-char hex session token)
-- `user_id` TEXT FK → users
-- `user_agent` TEXT
-- `expires_at`, `created_at` DATETIME
-
-**personal_access_tokens**
-- `id` TEXT PK
-- `user_id` TEXT FK → users
-- `token_hash` TEXT UNIQUE — SHA-256 hash of the raw token
-- `name` TEXT
-- `created_at` DATETIME
-
-**user_settings**
-- `user_id` TEXT PK/FK → users
-- `language` TEXT — `system`, `en`, `de`, `es`, `fr`, `pt`, `it`, `nl`, `pl`
-- `theme` TEXT — `system`, `light`, `dark`
-- `note_sort` TEXT — `manual`, `updated_at`, `created_at`
-- `created_at`, `updated_at` DATETIME
-
-**active_notes** — view over `notes` that excludes soft-deleted rows (`WHERE deleted_at IS NULL`).
-
-**migrations** — internal migration tracking table.
-
 ### Database Migrations
 
 Migration files live in `server/internal/database/migrations/` and are named `NNN_description.sql`. They are embedded into the binary at compile time via `embed.FS` and applied automatically at startup in sequential order. To add a new migration, create the next numbered file.
-
-### Configuration (Environment Variables)
-
-| Variable | Default | Notes |
-|----------|---------|-------|
-| `DB_PATH` | `./jot.db` | Path to SQLite database file |
-| `PORT` | `8080` | HTTP listen port (1–65535) |
-| `STATIC_DIR` | `../webapp/build/` | Path to compiled frontend files |
-| `CORS_ALLOWED_ORIGIN` | `""` | Allowed webapp origin for CORS (exact match) |
-| `COOKIE_SECURE` | `true` | Whether the session cookie is `Secure` |
-| `REGISTRATION_ENABLED` | `true` | When `false`, only admins can create users via the admin API |
-| `PASSWORD_MIN_LENGTH` | `10` | Minimum password length (1–72); set to `4` in dev via Taskfile |
-| `METRICS_ENABLED` | `false` | Enable Prometheus metrics endpoint |
-| `METRICS_HOST` | `127.0.0.1` | Host for the Prometheus metrics server |
-| `METRICS_PORT` | `8081` | Port for the Prometheus metrics server |
-| `OTEL_ENABLED` | `false` | Enable OpenTelemetry tracing |
-| `OTEL_EXPORTER_OTLP_ENDPOINT` | `""` | OTLP gRPC endpoint for traces/logs |
-| `OTEL_SERVICE_NAME` | `jot` | Service name reported in traces |
-| `OTEL_EXPORTER_OTLP_INSECURE` | `false` | Skip TLS for OTLP connection |
 
 ### Authentication
 
@@ -292,27 +187,6 @@ Migration files live in `server/internal/database/migrations/` and are named `NN
 - The first registered user automatically becomes admin.
 - Note access is granted if the requester is the owner **or** the note is shared with them.
 - PAT raw tokens are only returned once on creation; only the SHA-256 hash is stored.
-
-### Naming Conventions (Go)
-
-- Packages: `internal/{auth,config,database,handlers,logutil,mcphandler,models,server,sse,telemetry}`
-- Go types: PascalCase when exported (`UserStore`, `NoteStore`, `PATStore`); variables: camelCase (`noteStore`, `userID`)
-- Database columns: snake_case (`note_type`, `user_id`)
-- JSON fields: snake_case (`note_type`, `user_id`)
-- Error wrapping: `fmt.Errorf("context: %w", err)`
-- Use `any` instead of `interface{}`
-- Use `errors.Is` instead of `==` when comparing errors
-- Use `logrus` instead of the standard `log` package for all logging
-- In HTTP handlers and middleware, use `logutil.FromContext(ctx)` to get the request-scoped logger (carries `request_id`, `user_id`, `method`, `path` automatically)
-- Reserve bare `logrus.*` calls for background goroutines and startup code without request context
-- In tests, use `t.Context()` instead of `context.Background()`
-
-### Error Handling (Go)
-
-- Errors that cross a function boundary should be wrapped with a short, lowercase description of the operation that failed: `return nil, fmt.Errorf("get note by id: %w", err)`.
-- Prefer wrapping over bare `return err` or `return nil, err` when returning up the call stack — the added context makes log traces easier to follow.
-- Do **not** re-wrap sentinel errors (`sql.ErrNoRows`, `ErrNoteNotFound`, etc.) that have already been identified with `errors.Is` and are being returned directly. Re-wrapping them adds a redundant message layer without useful context (`errors.Is` traverses the `%w` chain, so matching still works either way).
-- Do not wrap errors inside `defer` functions or inside log statements.
 
 ### Server Tests
 
@@ -345,22 +219,6 @@ Migration files live in `server/internal/database/migrations/` and are named `NN
 - `src/utils/auth.ts` — user/settings read-write helpers in localStorage
 - `src/types/index.ts` — all shared TypeScript interfaces (single source of truth)
 - `src/service-worker.ts` — PWA offline caching via Workbox
-
-### i18n / Translations
-
-When adding new i18n keys to `src/i18n/locales/en.json`, you **must** also add the corresponding key with an appropriate translated value to every other locale file in the same directory:
-
-- `de.json` — German
-- `es.json` — Spanish
-- `fr.json` — French
-- `it.json` — Italian
-- `nl.json` — Dutch
-- `pl.json` — Polish
-- `pt.json` — Portuguese
-
-Do not use the English string as a placeholder in non-English locales. Provide a proper translation for each language.
-
-Run `task check-translations` after adding keys to verify all locale files are in sync with `en.json`.
 
 ### Naming Conventions (TypeScript/React)
 
@@ -399,10 +257,6 @@ Run `task check-translations` after adding keys to verify all locale files are i
 - **Expo SQLite** — local offline persistence
 - **react-native-sse** — SSE client for real-time updates
 - **@jot/shared** — shared types and utilities (local file dependency)
-
-### i18n / Translations
-
-Same 8-language requirement as the webapp. When adding new i18n keys to `src/i18n/locales/en.json`, add proper translations to all other locale files (`de.json`, `es.json`, `fr.json`, `it.json`, `nl.json`, `pl.json`, `pt.json`). Do not use English strings as placeholders.
 
 ### Mobile Tests
 
