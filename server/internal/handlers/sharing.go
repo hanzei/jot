@@ -147,7 +147,7 @@ func (h *NotesHandler) UnshareNote(w http.ResponseWriter, r *http.Request) (int,
 	}
 
 	if audienceErr == nil && h.hub != nil {
-		h.hub.Publish(audienceIDs, sse.Event{
+		h.hub.Publish(r.Context(), audienceIDs, sse.Event{
 			Type:         sse.EventNoteUnshared,
 			SourceUserID: user.ID,
 			TargetUserID: userID,
