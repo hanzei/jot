@@ -1,5 +1,5 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
-import { PlusIcon, DocumentTextIcon, ArchiveBoxIcon, TrashIcon, ClipboardDocumentCheckIcon, ArrowsUpDownIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, DocumentTextIcon, ArchiveBoxIcon, TrashIcon, ClipboardDocumentCheckIcon, ArrowsUpDownIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline';
 import { useTranslation } from 'react-i18next';
 import { notes, auth, labels as labelsApi, users as usersApi, isAxiosError } from '@/utils/api';
 import { removeUser, getUser, getSettings, setSettings, isAdmin } from '@/utils/auth';
@@ -71,6 +71,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const user = getUser();
   const isMountedRef = useRef(true);
   const searchInputRef = useRef<HTMLInputElement>(null);
+  const lastFocusedElementRef = useRef<Element | null>(null);
   const openNoteIdRef = useRef<string | null>(null);
   const returnPathRef = useRef('/');
   const noteSortUpdateRequestIdRef = useRef(0);
@@ -338,17 +339,28 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   }, [openNoteFromUrl]);
 
   const handleSSEEvent = useCallback((event: SSEEvent) => {
+    if (event.type === 'profile_icon_updated') {
+      const updatedUser = event.data.user;
+      setUsersById(prev => {
+        const next = new Map(prev);
+        next.set(updatedUser.id, updatedUser);
+        return next;
+      });
+      return;
+    }
+
+    const { note_id } = event.data;
     const currentUserLostAccess =
       event.type === 'note_deleted' ||
       (event.type === 'note_unshared' && event.target_user_id === user?.id);
 
     if (currentUserLostAccess) {
-      if (editingNote && event.note_id === editingNote.id) {
+      if (editingNote && note_id === editingNote.id) {
         setIsModalOpen(false);
         setEditingNote(null);
         restoreReturnUrl();
       }
-      if (sharingNote && event.note_id === sharingNote.id) {
+      if (sharingNote && note_id === sharingNote.id) {
         setIsShareModalOpen(false);
         setSharingNote(null);
       }
@@ -377,6 +389,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   };
 
   const handleCreateNote = useCallback(() => {
+    lastFocusedElementRef.current = document.activeElement;
     setEditingNote(null);
     setIsModalOpen(true);
   }, []);
@@ -392,6 +405,42 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       }
 
       if (loading) {
+        return;
+      }
+
+      // Arrow key navigation between note cards (runs before other guards)
+      const isArrowKey = event.key === 'ArrowLeft' || event.key === 'ArrowRight' ||
+        event.key === 'ArrowUp' || event.key === 'ArrowDown';
+      if (isArrowKey && document.activeElement?.getAttribute('data-note-card') === 'true') {
+        event.preventDefault();
+        const cards = Array.from(document.querySelectorAll<HTMLElement>('[data-note-card="true"]'));
+        const currentCard = document.activeElement as HTMLElement;
+        const currentIndex = cards.indexOf(currentCard);
+        if (event.key === 'ArrowLeft') {
+          cards[Math.max(0, currentIndex - 1)]?.focus();
+        } else if (event.key === 'ArrowRight') {
+          cards[Math.min(cards.length - 1, currentIndex + 1)]?.focus();
+        } else {
+          // Grid-aware Up/Down: find the nearest card in the target direction
+          const currentRect = currentCard.getBoundingClientRect();
+          const currentCenterX = currentRect.left + currentRect.width / 2;
+          const currentCenterY = currentRect.top + currentRect.height / 2;
+          const goingUp = event.key === 'ArrowUp';
+          let bestCard: HTMLElement | null = null;
+          let bestScore = Infinity;
+          for (const card of cards) {
+            if (card === currentCard) continue;
+            const rect = card.getBoundingClientRect();
+            const centerY = rect.top + rect.height / 2;
+            if (goingUp ? centerY > currentCenterY : centerY < currentCenterY) continue;
+            const dy = Math.abs(centerY - currentCenterY);
+            const dx = Math.abs(rect.left + rect.width / 2 - currentCenterX);
+            // Prefer cards that are more directly above/below (weight vertical distance heavily)
+            const score = dy + dx * 0.5;
+            if (score < bestScore) { bestScore = score; bestCard = card; }
+          }
+          (bestCard ?? (goingUp ? cards[Math.max(0, currentIndex - 1)] : cards[Math.min(cards.length - 1, currentIndex + 1)]))?.focus();
+        }
         return;
       }
 
@@ -488,6 +537,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     if (!openNoteIdRef.current) {
       returnPathRef.current = window.location.pathname + window.location.search;
     }
+    lastFocusedElementRef.current = document.activeElement;
     openNoteIdRef.current = note.id;
     setEditingNote(note);
     setIsModalOpen(true);
@@ -500,6 +550,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     setIsModalOpen(false);
     setEditingNote(null);
     restoreReturnUrl();
+    (lastFocusedElementRef.current as HTMLElement | null)?.focus();
   };
 
   const handleNoteRefresh = () => {
@@ -772,6 +823,59 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const dragReorderingDisabled = showArchived || showBin || showMyTodo || noteSort !== 'manual';
   const activeSortLabel = t(`dashboard.sortOption.${noteSort}`);
   const focusSearchShortcutHint = isApplePlatform() ? '⌘ + F' : t('keyboardShortcuts.focusSearchKey');
+  const showCreateFirstNoteCta =
+    !showArchived &&
+    !showBin &&
+    !showMyTodo &&
+    !debouncedSearchQuery &&
+    !selectedLabelId;
+  const emptyState = useMemo(() => {
+    if (debouncedSearchQuery) {
+      return {
+        icon: <MagnifyingGlassIcon aria-hidden="true" className="h-8 w-8" />,
+        title: t('dashboard.noSearchResults', { query: debouncedSearchQuery }),
+        description: t('dashboard.searchEmptyHint'),
+      };
+    }
+
+    if (showBin) {
+      return {
+        icon: <TrashIcon aria-hidden="true" className="h-8 w-8" />,
+        title: t('dashboard.noBinnedNotes'),
+        description: t('dashboard.binEmptyHint'),
+      };
+    }
+
+    if (showArchived) {
+      return {
+        icon: <ArchiveBoxIcon aria-hidden="true" className="h-8 w-8" />,
+        title: t('dashboard.noArchivedNotes'),
+        description: t('dashboard.archiveEmptyHint'),
+      };
+    }
+
+    if (showMyTodo) {
+      return {
+        icon: <ClipboardDocumentCheckIcon aria-hidden="true" className="h-8 w-8" />,
+        title: t('dashboard.noMyTodoNotesTitle'),
+        description: t('dashboard.noMyTodoNotes'),
+      };
+    }
+
+    if (selectedLabelId) {
+      return {
+        icon: <DocumentTextIcon aria-hidden="true" className="h-8 w-8" />,
+        title: t('dashboard.noNotesForThisLabel'),
+        description: t('dashboard.labelFilterEmptyHint'),
+      };
+    }
+
+    return {
+      icon: <DocumentTextIcon aria-hidden="true" className="h-8 w-8" />,
+      title: t('dashboard.noNotesYet'),
+      description: t('dashboard.createFirstNote'),
+    };
+  }, [debouncedSearchQuery, selectedLabelId, showArchived, showBin, showMyTodo, t]);
 
   if (loading) {
     return (
@@ -940,23 +1044,34 @@ export default function Dashboard({ onLogout }: DashboardProps) {
         )}
 
         {displayedPinned.length === 0 && displayedOther.length === 0 ? (
-          <div className="text-center py-12">
-            <div className="mx-auto max-w-xl text-gray-500 dark:text-gray-400 text-lg whitespace-normal break-words">
-              {debouncedSearchQuery
-                ? t('dashboard.noSearchResults', { query: debouncedSearchQuery })
-                : showBin ? t('dashboard.noBinnedNotes') : showArchived ? t('dashboard.noArchivedNotes') : showMyTodo ? t('dashboard.noMyTodoNotes') : t('dashboard.noNotesYet')}
-            </div>
-            {!showArchived && !showBin && !showMyTodo && !debouncedSearchQuery && (
-              <div className="mt-4">
-                <button
-                  onClick={handleCreateNote}
-                  className="inline-flex items-center px-4 py-2 text-sm font-medium rounded-md text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30 border border-blue-200 dark:border-blue-800 transition-colors"
-                >
-                  <PlusIcon className="h-5 w-5 mr-2" />
-                  {t('dashboard.createFirstNoteCta')}
-                </button>
+          <div className="py-12">
+            <div
+              data-testid="dashboard-empty-state"
+              className="mx-auto flex max-w-2xl flex-col items-center rounded-2xl border border-gray-200 bg-white px-6 py-10 text-center shadow-sm dark:border-slate-700 dark:bg-slate-800"
+            >
+              <div className="mb-4 inline-flex h-16 w-16 items-center justify-center rounded-2xl bg-gray-100 text-gray-500 dark:bg-slate-700 dark:text-slate-200">
+                {emptyState.icon}
               </div>
-            )}
+              <h2 className="max-w-xl text-lg font-semibold text-gray-900 dark:text-white whitespace-normal break-words">
+                {emptyState.title}
+              </h2>
+              {emptyState.description && (
+                <p className="mt-2 max-w-xl text-sm text-gray-600 dark:text-gray-300 whitespace-normal break-words">
+                  {emptyState.description}
+                </p>
+              )}
+              {showCreateFirstNoteCta && (
+                <div className="mt-6">
+                  <button
+                    onClick={handleCreateNote}
+                    className="inline-flex items-center px-4 py-2 text-sm font-medium rounded-md text-blue-600 dark:text-blue-400 bg-blue-50 dark:bg-blue-900/20 hover:bg-blue-100 dark:hover:bg-blue-900/30 border border-blue-200 dark:border-blue-800 transition-colors"
+                  >
+                    <PlusIcon className="h-5 w-5 mr-2" />
+                    {t('dashboard.createFirstNoteCta')}
+                  </button>
+                </div>
+              )}
+            </div>
           </div>
         ) : (
           <DndContext
@@ -1059,6 +1174,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
               setIsModalOpen(false);
               setEditingNote(null);
               restoreReturnUrl();
+              (lastFocusedElementRef.current as HTMLElement | null)?.focus();
             }}
             onSave={handleNoteUpdate}
             onRefresh={handleNoteRefresh}

@@ -200,9 +200,10 @@ test.describe('Admin', () => {
     expect(await adminPage.isVisible()).toBe(true);
 
     await page.getByRole('button', { name: 'Create User', exact: true }).click();
-    await page.getByPlaceholder('Username (2-30 characters)').fill(managedUsername);
-    await page.locator('input[type="password"]').fill(managedPassword);
-    await page.getByRole('button', { name: 'Create User' }).click();
+    const createModal = page.getByRole('dialog', { name: 'Create New User' });
+    await createModal.getByPlaceholder('Username (2-30 characters)').fill(managedUsername);
+    await createModal.locator('input[type="password"]').fill(managedPassword);
+    await createModal.getByRole('button', { name: 'Create User' }).click();
 
     const usersList = page.getByTestId('users-list');
     const managedUserRow = usersList.getByTestId(`user-row-${managedUsername}`);

@@ -12,7 +12,8 @@
     "logoutConfirmMessage": "Czy na pewno chcesz się wylogować?",
     "openMobileApp": "Otwórz w aplikacji mobilnej",
     "openMobileAppDescription": "Wolisz natywne doświadczenie mobilne?",
-    "dismissMobileAppBanner": "Ukryj"
+    "dismissMobileAppBanner": "Ukryj",
+    "skipToMainContent": "Przejdź do głównej treści"
   },
   "auth": {
     "signInTitle": "Zaloguj się do Jot",
@@ -36,13 +37,14 @@
     "usernameChars": "Nazwa użytkownika może zawierać tylko litery, cyfry, podkreślenia i myślniki",
     "usernameEdge": "Nazwa użytkownika nie może zaczynać się ani kończyć podkreśleniem lub myślnikiem",
     "passwordsNoMatch": "Hasła nie są zgodne",
-    "passwordMin": "Hasło musi mieć co najmniej 4 znaki"
+    "passwordMin": "Hasło musi mieć co najmniej {{min}} znaków"
   },
   "dashboard": {
     "newNote": "Nowa notatka",
     "noArchivedNotes": "Brak zarchiwizowanych notatek",
     "noNotesYet": "Brak notatek",
     "noSearchResults": "Brak notatek pasujących do \"{{query}}\"",
+    "searchEmptyHint": "Spróbuj innego słowa kluczowego lub wyczyść wyszukiwanie.",
     "noBinnedNotes": "Kosz jest pusty",
     "createFirstNote": "Kliknij \"Nowa notatka\", aby utworzyć pierwszą notatkę",
     "createFirstNoteCta": "Utwórz pierwszą notatkę",
@@ -65,9 +67,14 @@
     "tabArchive": "Archiwum",
     "tabBin": "Kosz",
     "tabAdmin": "Admin",
+    "noMyTodoNotesTitle": "Brak przypisanych zadań",
     "noMyTodoNotes": "Nie masz jeszcze żadnych przypisanych zadań. Gdy ktoś przypisze ci zadanie w udostępnionej notatce, pojawi się ono tutaj.",
+    "noNotesForThisLabel": "Brak notatek dla tej etykiety",
+    "labelFilterEmptyHint": "Notatki z tą etykietą pojawią się tutaj.",
     "archiveInfo": "Zarchiwizowane notatki są ukryte w widoku głównym, ale zachowywane na zawsze.",
+    "archiveEmptyHint": "Zarchiwizowane notatki pojawią się tutaj.",
     "binInfo": "Notatki w koszu są usuwane po 7 dniach",
+    "binEmptyHint": "Usunięte notatki pozostają tutaj, dopóki nie zostaną usunięte na stałe.",
     "archiveTooltip": "Ukryte notatki, które chcesz zachować",
     "binTooltip": "Usunięte notatki — usuwane po 7 dniach",
     "noteArchived": "Notatka zarchiwizowana",
@@ -110,7 +117,7 @@
     "currentPasswordLabel": "Aktualne hasło",
     "newPasswordLabel": "Nowe hasło",
     "confirmNewPasswordLabel": "Potwierdź nowe hasło",
-    "newPasswordPlaceholder": "Co najmniej 4 znaki",
+    "newPasswordPlaceholder": "Co najmniej {{min}} znaków",
     "passwordsNoMatch": "Nowe hasła nie są zgodne.",
     "failedChangePassword": "Zmiana hasła nie powiodła się.",
     "changing": "Zmienianie...",
@@ -193,6 +200,8 @@
     "binDescription": "Otwórz widok kosza",
     "helpKey": "?",
     "helpDescription": "Otwórz pomoc skrótów klawiszowych",
+    "openNoteKey": "Enter",
+    "openNoteDescription": "Otwórz zaznaczoną notatkę",
     "escapeKey": "Esc",
     "escapeDescription": "Zamknij aktywne okno modalne lub dialog"
   },
@@ -293,6 +302,7 @@
     "lastEdited": "Ostatnia edycja: {{date}}",
     "saving": "Zapisywanie...",
     "saved": "Zapisano",
+    "colorPickerLabel": "Wybierz kolor notatki",
     "colorWhite": "Biały",
     "colorCoral": "Koral",
     "colorYellow": "Żółty",

@@ -6,24 +6,35 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-// EventType identifies the kind of note mutation that occurred.
+// EventType identifies the kind of mutation that occurred.
 type EventType string
 
 const (
-	EventNoteCreated  EventType = "note_created"
-	EventNoteUpdated  EventType = "note_updated"
-	EventNoteDeleted  EventType = "note_deleted"
-	EventNoteShared   EventType = "note_shared"
-	EventNoteUnshared EventType = "note_unshared"
+	EventNoteCreated        EventType = "note_created"
+	EventNoteUpdated        EventType = "note_updated"
+	EventNoteDeleted        EventType = "note_deleted"
+	EventNoteShared         EventType = "note_shared"
+	EventNoteUnshared       EventType = "note_unshared"
+	EventProfileIconUpdated EventType = "profile_icon_updated"
 )
+
+// NoteEventData is the Data payload for note-related events.
+type NoteEventData struct {
+	NoteID string `json:"note_id"`
+	Note   any    `json:"note"` // nil for deleted/unshared
+}
+
+// ProfileIconEventData is the Data payload for profile_icon_updated events.
+type ProfileIconEventData struct {
+	User any `json:"user"`
+}
 
 // Event is the payload pushed to SSE clients.
 type Event struct {
 	Type         EventType `json:"type"`
-	NoteID       string    `json:"note_id"`
-	Note         any       `json:"note"`            // nil for deleted/unshared
-	SourceUserID string    `json:"source_user_id"` // who triggered the change
+	SourceUserID string    `json:"source_user_id"`           // who triggered the change
 	TargetUserID string    `json:"target_user_id,omitempty"` // user affected (e.g. unshared)
+	Data         any       `json:"data,omitempty"`
 }
 
 // Hub manages per-user SSE subscriber channels.
@@ -83,7 +94,7 @@ func (h *Hub) Publish(userIDs []string, event Event) {
 			select {
 			case ch <- event:
 			default:
-				logrus.WithField("type", event.Type).WithField("note_id", event.NoteID).WithField("user_id", uid).Warn("sse: dropping event, channel full")
+				logrus.WithField("type", event.Type).WithField("user_id", uid).Warn("sse: dropping event, channel full")
 			}
 		}
 	}

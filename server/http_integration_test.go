@@ -60,6 +60,7 @@ func defaultTestConfig(tmpDir string) *config.Config {
 		CORSAllowedOrigin:   "http://localhost:5173",
 		CookieSecure:        false,
 		RegistrationEnabled: true,
+		PasswordMinLength:   10,
 	}
 }
 
@@ -227,6 +228,27 @@ func TestConfigEndpoint(t *testing.T) {
 		require.NoError(t, err)
 		assert.True(t, cfg.RegistrationEnabled)
 	})
+
+	t.Run("returns default password_min_length", func(t *testing.T) {
+		ts := setupTestServer(t)
+		c := ts.newClient()
+
+		cfg, err := c.Config(t.Context())
+		require.NoError(t, err)
+		assert.Equal(t, 10, cfg.PasswordMinLength)
+	})
+
+	t.Run("returns configured password_min_length", func(t *testing.T) {
+		ts := setupTestServerWithConfig(t, func(cfg *config.Config) {
+			cfg.PasswordMinLength = 4
+		})
+		c := ts.newClient()
+
+		cfg, err := c.Config(t.Context())
+		require.NoError(t, err)
+		assert.Equal(t, 4, cfg.PasswordMinLength)
+	})
+
 }
 
 // Auth endpoint tests
@@ -697,7 +719,9 @@ func TestSSEEndpoint(t *testing.T) { //nolint:gocognit
 		case event := <-eventCh:
 			assert.Equal(t, "note_created", event["type"])
 			assert.Equal(t, user.User.ID, event["source_user_id"])
-			assert.Equal(t, note.ID, event["note_id"])
+			data, ok := event["data"].(map[string]any)
+			require.True(t, ok, "event data should be a JSON object")
+			assert.Equal(t, note.ID, data["note_id"])
 		case <-sseCtx.Done():
 			t.Fatal("timed out waiting for SSE event after note creation")
 		}

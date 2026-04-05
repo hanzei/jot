@@ -133,6 +133,7 @@ export default function NoteEditorScreen() {
   const hasPendingChangesRef = useRef(false);
   const saveInFlightRef = useRef<Promise<boolean> | null>(null);
   const tempIdCounterRef = useRef(0);
+  const requiresHydrationRef = useRef(initialNoteId !== null);
 
   // Refs for current state to avoid stale closures in debounced save
   const noteIdRef = useRef(noteId);
@@ -157,6 +158,8 @@ export default function NoteEditorScreen() {
   createMutateRef.current = createMutation.mutateAsync;
   const updateMutateRef = useRef(updateMutation.mutateAsync);
   updateMutateRef.current = updateMutation.mutateAsync;
+  const isHydratingRef = useRef(initialNoteId !== null && !existingNote);
+  isHydratingRef.current = initialNoteId !== null && !existingNote;
 
   const titleInputRef = useRef<TextInputType>(null);
   const contentInputRef = useRef<TextInputType>(null);
@@ -189,6 +192,7 @@ export default function NoteEditorScreen() {
         setItems(toLocalItems(existingNote.items));
       }
       isInitializedRef.current = true;
+      requiresHydrationRef.current = false;
     }
   }, [existingNote]);
 
@@ -213,7 +217,7 @@ export default function NoteEditorScreen() {
     if (!hasPendingChangesRef.current) return true;
     // If an existing note has local edits flagged but hasn't hydrated yet,
     // treat this as a failed flush so callers can retry after hydration.
-    if (noteIdRef.current && !isInitializedRef.current) return false;
+    if (requiresHydrationRef.current && noteIdRef.current && !isInitializedRef.current) return false;
 
     // Serialize mutations: chain onto any in-flight save to prevent concurrent writes
     const predecessor = saveInFlightRef.current;
@@ -244,6 +248,7 @@ export default function NoteEditorScreen() {
         });
         hasPendingChangesRef.current = false;
         if (!isMountedRef.current || unmounting) return true;
+        noteIdRef.current = newNote.id;
         setNoteId(newNote.id);
         setHasCreated(true);
         setSaveError(null);
@@ -702,17 +707,29 @@ export default function NoteEditorScreen() {
     }
     const prevColor = colorRef.current;
     setColor(selectedColor);
-    if (!noteId) return;
+    const currentNoteId = noteIdRef.current;
+    if (!currentNoteId) {
+      // Newly-created notes may not have committed noteId into render state yet.
+      // Keep this change dirty so autosave (or beforeRemove flush) persists color.
+      markDirtyAndScheduleUpdate();
+      return;
+    }
+    if (isHydratingRef.current) {
+      // Existing note data is still loading; avoid sending a metadata-only update
+      // with placeholder refs that could overwrite hydrated title/content.
+      markDirtyAndScheduleUpdate();
+      return;
+    }
     try {
       await updateMutation.mutateAsync({
-        id: noteId,
+        id: currentNoteId,
         data: buildMetadataUpdateData({ color: selectedColor }),
       });
     } catch {
       setColor(prevColor);
       Alert.alert(t('common.error'), t('note.failedColorUpdate'));
     }
-  }, [buildMetadataUpdateData, flushPendingChanges, noteId, t, updateMutation]);
+  }, [buildMetadataUpdateData, flushPendingChanges, markDirtyAndScheduleUpdate, t, updateMutation]);
 
   const handleToggleNoteType = useCallback(() => {
     if (hasCreated) return;
