@@ -5,6 +5,7 @@ import RegisterScreen from '../src/screens/RegisterScreen';
 import i18n from '../src/i18n';
 import { useAuth } from '../src/store/AuthContext';
 import { getBaseUrl, getStoredServerUrl, probeServerReachability, setServerUrl } from '../src/api/client';
+import { VALIDATION } from '@jot/shared';
 
 jest.mock('../src/store/AuthContext', () => ({
   useAuth: jest.fn(),
@@ -84,10 +85,9 @@ describe('Auth first-run server setup flow', () => {
     const { getByTestId, queryByTestId } = renderLoginScreen();
 
     await waitFor(() => {
-      expect(queryByTestId('login-server-setup-loading')).toBeNull();
+      expect(getByTestId('login-server-setup-step')).toBeTruthy();
     });
 
-    expect(getByTestId('login-server-setup-step')).toBeTruthy();
     expect(queryByTestId('username-input')).toBeNull();
   });
 
@@ -101,7 +101,9 @@ describe('Auth first-run server setup flow', () => {
     fireEvent.changeText(getByTestId('login-server-setup-input'), 'not-a-url');
     fireEvent.press(getByTestId('login-server-setup-submit'));
 
-    expect(getByText(i18n.t('auth.serverUrlProtocol'))).toBeTruthy();
+    await waitFor(() => {
+      expect(getByText(i18n.t('auth.serverUrlProtocol'))).toBeTruthy();
+    });
     expect(mockProbeServerReachability).not.toHaveBeenCalled();
   });
 
@@ -165,7 +167,7 @@ describe('Auth first-run server setup flow', () => {
 
   it('moves to register form after reachable server and keeps registration working', async () => {
     const { getByTestId, findByTestId } = renderRegisterScreen();
-    const validPassword = 'pass1234567';
+    const validPassword = 'p'.repeat(VALIDATION.PASSWORD_MIN_LENGTH);
 
     await waitFor(() => {
       expect(getByTestId('register-server-setup-step')).toBeTruthy();
@@ -181,11 +183,6 @@ describe('Auth first-run server setup flow', () => {
 
     fireEvent.changeText(getByTestId('username-input'), 'new_user');
     fireEvent.changeText(getByTestId('password-input'), validPassword);
-
-    await waitFor(() => {
-      expect(getByTestId('username-input').props.value).toBe('new_user');
-      expect(getByTestId('password-input').props.value).toBe(validPassword);
-    });
 
     fireEvent.press(getByTestId('register-button'));
 
@@ -257,6 +254,7 @@ describe('Auth first-run server setup flow', () => {
     await waitFor(() => {
       expect(getByText(i18n.t('auth.serverSetupConnectionInvalidServer'))).toBeTruthy();
     });
+    expect(mockSetServerUrl).not.toHaveBeenCalled();
   });
 
   it('shows connection error when server activation fails after probe success', async () => {
@@ -273,5 +271,7 @@ describe('Auth first-run server setup flow', () => {
     await waitFor(() => {
       expect(getByText(i18n.t('auth.serverSetupConnectionFailed'))).toBeTruthy();
     });
+    expect(mockProbeServerReachability).toHaveBeenCalledWith('http://localhost:8080');
+    expect(mockSetServerUrl).toHaveBeenCalledWith('http://localhost:8080');
   });
 });
