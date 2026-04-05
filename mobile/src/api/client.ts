@@ -183,7 +183,7 @@ export async function probeServerReachability(url: string): Promise<ServerReacha
       },
       validateStatus: () => true,
     });
-    if (response.status === 200 || response.status === 401 || response.status === 403) {
+    if (response.status === 200 || response.status === 401) {
       return { ok: true, canonicalUrl: canonical };
     }
     return { ok: false, reason: 'AUTH_ENDPOINT_UNAVAILABLE' };

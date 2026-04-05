@@ -663,8 +663,10 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
               testPrefix="server-picker-add"
               onServerReady={async () => {
                 setIsServerActionPending(true);
+                let initialRefreshOk = false;
                 try {
                   const ok = await refreshServerPickerData();
+                  initialRefreshOk = ok;
                   if (!ok) {
                     return;
                   }
@@ -676,7 +678,9 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
                   Alert.alert(t('common.error'), t('serverPicker.switchFailed'));
                 } finally {
                   setIsServerActionPending(false);
-                  await refreshServerPickerData();
+                  if (initialRefreshOk) {
+                    await refreshServerPickerData();
+                  }
                 }
               }}
               skipStoredServerCheck

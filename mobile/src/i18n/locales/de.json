@@ -46,16 +46,16 @@
     "alreadyHaveAccount": "Du hast bereits ein Konto? Anmelden",
     "unableToConnect": "Verbindung zum Server nicht möglich",
     "serverSetupTitle": "Server einrichten",
-    "serverSetupDescription": "Gib die URL deines Jot-Servers ein, um fortzufahren. Du kannst spaeter weitere Server hinzufuegen oder wechseln.",
+    "serverSetupDescription": "Gib die URL deines Jot-Servers ein, um fortzufahren. Du kannst später weitere Server hinzufügen oder wechseln.",
     "serverSetupContinue": "Weiter",
-    "serverSetupInputA11yLabel": "Eingabe fuer Server-URL",
-    "serverSetupSubmitA11yLabel": "Server pruefen und fortfahren",
-    "serverSetupConnectionFailed": "Server nicht erreichbar. Pruefe URL und Verbindung und versuche es erneut.",
+    "serverSetupInputA11yLabel": "Eingabe für Server-URL",
+    "serverSetupSubmitA11yLabel": "Server prüfen und fortfahren",
+    "serverSetupConnectionFailed": "Server nicht erreichbar. Prüfe URL und Verbindung und versuche es erneut.",
     "serverSetupConnectionInvalidServer": "Verbindung hergestellt, aber dies scheint kein kompatibler Jot-API-Endpunkt zu sein.",
     "serverSetupExampleLocalhost": "Beispiel: http://localhost:8080 (iOS-Simulator)",
     "serverSetupExampleAndroidEmulator": "Beispiel: http://10.0.2.2:8080 (Android-Emulator)",
     "serverSetupExampleLan": "Beispiel: http://192.168.1.42:8080 (LAN)",
-    "serverSetupExampleHosted": "Beispiel: https://notes.example.com (Self-Hosted-Domain)"
+    "serverSetupExampleHosted": "Beispiel: https://notes.example.com (selbstgehostete Domain)"
   },
   "dashboard": {
     "newNote": "Neue Notiz",

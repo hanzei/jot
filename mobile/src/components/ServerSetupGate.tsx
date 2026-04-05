@@ -119,8 +119,8 @@ export default function ServerSetupGate({
       }
       await activateServerUrl(probe.canonicalUrl);
       setServerUrlInput(probe.canonicalUrl);
+      await Promise.resolve(onServerReady?.(probe.canonicalUrl));
       setIsServerReady(true);
-      onServerReady?.(probe.canonicalUrl);
     } catch {
       setSetupError(t('auth.serverSetupConnectionFailed'));
     } finally {
