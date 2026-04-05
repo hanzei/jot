@@ -63,6 +63,7 @@ describe('buildCollaborators', () => {
       firstName: 'Alice',
       lastName: '',
       hasProfileIcon: false,
+      iconVersion: '',
     });
   });
 

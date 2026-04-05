@@ -7,23 +7,28 @@ interface LetterAvatarProps {
   className?: string;
   userId?: string;
   hasProfileIcon?: boolean;
+  iconVersion?: string;
 }
 
-const LetterAvatar = ({ firstName, username, className = '', userId, hasProfileIcon }: LetterAvatarProps) => {
+const LetterAvatar = ({ firstName, username, className = '', userId, hasProfileIcon, iconVersion }: LetterAvatarProps) => {
   const [imgFailed, setImgFailed] = useState(false);
-  // Reset imgFailed when userId changes using React's "derived state from props"
+  // Reset imgFailed when userId or iconVersion changes using React's "derived state from props"
   // pattern (https://react.dev/reference/react/useState#storing-information-from-previous-renders).
-  const [prevUserId, setPrevUserId] = useState(userId);
-  if (prevUserId !== userId) {
-    setPrevUserId(userId);
+  const [prevKey, setPrevKey] = useState(`${userId}:${iconVersion}`);
+  const key = `${userId}:${iconVersion}`;
+  if (prevKey !== key) {
+    setPrevKey(key);
     setImgFailed(false);
   }
   const accessibleLabel = username || firstName || '?';
 
   if (hasProfileIcon && userId && !imgFailed) {
+    const src = iconVersion
+      ? `/api/v1/users/${userId}/profile-icon?v=${encodeURIComponent(iconVersion)}`
+      : `/api/v1/users/${userId}/profile-icon`;
     return (
       <img
-        src={`/api/v1/users/${userId}/profile-icon`}
+        src={src}
         alt={accessibleLabel}
         className={`rounded-full object-cover ${className}`}
         onError={() => setImgFailed(true)}

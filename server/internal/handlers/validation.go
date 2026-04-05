@@ -22,6 +22,10 @@ const (
 	noteItemTextMaxLength = 500
 	noteItemsMaxCount     = 500
 	searchQueryMaxLength  = 500
+	patNameMaxLength      = 100
+	// maxPATsPerUser caps the number of personal access tokens a user can hold.
+	// Keep in sync with shared/src/constants.ts VALIDATION.PAT_MAX_COUNT.
+	maxPATsPerUser = 50
 )
 
 func validateUsername(username string) error {
@@ -64,6 +68,17 @@ func validateSearchQuery(q string) error {
 func validateColor(color string) error {
 	if !hexColorRegex.MatchString(color) {
 		return errors.New("color must be a valid CSS hex color (e.g. #fff or #ffffff)")
+	}
+	return nil
+}
+
+func validatePATName(name string) error {
+	n := utf8.RuneCountInString(name)
+	if n == 0 {
+		return errors.New("token name must not be empty")
+	}
+	if n > patNameMaxLength {
+		return fmt.Errorf("token name must be %d characters or fewer", patNameMaxLength)
 	}
 	return nil
 }

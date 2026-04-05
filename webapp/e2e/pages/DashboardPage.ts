@@ -289,8 +289,26 @@ export class DashboardPage {
     await expect(this.page.locator('[data-testid="note-card"]').filter({ hasText: title })).toHaveCount(0);
   }
 
-  async expectEmptyState(message: string) {
-    await expect(this.page.getByText(message)).toBeVisible();
+  async expectEmptyState(title?: string, description?: string, expectCreateCta?: boolean) {
+    const emptyState = this.page.getByTestId('dashboard-empty-state');
+    await expect(emptyState).toBeVisible();
+
+    if (title) {
+      await expect(emptyState.getByText(title)).toBeVisible();
+    }
+
+    if (description) {
+      await expect(emptyState.getByText(description)).toBeVisible();
+    }
+
+    if (typeof expectCreateCta === 'boolean') {
+      const createCtaButton = emptyState.getByRole('button');
+      if (expectCreateCta) {
+        await expect(createCtaButton).toBeVisible();
+      } else {
+        await expect(createCtaButton).toHaveCount(0);
+      }
+    }
   }
 
   noteCard(title: string): Locator {

@@ -144,6 +144,7 @@ export default function AssigneePicker({ collaborators, currentAssigneeId, onAss
                 username={c.username}
                 userId={c.userId}
                 hasProfileIcon={c.hasProfileIcon}
+                iconVersion={c.iconVersion}
                 className="w-5 h-5 mr-2 flex-shrink-0"
               />
               <span className="text-gray-700 dark:text-gray-200 truncate">

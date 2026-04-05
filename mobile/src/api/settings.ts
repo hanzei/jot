@@ -1,6 +1,6 @@
 import { Platform } from 'react-native';
 import api from './client';
-import type { User, AuthResponse, UpdateMeRequest, ChangePasswordRequest, AboutInfo, ActiveSession } from '@jot/shared';
+import type { User, AuthResponse, UpdateMeRequest, ChangePasswordRequest, AboutInfo, ActiveSession, PersonalAccessToken, CreatePATRequest } from '@jot/shared';
 
 export async function updateMe(data: UpdateMeRequest): Promise<AuthResponse> {
   const res = await api.patch('/users/me', data);
@@ -46,4 +46,18 @@ export async function listSessions(): Promise<ActiveSession[]> {
 
 export async function revokeSession(id: string): Promise<void> {
   await api.delete(`/sessions/${id}`);
+}
+
+export async function listPATs(): Promise<PersonalAccessToken[]> {
+  const res = await api.get('/pats');
+  return res.data;
+}
+
+export async function createPAT(data: CreatePATRequest): Promise<PersonalAccessToken> {
+  const res = await api.post('/pats', data);
+  return res.data;
+}
+
+export async function revokePAT(id: string): Promise<void> {
+  await api.delete(`/pats/${id}`);
 }
