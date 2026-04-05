@@ -48,6 +48,7 @@ type Server struct {
 	router          chi.Router
 	db              *database.DB
 	httpServer      *http.Server
+	metricsServer   *http.Server
 	staticRoot      *os.Root
 	startErr        error
 	startReady      chan struct{}
@@ -172,7 +173,6 @@ func (s *Server) setupRoutes() error {
 
 	s.router.Get("/livez", s.wrapHandler(s.handleLive))
 	s.router.Get("/readyz", s.handleReady)
-	s.router.Get("/metrics", promhttp.Handler().ServeHTTP)
 
 	cop := http.NewCrossOriginProtection()
 	if s.cfg.CORSAllowedOrigin != "" {
@@ -484,6 +484,36 @@ func requestLoggerMiddleware(next http.Handler) http.Handler {
 }
 
 func (s *Server) Start(addr string) error {
+	// Start the metrics server on its own port before the main server so it is
+	// ready by the time we signal readiness. A failure here is fatal — if the
+	// operator configured a metrics port it must be reachable.
+	metricsAddr := fmt.Sprintf(":%d", s.cfg.MetricsPort)
+	metricsListener, err := (&net.ListenConfig{}).Listen(s.ctx, "tcp", metricsAddr)
+	if err != nil {
+		startErr := fmt.Errorf("listen on metrics port: %w", err)
+		s.setStartResult(startErr)
+		return startErr
+	}
+	mux := http.NewServeMux()
+	mux.Handle("GET /metrics", promhttp.Handler())
+	metricsServer := &http.Server{
+		Handler:      mux,
+		ReadTimeout:  10 * time.Second,
+		WriteTimeout: 10 * time.Second,
+		IdleTimeout:  30 * time.Second,
+	}
+	s.serverMu.Lock()
+	s.metricsServer = metricsServer
+	s.serverMu.Unlock()
+	s.bgWg.Add(1)
+	go func() {
+		defer s.bgWg.Done()
+		if err := metricsServer.Serve(metricsListener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+			logrus.WithError(err).Error("metrics server stopped unexpectedly")
+		}
+	}()
+	logrus.Infof("Metrics server listening on %s", metricsAddr)
+
 	listener, err := (&net.ListenConfig{}).Listen(s.ctx, "tcp", addr)
 	if err != nil {
 		startErr := fmt.Errorf("listen: %w", err)
@@ -533,6 +563,15 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		s.httpServer = nil
 	}
 	s.serverMu.Unlock()
+
+	s.serverMu.RLock()
+	metricsServer := s.metricsServer
+	s.serverMu.RUnlock()
+	if metricsServer != nil {
+		if err := metricsServer.Shutdown(ctx); err != nil {
+			logrus.WithError(err).Warn("metrics server shutdown error")
+		}
+	}
 
 	s.cancel()
 	s.bgWg.Wait()

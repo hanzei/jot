@@ -10,6 +10,7 @@ import (
 // Config holds all server configuration values.
 type Config struct {
 	Port                int
+	MetricsPort         int
 	DBPath              string
 	StaticDir           string
 	CORSAllowedOrigin   string
@@ -26,6 +27,7 @@ type Config struct {
 func Load() (*Config, error) {
 	cfg := &Config{
 		Port:                8080,
+		MetricsPort:         8081,
 		DBPath:              "./jot.db",
 		CookieSecure:        true,
 		RegistrationEnabled: true,
@@ -42,6 +44,17 @@ func Load() (*Config, error) {
 			return nil, fmt.Errorf("invalid PORT value %d: must be between 1 and 65535", p)
 		}
 		cfg.Port = p
+	}
+
+	if v := os.Getenv("METRICS_PORT"); v != "" {
+		p, err := strconv.Atoi(v)
+		if err != nil {
+			return nil, fmt.Errorf("invalid METRICS_PORT value %q: must be a number", v)
+		}
+		if p < 1 || p > 65535 {
+			return nil, fmt.Errorf("invalid METRICS_PORT value %d: must be between 1 and 65535", p)
+		}
+		cfg.MetricsPort = p
 	}
 
 	if v := os.Getenv("DB_PATH"); v != "" {
