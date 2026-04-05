@@ -74,6 +74,10 @@ definitions:
       skipped:
         type: integer
     type: object
+  handlers.LabelCountsResponse:
+    additionalProperties:
+      type: integer
+    type: object
   handlers.LoginRequest:
     properties:
       password:
@@ -680,6 +684,40 @@ paths:
       summary: List all labels for the current user
       tags:
       - labels
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Label name
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.AddLabelRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.Label'
+        "400":
+          description: bad request
+          schema:
+            type: string
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "500":
+          description: internal server error
+          schema:
+            type: string
+      security:
+      - CookieAuth: []
+      summary: Create or return an existing label
+      tags:
+      - labels
   /labels/{id}:
     delete:
       parameters:
@@ -749,6 +787,28 @@ paths:
       security:
       - CookieAuth: []
       summary: Rename a label
+      tags:
+      - labels
+  /labels/counts:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.LabelCountsResponse'
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "500":
+          description: internal server error
+          schema:
+            type: string
+      security:
+      - CookieAuth: []
+      summary: Get note counts per label for the current user
       tags:
       - labels
   /login:

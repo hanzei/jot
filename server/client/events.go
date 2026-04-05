@@ -20,13 +20,19 @@ type SSEProfileIconData struct {
 	User *User `json:"user"`
 }
 
+// SSELabelsData is the Data payload for labels_changed SSE events.
+type SSELabelsData struct {
+	Label *Label `json:"label"`
+}
+
 // SSEEvent is a single event received from the server-sent events stream.
-// Depending on Type, either NoteData or ProfileData will be non-nil.
+// Depending on Type, NoteData, LabelsData, or ProfileData may be non-nil.
 type SSEEvent struct {
 	Type         string
 	SourceUserID string
 	TargetUserID string
 	NoteData     *SSENoteData        // set for note_created/updated/deleted/shared/unshared
+	LabelsData   *SSELabelsData      // set for labels_changed
 	ProfileData  *SSEProfileIconData // set for profile_icon_updated
 }
 
@@ -57,6 +63,14 @@ func parseSSEEvent(raw []byte) (SSEEvent, bool) {
 			}
 		}
 		ev.NoteData = &d
+	case "labels_changed":
+		var d SSELabelsData
+		if len(wire.Data) > 0 {
+			if err := json.Unmarshal(wire.Data, &d); err != nil {
+				return SSEEvent{}, false
+			}
+		}
+		ev.LabelsData = &d
 	case "profile_icon_updated":
 		var d SSEProfileIconData
 		if len(wire.Data) > 0 {

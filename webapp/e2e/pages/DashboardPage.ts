@@ -388,6 +388,21 @@ export class DashboardPage {
     ).toHaveCount(0);
   }
 
+  async createSidebarLabel(labelName: string) {
+    await this.ensureSidebarOpen();
+    await this.page.getByRole('button', { name: '+ New Label' }).click();
+    const input = this.page.getByRole('textbox', { name: 'New label name' });
+    await input.fill(labelName);
+    await input.press('Enter');
+    await this.expectLabelInSidebar(labelName);
+  }
+
+  async expectSidebarLabelCount(labelName: string, count: number) {
+    await this.ensureSidebarOpen();
+    const row = this.sidebarLabelRow(labelName);
+    await expect(row.locator('button span').last()).toHaveText(String(count));
+  }
+
   private sidebarLabelRow(labelName: string): Locator {
     return this.page
       .locator('aside [data-testid="sidebar-labels"] li')
@@ -445,29 +460,31 @@ export class DashboardPage {
     await this.closeActiveDialog();
   }
 
-  /** Asserts that Archive and Bin appear directly after a given label in the sidebar with no large gap. */
+  /** Asserts that Archive and Bin appear directly after the labels section in the sidebar. */
   async expectArchiveAndBinDirectlyAfterLabel(labelName: string) {
     await this.ensureSidebarOpen();
     const sidebar = this.page.locator('aside[aria-label="Main navigation"]');
 
     const labelButton = sidebar.getByRole('button', { name: labelName, exact: true });
+    const labelsSection = sidebar.locator('[data-testid="sidebar-labels"]');
     const archiveButton = sidebar.locator('[aria-label="Archive"]');
     const binButton = sidebar.locator('[aria-label="Bin"]');
 
     await expect(labelButton).toBeVisible();
+    await expect(labelsSection).toBeVisible();
     await expect(archiveButton).toBeVisible();
     await expect(binButton).toBeVisible();
 
-    const labelBox = await labelButton.boundingBox();
+    const labelsSectionBox = await labelsSection.boundingBox();
     const archiveBox = await archiveButton.boundingBox();
     const binBox = await binButton.boundingBox();
 
-    expect(labelBox).toBeTruthy();
+    expect(labelsSectionBox).toBeTruthy();
     expect(archiveBox).toBeTruthy();
     expect(binBox).toBeTruthy();
 
-    const gapBetweenLabelAndArchive = archiveBox!.y - (labelBox!.y + labelBox!.height);
-    expect(gapBetweenLabelAndArchive).toBeLessThan(30);
+    const gapBetweenLabelsSectionAndArchive = archiveBox!.y - (labelsSectionBox!.y + labelsSectionBox!.height);
+    expect(gapBetweenLabelsSectionAndArchive).toBeLessThan(40);
 
     expect(binBox!.y).toBeGreaterThan(archiveBox!.y);
   }

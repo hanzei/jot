@@ -359,6 +359,12 @@
     "noLabels": "Noch keine Labels",
     "newLabelPlaceholder": "Label-Name...",
     "createNew": "Neu erstellen...",
+    "newSidebar": "+ Neues Label",
+    "createInputLabel": "Neuer Labelname",
+    "createSave": "Label erstellen",
+    "createCancel": "Label-Erstellung abbrechen",
+    "createSuccess": "Label erstellt",
+    "createError": "Label konnte nicht erstellt werden.",
     "menuOptions": "Labeloptionen für {{name}}",
     "rename": "Umbenennen",
     "delete": "Löschen",
@@ -422,6 +428,7 @@
     "archive": "Archiv - Jot",
     "bin": "Papierkorb - Jot",
     "admin": "Admin - Jot",
-    "settings": "Einstellungen - Jot"
+    "settings": "Einstellungen - Jot",
+    "label": "{{name}} - Jot"
   }
 }
