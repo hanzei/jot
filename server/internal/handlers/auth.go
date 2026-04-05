@@ -15,24 +15,32 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/hanzei/jot/server/internal/auth"
+	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/hanzei/jot/server/internal/models"
+	"github.com/hanzei/jot/server/internal/sse"
 	"golang.org/x/image/draw"
 	_ "golang.org/x/image/webp"
 )
 
 type AuthHandler struct {
 	userStore           *models.UserStore
+	noteStore           *models.NoteStore
 	sessionService      *auth.SessionService
 	userSettingsStore   *models.UserSettingsStore
+	hub                 *sse.Hub
 	registrationEnabled bool
+	passwordMinLength   int
 }
 
-func NewAuthHandler(userStore *models.UserStore, sessionService *auth.SessionService, userSettingsStore *models.UserSettingsStore, registrationEnabled bool) *AuthHandler {
+func NewAuthHandler(userStore *models.UserStore, noteStore *models.NoteStore, sessionService *auth.SessionService, userSettingsStore *models.UserSettingsStore, hub *sse.Hub, registrationEnabled bool, passwordMinLength int) *AuthHandler {
 	return &AuthHandler{
 		userStore:           userStore,
+		noteStore:           noteStore,
 		sessionService:      sessionService,
 		userSettingsStore:   userSettingsStore,
+		hub:                 hub,
 		registrationEnabled: registrationEnabled,
+		passwordMinLength:   passwordMinLength,
 	}
 }
 
@@ -78,7 +86,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) (int, any
 		return http.StatusBadRequest, nil, err
 	}
 
-	if err := validatePassword(req.Password); err != nil {
+	if err := validatePassword(req.Password, h.passwordMinLength); err != nil {
 		return http.StatusBadRequest, nil, err
 	}
 
@@ -353,7 +361,7 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) (in
 		return http.StatusBadRequest, nil, errors.New("current_password and new_password are required")
 	}
 
-	if err := validatePassword(req.NewPassword); err != nil {
+	if err := validatePassword(req.NewPassword, h.passwordMinLength); err != nil {
 		return http.StatusBadRequest, nil, err
 	}
 
@@ -573,6 +581,8 @@ func (h *AuthHandler) UploadProfileIcon(w http.ResponseWriter, r *http.Request) 
 		return http.StatusInternalServerError, nil, fmt.Errorf("fetch user by id: %w", err)
 	}
 
+	h.publishProfileIconEvent(r.Context(), user)
+
 	return http.StatusOK, user, nil
 }
 
@@ -595,7 +605,38 @@ func (h *AuthHandler) DeleteProfileIcon(w http.ResponseWriter, r *http.Request) 
 		return http.StatusInternalServerError, nil, fmt.Errorf("delete profile icon for user %s: %w", currentUser.ID, err)
 	}
 
+	user, err := h.userStore.GetByID(r.Context(), currentUser.ID)
+	if err != nil {
+		// The deletion already succeeded; log the re-fetch failure but don't
+		// report it as an error to the caller.
+		logutil.FromContext(r.Context()).WithError(err).WithField("user_id", currentUser.ID).
+			Error("failed to re-fetch user after profile icon deletion; skipping SSE publish")
+	} else {
+		h.publishProfileIconEvent(r.Context(), user)
+	}
+
 	return http.StatusNoContent, nil, nil
+}
+
+// publishProfileIconEvent notifies all collaborators of userID that their
+// profile icon has changed. Errors are logged but never fail the HTTP request.
+func (h *AuthHandler) publishProfileIconEvent(ctx context.Context, user *models.User) {
+	if h.hub == nil || h.noteStore == nil {
+		return
+	}
+	collaboratorIDs, err := h.noteStore.GetCollaboratorIDs(ctx, user.ID)
+	if err != nil {
+		logutil.FromContext(ctx).WithError(err).WithField("user_id", user.ID).Error("failed to get collaborator IDs for profile icon SSE publish")
+		return
+	}
+	if len(collaboratorIDs) == 0 {
+		return
+	}
+	h.hub.Publish(collaboratorIDs, sse.Event{
+		Type:         sse.EventProfileIconUpdated,
+		SourceUserID: user.ID,
+		Data:         sse.ProfileIconEventData{User: user},
+	})
 }
 
 // GetUserProfileIcon godoc

@@ -12,7 +12,8 @@
     "logoutConfirmMessage": "¿Seguro que quieres cerrar sesión?",
     "openMobileApp": "Abrir en la app móvil",
     "openMobileAppDescription": "¿Prefieres la experiencia nativa móvil?",
-    "dismissMobileAppBanner": "Ocultar"
+    "dismissMobileAppBanner": "Ocultar",
+    "skipToMainContent": "Saltar al contenido principal"
   },
   "auth": {
     "signInTitle": "Iniciar sesión en Jot",
@@ -36,13 +37,14 @@
     "usernameChars": "El nombre de usuario solo puede contener letras, números, guiones bajos y guiones",
     "usernameEdge": "El nombre de usuario no puede empezar ni terminar con guión bajo o guión",
     "passwordsNoMatch": "Las contraseñas no coinciden",
-    "passwordMin": "La contraseña debe tener al menos 4 caracteres"
+    "passwordMin": "La contraseña debe tener al menos {{min}} caracteres"
   },
   "dashboard": {
     "newNote": "Nueva nota",
     "noArchivedNotes": "No hay notas archivadas",
     "noNotesYet": "Aún no hay notas",
     "noSearchResults": "No hay notas que coincidan con \"{{query}}\"",
+    "searchEmptyHint": "Prueba con otra palabra clave o borra tu búsqueda.",
     "noBinnedNotes": "La papelera está vacía",
     "createFirstNote": "Haz clic en \"Nueva nota\" para crear tu primera nota",
     "createFirstNoteCta": "Crea tu primera nota",
@@ -65,9 +67,14 @@
     "tabArchive": "Archivo",
     "tabBin": "Papelera",
     "tabAdmin": "Admin",
+    "noMyTodoNotesTitle": "No tienes tareas asignadas",
     "noMyTodoNotes": "Aún no tienes tareas asignadas. Cuando alguien te asigne una tarea en una nota compartida, aparecerá aquí.",
+    "noNotesForThisLabel": "No hay notas para esta etiqueta",
+    "labelFilterEmptyHint": "Las notas con esta etiqueta aparecerán aquí.",
     "archiveInfo": "Las notas archivadas se ocultan de la vista principal pero se conservan indefinidamente.",
+    "archiveEmptyHint": "Las notas que archives aparecerán aquí.",
     "binInfo": "Las notas en la papelera se eliminan después de 7 días",
+    "binEmptyHint": "Las notas eliminadas permanecerán aquí hasta que se borren.",
     "archiveTooltip": "Notas ocultas que quieres conservar",
     "binTooltip": "Notas eliminadas — se borran después de 7 días",
     "noteArchived": "Nota archivada",
@@ -110,7 +117,7 @@
     "currentPasswordLabel": "Contraseña actual",
     "newPasswordLabel": "Nueva contraseña",
     "confirmNewPasswordLabel": "Confirmar nueva contraseña",
-    "newPasswordPlaceholder": "Al menos 4 caracteres",
+    "newPasswordPlaceholder": "Al menos {{min}} caracteres",
     "passwordsNoMatch": "Las nuevas contraseñas no coinciden.",
     "failedChangePassword": "Error al cambiar la contraseña.",
     "changing": "Cambiando...",
@@ -193,6 +200,8 @@
     "binDescription": "Abrir la vista de papelera",
     "helpKey": "?",
     "helpDescription": "Abrir ayuda de atajos de teclado",
+    "openNoteKey": "Enter",
+    "openNoteDescription": "Abrir la nota enfocada",
     "escapeKey": "Esc",
     "escapeDescription": "Cerrar el modal o diálogo activo"
   },
@@ -293,6 +302,7 @@
     "lastEdited": "Última edición: {{date}}",
     "saving": "Guardando...",
     "saved": "Guardado",
+    "colorPickerLabel": "Seleccionar color de nota",
     "colorWhite": "Blanco",
     "colorCoral": "Coral",
     "colorYellow": "Amarillo",

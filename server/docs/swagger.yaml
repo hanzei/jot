@@ -432,6 +432,8 @@ definitions:
     type: object
   server.configResponse:
     properties:
+      password_min_length:
+        type: integer
       registration_enabled:
         type: boolean
     type: object
@@ -1480,6 +1482,10 @@ paths:
             items:
               $ref: '#/definitions/handlers.UserInfo'
             type: array
+        "400":
+          description: search query too long
+          schema:
+            type: string
         "401":
           description: unauthorized
           schema:

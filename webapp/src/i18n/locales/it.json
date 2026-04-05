@@ -12,7 +12,8 @@
     "logoutConfirmMessage": "Sei sicuro di voler uscire?",
     "openMobileApp": "Apri nell'app mobile",
     "openMobileAppDescription": "Preferisci l'esperienza mobile nativa?",
-    "dismissMobileAppBanner": "Nascondi"
+    "dismissMobileAppBanner": "Nascondi",
+    "skipToMainContent": "Vai al contenuto principale"
   },
   "auth": {
     "signInTitle": "Accedi a Jot",
@@ -36,13 +37,14 @@
     "usernameChars": "Il nome utente può contenere solo lettere, numeri, trattini bassi e trattini",
     "usernameEdge": "Il nome utente non può iniziare o terminare con trattino basso o trattino",
     "passwordsNoMatch": "Le password non corrispondono",
-    "passwordMin": "La password deve contenere almeno 4 caratteri"
+    "passwordMin": "La password deve contenere almeno {{min}} caratteri"
   },
   "dashboard": {
     "newNote": "Nuova nota",
     "noArchivedNotes": "Nessuna nota archiviata",
     "noNotesYet": "Nessuna nota ancora",
     "noSearchResults": "Nessuna nota corrispondente a \"{{query}}\"",
+    "searchEmptyHint": "Prova un'altra parola chiave o cancella la ricerca.",
     "noBinnedNotes": "Il cestino è vuoto",
     "createFirstNote": "Clicca su \"Nuova nota\" per creare la tua prima nota",
     "createFirstNoteCta": "Crea la tua prima nota",
@@ -65,9 +67,14 @@
     "tabArchive": "Archivio",
     "tabBin": "Cestino",
     "tabAdmin": "Admin",
+    "noMyTodoNotesTitle": "Nessuna attività assegnata",
     "noMyTodoNotes": "Nessuna attività ti è stata ancora assegnata. Quando qualcuno ti assegnerà un'attività in una nota condivisa, apparirà qui.",
+    "noNotesForThisLabel": "Nessuna nota per questa etichetta",
+    "labelFilterEmptyHint": "Le note con questa etichetta appariranno qui.",
     "archiveInfo": "Le note archiviate sono nascoste dalla vista principale ma conservate per sempre.",
+    "archiveEmptyHint": "Le note che archivi appariranno qui.",
     "binInfo": "Le note nel cestino vengono eliminate dopo 7 giorni",
+    "binEmptyHint": "Le note eliminate restano qui finché non vengono rimosse.",
     "archiveTooltip": "Note nascoste che vuoi conservare",
     "binTooltip": "Note eliminate — rimosse dopo 7 giorni",
     "noteArchived": "Nota archiviata",
@@ -110,7 +117,7 @@
     "currentPasswordLabel": "Password attuale",
     "newPasswordLabel": "Nuova password",
     "confirmNewPasswordLabel": "Conferma nuova password",
-    "newPasswordPlaceholder": "Almeno 4 caratteri",
+    "newPasswordPlaceholder": "Almeno {{min}} caratteri",
     "passwordsNoMatch": "Le nuove password non corrispondono.",
     "failedChangePassword": "Impossibile cambiare la password.",
     "changing": "Modifica in corso...",
@@ -193,6 +200,8 @@
     "binDescription": "Apri la vista del cestino",
     "helpKey": "?",
     "helpDescription": "Apri la guida delle scorciatoie da tastiera",
+    "openNoteKey": "Enter",
+    "openNoteDescription": "Apri la nota selezionata",
     "escapeKey": "Esc",
     "escapeDescription": "Chiudi la finestra modale o il dialogo attivo"
   },
@@ -293,6 +302,7 @@
     "lastEdited": "Ultima modifica: {{date}}",
     "saving": "Salvataggio...",
     "saved": "Salvato",
+    "colorPickerLabel": "Seleziona il colore della nota",
     "colorWhite": "Bianco",
     "colorCoral": "Corallo",
     "colorYellow": "Giallo",
