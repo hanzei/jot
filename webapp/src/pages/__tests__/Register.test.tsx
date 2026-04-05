@@ -76,7 +76,6 @@ describe('Register', () => {
 
     await user.type(passwordInput, '123')
     expect(screen.getByText(new RegExp(t('auth.passwordMin')))).toBeInTheDocument()
-    expect(screen.getByText(new RegExp(`${t('auth.passwordStrength')}:\\s*${t('auth.passwordStrengthWeak')}`, 'i'))).toBeInTheDocument()
 
     await user.type(confirmInput, 'xxx')
     expect(screen.getByText(t('auth.passwordsNoMatch'))).toBeInTheDocument()

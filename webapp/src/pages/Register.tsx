@@ -32,13 +32,6 @@ export default function Register({ onRegister }: RegisterProps) {
       } as const)[usernameValidationError]
     : null;
   const passwordTooShort = password.length > 0 && isPasswordTooShort(password);
-  const passwordStrength = password.length === 0
-    ? null
-    : password.length < PASSWORD_MIN_LENGTH
-      ? t('auth.passwordStrengthWeak')
-      : password.length < 8
-        ? t('auth.passwordStrengthFair')
-        : t('auth.passwordStrengthStrong');
   const passwordsMismatch = confirmPassword.length > 0 && password !== confirmPassword;
   const usernameMessageId = 'register-username-message';
   const passwordMessageId = 'register-password-message';
@@ -177,7 +170,6 @@ export default function Register({ onRegister }: RegisterProps) {
                 {passwordTooShort
                   ? t('auth.passwordMin')
                   : t('auth.passwordHint', { min: PASSWORD_MIN_LENGTH })}
-                {passwordStrength ? ` • ${t('auth.passwordStrength')}: ${passwordStrength}` : ''}
               </p>
             </div>
             <div>
