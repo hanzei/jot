@@ -114,9 +114,12 @@ export class DashboardPage {
     const card = this.page.locator('[data-testid="note-card"]').filter({
       has: this.page.locator('h3').getByText(title, { exact: true }),
     });
-    // force is intentional: hover/waitFor-based approaches were flaky in CI when sidebar overlays intercepted pointer events.
-    // TODO: remove force when note-card menu is reliably actionability-safe without hover timing dependence.
-    await card.locator('button[aria-label="Note options"]').click({ force: true });
+    await expect(card).toBeVisible();
+    const menuButton = card.getByRole('button', { name: 'Note options' });
+    // Focus + keyboard activation avoids pointer-interception flakes from overlays.
+    await menuButton.focus();
+    await this.page.keyboard.press('Enter');
+    await expect(this.page.getByRole('menu').last()).toBeVisible();
   }
 
   async deleteNote(title: string) {
