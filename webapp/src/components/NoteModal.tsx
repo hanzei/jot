@@ -1253,7 +1253,20 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       onRefresh?.();
       showToast(
         newPinnedState ? t('dashboard.notePinned') : t('dashboard.noteUnpinned'),
-        'success'
+        'success',
+        {
+          label: t('dashboard.undo'),
+          onClick: async () => {
+            try {
+              await notes.update(note.id, { pinned: !newPinnedState });
+              setPinned(!newPinnedState);
+              onRefresh?.();
+            } catch (undoError) {
+              console.error('Failed to undo pin status update:', undoError);
+              showToast(t('note.failedPin'), 'error');
+            }
+          },
+        }
       );
     } catch (error) {
       console.error('Failed to update pin status:', error);
@@ -1286,7 +1299,20 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       await notes.update(note.id, updateData);
       showToast(
         newArchivedState ? t('dashboard.noteArchived') : t('dashboard.noteUnarchived'),
-        'success'
+        'success',
+        {
+          label: t('dashboard.undo'),
+          onClick: async () => {
+            try {
+              await notes.update(note.id, { archived: !newArchivedState });
+              setArchived(!newArchivedState);
+              onRefresh?.();
+            } catch (undoError) {
+              console.error('Failed to undo archive status update:', undoError);
+              showToast(t('note.failedArchive'), 'error');
+            }
+          },
+        }
       );
       if (newArchivedState) {
         onClose();
