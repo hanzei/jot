@@ -388,6 +388,9 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
               {labels.map((label) => {
                 const isActive = activeLabelId === label.id;
                 const labelCount = labelCounts?.[label.id];
+                const labelAccessibilityName = labelCount !== undefined
+                  ? `${label.name}, ${labelCount}`
+                  : label.name;
                 return (
                   <View
                     key={label.id}
@@ -399,7 +402,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
                       onLongPress={() => handleLabelLongPress(label)}
                       delayLongPress={250}
                       testID={`drawer-label-${label.id}`}
-                      accessibilityLabel={label.name}
+                      accessibilityLabel={labelAccessibilityName}
                       accessibilityRole="button"
                       accessibilityState={{ selected: isActive }}
                     >
