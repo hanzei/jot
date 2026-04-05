@@ -387,10 +387,8 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
               <View style={[styles.navDivider, { backgroundColor: colors.divider }]} />
               {labels.map((label) => {
                 const isActive = activeLabelId === label.id;
-                const labelCount = labelCounts?.[label.id];
-                const labelAccessibilityName = labelCount !== undefined
-                  ? `${label.name}, ${labelCount}`
-                  : label.name;
+                const labelCount = labelCounts?.[label.id] ?? 0;
+                const labelAccessibilityName = `${label.name}, ${labelCount}`;
                 return (
                   <View
                     key={label.id}
@@ -418,14 +416,14 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
                         {label.name}
                       </Text>
                     </TouchableOpacity>
-                    {labelCount !== undefined && (
+                    {labelCount >= 0 && (
                       <Text
                         style={[styles.labelCount, { color: isActive ? colors.primary : colors.textSecondary }]}
                         testID={`drawer-label-count-${label.id}`}
                       >
                         {labelCount}
                       </Text>
-                    )}
+                    }
                     <TouchableOpacity
                       style={styles.labelMenuButton}
                       onPress={() => openLabelMenu(label)}

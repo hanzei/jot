@@ -1925,6 +1925,57 @@ describe('Dashboard', () => {
         expect(screen.getByTestId('label-count-label-realtime')).toHaveTextContent('1')
       })
     })
+
+    it('clears stale selected label from URL after labels_changed removes it', async () => {
+      const mockGetAll = vi.mocked(notes.getAll)
+      vi.mocked(labels.getAll)
+        .mockResolvedValueOnce([realtimeLabel])
+        .mockResolvedValueOnce([])
+      vi.mocked(labels.getCounts)
+        .mockResolvedValueOnce({ 'label-realtime': 1 })
+        .mockResolvedValueOnce({})
+
+      const LocationProbe = () => {
+        const { search } = useLocation()
+        return <span data-testid="location-search">{search}</span>
+      }
+
+      render(
+        <MemoryRouter initialEntries={['/?label=label-realtime']}>
+          <ToastProvider>
+            <Dashboard onLogout={vi.fn()} />
+          </ToastProvider>
+          <LocationProbe />
+        </MemoryRouter>
+      )
+
+      await waitFor(() => {
+        expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-realtime', false)
+      })
+
+      const sseOptions = vi.mocked(useSSE).mock.calls[0]?.[0]
+      expect(sseOptions).toBeDefined()
+
+      await act(async () => {
+        sseOptions?.onEvent({
+          type: 'labels_changed',
+          source_user_id: 'user1',
+          data: { label: realtimeLabel },
+        })
+      })
+
+      await waitFor(() => {
+        expect(labels.getAll).toHaveBeenCalledTimes(2)
+      })
+
+      await waitFor(() => {
+        expect(mockGetAll).toHaveBeenCalledWith(false, '', false, '', false)
+      })
+
+      await waitFor(() => {
+        expect(screen.getByTestId('location-search').textContent ?? '').not.toContain('label=')
+      })
+    })
   })
 
   describe('My Todo Filtering', () => {

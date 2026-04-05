@@ -76,6 +76,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const returnPathRef = useRef('/');
   const noteSortUpdateRequestIdRef = useRef(0);
   const loadNotesRequestIdRef = useRef(0);
+  const latestLabelCountsRequestIdRef = useRef(0);
   useEffect(() => {
     isMountedRef.current = true;
     return () => { isMountedRef.current = false; };
@@ -190,12 +191,14 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     }
   }, [editingNote?.title, isModalOpen, labelsList, selectedLabelId, showArchived, showBin, showMyTodo, t]);
 
-  const loadLabels = useCallback(async () => {
+  const loadLabels = useCallback(async (): Promise<Label[] | null> => {
     try {
       const labelsData = await labelsApi.getAll();
       if (isMountedRef.current) setLabelsList(labelsData);
+      return labelsData;
     } catch (error) {
       if (isMountedRef.current) console.error('Failed to load labels:', error);
+      return null;
     }
   }, []);
 
@@ -216,14 +219,16 @@ export default function Dashboard({ onLogout }: DashboardProps) {
 
   // Sidebar label counts reflect the default notes view (active, non-archived notes).
   const loadLabelCounts = useCallback(async () => {
+    const requestId = ++latestLabelCountsRequestIdRef.current;
+
     try {
       const counts = await labelsApi.getCounts();
-      if (!isMountedRef.current) {
+      if (!isMountedRef.current || requestId !== latestLabelCountsRequestIdRef.current) {
         return;
       }
       setLabelCounts(counts);
     } catch (error) {
-      if (isMountedRef.current) {
+      if (isMountedRef.current && requestId === latestLabelCountsRequestIdRef.current) {
         setLabelCounts(null);
         console.error('Failed to load label counts:', error);
       }
@@ -353,8 +358,27 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       return;
     }
     if (event.type === 'labels_changed') {
-      loadLabels();
-      loadLabelCounts();
+      void (async () => {
+        const [updatedLabels] = await Promise.all([loadLabels(), loadLabelCounts()]);
+        if (!isMountedRef.current || !selectedLabelId || !updatedLabels) {
+          return;
+        }
+
+        const selectedLabelStillExists = updatedLabels.some((label) => label.id === selectedLabelId);
+        if (selectedLabelStillExists) {
+          return;
+        }
+
+        setSelectedLabelId(null);
+        setSearchParams((prev) => {
+          if (!prev.has('label')) {
+            return prev;
+          }
+          const next = new URLSearchParams(prev);
+          next.delete('label');
+          return next;
+        });
+      })();
       return;
     }
 
@@ -380,7 +404,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     if (event.type === 'note_created' || event.type === 'note_updated') {
       loadLabels();
     }
-  }, [editingNote, sharingNote, loadNotes, loadLabels, loadLabelCounts, user?.id, restoreReturnUrl]);
+  }, [editingNote, sharingNote, loadNotes, loadLabels, loadLabelCounts, selectedLabelId, setSearchParams, user?.id, restoreReturnUrl]);
 
   useSSE({
     onEvent: handleSSEEvent,

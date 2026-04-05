@@ -367,6 +367,22 @@ describe('DrawerContent', () => {
     expect(queryByTestId('drawer-label-count-missing')).toBeNull();
   });
 
+  it('shows zero label count badge when label count entry is missing', () => {
+    mockLabelsData.push({
+      id: 'label-1',
+      user_id: 'user-1',
+      name: 'Work',
+      created_at: '2026-01-01T00:00:00Z',
+      updated_at: '2026-01-01T00:00:00Z',
+    });
+
+    const props = makeProps();
+    const { getByTestId } = render(<DrawerContent {...props} />);
+
+    expect(getByTestId('drawer-label-count-label-1').props.children).toBe(0);
+    expect(getByTestId('drawer-label-label-1').props.accessibilityLabel).toContain('0');
+  });
+
   it('creates a label from the drawer create action', async () => {
     const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(jest.fn());
     const props = makeProps();
