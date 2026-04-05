@@ -41,10 +41,6 @@
     "showPassword": "Show password",
     "hidePassword": "Hide password",
     "passwordHint": "At least {{min}} characters",
-    "passwordStrength": "Strength",
-    "passwordStrengthWeak": "Weak",
-    "passwordStrengthFair": "Fair",
-    "passwordStrengthStrong": "Strong",
     "logoAlt": "Jot logo"
   },
   "dashboard": {

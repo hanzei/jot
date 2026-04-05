@@ -41,10 +41,6 @@
     "showPassword": "Mostra password",
     "hidePassword": "Nascondi password",
     "passwordHint": "Almeno {{min}} caratteri",
-    "passwordStrength": "Sicurezza",
-    "passwordStrengthWeak": "Debole",
-    "passwordStrengthFair": "Media",
-    "passwordStrengthStrong": "Forte",
     "logoAlt": "Logo Jot"
   },
   "dashboard": {

@@ -23,14 +23,15 @@ export default function Register({ onRegister, passwordMinLength }: RegisterProp
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState('');
 
+  const usernameValidationErrorTranslations = {
+    min: t('auth.usernameMin'),
+    max: t('auth.usernameMax'),
+    chars: t('auth.usernameChars'),
+    edge: t('auth.usernameEdge'),
+  } as const;
   const usernameValidationError = username ? getUsernameValidationError(username) : null;
   const usernameValidationMessage = usernameValidationError
-    ? ({
-        min: t('auth.usernameMin'),
-        max: t('auth.usernameMax'),
-        chars: t('auth.usernameChars'),
-        edge: t('auth.usernameEdge'),
-      } as const)[usernameValidationError]
+    ? usernameValidationErrorTranslations[usernameValidationError]
     : null;
   const passwordTooShort = password.length > 0 && isPasswordTooShort(password);
   const passwordsMismatch = confirmPassword.length > 0 && password !== confirmPassword;
@@ -45,13 +46,7 @@ export default function Register({ onRegister, passwordMinLength }: RegisterProp
 
     const usernameValidationError = getUsernameValidationError(username);
     if (usernameValidationError) {
-      const translationKeyByError = {
-        min: 'auth.usernameMin',
-        max: 'auth.usernameMax',
-        chars: 'auth.usernameChars',
-        edge: 'auth.usernameEdge',
-      } as const;
-      setError(t(translationKeyByError[usernameValidationError]));
+      setError(usernameValidationErrorTranslations[usernameValidationError]);
       setLoading(false);
       return;
     }

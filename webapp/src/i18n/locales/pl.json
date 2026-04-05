@@ -41,10 +41,6 @@
     "showPassword": "Pokaż hasło",
     "hidePassword": "Ukryj hasło",
     "passwordHint": "Co najmniej {{min}} znaków",
-    "passwordStrength": "Siła",
-    "passwordStrengthWeak": "Słabe",
-    "passwordStrengthFair": "Średnie",
-    "passwordStrengthStrong": "Silne",
     "logoAlt": "Logo Jot"
   },
   "dashboard": {

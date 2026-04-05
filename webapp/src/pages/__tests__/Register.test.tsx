@@ -27,6 +27,23 @@ const renderRegister = (onRegister = vi.fn()) => render(
 
 describe('Register', () => {
   const t = i18n.t.bind(i18n)
+  const expectedUser = {
+    id: 'u1',
+    username: 'valid_user',
+    role: 'user' as const,
+    first_name: '',
+    last_name: '',
+    has_profile_icon: false,
+    created_at: '',
+    updated_at: '',
+  }
+  const expectedSettings = {
+    user_id: 'u1',
+    language: 'system',
+    theme: 'system' as const,
+    note_sort: 'manual' as const,
+    updated_at: '',
+  }
 
   beforeEach(() => {
     vi.clearAllMocks()
@@ -73,7 +90,7 @@ describe('Register', () => {
     await user.type(usernameInput, 'valid_user')
     expect(usernameInput).toHaveValue('valid_user')
     expect(screen.getByText(t('auth.usernamePlaceholderLong'))).toBeInTheDocument()
-    expect(screen.getByText('10/30')).toBeInTheDocument()
+    expect(screen.getByText(`10/${VALIDATION.USERNAME_MAX_LENGTH}`)).toBeInTheDocument()
 
     await user.type(passwordInput, '123456789')
     expect(
@@ -105,17 +122,8 @@ describe('Register', () => {
     const user = userEvent.setup()
     const onRegister = vi.fn()
     vi.mocked(auth.register).mockResolvedValue({
-      user: {
-        id: 'u1',
-        username: 'valid_user',
-        role: 'user',
-        first_name: '',
-        last_name: '',
-        has_profile_icon: false,
-        created_at: '',
-        updated_at: '',
-      },
-      settings: { user_id: 'u1', language: 'system', theme: 'system', note_sort: 'manual', updated_at: '' },
+      user: expectedUser,
+      settings: expectedSettings,
     })
     renderRegister(onRegister)
 
@@ -126,8 +134,8 @@ describe('Register', () => {
 
     await waitFor(() => {
       expect(auth.register).toHaveBeenCalledWith({ username: 'valid_user', password: 'validpass123' })
-      expect(setUser).toHaveBeenCalled()
-      expect(setSettings).toHaveBeenCalled()
+      expect(setUser).toHaveBeenCalledWith(expectedUser)
+      expect(setSettings).toHaveBeenCalledWith(expectedSettings)
       expect(onRegister).toHaveBeenCalled()
     })
   })

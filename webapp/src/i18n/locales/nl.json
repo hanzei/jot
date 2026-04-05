@@ -41,10 +41,6 @@
     "showPassword": "Wachtwoord tonen",
     "hidePassword": "Wachtwoord verbergen",
     "passwordHint": "Minimaal {{min}} tekens",
-    "passwordStrength": "Sterkte",
-    "passwordStrengthWeak": "Zwak",
-    "passwordStrengthFair": "Gemiddeld",
-    "passwordStrengthStrong": "Sterk",
     "logoAlt": "Jot-logo"
   },
   "dashboard": {

@@ -70,18 +70,26 @@ describe('Login', () => {
   it('submits credentials and calls login callbacks', async () => {
     const user = userEvent.setup()
     const onLogin = vi.fn()
+    const expectedUser = {
+      id: 'u1',
+      username: 'jotuser',
+      first_name: '',
+      last_name: '',
+      role: 'user' as const,
+      has_profile_icon: false,
+      created_at: '',
+      updated_at: '',
+    }
+    const expectedSettings = {
+      user_id: 'u1',
+      language: 'system',
+      theme: 'system' as const,
+      note_sort: 'manual' as const,
+      updated_at: '',
+    }
     vi.mocked(auth.login).mockResolvedValue({
-      user: {
-        id: 'u1',
-        username: 'jotuser',
-        first_name: '',
-        last_name: '',
-        role: 'user',
-        has_profile_icon: false,
-        created_at: '',
-        updated_at: '',
-      },
-      settings: { user_id: 'u1', language: 'system', theme: 'system', note_sort: 'manual', updated_at: '' },
+      user: expectedUser,
+      settings: expectedSettings,
     })
 
     renderLogin({ onLogin })
@@ -92,8 +100,8 @@ describe('Login', () => {
 
     await waitFor(() => {
       expect(auth.login).toHaveBeenCalledWith({ username: 'jotuser', password: 'secret' })
-      expect(setUser).toHaveBeenCalled()
-      expect(setSettings).toHaveBeenCalled()
+      expect(setUser).toHaveBeenCalledWith(expectedUser)
+      expect(setSettings).toHaveBeenCalledWith(expectedSettings)
       expect(onLogin).toHaveBeenCalled()
     })
   })

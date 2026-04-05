@@ -41,10 +41,6 @@
     "showPassword": "Mostrar senha",
     "hidePassword": "Ocultar senha",
     "passwordHint": "Pelo menos {{min}} caracteres",
-    "passwordStrength": "Força",
-    "passwordStrengthWeak": "Fraca",
-    "passwordStrengthFair": "Média",
-    "passwordStrengthStrong": "Forte",
     "logoAlt": "Logotipo do Jot"
   },
   "dashboard": {
