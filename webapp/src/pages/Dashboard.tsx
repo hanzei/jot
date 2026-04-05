@@ -558,7 +558,18 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     try {
       await notes.restore(noteId);
       loadNotes();
-      showToast(t('dashboard.noteRestored'));
+      showToast(t('dashboard.noteRestored'), 'success', {
+        label: t('dashboard.undo'),
+        onClick: async () => {
+          try {
+            await notes.delete(noteId);
+            await loadNotes();
+          } catch (undoError) {
+            console.error('Failed to undo restore:', undoError);
+            showToast(t('dashboard.failedDeleteNote'), 'error');
+          }
+        },
+      });
     } catch (error) {
       console.error('Failed to restore note:', error);
       showToast(t('dashboard.failedRestoreNote'), 'error');
@@ -597,9 +608,20 @@ export default function Dashboard({ onLogout }: DashboardProps) {
 
   const handleDuplicateNote = useCallback(async (noteId: string) => {
     try {
-      await notes.duplicate(noteId);
+      const duplicatedNote = await notes.duplicate(noteId);
       await Promise.all([loadNotes(), loadLabels()]);
-      showToast(t('dashboard.noteDuplicated'), 'success');
+      showToast(t('dashboard.noteDuplicated'), 'success', {
+        label: t('dashboard.undo'),
+        onClick: async () => {
+          try {
+            await notes.delete(duplicatedNote.id);
+            await Promise.all([loadNotes(), loadLabels()]);
+          } catch (undoError) {
+            console.error('Failed to undo duplicate note:', undoError);
+            showToast(t('dashboard.failedDeleteNote'), 'error');
+          }
+        },
+      });
     } catch (error) {
       console.error('Failed to duplicate note:', error);
       throw error;

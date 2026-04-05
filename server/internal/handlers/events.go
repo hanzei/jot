@@ -51,7 +51,7 @@ func (h *EventsHandler) ServeSSE(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no") // disable nginx proxy buffering
 
-	ch, unsubscribe := h.hub.Subscribe(user.ID)
+	ch, unsubscribe := h.hub.Subscribe(r.Context(), user.ID)
 	defer unsubscribe()
 
 	// Flush the headers immediately so the client knows the connection is open.
