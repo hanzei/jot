@@ -2,7 +2,10 @@ package auth
 
 import (
 	"context"
+	"errors"
+	"fmt"
 	"net/http"
+	"strings"
 
 	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/hanzei/jot/server/internal/models"
@@ -15,21 +18,58 @@ const SessionTokenContextKey contextKey = "session_token"
 
 func (s *SessionService) AuthMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		session, user, err := s.GetSessionAndUser(r)
-		if err != nil {
-			http.Error(w, "Unauthorized", http.StatusUnauthorized)
+		// Try cookie-based session first.
+		if _, err := r.Cookie(SessionCookieName); err == nil {
+			session, user, err := s.GetSessionAndUser(r)
+			if err != nil {
+				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				return
+			}
+			if err := s.RenewSessionIfExpiringSoon(r.Context(), w, session); err != nil {
+				logutil.FromContext(r.Context()).WithError(err).Warn("failed to renew session")
+			}
+
+			logutil.FromContext(r.Context()).AddField("user_id", user.ID)
+
+			ctx := context.WithValue(r.Context(), UserContextKey, user)
+			ctx = context.WithValue(ctx, SessionTokenContextKey, session.Token)
+			next.ServeHTTP(w, r.WithContext(ctx))
 			return
 		}
-		if err := s.RenewSessionIfExpiringSoon(r.Context(), w, session); err != nil {
-			logutil.FromContext(r.Context()).WithError(err).Warn("failed to renew session")
+
+		// Fall back to Bearer token (personal access token).
+		if authHeader := r.Header.Get("Authorization"); strings.HasPrefix(authHeader, "Bearer ") {
+			rawToken := strings.TrimPrefix(authHeader, "Bearer ")
+			user, err := s.authenticateWithPAT(r.Context(), rawToken)
+			if err != nil {
+				if !errors.Is(err, models.ErrPATNotFound) {
+					logutil.FromContext(r.Context()).WithError(err).Warn("PAT authentication error")
+				}
+				http.Error(w, "Unauthorized", http.StatusUnauthorized)
+				return
+			}
+
+			logutil.FromContext(r.Context()).AddField("user_id", user.ID)
+
+			ctx := context.WithValue(r.Context(), UserContextKey, user)
+			next.ServeHTTP(w, r.WithContext(ctx))
+			return
 		}
 
-		logutil.FromContext(r.Context()).AddField("user_id", user.ID)
-
-		ctx := context.WithValue(r.Context(), UserContextKey, user)
-		ctx = context.WithValue(ctx, SessionTokenContextKey, session.Token)
-		next.ServeHTTP(w, r.WithContext(ctx))
+		http.Error(w, "Unauthorized", http.StatusUnauthorized)
 	})
+}
+
+func (s *SessionService) authenticateWithPAT(ctx context.Context, rawToken string) (*models.User, error) {
+	pat, err := s.patStore.GetByTokenHash(ctx, rawToken)
+	if err != nil {
+		return nil, err
+	}
+	user, err := s.userStore.GetByID(ctx, pat.UserID)
+	if err != nil {
+		return nil, fmt.Errorf("get user for PAT: %w", err)
+	}
+	return user, nil
 }
 
 func GetUserFromContext(ctx context.Context) (*models.User, bool) {
@@ -40,6 +80,22 @@ func GetUserFromContext(ctx context.Context) (*models.User, bool) {
 func GetSessionTokenFromContext(ctx context.Context) (string, bool) {
 	token, ok := ctx.Value(SessionTokenContextKey).(string)
 	return token, ok
+}
+
+// SessionRequired is a middleware that ensures the request was authenticated
+// with a browser session cookie, not a personal access token. Use this to
+// protect sensitive account management endpoints (e.g. PAT management) that
+// should not be accessible via PAT Bearer auth to limit the blast radius of a
+// leaked token.
+func SessionRequired(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		_, ok := GetSessionTokenFromContext(r.Context())
+		if !ok {
+			http.Error(w, "session authentication required", http.StatusForbidden)
+			return
+		}
+		next.ServeHTTP(w, r)
+	})
 }
 
 func AdminRequired(next http.Handler) http.Handler {
