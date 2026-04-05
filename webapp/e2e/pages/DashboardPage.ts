@@ -229,7 +229,10 @@ export class DashboardPage {
     }
 
     // On desktop, a collapsed sidebar is still visible but hides label text/buttons.
-    const isSidebarCollapsed = await this.page.evaluate(() => localStorage.getItem('sidebar-collapsed') === 'true');
+    const isSidebarCollapsed = await this.page.evaluate(() => {
+      const stored = localStorage.getItem('sidebar-collapsed');
+      return stored === null || stored === 'true';
+    });
     if (isSidebarCollapsed) {
       await toggleSidebarButton.click();
       await expect(sidebar).toBeVisible();
