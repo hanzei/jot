@@ -1,5 +1,6 @@
 export interface ServerConfig {
   registration_enabled: boolean;
+  password_min_length: number;
 }
 
 export interface AboutInfo {
@@ -225,19 +226,14 @@ export interface ActiveSession {
   expires_at: string;
 }
 
-export type SSEEventType =
-  | 'note_created'
-  | 'note_updated'
-  | 'note_deleted'
-  | 'note_shared'
-  | 'note_unshared';
-
-export interface SSEEvent {
-  type: SSEEventType;
-  note_id: string;
-  note: Note | null;
+export interface NoteSSEEvent {
+  type: 'note_created' | 'note_updated' | 'note_deleted' | 'note_shared' | 'note_unshared';
   source_user_id: string;
   target_user_id?: string;
+  data: {
+    note_id: string;
+    note: Note | null;
+  };
 }
 
 export interface PersonalAccessToken {
@@ -251,3 +247,13 @@ export interface PersonalAccessToken {
 export interface CreatePATRequest {
   name: string;
 }
+
+export interface ProfileIconSSEEvent {
+  type: 'profile_icon_updated';
+  source_user_id: string;
+  data: {
+    user: User;
+  };
+}
+
+export type SSEEvent = NoteSSEEvent | ProfileIconSSEEvent;

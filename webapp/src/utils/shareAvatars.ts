@@ -7,6 +7,7 @@ export interface AvatarInfo {
   firstName?: string;
   displayName: string;
   hasProfileIcon?: boolean;
+  iconVersion?: string;
 }
 
 function formatDisplayName(username: string, firstName?: string, lastName?: string): string {
@@ -32,6 +33,7 @@ export function buildShareAvatars(
       firstName: owner?.first_name,
       displayName: formatDisplayName(owner?.username || '?', owner?.first_name, owner?.last_name),
       hasProfileIcon: owner?.has_profile_icon,
+      iconVersion: owner?.updated_at,
     });
   }
 
@@ -46,7 +48,8 @@ export function buildShareAvatars(
         username: s.username || '?',
         firstName: s.first_name,
         displayName: formatDisplayName(s.username || '?', s.first_name, s.last_name),
-        hasProfileIcon: s.has_profile_icon ?? u?.has_profile_icon,
+        hasProfileIcon: u?.has_profile_icon ?? s.has_profile_icon,
+        iconVersion: u?.updated_at,
       });
     });
 

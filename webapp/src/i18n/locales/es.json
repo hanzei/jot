@@ -12,7 +12,8 @@
     "logoutConfirmMessage": "¿Seguro que quieres cerrar sesión?",
     "openMobileApp": "Abrir en la app móvil",
     "openMobileAppDescription": "¿Prefieres la experiencia nativa móvil?",
-    "dismissMobileAppBanner": "Ocultar"
+    "dismissMobileAppBanner": "Ocultar",
+    "skipToMainContent": "Saltar al contenido principal"
   },
   "auth": {
     "signInTitle": "Iniciar sesión en Jot",
@@ -36,7 +37,7 @@
     "usernameChars": "El nombre de usuario solo puede contener letras, números, guiones bajos y guiones",
     "usernameEdge": "El nombre de usuario no puede empezar ni terminar con guión bajo o guión",
     "passwordsNoMatch": "Las contraseñas no coinciden",
-    "passwordMin": "La contraseña debe tener al menos 4 caracteres"
+    "passwordMin": "La contraseña debe tener al menos {{min}} caracteres"
   },
   "dashboard": {
     "newNote": "Nueva nota",
@@ -110,7 +111,7 @@
     "currentPasswordLabel": "Contraseña actual",
     "newPasswordLabel": "Nueva contraseña",
     "confirmNewPasswordLabel": "Confirmar nueva contraseña",
-    "newPasswordPlaceholder": "Al menos 4 caracteres",
+    "newPasswordPlaceholder": "Al menos {{min}} caracteres",
     "passwordsNoMatch": "Las nuevas contraseñas no coinciden.",
     "failedChangePassword": "Error al cambiar la contraseña.",
     "changing": "Cambiando...",
@@ -211,6 +212,8 @@
     "binDescription": "Abrir la vista de papelera",
     "helpKey": "?",
     "helpDescription": "Abrir ayuda de atajos de teclado",
+    "openNoteKey": "Enter",
+    "openNoteDescription": "Abrir la nota enfocada",
     "escapeKey": "Esc",
     "escapeDescription": "Cerrar el modal o diálogo activo"
   },
@@ -311,6 +314,7 @@
     "lastEdited": "Última edición: {{date}}",
     "saving": "Guardando...",
     "saved": "Guardado",
+    "colorPickerLabel": "Seleccionar color de nota",
     "colorWhite": "Blanco",
     "colorCoral": "Coral",
     "colorYellow": "Amarillo",

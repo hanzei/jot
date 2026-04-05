@@ -47,9 +47,8 @@ func (h *NotesHandler) publishNoteEvent(ctx context.Context, noteID string, even
 	}
 	h.hub.Publish(audienceIDs, sse.Event{
 		Type:         eventType,
-		NoteID:       noteID,
-		Note:         note,
 		SourceUserID: sourceUserID,
+		Data:         sse.NoteEventData{NoteID: noteID, Note: note},
 	})
 }
 
@@ -69,9 +68,8 @@ func (h *NotesHandler) publishPersonalizedNoteEvent(ctx context.Context, noteID 
 		}
 		h.hub.Publish([]string{uid}, sse.Event{
 			Type:         sse.EventNoteUpdated,
-			NoteID:       noteID,
-			Note:         n,
 			SourceUserID: sourceUserID,
+			Data:         sse.NoteEventData{NoteID: noteID, Note: n},
 		})
 	}
 }
@@ -83,9 +81,8 @@ func (h *NotesHandler) publishDeletedNoteEvent(noteID string, audienceIDs []stri
 
 	h.hub.Publish(audienceIDs, sse.Event{
 		Type:         sse.EventNoteDeleted,
-		NoteID:       noteID,
-		Note:         nil,
 		SourceUserID: sourceUserID,
+		Data:         sse.NoteEventData{NoteID: noteID},
 	})
 }
 
@@ -233,8 +230,8 @@ func (h *NotesHandler) GetNotes(w http.ResponseWriter, r *http.Request) (int, an
 	labelID := q.Get("label")
 	myTodo := q.Get("my_todo") == queryTrue
 
-	if utf8.RuneCountInString(search) > searchQueryMaxLength {
-		return http.StatusBadRequest, nil, fmt.Errorf("search query must be %d characters or fewer", searchQueryMaxLength)
+	if err := validateSearchQuery(search); err != nil {
+		return http.StatusBadRequest, nil, err
 	}
 
 	notes, err := h.noteStore.GetByUserID(r.Context(), user.ID, archived, trashed, search, labelID, myTodo)
@@ -590,9 +587,8 @@ func (h *NotesHandler) publishUpdateEvent(ctx context.Context, noteID string, no
 	if h.hub != nil {
 		h.hub.Publish([]string{userID}, sse.Event{
 			Type:         sse.EventNoteUpdated,
-			NoteID:       noteID,
-			Note:         note,
 			SourceUserID: userID,
+			Data:         sse.NoteEventData{NoteID: noteID, Note: note},
 		})
 	}
 }

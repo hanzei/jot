@@ -6,6 +6,7 @@ export interface Collaborator {
   firstName?: string;
   lastName?: string;
   hasProfileIcon?: boolean;
+  iconVersion?: string;
 }
 
 export function displayName(c: Collaborator): string {
@@ -28,6 +29,7 @@ export function buildCollaborators(
     firstName: owner?.first_name,
     lastName: owner?.last_name,
     hasProfileIcon: owner?.has_profile_icon,
+    iconVersion: owner?.updated_at,
   });
   seen.add(noteUserId);
 
@@ -41,6 +43,7 @@ export function buildCollaborators(
       firstName: u?.first_name || s.first_name,
       lastName: u?.last_name || s.last_name,
       hasProfileIcon: u?.has_profile_icon ?? s.has_profile_icon,
+      iconVersion: u?.updated_at,
     });
   });
 

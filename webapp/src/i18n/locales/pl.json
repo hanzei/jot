@@ -12,7 +12,8 @@
     "logoutConfirmMessage": "Czy na pewno chcesz się wylogować?",
     "openMobileApp": "Otwórz w aplikacji mobilnej",
     "openMobileAppDescription": "Wolisz natywne doświadczenie mobilne?",
-    "dismissMobileAppBanner": "Ukryj"
+    "dismissMobileAppBanner": "Ukryj",
+    "skipToMainContent": "Przejdź do głównej treści"
   },
   "auth": {
     "signInTitle": "Zaloguj się do Jot",
@@ -36,7 +37,7 @@
     "usernameChars": "Nazwa użytkownika może zawierać tylko litery, cyfry, podkreślenia i myślniki",
     "usernameEdge": "Nazwa użytkownika nie może zaczynać się ani kończyć podkreśleniem lub myślnikiem",
     "passwordsNoMatch": "Hasła nie są zgodne",
-    "passwordMin": "Hasło musi mieć co najmniej 4 znaki"
+    "passwordMin": "Hasło musi mieć co najmniej {{min}} znaków"
   },
   "dashboard": {
     "newNote": "Nowa notatka",
@@ -110,7 +111,7 @@
     "currentPasswordLabel": "Aktualne hasło",
     "newPasswordLabel": "Nowe hasło",
     "confirmNewPasswordLabel": "Potwierdź nowe hasło",
-    "newPasswordPlaceholder": "Co najmniej 4 znaki",
+    "newPasswordPlaceholder": "Co najmniej {{min}} znaków",
     "passwordsNoMatch": "Nowe hasła nie są zgodne.",
     "failedChangePassword": "Zmiana hasła nie powiodła się.",
     "changing": "Zmienianie...",
@@ -211,6 +212,8 @@
     "binDescription": "Otwórz widok kosza",
     "helpKey": "?",
     "helpDescription": "Otwórz pomoc skrótów klawiszowych",
+    "openNoteKey": "Enter",
+    "openNoteDescription": "Otwórz zaznaczoną notatkę",
     "escapeKey": "Esc",
     "escapeDescription": "Zamknij aktywne okno modalne lub dialog"
   },
@@ -311,6 +314,7 @@
     "lastEdited": "Ostatnia edycja: {{date}}",
     "saving": "Zapisywanie...",
     "saved": "Zapisano",
+    "colorPickerLabel": "Wybierz kolor notatki",
     "colorWhite": "Biały",
     "colorCoral": "Koral",
     "colorYellow": "Żółty",

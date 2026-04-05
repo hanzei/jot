@@ -99,7 +99,7 @@ const renderSettings = (onLogout = vi.fn()) => {
   return render(
     <MemoryRouter>
       <ToastProvider>
-        <Settings onLogout={onLogout} />
+        <Settings onLogout={onLogout} passwordMinLength={10} />
       </ToastProvider>
     </MemoryRouter>
   )

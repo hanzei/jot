@@ -79,6 +79,7 @@ interface PasswordFormProps {
   onConfirmPasswordChange: (value: string) => void;
   passwordSaving: boolean;
   passwordError: string;
+  passwordMinLength: number;
   onPasswordSubmit: (e: FormEvent<HTMLFormElement>) => void;
 }
 
@@ -115,6 +116,7 @@ export const IdentitySecurityColumn = ({
     onConfirmPasswordChange,
     passwordSaving,
     passwordError,
+    passwordMinLength,
     onPasswordSubmit,
   },
   patsSection: {
@@ -279,7 +281,7 @@ export const IdentitySecurityColumn = ({
             value={newPassword}
             onChange={(e) => onNewPasswordChange(e.target.value)}
             className="mt-1 block w-full border border-gray-300 dark:border-slate-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-            placeholder={t('settings.newPasswordPlaceholder')}
+            placeholder={t('settings.newPasswordPlaceholder', { min: passwordMinLength })}
           />
         </div>
 

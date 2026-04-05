@@ -1660,9 +1660,8 @@ describe('Dashboard', () => {
       await act(async () => {
         sseOptions?.onEvent({
           type: 'note_created',
-          note_id: 'note-1',
-          note: createMockNote({ id: 'note-1', labels: [realtimeLabel] }),
           source_user_id: 'user1',
+          data: { note_id: 'note-1', note: createMockNote({ id: 'note-1', labels: [realtimeLabel] }) },
         })
       })
 
@@ -1677,9 +1676,8 @@ describe('Dashboard', () => {
       await act(async () => {
         sseOptions?.onEvent({
           type: 'note_updated',
-          note_id: 'note-1',
-          note: createMockNote({ id: 'note-1', labels: [realtimeLabel] }),
           source_user_id: 'user1',
+          data: { note_id: 'note-1', note: createMockNote({ id: 'note-1', labels: [realtimeLabel] }) },
         })
       })
 
