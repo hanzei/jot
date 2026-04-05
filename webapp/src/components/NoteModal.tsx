@@ -1258,21 +1258,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
           label: t('dashboard.undo'),
           onClick: async () => {
             try {
-              await notes.update(note.id, {
-                title,
-                content,
-                pinned: !newPinnedState,
-                archived,
-                color,
-                checked_items_collapsed: checkedItemsCollapsed,
-                items: note.note_type === 'todo' ? items.map((item, idx) => ({
-                  text: item.text,
-                  position: idx,
-                  completed: item.completed,
-                  indent_level: item.indentLevel,
-                  assigned_to: item.assignedTo,
-                })) : undefined,
-              });
+              await notes.update(note.id, { pinned: !newPinnedState });
               setPinned(!newPinnedState);
               onRefresh?.();
             } catch (undoError) {
@@ -1318,21 +1304,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
           label: t('dashboard.undo'),
           onClick: async () => {
             try {
-              await notes.update(note.id, {
-                title,
-                content,
-                pinned,
-                archived: !newArchivedState,
-                color,
-                checked_items_collapsed: checkedItemsCollapsed,
-                items: note.note_type === 'todo' ? items.map((item, idx) => ({
-                  text: item.text,
-                  position: idx,
-                  completed: item.completed,
-                  indent_level: item.indentLevel,
-                  assigned_to: item.assignedTo,
-                })) : undefined,
-              });
+              await notes.update(note.id, { archived: !newArchivedState });
               setArchived(!newArchivedState);
               onRefresh?.();
             } catch (undoError) {

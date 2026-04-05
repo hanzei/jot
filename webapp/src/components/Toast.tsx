@@ -45,6 +45,7 @@ function ToastItem({ toast, onDismiss }: { toast: ToastMessage; onDismiss: (id: 
   const [visible, setVisible] = useState(false);
   const [exiting, setExiting] = useState(false);
   const exitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rafRef = useRef<number | null>(null);
   const autoDismissMs = toast.action ? TOAST_ACTION_AUTO_DISMISS_MS : TOAST_AUTO_DISMISS_MS;
   const beginDismiss = useCallback(() => {
     setExiting(true);
@@ -58,11 +59,18 @@ function ToastItem({ toast, onDismiss }: { toast: ToastMessage; onDismiss: (id: 
   }, [onDismiss, toast.id]);
 
   useEffect(() => {
-    requestAnimationFrame(() => setVisible(true));
+    rafRef.current = requestAnimationFrame(() => {
+      setVisible(true);
+      rafRef.current = null;
+    });
     const timer = setTimeout(() => {
       beginDismiss();
     }, autoDismissMs);
     return () => {
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
       clearTimeout(timer);
       if (exitTimerRef.current) {
         clearTimeout(exitTimerRef.current);

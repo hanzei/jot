@@ -82,14 +82,7 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
           label: t('dashboard.undo'),
           onClick: async () => {
             try {
-              await notes.update(note.id, {
-                title: note.title,
-                content: note.content,
-                pinned: note.pinned,
-                archived: !willArchive,
-                color: note.color,
-                checked_items_collapsed: note.checked_items_collapsed,
-              });
+              await notes.update(note.id, { archived: !willArchive });
               onRefresh?.();
             } catch (undoError) {
               console.error('Failed to undo archive toggle:', undoError);
@@ -126,14 +119,7 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
           label: t('dashboard.undo'),
           onClick: async () => {
             try {
-              await notes.update(note.id, {
-                title: note.title,
-                content: note.content,
-                pinned: !willPin,
-                archived: note.archived,
-                color: note.color,
-                checked_items_collapsed: note.checked_items_collapsed,
-              });
+              await notes.update(note.id, { pinned: !willPin });
               onRefresh?.();
             } catch (undoError) {
               console.error('Failed to undo pin toggle:', undoError);
