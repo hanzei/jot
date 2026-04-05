@@ -257,6 +257,13 @@
     "title": "Etykiety",
     "noLabels": "Brak etykiet",
     "newLabelPlaceholder": "Nowa etykieta",
+
+    "newSidebar": "+ New Label",
+    "createInputLabel": "New label name",
+    "createSave": "Create label",
+    "createCancel": "Cancel label creation",
+    "createSuccess": "Label created",
+    "createError": "Failed to create label",
     "failedUpdate": "Nie udało się zaktualizować etykiety",
     "failedCreate": "Nie udało się utworzyć etykiety",
     "menuOptions": "Wybierz akcję dla tej etykiety.",

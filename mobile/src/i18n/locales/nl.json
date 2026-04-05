@@ -272,6 +272,13 @@
     "title": "Labels",
     "noLabels": "Nog geen labels",
     "newLabelPlaceholder": "Nieuw label",
+
+    "newSidebar": "+ New Label",
+    "createInputLabel": "New label name",
+    "createSave": "Create label",
+    "createCancel": "Cancel label creation",
+    "createSuccess": "Label created",
+    "createError": "Failed to create label",
     "failedUpdate": "Label bijwerken mislukt",
     "failedCreate": "Label aanmaken mislukt",
     "menuOptions": "Kies een actie voor dit label.",
