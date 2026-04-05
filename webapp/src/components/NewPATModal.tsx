@@ -14,9 +14,25 @@ export default function NewPATModal({ open, tokenName, token, onClose }: NewPATM
   const [copied, setCopied] = useState(false);
 
   const handleCopy = async () => {
-    await navigator.clipboard.writeText(token);
-    setCopied(true);
-    setTimeout(() => setCopied(false), 2000);
+    try {
+      await navigator.clipboard.writeText(token);
+      setCopied(true);
+      setTimeout(() => setCopied(false), 2000);
+    } catch {
+      // Fallback for browsers where clipboard API is unavailable.
+      const ta = document.createElement('textarea');
+      ta.value = token;
+      ta.style.position = 'fixed';
+      ta.style.opacity = '0';
+      document.body.appendChild(ta);
+      ta.focus();
+      ta.select();
+      if (document.execCommand('copy')) {
+        setCopied(true);
+        setTimeout(() => setCopied(false), 2000);
+      }
+      document.body.removeChild(ta);
+    }
   };
 
   return (

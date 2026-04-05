@@ -205,10 +205,10 @@ func (s *Server) setupRoutes() error {
 
 			r.Get("/users", s.wrapHandler(s.notesHandler.SearchUsers))
 
-			r.Get("/sessions", s.wrapHandler(s.sessionsHandler.ListSessions))
-			r.Delete("/sessions/{id}", s.wrapHandler(s.sessionsHandler.RevokeSession))
+			r.With(auth.SessionRequired).Get("/sessions", s.wrapHandler(s.sessionsHandler.ListSessions))
+			r.With(auth.SessionRequired).Delete("/sessions/{id}", s.wrapHandler(s.sessionsHandler.RevokeSession))
 
-			r.Get("/pats", s.wrapHandler(s.patsHandler.ListPATs))
+			r.With(auth.SessionRequired).Get("/pats", s.wrapHandler(s.patsHandler.ListPATs))
 			r.With(auth.SessionRequired).Post("/pats", s.wrapHandler(s.patsHandler.CreatePAT))
 			r.With(auth.SessionRequired).Delete("/pats/{id}", s.wrapHandler(s.patsHandler.RevokePAT))
 

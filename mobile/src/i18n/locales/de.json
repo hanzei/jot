@@ -157,7 +157,21 @@
     "importButton": "Aus Google Keep importieren",
     "currentServerSection": "Server",
     "currentServerLabel": "Aktiver Server",
-    "noServerConfigured": "Kein Server konfiguriert"
+    "noServerConfigured": "Kein Server konfiguriert",
+    "patsSection": "Persönliche Zugriffstoken",
+    "patsDescription": "Token für den API-Zugriff aus Skripten und externen Tools.",
+    "patsNamePlaceholder": "Tokenname",
+    "patsCreate": "Erstellen",
+    "patsCreating": "Wird erstellt...",
+    "patsCreateError": "Token konnte nicht erstellt werden.",
+    "patsRevoke": "Widerrufen",
+    "patsRevoking": "Wird widerrufen...",
+    "patsRevokeConfirmTitle": "Token widerrufen",
+    "patsRevokeConfirmMessage": "Möchtest du \"{{name}}\" wirklich widerrufen? Dies kann nicht rückgängig gemacht werden.",
+    "patsRevokeError": "Token konnte nicht widerrufen werden.",
+    "patsNone": "Noch keine persönlichen Zugriffstoken vorhanden.",
+    "patsNewTokenTitle": "Dein neuer Zugriffstoken",
+    "patsLoadError": "Token konnten nicht geladen werden."
   },
   "about": {
     "clientInfo": "Client-Info",

@@ -177,7 +177,8 @@
     "patsNewTokenDone": "Done",
     "patsLoadError": "Failed to load tokens.",
     "aboutSection": "About",
-    "aboutButton": "About Jot"
+    "aboutButton": "About Jot",
+    "patsLoading": "Loading tokens..."
   },
   "about": {
     "title": "About Jot",

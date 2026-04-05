@@ -342,7 +342,7 @@ export const IdentitySecurityColumn = ({
         <div role="alert" className="mb-3 text-red-600 dark:text-red-400 text-sm">{patDisplayMsg(patsError)}</div>
       )}
       {patsLoading ? (
-        <p className="text-sm text-gray-500 dark:text-gray-400">{t('settings.sessionsLoading')}</p>
+        <p className="text-sm text-gray-500 dark:text-gray-400">{t('settings.patsLoading')}</p>
       ) : pats.length === 0 ? (
         <p className="text-sm text-gray-500 dark:text-gray-400">{t('settings.patsNone')}</p>
       ) : (

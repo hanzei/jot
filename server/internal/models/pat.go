@@ -74,7 +74,7 @@ func (s *PATStore) Create(ctx context.Context, userID, name string) (*PersonalAc
 
 // GetByUserID returns all personal access tokens for the given user, ordered by creation date descending.
 func (s *PATStore) GetByUserID(ctx context.Context, userID string) (pats []*PersonalAccessToken, err error) {
-	query := `SELECT id, user_id, name, created_at FROM personal_access_tokens WHERE user_id = ? ORDER BY created_at DESC`
+	query := `SELECT id, user_id, name, created_at FROM personal_access_tokens WHERE user_id = ? ORDER BY created_at DESC, id DESC`
 
 	rows, err := s.db.QueryContext(ctx, query, userID)
 	if err != nil {
