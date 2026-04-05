@@ -220,9 +220,20 @@ export class DashboardPage {
 
   private async ensureSidebarOpen() {
     const sidebar = this.page.locator('aside[aria-label="Main navigation"]');
+    const toggleSidebarButton = this.page.getByRole('button', { name: 'Toggle sidebar' });
     if (!(await sidebar.isVisible())) {
-      await this.page.getByRole('button', { name: 'Toggle sidebar' }).click();
+      await toggleSidebarButton.click();
       await expect(sidebar).toBeVisible();
+    }
+
+    // On desktop, a collapsed sidebar is still visible but hides label text/buttons.
+    const isSidebarCollapsed = await this.page.evaluate(() => localStorage.getItem('sidebar-collapsed') === 'true');
+    if (isSidebarCollapsed) {
+      await toggleSidebarButton.click();
+      await expect(sidebar).toBeVisible();
+      await expect.poll(
+        () => this.page.evaluate(() => localStorage.getItem('sidebar-collapsed'))
+      ).toBe('false');
     }
   }
 
