@@ -140,6 +140,7 @@ test.describe('Task Assignment', () => {
 
     await dashboardPage.switchToMyTodo();
     await dashboardPage.expectEmptyState(
+      'No assigned to-do items',
       'No to-do items assigned to you yet. When someone assigns a to-do item to you in a shared note, it will appear here.'
     );
   });

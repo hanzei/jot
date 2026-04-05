@@ -19,6 +19,7 @@ type AdminHandler struct {
 	statsStore        *models.AdminStatsStore
 	userSettingsStore *models.UserSettingsStore
 	dbPath            string
+	passwordMinLength int
 }
 
 func NewAdminHandler(
@@ -27,6 +28,7 @@ func NewAdminHandler(
 	statsStore *models.AdminStatsStore,
 	userSettingsStore *models.UserSettingsStore,
 	dbPath string,
+	passwordMinLength int,
 ) *AdminHandler {
 	return &AdminHandler{
 		userStore:         userStore,
@@ -34,6 +36,7 @@ func NewAdminHandler(
 		statsStore:        statsStore,
 		userSettingsStore: userSettingsStore,
 		dbPath:            dbPath,
+		passwordMinLength: passwordMinLength,
 	}
 }
 
@@ -121,7 +124,7 @@ func (h *AdminHandler) CreateUser(w http.ResponseWriter, r *http.Request) (int, 
 		return http.StatusBadRequest, nil, err
 	}
 
-	if err := validatePassword(req.Password); err != nil {
+	if err := validatePassword(req.Password, h.passwordMinLength); err != nil {
 		return http.StatusBadRequest, nil, err
 	}
 

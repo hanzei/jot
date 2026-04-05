@@ -40,7 +40,7 @@ export function useSSESubscription(noteId: string | null, onUpdated: () => void)
     if (!context || !noteId) return;
     const currentNoteId = noteId;
     return context.subscribe((event) => {
-      if (event.type === 'note_updated' && event.note_id === currentNoteId) {
+      if (event.type === 'note_updated' && event.data.note_id === currentNoteId) {
         onUpdatedRef.current();
       }
     });

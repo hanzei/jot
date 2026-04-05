@@ -216,6 +216,22 @@ definitions:
           $ref: '#/definitions/models.User'
         type: array
     type: object
+  handlers.createPATRequest:
+    properties:
+      name:
+        type: string
+    type: object
+  handlers.patResponse:
+    properties:
+      created_at:
+        type: string
+      id:
+        type: string
+      name:
+        type: string
+      token:
+        type: string
+    type: object
   models.AdminLabelStats:
     properties:
       note_associations:
@@ -436,6 +452,8 @@ definitions:
     type: object
   server.configResponse:
     properties:
+      password_min_length:
+        type: integer
       registration_enabled:
         type: boolean
     type: object
@@ -1438,6 +1456,80 @@ paths:
       summary: Permanently delete all notes in the current user's trash
       tags:
       - notes
+  /pats:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/handlers.patResponse'
+            type: array
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+      security:
+      - CookieAuth: []
+      summary: List personal access tokens for the current user
+      tags:
+      - pats
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Token name
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.createPATRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/handlers.patResponse'
+        "400":
+          description: bad request
+          schema:
+            type: string
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+      security:
+      - CookieAuth: []
+      summary: Create a new personal access token
+      tags:
+      - pats
+  /pats/{id}:
+    delete:
+      parameters:
+      - description: PAT ID
+        in: path
+        name: id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: no content
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "404":
+          description: not found
+          schema:
+            type: string
+      security:
+      - CookieAuth: []
+      summary: Revoke a personal access token
+      tags:
+      - pats
   /register:
     post:
       consumes:
@@ -1540,6 +1632,10 @@ paths:
             items:
               $ref: '#/definitions/handlers.UserInfo'
             type: array
+        "400":
+          description: search query too long
+          schema:
+            type: string
         "401":
           description: unauthorized
           schema:

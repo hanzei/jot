@@ -14,10 +14,9 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import { AuthStackParamList } from '../navigation/AuthStack';
-import { setServerUrl } from '../api/client';
-import { useServerUrl } from '../hooks/useServerUrl';
 import { VALIDATION } from '@jot/shared';
 import { displayMessage } from '../i18n/utils';
+import ServerSetupGate from '../components/ServerSetupGate';
 
 type RegisterScreenProps = {
   navigation: NativeStackNavigationProp<AuthStackParamList, 'Register'>;
@@ -27,16 +26,12 @@ export default function RegisterScreen({ navigation }: RegisterScreenProps) {
   const { register } = useAuth();
   const { colors } = useTheme();
   const { t } = useTranslation();
-  const { serverUrl, setServerUrl: setServerUrlInput, validateServerUrl } = useServerUrl();
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
   const [loading, setLoading] = useState(false);
 
   const validate = (): string | null => {
-    const urlError = validateServerUrl(serverUrl);
-    if (urlError) return displayMessage(t, urlError);
-
     const trimmedUsername = username.trim();
     if (!trimmedUsername) return t('auth.usernameRequired');
     if (trimmedUsername.length < VALIDATION.USERNAME_MIN_LENGTH) {
@@ -52,7 +47,7 @@ export default function RegisterScreen({ navigation }: RegisterScreenProps) {
       return t('auth.usernameEdge');
     }
     if (!password.trim()) return t('auth.passwordRequired');
-    if (password.length < VALIDATION.PASSWORD_MIN_LENGTH) return t('auth.passwordMin');
+    if ([...password].length < VALIDATION.PASSWORD_MIN_LENGTH) return t('auth.passwordMin', { min: VALIDATION.PASSWORD_MIN_LENGTH });
     return null;
   };
 
@@ -66,7 +61,6 @@ export default function RegisterScreen({ navigation }: RegisterScreenProps) {
     setError('');
     setLoading(true);
     try {
-      await setServerUrl(serverUrl.trim());
       await register(username.trim(), password);
     } catch (err: unknown) {
       const response = (err as { response?: { status?: number; data?: string } })?.response;
@@ -93,66 +87,68 @@ export default function RegisterScreen({ navigation }: RegisterScreenProps) {
       <ScrollView contentContainerStyle={styles.inner} keyboardShouldPersistTaps="handled">
         <Text style={[styles.title, { color: colors.text }]}>{t('auth.createAccountTitle')}</Text>
 
-        {error ? <Text style={[styles.error, { color: colors.error }]}>{error}</Text> : null}
+        <ServerSetupGate testPrefix="register">
+        {error ? (
+          <Text
+            style={[styles.error, { color: colors.error }]}
+            accessibilityRole="alert"
+            accessibilityLiveRegion="polite"
+          >
+            {error}
+          </Text>
+        ) : null}
 
-        <TextInput
-          style={[styles.input, { backgroundColor: colors.inputBackground, borderColor: colors.inputBorder, color: colors.text }]}
-          placeholder={t('auth.serverUrlPlaceholder')}
-          placeholderTextColor={colors.placeholder}
-          autoCapitalize="none"
-          autoCorrect={false}
-          keyboardType="url"
-          value={serverUrl}
-          onChangeText={setServerUrlInput}
-          accessibilityLabel={t('auth.serverUrlPlaceholder')}
-          testID="server-url-input"
-        />
+          <TextInput
+            style={[styles.input, { backgroundColor: colors.inputBackground, borderColor: colors.inputBorder, color: colors.text }]}
+            placeholder={t('auth.usernamePlaceholderLong')}
+            placeholderTextColor={colors.placeholder}
+            autoCapitalize="none"
+            autoCorrect={false}
+            value={username}
+            onChangeText={setUsername}
+            accessibilityLabel={t('settings.usernameLabel')}
+            testID="username-input"
+          />
 
-        <TextInput
-          style={[styles.input, { backgroundColor: colors.inputBackground, borderColor: colors.inputBorder, color: colors.text }]}
-          placeholder={t('auth.usernamePlaceholderLong')}
-          placeholderTextColor={colors.placeholder}
-          autoCapitalize="none"
-          autoCorrect={false}
-          value={username}
-          onChangeText={setUsername}
-          accessibilityLabel={t('settings.usernameLabel')}
-          testID="username-input"
-        />
+          <TextInput
+            style={[styles.input, { backgroundColor: colors.inputBackground, borderColor: colors.inputBorder, color: colors.text }]}
+            placeholder={t('auth.passwordPlaceholderLong')}
+            placeholderTextColor={colors.placeholder}
+            secureTextEntry
+            autoCapitalize="none"
+            autoCorrect={false}
+            value={password}
+            onChangeText={setPassword}
+            accessibilityLabel={t('auth.passwordPlaceholder')}
+            testID="password-input"
+          />
 
-        <TextInput
-          style={[styles.input, { backgroundColor: colors.inputBackground, borderColor: colors.inputBorder, color: colors.text }]}
-          placeholder={t('auth.passwordPlaceholderLong')}
-          placeholderTextColor={colors.placeholder}
-          secureTextEntry
-          autoCapitalize="none"
-          autoCorrect={false}
-          value={password}
-          onChangeText={setPassword}
-          accessibilityLabel={t('auth.passwordPlaceholder')}
-          testID="password-input"
-        />
+          <TouchableOpacity
+            style={[styles.button, { backgroundColor: colors.primary }, loading && styles.buttonDisabled]}
+            onPress={handleRegister}
+            disabled={loading}
+            testID="register-button"
+            accessibilityRole="button"
+            accessibilityLabel={loading ? t('auth.creatingAccount') : t('auth.createAccount')}
+            accessibilityState={{ disabled: loading, busy: loading }}
+          >
+            {loading ? (
+              <ActivityIndicator color="#fff" />
+            ) : (
+              <Text style={styles.buttonText}>{t('auth.createAccount')}</Text>
+            )}
+          </TouchableOpacity>
 
-        <TouchableOpacity
-          style={[styles.button, { backgroundColor: colors.primary }, loading && styles.buttonDisabled]}
-          onPress={handleRegister}
-          disabled={loading}
-          testID="register-button"
-        >
-          {loading ? (
-            <ActivityIndicator color="#fff" />
-          ) : (
-            <Text style={styles.buttonText}>{t('auth.createAccount')}</Text>
-          )}
-        </TouchableOpacity>
-
-        <TouchableOpacity
-          onPress={() => navigation.goBack()}
-          style={styles.link}
-          testID="login-link"
-        >
-          <Text style={[styles.linkText, { color: colors.primary }]}>{t('auth.alreadyHaveAccount')}</Text>
-        </TouchableOpacity>
+          <TouchableOpacity
+            onPress={() => navigation.goBack()}
+            style={styles.link}
+            testID="login-link"
+            accessibilityRole="link"
+            accessibilityLabel={t('auth.alreadyHaveAccount')}
+          >
+            <Text style={[styles.linkText, { color: colors.primary }]}>{t('auth.alreadyHaveAccount')}</Text>
+          </TouchableOpacity>
+        </ServerSetupGate>
       </ScrollView>
     </KeyboardAvoidingView>
   );
