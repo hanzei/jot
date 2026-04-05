@@ -1,10 +1,13 @@
 package main
 
 import (
+	"context"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/hanzei/jot/server/client"
+	"github.com/hanzei/jot/server/internal/sse"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -146,6 +149,32 @@ func TestCreateLabel(t *testing.T) {
 		require.Error(t, err)
 		assert.Equal(t, http.StatusUnauthorized, client.StatusCode(err))
 	})
+
+	t.Run("publishes labels_changed SSE event with created label", func(t *testing.T) {
+		sseCtx, cancel := context.WithCancel(t.Context())
+		t.Cleanup(cancel)
+
+		ch, err := user.Client.SubscribeSSE(sseCtx)
+		require.NoError(t, err)
+
+		created, err := user.Client.CreateLabel(t.Context(), "sse-label")
+		require.NoError(t, err)
+
+		event, found := waitForSSEEvent(ch, func(e client.SSEEvent) bool {
+			return e.Type == string(sse.EventLabelsChanged) &&
+				e.SourceUserID == user.User.ID &&
+				e.LabelsData != nil &&
+				e.LabelsData.Label != nil &&
+				e.LabelsData.Label.ID == created.ID
+		}, 3*time.Second)
+		require.True(t, found, "expected labels_changed SSE event after label creation")
+		assert.Equal(t, string(sse.EventLabelsChanged), event.Type)
+		assert.Equal(t, user.User.ID, event.SourceUserID)
+		require.NotNil(t, event.LabelsData)
+		require.NotNil(t, event.LabelsData.Label)
+		assert.Equal(t, created.ID, event.LabelsData.Label.ID)
+		assert.Equal(t, created.Name, event.LabelsData.Label.Name)
+	})
 }
 
 func TestGetLabelCounts(t *testing.T) {
@@ -200,6 +229,29 @@ func TestGetLabelCounts(t *testing.T) {
 		_, err := c.ListLabelCounts(t.Context())
 		require.Error(t, err)
 		assert.Equal(t, http.StatusUnauthorized, client.StatusCode(err))
+	})
+
+	t.Run("counts include labeled shared notes visible to collaborator", func(t *testing.T) {
+		owner := ts.createTestUser(t, "countowner", "password123", false)
+		collaborator := ts.createTestUser(t, "countcollab", "password123", false)
+
+		sharedNote, err := owner.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
+			Title: "Shared for collaborator label", Content: "content",
+		})
+		require.NoError(t, err)
+		require.NoError(t, owner.Client.ShareNote(t.Context(), sharedNote.ID, collaborator.User.ID))
+
+		_, err = collaborator.Client.AddLabel(t.Context(), sharedNote.ID, "shared-work")
+		require.NoError(t, err)
+
+		labels, err := collaborator.Client.ListLabels(t.Context())
+		require.NoError(t, err)
+		require.Len(t, labels, 1)
+		assert.Equal(t, "shared-work", labels[0].Name)
+
+		counts, err := collaborator.Client.ListLabelCounts(t.Context())
+		require.NoError(t, err)
+		assert.Equal(t, 1, counts[labels[0].ID])
 	})
 }
 

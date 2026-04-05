@@ -140,6 +140,15 @@ func (h *LabelsHandler) CreateLabel(w http.ResponseWriter, r *http.Request) (int
 		return http.StatusInternalServerError, nil, fmt.Errorf("get or create label: %w", err)
 	}
 
+	if h.hub != nil {
+		// Best-effort realtime update for other sessions of the same user.
+		h.hub.Publish(r.Context(), []string{user.ID}, sse.Event{
+			Type:         sse.EventLabelsChanged,
+			SourceUserID: user.ID,
+			Data:         sse.LabelsEventData{Label: label},
+		})
+	}
+
 	return http.StatusOK, label, nil
 }
 

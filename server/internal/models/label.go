@@ -61,7 +61,6 @@ func (s *LabelStore) GetLabelCounts(ctx context.Context, userID string) (map[str
 			ON nl.label_id = l.id AND nl.user_id = l.user_id
 		LEFT JOIN notes n
 			ON n.id = nl.note_id
-			AND n.user_id = l.user_id
 			AND n.deleted_at IS NULL
 		LEFT JOIN note_user_state nus
 			ON nus.note_id = n.id

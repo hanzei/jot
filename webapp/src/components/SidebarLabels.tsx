@@ -17,7 +17,7 @@ interface SidebarLabelsProps {
   labels: Label[];
   selectedLabelId?: string | null;
   onSelect?: (labelId: string) => void;
-  labelCounts?: Record<string, number>;
+  labelCounts?: Record<string, number> | null;
   onCreate?: (name: string) => Promise<boolean>;
   onRename?: (label: Label, newName: string) => Promise<boolean>;
   onDelete?: (label: Label) => Promise<boolean>;
@@ -202,13 +202,14 @@ const SidebarLabels = ({
                     type="button"
                     onClick={() => onSelect?.(label.id)}
                     className={className}
-                    aria-label={label.name}
+                    aria-describedby={labelCounts ? `label-count-${label.id}` : undefined}
                     aria-pressed={isActive ? true : undefined}
                   >
                     <TagIcon className="h-4 w-4 shrink-0" />
                     <span className="truncate min-w-0">{label.name}</span>
                     {labelCounts && (
                       <span
+                        id={`label-count-${label.id}`}
                         data-testid={`label-count-${label.id}`}
                         className={`ml-auto shrink-0 text-xs ${isActive ? 'text-blue-600 dark:text-blue-300' : 'text-gray-400 dark:text-gray-500'}`}
                       >

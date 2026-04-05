@@ -61,7 +61,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const [showBin, setShowBin] = useState(!initialLabel && searchParams.get('view') === 'bin');
   const [showMyTodo, setShowMyTodo] = useState(!initialLabel && searchParams.get('view') === 'my-todo');
   const [labelsList, setLabelsList] = useState<Label[]>([]);
-  const [labelCounts, setLabelCounts] = useState<Record<string, number>>({});
+  const [labelCounts, setLabelCounts] = useState<Record<string, number> | null>(null);
   const [selectedLabelId, setSelectedLabelId] = useState<string | null>(initialLabel);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingNote, setEditingNote] = useState<Note | null>(null);
@@ -182,10 +182,13 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       document.title = t('pageTitle.archive');
     } else if (showMyTodo) {
       document.title = t('pageTitle.myTodo');
+    } else if (selectedLabelId) {
+      const activeLabelName = labelsList.find((label) => label.id === selectedLabelId)?.name ?? '';
+      document.title = activeLabelName ? t('pageTitle.label', { name: activeLabelName }) : t('pageTitle.notes');
     } else {
       document.title = t('pageTitle.notes');
     }
-  }, [editingNote?.title, isModalOpen, showArchived, showBin, showMyTodo, t]);
+  }, [editingNote?.title, isModalOpen, labelsList, selectedLabelId, showArchived, showBin, showMyTodo, t]);
 
   const loadLabels = useCallback(async () => {
     try {
@@ -221,6 +224,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       setLabelCounts(counts);
     } catch (error) {
       if (isMountedRef.current) {
+        setLabelCounts(null);
         console.error('Failed to load label counts:', error);
       }
     }
@@ -346,6 +350,11 @@ export default function Dashboard({ onLogout }: DashboardProps) {
         next.set(updatedUser.id, updatedUser);
         return next;
       });
+      return;
+    }
+    if (event.type === 'labels_changed') {
+      loadLabels();
+      loadLabelCounts();
       return;
     }
 

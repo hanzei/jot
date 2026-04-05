@@ -428,6 +428,7 @@
     "archive": "Archivo - Jot",
     "bin": "Papelera - Jot",
     "admin": "Admin - Jot",
-    "settings": "Ajustes - Jot"
+    "settings": "Ajustes - Jot",
+    "label": "{{name}} - Jot"
   }
 }

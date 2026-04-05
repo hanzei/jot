@@ -428,6 +428,7 @@
     "archive": "Archief - Jot",
     "bin": "Prullenbak - Jot",
     "admin": "Admin - Jot",
-    "settings": "Instellingen - Jot"
+    "settings": "Instellingen - Jot",
+    "label": "{{name}} - Jot"
   }
 }

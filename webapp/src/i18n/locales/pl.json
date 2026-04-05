@@ -428,6 +428,7 @@
     "archive": "Archiwum - Jot",
     "bin": "Kosz - Jot",
     "admin": "Admin - Jot",
-    "settings": "Ustawienia - Jot"
+    "settings": "Ustawienia - Jot",
+    "label": "{{name}} - Jot"
   }
 }

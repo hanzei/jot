@@ -428,6 +428,7 @@
     "archive": "Archive - Jot",
     "bin": "Corbeille - Jot",
     "admin": "Admin - Jot",
-    "settings": "Paramètres - Jot"
+    "settings": "Paramètres - Jot",
+    "label": "{{name}} - Jot"
   }
 }

@@ -424,6 +424,7 @@
     "register": "Create Account - Jot",
     "notes": "Jot",
     "note": "{{title}} - Jot",
+    "label": "{{name}} - Jot",
     "myTodo": "My Todo - Jot",
     "archive": "Archive - Jot",
     "bin": "Bin - Jot",
