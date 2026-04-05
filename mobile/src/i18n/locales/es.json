@@ -183,7 +183,21 @@
     "importButton": "Importar desde Google Keep",
     "currentServerSection": "Servidor",
     "currentServerLabel": "Servidor activo",
-    "noServerConfigured": "No hay servidor configurado"
+    "noServerConfigured": "No hay servidor configurado",
+    "patsSection": "Tokens de acceso personal",
+    "patsDescription": "Tokens para el acceso a la API desde scripts y herramientas externas.",
+    "patsNamePlaceholder": "Nombre del token",
+    "patsCreate": "Crear",
+    "patsCreating": "Creando...",
+    "patsCreateError": "No se pudo crear el token.",
+    "patsRevoke": "Revocar",
+    "patsRevoking": "Revocando...",
+    "patsRevokeConfirmTitle": "Revocar token",
+    "patsRevokeConfirmMessage": "¿Estás seguro de que quieres revocar \"{{name}}\"? Esta acción no se puede deshacer.",
+    "patsRevokeError": "No se pudo revocar el token.",
+    "patsNone": "Aún no hay tokens de acceso personal.",
+    "patsNewTokenTitle": "Tu nuevo token de acceso",
+    "patsLoadError": "No se pudieron cargar los tokens."
   },
   "about": {
     "clientInfo": "Información del cliente",

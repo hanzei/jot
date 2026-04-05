@@ -183,7 +183,21 @@
     "aboutButton": "About Jot",
     "importSection": "Import",
     "importDescription": "Import notes from Google Keep exports.",
-    "importButton": "Import from Google Keep"
+    "importButton": "Import from Google Keep",
+    "patsSection": "Personal Access Tokens",
+    "patsDescription": "Tokens for API access from scripts and external tools.",
+    "patsNamePlaceholder": "Token name",
+    "patsCreate": "Create",
+    "patsCreating": "Creating...",
+    "patsCreateError": "Failed to create token.",
+    "patsRevoke": "Revoke",
+    "patsRevoking": "Revoking...",
+    "patsRevokeConfirmTitle": "Revoke token",
+    "patsRevokeConfirmMessage": "Are you sure you want to revoke \"{{name}}\"? This cannot be undone.",
+    "patsRevokeError": "Failed to revoke token.",
+    "patsNone": "No personal access tokens yet.",
+    "patsNewTokenTitle": "Your new access token",
+    "patsLoadError": "Failed to load tokens."
   },
   "about": {
     "clientInfo": "Client Info",

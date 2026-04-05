@@ -183,7 +183,21 @@
     "importButton": "Importeren uit Google Keep",
     "currentServerSection": "Server",
     "currentServerLabel": "Actieve server",
-    "noServerConfigured": "Geen server geconfigureerd"
+    "noServerConfigured": "Geen server geconfigureerd",
+    "patsSection": "Persoonlijke toegangstokens",
+    "patsDescription": "Tokens voor API-toegang vanuit scripts en externe tools.",
+    "patsNamePlaceholder": "Tokennaam",
+    "patsCreate": "Aanmaken",
+    "patsCreating": "Aanmaken...",
+    "patsCreateError": "Token aanmaken mislukt.",
+    "patsRevoke": "Intrekken",
+    "patsRevoking": "Intrekken...",
+    "patsRevokeConfirmTitle": "Token intrekken",
+    "patsRevokeConfirmMessage": "Weet je zeker dat je \"{{name}}\" wilt intrekken? Dit kan niet ongedaan worden gemaakt.",
+    "patsRevokeError": "Token intrekken mislukt.",
+    "patsNone": "Nog geen persoonlijke toegangstokens.",
+    "patsNewTokenTitle": "Jouw nieuwe toegangstoken",
+    "patsLoadError": "Tokens laden mislukt."
   },
   "about": {
     "clientInfo": "Clientinformatie",
