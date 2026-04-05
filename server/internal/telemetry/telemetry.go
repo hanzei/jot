@@ -14,8 +14,8 @@ import (
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	promexporter "go.opentelemetry.io/otel/exporters/prometheus"
 	"go.opentelemetry.io/otel/exporters/stdout/stdoutlog"
-	"go.opentelemetry.io/otel/exporters/stdout/stdoutmetric"
 	"go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
 	"go.opentelemetry.io/otel/log/global"
 	sdklog "go.opentelemetry.io/otel/sdk/log"
@@ -33,8 +33,9 @@ type Config struct {
 	Enabled bool
 
 	// Endpoint is the OTLP gRPC endpoint (e.g. "localhost:4317").
-	// When empty and Enabled is true, stdout exporters are used instead
-	// (useful for development and debugging).
+	// When empty and Enabled is true, stdout exporters are used for
+	// traces and logs (useful for development and debugging).
+	// Metrics are always exposed via /metrics regardless of this setting.
 	Endpoint string
 
 	// ServiceName is the service name reported in all traces, metrics, and logs.
@@ -46,6 +47,10 @@ type Config struct {
 // resulting TracerProvider, MeterProvider, and LoggerProvider as globals. The
 // returned shutdown function must be called (typically via defer) to flush and
 // stop exporters.
+//
+// The Prometheus metric reader is always registered with prometheus.DefaultRegisterer
+// when cfg.Enabled is true, so the /metrics handler (mounted separately by the
+// server) will serve OTel custom metrics alongside the default Go runtime metrics.
 //
 // When cfg.Enabled is false, noop providers are already the default globals;
 // nothing to do.
@@ -71,6 +76,13 @@ func Setup(ctx context.Context, cfg Config) (shutdown func(context.Context) erro
 		logrus.WithError(err).Warn("OTel resource is partial; some attributes may be missing")
 	}
 
+	// Prometheus exporter: registers with prometheus.DefaultRegisterer so that
+	// the /metrics handler serves OTel custom metrics alongside Go runtime stats.
+	promExp, err := promexporter.New()
+	if err != nil {
+		return nil, fmt.Errorf("create Prometheus exporter: %w", err)
+	}
+
 	var (
 		tp        *sdktrace.TracerProvider
 		mp        *metric.MeterProvider
@@ -79,9 +91,9 @@ func Setup(ctx context.Context, cfg Config) (shutdown func(context.Context) erro
 	)
 
 	if cfg.Endpoint != "" {
-		tp, mp, lp, shutdowns, err = setupOTLP(ctx, res, cfg.Endpoint)
+		tp, mp, lp, shutdowns, err = setupOTLP(ctx, res, cfg.Endpoint, promExp)
 	} else {
-		tp, mp, lp, shutdowns, err = setupStdout(ctx, res)
+		tp, mp, lp, shutdowns, err = setupStdout(ctx, res, promExp)
 	}
 	if err != nil {
 		return nil, err
@@ -102,7 +114,7 @@ func Setup(ctx context.Context, cfg Config) (shutdown func(context.Context) erro
 	}, nil
 }
 
-func setupOTLP(ctx context.Context, res *resource.Resource, endpoint string) (*sdktrace.TracerProvider, *metric.MeterProvider, *sdklog.LoggerProvider, []func(context.Context) error, error) {
+func setupOTLP(ctx context.Context, res *resource.Resource, endpoint string, promExp *promexporter.Exporter) (*sdktrace.TracerProvider, *metric.MeterProvider, *sdklog.LoggerProvider, []func(context.Context) error, error) {
 	traceExporter, err := otlptracegrpc.New(ctx,
 		otlptracegrpc.WithEndpoint(endpoint),
 		otlptracegrpc.WithInsecure(),
@@ -134,7 +146,10 @@ func setupOTLP(ctx context.Context, res *resource.Resource, endpoint string) (*s
 		sdktrace.WithBatcher(traceExporter),
 		sdktrace.WithResource(res),
 	)
+	// Both readers are registered: Prometheus for pull-based scraping at /metrics,
+	// and OTLP for push-based export to the configured collector.
 	mp := metric.NewMeterProvider(
+		metric.WithReader(promExp),
 		metric.WithReader(metric.NewPeriodicReader(metricExporter)),
 		metric.WithResource(res),
 	)
@@ -147,22 +162,15 @@ func setupOTLP(ctx context.Context, res *resource.Resource, endpoint string) (*s
 	return tp, mp, lp, shutdowns, nil
 }
 
-func setupStdout(ctx context.Context, res *resource.Resource) (*sdktrace.TracerProvider, *metric.MeterProvider, *sdklog.LoggerProvider, []func(context.Context) error, error) {
+func setupStdout(ctx context.Context, res *resource.Resource, promExp *promexporter.Exporter) (*sdktrace.TracerProvider, *metric.MeterProvider, *sdklog.LoggerProvider, []func(context.Context) error, error) {
 	traceExporter, err := stdouttrace.New(stdouttrace.WithWriter(os.Stdout))
 	if err != nil {
 		return nil, nil, nil, nil, fmt.Errorf("create stdout trace exporter: %w", err)
 	}
 
-	metricExporter, err := stdoutmetric.New(stdoutmetric.WithWriter(os.Stdout))
-	if err != nil {
-		_ = traceExporter.Shutdown(ctx)
-		return nil, nil, nil, nil, fmt.Errorf("create stdout metric exporter: %w", err)
-	}
-
 	logExporter, err := stdoutlog.New(stdoutlog.WithWriter(os.Stdout))
 	if err != nil {
 		_ = traceExporter.Shutdown(ctx)
-		_ = metricExporter.Shutdown(ctx)
 		return nil, nil, nil, nil, fmt.Errorf("create stdout log exporter: %w", err)
 	}
 
@@ -170,8 +178,10 @@ func setupStdout(ctx context.Context, res *resource.Resource) (*sdktrace.TracerP
 		sdktrace.WithBatcher(traceExporter),
 		sdktrace.WithResource(res),
 	)
+	// Prometheus is the only metric reader in dev mode; there is no OTLP endpoint
+	// to push to, and stdout metric export would duplicate /metrics output.
 	mp := metric.NewMeterProvider(
-		metric.WithReader(metric.NewPeriodicReader(metricExporter)),
+		metric.WithReader(promExp),
 		metric.WithResource(res),
 	)
 	lp := sdklog.NewLoggerProvider(

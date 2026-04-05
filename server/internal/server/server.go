@@ -25,6 +25,7 @@ import (
 	"github.com/hanzei/jot/server/internal/mcphandler"
 	"github.com/hanzei/jot/server/internal/models"
 	"github.com/hanzei/jot/server/internal/sse"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
 	httpSwagger "github.com/swaggo/http-swagger/v2"
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
@@ -171,6 +172,7 @@ func (s *Server) setupRoutes() error {
 
 	s.router.Get("/livez", s.wrapHandler(s.handleLive))
 	s.router.Get("/readyz", s.handleReady)
+	s.router.Get("/metrics", promhttp.Handler().ServeHTTP)
 
 	cop := http.NewCrossOriginProtection()
 	if s.cfg.CORSAllowedOrigin != "" {
