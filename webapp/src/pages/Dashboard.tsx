@@ -61,6 +61,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const [showBin, setShowBin] = useState(!initialLabel && searchParams.get('view') === 'bin');
   const [showMyTodo, setShowMyTodo] = useState(!initialLabel && searchParams.get('view') === 'my-todo');
   const [labelsList, setLabelsList] = useState<Label[]>([]);
+  const [labelCounts, setLabelCounts] = useState<Record<string, number> | null>(null);
   const [selectedLabelId, setSelectedLabelId] = useState<string | null>(initialLabel);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingNote, setEditingNote] = useState<Note | null>(null);
@@ -75,6 +76,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const returnPathRef = useRef('/');
   const noteSortUpdateRequestIdRef = useRef(0);
   const loadNotesRequestIdRef = useRef(0);
+  const latestLabelCountsRequestIdRef = useRef(0);
   useEffect(() => {
     isMountedRef.current = true;
     return () => { isMountedRef.current = false; };
@@ -181,17 +183,22 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       document.title = t('pageTitle.archive');
     } else if (showMyTodo) {
       document.title = t('pageTitle.myTodo');
+    } else if (selectedLabelId) {
+      const activeLabelName = labelsList.find((label) => label.id === selectedLabelId)?.name ?? '';
+      document.title = activeLabelName ? t('pageTitle.label', { name: activeLabelName }) : t('pageTitle.notes');
     } else {
       document.title = t('pageTitle.notes');
     }
-  }, [editingNote?.title, isModalOpen, showArchived, showBin, showMyTodo, t]);
+  }, [editingNote?.title, isModalOpen, labelsList, selectedLabelId, showArchived, showBin, showMyTodo, t]);
 
-  const loadLabels = useCallback(async () => {
+  const loadLabels = useCallback(async (): Promise<Label[] | null> => {
     try {
       const labelsData = await labelsApi.getAll();
       if (isMountedRef.current) setLabelsList(labelsData);
+      return labelsData;
     } catch (error) {
       if (isMountedRef.current) console.error('Failed to load labels:', error);
+      return null;
     }
   }, []);
 
@@ -207,6 +214,24 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       }
     } catch (error) {
       if (isMountedRef.current) console.error('Failed to load users:', error);
+    }
+  }, []);
+
+  // Sidebar label counts reflect the default notes view (active, non-archived notes).
+  const loadLabelCounts = useCallback(async () => {
+    const requestId = ++latestLabelCountsRequestIdRef.current;
+
+    try {
+      const counts = await labelsApi.getCounts();
+      if (!isMountedRef.current || requestId !== latestLabelCountsRequestIdRef.current) {
+        return;
+      }
+      setLabelCounts(counts);
+    } catch (error) {
+      if (isMountedRef.current && requestId === latestLabelCountsRequestIdRef.current) {
+        setLabelCounts(null);
+        console.error('Failed to load label counts:', error);
+      }
     }
   }, []);
 
@@ -250,7 +275,8 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   useEffect(() => {
     loadLabels();
     loadUsers();
-  }, [loadLabels, loadUsers]);
+    loadLabelCounts();
+  }, [loadLabels, loadUsers, loadLabelCounts]);
 
   useEffect(() => {
     loadNotes();
@@ -331,6 +357,30 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       });
       return;
     }
+    if (event.type === 'labels_changed') {
+      void (async () => {
+        const [updatedLabels] = await Promise.all([loadLabels(), loadLabelCounts()]);
+        if (!isMountedRef.current || !selectedLabelId || !updatedLabels) {
+          return;
+        }
+
+        const selectedLabelStillExists = updatedLabels.some((label) => label.id === selectedLabelId);
+        if (selectedLabelStillExists) {
+          return;
+        }
+
+        setSelectedLabelId(null);
+        setSearchParams((prev) => {
+          if (!prev.has('label')) {
+            return prev;
+          }
+          const next = new URLSearchParams(prev);
+          next.delete('label');
+          return next;
+        });
+      })();
+      return;
+    }
 
     const { note_id } = event.data;
     const currentUserLostAccess =
@@ -350,10 +400,11 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     }
 
     loadNotes();
+    loadLabelCounts();
     if (event.type === 'note_created' || event.type === 'note_updated') {
       loadLabels();
     }
-  }, [editingNote, sharingNote, loadNotes, loadLabels, user?.id, restoreReturnUrl]);
+  }, [editingNote, sharingNote, loadNotes, loadLabels, loadLabelCounts, selectedLabelId, setSearchParams, user?.id, restoreReturnUrl]);
 
   useSSE({
     onEvent: handleSSEEvent,
@@ -527,7 +578,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   };
 
   const handleNoteUpdate = () => {
-    loadNotes();
+    void Promise.all([loadNotes(), loadLabelCounts()]);
     loadLabels();
     setIsModalOpen(false);
     setEditingNote(null);
@@ -536,14 +587,14 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   };
 
   const handleNoteRefresh = () => {
-    loadNotes();
+    void Promise.all([loadNotes(), loadLabelCounts()]);
     loadLabels();
   };
 
   const handleDeleteNote = async (noteId: string) => {
     try {
       await notes.delete(noteId);
-      loadNotes();
+      await Promise.all([loadNotes(), loadLabelCounts()]);
       showToast(t('dashboard.noteDeleted'), 'success', {
         label: t('dashboard.undo'),
         onClick: () => handleRestoreNote(noteId),
@@ -557,13 +608,13 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const handleRestoreNote = async (noteId: string) => {
     try {
       await notes.restore(noteId);
-      loadNotes();
+      await Promise.all([loadNotes(), loadLabelCounts()]);
       showToast(t('dashboard.noteRestored'), 'success', {
         label: t('dashboard.undo'),
         onClick: async () => {
           try {
             await notes.delete(noteId);
-            await loadNotes();
+            await Promise.all([loadNotes(), loadLabelCounts()]);
           } catch (undoError) {
             console.error('Failed to undo restore:', undoError);
             showToast(t('dashboard.failedDeleteNote'), 'error');
@@ -579,7 +630,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const handlePermanentlyDeleteNote = async (noteId: string) => {
     try {
       await notes.delete(noteId, { permanent: true });
-      loadNotes();
+      await Promise.all([loadNotes(), loadLabelCounts()]);
       showToast(t('dashboard.noteDeletedForever'));
     } catch (error) {
       console.error('Failed to permanently delete note:', error);
@@ -597,7 +648,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       }
       setShowEmptyTrashConfirm(false);
       showToast(t('dashboard.trashEmptied'));
-      void loadNotes();
+      void Promise.all([loadNotes(), loadLabelCounts()]);
     } catch (error) {
       console.error('Failed to empty trash:', error);
       showToast(t('dashboard.emptyTrashFailed'), 'error');
@@ -609,13 +660,13 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const handleDuplicateNote = useCallback(async (noteId: string) => {
     try {
       const duplicatedNote = await notes.duplicate(noteId);
-      await Promise.all([loadNotes(), loadLabels()]);
+      await Promise.all([loadNotes(), loadLabels(), loadLabelCounts()]);
       showToast(t('dashboard.noteDuplicated'), 'success', {
         label: t('dashboard.undo'),
         onClick: async () => {
           try {
             await notes.delete(duplicatedNote.id);
-            await Promise.all([loadNotes(), loadLabels()]);
+            await Promise.all([loadNotes(), loadLabels(), loadLabelCounts()]);
           } catch (undoError) {
             console.error('Failed to undo duplicate note:', undoError);
             showToast(t('dashboard.failedDeleteNote'), 'error');
@@ -626,7 +677,24 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       console.error('Failed to duplicate note:', error);
       throw error;
     }
-  }, [loadLabels, loadNotes, showToast, t]);
+  }, [loadLabelCounts, loadLabels, loadNotes, showToast, t]);
+
+  const handleCreateLabel = useCallback(async (name: string): Promise<boolean> => {
+    try {
+      await labelsApi.create(name);
+      await Promise.all([loadLabels(), loadLabelCounts()]);
+      showToast(t('labels.createSuccess'), 'success');
+      return true;
+    } catch (err: unknown) {
+      if (isAxiosError(err)) {
+        const msg = typeof err.response?.data === 'string' ? err.response.data.trim() : '';
+        showToast(msg || t('labels.createError'), 'error');
+      } else {
+        showToast(t('labels.createError'), 'error');
+      }
+      return false;
+    }
+  }, [loadLabelCounts, loadLabels, showToast, t]);
 
   const handleShareNote = (note: Note) => {
     setSharingNote(note);
@@ -733,7 +801,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const handleDeleteLabel = useCallback(async (label: Label): Promise<boolean> => {
     try {
       await labelsApi.delete(label.id);
-      await loadLabels();
+      await Promise.all([loadLabels(), loadLabelCounts()]);
       if (selectedLabelId === label.id) {
         handleViewChange('notes');
       } else {
@@ -750,7 +818,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       }
       return false;
     }
-  }, [handleViewChange, loadLabels, loadNotes, selectedLabelId, showToast, t]);
+  }, [handleViewChange, loadLabelCounts, loadLabels, loadNotes, selectedLabelId, showToast, t]);
 
   const handleDragEnd = async (event: DragEndEvent) => {
     if (showArchived || showBin || showMyTodo || noteSort !== 'manual') {
@@ -964,8 +1032,10 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const sidebarChildren = (
     <SidebarLabels
       labels={labelsList}
+      labelCounts={labelCounts}
       selectedLabelId={selectedLabelId}
       onSelect={(labelId) => handleLabelSelect(selectedLabelId === labelId ? null : labelId)}
+      onCreate={handleCreateLabel}
       onRename={handleRenameLabel}
       onDelete={handleDeleteLabel}
     />

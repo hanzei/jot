@@ -6,6 +6,16 @@ export async function getLabels(): Promise<Label[]> {
   return res.data;
 }
 
+export async function getLabelCounts(): Promise<Record<string, number>> {
+  const res = await api.get('/labels/counts');
+  return res.data;
+}
+
+export async function createLabel(name: string): Promise<Label> {
+  const res = await api.post('/labels', { name });
+  return res.data;
+}
+
 export async function addLabelToNote(noteId: string, name: string): Promise<Note> {
   const res = await api.post(`/notes/${noteId}/labels`, { name });
   return res.data;

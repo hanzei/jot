@@ -359,6 +359,12 @@
     "noLabels": "Nenhuma etiqueta ainda",
     "newLabelPlaceholder": "Nome da etiqueta...",
     "createNew": "Criar nova...",
+    "newSidebar": "+ Nova etiqueta",
+    "createInputLabel": "Nome da nova etiqueta",
+    "createSave": "Criar etiqueta",
+    "createCancel": "Cancelar criação da etiqueta",
+    "createSuccess": "Etiqueta criada",
+    "createError": "Falha ao criar etiqueta.",
     "menuOptions": "Opções de etiqueta para {{name}}",
     "rename": "Renomear",
     "delete": "Excluir",
@@ -422,6 +428,7 @@
     "archive": "Arquivo - Jot",
     "bin": "Lixeira - Jot",
     "admin": "Admin - Jot",
-    "settings": "Configurações - Jot"
+    "settings": "Configurações - Jot",
+    "label": "{{name}} - Jot"
   }
 }

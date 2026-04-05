@@ -1,10 +1,13 @@
 package main
 
 import (
+	"context"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/hanzei/jot/server/client"
+	"github.com/hanzei/jot/server/internal/sse"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
@@ -89,6 +92,166 @@ func TestGetNotesByLabel(t *testing.T) {
 		c := ts.newClient()
 		_, err := c.ListNotes(t.Context(), &client.ListNotesOptions{Label: labelIDByName["work"]})
 		assert.Equal(t, http.StatusUnauthorized, client.StatusCode(err))
+	})
+}
+
+func TestCreateLabel(t *testing.T) {
+	ts := setupTestServer(t)
+	user := ts.createTestUser(t, "createlabel", "password123", false)
+
+	t.Run("create label happy path", func(t *testing.T) {
+		label, err := user.Client.CreateLabel(t.Context(), "planning")
+		require.NoError(t, err)
+		require.NotNil(t, label)
+		assert.Equal(t, "planning", label.Name)
+
+		labels, err := user.Client.ListLabels(t.Context())
+		require.NoError(t, err)
+		require.Len(t, labels, 1)
+		assert.Equal(t, "planning", labels[0].Name)
+		assert.Equal(t, label.ID, labels[0].ID)
+	})
+
+	t.Run("creating same label twice returns existing label", func(t *testing.T) {
+		first, err := user.Client.CreateLabel(t.Context(), "existing")
+		require.NoError(t, err)
+		second, err := user.Client.CreateLabel(t.Context(), "existing")
+		require.NoError(t, err)
+
+		assert.Equal(t, first.ID, second.ID)
+
+		labels, err := user.Client.ListLabels(t.Context())
+		require.NoError(t, err)
+		existingCount := 0
+		for _, l := range labels {
+			if l.Name == "existing" {
+				existingCount++
+			}
+		}
+		assert.Equal(t, 1, existingCount)
+	})
+
+	t.Run("trims whitespace from label name", func(t *testing.T) {
+		label, err := user.Client.CreateLabel(t.Context(), "  trimmed  ")
+		require.NoError(t, err)
+		assert.Equal(t, "trimmed", label.Name)
+	})
+
+	t.Run("empty label name returns 400", func(t *testing.T) {
+		_, err := user.Client.CreateLabel(t.Context(), "   ")
+		require.Error(t, err)
+		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
+	})
+
+	t.Run("unauthenticated request returns 401", func(t *testing.T) {
+		c := ts.newClient()
+		_, err := c.CreateLabel(t.Context(), "unauth")
+		require.Error(t, err)
+		assert.Equal(t, http.StatusUnauthorized, client.StatusCode(err))
+	})
+
+	t.Run("publishes labels_changed SSE event with created label", func(t *testing.T) {
+		sseCtx, cancel := context.WithCancel(t.Context())
+		t.Cleanup(cancel)
+
+		ch, err := user.Client.SubscribeSSE(sseCtx)
+		require.NoError(t, err)
+
+		created, err := user.Client.CreateLabel(t.Context(), "sse-label")
+		require.NoError(t, err)
+
+		event, found := waitForSSEEvent(ch, func(e client.SSEEvent) bool {
+			return e.Type == string(sse.EventLabelsChanged) &&
+				e.SourceUserID == user.User.ID &&
+				e.LabelsData != nil &&
+				e.LabelsData.Label != nil &&
+				e.LabelsData.Label.ID == created.ID
+		}, 3*time.Second)
+		require.True(t, found, "expected labels_changed SSE event after label creation")
+		assert.Equal(t, string(sse.EventLabelsChanged), event.Type)
+		assert.Equal(t, user.User.ID, event.SourceUserID)
+		require.NotNil(t, event.LabelsData)
+		require.NotNil(t, event.LabelsData.Label)
+		assert.Equal(t, created.ID, event.LabelsData.Label.ID)
+		assert.Equal(t, created.Name, event.LabelsData.Label.Name)
+	})
+}
+
+func TestGetLabelCounts(t *testing.T) {
+	ts := setupTestServer(t)
+	user := ts.createTestUser(t, "countlabels", "password123", false)
+
+	activeNote, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
+		Title: "Active with work and personal", Content: "content",
+	})
+	require.NoError(t, err)
+	archivedNote, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
+		Title: "Archived with work", Content: "content",
+	})
+	require.NoError(t, err)
+	trashedNote, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
+		Title: "Trashed with work", Content: "content",
+	})
+	require.NoError(t, err)
+
+	_, err = user.Client.AddLabel(t.Context(), activeNote.ID, "work")
+	require.NoError(t, err)
+	_, err = user.Client.AddLabel(t.Context(), activeNote.ID, "personal")
+	require.NoError(t, err)
+	_, err = user.Client.AddLabel(t.Context(), archivedNote.ID, "work")
+	require.NoError(t, err)
+	_, err = user.Client.AddLabel(t.Context(), trashedNote.ID, "work")
+	require.NoError(t, err)
+
+	archived := true
+	_, err = user.Client.UpdateNote(t.Context(), archivedNote.ID, &client.UpdateNoteRequest{Archived: &archived})
+	require.NoError(t, err)
+	err = user.Client.DeleteNote(t.Context(), trashedNote.ID)
+	require.NoError(t, err)
+
+	labels, err := user.Client.ListLabels(t.Context())
+	require.NoError(t, err)
+	require.Len(t, labels, 2)
+	labelIDByName := map[string]string{}
+	for _, l := range labels {
+		labelIDByName[l.Name] = l.ID
+	}
+
+	t.Run("returns active-note counts, excluding archived and trashed notes", func(t *testing.T) {
+		counts, err := user.Client.ListLabelCounts(t.Context())
+		require.NoError(t, err)
+		assert.Equal(t, 1, counts[labelIDByName["work"]])
+		assert.Equal(t, 1, counts[labelIDByName["personal"]])
+	})
+
+	t.Run("unauthenticated request returns 401", func(t *testing.T) {
+		c := ts.newClient()
+		_, err := c.ListLabelCounts(t.Context())
+		require.Error(t, err)
+		assert.Equal(t, http.StatusUnauthorized, client.StatusCode(err))
+	})
+
+	t.Run("counts include labeled shared notes visible to collaborator", func(t *testing.T) {
+		owner := ts.createTestUser(t, "countowner", "password123", false)
+		collaborator := ts.createTestUser(t, "countcollab", "password123", false)
+
+		sharedNote, err := owner.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
+			Title: "Shared for collaborator label", Content: "content",
+		})
+		require.NoError(t, err)
+		require.NoError(t, owner.Client.ShareNote(t.Context(), sharedNote.ID, collaborator.User.ID))
+
+		_, err = collaborator.Client.AddLabel(t.Context(), sharedNote.ID, "shared-work")
+		require.NoError(t, err)
+
+		labels, err := collaborator.Client.ListLabels(t.Context())
+		require.NoError(t, err)
+		require.Len(t, labels, 1)
+		assert.Equal(t, "shared-work", labels[0].Name)
+
+		counts, err := collaborator.Client.ListLabelCounts(t.Context())
+		require.NoError(t, err)
+		assert.Equal(t, 1, counts[labels[0].ID])
 	})
 }
 

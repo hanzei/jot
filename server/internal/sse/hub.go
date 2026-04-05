@@ -20,6 +20,7 @@ const (
 	EventNoteDeleted        EventType = "note_deleted"
 	EventNoteShared         EventType = "note_shared"
 	EventNoteUnshared       EventType = "note_unshared"
+	EventLabelsChanged      EventType = "labels_changed"
 	EventProfileIconUpdated EventType = "profile_icon_updated"
 )
 
@@ -32,6 +33,11 @@ type NoteEventData struct {
 // ProfileIconEventData is the Data payload for profile_icon_updated events.
 type ProfileIconEventData struct {
 	User any `json:"user"`
+}
+
+// LabelsEventData is the Data payload for labels_changed events.
+type LabelsEventData struct {
+	Label any `json:"label"`
 }
 
 // Event is the payload pushed to SSE clients.

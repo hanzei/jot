@@ -359,6 +359,12 @@
     "noLabels": "Nog geen labels",
     "newLabelPlaceholder": "Labelnaam...",
     "createNew": "Nieuw aanmaken...",
+    "newSidebar": "+ Nieuw label",
+    "createInputLabel": "Nieuwe labelnaam",
+    "createSave": "Label aanmaken",
+    "createCancel": "Label maken annuleren",
+    "createSuccess": "Label aangemaakt",
+    "createError": "Label aanmaken mislukt.",
     "menuOptions": "Labelopties voor {{name}}",
     "rename": "Hernoemen",
     "delete": "Verwijderen",
@@ -422,6 +428,7 @@
     "archive": "Archief - Jot",
     "bin": "Prullenbak - Jot",
     "admin": "Admin - Jot",
-    "settings": "Instellingen - Jot"
+    "settings": "Instellingen - Jot",
+    "label": "{{name}} - Jot"
   }
 }
