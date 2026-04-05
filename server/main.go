@@ -50,6 +50,7 @@ import (
 	"github.com/hanzei/jot/server/internal/server"
 	"github.com/hanzei/jot/server/internal/telemetry"
 	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/contrib/bridges/otellogrus"
 )
 
 func main() {
@@ -72,6 +73,12 @@ func main() {
 			logrus.WithError(shutdownErr).Warn("OpenTelemetry shutdown error")
 		}
 	}()
+
+	if cfg.OTelEnabled {
+		// Forward all logrus log entries to the OTel LoggerProvider so they
+		// are exported via OTLP alongside traces and metrics.
+		logrus.AddHook(otellogrus.NewHook("github.com/hanzei/jot/server"))
+	}
 
 	s, err := server.New(cfg)
 	if err != nil {

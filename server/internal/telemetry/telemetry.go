@@ -1,5 +1,6 @@
 // Package telemetry initialises the OpenTelemetry SDK and registers global
-// TracerProvider and MeterProvider instances used throughout the server.
+// TracerProvider, MeterProvider, and LoggerProvider instances used throughout
+// the server.
 package telemetry
 
 import (
@@ -10,10 +11,14 @@ import (
 
 	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
+	"go.opentelemetry.io/otel/exporters/stdout/stdoutlog"
 	"go.opentelemetry.io/otel/exporters/stdout/stdoutmetric"
 	"go.opentelemetry.io/otel/exporters/stdout/stdouttrace"
+	"go.opentelemetry.io/otel/log/global"
+	sdklog "go.opentelemetry.io/otel/sdk/log"
 	"go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
@@ -32,17 +37,18 @@ type Config struct {
 	// (useful for development and debugging).
 	Endpoint string
 
-	// ServiceName is the service name reported in all traces and metrics.
+	// ServiceName is the service name reported in all traces, metrics, and logs.
 	// Defaults to "jot".
 	ServiceName string
 }
 
 // Setup initialises the OpenTelemetry SDK according to cfg and registers the
-// resulting TracerProvider and MeterProvider as globals. The returned shutdown
-// function must be called (typically via defer) to flush and stop exporters.
+// resulting TracerProvider, MeterProvider, and LoggerProvider as globals. The
+// returned shutdown function must be called (typically via defer) to flush and
+// stop exporters.
 //
-// When cfg.Enabled is false, noop providers are registered so all
-// instrumentation calls compile and run without effect.
+// When cfg.Enabled is false, noop providers are already the default globals;
+// nothing to do.
 func Setup(ctx context.Context, cfg Config) (shutdown func(context.Context) error, err error) {
 	if !cfg.Enabled {
 		// Noop providers are already the default globals; nothing to do.
@@ -66,15 +72,16 @@ func Setup(ctx context.Context, cfg Config) (shutdown func(context.Context) erro
 	}
 
 	var (
-		tp       *sdktrace.TracerProvider
-		mp       *metric.MeterProvider
+		tp        *sdktrace.TracerProvider
+		mp        *metric.MeterProvider
+		lp        *sdklog.LoggerProvider
 		shutdowns []func(context.Context) error
 	)
 
 	if cfg.Endpoint != "" {
-		tp, mp, shutdowns, err = setupOTLP(ctx, res, cfg.Endpoint)
+		tp, mp, lp, shutdowns, err = setupOTLP(ctx, res, cfg.Endpoint)
 	} else {
-		tp, mp, shutdowns, err = setupStdout(ctx, res)
+		tp, mp, lp, shutdowns, err = setupStdout(ctx, res)
 	}
 	if err != nil {
 		return nil, err
@@ -82,6 +89,7 @@ func Setup(ctx context.Context, cfg Config) (shutdown func(context.Context) erro
 
 	otel.SetTracerProvider(tp)
 	otel.SetMeterProvider(mp)
+	global.SetLoggerProvider(lp)
 
 	return func(ctx context.Context) error {
 		var firstErr error
@@ -94,13 +102,13 @@ func Setup(ctx context.Context, cfg Config) (shutdown func(context.Context) erro
 	}, nil
 }
 
-func setupOTLP(ctx context.Context, res *resource.Resource, endpoint string) (*sdktrace.TracerProvider, *metric.MeterProvider, []func(context.Context) error, error) {
+func setupOTLP(ctx context.Context, res *resource.Resource, endpoint string) (*sdktrace.TracerProvider, *metric.MeterProvider, *sdklog.LoggerProvider, []func(context.Context) error, error) {
 	traceExporter, err := otlptracegrpc.New(ctx,
 		otlptracegrpc.WithEndpoint(endpoint),
 		otlptracegrpc.WithInsecure(),
 	)
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("create OTLP trace exporter: %w", err)
+		return nil, nil, nil, nil, fmt.Errorf("create OTLP trace exporter: %w", err)
 	}
 
 	metricExporter, err := otlpmetricgrpc.New(ctx,
@@ -109,7 +117,17 @@ func setupOTLP(ctx context.Context, res *resource.Resource, endpoint string) (*s
 	)
 	if err != nil {
 		_ = traceExporter.Shutdown(ctx)
-		return nil, nil, nil, fmt.Errorf("create OTLP metric exporter: %w", err)
+		return nil, nil, nil, nil, fmt.Errorf("create OTLP metric exporter: %w", err)
+	}
+
+	logExporter, err := otlploggrpc.New(ctx,
+		otlploggrpc.WithEndpoint(endpoint),
+		otlploggrpc.WithInsecure(),
+	)
+	if err != nil {
+		_ = traceExporter.Shutdown(ctx)
+		_ = metricExporter.Shutdown(ctx)
+		return nil, nil, nil, nil, fmt.Errorf("create OTLP log exporter: %w", err)
 	}
 
 	tp := sdktrace.NewTracerProvider(
@@ -120,21 +138,32 @@ func setupOTLP(ctx context.Context, res *resource.Resource, endpoint string) (*s
 		metric.WithReader(metric.NewPeriodicReader(metricExporter)),
 		metric.WithResource(res),
 	)
+	lp := sdklog.NewLoggerProvider(
+		sdklog.WithProcessor(sdklog.NewBatchProcessor(logExporter)),
+		sdklog.WithResource(res),
+	)
 
-	shutdowns := []func(context.Context) error{tp.Shutdown, mp.Shutdown}
-	return tp, mp, shutdowns, nil
+	shutdowns := []func(context.Context) error{tp.Shutdown, mp.Shutdown, lp.Shutdown}
+	return tp, mp, lp, shutdowns, nil
 }
 
-func setupStdout(ctx context.Context, res *resource.Resource) (*sdktrace.TracerProvider, *metric.MeterProvider, []func(context.Context) error, error) {
+func setupStdout(ctx context.Context, res *resource.Resource) (*sdktrace.TracerProvider, *metric.MeterProvider, *sdklog.LoggerProvider, []func(context.Context) error, error) {
 	traceExporter, err := stdouttrace.New(stdouttrace.WithWriter(os.Stdout))
 	if err != nil {
-		return nil, nil, nil, fmt.Errorf("create stdout trace exporter: %w", err)
+		return nil, nil, nil, nil, fmt.Errorf("create stdout trace exporter: %w", err)
 	}
 
 	metricExporter, err := stdoutmetric.New(stdoutmetric.WithWriter(os.Stdout))
 	if err != nil {
 		_ = traceExporter.Shutdown(ctx)
-		return nil, nil, nil, fmt.Errorf("create stdout metric exporter: %w", err)
+		return nil, nil, nil, nil, fmt.Errorf("create stdout metric exporter: %w", err)
+	}
+
+	logExporter, err := stdoutlog.New(stdoutlog.WithWriter(os.Stdout))
+	if err != nil {
+		_ = traceExporter.Shutdown(ctx)
+		_ = metricExporter.Shutdown(ctx)
+		return nil, nil, nil, nil, fmt.Errorf("create stdout log exporter: %w", err)
 	}
 
 	tp := sdktrace.NewTracerProvider(
@@ -145,7 +174,11 @@ func setupStdout(ctx context.Context, res *resource.Resource) (*sdktrace.TracerP
 		metric.WithReader(metric.NewPeriodicReader(metricExporter)),
 		metric.WithResource(res),
 	)
+	lp := sdklog.NewLoggerProvider(
+		sdklog.WithProcessor(sdklog.NewBatchProcessor(logExporter)),
+		sdklog.WithResource(res),
+	)
 
-	shutdowns := []func(context.Context) error{tp.Shutdown, mp.Shutdown}
-	return tp, mp, shutdowns, nil
+	shutdowns := []func(context.Context) error{tp.Shutdown, mp.Shutdown, lp.Shutdown}
+	return tp, mp, lp, shutdowns, nil
 }
