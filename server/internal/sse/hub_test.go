@@ -13,7 +13,7 @@ func TestHub_Subscribe(t *testing.T) {
 	t.Run("returns readable channel and unsubscribe func", func(t *testing.T) {
 		h, err := NewHub()
 		require.NoError(t, err)
-		ch, unsub := h.Subscribe("user1")
+		ch, unsub := h.Subscribe(t.Context(), "user1")
 
 		require.NotNil(t, ch)
 		require.NotNil(t, unsub)
@@ -22,8 +22,8 @@ func TestHub_Subscribe(t *testing.T) {
 	t.Run("multiple subscribers for same user each get their own channel", func(t *testing.T) {
 		h, err := NewHub()
 		require.NoError(t, err)
-		ch1, _ := h.Subscribe("user1")
-		ch2, _ := h.Subscribe("user1")
+		ch1, _ := h.Subscribe(t.Context(), "user1")
+		ch2, _ := h.Subscribe(t.Context(), "user1")
 
 		assert.NotEqual(t, ch1, ch2)
 
@@ -37,7 +37,7 @@ func TestHub_Unsubscribe(t *testing.T) {
 	t.Run("removes channel and closes it", func(t *testing.T) {
 		h, err := NewHub()
 		require.NoError(t, err)
-		_, unsub := h.Subscribe("user1")
+		_, unsub := h.Subscribe(t.Context(), "user1")
 
 		unsub()
 
@@ -51,8 +51,8 @@ func TestHub_Unsubscribe(t *testing.T) {
 	t.Run("removes only the unsubscribed channel when multiple exist", func(t *testing.T) {
 		h, err := NewHub()
 		require.NoError(t, err)
-		_, unsub1 := h.Subscribe("user1")
-		_, _ = h.Subscribe("user1")
+		_, unsub1 := h.Subscribe(t.Context(), "user1")
+		_, _ = h.Subscribe(t.Context(), "user1")
 
 		unsub1()
 
@@ -64,7 +64,7 @@ func TestHub_Unsubscribe(t *testing.T) {
 	t.Run("closed channel is readable and reflects no pending events", func(t *testing.T) {
 		h, err := NewHub()
 		require.NoError(t, err)
-		ch, unsub := h.Subscribe("user1")
+		ch, unsub := h.Subscribe(t.Context(), "user1")
 		unsub()
 
 		// Channel should be closed; reading from it should return zero value immediately.
@@ -83,7 +83,7 @@ func TestHub_Publish(t *testing.T) { //nolint:gocognit
 	t.Run("delivers event to subscribed user", func(t *testing.T) {
 		h, err := NewHub()
 		require.NoError(t, err)
-		ch, unsub := h.Subscribe("user1")
+		ch, unsub := h.Subscribe(t.Context(), "user1")
 		defer unsub()
 
 		h.Publish(t.Context(), []string{"user1"}, event)
@@ -99,8 +99,8 @@ func TestHub_Publish(t *testing.T) { //nolint:gocognit
 	t.Run("delivers event to all channels of a user", func(t *testing.T) {
 		h, err := NewHub()
 		require.NoError(t, err)
-		ch1, unsub1 := h.Subscribe("user1")
-		ch2, unsub2 := h.Subscribe("user1")
+		ch1, unsub1 := h.Subscribe(t.Context(), "user1")
+		ch2, unsub2 := h.Subscribe(t.Context(), "user1")
 		defer unsub1()
 		defer unsub2()
 
@@ -124,8 +124,8 @@ func TestHub_Publish(t *testing.T) { //nolint:gocognit
 	t.Run("delivers event to multiple different users", func(t *testing.T) {
 		h, err := NewHub()
 		require.NoError(t, err)
-		ch1, unsub1 := h.Subscribe("user1")
-		ch2, unsub2 := h.Subscribe("user2")
+		ch1, unsub1 := h.Subscribe(t.Context(), "user1")
+		ch2, unsub2 := h.Subscribe(t.Context(), "user2")
 		defer unsub1()
 		defer unsub2()
 
@@ -149,7 +149,7 @@ func TestHub_Publish(t *testing.T) { //nolint:gocognit
 	t.Run("skips users with no subscribers", func(t *testing.T) {
 		h, err := NewHub()
 		require.NoError(t, err)
-		ch, unsub := h.Subscribe("user1")
+		ch, unsub := h.Subscribe(t.Context(), "user1")
 		defer unsub()
 
 		// Publish to user1 and a non-subscribed user; should not panic or block.
@@ -166,7 +166,7 @@ func TestHub_Publish(t *testing.T) { //nolint:gocognit
 	t.Run("drops events without blocking when channel buffer is full", func(t *testing.T) {
 		h, err := NewHub()
 		require.NoError(t, err)
-		ch, unsub := h.Subscribe("user1")
+		ch, unsub := h.Subscribe(t.Context(), "user1")
 		defer unsub()
 
 		// Fill the channel buffer (capacity 16).
@@ -217,7 +217,7 @@ func TestHub_ConcurrentAccess(t *testing.T) {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				ch, unsub := h.Subscribe("user1")
+				ch, unsub := h.Subscribe(t.Context(), "user1")
 			h.Publish(t.Context(), []string{"user1"}, Event{Type: EventNoteUpdated, SourceUserID: "u1", Data: NoteEventData{NoteID: "n1"}})
 				// Drain any delivered event so the channel doesn't block unsubscribe.
 				select {

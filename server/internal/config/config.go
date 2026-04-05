@@ -25,54 +25,70 @@ type Config struct {
 	OTelInsecure        bool
 }
 
+// parseBoolEnv reads an environment variable that must be "true", "false", or
+// absent. It returns defaultVal when the variable is not set.
+func parseBoolEnv(name string, defaultVal bool) (bool, error) {
+	switch os.Getenv(name) {
+	case "":
+		return defaultVal, nil
+	case "true":
+		return true, nil
+	case "false":
+		return false, nil
+	default:
+		return false, fmt.Errorf("invalid %s value %q: must be \"true\" or \"false\"", name, os.Getenv(name))
+	}
+}
+
+// parseIntRangeEnv reads an integer environment variable and validates it is
+// within [min, max]. Returns defaultVal when the variable is not set.
+func parseIntRangeEnv(name string, defaultVal, min, max int) (int, error) {
+	v := os.Getenv(name)
+	if v == "" {
+		return defaultVal, nil
+	}
+	n, err := strconv.Atoi(v)
+	if err != nil {
+		return 0, fmt.Errorf("invalid %s value %q: must be a number", name, v)
+	}
+	if n < min || n > max {
+		return 0, fmt.Errorf("invalid %s value %d: must be between %d and %d", name, n, min, max)
+	}
+	return n, nil
+}
+
 // Load reads configuration from environment variables, applying defaults
 // for any values not set.
 func Load() (*Config, error) {
 	cfg := &Config{
-		Port:                8080,
-		MetricsPort:         8081,
 		MetricsHost:         "127.0.0.1",
 		DBPath:              "./jot.db",
 		CookieSecure:        true,
 		RegistrationEnabled: true,
-		PasswordMinLength:   10,
 		OTelServiceName:     "jot",
 	}
 
-	if v := os.Getenv("PORT"); v != "" {
-		p, err := strconv.Atoi(v)
-		if err != nil {
-			return nil, fmt.Errorf("invalid PORT value %q: must be a number", v)
-		}
-		if p < 1 || p > 65535 {
-			return nil, fmt.Errorf("invalid PORT value %d: must be between 1 and 65535", p)
-		}
-		cfg.Port = p
+	port, err := parseIntRangeEnv("PORT", 8080, 1, 65535)
+	if err != nil {
+		return nil, err
 	}
+	cfg.Port = port
 
-	if v := os.Getenv("METRICS_PORT"); v != "" {
-		p, err := strconv.Atoi(v)
-		if err != nil {
-			return nil, fmt.Errorf("invalid METRICS_PORT value %q: must be a number", v)
-		}
-		if p < 1 || p > 65535 {
-			return nil, fmt.Errorf("invalid METRICS_PORT value %d: must be between 1 and 65535", p)
-		}
-		cfg.MetricsPort = p
+	metricsPort, err := parseIntRangeEnv("METRICS_PORT", 8081, 1, 65535)
+	if err != nil {
+		return nil, err
 	}
+	cfg.MetricsPort = metricsPort
 
 	if v := os.Getenv("METRICS_HOST"); v != "" {
 		cfg.MetricsHost = v
 	}
 
-	switch os.Getenv("METRICS_ENABLED") {
-	case "true":
-		cfg.MetricsEnabled = true
-	case "", "false":
-		// default false
-	default:
-		return nil, fmt.Errorf("invalid METRICS_ENABLED value %q: must be \"true\" or \"false\"", os.Getenv("METRICS_ENABLED"))
+	metricsEnabled, err := parseBoolEnv("METRICS_ENABLED", false)
+	if err != nil {
+		return nil, err
 	}
+	cfg.MetricsEnabled = metricsEnabled
 
 	if v := os.Getenv("DB_PATH"); v != "" {
 		cfg.DBPath = v
@@ -81,47 +97,36 @@ func Load() (*Config, error) {
 	if v := os.Getenv("STATIC_DIR"); v != "" {
 		cfg.StaticDir = filepath.Clean(v)
 	} else {
-		workDir, err := os.Getwd()
-		if err != nil {
-			return nil, fmt.Errorf("get working directory: %w", err)
+		workDir, wdErr := os.Getwd()
+		if wdErr != nil {
+			return nil, fmt.Errorf("get working directory: %w", wdErr)
 		}
 		cfg.StaticDir = filepath.Join(workDir, "..", "webapp", "build")
 	}
 
 	cfg.CORSAllowedOrigin = os.Getenv("CORS_ALLOWED_ORIGIN")
 
-	switch os.Getenv("COOKIE_SECURE") {
-	case "false":
-		cfg.CookieSecure = false
-	case "", "true":
-		// default already set to true
-	default:
-		return nil, fmt.Errorf("invalid COOKIE_SECURE value %q: must be \"true\" or \"false\"", os.Getenv("COOKIE_SECURE"))
+	cookieSecure, err := parseBoolEnv("COOKIE_SECURE", true)
+	if err != nil {
+		return nil, err
 	}
+	cfg.CookieSecure = cookieSecure
 
 	if os.Getenv("REGISTRATION_ENABLED") == "false" {
 		cfg.RegistrationEnabled = false
 	}
 
-	if v := os.Getenv("PASSWORD_MIN_LENGTH"); v != "" {
-		n, err := strconv.Atoi(v)
-		if err != nil {
-			return nil, fmt.Errorf("invalid PASSWORD_MIN_LENGTH value %q: must be a number", v)
-		}
-		if n < 1 || n > 72 {
-			return nil, fmt.Errorf("invalid PASSWORD_MIN_LENGTH value %d: must be between 1 and 72", n)
-		}
-		cfg.PasswordMinLength = n
+	passwordMinLength, err := parseIntRangeEnv("PASSWORD_MIN_LENGTH", 10, 1, 72)
+	if err != nil {
+		return nil, err
 	}
+	cfg.PasswordMinLength = passwordMinLength
 
-	switch os.Getenv("OTEL_ENABLED") {
-	case "true":
-		cfg.OTelEnabled = true
-	case "", "false":
-		// default already set to false
-	default:
-		return nil, fmt.Errorf("invalid OTEL_ENABLED value %q: must be \"true\" or \"false\"", os.Getenv("OTEL_ENABLED"))
+	otelEnabled, err := parseBoolEnv("OTEL_ENABLED", false)
+	if err != nil {
+		return nil, err
 	}
+	cfg.OTelEnabled = otelEnabled
 
 	cfg.OTelEndpoint = os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
 
@@ -129,14 +134,11 @@ func Load() (*Config, error) {
 		cfg.OTelServiceName = v
 	}
 
-	switch os.Getenv("OTEL_EXPORTER_OTLP_INSECURE") {
-	case "true":
-		cfg.OTelInsecure = true
-	case "", "false":
-		// default false
-	default:
-		return nil, fmt.Errorf("invalid OTEL_EXPORTER_OTLP_INSECURE value %q: must be \"true\" or \"false\"", os.Getenv("OTEL_EXPORTER_OTLP_INSECURE"))
+	otelInsecure, err := parseBoolEnv("OTEL_EXPORTER_OTLP_INSECURE", false)
+	if err != nil {
+		return nil, err
 	}
+	cfg.OTelInsecure = otelInsecure
 
 	return cfg, nil
 }

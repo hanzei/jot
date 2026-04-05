@@ -37,7 +37,7 @@ type SessionStore struct {
 	expired metric.Int64Counter
 }
 
-// NewSessionStore creates a SessionStore with OTel instruments initialised from
+// NewSessionStore creates a SessionStore with OTel instruments initialized from
 // the global MeterProvider. Returns an error if any instrument cannot be created.
 func NewSessionStore(db *sql.DB) (*SessionStore, error) {
 	meter := otel.GetMeterProvider().Meter("github.com/hanzei/jot/server")

@@ -31,7 +31,7 @@ type NotesHandler struct {
 	notesRestored metric.Int64Counter
 }
 
-// NewNotesHandler creates a NotesHandler with OTel instruments initialised from
+// NewNotesHandler creates a NotesHandler with OTel instruments initialized from
 // the global MeterProvider. Returns an error if any instrument cannot be created.
 func NewNotesHandler(noteStore *models.NoteStore, userStore *models.UserStore, labelStore *models.LabelStore, hub *sse.Hub) (*NotesHandler, error) {
 	meter := otel.GetMeterProvider().Meter("github.com/hanzei/jot/server")

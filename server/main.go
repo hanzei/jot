@@ -67,7 +67,7 @@ func main() {
 		Insecure:    cfg.OTelInsecure,
 	})
 	if err != nil {
-		logrus.WithError(err).Fatal("Failed to initialise OpenTelemetry")
+		logrus.WithError(err).Fatal("Failed to initialize OpenTelemetry")
 	}
 	defer func() {
 		timeoutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)

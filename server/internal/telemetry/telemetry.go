@@ -1,4 +1,4 @@
-// Package telemetry initialises the OpenTelemetry SDK and registers global
+// Package telemetry initializes the OpenTelemetry SDK and registers global
 // TracerProvider, MeterProvider, and LoggerProvider instances used throughout
 // the server.
 package telemetry
@@ -48,7 +48,7 @@ type Config struct {
 	Insecure bool
 }
 
-// Setup initialises the OpenTelemetry SDK according to cfg and registers the
+// Setup initializes the OpenTelemetry SDK according to cfg and registers the
 // resulting TracerProvider, MeterProvider, and LoggerProvider as globals. The
 // returned shutdown function must be called (typically via defer) to flush and
 // stop exporters.

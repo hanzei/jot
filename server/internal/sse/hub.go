@@ -51,7 +51,7 @@ type Hub struct {
 	eventsDropped     metric.Int64Counter
 }
 
-// NewHub creates a ready-to-use Hub with OTel instruments initialised from the
+// NewHub creates a ready-to-use Hub with OTel instruments initialized from the
 // global MeterProvider. Returns an error if any instrument cannot be created.
 func NewHub() (*Hub, error) {
 	meter := otel.GetMeterProvider().Meter("github.com/hanzei/jot/server")
@@ -90,16 +90,17 @@ func NewHub() (*Hub, error) {
 
 // Subscribe registers a buffered channel for userID and returns an unsubscribe function.
 // The caller must call unsubscribe when the SSE connection closes.
-func (h *Hub) Subscribe(userID string) (<-chan Event, func()) {
+// ctx is used to link the active-subscriber gauge increment to the caller's trace span.
+func (h *Hub) Subscribe(ctx context.Context, userID string) (<-chan Event, func()) {
 	ch := make(chan Event, 16)
 
 	h.mu.Lock()
 	h.clients[userID] = append(h.clients[userID], ch)
 	h.mu.Unlock()
 
-	h.subscribersActive.Add(context.Background(), 1)
+	h.subscribersActive.Add(ctx, 1)
 
-	unsubscribe := func() {
+	unsubscribe := func() { //nolint:contextcheck // request ctx is already canceled when unsubscribe runs
 		h.mu.Lock()
 		defer h.mu.Unlock()
 		channels := h.clients[userID]
