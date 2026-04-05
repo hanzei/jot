@@ -119,7 +119,7 @@ export class DashboardPage {
     // Focus + keyboard activation avoids pointer-interception flakes from overlays.
     await menuButton.focus();
     await this.page.keyboard.press('Enter');
-    await expect(this.page.getByRole('menu').last()).toBeVisible();
+    await expect(menuButton).toHaveAttribute('aria-expanded', 'true');
   }
 
   async deleteNote(title: string) {
