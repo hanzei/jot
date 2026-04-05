@@ -15,13 +15,6 @@ test.describe('Toast timing', () => {
     await dashboardPage.createNote('Toast Timing Note');
 
     await dashboardPage.archiveNote('Toast Timing Note');
-
-    const standardToast = page.getByTestId('toast').last();
-    await expect(standardToast).toBeVisible();
-    await expect(standardToast.getByRole('button', { name: 'Undo' })).toHaveCount(0);
-
-    await expect(page.getByTestId('toast')).toHaveCount(0, { timeout: 6000 });
-
     await dashboardPage.switchToArchived();
     await dashboardPage.deleteNote('Toast Timing Note');
 
@@ -32,5 +25,13 @@ test.describe('Toast timing', () => {
     await page.waitForTimeout(TOAST_ACTION_AUTO_DISMISS_MS - 1000);
     await expect(undoToast).toBeVisible();
     await expect(page.getByTestId('toast')).toHaveCount(0, { timeout: 4000 });
+
+    await dashboardPage.switchToBin();
+    await dashboardPage.permanentlyDeleteNoteFromBin('Toast Timing Note');
+
+    const standardToast = page.getByTestId('toast').last();
+    await expect(standardToast).toBeVisible();
+    await expect(standardToast.getByRole('button', { name: 'Undo' })).toHaveCount(0);
+    await expect(page.getByTestId('toast')).toHaveCount(0, { timeout: 6000 });
   });
 });
