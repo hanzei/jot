@@ -1,5 +1,7 @@
 import { Page, expect, Locator } from '@playwright/test';
 
+const escapeForRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 export class DashboardPage {
   constructor(private page: Page) {}
 
@@ -382,21 +384,21 @@ export class DashboardPage {
   /** Clicks a label button in the sidebar to toggle the label filter. */
   async selectSidebarLabel(labelName: string) {
     await this.ensureSidebarOpen();
-    await this.page.locator('aside ul').getByRole('button', { name: labelName, exact: true }).click();
+    const row = this.sidebarLabelRow(labelName);
+    await expect(row).toBeVisible();
+    await row.locator('button').first().click();
   }
 
   async expectLabelInSidebar(labelName: string) {
     await this.ensureSidebarOpen();
-    await expect(
-      this.page.locator('aside ul').getByRole('button', { name: labelName, exact: true })
-    ).toBeVisible();
+    const row = this.sidebarLabelRow(labelName);
+    await expect(row).toBeVisible();
+    await expect(row.locator('button span.truncate')).toHaveText(labelName);
   }
 
   async expectLabelNotInSidebar(labelName: string) {
     await this.ensureSidebarOpen();
-    await expect(
-      this.page.locator('aside ul').getByRole('button', { name: labelName, exact: true })
-    ).toHaveCount(0);
+    await expect(this.sidebarLabelRow(labelName)).toHaveCount(0);
   }
 
   async createSidebarLabel(labelName: string) {
@@ -415,9 +417,10 @@ export class DashboardPage {
   }
 
   private sidebarLabelRow(labelName: string): Locator {
+    const exactLabelName = new RegExp(`^${escapeForRegex(labelName)}$`);
     return this.page
       .locator('aside [data-testid="sidebar-labels"] li')
-      .filter({ has: this.page.getByRole('button', { name: labelName, exact: true }) })
+      .filter({ has: this.page.locator('button span.truncate', { hasText: exactLabelName }) })
       .first();
   }
 
