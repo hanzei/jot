@@ -236,6 +236,18 @@ export interface NoteSSEEvent {
   };
 }
 
+export interface PersonalAccessToken {
+  id: string;
+  name: string;
+  created_at: string;
+  /** Only present in the create response; never returned by list. */
+  token?: string;
+}
+
+export interface CreatePATRequest {
+  name: string;
+}
+
 export interface ProfileIconSSEEvent {
   type: 'profile_icon_updated';
   source_user_id: string;

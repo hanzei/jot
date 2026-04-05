@@ -157,7 +157,21 @@
     "importButton": "Importer depuis Google Keep",
     "currentServerSection": "Serveur",
     "currentServerLabel": "Serveur actif",
-    "noServerConfigured": "Aucun serveur configuré"
+    "noServerConfigured": "Aucun serveur configuré",
+    "patsSection": "Jetons d'accès personnels",
+    "patsDescription": "Jetons pour l'accès à l'API depuis des scripts et des outils externes.",
+    "patsNamePlaceholder": "Nom du jeton",
+    "patsCreate": "Créer",
+    "patsCreating": "Création en cours...",
+    "patsCreateError": "Échec de la création du jeton.",
+    "patsRevoke": "Révoquer",
+    "patsRevoking": "Révocation en cours...",
+    "patsRevokeConfirmTitle": "Révoquer le jeton",
+    "patsRevokeConfirmMessage": "Êtes-vous sûr de vouloir révoquer \"{{name}}\" ? Cette action est irréversible.",
+    "patsRevokeError": "Échec de la révocation du jeton.",
+    "patsNone": "Aucun jeton d'accès personnel pour l'instant.",
+    "patsNewTokenTitle": "Votre nouveau jeton d'accès",
+    "patsLoadError": "Échec du chargement des jetons."
   },
   "about": {
     "clientInfo": "Infos client",

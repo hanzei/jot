@@ -157,7 +157,21 @@
     "importButton": "Importuj z Google Keep",
     "currentServerSection": "Serwer",
     "currentServerLabel": "Aktywny serwer",
-    "noServerConfigured": "Brak skonfigurowanego serwera"
+    "noServerConfigured": "Brak skonfigurowanego serwera",
+    "patsSection": "Osobiste tokeny dostępu",
+    "patsDescription": "Tokeny do dostępu do API ze skryptów i narzędzi zewnętrznych.",
+    "patsNamePlaceholder": "Nazwa tokena",
+    "patsCreate": "Utwórz",
+    "patsCreating": "Tworzenie...",
+    "patsCreateError": "Nie udało się utworzyć tokena.",
+    "patsRevoke": "Unieważnij",
+    "patsRevoking": "Unieważnianie...",
+    "patsRevokeConfirmTitle": "Unieważnij token",
+    "patsRevokeConfirmMessage": "Czy na pewno chcesz unieważnić „{{name}}”? Tej operacji nie można cofnąć.",
+    "patsRevokeError": "Nie udało się unieważnić tokena.",
+    "patsNone": "Brak osobistych tokenów dostępu.",
+    "patsNewTokenTitle": "Twój nowy token dostępu",
+    "patsLoadError": "Nie udało się załadować tokenów."
   },
   "about": {
     "clientInfo": "Informacje o kliencie",

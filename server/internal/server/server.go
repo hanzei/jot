@@ -60,6 +60,7 @@ type Server struct {
 	eventsHandler   *handlers.EventsHandler
 	adminHandler    *handlers.AdminHandler
 	sessionsHandler *handlers.SessionsHandler
+	patsHandler     *handlers.PATsHandler
 	noteStore       *models.NoteStore
 	labelStore      *models.LabelStore
 }
@@ -80,8 +81,9 @@ func New(cfg *config.Config) (*Server, error) {
 	adminStatsStore := models.NewAdminStatsStore(db.DB)
 	sessionStore := models.NewSessionStore(db.DB)
 	userSettingsStore := models.NewUserSettingsStore(db.DB)
+	patStore := models.NewPATStore(db.DB)
 
-	sessionService := auth.NewSessionService(sessionStore, userStore, cfg.CookieSecure)
+	sessionService := auth.NewSessionService(sessionStore, userStore, patStore, cfg.CookieSecure)
 
 	ctx, cancel := context.WithCancel(context.Background())
 
@@ -93,6 +95,7 @@ func New(cfg *config.Config) (*Server, error) {
 	eventsHandler := handlers.NewEventsHandler(hub)
 	adminHandler := handlers.NewAdminHandler(userStore, noteStore, adminStatsStore, userSettingsStore, cfg.DBPath, cfg.PasswordMinLength)
 	sessionsHandler := handlers.NewSessionsHandler(sessionStore)
+	patsHandler := handlers.NewPATsHandler(patStore)
 
 	s := &Server{
 		cfg:             cfg,
@@ -108,6 +111,7 @@ func New(cfg *config.Config) (*Server, error) {
 		eventsHandler:   eventsHandler,
 		adminHandler:    adminHandler,
 		sessionsHandler: sessionsHandler,
+		patsHandler:     patsHandler,
 		noteStore:       noteStore,
 		labelStore:      labelStore,
 	}
@@ -135,7 +139,7 @@ func (s *Server) setupRoutes() error {
 
 	corsOpts := cors.Options{
 		AllowedMethods:   []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodOptions},
-		AllowedHeaders:   []string{"Accept", "Content-Type"},
+		AllowedHeaders:   []string{"Accept", "Content-Type", "Authorization"},
 		ExposedHeaders:   []string{"Link"},
 		AllowCredentials: true,
 		MaxAge:           300,
@@ -201,8 +205,12 @@ func (s *Server) setupRoutes() error {
 
 			r.Get("/users", s.wrapHandler(s.notesHandler.SearchUsers))
 
-			r.Get("/sessions", s.wrapHandler(s.sessionsHandler.ListSessions))
-			r.Delete("/sessions/{id}", s.wrapHandler(s.sessionsHandler.RevokeSession))
+			r.With(auth.SessionRequired).Get("/sessions", s.wrapHandler(s.sessionsHandler.ListSessions))
+			r.With(auth.SessionRequired).Delete("/sessions/{id}", s.wrapHandler(s.sessionsHandler.RevokeSession))
+
+			r.With(auth.SessionRequired).Get("/pats", s.wrapHandler(s.patsHandler.ListPATs))
+			r.With(auth.SessionRequired).Post("/pats", s.wrapHandler(s.patsHandler.CreatePAT))
+			r.With(auth.SessionRequired).Delete("/pats/{id}", s.wrapHandler(s.patsHandler.RevokePAT))
 
 			r.Handle("/mcp", mcphandler.New(s.noteStore, s.labelStore).NewStreamableHTTPHandler())
 		})
