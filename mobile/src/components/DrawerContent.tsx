@@ -416,14 +416,12 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
                         {label.name}
                       </Text>
                     </TouchableOpacity>
-                    {labelCount >= 0 && (
-                      <Text
-                        style={[styles.labelCount, { color: isActive ? colors.primary : colors.textSecondary }]}
-                        testID={`drawer-label-count-${label.id}`}
-                      >
-                        {labelCount}
-                      </Text>
-                    }
+                    <Text
+                      style={[styles.labelCount, { color: isActive ? colors.primary : colors.textSecondary }]}
+                      testID={`drawer-label-count-${label.id}`}
+                    >
+                      {labelCount}
+                    </Text>
                     <TouchableOpacity
                       style={styles.labelMenuButton}
                       onPress={() => openLabelMenu(label)}
