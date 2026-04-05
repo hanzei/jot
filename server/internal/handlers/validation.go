@@ -23,6 +23,9 @@ const (
 	noteItemsMaxCount     = 500
 	searchQueryMaxLength  = 500
 	patNameMaxLength      = 100
+	// maxPATsPerUser caps the number of personal access tokens a user can hold.
+	// Keep in sync with shared/src/constants.ts VALIDATION.PAT_MAX_COUNT.
+	maxPATsPerUser = 50
 )
 
 func validateUsername(username string) error {

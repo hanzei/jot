@@ -3,6 +3,7 @@ package handlers
 import (
 	"encoding/json"
 	"errors"
+	"fmt"
 	"net/http"
 	"time"
 
@@ -87,6 +88,14 @@ func (h *PATsHandler) CreatePAT(w http.ResponseWriter, r *http.Request) (int, an
 
 	if err := validatePATName(req.Name); err != nil {
 		return http.StatusBadRequest, nil, err
+	}
+
+	existing, err := h.patStore.GetByUserID(r.Context(), user.ID)
+	if err != nil {
+		return http.StatusInternalServerError, nil, err
+	}
+	if len(existing) >= maxPATsPerUser {
+		return http.StatusUnprocessableEntity, nil, fmt.Errorf("maximum number of personal access tokens (%d) reached", maxPATsPerUser)
 	}
 
 	pat, rawToken, err := h.patStore.Create(r.Context(), user.ID, req.Name)

@@ -3,6 +3,7 @@ package main
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	"net/http"
 	"testing"
 	"time"
@@ -273,5 +274,27 @@ func TestPATs(t *testing.T) {
 		// Verify the second PAT still exists via cookie auth.
 		pats := listPATs(t, ts, u)
 		assert.Len(t, pats, 2)
+	})
+
+	t.Run("create returns 422 when limit reached", func(t *testing.T) {
+		ts := setupTestServer(t)
+		u := ts.createTestUser(t, "alice", "password123", false)
+
+		// Create up to the limit.
+		for i := range 50 {
+			createPAT(t, ts, u, fmt.Sprintf("token-%d", i))
+		}
+
+		// The next creation should be rejected.
+		body, err := json.Marshal(map[string]string{"name": "one too many"})
+		require.NoError(t, err)
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, ts.HTTPServer.URL+"/api/v1/pats", bytes.NewReader(body))
+		require.NoError(t, err)
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := u.Client.HTTPClient().Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		assert.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode)
 	})
 }
