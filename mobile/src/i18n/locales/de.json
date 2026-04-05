@@ -257,6 +257,13 @@
     "title": "Labels",
     "noLabels": "Noch keine Labels",
     "newLabelPlaceholder": "Neues Label",
+
+    "newSidebar": "+ Neues Label",
+    "createInputLabel": "Neuer Labelname",
+    "createSave": "Label erstellen",
+    "createCancel": "Label-Erstellung abbrechen",
+    "createSuccess": "Label erstellt",
+    "createError": "Label konnte nicht erstellt werden.",
     "failedUpdate": "Label konnte nicht aktualisiert werden",
     "failedCreate": "Label konnte nicht erstellt werden",
     "menuOptions": "Wähle eine Aktion für dieses Label.",

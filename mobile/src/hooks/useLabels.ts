@@ -1,12 +1,21 @@
 import { useRef } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSQLiteContext, type SQLiteDatabase } from 'expo-sqlite';
-import { getLabels, addLabelToNote, removeLabelFromNote, renameLabel, deleteLabel } from '../api/labels';
+import {
+  getLabels,
+  getLabelCounts,
+  createLabel,
+  addLabelToNote,
+  removeLabelFromNote,
+  renameLabel,
+  deleteLabel,
+} from '../api/labels';
 import { getNotes } from '../api/notes';
 import { saveNote, saveNotes, renameLabelInLocalNotes, deleteLabelFromLocalNotes } from '../db/noteQueries';
 import { useNetworkStatus } from './useNetworkStatus';
 import { isServerSwitchInProgress } from '../api/client';
 import {
+  labelCountsQueryKey,
   labelsQueryKey,
   noteLocalQueryKey,
   noteLocalQueryScopeKey,
@@ -68,6 +77,38 @@ export function useLabels() {
   });
 }
 
+export function useLabelCounts() {
+  return useQuery({
+    queryKey: labelCountsQueryKey(),
+    queryFn: getLabelCounts,
+  });
+}
+
+export function useCreateLabel() {
+  const queryClient = useQueryClient();
+  const { isConnected } = useNetworkStatus();
+  const isConnectedRef = useRef(isConnected);
+  isConnectedRef.current = isConnected;
+
+  return useMutation({
+    mutationFn: async ({ name }: { name: string }) => {
+      assertSwitchWriteAllowed();
+      if (!isConnectedRef.current) {
+        throw new Error('Label creation requires an internet connection');
+      }
+      return createLabel(name);
+    },
+    onSuccess: () => {
+      queryClient.invalidateQueries({ queryKey: labelsQueryKey() });
+      queryClient.invalidateQueries({ queryKey: labelCountsQueryKey() });
+      queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
+      queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+      queryClient.invalidateQueries({ queryKey: noteQueryScopeKey() });
+      queryClient.invalidateQueries({ queryKey: noteLocalQueryScopeKey() });
+    },
+  });
+}
+
 export function useAddLabelToNote() {
   const queryClient = useQueryClient();
   const db = useSQLiteContext();
@@ -84,6 +125,7 @@ export function useAddLabelToNote() {
       queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
       // Invalidate labels list since a new label name may have been created
       queryClient.invalidateQueries({ queryKey: labelsQueryKey() });
+      queryClient.invalidateQueries({ queryKey: labelCountsQueryKey() });
     },
   });
 }
@@ -103,6 +145,7 @@ export function useRemoveLabelFromNote() {
       queryClient.invalidateQueries({ queryKey: noteQueryKey(noteId) });
       queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
       queryClient.invalidateQueries({ queryKey: labelsQueryKey() });
+      queryClient.invalidateQueries({ queryKey: labelCountsQueryKey() });
     },
   });
 }
@@ -135,6 +178,7 @@ export function useRenameLabel() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: labelsQueryKey() });
+      queryClient.invalidateQueries({ queryKey: labelCountsQueryKey() });
       queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
       queryClient.invalidateQueries({ queryKey: noteQueryScopeKey() });
@@ -170,6 +214,7 @@ export function useDeleteLabel() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: labelsQueryKey() });
+      queryClient.invalidateQueries({ queryKey: labelCountsQueryKey() });
       queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
       queryClient.invalidateQueries({ queryKey: noteQueryScopeKey() });

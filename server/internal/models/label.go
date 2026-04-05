@@ -51,6 +51,47 @@ func (s *LabelStore) GetLabels(ctx context.Context, userID string) ([]Label, err
 	return labels, nil
 }
 
+// GetLabelCounts returns a map of label ID to note count for active notes.
+// Counts exclude archived and trashed notes to match the default notes view.
+func (s *LabelStore) GetLabelCounts(ctx context.Context, userID string) (map[string]int, error) {
+	rows, err := s.db.QueryContext(ctx, `
+		SELECT l.id, COUNT(nus.note_id) AS note_count
+		FROM labels l
+		LEFT JOIN note_labels nl
+			ON nl.label_id = l.id AND nl.user_id = l.user_id
+		LEFT JOIN notes n
+			ON n.id = nl.note_id
+			AND n.deleted_at IS NULL
+		LEFT JOIN note_user_state nus
+			ON nus.note_id = n.id
+			AND nus.user_id = l.user_id
+			AND nus.archived = FALSE
+		WHERE l.user_id = ?
+		GROUP BY l.id
+	`, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get label counts: %w", err)
+	}
+	defer func() {
+		_ = rows.Close()
+	}()
+
+	counts := map[string]int{}
+	for rows.Next() {
+		var labelID string
+		var count int
+		if err := rows.Scan(&labelID, &count); err != nil {
+			return nil, fmt.Errorf("scan label count: %w", err)
+		}
+		counts[labelID] = count
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("iterate label counts: %w", err)
+	}
+
+	return counts, nil
+}
+
 // GetOrCreateLabel finds an existing label by name for a user or creates a new one.
 // Uses an atomic upsert to avoid race conditions when multiple callers create the same label concurrently.
 func (s *LabelStore) GetOrCreateLabel(ctx context.Context, userID, name string) (*Label, error) {

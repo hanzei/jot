@@ -271,7 +271,13 @@
   "labels": {
     "title": "Labels",
     "noLabels": "No labels yet",
+    "newSidebar": "+ New Label",
     "newLabelPlaceholder": "New label",
+    "createInputLabel": "New label name",
+    "createSave": "Create label",
+    "createCancel": "Cancel",
+    "createSuccess": "Label created",
+    "createError": "Failed to create label.",
     "failedUpdate": "Failed to update label",
     "failedCreate": "Failed to create label",
     "menuOptions": "Choose an action for this label.",

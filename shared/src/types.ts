@@ -236,6 +236,14 @@ export interface NoteSSEEvent {
   };
 }
 
+export interface LabelsChangedSSEEvent {
+  type: 'labels_changed';
+  source_user_id: string;
+  data: {
+    label: Label;
+  };
+}
+
 export interface PersonalAccessToken {
   id: string;
   name: string;
@@ -256,4 +264,4 @@ export interface ProfileIconSSEEvent {
   };
 }
 
-export type SSEEvent = NoteSSEEvent | ProfileIconSSEEvent;
+export type SSEEvent = NoteSSEEvent | LabelsChangedSSEEvent | ProfileIconSSEEvent;

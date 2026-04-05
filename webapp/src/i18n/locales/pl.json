@@ -359,6 +359,12 @@
     "noLabels": "Brak etykiet",
     "newLabelPlaceholder": "Nazwa etykiety...",
     "createNew": "Utwórz nową...",
+    "newSidebar": "+ Nowa etykieta",
+    "createInputLabel": "Nazwa nowej etykiety",
+    "createSave": "Utwórz etykietę",
+    "createCancel": "Anuluj tworzenie etykiety",
+    "createSuccess": "Etykieta utworzona",
+    "createError": "Nie udało się utworzyć etykiety.",
     "menuOptions": "Opcje etykiety dla {{name}}",
     "rename": "Zmień nazwę",
     "delete": "Usuń",
@@ -422,6 +428,7 @@
     "archive": "Archiwum - Jot",
     "bin": "Kosz - Jot",
     "admin": "Admin - Jot",
-    "settings": "Ustawienia - Jot"
+    "settings": "Ustawienia - Jot",
+    "label": "{{name}} - Jot"
   }
 }
