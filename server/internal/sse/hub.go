@@ -1,9 +1,14 @@
 package sse
 
 import (
+	"context"
+	"fmt"
 	"sync"
 
 	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/metric"
 )
 
 // EventType identifies the kind of note mutation that occurred.
@@ -21,22 +26,55 @@ const (
 type Event struct {
 	Type         EventType `json:"type"`
 	NoteID       string    `json:"note_id"`
-	Note         any       `json:"note"`            // nil for deleted/unshared
-	SourceUserID string    `json:"source_user_id"` // who triggered the change
-	TargetUserID string    `json:"target_user_id,omitempty"` // user affected (e.g. unshared)
+	Note         any       `json:"note"`                        // nil for deleted/unshared
+	SourceUserID string    `json:"source_user_id"`              // who triggered the change
+	TargetUserID string    `json:"target_user_id,omitempty"`    // user affected (e.g. unshared)
 }
 
 // Hub manages per-user SSE subscriber channels.
 type Hub struct {
-	mu      sync.RWMutex
-	clients map[string][]chan Event // user_id -> subscriber channels
+	mu                sync.RWMutex
+	clients           map[string][]chan Event // user_id -> subscriber channels
+	subscribersActive metric.Int64UpDownCounter
+	eventsPublished   metric.Int64Counter
+	eventsDropped     metric.Int64Counter
 }
 
-// NewHub creates a ready-to-use Hub.
-func NewHub() *Hub {
-	return &Hub{
-		clients: make(map[string][]chan Event),
+// NewHub creates a ready-to-use Hub with OTel instruments initialised from the
+// global MeterProvider. Returns an error if any instrument cannot be created.
+func NewHub() (*Hub, error) {
+	meter := otel.GetMeterProvider().Meter("github.com/hanzei/jot/server")
+
+	subscribersActive, err := meter.Int64UpDownCounter(
+		"sse.subscribers.active",
+		metric.WithDescription("Number of active SSE subscriber connections"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create sse.subscribers.active instrument: %w", err)
 	}
+
+	eventsPublished, err := meter.Int64Counter(
+		"sse.events.published",
+		metric.WithDescription("Total SSE events delivered to subscriber channels"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create sse.events.published instrument: %w", err)
+	}
+
+	eventsDropped, err := meter.Int64Counter(
+		"sse.events.dropped",
+		metric.WithDescription("Total SSE events dropped because a subscriber channel was full"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create sse.events.dropped instrument: %w", err)
+	}
+
+	return &Hub{
+		clients:           make(map[string][]chan Event),
+		subscribersActive: subscribersActive,
+		eventsPublished:   eventsPublished,
+		eventsDropped:     eventsDropped,
+	}, nil
 }
 
 // Subscribe registers a buffered channel for userID and returns an unsubscribe function.
@@ -47,6 +85,8 @@ func (h *Hub) Subscribe(userID string) (<-chan Event, func()) {
 	h.mu.Lock()
 	h.clients[userID] = append(h.clients[userID], ch)
 	h.mu.Unlock()
+
+	h.subscribersActive.Add(context.Background(), 1)
 
 	unsubscribe := func() {
 		h.mu.Lock()
@@ -62,6 +102,7 @@ func (h *Hub) Subscribe(userID string) (<-chan Event, func()) {
 			delete(h.clients, userID)
 		}
 		close(ch)
+		h.subscribersActive.Add(context.Background(), -1)
 	}
 
 	return ch, unsubscribe
@@ -69,9 +110,13 @@ func (h *Hub) Subscribe(userID string) (<-chan Event, func()) {
 
 // Publish sends an event to all channels registered for each of the given user IDs.
 // Duplicate user IDs are ignored. Events are dropped (non-blocking) if a channel's buffer is full.
-func (h *Hub) Publish(userIDs []string, event Event) {
+// ctx should be the request context of the caller so that OTel exemplars can link
+// the metric increments to the active trace span.
+func (h *Hub) Publish(ctx context.Context, userIDs []string, event Event) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
+
+	eventAttr := attribute.String("event.type", string(event.Type))
 
 	seen := make(map[string]struct{}, len(userIDs))
 	for _, uid := range userIDs {
@@ -82,8 +127,10 @@ func (h *Hub) Publish(userIDs []string, event Event) {
 		for _, ch := range h.clients[uid] {
 			select {
 			case ch <- event:
+				h.eventsPublished.Add(ctx, 1, metric.WithAttributes(eventAttr))
 			default:
 				logrus.WithField("type", event.Type).WithField("note_id", event.NoteID).WithField("user_id", uid).Warn("sse: dropping event, channel full")
+				h.eventsDropped.Add(ctx, 1, metric.WithAttributes(eventAttr))
 			}
 		}
 	}

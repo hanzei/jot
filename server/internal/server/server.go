@@ -27,6 +27,8 @@ import (
 	"github.com/hanzei/jot/server/internal/sse"
 	"github.com/sirupsen/logrus"
 	httpSwagger "github.com/swaggo/http-swagger/v2"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/trace"
 )
 
 func buildInfo() aboutResponse {
@@ -74,21 +76,36 @@ func New(cfg *config.Config) (*Server, error) {
 		return nil, fmt.Errorf("initialize database: %w", err)
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+
 	userStore := models.NewUserStore(db.DB)
 	noteStore := models.NewNoteStore(db.DB)
 	labelStore := models.NewLabelStore(db.DB)
 	adminStatsStore := models.NewAdminStatsStore(db.DB)
-	sessionStore := models.NewSessionStore(db.DB)
+	sessionStore, err := models.NewSessionStore(db.DB)
+	if err != nil {
+		cancel()
+		_ = db.Close()
+		return nil, fmt.Errorf("initialize session store: %w", err)
+	}
 	userSettingsStore := models.NewUserSettingsStore(db.DB)
 
 	sessionService := auth.NewSessionService(sessionStore, userStore, cfg.CookieSecure)
 
-	ctx, cancel := context.WithCancel(context.Background())
-
-	hub := sse.NewHub()
+	hub, err := sse.NewHub()
+	if err != nil {
+		cancel()
+		_ = db.Close()
+		return nil, fmt.Errorf("initialize SSE hub: %w", err)
+	}
 
 	authHandler := handlers.NewAuthHandler(userStore, sessionService, userSettingsStore, cfg.RegistrationEnabled, cfg.PasswordMinLength)
-	notesHandler := handlers.NewNotesHandler(noteStore, userStore, labelStore, hub)
+	notesHandler, err := handlers.NewNotesHandler(noteStore, userStore, labelStore, hub)
+	if err != nil {
+		cancel()
+		_ = db.Close()
+		return nil, fmt.Errorf("initialize notes handler: %w", err)
+	}
 	labelsHandler := handlers.NewLabelsHandler(noteStore, labelStore, hub)
 	eventsHandler := handlers.NewEventsHandler(hub)
 	adminHandler := handlers.NewAdminHandler(userStore, noteStore, adminStatsStore, userSettingsStore, cfg.DBPath, cfg.PasswordMinLength)
@@ -129,6 +146,10 @@ func New(cfg *config.Config) (*Server, error) {
 
 func (s *Server) setupRoutes() error {
 	s.router.Use(middleware.RequestID)
+	s.router.Use(otelhttp.NewMiddleware(""))
+	// otelhttp sets the span name before chi populates RoutePattern, so a
+	// second middleware renames the span after routing is complete.
+	s.router.Use(chiRouteSpanNamer)
 	s.router.Use(requestLoggerMiddleware)
 	s.router.Use(middleware.Recoverer)
 	s.router.Use(securityHeaders(s.cfg.CookieSecure))
@@ -414,6 +435,19 @@ func securityHeaders(cookieSecure bool) func(http.Handler) http.Handler {
 			next.ServeHTTP(w, r)
 		})
 	}
+}
+
+// chiRouteSpanNamer renames the active OTel span to "METHOD /route/{pattern}"
+// after chi has matched the route. It must be registered after otelhttp so the
+// span already exists, and it runs the next handler first so chi has populated
+// RouteContext before the rename happens.
+func chiRouteSpanNamer(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		next.ServeHTTP(w, r)
+		if rctx := chi.RouteContext(r.Context()); rctx != nil && rctx.RoutePattern() != "" {
+			trace.SpanFromContext(r.Context()).SetName(r.Method + " " + rctx.RoutePattern())
+		}
+	})
 }
 
 func requestLoggerMiddleware(next http.Handler) http.Handler {

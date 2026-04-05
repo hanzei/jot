@@ -11,7 +11,8 @@ import (
 
 func TestHub_Subscribe(t *testing.T) {
 	t.Run("returns readable channel and unsubscribe func", func(t *testing.T) {
-		h := NewHub()
+		h, err := NewHub()
+		require.NoError(t, err)
 		ch, unsub := h.Subscribe("user1")
 
 		require.NotNil(t, ch)
@@ -19,7 +20,8 @@ func TestHub_Subscribe(t *testing.T) {
 	})
 
 	t.Run("multiple subscribers for same user each get their own channel", func(t *testing.T) {
-		h := NewHub()
+		h, err := NewHub()
+		require.NoError(t, err)
 		ch1, _ := h.Subscribe("user1")
 		ch2, _ := h.Subscribe("user1")
 
@@ -33,7 +35,8 @@ func TestHub_Subscribe(t *testing.T) {
 
 func TestHub_Unsubscribe(t *testing.T) {
 	t.Run("removes channel and closes it", func(t *testing.T) {
-		h := NewHub()
+		h, err := NewHub()
+		require.NoError(t, err)
 		_, unsub := h.Subscribe("user1")
 
 		unsub()
@@ -46,7 +49,8 @@ func TestHub_Unsubscribe(t *testing.T) {
 	})
 
 	t.Run("removes only the unsubscribed channel when multiple exist", func(t *testing.T) {
-		h := NewHub()
+		h, err := NewHub()
+		require.NoError(t, err)
 		_, unsub1 := h.Subscribe("user1")
 		_, _ = h.Subscribe("user1")
 
@@ -58,7 +62,8 @@ func TestHub_Unsubscribe(t *testing.T) {
 	})
 
 	t.Run("closed channel is readable and reflects no pending events", func(t *testing.T) {
-		h := NewHub()
+		h, err := NewHub()
+		require.NoError(t, err)
 		ch, unsub := h.Subscribe("user1")
 		unsub()
 
@@ -76,11 +81,12 @@ func TestHub_Publish(t *testing.T) { //nolint:gocognit
 	}
 
 	t.Run("delivers event to subscribed user", func(t *testing.T) {
-		h := NewHub()
+		h, err := NewHub()
+		require.NoError(t, err)
 		ch, unsub := h.Subscribe("user1")
 		defer unsub()
 
-		h.Publish([]string{"user1"}, event)
+		h.Publish(t.Context(), []string{"user1"}, event)
 
 		select {
 		case got := <-ch:
@@ -91,13 +97,14 @@ func TestHub_Publish(t *testing.T) { //nolint:gocognit
 	})
 
 	t.Run("delivers event to all channels of a user", func(t *testing.T) {
-		h := NewHub()
+		h, err := NewHub()
+		require.NoError(t, err)
 		ch1, unsub1 := h.Subscribe("user1")
 		ch2, unsub2 := h.Subscribe("user1")
 		defer unsub1()
 		defer unsub2()
 
-		h.Publish([]string{"user1"}, event)
+		h.Publish(t.Context(), []string{"user1"}, event)
 
 		select {
 		case got := <-ch1:
@@ -115,13 +122,14 @@ func TestHub_Publish(t *testing.T) { //nolint:gocognit
 	})
 
 	t.Run("delivers event to multiple different users", func(t *testing.T) {
-		h := NewHub()
+		h, err := NewHub()
+		require.NoError(t, err)
 		ch1, unsub1 := h.Subscribe("user1")
 		ch2, unsub2 := h.Subscribe("user2")
 		defer unsub1()
 		defer unsub2()
 
-		h.Publish([]string{"user1", "user2"}, event)
+		h.Publish(t.Context(), []string{"user1", "user2"}, event)
 
 		select {
 		case got := <-ch1:
@@ -139,12 +147,13 @@ func TestHub_Publish(t *testing.T) { //nolint:gocognit
 	})
 
 	t.Run("skips users with no subscribers", func(t *testing.T) {
-		h := NewHub()
+		h, err := NewHub()
+		require.NoError(t, err)
 		ch, unsub := h.Subscribe("user1")
 		defer unsub()
 
 		// Publish to user1 and a non-subscribed user; should not panic or block.
-		h.Publish([]string{"user1", "nobody"}, event)
+		h.Publish(t.Context(), []string{"user1", "nobody"}, event)
 
 		select {
 		case got := <-ch:
@@ -155,19 +164,20 @@ func TestHub_Publish(t *testing.T) { //nolint:gocognit
 	})
 
 	t.Run("drops events without blocking when channel buffer is full", func(t *testing.T) {
-		h := NewHub()
+		h, err := NewHub()
+		require.NoError(t, err)
 		ch, unsub := h.Subscribe("user1")
 		defer unsub()
 
 		// Fill the channel buffer (capacity 16).
 		for range 16 {
-			h.Publish([]string{"user1"}, event)
+			h.Publish(t.Context(), []string{"user1"}, event)
 		}
 
 		// This 17th publish must not block.
 		done := make(chan struct{})
 		go func() {
-			h.Publish([]string{"user1"}, event)
+			h.Publish(t.Context(), []string{"user1"}, event)
 			close(done)
 		}()
 
@@ -198,7 +208,8 @@ func TestHub_Publish(t *testing.T) { //nolint:gocognit
 
 func TestHub_ConcurrentAccess(t *testing.T) {
 	t.Run("concurrent subscribe, publish, and unsubscribe do not race", func(t *testing.T) {
-		h := NewHub()
+		h, err := NewHub()
+		require.NoError(t, err)
 		var wg sync.WaitGroup
 
 		// Multiple goroutines subscribing and unsubscribing.
@@ -207,7 +218,7 @@ func TestHub_ConcurrentAccess(t *testing.T) {
 			go func() {
 				defer wg.Done()
 				ch, unsub := h.Subscribe("user1")
-				h.Publish([]string{"user1"}, Event{Type: EventNoteUpdated, NoteID: "n1", SourceUserID: "u1"})
+				h.Publish(t.Context(), []string{"user1"}, Event{Type: EventNoteUpdated, NoteID: "n1", SourceUserID: "u1"})
 				// Drain any delivered event so the channel doesn't block unsubscribe.
 				select {
 				case <-ch:
@@ -222,7 +233,7 @@ func TestHub_ConcurrentAccess(t *testing.T) {
 			wg.Add(1)
 			go func() {
 				defer wg.Done()
-				h.Publish([]string{"user1", "user2"}, Event{Type: EventNoteDeleted, NoteID: "n2", SourceUserID: "u2"})
+				h.Publish(t.Context(), []string{"user1", "user2"}, Event{Type: EventNoteDeleted, NoteID: "n2", SourceUserID: "u2"})
 			}()
 		}
 

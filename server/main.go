@@ -48,6 +48,7 @@ import (
 	_ "github.com/hanzei/jot/server/docs"
 	"github.com/hanzei/jot/server/internal/config"
 	"github.com/hanzei/jot/server/internal/server"
+	"github.com/hanzei/jot/server/internal/telemetry"
 	"github.com/sirupsen/logrus"
 )
 
@@ -56,6 +57,22 @@ func main() {
 	if err != nil {
 		logrus.WithError(err).Fatal("Failed to load configuration")
 	}
+
+	ctx := context.Background()
+	otelShutdown, err := telemetry.Setup(ctx, telemetry.Config{
+		Enabled:     cfg.OTelEnabled,
+		Endpoint:    cfg.OTelEndpoint,
+		ServiceName: cfg.OTelServiceName,
+	})
+	if err != nil {
+		logrus.WithError(err).Fatal("Failed to initialise OpenTelemetry")
+	}
+	defer func() {
+		if shutdownErr := otelShutdown(ctx); shutdownErr != nil {
+			logrus.WithError(shutdownErr).Warn("OpenTelemetry shutdown error")
+		}
+	}()
+
 	s, err := server.New(cfg)
 	if err != nil {
 		logrus.WithError(err).Fatal("Failed to initialize server")

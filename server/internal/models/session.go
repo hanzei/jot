@@ -8,6 +8,9 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/metric"
 )
 
 const (
@@ -28,11 +31,42 @@ type Session struct {
 }
 
 type SessionStore struct {
-	db *sql.DB
+	db      *sql.DB
+	created metric.Int64Counter
+	evicted metric.Int64Counter
+	expired metric.Int64Counter
 }
 
-func NewSessionStore(db *sql.DB) *SessionStore {
-	return &SessionStore{db: db}
+// NewSessionStore creates a SessionStore with OTel instruments initialised from
+// the global MeterProvider. Returns an error if any instrument cannot be created.
+func NewSessionStore(db *sql.DB) (*SessionStore, error) {
+	meter := otel.GetMeterProvider().Meter("github.com/hanzei/jot/server")
+
+	created, err := meter.Int64Counter(
+		"sessions.created",
+		metric.WithDescription("Total sessions created"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create sessions.created instrument: %w", err)
+	}
+
+	evicted, err := meter.Int64Counter(
+		"sessions.evicted",
+		metric.WithDescription("Total sessions evicted due to per-user session cap"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create sessions.evicted instrument: %w", err)
+	}
+
+	expired, err := meter.Int64Counter(
+		"sessions.expired",
+		metric.WithDescription("Total expired sessions deleted during periodic cleanup"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create sessions.expired instrument: %w", err)
+	}
+
+	return &SessionStore{db: db, created: created, evicted: evicted, expired: expired}, nil
 }
 
 func generateSessionToken() (string, error) {
@@ -71,7 +105,8 @@ func (s *SessionStore) Create(ctx context.Context, userID, userAgent string) (*S
 		ORDER BY created_at DESC
 		LIMIT -1 OFFSET ?
 	)`
-	if _, err = tx.ExecContext(ctx, evictQuery, userID, now, MaxSessionsPerUser-1); err != nil {
+	evictResult, err := tx.ExecContext(ctx, evictQuery, userID, now, MaxSessionsPerUser-1)
+	if err != nil {
 		return nil, fmt.Errorf("failed to evict old sessions: %w", err)
 	}
 
@@ -83,6 +118,11 @@ func (s *SessionStore) Create(ctx context.Context, userID, userAgent string) (*S
 	if err = tx.Commit(); err != nil {
 		return nil, fmt.Errorf("failed to commit session: %w", err)
 	}
+
+	if n, rowErr := evictResult.RowsAffected(); rowErr == nil && n > 0 {
+		s.evicted.Add(ctx, n)
+	}
+	s.created.Add(ctx, 1)
 
 	return &Session{
 		Token:     token,
@@ -168,8 +208,12 @@ func (s *SessionStore) DeleteByUserID(ctx context.Context, userID string) error 
 
 func (s *SessionStore) DeleteExpired(ctx context.Context) error {
 	query := `DELETE FROM sessions WHERE expires_at <= ?`
-	if _, err := s.db.ExecContext(ctx, query, time.Now()); err != nil {
+	result, err := s.db.ExecContext(ctx, query, time.Now())
+	if err != nil {
 		return fmt.Errorf("failed to delete expired sessions: %w", err)
+	}
+	if n, rowErr := result.RowsAffected(); rowErr == nil && n > 0 {
+		s.expired.Add(ctx, n)
 	}
 	return nil
 }

@@ -16,6 +16,9 @@ type Config struct {
 	CookieSecure        bool
 	RegistrationEnabled bool
 	PasswordMinLength   int
+	OTelEnabled         bool
+	OTelEndpoint        string
+	OTelServiceName     string
 }
 
 // Load reads configuration from environment variables, applying defaults
@@ -27,6 +30,7 @@ func Load() (*Config, error) {
 		CookieSecure:        true,
 		RegistrationEnabled: true,
 		PasswordMinLength:   10,
+		OTelServiceName:     "jot",
 	}
 
 	if v := os.Getenv("PORT"); v != "" {
@@ -78,6 +82,21 @@ func Load() (*Config, error) {
 			return nil, fmt.Errorf("invalid PASSWORD_MIN_LENGTH value %d: must be between 1 and 72", n)
 		}
 		cfg.PasswordMinLength = n
+	}
+
+	switch os.Getenv("OTEL_ENABLED") {
+	case "true":
+		cfg.OTelEnabled = true
+	case "", "false":
+		// default already set to false
+	default:
+		return nil, fmt.Errorf("invalid OTEL_ENABLED value %q: must be \"true\" or \"false\"", os.Getenv("OTEL_ENABLED"))
+	}
+
+	cfg.OTelEndpoint = os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+
+	if v := os.Getenv("OTEL_SERVICE_NAME"); v != "" {
+		cfg.OTelServiceName = v
 	}
 
 	return cfg, nil
