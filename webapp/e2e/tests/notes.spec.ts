@@ -94,7 +94,10 @@ test.describe('Notes', () => {
     await dashboardPage.emptyTrash();
 
     await dashboardPage.expectEmptyTrashButtonHidden();
-    await dashboardPage.expectEmptyState('Bin is empty');
+    await dashboardPage.expectEmptyState(
+      'Bin is empty',
+      'Deleted notes remain here until they are removed.',
+    );
   });
 
   test('pins a note and it appears in the pinned section', async ({ page, dashboardPage }) => {
@@ -382,7 +385,11 @@ test.describe('Notes', () => {
 
   test('shows empty state when no notes exist', async ({ dashboardPage }) => {
     await dashboardPage.goto();
-    await dashboardPage.expectEmptyState('No notes yet');
+    await dashboardPage.expectEmptyState(
+      'No notes yet',
+      'Click "New Note" to create your first note',
+      true,
+    );
   });
 
   test('pressing Enter on a non-last todo item inserts a new item below it', async ({ dashboardPage }) => {
