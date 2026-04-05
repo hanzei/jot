@@ -430,6 +430,7 @@ func (h *NotesHandler) DuplicateNote(w http.ResponseWriter, r *http.Request) (in
 	}
 
 	h.publishNoteEvent(r.Context(), duplicatedNote.ID, sse.EventNoteCreated, duplicatedNote, user.ID)
+	h.notesCreated.Add(r.Context(), 1)
 	return http.StatusCreated, duplicatedNote, nil
 }
 
@@ -722,6 +723,7 @@ func (h *NotesHandler) EmptyTrash(w http.ResponseWriter, r *http.Request) (int, 
 
 	for _, deletedNote := range deletedNotes {
 		h.publishDeletedNoteEvent(r.Context(), deletedNote.NoteID, deletedNote.AudienceIDs, user.ID)
+		h.notesDeleted.Add(r.Context(), 1)
 	}
 
 	return http.StatusOK, EmptyTrashResponse{Deleted: len(deletedNotes)}, nil

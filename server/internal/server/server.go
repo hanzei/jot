@@ -495,7 +495,7 @@ func (s *Server) Start(addr string) error {
 	// Start the metrics server on its own port before the main server so it is
 	// ready by the time we signal readiness. A failure here is fatal — if the
 	// operator configured a metrics port it must be reachable.
-	metricsAddr := fmt.Sprintf(":%d", s.cfg.MetricsPort)
+	metricsAddr := fmt.Sprintf("%s:%d", s.cfg.MetricsHost, s.cfg.MetricsPort)
 	metricsListener, err := (&net.ListenConfig{}).Listen(s.ctx, "tcp", metricsAddr)
 	if err != nil {
 		startErr := fmt.Errorf("listen on metrics port: %w", err)
@@ -525,6 +525,11 @@ func (s *Server) Start(addr string) error {
 	listener, err := (&net.ListenConfig{}).Listen(s.ctx, "tcp", addr)
 	if err != nil {
 		startErr := fmt.Errorf("listen: %w", err)
+		// Tear down the metrics server that started successfully above.
+		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer shutdownCancel()
+		_ = metricsServer.Shutdown(shutdownCtx)
+		s.bgWg.Wait()
 		s.setStartResult(startErr)
 		return startErr
 	}

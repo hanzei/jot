@@ -5,7 +5,7 @@ import (
 	"fmt"
 	"sync"
 
-	"github.com/sirupsen/logrus"
+	"github.com/hanzei/jot/server/internal/logutil"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/metric"
@@ -140,7 +140,7 @@ func (h *Hub) Publish(ctx context.Context, userIDs []string, event Event) {
 			case ch <- event:
 				h.eventsPublished.Add(ctx, 1, metric.WithAttributes(eventAttr))
 			default:
-				logrus.WithField("type", event.Type).WithField("user_id", uid).Warn("sse: dropping event, channel full")
+				logutil.FromContext(ctx).WithField("type", string(event.Type)).WithField("user_id", uid).Warn("sse: dropping event, channel full")
 				h.eventsDropped.Add(ctx, 1, metric.WithAttributes(eventAttr))
 			}
 		}

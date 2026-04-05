@@ -11,6 +11,7 @@ import (
 type Config struct {
 	Port                int
 	MetricsPort         int
+	MetricsHost         string
 	DBPath              string
 	StaticDir           string
 	CORSAllowedOrigin   string
@@ -20,6 +21,7 @@ type Config struct {
 	OTelEnabled         bool
 	OTelEndpoint        string
 	OTelServiceName     string
+	OTelInsecure        bool
 }
 
 // Load reads configuration from environment variables, applying defaults
@@ -28,6 +30,7 @@ func Load() (*Config, error) {
 	cfg := &Config{
 		Port:                8080,
 		MetricsPort:         8081,
+		MetricsHost:         "127.0.0.1",
 		DBPath:              "./jot.db",
 		CookieSecure:        true,
 		RegistrationEnabled: true,
@@ -55,6 +58,10 @@ func Load() (*Config, error) {
 			return nil, fmt.Errorf("invalid METRICS_PORT value %d: must be between 1 and 65535", p)
 		}
 		cfg.MetricsPort = p
+	}
+
+	if v := os.Getenv("METRICS_HOST"); v != "" {
+		cfg.MetricsHost = v
 	}
 
 	if v := os.Getenv("DB_PATH"); v != "" {
@@ -110,6 +117,15 @@ func Load() (*Config, error) {
 
 	if v := os.Getenv("OTEL_SERVICE_NAME"); v != "" {
 		cfg.OTelServiceName = v
+	}
+
+	switch os.Getenv("OTEL_EXPORTER_OTLP_INSECURE") {
+	case "true":
+		cfg.OTelInsecure = true
+	case "", "false":
+		// default false
+	default:
+		return nil, fmt.Errorf("invalid OTEL_EXPORTER_OTLP_INSECURE value %q: must be \"true\" or \"false\"", os.Getenv("OTEL_EXPORTER_OTLP_INSECURE"))
 	}
 
 	return cfg, nil

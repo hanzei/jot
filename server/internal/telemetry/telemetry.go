@@ -41,6 +41,11 @@ type Config struct {
 	// ServiceName is the service name reported in all traces, metrics, and logs.
 	// Defaults to "jot".
 	ServiceName string
+
+	// Insecure controls whether OTLP gRPC connections skip TLS verification.
+	// Set to true only for local collectors or development environments.
+	// Defaults to false (TLS enabled).
+	Insecure bool
 }
 
 // Setup initialises the OpenTelemetry SDK according to cfg and registers the
@@ -91,7 +96,7 @@ func Setup(ctx context.Context, cfg Config) (shutdown func(context.Context) erro
 	)
 
 	if cfg.Endpoint != "" {
-		tp, mp, lp, shutdowns, err = setupOTLP(ctx, res, cfg.Endpoint, promExp)
+		tp, mp, lp, shutdowns, err = setupOTLP(ctx, res, cfg.Endpoint, cfg.Insecure, promExp)
 	} else {
 		tp, mp, lp, shutdowns, err = setupStdout(ctx, res, promExp)
 	}
@@ -114,28 +119,28 @@ func Setup(ctx context.Context, cfg Config) (shutdown func(context.Context) erro
 	}, nil
 }
 
-func setupOTLP(ctx context.Context, res *resource.Resource, endpoint string, promExp *promexporter.Exporter) (*sdktrace.TracerProvider, *metric.MeterProvider, *sdklog.LoggerProvider, []func(context.Context) error, error) {
-	traceExporter, err := otlptracegrpc.New(ctx,
-		otlptracegrpc.WithEndpoint(endpoint),
-		otlptracegrpc.WithInsecure(),
-	)
+func setupOTLP(ctx context.Context, res *resource.Resource, endpoint string, insecure bool, promExp *promexporter.Exporter) (*sdktrace.TracerProvider, *metric.MeterProvider, *sdklog.LoggerProvider, []func(context.Context) error, error) {
+	traceOpts := []otlptracegrpc.Option{otlptracegrpc.WithEndpoint(endpoint)}
+	metricOpts := []otlpmetricgrpc.Option{otlpmetricgrpc.WithEndpoint(endpoint)}
+	logOpts := []otlploggrpc.Option{otlploggrpc.WithEndpoint(endpoint)}
+	if insecure {
+		traceOpts = append(traceOpts, otlptracegrpc.WithInsecure())
+		metricOpts = append(metricOpts, otlpmetricgrpc.WithInsecure())
+		logOpts = append(logOpts, otlploggrpc.WithInsecure())
+	}
+
+	traceExporter, err := otlptracegrpc.New(ctx, traceOpts...)
 	if err != nil {
 		return nil, nil, nil, nil, fmt.Errorf("create OTLP trace exporter: %w", err)
 	}
 
-	metricExporter, err := otlpmetricgrpc.New(ctx,
-		otlpmetricgrpc.WithEndpoint(endpoint),
-		otlpmetricgrpc.WithInsecure(),
-	)
+	metricExporter, err := otlpmetricgrpc.New(ctx, metricOpts...)
 	if err != nil {
 		_ = traceExporter.Shutdown(ctx)
 		return nil, nil, nil, nil, fmt.Errorf("create OTLP metric exporter: %w", err)
 	}
 
-	logExporter, err := otlploggrpc.New(ctx,
-		otlploggrpc.WithEndpoint(endpoint),
-		otlploggrpc.WithInsecure(),
-	)
+	logExporter, err := otlploggrpc.New(ctx, logOpts...)
 	if err != nil {
 		_ = traceExporter.Shutdown(ctx)
 		_ = metricExporter.Shutdown(ctx)

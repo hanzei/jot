@@ -64,12 +64,15 @@ func main() {
 		Enabled:     cfg.OTelEnabled,
 		Endpoint:    cfg.OTelEndpoint,
 		ServiceName: cfg.OTelServiceName,
+		Insecure:    cfg.OTelInsecure,
 	})
 	if err != nil {
 		logrus.WithError(err).Fatal("Failed to initialise OpenTelemetry")
 	}
 	defer func() {
-		if shutdownErr := otelShutdown(ctx); shutdownErr != nil {
+		timeoutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if shutdownErr := otelShutdown(timeoutCtx); shutdownErr != nil {
 			logrus.WithError(shutdownErr).Warn("OpenTelemetry shutdown error")
 		}
 	}()
@@ -85,7 +88,7 @@ func main() {
 		logrus.WithError(err).Fatal("Failed to initialize server")
 	}
 	addr := fmt.Sprintf(":%d", cfg.Port)
-	logrus.Infof("Starting Jot server on %s (metrics on :%d)", addr, cfg.MetricsPort)
+	logrus.Infof("Starting Jot server on %s (metrics on %s:%d)", addr, cfg.MetricsHost, cfg.MetricsPort)
 
 	serverErrCh := make(chan error, 1)
 	go func() {
