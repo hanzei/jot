@@ -211,7 +211,7 @@ const SidebarLabels = ({
                       <span
                         id={`label-count-${label.id}`}
                         data-testid={`label-count-${label.id}`}
-                        className={`ml-auto shrink-0 text-xs ${isActive ? 'text-blue-600 dark:text-blue-300' : 'text-gray-400 dark:text-gray-500'}`}
+                        className={`ml-auto shrink-0 text-xs transition-opacity opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 ${isActive ? 'text-blue-600 dark:text-blue-300' : 'text-gray-400 dark:text-gray-500'}`}
                       >
                         {labelCounts[label.id] ?? 0}
                       </span>
