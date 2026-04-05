@@ -59,7 +59,18 @@
     "passwordRequired": "La contraseña es obligatoria",
     "createAccountLink": "Crear cuenta",
     "alreadyHaveAccount": "¿Ya tienes una cuenta? Inicia sesión",
-    "unableToConnect": "No se puede conectar al servidor"
+    "unableToConnect": "No se puede conectar al servidor",
+    "serverSetupTitle": "Configura tu servidor",
+    "serverSetupDescription": "Introduce la URL de tu servidor Jot para continuar. Podrás cambiar o añadir más servidores después.",
+    "serverSetupContinue": "Continuar",
+    "serverSetupInputA11yLabel": "Campo de URL del servidor",
+    "serverSetupSubmitA11yLabel": "Validar servidor y continuar",
+    "serverSetupConnectionFailed": "No se pudo conectar con ese servidor. Revisa la URL y tu conexión, y vuelve a intentarlo.",
+    "serverSetupConnectionInvalidServer": "Se pudo conectar, pero no parece un endpoint API de Jot compatible.",
+    "serverSetupExampleLocalhost": "Ejemplo: http://localhost:8080 (simulador de iOS)",
+    "serverSetupExampleAndroidEmulator": "Ejemplo: http://10.0.2.2:8080 (emulador de Android)",
+    "serverSetupExampleLan": "Ejemplo: http://192.168.1.42:8080 (LAN)",
+    "serverSetupExampleHosted": "Ejemplo: https://notes.example.com (dominio autohospedado)"
   },
   "dashboard": {
     "newNote": "Nueva nota",

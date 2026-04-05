@@ -44,7 +44,18 @@
     "passwordRequired": "Le mot de passe est requis",
     "createAccountLink": "Créer un compte",
     "alreadyHaveAccount": "Vous avez déjà un compte ? Se connecter",
-    "unableToConnect": "Impossible de se connecter au serveur"
+    "unableToConnect": "Impossible de se connecter au serveur",
+    "serverSetupTitle": "Configurer votre serveur",
+    "serverSetupDescription": "Entrez l'URL de votre serveur Jot pour continuer. Vous pourrez ajouter ou changer de serveur plus tard.",
+    "serverSetupContinue": "Continuer",
+    "serverSetupInputA11yLabel": "Champ URL du serveur",
+    "serverSetupSubmitA11yLabel": "Valider le serveur et continuer",
+    "serverSetupConnectionFailed": "Impossible d'atteindre ce serveur. Vérifiez l'URL et votre connexion, puis réessayez.",
+    "serverSetupConnectionInvalidServer": "Connexion établie, mais ce point de terminaison ne semble pas être une API Jot compatible.",
+    "serverSetupExampleLocalhost": "Exemple : http://localhost:8080 (simulateur iOS)",
+    "serverSetupExampleAndroidEmulator": "Exemple : http://10.0.2.2:8080 (émulateur Android)",
+    "serverSetupExampleLan": "Exemple : http://192.168.1.42:8080 (LAN)",
+    "serverSetupExampleHosted": "Exemple : https://notes.example.com (domaine auto-hébergé)"
   },
   "dashboard": {
     "newNote": "Nouvelle note",
