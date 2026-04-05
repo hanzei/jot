@@ -10,6 +10,7 @@ import (
 // Config holds all server configuration values.
 type Config struct {
 	Port                int
+	MetricsEnabled      bool
 	MetricsPort         int
 	MetricsHost         string
 	DBPath              string
@@ -62,6 +63,15 @@ func Load() (*Config, error) {
 
 	if v := os.Getenv("METRICS_HOST"); v != "" {
 		cfg.MetricsHost = v
+	}
+
+	switch os.Getenv("METRICS_ENABLED") {
+	case "true":
+		cfg.MetricsEnabled = true
+	case "", "false":
+		// default false
+	default:
+		return nil, fmt.Errorf("invalid METRICS_ENABLED value %q: must be \"true\" or \"false\"", os.Getenv("METRICS_ENABLED"))
 	}
 
 	if v := os.Getenv("DB_PATH"); v != "" {

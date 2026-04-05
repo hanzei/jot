@@ -88,7 +88,11 @@ func main() {
 		logrus.WithError(err).Fatal("Failed to initialize server")
 	}
 	addr := fmt.Sprintf(":%d", cfg.Port)
-	logrus.Infof("Starting Jot server on %s (metrics on %s:%d)", addr, cfg.MetricsHost, cfg.MetricsPort)
+	if cfg.MetricsEnabled {
+		logrus.Infof("Starting Jot server on %s (metrics on %s:%d)", addr, cfg.MetricsHost, cfg.MetricsPort)
+	} else {
+		logrus.Infof("Starting Jot server on %s", addr)
+	}
 
 	serverErrCh := make(chan error, 1)
 	go func() {

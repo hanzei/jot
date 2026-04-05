@@ -492,44 +492,51 @@ func requestLoggerMiddleware(next http.Handler) http.Handler {
 }
 
 func (s *Server) Start(addr string) error {
-	// Start the metrics server on its own port before the main server so it is
-	// ready by the time we signal readiness. A failure here is fatal — if the
-	// operator configured a metrics port it must be reachable.
-	metricsAddr := fmt.Sprintf("%s:%d", s.cfg.MetricsHost, s.cfg.MetricsPort)
-	metricsListener, err := (&net.ListenConfig{}).Listen(s.ctx, "tcp", metricsAddr)
-	if err != nil {
-		startErr := fmt.Errorf("listen on metrics port: %w", err)
-		s.setStartResult(startErr)
-		return startErr
-	}
-	mux := http.NewServeMux()
-	mux.Handle("GET /metrics", promhttp.Handler())
-	metricsServer := &http.Server{
-		Handler:      mux,
-		ReadTimeout:  10 * time.Second,
-		WriteTimeout: 10 * time.Second,
-		IdleTimeout:  30 * time.Second,
-	}
-	s.serverMu.Lock()
-	s.metricsServer = metricsServer
-	s.serverMu.Unlock()
-	s.bgWg.Add(1)
-	go func() {
-		defer s.bgWg.Done()
-		if err := metricsServer.Serve(metricsListener); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			logrus.WithError(err).Error("metrics server stopped unexpectedly")
+	if s.cfg.MetricsEnabled {
+		// Start the metrics server on its own port before the main server so it
+		// is ready by the time we signal readiness. A failure here is fatal — if
+		// the operator enabled metrics the port must be reachable.
+		metricsAddr := fmt.Sprintf("%s:%d", s.cfg.MetricsHost, s.cfg.MetricsPort)
+		metricsListener, err := (&net.ListenConfig{}).Listen(s.ctx, "tcp", metricsAddr)
+		if err != nil {
+			startErr := fmt.Errorf("listen on metrics port: %w", err)
+			s.setStartResult(startErr)
+			return startErr
 		}
-	}()
-	logrus.Infof("Metrics server listening on %s", metricsAddr)
+		mux := http.NewServeMux()
+		mux.Handle("GET /metrics", promhttp.Handler())
+		metricsServer := &http.Server{
+			Handler:      mux,
+			ReadTimeout:  10 * time.Second,
+			WriteTimeout: 10 * time.Second,
+			IdleTimeout:  30 * time.Second,
+		}
+		s.serverMu.Lock()
+		s.metricsServer = metricsServer
+		s.serverMu.Unlock()
+		s.bgWg.Add(1)
+		go func() {
+			defer s.bgWg.Done()
+			if err := metricsServer.Serve(metricsListener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				logrus.WithError(err).Error("metrics server stopped unexpectedly")
+			}
+		}()
+		logrus.Infof("Metrics server listening on %s", metricsAddr)
+	}
 
 	listener, err := (&net.ListenConfig{}).Listen(s.ctx, "tcp", addr)
 	if err != nil {
 		startErr := fmt.Errorf("listen: %w", err)
-		// Tear down the metrics server that started successfully above.
-		shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
-		defer shutdownCancel()
-		_ = metricsServer.Shutdown(shutdownCtx)
-		s.bgWg.Wait()
+		// Tear down the metrics server if it started successfully above.
+		s.serverMu.RLock()
+		metricsServer := s.metricsServer
+		s.serverMu.RUnlock()
+		if metricsServer != nil {
+			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer shutdownCancel()
+			_ = metricsServer.Shutdown(shutdownCtx)
+			s.bgWg.Wait()
+		}
 		s.setStartResult(startErr)
 		return startErr
 	}
