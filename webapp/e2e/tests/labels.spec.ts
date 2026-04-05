@@ -233,6 +233,11 @@ test.describe('Label Filtering', () => {
 test.describe('Label Filtering — Mobile', () => {
   test.use({ viewport: { width: 375, height: 812 } });
 
+  const sidebarLabelButtonByName = (sidebar: ReturnType<typeof expect['soft']> extends never ? never : never, labelName: string) =>
+    sidebar.locator('button').filter({
+      has: sidebar.locator('span.truncate', { hasText: new RegExp(`^${labelName}$`) }),
+    }).first();
+
   test.beforeEach(async ({ authenticatedUser }) => {
     void authenticatedUser;
   });
@@ -250,7 +255,9 @@ test.describe('Label Filtering — Mobile', () => {
 
     await expect(sidebar.getByTestId('sidebar-labels')).toBeVisible();
     await expect(
-      sidebar.locator('ul').getByRole('button', { name: 'mobilelabel', exact: true })
+      sidebar.locator('button').filter({
+        has: sidebar.locator('span.truncate', { hasText: /^mobilelabel$/ }),
+      }).first()
     ).toBeVisible();
   });
 
@@ -279,10 +286,14 @@ test.describe('Label Filtering — Mobile', () => {
     await expect(sidebar).toBeVisible();
 
     await expect(
-      sidebar.locator('ul').getByRole('button', { name: 'alpha', exact: true })
+      sidebar.locator('button').filter({
+        has: sidebar.locator('span.truncate', { hasText: /^alpha$/ }),
+      }).first()
     ).toBeVisible();
     await expect(
-      sidebar.locator('ul').getByRole('button', { name: 'beta', exact: true })
+      sidebar.locator('button').filter({
+        has: sidebar.locator('span.truncate', { hasText: /^beta$/ }),
+      }).first()
     ).toBeVisible();
   });
 });

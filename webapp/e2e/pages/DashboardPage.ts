@@ -479,12 +479,12 @@ export class DashboardPage {
     await this.ensureSidebarOpen();
     const sidebar = this.page.locator('aside[aria-label="Main navigation"]');
 
-    const labelButton = sidebar.getByRole('button', { name: labelName, exact: true });
+    const labelRow = this.sidebarLabelRow(labelName);
     const labelsSection = sidebar.locator('[data-testid="sidebar-labels"]');
     const archiveButton = sidebar.locator('[aria-label="Archive"]');
     const binButton = sidebar.locator('[aria-label="Bin"]');
 
-    await expect(labelButton).toBeVisible();
+    await expect(labelRow).toBeVisible();
     await expect(labelsSection).toBeVisible();
     await expect(archiveButton).toBeVisible();
     await expect(binButton).toBeVisible();
