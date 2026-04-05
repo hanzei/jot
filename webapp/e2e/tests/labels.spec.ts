@@ -233,11 +233,6 @@ test.describe('Label Filtering', () => {
 test.describe('Label Filtering — Mobile', () => {
   test.use({ viewport: { width: 375, height: 812 } });
 
-  const sidebarLabelButtonByName = (sidebar: ReturnType<typeof expect['soft']> extends never ? never : never, labelName: string) =>
-    sidebar.locator('button').filter({
-      has: sidebar.locator('span.truncate', { hasText: new RegExp(`^${labelName}$`) }),
-    }).first();
-
   test.beforeEach(async ({ authenticatedUser }) => {
     void authenticatedUser;
   });
@@ -254,11 +249,7 @@ test.describe('Label Filtering — Mobile', () => {
     await expect(sidebar).toBeVisible();
 
     await expect(sidebar.getByTestId('sidebar-labels')).toBeVisible();
-    await expect(
-      sidebar.locator('button').filter({
-        has: sidebar.locator('span.truncate', { hasText: /^mobilelabel$/ }),
-      }).first()
-    ).toBeVisible();
+    await dashboardPage.expectLabelInSidebar('mobilelabel');
   });
 
   test('clicking a label filters notes and closes the sidebar on mobile', async ({ page, dashboardPage }) => {
@@ -285,15 +276,7 @@ test.describe('Label Filtering — Mobile', () => {
     await page.getByRole('button', { name: 'Toggle sidebar' }).click();
     await expect(sidebar).toBeVisible();
 
-    await expect(
-      sidebar.locator('button').filter({
-        has: sidebar.locator('span.truncate', { hasText: /^alpha$/ }),
-      }).first()
-    ).toBeVisible();
-    await expect(
-      sidebar.locator('button').filter({
-        has: sidebar.locator('span.truncate', { hasText: /^beta$/ }),
-      }).first()
-    ).toBeVisible();
+    await dashboardPage.expectLabelInSidebar('alpha');
+    await dashboardPage.expectLabelInSidebar('beta');
   });
 });
