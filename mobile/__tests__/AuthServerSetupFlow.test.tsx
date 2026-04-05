@@ -165,6 +165,7 @@ describe('Auth first-run server setup flow', () => {
 
   it('moves to register form after reachable server and keeps registration working', async () => {
     const { getByTestId, findByTestId } = renderRegisterScreen();
+    const validPassword = 'pass1234567';
 
     await waitFor(() => {
       expect(getByTestId('register-server-setup-step')).toBeTruthy();
@@ -179,17 +180,17 @@ describe('Auth first-run server setup flow', () => {
     expect(await findByTestId('username-input')).toBeTruthy();
 
     fireEvent.changeText(getByTestId('username-input'), 'new_user');
-    fireEvent.changeText(getByTestId('password-input'), 'pass1234');
+    fireEvent.changeText(getByTestId('password-input'), validPassword);
 
     await waitFor(() => {
       expect(getByTestId('username-input').props.value).toBe('new_user');
-      expect(getByTestId('password-input').props.value).toBe('pass1234');
+      expect(getByTestId('password-input').props.value).toBe(validPassword);
     });
 
     fireEvent.press(getByTestId('register-button'));
 
     await waitFor(() => {
-      expect(mockRegister).toHaveBeenCalledWith('new_user', 'pass1234');
+      expect(mockRegister).toHaveBeenCalledWith('new_user', validPassword);
     });
   });
 
