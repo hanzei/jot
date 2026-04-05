@@ -193,6 +193,43 @@ test.describe('Settings', () => {
   });
 });
 
+test.describe('Settings sidebar navigation', () => {
+  test('shows all nav tabs with none active', async ({ authenticatedUser, settingsPage }) => {
+    await settingsPage.goto();
+
+    await settingsPage.expectSidebarNavTabsVisible();
+    await settingsPage.expectNoTabActive();
+    void authenticatedUser;
+  });
+
+  test('Notes tab navigates to the dashboard', async ({ authenticatedUser, page, settingsPage }) => {
+    await settingsPage.goto();
+
+    await settingsPage.sidebarNotesTab().click();
+
+    await expect(page).toHaveURL('/');
+    void authenticatedUser;
+  });
+
+  test('Archive tab navigates to the archive view', async ({ authenticatedUser, page, settingsPage }) => {
+    await settingsPage.goto();
+
+    await settingsPage.sidebarArchiveTab().click();
+
+    await expect(page).toHaveURL(/[?&]view=archive/);
+    void authenticatedUser;
+  });
+
+  test('Bin tab navigates to the bin view', async ({ authenticatedUser, page, settingsPage }) => {
+    await settingsPage.goto();
+
+    await settingsPage.sidebarBinTab().click();
+
+    await expect(page).toHaveURL(/[?&]view=bin/);
+    void authenticatedUser;
+  });
+});
+
 test.describe('Settings sidebar labels — Mobile', () => {
   test.use({ viewport: { width: 375, height: 812 } });
 

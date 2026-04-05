@@ -138,4 +138,25 @@ export class SettingsPage {
   async clickMobileLabel(labelName = 'settings-mobile-label') {
     await this.sidebar().locator('ul').getByRole('button', { name: labelName, exact: true }).click();
   }
+
+  private sidebarTab(label: string) {
+    return this.sidebar().locator(`[aria-label="${label}"]`);
+  }
+
+  sidebarNotesTab() { return this.sidebarTab('Notes'); }
+  sidebarMyTodoTab() { return this.sidebarTab('My Todo'); }
+  sidebarArchiveTab() { return this.sidebarTab('Archive'); }
+  sidebarBinTab() { return this.sidebarTab('Bin'); }
+
+  private allNavTabs() {
+    return [this.sidebarNotesTab(), this.sidebarMyTodoTab(), this.sidebarArchiveTab(), this.sidebarBinTab()];
+  }
+
+  async expectSidebarNavTabsVisible() {
+    await Promise.all(this.allNavTabs().map(tab => expect(tab).toBeVisible()));
+  }
+
+  async expectNoTabActive() {
+    await Promise.all(this.allNavTabs().map(tab => expect(tab).not.toHaveAttribute('aria-current', 'page')));
+  }
 }
