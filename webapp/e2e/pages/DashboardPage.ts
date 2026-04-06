@@ -1,5 +1,7 @@
 import { Page, expect, Locator } from '@playwright/test';
 
+const escapeForRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 export class DashboardPage {
   constructor(private page: Page) {}
 
@@ -114,9 +116,12 @@ export class DashboardPage {
     const card = this.page.locator('[data-testid="note-card"]').filter({
       has: this.page.locator('h3').getByText(title, { exact: true }),
     });
-    // force is intentional: hover/waitFor-based approaches were flaky in CI when sidebar overlays intercepted pointer events.
-    // TODO: remove force when note-card menu is reliably actionability-safe without hover timing dependence.
-    await card.locator('button[aria-label="Note options"]').click({ force: true });
+    await expect(card).toBeVisible();
+    const menuButton = card.getByRole('button', { name: 'Note options' });
+    // Focus + keyboard activation avoids pointer-interception flakes from overlays.
+    await menuButton.focus();
+    await this.page.keyboard.press('Enter');
+    await expect(menuButton).toHaveAttribute('aria-expanded', 'true');
   }
 
   async deleteNote(title: string) {
@@ -217,9 +222,20 @@ export class DashboardPage {
 
   private async ensureSidebarOpen() {
     const sidebar = this.page.locator('aside[aria-label="Main navigation"]');
+    const toggleSidebarButton = this.page.getByRole('button', { name: 'Toggle sidebar' });
     if (!(await sidebar.isVisible())) {
-      await this.page.getByRole('button', { name: 'Toggle sidebar' }).click();
+      await toggleSidebarButton.click();
       await expect(sidebar).toBeVisible();
+    }
+
+    // On desktop, a collapsed sidebar is still visible but hides label text/buttons.
+    const isSidebarCollapsed = await this.page.evaluate(() => localStorage.getItem('sidebar-collapsed') === 'true');
+    if (isSidebarCollapsed) {
+      await toggleSidebarButton.click();
+      await expect(sidebar).toBeVisible();
+      await expect.poll(
+        () => this.page.evaluate(() => localStorage.getItem('sidebar-collapsed'))
+      ).toBe('false');
     }
   }
 
@@ -368,21 +384,21 @@ export class DashboardPage {
   /** Clicks a label button in the sidebar to toggle the label filter. */
   async selectSidebarLabel(labelName: string) {
     await this.ensureSidebarOpen();
-    await this.page.locator('aside ul').getByRole('button', { name: labelName, exact: true }).click();
+    const row = this.sidebarLabelRow(labelName);
+    await expect(row).toBeVisible();
+    await row.locator('button').first().click();
   }
 
   async expectLabelInSidebar(labelName: string) {
     await this.ensureSidebarOpen();
-    await expect(
-      this.page.locator('aside ul').getByRole('button', { name: labelName, exact: true })
-    ).toBeVisible();
+    const row = this.sidebarLabelRow(labelName);
+    await expect(row).toBeVisible();
+    await expect(row.locator('button span.truncate')).toHaveText(labelName);
   }
 
   async expectLabelNotInSidebar(labelName: string) {
     await this.ensureSidebarOpen();
-    await expect(
-      this.page.locator('aside ul').getByRole('button', { name: labelName, exact: true })
-    ).toHaveCount(0);
+    await expect(this.sidebarLabelRow(labelName)).toHaveCount(0);
   }
 
   async createSidebarLabel(labelName: string) {
@@ -401,9 +417,10 @@ export class DashboardPage {
   }
 
   private sidebarLabelRow(labelName: string): Locator {
+    const exactLabelName = new RegExp(`^${escapeForRegex(labelName)}$`);
     return this.page
       .locator('aside [data-testid="sidebar-labels"] li')
-      .filter({ has: this.page.getByRole('button', { name: labelName, exact: true }) })
+      .filter({ has: this.page.locator('button span.truncate', { hasText: exactLabelName }) })
       .first();
   }
 
@@ -462,12 +479,12 @@ export class DashboardPage {
     await this.ensureSidebarOpen();
     const sidebar = this.page.locator('aside[aria-label="Main navigation"]');
 
-    const labelButton = sidebar.getByRole('button', { name: labelName, exact: true });
+    const labelRow = this.sidebarLabelRow(labelName);
     const labelsSection = sidebar.locator('[data-testid="sidebar-labels"]');
     const archiveButton = sidebar.locator('[aria-label="Archive"]');
     const binButton = sidebar.locator('[aria-label="Bin"]');
 
-    await expect(labelButton).toBeVisible();
+    await expect(labelRow).toBeVisible();
     await expect(labelsSection).toBeVisible();
     await expect(archiveButton).toBeVisible();
     await expect(binButton).toBeVisible();

@@ -249,9 +249,7 @@ test.describe('Label Filtering — Mobile', () => {
     await expect(sidebar).toBeVisible();
 
     await expect(sidebar.getByTestId('sidebar-labels')).toBeVisible();
-    await expect(
-      sidebar.locator('ul').getByRole('button', { name: 'mobilelabel', exact: true })
-    ).toBeVisible();
+    await dashboardPage.expectLabelInSidebar('mobilelabel');
   });
 
   test('clicking a label filters notes and closes the sidebar on mobile', async ({ page, dashboardPage }) => {
@@ -278,11 +276,7 @@ test.describe('Label Filtering — Mobile', () => {
     await page.getByRole('button', { name: 'Toggle sidebar' }).click();
     await expect(sidebar).toBeVisible();
 
-    await expect(
-      sidebar.locator('ul').getByRole('button', { name: 'alpha', exact: true })
-    ).toBeVisible();
-    await expect(
-      sidebar.locator('ul').getByRole('button', { name: 'beta', exact: true })
-    ).toBeVisible();
+    await dashboardPage.expectLabelInSidebar('alpha');
+    await dashboardPage.expectLabelInSidebar('beta');
   });
 });
