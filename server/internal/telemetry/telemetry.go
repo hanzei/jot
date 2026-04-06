@@ -10,6 +10,7 @@ import (
 	"os"
 
 	"github.com/sirupsen/logrus"
+	goruntime "go.opentelemetry.io/contrib/instrumentation/runtime"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
@@ -108,7 +109,7 @@ func Setup(ctx context.Context, cfg Config) (shutdown func(context.Context) erro
 	otel.SetMeterProvider(mp)
 	global.SetLoggerProvider(lp)
 
-	if err := startRuntimeMetrics(mp); err != nil {
+	if err := goruntime.Start(goruntime.WithMeterProvider(mp)); err != nil {
 		return nil, fmt.Errorf("start runtime metrics: %w", err)
 	}
 
