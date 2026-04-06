@@ -33,6 +33,7 @@ vi.mock('@/utils/api', () => ({
   },
   labels: {
     getAll: vi.fn().mockResolvedValue([]),
+    create: vi.fn(),
   },
   sessions: {
     list: vi.fn().mockResolvedValue([]),
@@ -109,6 +110,8 @@ describe('Settings', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockNavigate.mockReset()
+    vi.mocked(isAxiosError).mockReset()
+    vi.mocked(isAxiosError).mockReturnValue(false)
     vi.mocked(authUtils.isAdmin).mockReturnValue(false)
     vi.mocked(authUtils.getUser).mockReturnValue(mockUser)
     i18n.changeLanguage('en')
@@ -191,6 +194,33 @@ describe('Settings', () => {
 
       expect(mockNavigate).toHaveBeenCalledWith('/?label=label-1')
     })
+
+    it('shows new label action in sidebar and creates a label', async () => {
+      const user = userEvent.setup()
+      const createdLabel = {
+        id: 'label-2',
+        user_id: 'user1',
+        name: 'Ideas',
+        created_at: '2023-01-01T00:00:00Z',
+        updated_at: '2023-01-01T00:00:00Z',
+      }
+      vi.mocked(labelsApi.getAll).mockResolvedValueOnce([]).mockResolvedValueOnce([createdLabel])
+      vi.mocked(labelsApi.create).mockResolvedValue(createdLabel)
+
+      renderSettings()
+
+      await user.click(await screen.findByRole('button', { name: i18n.t('labels.newSidebar') }))
+      await user.type(screen.getByLabelText(i18n.t('labels.createInputLabel')), 'Ideas')
+      await user.click(screen.getByRole('button', { name: i18n.t('labels.createSave') }))
+
+      await waitFor(() => {
+        expect(labelsApi.create).toHaveBeenCalledWith('Ideas')
+      })
+      await waitFor(() => {
+        expect(labelsApi.getAll).toHaveBeenCalledTimes(2)
+      })
+      expect(await screen.findByRole('button', { name: 'Ideas' })).toBeInTheDocument()
+    })
   })
 
   describe('Username update', () => {
@@ -265,7 +295,7 @@ describe('Settings', () => {
       await user.click(screen.getByRole('button', { name: 'Save Changes' }))
 
       await waitFor(() => {
-        expect(screen.getByRole('alert')).toHaveTextContent('username already taken')
+        expect(screen.getAllByRole('alert')[0]).toHaveTextContent('username already taken')
       })
     })
 
@@ -279,11 +309,11 @@ describe('Settings', () => {
       await user.click(screen.getByRole('button', { name: 'Save Changes' }))
 
       await waitFor(() => {
-        expect(screen.getByRole('alert')).toHaveTextContent('Failed to update username.')
+        expect(screen.getAllByRole('alert')[0]).toHaveTextContent('Failed to update username.')
       })
     })
 
-    it('clears previous error/success messages on a new submission', async () => {
+    it('clears previous account error message on a new submission', async () => {
       const user = userEvent.setup()
       vi.mocked(isAxiosError).mockReturnValue(false)
       const mockSettings = { ...defaultSettings }
@@ -295,7 +325,7 @@ describe('Settings', () => {
 
       // First submit — causes error
       await user.click(screen.getByRole('button', { name: 'Save Changes' }))
-      await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument())
+      await waitFor(() => expect(screen.getAllByRole('alert')[0]).toBeInTheDocument())
 
       // Second submit — should clear error before resolving
       await user.click(screen.getByRole('button', { name: 'Save Changes' }))
@@ -374,23 +404,29 @@ describe('Settings', () => {
       await user.click(screen.getByTestId('logout-button'))
 
       await waitFor(() => {
-        expect(screen.getByRole('alert')).toHaveTextContent('Logout failed')
+        expect(screen.getAllByRole('alert')[0]).toHaveTextContent('Logout failed')
       })
     })
   })
 
   describe('Session revocation confirmation', () => {
+    const getSessionsSection = async () => {
+      const sessionsHeading = await screen.findByRole('heading', { name: i18n.t('settings.sessionsSection') })
+      return sessionsHeading.closest('section') as HTMLElement
+    }
+
     it('opens confirmation dialog before revoking a session', async () => {
       const user = userEvent.setup()
       vi.mocked(sessions.list).mockResolvedValue([activeSession])
 
       renderSettings()
 
+      const sessionsSection = await getSessionsSection()
       await waitFor(() => {
-        expect(screen.getByRole('button', { name: 'Revoke' })).toBeInTheDocument()
+        expect(within(sessionsSection).getByRole('button', { name: 'Revoke' })).toBeInTheDocument()
       })
 
-      await user.click(screen.getByRole('button', { name: 'Revoke' }))
+      await user.click(within(sessionsSection).getByRole('button', { name: 'Revoke' }))
 
       expect(screen.getByRole('heading', { name: 'Revoke session' })).toBeInTheDocument()
       expect(sessions.revoke).not.toHaveBeenCalled()
@@ -402,7 +438,8 @@ describe('Settings', () => {
 
       renderSettings()
 
-      await user.click(await screen.findByRole('button', { name: 'Revoke' }))
+      const sessionsSection = await getSessionsSection()
+      await user.click(within(sessionsSection).getByRole('button', { name: 'Revoke' }))
       const confirmDialog = screen.getByRole('dialog', { name: 'Revoke session' })
       await user.click(within(confirmDialog).getByRole('button', { name: 'Revoke' }))
 
@@ -417,7 +454,8 @@ describe('Settings', () => {
 
       renderSettings()
 
-      await user.click(await screen.findByRole('button', { name: 'Revoke' }))
+      const sessionsSection = await getSessionsSection()
+      await user.click(within(sessionsSection).getByRole('button', { name: 'Revoke' }))
       const confirmDialog = screen.getByRole('dialog', { name: 'Revoke session' })
       await user.click(within(confirmDialog).getByRole('button', { name: 'Cancel' }))
 

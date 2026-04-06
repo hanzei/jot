@@ -288,6 +288,31 @@ const Settings = ({ onLogout, passwordMinLength }: SettingsProps) => {
     }
   };
 
+  const handleCreateLabel = async (name: string): Promise<boolean> => {
+    try {
+      const createdLabel = await labelsApi.create(name);
+      setLabelsList((prev) => {
+        if (prev.some((label) => label.id === createdLabel.id)) {
+          return prev;
+        }
+        return [...prev, createdLabel];
+      });
+      labelsApi.getAll().then(setLabelsList).catch(() => {
+        // Keep optimistic label list if refresh fails.
+      });
+      showToast(t('labels.createSuccess'), 'success');
+      return true;
+    } catch (err: unknown) {
+      if (isAxiosError(err)) {
+        const msg = typeof err.response?.data === 'string' ? err.response.data.trim() : '';
+        showToast(msg || t('labels.createError'), 'error');
+      } else {
+        showToast(t('labels.createError'), 'error');
+      }
+      return false;
+    }
+  };
+
   const handleThemeChange = async (pref: ThemePreference) => {
     const prev = themePref;
     const current = getSettings();
@@ -371,6 +396,7 @@ const Settings = ({ onLogout, passwordMinLength }: SettingsProps) => {
     <SidebarLabels
       labels={labelsList}
       onSelect={(labelId) => navigate(`/?label=${encodeURIComponent(labelId)}`)}
+      onCreate={handleCreateLabel}
     />
   );
 
