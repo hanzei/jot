@@ -306,7 +306,6 @@ const Admin = ({ onLogout, passwordMinLength }: AdminProps) => {
                   value={formatNumber(stats.labels.total)}
                   valueTestId="admin-stats-labels-total"
                 >
-                  <StatLine label={t('admin.stats.metrics.totalLabels')} value={formatNumber(stats.labels.total)} />
                   <StatLine label={t('admin.stats.metrics.noteAssociations')} value={formatNumber(stats.labels.note_associations)} />
                 </StatCard>
 
