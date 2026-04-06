@@ -403,7 +403,7 @@ export class DashboardPage {
 
   async createSidebarLabel(labelName: string) {
     await this.ensureSidebarOpen();
-    await this.page.getByRole('button', { name: '+ New Label' }).click();
+    await this.page.getByRole('button', { name: 'New Label' }).click();
     const input = this.page.getByRole('textbox', { name: 'New label name' });
     await input.fill(labelName);
     await input.press('Enter');
