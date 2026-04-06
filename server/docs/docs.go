@@ -2592,6 +2592,9 @@ const docTemplate = `{
         "models.AdminUserStats": {
             "type": "object",
             "properties": {
+                "admins": {
+                    "type": "integer"
+                },
                 "total": {
                     "type": "integer"
                 }

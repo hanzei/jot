@@ -636,7 +636,7 @@ describe('API Module', () => {
     describe('getStats', () => {
       it('gets aggregate admin stats', async () => {
         const mockResponse: AdminStatsResponse = {
-          users: { total: 3 },
+          users: { total: 3, admins: 1 },
           notes: { total: 4, text: 2, todo: 2, trashed: 1, archived: 1 },
           sharing: { shared_notes: 1, share_links: 2 },
           labels: { total: 2, note_associations: 3 },
