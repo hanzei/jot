@@ -295,11 +295,10 @@ const Admin = ({ onLogout, passwordMinLength }: AdminProps) => {
                 </StatCard>
 
                 <StatCard
-                  title={t('admin.stats.cards.sharing')}
+                  title={t('admin.stats.metrics.sharedNotes')}
                   value={formatNumber(stats.sharing.shared_notes)}
                   valueTestId="admin-stats-shared-notes"
                 >
-                  <StatLine label={t('admin.stats.metrics.sharedNotes')} value={formatNumber(stats.sharing.shared_notes)} />
                   <StatLine label={t('admin.stats.metrics.shareLinks')} value={formatNumber(stats.sharing.share_links)} />
                 </StatCard>
 
