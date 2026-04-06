@@ -398,6 +398,10 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       }
     }
 
+    if (event.type === 'note_updated' && editingNote && note_id === editingNote.id && event.data.note) {
+      setEditingNote(event.data.note);
+    }
+
     loadNotes();
     loadLabelCounts();
     if (event.type === 'note_created' || event.type === 'note_updated') {
