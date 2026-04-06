@@ -10,6 +10,7 @@ import (
 	"os"
 
 	"github.com/sirupsen/logrus"
+	goruntime "go.opentelemetry.io/contrib/instrumentation/runtime"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/exporters/otlp/otlplog/otlploggrpc"
 	"go.opentelemetry.io/otel/exporters/otlp/otlpmetric/otlpmetricgrpc"
@@ -101,12 +102,19 @@ func Setup(ctx context.Context, cfg Config) (shutdown func(context.Context) erro
 		tp, mp, lp, shutdowns, err = setupStdout(ctx, res, promExp)
 	}
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("setup OTel providers: %w", err)
 	}
 
 	otel.SetTracerProvider(tp)
 	otel.SetMeterProvider(mp)
 	global.SetLoggerProvider(lp)
+
+	if err := goruntime.Start(goruntime.WithMeterProvider(mp)); err != nil {
+		for _, fn := range shutdowns {
+			_ = fn(ctx)
+		}
+		return nil, fmt.Errorf("start runtime metrics: %w", err)
+	}
 
 	return func(ctx context.Context) error {
 		var firstErr error
