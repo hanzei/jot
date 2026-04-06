@@ -1498,19 +1498,42 @@ func reorderImportedNotesTx(ctx context.Context, tx *sql.Tx, userID string, impo
 		buckets[b] = append(buckets[b], n)
 	}
 
-	for _, items := range buckets {
+	for key, items := range buckets {
+		// Find the highest existing position in this bucket so imported notes
+		// are appended after existing ones and do not collide.
+		var maxPos sql.NullInt64
+		if err := tx.QueryRowContext(ctx,
+			`SELECT MAX(nus.position)
+			   FROM note_user_state nus
+			   JOIN notes n ON n.id = nus.note_id
+			  WHERE nus.user_id = ?
+			    AND n.deleted_at IS NULL
+			    AND nus.pinned = ?
+			    AND nus.archived = ?`,
+			userID, key.pinned, key.archived,
+		).Scan(&maxPos); err != nil {
+			return fmt.Errorf("query max position: %w", err)
+		}
+		offset := 0
+		if maxPos.Valid {
+			offset = int(maxPos.Int64) + 1
+		}
+
 		slices.SortFunc(items, func(a, b importedNote) int {
 			return a.note.Position - b.note.Position
 		})
 		for pos, n := range items {
+			finalPos := offset + pos
 			unpinnedPos := n.note.UnpinnedPosition
 			if unpinnedPos == nil {
-				p := pos
-				unpinnedPos = &p
+				unpinnedPos = &finalPos
+			} else {
+				adjusted := offset + *unpinnedPos
+				unpinnedPos = &adjusted
 			}
 			if _, err := tx.ExecContext(ctx,
 				`UPDATE note_user_state SET position = ?, unpinned_position = ? WHERE note_id = ? AND user_id = ?`,
-				pos, unpinnedPos, n.id, userID,
+				finalPos, unpinnedPos, n.id, userID,
 			); err != nil {
 				return fmt.Errorf("set note position: %w", err)
 			}

@@ -221,34 +221,34 @@ type jotImportEnvelope struct {
 	Notes   []jotImportNote `json:"notes"`
 }
 
-func (h *NotesHandler) importJotJSON(ctx context.Context, userID string, data []byte) (int, error) {
+func (h *NotesHandler) importJotJSON(ctx context.Context, userID string, data []byte) (int, int, error) {
 	var raw jotImportEnvelope
 	if err := json.Unmarshal(data, &raw); err != nil {
-		return 0, errors.New("invalid JSON file")
+		return 0, http.StatusBadRequest, errors.New("invalid JSON file")
 	}
 	if raw.Format != jotExportFormat {
-		return 0, fmt.Errorf("invalid format %q: expected jot_export", raw.Format)
+		return 0, http.StatusBadRequest, fmt.Errorf("invalid format %q: expected jot_export", raw.Format)
 	}
 	if raw.Version != jotExportVersion {
-		return 0, fmt.Errorf("unsupported version %d: only version 1 is supported", raw.Version)
+		return 0, http.StatusBadRequest, fmt.Errorf("unsupported version %d: only version 1 is supported", raw.Version)
 	}
 	if raw.Notes == nil {
-		return 0, errors.New("notes must be a JSON array")
+		return 0, http.StatusBadRequest, errors.New("notes must be a JSON array")
 	}
 
 	importNotes := make([]models.JotImportNote, 0, len(raw.Notes))
 	for i, n := range raw.Notes {
 		importNote, err := validateJotImportNote(i+1, n)
 		if err != nil {
-			return 0, err
+			return 0, http.StatusBadRequest, err
 		}
 		importNotes = append(importNotes, importNote)
 	}
 
 	if err := h.noteStore.ImportJotNotes(ctx, userID, importNotes); err != nil {
-		return 0, err
+		return 0, http.StatusInternalServerError, fmt.Errorf("import jot notes: %w", err)
 	}
-	return len(importNotes), nil
+	return len(importNotes), http.StatusOK, nil
 }
 
 // validateJotImportNote validates a single note from a Jot JSON export and converts
@@ -265,6 +265,9 @@ func validateJotImportNote(idx int, n jotImportNote) (models.JotImportNote, erro
 	}
 	if n.Position < 0 {
 		return models.JotImportNote{}, fmt.Errorf("note #%d: position must be non-negative", idx)
+	}
+	if n.UnpinnedPosition != nil && *n.UnpinnedPosition < 0 {
+		return models.JotImportNote{}, fmt.Errorf("note #%d: unpinned_position must be non-negative", idx)
 	}
 
 	color := n.Color
@@ -373,9 +376,9 @@ func (h *NotesHandler) ImportNotes(w http.ResponseWriter, r *http.Request) (int,
 
 	switch importType {
 	case importTypeJotJSON:
-		imported, err := h.importJotJSON(r.Context(), user.ID, data)
+		imported, status, err := h.importJotJSON(r.Context(), user.ID, data)
 		if err != nil {
-			return http.StatusBadRequest, nil, err
+			return status, nil, err
 		}
 		return http.StatusOK, ImportResponse{Imported: imported}, nil
 	default: // google_keep

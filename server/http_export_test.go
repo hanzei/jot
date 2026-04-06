@@ -330,7 +330,9 @@ func TestImportJotJSONRoundTrip(t *testing.T) {
 	archivedNotes, err := dst.Client.ListNotes(t.Context(), &client.ListNotesOptions{Archived: true})
 	require.NoError(t, err)
 
-	allNotes := append(activeNotes, archivedNotes...)
+	allNotes := make([]client.Note, 0, len(activeNotes)+len(archivedNotes))
+	allNotes = append(allNotes, activeNotes...)
+	allNotes = append(allNotes, archivedNotes...)
 	assert.Len(t, allNotes, 4)
 
 	byTitle := map[string]client.Note{}
