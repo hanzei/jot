@@ -106,6 +106,9 @@ func Setup(ctx context.Context, cfg Config) (shutdown func(context.Context) erro
 		return nil, fmt.Errorf("setup OTel providers: %w", err)
 	}
 
+	otel.SetErrorHandler(otel.ErrorHandlerFunc(func(err error) {
+		logrus.WithError(err).Warn("OpenTelemetry export error")
+	}))
 	otel.SetTracerProvider(tp)
 	otel.SetMeterProvider(mp)
 	global.SetLoggerProvider(lp)
