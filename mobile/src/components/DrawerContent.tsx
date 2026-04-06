@@ -8,6 +8,7 @@ import {
   Modal,
   Pressable,
   TextInput,
+  ActivityIndicator,
 } from 'react-native';
 import { DrawerContentScrollView, DrawerContentComponentProps } from '@react-navigation/drawer';
 import { CommonActions } from '@react-navigation/native';
@@ -15,11 +16,12 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../store/AuthContext';
-import { useDeleteLabel, useLabels, useRenameLabel } from '../hooks/useLabels';
+import { useCreateLabel, useDeleteLabel, useLabelCounts, useLabels, useRenameLabel } from '../hooks/useLabels';
 import { useTheme } from '../theme/ThemeContext';
-import { addServer, getActiveServer, listServers, type ServerAccountEntry } from '../store/serverAccounts';
+import { getActiveServer, listServers, type ServerAccountEntry } from '../store/serverAccounts';
 import { switchActiveServer } from '../api/client';
 import UserAvatar from './UserAvatar';
+import ServerSetupGate from './ServerSetupGate';
 
 import type { Label } from '@jot/shared';
 import type { MainDrawerParamList } from '../navigation/MainDrawer';
@@ -58,9 +60,12 @@ function extractErrorMessage(error: unknown, fallback: string) {
 
   return fallback;
 }
+
 export default function DrawerContent(props: DrawerContentComponentProps) {
   const { user, logout, revalidateSession } = useAuth();
   const { data: labels } = useLabels();
+  const { data: labelCounts } = useLabelCounts();
+  const createLabel = useCreateLabel();
   const renameLabel = useRenameLabel();
   const deleteLabel = useDeleteLabel();
   const { colors } = useTheme();
@@ -76,10 +81,12 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
   ];
   const [renameLabelTarget, setRenameLabelTarget] = useState<Label | null>(null);
   const [renameValue, setRenameValue] = useState('');
+  const [isCreateLabelVisible, setIsCreateLabelVisible] = useState(false);
+  const [newLabelValue, setNewLabelValue] = useState('');
   const [isServerPickerVisible, setIsServerPickerVisible] = useState(false);
+  const [isServerSetupVisible, setIsServerSetupVisible] = useState(false);
   const [servers, setServers] = useState<ServerAccountEntry[]>([]);
   const [activeServerId, setActiveServerId] = useState<string | null>(null);
-  const [newServerUrl, setNewServerUrl] = useState('');
   const [isServerActionPending, setIsServerActionPending] = useState(false);
   const serverSwitchingRef = useRef(false);
   const longPressHandledRef = useRef(false);
@@ -177,6 +184,30 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
     );
   }, [deleteLabel, handleDeleteLabelSuccess, t]);
 
+  const handleSubmitCreateLabel = useCallback(async () => {
+    const name = newLabelValue.trim();
+    if (!name || createLabel.isPending) {
+      return;
+    }
+
+    try {
+      await createLabel.mutateAsync({ name });
+      setIsCreateLabelVisible(false);
+      setNewLabelValue('');
+      Alert.alert(t('labels.createSuccess'));
+    } catch (error) {
+      Alert.alert(t('common.error'), extractErrorMessage(error, t('labels.createError')));
+    }
+  }, [createLabel, newLabelValue, t]);
+
+  const closeCreateLabelModal = useCallback(() => {
+    if (createLabel.isPending) {
+      return;
+    }
+    setIsCreateLabelVisible(false);
+    setNewLabelValue('');
+  }, [createLabel.isPending]);
+
   const resetLongPressHandled = useCallback(() => {
     longPressHandledRef.current = false;
   }, []);
@@ -226,7 +257,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
       return true;
     } catch (error) {
       console.warn('Failed to load server picker data:', error);
-      Alert.alert(t('common.error'), t('serverPicker.loadFailed'));
+      Alert.alert(t('common.error'), t('serverPicker.switchFailed'));
       return false;
     }
   }, [loadServerPickerData, t]);
@@ -270,54 +301,19 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
     }
   }, [isServerActionPending, loadServerPickerData, props.navigation, revalidateSession, refreshServerPickerData, t]);
 
-  const handleAddServer = useCallback(async () => {
+  const handleOpenServerSetup = useCallback(() => {
     if (isServerActionPending) {
       return;
     }
+    setIsServerPickerVisible(false);
+    setIsServerSetupVisible(true);
+  }, [isServerActionPending]);
 
-    const candidateUrl = newServerUrl.trim();
-    if (!candidateUrl) {
-      Alert.alert(t('common.error'), t('serverPicker.urlRequired'));
-      return;
-    }
-
-    setIsServerActionPending(true);
-    try {
-      const result = await addServer(candidateUrl);
-      if (!result.success) {
-        if (result.code === 'DUPLICATE' && result.existingServerId) {
-          Alert.alert(
-            t('serverPicker.duplicateTitle'),
-            t('serverPicker.duplicateMessage'),
-            [
-              { text: t('common.cancel'), style: 'cancel' },
-              {
-                text: t('serverPicker.switchToExisting'),
-                onPress: () => {
-                  void handleSwitchToServer(result.existingServerId!);
-                },
-              },
-            ],
-          );
-          return;
-        }
-        if (result.code === 'INVALID_URL') {
-          Alert.alert(t('common.error'), t('serverPicker.invalidUrl'));
-          return;
-        }
-        Alert.alert(t('common.error'), result.message || t('serverPicker.addFailed'));
-        return;
-      }
-
-      setNewServerUrl('');
-      await handleSwitchToServer(result.serverId);
-    } catch {
-      Alert.alert(t('common.error'), t('serverPicker.addFailed'));
-    } finally {
-      setIsServerActionPending(false);
-      await refreshServerPickerData();
-    }
-  }, [handleSwitchToServer, isServerActionPending, newServerUrl, refreshServerPickerData, t]);
+  const handleBackToDashboardFromServerSetup = useCallback(() => {
+    setIsServerSetupVisible(false);
+    setIsServerPickerVisible(false);
+    props.navigation.closeDrawer();
+  }, [props.navigation]);
 
   const displayName = user
     ? [user.first_name, user.last_name].filter(Boolean).join(' ') || user.username
@@ -391,6 +387,8 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
               <View style={[styles.navDivider, { backgroundColor: colors.divider }]} />
               {labels.map((label) => {
                 const isActive = activeLabelId === label.id;
+                const labelCount = labelCounts?.[label.id] ?? 0;
+                const labelAccessibilityName = `${label.name}, ${labelCount}`;
                 return (
                   <View
                     key={label.id}
@@ -402,7 +400,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
                       onLongPress={() => handleLabelLongPress(label)}
                       delayLongPress={250}
                       testID={`drawer-label-${label.id}`}
-                      accessibilityLabel={label.name}
+                      accessibilityLabel={labelAccessibilityName}
                       accessibilityRole="button"
                       accessibilityState={{ selected: isActive }}
                     >
@@ -418,6 +416,12 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
                         {label.name}
                       </Text>
                     </TouchableOpacity>
+                    <Text
+                      style={[styles.labelCount, { color: isActive ? colors.primary : colors.textSecondary }]}
+                      testID={`drawer-label-count-${label.id}`}
+                    >
+                      {labelCount}
+                    </Text>
                     <TouchableOpacity
                       style={styles.labelMenuButton}
                       onPress={() => openLabelMenu(label)}
@@ -437,6 +441,23 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
               })}
             </>
           )}
+
+          <TouchableOpacity
+            style={styles.navItem}
+            onPress={() => {
+              setRenameLabelTarget(null);
+              setNewLabelValue('');
+              setIsCreateLabelVisible(true);
+            }}
+            testID="drawer-label-create"
+            accessibilityRole="button"
+            accessibilityLabel={t('labels.newSidebar')}
+          >
+            <Ionicons name="add" size={22} color={colors.primary} />
+            <Text style={[styles.navItemText, { color: colors.primary, fontWeight: '600' }]}>
+              {t('labels.newSidebar')}
+            </Text>
+          </TouchableOpacity>
 
           <View style={[styles.navDivider, { backgroundColor: colors.divider }]} />
 
@@ -493,6 +514,75 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
           <Text style={[styles.logoutText, { color: colors.error }]}>{t('nav.logout')}</Text>
         </TouchableOpacity>
       </View>
+
+      <Modal
+        visible={isCreateLabelVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          closeCreateLabelModal();
+        }}
+      >
+        <Pressable
+          style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}
+          onPress={() => {
+            closeCreateLabelModal();
+          }}
+        >
+          <Pressable
+            style={[styles.modalCard, { backgroundColor: colors.surface, borderColor: colors.borderLight }]}
+            onPress={(event) => event.stopPropagation()}
+          >
+            <Text style={[styles.modalTitle, { color: colors.text }]}>
+              {t('labels.createInputLabel')}
+            </Text>
+            <TextInput
+              style={[styles.modalInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.background }]}
+              value={newLabelValue}
+              onChangeText={setNewLabelValue}
+              placeholder={t('labels.newLabelPlaceholder')}
+              placeholderTextColor={colors.placeholder}
+              autoFocus
+              editable={!createLabel.isPending}
+              returnKeyType="done"
+              onSubmitEditing={() => {
+                void handleSubmitCreateLabel();
+              }}
+              testID="create-label-input"
+            />
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalSecondaryButton, { borderColor: colors.border }]}
+                onPress={() => {
+                  closeCreateLabelModal();
+                }}
+                disabled={createLabel.isPending}
+              >
+                <Text style={[styles.modalSecondaryText, { color: colors.textSecondary }]}>
+                  {t('labels.createCancel')}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.modalButton,
+                  styles.modalPrimaryButton,
+                  { backgroundColor: colors.primary },
+                  !newLabelValue.trim() && styles.modalButtonDisabled,
+                ]}
+                onPress={() => {
+                  void handleSubmitCreateLabel();
+                }}
+                disabled={!newLabelValue.trim() || createLabel.isPending}
+                testID="create-label-submit"
+              >
+                <Text style={styles.modalPrimaryText}>
+                  {createLabel.isPending ? t('settings.saving') : t('labels.createSave')}
+                </Text>
+              </TouchableOpacity>
+            </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
 
       <Modal
         visible={renameLabelTarget !== null}
@@ -631,23 +721,6 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
               )}
             </View>
 
-            <TextInput
-              style={[styles.modalInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.background }]}
-              value={newServerUrl}
-              onChangeText={setNewServerUrl}
-              placeholder={t('serverPicker.addPlaceholder')}
-              placeholderTextColor={colors.placeholder}
-              autoCapitalize="none"
-              autoCorrect={false}
-              keyboardType="url"
-              editable={!isServerActionPending}
-              returnKeyType="done"
-              onSubmitEditing={() => {
-                void handleAddServer();
-              }}
-              testID="server-picker-add-input"
-            />
-
             <View style={styles.modalActions}>
               <TouchableOpacity
                 style={[styles.modalButton, styles.modalSecondaryButton, { borderColor: colors.border }]}
@@ -667,19 +740,96 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
                   styles.modalButton,
                   styles.modalPrimaryButton,
                   { backgroundColor: colors.primary },
-                  !newServerUrl.trim() && styles.modalButtonDisabled,
                 ]}
                 onPress={() => {
-                  void handleAddServer();
+                  handleOpenServerSetup();
                 }}
-                disabled={!newServerUrl.trim() || isServerActionPending}
+                disabled={isServerActionPending}
                 testID="server-picker-add-submit"
+                accessibilityRole="button"
+                accessibilityLabel={t('serverPicker.addButton')}
               >
                 <Text style={styles.modalPrimaryText}>
-                  {isServerActionPending ? t('serverPicker.working') : t('serverPicker.addButton')}
+                  {t('serverPicker.addButton')}
                 </Text>
               </TouchableOpacity>
             </View>
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={isServerSetupVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => {
+          if (!isServerActionPending) {
+            handleBackToDashboardFromServerSetup();
+          }
+        }}
+      >
+        <Pressable
+          style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}
+          onPress={() => {
+            if (!isServerActionPending) {
+              handleBackToDashboardFromServerSetup();
+            }
+          }}
+        >
+          <Pressable
+            style={[styles.modalCard, { backgroundColor: colors.surface, borderColor: colors.borderLight }]}
+            onPress={(event) => event.stopPropagation()}
+            testID="server-setup-modal"
+          >
+            <ServerSetupGate
+              testPrefix="server-picker-add"
+              onServerReady={async () => {
+                setIsServerActionPending(true);
+                let initialRefreshOk = false;
+                try {
+                  const ok = await refreshServerPickerData();
+                  initialRefreshOk = ok;
+                  if (!ok) {
+                    return;
+                  }
+                  await revalidateSession();
+                  setIsServerSetupVisible(false);
+                  setIsServerPickerVisible(false);
+                  props.navigation.closeDrawer();
+                } catch {
+                  Alert.alert(t('common.error'), t('serverPicker.switchFailed'));
+                } finally {
+                  setIsServerActionPending(false);
+                  if (initialRefreshOk) {
+                    await refreshServerPickerData();
+                  }
+                }
+              }}
+              skipStoredServerCheck
+              setupFooter={(
+                <View style={styles.serverSetupActions}>
+                  <TouchableOpacity
+                    style={[styles.modalButton, styles.modalSecondaryButton, { borderColor: colors.border }]}
+                    onPress={() => {
+                      handleBackToDashboardFromServerSetup();
+                    }}
+                    disabled={isServerActionPending}
+                    testID="server-picker-add-cancel"
+                    accessibilityRole="button"
+                    accessibilityLabel={t('common.close')}
+                  >
+                    <Text style={[styles.modalSecondaryText, { color: colors.textSecondary }]}>
+                      {t('common.close')}
+                    </Text>
+                  </TouchableOpacity>
+                  {isServerActionPending ? (
+                    <View style={styles.serverSetupPending}>
+                      <ActivityIndicator color={colors.primary} />
+                    </View>
+                  ) : null}
+                </View>
+              )}
+            />
           </Pressable>
         </Pressable>
       </Modal>
@@ -747,6 +897,13 @@ const styles = StyleSheet.create({
   labelMenuButton: {
     padding: 10,
     borderRadius: 8,
+  },
+  labelCount: {
+    minWidth: 24,
+    textAlign: 'right',
+    fontSize: 12,
+    fontWeight: '600',
+    marginLeft: 6,
   },
   navDivider: {
     height: 1,
@@ -827,6 +984,15 @@ const styles = StyleSheet.create({
   serverRowSubtext: {
     fontSize: 12,
     marginTop: 2,
+  },
+  serverSetupActions: {
+    marginTop: 8,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  serverSetupPending: {
+    marginLeft: 12,
   },
   settingsButton: {
     flexDirection: 'row',

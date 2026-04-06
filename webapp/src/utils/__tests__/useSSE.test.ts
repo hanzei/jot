@@ -100,9 +100,8 @@ describe('useSSE', () => {
 
       const event: SSEEvent = {
         type: 'note_created',
-        note_id: 'note123',
-        note: null,
         source_user_id: 'user1',
+        data: { note_id: 'note123', note: null },
       }
 
       act(() => {
@@ -186,9 +185,8 @@ describe('useSSE', () => {
       // Trigger an event after rerender — the latest callback should fire.
       const event: SSEEvent = {
         type: 'note_updated',
-        note_id: 'n1',
-        note: null,
         source_user_id: 'u1',
+        data: { note_id: 'n1', note: null },
       }
       act(() => {
         MockEventSource.instances[0].simulateMessage(event)

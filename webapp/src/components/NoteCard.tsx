@@ -77,7 +77,19 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
       onRefresh?.();
       showToast(
         willArchive ? t('dashboard.noteArchived') : t('dashboard.noteUnarchived'),
-        'success'
+        'success',
+        {
+          label: t('dashboard.undo'),
+          onClick: async () => {
+            try {
+              await notes.update(note.id, { archived: !willArchive });
+              onRefresh?.();
+            } catch (undoError) {
+              console.error('Failed to undo archive toggle:', undoError);
+              showToast(t('note.failedArchive'), 'error');
+            }
+          },
+        }
       );
     } catch (error) {
       console.error('Failed to toggle archive:', error);
@@ -102,7 +114,19 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
       onRefresh?.();
       showToast(
         willPin ? t('dashboard.notePinned') : t('dashboard.noteUnpinned'),
-        'success'
+        'success',
+        {
+          label: t('dashboard.undo'),
+          onClick: async () => {
+            try {
+              await notes.update(note.id, { pinned: !willPin });
+              onRefresh?.();
+            } catch (undoError) {
+              console.error('Failed to undo pin toggle:', undoError);
+              showToast(t('note.failedPin'), 'error');
+            }
+          },
+        }
       );
     } catch (error) {
       console.error('Failed to toggle pin:', error);
@@ -153,8 +177,18 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
   return (
     <div
       data-testid="note-card"
-      className={`note-card ${getColorClass(note.color)} p-4 relative group ${isUpdating ? 'opacity-50' : ''
+      data-note-card="true"
+      tabIndex={0}
+      aria-label={note.title || t('share.untitledNote')}
+      className={`note-card ${getColorClass(note.color)} p-4 relative group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1 ${isUpdating ? 'opacity-50' : ''
         }`}
+      onKeyDown={(e) => {
+        if (e.target !== e.currentTarget) return;
+        if (!inBin && (e.key === 'Enter' || e.key === ' ')) {
+          e.preventDefault();
+          onEdit(note);
+        }
+      }}
     >
       {note.pinned && (
         <div className="absolute top-2 right-8">
@@ -165,7 +199,7 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
       )}
 
       {/* Menu */}
-      <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-opacity">
+      <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
       <Menu>
         <MenuButton aria-label={t('note.menuOptions')} className="p-1 rounded-full hover:bg-gray-200 transition-colors">
           <EllipsisVerticalIcon className="h-4 w-4 text-gray-600" />
@@ -349,6 +383,7 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
                   username={a.username}
                   userId={a.userId}
                   hasProfileIcon={a.hasProfileIcon}
+                  iconVersion={a.iconVersion}
                   className={`w-5 h-5 ring-2 ring-white dark:ring-slate-800 ${index > 0 ? '-ml-1' : ''}`}
                 />
               </div>

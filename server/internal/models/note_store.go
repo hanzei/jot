@@ -1143,6 +1143,31 @@ func (s *NoteStore) ReorderNotes(ctx context.Context, userID string, noteIDs []s
 	return nil
 }
 
+// GetCollaboratorIDs returns the IDs of all users who share at least one note
+// with userID (in either direction). Used to determine who to notify when a
+// user's profile icon changes.
+func (s *NoteStore) GetCollaboratorIDs(ctx context.Context, userID string) ([]string, error) {
+	query := `
+		SELECT DISTINCT shared_with_user_id FROM note_shares WHERE shared_by_user_id = ?
+		UNION
+		SELECT DISTINCT shared_by_user_id FROM note_shares WHERE shared_with_user_id = ?
+	`
+	rows, err := s.db.QueryContext(ctx, query, userID, userID)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get collaborator IDs: %w", err)
+	}
+
+	scanString := func(rows *sql.Rows) (string, error) {
+		var v string
+		return v, rows.Scan(&v)
+	}
+	ids, err := collectRows(rows, scanString)
+	if err != nil {
+		return nil, fmt.Errorf("failed to scan collaborator IDs: %w", err)
+	}
+	return ids, nil
+}
+
 // GetNoteAudienceIDs returns the owner's user ID plus all shared_with user IDs for a note.
 // Used by handlers to determine who to broadcast SSE events to.
 func (s *NoteStore) GetNoteAudienceIDs(ctx context.Context, noteID string) ([]string, error) {

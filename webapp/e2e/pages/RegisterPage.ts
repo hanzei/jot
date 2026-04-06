@@ -15,7 +15,7 @@ export class RegisterPage {
   }
 
   async expectError(message: string) {
-    await expect(this.page.getByText(message)).toBeVisible();
+    await expect(this.page.getByRole('alert')).toContainText(message);
   }
 
   async expectRedirectedToDashboard() {

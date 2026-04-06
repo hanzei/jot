@@ -104,9 +104,8 @@ describe('useSSE', () => {
     act(() => {
       capturedCallback?.({
         type: 'note_created',
-        note_id: 'new-note',
-        note: null,
         source_user_id: 'other-user',
+        data: { note_id: 'new-note', note: null },
       });
     });
 
@@ -123,9 +122,8 @@ describe('useSSE', () => {
     act(() => {
       capturedCallback?.({
         type: 'note_updated',
-        note_id: 'note-123',
-        note: null,
         source_user_id: 'other-user',
+        data: { note_id: 'note-123', note: null },
       });
     });
 
@@ -144,9 +142,8 @@ describe('useSSE', () => {
     act(() => {
       capturedCallback?.({
         type: 'note_deleted',
-        note_id: 'note-123',
-        note: null,
         source_user_id: 'other-user',
+        data: { note_id: 'note-123', note: null },
       });
     });
 
@@ -166,9 +163,8 @@ describe('useSSE', () => {
     act(() => {
       capturedCallback?.({
         type: 'note_updated',
-        note_id: 'note-123',
-        note: null,
         source_user_id: 'current-user', // Same user, different device
+        data: { note_id: 'note-123', note: null },
       });
     });
 
@@ -186,9 +182,8 @@ describe('useSSE', () => {
     act(() => {
       capturedCallback?.({
         type: 'note_updated',
-        note_id: 'note-123',
-        note: null,
         source_user_id: 'current-user', // Same user — should not show "updated by another user" toast
+        data: { note_id: 'note-123', note: null },
       });
     });
 
@@ -203,9 +198,8 @@ describe('useSSE', () => {
 
     const event: SSEEvent = {
       type: 'note_updated',
-      note_id: 'note-123',
-      note: null,
       source_user_id: 'other-user',
+      data: { note_id: 'note-123', note: null },
     };
 
     act(() => {
@@ -225,10 +219,9 @@ describe('useSSE', () => {
     act(() => {
       capturedCallback?.({
         type: 'note_shared',
-        note_id: 'note-123',
-        note: null,
         source_user_id: 'other-user',
         target_user_id: 'current-user',
+        data: { note_id: 'note-123', note: null },
       });
     });
 
@@ -239,10 +232,9 @@ describe('useSSE', () => {
     act(() => {
       capturedCallback?.({
         type: 'note_unshared',
-        note_id: 'note-123',
-        note: null,
         source_user_id: 'other-user',
         target_user_id: 'current-user',
+        data: { note_id: 'note-123', note: null },
       });
     });
 

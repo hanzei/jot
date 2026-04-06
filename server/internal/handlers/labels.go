@@ -36,6 +36,8 @@ type RenameLabelRequest struct {
 	Name string `json:"name"`
 }
 
+type LabelCountsResponse map[string]int
+
 func (h *LabelsHandler) publishLabelNoteUpdates(ctx context.Context, noteIDs []string, userID string) {
 	if h.hub == nil {
 		return
@@ -48,11 +50,10 @@ func (h *LabelsHandler) publishLabelNoteUpdates(ctx context.Context, noteIDs []s
 			continue
 		}
 
-		h.hub.Publish([]string{userID}, sse.Event{
+		h.hub.Publish(ctx, []string{userID}, sse.Event{
 			Type:         sse.EventNoteUpdated,
-			NoteID:       noteID,
-			Note:         note,
 			SourceUserID: userID,
+			Data:         sse.NoteEventData{NoteID: noteID, Note: note},
 		})
 	}
 }
@@ -79,6 +80,76 @@ func (h *LabelsHandler) GetLabels(w http.ResponseWriter, r *http.Request) (int, 
 	}
 
 	return http.StatusOK, labels, nil
+}
+
+// GetLabelCounts godoc
+//
+//	@Summary	Get note counts per label for the current user
+//	@Tags		labels
+//	@Security	CookieAuth
+//	@Produce	json
+//	@Success	200	{object}	LabelCountsResponse
+//	@Failure	401	{string}	string	"unauthorized"
+//	@Failure	500	{string}	string	"internal server error"
+//	@Router		/labels/counts [get]
+func (h *LabelsHandler) GetLabelCounts(w http.ResponseWriter, r *http.Request) (int, any, error) {
+	user, ok := auth.GetUserFromContext(r.Context())
+	if !ok {
+		return http.StatusUnauthorized, nil, errors.New("unauthorized")
+	}
+
+	counts, err := h.labelStore.GetLabelCounts(r.Context(), user.ID)
+	if err != nil {
+		return http.StatusInternalServerError, nil, fmt.Errorf("get label counts: %w", err)
+	}
+
+	return http.StatusOK, counts, nil
+}
+
+// CreateLabel godoc
+//
+//	@Summary	Create or return an existing label
+//	@Tags		labels
+//	@Security	CookieAuth
+//	@Accept		json
+//	@Produce	json
+//	@Param		body	body		AddLabelRequest	true	"Label name"
+//	@Success	200		{object}	models.Label
+//	@Failure	400		{string}	string	"bad request"
+//	@Failure	401		{string}	string	"unauthorized"
+//	@Failure	500		{string}	string	"internal server error"
+//	@Router		/labels [post]
+func (h *LabelsHandler) CreateLabel(w http.ResponseWriter, r *http.Request) (int, any, error) {
+	user, ok := auth.GetUserFromContext(r.Context())
+	if !ok {
+		return http.StatusUnauthorized, nil, errors.New("unauthorized")
+	}
+
+	var req AddLabelRequest
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		return http.StatusBadRequest, nil, errors.New("invalid request body")
+	}
+
+	req.Name = strings.TrimSpace(req.Name)
+	if req.Name == "" {
+		return http.StatusBadRequest, nil, errors.New("label name is required")
+	}
+
+	label, err := h.labelStore.GetOrCreateLabel(r.Context(), user.ID, req.Name)
+	if err != nil {
+		return http.StatusInternalServerError, nil, fmt.Errorf("get or create label: %w", err)
+	}
+
+	if h.hub != nil {
+		// Best-effort realtime update for other sessions of the same user.
+		h.hub.Publish(r.Context(), []string{user.ID}, sse.Event{
+			Type:         sse.EventLabelsChanged,
+			SourceUserID: user.ID,
+			Data:         sse.LabelsEventData{Label: label},
+		})
+	}
+
+	return http.StatusOK, label, nil
 }
 
 // RenameLabel godoc
@@ -193,11 +264,10 @@ func (h *LabelsHandler) AddLabel(w http.ResponseWriter, r *http.Request) (int, a
 	}
 
 	if h.hub != nil {
-		h.hub.Publish([]string{user.ID}, sse.Event{
+		h.hub.Publish(r.Context(), []string{user.ID}, sse.Event{
 			Type:         sse.EventNoteUpdated,
-			NoteID:       noteID,
-			Note:         note,
 			SourceUserID: user.ID,
+			Data:         sse.NoteEventData{NoteID: noteID, Note: note},
 		})
 	}
 
@@ -239,11 +309,10 @@ func (h *LabelsHandler) RemoveLabel(w http.ResponseWriter, r *http.Request) (int
 	}
 
 	if h.hub != nil {
-		h.hub.Publish([]string{user.ID}, sse.Event{
+		h.hub.Publish(r.Context(), []string{user.ID}, sse.Event{
 			Type:         sse.EventNoteUpdated,
-			NoteID:       noteID,
-			Note:         note,
 			SourceUserID: user.ID,
+			Data:         sse.NoteEventData{NoteID: noteID, Note: note},
 		})
 	}
 

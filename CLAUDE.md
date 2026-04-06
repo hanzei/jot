@@ -43,12 +43,12 @@ Use the following Task commands for development:
 
 - `task run-server` - Start the Jot server
 - `task run-webapp` - Start webapp dev server with HMR
-- `task test` - Run all tests
+- `task test` - Run all tests (server + webapp + mobile + shared)
 - `task test-server` - Run server tests
 - `task test-webapp` - Run webapp tests
 - `task test-e2e` - Run Playwright end-to-end tests (`webapp/e2e/`)
 - `task coverage` - Run server tests with coverage report
-- `task lint` - Run linters
+- `task lint` - Run linters (server + webapp + mobile + shared)
 - `task lint-server` - Run server linting with golangci-lint
 - `task lint-webapp` - Run webapp linting
 - `task check-translations` - Verify locale files stay in sync with `en.json`
@@ -57,6 +57,8 @@ Use the following Task commands for development:
 - `task test-shared` - Run shared package tests
 - `task lint-shared` - Run shared package linting
 - `task gen-docs` - Regenerate Swagger API docs from handler annotations (requires `swag` CLI)
+- `task build-jotctl` - Build the `jotctl` admin CLI binary
+- `task clean` - Remove generated files and node packages
 
 ---
 
@@ -79,33 +81,46 @@ Jot is a self-hosted note-taking application. The backend is a Go HTTP API and t
 ├── server/          # Go backend
 │   ├── main.go
 │   ├── go.mod
+│   ├── client/          # Go client SDK types (used by jotctl)
+│   ├── cmd/
+│   │   └── jotctl/      # Admin CLI tool (build with task build-jotctl)
+│   │       ├── main.go
+│   │       └── cmd/     # Cobra command definitions
 │   ├── internal/
-│   │   ├── auth/        # Session-cookie auth middleware and utilities
+│   │   ├── auth/        # Session-cookie + PAT auth middleware and utilities
 │   │   ├── config/      # Server configuration (env vars, defaults)
 │   │   ├── database/    # Database bootstrap and migration runner
-│   │   ├── handlers/    # HTTP request handlers
-│   │   ├── models/      # Store types and shared data models
-│   │   ├── sse/         # Server-sent event hub and event types
-│   │   └── server/      # Server setup, routing, middleware wiring
-│   ├── docs/            # Generated OpenAPI docs (swagger)
-│   └── internal/
-│   │   └── database/
 │   │   │   └── migrations/  # Sequential SQL migration files (embedded into binary)
+│   │   ├── handlers/    # HTTP request handlers
+│   │   ├── logutil/     # Request-scoped logger utilities
+│   │   ├── mcphandler/  # Model Context Protocol (MCP) server (note/label tools)
+│   │   ├── models/      # Store types and shared data models
+│   │   ├── server/      # Server setup, routing, middleware wiring
+│   │   ├── sse/         # Server-sent event hub and event types
+│   │   └── telemetry/   # OpenTelemetry setup (tracing, metrics, logging)
+│   └── docs/            # Generated OpenAPI docs (swagger)
 ├── webapp/          # React/TypeScript frontend
 │   ├── src/
 │   │   ├── components/  # React components
+│   │   ├── hooks/       # Custom React hooks
+│   │   ├── i18n/        # Internationalization (8 languages)
 │   │   ├── pages/       # Route-level page components
 │   │   └── utils/       # API client, auth helpers
+│   ├── e2e/             # Playwright end-to-end tests
+│   │   ├── fixtures/    # Test fixtures and helpers
+│   │   ├── pages/       # Page Object Model classes
+│   │   └── tests/       # E2E test specs
 │   └── package.json
 ├── mobile/          # React Native/Expo mobile app
 │   ├── src/
-│   │   ├── components/  # React Native components
-│   │   ├── screens/     # Screen components
-│   │   ├── navigation/  # React Navigation setup
-│   │   ├── hooks/       # Custom hooks (API, auth, sync)
 │   │   ├── api/         # API client modules
+│   │   ├── components/  # React Native components
 │   │   ├── db/          # Local SQLite/offline persistence
-│   │   ├── store/       # Context/state providers
+│   │   ├── hooks/       # Custom hooks (API, auth, sync)
+│   │   ├── i18n/        # Internationalization (8 languages)
+│   │   ├── navigation/  # React Navigation setup
+│   │   ├── screens/     # Screen components
+│   │   └── store/       # Context/state providers
 │   └── package.json
 ├── images/          # Documentation images
 ├── Taskfile.yml
@@ -127,10 +142,12 @@ Jot is a self-hosted note-taking application. The backend is a Go HTTP API and t
 - **logrus** — Structured logging
 - **testify** — Test assertions
 - **swaggo/swag + http-swagger** — OpenAPI spec generation and Swagger UI
+- **modelcontextprotocol/go-sdk** — MCP protocol server
+- **OpenTelemetry** — Distributed tracing, metrics, and logging (optional)
 
 ### Architecture Patterns
 
-**Store pattern** — database interaction is wrapped in `*Store` types (`UserStore`, `NoteStore`, etc.) in `internal/models`, each holding a `*sql.DB`. No ORM is used; all queries are hand-written SQL with parameterized inputs.
+**Store pattern** — database interaction is wrapped in `*Store` types (`UserStore`, `NoteStore`, `PATStore`, etc.) in `internal/models`, each holding a `*sql.DB`. No ORM is used; all queries are hand-written SQL with parameterized inputs.
 
 **Handler pattern** — handlers have the signature:
 ```go
@@ -138,9 +155,13 @@ func(w http.ResponseWriter, r *http.Request) (int, error)
 ```
 They return an HTTP status code and error. The `wrapHandler` middleware in `server.go` handles writing the status and logging the error uniformly.
 
-**ID generation** — most entity IDs are 22-character cryptographically random alphanumeric strings generated from `crypto/rand`. Session tokens are 64-character hex strings.
+**ID generation** — most entity IDs are 22-character cryptographically random alphanumeric strings generated from `crypto/rand`. Session tokens are 64-character hex strings. PAT raw tokens are 64-character hex strings (32 random bytes); only the SHA-256 hash is stored.
 
-**Middleware** — authentication middleware reads the `jot_session` cookie, resolves the user from the session store, and saves the user in request context. Admin middleware checks the authenticated user's `role`.
+**Middleware** — authentication middleware reads the `jot_session` cookie first; if absent, it falls back to an `Authorization: Bearer <token>` header (PAT). The resolved user is saved in request context. Admin middleware checks the authenticated user's `role`.
+
+**MCP server** — `internal/mcphandler` exposes note and label CRUD as Model Context Protocol tools over the streamable-HTTP transport. It is mounted behind auth middleware so every MCP session is scoped to the authenticated user.
+
+**Observability** — `internal/telemetry` sets up optional OpenTelemetry traces (OTLP gRPC) and Prometheus metrics (separate port). Structured logs are integrated with the OTel LoggerProvider.
 
 ### API Specification
 
@@ -152,113 +173,24 @@ Do not maintain endpoint tables in this file. Use the generated OpenAPI spec as 
 
 If handler annotations or request/response types change, regenerate docs with `task gen-docs`.
 
-### Database Schema
-
-**users**
-- `id` TEXT PK — 22-char random ID
-- `username` TEXT UNIQUE — 2–30 chars, alphanumeric/underscore/hyphen
-- `password_hash` TEXT — bcrypt
-- `role` TEXT — `'user'` or `'admin'`
-- `first_name`, `last_name` TEXT
-- `profile_icon`, `profile_icon_content_type` BLOB/TEXT (nullable)
-- `created_at`, `updated_at` DATETIME
-
-**notes**
-- `id` TEXT PK
-- `user_id` TEXT FK → users
-- `title`, `content` TEXT
-- `note_type` TEXT — `'text'` or `'todo'`
-- `color` TEXT — hex color (default `#ffffff`)
-- `pinned`, `archived` BOOLEAN
-- `position` INTEGER — display order
-- `unpinned_position` INTEGER (nullable) — saved position restored when unpinning
-- `checked_items_collapsed` BOOLEAN — UI state for todo notes
-- `deleted_at` DATETIME (nullable soft-delete/trash marker)
-- `created_at`, `updated_at` DATETIME
-
-**note_items** (todo list items)
-- `id` TEXT PK
-- `note_id` TEXT FK → notes
-- `text` TEXT
-- `completed` BOOLEAN
-- `position` INTEGER
-- `indent_level` INTEGER
-- `created_at`, `updated_at` DATETIME
-
-**note_shares**
-- `id` TEXT PK
-- `note_id`, `shared_with_user_id`, `shared_by_user_id` TEXT FKs
-- `permission_level` TEXT — `'edit'` (only level currently)
-- `created_at`, `updated_at` DATETIME
-
-**labels**
-- `id` TEXT PK
-- `user_id` TEXT FK → users
-- `name` TEXT
-- `created_at`, `updated_at` DATETIME
-
-**note_labels**
-- `id` TEXT PK
-- `note_id` TEXT FK → notes
-- `label_id` TEXT FK → labels
-- `created_at` DATETIME
-- UNIQUE(`note_id`, `label_id`)
-
-**sessions**
-- `token` TEXT PK (64-char hex session token)
-- `user_id` TEXT FK → users
-- `expires_at`, `created_at` DATETIME
-
-**user_settings**
-- `user_id` TEXT PK/FK → users
-- `language` TEXT
-- `theme` TEXT (`system`, `light`, `dark`)
-- `created_at`, `updated_at` DATETIME
-
-**migrations** — internal migration tracking table.
-
 ### Database Migrations
 
 Migration files live in `server/internal/database/migrations/` and are named `NNN_description.sql`. They are embedded into the binary at compile time via `embed.FS` and applied automatically at startup in sequential order. To add a new migration, create the next numbered file.
 
-### Configuration (Environment Variables)
-
-| Variable | Default | Notes |
-|----------|---------|-------|
-| `DB_PATH` | `./jot.db` | Path to SQLite database file |
-| `PORT` | `8080` | HTTP listen port |
-| `STATIC_DIR` | `../webapp/build/` | Path to compiled frontend files |
-| `CORS_ALLOWED_ORIGIN` | `http://localhost:5173` | Allowed webapp origin for CORS |
-| `COOKIE_SECURE` | `true` (unless explicitly `false`) | Whether the session cookie is `Secure` |
-| `REGISTRATION_ENABLED` | `true` (unless explicitly `false`) | Whether public user registration is allowed. When `false`, only admins can create users via the admin API. |
-
 ### Authentication
 
-- Auth is session-based using an HttpOnly `jot_session` cookie.
+- Auth is session-based using an HttpOnly `jot_session` cookie (primary method).
+- Personal Access Tokens (PATs) are accepted via `Authorization: Bearer <token>` header (machine-to-machine use).
 - Sessions are persisted in the `sessions` table with 30-day expiry by default.
 - Sessions are automatically extended to 30 days again when less than 7 days remain.
 - Browser clients send credentialed requests (`withCredentials: true`).
 - The first registered user automatically becomes admin.
 - Note access is granted if the requester is the owner **or** the note is shared with them.
-
-### Naming Conventions (Go)
-
-- Packages: `internal/{auth,config,database,handlers,models,sse,server}`
-- Go types: PascalCase when exported (`UserStore`, `NoteStore`); variables: camelCase (`noteStore`, `userID`)
-- Database columns: snake_case (`note_type`, `user_id`)
-- JSON fields: snake_case (`note_type`, `user_id`)
-- Error wrapping: `fmt.Errorf("context: %w", err)`
-
-### Error Handling (Go)
-
-- Errors that cross a function boundary should be wrapped with a short, lowercase description of the operation that failed: `return nil, fmt.Errorf("get note by id: %w", err)`.
-- Prefer wrapping over bare `return err` or `return nil, err` when returning up the call stack — the added context makes log traces easier to follow.
-- Do **not** re-wrap sentinel errors (`sql.ErrNoRows`, `ErrNoteNotFound`, etc.) that have already been identified with `errors.Is` and are being returned directly. Re-wrapping them adds a redundant message layer without useful context (`errors.Is` traverses the `%w` chain, so matching still works either way).
-- Do not wrap errors inside `defer` functions or inside log statements.
+- PAT raw tokens are only returned once on creation; only the SHA-256 hash is stored.
 
 ### Server Tests
 
-- Integration tests live in `server/` root (for example: `http_integration_test.go`, `http_notes_sharing_test.go`, `http_labels_test.go`, `http_import_test.go`, `http_profile_icon_test.go`)
+- Integration tests live in `server/` root (e.g. `http_integration_test.go`, `http_notes_sharing_test.go`, `http_labels_test.go`, `http_import_test.go`, `http_profile_icon_test.go`, `http_pats_test.go`, `http_mcp_test.go`, `http_task_assignment_test.go`, `http_note_duplicate_test.go`, `http_note_validation_test.go`, `http_security_headers_test.go`, `http_auth_middleware_test.go`, `http_user_flows_test.go`)
 - Unit tests alongside source: e.g., `server/internal/models/note_test.go`
 - Tests spin up an `httptest.Server` against a temporary SQLite database (`/tmp/test_*.db`)
 - Helper types: `TestResponse`, `TestUser`, `TestServer`
@@ -314,6 +246,26 @@ Migration files live in `server/internal/database/migrations/` and are named `NN
 
 ---
 
+## Mobile (React Native/Expo)
+
+### Technology Stack
+
+- **React Native 0.83** + **Expo 55**
+- **React Navigation 7** — drawer + native stack navigation
+- **Tanstack React Query 5** — data fetching and caching
+- **Expo Secure Store** — credential storage
+- **Expo SQLite** — local offline persistence
+- **react-native-sse** — SSE client for real-time updates
+- **@jot/shared** — shared types and utilities (local file dependency)
+
+### Mobile Tests
+
+- Framework: **Jest**
+- Test files in `__tests__/`
+- Run: `task test-mobile`
+
+---
+
 ## Build & Deployment
 
 ### Local Development
@@ -326,7 +278,7 @@ task run-server
 task run-webapp
 ```
 
-The server at `localhost:8080` serves the API. Vite is configured with a proxy to forward API calls during development.
+The server at `localhost:8080` serves the API. Vite is configured with a proxy to forward API calls during development. Note: `run-server` sets `PASSWORD_MIN_LENGTH=4` for local convenience — do not use this in production.
 
 ### Docker (Production)
 
@@ -348,4 +300,3 @@ Persistent data is mounted at `/data` (default `docker-compose.yml` maps host `.
 1. `task test` — all tests pass
 2. `task lint` — no lint errors
 3. `task test-e2e` — e2e tests pass (add new e2e tests for any new user-facing features)
-

@@ -15,13 +15,15 @@ const (
 type SessionService struct {
 	sessionStore *models.SessionStore
 	userStore    *models.UserStore
+	patStore     *models.PATStore
 	cookieSecure bool
 }
 
-func NewSessionService(sessionStore *models.SessionStore, userStore *models.UserStore, cookieSecure bool) *SessionService {
+func NewSessionService(sessionStore *models.SessionStore, userStore *models.UserStore, patStore *models.PATStore, cookieSecure bool) *SessionService {
 	return &SessionService{
 		sessionStore: sessionStore,
 		userStore:    userStore,
+		patStore:     patStore,
 		cookieSecure: cookieSecure,
 	}
 }

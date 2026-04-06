@@ -23,6 +23,9 @@ jest.mock('../src/api/settings', () => ({
   getAboutInfo: jest.fn(),
   listSessions: jest.fn(),
   revokeSession: jest.fn(),
+  listPATs: jest.fn().mockResolvedValue([]),
+  createPAT: jest.fn(),
+  revokePAT: jest.fn(),
 }));
 
 jest.mock('../src/api/notes', () => ({
