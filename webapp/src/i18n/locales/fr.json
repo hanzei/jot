@@ -270,24 +270,21 @@
     "deleteUserLabel": "Supprimer l'utilisateur {{username}}",
     "stats": {
       "title": "Aperçu de l'instance",
-      "description": "Métriques en temps réel pour ce serveur Jot.",
       "cards": {
         "users": "Utilisateurs",
         "notes": "Notes",
-        "sharing": "Partages",
         "labels": "Étiquettes",
-        "todoItems": "Tâches",
-        "storage": "Stockage"
+        "todoItems": "Tâches"
       },
       "metrics": {
+        "admins": "Administrateurs",
         "text": "Texte",
         "todo": "Tâches",
         "archived": "Archivées",
         "trashed": "Corbeille",
         "sharedNotes": "Notes partagées",
         "shareLinks": "Liens de partage",
-        "totalLabels": "Total des étiquettes",
-        "noteAssociations": "Liens de notes",
+        "noteAssociations": "Affectations de labels",
         "completed": "Terminées",
         "assigned": "Assignées",
         "databaseSize": "Taille de la base de données"

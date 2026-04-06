@@ -205,7 +205,8 @@ type AdminStatsResponse struct {
 }
 
 type AdminUserStats struct {
-	Total int64 `json:"total"`
+	Total  int64 `json:"total"`
+	Admins int64 `json:"admins"`
 }
 
 type AdminNoteStats struct {

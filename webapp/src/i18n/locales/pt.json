@@ -270,24 +270,21 @@
     "deleteUserLabel": "Excluir usuário {{username}}",
     "stats": {
       "title": "Visão geral da instância",
-      "description": "Métricas em tempo real para este servidor Jot.",
       "cards": {
         "users": "Usuários",
         "notes": "Notas",
-        "sharing": "Compartilhamentos",
         "labels": "Etiquetas",
-        "todoItems": "Tarefas",
-        "storage": "Armazenamento"
+        "todoItems": "Tarefas"
       },
       "metrics": {
+        "admins": "Administradores",
         "text": "Texto",
         "todo": "Tarefas",
         "archived": "Arquivadas",
         "trashed": "Na lixeira",
         "sharedNotes": "Notas compartilhadas",
         "shareLinks": "Links de compartilhamento",
-        "totalLabels": "Total de etiquetas",
-        "noteAssociations": "Vínculos de notas",
+        "noteAssociations": "Atribuições de etiquetas",
         "completed": "Concluídas",
         "assigned": "Atribuídas",
         "databaseSize": "Tamanho do banco de dados"

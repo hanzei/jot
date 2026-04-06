@@ -290,6 +290,8 @@ definitions:
     type: object
   models.AdminUserStats:
     properties:
+      admins:
+        type: integer
       total:
         type: integer
     type: object

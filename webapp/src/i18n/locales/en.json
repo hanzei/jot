@@ -270,24 +270,21 @@
     "deleteUserLabel": "Delete user {{username}}",
     "stats": {
       "title": "Instance Overview",
-      "description": "Live metrics for this Jot server.",
       "cards": {
         "users": "Users",
         "notes": "Notes",
-        "sharing": "Sharing",
         "labels": "Labels",
-        "todoItems": "Todo Items",
-        "storage": "Storage"
+        "todoItems": "Todo Items"
       },
       "metrics": {
+        "admins": "Admins",
         "text": "Text",
         "todo": "Todo",
         "archived": "Archived",
         "trashed": "Trashed",
         "sharedNotes": "Shared notes",
         "shareLinks": "Share links",
-        "totalLabels": "Total labels",
-        "noteAssociations": "Note links",
+        "noteAssociations": "Label assignments",
         "completed": "Completed",
         "assigned": "Assigned",
         "databaseSize": "Database size"

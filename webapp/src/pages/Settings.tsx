@@ -8,7 +8,7 @@ import { getLanguagePreference, resolveLanguage, LanguagePreference } from '@/ut
 import { isPasswordTooShort } from '@/utils/userValidation';
 import { getThemePreference, applyTheme, ThemePreference } from '@/utils/theme';
 import AppLayout from '@/components/AppLayout';
-import SearchBar from '@/components/SearchBar';
+import PageContent from '@/components/PageContent';
 import ImportModal from '@/components/ImportModal';
 import AboutModal from '@/components/AboutModal';
 import NewPATModal from '@/components/NewPATModal';
@@ -40,8 +40,6 @@ const Settings = ({ onLogout, passwordMinLength }: SettingsProps) => {
   const [draftLastName, setDraftLastName] = useState(currentUser?.last_name ?? '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
-
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -240,15 +238,6 @@ const Settings = ({ onLogout, passwordMinLength }: SettingsProps) => {
     }
   };
 
-  const handleSearch = () => {
-    const trimmed = searchQuery.trim();
-    if (trimmed) {
-      navigate(`/?search=${encodeURIComponent(trimmed)}`);
-    } else {
-      navigate('/');
-    }
-  };
-
   const handleLanguageChange = async (pref: LanguagePreference) => {
     const prev = languagePref;
     const current = getSettings();
@@ -355,14 +344,6 @@ const Settings = ({ onLogout, passwordMinLength }: SettingsProps) => {
     )
     : '';
 
-  const searchBar = (
-    <SearchBar
-      value={searchQuery}
-      onChange={setSearchQuery}
-      onSubmit={handleSearch}
-      stopEscapePropagation={true}
-    />
-  );
   const sidebarChildren = (
     <SidebarLabels
       labels={labelsList}
@@ -383,82 +364,79 @@ const Settings = ({ onLogout, passwordMinLength }: SettingsProps) => {
       sidebarTabs={navigationTabs}
       sidebarBottomTabs={bottomNavigationTabs}
       sidebarChildren={sidebarChildren}
-      searchBar={searchBar}
     >
-      <div className="max-w-6xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div className="px-4 py-6 sm:px-0">
-          <div className="mb-6">
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{t('settings.title')}</h1>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-            <IdentitySecurityColumn
-              t={t}
-              currentUser={currentUser}
-              currentUsername={currentUsername}
-              profileIcon={{
-                hasProfileIcon,
-                fileInputRef,
-                iconUploading,
-                iconDeleting,
-                iconError,
-                onIconUpload: handleIconUpload,
-                onIconDelete: handleIconDelete,
-              }}
-              accountForm={{
-                draftFirstName,
-                draftLastName,
-                draftUsername,
-                onDraftFirstNameChange: setDraftFirstName,
-                onDraftLastNameChange: setDraftLastName,
-                onDraftUsernameChange: setDraftUsername,
-                saving,
-                error,
-                onAccountSubmit: handleSubmit,
-              }}
-              passwordForm={{
-                currentPassword,
-                newPassword,
-                confirmPassword,
-                onCurrentPasswordChange: setCurrentPassword,
-                onNewPasswordChange: setNewPassword,
-                onConfirmPasswordChange: setConfirmPassword,
-                passwordSaving,
-                passwordError,
-                passwordMinLength,
-                onPasswordSubmit: handlePasswordChange,
-              }}
-              patsSection={{
-                pats: patsList,
-                patsLoading,
-                patsError,
-                creatingPAT,
-                revokingPATIds,
-                onCreatePAT: handleCreatePAT,
-                onRevokePAT: handleRevokePAT,
-                displayMsg,
-              }}
-              displayMsg={displayMsg}
-            />
-
-            <PreferencesInfoColumn
-              t={t}
-              sessionsLoading={sessionsLoading}
-              sessionsError={sessionsError}
-              activeSessions={activeSessions}
-              revokingSessionId={revokingSessionId}
-              onRequestRevokeSession={handleRequestRevokeSession}
-              displayMsg={displayMsg}
-              languagePref={languagePref}
-              onLanguageChange={handleLanguageChange}
-              themePref={themePref}
-              onThemeChange={handleThemeChange}
-              onOpenImportModal={() => setIsImportModalOpen(true)}
-              onOpenAboutModal={() => setIsAboutModalOpen(true)}
-            />
-          </div>
+      <PageContent>
+        <div className="mb-6">
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{t('settings.title')}</h1>
         </div>
-      </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+          <IdentitySecurityColumn
+            t={t}
+            currentUser={currentUser}
+            currentUsername={currentUsername}
+            profileIcon={{
+              hasProfileIcon,
+              fileInputRef,
+              iconUploading,
+              iconDeleting,
+              iconError,
+              onIconUpload: handleIconUpload,
+              onIconDelete: handleIconDelete,
+            }}
+            accountForm={{
+              draftFirstName,
+              draftLastName,
+              draftUsername,
+              onDraftFirstNameChange: setDraftFirstName,
+              onDraftLastNameChange: setDraftLastName,
+              onDraftUsernameChange: setDraftUsername,
+              saving,
+              error,
+              onAccountSubmit: handleSubmit,
+            }}
+            passwordForm={{
+              currentPassword,
+              newPassword,
+              confirmPassword,
+              onCurrentPasswordChange: setCurrentPassword,
+              onNewPasswordChange: setNewPassword,
+              onConfirmPasswordChange: setConfirmPassword,
+              passwordSaving,
+              passwordError,
+              passwordMinLength,
+              onPasswordSubmit: handlePasswordChange,
+            }}
+            patsSection={{
+              pats: patsList,
+              patsLoading,
+              patsError,
+              creatingPAT,
+              revokingPATIds,
+              onCreatePAT: handleCreatePAT,
+              onRevokePAT: handleRevokePAT,
+              displayMsg,
+            }}
+            displayMsg={displayMsg}
+          />
+
+          <PreferencesInfoColumn
+            t={t}
+            sessionsLoading={sessionsLoading}
+            sessionsError={sessionsError}
+            activeSessions={activeSessions}
+            revokingSessionId={revokingSessionId}
+            onRequestRevokeSession={handleRequestRevokeSession}
+            displayMsg={displayMsg}
+            languagePref={languagePref}
+            onLanguageChange={handleLanguageChange}
+            themePref={themePref}
+            onThemeChange={handleThemeChange}
+            onOpenImportModal={() => setIsImportModalOpen(true)}
+            onOpenAboutModal={() => setIsAboutModalOpen(true)}
+          />
+        </div>
+      </PageContent>
 
       <ConfirmDialog
         open={Boolean(sessionPendingRevoke)}

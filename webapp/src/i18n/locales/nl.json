@@ -270,24 +270,21 @@
     "deleteUserLabel": "Gebruiker {{username}} verwijderen",
     "stats": {
       "title": "Instantie-overzicht",
-      "description": "Live-statistieken voor deze Jot-server.",
       "cards": {
         "users": "Gebruikers",
         "notes": "Notities",
-        "sharing": "Gedeeld",
         "labels": "Labels",
-        "todoItems": "Taken",
-        "storage": "Opslag"
+        "todoItems": "Taken"
       },
       "metrics": {
+        "admins": "Beheerders",
         "text": "Tekst",
         "todo": "Taken",
         "archived": "Gearchiveerd",
         "trashed": "Prullenbak",
         "sharedNotes": "Gedeelde notities",
         "shareLinks": "Deellinks",
-        "totalLabels": "Totaal labels",
-        "noteAssociations": "Notitiekoppelingen",
+        "noteAssociations": "Labelkoppelingen",
         "completed": "Voltooid",
         "assigned": "Toegewezen",
         "databaseSize": "Databasegrootte"
