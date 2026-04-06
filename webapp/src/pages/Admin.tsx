@@ -320,12 +320,10 @@ const Admin = ({ onLogout, passwordMinLength }: AdminProps) => {
                 </StatCard>
 
                 <StatCard
-                  title={t('admin.stats.cards.storage')}
+                  title={t('admin.stats.metrics.databaseSize')}
                   value={formatBytes(stats.storage.database_size_bytes)}
                   valueTestId="admin-stats-database-size"
-                >
-                  <StatLine label={t('admin.stats.metrics.databaseSize')} value={formatBytes(stats.storage.database_size_bytes)} />
-                </StatCard>
+                />
               </>
             ) : null}
           </div>
