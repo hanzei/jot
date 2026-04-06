@@ -33,7 +33,10 @@ vi.mock('@/utils/api', () => ({
   },
   labels: {
     getAll: vi.fn().mockResolvedValue([]),
+    getCounts: vi.fn().mockResolvedValue({}),
     create: vi.fn(),
+    rename: vi.fn(),
+    delete: vi.fn(),
   },
   sessions: {
     list: vi.fn().mockResolvedValue([]),
@@ -106,12 +109,24 @@ const renderSettings = (onLogout = vi.fn()) => {
   )
 }
 
+const getSidebarLabels = async () => {
+  const sidebar = await screen.findByTestId('sidebar-labels')
+  return within(sidebar)
+}
+
 describe('Settings', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockNavigate.mockReset()
     vi.mocked(isAxiosError).mockReset()
     vi.mocked(isAxiosError).mockReturnValue(false)
+    vi.mocked(labelsApi.getAll).mockReset()
+    vi.mocked(labelsApi.getAll).mockResolvedValue([])
+    vi.mocked(labelsApi.getCounts).mockReset()
+    vi.mocked(labelsApi.getCounts).mockResolvedValue({})
+    vi.mocked(labelsApi.create).mockReset()
+    vi.mocked(labelsApi.rename).mockReset()
+    vi.mocked(labelsApi.delete).mockReset()
     vi.mocked(authUtils.isAdmin).mockReturnValue(false)
     vi.mocked(authUtils.getUser).mockReturnValue(mockUser)
     i18n.changeLanguage('en')
@@ -173,7 +188,8 @@ describe('Settings', () => {
       await waitFor(() => {
         expect(labelsApi.getAll).toHaveBeenCalled()
       })
-      expect(await screen.findByRole('button', { name: 'Work' })).toBeInTheDocument()
+      const sidebar = await getSidebarLabels()
+      expect(sidebar.getByText('Work')).toBeInTheDocument()
     })
 
     it('navigates to label-filtered notes when a sidebar label is clicked', async () => {
@@ -190,7 +206,8 @@ describe('Settings', () => {
 
       renderSettings()
 
-      await user.click(await screen.findByRole('button', { name: 'Work' }))
+      const sidebar = await getSidebarLabels()
+      await user.click(sidebar.getByText('Work'))
 
       expect(mockNavigate).toHaveBeenCalledWith('/?label=label-1')
     })
@@ -218,8 +235,86 @@ describe('Settings', () => {
       })
       await waitFor(() => {
         expect(labelsApi.getAll).toHaveBeenCalledTimes(2)
+        expect(labelsApi.getCounts).toHaveBeenCalledTimes(2)
       })
-      expect(await screen.findByRole('button', { name: 'Ideas' })).toBeInTheDocument()
+      const sidebar = await getSidebarLabels()
+      expect(sidebar.getByText('Ideas')).toBeInTheDocument()
+    })
+
+    it('loads and displays sidebar label counts', async () => {
+      vi.mocked(labelsApi.getAll).mockResolvedValue([
+        {
+          id: 'label-1',
+          user_id: 'user1',
+          name: 'Work',
+          created_at: '2023-01-01T00:00:00Z',
+          updated_at: '2023-01-01T00:00:00Z',
+        },
+      ])
+      vi.mocked(labelsApi.getCounts).mockResolvedValue({ 'label-1': 3 })
+
+      renderSettings()
+
+      const sidebar = await getSidebarLabels()
+      expect(sidebar.getByText('Work')).toBeInTheDocument()
+      expect(await screen.findByTestId('label-count-label-1')).toHaveTextContent('3')
+    })
+
+    it('renames a sidebar label', async () => {
+      const user = userEvent.setup()
+      const originalLabel = {
+        id: 'label-1',
+        user_id: 'user1',
+        name: 'Work',
+        created_at: '2023-01-01T00:00:00Z',
+        updated_at: '2023-01-01T00:00:00Z',
+      }
+      const renamedLabel = { ...originalLabel, name: 'Work Updated' }
+      vi.mocked(labelsApi.getAll).mockResolvedValueOnce([originalLabel]).mockResolvedValueOnce([renamedLabel])
+      vi.mocked(labelsApi.rename).mockResolvedValue(renamedLabel)
+
+      renderSettings()
+
+      const sidebar = await getSidebarLabels()
+      await user.click(sidebar.getByRole('button', { name: 'Label options for Work' }))
+      await user.click(await screen.findByRole('menuitem', { name: 'Rename' }))
+      const renameInput = await screen.findByLabelText('Rename label Work')
+      await user.clear(renameInput)
+      await user.type(renameInput, 'Work Updated')
+      await user.click(screen.getByRole('button', { name: 'Save label name' }))
+
+      await waitFor(() => {
+        expect(labelsApi.rename).toHaveBeenCalledWith('label-1', 'Work Updated')
+      })
+      expect(sidebar.getByText('Work Updated')).toBeInTheDocument()
+    })
+
+    it('deletes a sidebar label after confirmation', async () => {
+      const user = userEvent.setup()
+      const label = {
+        id: 'label-1',
+        user_id: 'user1',
+        name: 'Work',
+        created_at: '2023-01-01T00:00:00Z',
+        updated_at: '2023-01-01T00:00:00Z',
+      }
+      vi.mocked(labelsApi.getAll).mockResolvedValueOnce([label]).mockResolvedValueOnce([])
+      vi.mocked(labelsApi.delete).mockResolvedValue(undefined)
+
+      renderSettings()
+
+      const sidebar = await getSidebarLabels()
+      await user.click(sidebar.getByRole('button', { name: 'Label options for Work' }))
+      await user.click(await screen.findByRole('menuitem', { name: 'Delete' }))
+      const confirmDialog = screen.getByRole('dialog', { name: 'Delete label' })
+      await user.click(within(confirmDialog).getByRole('button', { name: 'Delete' }))
+
+      await waitFor(() => {
+        expect(labelsApi.delete).toHaveBeenCalledWith('label-1')
+      })
+      await waitFor(() => {
+        expect(sidebar.queryByText('Work')).not.toBeInTheDocument()
+      })
     })
   })
 

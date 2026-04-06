@@ -61,6 +61,7 @@ const Settings = ({ onLogout, passwordMinLength }: SettingsProps) => {
   const [revokingSessionId, setRevokingSessionId] = useState<string | null>(null);
   const [sessionPendingRevoke, setSessionPendingRevoke] = useState<ActiveSession | null>(null);
   const [labelsList, setLabelsList] = useState<Label[]>([]);
+  const [labelCounts, setLabelCounts] = useState<Record<string, number> | null>(null);
   const [patsList, setPatsList] = useState<PersonalAccessToken[]>([]);
   const [patsLoading, setPatsLoading] = useState(true);
   const [patsError, setPatsError] = useState('');
@@ -135,23 +136,27 @@ const Settings = ({ onLogout, passwordMinLength }: SettingsProps) => {
     }
   };
 
-  useEffect(() => {
-    let mounted = true;
-    labelsApi.getAll()
-      .then((labels) => {
-        if (mounted) {
-          setLabelsList(labels);
-        }
-      })
-      .catch(() => {
-        if (mounted) {
-          setLabelsList([]);
-        }
-      });
-    return () => {
-      mounted = false;
-    };
+  const loadLabels = useCallback(async () => {
+    try {
+      const labels = await labelsApi.getAll();
+      setLabelsList(labels);
+    } catch {
+      // Preserve existing sidebar labels on transient refresh failures.
+    }
   }, []);
+
+  const loadLabelCounts = useCallback(async () => {
+    try {
+      const counts = await labelsApi.getCounts();
+      setLabelCounts(counts);
+    } catch {
+      setLabelCounts(null);
+    }
+  }, []);
+
+  useEffect(() => {
+    void Promise.all([loadLabels(), loadLabelCounts()]);
+  }, [loadLabels, loadLabelCounts]);
 
   const handleRevokeSession = async (sessionId: string) => {
     setRevokingSessionId(sessionId);
@@ -297,9 +302,7 @@ const Settings = ({ onLogout, passwordMinLength }: SettingsProps) => {
         }
         return [...prev, createdLabel];
       });
-      labelsApi.getAll().then(setLabelsList).catch(() => {
-        // Keep optimistic label list if refresh fails.
-      });
+      void Promise.all([loadLabels(), loadLabelCounts()]);
       showToast(t('labels.createSuccess'), 'success');
       return true;
     } catch (err: unknown) {
@@ -308,6 +311,40 @@ const Settings = ({ onLogout, passwordMinLength }: SettingsProps) => {
         showToast(msg || t('labels.createError'), 'error');
       } else {
         showToast(t('labels.createError'), 'error');
+      }
+      return false;
+    }
+  };
+
+  const handleRenameLabel = async (label: Label, newName: string): Promise<boolean> => {
+    try {
+      await labelsApi.rename(label.id, newName);
+      await Promise.all([loadLabels(), loadLabelCounts()]);
+      showToast(t('labels.renameSuccess'), 'success');
+      return true;
+    } catch (err: unknown) {
+      if (isAxiosError(err)) {
+        const msg = typeof err.response?.data === 'string' ? err.response.data.trim() : '';
+        showToast(msg || t('labels.renameError'), 'error');
+      } else {
+        showToast(t('labels.renameError'), 'error');
+      }
+      return false;
+    }
+  };
+
+  const handleDeleteLabel = async (label: Label): Promise<boolean> => {
+    try {
+      await labelsApi.delete(label.id);
+      await Promise.all([loadLabels(), loadLabelCounts()]);
+      showToast(t('labels.deleteSuccess'), 'success');
+      return true;
+    } catch (err: unknown) {
+      if (isAxiosError(err)) {
+        const msg = typeof err.response?.data === 'string' ? err.response.data.trim() : '';
+        showToast(msg || t('labels.deleteError'), 'error');
+      } else {
+        showToast(t('labels.deleteError'), 'error');
       }
       return false;
     }
@@ -395,8 +432,11 @@ const Settings = ({ onLogout, passwordMinLength }: SettingsProps) => {
   const sidebarChildren = (
     <SidebarLabels
       labels={labelsList}
+      labelCounts={labelCounts}
       onSelect={(labelId) => navigate(`/?label=${encodeURIComponent(labelId)}`)}
       onCreate={handleCreateLabel}
+      onRename={handleRenameLabel}
+      onDelete={handleDeleteLabel}
     />
   );
 
