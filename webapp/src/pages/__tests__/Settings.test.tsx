@@ -33,6 +33,10 @@ vi.mock('@/utils/api', () => ({
   },
   labels: {
     getAll: vi.fn().mockResolvedValue([]),
+    getCounts: vi.fn().mockResolvedValue({}),
+    create: vi.fn(),
+    rename: vi.fn(),
+    delete: vi.fn(),
   },
   sessions: {
     list: vi.fn().mockResolvedValue([]),
@@ -105,10 +109,24 @@ const renderSettings = (onLogout = vi.fn()) => {
   )
 }
 
+const getSidebarLabels = async () => {
+  const sidebar = await screen.findByTestId('sidebar-labels')
+  return within(sidebar)
+}
+
 describe('Settings', () => {
   beforeEach(() => {
     vi.clearAllMocks()
     mockNavigate.mockReset()
+    vi.mocked(isAxiosError).mockReset()
+    vi.mocked(isAxiosError).mockReturnValue(false)
+    vi.mocked(labelsApi.getAll).mockReset()
+    vi.mocked(labelsApi.getAll).mockResolvedValue([])
+    vi.mocked(labelsApi.getCounts).mockReset()
+    vi.mocked(labelsApi.getCounts).mockResolvedValue({})
+    vi.mocked(labelsApi.create).mockReset()
+    vi.mocked(labelsApi.rename).mockReset()
+    vi.mocked(labelsApi.delete).mockReset()
     vi.mocked(authUtils.isAdmin).mockReturnValue(false)
     vi.mocked(authUtils.getUser).mockReturnValue(mockUser)
     i18n.changeLanguage('en')
@@ -170,7 +188,8 @@ describe('Settings', () => {
       await waitFor(() => {
         expect(labelsApi.getAll).toHaveBeenCalled()
       })
-      expect(await screen.findByRole('button', { name: 'Work' })).toBeInTheDocument()
+      const sidebar = await getSidebarLabels()
+      expect(sidebar.getByText('Work')).toBeInTheDocument()
     })
 
     it('navigates to label-filtered notes when a sidebar label is clicked', async () => {
@@ -187,9 +206,115 @@ describe('Settings', () => {
 
       renderSettings()
 
-      await user.click(await screen.findByRole('button', { name: 'Work' }))
+      const sidebar = await getSidebarLabels()
+      await user.click(sidebar.getByText('Work'))
 
       expect(mockNavigate).toHaveBeenCalledWith('/?label=label-1')
+    })
+
+    it('shows new label action in sidebar and creates a label', async () => {
+      const user = userEvent.setup()
+      const createdLabel = {
+        id: 'label-2',
+        user_id: 'user1',
+        name: 'Ideas',
+        created_at: '2023-01-01T00:00:00Z',
+        updated_at: '2023-01-01T00:00:00Z',
+      }
+      vi.mocked(labelsApi.getAll).mockResolvedValueOnce([]).mockResolvedValueOnce([createdLabel])
+      vi.mocked(labelsApi.create).mockResolvedValue(createdLabel)
+
+      renderSettings()
+
+      await user.click(await screen.findByRole('button', { name: i18n.t('labels.newSidebar') }))
+      await user.type(screen.getByLabelText(i18n.t('labels.createInputLabel')), 'Ideas')
+      await user.click(screen.getByRole('button', { name: i18n.t('labels.createSave') }))
+
+      await waitFor(() => {
+        expect(labelsApi.create).toHaveBeenCalledWith('Ideas')
+      })
+      await waitFor(() => {
+        expect(labelsApi.getAll).toHaveBeenCalledTimes(2)
+        expect(labelsApi.getCounts).toHaveBeenCalledTimes(2)
+      })
+      const sidebar = await getSidebarLabels()
+      expect(sidebar.getByText('Ideas')).toBeInTheDocument()
+    })
+
+    it('loads and displays sidebar label counts', async () => {
+      vi.mocked(labelsApi.getAll).mockResolvedValue([
+        {
+          id: 'label-1',
+          user_id: 'user1',
+          name: 'Work',
+          created_at: '2023-01-01T00:00:00Z',
+          updated_at: '2023-01-01T00:00:00Z',
+        },
+      ])
+      vi.mocked(labelsApi.getCounts).mockResolvedValue({ 'label-1': 3 })
+
+      renderSettings()
+
+      const sidebar = await getSidebarLabels()
+      expect(sidebar.getByText('Work')).toBeInTheDocument()
+      expect(await screen.findByTestId('label-count-label-1')).toHaveTextContent('3')
+    })
+
+    it('renames a sidebar label', async () => {
+      const user = userEvent.setup()
+      const originalLabel = {
+        id: 'label-1',
+        user_id: 'user1',
+        name: 'Work',
+        created_at: '2023-01-01T00:00:00Z',
+        updated_at: '2023-01-01T00:00:00Z',
+      }
+      const renamedLabel = { ...originalLabel, name: 'Work Updated' }
+      vi.mocked(labelsApi.getAll).mockResolvedValueOnce([originalLabel]).mockResolvedValueOnce([renamedLabel])
+      vi.mocked(labelsApi.rename).mockResolvedValue(renamedLabel)
+
+      renderSettings()
+
+      const sidebar = await getSidebarLabels()
+      await user.click(sidebar.getByRole('button', { name: 'Label options for Work' }))
+      await user.click(await screen.findByRole('menuitem', { name: 'Rename' }))
+      const renameInput = await screen.findByLabelText('Rename label Work')
+      await user.clear(renameInput)
+      await user.type(renameInput, 'Work Updated')
+      await user.click(screen.getByRole('button', { name: 'Save label name' }))
+
+      await waitFor(() => {
+        expect(labelsApi.rename).toHaveBeenCalledWith('label-1', 'Work Updated')
+      })
+      expect(sidebar.getByText('Work Updated')).toBeInTheDocument()
+    })
+
+    it('deletes a sidebar label after confirmation', async () => {
+      const user = userEvent.setup()
+      const label = {
+        id: 'label-1',
+        user_id: 'user1',
+        name: 'Work',
+        created_at: '2023-01-01T00:00:00Z',
+        updated_at: '2023-01-01T00:00:00Z',
+      }
+      vi.mocked(labelsApi.getAll).mockResolvedValueOnce([label]).mockResolvedValueOnce([])
+      vi.mocked(labelsApi.delete).mockResolvedValue(undefined)
+
+      renderSettings()
+
+      const sidebar = await getSidebarLabels()
+      await user.click(sidebar.getByRole('button', { name: 'Label options for Work' }))
+      await user.click(await screen.findByRole('menuitem', { name: 'Delete' }))
+      const confirmDialog = screen.getByRole('dialog', { name: 'Delete label' })
+      await user.click(within(confirmDialog).getByRole('button', { name: 'Delete' }))
+
+      await waitFor(() => {
+        expect(labelsApi.delete).toHaveBeenCalledWith('label-1')
+      })
+      await waitFor(() => {
+        expect(sidebar.queryByText('Work')).not.toBeInTheDocument()
+      })
     })
   })
 
@@ -265,7 +390,7 @@ describe('Settings', () => {
       await user.click(screen.getByRole('button', { name: 'Save Changes' }))
 
       await waitFor(() => {
-        expect(screen.getByRole('alert')).toHaveTextContent('username already taken')
+        expect(screen.getAllByRole('alert')[0]).toHaveTextContent('username already taken')
       })
     })
 
@@ -279,11 +404,11 @@ describe('Settings', () => {
       await user.click(screen.getByRole('button', { name: 'Save Changes' }))
 
       await waitFor(() => {
-        expect(screen.getByRole('alert')).toHaveTextContent('Failed to update username.')
+        expect(screen.getAllByRole('alert')[0]).toHaveTextContent('Failed to update username.')
       })
     })
 
-    it('clears previous error/success messages on a new submission', async () => {
+    it('clears previous account error message on a new submission', async () => {
       const user = userEvent.setup()
       vi.mocked(isAxiosError).mockReturnValue(false)
       const mockSettings = { ...defaultSettings }
@@ -295,7 +420,7 @@ describe('Settings', () => {
 
       // First submit — causes error
       await user.click(screen.getByRole('button', { name: 'Save Changes' }))
-      await waitFor(() => expect(screen.getByRole('alert')).toBeInTheDocument())
+      await waitFor(() => expect(screen.getAllByRole('alert')[0]).toBeInTheDocument())
 
       // Second submit — should clear error before resolving
       await user.click(screen.getByRole('button', { name: 'Save Changes' }))
@@ -374,23 +499,29 @@ describe('Settings', () => {
       await user.click(screen.getByTestId('logout-button'))
 
       await waitFor(() => {
-        expect(screen.getByRole('alert')).toHaveTextContent('Logout failed')
+        expect(screen.getAllByRole('alert')[0]).toHaveTextContent('Logout failed')
       })
     })
   })
 
   describe('Session revocation confirmation', () => {
+    const getSessionsSection = async () => {
+      const sessionsHeading = await screen.findByRole('heading', { name: i18n.t('settings.sessionsSection') })
+      return sessionsHeading.closest('section') as HTMLElement
+    }
+
     it('opens confirmation dialog before revoking a session', async () => {
       const user = userEvent.setup()
       vi.mocked(sessions.list).mockResolvedValue([activeSession])
 
       renderSettings()
 
+      const sessionsSection = await getSessionsSection()
       await waitFor(() => {
-        expect(screen.getByRole('button', { name: 'Revoke' })).toBeInTheDocument()
+        expect(within(sessionsSection).getByRole('button', { name: 'Revoke' })).toBeInTheDocument()
       })
 
-      await user.click(screen.getByRole('button', { name: 'Revoke' }))
+      await user.click(within(sessionsSection).getByRole('button', { name: 'Revoke' }))
 
       expect(screen.getByRole('heading', { name: 'Revoke session' })).toBeInTheDocument()
       expect(sessions.revoke).not.toHaveBeenCalled()
@@ -402,7 +533,8 @@ describe('Settings', () => {
 
       renderSettings()
 
-      await user.click(await screen.findByRole('button', { name: 'Revoke' }))
+      const sessionsSection = await getSessionsSection()
+      await user.click(within(sessionsSection).getByRole('button', { name: 'Revoke' }))
       const confirmDialog = screen.getByRole('dialog', { name: 'Revoke session' })
       await user.click(within(confirmDialog).getByRole('button', { name: 'Revoke' }))
 
@@ -417,7 +549,8 @@ describe('Settings', () => {
 
       renderSettings()
 
-      await user.click(await screen.findByRole('button', { name: 'Revoke' }))
+      const sessionsSection = await getSessionsSection()
+      await user.click(within(sessionsSection).getByRole('button', { name: 'Revoke' }))
       const confirmDialog = screen.getByRole('dialog', { name: 'Revoke session' })
       await user.click(within(confirmDialog).getByRole('button', { name: 'Cancel' }))
 

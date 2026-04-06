@@ -2,7 +2,7 @@ import { useState, useEffect, useRef, useCallback } from 'react';
 import { useNavigate } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import i18n from '@/i18n';
-import { auth, users, labels as labelsApi, sessions as sessionsApi, pats as patsApi, isAxiosError } from '@/utils/api';
+import { auth, users, sessions as sessionsApi, pats as patsApi, isAxiosError } from '@/utils/api';
 import { getUser, setUser, removeUser, getSettings, setSettings, isAdmin } from '@/utils/auth';
 import { getLanguagePreference, resolveLanguage, LanguagePreference } from '@/utils/language';
 import { isPasswordTooShort } from '@/utils/userValidation';
@@ -16,7 +16,8 @@ import SidebarLabels from '@/components/SidebarLabels';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { useToast } from '@/hooks/useToast';
 import { useNavigationLinkTabs } from '@/hooks/useNavigationTabs';
-import type { ActiveSession, Label, PersonalAccessToken } from '@jot/shared';
+import { useSidebarLabelsController } from '@/hooks/useSidebarLabelsController';
+import type { ActiveSession, PersonalAccessToken } from '@jot/shared';
 import { IdentitySecurityColumn, PreferencesInfoColumn } from './settings/SettingsSections';
 
 interface SettingsProps {
@@ -60,7 +61,6 @@ const Settings = ({ onLogout, passwordMinLength }: SettingsProps) => {
   const [sessionsError, setSessionsError] = useState('');
   const [revokingSessionId, setRevokingSessionId] = useState<string | null>(null);
   const [sessionPendingRevoke, setSessionPendingRevoke] = useState<ActiveSession | null>(null);
-  const [labelsList, setLabelsList] = useState<Label[]>([]);
   const [patsList, setPatsList] = useState<PersonalAccessToken[]>([]);
   const [patsLoading, setPatsLoading] = useState(true);
   const [patsError, setPatsError] = useState('');
@@ -134,24 +134,6 @@ const Settings = ({ onLogout, passwordMinLength }: SettingsProps) => {
       });
     }
   };
-
-  useEffect(() => {
-    let mounted = true;
-    labelsApi.getAll()
-      .then((labels) => {
-        if (mounted) {
-          setLabelsList(labels);
-        }
-      })
-      .catch(() => {
-        if (mounted) {
-          setLabelsList([]);
-        }
-      });
-    return () => {
-      mounted = false;
-    };
-  }, []);
 
   const handleRevokeSession = async (sessionId: string) => {
     setRevokingSessionId(sessionId);
@@ -288,6 +270,20 @@ const Settings = ({ onLogout, passwordMinLength }: SettingsProps) => {
     }
   };
 
+  const {
+    labels: labelsList,
+    labelCounts,
+    loadLabels,
+    loadLabelCounts,
+    handleCreateLabel,
+    handleRenameLabel,
+    handleDeleteLabel,
+  } = useSidebarLabelsController();
+
+  useEffect(() => {
+    void Promise.all([loadLabels(), loadLabelCounts()]);
+  }, [loadLabels, loadLabelCounts]);
+
   const handleThemeChange = async (pref: ThemePreference) => {
     const prev = themePref;
     const current = getSettings();
@@ -370,7 +366,11 @@ const Settings = ({ onLogout, passwordMinLength }: SettingsProps) => {
   const sidebarChildren = (
     <SidebarLabels
       labels={labelsList}
+      labelCounts={labelCounts}
       onSelect={(labelId) => navigate(`/?label=${encodeURIComponent(labelId)}`)}
+      onCreate={handleCreateLabel}
+      onRename={handleRenameLabel}
+      onDelete={handleDeleteLabel}
     />
   );
 
