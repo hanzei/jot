@@ -270,14 +270,11 @@
     "deleteUserLabel": "Benutzer {{username}} löschen",
     "stats": {
       "title": "Instanzübersicht",
-      "description": "Live-Metriken für diesen Jot-Server.",
       "cards": {
         "users": "Benutzer",
         "notes": "Notizen",
-        "sharing": "Freigaben",
         "labels": "Labels",
-        "todoItems": "Aufgaben",
-        "storage": "Speicher"
+        "todoItems": "Aufgaben"
       },
       "metrics": {
         "admins": "Admins",
@@ -287,7 +284,6 @@
         "trashed": "Papierkorb",
         "sharedNotes": "Geteilte Notizen",
         "shareLinks": "Freigabelinks",
-        "totalLabels": "Labels gesamt",
         "noteAssociations": "Label-Zuweisungen",
         "completed": "Erledigt",
         "assigned": "Zugewiesen",

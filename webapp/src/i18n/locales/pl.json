@@ -270,14 +270,11 @@
     "deleteUserLabel": "Usuń użytkownika {{username}}",
     "stats": {
       "title": "Przegląd instancji",
-      "description": "Metryki na żywo dla tego serwera Jot.",
       "cards": {
         "users": "Użytkownicy",
         "notes": "Notatki",
-        "sharing": "Udostępnienia",
         "labels": "Etykiety",
-        "todoItems": "Zadania",
-        "storage": "Magazyn"
+        "todoItems": "Zadania"
       },
       "metrics": {
         "admins": "Administratorzy",
@@ -287,7 +284,6 @@
         "trashed": "W koszu",
         "sharedNotes": "Udostępnione notatki",
         "shareLinks": "Linki udostępniania",
-        "totalLabels": "Łączna liczba etykiet",
         "noteAssociations": "Przypisania etykiet",
         "completed": "Ukończone",
         "assigned": "Przypisane",
