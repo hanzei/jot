@@ -359,7 +359,7 @@
     "noLabels": "Aucune étiquette pour l'instant",
     "newLabelPlaceholder": "Nom de l'étiquette...",
     "createNew": "Créer nouvelle...",
-    "newSidebar": "+ Nouvelle étiquette",
+    "newSidebar": "Nouvelle étiquette",
     "createInputLabel": "Nom de la nouvelle étiquette",
     "createSave": "Créer l'étiquette",
     "createCancel": "Annuler la création de l'étiquette",
