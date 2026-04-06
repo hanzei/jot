@@ -156,6 +156,10 @@ export class SettingsPage {
     await Promise.all(this.allNavTabs().map(tab => expect(tab).toBeVisible()));
   }
 
+  sidebarNewLabelButton() {
+    return this.sidebar().getByRole('button', { name: '+ New Label' });
+  }
+
   async expectNotesTabActive() {
     await expect(this.sidebarNotesTab()).toHaveAttribute('aria-current', 'page');
     await Promise.all(

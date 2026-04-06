@@ -53,6 +53,11 @@ const Settings = ({ onLogout, passwordMinLength }: SettingsProps) => {
   const [iconUploading, setIconUploading] = useState(false);
   const [iconDeleting, setIconDeleting] = useState(false);
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const isMountedRef = useRef(true);
+  useEffect(() => {
+    isMountedRef.current = true;
+    return () => { isMountedRef.current = false; };
+  }, []);
   const [languagePref, setLanguagePref] = useState<LanguagePreference>(() => getLanguagePreference());
   const [themePref, setThemePref] = useState<ThemePreference>(() => getThemePreference());
   const [activeSessions, setActiveSessions] = useState<ActiveSession[]>([]);
@@ -135,23 +140,69 @@ const Settings = ({ onLogout, passwordMinLength }: SettingsProps) => {
     }
   };
 
-  useEffect(() => {
-    let mounted = true;
-    labelsApi.getAll()
-      .then((labels) => {
-        if (mounted) {
-          setLabelsList(labels);
-        }
-      })
-      .catch(() => {
-        if (mounted) {
-          setLabelsList([]);
-        }
-      });
-    return () => {
-      mounted = false;
-    };
+  const loadLabels = useCallback(async () => {
+    try {
+      const data = await labelsApi.getAll();
+      if (isMountedRef.current) setLabelsList(data);
+    } catch {
+      if (isMountedRef.current) setLabelsList([]);
+    }
   }, []);
+
+  useEffect(() => {
+    void loadLabels();
+  }, [loadLabels]);
+
+  const handleCreateLabel = useCallback(async (name: string): Promise<boolean> => {
+    try {
+      await labelsApi.create(name);
+      await loadLabels();
+      showToast(t('labels.createSuccess'), 'success');
+      return true;
+    } catch (err: unknown) {
+      if (isAxiosError(err)) {
+        const msg = typeof err.response?.data === 'string' ? err.response.data.trim() : '';
+        showToast(msg || t('labels.createError'), 'error');
+      } else {
+        showToast(t('labels.createError'), 'error');
+      }
+      return false;
+    }
+  }, [loadLabels, showToast, t]);
+
+  const handleRenameLabel = useCallback(async (label: Label, newName: string): Promise<boolean> => {
+    try {
+      await labelsApi.rename(label.id, newName);
+      await loadLabels();
+      showToast(t('labels.renameSuccess'), 'success');
+      return true;
+    } catch (err: unknown) {
+      if (isAxiosError(err)) {
+        const msg = typeof err.response?.data === 'string' ? err.response.data.trim() : '';
+        showToast(msg || t('labels.renameError'), 'error');
+      } else {
+        showToast(t('labels.renameError'), 'error');
+      }
+      return false;
+    }
+  }, [loadLabels, showToast, t]);
+
+  const handleDeleteLabel = useCallback(async (label: Label): Promise<boolean> => {
+    try {
+      await labelsApi.delete(label.id);
+      await loadLabels();
+      showToast(t('labels.deleteSuccess'), 'success');
+      return true;
+    } catch (err: unknown) {
+      if (isAxiosError(err)) {
+        const msg = typeof err.response?.data === 'string' ? err.response.data.trim() : '';
+        showToast(msg || t('labels.deleteError'), 'error');
+      } else {
+        showToast(t('labels.deleteError'), 'error');
+      }
+      return false;
+    }
+  }, [loadLabels, showToast, t]);
 
   const handleRevokeSession = async (sessionId: string) => {
     setRevokingSessionId(sessionId);
@@ -371,6 +422,9 @@ const Settings = ({ onLogout, passwordMinLength }: SettingsProps) => {
     <SidebarLabels
       labels={labelsList}
       onSelect={(labelId) => navigate(`/?label=${encodeURIComponent(labelId)}`)}
+      onCreate={handleCreateLabel}
+      onRename={handleRenameLabel}
+      onDelete={handleDeleteLabel}
     />
   );
 

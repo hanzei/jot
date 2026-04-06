@@ -202,6 +202,13 @@ test.describe('Settings sidebar navigation', () => {
     void authenticatedUser;
   });
 
+  test('shows New Label button in sidebar', async ({ authenticatedUser, settingsPage }) => {
+    await settingsPage.goto();
+
+    await expect(settingsPage.sidebarNewLabelButton()).toBeVisible();
+    void authenticatedUser;
+  });
+
   test('Notes tab navigates to the dashboard', async ({ authenticatedUser, page, settingsPage }) => {
     await settingsPage.goto();
 
