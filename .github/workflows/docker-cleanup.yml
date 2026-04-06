@@ -7,6 +7,7 @@ on:
 permissions:
   contents: read
   packages: write
+  actions: read
 
 jobs:
   cleanup:
@@ -17,19 +18,54 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_TAG: pr-${{ github.event.pull_request.number }}
+          OWNER: ${{ github.repository_owner }}
+          REPO: ${{ github.repository }}
+          BRANCH: ${{ github.head_ref }}
         run: |
+          # Determine if owner is a user or organization and build the package API path
+          OWNER_TYPE=$(gh api "/users/$OWNER" --jq '.type' 2>/dev/null || echo "User")
+          if [ "$OWNER_TYPE" = "Organization" ]; then
+            PACKAGE_API="/orgs/$OWNER/packages/container/jot"
+          else
+            PACKAGE_API="/users/$OWNER/packages/container/jot"
+          fi
+
+          # Wait briefly, then skip deletion if a Docker workflow run is still
+          # active for this branch, to avoid deleting an image that is mid-push.
+          sleep 30
+          IN_PROGRESS=$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/$REPO/actions/workflows/docker.yml/runs?branch=$BRANCH&status=in_progress" \
+            --jq '.total_count' 2>/dev/null || echo "0")
+          QUEUED=$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            "/repos/$REPO/actions/workflows/docker.yml/runs?branch=$BRANCH&status=queued" \
+            --jq '.total_count' 2>/dev/null || echo "0")
+
+          if [ "$((IN_PROGRESS + QUEUED))" -gt 0 ]; then
+            echo "Skipping deletion: $IN_PROGRESS in-progress and $QUEUED queued Docker run(s) still active for branch $BRANCH"
+            exit 0
+          fi
+
+          # Find the package version ID for the PR tag
+          PACKAGE_ERR=$(mktemp)
           VERSION_ID=$(gh api \
             -H "Accept: application/vnd.github+json" \
-            "/users/hanzei/packages/container/jot/versions" \
-            2>/dev/null | jq -r --arg tag "$PR_TAG" \
+            "$PACKAGE_API/versions" \
+            2>"$PACKAGE_ERR" | jq -r --arg tag "$PR_TAG" \
             '.[] | select(.metadata.container.tags[] == $tag) | .id' \
             | head -1 || true)
+
+          if [ -s "$PACKAGE_ERR" ]; then
+            echo "Warning: gh api package list returned error: $(cat "$PACKAGE_ERR")"
+          fi
+          rm -f "$PACKAGE_ERR"
 
           if [ -n "$VERSION_ID" ]; then
             gh api \
               --method DELETE \
               -H "Accept: application/vnd.github+json" \
-              "/users/hanzei/packages/container/jot/versions/${VERSION_ID}"
+              "$PACKAGE_API/versions/$VERSION_ID"
             echo "Deleted ghcr.io/hanzei/jot:${PR_TAG}"
           else
             echo "No image found for ${PR_TAG}, skipping"
