@@ -81,6 +81,12 @@ const AuthenticatedLayout = ({ onLogout }: AuthenticatedLayoutProps) => {
     void Promise.all([loadLabels(), loadLabelCounts()]);
   }, [loadLabels, loadLabelCounts]);
 
+  // Dashboard calls registerLabelCallbacks once on mount (via a stable useEffect)
+  // to wire up page-specific reactions to label renames and deletes. The callbacks
+  // are stored in labelCallbacksRef.current so they can be replaced without
+  // restarting useSidebarLabelsController. Callers should register once per mount
+  // and rely on closure-captured refs (e.g. selectedLabelIdRef) for fresh values
+  // rather than re-registering on every render.
   const registerLabelCallbacks = useCallback((callbacks: LabelCallbacks) => {
     labelCallbacksRef.current = callbacks;
   }, []);
