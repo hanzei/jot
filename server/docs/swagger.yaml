@@ -1367,16 +1367,41 @@ paths:
       summary: Remove a share from a note
       tags:
       - sharing
+  /notes/export:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: Jot JSON export file attachment
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "500":
+          description: internal server error
+          schema:
+            type: string
+      security:
+      - CookieAuth: []
+      summary: Export notes as a Jot JSON backup
+      tags:
+      - notes
   /notes/import:
     post:
       consumes:
       - multipart/form-data
       parameters:
-      - description: Google Keep JSON or ZIP export file
+      - description: Export file to import
         in: formData
         name: file
         required: true
         type: file
+      - description: 'Import format: jot_json or google_keep'
+        in: formData
+        name: import_type
+        required: true
+        type: string
       produces:
       - application/json
       responses:
@@ -1398,7 +1423,7 @@ paths:
             type: string
       security:
       - CookieAuth: []
-      summary: Import notes from a Google Keep export
+      summary: Import notes from a supported export format
       tags:
       - notes
   /notes/reorder:
