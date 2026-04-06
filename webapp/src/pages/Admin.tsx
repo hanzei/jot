@@ -5,6 +5,7 @@ import { admin, auth, isAxiosError } from '@/utils/api';
 import { isAdmin, removeUser, getUser } from '@/utils/auth';
 import { Navigate, useNavigate } from 'react-router';
 import AppLayout from '@/components/AppLayout';
+import PageContent from '@/components/PageContent';
 import SearchBar from '@/components/SearchBar';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import CreateUserModal from '@/components/CreateUserModal';
@@ -234,7 +235,7 @@ const Admin = ({ onLogout, passwordMinLength }: AdminProps) => {
       sidebarBottomTabs={bottomNavigationTabs}
       searchBar={searchBar}
     >
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <PageContent>
         <div className="mb-6">
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{t('admin.pageHeading')}</h1>
         </div>
@@ -431,7 +432,7 @@ const Admin = ({ onLogout, passwordMinLength }: AdminProps) => {
             onSuccess={handleCreateUserSuccess}
           />
         )}
-      </div>
+      </PageContent>
     </AppLayout>
   );
 };

@@ -8,6 +8,7 @@ import { getLanguagePreference, resolveLanguage, LanguagePreference } from '@/ut
 import { isPasswordTooShort } from '@/utils/userValidation';
 import { getThemePreference, applyTheme, ThemePreference } from '@/utils/theme';
 import AppLayout from '@/components/AppLayout';
+import PageContent from '@/components/PageContent';
 import SearchBar from '@/components/SearchBar';
 import ImportModal from '@/components/ImportModal';
 import AboutModal from '@/components/AboutModal';
@@ -385,7 +386,7 @@ const Settings = ({ onLogout, passwordMinLength }: SettingsProps) => {
       sidebarChildren={sidebarChildren}
       searchBar={searchBar}
     >
-      <div className="max-w-6xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <PageContent>
         <div className="mb-6">
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{t('settings.title')}</h1>
         </div>
@@ -456,7 +457,7 @@ const Settings = ({ onLogout, passwordMinLength }: SettingsProps) => {
             onOpenAboutModal={() => setIsAboutModalOpen(true)}
           />
         </div>
-      </div>
+      </PageContent>
 
       <ConfirmDialog
         open={Boolean(sessionPendingRevoke)}

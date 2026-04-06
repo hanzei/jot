@@ -7,6 +7,7 @@ import type { Note, User, SSEEvent, NoteSort } from '@jot/shared';
 import { useSSE } from '@/utils/useSSE';
 import { useSearchParams, useParams } from 'react-router';
 import AppLayout from '@/components/AppLayout';
+import PageContent from '@/components/PageContent';
 import SearchBar from '@/components/SearchBar';
 import SortableNoteCard from '@/components/SortableNoteCard';
 import NoteModal from '@/components/NoteModal';
@@ -998,7 +999,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       sidebarChildren={sidebarChildren}
       searchBar={searchBar}
     >
-      <div className="max-w-7xl mx-auto px-4 sm:px-6 lg:px-8 py-8">
+      <PageContent>
         {/* Create note button — hidden in bin view */}
         {!showBin && (
           <div className="mb-8">
@@ -1197,7 +1198,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
             onClose={handleShareModalClose}
           />
         )}
-      </div>
+      </PageContent>
     </AppLayout>
   );
 }
