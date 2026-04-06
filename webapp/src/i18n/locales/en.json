@@ -359,7 +359,7 @@
     "noLabels": "No labels yet",
     "newLabelPlaceholder": "Label name...",
     "createNew": "Create new...",
-    "newSidebar": "+ New Label",
+    "newSidebar": "New Label",
     "createInputLabel": "New label name",
     "createSave": "Create label",
     "createCancel": "Cancel label creation",
