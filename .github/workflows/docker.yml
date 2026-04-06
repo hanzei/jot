@@ -57,7 +57,7 @@ jobs:
           images: ${{ github.event_name == 'pull_request' && 'ghcr.io/hanzei/jot' || 'hanzei/jot' }}
           tags: |
             type=raw,value=unstable,enable={{is_default_branch}}
-            type=sha
+            type=sha,enable={{is_default_branch}}
             type=raw,value=pr-${{ github.event.pull_request.number }},enable=${{ github.event_name == 'pull_request' }}
 
       - name: Get build date
@@ -132,7 +132,7 @@ jobs:
           images: ${{ github.event_name == 'pull_request' && 'ghcr.io/hanzei/jot' || 'hanzei/jot' }}
           tags: |
             type=raw,value=unstable,enable={{is_default_branch}}
-            type=sha
+            type=sha,enable={{is_default_branch}}
             type=raw,value=pr-${{ github.event.pull_request.number }},enable=${{ github.event_name == 'pull_request' }}
 
       - name: Create manifest list and push
