@@ -148,9 +148,17 @@ jobs:
         working-directory: /tmp/digests
         env:
           IMAGE: ${{ github.event_name == 'pull_request' && 'ghcr.io/hanzei/jot' || 'hanzei/jot' }}
+        run: |
+          docker buildx imagetools create \
+            $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(printf "${IMAGE}@sha256:%s " *)
+
+      - name: Annotate manifest with description
+        env:
+          IMAGE: ${{ github.event_name == 'pull_request' && 'ghcr.io/hanzei/jot' || 'hanzei/jot' }}
           DESCRIPTION: ${{ steps.description.outputs.value }}
         run: |
           docker buildx imagetools create \
             $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
             --annotation "index:org.opencontainers.image.description=$DESCRIPTION" \
-            $(printf "${IMAGE}@sha256:%s " *)
+            "$(jq -r '.tags[0]' <<< "$DOCKER_METADATA_OUTPUT_JSON")"
