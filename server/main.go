@@ -81,6 +81,11 @@ func main() {
 		// Forward all logrus log entries to the OTel LoggerProvider so they
 		// are exported via OTLP alongside traces and metrics.
 		logrus.AddHook(otellogrus.NewHook("github.com/hanzei/jot/server"))
+		if cfg.OTelEndpoint != "" {
+			logrus.Infof("OpenTelemetry enabled (service: %s)", cfg.OTelServiceName)
+		} else {
+			logrus.Infof("OpenTelemetry enabled (stdout exporter, service: %s)", cfg.OTelServiceName)
+		}
 	}
 
 	s, err := server.New(cfg)
