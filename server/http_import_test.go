@@ -56,7 +56,7 @@ func TestImportSingleJSONFile(t *testing.T) {
 	user := ts.createTestUser(t, "importuser1", "password123", false)
 
 	noteData := marshalKeepNote(t, keepNoteJSON{Title: "Imported Note", TextContent: "some content"})
-	result, err := user.Client.ImportNotes(t.Context(), "note.json", bytes.NewReader(noteData))
+	result, err := user.Client.ImportNotes(t.Context(), "google_keep", "note.json", bytes.NewReader(noteData))
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.Imported)
 	assert.Equal(t, 0, result.Skipped)
@@ -73,7 +73,7 @@ func TestImportZIPWithMultipleFiles(t *testing.T) {
 		"note2.json": note2,
 	})
 
-	result, err := user.Client.ImportNotes(t.Context(), "export.zip", bytes.NewReader(zipData))
+	result, err := user.Client.ImportNotes(t.Context(), "google_keep", "export.zip", bytes.NewReader(zipData))
 	require.NoError(t, err)
 	assert.Equal(t, 2, result.Imported)
 }
@@ -89,7 +89,7 @@ func TestImportTrashedNoteSkipped(t *testing.T) {
 		"trashed.json": trashed,
 	})
 
-	result, err := user.Client.ImportNotes(t.Context(), "export.zip", bytes.NewReader(zipData))
+	result, err := user.Client.ImportNotes(t.Context(), "google_keep", "export.zip", bytes.NewReader(zipData))
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.Imported)
 	assert.Equal(t, 1, result.Skipped)
@@ -101,6 +101,7 @@ func TestImportMissingFileFieldReturns400(t *testing.T) {
 
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)
+	require.NoError(t, mw.WriteField("import_type", "google_keep"))
 	require.NoError(t, mw.Close())
 
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, ts.HTTPServer.URL+"/api/v1/notes/import", &buf)
@@ -113,11 +114,44 @@ func TestImportMissingFileFieldReturns400(t *testing.T) {
 	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 }
 
+func TestImportMissingImportTypeReturns400(t *testing.T) {
+	ts := setupTestServer(t)
+	user := ts.createTestUser(t, "importuser4b", "password123", false)
+
+	noteData := marshalKeepNote(t, keepNoteJSON{Title: "Note", TextContent: "content"})
+
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	part, err := mw.CreateFormFile("file", "note.json")
+	require.NoError(t, err)
+	_, err = part.Write(noteData)
+	require.NoError(t, err)
+	require.NoError(t, mw.Close())
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, ts.HTTPServer.URL+"/api/v1/notes/import", &buf)
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+
+	resp, err := user.Client.HTTPClient().Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+
+func TestImportInvalidImportTypeReturns400(t *testing.T) {
+	ts := setupTestServer(t)
+	user := ts.createTestUser(t, "importuser4c", "password123", false)
+
+	noteData := marshalKeepNote(t, keepNoteJSON{Title: "Note", TextContent: "content"})
+	_, err := user.Client.ImportNotes(t.Context(), "unknown_format", "note.json", bytes.NewReader(noteData))
+	assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
+}
+
 func TestImportInvalidJSONReturns400(t *testing.T) {
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "importuser5", "password123", false)
 
-	_, err := user.Client.ImportNotes(t.Context(), "bad.json", bytes.NewReader([]byte("not valid json")))
+	_, err := user.Client.ImportNotes(t.Context(), "google_keep", "bad.json", bytes.NewReader([]byte("not valid json")))
 	assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 }
 
@@ -126,7 +160,7 @@ func TestImportCorruptZIPReturns400(t *testing.T) {
 	user := ts.createTestUser(t, "importuser6", "password123", false)
 
 	corrupt := []byte{'P', 'K', 0x03, 0x04, 0xDE, 0xAD, 0xBE, 0xEF}
-	_, err := user.Client.ImportNotes(t.Context(), "bad.zip", bytes.NewReader(corrupt))
+	_, err := user.Client.ImportNotes(t.Context(), "google_keep", "bad.zip", bytes.NewReader(corrupt))
 	assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 }
 
@@ -137,6 +171,7 @@ func TestImportUnauthenticatedReturns401(t *testing.T) {
 
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)
+	require.NoError(t, mw.WriteField("import_type", "google_keep"))
 	part, err := mw.CreateFormFile("file", "note.json")
 	require.NoError(t, err)
 	_, err = part.Write(noteData)
@@ -158,7 +193,7 @@ func TestImportNotesAppearInNotesList(t *testing.T) {
 	user := ts.createTestUser(t, "importuser7", "password123", false)
 
 	noteData := marshalKeepNote(t, keepNoteJSON{Title: "Findable Import", TextContent: "unique text"})
-	_, err := user.Client.ImportNotes(t.Context(), "note.json", bytes.NewReader(noteData))
+	_, err := user.Client.ImportNotes(t.Context(), "google_keep", "note.json", bytes.NewReader(noteData))
 	require.NoError(t, err)
 
 	notes, err := user.Client.ListNotes(t.Context(), nil)
@@ -180,7 +215,7 @@ func TestImportPinnedAndArchivedNote(t *testing.T) {
 
 	t.Run("pinned note is imported as pinned", func(t *testing.T) {
 		data := marshalKeepNote(t, keepNoteJSON{Title: "Pinned Import", IsPinned: true})
-		result, err := user.Client.ImportNotes(t.Context(), "note.json", bytes.NewReader(data))
+		result, err := user.Client.ImportNotes(t.Context(), "google_keep", "note.json", bytes.NewReader(data))
 		require.NoError(t, err)
 		assert.Equal(t, 1, result.Imported)
 
@@ -199,7 +234,7 @@ func TestImportPinnedAndArchivedNote(t *testing.T) {
 
 	t.Run("archived note is imported as archived", func(t *testing.T) {
 		data := marshalKeepNote(t, keepNoteJSON{Title: "Archived Import", IsArchived: true})
-		result, err := user.Client.ImportNotes(t.Context(), "note.json", bytes.NewReader(data))
+		result, err := user.Client.ImportNotes(t.Context(), "google_keep", "note.json", bytes.NewReader(data))
 		require.NoError(t, err)
 		assert.Equal(t, 1, result.Imported)
 
@@ -223,7 +258,7 @@ func TestImportValidation(t *testing.T) {
 
 	t.Run("title exceeding max is skipped with error", func(t *testing.T) {
 		data := marshalKeepNote(t, keepNoteJSON{Title: strings.Repeat("a", 201)})
-		result, err := user.Client.ImportNotes(t.Context(), "note.json", bytes.NewReader(data))
+		result, err := user.Client.ImportNotes(t.Context(), "google_keep", "note.json", bytes.NewReader(data))
 		require.NoError(t, err)
 		assert.Equal(t, 0, result.Imported)
 		assert.Len(t, result.Errors, 1)
@@ -231,7 +266,7 @@ func TestImportValidation(t *testing.T) {
 
 	t.Run("content exceeding max is skipped with error", func(t *testing.T) {
 		data := marshalKeepNote(t, keepNoteJSON{TextContent: strings.Repeat("a", 10001)})
-		result, err := user.Client.ImportNotes(t.Context(), "note.json", bytes.NewReader(data))
+		result, err := user.Client.ImportNotes(t.Context(), "google_keep", "note.json", bytes.NewReader(data))
 		require.NoError(t, err)
 		assert.Equal(t, 0, result.Imported)
 		assert.Len(t, result.Errors, 1)
@@ -243,7 +278,7 @@ func TestImportValidation(t *testing.T) {
 			items[i] = keepNoteItemJSON{Text: "item"}
 		}
 		data := marshalKeepNote(t, keepNoteJSON{Title: "Many Items", ListContent: items})
-		result, err := user.Client.ImportNotes(t.Context(), "note.json", bytes.NewReader(data))
+		result, err := user.Client.ImportNotes(t.Context(), "google_keep", "note.json", bytes.NewReader(data))
 		require.NoError(t, err)
 		assert.Equal(t, 0, result.Imported)
 		assert.Len(t, result.Errors, 1)
@@ -254,7 +289,7 @@ func TestImportValidation(t *testing.T) {
 			Title:       "Todo",
 			ListContent: []keepNoteItemJSON{{Text: strings.Repeat("a", 501)}},
 		})
-		result, err := user.Client.ImportNotes(t.Context(), "note.json", bytes.NewReader(data))
+		result, err := user.Client.ImportNotes(t.Context(), "google_keep", "note.json", bytes.NewReader(data))
 		require.NoError(t, err)
 		assert.Equal(t, 0, result.Imported)
 		assert.Len(t, result.Errors, 1)
@@ -267,7 +302,7 @@ func TestImportValidation(t *testing.T) {
 			"valid.json":   valid,
 			"invalid.json": invalid,
 		})
-		result, err := user.Client.ImportNotes(t.Context(), "export.zip", bytes.NewReader(zipData))
+		result, err := user.Client.ImportNotes(t.Context(), "google_keep", "export.zip", bytes.NewReader(zipData))
 		require.NoError(t, err)
 		assert.Equal(t, 1, result.Imported)
 		assert.Len(t, result.Errors, 1)

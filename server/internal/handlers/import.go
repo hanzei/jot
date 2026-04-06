@@ -22,6 +22,8 @@ type ImportResponse struct {
 	Errors   []string `json:"errors,omitempty"`
 }
 
+// --- Google Keep import types ---
+
 type keepNoteItem struct {
 	Text      string `json:"text"`
 	IsChecked bool   `json:"isChecked"`
@@ -110,7 +112,7 @@ const (
 )
 
 func parseKeepNotesFromZip(zr *zip.Reader) []keepNote {
-	var notes []keepNote
+	notes := make([]keepNote, 0, len(zr.File))
 	var totalRead int64
 	for _, f := range zr.File {
 		if !strings.HasSuffix(strings.ToLower(f.Name), ".json") {
@@ -183,18 +185,162 @@ func (h *NotesHandler) importKeepNotes(ctx context.Context, userID string, keepN
 	return imported, skipped, importErrors
 }
 
+const (
+	importTypeJotJSON    = "jot_json"
+	importTypeGoogleKeep = "google_keep"
+	jotExportFormat      = "jot_export"
+	jotExportVersion     = 1
+)
+
+// --- Jot JSON import types ---
+
+type jotImportNoteItem struct {
+	Text        string `json:"text"`
+	Completed   bool   `json:"completed"`
+	Position    int    `json:"position"`
+	IndentLevel int    `json:"indent_level"`
+}
+
+type jotImportNote struct {
+	Title                 string              `json:"title"`
+	Content               string              `json:"content"`
+	NoteType              models.NoteType     `json:"note_type"`
+	Color                 string              `json:"color"`
+	Pinned                bool                `json:"pinned"`
+	Archived              bool                `json:"archived"`
+	Position              int                 `json:"position"`
+	UnpinnedPosition      *int                `json:"unpinned_position"`
+	CheckedItemsCollapsed bool                `json:"checked_items_collapsed"`
+	Labels                []string            `json:"labels"`
+	Items                 []jotImportNoteItem `json:"items"`
+}
+
+type jotImportEnvelope struct {
+	Format  string          `json:"format"`
+	Version int             `json:"version"`
+	Notes   []jotImportNote `json:"notes"`
+}
+
+func (h *NotesHandler) importJotJSON(ctx context.Context, userID string, data []byte) (int, int, error) {
+	var raw jotImportEnvelope
+	if err := json.Unmarshal(data, &raw); err != nil {
+		return 0, http.StatusBadRequest, errors.New("invalid JSON file")
+	}
+	if raw.Format != jotExportFormat {
+		return 0, http.StatusBadRequest, fmt.Errorf("invalid format %q: expected jot_export", raw.Format)
+	}
+	if raw.Version != jotExportVersion {
+		return 0, http.StatusBadRequest, fmt.Errorf("unsupported version %d: only version 1 is supported", raw.Version)
+	}
+	if raw.Notes == nil {
+		return 0, http.StatusBadRequest, errors.New("notes must be a JSON array")
+	}
+
+	importNotes := make([]models.JotImportNote, 0, len(raw.Notes))
+	for i, n := range raw.Notes {
+		importNote, err := validateJotImportNote(i+1, n)
+		if err != nil {
+			return 0, http.StatusBadRequest, err
+		}
+		importNotes = append(importNotes, importNote)
+	}
+
+	if err := h.noteStore.ImportJotNotes(ctx, userID, importNotes); err != nil {
+		return 0, http.StatusInternalServerError, fmt.Errorf("import jot notes: %w", err)
+	}
+	return len(importNotes), http.StatusOK, nil
+}
+
+// validateJotImportNote validates a single note from a Jot JSON export and converts
+// it to the store import type. idx is 1-based and used only in error messages.
+func validateJotImportNote(idx int, n jotImportNote) (models.JotImportNote, error) {
+	if n.NoteType != models.NoteTypeText && n.NoteType != models.NoteTypeTodo {
+		return models.JotImportNote{}, fmt.Errorf("note #%d: unsupported note_type %q", idx, n.NoteType)
+	}
+	if utf8.RuneCountInString(n.Title) > noteTitleMaxLength {
+		return models.JotImportNote{}, fmt.Errorf("note #%d: title exceeds %d character limit", idx, noteTitleMaxLength)
+	}
+	if utf8.RuneCountInString(n.Content) > noteContentMaxLength {
+		return models.JotImportNote{}, fmt.Errorf("note #%d: content exceeds %d character limit", idx, noteContentMaxLength)
+	}
+	if n.Position < 0 {
+		return models.JotImportNote{}, fmt.Errorf("note #%d: position must be non-negative", idx)
+	}
+	if n.UnpinnedPosition != nil && *n.UnpinnedPosition < 0 {
+		return models.JotImportNote{}, fmt.Errorf("note #%d: unpinned_position must be non-negative", idx)
+	}
+
+	color := n.Color
+	if color == "" {
+		color = models.DefaultNoteColor
+	}
+	if err := validateColor(color); err != nil {
+		return models.JotImportNote{}, fmt.Errorf("note #%d: %w", idx, err)
+	}
+
+	if n.NoteType == models.NoteTypeText && len(n.Items) > 0 {
+		return models.JotImportNote{}, fmt.Errorf("note #%d: text notes cannot have items", idx)
+	}
+	if len(n.Items) > noteItemsMaxCount {
+		return models.JotImportNote{}, fmt.Errorf("note #%d: too many items (max %d)", idx, noteItemsMaxCount)
+	}
+
+	importItems, err := validateJotImportItems(idx, n.Items)
+	if err != nil {
+		return models.JotImportNote{}, err
+	}
+
+	return models.JotImportNote{
+		Title:                 n.Title,
+		Content:               n.Content,
+		NoteType:              n.NoteType,
+		Color:                 color,
+		Pinned:                n.Pinned,
+		Archived:              n.Archived,
+		Position:              n.Position,
+		UnpinnedPosition:      n.UnpinnedPosition,
+		CheckedItemsCollapsed: n.CheckedItemsCollapsed,
+		Labels:                normalizeLabels(n.Labels),
+		Items:                 importItems,
+	}, nil
+}
+
+func validateJotImportItems(noteIdx int, items []jotImportNoteItem) ([]models.JotImportNoteItem, error) {
+	result := make([]models.JotImportNoteItem, 0, len(items))
+	for j, item := range items {
+		jdx := j + 1
+		if utf8.RuneCountInString(item.Text) > noteItemTextMaxLength {
+			return nil, fmt.Errorf("note #%d item #%d: text exceeds %d character limit", noteIdx, jdx, noteItemTextMaxLength)
+		}
+		if item.IndentLevel < 0 || item.IndentLevel > 1 {
+			return nil, fmt.Errorf("note #%d item #%d: indent_level must be 0 or 1", noteIdx, jdx)
+		}
+		if item.Position < 0 {
+			return nil, fmt.Errorf("note #%d item #%d: position must be non-negative", noteIdx, jdx)
+		}
+		result = append(result, models.JotImportNoteItem{
+			Text:        item.Text,
+			Completed:   item.Completed,
+			Position:    item.Position,
+			IndentLevel: item.IndentLevel,
+		})
+	}
+	return result, nil
+}
+
 // ImportNotes godoc
 //
-//	@Summary	Import notes from a Google Keep export
+//	@Summary	Import notes from a supported export format
 //	@Tags		notes
 //	@Security	CookieAuth
 //	@Accept		multipart/form-data
 //	@Produce	json
-//	@Param		file	formData	file			true	"Google Keep JSON or ZIP export file"
-//	@Success	200		{object}	ImportResponse
-//	@Failure	400		{string}	string	"bad request"
-//	@Failure	401		{string}	string	"unauthorized"
-//	@Failure	500		{string}	string	"internal server error"
+//	@Param		file			formData	file	true	"Export file to import"
+//	@Param		import_type		formData	string	true	"Import format: jot_json or google_keep"
+//	@Success	200				{object}	ImportResponse
+//	@Failure	400				{string}	string	"bad request"
+//	@Failure	401				{string}	string	"unauthorized"
+//	@Failure	500				{string}	string	"internal server error"
 //	@Router		/notes/import [post]
 func (h *NotesHandler) ImportNotes(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
@@ -205,6 +351,16 @@ func (h *NotesHandler) ImportNotes(w http.ResponseWriter, r *http.Request) (int,
 	r.Body = http.MaxBytesReader(w, r.Body, 32<<20)
 	if err := r.ParseMultipartForm(32 << 20); err != nil {
 		return http.StatusBadRequest, nil, errors.New("invalid multipart form")
+	}
+
+	importType := r.FormValue("import_type")
+	switch importType {
+	case importTypeJotJSON, importTypeGoogleKeep:
+		// valid
+	case "":
+		return http.StatusBadRequest, nil, errors.New("missing import_type")
+	default:
+		return http.StatusBadRequest, nil, fmt.Errorf("unsupported import_type %q", importType)
 	}
 
 	file, header, err := r.FormFile("file")
@@ -218,12 +374,19 @@ func (h *NotesHandler) ImportNotes(w http.ResponseWriter, r *http.Request) (int,
 		return http.StatusInternalServerError, nil, err
 	}
 
-	keepNotes, err := parseKeepNotesFromData(header.Filename, data)
-	if err != nil {
-		return http.StatusBadRequest, nil, err
+	switch importType {
+	case importTypeJotJSON:
+		imported, status, err := h.importJotJSON(r.Context(), user.ID, data)
+		if err != nil {
+			return status, nil, err
+		}
+		return http.StatusOK, ImportResponse{Imported: imported}, nil
+	default: // google_keep
+		keepNotes, err := parseKeepNotesFromData(header.Filename, data)
+		if err != nil {
+			return http.StatusBadRequest, nil, err
+		}
+		imported, skipped, importErrors := h.importKeepNotes(r.Context(), user.ID, keepNotes)
+		return http.StatusOK, ImportResponse{Imported: imported, Skipped: skipped, Errors: importErrors}, nil
 	}
-
-	imported, skipped, importErrors := h.importKeepNotes(r.Context(), user.ID, keepNotes)
-
-	return http.StatusOK, ImportResponse{Imported: imported, Skipped: skipped, Errors: importErrors}, nil
 }

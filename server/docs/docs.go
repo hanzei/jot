@@ -817,6 +817,39 @@ const docTemplate = `{
                 }
             }
         },
+        "/notes/export": {
+            "get": {
+                "security": [
+                    {
+                        "CookieAuth": []
+                    }
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "notes"
+                ],
+                "summary": "Export notes as a Jot JSON backup",
+                "responses": {
+                    "200": {
+                        "description": "Jot JSON export file attachment"
+                    },
+                    "401": {
+                        "description": "unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                }
+            }
+        },
         "/notes/import": {
             "post": {
                 "security": [
@@ -833,12 +866,19 @@ const docTemplate = `{
                 "tags": [
                     "notes"
                 ],
-                "summary": "Import notes from a Google Keep export",
+                "summary": "Import notes from a supported export format",
                 "parameters": [
                     {
                         "type": "file",
-                        "description": "Google Keep JSON or ZIP export file",
+                        "description": "Export file to import",
                         "name": "file",
+                        "in": "formData",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Import format: jot_json or google_keep",
+                        "name": "import_type",
                         "in": "formData",
                         "required": true
                     }

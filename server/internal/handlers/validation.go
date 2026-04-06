@@ -83,6 +83,25 @@ func validatePATName(name string) error {
 	return nil
 }
 
+// normalizeLabels trims whitespace from each label name, drops empty names, and
+// removes duplicates while preserving first-occurrence order.
+func normalizeLabels(rawLabels []string) []string {
+	seen := make(map[string]struct{})
+	result := make([]string, 0, len(rawLabels))
+	for _, raw := range rawLabels {
+		name := strings.TrimSpace(raw)
+		if name == "" {
+			continue
+		}
+		if _, dup := seen[name]; dup {
+			continue
+		}
+		seen[name] = struct{}{}
+		result = append(result, name)
+	}
+	return result
+}
+
 // truncateRunes returns s truncated to at most max Unicode code points.
 func truncateRunes(s string, max int) string {
 	if utf8.RuneCountInString(s) <= max {
