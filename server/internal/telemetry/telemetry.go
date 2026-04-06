@@ -106,8 +106,16 @@ func Setup(ctx context.Context, cfg Config) (shutdown func(context.Context) erro
 		return nil, fmt.Errorf("setup OTel providers: %w", err)
 	}
 
+	// Use a dedicated logger without hooks to avoid a re-entrancy loop:
+	// the global logrus logger has an otellogrus hook that routes entries back
+	// into the OTel pipeline, so using it here would cause OTel export errors
+	// to trigger further OTel exports indefinitely.
+	otelErrLogger := logrus.New()
+	otelErrLogger.SetFormatter(logrus.StandardLogger().Formatter)
+	otelErrLogger.SetOutput(logrus.StandardLogger().Out)
+	otelErrLogger.SetLevel(logrus.StandardLogger().GetLevel())
 	otel.SetErrorHandler(otel.ErrorHandlerFunc(func(err error) {
-		logrus.WithError(err).Warn("OpenTelemetry export error")
+		otelErrLogger.WithError(err).Warn("OpenTelemetry export error")
 	}))
 	otel.SetTracerProvider(tp)
 	otel.SetMeterProvider(mp)
