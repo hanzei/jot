@@ -158,9 +158,9 @@ interface ExportedNoteV1 {
   archived: boolean;
   position: number;
   unpinned_position?: number;
-  checked_items_collapsed: boolean;
+  checked_items_collapsed?: boolean;
   labels: string[];
-  items: ExportedNoteItemV1[];
+  items?: ExportedNoteItemV1[];
 }
 
 interface ExportedNoteItemV1 {
@@ -193,10 +193,12 @@ V1 intentionally omits:
 ### Text notes vs todo notes
 
 - `notes` must be present as a JSON array, not `null`.
-- For `note_type: "text"`, `items` may be omitted and should be normalized to `[]` on import.
+- For `note_type: "text"`, exporters may omit `items`; import must treat an absent `items` field as equivalent to `items: []`.
 - For `note_type: "todo"`, `items` may be omitted and normalized to `[]`, or provided with todo items.
-- A text note with non-empty `items` is invalid.
-- `unpinned_position` is optional and only meaningful for pinned notes or notes that have previously been pinned. When absent, import can fall back to `position`.
+- For `note_type: "text"`, `items` must be absent or equal to `[]`. A text note with non-empty `items` is invalid.
+- For `note_type: "text"`, exporters should omit `checked_items_collapsed`. Import should accept it as missing and normalize it to `false`.
+- For `note_type: "todo"`, exporters should include `checked_items_collapsed` when true and may omit it when false. Import should normalize absence to `false`.
+- `unpinned_position` is optional. When absent, import falls back to `position`. When present on an unpinned note, import should preserve it rather than reject it, so a later pin/unpin cycle can restore the exported return position.
 
 If later we want a "full-fidelity archive" mode, we can add additional optional fields in `version: 2`.
 
@@ -225,7 +227,7 @@ Optional future expansion:
 
 - `200 OK`
 - `Content-Type: application/json`
-- `Content-Disposition: attachment; filename="jot-export-YYYY-MM-DD.json"`
+- `Content-Disposition: attachment; filename="jot-export-YYYY-MM-DDTHH-mm-ssZ.json"`
 
 The body is `JotExportV1`.
 
@@ -263,7 +265,7 @@ For each exported note:
 
 1. Create the note with the exported title/content/type/color.
 2. Apply pinned and archived state after create if needed, but do **not** rely on the normal pin-transition side effects in `NoteStore.Update` as the final source of truth for imported ordering metadata.
-3. Restore `checked_items_collapsed`.
+3. Restore `checked_items_collapsed`, normalizing a missing value to `false`.
 4. Recreate todo items with exported text/completed/position/indent level.
 5. Recreate labels by name using the current label-add flow, deduplicating by name per user.
 6. Restore exported ordering metadata after all notes are created.
@@ -281,28 +283,85 @@ To make round-trip ordering deterministic, native import should:
 5. run archived reorder passes too, splitting archived notes into pinned and unpinned buckets if the export contains both, so archived ordering round-trips consistently with the same `pinned DESC, position ASC` rule used elsewhere;
 6. persist `unpinned_position` when present so pinned notes return to the expected location after unpinning.
 
-This should run in a single import transaction where practical so partially imported ordering does not leak through on failure.
+By default, native Jot import should run inside a **single database transaction** so the import is all-or-nothing.
 
-Because the existing `ReorderNotes` store method only updates `position`, and the normal `Update` path recomputes `position` / `unpinned_position` when pin state changes, native import will likely need one of:
+- Any validation failure or creation failure must roll back the full import.
+- Ordering restoration steps are part of that same transaction and also trigger rollback on failure.
+- This is different from the current Google Keep import path, which is best-effort and returns per-note failures in `ImportResponse.errors`.
 
-- a new import-specific store helper that updates `position` and `unpinned_position` together inside the import transaction, or
-- a dedicated SQL update step in the import transaction after note creation and reorder passes.
+Because the existing `ReorderNotes` store method only updates `position`, and the normal `Update` path recomputes `position` / `unpinned_position` when pin state changes, native import must add an **import-specific store helper** that updates `position` and `unpinned_position` together inside the import transaction.
 
 Do not assume `ReorderNotes` alone is enough to restore `unpinned_position`, and do not assume a normal pin/unpin update call will preserve imported ordering metadata.
 
-### 5. Import semantics
+### 5. Optional best-effort mode
+
+If we later add an explicit opt-in flag such as `allow_partial_import=true`, native import may support a best-effort mode:
+
+- valid notes are created and committed;
+- per-note validation or creation failures are collected into `ImportResponse.errors`;
+- ordering restoration failures for affected notes are logged and skipped rather than rolling back already created notes.
+
+V1 should **not** enable this mode by default.
+
+### 6. Import semantics
 
 - Imported notes become **owned by the importing user**.
 - Imported notes are **not shared**, even if the source note was shared.
 - Imported todo items are **unassigned**.
 - Existing notes are **not overwritten**; import creates new notes.
-- Native Jot import and Google Keep import share the same success response shape:
+- Native Jot import and Google Keep import share the same success response shape for successful 2xx requests:
 
 ```ts
 interface ImportResponse {
   imported: number;
   skipped: number;
   errors?: string[];
+}
+```
+
+Rules for `ImportResponse.errors`:
+
+- `errors` is only present for successful requests that completed with partial failures.
+- `errors` remains a `string[]` in V1 to match the current API contract.
+- Each entry represents one failed note and should contain both:
+  - a stable machine-readable failure code prefix
+  - a short user-facing message
+- Recommended format: `"<code>: <message>"`, for example `invalid_note_type: note #3 uses unsupported note_type "drawing"`.
+- `errors` must never include stack traces or internal debug details; those belong in server logs.
+
+For native Jot import in default all-or-nothing mode, `errors` should usually be absent because any validation or creation failure returns a non-2xx response and rolls back the whole import.
+
+#### Validation failures
+
+Today, most server validation failures are returned as plain-text `400` responses via `wrapHandler` / `http.Error`. Native Jot import can either:
+
+- keep that existing plain-text error contract for consistency, or
+- intentionally introduce a structured JSON validation payload for this endpoint.
+
+If we choose the structured path, treat it as a **new** contract for `/notes/import`, update Swagger/client expectations accordingly, and return a payload such as:
+
+```json
+{
+  "code": "invalid_jot_export",
+  "message": "notes must be a JSON array"
+}
+```
+
+If we keep the existing server-wide pattern, the equivalent response would instead be a plain-text `400` body such as:
+
+```text
+notes must be a JSON array
+```
+
+Example successful partial-import response shape:
+
+```json
+{
+  "imported": 2,
+  "skipped": 0,
+  "errors": [
+    "invalid_note_type: note #3 uses unsupported note_type \"drawing\""
+  ]
 }
 ```
 
@@ -324,7 +383,7 @@ The handler must not return `http.StatusOK, nil, nil` after writing the response
 
 ### 2. Export data loading
 
-Load the current user's **owned active + archived notes** via the note store.
+Load the current user's **owned active + archived notes** via an owner-filtered note-store path.
 
 V1 should exclude trashed notes entirely.
 
@@ -335,6 +394,8 @@ When populating export DTOs:
 - `position` preserves the current manual ordering.
 - `unpinned_position`, when available, preserves where a note should return after unpinning.
 - notes shared with other users are exported as plain owned notes without share metadata.
+
+Do **not** reuse the normal list-notes query without modification. The current `GetByUserID` path is based on `note_user_state.user_id`, which also includes notes shared with the current user. Export must explicitly filter on `notes.user_id = requesting user`.
 
 ### 3. Native import parser
 
@@ -354,10 +415,18 @@ Validation rules:
 - `format` must equal `"jot_export"`
 - `version` must equal `1`
 - `exported_at` should be RFC3339
-- `notes` must be present
-- each note must satisfy existing note validation rules
-- each todo item must satisfy existing item validation rules
-- text notes must have `items: []`
+- `notes` must be present and must be a JSON array, not `null`
+- note and item validation should mirror the canonical **create/import** server rules in `server/internal/handlers/notes.go`, especially `normalizeCreateNoteRequest`, `createTodoItems`, and `validateColor`
+- do not treat `validateTodoItems` as the primary import reference; it is update-oriented and includes assignment/share validation that V1 native import intentionally skips because assignments are out of scope
+- title length must be at most 200 Unicode code points (runes)
+- content length must be at most 10000 Unicode code points (runes)
+- item text length must be at most 500 Unicode code points (runes)
+- a note can have at most the current server `noteItemsMaxCount`
+- `position` must be a non-negative integer
+- `indent_level` must be an integer in the currently enforced server range of `0..1`
+- color must pass the current server color validation (`validateColor`) and match the Jot note color format
+- text notes must have `items` absent or equal to `[]`
+- label names should be trimmed, empty labels skipped, and duplicate names deduplicated by exact name, matching the current label-creation flow
 
 ### 4. Shared types
 
@@ -446,9 +515,15 @@ Add focused tests parallel to the existing import tests:
 - export contains only notes owned by the requester
 - export excludes trashed notes in V1
 - export JSON matches expected envelope shape
+- `NotesHandler.ExportNotes` writes headers, calls `w.WriteHeader(http.StatusOK)`, streams the attachment body itself, and returns `0, nil, nil`
+- `NotesHandler.ExportNotes` response contains no duplicate/conflicting headers and no spurious JSON body from `wrapHandler`
+- `NotesHandler.ExportNotes` final observed status code is the one written by the handler (`200 OK`)
 - native import accepts valid Jot export JSON
 - native import rejects invalid version / invalid format marker
-- round trip test: create notes -> export -> import into a fresh user -> verify note content, labels, order, archived state, and todo items
+- native import default mode is all-or-nothing and rolls back fully on validation or ordering failure
+- optional best-effort mode, when enabled later, reports per-note failures through `ImportResponse.errors`
+- round trip test: create notes -> export -> import into a fresh user -> verify note content, labels, color, order, archived state, todo items, `checked_items_collapsed` on todo notes, `unpinned_position` for pinned notes, and todo item `indent_level`
+- duplicate import test: importing the same payload twice creates distinct notes with no deduplication
 - Google Keep import tests continue passing unchanged
 
 ### Web tests
@@ -476,9 +551,10 @@ Add a high-signal web e2e flow:
 1. Add shared export DTOs.
 2. Add `GET /notes/export`.
 3. Extend `/notes/import` to detect and import native Jot JSON.
-4. Add server tests for export and round-trip native import.
-5. Add web export button and import copy updates.
-6. Add web tests / e2e.
+4. Update Swagger annotations / generated docs for any new or changed import/export API behavior.
+5. Add server tests for export and round-trip native import.
+6. Add web export button and import copy updates.
+7. Add web tests / e2e.
 
 ---
 
