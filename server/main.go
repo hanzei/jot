@@ -59,18 +59,6 @@ func main() {
 		logrus.WithError(err).Fatal("Failed to load configuration")
 	}
 
-	// otelhttp v0.67.0 and earlier default to the old/unstable HTTP semantic
-	// conventions (e.g. http.server.duration in milliseconds). Opt in to the
-	// stable conventions (http.server.request.duration in seconds, etc.) so
-	// that the metric names emitted by the middleware match what Prometheus
-	// dashboards built against the stable OTel HTTP spec expect.
-	// Preserve any value the operator has already set explicitly.
-	if cfg.OTelEnabled && os.Getenv("OTEL_SEMCONV_STABILITY_OPT_IN") == "" {
-		if setErr := os.Setenv("OTEL_SEMCONV_STABILITY_OPT_IN", "http"); setErr != nil {
-			logrus.WithError(setErr).Warn("failed to set OTEL_SEMCONV_STABILITY_OPT_IN; HTTP server metrics will use legacy semconv names")
-		}
-	}
-
 	ctx := context.Background()
 	otelShutdown, err := telemetry.Setup(ctx, telemetry.Config{
 		Enabled:     cfg.OTelEnabled,
