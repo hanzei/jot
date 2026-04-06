@@ -32,6 +32,7 @@ This is intentionally different from the existing Google Keep import path, which
 
 - Export **owned notes only** as a native Jot JSON file.
 - Import that same native Jot JSON file through the existing import flow.
+- Add two explicit import actions in web Settings: one for **Jot JSON** and one for **Google Keep**.
 - Preserve note content and note organization metadata needed for a practical round trip:
   - title
   - content
@@ -239,27 +240,54 @@ Register `/notes/export` **before** `/notes/{id}` in `server/internal/server/ser
 
 ## Import Design
 
-### 1. Reuse the existing endpoint
+### 1. Reuse the existing endpoint with explicit import type
 
 Keep using:
 
 - `POST /api/v1/notes/import`
 
-But broaden it from "Google Keep import" to "supported note import formats."
+But broaden it from "Google Keep import" to "supported note import formats" via an explicit selector instead of server-side auto-detection.
 
-### 2. Detection strategy
+This is the **HTTP API endpoint**, not a new web route or page. The web product surface remains Settings-driven import controls.
+
+### 2. Request shape
+
+Use multipart form data with:
+
+- `file`: uploaded import file
+- `import_type`: required string selector
+
+Allowed `import_type` values in V1:
+
+- `jot_json`
+- `google_keep`
+
+Example:
+
+```text
+POST /api/v1/notes/import
+Content-Type: multipart/form-data
+
+file=<uploaded file>
+import_type=jot_json
+```
+
+If `import_type` is missing or unsupported, return `400 Bad Request`.
+
+Because existing clients today only send the uploaded file, requiring `import_type` is an **API-breaking change** for any direct callers of `/api/v1/notes/import`. Web, generated clients, tests, and any external consumers must be updated together.
+
+### 3. Dispatch strategy
 
 On upload:
 
-- If the payload is ZIP, keep the existing Google Keep ZIP behavior.
-- If the payload is JSON:
-  - Decode the raw JSON into a lightweight generic envelope first.
-  - If it is an object with `format: "jot_export"` and `version: 1`, treat it as native Jot import.
-  - Otherwise, fall back to the existing Google Keep JSON parsing behavior.
+- If `import_type == "jot_json"`, parse the file only as native Jot JSON.
+- If `import_type == "google_keep"`, parse the file only with the existing Google Keep JSON / ZIP behavior.
 
-This detection must happen **before** trying to unmarshal JSON into the existing Google Keep note shape. Otherwise a valid Jot export envelope with `notes: []` or without Keep-style top-level fields could be rejected as an invalid Keep note before native import is even attempted.
+Do **not** auto-detect between formats in V1. The client-selected import type is the source of truth, which keeps error handling and user intent explicit.
 
-### 3. Import behavior for Jot JSON
+When the uploaded file obviously does not match the selected `import_type`, prefer a dedicated validation error over a generic parser failure so the user can understand they chose the wrong import button.
+
+### 4. Import behavior for Jot JSON
 
 For each exported note:
 
@@ -270,7 +298,7 @@ For each exported note:
 5. Recreate labels by name using the current label-add flow, deduplicating by name per user.
 6. Restore exported ordering metadata after all notes are created.
 
-### 4. Ordering restoration
+### 5. Ordering restoration
 
 Current `NoteStore.Create` always inserts a new active unpinned note at position `0`, so repeated create calls will not naturally preserve exported ordering.
 
@@ -293,7 +321,7 @@ Because the existing `ReorderNotes` store method only updates `position`, and th
 
 Do not assume `ReorderNotes` alone is enough to restore `unpinned_position`, and do not assume a normal pin/unpin update call will preserve imported ordering metadata.
 
-### 5. Optional best-effort mode
+### 6. Optional best-effort mode
 
 If we later add an explicit opt-in flag such as `allow_partial_import=true`, native import may support a best-effort mode:
 
@@ -303,7 +331,7 @@ If we later add an explicit opt-in flag such as `allow_partial_import=true`, nat
 
 V1 should **not** enable this mode by default.
 
-### 6. Import semantics
+### 7. Import semantics
 
 - Imported notes become **owned by the importing user**.
 - Imported notes are **not shared**, even if the source note was shared.
@@ -428,7 +456,23 @@ Validation rules:
 - text notes must have `items` absent or equal to `[]`
 - label names should be trimmed, empty labels skipped, and duplicate names deduplicated by exact name, matching the current label-creation flow
 
-### 4. Shared types
+### 4. Import endpoint selector
+
+Extend the existing import endpoint to read a required multipart field such as:
+
+```go
+importType := r.FormValue("import_type")
+```
+
+Behavior:
+
+- `jot_json` -> call the native Jot JSON parser/importer
+- `google_keep` -> call the existing Google Keep parser/importer
+- missing / unknown value -> `400 Bad Request`
+
+This keeps the handler logic straightforward and avoids ambiguous format detection branches.
+
+### 5. Shared types
 
 Add native export/import DTOs to `shared/src/types.ts` so the format is explicit and reusable across:
 
@@ -446,7 +490,7 @@ Add export next to the existing import section in Settings.
 
 Recommended UI:
 
-- Keep the current Import section, but update copy to mention Google Keep **and** Jot JSON.
+- Keep a single Import section, but replace the one generic import action with two explicit buttons.
 - Add a new sibling card:
   - title: "Export"
   - description: "Download your notes as a Jot JSON backup."
@@ -458,14 +502,21 @@ Clicking **Export notes** immediately downloads the JSON file.
 
 No modal is required in V1.
 
-### Import copy updates
+### Import controls
 
-Update current import text so users understand accepted formats:
+Recommended import actions:
 
-- Google Keep JSON / ZIP
-- Jot export JSON
+- `Import Jot JSON`
+- `Import Google Keep`
 
-The existing `ImportModal` already accepts `.json` and `.zip`, so the main change is messaging plus backend format detection.
+Each action should open the import flow preconfigured with the matching `import_type` sent to `/notes/import`.
+
+Expected file acceptance:
+
+- `Import Jot JSON` -> `.json`
+- `Import Google Keep` -> `.json` or `.zip`
+
+The UI should make the distinction obvious so users do not have to guess which file type the server will interpret.
 
 ---
 
@@ -489,8 +540,9 @@ When mobile work begins later, the existing Settings screen is the right place t
 | Export contains labels that already exist on importing account | Reuse existing labels by name |
 | Export contains invalid shape or unsupported version | `400 Bad Request` |
 | Export contains todo items with invalid indent level | Rejected using normal validation rules |
-| Native Jot JSON is uploaded to `/notes/import` | Parsed as Jot import via `format/version` detection |
-| Google Keep JSON is uploaded to `/notes/import` | Existing behavior remains unchanged |
+| `import_type` is missing or unsupported | `400 Bad Request` |
+| Jot JSON is uploaded with `import_type=google_keep` | `400 Bad Request` with an error indicating the file does not match the selected Google Keep import type |
+| Google Keep data is uploaded with `import_type=jot_json` | `400 Bad Request` with an error indicating the file does not match the selected Jot JSON import type |
 
 ---
 
@@ -519,12 +571,14 @@ Add focused tests parallel to the existing import tests:
 - `NotesHandler.ExportNotes` response contains no duplicate/conflicting headers and no spurious JSON body from `wrapHandler`
 - `NotesHandler.ExportNotes` final observed status code is the one written by the handler (`200 OK`)
 - native import accepts valid Jot export JSON
+- import endpoint rejects missing or invalid `import_type`
+- import endpoint dispatches to the correct parser based on `import_type`
 - native import rejects invalid version / invalid format marker
 - native import default mode is all-or-nothing and rolls back fully on validation or ordering failure
 - optional best-effort mode, when enabled later, reports per-note failures through `ImportResponse.errors`
 - round trip test: create notes -> export -> import into a fresh user -> verify note content, labels, color, order, archived state, todo items, `checked_items_collapsed` on todo notes, `unpinned_position` for pinned notes, and todo item `indent_level`
 - duplicate import test: importing the same payload twice creates distinct notes with no deduplication
-- Google Keep import tests continue passing unchanged
+- Existing Google Keep import tests continue passing after being updated to send `import_type=google_keep`
 
 ### Web tests
 
@@ -532,7 +586,9 @@ Add targeted tests for:
 
 - export button renders in Settings
 - clicking export triggers a download request
-- import modal copy mentions Jot JSON support
+- Settings renders separate `Import Jot JSON` and `Import Google Keep` actions
+- Jot import UI sends `import_type=jot_json`
+- Google Keep import UI sends `import_type=google_keep`
 
 ### E2E
 
@@ -550,11 +606,12 @@ Add a high-signal web e2e flow:
 
 1. Add shared export DTOs.
 2. Add `GET /notes/export`.
-3. Extend `/notes/import` to detect and import native Jot JSON.
-4. Update Swagger annotations / generated docs for any new or changed import/export API behavior.
-5. Add server tests for export and round-trip native import.
-6. Add web export button and import copy updates.
-7. Add web tests / e2e.
+3. Extend `/notes/import` to require `import_type` and dispatch by explicit parser selection.
+4. Add native Jot JSON import behind `import_type=jot_json`.
+5. Update Swagger annotations / generated docs for the changed import API behavior.
+6. Add server tests for export, explicit import dispatch, and round-trip native import.
+7. Add web export button plus separate Jot / Google Keep import actions.
+8. Add web tests / e2e.
 
 ---
 
