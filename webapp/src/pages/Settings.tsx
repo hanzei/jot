@@ -9,7 +9,6 @@ import { isPasswordTooShort } from '@/utils/userValidation';
 import { getThemePreference, applyTheme, ThemePreference } from '@/utils/theme';
 import AppLayout from '@/components/AppLayout';
 import PageContent from '@/components/PageContent';
-import SearchBar from '@/components/SearchBar';
 import ImportModal from '@/components/ImportModal';
 import AboutModal from '@/components/AboutModal';
 import NewPATModal from '@/components/NewPATModal';
@@ -41,8 +40,6 @@ const Settings = ({ onLogout, passwordMinLength }: SettingsProps) => {
   const [draftLastName, setDraftLastName] = useState(currentUser?.last_name ?? '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
-
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
@@ -241,15 +238,6 @@ const Settings = ({ onLogout, passwordMinLength }: SettingsProps) => {
     }
   };
 
-  const handleSearch = () => {
-    const trimmed = searchQuery.trim();
-    if (trimmed) {
-      navigate(`/?search=${encodeURIComponent(trimmed)}`);
-    } else {
-      navigate('/');
-    }
-  };
-
   const handleLanguageChange = async (pref: LanguagePreference) => {
     const prev = languagePref;
     const current = getSettings();
@@ -356,14 +344,6 @@ const Settings = ({ onLogout, passwordMinLength }: SettingsProps) => {
     )
     : '';
 
-  const searchBar = (
-    <SearchBar
-      value={searchQuery}
-      onChange={setSearchQuery}
-      onSubmit={handleSearch}
-      stopEscapePropagation={true}
-    />
-  );
   const sidebarChildren = (
     <SidebarLabels
       labels={labelsList}
@@ -384,7 +364,6 @@ const Settings = ({ onLogout, passwordMinLength }: SettingsProps) => {
       sidebarTabs={navigationTabs}
       sidebarBottomTabs={bottomNavigationTabs}
       sidebarChildren={sidebarChildren}
-      searchBar={searchBar}
     >
       <PageContent>
         <div className="mb-6">

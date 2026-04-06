@@ -3,10 +3,9 @@ import { ROLES, type User, type AdminStatsResponse } from '@jot/shared';
 import { useTranslation } from 'react-i18next';
 import { admin, auth, isAxiosError } from '@/utils/api';
 import { isAdmin, removeUser, getUser } from '@/utils/auth';
-import { Navigate, useNavigate } from 'react-router';
+import { Navigate } from 'react-router';
 import AppLayout from '@/components/AppLayout';
 import PageContent from '@/components/PageContent';
-import SearchBar from '@/components/SearchBar';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import CreateUserModal from '@/components/CreateUserModal';
 import { useNavigationLinkTabs } from '@/hooks/useNavigationTabs';
@@ -58,7 +57,6 @@ const StatCardSkeleton = () => (
 
 const Admin = ({ onLogout, passwordMinLength }: AdminProps) => {
   const { t, i18n } = useTranslation();
-  const navigate = useNavigate();
   const currentUser = getUser();
   const [users, setUsers] = useState<User[]>([]);
   const [usersLoading, setUsersLoading] = useState(true);
@@ -68,7 +66,6 @@ const Admin = ({ onLogout, passwordMinLength }: AdminProps) => {
   const [error, setError] = useState('');
   const [statsError, setStatsError] = useState('');
   const [showCreateModal, setShowCreateModal] = useState(false);
-  const [searchQuery, setSearchQuery] = useState('');
   const [roleUpdating, setRoleUpdating] = useState<Set<string>>(new Set());
   const [deleteLoading, setDeleteLoading] = useState<Set<string>>(new Set());
   const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; user: User | null }>({ open: false, user: null });
@@ -208,24 +205,6 @@ const Admin = ({ onLogout, passwordMinLength }: AdminProps) => {
     }
   };
 
-  const handleSearch = () => {
-    const trimmed = searchQuery.trim();
-    if (trimmed) {
-      navigate(`/?search=${encodeURIComponent(trimmed)}`);
-    } else {
-      navigate('/');
-    }
-  };
-
-  const searchBar = (
-    <SearchBar
-      value={searchQuery}
-      onChange={setSearchQuery}
-      onSubmit={handleSearch}
-      stopEscapePropagation={true}
-    />
-  );
-
   return (
     <AppLayout
       onLogout={handleLogout}
@@ -233,7 +212,6 @@ const Admin = ({ onLogout, passwordMinLength }: AdminProps) => {
       adminLinkActive={true}
       sidebarTabs={navigationTabs}
       sidebarBottomTabs={bottomNavigationTabs}
-      searchBar={searchBar}
     >
       <PageContent>
         <div className="mb-6">
