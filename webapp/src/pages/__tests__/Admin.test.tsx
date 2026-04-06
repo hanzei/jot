@@ -4,7 +4,8 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { MemoryRouter } from 'react-router'
 import { type ReactNode } from 'react'
 import Admin from '../Admin'
-import { admin, isAxiosError } from '@/utils/api'
+import { ToastProvider } from '@/components/Toast'
+import { admin, labels as labelsApi, isAxiosError } from '@/utils/api'
 import * as authUtils from '@/utils/auth'
 import { VALIDATION, type User, type AdminStatsResponse } from '@jot/shared'
 
@@ -19,6 +20,13 @@ vi.mock('@/utils/api', () => ({
   auth: {
     logout: vi.fn(),
   },
+  labels: {
+    getAll: vi.fn().mockResolvedValue([]),
+    getCounts: vi.fn().mockResolvedValue({}),
+    create: vi.fn(),
+    rename: vi.fn(),
+    delete: vi.fn(),
+  },
   isAxiosError: vi.fn(),
 }))
 
@@ -29,10 +37,11 @@ vi.mock('@/utils/auth', () => ({
 }))
 
 vi.mock('@/components/AppLayout', () => ({
-  default: ({ onLogout, children, isAdmin, adminLinkActive, searchBar }: { onLogout?: () => void; children?: ReactNode; isAdmin?: boolean; adminLinkActive?: boolean; searchBar?: ReactNode }) => (
+  default: ({ onLogout, children, isAdmin, adminLinkActive, searchBar, sidebarChildren }: { onLogout?: () => void; children?: ReactNode; isAdmin?: boolean; adminLinkActive?: boolean; searchBar?: ReactNode; sidebarChildren?: ReactNode }) => (
     <div data-testid="app-layout" data-is-admin={isAdmin} data-admin-link-active={adminLinkActive}>
       <button onClick={onLogout} data-testid="logout-button">Logout</button>
       <div data-testid="search-bar">{searchBar}</div>
+      <div data-testid="sidebar-children">{sidebarChildren}</div>
       {children}
     </div>
   ),
@@ -83,7 +92,9 @@ const mockStats: AdminStatsResponse = {
 const renderAdmin = (onLogout = vi.fn()) => {
   return render(
     <MemoryRouter>
-      <Admin onLogout={onLogout} passwordMinLength={10} />
+      <ToastProvider>
+        <Admin onLogout={onLogout} passwordMinLength={10} />
+      </ToastProvider>
     </MemoryRouter>
   )
 }
@@ -108,6 +119,25 @@ describe('Admin', () => {
       const layout = screen.getByTestId('app-layout')
       expect(layout).toHaveAttribute('data-is-admin', 'true')
       expect(layout).toHaveAttribute('data-admin-link-active', 'true')
+    })
+  })
+
+  describe('Sidebar labels', () => {
+    it('loads labels and label counts on mount', async () => {
+      renderAdmin()
+
+      await waitFor(() => {
+        expect(labelsApi.getAll).toHaveBeenCalled()
+        expect(labelsApi.getCounts).toHaveBeenCalled()
+      })
+    })
+
+    it('renders the sidebar labels component', async () => {
+      renderAdmin()
+
+      await waitFor(() => {
+        expect(screen.getByTestId('sidebar-labels')).toBeInTheDocument()
+      })
     })
   })
 
