@@ -3,12 +3,14 @@ import { ROLES, type User, type AdminStatsResponse } from '@jot/shared';
 import { useTranslation } from 'react-i18next';
 import { admin, auth, isAxiosError } from '@/utils/api';
 import { isAdmin, removeUser, getUser } from '@/utils/auth';
-import { Navigate } from 'react-router';
+import { Navigate, useNavigate } from 'react-router';
 import AppLayout from '@/components/AppLayout';
 import PageContent from '@/components/PageContent';
+import SidebarLabels from '@/components/SidebarLabels';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import CreateUserModal from '@/components/CreateUserModal';
 import { useNavigationLinkTabs } from '@/hooks/useNavigationTabs';
+import { useSidebarLabelsController } from '@/hooks/useSidebarLabelsController';
 
 interface AdminProps {
   onLogout: () => void;
@@ -72,6 +74,15 @@ const Admin = ({ onLogout, passwordMinLength }: AdminProps) => {
 
   const userIsAdmin = isAdmin();
   const { tabs: navigationTabs, bottomTabs: bottomNavigationTabs } = useNavigationLinkTabs();
+  const {
+    labels: labelsList,
+    labelCounts,
+    loadLabels,
+    loadLabelCounts,
+    handleCreateLabel,
+    handleRenameLabel,
+    handleDeleteLabel,
+  } = useSidebarLabelsController();
 
   useEffect(() => { document.title = t('pageTitle.admin'); }, [t]);
 
@@ -143,6 +154,12 @@ const Admin = ({ onLogout, passwordMinLength }: AdminProps) => {
     }
   }, [userIsAdmin, fetchUsers, fetchStats]);
 
+  useEffect(() => {
+    if (userIsAdmin) {
+      void Promise.all([loadLabels(), loadLabelCounts()]);
+    }
+  }, [userIsAdmin, loadLabels, loadLabelCounts]);
+
   if (!userIsAdmin) {
     return <Navigate to="/" />;
   }
@@ -205,6 +222,19 @@ const Admin = ({ onLogout, passwordMinLength }: AdminProps) => {
     }
   };
 
+  const navigate = useNavigate();
+
+  const sidebarChildren = (
+    <SidebarLabels
+      labels={labelsList}
+      labelCounts={labelCounts}
+      onSelect={(labelId) => navigate(`/?label=${encodeURIComponent(labelId)}`)}
+      onCreate={handleCreateLabel}
+      onRename={handleRenameLabel}
+      onDelete={handleDeleteLabel}
+    />
+  );
+
   return (
     <AppLayout
       onLogout={handleLogout}
@@ -212,6 +242,7 @@ const Admin = ({ onLogout, passwordMinLength }: AdminProps) => {
       adminLinkActive={true}
       sidebarTabs={navigationTabs}
       sidebarBottomTabs={bottomNavigationTabs}
+      sidebarChildren={sidebarChildren}
     >
       <PageContent>
         <div className="mb-6">
