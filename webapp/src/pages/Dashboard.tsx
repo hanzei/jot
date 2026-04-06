@@ -398,7 +398,7 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       }
     }
 
-    if (event.type === 'note_updated' && editingNote && note_id === editingNote.id && event.data.note) {
+    if (event.type === 'note_updated' && editingNote && note_id === editingNote.id && event.data.note?.id === note_id) {
       setEditingNote(event.data.note);
     }
 
