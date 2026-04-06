@@ -184,6 +184,37 @@ type ImportResponse struct {
 	Errors   []string `json:"errors,omitempty"`
 }
 
+// JotExport is the top-level envelope for the native Jot JSON export format.
+type JotExport struct {
+	Format     string          `json:"format"`
+	Version    int             `json:"version"`
+	ExportedAt time.Time       `json:"exported_at"`
+	Notes      []JotExportNote `json:"notes"`
+}
+
+// JotExportNote is a single note in a Jot JSON export.
+type JotExportNote struct {
+	Title                 string              `json:"title"`
+	Content               string              `json:"content"`
+	NoteType              NoteType            `json:"note_type"`
+	Color                 string              `json:"color"`
+	Pinned                bool                `json:"pinned"`
+	Archived              bool                `json:"archived"`
+	Position              int                 `json:"position"`
+	UnpinnedPosition      *int                `json:"unpinned_position,omitempty"`
+	CheckedItemsCollapsed bool                `json:"checked_items_collapsed,omitempty"`
+	Labels                []string            `json:"labels"`
+	Items                 []JotExportNoteItem `json:"items,omitempty"`
+}
+
+// JotExportNoteItem is a single todo item in a Jot JSON export.
+type JotExportNoteItem struct {
+	Text        string `json:"text"`
+	Completed   bool   `json:"completed"`
+	Position    int    `json:"position"`
+	IndentLevel int    `json:"indent_level"`
+}
+
 // EmptyTrashResponse is returned by DELETE /api/v1/notes/trash.
 type EmptyTrashResponse struct {
 	Deleted int `json:"deleted"`

@@ -128,10 +128,13 @@ func (c *Client) ReorderNotes(ctx context.Context, noteIDs []string) error {
 	})
 }
 
-// ImportNotes uploads a Google Keep export file (JSON or ZIP).
-func (c *Client) ImportNotes(ctx context.Context, filename string, data io.Reader) (*ImportResponse, error) {
+// ImportNotes uploads a note export file. importType must be "jot_json" or "google_keep".
+func (c *Client) ImportNotes(ctx context.Context, importType string, filename string, data io.Reader) (*ImportResponse, error) {
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)
+	if err := mw.WriteField("import_type", importType); err != nil {
+		return nil, fmt.Errorf("write import_type field: %w", err)
+	}
 	part, err := mw.CreateFormFile("file", filename)
 	if err != nil {
 		return nil, fmt.Errorf("create form file: %w", err)
@@ -169,4 +172,13 @@ func (c *Client) ImportNotes(ctx context.Context, filename string, data io.Reade
 		return nil, fmt.Errorf("unmarshal response: %w", err)
 	}
 	return &result, nil
+}
+
+// ExportNotes downloads the authenticated user's notes as a Jot JSON export.
+func (c *Client) ExportNotes(ctx context.Context) (*JotExport, error) {
+	var export JotExport
+	if err := c.doJSON(ctx, http.MethodGet, "/api/v1/notes/export", nil, &export); err != nil {
+		return nil, err
+	}
+	return &export, nil
 }

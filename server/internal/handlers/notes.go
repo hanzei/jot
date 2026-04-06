@@ -6,7 +6,6 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
-	"strings"
 	"unicode/utf8"
 
 	"github.com/go-chi/chi/v5"
@@ -207,17 +206,7 @@ func normalizeCreateNoteRequest(req *CreateNoteRequest) (int, error) {
 }
 
 func (h *NotesHandler) createNoteLabels(ctx context.Context, noteID, userID string, rawLabels []string) (int, error) {
-	seen := make(map[string]struct{})
-	for _, raw := range rawLabels {
-		name := strings.TrimSpace(raw)
-		if name == "" {
-			continue
-		}
-		if _, dup := seen[name]; dup {
-			continue
-		}
-		seen[name] = struct{}{}
-
+	for _, name := range normalizeLabels(rawLabels) {
 		label, err := h.labelStore.GetOrCreateLabel(ctx, userID, name)
 		if err != nil {
 			return http.StatusInternalServerError, fmt.Errorf("get or create label: %w", err)
