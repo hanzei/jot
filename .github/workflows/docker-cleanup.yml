@@ -7,7 +7,6 @@ on:
 permissions:
   contents: read
   packages: write
-  actions: read
 
 jobs:
   cleanup:
@@ -18,25 +17,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_TAG: pr-${{ github.event.pull_request.number }}
-          REPO: ${{ github.repository }}
-          BRANCH: ${{ github.head_ref }}
         run: |
-          # Wait briefly, then skip deletion if a Docker workflow run is still
-          # active for this branch, to avoid deleting an image that is mid-push.
-          sleep 30
-          IN_PROGRESS=$(gh api \
-            -H "Accept: application/vnd.github+json" \
-            "/repos/$REPO/actions/workflows/docker.yml/runs?branch=$BRANCH&status=in_progress" \
-            --jq '.total_count' 2>/dev/null || echo "0")
-          QUEUED=$(gh api \
-            -H "Accept: application/vnd.github+json" \
-            "/repos/$REPO/actions/workflows/docker.yml/runs?branch=$BRANCH&status=queued" \
-            --jq '.total_count' 2>/dev/null || echo "0")
-
-          if [ "$((IN_PROGRESS + QUEUED))" -gt 0 ]; then
-            echo "Skipping deletion: $IN_PROGRESS in-progress and $QUEUED queued Docker run(s) still active for branch $BRANCH"
-            exit 0
-          fi
+          # Wait for any in-flight docker-merge run to finish before deleting.
+          sleep 180
 
           # Find the package version ID for the PR tag
           PACKAGE_ERR=$(mktemp)
