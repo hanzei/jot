@@ -2,8 +2,10 @@ import { useState, useRef } from 'react';
 import { Dialog, DialogPanel, DialogTitle } from '@headlessui/react';
 import { XMarkIcon, ArrowUpTrayIcon } from '@heroicons/react/24/outline';
 import { useTranslation } from 'react-i18next';
-import { notes } from '@/utils/api';
+import { notes, isAxiosError } from '@/utils/api';
 import type { ImportResponse } from '@jot/shared';
+
+type ImportType = 'jot_json' | 'google_keep';
 
 interface ImportModalProps {
   isOpen: boolean;
@@ -13,11 +15,21 @@ interface ImportModalProps {
 
 export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalProps) {
   const { t } = useTranslation();
+  const [importType, setImportType] = useState<ImportType>('google_keep');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState<ImportResponse | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
+
+  const acceptedFileTypes = importType === 'jot_json' ? '.json' : '.json,.zip';
+
+  const isValidFile = (file: File): boolean => {
+    const isJson = file.name.endsWith('.json') || file.type === 'application/json';
+    if (importType === 'jot_json') return isJson;
+    const isZip = file.name.endsWith('.zip') || file.type === 'application/zip';
+    return isJson || isZip;
+  };
 
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] ?? null;
@@ -30,10 +42,8 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
     e.preventDefault();
     const file = e.dataTransfer.files[0];
     if (file) {
-      const isJson = file.name.endsWith('.json') || file.type === 'application/json';
-      const isZip = file.name.endsWith('.zip') || file.type === 'application/zip';
-      if (!isJson && !isZip) {
-        setError(t('import.invalidFileType'));
+      if (!isValidFile(file)) {
+        setError(importType === 'jot_json' ? t('import.invalidFileTypeJson') : t('import.invalidFileType'));
         return;
       }
       setSelectedFile(file);
@@ -46,6 +56,16 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
     e.preventDefault();
   };
 
+  const handleFormatChange = (type: ImportType) => {
+    setImportType(type);
+    setSelectedFile(null);
+    setError('');
+    setResult(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
   const handleImport = async () => {
     if (!selectedFile) return;
 
@@ -54,18 +74,23 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
     setResult(null);
 
     try {
-      const response = await notes.importKeep(selectedFile);
+      const response = await notes.importNotes(selectedFile, importType);
       setResult(response);
       onSuccess();
     } catch (err: unknown) {
-      const axiosError = err as { response?: { data?: string } };
-      setError(axiosError.response?.data || t('import.importFailed'));
+      if (isAxiosError(err)) {
+        const msg = typeof err.response?.data === 'string' ? err.response.data.trim() : '';
+        setError(msg || t('import.importFailed'));
+      } else {
+        setError(t('import.importFailed'));
+      }
     } finally {
       setIsLoading(false);
     }
   };
 
   const handleClose = () => {
+    setImportType('google_keep');
     setSelectedFile(null);
     setError('');
     setResult(null);
@@ -74,6 +99,10 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
     }
     onClose();
   };
+
+  const description = importType === 'jot_json'
+    ? t('import.descriptionJotJson')
+    : t('import.description');
 
   return (
     <Dialog open={isOpen} onClose={handleClose} className="relative z-50">
@@ -94,8 +123,38 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
               </button>
             </div>
 
+            <div className="mb-4">
+              <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
+                {t('import.formatLabel')}
+              </p>
+              <div className="flex gap-4">
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="import-format"
+                    value="google_keep"
+                    checked={importType === 'google_keep'}
+                    onChange={() => handleFormatChange('google_keep')}
+                    className="text-blue-600"
+                  />
+                  <span className="text-sm text-gray-700 dark:text-gray-300">{t('import.formatGoogleKeep')}</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="import-format"
+                    value="jot_json"
+                    checked={importType === 'jot_json'}
+                    onChange={() => handleFormatChange('jot_json')}
+                    className="text-blue-600"
+                  />
+                  <span className="text-sm text-gray-700 dark:text-gray-300">{t('import.formatJotJson')}</span>
+                </label>
+              </div>
+            </div>
+
             <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
-              {t('import.description')}
+              {description}
             </p>
 
             {error && (
@@ -138,13 +197,15 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
                   <p className="text-sm text-gray-500 dark:text-gray-400">
                     {t('import.dropFile')} <span className="text-blue-600 dark:text-blue-400">{t('import.browse')}</span>
                   </p>
-                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">{t('import.fileTypes')}</p>
+                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                    {importType === 'jot_json' ? t('import.fileTypesJson') : t('import.fileTypes')}
+                  </p>
                 </>
               )}
               <input
                 ref={fileInputRef}
                 type="file"
-                accept=".json,.zip"
+                accept={acceptedFileTypes}
                 className="hidden"
                 onChange={handleFileChange}
               />

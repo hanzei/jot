@@ -1,7 +1,7 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
 import { useTranslation } from 'react-i18next';
 import i18n from '@/i18n';
-import { auth, users, sessions as sessionsApi, pats as patsApi, isAxiosError } from '@/utils/api';
+import { auth, users, notes as notesApi, sessions as sessionsApi, pats as patsApi, isAxiosError } from '@/utils/api';
 import { getUser, setUser, getSettings, setSettings } from '@/utils/auth';
 import { getLanguagePreference, resolveLanguage, LanguagePreference } from '@/utils/language';
 import { isPasswordTooShort } from '@/utils/userValidation';
@@ -39,6 +39,7 @@ const Settings = ({ passwordMinLength }: SettingsProps) => {
   const [passwordSaving, setPasswordSaving] = useState(false);
   const [passwordError, setPasswordError] = useState('');
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [isAboutModalOpen, setIsAboutModalOpen] = useState(false);
   const [hasProfileIcon, setHasProfileIcon] = useState(currentUser?.has_profile_icon ?? false);
   const [iconError, setIconError] = useState('');
@@ -304,6 +305,25 @@ const Settings = ({ passwordMinLength }: SettingsProps) => {
     }
   };
 
+  const handleExport = async () => {
+    setIsExporting(true);
+    try {
+      const { blob, filename } = await notesApi.exportNotes();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch {
+      showToast(t('settings.exportFailed'), 'error');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   const sessionPendingRevokeLabel = sessionPendingRevoke
     ? (
       sessionPendingRevoke.os !== 'Unknown'
@@ -383,6 +403,8 @@ const Settings = ({ passwordMinLength }: SettingsProps) => {
             onThemeChange={handleThemeChange}
             onOpenImportModal={() => setIsImportModalOpen(true)}
             onOpenAboutModal={() => setIsAboutModalOpen(true)}
+            onExport={handleExport}
+            isExporting={isExporting}
           />
         </div>
       </PageContent>
