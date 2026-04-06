@@ -1509,10 +1509,10 @@ describe('Dashboard', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: '+ New Label' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'New Label' })).toBeInTheDocument()
     })
 
-    await user.click(screen.getByRole('button', { name: '+ New Label' }))
+    await user.click(screen.getByRole('button', { name: 'New Label' }))
     const createInput = await screen.findByRole('textbox', { name: 'New label name' })
     await user.type(createInput, 'important{enter}')
 
@@ -1536,7 +1536,7 @@ describe('Dashboard', () => {
       expect(screen.getByText('New Note')).toBeInTheDocument()
     })
 
-    expect(screen.getByRole('button', { name: '+ New Label' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'New Label' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /^work/ })).not.toBeInTheDocument()
   })
 
