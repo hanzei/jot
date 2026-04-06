@@ -101,12 +101,16 @@ func Setup(ctx context.Context, cfg Config) (shutdown func(context.Context) erro
 		tp, mp, lp, shutdowns, err = setupStdout(ctx, res, promExp)
 	}
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("setup OTel providers: %w", err)
 	}
 
 	otel.SetTracerProvider(tp)
 	otel.SetMeterProvider(mp)
 	global.SetLoggerProvider(lp)
+
+	if err := startRuntimeMetrics(mp); err != nil {
+		return nil, fmt.Errorf("start runtime metrics: %w", err)
+	}
 
 	return func(ctx context.Context) error {
 		var firstErr error
