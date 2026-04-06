@@ -18,18 +18,9 @@ jobs:
         env:
           GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
           PR_TAG: pr-${{ github.event.pull_request.number }}
-          OWNER: ${{ github.repository_owner }}
           REPO: ${{ github.repository }}
           BRANCH: ${{ github.head_ref }}
         run: |
-          # Determine if owner is a user or organization and build the package API path
-          OWNER_TYPE=$(gh api "/users/$OWNER" --jq '.type' 2>/dev/null || echo "User")
-          if [ "$OWNER_TYPE" = "Organization" ]; then
-            PACKAGE_API="/orgs/$OWNER/packages/container/jot"
-          else
-            PACKAGE_API="/users/$OWNER/packages/container/jot"
-          fi
-
           # Wait briefly, then skip deletion if a Docker workflow run is still
           # active for this branch, to avoid deleting an image that is mid-push.
           sleep 30
@@ -51,7 +42,7 @@ jobs:
           PACKAGE_ERR=$(mktemp)
           VERSION_ID=$(gh api \
             -H "Accept: application/vnd.github+json" \
-            "$PACKAGE_API/versions" \
+            "/users/hanzei/packages/container/jot/versions" \
             2>"$PACKAGE_ERR" | jq -r --arg tag "$PR_TAG" \
             '.[] | select(.metadata.container.tags[] == $tag) | .id' \
             | head -1 || true)
@@ -65,7 +56,7 @@ jobs:
             gh api \
               --method DELETE \
               -H "Accept: application/vnd.github+json" \
-              "$PACKAGE_API/versions/$VERSION_ID"
+              "/users/hanzei/packages/container/jot/versions/$VERSION_ID"
             echo "Deleted ghcr.io/hanzei/jot:${PR_TAG}"
           else
             echo "No image found for ${PR_TAG}, skipping"
