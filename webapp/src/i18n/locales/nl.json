@@ -24,7 +24,7 @@
     "usernamePlaceholder": "Gebruikersnaam",
     "usernamePlaceholderLong": "Gebruikersnaam (2–30 tekens)",
     "passwordPlaceholder": "Wachtwoord",
-    "passwordPlaceholderLong": "Wachtwoord (min. 4 tekens)",
+    "passwordPlaceholderLong": "Wachtwoord (min. {{min}} tekens)",
     "confirmPasswordPlaceholder": "Wachtwoord bevestigen",
     "signingIn": "Inloggen...",
     "signIn": "Inloggen",
