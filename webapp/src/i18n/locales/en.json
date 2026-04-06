@@ -287,7 +287,7 @@
         "sharedNotes": "Shared notes",
         "shareLinks": "Share links",
         "totalLabels": "Total labels",
-        "noteAssociations": "Note links",
+        "noteAssociations": "Label assignments",
         "completed": "Completed",
         "assigned": "Assigned",
         "databaseSize": "Database size"
