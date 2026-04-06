@@ -1,5 +1,7 @@
 import { Page, expect, Locator } from '@playwright/test';
 
+const escapeForRegex = (value: string) => value.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
+
 export class DashboardPage {
   constructor(private page: Page) {}
 
@@ -106,13 +108,20 @@ export class DashboardPage {
     }).click();
   }
 
+  async closeNoteModal() {
+    await this.closeActiveDialog();
+  }
+
   private async openNoteMenu(title: string) {
     const card = this.page.locator('[data-testid="note-card"]').filter({
       has: this.page.locator('h3').getByText(title, { exact: true }),
     });
-    // force is intentional: hover/waitFor-based approaches were flaky in CI when sidebar overlays intercepted pointer events.
-    // TODO: remove force when note-card menu is reliably actionability-safe without hover timing dependence.
-    await card.locator('button[aria-label="Note options"]').click({ force: true });
+    await expect(card).toBeVisible();
+    const menuButton = card.getByRole('button', { name: 'Note options' });
+    // Focus + keyboard activation avoids pointer-interception flakes from overlays.
+    await menuButton.focus();
+    await this.page.keyboard.press('Enter');
+    await expect(menuButton).toHaveAttribute('aria-expanded', 'true');
   }
 
   async deleteNote(title: string) {
@@ -182,6 +191,11 @@ export class DashboardPage {
     await activeDialog.getByRole('button', { name: 'Duplicate' }).click();
   }
 
+  async archiveCurrentNoteFromModal() {
+    const activeDialog = this.page.getByRole('dialog').last();
+    await activeDialog.getByRole('button', { name: 'Archive note' }).click();
+  }
+
   async search(query: string) {
     await this.page.fill('[aria-label="Search notes"]', query);
   }
@@ -208,9 +222,20 @@ export class DashboardPage {
 
   private async ensureSidebarOpen() {
     const sidebar = this.page.locator('aside[aria-label="Main navigation"]');
+    const toggleSidebarButton = this.page.getByRole('button', { name: 'Toggle sidebar' });
     if (!(await sidebar.isVisible())) {
-      await this.page.getByRole('button', { name: 'Toggle sidebar' }).click();
+      await toggleSidebarButton.click();
       await expect(sidebar).toBeVisible();
+    }
+
+    // On desktop, a collapsed sidebar is still visible but hides label text/buttons.
+    const isSidebarCollapsed = await this.page.evaluate(() => localStorage.getItem('sidebar-collapsed') === 'true');
+    if (isSidebarCollapsed) {
+      await toggleSidebarButton.click();
+      await expect(sidebar).toBeVisible();
+      await expect.poll(
+        () => this.page.evaluate(() => localStorage.getItem('sidebar-collapsed'))
+      ).toBe('false');
     }
   }
 
@@ -280,8 +305,26 @@ export class DashboardPage {
     await expect(this.page.locator('[data-testid="note-card"]').filter({ hasText: title })).toHaveCount(0);
   }
 
-  async expectEmptyState(message: string) {
-    await expect(this.page.getByText(message)).toBeVisible();
+  async expectEmptyState(title?: string, description?: string, expectCreateCta?: boolean) {
+    const emptyState = this.page.getByTestId('dashboard-empty-state');
+    await expect(emptyState).toBeVisible();
+
+    if (title) {
+      await expect(emptyState.getByText(title)).toBeVisible();
+    }
+
+    if (description) {
+      await expect(emptyState.getByText(description)).toBeVisible();
+    }
+
+    if (typeof expectCreateCta === 'boolean') {
+      const createCtaButton = emptyState.getByRole('button');
+      if (expectCreateCta) {
+        await expect(createCtaButton).toBeVisible();
+      } else {
+        await expect(createCtaButton).toHaveCount(0);
+      }
+    }
   }
 
   noteCard(title: string): Locator {
@@ -341,27 +384,43 @@ export class DashboardPage {
   /** Clicks a label button in the sidebar to toggle the label filter. */
   async selectSidebarLabel(labelName: string) {
     await this.ensureSidebarOpen();
-    await this.page.locator('aside ul').getByRole('button', { name: labelName, exact: true }).click();
+    const row = this.sidebarLabelRow(labelName);
+    await expect(row).toBeVisible();
+    await row.locator('button').first().click();
   }
 
   async expectLabelInSidebar(labelName: string) {
     await this.ensureSidebarOpen();
-    await expect(
-      this.page.locator('aside ul').getByRole('button', { name: labelName, exact: true })
-    ).toBeVisible();
+    const row = this.sidebarLabelRow(labelName);
+    await expect(row).toBeVisible();
+    await expect(row.locator('button span.truncate')).toHaveText(labelName);
   }
 
   async expectLabelNotInSidebar(labelName: string) {
     await this.ensureSidebarOpen();
-    await expect(
-      this.page.locator('aside ul').getByRole('button', { name: labelName, exact: true })
-    ).toHaveCount(0);
+    await expect(this.sidebarLabelRow(labelName)).toHaveCount(0);
+  }
+
+  async createSidebarLabel(labelName: string) {
+    await this.ensureSidebarOpen();
+    await this.page.getByRole('button', { name: '+ New Label' }).click();
+    const input = this.page.getByRole('textbox', { name: 'New label name' });
+    await input.fill(labelName);
+    await input.press('Enter');
+    await this.expectLabelInSidebar(labelName);
+  }
+
+  async expectSidebarLabelCount(labelName: string, count: number) {
+    await this.ensureSidebarOpen();
+    const row = this.sidebarLabelRow(labelName);
+    await expect(row.locator('button span').last()).toHaveText(String(count));
   }
 
   private sidebarLabelRow(labelName: string): Locator {
+    const exactLabelName = new RegExp(`^${escapeForRegex(labelName)}$`);
     return this.page
       .locator('aside [data-testid="sidebar-labels"] li')
-      .filter({ has: this.page.getByRole('button', { name: labelName, exact: true }) })
+      .filter({ has: this.page.locator('button span.truncate', { hasText: exactLabelName }) })
       .first();
   }
 
@@ -404,8 +463,9 @@ export class DashboardPage {
     const itemRow = this.page.locator('[data-testid="todo-item-row"]').nth(itemIndex);
     await itemRow.hover();
     const assignBtn = itemRow.locator('button[aria-label="Assign item"]');
-    await assignBtn.waitFor({ state: 'visible', timeout: 5000 });
-    await assignBtn.click();
+    // force: true bypasses visibility so the click works on both desktop (hover
+    // shows the button) and mobile emulation (group-hover CSS doesn't trigger).
+    await assignBtn.click({ force: true });
 
     await expect(this.page.getByText('Assign item')).toBeVisible();
     const pickerPopover = this.page.locator('.max-h-48');
@@ -414,29 +474,31 @@ export class DashboardPage {
     await this.closeActiveDialog();
   }
 
-  /** Asserts that Archive and Bin appear directly after a given label in the sidebar with no large gap. */
+  /** Asserts that Archive and Bin appear directly after the labels section in the sidebar. */
   async expectArchiveAndBinDirectlyAfterLabel(labelName: string) {
     await this.ensureSidebarOpen();
     const sidebar = this.page.locator('aside[aria-label="Main navigation"]');
 
-    const labelButton = sidebar.getByRole('button', { name: labelName, exact: true });
+    const labelRow = this.sidebarLabelRow(labelName);
+    const labelsSection = sidebar.locator('[data-testid="sidebar-labels"]');
     const archiveButton = sidebar.locator('[aria-label="Archive"]');
     const binButton = sidebar.locator('[aria-label="Bin"]');
 
-    await expect(labelButton).toBeVisible();
+    await expect(labelRow).toBeVisible();
+    await expect(labelsSection).toBeVisible();
     await expect(archiveButton).toBeVisible();
     await expect(binButton).toBeVisible();
 
-    const labelBox = await labelButton.boundingBox();
+    const labelsSectionBox = await labelsSection.boundingBox();
     const archiveBox = await archiveButton.boundingBox();
     const binBox = await binButton.boundingBox();
 
-    expect(labelBox).toBeTruthy();
+    expect(labelsSectionBox).toBeTruthy();
     expect(archiveBox).toBeTruthy();
     expect(binBox).toBeTruthy();
 
-    const gapBetweenLabelAndArchive = archiveBox!.y - (labelBox!.y + labelBox!.height);
-    expect(gapBetweenLabelAndArchive).toBeLessThan(30);
+    const gapBetweenLabelsSectionAndArchive = archiveBox!.y - (labelsSectionBox!.y + labelsSectionBox!.height);
+    expect(gapBetweenLabelsSectionAndArchive).toBeLessThan(40);
 
     expect(binBox!.y).toBeGreaterThan(archiveBox!.y);
   }

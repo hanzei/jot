@@ -1,4 +1,4 @@
-export const PASSWORD_MIN_LENGTH = 4;
+export const PASSWORD_MIN_LENGTH = 10;
 export const SUPPORTED_LANGUAGES = ['en', 'de', 'es', 'fr', 'pt', 'it', 'nl', 'pl'] as const;
 export type SupportedLanguage = (typeof SUPPORTED_LANGUAGES)[number];
 export type LanguagePreference = 'system' | SupportedLanguage;
@@ -12,6 +12,9 @@ export const VALIDATION = {
   USERNAME_MIN_LENGTH: 2,
   USERNAME_MAX_LENGTH: 30,
   PASSWORD_MIN_LENGTH,
+  PAT_NAME_MAX_LENGTH: 100,
+  PAT_MAX_COUNT: 50,
+  SEARCH_QUERY_MAX_LENGTH: 500,
 } as const;
 
 export const ROLES = {

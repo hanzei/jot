@@ -7,8 +7,8 @@ import (
 	"time"
 
 	"github.com/hanzei/jot/server/internal/auth"
+	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/hanzei/jot/server/internal/sse"
-	"github.com/sirupsen/logrus"
 )
 
 // EventsHandler streams SSE events to authenticated clients.
@@ -51,7 +51,7 @@ func (h *EventsHandler) ServeSSE(w http.ResponseWriter, r *http.Request) {
 	w.Header().Set("Connection", "keep-alive")
 	w.Header().Set("X-Accel-Buffering", "no") // disable nginx proxy buffering
 
-	ch, unsubscribe := h.hub.Subscribe(user.ID)
+	ch, unsubscribe := h.hub.Subscribe(r.Context(), user.ID)
 	defer unsubscribe()
 
 	// Flush the headers immediately so the client knows the connection is open.
@@ -73,7 +73,7 @@ func (h *EventsHandler) ServeSSE(w http.ResponseWriter, r *http.Request) {
 			}
 			data, err := json.Marshal(event)
 			if err != nil {
-				logrus.WithError(err).WithField("type", event.Type).WithField("note_id", event.NoteID).Error("failed to marshal SSE event")
+				logutil.FromContext(r.Context()).WithError(err).WithField("type", event.Type).Error("failed to marshal SSE event")
 				continue
 			}
 			if _, err := fmt.Fprintf(w, "data: %s\n\n", data); err != nil {

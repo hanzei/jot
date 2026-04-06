@@ -1,7 +1,0 @@
-CREATE TABLE user_settings (
-  user_id TEXT NOT NULL PRIMARY KEY,
-  language TEXT NOT NULL DEFAULT 'system' CHECK (language IN ('system', 'en', 'de')),
-  created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-  FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
-);

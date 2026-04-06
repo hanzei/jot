@@ -7,30 +7,77 @@ import (
 	"fmt"
 	"net/http"
 	"strings"
+	"unicode/utf8"
 
 	"github.com/go-chi/chi/v5"
 	"github.com/hanzei/jot/server/internal/auth"
+	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/hanzei/jot/server/internal/models"
 	"github.com/hanzei/jot/server/internal/sse"
-	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/metric"
 )
 
 const queryTrue = "true"
 
 type NotesHandler struct {
-	noteStore  *models.NoteStore
-	userStore  *models.UserStore
-	labelStore *models.LabelStore
-	hub        *sse.Hub
+	noteStore     *models.NoteStore
+	userStore     *models.UserStore
+	labelStore    *models.LabelStore
+	hub           *sse.Hub
+	notesCreated  metric.Int64Counter
+	notesUpdated  metric.Int64Counter
+	notesDeleted  metric.Int64Counter
+	notesRestored metric.Int64Counter
 }
 
-func NewNotesHandler(noteStore *models.NoteStore, userStore *models.UserStore, labelStore *models.LabelStore, hub *sse.Hub) *NotesHandler {
-	return &NotesHandler{
-		noteStore:  noteStore,
-		userStore:  userStore,
-		labelStore: labelStore,
-		hub:        hub,
+// NewNotesHandler creates a NotesHandler with OTel instruments initialized from
+// the global MeterProvider. Returns an error if any instrument cannot be created.
+func NewNotesHandler(noteStore *models.NoteStore, userStore *models.UserStore, labelStore *models.LabelStore, hub *sse.Hub) (*NotesHandler, error) {
+	meter := otel.GetMeterProvider().Meter("github.com/hanzei/jot/server")
+
+	notesCreated, err := meter.Int64Counter(
+		"notes.created",
+		metric.WithDescription("Total notes created"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create notes.created instrument: %w", err)
 	}
+
+	notesUpdated, err := meter.Int64Counter(
+		"notes.updated",
+		metric.WithDescription("Total notes updated"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create notes.updated instrument: %w", err)
+	}
+
+	notesDeleted, err := meter.Int64Counter(
+		"notes.deleted",
+		metric.WithDescription("Total notes deleted or moved to trash"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create notes.deleted instrument: %w", err)
+	}
+
+	notesRestored, err := meter.Int64Counter(
+		"notes.restored",
+		metric.WithDescription("Total notes restored from trash"),
+	)
+	if err != nil {
+		return nil, fmt.Errorf("create notes.restored instrument: %w", err)
+	}
+
+	return &NotesHandler{
+		noteStore:     noteStore,
+		userStore:     userStore,
+		labelStore:    labelStore,
+		hub:           hub,
+		notesCreated:  notesCreated,
+		notesUpdated:  notesUpdated,
+		notesDeleted:  notesDeleted,
+		notesRestored: notesRestored,
+	}, nil
 }
 
 // publishNoteEvent fetches the note's audience and publishes an SSE event.
@@ -41,14 +88,13 @@ func (h *NotesHandler) publishNoteEvent(ctx context.Context, noteID string, even
 	}
 	audienceIDs, err := h.noteStore.GetNoteAudienceIDs(ctx, noteID)
 	if err != nil {
-		logrus.WithError(err).WithField("note_id", noteID).Error("failed to get note audience for SSE publish")
+		logutil.FromContext(ctx).WithError(err).WithField("note_id", noteID).Error("failed to get note audience for SSE publish")
 		return
 	}
-	h.hub.Publish(audienceIDs, sse.Event{
+	h.hub.Publish(ctx, audienceIDs, sse.Event{
 		Type:         eventType,
-		NoteID:       noteID,
-		Note:         note,
 		SourceUserID: sourceUserID,
+		Data:         sse.NoteEventData{NoteID: noteID, Note: note},
 	})
 }
 
@@ -63,31 +109,26 @@ func (h *NotesHandler) publishPersonalizedNoteEvent(ctx context.Context, noteID 
 	for _, uid := range audienceIDs {
 		n, err := h.noteStore.GetByID(ctx, noteID, uid)
 		if err != nil {
-			logrus.WithError(err).WithFields(logrus.Fields{
-				"note_id": noteID,
-				"user_id": uid,
-			}).Warn("failed to fetch personalized note for SSE publish")
+			logutil.FromContext(ctx).WithError(err).WithField("note_id", noteID).WithField("user_id", uid).Warn("failed to fetch personalized note for SSE publish")
 			continue
 		}
-		h.hub.Publish([]string{uid}, sse.Event{
+		h.hub.Publish(ctx, []string{uid}, sse.Event{
 			Type:         sse.EventNoteUpdated,
-			NoteID:       noteID,
-			Note:         n,
 			SourceUserID: sourceUserID,
+			Data:         sse.NoteEventData{NoteID: noteID, Note: n},
 		})
 	}
 }
 
-func (h *NotesHandler) publishDeletedNoteEvent(noteID string, audienceIDs []string, sourceUserID string) {
+func (h *NotesHandler) publishDeletedNoteEvent(ctx context.Context, noteID string, audienceIDs []string, sourceUserID string) {
 	if h.hub == nil || len(audienceIDs) == 0 {
 		return
 	}
 
-	h.hub.Publish(audienceIDs, sse.Event{
+	h.hub.Publish(ctx, audienceIDs, sse.Event{
 		Type:         sse.EventNoteDeleted,
-		NoteID:       noteID,
-		Note:         nil,
 		SourceUserID: sourceUserID,
+		Data:         sse.NoteEventData{NoteID: noteID},
 	})
 }
 
@@ -134,6 +175,16 @@ func normalizeCreateNoteRequest(req *CreateNoteRequest) (int, error) {
 		return http.StatusBadRequest, errors.New("note must have a title, content, or items")
 	}
 
+	if utf8.RuneCountInString(req.Title) > noteTitleMaxLength {
+		return http.StatusBadRequest, fmt.Errorf("title must be %d characters or fewer", noteTitleMaxLength)
+	}
+	if utf8.RuneCountInString(req.Content) > noteContentMaxLength {
+		return http.StatusBadRequest, fmt.Errorf("content must be %d characters or fewer", noteContentMaxLength)
+	}
+	if len(req.Items) > noteItemsMaxCount {
+		return http.StatusBadRequest, fmt.Errorf("note cannot have more than %d items", noteItemsMaxCount)
+	}
+
 	if len(req.Items) > 0 {
 		if req.NoteType == "" {
 			req.NoteType = models.NoteTypeTodo
@@ -146,6 +197,10 @@ func normalizeCreateNoteRequest(req *CreateNoteRequest) (int, error) {
 
 	if req.Color == "" {
 		req.Color = models.DefaultNoteColor
+	}
+
+	if err := validateColor(req.Color); err != nil {
+		return http.StatusBadRequest, err
 	}
 
 	return http.StatusOK, nil
@@ -168,6 +223,9 @@ func (h *NotesHandler) createNoteLabels(ctx context.Context, noteID, userID stri
 			return http.StatusInternalServerError, fmt.Errorf("get or create label: %w", err)
 		}
 		if err = h.noteStore.AddLabelToNote(ctx, noteID, label.ID, userID); err != nil {
+			if errors.Is(err, models.ErrLabelNotFoundOrNotOwned) {
+				return http.StatusNotFound, fmt.Errorf("label not found: %w", err)
+			}
 			return http.StatusInternalServerError, fmt.Errorf("add label to note: %w", err)
 		}
 	}
@@ -179,8 +237,11 @@ func (h *NotesHandler) createTodoItems(ctx context.Context, noteID string, items
 		if item.IndentLevel < 0 || item.IndentLevel > 1 {
 			return http.StatusBadRequest, errors.New("indent_level must be 0 or 1")
 		}
+		if utf8.RuneCountInString(item.Text) > noteItemTextMaxLength {
+			return http.StatusBadRequest, fmt.Errorf("item text must be %d characters or fewer", noteItemTextMaxLength)
+		}
 		if _, err := h.noteStore.CreateItemWithCompleted(ctx, noteID, item.Text, item.Position, item.Completed, item.IndentLevel, ""); err != nil {
-			return http.StatusInternalServerError, err
+			return http.StatusInternalServerError, fmt.Errorf("create todo item: %w", err)
 		}
 	}
 	return http.StatusOK, nil
@@ -198,6 +259,7 @@ func (h *NotesHandler) createTodoItems(ctx context.Context, noteID string, items
 //	@Param		label		query		string	false	"Filter by label ID"
 //	@Param		my_todo		query		boolean	false	"Return only notes with todos assigned to current user"
 //	@Success	200			{array}		models.Note
+//	@Failure	400			{string}	string	"search query too long"
 //	@Failure	401			{string}	string	"unauthorized"
 //	@Failure	500			{string}	string	"internal server error"
 //	@Router		/notes [get]
@@ -214,9 +276,13 @@ func (h *NotesHandler) GetNotes(w http.ResponseWriter, r *http.Request) (int, an
 	labelID := q.Get("label")
 	myTodo := q.Get("my_todo") == queryTrue
 
+	if err := validateSearchQuery(search); err != nil {
+		return http.StatusBadRequest, nil, err
+	}
+
 	notes, err := h.noteStore.GetByUserID(r.Context(), user.ID, archived, trashed, search, labelID, myTodo)
 	if err != nil {
-		return http.StatusInternalServerError, nil, err
+		return http.StatusInternalServerError, nil, fmt.Errorf("get notes: %w", err)
 	}
 
 	return http.StatusOK, notes, nil
@@ -233,6 +299,7 @@ func (h *NotesHandler) GetNotes(w http.ResponseWriter, r *http.Request) (int, an
 //	@Success	201		{object}	models.Note
 //	@Failure	400		{string}	string	"bad request"
 //	@Failure	401		{string}	string	"unauthorized"
+//	@Failure	404		{string}	string	"label not found"
 //	@Failure	500		{string}	string	"internal server error"
 //	@Router		/notes [post]
 func (h *NotesHandler) CreateNote(w http.ResponseWriter, r *http.Request) (int, any, error) {
@@ -252,7 +319,7 @@ func (h *NotesHandler) CreateNote(w http.ResponseWriter, r *http.Request) (int, 
 
 	note, err := h.noteStore.Create(r.Context(), user.ID, req.Title, req.Content, req.NoteType, req.Color)
 	if err != nil {
-		return http.StatusInternalServerError, nil, err
+		return http.StatusInternalServerError, nil, fmt.Errorf("create note: %w", err)
 	}
 
 	needRefetch := false
@@ -279,6 +346,7 @@ func (h *NotesHandler) CreateNote(w http.ResponseWriter, r *http.Request) (int, 
 		note = updatedNote
 	}
 
+	h.notesCreated.Add(r.Context(), 1)
 	h.publishNoteEvent(r.Context(), note.ID, sse.EventNoteCreated, note, user.ID)
 	return http.StatusCreated, note, nil
 }
@@ -315,7 +383,7 @@ func (h *NotesHandler) GetNote(w http.ResponseWriter, r *http.Request) (int, any
 		if errors.Is(err, models.ErrNoteNotFound) {
 			return http.StatusNotFound, nil, err
 		}
-		return http.StatusInternalServerError, nil, err
+		return http.StatusInternalServerError, nil, fmt.Errorf("get note: %w", err)
 	}
 
 	return http.StatusOK, note, nil
@@ -353,22 +421,48 @@ func (h *NotesHandler) DuplicateNote(w http.ResponseWriter, r *http.Request) (in
 		if errors.Is(err, models.ErrNoteNotFound) {
 			return http.StatusNotFound, nil, err
 		}
-		return http.StatusInternalServerError, nil, err
+		return http.StatusInternalServerError, nil, fmt.Errorf("get note: %w", err)
 	}
 
 	duplicatedNote, err := h.noteStore.Duplicate(r.Context(), sourceNote, user.ID)
 	if err != nil {
-		return http.StatusInternalServerError, nil, err
+		return http.StatusInternalServerError, nil, fmt.Errorf("duplicate note: %w", err)
 	}
 
 	h.publishNoteEvent(r.Context(), duplicatedNote.ID, sse.EventNoteCreated, duplicatedNote, user.ID)
+	h.notesCreated.Add(r.Context(), 1)
 	return http.StatusCreated, duplicatedNote, nil
 }
 
+func normalizeUpdateNoteRequest(req *UpdateNoteRequest) (int, error) {
+	if req.Title != nil && utf8.RuneCountInString(*req.Title) > noteTitleMaxLength {
+		return http.StatusBadRequest, fmt.Errorf("title must be %d characters or fewer", noteTitleMaxLength)
+	}
+	if req.Content != nil && utf8.RuneCountInString(*req.Content) > noteContentMaxLength {
+		return http.StatusBadRequest, fmt.Errorf("content must be %d characters or fewer", noteContentMaxLength)
+	}
+	if req.Color != nil {
+		if *req.Color == "" {
+			*req.Color = models.DefaultNoteColor
+		}
+		if err := validateColor(*req.Color); err != nil {
+			return http.StatusBadRequest, err
+		}
+	}
+	return http.StatusOK, nil
+}
+
 func (h *NotesHandler) validateTodoItems(ctx context.Context, noteID string, items []UpdateNoteItem) (int, error) {
+	if len(items) > noteItemsMaxCount {
+		return http.StatusBadRequest, fmt.Errorf("note cannot have more than %d items", noteItemsMaxCount)
+	}
+
 	for _, item := range items {
 		if item.IndentLevel < 0 || item.IndentLevel > 1 {
 			return http.StatusBadRequest, errors.New("indent_level must be 0 or 1")
+		}
+		if utf8.RuneCountInString(item.Text) > noteItemTextMaxLength {
+			return http.StatusBadRequest, fmt.Errorf("item text must be %d characters or fewer", noteItemTextMaxLength)
 		}
 	}
 
@@ -429,18 +523,18 @@ func (h *NotesHandler) validateItemAssignments(ctx context.Context, noteID strin
 func (h *NotesHandler) updateTodoItems(ctx context.Context, noteID string, userID string, items []UpdateNoteItem) error {
 	currentNote, err := h.noteStore.GetByID(ctx, noteID, userID)
 	if err != nil {
-		return err
+		return fmt.Errorf("get note: %w", err)
 	}
 
 	if currentNote.NoteType == models.NoteTypeTodo {
 		if err := h.noteStore.DeleteItemsByNoteID(ctx, noteID); err != nil {
-			return err
+			return fmt.Errorf("delete note items: %w", err)
 		}
 
 		for _, item := range items {
 			_, err := h.noteStore.CreateItemWithCompleted(ctx, noteID, item.Text, item.Position, item.Completed, item.IndentLevel, item.AssignedTo)
 			if err != nil {
-				return err
+				return fmt.Errorf("create note item: %w", err)
 			}
 		}
 	}
@@ -481,9 +575,16 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 		return http.StatusBadRequest, nil, err
 	}
 
+	if status, err := normalizeUpdateNoteRequest(&req); err != nil {
+		return status, nil, err
+	}
+
 	// Validate items before persisting any changes so invalid assigned_to
 	// values are rejected before note metadata is committed.
-	if len(req.Items) > 0 {
+	// req.Items can be either:
+	// - nil: "items" omitted from payload (do not touch existing items)
+	// - empty/non-empty slice: "items" explicitly provided (replace items)
+	if req.Items != nil {
 		if status, err := h.validateTodoItems(r.Context(), id, req.Items); err != nil {
 			return status, nil, err
 		}
@@ -494,27 +595,28 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 		if errors.Is(err, models.ErrNoteNotFound) || errors.Is(err, models.ErrNoteNoAccess) {
 			return http.StatusNotFound, nil, err
 		}
-		return http.StatusInternalServerError, nil, err
+		return http.StatusInternalServerError, nil, fmt.Errorf("update note: %w", err)
 	}
 
-	if len(req.Items) > 0 {
+	if req.Items != nil {
 		if updateErr := h.updateTodoItems(r.Context(), id, user.ID, req.Items); updateErr != nil {
-			return http.StatusInternalServerError, nil, updateErr
+			return http.StatusInternalServerError, nil, fmt.Errorf("update todo items: %w", updateErr)
 		}
 	}
 
 	note, err := h.noteStore.GetByID(r.Context(), id, user.ID)
 	if err != nil {
-		return http.StatusInternalServerError, nil, err
+		return http.StatusInternalServerError, nil, fmt.Errorf("get note: %w", err)
 	}
 
 	// Title, content, and items are shared fields: every collaborator must receive
 	// their own personalized copy of the note (preserving their per-user state).
 	// Per-user-only changes (color, pinned, archived, checked_items_collapsed) only
 	// need to be delivered to the acting user.
-	hasSharedFieldChange := req.Title != nil || req.Content != nil || len(req.Items) > 0
+	hasSharedFieldChange := req.Title != nil || req.Content != nil || req.Items != nil
 	h.publishUpdateEvent(r.Context(), id, note, user.ID, hasSharedFieldChange)
 
+	h.notesUpdated.Add(r.Context(), 1)
 	return http.StatusOK, note, nil
 }
 
@@ -525,18 +627,17 @@ func (h *NotesHandler) publishUpdateEvent(ctx context.Context, noteID string, no
 	if sharedFieldChanged {
 		audienceIDs, err := h.noteStore.GetNoteAudienceIDs(ctx, noteID)
 		if err != nil {
-			logrus.WithError(err).WithField("note_id", noteID).Error("failed to get note audience for SSE publish")
+			logutil.FromContext(ctx).WithError(err).WithField("note_id", noteID).Error("failed to get note audience for SSE publish")
 			return
 		}
 		h.publishPersonalizedNoteEvent(ctx, noteID, audienceIDs, userID)
 		return
 	}
 	if h.hub != nil {
-		h.hub.Publish([]string{userID}, sse.Event{
+		h.hub.Publish(ctx, []string{userID}, sse.Event{
 			Type:         sse.EventNoteUpdated,
-			NoteID:       noteID,
-			Note:         note,
 			SourceUserID: userID,
+			Data:         sse.NoteEventData{NoteID: noteID, Note: note},
 		})
 	}
 }
@@ -579,7 +680,7 @@ func (h *NotesHandler) DeleteNote(w http.ResponseWriter, r *http.Request) (int, 
 			if errors.Is(err, models.ErrNoteNotInTrash) {
 				return http.StatusNotFound, nil, err
 			}
-			return http.StatusInternalServerError, nil, err
+			return http.StatusInternalServerError, nil, fmt.Errorf("delete note from trash: %w", err)
 		}
 	} else {
 		err := h.noteStore.MoveToTrash(r.Context(), id, user.ID)
@@ -587,14 +688,15 @@ func (h *NotesHandler) DeleteNote(w http.ResponseWriter, r *http.Request) (int, 
 			if errors.Is(err, models.ErrNoteNotOwnedByUser) {
 				return http.StatusNotFound, nil, err
 			}
-			return http.StatusInternalServerError, nil, err
+			return http.StatusInternalServerError, nil, fmt.Errorf("move note to trash: %w", err)
 		}
 	}
 
 	if audienceErr == nil {
-		h.publishDeletedNoteEvent(id, audienceIDs, user.ID)
+		h.publishDeletedNoteEvent(r.Context(), id, audienceIDs, user.ID)
 	}
 
+	h.notesDeleted.Add(r.Context(), 1)
 	return http.StatusNoContent, nil, nil
 }
 
@@ -616,11 +718,12 @@ func (h *NotesHandler) EmptyTrash(w http.ResponseWriter, r *http.Request) (int, 
 
 	deletedNotes, err := h.noteStore.EmptyTrash(r.Context(), user.ID)
 	if err != nil {
-		return http.StatusInternalServerError, nil, err
+		return http.StatusInternalServerError, nil, fmt.Errorf("empty trash: %w", err)
 	}
 
 	for _, deletedNote := range deletedNotes {
-		h.publishDeletedNoteEvent(deletedNote.NoteID, deletedNote.AudienceIDs, user.ID)
+		h.publishDeletedNoteEvent(r.Context(), deletedNote.NoteID, deletedNote.AudienceIDs, user.ID)
+		h.notesDeleted.Add(r.Context(), 1)
 	}
 
 	return http.StatusOK, EmptyTrashResponse{Deleted: len(deletedNotes)}, nil
@@ -658,14 +761,15 @@ func (h *NotesHandler) RestoreNote(w http.ResponseWriter, r *http.Request) (int,
 		if errors.Is(err, models.ErrNoteNotOwnedByUser) || errors.Is(err, models.ErrNoteNotInTrash) {
 			return http.StatusNotFound, nil, err
 		}
-		return http.StatusInternalServerError, nil, err
+		return http.StatusInternalServerError, nil, fmt.Errorf("restore note: %w", err)
 	}
 
 	note, err := h.noteStore.GetByID(r.Context(), id, user.ID)
 	if err != nil {
-		return http.StatusInternalServerError, nil, err
+		return http.StatusInternalServerError, nil, fmt.Errorf("get note: %w", err)
 	}
 
+	h.notesRestored.Add(r.Context(), 1)
 	h.publishNoteEvent(r.Context(), id, sse.EventNoteUpdated, note, user.ID)
 	return http.StatusOK, note, nil
 }
@@ -707,7 +811,7 @@ func (h *NotesHandler) ReorderNotes(w http.ResponseWriter, r *http.Request) (int
 		if errors.Is(err, models.ErrNoteNoAccess) {
 			return http.StatusForbidden, nil, err
 		}
-		return http.StatusInternalServerError, nil, err
+		return http.StatusInternalServerError, nil, fmt.Errorf("reorder notes: %w", err)
 	}
 
 	return http.StatusNoContent, nil, nil

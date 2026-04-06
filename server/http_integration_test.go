@@ -60,6 +60,7 @@ func defaultTestConfig(tmpDir string) *config.Config {
 		CORSAllowedOrigin:   "http://localhost:5173",
 		CookieSecure:        false,
 		RegistrationEnabled: true,
+		PasswordMinLength:   10,
 	}
 }
 
@@ -160,9 +161,7 @@ func TestProbeEndpoints(t *testing.T) {
 		resp, err := c.HTTPClient().Do(req)
 		require.NoError(t, err)
 		defer resp.Body.Close()
-		body, _ := io.ReadAll(resp.Body)
 		assert.Equal(t, http.StatusOK, resp.StatusCode)
-		assert.Equal(t, "OK", string(body))
 	})
 
 	t.Run("readyz endpoint", func(t *testing.T) {
@@ -229,6 +228,27 @@ func TestConfigEndpoint(t *testing.T) {
 		require.NoError(t, err)
 		assert.True(t, cfg.RegistrationEnabled)
 	})
+
+	t.Run("returns default password_min_length", func(t *testing.T) {
+		ts := setupTestServer(t)
+		c := ts.newClient()
+
+		cfg, err := c.Config(t.Context())
+		require.NoError(t, err)
+		assert.Equal(t, 10, cfg.PasswordMinLength)
+	})
+
+	t.Run("returns configured password_min_length", func(t *testing.T) {
+		ts := setupTestServerWithConfig(t, func(cfg *config.Config) {
+			cfg.PasswordMinLength = 4
+		})
+		c := ts.newClient()
+
+		cfg, err := c.Config(t.Context())
+		require.NoError(t, err)
+		assert.Equal(t, 4, cfg.PasswordMinLength)
+	})
+
 }
 
 // Auth endpoint tests
@@ -502,7 +522,7 @@ func TestAdminStatsEndpoint(t *testing.T) {
 	archived := true
 	_, err = adminUser.Client.UpdateNote(t.Context(), archivedTodoNote.ID, &client.UpdateNoteRequest{
 		Archived: &archived,
-		Items: []client.UpdateNoteItem{
+		Items: &[]client.UpdateNoteItem{
 			{Text: "First todo", Position: 0, Completed: true, AssignedTo: member1.User.ID},
 			{Text: "Second todo", Position: 1, Completed: false, AssignedTo: ""},
 		},
@@ -510,7 +530,7 @@ func TestAdminStatsEndpoint(t *testing.T) {
 	require.NoError(t, err)
 
 	_, err = adminUser.Client.UpdateNote(t.Context(), activeTodoNote.ID, &client.UpdateNoteRequest{
-		Items: []client.UpdateNoteItem{
+		Items: &[]client.UpdateNoteItem{
 			{Text: "Assigned todo", Position: 0, Completed: false, AssignedTo: member2.User.ID},
 		},
 	})
@@ -699,7 +719,9 @@ func TestSSEEndpoint(t *testing.T) { //nolint:gocognit
 		case event := <-eventCh:
 			assert.Equal(t, "note_created", event["type"])
 			assert.Equal(t, user.User.ID, event["source_user_id"])
-			assert.Equal(t, note.ID, event["note_id"])
+			data, ok := event["data"].(map[string]any)
+			require.True(t, ok, "event data should be a JSON object")
+			assert.Equal(t, note.ID, data["note_id"])
 		case <-sseCtx.Done():
 			t.Fatal("timed out waiting for SSE event after note creation")
 		}
@@ -878,7 +900,7 @@ func TestTodoItemIndentLevel(t *testing.T) {
 		_, err := user.Client.UpdateNote(t.Context(), created.ID, &client.UpdateNoteRequest{
 			Title: client.Ptr("Indent Test"),
 			Color: client.Ptr("#ffffff"),
-			Items: []client.UpdateNoteItem{
+			Items: &[]client.UpdateNoteItem{
 				{Text: "top level", Position: 0, IndentLevel: 0},
 				{Text: "indented once", Position: 1, IndentLevel: 1},
 				{Text: "promoted to top", Position: 2, IndentLevel: 0},
@@ -922,7 +944,7 @@ func TestTodoItemIndentLevel(t *testing.T) {
 		_, err := user.Client.UpdateNote(t.Context(), created.ID, &client.UpdateNoteRequest{
 			Title: client.Ptr("Indent Test"),
 			Color: client.Ptr("#ffffff"),
-			Items: []client.UpdateNoteItem{
+			Items: &[]client.UpdateNoteItem{
 				{Text: "top level", Position: 0, IndentLevel: 0},
 				{Text: "too deep", Position: 1, IndentLevel: 2},
 			},

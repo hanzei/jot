@@ -432,7 +432,7 @@ describe('Auth Utilities', () => {
       const maliciousUser = {
         ...mockUser,
         username: '<script>alert("xss")</script>',
-        role: 'user<img src=x onerror=alert("xss")>',
+        role: 'user<img src=x onerror=alert("xss")>' as unknown as User['role'],
       }
 
       setUser(maliciousUser)

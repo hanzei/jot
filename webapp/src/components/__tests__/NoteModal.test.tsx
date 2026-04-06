@@ -87,7 +87,6 @@ vi.mock('@dnd-kit/utilities', () => ({
 
 // Mock console.error to silence error logs in tests
 const mockConsoleError = vi.fn()
-vi.spyOn(console, 'error').mockImplementation(mockConsoleError)
 
 const createMockTodoItems = (): NoteItem[] => [
   {
@@ -124,16 +123,30 @@ const defaultProps = {
   onRefresh: vi.fn(),
 }
 
+const mockMobileMatchMedia = () => {
+  vi.spyOn(window, 'matchMedia').mockImplementation((query: string) => ({
+    matches: query === '(pointer: coarse)',
+    media: query,
+    onchange: null,
+    addListener: () => {},
+    removeListener: () => {},
+    addEventListener: () => {},
+    removeEventListener: () => {},
+    dispatchEvent: () => false,
+  }))
+}
+
 describe('NoteModal', () => {
   beforeEach(() => {
     vi.clearAllMocks()
+    vi.spyOn(console, 'error').mockImplementation(mockConsoleError)
     vi.useFakeTimers()
     localStorage.clear()
   })
 
   afterEach(() => {
-    mockConsoleError.mockClear()
     vi.useRealTimers()
+    vi.restoreAllMocks()
   })
 
   describe('Basic Rendering', () => {
@@ -176,7 +189,9 @@ describe('NoteModal', () => {
       expect(screen.getByText(/Last edited:/)).toBeInTheDocument()
     })
 
-    it('renders permanent mobile app toolbar link in note modal', () => {
+    it('renders mobile app toolbar link on mobile devices', () => {
+      mockMobileMatchMedia()
+
       const note = createMockNote()
       renderNoteModal({ ...defaultProps, note })
 
@@ -191,13 +206,21 @@ describe('NoteModal', () => {
       expect(deepLink.searchParams.get('server')).toBe(window.location.origin.toLowerCase())
     })
 
-    it('renders mobile app toolbar link before share action', () => {
+    it('renders mobile app toolbar link before share action on mobile devices', () => {
+      mockMobileMatchMedia()
+
       const note = createMockNote()
       renderNoteModal({ ...defaultProps, note, onShare: vi.fn(), isOwner: true })
 
       const mobileLink = screen.getByTestId('note-open-mobile-app-toolbar-link')
       const shareButton = screen.getByRole('button', { name: 'Share' })
       expect(mobileLink.compareDocumentPosition(shareButton) & Node.DOCUMENT_POSITION_FOLLOWING).not.toBe(0)
+    })
+
+    it('does not render mobile app toolbar link on non-mobile devices', () => {
+      const note = createMockNote()
+      renderNoteModal({ ...defaultProps, note })
+      expect(screen.queryByTestId('note-open-mobile-app-toolbar-link')).not.toBeInTheDocument()
     })
 
     it('does not render mobile app toolbar link for new note', () => {
@@ -815,6 +838,28 @@ describe('NoteModal', () => {
       }))
     })
 
+    it('removing the only todo item from an existing note sends empty items array', async () => {
+      const todoNote = createMockNote({
+        note_type: 'todo',
+        items: [
+          { id: 'item1', note_id: '1', text: '', completed: false, position: 0, indent_level: 0, assigned_to: '', created_at: '', updated_at: '' },
+        ],
+      })
+      mockNotesUpdate.mockClear()
+      renderNoteModal({ ...defaultProps, note: todoNote })
+
+      const inputs = screen.getAllByTestId('todo-item-input')
+      expect(inputs).toHaveLength(1)
+
+      // Press Backspace on the only empty item
+      fireEvent.keyDown(inputs[0], { key: 'Backspace', code: 'Backspace' })
+
+      expect(screen.queryAllByTestId('todo-item-input')).toHaveLength(0)
+      expect(mockNotesUpdate).toHaveBeenCalledWith('1', expect.objectContaining({
+        items: [],
+      }))
+    })
+
     it('preserves completed state when creating a new todo note', async () => {
       renderNoteModal(defaultProps)
 
@@ -949,6 +994,112 @@ describe('NoteModal', () => {
       const note = createMockNote()
       renderNoteModal({ ...defaultProps, note })
       expect(screen.getByRole('button', { name: 'Add labels' })).toBeInTheDocument()
+    })
+  })
+
+  describe('Dashboard update on property changes', () => {
+    it('autosaves and calls onRefresh when title changes on an existing note', async () => {
+      const note = createMockNote()
+      const onRefresh = vi.fn()
+      renderNoteModal({ ...defaultProps, onRefresh, note })
+
+      const titleInput = screen.getByDisplayValue('Test Note')
+      fireEvent.change(titleInput, { target: { value: 'New Title' } })
+      await vi.runAllTimersAsync()
+
+      expect(mockNotesUpdate).toHaveBeenCalledWith('1', expect.objectContaining({ title: 'New Title' }))
+      expect(onRefresh).toHaveBeenCalled()
+    })
+
+    it('does not autosave title on new notes (no note id)', async () => {
+      renderNoteModal(defaultProps)
+
+      const titleInput = screen.getByPlaceholderText('Note title...')
+      fireEvent.change(titleInput, { target: { value: 'Some Title' } })
+      await vi.runAllTimersAsync()
+
+      expect(mockNotesUpdate).not.toHaveBeenCalled()
+    })
+
+    it('autosaves and calls onRefresh when content changes on an existing note', async () => {
+      const note = createMockNote()
+      const onRefresh = vi.fn()
+      renderNoteModal({ ...defaultProps, onRefresh, note })
+
+      const contentInput = screen.getByDisplayValue('Test content')
+      fireEvent.change(contentInput, { target: { value: 'Updated content' } })
+      await vi.runAllTimersAsync()
+
+      expect(mockNotesUpdate).toHaveBeenCalledWith('1', expect.objectContaining({ content: 'Updated content' }))
+      expect(onRefresh).toHaveBeenCalled()
+    })
+
+    it('does not autosave content on new notes (no note id)', async () => {
+      renderNoteModal(defaultProps)
+
+      const contentInput = screen.getByPlaceholderText('Take a note...')
+      fireEvent.change(contentInput, { target: { value: 'Some content' } })
+      await vi.runAllTimersAsync()
+
+      expect(mockNotesUpdate).not.toHaveBeenCalled()
+    })
+
+    it('autosaves and calls onRefresh immediately when color changes on an existing note', async () => {
+      const note = createMockNote()
+      const onRefresh = vi.fn()
+      renderNoteModal({ ...defaultProps, onRefresh, note })
+
+      fireEvent.click(screen.getByTitle('Coral'))
+      await vi.runAllTimersAsync()
+
+      expect(mockNotesUpdate).toHaveBeenCalledWith('1', expect.objectContaining({ color: '#f28b82' }))
+      expect(onRefresh).toHaveBeenCalled()
+    })
+
+    it('does not autosave color on new notes', async () => {
+      renderNoteModal(defaultProps)
+
+      fireEvent.click(screen.getByTitle('Coral'))
+      await vi.runAllTimersAsync()
+
+      expect(mockNotesUpdate).not.toHaveBeenCalled()
+    })
+
+    it('title autosave debounces rapid changes and sends only the latest value', async () => {
+      const note = createMockNote()
+      const onRefresh = vi.fn()
+      renderNoteModal({ ...defaultProps, onRefresh, note })
+
+      const titleInput = screen.getByDisplayValue('Test Note')
+      fireEvent.change(titleInput, { target: { value: 'First' } })
+      fireEvent.change(titleInput, { target: { value: 'Second' } })
+      fireEvent.change(titleInput, { target: { value: 'Final' } })
+      await vi.runAllTimersAsync()
+
+      expect(mockNotesUpdate).toHaveBeenCalledTimes(1)
+      expect(mockNotesUpdate).toHaveBeenCalledWith('1', expect.objectContaining({ title: 'Final' }))
+      expect(onRefresh).toHaveBeenCalled()
+    })
+
+    it('color change cancels a pending title debounce and the save includes both changes', async () => {
+      const note = createMockNote()
+      const onRefresh = vi.fn()
+      renderNoteModal({ ...defaultProps, onRefresh, note })
+
+      // Start a title debounce
+      const titleInput = screen.getByDisplayValue('Test Note')
+      fireEvent.change(titleInput, { target: { value: 'Updated Title' } })
+
+      // Immediately click a color — should cancel the title debounce and save both
+      fireEvent.click(screen.getByTitle('Coral'))
+      await vi.runAllTimersAsync()
+
+      // The color save should have included the updated title
+      expect(mockNotesUpdate).toHaveBeenCalledWith('1', expect.objectContaining({
+        title: 'Updated Title',
+        color: '#f28b82',
+      }))
+      expect(onRefresh).toHaveBeenCalled()
     })
   })
 

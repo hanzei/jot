@@ -15,24 +15,32 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/hanzei/jot/server/internal/auth"
+	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/hanzei/jot/server/internal/models"
+	"github.com/hanzei/jot/server/internal/sse"
 	"golang.org/x/image/draw"
 	_ "golang.org/x/image/webp"
 )
 
 type AuthHandler struct {
 	userStore           *models.UserStore
+	noteStore           *models.NoteStore
 	sessionService      *auth.SessionService
 	userSettingsStore   *models.UserSettingsStore
+	hub                 *sse.Hub
 	registrationEnabled bool
+	passwordMinLength   int
 }
 
-func NewAuthHandler(userStore *models.UserStore, sessionService *auth.SessionService, userSettingsStore *models.UserSettingsStore, registrationEnabled bool) *AuthHandler {
+func NewAuthHandler(userStore *models.UserStore, noteStore *models.NoteStore, sessionService *auth.SessionService, userSettingsStore *models.UserSettingsStore, hub *sse.Hub, registrationEnabled bool, passwordMinLength int) *AuthHandler {
 	return &AuthHandler{
 		userStore:           userStore,
+		noteStore:           noteStore,
 		sessionService:      sessionService,
 		userSettingsStore:   userSettingsStore,
+		hub:                 hub,
 		registrationEnabled: registrationEnabled,
+		passwordMinLength:   passwordMinLength,
 	}
 }
 
@@ -78,7 +86,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) (int, any
 		return http.StatusBadRequest, nil, err
 	}
 
-	if err := validatePassword(req.Password); err != nil {
+	if err := validatePassword(req.Password, h.passwordMinLength); err != nil {
 		return http.StatusBadRequest, nil, err
 	}
 
@@ -87,17 +95,17 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) (int, any
 		if errors.Is(err, models.ErrUsernameTaken) {
 			return http.StatusConflict, nil, models.ErrUsernameTaken
 		}
-		return http.StatusInternalServerError, nil, err
+		return http.StatusInternalServerError, nil, fmt.Errorf("create user: %w", err)
 	}
 
 	settings, err := h.userSettingsStore.GetOrCreate(r.Context(), user.ID)
 	if err != nil {
-		return http.StatusInternalServerError, nil, err
+		return http.StatusInternalServerError, nil, fmt.Errorf("get or create user settings: %w", err)
 	}
 
 	err = h.sessionService.CreateSession(w, r, user.ID)
 	if err != nil {
-		return http.StatusInternalServerError, nil, err
+		return http.StatusInternalServerError, nil, fmt.Errorf("create session: %w", err)
 	}
 
 	response := AuthResponse{
@@ -141,12 +149,12 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) (int, any, e
 
 	settings, err := h.userSettingsStore.GetOrCreate(r.Context(), user.ID)
 	if err != nil {
-		return http.StatusInternalServerError, nil, err
+		return http.StatusInternalServerError, nil, fmt.Errorf("get or create user settings: %w", err)
 	}
 
 	err = h.sessionService.CreateSession(w, r, user.ID)
 	if err != nil {
-		return http.StatusInternalServerError, nil, err
+		return http.StatusInternalServerError, nil, fmt.Errorf("create session: %w", err)
 	}
 
 	response := AuthResponse{
@@ -167,7 +175,7 @@ func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) (int, any, e
 //	@Router		/logout [post]
 func (h *AuthHandler) Logout(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	if err := h.sessionService.DeleteSession(w, r); err != nil {
-		return http.StatusInternalServerError, nil, err
+		return http.StatusInternalServerError, nil, fmt.Errorf("delete session: %w", err)
 	}
 
 	return http.StatusNoContent, nil, nil
@@ -246,7 +254,7 @@ func (h *AuthHandler) applySettingsUpdate(ctx context.Context, userID string, cu
 	}
 	updated, err := h.userSettingsStore.Update(ctx, userID, lang, th, ns)
 	if err != nil {
-		return nil, http.StatusInternalServerError, err
+		return nil, http.StatusInternalServerError, fmt.Errorf("update user settings: %w", err)
 	}
 	return updated, 0, nil
 }
@@ -296,7 +304,7 @@ func (h *AuthHandler) UpdateUser(w http.ResponseWriter, r *http.Request) (int, a
 	// Validate settings before committing any changes so we fail atomically.
 	settings, err := h.userSettingsStore.GetOrCreate(r.Context(), currentUser.ID)
 	if err != nil {
-		return http.StatusInternalServerError, nil, err
+		return http.StatusInternalServerError, nil, fmt.Errorf("get or create user settings: %w", err)
 	}
 	if _, _, _, _, validateErr := validateSettingsFields(settings, req.Language, req.Theme, req.NoteSort); validateErr != nil {
 		return http.StatusBadRequest, nil, validateErr
@@ -307,7 +315,7 @@ func (h *AuthHandler) UpdateUser(w http.ResponseWriter, r *http.Request) (int, a
 		if errors.Is(err, models.ErrUsernameTaken) {
 			return http.StatusConflict, nil, models.ErrUsernameTaken
 		}
-		return http.StatusInternalServerError, nil, err
+		return http.StatusInternalServerError, nil, fmt.Errorf("update user profile: %w", err)
 	}
 
 	settings, status, settingsErr := h.applySettingsUpdate(r.Context(), currentUser.ID, settings, req.Language, req.Theme, req.NoteSort)
@@ -353,14 +361,14 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) (in
 		return http.StatusBadRequest, nil, errors.New("current_password and new_password are required")
 	}
 
-	if err := validatePassword(req.NewPassword); err != nil {
+	if err := validatePassword(req.NewPassword, h.passwordMinLength); err != nil {
 		return http.StatusBadRequest, nil, err
 	}
 
 	// Verify current password
 	user, err := h.userStore.GetByID(r.Context(), currentUser.ID)
 	if err != nil {
-		return http.StatusInternalServerError, nil, err
+		return http.StatusInternalServerError, nil, fmt.Errorf("get user: %w", err)
 	}
 
 	if !user.CheckPassword(req.CurrentPassword) {
@@ -368,18 +376,18 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) (in
 	}
 
 	if err := h.userStore.UpdatePassword(r.Context(), currentUser.ID, req.NewPassword); err != nil {
-		return http.StatusInternalServerError, nil, err
+		return http.StatusInternalServerError, nil, fmt.Errorf("update password: %w", err)
 	}
 
 	// Invalidate all existing sessions so that stolen/compromised tokens
 	// cannot be reused after a password change.
 	if err := h.sessionService.InvalidateUserSessions(r.Context(), currentUser.ID); err != nil {
-		return http.StatusInternalServerError, nil, err
+		return http.StatusInternalServerError, nil, fmt.Errorf("invalidate user sessions: %w", err)
 	}
 
 	// Issue a fresh session for the current request so the user stays logged in.
 	if err := h.sessionService.CreateSession(w, r, currentUser.ID); err != nil {
-		return http.StatusInternalServerError, nil, err
+		return http.StatusInternalServerError, nil, fmt.Errorf("create session: %w", err)
 	}
 
 	return http.StatusNoContent, nil, nil
@@ -403,7 +411,7 @@ func (h *AuthHandler) Me(w http.ResponseWriter, r *http.Request) (int, any, erro
 
 	settings, err := h.userSettingsStore.GetOrCreate(r.Context(), user.ID)
 	if err != nil {
-		return http.StatusInternalServerError, nil, err
+		return http.StatusInternalServerError, nil, fmt.Errorf("get or create user settings: %w", err)
 	}
 
 	response := AuthResponse{
@@ -573,6 +581,8 @@ func (h *AuthHandler) UploadProfileIcon(w http.ResponseWriter, r *http.Request) 
 		return http.StatusInternalServerError, nil, fmt.Errorf("fetch user by id: %w", err)
 	}
 
+	h.publishProfileIconEvent(r.Context(), user)
+
 	return http.StatusOK, user, nil
 }
 
@@ -595,7 +605,38 @@ func (h *AuthHandler) DeleteProfileIcon(w http.ResponseWriter, r *http.Request) 
 		return http.StatusInternalServerError, nil, fmt.Errorf("delete profile icon for user %s: %w", currentUser.ID, err)
 	}
 
+	user, err := h.userStore.GetByID(r.Context(), currentUser.ID)
+	if err != nil {
+		// The deletion already succeeded; log the re-fetch failure but don't
+		// report it as an error to the caller.
+		logutil.FromContext(r.Context()).WithError(err).WithField("user_id", currentUser.ID).
+			Error("failed to re-fetch user after profile icon deletion; skipping SSE publish")
+	} else {
+		h.publishProfileIconEvent(r.Context(), user)
+	}
+
 	return http.StatusNoContent, nil, nil
+}
+
+// publishProfileIconEvent notifies all collaborators of userID that their
+// profile icon has changed. Errors are logged but never fail the HTTP request.
+func (h *AuthHandler) publishProfileIconEvent(ctx context.Context, user *models.User) {
+	if h.hub == nil || h.noteStore == nil {
+		return
+	}
+	collaboratorIDs, err := h.noteStore.GetCollaboratorIDs(ctx, user.ID)
+	if err != nil {
+		logutil.FromContext(ctx).WithError(err).WithField("user_id", user.ID).Error("failed to get collaborator IDs for profile icon SSE publish")
+		return
+	}
+	if len(collaboratorIDs) == 0 {
+		return
+	}
+	h.hub.Publish(ctx, collaboratorIDs, sse.Event{
+		Type:         sse.EventProfileIconUpdated,
+		SourceUserID: user.ID,
+		Data:         sse.ProfileIconEventData{User: user},
+	})
 }
 
 // GetUserProfileIcon godoc

@@ -143,7 +143,7 @@ function NavigationWrapper() {
     return promptPromise;
   }, [t]);
 
-  const ensureDeepLinkServerContext = React.useCallback(async (serverOrigin: string): Promise<boolean> => {
+  const ensureDeepLinkServerContext = React.useCallback(async (serverOrigin: string): Promise<'ready' | 'switched' | false> => {
     const knownServers = await listServers();
     let targetServerId = knownServers.find((entry) => entry.serverUrl === serverOrigin)?.serverId ?? null;
 
@@ -165,7 +165,7 @@ function NavigationWrapper() {
     }
 
     if (getActiveServerId() === targetServerId && !isServerSwitchInProgress()) {
-      return true;
+      return 'ready';
     }
     if (isServerSwitchInProgress() && getActiveServerId() !== targetServerId) {
       return false;
@@ -177,7 +177,12 @@ function NavigationWrapper() {
       return false;
     }
     await revalidateSession();
-    return true;
+    // Always stash after a switch: the server change causes SQLiteProvider to
+    // remount with a new key, which remounts NavigationContainer and resets
+    // isNavReady. The pending URL effect replays the link once the new
+    // container is ready (and after login if the session on the new server
+    // is not valid).
+    return 'switched';
   }, [promptToAddUnknownDeepLinkServer, revalidateSession, t]);
 
   const evaluateIncomingDeepLink = React.useCallback(async (
@@ -209,10 +214,22 @@ function NavigationWrapper() {
     }
 
     if (serverOrigin) {
-      const switched = await ensureDeepLinkServerContext(serverOrigin);
-      if (!switched) {
+      const serverCtxResult = await ensureDeepLinkServerContext(serverOrigin);
+      if (!serverCtxResult) {
         return 'ignore';
       }
+      if (serverCtxResult === 'switched') {
+        // A server switch was performed. The switch triggers a SQLiteProvider
+        // remount which remounts NavigationContainer, invalidating the current
+        // listener. Stash the URL so the pending-URL effect replays it once
+        // the new container is ready (and after login if needed).
+        if (allowStash && isProtectedDeepLinkPath(path)) {
+          pendingDeepLinkUrlRef.current = url;
+          return 'stash';
+        }
+        return 'ignore';
+      }
+      // 'ready': already on the correct server, fall through to normal auth check
     }
 
     if (allowStash && !isAuthenticated && isProtectedDeepLinkPath(path)) {

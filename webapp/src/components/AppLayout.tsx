@@ -1,4 +1,5 @@
 import { type ReactNode, useEffect, useState } from 'react';
+import { useTranslation } from 'react-i18next';
 import NavigationHeader from '@/components/NavigationHeader';
 import KeyboardShortcutsDialog from '@/components/KeyboardShortcutsDialog';
 import Sidebar, { type SidebarTab } from '@/components/Sidebar';
@@ -32,6 +33,7 @@ const AppLayout = ({
   searchBar,
   children,
 }: AppLayoutProps) => {
+  const { t } = useTranslation();
   const { collapsed, toggle: toggleSidebar, collapse: collapseSidebar } = useSidebarCollapsed();
   const [isKeyboardShortcutsOpen, setIsKeyboardShortcutsOpen] = useState(false);
 
@@ -64,6 +66,12 @@ const AppLayout = ({
 
   return (
     <div className="h-dvh bg-gray-50 dark:bg-slate-900 flex flex-col">
+      <a
+        href="#main-content"
+        className="sr-only focus:not-sr-only focus:absolute focus:z-50 focus:top-2 focus:left-2 focus:px-4 focus:py-2 focus:rounded focus:bg-white focus:text-blue-700 focus:font-medium focus:shadow-md focus:outline-none focus:ring-2 focus:ring-blue-500"
+      >
+        {t('nav.skipToMainContent')}
+      </a>
       <NavigationHeader
         title={title}
         onLogout={onLogout}
@@ -72,6 +80,7 @@ const AppLayout = ({
         adminLinkActive={adminLinkActive}
         settingsLinkActive={settingsLinkActive}
         onToggleSidebar={toggleSidebar}
+        onOpenKeyboardShortcuts={() => setIsKeyboardShortcutsOpen(true)}
       >
         {searchBar}
       </NavigationHeader>
@@ -86,7 +95,7 @@ const AppLayout = ({
           {sidebarChildren}
         </Sidebar>
 
-        <main className="flex-1 overflow-y-auto">
+        <main id="main-content" tabIndex={-1} className="flex-1 overflow-y-auto focus:outline-none">
           {children}
         </main>
       </div>

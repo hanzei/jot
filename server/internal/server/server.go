@@ -21,10 +21,16 @@ import (
 	"github.com/hanzei/jot/server/internal/config"
 	"github.com/hanzei/jot/server/internal/database"
 	"github.com/hanzei/jot/server/internal/handlers"
+	"github.com/hanzei/jot/server/internal/logutil"
+	"github.com/hanzei/jot/server/internal/mcphandler"
 	"github.com/hanzei/jot/server/internal/models"
 	"github.com/hanzei/jot/server/internal/sse"
+	"github.com/prometheus/client_golang/prometheus/promhttp"
 	"github.com/sirupsen/logrus"
 	httpSwagger "github.com/swaggo/http-swagger/v2"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 func buildInfo() aboutResponse {
@@ -42,6 +48,7 @@ type Server struct {
 	router          chi.Router
 	db              *database.DB
 	httpServer      *http.Server
+	metricsServer   *http.Server
 	staticRoot      *os.Root
 	startErr        error
 	startReady      chan struct{}
@@ -58,6 +65,9 @@ type Server struct {
 	eventsHandler   *handlers.EventsHandler
 	adminHandler    *handlers.AdminHandler
 	sessionsHandler *handlers.SessionsHandler
+	patsHandler     *handlers.PATsHandler
+	noteStore       *models.NoteStore
+	labelStore      *models.LabelStore
 }
 
 func New(cfg *config.Config) (*Server, error) {
@@ -70,25 +80,42 @@ func New(cfg *config.Config) (*Server, error) {
 		return nil, fmt.Errorf("initialize database: %w", err)
 	}
 
+	ctx, cancel := context.WithCancel(context.Background())
+
 	userStore := models.NewUserStore(db.DB)
 	noteStore := models.NewNoteStore(db.DB)
 	labelStore := models.NewLabelStore(db.DB)
 	adminStatsStore := models.NewAdminStatsStore(db.DB)
-	sessionStore := models.NewSessionStore(db.DB)
+	sessionStore, err := models.NewSessionStore(db.DB)
+	if err != nil {
+		cancel()
+		_ = db.Close()
+		return nil, fmt.Errorf("initialize session store: %w", err)
+	}
 	userSettingsStore := models.NewUserSettingsStore(db.DB)
+	patStore := models.NewPATStore(db.DB)
 
-	sessionService := auth.NewSessionService(sessionStore, userStore, cfg.CookieSecure)
+	sessionService := auth.NewSessionService(sessionStore, userStore, patStore, cfg.CookieSecure)
 
-	ctx, cancel := context.WithCancel(context.Background())
+	hub, err := sse.NewHub()
+	if err != nil {
+		cancel()
+		_ = db.Close()
+		return nil, fmt.Errorf("initialize SSE hub: %w", err)
+	}
 
-	hub := sse.NewHub()
-
-	authHandler := handlers.NewAuthHandler(userStore, sessionService, userSettingsStore, cfg.RegistrationEnabled)
-	notesHandler := handlers.NewNotesHandler(noteStore, userStore, labelStore, hub)
+	authHandler := handlers.NewAuthHandler(userStore, noteStore, sessionService, userSettingsStore, hub, cfg.RegistrationEnabled, cfg.PasswordMinLength)
+	notesHandler, err := handlers.NewNotesHandler(noteStore, userStore, labelStore, hub)
+	if err != nil {
+		cancel()
+		_ = db.Close()
+		return nil, fmt.Errorf("initialize notes handler: %w", err)
+	}
 	labelsHandler := handlers.NewLabelsHandler(noteStore, labelStore, hub)
 	eventsHandler := handlers.NewEventsHandler(hub)
-	adminHandler := handlers.NewAdminHandler(userStore, noteStore, adminStatsStore, cfg.DBPath)
+	adminHandler := handlers.NewAdminHandler(userStore, noteStore, adminStatsStore, userSettingsStore, cfg.DBPath, cfg.PasswordMinLength)
 	sessionsHandler := handlers.NewSessionsHandler(sessionStore)
+	patsHandler := handlers.NewPATsHandler(patStore)
 
 	s := &Server{
 		cfg:             cfg,
@@ -104,6 +131,9 @@ func New(cfg *config.Config) (*Server, error) {
 		eventsHandler:   eventsHandler,
 		adminHandler:    adminHandler,
 		sessionsHandler: sessionsHandler,
+		patsHandler:     patsHandler,
+		noteStore:       noteStore,
+		labelStore:      labelStore,
 	}
 
 	startPeriodicTask(&s.bgWg, ctx, time.Hour, false, func() error {
@@ -122,23 +152,37 @@ func New(cfg *config.Config) (*Server, error) {
 }
 
 func (s *Server) setupRoutes() error {
-	s.router.Use(logrusRequestLogger)
+	s.router.Use(middleware.RequestID)
+	s.router.Use(otelhttp.NewMiddleware(""))
+	// otelhttp sets the span name before chi populates RoutePattern, so a
+	// second middleware renames the span after routing is complete.
+	s.router.Use(chiRouteSpanNamer)
+	s.router.Use(requestLoggerMiddleware)
 	s.router.Use(middleware.Recoverer)
-	s.router.Use(cors.Handler(cors.Options{
-		AllowedOrigins:   []string{s.cfg.CORSAllowedOrigin},
+	s.router.Use(securityHeaders(s.cfg.CookieSecure))
+
+	corsOpts := cors.Options{
 		AllowedMethods:   []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodOptions},
-		AllowedHeaders:   []string{"Accept", "Content-Type"},
+		AllowedHeaders:   []string{"Accept", "Content-Type", "Authorization"},
 		ExposedHeaders:   []string{"Link"},
 		AllowCredentials: true,
 		MaxAge:           300,
-	}))
+	}
+	if s.cfg.CORSAllowedOrigin != "" {
+		corsOpts.AllowedOrigins = []string{s.cfg.CORSAllowedOrigin}
+	} else {
+		corsOpts.AllowOriginFunc = func(_ *http.Request, _ string) bool { return false }
+	}
+	s.router.Use(cors.Handler(corsOpts))
 
-	s.router.Get("/livez", s.handleLive)
+	s.router.Get("/livez", s.wrapHandler(s.handleLive))
 	s.router.Get("/readyz", s.handleReady)
 
 	cop := http.NewCrossOriginProtection()
-	if err := cop.AddTrustedOrigin(s.cfg.CORSAllowedOrigin); err != nil {
-		return fmt.Errorf("add trusted origin %q: %w", s.cfg.CORSAllowedOrigin, err)
+	if s.cfg.CORSAllowedOrigin != "" {
+		if err := cop.AddTrustedOrigin(s.cfg.CORSAllowedOrigin); err != nil {
+			return fmt.Errorf("add trusted origin %q: %w", s.cfg.CORSAllowedOrigin, err)
+		}
 	}
 	s.router.Route("/api/v1", func(r chi.Router) {
 		r.Use(cop.Handler)
@@ -180,13 +224,21 @@ func (s *Server) setupRoutes() error {
 			r.Delete("/notes/{id}/labels/{label_id}", s.wrapHandler(s.labelsHandler.RemoveLabel))
 
 			r.Get("/labels", s.wrapHandler(s.labelsHandler.GetLabels))
+			r.Get("/labels/counts", s.wrapHandler(s.labelsHandler.GetLabelCounts))
+			r.Post("/labels", s.wrapHandler(s.labelsHandler.CreateLabel))
 			r.Patch("/labels/{id}", s.wrapHandler(s.labelsHandler.RenameLabel))
 			r.Delete("/labels/{id}", s.wrapHandler(s.labelsHandler.DeleteLabel))
 
 			r.Get("/users", s.wrapHandler(s.notesHandler.SearchUsers))
 
-			r.Get("/sessions", s.wrapHandler(s.sessionsHandler.ListSessions))
-			r.Delete("/sessions/{id}", s.wrapHandler(s.sessionsHandler.RevokeSession))
+			r.With(auth.SessionRequired).Get("/sessions", s.wrapHandler(s.sessionsHandler.ListSessions))
+			r.With(auth.SessionRequired).Delete("/sessions/{id}", s.wrapHandler(s.sessionsHandler.RevokeSession))
+
+			r.With(auth.SessionRequired).Get("/pats", s.wrapHandler(s.patsHandler.ListPATs))
+			r.With(auth.SessionRequired).Post("/pats", s.wrapHandler(s.patsHandler.CreatePAT))
+			r.With(auth.SessionRequired).Delete("/pats/{id}", s.wrapHandler(s.patsHandler.RevokePAT))
+
+			r.Handle("/mcp", mcphandler.New(s.noteStore, s.labelStore).NewStreamableHTTPHandler())
 		})
 
 		r.Group(func(r chi.Router) {
@@ -257,21 +309,21 @@ func FileServer(r chi.Router, path string, root *os.Root) {
 				http.NotFound(w, req)
 				return
 			}
-			defer func() {
+			defer func(ctx context.Context) {
 				if err := indexFile.Close(); err != nil {
-					logrus.WithError(err).Error("Failed to close index file")
+					logutil.FromContext(ctx).WithError(err).Error("Failed to close index file")
 				}
-			}()
+			}(req.Context())
 
 			w.Header().Set("Content-Type", "text/html")
 			http.ServeContent(w, req, "index.html", time.Time{}, indexFile)
 			return
 		}
-		defer func() {
+		defer func(ctx context.Context) {
 			if err := file.Close(); err != nil {
-				logrus.WithError(err).Error("Failed to close file")
+				logutil.FromContext(ctx).WithError(err).Error("Failed to close file")
 			}
-		}()
+		}(req.Context())
 
 		// File exists, serve it via the traversal-safe FS
 		fs := http.StripPrefix(pathPrefix, fileServer)
@@ -283,11 +335,14 @@ func (s *Server) wrapHandler(handler func(w http.ResponseWriter, r *http.Request
 	return func(w http.ResponseWriter, r *http.Request) {
 		statusCode, body, err := handler(w, r)
 		if err != nil {
-			entry := logrus.WithError(err).WithField("status_code", statusCode).WithField("method", r.Method).WithField("path", r.URL.Path)
+			log := logutil.FromContext(r.Context()).WithError(err).WithField("status_code", statusCode)
 			if statusCode >= 500 {
-				entry.Error("HTTP handler error")
+				log.Error("HTTP handler error")
+				span := trace.SpanFromContext(r.Context())
+				span.RecordError(err)
+				span.SetStatus(codes.Error, err.Error())
 			} else {
-				entry.Warn("HTTP handler error")
+				log.Warn("HTTP handler error")
 			}
 			msg := err.Error()
 			if statusCode >= 500 {
@@ -300,7 +355,7 @@ func (s *Server) wrapHandler(handler func(w http.ResponseWriter, r *http.Request
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(statusCode)
 			if err := json.NewEncoder(w).Encode(body); err != nil {
-				logrus.WithError(err).WithField("method", r.Method).WithField("path", r.URL.Path).Error("failed to encode response body")
+				logutil.FromContext(r.Context()).WithError(err).Error("failed to encode response body")
 			}
 		} else if statusCode > 0 {
 			w.WriteHeader(statusCode)
@@ -309,11 +364,8 @@ func (s *Server) wrapHandler(handler func(w http.ResponseWriter, r *http.Request
 }
 
 // handleLive serves the liveness probe response.
-func (s *Server) handleLive(w http.ResponseWriter, _ *http.Request) {
-	w.WriteHeader(http.StatusOK)
-	if _, err := w.Write([]byte("OK")); err != nil {
-		logrus.WithError(err).Error("failed to write health check response")
-	}
+func (s *Server) handleLive(_ http.ResponseWriter, _ *http.Request) (int, any, error) {
+	return http.StatusOK, nil, nil
 }
 
 // handleReady serves the readiness probe response.
@@ -327,14 +379,14 @@ func (s *Server) handleReady(w http.ResponseWriter, r *http.Request) {
 	defer cancel()
 
 	if err := s.db.PingContext(ctx); err != nil {
-		logrus.WithError(err).Warn("Readiness check failed")
+		logutil.FromContext(r.Context()).WithError(err).Warn("Readiness check failed")
 		http.Error(w, "NOT READY", http.StatusServiceUnavailable)
 		return
 	}
 
 	w.WriteHeader(http.StatusOK)
 	if _, err := w.Write([]byte("OK")); err != nil {
-		logrus.WithError(err).Error("Failed to write readiness response")
+		logutil.FromContext(r.Context()).WithError(err).Error("Failed to write readiness response")
 	}
 }
 
@@ -359,6 +411,7 @@ func (s *Server) handleAbout(_ http.ResponseWriter, _ *http.Request) (int, any, 
 
 type configResponse struct {
 	RegistrationEnabled bool `json:"registration_enabled"`
+	PasswordMinLength   int  `json:"password_min_length"`
 }
 
 // handleConfig godoc
@@ -371,6 +424,7 @@ type configResponse struct {
 func (s *Server) handleConfig(_ http.ResponseWriter, _ *http.Request) (int, any, error) {
 	return http.StatusOK, configResponse{
 		RegistrationEnabled: s.cfg.RegistrationEnabled,
+		PasswordMinLength:   s.cfg.PasswordMinLength,
 	}, nil
 }
 
@@ -382,25 +436,109 @@ func (s *Server) GetDB() *database.DB {
 	return s.db
 }
 
-func logrusRequestLogger(next http.Handler) http.Handler {
+func securityHeaders(cookieSecure bool) func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			h := w.Header()
+			h.Set("X-Content-Type-Options", "nosniff")
+			h.Set("X-Frame-Options", "DENY")
+			h.Set("Referrer-Policy", "strict-origin-when-cross-origin")
+			h.Set("Permissions-Policy", "camera=(), microphone=(), geolocation=()")
+			h.Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; frame-ancestors 'none'")
+			if cookieSecure {
+				h.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+			}
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+
+// chiRouteSpanNamer renames the active OTel span to "METHOD /route/{pattern}"
+// after chi has matched the route. It must be registered after otelhttp so the
+// span already exists, and it runs the next handler first so chi has populated
+// RouteContext before the rename happens.
+func chiRouteSpanNamer(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		next.ServeHTTP(w, r)
+		if rctx := chi.RouteContext(r.Context()); rctx != nil && rctx.RoutePattern() != "" {
+			trace.SpanFromContext(r.Context()).SetName(r.Method + " " + rctx.RoutePattern())
+		}
+	})
+}
+
+func requestLoggerMiddleware(next http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		start := time.Now()
 		ww := middleware.NewWrapResponseWriter(w, r.ProtoMajor)
-		next.ServeHTTP(ww, r)
-		logrus.WithFields(logrus.Fields{
+
+		entry := logrus.WithFields(logrus.Fields{
+			"request_id": middleware.GetReqID(r.Context()),
+			"method":     r.Method,
+			"path":       r.URL.Path,
+		})
+		if sc := trace.SpanFromContext(r.Context()).SpanContext(); sc.IsValid() {
+			entry = entry.WithFields(logrus.Fields{
+				"trace_id": sc.TraceID().String(),
+				"span_id":  sc.SpanID().String(),
+			})
+		}
+		rl := logutil.NewRequestLogger(entry)
+		next.ServeHTTP(ww, r.WithContext(logutil.NewContext(r.Context(), rl)))
+
+		// After next returns, rl may have been enriched by AuthMiddleware with user_id.
+		rl.WithFields(logrus.Fields{
 			"status":   ww.Status(),
 			"duration": time.Since(start).String(),
-			"method":   r.Method,
-			"path":     r.URL.Path,
-			"remote":   r.RemoteAddr,
 		}).Info("request completed")
 	})
 }
 
 func (s *Server) Start(addr string) error {
+	if s.cfg.MetricsEnabled {
+		// Start the metrics server on its own port before the main server so it
+		// is ready by the time we signal readiness. A failure here is fatal — if
+		// the operator enabled metrics the port must be reachable.
+		metricsAddr := fmt.Sprintf("%s:%d", s.cfg.MetricsHost, s.cfg.MetricsPort)
+		metricsListener, err := (&net.ListenConfig{}).Listen(s.ctx, "tcp", metricsAddr)
+		if err != nil {
+			startErr := fmt.Errorf("listen on metrics port: %w", err)
+			s.setStartResult(startErr)
+			return startErr
+		}
+		mux := http.NewServeMux()
+		mux.Handle("GET /metrics", promhttp.Handler())
+		metricsServer := &http.Server{
+			Handler:      mux,
+			ReadTimeout:  10 * time.Second,
+			WriteTimeout: 10 * time.Second,
+			IdleTimeout:  30 * time.Second,
+		}
+		s.serverMu.Lock()
+		s.metricsServer = metricsServer
+		s.serverMu.Unlock()
+		s.bgWg.Add(1)
+		go func() {
+			defer s.bgWg.Done()
+			if err := metricsServer.Serve(metricsListener); err != nil && !errors.Is(err, http.ErrServerClosed) {
+				logrus.WithError(err).Error("metrics server stopped unexpectedly")
+			}
+		}()
+		logrus.Infof("Metrics server listening on %s", metricsAddr)
+	}
+
 	listener, err := (&net.ListenConfig{}).Listen(s.ctx, "tcp", addr)
 	if err != nil {
 		startErr := fmt.Errorf("listen: %w", err)
+		// Tear down the metrics server if it started successfully above.
+		s.serverMu.RLock()
+		metricsServer := s.metricsServer
+		s.serverMu.RUnlock()
+		if metricsServer != nil {
+			shutdownCtx, shutdownCancel := context.WithTimeout(context.Background(), 5*time.Second)
+			defer shutdownCancel()
+			_ = metricsServer.Shutdown(shutdownCtx)
+			s.bgWg.Wait()
+		}
 		s.setStartResult(startErr)
 		return startErr
 	}
@@ -447,6 +585,15 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		s.httpServer = nil
 	}
 	s.serverMu.Unlock()
+
+	s.serverMu.RLock()
+	metricsServer := s.metricsServer
+	s.serverMu.RUnlock()
+	if metricsServer != nil {
+		if err := metricsServer.Shutdown(ctx); err != nil {
+			logrus.WithError(err).Warn("metrics server shutdown error")
+		}
+	}
 
 	s.cancel()
 	s.bgWg.Wait()

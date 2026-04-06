@@ -104,9 +104,8 @@ describe('useSSE', () => {
     act(() => {
       capturedCallback?.({
         type: 'note_created',
-        note_id: 'new-note',
-        note: null,
         source_user_id: 'other-user',
+        data: { note_id: 'new-note', note: null },
       });
     });
 
@@ -123,9 +122,8 @@ describe('useSSE', () => {
     act(() => {
       capturedCallback?.({
         type: 'note_updated',
-        note_id: 'note-123',
-        note: null,
         source_user_id: 'other-user',
+        data: { note_id: 'note-123', note: null },
       });
     });
 
@@ -144,9 +142,8 @@ describe('useSSE', () => {
     act(() => {
       capturedCallback?.({
         type: 'note_deleted',
-        note_id: 'note-123',
-        note: null,
         source_user_id: 'other-user',
+        data: { note_id: 'note-123', note: null },
       });
     });
 
@@ -154,7 +151,7 @@ describe('useSSE', () => {
     expect(removeSpy).toHaveBeenCalledWith({ queryKey: noteQueryKey('note-123') });
   });
 
-  it('skips events from the current user', () => {
+  it('invalidates queries for same-user events to support cross-device sync', () => {
     const { queryClient, Wrapper } = createWrapper();
     const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
 
@@ -165,17 +162,35 @@ describe('useSSE', () => {
 
     act(() => {
       capturedCallback?.({
-        type: 'note_created',
-        note_id: 'new-note',
-        note: null,
-        source_user_id: 'current-user', // Same as mock user
+        type: 'note_updated',
+        source_user_id: 'current-user', // Same user, different device
+        data: { note_id: 'note-123', note: null },
       });
     });
 
-    expect(invalidateSpy).not.toHaveBeenCalled();
+    // Queries must be invalidated so another device of the same user sees the change
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: notesQueryScopeKey() });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: noteQueryKey('note-123') });
   });
 
-  it('calls notification callback on note_updated from other user', () => {
+  it('does not call notification callback for same-user events', () => {
+    const { Wrapper } = createWrapper();
+    const onNotify = jest.fn();
+
+    renderHook(() => useSSE(onNotify), { wrapper: Wrapper });
+
+    act(() => {
+      capturedCallback?.({
+        type: 'note_updated',
+        source_user_id: 'current-user', // Same user — should not show "updated by another user" toast
+        data: { note_id: 'note-123', note: null },
+      });
+    });
+
+    expect(onNotify).not.toHaveBeenCalled();
+  });
+
+  it('calls notification callback on note_updated from another user', () => {
     const { Wrapper } = createWrapper();
     const onNotify = jest.fn();
 
@@ -183,9 +198,8 @@ describe('useSSE', () => {
 
     const event: SSEEvent = {
       type: 'note_updated',
-      note_id: 'note-123',
-      note: null,
       source_user_id: 'other-user',
+      data: { note_id: 'note-123', note: null },
     };
 
     act(() => {
@@ -205,10 +219,9 @@ describe('useSSE', () => {
     act(() => {
       capturedCallback?.({
         type: 'note_shared',
-        note_id: 'note-123',
-        note: null,
         source_user_id: 'other-user',
         target_user_id: 'current-user',
+        data: { note_id: 'note-123', note: null },
       });
     });
 
@@ -219,10 +232,9 @@ describe('useSSE', () => {
     act(() => {
       capturedCallback?.({
         type: 'note_unshared',
-        note_id: 'note-123',
-        note: null,
         source_user_id: 'other-user',
         target_user_id: 'current-user',
+        data: { note_id: 'note-123', note: null },
       });
     });
 

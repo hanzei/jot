@@ -1,12 +1,7 @@
-version: '3.8'
-
 services:
   jot:
     image: hanzei/jot:latest
     container_name: jot
-    environment:
-      - DB_PATH=/data/jot.db
-      - STATIC_DIR=/app/webapp/build
     volumes:
       - ./data:/data
     ports:
@@ -17,7 +12,3 @@ services:
       interval: 30s
       timeout: 10s
       retries: 3
-
-volumes:
-  data:
-    driver: local

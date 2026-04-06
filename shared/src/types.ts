@@ -1,5 +1,6 @@
 export interface ServerConfig {
   registration_enabled: boolean;
+  password_min_length: number;
 }
 
 export interface AboutInfo {
@@ -9,12 +10,14 @@ export interface AboutInfo {
   go_version?: string;
 }
 
+export type UserRole = 'user' | 'admin';
+
 export interface User {
   id: string;
   username: string;
   first_name: string;
   last_name: string;
-  role: string;
+  role: UserRole;
   has_profile_icon: boolean;
   created_at: string;
   updated_at: string;
@@ -117,7 +120,7 @@ export interface CreateNoteRequest {
   content: string;
   note_type: NoteType;
   color?: string;
-  items?: { text: string; position: number; completed?: boolean; indent_level?: number; assigned_to?: string }[];
+  items?: { text: string; position: number; completed?: boolean; indent_level?: number }[];
   labels?: string[];
 }
 
@@ -134,7 +137,7 @@ export interface UpdateNoteRequest {
 export interface CreateUserRequest {
   username: string;
   password: string;
-  role: string;
+  role: UserRole;
 }
 
 export interface UserListResponse {
@@ -200,11 +203,6 @@ export interface ShareNoteRequest {
   user_id: string;
 }
 
-export interface ShareNoteResponse {
-  success: boolean;
-  message: string;
-}
-
 export interface ImportResponse {
   imported: number;
   skipped: number;
@@ -216,7 +214,7 @@ export interface EmptyTrashResponse {
 }
 
 export interface UpdateUserRoleRequest {
-  role: string;
+  role: UserRole;
 }
 
 export interface ActiveSession {
@@ -228,17 +226,42 @@ export interface ActiveSession {
   expires_at: string;
 }
 
-export type SSEEventType =
-  | 'note_created'
-  | 'note_updated'
-  | 'note_deleted'
-  | 'note_shared'
-  | 'note_unshared';
-
-export interface SSEEvent {
-  type: SSEEventType;
-  note_id: string;
-  note: Note | null;
+export interface NoteSSEEvent {
+  type: 'note_created' | 'note_updated' | 'note_deleted' | 'note_shared' | 'note_unshared';
   source_user_id: string;
   target_user_id?: string;
+  data: {
+    note_id: string;
+    note: Note | null;
+  };
 }
+
+export interface LabelsChangedSSEEvent {
+  type: 'labels_changed';
+  source_user_id: string;
+  data: {
+    label: Label;
+  };
+}
+
+export interface PersonalAccessToken {
+  id: string;
+  name: string;
+  created_at: string;
+  /** Only present in the create response; never returned by list. */
+  token?: string;
+}
+
+export interface CreatePATRequest {
+  name: string;
+}
+
+export interface ProfileIconSSEEvent {
+  type: 'profile_icon_updated';
+  source_user_id: string;
+  data: {
+    user: User;
+  };
+}
+
+export type SSEEvent = NoteSSEEvent | LabelsChangedSSEEvent | ProfileIconSSEEvent;

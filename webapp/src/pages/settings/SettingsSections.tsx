@@ -1,10 +1,13 @@
 import type { ChangeEvent, FormEvent, ReactNode, RefObject } from 'react';
+import { useState } from 'react';
 import { ArrowUpTrayIcon } from '@heroicons/react/24/outline';
 import type { TFunction } from 'i18next';
 import LetterAvatar from '@/components/LetterAvatar';
+import ConfirmDialog from '@/components/ConfirmDialog';
 import { SUPPORTED_LANGUAGES, type LanguagePreference } from '@/utils/language';
 import type { ThemePreference } from '@/utils/theme';
-import type { ActiveSession, User } from '@jot/shared';
+import { VALIDATION } from '@jot/shared';
+import type { ActiveSession, PersonalAccessToken, User } from '@jot/shared';
 
 const CARD_CLASSES = 'bg-white dark:bg-slate-800 shadow rounded-lg p-6 border border-gray-200 dark:border-slate-700';
 const SECTION_TITLE_CLASSES = 'text-lg font-medium text-gray-900 dark:text-white mb-4';
@@ -23,6 +26,17 @@ const SettingsSectionCard = ({ title, children }: SettingsSectionCardProps) => (
   </section>
 );
 
+interface PATsSectionProps {
+  pats: PersonalAccessToken[];
+  patsLoading: boolean;
+  patsError: string;
+  creatingPAT: boolean;
+  revokingPATIds: Set<string>;
+  onCreatePAT: (name: string) => void;
+  onRevokePAT: (id: string) => void;
+  displayMsg: (msg: string) => string;
+}
+
 interface IdentitySecurityColumnProps {
   t: Translate;
   currentUser: User | null;
@@ -30,6 +44,7 @@ interface IdentitySecurityColumnProps {
   profileIcon: ProfileIconProps;
   accountForm: AccountFormProps;
   passwordForm: PasswordFormProps;
+  patsSection: PATsSectionProps;
   displayMsg: (msg: string) => string;
 }
 
@@ -64,6 +79,7 @@ interface PasswordFormProps {
   onConfirmPasswordChange: (value: string) => void;
   passwordSaving: boolean;
   passwordError: string;
+  passwordMinLength: number;
   onPasswordSubmit: (e: FormEvent<HTMLFormElement>) => void;
 }
 
@@ -100,10 +116,33 @@ export const IdentitySecurityColumn = ({
     onConfirmPasswordChange,
     passwordSaving,
     passwordError,
+    passwordMinLength,
     onPasswordSubmit,
   },
+  patsSection: {
+    pats,
+    patsLoading,
+    patsError,
+    creatingPAT,
+    revokingPATIds,
+    onCreatePAT,
+    onRevokePAT,
+    displayMsg: patDisplayMsg,
+  },
   displayMsg,
-}: IdentitySecurityColumnProps) => (
+}: IdentitySecurityColumnProps) => {
+  const [newPATName, setNewPATName] = useState('');
+  const [patPendingRevoke, setPATpendingRevoke] = useState<PersonalAccessToken | null>(null);
+
+  const handleCreateSubmit = (e: FormEvent) => {
+    e.preventDefault();
+    const name = newPATName.trim();
+    if (!name || creatingPAT) return;
+    onCreatePAT(name);
+    setNewPATName('');
+  };
+
+  return (
   <div className="space-y-6">
     <SettingsSectionCard title={t('settings.profileIconSection')}>
       <div className="flex items-center space-x-4">
@@ -242,7 +281,7 @@ export const IdentitySecurityColumn = ({
             value={newPassword}
             onChange={(e) => onNewPasswordChange(e.target.value)}
             className="mt-1 block w-full border border-gray-300 dark:border-slate-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
-            placeholder={t('settings.newPasswordPlaceholder')}
+            placeholder={t('settings.newPasswordPlaceholder', { min: passwordMinLength })}
           />
         </div>
 
@@ -277,8 +316,80 @@ export const IdentitySecurityColumn = ({
         </div>
       </form>
     </SettingsSectionCard>
+
+    <SettingsSectionCard title={t('settings.patsSection')}>
+      <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
+        {t('settings.patsDescription')}
+      </p>
+      <form onSubmit={handleCreateSubmit} className="flex gap-2 mb-4">
+        <input
+          type="text"
+          value={newPATName}
+          onChange={(e) => setNewPATName(e.target.value)}
+          placeholder={t('settings.patsNamePlaceholder')}
+          maxLength={VALIDATION.PAT_NAME_MAX_LENGTH}
+          className="flex-1 min-w-0 border border-gray-300 dark:border-slate-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+        />
+        <button
+          type="submit"
+          disabled={creatingPAT || !newPATName.trim()}
+          className="flex-shrink-0 bg-blue-600 hover:bg-blue-700 disabled:bg-blue-400 dark:disabled:bg-blue-500 text-white px-4 py-2 rounded-md text-sm font-medium"
+        >
+          {creatingPAT ? t('settings.patsCreating') : t('settings.patsCreate')}
+        </button>
+      </form>
+      {patsError && (
+        <div role="alert" className="mb-3 text-red-600 dark:text-red-400 text-sm">{patDisplayMsg(patsError)}</div>
+      )}
+      {patsLoading ? (
+        <p className="text-sm text-gray-500 dark:text-gray-400">{t('settings.patsLoading')}</p>
+      ) : pats.length === 0 ? (
+        <p className="text-sm text-gray-500 dark:text-gray-400">{t('settings.patsNone')}</p>
+      ) : (
+        <ul className="space-y-3">
+          {pats.map((pat) => (
+            <li
+              key={pat.id}
+              className="flex items-center justify-between rounded-md border border-gray-200 dark:border-slate-600 px-4 py-3"
+            >
+              <div className="min-w-0">
+                <span className="text-sm font-medium text-gray-900 dark:text-white truncate block">
+                  {pat.name}
+                </span>
+                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                  {new Date(pat.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
+                </p>
+              </div>
+              <button
+                type="button"
+                onClick={() => setPATpendingRevoke(pat)}
+                disabled={revokingPATIds.has(pat.id)}
+                className="ml-4 flex-shrink-0 text-sm text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 disabled:opacity-50"
+              >
+                {revokingPATIds.has(pat.id) ? t('settings.patsRevoking') : t('settings.patsRevoke')}
+              </button>
+            </li>
+          ))}
+        </ul>
+      )}
+    </SettingsSectionCard>
+
+    <ConfirmDialog
+      open={Boolean(patPendingRevoke)}
+      title={t('settings.patsRevokeConfirmTitle')}
+      message={t('settings.patsRevokeConfirmMessage', { name: patPendingRevoke?.name ?? '' })}
+      confirmLabel={t('settings.patsRevoke')}
+      onConfirm={() => {
+        if (patPendingRevoke) {
+          onRevokePAT(patPendingRevoke.id);
+          setPATpendingRevoke(null);
+        }
+      }}
+      onCancel={() => setPATpendingRevoke(null)}
+    />
   </div>
-);
+  );
+};
 
 interface PreferencesInfoColumnProps {
   t: Translate;
@@ -286,7 +397,7 @@ interface PreferencesInfoColumnProps {
   sessionsError: string;
   activeSessions: ActiveSession[];
   revokingSessionId: string | null;
-  onRevokeSession: (sessionId: string) => void | Promise<void>;
+  onRequestRevokeSession: (session: ActiveSession) => void;
   displayMsg: (msg: string) => string;
   languagePref: LanguagePreference;
   onLanguageChange: (pref: LanguagePreference) => void;
@@ -302,7 +413,7 @@ export const PreferencesInfoColumn = ({
   sessionsError,
   activeSessions,
   revokingSessionId,
-  onRevokeSession,
+  onRequestRevokeSession,
   displayMsg,
   languagePref,
   onLanguageChange,
@@ -347,8 +458,8 @@ export const PreferencesInfoColumn = ({
               {!session.is_current && (
                 <button
                   type="button"
-                  onClick={() => onRevokeSession(session.id)}
-                  disabled={revokingSessionId === session.id}
+                  onClick={() => onRequestRevokeSession(session)}
+                  disabled={revokingSessionId !== null}
                   className="ml-4 flex-shrink-0 text-sm text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 disabled:opacity-50"
                 >
                   {revokingSessionId === session.id ? t('settings.sessionsRevoking') : t('settings.sessionsRevoke')}

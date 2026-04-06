@@ -15,13 +15,15 @@ const (
 type SessionService struct {
 	sessionStore *models.SessionStore
 	userStore    *models.UserStore
+	patStore     *models.PATStore
 	cookieSecure bool
 }
 
-func NewSessionService(sessionStore *models.SessionStore, userStore *models.UserStore, cookieSecure bool) *SessionService {
+func NewSessionService(sessionStore *models.SessionStore, userStore *models.UserStore, patStore *models.PATStore, cookieSecure bool) *SessionService {
 	return &SessionService{
 		sessionStore: sessionStore,
 		userStore:    userStore,
+		patStore:     patStore,
 		cookieSecure: cookieSecure,
 	}
 }
@@ -105,7 +107,7 @@ func (s *SessionService) setSessionCookie(w http.ResponseWriter, value string, m
 		Path:     "/",
 		HttpOnly: true,
 		Secure:   s.cookieSecure,
-		SameSite: http.SameSiteLaxMode,
+		SameSite: http.SameSiteStrictMode,
 		MaxAge:   maxAge,
 	})
 }

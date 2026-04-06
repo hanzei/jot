@@ -55,6 +55,17 @@ test.describe('Labels on Note Creation', () => {
     await expect(card.getByText('alpha')).toBeVisible();
     await expect(card.getByText('beta')).toBeVisible();
   });
+
+  test('can create a sidebar label and show count after assigning it', async ({ dashboardPage, isMobile }) => {
+    test.skip(isMobile, 'Sidebar label management is covered on desktop only.');
+    await dashboardPage.goto();
+
+    await dashboardPage.createSidebarLabel('taxonomy');
+    await dashboardPage.expectSidebarLabelCount('taxonomy', 0);
+
+    await dashboardPage.createNoteWithLabels('Sidebar Counted Note', 'content', ['taxonomy']);
+    await dashboardPage.expectSidebarLabelCount('taxonomy', 1);
+  });
 });
 
 test.describe('Label Filtering', () => {
@@ -238,9 +249,7 @@ test.describe('Label Filtering — Mobile', () => {
     await expect(sidebar).toBeVisible();
 
     await expect(sidebar.getByTestId('sidebar-labels')).toBeVisible();
-    await expect(
-      sidebar.locator('ul').getByRole('button', { name: 'mobilelabel', exact: true })
-    ).toBeVisible();
+    await dashboardPage.expectLabelInSidebar('mobilelabel');
   });
 
   test('clicking a label filters notes and closes the sidebar on mobile', async ({ page, dashboardPage }) => {
@@ -267,11 +276,7 @@ test.describe('Label Filtering — Mobile', () => {
     await page.getByRole('button', { name: 'Toggle sidebar' }).click();
     await expect(sidebar).toBeVisible();
 
-    await expect(
-      sidebar.locator('ul').getByRole('button', { name: 'alpha', exact: true })
-    ).toBeVisible();
-    await expect(
-      sidebar.locator('ul').getByRole('button', { name: 'beta', exact: true })
-    ).toBeVisible();
+    await dashboardPage.expectLabelInSidebar('alpha');
+    await dashboardPage.expectLabelInSidebar('beta');
   });
 });

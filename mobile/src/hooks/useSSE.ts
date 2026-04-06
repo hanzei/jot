@@ -27,7 +27,6 @@ export function useSSE(onNoteUpdatedByOther?: SSENotificationCallback): void {
   onNoteUpdatedRef.current = onNoteUpdatedByOther;
   const dbRef = useRef(db);
   dbRef.current = db;
-
   const userIdRef = useRef(user?.id);
   userIdRef.current = user?.id;
 
@@ -43,29 +42,39 @@ export function useSSE(onNoteUpdatedByOther?: SSENotificationCallback): void {
     managerRef.current = manager;
 
     manager.connect((event: SSEEvent) => {
-      // Skip events from the current user (already handled by optimistic updates)
-      if (event.source_user_id === userIdRef.current) {
-        return;
+      // Note-related events require refreshing the notes list
+      if (
+        event.type === 'note_created' ||
+        event.type === 'note_updated' ||
+        event.type === 'note_deleted' ||
+        event.type === 'note_shared' ||
+        event.type === 'note_unshared'
+      ) {
+        queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
+        queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
       }
-
-      // All event types require refreshing the notes list
-      queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
-      queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
 
       // Per-event-type extras
       if (event.type === 'note_updated') {
-        if (event.note) {
+        const { note_id, note } = event.data;
+        if (note) {
           // Persist the updated note to SQLite so offline reads stay current
-          saveNote(dbRef.current, event.note).catch(() => {});
+          saveNote(dbRef.current, note).catch(() => {});
         }
-        queryClient.invalidateQueries({ queryKey: noteQueryKey(event.note_id) });
-        queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(event.note_id) });
-        onNoteUpdatedRef.current?.(event);
+        queryClient.invalidateQueries({ queryKey: noteQueryKey(note_id) });
+        queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(note_id) });
+        // Only notify subscribers about updates from other users. Updates from
+        // the current user (possibly from another device) are handled by query
+        // invalidation above and don't need an "updated by someone else" toast.
+        if (event.source_user_id !== userIdRef.current) {
+          onNoteUpdatedRef.current?.(event);
+        }
       } else if (event.type === 'note_deleted') {
+        const { note_id } = event.data;
         // Tombstone the note in SQLite so it disappears from offline views
-        markLocalNoteDeleted(dbRef.current, event.note_id).catch(() => {});
-        queryClient.removeQueries({ queryKey: noteQueryKey(event.note_id) });
-        queryClient.removeQueries({ queryKey: noteLocalQueryKey(event.note_id) });
+        markLocalNoteDeleted(dbRef.current, note_id).catch(() => {});
+        queryClient.removeQueries({ queryKey: noteQueryKey(note_id) });
+        queryClient.removeQueries({ queryKey: noteLocalQueryKey(note_id) });
       }
     });
 

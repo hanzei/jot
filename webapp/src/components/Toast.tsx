@@ -2,6 +2,11 @@ import { useState, useEffect, useCallback, useRef } from 'react';
 import { XMarkIcon, CheckCircleIcon, ExclamationTriangleIcon, InformationCircleIcon } from '@heroicons/react/24/outline';
 import { useTranslation } from 'react-i18next';
 import { ToastContext, type ToastAction, type ToastType } from '@/hooks/useToast';
+import {
+  TOAST_ACTION_AUTO_DISMISS_MS,
+  TOAST_AUTO_DISMISS_MS,
+  TOAST_EXIT_ANIMATION_MS,
+} from '@/utils/toastTiming';
 
 interface ToastMessage {
   id: number;
@@ -39,15 +44,40 @@ function ToastItem({ toast, onDismiss }: { toast: ToastMessage; onDismiss: (id: 
   const { t } = useTranslation();
   const [visible, setVisible] = useState(false);
   const [exiting, setExiting] = useState(false);
+  const exitTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const rafRef = useRef<number | null>(null);
+  const autoDismissMs = toast.action ? TOAST_ACTION_AUTO_DISMISS_MS : TOAST_AUTO_DISMISS_MS;
+  const beginDismiss = useCallback(() => {
+    setExiting(true);
+    if (exitTimerRef.current) {
+      clearTimeout(exitTimerRef.current);
+    }
+    exitTimerRef.current = setTimeout(() => {
+      onDismiss(toast.id);
+      exitTimerRef.current = null;
+    }, TOAST_EXIT_ANIMATION_MS);
+  }, [onDismiss, toast.id]);
 
   useEffect(() => {
-    requestAnimationFrame(() => setVisible(true));
+    rafRef.current = requestAnimationFrame(() => {
+      setVisible(true);
+      rafRef.current = null;
+    });
     const timer = setTimeout(() => {
-      setExiting(true);
-      setTimeout(() => onDismiss(toast.id), 200);
-    }, 4000);
-    return () => clearTimeout(timer);
-  }, [toast.id, onDismiss]);
+      beginDismiss();
+    }, autoDismissMs);
+    return () => {
+      if (rafRef.current !== null) {
+        cancelAnimationFrame(rafRef.current);
+        rafRef.current = null;
+      }
+      clearTimeout(timer);
+      if (exitTimerRef.current) {
+        clearTimeout(exitTimerRef.current);
+        exitTimerRef.current = null;
+      }
+    };
+  }, [autoDismissMs, beginDismiss]);
 
   const Icon = toast.type === 'success' ? CheckCircleIcon
     : toast.type === 'error' ? ExclamationTriangleIcon
@@ -59,6 +89,7 @@ function ToastItem({ toast, onDismiss }: { toast: ToastMessage; onDismiss: (id: 
 
   return (
     <div
+      data-testid="toast"
       role="status"
       aria-live="polite"
       className={`pointer-events-auto flex items-center gap-2 px-4 py-3 rounded-lg shadow-lg border bg-white dark:bg-slate-800 border-gray-200 dark:border-slate-700 text-sm text-gray-900 dark:text-white transition-all duration-200 ${
@@ -80,8 +111,7 @@ function ToastItem({ toast, onDismiss }: { toast: ToastMessage; onDismiss: (id: 
       )}
       <button
         onClick={() => {
-          setExiting(true);
-          setTimeout(() => onDismiss(toast.id), 200);
+          beginDismiss();
         }}
         className="ml-1 p-0.5 rounded hover:bg-gray-100 dark:hover:bg-slate-700"
         aria-label={t('common.close')}

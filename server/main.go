@@ -48,7 +48,9 @@ import (
 	_ "github.com/hanzei/jot/server/docs"
 	"github.com/hanzei/jot/server/internal/config"
 	"github.com/hanzei/jot/server/internal/server"
+	"github.com/hanzei/jot/server/internal/telemetry"
 	"github.com/sirupsen/logrus"
+	"go.opentelemetry.io/contrib/bridges/otellogrus"
 )
 
 func main() {
@@ -57,12 +59,40 @@ func main() {
 		logrus.WithError(err).Fatal("Failed to load configuration")
 	}
 
+	ctx := context.Background()
+	otelShutdown, err := telemetry.Setup(ctx, telemetry.Config{
+		Enabled:     cfg.OTelEnabled,
+		Endpoint:    cfg.OTelEndpoint,
+		ServiceName: cfg.OTelServiceName,
+		Insecure:    cfg.OTelInsecure,
+	})
+	if err != nil {
+		logrus.WithError(err).Fatal("Failed to initialize OpenTelemetry")
+	}
+	defer func() {
+		timeoutCtx, cancel := context.WithTimeout(context.Background(), 5*time.Second)
+		defer cancel()
+		if shutdownErr := otelShutdown(timeoutCtx); shutdownErr != nil {
+			logrus.WithError(shutdownErr).Warn("OpenTelemetry shutdown error")
+		}
+	}()
+
+	if cfg.OTelEnabled {
+		// Forward all logrus log entries to the OTel LoggerProvider so they
+		// are exported via OTLP alongside traces and metrics.
+		logrus.AddHook(otellogrus.NewHook("github.com/hanzei/jot/server"))
+	}
+
 	s, err := server.New(cfg)
 	if err != nil {
 		logrus.WithError(err).Fatal("Failed to initialize server")
 	}
 	addr := fmt.Sprintf(":%d", cfg.Port)
-	logrus.Infof("Starting Jot server on %s", addr)
+	if cfg.MetricsEnabled {
+		logrus.Infof("Starting Jot server on %s (metrics on %s:%d)", addr, cfg.MetricsHost, cfg.MetricsPort)
+	} else {
+		logrus.Infof("Starting Jot server on %s", addr)
+	}
 
 	serverErrCh := make(chan error, 1)
 	go func() {

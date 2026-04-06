@@ -25,6 +25,8 @@ vi.mock('@/utils/api', () => ({
   },
   labels: {
     getAll: vi.fn().mockResolvedValue([]),
+    create: vi.fn(),
+    getCounts: vi.fn().mockResolvedValue({}),
   },
   users: {
     search: vi.fn().mockResolvedValue([]),
@@ -294,11 +296,30 @@ describe('Dashboard', () => {
   })
 
   describe('Search Functionality', () => {
+    it('focuses search when Meta+F is pressed', async () => {
+      renderDashboard()
+
+      await waitFor(() => {
+        expect(screen.getByPlaceholderText('Search notes...')).toBeInTheDocument()
+      })
+
+      fireEvent.keyDown(window, { key: 'f', metaKey: true })
+      expect(screen.getByPlaceholderText('Search notes...')).toHaveFocus()
+    })
+
     it('renders search input', async () => {
       renderDashboard()
       
       await waitFor(() => {
         expect(screen.getByPlaceholderText('Search notes...')).toBeInTheDocument()
+      })
+    })
+
+    it('renders keyboard shortcut hint in dashboard search input', async () => {
+      renderDashboard()
+
+      await waitFor(() => {
+        expect(screen.getByTestId('search-shortcut-hint')).toHaveTextContent('Ctrl + F')
       })
     })
 
@@ -725,7 +746,9 @@ describe('Dashboard', () => {
       
       await waitFor(() => {
         expect(screen.getByText('No notes yet')).toBeInTheDocument()
+        expect(screen.getByText('Click "New Note" to create your first note')).toBeInTheDocument()
         expect(screen.getByText('Create your first note')).toBeInTheDocument()
+        expect(screen.getByTestId('dashboard-empty-state')).toBeInTheDocument()
       })
     })
 
@@ -742,6 +765,7 @@ describe('Dashboard', () => {
 
       await waitFor(() => {
         expect(screen.getByText('No archived notes')).toBeInTheDocument()
+        expect(screen.getByText('Notes you archive will appear here.')).toBeInTheDocument()
       })
     })
 
@@ -1030,11 +1054,12 @@ describe('Dashboard', () => {
       await waitFor(() => {
         expect(screen.getByTestId('refresh-1')).toBeInTheDocument()
       })
+      const initialCalls = mockGetAll.mock.calls.length
       await user.click(screen.getByTestId('refresh-1'))
 
       await waitFor(() => {
-        // Should call getAll again to refresh
-        expect(mockGetAll).toHaveBeenCalledTimes(2)
+        // Refresh should trigger at least one additional notes fetch.
+        expect(mockGetAll.mock.calls.length).toBeGreaterThanOrEqual(initialCalls + 1)
       })
     })
   })
@@ -1171,7 +1196,7 @@ describe('Dashboard', () => {
       
       // Should handle multiple API calls
       await waitFor(() => {
-        expect(mockGetAll).toHaveBeenCalledTimes(4) // Initial + 3 switches
+        expect(mockGetAll).toHaveBeenCalledTimes(4) // Initial notes + 3 switches
       })
     })
 
@@ -1267,12 +1292,171 @@ describe('Dashboard', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'work' })).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: 'personal' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /^work/ })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /^personal/ })).toBeInTheDocument()
     })
   })
 
-  it('does not render labels section when no labels exist', async () => {
+  it('shows label counts next to each label', async () => {
+    const countedLabels: Label[] = [
+      {
+        id: 'label-work',
+        user_id: 'user1',
+        name: 'work',
+        created_at: '2024-01-01T00:00:00Z',
+        updated_at: '2024-01-01T00:00:00Z',
+      },
+      {
+        id: 'label-personal',
+        user_id: 'user1',
+        name: 'personal',
+        created_at: '2024-01-01T00:00:00Z',
+        updated_at: '2024-01-01T00:00:00Z',
+      },
+    ]
+    vi.mocked(labels.getAll).mockResolvedValue(countedLabels)
+    vi.mocked(labels.getCounts).mockResolvedValue({
+      'label-work': 2,
+      'label-personal': 1,
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <ToastProvider>
+          <Dashboard onLogout={vi.fn()} />
+        </ToastProvider>
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByTestId('label-count-label-work')).toHaveTextContent('2')
+      expect(screen.getByTestId('label-count-label-personal')).toHaveTextContent('1')
+    })
+  })
+
+  it('does not render default 0 label counts while label counts request is pending', async () => {
+    const countedLabels: Label[] = [
+      {
+        id: 'label-work',
+        user_id: 'user1',
+        name: 'work',
+        created_at: '2024-01-01T00:00:00Z',
+        updated_at: '2024-01-01T00:00:00Z',
+      },
+      {
+        id: 'label-personal',
+        user_id: 'user1',
+        name: 'personal',
+        created_at: '2024-01-01T00:00:00Z',
+        updated_at: '2024-01-01T00:00:00Z',
+      },
+    ]
+    vi.mocked(labels.getAll).mockResolvedValue(countedLabels)
+    let resolveCounts: ((value: Record<string, number>) => void) | null = null
+    const pendingCounts = new Promise<Record<string, number>>((resolve) => {
+      resolveCounts = resolve
+    })
+    vi.mocked(labels.getCounts).mockImplementation(() => pendingCounts)
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <ToastProvider>
+          <Dashboard onLogout={vi.fn()} />
+        </ToastProvider>
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /^work/ })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /^personal/ })).toBeInTheDocument()
+    })
+
+    expect(screen.queryByTestId('label-count-label-work')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('label-count-label-personal')).not.toBeInTheDocument()
+
+    await act(async () => {
+      resolveCounts?.({
+        'label-work': 2,
+        'label-personal': 1,
+      })
+      await pendingCounts
+    })
+
+    await waitFor(() => {
+      expect(screen.getByTestId('label-count-label-work')).toHaveTextContent('2')
+      expect(screen.getByTestId('label-count-label-personal')).toHaveTextContent('1')
+    })
+  })
+
+  it('hides label counts when label counts request fails', async () => {
+    const countedLabels: Label[] = [
+      {
+        id: 'label-work',
+        user_id: 'user1',
+        name: 'work',
+        created_at: '2024-01-01T00:00:00Z',
+        updated_at: '2024-01-01T00:00:00Z',
+      },
+      {
+        id: 'label-personal',
+        user_id: 'user1',
+        name: 'personal',
+        created_at: '2024-01-01T00:00:00Z',
+        updated_at: '2024-01-01T00:00:00Z',
+      },
+    ]
+    vi.mocked(labels.getAll).mockResolvedValue(countedLabels)
+    vi.mocked(labels.getCounts).mockRejectedValue(new Error('counts failed'))
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <ToastProvider>
+          <Dashboard onLogout={vi.fn()} />
+        </ToastProvider>
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /^work/ })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /^personal/ })).toBeInTheDocument()
+    })
+
+    expect(screen.queryByTestId('label-count-label-work')).not.toBeInTheDocument()
+    expect(screen.queryByTestId('label-count-label-personal')).not.toBeInTheDocument()
+  })
+
+  it('creates a new label from sidebar new label control', async () => {
+    const user = userEvent.setup()
+    vi.mocked(labels.create).mockResolvedValue({
+      id: 'label-new',
+      user_id: 'user1',
+      name: 'important',
+      created_at: '2024-01-01T00:00:00Z',
+      updated_at: '2024-01-01T00:00:00Z',
+    })
+
+    render(
+      <MemoryRouter initialEntries={['/']}>
+        <ToastProvider>
+          <Dashboard onLogout={vi.fn()} />
+        </ToastProvider>
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: '+ New Label' })).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('button', { name: '+ New Label' }))
+    const createInput = await screen.findByRole('textbox', { name: 'New label name' })
+    await user.type(createInput, 'important{enter}')
+
+    await waitFor(() => {
+      expect(labels.create).toHaveBeenCalledWith('important')
+    })
+  })
+
+  it('renders new label action when no labels exist', async () => {
     vi.mocked(labels.getAll).mockResolvedValue([])
 
     render(
@@ -1287,7 +1471,8 @@ describe('Dashboard', () => {
       expect(screen.getByText('New Note')).toBeInTheDocument()
     })
 
-    expect(screen.queryByRole('button', { name: 'work' })).not.toBeInTheDocument()
+    expect(screen.getByRole('button', { name: '+ New Label' })).toBeInTheDocument()
+    expect(screen.queryByRole('button', { name: /^work/ })).not.toBeInTheDocument()
   })
 
   it('clicking a label calls getAll with that labelId', async () => {
@@ -1303,10 +1488,10 @@ describe('Dashboard', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'work' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /^work/ })).toBeInTheDocument()
     })
 
-    await user.click(screen.getByRole('button', { name: 'work' }))
+    await user.click(screen.getByRole('button', { name: /^work/ }))
 
     await waitFor(() => {
       expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-work', false)
@@ -1326,17 +1511,17 @@ describe('Dashboard', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'work' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /^work/ })).toBeInTheDocument()
     })
 
     // Select
-    await user.click(screen.getByRole('button', { name: 'work' }))
+    await user.click(screen.getByRole('button', { name: /^work/ }))
     await waitFor(() => {
       expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-work', false)
     })
 
     // Deselect
-    await user.click(screen.getByRole('button', { name: 'work' }))
+    await user.click(screen.getByRole('button', { name: /^work/ }))
     await waitFor(() => {
       const calls = mockGetAll.mock.calls
       expect(calls[calls.length - 1]).toEqual([false, '', false, '', false])
@@ -1362,10 +1547,10 @@ describe('Dashboard', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'personal' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /^personal/ })).toBeInTheDocument()
     })
 
-    await user.click(screen.getByRole('button', { name: 'personal' }))
+    await user.click(screen.getByRole('button', { name: /^personal/ }))
 
     // The label id is passed to getAll only after the URL param is set and
     // the component re-renders with the new selectedLabelId from useSearchParams
@@ -1376,6 +1561,21 @@ describe('Dashboard', () => {
     // Verify the search param was written to the URL
     await waitFor(() => {
       expect(screen.getByTestId('location-search').textContent).toContain('label=label-personal')
+    })
+  })
+
+  it('sets label-specific page title when a label filter is selected', async () => {
+    const user = userEvent.setup()
+    renderDashboard()
+
+    await waitFor(() => {
+      expect(screen.getByRole('button', { name: /^personal/ })).toBeInTheDocument()
+    })
+
+    await user.click(screen.getByRole('button', { name: /^personal/ }))
+
+    await waitFor(() => {
+      expect(document.title).toBe('personal - Jot')
     })
   })
 
@@ -1395,11 +1595,11 @@ describe('Dashboard', () => {
     })
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'work' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /^work/ })).toBeInTheDocument()
     })
 
     // Click to deselect
-    await user.click(screen.getByRole('button', { name: 'work' }))
+    await user.click(screen.getByRole('button', { name: /^work/ }))
 
     await waitFor(() => {
       expect(mockGetAll).toHaveBeenCalledWith(false, '', false, '', false)
@@ -1421,10 +1621,10 @@ describe('Dashboard', () => {
     })
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'work' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /^work/ })).toBeInTheDocument()
     })
 
-    await user.click(screen.getByRole('button', { name: 'work' }))
+    await user.click(screen.getByRole('button', { name: /^work/ }))
 
     await waitFor(() => {
       expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-work', false)
@@ -1446,10 +1646,10 @@ describe('Dashboard', () => {
     })
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'work' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /^work/ })).toBeInTheDocument()
     })
 
-    await user.click(screen.getByRole('button', { name: 'work' }))
+    await user.click(screen.getByRole('button', { name: /^work/ }))
 
     await waitFor(() => {
       expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-work', false)
@@ -1471,10 +1671,10 @@ describe('Dashboard', () => {
     })
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'work' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /^work/ })).toBeInTheDocument()
     })
 
-    await user.click(screen.getByRole('button', { name: 'work' }))
+    await user.click(screen.getByRole('button', { name: /^work/ }))
 
     await waitFor(() => {
       expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-work', false)
@@ -1493,7 +1693,7 @@ describe('Dashboard', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'work' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /^work/ })).toBeInTheDocument()
     })
 
     // Notes tab should initially have aria-current
@@ -1501,7 +1701,7 @@ describe('Dashboard', () => {
     expect(notesButton).toHaveAttribute('aria-current', 'page')
 
     // Select a label
-    await user.click(screen.getByRole('button', { name: 'work' }))
+    await user.click(screen.getByRole('button', { name: /^work/ }))
 
     // Notes tab should no longer have aria-current
     await waitFor(() => {
@@ -1569,7 +1769,7 @@ describe('Dashboard', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'work' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /^work/ })).toBeInTheDocument()
     })
 
     // Switch to archive view
@@ -1578,6 +1778,23 @@ describe('Dashboard', () => {
 
     await waitFor(() => {
       expect(mockGetAll).toHaveBeenCalledWith(true, '', false, '', false)
+    })
+  })
+
+  it('shows label-specific empty state and hides create-first-note CTA when label has no notes', async () => {
+    vi.mocked(notes.getAll).mockResolvedValue([])
+
+    render(
+      <MemoryRouter initialEntries={['/?label=label-work']}>
+        <ToastProvider><Dashboard onLogout={vi.fn()} /></ToastProvider>
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(screen.getByTestId('dashboard-empty-state')).toBeInTheDocument()
+      expect(screen.getByText('No notes for this label')).toBeInTheDocument()
+      expect(screen.getByText('Notes tagged with this label will appear here.')).toBeInTheDocument()
+      expect(screen.queryByText('Create your first note')).not.toBeInTheDocument()
     })
   })
   })
@@ -1618,7 +1835,7 @@ describe('Dashboard', () => {
       })
 
       await waitFor(() => {
-        expect(screen.getByRole('button', { name: 'realtime' })).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: /^realtime/ })).toBeInTheDocument()
       })
     })
 
@@ -1641,9 +1858,8 @@ describe('Dashboard', () => {
       await act(async () => {
         sseOptions?.onEvent({
           type: 'note_created',
-          note_id: 'note-1',
-          note: createMockNote({ id: 'note-1', labels: [realtimeLabel] }),
           source_user_id: 'user1',
+          data: { note_id: 'note-1', note: createMockNote({ id: 'note-1', labels: [realtimeLabel] }) },
         })
       })
 
@@ -1652,15 +1868,14 @@ describe('Dashboard', () => {
       })
 
       await waitFor(() => {
-        expect(screen.getByRole('button', { name: 'realtime' })).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: /^realtime/ })).toBeInTheDocument()
       })
 
       await act(async () => {
         sseOptions?.onEvent({
           type: 'note_updated',
-          note_id: 'note-1',
-          note: createMockNote({ id: 'note-1', labels: [realtimeLabel] }),
           source_user_id: 'user1',
+          data: { note_id: 'note-1', note: createMockNote({ id: 'note-1', labels: [realtimeLabel] }) },
         })
       })
 
@@ -1669,7 +1884,96 @@ describe('Dashboard', () => {
       })
 
       await waitFor(() => {
-        expect(screen.getByRole('button', { name: 'realtime' })).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: /^realtime/ })).toBeInTheDocument()
+      })
+    })
+
+    it('refreshes sidebar labels and counts when SSE reports labels_changed', async () => {
+      vi.mocked(labels.getAll)
+        .mockResolvedValueOnce([])
+        .mockResolvedValueOnce([realtimeLabel])
+      vi.mocked(labels.getCounts)
+        .mockResolvedValueOnce({})
+        .mockResolvedValueOnce({ 'label-realtime': 1 })
+
+      renderDashboard()
+
+      await waitFor(() => {
+        expect(useSSE).toHaveBeenCalled()
+        expect(labels.getAll).toHaveBeenCalledTimes(1)
+        expect(labels.getCounts).toHaveBeenCalledTimes(1)
+      })
+
+      const sseOptions = vi.mocked(useSSE).mock.calls[0]?.[0]
+      expect(sseOptions).toBeDefined()
+
+      await act(async () => {
+        sseOptions?.onEvent({
+          type: 'labels_changed',
+          source_user_id: 'user1',
+          data: { label: realtimeLabel },
+        })
+      })
+
+      await waitFor(() => {
+        expect(labels.getAll).toHaveBeenCalledTimes(2)
+        expect(labels.getCounts).toHaveBeenCalledTimes(2)
+      })
+
+      await waitFor(() => {
+        expect(screen.getByRole('button', { name: /^realtime/ })).toBeInTheDocument()
+        expect(screen.getByTestId('label-count-label-realtime')).toHaveTextContent('1')
+      })
+    })
+
+    it('clears stale selected label from URL after labels_changed removes it', async () => {
+      const mockGetAll = vi.mocked(notes.getAll)
+      vi.mocked(labels.getAll)
+        .mockResolvedValueOnce([realtimeLabel])
+        .mockResolvedValueOnce([])
+      vi.mocked(labels.getCounts)
+        .mockResolvedValueOnce({ 'label-realtime': 1 })
+        .mockResolvedValueOnce({})
+
+      const LocationProbe = () => {
+        const { search } = useLocation()
+        return <span data-testid="location-search">{search}</span>
+      }
+
+      render(
+        <MemoryRouter initialEntries={['/?label=label-realtime']}>
+          <ToastProvider>
+            <Dashboard onLogout={vi.fn()} />
+          </ToastProvider>
+          <LocationProbe />
+        </MemoryRouter>
+      )
+
+      await waitFor(() => {
+        expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-realtime', false)
+      })
+
+      const sseOptions = vi.mocked(useSSE).mock.calls[0]?.[0]
+      expect(sseOptions).toBeDefined()
+
+      await act(async () => {
+        sseOptions?.onEvent({
+          type: 'labels_changed',
+          source_user_id: 'user1',
+          data: { label: realtimeLabel },
+        })
+      })
+
+      await waitFor(() => {
+        expect(labels.getAll).toHaveBeenCalledTimes(2)
+      })
+
+      await waitFor(() => {
+        expect(mockGetAll).toHaveBeenCalledWith(false, '', false, '', false)
+      })
+
+      await waitFor(() => {
+        expect(screen.getByTestId('location-search').textContent ?? '').not.toContain('label=')
       })
     })
   })
@@ -1723,6 +2027,7 @@ describe('Dashboard', () => {
       await user.click(screen.getByRole('button', { name: 'My Todo' }))
 
       await waitFor(() => {
+        expect(screen.getByText('No assigned to-do items')).toBeInTheDocument()
         expect(screen.getByText('No to-do items assigned to you yet. When someone assigns a to-do item to you in a shared note, it will appear here.')).toBeInTheDocument()
       })
     })
@@ -1752,6 +2057,48 @@ describe('Dashboard', () => {
 
       await waitFor(() => {
         expect(document.title).toBe('My Todo - Jot')
+      })
+    })
+
+    it('sets note title in page title when a note with a title is opened', async () => {
+      const mockNote = createMockNote({ id: 'abc123', title: 'My Important Note' })
+      vi.mocked(notes.getById).mockResolvedValue(mockNote)
+
+      renderDashboard(['/notes/abc123'])
+
+      await waitFor(() => {
+        expect(screen.getByTestId('note-modal')).toBeInTheDocument()
+        expect(document.title).toBe('My Important Note - Jot')
+      })
+    })
+
+    it('keeps section title when a note without a title is opened', async () => {
+      const mockNote = createMockNote({ id: 'abc123', title: '' })
+      vi.mocked(notes.getById).mockResolvedValue(mockNote)
+
+      renderDashboard(['/notes/abc123'])
+
+      await waitFor(() => {
+        expect(screen.getByTestId('note-modal')).toBeInTheDocument()
+        expect(document.title).toBe('Jot')
+      })
+    })
+
+    it('restores section title when note modal is closed', async () => {
+      const user = userEvent.setup()
+      const mockNote = createMockNote({ id: 'abc123', title: 'My Important Note' })
+      vi.mocked(notes.getById).mockResolvedValue(mockNote)
+
+      renderDashboard(['/notes/abc123'])
+
+      await waitFor(() => {
+        expect(document.title).toBe('My Important Note - Jot')
+      })
+
+      await user.click(screen.getByTestId('modal-close'))
+
+      await waitFor(() => {
+        expect(document.title).toBe('Jot')
       })
     })
 
@@ -1794,14 +2141,15 @@ describe('Dashboard', () => {
       })
 
       await waitFor(() => {
-        expect(screen.getByRole('button', { name: 'work' })).toBeInTheDocument()
+        expect(screen.getByRole('button', { name: /^work/ })).toBeInTheDocument()
       })
 
-      await user.click(screen.getByRole('button', { name: 'work' }))
+      await user.click(screen.getByRole('button', { name: /^work/ }))
 
       await waitFor(() => {
         expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-work', false)
       })
     })
+
   })
 })

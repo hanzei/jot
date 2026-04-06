@@ -25,7 +25,7 @@ test.describe('Authentication', () => {
     const username = uniqueUsername('reg');
     await registerPage.goto();
     await registerPage.register(username, 'abc', 'abc');
-    await registerPage.expectError('Password must be at least 4 characters');
+    await registerPage.expectError('Password must be at least 10 characters');
   });
 
   test('shows error for duplicate username', async ({ page, registerPage, dashboardPage }) => {
