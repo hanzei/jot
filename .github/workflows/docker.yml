@@ -134,7 +134,7 @@ jobs:
             type=raw,value=unstable,enable={{is_default_branch}}
             type=sha,enable={{is_default_branch}}
             type=raw,value=pr-${{ github.event.pull_request.number }},enable=${{ github.event_name == 'pull_request' }}
-          labels: |
+          annotations: |
             org.opencontainers.image.description=${{ github.event_name == 'pull_request' && format('Built from PR #{0}: {1}', github.event.pull_request.number, github.event.pull_request.html_url) || 'Jot — self-hosted note-taking application' }}
 
       - name: Create manifest list and push
@@ -144,4 +144,5 @@ jobs:
         run: |
           docker buildx imagetools create \
             $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
+            $(awk 'NF{print "--annotation index:" $0}' <<< "$DOCKER_METADATA_OUTPUT_ANNOTATIONS") \
             $(printf "${IMAGE}@sha256:%s " *)
