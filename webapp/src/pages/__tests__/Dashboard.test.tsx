@@ -1217,7 +1217,7 @@ describe('Dashboard', () => {
 
     render(
       <MemoryRouter initialEntries={['/?label=label-work']}>
-        <ToastProvider><Dashboard onLogout={vi.fn()} /></ToastProvider>
+        <ToastProvider><Routes><Route element={<Dashboard />}><Route index element={null} /></Route></Routes></ToastProvider>
       </MemoryRouter>
     )
 
