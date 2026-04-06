@@ -1183,13 +1183,75 @@ describe('Dashboard', () => {
     })
   })
 
-  it('fetches active notes when navigating from label URL to plain URL', async () => {
+  it('fetches active notes when URL label param is removed', async () => {
+    const user = userEvent.setup()
     const mockGetAll = vi.mocked(notes.getAll)
 
-    renderDashboard(['/?label=label-work'])
+    const NavHelper = () => {
+      const navigate = useNavigate()
+      return <button data-testid="go-home" onClick={() => navigate('/')}>home</button>
+    }
+
+    render(
+      <MemoryRouter initialEntries={['/?label=label-work']}>
+        <NavHelper />
+        <ToastProvider>
+          <SearchBarCapture>
+            <Routes>
+              <Route element={<Dashboard />}>
+                <Route index element={null} />
+                <Route path="notes/:noteId" element={null} />
+              </Route>
+            </Routes>
+          </SearchBarCapture>
+        </ToastProvider>
+      </MemoryRouter>
+    )
 
     await waitFor(() => {
       expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-work', false)
+    })
+
+    await user.click(screen.getByTestId('go-home'))
+
+    await waitFor(() => {
+      expect(mockGetAll).toHaveBeenCalledWith(false, '', false, '', false)
+    })
+  })
+
+  it('clears label filter and fetches archived notes when URL switches to archive view', async () => {
+    const user = userEvent.setup()
+    const mockGetAll = vi.mocked(notes.getAll)
+
+    const NavHelper = () => {
+      const navigate = useNavigate()
+      return <button data-testid="go-archive" onClick={() => navigate('/?view=archive')}>archive</button>
+    }
+
+    render(
+      <MemoryRouter initialEntries={['/?label=label-work']}>
+        <NavHelper />
+        <ToastProvider>
+          <SearchBarCapture>
+            <Routes>
+              <Route element={<Dashboard />}>
+                <Route index element={null} />
+                <Route path="notes/:noteId" element={null} />
+              </Route>
+            </Routes>
+          </SearchBarCapture>
+        </ToastProvider>
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-work', false)
+    })
+
+    await user.click(screen.getByTestId('go-archive'))
+
+    await waitFor(() => {
+      expect(mockGetAll).toHaveBeenCalledWith(true, '', false, '', false)
     })
   })
 
@@ -1201,12 +1263,21 @@ describe('Dashboard', () => {
     })
   })
 
-  it('fetches notes with label from archive URL', async () => {
+  it('fetches notes with label from archive URL (label param overrides view)', async () => {
     const mockGetAll = vi.mocked(notes.getAll)
 
     renderDashboard(['/?view=archive&label=label-work'])
 
-    // Label param overrides view — should fetch active notes with label, not archived
+    await waitFor(() => {
+      expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-work', false)
+    })
+  })
+
+  it('fetches notes with label from bin URL (label param overrides view)', async () => {
+    const mockGetAll = vi.mocked(notes.getAll)
+
+    renderDashboard(['/?view=bin&label=label-work'])
+
     await waitFor(() => {
       expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-work', false)
     })
