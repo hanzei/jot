@@ -194,11 +194,11 @@ test.describe('Settings', () => {
 });
 
 test.describe('Settings sidebar navigation', () => {
-  test('shows all nav tabs with none active', async ({ authenticatedUser, settingsPage }) => {
+  test('shows all nav tabs with Notes active', async ({ authenticatedUser, settingsPage }) => {
     await settingsPage.goto();
 
     await settingsPage.expectSidebarNavTabsVisible();
-    await settingsPage.expectNoTabActive();
+    await settingsPage.expectNotesTabActive();
     void authenticatedUser;
   });
 

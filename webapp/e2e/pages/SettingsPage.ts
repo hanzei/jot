@@ -156,7 +156,12 @@ export class SettingsPage {
     await Promise.all(this.allNavTabs().map(tab => expect(tab).toBeVisible()));
   }
 
-  async expectNoTabActive() {
-    await Promise.all(this.allNavTabs().map(tab => expect(tab).not.toHaveAttribute('aria-current', 'page')));
+  async expectNotesTabActive() {
+    await expect(this.sidebarNotesTab()).toHaveAttribute('aria-current', 'page');
+    await Promise.all(
+      [this.sidebarMyTodoTab(), this.sidebarArchiveTab(), this.sidebarBinTab()].map(
+        tab => expect(tab).not.toHaveAttribute('aria-current', 'page')
+      )
+    );
   }
 }
