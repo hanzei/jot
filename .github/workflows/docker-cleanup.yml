@@ -1,0 +1,36 @@
+name: Docker Cleanup
+
+on:
+  pull_request:
+    types: [closed]
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  cleanup:
+    runs-on: ubuntu-24.04
+    if: github.event.pull_request.head.repo.full_name == github.repository
+    steps:
+      - name: Delete PR image from GitHub Container Registry
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          PR_TAG: pr-${{ github.event.pull_request.number }}
+        run: |
+          VERSION_ID=$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            "/users/hanzei/packages/container/jot/versions" \
+            2>/dev/null | jq -r --arg tag "$PR_TAG" \
+            '.[] | select(.metadata.container.tags[] == $tag) | .id' \
+            | head -1 || true)
+
+          if [ -n "$VERSION_ID" ]; then
+            gh api \
+              --method DELETE \
+              -H "Accept: application/vnd.github+json" \
+              "/users/hanzei/packages/container/jot/versions/${VERSION_ID}"
+            echo "Deleted ghcr.io/hanzei/jot:${PR_TAG}"
+          else
+            echo "No image found for ${PR_TAG}, skipping"
+          fi

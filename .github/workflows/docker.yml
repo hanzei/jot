@@ -2,11 +2,13 @@ name: Docker
 
 permissions:
   contents: read
+  packages: write
 
 on:
   push:
     branches: [master]
   pull_request:
+    types: [opened, synchronize, reopened]
     paths:
       - 'server/**'
       - 'webapp/**'
@@ -40,14 +42,23 @@ jobs:
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
 
+      - name: Log in to GitHub Container Registry
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6
         with:
-          images: hanzei/jot
+          images: ${{ github.event_name == 'pull_request' && 'ghcr.io/hanzei/jot' || 'hanzei/jot' }}
           tags: |
             type=raw,value=unstable,enable={{is_default_branch}}
             type=sha
+            type=raw,value=pr-${{ github.event.pull_request.number }},enable=${{ github.event_name == 'pull_request' }}
 
       - name: Get build date
         id: build-date
@@ -66,17 +77,17 @@ jobs:
           labels: ${{ steps.meta.outputs.labels }}
           cache-from: type=gha,scope=${{ matrix.platform }}
           cache-to: type=gha,mode=max,scope=${{ matrix.platform }}
-          outputs: type=image,name=hanzei/jot,push-by-digest=true,name-canonical=true,push=${{ github.event_name == 'push' && github.ref == 'refs/heads/master' }}
+          outputs: type=image,name=${{ github.event_name == 'pull_request' && 'ghcr.io/hanzei/jot' || 'hanzei/jot' }},push-by-digest=true,name-canonical=true,push=${{ (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) || (github.event_name == 'push' && github.ref == 'refs/heads/master') }}
 
       - name: Export digest
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        if: (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) || (github.event_name == 'push' && github.ref == 'refs/heads/master')
         run: |
           mkdir -p /tmp/digests
           digest="${{ steps.build.outputs.digest }}"
           touch "/tmp/digests/${digest#sha256:}"
 
       - name: Upload digest
-        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+        if: (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) || (github.event_name == 'push' && github.ref == 'refs/heads/master')
         uses: actions/upload-artifact@bbbca2ddaa5d8feaa63e36b76fdaad77386f024f # v7
         with:
           name: digests-${{ matrix.platform == 'linux/amd64' && 'amd64' || 'arm64' }}
@@ -84,9 +95,9 @@ jobs:
           retention-days: 1
 
   docker-merge:
-    runs-on: ubuntu-latest
+    runs-on: ubuntu-24.04
     needs: [docker]
-    if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    if: (github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository) || (github.event_name == 'push' && github.ref == 'refs/heads/master')
 
     steps:
       - name: Download digests
@@ -100,23 +111,35 @@ jobs:
         uses: docker/setup-buildx-action@4d04d5d9486b7bd6fa91e7baf45bbb4f8b9deedd # v4
 
       - name: Log in to Docker Hub
+        if: github.event_name == 'push' && github.ref == 'refs/heads/master'
         uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4
         with:
           username: ${{ secrets.DOCKER_HUB_USERNAME }}
           password: ${{ secrets.DOCKER_HUB_TOKEN }}
 
+      - name: Log in to GitHub Container Registry
+        if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
+        uses: docker/login-action@b45d80f862d83dbcd57f89517bcf500b2ab88fb2 # v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
       - name: Extract metadata
         id: meta
         uses: docker/metadata-action@030e881283bb7a6894de51c315a6bfe6a94e05cf # v6
         with:
-          images: hanzei/jot
+          images: ${{ github.event_name == 'pull_request' && 'ghcr.io/hanzei/jot' || 'hanzei/jot' }}
           tags: |
             type=raw,value=unstable,enable={{is_default_branch}}
             type=sha
+            type=raw,value=pr-${{ github.event.pull_request.number }},enable=${{ github.event_name == 'pull_request' }}
 
       - name: Create manifest list and push
         working-directory: /tmp/digests
+        env:
+          IMAGE: ${{ github.event_name == 'pull_request' && 'ghcr.io/hanzei/jot' || 'hanzei/jot' }}
         run: |
           docker buildx imagetools create \
             $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            $(printf 'hanzei/jot@sha256:%s ' *)
+            $(printf "${IMAGE}@sha256:%s " *)
