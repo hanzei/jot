@@ -146,7 +146,7 @@ export default function Register({ onRegister, passwordMinLength }: RegisterProp
                       ? 'border-red-300 dark:border-red-600'
                       : 'border-gray-300 dark:border-slate-600'
                   }`}
-                  placeholder={t('auth.passwordPlaceholderLong')}
+                  placeholder={t('auth.passwordPlaceholderLong', { min: passwordMinLength })}
                   value={password}
                   onChange={(e) => setPassword(e.target.value)}
                 />

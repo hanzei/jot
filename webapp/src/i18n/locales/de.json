@@ -24,7 +24,7 @@
     "usernamePlaceholder": "Benutzername",
     "usernamePlaceholderLong": "Benutzername (2–30 Zeichen)",
     "passwordPlaceholder": "Passwort",
-    "passwordPlaceholderLong": "Passwort (min. 4 Zeichen)",
+    "passwordPlaceholderLong": "Passwort (min. {{min}} Zeichen)",
     "confirmPasswordPlaceholder": "Passwort bestätigen",
     "signingIn": "Anmelden...",
     "signIn": "Anmelden",
