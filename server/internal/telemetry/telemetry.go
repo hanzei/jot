@@ -110,6 +110,9 @@ func Setup(ctx context.Context, cfg Config) (shutdown func(context.Context) erro
 	global.SetLoggerProvider(lp)
 
 	if err := goruntime.Start(goruntime.WithMeterProvider(mp)); err != nil {
+		for _, fn := range shutdowns {
+			_ = fn(ctx)
+		}
 		return nil, fmt.Errorf("start runtime metrics: %w", err)
 	}
 
