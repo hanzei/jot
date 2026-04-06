@@ -44,3 +44,20 @@ jobs:
           else
             echo "No image found for ${PR_TAG}, skipping"
           fi
+
+          # Delete orphaned untagged versions (per-platform manifests pushed by
+          # the build job without tags; they become orphaned once the manifest
+          # list above is deleted). Since master images go to Docker Hub, every
+          # untagged version on ghcr.io is safe to remove.
+          UNTAGGED=$(gh api \
+            -H "Accept: application/vnd.github+json" \
+            "/users/hanzei/packages/container/jot/versions" \
+            2>/dev/null | jq -r '.[] | select(.metadata.container.tags | length == 0) | .id' || true)
+
+          for ID in $UNTAGGED; do
+            gh api \
+              --method DELETE \
+              -H "Accept: application/vnd.github+json" \
+              "/users/hanzei/packages/container/jot/versions/$ID"
+            echo "Deleted untagged version $ID"
+          done
