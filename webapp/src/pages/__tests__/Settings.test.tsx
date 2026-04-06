@@ -2,25 +2,12 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { MemoryRouter } from 'react-router'
-import { type ReactNode } from 'react'
 import Settings from '../Settings'
 import { ToastProvider } from '@/components/Toast'
-import { users, auth, labels as labelsApi, sessions, isAxiosError } from '@/utils/api'
+import { users, auth, sessions, isAxiosError } from '@/utils/api'
 import * as authUtils from '@/utils/auth'
 import type { UserSettings } from '@jot/shared'
 import i18n from '@/i18n'
-
-const { mockNavigate } = vi.hoisted(() => ({
-  mockNavigate: vi.fn(),
-}))
-
-vi.mock('react-router', async () => {
-  const actual = await vi.importActual<typeof import('react-router')>('react-router')
-  return {
-    ...actual,
-    useNavigate: () => mockNavigate,
-  }
-})
 
 vi.mock('@/utils/api', () => ({
   auth: {
@@ -30,13 +17,8 @@ vi.mock('@/utils/api', () => ({
   users: {
     updateMe: vi.fn(),
     changePassword: vi.fn(),
-  },
-  labels: {
-    getAll: vi.fn().mockResolvedValue([]),
-    getCounts: vi.fn().mockResolvedValue({}),
-    create: vi.fn(),
-    rename: vi.fn(),
-    delete: vi.fn(),
+    uploadProfileIcon: vi.fn(),
+    deleteProfileIcon: vi.fn(),
   },
   sessions: {
     list: vi.fn().mockResolvedValue([]),
@@ -57,18 +39,6 @@ vi.mock('@/utils/auth', () => ({
   getSettings: vi.fn().mockReturnValue(null),
   setSettings: vi.fn(),
   isAdmin: vi.fn().mockReturnValue(false),
-}))
-
-vi.mock('@/components/AppLayout', () => ({
-  default: ({ onLogout, username, settingsLinkActive, isAdmin, children, searchBar, sidebarChildren }: { onLogout?: () => void; username?: string; settingsLinkActive?: boolean; isAdmin?: boolean; children?: ReactNode; searchBar?: ReactNode; sidebarChildren?: ReactNode }) => (
-    <div data-testid="app-layout" data-settings-link-active={settingsLinkActive} data-is-admin={isAdmin}>
-      <span data-testid="displayed-username">{username}</span>
-      <button onClick={onLogout} data-testid="logout-button">Logout</button>
-      <div data-testid="search-bar">{searchBar}</div>
-      <div data-testid="sidebar-children">{sidebarChildren}</div>
-      {children}
-    </div>
-  ),
 }))
 
 const mockUser = {
@@ -99,34 +69,20 @@ const activeSession = {
   expires_at: '2023-02-01T00:00:00Z',
 }
 
-const renderSettings = (onLogout = vi.fn()) => {
+const renderSettings = () => {
   return render(
     <MemoryRouter>
       <ToastProvider>
-        <Settings onLogout={onLogout} passwordMinLength={10} />
+        <Settings passwordMinLength={10} />
       </ToastProvider>
     </MemoryRouter>
   )
 }
 
-const getSidebarLabels = async () => {
-  const sidebar = await screen.findByTestId('sidebar-labels')
-  return within(sidebar)
-}
-
 describe('Settings', () => {
   beforeEach(() => {
     vi.clearAllMocks()
-    mockNavigate.mockReset()
-    vi.mocked(isAxiosError).mockReset()
     vi.mocked(isAxiosError).mockReturnValue(false)
-    vi.mocked(labelsApi.getAll).mockReset()
-    vi.mocked(labelsApi.getAll).mockResolvedValue([])
-    vi.mocked(labelsApi.getCounts).mockReset()
-    vi.mocked(labelsApi.getCounts).mockResolvedValue({})
-    vi.mocked(labelsApi.create).mockReset()
-    vi.mocked(labelsApi.rename).mockReset()
-    vi.mocked(labelsApi.delete).mockReset()
     vi.mocked(authUtils.isAdmin).mockReturnValue(false)
     vi.mocked(authUtils.getUser).mockReturnValue(mockUser)
     i18n.changeLanguage('en')
@@ -145,177 +101,12 @@ describe('Settings', () => {
       expect(screen.getByLabelText('Username')).toHaveValue('testuser')
     })
 
-    it('passes current username to AppLayout', () => {
-      renderSettings()
-      expect(screen.getByTestId('displayed-username')).toHaveTextContent('testuser')
-    })
-
-    it('passes settingsLinkActive to AppLayout', () => {
-      renderSettings()
-      expect(screen.getByTestId('app-layout')).toHaveAttribute('data-settings-link-active', 'true')
-    })
-
-    it('passes isAdmin to AppLayout for non-admin user', () => {
-      renderSettings()
-      expect(screen.getByTestId('app-layout')).toHaveAttribute('data-is-admin', 'false')
-    })
-
-    it('passes isAdmin to AppLayout for admin user', () => {
-      vi.mocked(authUtils.isAdmin).mockReturnValue(true)
-      renderSettings()
-      expect(screen.getByTestId('app-layout')).toHaveAttribute('data-is-admin', 'true')
-    })
-
     it('renders without errors when user is not logged in', () => {
       vi.mocked(authUtils.getUser).mockReturnValue(null)
       renderSettings()
       expect(screen.getByLabelText('Username')).toHaveValue('')
     })
 
-    it('loads labels and renders sidebar label buttons', async () => {
-      vi.mocked(labelsApi.getAll).mockResolvedValue([
-        {
-          id: 'label-1',
-          user_id: 'user1',
-          name: 'Work',
-          created_at: '2023-01-01T00:00:00Z',
-          updated_at: '2023-01-01T00:00:00Z',
-        },
-      ])
-
-      renderSettings()
-
-      await waitFor(() => {
-        expect(labelsApi.getAll).toHaveBeenCalled()
-      })
-      const sidebar = await getSidebarLabels()
-      expect(sidebar.getByText('Work')).toBeInTheDocument()
-    })
-
-    it('navigates to label-filtered notes when a sidebar label is clicked', async () => {
-      const user = userEvent.setup()
-      vi.mocked(labelsApi.getAll).mockResolvedValue([
-        {
-          id: 'label-1',
-          user_id: 'user1',
-          name: 'Work',
-          created_at: '2023-01-01T00:00:00Z',
-          updated_at: '2023-01-01T00:00:00Z',
-        },
-      ])
-
-      renderSettings()
-
-      const sidebar = await getSidebarLabels()
-      await user.click(sidebar.getByText('Work'))
-
-      expect(mockNavigate).toHaveBeenCalledWith('/?label=label-1')
-    })
-
-    it('shows new label action in sidebar and creates a label', async () => {
-      const user = userEvent.setup()
-      const createdLabel = {
-        id: 'label-2',
-        user_id: 'user1',
-        name: 'Ideas',
-        created_at: '2023-01-01T00:00:00Z',
-        updated_at: '2023-01-01T00:00:00Z',
-      }
-      vi.mocked(labelsApi.getAll).mockResolvedValueOnce([]).mockResolvedValueOnce([createdLabel])
-      vi.mocked(labelsApi.create).mockResolvedValue(createdLabel)
-
-      renderSettings()
-
-      await user.click(await screen.findByRole('button', { name: i18n.t('labels.newSidebar') }))
-      await user.type(screen.getByLabelText(i18n.t('labels.createInputLabel')), 'Ideas')
-      await user.click(screen.getByRole('button', { name: i18n.t('labels.createSave') }))
-
-      await waitFor(() => {
-        expect(labelsApi.create).toHaveBeenCalledWith('Ideas')
-      })
-      await waitFor(() => {
-        expect(labelsApi.getAll).toHaveBeenCalledTimes(2)
-        expect(labelsApi.getCounts).toHaveBeenCalledTimes(2)
-      })
-      const sidebar = await getSidebarLabels()
-      expect(sidebar.getByText('Ideas')).toBeInTheDocument()
-    })
-
-    it('loads and displays sidebar label counts', async () => {
-      vi.mocked(labelsApi.getAll).mockResolvedValue([
-        {
-          id: 'label-1',
-          user_id: 'user1',
-          name: 'Work',
-          created_at: '2023-01-01T00:00:00Z',
-          updated_at: '2023-01-01T00:00:00Z',
-        },
-      ])
-      vi.mocked(labelsApi.getCounts).mockResolvedValue({ 'label-1': 3 })
-
-      renderSettings()
-
-      const sidebar = await getSidebarLabels()
-      expect(sidebar.getByText('Work')).toBeInTheDocument()
-      expect(await screen.findByTestId('label-count-label-1')).toHaveTextContent('3')
-    })
-
-    it('renames a sidebar label', async () => {
-      const user = userEvent.setup()
-      const originalLabel = {
-        id: 'label-1',
-        user_id: 'user1',
-        name: 'Work',
-        created_at: '2023-01-01T00:00:00Z',
-        updated_at: '2023-01-01T00:00:00Z',
-      }
-      const renamedLabel = { ...originalLabel, name: 'Work Updated' }
-      vi.mocked(labelsApi.getAll).mockResolvedValueOnce([originalLabel]).mockResolvedValueOnce([renamedLabel])
-      vi.mocked(labelsApi.rename).mockResolvedValue(renamedLabel)
-
-      renderSettings()
-
-      const sidebar = await getSidebarLabels()
-      await user.click(sidebar.getByRole('button', { name: 'Label options for Work' }))
-      await user.click(await screen.findByRole('menuitem', { name: 'Rename' }))
-      const renameInput = await screen.findByLabelText('Rename label Work')
-      await user.clear(renameInput)
-      await user.type(renameInput, 'Work Updated')
-      await user.click(screen.getByRole('button', { name: 'Save label name' }))
-
-      await waitFor(() => {
-        expect(labelsApi.rename).toHaveBeenCalledWith('label-1', 'Work Updated')
-      })
-      expect(sidebar.getByText('Work Updated')).toBeInTheDocument()
-    })
-
-    it('deletes a sidebar label after confirmation', async () => {
-      const user = userEvent.setup()
-      const label = {
-        id: 'label-1',
-        user_id: 'user1',
-        name: 'Work',
-        created_at: '2023-01-01T00:00:00Z',
-        updated_at: '2023-01-01T00:00:00Z',
-      }
-      vi.mocked(labelsApi.getAll).mockResolvedValueOnce([label]).mockResolvedValueOnce([])
-      vi.mocked(labelsApi.delete).mockResolvedValue(undefined)
-
-      renderSettings()
-
-      const sidebar = await getSidebarLabels()
-      await user.click(sidebar.getByRole('button', { name: 'Label options for Work' }))
-      await user.click(await screen.findByRole('menuitem', { name: 'Delete' }))
-      const confirmDialog = screen.getByRole('dialog', { name: 'Delete label' })
-      await user.click(within(confirmDialog).getByRole('button', { name: 'Delete' }))
-
-      await waitFor(() => {
-        expect(labelsApi.delete).toHaveBeenCalledWith('label-1')
-      })
-      await waitFor(() => {
-        expect(sidebar.queryByText('Work')).not.toBeInTheDocument()
-      })
-    })
   })
 
   describe('Username update', () => {
@@ -339,24 +130,6 @@ describe('Settings', () => {
         expect(screen.getByRole('status')).toHaveTextContent('Profile updated successfully.')
       })
       expect(authUtils.setUser).toHaveBeenCalledWith(updatedUser)
-    })
-
-    it('updates displayed username in AppLayout after successful save', async () => {
-      const user = userEvent.setup()
-      const updatedUser = { ...mockUser, username: 'newuser' }
-      const mockSettings = { ...defaultSettings }
-      vi.mocked(users.updateMe).mockResolvedValue({ user: updatedUser, settings: mockSettings })
-
-      renderSettings()
-
-      const input = screen.getByLabelText('Username')
-      await user.clear(input)
-      await user.type(input, 'newuser')
-      await user.click(screen.getByRole('button', { name: 'Save Changes' }))
-
-      await waitFor(() => {
-        expect(screen.getByTestId('displayed-username')).toHaveTextContent('newuser')
-      })
     })
 
     it('shows saving state while request is in flight', async () => {
@@ -469,37 +242,6 @@ describe('Settings', () => {
       })
       await waitFor(() => {
         expect(authUtils.setSettings).toHaveBeenCalledWith(updatedSettings)
-      })
-    })
-  })
-
-  describe('Logout', () => {
-    it('calls logout API, removeUser, and onLogout on success', async () => {
-      const user = userEvent.setup()
-      const mockOnLogout = vi.fn()
-      vi.mocked(auth.logout).mockResolvedValue()
-
-      renderSettings(mockOnLogout)
-
-      await user.click(screen.getByTestId('logout-button'))
-
-      await waitFor(() => {
-        expect(auth.logout).toHaveBeenCalled()
-        expect(authUtils.removeUser).toHaveBeenCalled()
-        expect(mockOnLogout).toHaveBeenCalled()
-      })
-    })
-
-    it('shows an error message when logout API fails', async () => {
-      const user = userEvent.setup()
-      vi.mocked(auth.logout).mockRejectedValue(new Error('server error'))
-
-      renderSettings()
-
-      await user.click(screen.getByTestId('logout-button'))
-
-      await waitFor(() => {
-        expect(screen.getAllByRole('alert')[0]).toHaveTextContent('Logout failed')
       })
     })
   })

@@ -2,10 +2,9 @@ import { render, screen, waitFor, within } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { MemoryRouter } from 'react-router'
-import { type ReactNode } from 'react'
 import Admin from '../Admin'
 import { ToastProvider } from '@/components/Toast'
-import { admin, labels as labelsApi, isAxiosError } from '@/utils/api'
+import { admin, isAxiosError } from '@/utils/api'
 import * as authUtils from '@/utils/auth'
 import { VALIDATION, type User, type AdminStatsResponse } from '@jot/shared'
 
@@ -17,34 +16,12 @@ vi.mock('@/utils/api', () => ({
     updateUserRole: vi.fn(),
     deleteUser: vi.fn(),
   },
-  auth: {
-    logout: vi.fn(),
-  },
-  labels: {
-    getAll: vi.fn().mockResolvedValue([]),
-    getCounts: vi.fn().mockResolvedValue({}),
-    create: vi.fn(),
-    rename: vi.fn(),
-    delete: vi.fn(),
-  },
   isAxiosError: vi.fn(),
 }))
 
 vi.mock('@/utils/auth', () => ({
   getUser: vi.fn(),
-  removeUser: vi.fn(),
   isAdmin: vi.fn().mockReturnValue(true),
-}))
-
-vi.mock('@/components/AppLayout', () => ({
-  default: ({ onLogout, children, isAdmin, adminLinkActive, searchBar, sidebarChildren }: { onLogout?: () => void; children?: ReactNode; isAdmin?: boolean; adminLinkActive?: boolean; searchBar?: ReactNode; sidebarChildren?: ReactNode }) => (
-    <div data-testid="app-layout" data-is-admin={isAdmin} data-admin-link-active={adminLinkActive}>
-      <button onClick={onLogout} data-testid="logout-button">Logout</button>
-      <div data-testid="search-bar">{searchBar}</div>
-      <div data-testid="sidebar-children">{sidebarChildren}</div>
-      {children}
-    </div>
-  ),
 }))
 
 const currentUser: User = {
@@ -89,11 +66,11 @@ const mockStats: AdminStatsResponse = {
   storage: { database_size_bytes: 4_398_047 },
 }
 
-const renderAdmin = (onLogout = vi.fn()) => {
+const renderAdmin = () => {
   return render(
     <MemoryRouter>
       <ToastProvider>
-        <Admin onLogout={onLogout} passwordMinLength={10} />
+        <Admin passwordMinLength={10} />
       </ToastProvider>
     </MemoryRouter>
   )
@@ -106,39 +83,6 @@ describe('Admin', () => {
     vi.mocked(authUtils.getUser).mockReturnValue(currentUser)
     vi.mocked(admin.getStats).mockResolvedValue(mockStats)
     vi.mocked(admin.getUsers).mockResolvedValue({ users: [currentUser, otherUser, otherAdmin] })
-  })
-
-  describe('AppLayout props', () => {
-    it('passes isAdmin and adminLinkActive to AppLayout', async () => {
-      renderAdmin()
-
-      await waitFor(() => {
-        expect(screen.getByText('regularuser')).toBeInTheDocument()
-      })
-
-      const layout = screen.getByTestId('app-layout')
-      expect(layout).toHaveAttribute('data-is-admin', 'true')
-      expect(layout).toHaveAttribute('data-admin-link-active', 'true')
-    })
-  })
-
-  describe('Sidebar labels', () => {
-    it('loads labels and label counts on mount', async () => {
-      renderAdmin()
-
-      await waitFor(() => {
-        expect(labelsApi.getAll).toHaveBeenCalled()
-        expect(labelsApi.getCounts).toHaveBeenCalled()
-      })
-    })
-
-    it('renders the sidebar labels component', async () => {
-      renderAdmin()
-
-      await waitFor(() => {
-        expect(screen.getByTestId('sidebar-labels')).toBeInTheDocument()
-      })
-    })
   })
 
   describe('Stats section', () => {

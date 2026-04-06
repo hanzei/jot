@@ -2,13 +2,14 @@ import { render, screen, waitFor, fireEvent, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { MemoryRouter, useLocation, useNavigate, Routes, Route } from 'react-router'
-import { type ReactNode, useCallback, useState } from 'react'
+import { type ReactNode, useCallback, useState, useEffect } from 'react'
+import React from 'react'
 import Dashboard from '../Dashboard'
 import type { AuthResponse, Note, Label, NoteSort, UserSettings } from '@jot/shared'
 import { notes, labels, users } from '@/utils/api'
 import * as auth from '@/utils/auth'
 import { useSSE } from '@/utils/useSSE'
-import { useSidebarLabelsController } from '@/hooks/useSidebarLabelsController'
+import { useAuthenticatedLayout } from '@/components/AuthenticatedLayout'
 import { createMockNote } from '@/utils/__tests__/test-helpers'
 import { ToastProvider } from '@/components/Toast'
 
@@ -97,56 +98,26 @@ vi.mock('@/utils/useSSE', () => ({
   useSSE: vi.fn(),
 }))
 
-vi.mock('@/hooks/useSidebarLabelsController', () => ({
-  useSidebarLabelsController: vi.fn(),
+vi.mock('@/components/AuthenticatedLayout', () => ({
+  useAuthenticatedLayout: vi.fn(),
 }))
 
-// Mock AppLayout to render children and expose props for testing
-vi.mock('@/components/AppLayout', () => ({
-  default: ({ title, onLogout, children, isAdmin: showAdminLink, sidebarTabs, sidebarBottomTabs, sidebarChildren, searchBar }: {
-    title?: string;
-    onLogout?: () => void;
-    children?: ReactNode;
-    isAdmin?: boolean;
-    sidebarTabs?: Array<{ label: string; onClick?: () => void; isActive?: boolean; title?: string }>;
-    sidebarBottomTabs?: Array<{ label: string; onClick?: () => void; isActive?: boolean; title?: string }>;
-    sidebarChildren?: ReactNode;
-    searchBar?: ReactNode;
-  }) => (
-    <div data-testid="app-layout">
-      <h1>{title}</h1>
-      <button onClick={onLogout} data-testid="logout-button">Logout</button>
-      {showAdminLink && <div data-testid="admin-link">Admin</div>}
-      <div data-testid="search-bar">{searchBar}</div>
-      <div data-testid="sidebar">
-        {sidebarTabs?.map(tab => (
-          <button
-            key={tab.label}
-            onClick={tab.onClick}
-            aria-label={tab.label}
-            title={tab.title}
-            aria-current={tab.isActive ? 'page' : undefined}
-          >
-            {tab.label}
-          </button>
-        ))}
-        {sidebarChildren}
-        {sidebarBottomTabs?.map(tab => (
-          <button
-            key={tab.label}
-            onClick={tab.onClick}
-            aria-label={tab.label}
-            title={tab.title}
-            aria-current={tab.isActive ? 'page' : undefined}
-          >
-            {tab.label}
-          </button>
-        ))}
-      </div>
+// Captures the search bar content injected by Dashboard via setSearchBar
+// so tests can query search bar elements.
+const captureSearchBarRef = React.createRef<((content: ReactNode) => void)>() as React.MutableRefObject<(content: ReactNode) => void>
+captureSearchBarRef.current = () => {}
+const SearchBarCapture = ({ children }: { children: ReactNode }) => {
+  const [searchBar, setSearchBar] = React.useState<ReactNode>(null)
+  React.useEffect(() => {
+    captureSearchBarRef.current = setSearchBar
+  }, [setSearchBar])
+  return (
+    <>
       {children}
-    </div>
-  ),
-}))
+      <div data-testid="search-bar">{searchBar}</div>
+    </>
+  )
+}
 
 vi.mock('@/components/SortableNoteCard', () => ({
   default: ({ note, onEdit, onDelete, onShare, onRestore, onPermanentlyDelete, disabled, inBin, onRefresh }: {
@@ -210,12 +181,14 @@ const renderDashboard = (initialEntries = ['/']) => {
   return render(
     <MemoryRouter initialEntries={initialEntries}>
       <ToastProvider>
-        <Routes>
-          <Route element={<Dashboard onLogout={vi.fn()} />}>
-            <Route index element={null} />
-            <Route path="notes/:noteId" element={null} />
-          </Route>
-        </Routes>
+        <SearchBarCapture>
+          <Routes>
+            <Route element={<Dashboard />}>
+              <Route index element={null} />
+              <Route path="notes/:noteId" element={null} />
+            </Route>
+          </Routes>
+        </SearchBarCapture>
       </ToastProvider>
     </MemoryRouter>
   )
@@ -244,9 +217,8 @@ describe('Dashboard', () => {
       updated_at: '2023-01-01T00:00:00Z',
     })
     vi.mocked(notes.getAll).mockResolvedValue([])
-    vi.mocked(useSidebarLabelsController).mockImplementation(() => {
+    vi.mocked(useAuthenticatedLayout).mockImplementation(() => {
       const [labelsList, setLabelsList] = useState<Label[]>([])
-      const [labelCounts, setLabelCounts] = useState<Record<string, number> | null>(null)
 
       const loadLabels = useCallback(async ({ preserveOnError = false }: { preserveOnError?: boolean } = {}) => {
         try {
@@ -264,42 +236,29 @@ describe('Dashboard', () => {
       const loadLabelCounts = useCallback(async ({ preserveOnError = false }: { preserveOnError?: boolean } = {}) => {
         try {
           const counts = await labels.getCounts()
-          setLabelCounts(counts)
           return counts
         } catch {
           if (!preserveOnError) {
-            setLabelCounts(null)
+            return null
           }
           return null
         }
       }, [])
 
-      const handleCreateLabel = useCallback(async (name: string): Promise<boolean> => {
-        await labels.create(name)
-        await Promise.all([loadLabels({ preserveOnError: true }), loadLabelCounts({ preserveOnError: true })])
-        return true
-      }, [loadLabelCounts, loadLabels])
-
-      const handleRenameLabel = useCallback(async (label: Label, newName: string): Promise<boolean> => {
-        await labels.rename(label.id, newName)
-        await Promise.all([loadLabels({ preserveOnError: true }), loadLabelCounts({ preserveOnError: true })])
-        return true
-      }, [loadLabelCounts, loadLabels])
-
-      const handleDeleteLabel = useCallback(async (label: Label): Promise<boolean> => {
-        await labels.delete(label.id)
-        await Promise.all([loadLabels({ preserveOnError: true }), loadLabelCounts({ preserveOnError: true })])
-        return true
-      }, [loadLabelCounts, loadLabels])
+      useEffect(() => {
+        void Promise.all([loadLabels(), loadLabelCounts()])
+      }, [loadLabels, loadLabelCounts])
 
       return {
         labels: labelsList,
-        labelCounts,
+        labelCounts: null,
         loadLabels,
         loadLabelCounts,
-        handleCreateLabel,
-        handleRenameLabel,
-        handleDeleteLabel,
+        handleCreateLabel: vi.fn().mockResolvedValue(true),
+        handleRenameLabel: vi.fn().mockResolvedValue(true),
+        handleDeleteLabel: vi.fn().mockResolvedValue(true),
+        registerLabelCallbacks: vi.fn(),
+        setSearchBar: (content: ReactNode) => captureSearchBarRef.current(content),
       }
     })
   })
@@ -321,43 +280,12 @@ describe('Dashboard', () => {
 
     it('renders dashboard after loading completes', async () => {
       renderDashboard()
-      
+
       await waitFor(() => {
-        expect(screen.getByText('Jot')).toBeInTheDocument()
         expect(screen.getByText('New Note')).toBeInTheDocument()
       })
     })
 
-    it('renders navigation tabs correctly', async () => {
-      renderDashboard()
-
-      await waitFor(() => {
-        expect(screen.getByText('Notes')).toBeInTheDocument()
-        expect(screen.getByText('My Todo')).toBeInTheDocument()
-        expect(screen.getByText('Archive')).toBeInTheDocument()
-        expect(screen.getByText('Bin')).toBeInTheDocument()
-      })
-    })
-
-    it('shows admin link for admin users', async () => {
-      vi.mocked(auth.isAdmin).mockReturnValue(true)
-
-      renderDashboard()
-
-      await waitFor(() => {
-        expect(screen.getByTestId('admin-link')).toBeInTheDocument()
-      })
-    })
-
-    it('does not show admin link for regular users', async () => {
-      vi.mocked(auth.isAdmin).mockReturnValue(false)
-
-      renderDashboard()
-
-      await waitFor(() => {
-        expect(screen.queryByTestId('admin-link')).not.toBeInTheDocument()
-      })
-    })
   })
 
   describe('Search Functionality', () => {
@@ -693,39 +621,12 @@ describe('Dashboard', () => {
 
   describe('View Switching', () => {
     it('switches between notes and archive view', async () => {
-      const user = userEvent.setup()
       const mockGetAll = vi.mocked(notes.getAll)
-      
-      renderDashboard()
-      
-      await waitFor(() => {
-        expect(screen.getByText('Notes')).toBeInTheDocument()
-      })
-      
-      // Switch to archive view
-      const archiveButton = screen.getByRole('button', { name: 'Archive' })
-      await user.click(archiveButton)
-      
+
+      renderDashboard(['/?view=archive'])
+
       await waitFor(() => {
         expect(mockGetAll).toHaveBeenCalledWith(true, '', false, '', false)
-      })
-    })
-
-    it('updates URL when switching to archive view', async () => {
-      const user = userEvent.setup()
-      
-      renderDashboard()
-      
-      await waitFor(() => {
-        expect(screen.getByText('Archive')).toBeInTheDocument()
-      })
-      
-      const archiveButton = screen.getByRole('button', { name: 'Archive' })
-      await user.click(archiveButton)
-      
-      // The active tab should have aria-current="page"
-      await waitFor(() => {
-        expect(archiveButton).toHaveAttribute('aria-current', 'page')
       })
     })
 
@@ -793,14 +694,6 @@ describe('Dashboard', () => {
       })
     })
 
-    it('sets sidebar tooltips for archive and bin tabs', async () => {
-      renderDashboard()
-
-      await waitFor(() => {
-        expect(screen.getByRole('button', { name: 'Archive' })).toHaveAttribute('title', 'Hidden notes you want to keep')
-        expect(screen.getByRole('button', { name: 'Bin' })).toHaveAttribute('title', 'Deleted notes — removed after 7 days')
-      })
-    })
   })
 
   describe('Notes Display', () => {
@@ -818,15 +711,9 @@ describe('Dashboard', () => {
     })
 
     it('shows empty archive state', async () => {
-      const user = userEvent.setup()
       vi.mocked(notes.getAll).mockResolvedValue([])
 
-      renderDashboard()
-
-      await waitFor(() => {
-        expect(screen.getByText('Archive')).toBeInTheDocument()
-      })
-      await user.click(screen.getByText('Archive'))
+      renderDashboard(['/?view=archive'])
 
       await waitFor(() => {
         expect(screen.getByText('No archived notes')).toBeInTheDocument()
@@ -959,7 +846,7 @@ describe('Dashboard', () => {
           <NavigateToNoteButton />
           <ToastProvider>
             <Routes>
-              <Route element={<Dashboard onLogout={vi.fn()} />}>
+              <Route element={<Dashboard />}>
                 <Route index element={null} />
                 <Route path="notes/:noteId" element={null} />
               </Route>
@@ -1007,7 +894,7 @@ describe('Dashboard', () => {
           <NavigateToNextNoteButton />
           <ToastProvider>
             <Routes>
-              <Route element={<Dashboard onLogout={vi.fn()} />}>
+              <Route element={<Dashboard />}>
                 <Route index element={null} />
                 <Route path="notes/:noteId" element={null} />
               </Route>
@@ -1177,32 +1064,6 @@ describe('Dashboard', () => {
     })
   })
 
-  describe('Authentication and Logout', () => {
-    it('handles logout correctly', async () => {
-      const user = userEvent.setup()
-      const mockOnLogout = vi.fn()
-      const mockRemoveUser = vi.mocked(auth.removeUser)
-
-      render(
-        <MemoryRouter>
-          <ToastProvider>
-            <Dashboard onLogout={mockOnLogout} />
-          </ToastProvider>
-        </MemoryRouter>
-      )
-
-      await waitFor(() => {
-        expect(screen.getByTestId('logout-button')).toBeInTheDocument()
-      })
-      await user.click(screen.getByTestId('logout-button'))
-
-      await waitFor(() => {
-        expect(mockRemoveUser).toHaveBeenCalled()
-        expect(mockOnLogout).toHaveBeenCalled()
-      })
-    })
-  })
-
   describe('Error Handling', () => {
     it('handles API failures gracefully', async () => {
       vi.mocked(notes.getAll).mockRejectedValue(new Error('API Error'))
@@ -1211,17 +1072,6 @@ describe('Dashboard', () => {
       
       await waitFor(() => {
         expect(mockConsoleError).toHaveBeenCalledWith('Failed to load notes:', expect.any(Error))
-      })
-    })
-
-    it('handles missing user data', async () => {
-      vi.mocked(auth.getUser).mockReturnValue(null)
-      
-      renderDashboard()
-      
-      await waitFor(() => {
-        // Should still render without throwing errors
-        expect(screen.getByText('Jot')).toBeInTheDocument()
       })
     })
 
@@ -1241,30 +1091,6 @@ describe('Dashboard', () => {
   })
 
   describe('Edge Cases and Race Conditions', () => {
-    it('handles rapid view switching', async () => {
-      const user = userEvent.setup()
-      const mockGetAll = vi.mocked(notes.getAll)
-      
-      renderDashboard()
-      
-      await waitFor(() => {
-        expect(screen.getByText('Archive')).toBeInTheDocument()
-      })
-      
-      const archiveButton = screen.getByRole('button', { name: 'Archive' })
-      const notesButton = screen.getByRole('button', { name: 'Notes' })
-      
-      // Rapid clicking
-      await user.click(archiveButton)
-      await user.click(notesButton)
-      await user.click(archiveButton)
-      
-      // Should handle multiple API calls
-      await waitFor(() => {
-        expect(mockGetAll).toHaveBeenCalledTimes(4) // Initial notes + 3 switches
-      })
-    })
-
     it('handles concurrent note operations', async () => {
       const user = userEvent.setup()
       const mockNotes = [createMockNote({ id: '1', title: 'Test Note' })]
@@ -1347,502 +1173,113 @@ describe('Dashboard', () => {
       vi.mocked(labels.getAll).mockResolvedValue(mockLabels)
     })
 
-  it('renders label list in sidebar when labels exist', async () => {
-    render(
-      <MemoryRouter initialEntries={['/']}>
-        <ToastProvider>
-          <Dashboard onLogout={vi.fn()} />
-        </ToastProvider>
-      </MemoryRouter>
-    )
-
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: /^work/ })).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: /^personal/ })).toBeInTheDocument()
-    })
-  })
-
-  it('shows label counts next to each label', async () => {
-    const countedLabels: Label[] = [
-      {
-        id: 'label-work',
-        user_id: 'user1',
-        name: 'work',
-        created_at: '2024-01-01T00:00:00Z',
-        updated_at: '2024-01-01T00:00:00Z',
-      },
-      {
-        id: 'label-personal',
-        user_id: 'user1',
-        name: 'personal',
-        created_at: '2024-01-01T00:00:00Z',
-        updated_at: '2024-01-01T00:00:00Z',
-      },
-    ]
-    vi.mocked(labels.getAll).mockResolvedValue(countedLabels)
-    vi.mocked(labels.getCounts).mockResolvedValue({
-      'label-work': 2,
-      'label-personal': 1,
-    })
-
-    render(
-      <MemoryRouter initialEntries={['/']}>
-        <ToastProvider>
-          <Dashboard onLogout={vi.fn()} />
-        </ToastProvider>
-      </MemoryRouter>
-    )
-
-    await waitFor(() => {
-      expect(screen.getByTestId('label-count-label-work')).toHaveTextContent('2')
-      expect(screen.getByTestId('label-count-label-personal')).toHaveTextContent('1')
-    })
-  })
-
-  it('does not render default 0 label counts while label counts request is pending', async () => {
-    const countedLabels: Label[] = [
-      {
-        id: 'label-work',
-        user_id: 'user1',
-        name: 'work',
-        created_at: '2024-01-01T00:00:00Z',
-        updated_at: '2024-01-01T00:00:00Z',
-      },
-      {
-        id: 'label-personal',
-        user_id: 'user1',
-        name: 'personal',
-        created_at: '2024-01-01T00:00:00Z',
-        updated_at: '2024-01-01T00:00:00Z',
-      },
-    ]
-    vi.mocked(labels.getAll).mockResolvedValue(countedLabels)
-    let resolveCounts: ((value: Record<string, number>) => void) | null = null
-    const pendingCounts = new Promise<Record<string, number>>((resolve) => {
-      resolveCounts = resolve
-    })
-    vi.mocked(labels.getCounts).mockImplementation(() => pendingCounts)
-
-    render(
-      <MemoryRouter initialEntries={['/']}>
-        <ToastProvider>
-          <Dashboard onLogout={vi.fn()} />
-        </ToastProvider>
-      </MemoryRouter>
-    )
-
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: /^work/ })).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: /^personal/ })).toBeInTheDocument()
-    })
-
-    expect(screen.queryByTestId('label-count-label-work')).not.toBeInTheDocument()
-    expect(screen.queryByTestId('label-count-label-personal')).not.toBeInTheDocument()
-
-    await act(async () => {
-      resolveCounts?.({
-        'label-work': 2,
-        'label-personal': 1,
-      })
-      await pendingCounts
-    })
-
-    await waitFor(() => {
-      expect(screen.getByTestId('label-count-label-work')).toHaveTextContent('2')
-      expect(screen.getByTestId('label-count-label-personal')).toHaveTextContent('1')
-    })
-  })
-
-  it('hides label counts when label counts request fails', async () => {
-    const countedLabels: Label[] = [
-      {
-        id: 'label-work',
-        user_id: 'user1',
-        name: 'work',
-        created_at: '2024-01-01T00:00:00Z',
-        updated_at: '2024-01-01T00:00:00Z',
-      },
-      {
-        id: 'label-personal',
-        user_id: 'user1',
-        name: 'personal',
-        created_at: '2024-01-01T00:00:00Z',
-        updated_at: '2024-01-01T00:00:00Z',
-      },
-    ]
-    vi.mocked(labels.getAll).mockResolvedValue(countedLabels)
-    vi.mocked(labels.getCounts).mockRejectedValue(new Error('counts failed'))
-
-    render(
-      <MemoryRouter initialEntries={['/']}>
-        <ToastProvider>
-          <Dashboard onLogout={vi.fn()} />
-        </ToastProvider>
-      </MemoryRouter>
-    )
-
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: /^work/ })).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: /^personal/ })).toBeInTheDocument()
-    })
-
-    expect(screen.queryByTestId('label-count-label-work')).not.toBeInTheDocument()
-    expect(screen.queryByTestId('label-count-label-personal')).not.toBeInTheDocument()
-  })
-
-  it('creates a new label from sidebar new label control', async () => {
-    const user = userEvent.setup()
-    vi.mocked(labels.create).mockResolvedValue({
-      id: 'label-new',
-      user_id: 'user1',
-      name: 'important',
-      created_at: '2024-01-01T00:00:00Z',
-      updated_at: '2024-01-01T00:00:00Z',
-    })
-
-    render(
-      <MemoryRouter initialEntries={['/']}>
-        <ToastProvider>
-          <Dashboard onLogout={vi.fn()} />
-        </ToastProvider>
-      </MemoryRouter>
-    )
-
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: 'New Label' })).toBeInTheDocument()
-    })
-
-    await user.click(screen.getByRole('button', { name: 'New Label' }))
-    const createInput = await screen.findByRole('textbox', { name: 'New label name' })
-    await user.type(createInput, 'important{enter}')
-
-    await waitFor(() => {
-      expect(labels.create).toHaveBeenCalledWith('important')
-    })
-  })
-
-  it('renders new label action when no labels exist', async () => {
-    vi.mocked(labels.getAll).mockResolvedValue([])
-
-    render(
-      <MemoryRouter initialEntries={['/']}>
-        <ToastProvider>
-          <Dashboard onLogout={vi.fn()} />
-        </ToastProvider>
-      </MemoryRouter>
-    )
-
-    await waitFor(() => {
-      expect(screen.getByText('New Note')).toBeInTheDocument()
-    })
-
-    expect(screen.getByRole('button', { name: 'New Label' })).toBeInTheDocument()
-    expect(screen.queryByRole('button', { name: /^work/ })).not.toBeInTheDocument()
-  })
-
-  it('clicking a label calls getAll with that labelId', async () => {
-    const user = userEvent.setup()
+  it('fetches notes filtered by label when URL has label param', async () => {
     const mockGetAll = vi.mocked(notes.getAll)
 
-    render(
-      <MemoryRouter initialEntries={['/']}>
-        <ToastProvider>
-          <Dashboard onLogout={vi.fn()} />
-        </ToastProvider>
-      </MemoryRouter>
-    )
-
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: /^work/ })).toBeInTheDocument()
-    })
-
-    await user.click(screen.getByRole('button', { name: /^work/ }))
+    renderDashboard(['/?label=label-work'])
 
     await waitFor(() => {
       expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-work', false)
     })
   })
 
-  it('clicking active label again deselects and calls getAll with empty labelId', async () => {
+  it('fetches active notes when URL label param is removed', async () => {
     const user = userEvent.setup()
     const mockGetAll = vi.mocked(notes.getAll)
 
-    render(
-      <MemoryRouter initialEntries={['/']}>
-        <ToastProvider>
-          <Dashboard onLogout={vi.fn()} />
-        </ToastProvider>
-      </MemoryRouter>
-    )
-
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: /^work/ })).toBeInTheDocument()
-    })
-
-    // Select
-    await user.click(screen.getByRole('button', { name: /^work/ }))
-    await waitFor(() => {
-      expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-work', false)
-    })
-
-    // Deselect
-    await user.click(screen.getByRole('button', { name: /^work/ }))
-    await waitFor(() => {
-      const calls = mockGetAll.mock.calls
-      expect(calls[calls.length - 1]).toEqual([false, '', false, '', false])
-    })
-  })
-
-  it('selecting a label updates search params (verified via getAll arg)', async () => {
-    const LocationProbe = () => {
-      const { search } = useLocation()
-      return <span data-testid="location-search">{search}</span>
+    const NavHelper = () => {
+      const navigate = useNavigate()
+      return <button data-testid="go-home" onClick={() => navigate('/')}>home</button>
     }
 
-    const user = userEvent.setup()
-    const mockGetAll = vi.mocked(notes.getAll)
-
     render(
-      <MemoryRouter initialEntries={['/']}>
+      <MemoryRouter initialEntries={['/?label=label-work']}>
+        <NavHelper />
         <ToastProvider>
-          <Dashboard onLogout={vi.fn()} />
+          <SearchBarCapture>
+            <Routes>
+              <Route element={<Dashboard />}>
+                <Route index element={null} />
+                <Route path="notes/:noteId" element={null} />
+              </Route>
+            </Routes>
+          </SearchBarCapture>
         </ToastProvider>
-        <LocationProbe />
       </MemoryRouter>
     )
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: /^personal/ })).toBeInTheDocument()
+      expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-work', false)
     })
 
-    await user.click(screen.getByRole('button', { name: /^personal/ }))
+    await user.click(screen.getByTestId('go-home'))
 
-    // The label id is passed to getAll only after the URL param is set and
-    // the component re-renders with the new selectedLabelId from useSearchParams
     await waitFor(() => {
-      expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-personal', false)
+      expect(mockGetAll).toHaveBeenCalledWith(false, '', false, '', false)
+    })
+  })
+
+  it('clears label filter and fetches archived notes when URL switches to archive view', async () => {
+    const user = userEvent.setup()
+    const mockGetAll = vi.mocked(notes.getAll)
+
+    const NavHelper = () => {
+      const navigate = useNavigate()
+      return <button data-testid="go-archive" onClick={() => navigate('/?view=archive')}>archive</button>
+    }
+
+    render(
+      <MemoryRouter initialEntries={['/?label=label-work']}>
+        <NavHelper />
+        <ToastProvider>
+          <SearchBarCapture>
+            <Routes>
+              <Route element={<Dashboard />}>
+                <Route index element={null} />
+                <Route path="notes/:noteId" element={null} />
+              </Route>
+            </Routes>
+          </SearchBarCapture>
+        </ToastProvider>
+      </MemoryRouter>
+    )
+
+    await waitFor(() => {
+      expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-work', false)
     })
 
-    // Verify the search param was written to the URL
+    await user.click(screen.getByTestId('go-archive'))
+
     await waitFor(() => {
-      expect(screen.getByTestId('location-search').textContent).toContain('label=label-personal')
+      expect(mockGetAll).toHaveBeenCalledWith(true, '', false, '', false)
     })
   })
 
   it('sets label-specific page title when a label filter is selected', async () => {
-    const user = userEvent.setup()
-    renderDashboard()
-
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: /^personal/ })).toBeInTheDocument()
-    })
-
-    await user.click(screen.getByRole('button', { name: /^personal/ }))
+    renderDashboard(['/?label=label-personal'])
 
     await waitFor(() => {
       expect(document.title).toBe('personal - Jot')
     })
   })
 
-  it('deselecting a label calls getAll with empty labelId', async () => {
-    const user = userEvent.setup()
+  it('fetches notes with label from archive URL (label param overrides view)', async () => {
     const mockGetAll = vi.mocked(notes.getAll)
 
-    render(
-      <MemoryRouter initialEntries={['/?label=label-work']}>
-        <ToastProvider><Dashboard onLogout={vi.fn()} /></ToastProvider>
-      </MemoryRouter>
-    )
-
-    await waitFor(() => {
-      // Initial load should use the label from URL
-      expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-work', false)
-    })
-
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: /^work/ })).toBeInTheDocument()
-    })
-
-    // Click to deselect
-    await user.click(screen.getByRole('button', { name: /^work/ }))
-
-    await waitFor(() => {
-      expect(mockGetAll).toHaveBeenCalledWith(false, '', false, '', false)
-    })
-  })
-
-  it('clicking a label from archive view clears archive and fetches active notes', async () => {
-    const user = userEvent.setup()
-    const mockGetAll = vi.mocked(notes.getAll)
-
-    render(
-      <MemoryRouter initialEntries={['/?view=archive']}>
-        <ToastProvider><Dashboard onLogout={vi.fn()} /></ToastProvider>
-      </MemoryRouter>
-    )
-
-    await waitFor(() => {
-      expect(mockGetAll).toHaveBeenCalledWith(true, '', false, '', false)
-    })
-
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: /^work/ })).toBeInTheDocument()
-    })
-
-    await user.click(screen.getByRole('button', { name: /^work/ }))
+    renderDashboard(['/?view=archive&label=label-work'])
 
     await waitFor(() => {
       expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-work', false)
     })
   })
 
-  it('clicking a label from bin view clears bin and fetches active notes', async () => {
-    const user = userEvent.setup()
+  it('fetches notes with label from bin URL (label param overrides view)', async () => {
     const mockGetAll = vi.mocked(notes.getAll)
 
-    render(
-      <MemoryRouter initialEntries={['/?view=bin']}>
-        <ToastProvider><Dashboard onLogout={vi.fn()} /></ToastProvider>
-      </MemoryRouter>
-    )
-
-    await waitFor(() => {
-      expect(mockGetAll).toHaveBeenCalledWith(false, '', true, '', false)
-    })
-
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: /^work/ })).toBeInTheDocument()
-    })
-
-    await user.click(screen.getByRole('button', { name: /^work/ }))
+    renderDashboard(['/?view=bin&label=label-work'])
 
     await waitFor(() => {
       expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-work', false)
-    })
-  })
-
-  it('clicking a label clears search query', async () => {
-    const user = userEvent.setup()
-    const mockGetAll = vi.mocked(notes.getAll)
-
-    render(
-      <MemoryRouter initialEntries={['/?search=hello']}>
-        <ToastProvider><Dashboard onLogout={vi.fn()} /></ToastProvider>
-      </MemoryRouter>
-    )
-
-    await waitFor(() => {
-      expect(mockGetAll).toHaveBeenCalledWith(false, 'hello', false, '', false)
-    })
-
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: /^work/ })).toBeInTheDocument()
-    })
-
-    await user.click(screen.getByRole('button', { name: /^work/ }))
-
-    await waitFor(() => {
-      expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-work', false)
-    })
-  })
-
-  it('Notes tab is not highlighted when a label is selected', async () => {
-    const user = userEvent.setup()
-
-    render(
-      <MemoryRouter initialEntries={['/']}>
-        <ToastProvider>
-          <Dashboard onLogout={vi.fn()} />
-        </ToastProvider>
-      </MemoryRouter>
-    )
-
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: /^work/ })).toBeInTheDocument()
-    })
-
-    // Notes tab should initially have aria-current
-    const notesButton = screen.getByRole('button', { name: 'Notes' })
-    expect(notesButton).toHaveAttribute('aria-current', 'page')
-
-    // Select a label
-    await user.click(screen.getByRole('button', { name: /^work/ }))
-
-    // Notes tab should no longer have aria-current
-    await waitFor(() => {
-      expect(notesButton).not.toHaveAttribute('aria-current')
-    })
-  })
-
-  it('clicking Notes tab while label is selected clears label and highlights Notes', async () => {
-    const user = userEvent.setup()
-    const mockGetAll = vi.mocked(notes.getAll)
-
-    render(
-      <MemoryRouter initialEntries={['/?label=label-work']}>
-        <ToastProvider><Dashboard onLogout={vi.fn()} /></ToastProvider>
-      </MemoryRouter>
-    )
-
-    await waitFor(() => {
-      expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-work', false)
-    })
-
-    const notesButton = screen.getByRole('button', { name: 'Notes' })
-    // Notes tab should not be highlighted when label is active
-    expect(notesButton).not.toHaveAttribute('aria-current')
-
-    await user.click(notesButton)
-
-    await waitFor(() => {
-      expect(notesButton).toHaveAttribute('aria-current', 'page')
-      expect(mockGetAll).toHaveBeenCalledWith(false, '', false, '', false)
-    })
-  })
-
-  it('label param takes precedence over view param in URL', async () => {
-    const mockGetAll = vi.mocked(notes.getAll)
-
-    render(
-      <MemoryRouter initialEntries={['/?view=archive&label=label-work']}>
-        <ToastProvider><Dashboard onLogout={vi.fn()} /></ToastProvider>
-      </MemoryRouter>
-    )
-
-    // Should fetch active notes with label, not archived notes
-    await waitFor(() => {
-      expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-work', false)
-    })
-
-    // Notes tab should not be highlighted (label is active)
-    const notesButton = screen.getByRole('button', { name: 'Notes' })
-    expect(notesButton).not.toHaveAttribute('aria-current')
-
-    // Archive tab should not be highlighted either
-    const archiveButton = screen.getByRole('button', { name: 'Archive' })
-    expect(archiveButton).not.toHaveAttribute('aria-current')
-  })
-
-  it('switching view clears label filter and calls getAll without labelId', async () => {
-    const user = userEvent.setup()
-    const mockGetAll = vi.mocked(notes.getAll)
-
-    render(
-      <MemoryRouter initialEntries={['/?label=label-work']}>
-        <ToastProvider><Dashboard onLogout={vi.fn()} /></ToastProvider>
-      </MemoryRouter>
-    )
-
-    await waitFor(() => {
-      expect(screen.getByRole('button', { name: /^work/ })).toBeInTheDocument()
-    })
-
-    // Switch to archive view
-    const archiveButton = screen.getByRole('button', { name: 'Archive' })
-    await user.click(archiveButton)
-
-    await waitFor(() => {
-      expect(mockGetAll).toHaveBeenCalledWith(true, '', false, '', false)
     })
   })
 
@@ -1851,7 +1288,7 @@ describe('Dashboard', () => {
 
     render(
       <MemoryRouter initialEntries={['/?label=label-work']}>
-        <ToastProvider><Dashboard onLogout={vi.fn()} /></ToastProvider>
+        <ToastProvider><Routes><Route element={<Dashboard />}><Route index element={null} /></Route></Routes></ToastProvider>
       </MemoryRouter>
     )
 
@@ -1898,13 +1335,9 @@ describe('Dashboard', () => {
       await waitFor(() => {
         expect(labels.getAll).toHaveBeenCalledTimes(2)
       })
-
-      await waitFor(() => {
-        expect(screen.getByRole('button', { name: /^realtime/ })).toBeInTheDocument()
-      })
     })
 
-    it('refreshes sidebar labels when SSE reports created and updated notes', async () => {
+    it('refreshes labels when SSE reports created and updated notes', async () => {
       vi.mocked(labels.getAll)
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([realtimeLabel])
@@ -1932,10 +1365,6 @@ describe('Dashboard', () => {
         expect(labels.getAll).toHaveBeenCalledTimes(2)
       })
 
-      await waitFor(() => {
-        expect(screen.getByRole('button', { name: /^realtime/ })).toBeInTheDocument()
-      })
-
       await act(async () => {
         sseOptions?.onEvent({
           type: 'note_updated',
@@ -1947,13 +1376,9 @@ describe('Dashboard', () => {
       await waitFor(() => {
         expect(labels.getAll).toHaveBeenCalledTimes(3)
       })
-
-      await waitFor(() => {
-        expect(screen.getByRole('button', { name: /^realtime/ })).toBeInTheDocument()
-      })
     })
 
-    it('refreshes sidebar labels and counts when SSE reports labels_changed', async () => {
+    it('refreshes labels and counts when SSE reports labels_changed', async () => {
       vi.mocked(labels.getAll)
         .mockResolvedValueOnce([])
         .mockResolvedValueOnce([realtimeLabel])
@@ -1984,11 +1409,6 @@ describe('Dashboard', () => {
         expect(labels.getAll).toHaveBeenCalledTimes(2)
         expect(labels.getCounts).toHaveBeenCalledTimes(2)
       })
-
-      await waitFor(() => {
-        expect(screen.getByRole('button', { name: /^realtime/ })).toBeInTheDocument()
-        expect(screen.getByTestId('label-count-label-realtime')).toHaveTextContent('1')
-      })
     })
 
     it('clears stale selected label from URL after labels_changed removes it', async () => {
@@ -2008,7 +1428,12 @@ describe('Dashboard', () => {
       render(
         <MemoryRouter initialEntries={['/?label=label-realtime']}>
           <ToastProvider>
-            <Dashboard onLogout={vi.fn()} />
+            <Routes>
+              <Route element={<Dashboard />}>
+                <Route index element={null} />
+                <Route path="notes/:noteId" element={null} />
+              </Route>
+            </Routes>
           </ToastProvider>
           <LocationProbe />
         </MemoryRouter>
@@ -2044,31 +1469,6 @@ describe('Dashboard', () => {
   })
 
   describe('My Todo Filtering', () => {
-    it('renders My Todo tab in sidebar', async () => {
-      renderDashboard()
-
-      await waitFor(() => {
-        expect(screen.getByRole('button', { name: 'My Todo' })).toBeInTheDocument()
-      })
-    })
-
-    it('clicking My Todo tab calls getAll with myTodo=true', async () => {
-      const user = userEvent.setup()
-      const mockGetAll = vi.mocked(notes.getAll)
-
-      renderDashboard()
-
-      await waitFor(() => {
-        expect(screen.getByRole('button', { name: 'My Todo' })).toBeInTheDocument()
-      })
-
-      await user.click(screen.getByRole('button', { name: 'My Todo' }))
-
-      await waitFor(() => {
-        expect(mockGetAll).toHaveBeenCalledWith(false, '', false, '', true)
-      })
-    })
-
     it('loads My Todo view from URL parameter', async () => {
       const mockGetAll = vi.mocked(notes.getAll)
 
@@ -2080,16 +1480,9 @@ describe('Dashboard', () => {
     })
 
     it('shows empty state for My Todo with no assigned notes', async () => {
-      const user = userEvent.setup()
       vi.mocked(notes.getAll).mockResolvedValue([])
 
-      renderDashboard()
-
-      await waitFor(() => {
-        expect(screen.getByRole('button', { name: 'My Todo' })).toBeInTheDocument()
-      })
-
-      await user.click(screen.getByRole('button', { name: 'My Todo' }))
+      renderDashboard(['/?view=my-todo'])
 
       await waitFor(() => {
         expect(screen.getByText('No assigned to-do items')).toBeInTheDocument()
@@ -2097,20 +1490,10 @@ describe('Dashboard', () => {
       })
     })
 
-    it('shows My Todo tab tooltip and subtitle in My Todo view', async () => {
-      const user = userEvent.setup()
+    it('shows My Todo info subtitle in My Todo view', async () => {
       vi.mocked(notes.getAll).mockResolvedValue([])
 
-      renderDashboard()
-
-      await waitFor(() => {
-        expect(screen.getByRole('button', { name: 'My Todo' })).toHaveAttribute(
-          'title',
-          'Notes with to-do items assigned to you'
-        )
-      })
-
-      await user.click(screen.getByRole('button', { name: 'My Todo' }))
+      renderDashboard(['/?view=my-todo'])
 
       await waitFor(() => {
         expect(screen.getByText('Showing notes that include your assigned to-do items.')).toBeInTheDocument()
@@ -2164,55 +1547,6 @@ describe('Dashboard', () => {
 
       await waitFor(() => {
         expect(document.title).toBe('Jot')
-      })
-    })
-
-    it('switching from My Todo to Notes clears my_todo filter', async () => {
-      const user = userEvent.setup()
-      const mockGetAll = vi.mocked(notes.getAll)
-
-      renderDashboard(['/?view=my-todo'])
-
-      await waitFor(() => {
-        expect(mockGetAll).toHaveBeenCalledWith(false, '', false, '', true)
-      })
-
-      await user.click(screen.getByRole('button', { name: 'Notes' }))
-
-      await waitFor(() => {
-        expect(mockGetAll).toHaveBeenCalledWith(false, '', false, '', false)
-      })
-    })
-
-    it('clicking a label from My Todo view clears my_todo and filters by label', async () => {
-      const user = userEvent.setup()
-      const mockGetAll = vi.mocked(notes.getAll)
-
-      const mockLabels: Label[] = [
-        {
-          id: 'label-work',
-          user_id: 'user1',
-          name: 'work',
-          created_at: '2024-01-01T00:00:00Z',
-          updated_at: '2024-01-01T00:00:00Z',
-        },
-      ]
-      vi.mocked(labels.getAll).mockResolvedValue(mockLabels)
-
-      renderDashboard(['/?view=my-todo'])
-
-      await waitFor(() => {
-        expect(mockGetAll).toHaveBeenCalledWith(false, '', false, '', true)
-      })
-
-      await waitFor(() => {
-        expect(screen.getByRole('button', { name: /^work/ })).toBeInTheDocument()
-      })
-
-      await user.click(screen.getByRole('button', { name: /^work/ }))
-
-      await waitFor(() => {
-        expect(mockGetAll).toHaveBeenCalledWith(false, '', false, 'label-work', false)
       })
     })
 

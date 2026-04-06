@@ -1,37 +1,30 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import i18n from '@/i18n';
 import { auth, users, sessions as sessionsApi, pats as patsApi, isAxiosError } from '@/utils/api';
-import { getUser, setUser, removeUser, getSettings, setSettings, isAdmin } from '@/utils/auth';
+import { getUser, setUser, getSettings, setSettings } from '@/utils/auth';
 import { getLanguagePreference, resolveLanguage, LanguagePreference } from '@/utils/language';
 import { isPasswordTooShort } from '@/utils/userValidation';
 import { getThemePreference, applyTheme, ThemePreference } from '@/utils/theme';
-import AppLayout from '@/components/AppLayout';
 import PageContent from '@/components/PageContent';
 import ImportModal from '@/components/ImportModal';
 import AboutModal from '@/components/AboutModal';
 import NewPATModal from '@/components/NewPATModal';
-import SidebarLabels from '@/components/SidebarLabels';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { useToast } from '@/hooks/useToast';
-import { useNavigationLinkTabs } from '@/hooks/useNavigationTabs';
-import { useSidebarLabelsController } from '@/hooks/useSidebarLabelsController';
 import type { ActiveSession, PersonalAccessToken } from '@jot/shared';
 import { IdentitySecurityColumn, PreferencesInfoColumn } from './settings/SettingsSections';
 
 interface SettingsProps {
-  onLogout: () => void;
   passwordMinLength: number;
 }
 
-const Settings = ({ onLogout, passwordMinLength }: SettingsProps) => {
+const Settings = ({ passwordMinLength }: SettingsProps) => {
   const { t } = useTranslation();
   const { showToast } = useToast();
   useEffect(() => { document.title = t('pageTitle.settings'); }, [t]);
   const displayMsg = (msg: string) => (i18n.exists(msg) ? t(msg) : msg);
   const currentUser = getUser();
-  const navigate = useNavigate();
   // currentUsername tracks the persisted value shown in the nav header.
   // draftUsername is the live value bound to the input field.
   const [currentUsername, setCurrentUsername] = useState(currentUser?.username ?? '');
@@ -169,16 +162,6 @@ const Settings = ({ onLogout, passwordMinLength }: SettingsProps) => {
     }).catch(() => { /* keep cached/system default */ });
   }, []);
 
-  const handleLogout = async () => {
-    try {
-      await auth.logout();
-      removeUser();
-      onLogout();
-    } catch {
-      setError('settings.logoutFailed');
-    }
-  };
-
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
     setPasswordError('');
@@ -259,20 +242,6 @@ const Settings = ({ onLogout, passwordMinLength }: SettingsProps) => {
     }
   };
 
-  const {
-    labels: labelsList,
-    labelCounts,
-    loadLabels,
-    loadLabelCounts,
-    handleCreateLabel,
-    handleRenameLabel,
-    handleDeleteLabel,
-  } = useSidebarLabelsController();
-
-  useEffect(() => {
-    void Promise.all([loadLabels(), loadLabelCounts()]);
-  }, [loadLabels, loadLabelCounts]);
-
   const handleThemeChange = async (pref: ThemePreference) => {
     const prev = themePref;
     const current = getSettings();
@@ -335,7 +304,6 @@ const Settings = ({ onLogout, passwordMinLength }: SettingsProps) => {
     }
   };
 
-  const { tabs: navigationTabs, bottomTabs: bottomNavigationTabs } = useNavigationLinkTabs();
   const sessionPendingRevokeLabel = sessionPendingRevoke
     ? (
       sessionPendingRevoke.os !== 'Unknown'
@@ -344,28 +312,9 @@ const Settings = ({ onLogout, passwordMinLength }: SettingsProps) => {
     )
     : '';
 
-  const sidebarChildren = (
-    <SidebarLabels
-      labels={labelsList}
-      labelCounts={labelCounts}
-      onSelect={(labelId) => navigate(`/?label=${encodeURIComponent(labelId)}`)}
-      onCreate={handleCreateLabel}
-      onRename={handleRenameLabel}
-      onDelete={handleDeleteLabel}
-    />
-  );
-
   return (
-    <AppLayout
-      onLogout={handleLogout}
-      username={currentUsername}
-      isAdmin={isAdmin()}
-      settingsLinkActive={true}
-      sidebarTabs={navigationTabs}
-      sidebarBottomTabs={bottomNavigationTabs}
-      sidebarChildren={sidebarChildren}
-    >
-      <PageContent>
+    <>
+    <PageContent>
         <div className="mb-6">
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{t('settings.title')}</h1>
         </div>
@@ -464,7 +413,7 @@ const Settings = ({ onLogout, passwordMinLength }: SettingsProps) => {
         token={newlyCreatedPAT?.token ?? ''}
         onClose={() => setNewlyCreatedPAT(null)}
       />
-    </AppLayout>
+    </>
   );
 };
 
