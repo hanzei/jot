@@ -134,6 +134,8 @@ jobs:
             type=raw,value=unstable,enable={{is_default_branch}}
             type=sha,enable={{is_default_branch}}
             type=raw,value=pr-${{ github.event.pull_request.number }},enable=${{ github.event_name == 'pull_request' }}
+          labels: |
+            org.opencontainers.image.description=${{ github.event_name == 'pull_request' && format('Built from PR #{0}: {1}', github.event.pull_request.number, github.event.pull_request.html_url) || 'Jot — self-hosted note-taking application' }}
 
       - name: Create manifest list and push
         working-directory: /tmp/digests
