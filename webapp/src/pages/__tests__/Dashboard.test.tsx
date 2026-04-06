@@ -2,12 +2,13 @@ import { render, screen, waitFor, fireEvent, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { MemoryRouter, useLocation, useNavigate, Routes, Route } from 'react-router'
-import { type ReactNode } from 'react'
+import { type ReactNode, useCallback, useState } from 'react'
 import Dashboard from '../Dashboard'
 import type { AuthResponse, Note, Label, NoteSort, UserSettings } from '@jot/shared'
 import { notes, labels, users } from '@/utils/api'
 import * as auth from '@/utils/auth'
 import { useSSE } from '@/utils/useSSE'
+import { useSidebarLabelsController } from '@/hooks/useSidebarLabelsController'
 import { createMockNote } from '@/utils/__tests__/test-helpers'
 import { ToastProvider } from '@/components/Toast'
 
@@ -27,6 +28,8 @@ vi.mock('@/utils/api', () => ({
     getAll: vi.fn().mockResolvedValue([]),
     create: vi.fn(),
     getCounts: vi.fn().mockResolvedValue({}),
+    rename: vi.fn(),
+    delete: vi.fn(),
   },
   users: {
     search: vi.fn().mockResolvedValue([]),
@@ -92,6 +95,10 @@ vi.mock('@dnd-kit/modifiers', () => ({
 // Mock useSSE to prevent EventSource usage in jsdom environment
 vi.mock('@/utils/useSSE', () => ({
   useSSE: vi.fn(),
+}))
+
+vi.mock('@/hooks/useSidebarLabelsController', () => ({
+  useSidebarLabelsController: vi.fn(),
 }))
 
 // Mock AppLayout to render children and expose props for testing
@@ -237,6 +244,64 @@ describe('Dashboard', () => {
       updated_at: '2023-01-01T00:00:00Z',
     })
     vi.mocked(notes.getAll).mockResolvedValue([])
+    vi.mocked(useSidebarLabelsController).mockImplementation(() => {
+      const [labelsList, setLabelsList] = useState<Label[]>([])
+      const [labelCounts, setLabelCounts] = useState<Record<string, number> | null>(null)
+
+      const loadLabels = useCallback(async ({ preserveOnError = false }: { preserveOnError?: boolean } = {}) => {
+        try {
+          const nextLabels = await labels.getAll()
+          setLabelsList(nextLabels)
+          return nextLabels
+        } catch {
+          if (!preserveOnError) {
+            setLabelsList([])
+          }
+          return null
+        }
+      }, [])
+
+      const loadLabelCounts = useCallback(async ({ preserveOnError = false }: { preserveOnError?: boolean } = {}) => {
+        try {
+          const counts = await labels.getCounts()
+          setLabelCounts(counts)
+          return counts
+        } catch {
+          if (!preserveOnError) {
+            setLabelCounts(null)
+          }
+          return null
+        }
+      }, [])
+
+      const handleCreateLabel = useCallback(async (name: string): Promise<boolean> => {
+        await labels.create(name)
+        await Promise.all([loadLabels({ preserveOnError: true }), loadLabelCounts({ preserveOnError: true })])
+        return true
+      }, [loadLabelCounts, loadLabels])
+
+      const handleRenameLabel = useCallback(async (label: Label, newName: string): Promise<boolean> => {
+        await labels.rename(label.id, newName)
+        await Promise.all([loadLabels({ preserveOnError: true }), loadLabelCounts({ preserveOnError: true })])
+        return true
+      }, [loadLabelCounts, loadLabels])
+
+      const handleDeleteLabel = useCallback(async (label: Label): Promise<boolean> => {
+        await labels.delete(label.id)
+        await Promise.all([loadLabels({ preserveOnError: true }), loadLabelCounts({ preserveOnError: true })])
+        return true
+      }, [loadLabelCounts, loadLabels])
+
+      return {
+        labels: labelsList,
+        labelCounts,
+        loadLabels,
+        loadLabelCounts,
+        handleCreateLabel,
+        handleRenameLabel,
+        handleDeleteLabel,
+      }
+    })
   })
 
   afterEach(() => {
@@ -1444,10 +1509,10 @@ describe('Dashboard', () => {
     )
 
     await waitFor(() => {
-      expect(screen.getByRole('button', { name: '+ New Label' })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'New Label' })).toBeInTheDocument()
     })
 
-    await user.click(screen.getByRole('button', { name: '+ New Label' }))
+    await user.click(screen.getByRole('button', { name: 'New Label' }))
     const createInput = await screen.findByRole('textbox', { name: 'New label name' })
     await user.type(createInput, 'important{enter}')
 
@@ -1471,7 +1536,7 @@ describe('Dashboard', () => {
       expect(screen.getByText('New Note')).toBeInTheDocument()
     })
 
-    expect(screen.getByRole('button', { name: '+ New Label' })).toBeInTheDocument()
+    expect(screen.getByRole('button', { name: 'New Label' })).toBeInTheDocument()
     expect(screen.queryByRole('button', { name: /^work/ })).not.toBeInTheDocument()
   })
 

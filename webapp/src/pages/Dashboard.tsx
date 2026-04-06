@@ -1,9 +1,9 @@
 import { useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import { PlusIcon, DocumentTextIcon, ArchiveBoxIcon, TrashIcon, ClipboardDocumentCheckIcon, ArrowsUpDownIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline';
 import { useTranslation } from 'react-i18next';
-import { notes, auth, labels as labelsApi, users as usersApi, isAxiosError } from '@/utils/api';
+import { notes, auth, users as usersApi } from '@/utils/api';
 import { removeUser, getUser, getSettings, setSettings, isAdmin } from '@/utils/auth';
-import type { Note, Label, User, SSEEvent, NoteSort } from '@jot/shared';
+import type { Note, User, SSEEvent, NoteSort } from '@jot/shared';
 import { useSSE } from '@/utils/useSSE';
 import { useSearchParams, useParams } from 'react-router';
 import AppLayout from '@/components/AppLayout';
@@ -14,6 +14,7 @@ import ShareModal from '@/components/ShareModal';
 import SidebarLabels from '@/components/SidebarLabels';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { useToast } from '@/hooks/useToast';
+import { useSidebarLabelsController } from '@/hooks/useSidebarLabelsController';
 import { isAnyModalDialogOpen, isEditableElementFocused, isOverlayControlFocused } from '@/utils/keyboardShortcuts';
 import { NOTE_SORT_OPTIONS, normalizeNoteSort, sortNotesForDisplay } from '@/utils/noteSort';
 import {
@@ -60,8 +61,6 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const [showArchived, setShowArchived] = useState(!initialLabel && searchParams.get('view') === 'archive');
   const [showBin, setShowBin] = useState(!initialLabel && searchParams.get('view') === 'bin');
   const [showMyTodo, setShowMyTodo] = useState(!initialLabel && searchParams.get('view') === 'my-todo');
-  const [labelsList, setLabelsList] = useState<Label[]>([]);
-  const [labelCounts, setLabelCounts] = useState<Record<string, number> | null>(null);
   const [selectedLabelId, setSelectedLabelId] = useState<string | null>(initialLabel);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingNote, setEditingNote] = useState<Note | null>(null);
@@ -70,13 +69,13 @@ export default function Dashboard({ onLogout }: DashboardProps) {
   const [usersById, setUsersById] = useState<Map<string, User>>(new Map());
   const user = getUser();
   const isMountedRef = useRef(true);
+  const selectedLabelIdRef = useRef<string | null>(initialLabel);
   const searchInputRef = useRef<HTMLInputElement>(null);
   const lastFocusedElementRef = useRef<Element | null>(null);
   const openNoteIdRef = useRef<string | null>(null);
   const returnPathRef = useRef('/');
   const noteSortUpdateRequestIdRef = useRef(0);
   const loadNotesRequestIdRef = useRef(0);
-  const latestLabelCountsRequestIdRef = useRef(0);
   useEffect(() => {
     isMountedRef.current = true;
     return () => { isMountedRef.current = false; };
@@ -95,6 +94,10 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     setShowMyTodo(!label && searchParams.get('view') === 'my-todo');
     setSelectedLabelId(label);
   }, [searchParams]);
+
+  useEffect(() => {
+    selectedLabelIdRef.current = selectedLabelId;
+  }, [selectedLabelId]);
 
   useEffect(() => {
     if (!showBin) {
@@ -174,34 +177,6 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     })
   );
 
-  useEffect(() => {
-    if (isModalOpen && editingNote?.title) {
-      document.title = t('pageTitle.note', { title: editingNote.title });
-    } else if (showBin) {
-      document.title = t('pageTitle.bin');
-    } else if (showArchived) {
-      document.title = t('pageTitle.archive');
-    } else if (showMyTodo) {
-      document.title = t('pageTitle.myTodo');
-    } else if (selectedLabelId) {
-      const activeLabelName = labelsList.find((label) => label.id === selectedLabelId)?.name ?? '';
-      document.title = activeLabelName ? t('pageTitle.label', { name: activeLabelName }) : t('pageTitle.notes');
-    } else {
-      document.title = t('pageTitle.notes');
-    }
-  }, [editingNote?.title, isModalOpen, labelsList, selectedLabelId, showArchived, showBin, showMyTodo, t]);
-
-  const loadLabels = useCallback(async (): Promise<Label[] | null> => {
-    try {
-      const labelsData = await labelsApi.getAll();
-      if (isMountedRef.current) setLabelsList(labelsData);
-      return labelsData;
-    } catch (error) {
-      if (isMountedRef.current) console.error('Failed to load labels:', error);
-      return null;
-    }
-  }, []);
-
   const loadUsers = useCallback(async () => {
     try {
       const usersData = await usersApi.search();
@@ -214,24 +189,6 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       }
     } catch (error) {
       if (isMountedRef.current) console.error('Failed to load users:', error);
-    }
-  }, []);
-
-  // Sidebar label counts reflect the default notes view (active, non-archived notes).
-  const loadLabelCounts = useCallback(async () => {
-    const requestId = ++latestLabelCountsRequestIdRef.current;
-
-    try {
-      const counts = await labelsApi.getCounts();
-      if (!isMountedRef.current || requestId !== latestLabelCountsRequestIdRef.current) {
-        return;
-      }
-      setLabelCounts(counts);
-    } catch (error) {
-      if (isMountedRef.current && requestId === latestLabelCountsRequestIdRef.current) {
-        setLabelCounts(null);
-        console.error('Failed to load label counts:', error);
-      }
     }
   }, []);
 
@@ -272,11 +229,52 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     }
   }, [showArchived, showBin, debouncedSearchQuery, selectedLabelId, showMyTodo, showToast, t]);
 
+  // Sidebar label counts reflect the default notes view (active, non-archived notes).
+  const {
+    labels: labelsList,
+    labelCounts,
+    loadLabels,
+    loadLabelCounts,
+    handleCreateLabel,
+    handleRenameLabel,
+    handleDeleteLabel,
+  } = useSidebarLabelsController({
+    onRenameSuccess: async () => {
+      await loadNotes();
+    },
+    onDeleteSuccess: async (label) => {
+      if (selectedLabelIdRef.current === label.id) {
+        handleViewChange('notes');
+        return;
+      }
+      await loadNotes();
+    },
+  });
+
   useEffect(() => {
-    loadLabels();
+    void Promise.all([loadLabels(), loadLabelCounts()]);
+  }, [loadLabelCounts, loadLabels]);
+
+  useEffect(() => {
+    if (isModalOpen && editingNote?.title) {
+      document.title = t('pageTitle.note', { title: editingNote.title });
+    } else if (showBin) {
+      document.title = t('pageTitle.bin');
+    } else if (showArchived) {
+      document.title = t('pageTitle.archive');
+    } else if (showMyTodo) {
+      document.title = t('pageTitle.myTodo');
+    } else if (selectedLabelId) {
+      const activeLabelName = labelsList.find((label) => label.id === selectedLabelId)?.name ?? '';
+      document.title = activeLabelName ? t('pageTitle.label', { name: activeLabelName }) : t('pageTitle.notes');
+    } else {
+      document.title = t('pageTitle.notes');
+    }
+  }, [editingNote?.title, isModalOpen, labelsList, selectedLabelId, showArchived, showBin, showMyTodo, t]);
+
+  useEffect(() => {
     loadUsers();
-    loadLabelCounts();
-  }, [loadLabels, loadUsers, loadLabelCounts]);
+  }, [loadUsers]);
 
   useEffect(() => {
     loadNotes();
@@ -360,11 +358,12 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     if (event.type === 'labels_changed') {
       void (async () => {
         const [updatedLabels] = await Promise.all([loadLabels(), loadLabelCounts()]);
-        if (!isMountedRef.current || !selectedLabelId || !updatedLabels) {
+        const currentSelectedLabelId = selectedLabelIdRef.current;
+        if (!isMountedRef.current || !currentSelectedLabelId || !updatedLabels) {
           return;
         }
 
-        const selectedLabelStillExists = updatedLabels.some((label) => label.id === selectedLabelId);
+        const selectedLabelStillExists = updatedLabels.some((label) => label.id === currentSelectedLabelId);
         if (selectedLabelStillExists) {
           return;
         }
@@ -399,12 +398,16 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       }
     }
 
+    if (event.type === 'note_updated' && editingNote && note_id === editingNote.id && event.data.note?.id === note_id) {
+      setEditingNote(event.data.note);
+    }
+
     loadNotes();
     loadLabelCounts();
     if (event.type === 'note_created' || event.type === 'note_updated') {
       loadLabels();
     }
-  }, [editingNote, sharingNote, loadNotes, loadLabels, loadLabelCounts, selectedLabelId, setSearchParams, user?.id, restoreReturnUrl]);
+  }, [editingNote, sharingNote, loadNotes, loadLabels, loadLabelCounts, setSearchParams, user?.id, restoreReturnUrl]);
 
   useSSE({
     onEvent: handleSSEEvent,
@@ -679,23 +682,6 @@ export default function Dashboard({ onLogout }: DashboardProps) {
     }
   }, [loadLabelCounts, loadLabels, loadNotes, showToast, t]);
 
-  const handleCreateLabel = useCallback(async (name: string): Promise<boolean> => {
-    try {
-      await labelsApi.create(name);
-      await Promise.all([loadLabels(), loadLabelCounts()]);
-      showToast(t('labels.createSuccess'), 'success');
-      return true;
-    } catch (err: unknown) {
-      if (isAxiosError(err)) {
-        const msg = typeof err.response?.data === 'string' ? err.response.data.trim() : '';
-        showToast(msg || t('labels.createError'), 'error');
-      } else {
-        showToast(t('labels.createError'), 'error');
-      }
-      return false;
-    }
-  }, [loadLabelCounts, loadLabels, showToast, t]);
-
   const handleShareNote = (note: Note) => {
     setSharingNote(note);
     setIsShareModalOpen(true);
@@ -780,45 +766,6 @@ export default function Dashboard({ onLogout }: DashboardProps) {
       }
     }
   }, [noteSort, showToast, t]);
-
-  const handleRenameLabel = useCallback(async (label: Label, newName: string): Promise<boolean> => {
-    try {
-      await labelsApi.rename(label.id, newName);
-      await Promise.all([loadLabels(), loadNotes()]);
-      showToast(t('labels.renameSuccess'), 'success');
-      return true;
-    } catch (err: unknown) {
-      if (isAxiosError(err)) {
-        const msg = typeof err.response?.data === 'string' ? err.response.data.trim() : '';
-        showToast(msg || t('labels.renameError'), 'error');
-      } else {
-        showToast(t('labels.renameError'), 'error');
-      }
-      return false;
-    }
-  }, [loadLabels, loadNotes, showToast, t]);
-
-  const handleDeleteLabel = useCallback(async (label: Label): Promise<boolean> => {
-    try {
-      await labelsApi.delete(label.id);
-      await Promise.all([loadLabels(), loadLabelCounts()]);
-      if (selectedLabelId === label.id) {
-        handleViewChange('notes');
-      } else {
-        await loadNotes();
-      }
-      showToast(t('labels.deleteSuccess'), 'success');
-      return true;
-    } catch (err: unknown) {
-      if (isAxiosError(err)) {
-        const msg = typeof err.response?.data === 'string' ? err.response.data.trim() : '';
-        showToast(msg || t('labels.deleteError'), 'error');
-      } else {
-        showToast(t('labels.deleteError'), 'error');
-      }
-      return false;
-    }
-  }, [handleViewChange, loadLabelCounts, loadLabels, loadNotes, selectedLabelId, showToast, t]);
 
   const handleDragEnd = async (event: DragEndEvent) => {
     if (showArchived || showBin || showMyTodo || noteSort !== 'manual') {

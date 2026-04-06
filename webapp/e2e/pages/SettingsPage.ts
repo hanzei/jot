@@ -136,6 +136,13 @@ export class SettingsPage {
   }
 
   async clickMobileLabel(labelName = 'settings-mobile-label') {
-    await this.sidebar().locator('ul').getByRole('button', { name: labelName, exact: true }).click();
+    const exactLabelName = new RegExp(`^${labelName.replace(/[.*+?^${}()|[\]\\]/g, '\\$&')}$`);
+    const labelRow = this.sidebar()
+      .locator('[data-testid="sidebar-labels"] li')
+      .filter({ has: this.page.locator('button span.truncate', { hasText: exactLabelName }) })
+      .first();
+
+    await expect(labelRow).toBeVisible();
+    await labelRow.locator('button').first().click();
   }
 }
