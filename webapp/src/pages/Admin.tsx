@@ -1,19 +1,13 @@
 import { useState, useEffect, useCallback, type ReactNode } from 'react';
 import { ROLES, type User, type AdminStatsResponse } from '@jot/shared';
 import { useTranslation } from 'react-i18next';
-import { admin, auth, isAxiosError } from '@/utils/api';
-import { isAdmin, removeUser, getUser } from '@/utils/auth';
-import { Navigate, useNavigate } from 'react-router';
-import AppLayout from '@/components/AppLayout';
+import { admin, isAxiosError } from '@/utils/api';
+import { getUser } from '@/utils/auth';
 import PageContent from '@/components/PageContent';
-import SidebarLabels from '@/components/SidebarLabels';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import CreateUserModal from '@/components/CreateUserModal';
-import { useNavigationLinkTabs } from '@/hooks/useNavigationTabs';
-import { useSidebarLabelsController } from '@/hooks/useSidebarLabelsController';
 
 interface AdminProps {
-  onLogout: () => void;
   passwordMinLength: number;
 }
 
@@ -57,7 +51,7 @@ const StatCardSkeleton = () => (
   </div>
 );
 
-const Admin = ({ onLogout, passwordMinLength }: AdminProps) => {
+const Admin = ({ passwordMinLength }: AdminProps) => {
   const { t, i18n } = useTranslation();
   const currentUser = getUser();
   const [users, setUsers] = useState<User[]>([]);
@@ -72,30 +66,7 @@ const Admin = ({ onLogout, passwordMinLength }: AdminProps) => {
   const [deleteLoading, setDeleteLoading] = useState<Set<string>>(new Set());
   const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; user: User | null }>({ open: false, user: null });
 
-  const navigate = useNavigate();
-  const userIsAdmin = isAdmin();
-  const { tabs: navigationTabs, bottomTabs: bottomNavigationTabs } = useNavigationLinkTabs();
-  const {
-    labels: labelsList,
-    labelCounts,
-    loadLabels,
-    loadLabelCounts,
-    handleCreateLabel,
-    handleRenameLabel,
-    handleDeleteLabel,
-  } = useSidebarLabelsController();
-
   useEffect(() => { document.title = t('pageTitle.admin'); }, [t]);
-
-  const handleLogout = async () => {
-    try {
-      await auth.logout();
-    } catch {
-      // Continue with logout even if the server call fails
-    }
-    removeUser();
-    onLogout();
-  };
 
   const formatNumber = useCallback((value: number) => {
     return new Intl.NumberFormat(i18n.resolvedLanguage).format(value);
@@ -149,21 +120,9 @@ const Admin = ({ onLogout, passwordMinLength }: AdminProps) => {
   }, [t]);
 
   useEffect(() => {
-    if (userIsAdmin) {
-      void fetchUsers();
-      void fetchStats();
-    }
-  }, [userIsAdmin, fetchUsers, fetchStats]);
-
-  useEffect(() => {
-    if (userIsAdmin) {
-      void Promise.all([loadLabels(), loadLabelCounts()]);
-    }
-  }, [userIsAdmin, loadLabels, loadLabelCounts]);
-
-  if (!userIsAdmin) {
-    return <Navigate to="/" />;
-  }
+    void fetchUsers();
+    void fetchStats();
+  }, [fetchUsers, fetchStats]);
 
   const handleCreateUserSuccess = (newUser: User) => {
     setUsers(prev => [newUser, ...prev]);
@@ -223,27 +182,8 @@ const Admin = ({ onLogout, passwordMinLength }: AdminProps) => {
     }
   };
 
-  const sidebarChildren = (
-    <SidebarLabels
-      labels={labelsList}
-      labelCounts={labelCounts}
-      onSelect={(labelId) => navigate(`/?label=${encodeURIComponent(labelId)}`)}
-      onCreate={handleCreateLabel}
-      onRename={handleRenameLabel}
-      onDelete={handleDeleteLabel}
-    />
-  );
-
   return (
-    <AppLayout
-      onLogout={handleLogout}
-      isAdmin={true}
-      adminLinkActive={true}
-      sidebarTabs={navigationTabs}
-      sidebarBottomTabs={bottomNavigationTabs}
-      sidebarChildren={sidebarChildren}
-    >
-      <PageContent>
+    <PageContent>
         <div className="mb-6">
           <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{t('admin.pageHeading')}</h1>
         </div>
@@ -438,7 +378,6 @@ const Admin = ({ onLogout, passwordMinLength }: AdminProps) => {
           />
         )}
       </PageContent>
-    </AppLayout>
   );
 };
 

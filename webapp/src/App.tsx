@@ -5,6 +5,7 @@ import Register from '@/pages/Register';
 import Dashboard from '@/pages/Dashboard';
 import Admin from '@/pages/Admin';
 import Settings from '@/pages/Settings';
+import AuthenticatedLayout from '@/components/AuthenticatedLayout';
 import { OfflineNotification } from '@/components/OfflineNotification';
 import { ToastProvider } from '@/components/Toast';
 import { isAdmin, setUser, setSettings, removeUser } from '@/utils/auth';
@@ -76,18 +77,26 @@ function App() {
             path="/register"
             element={!isAuth && registrationEnabled ? <Register onRegister={() => setIsAuth(true)} passwordMinLength={passwordMinLength} /> : <Navigate to={isAuth ? "/" : "/login"} />}
           />
-          <Route element={isAuth ? <Dashboard onLogout={() => setIsAuth(false)} /> : <Navigate to="/login" />}>
-            <Route index element={null} />
-            <Route path="notes/:noteId" element={null} />
+          <Route
+            element={
+              isAuth
+                ? <AuthenticatedLayout onLogout={() => setIsAuth(false)} />
+                : <Navigate to="/login" />
+            }
+          >
+            <Route element={<Dashboard />}>
+              <Route index element={null} />
+              <Route path="notes/:noteId" element={null} />
+            </Route>
+            <Route
+              path="/admin"
+              element={isAdmin() ? <Admin passwordMinLength={passwordMinLength} /> : <Navigate to="/" />}
+            />
+            <Route
+              path="/settings"
+              element={<Settings passwordMinLength={passwordMinLength} />}
+            />
           </Route>
-          <Route
-            path="/admin"
-            element={isAuth && isAdmin() ? <Admin onLogout={() => setIsAuth(false)} passwordMinLength={passwordMinLength} /> : <Navigate to="/" />}
-          />
-          <Route
-            path="/settings"
-            element={isAuth ? <Settings onLogout={() => setIsAuth(false)} passwordMinLength={passwordMinLength} /> : <Navigate to="/login" />}
-          />
         </Routes>
       </div>
       </ToastProvider>
