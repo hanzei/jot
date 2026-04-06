@@ -134,19 +134,23 @@ jobs:
             type=raw,value=unstable,enable={{is_default_branch}}
             type=sha,enable={{is_default_branch}}
             type=raw,value=pr-${{ github.event.pull_request.number }},enable=${{ github.event_name == 'pull_request' }}
-          annotations: |
-            org.opencontainers.image.description=${{ github.event_name == 'pull_request' && format('Built from PR #{0}: {1}', github.event.pull_request.number, github.event.pull_request.html_url) || 'Jot — self-hosted note-taking application' }}
+
+      - name: Set image description
+        id: description
+        run: |
+          if [ "${{ github.event_name }}" = "pull_request" ]; then
+            echo "value=Built from PR #${{ github.event.pull_request.number }}: ${{ github.event.pull_request.html_url }}" >> "$GITHUB_OUTPUT"
+          else
+            echo "value=Jot — self-hosted note-taking application" >> "$GITHUB_OUTPUT"
+          fi
 
       - name: Create manifest list and push
         working-directory: /tmp/digests
         env:
           IMAGE: ${{ github.event_name == 'pull_request' && 'ghcr.io/hanzei/jot' || 'hanzei/jot' }}
+          DESCRIPTION: ${{ steps.description.outputs.value }}
         run: |
-          ann_args=()
-          while IFS= read -r line; do
-            [[ -n "$line" ]] && ann_args+=(--annotation "index:$line")
-          done <<< "$DOCKER_METADATA_OUTPUT_ANNOTATIONS"
           docker buildx imagetools create \
             $(jq -cr '.tags | map("-t " + .) | join(" ")' <<< "$DOCKER_METADATA_OUTPUT_JSON") \
-            "${ann_args[@]}" \
+            --annotation "index:org.opencontainers.image.description=$DESCRIPTION" \
             $(printf "${IMAGE}@sha256:%s " *)
