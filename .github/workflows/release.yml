@@ -6,12 +6,14 @@ on:
       - "v*"
 
 permissions:
-  contents: write
+  contents: read
 
 jobs:
   goreleaser:
     runs-on: ubuntu-latest
-
+    timeout-minutes: 45
+    permissions:
+      contents: write
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
         with:
@@ -44,7 +46,10 @@ jobs:
           - platform: linux/arm64
             runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
     needs: goreleaser
+    permissions:
+      contents: read
 
     steps:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -105,7 +110,10 @@ jobs:
 
   docker-merge:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: [docker]
+    permissions:
+      contents: read
 
     steps:
       - name: Download digests

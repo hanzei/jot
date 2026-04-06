@@ -3,6 +3,10 @@ name: Docker
 permissions:
   contents: read
 
+concurrency:
+  group: ${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
 on:
   push:
     branches: [master]
@@ -26,6 +30,9 @@ jobs:
           - platform: linux/arm64
             runner: ubuntu-24.04-arm
     runs-on: ${{ matrix.runner }}
+    timeout-minutes: 60
+    permissions:
+      contents: read
     steps:
       - name: Checkout
         uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
@@ -85,8 +92,11 @@ jobs:
 
   docker-merge:
     runs-on: ubuntu-latest
+    timeout-minutes: 15
     needs: [docker]
     if: github.event_name == 'push' && github.ref == 'refs/heads/master'
+    permissions:
+      contents: read
 
     steps:
       - name: Download digests
