@@ -72,6 +72,7 @@ const Admin = ({ onLogout, passwordMinLength }: AdminProps) => {
   const [deleteLoading, setDeleteLoading] = useState<Set<string>>(new Set());
   const [deleteConfirm, setDeleteConfirm] = useState<{ open: boolean; user: User | null }>({ open: false, user: null });
 
+  const navigate = useNavigate();
   const userIsAdmin = isAdmin();
   const { tabs: navigationTabs, bottomTabs: bottomNavigationTabs } = useNavigationLinkTabs();
   const {
@@ -221,8 +222,6 @@ const Admin = ({ onLogout, passwordMinLength }: AdminProps) => {
       });
     }
   };
-
-  const navigate = useNavigate();
 
   const sidebarChildren = (
     <SidebarLabels
