@@ -280,6 +280,7 @@
         "storage": "Storage"
       },
       "metrics": {
+        "admins": "Admins",
         "text": "Text",
         "todo": "Todo",
         "archived": "Archived",

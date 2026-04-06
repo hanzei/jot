@@ -280,6 +280,7 @@
         "storage": "Armazenamento"
       },
       "metrics": {
+        "admins": "Administradores",
         "text": "Texto",
         "todo": "Tarefas",
         "archived": "Arquivadas",

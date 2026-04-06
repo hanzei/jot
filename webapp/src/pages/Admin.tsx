@@ -279,7 +279,9 @@ const Admin = ({ onLogout, passwordMinLength }: AdminProps) => {
                   title={t('admin.stats.cards.users')}
                   value={formatNumber(stats.users.total)}
                   valueTestId="admin-stats-users-total"
-                />
+                >
+                  <StatLine label={t('admin.stats.metrics.admins')} value={formatNumber(stats.users.admins)} />
+                </StatCard>
 
                 <StatCard
                   title={t('admin.stats.cards.notes')}

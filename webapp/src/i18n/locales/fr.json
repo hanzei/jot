@@ -280,6 +280,7 @@
         "storage": "Stockage"
       },
       "metrics": {
+        "admins": "Administrateurs",
         "text": "Texte",
         "todo": "Tâches",
         "archived": "Archivées",

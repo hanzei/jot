@@ -280,6 +280,7 @@
         "storage": "Archiviazione"
       },
       "metrics": {
+        "admins": "Amministratori",
         "text": "Testo",
         "todo": "Attività",
         "archived": "Archiviate",

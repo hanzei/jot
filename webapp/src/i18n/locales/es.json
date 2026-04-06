@@ -280,6 +280,7 @@
         "storage": "Almacenamiento"
       },
       "metrics": {
+        "admins": "Administradores",
         "text": "Texto",
         "todo": "Tareas",
         "archived": "Archivadas",

@@ -280,6 +280,7 @@
         "storage": "Magazyn"
       },
       "metrics": {
+        "admins": "Administratorzy",
         "text": "Tekst",
         "todo": "Zadania",
         "archived": "Zarchiwizowane",
