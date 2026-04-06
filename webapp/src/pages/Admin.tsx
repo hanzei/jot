@@ -257,7 +257,6 @@ const Admin = ({ onLogout, passwordMinLength }: AdminProps) => {
         <section data-testid="admin-stats-section" className="mb-6">
           <div className="mb-4">
             <h2 className="text-lg font-medium text-gray-900 dark:text-white">{t('admin.stats.title')}</h2>
-            <p className="text-sm text-gray-500 dark:text-gray-400">{t('admin.stats.description')}</p>
           </div>
 
           {statsError ? (
