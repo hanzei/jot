@@ -719,7 +719,8 @@ func TestSSEEndpoint(t *testing.T) { //nolint:gocognit
 		case event := <-eventCh:
 			assert.Equal(t, "note_created", event["type"])
 			assert.Equal(t, user.User.ID, event["source_user_id"])
-			assert.Empty(t, event["client_id"], "client_id should be absent when X-Client-Id header is not sent")
+			_, hasClientID := event["client_id"]
+			assert.False(t, hasClientID, "client_id key should be absent when X-Client-Id header is not sent")
 			data, ok := event["data"].(map[string]any)
 			require.True(t, ok, "event data should be a JSON object")
 			assert.Equal(t, note.ID, data["note_id"])
