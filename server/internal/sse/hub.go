@@ -147,7 +147,7 @@ func (h *Hub) Publish(ctx context.Context, userIDs []string, event Event) {
 			case ch <- event:
 				h.eventsPublished.Add(ctx, 1, metric.WithAttributes(eventAttr))
 			default:
-				logutil.FromContext(ctx).WithField("type", string(event.Type)).WithField("user_id", uid).Warn("sse: dropping event, channel full")
+				logutil.FromContext(ctx).WithField("type", string(event.Type)).WithField("user_id", uid).Warn("SSE: dropping event, channel full")
 				h.eventsDropped.Add(ctx, 1, metric.WithAttributes(eventAttr))
 			}
 		}

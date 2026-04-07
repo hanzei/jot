@@ -26,7 +26,7 @@ func (s *SessionService) AuthMiddleware(next http.Handler) http.Handler {
 				return
 			}
 			if err := s.RenewSessionIfExpiringSoon(r.Context(), w, session); err != nil {
-				logutil.FromContext(r.Context()).WithError(err).Warn("failed to renew session")
+				logutil.FromContext(r.Context()).WithError(err).Warn("Failed to renew session")
 			}
 
 			logutil.FromContext(r.Context()).AddField("user_id", user.ID)

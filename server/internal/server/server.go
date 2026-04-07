@@ -356,7 +356,7 @@ func (s *Server) wrapHandler(handler func(w http.ResponseWriter, r *http.Request
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(statusCode)
 			if err := json.NewEncoder(w).Encode(body); err != nil {
-				logutil.FromContext(r.Context()).WithError(err).Error("failed to encode response body")
+				logutil.FromContext(r.Context()).WithError(err).Error("Failed to encode response body")
 			}
 		} else if statusCode > 0 {
 			w.WriteHeader(statusCode)
@@ -490,7 +490,7 @@ func requestLoggerMiddleware(next http.Handler) http.Handler {
 		rl.WithFields(logrus.Fields{
 			"status":   ww.Status(),
 			"duration": time.Since(start).String(),
-		}).Info("request completed")
+		}).Info("Request completed")
 	})
 }
 
@@ -521,7 +521,7 @@ func (s *Server) Start(addr string) error {
 		go func() {
 			defer s.bgWg.Done()
 			if err := metricsServer.Serve(metricsListener); err != nil && !errors.Is(err, http.ErrServerClosed) {
-				logrus.WithError(err).Error("metrics server stopped unexpectedly")
+				logrus.WithError(err).Error("Metrics server stopped unexpectedly")
 			}
 		}()
 		logrus.Infof("Metrics server listening on %s", metricsAddr)
@@ -592,7 +592,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	s.serverMu.RUnlock()
 	if metricsServer != nil {
 		if err := metricsServer.Shutdown(ctx); err != nil {
-			logrus.WithError(err).Warn("metrics server shutdown error")
+			logrus.WithError(err).Warn("Metrics server shutdown error")
 		}
 	}
 
@@ -653,7 +653,7 @@ func startPeriodicTask(wg *sync.WaitGroup, ctx context.Context, interval time.Du
 		defer wg.Done()
 		if runNow {
 			if err := fn(); err != nil {
-				logrus.WithError(err).Errorf("failed to %s", logMsg)
+				logrus.WithError(err).Errorf("Failed to %s", logMsg)
 			}
 		}
 		ticker := time.NewTicker(interval)
@@ -662,7 +662,7 @@ func startPeriodicTask(wg *sync.WaitGroup, ctx context.Context, interval time.Du
 			select {
 			case <-ticker.C:
 				if err := fn(); err != nil {
-					logrus.WithError(err).Errorf("failed to %s", logMsg)
+					logrus.WithError(err).Errorf("Failed to %s", logMsg)
 				}
 			case <-ctx.Done():
 				return

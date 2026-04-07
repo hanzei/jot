@@ -87,7 +87,7 @@ func (h *NotesHandler) publishNoteEvent(ctx context.Context, noteID string, even
 	}
 	audienceIDs, err := h.noteStore.GetNoteAudienceIDs(ctx, noteID)
 	if err != nil {
-		logutil.FromContext(ctx).WithError(err).WithField("note_id", noteID).Error("failed to get note audience for SSE publish")
+		logutil.FromContext(ctx).WithError(err).WithField("note_id", noteID).Error("Failed to get note audience for SSE publish")
 		return
 	}
 	h.hub.Publish(ctx, audienceIDs, sse.Event{
@@ -108,7 +108,7 @@ func (h *NotesHandler) publishPersonalizedNoteEvent(ctx context.Context, noteID 
 	for _, uid := range audienceIDs {
 		n, err := h.noteStore.GetByID(ctx, noteID, uid)
 		if err != nil {
-			logutil.FromContext(ctx).WithError(err).WithField("note_id", noteID).WithField("user_id", uid).Warn("failed to fetch personalized note for SSE publish")
+			logutil.FromContext(ctx).WithError(err).WithField("note_id", noteID).WithField("user_id", uid).Warn("Failed to fetch personalized note for SSE publish")
 			continue
 		}
 		h.hub.Publish(ctx, []string{uid}, sse.Event{
@@ -616,7 +616,7 @@ func (h *NotesHandler) publishUpdateEvent(ctx context.Context, noteID string, no
 	if sharedFieldChanged {
 		audienceIDs, err := h.noteStore.GetNoteAudienceIDs(ctx, noteID)
 		if err != nil {
-			logutil.FromContext(ctx).WithError(err).WithField("note_id", noteID).Error("failed to get note audience for SSE publish")
+			logutil.FromContext(ctx).WithError(err).WithField("note_id", noteID).Error("Failed to get note audience for SSE publish")
 			return
 		}
 		h.publishPersonalizedNoteEvent(ctx, noteID, audienceIDs, userID)

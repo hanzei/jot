@@ -12,6 +12,7 @@
 - Use `logrus` instead of the standard `log` package for all logging
 - In HTTP handlers and middleware, use `logutil.FromContext(ctx)` (from `server/internal/logutil`) to obtain the request-scoped logger. It automatically carries `request_id`, `user_id` (when authenticated), `method`, and `path` on every log line.
 - Reserve bare `logrus.*` calls for background goroutines and startup code that have no request context.
+- Log messages should start with a capital letter (e.g., `"Server shutdown complete"`).
 - In tests, use `t.Context()` instead of `context.Background()`
 
 ## Error Handling (Go)
