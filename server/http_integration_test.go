@@ -719,11 +719,72 @@ func TestSSEEndpoint(t *testing.T) { //nolint:gocognit
 		case event := <-eventCh:
 			assert.Equal(t, "note_created", event["type"])
 			assert.Equal(t, user.User.ID, event["source_user_id"])
+			assert.Empty(t, event["client_id"], "client_id should be absent when X-Client-Id header is not sent")
 			data, ok := event["data"].(map[string]any)
 			require.True(t, ok, "event data should be a JSON object")
 			assert.Equal(t, note.ID, data["note_id"])
 		case <-sseCtx.Done():
 			t.Fatal("timed out waiting for SSE event after note creation")
+		}
+	})
+
+	t.Run("note_created event includes client_id matching X-Client-Id header", func(t *testing.T) {
+		sseCtx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+		defer cancel()
+
+		req, err := http.NewRequestWithContext(sseCtx, http.MethodGet, ts.HTTPServer.URL+"/api/v1/events", nil)
+		require.NoError(t, err)
+
+		resp, err := user.Client.HTTPClient().Do(req) //nolint:bodyclose // closed on next line
+		require.NoError(t, err)
+		defer resp.Body.Close()
+
+		connectedCh := make(chan struct{})
+		eventCh := make(chan map[string]any, 4)
+
+		go func() {
+			scanner := bufio.NewScanner(resp.Body)
+			connectedSent := false
+			for scanner.Scan() {
+				line := scanner.Text()
+				if !connectedSent && line == ": connected" {
+					close(connectedCh)
+					connectedSent = true
+					continue
+				}
+				if strings.HasPrefix(line, "data: ") {
+					var event map[string]any
+					if jsonErr := json.Unmarshal([]byte(line[6:]), &event); jsonErr == nil {
+						eventCh <- event
+					}
+				}
+			}
+		}()
+
+		select {
+		case <-connectedCh:
+		case <-sseCtx.Done():
+			t.Fatal("timed out waiting for SSE connection")
+		}
+
+		const testClientID = "test-client-abc123"
+		noteBody, err := json.Marshal(map[string]any{"title": "ClientID Test", "content": "", "note_type": "text"})
+		require.NoError(t, err)
+		createReq, err := http.NewRequestWithContext(t.Context(), http.MethodPost, ts.HTTPServer.URL+"/api/v1/notes", bytes.NewReader(noteBody))
+		require.NoError(t, err)
+		createReq.Header.Set("Content-Type", "application/json")
+		createReq.Header.Set("X-Client-Id", testClientID)
+		createResp, err := user.Client.HTTPClient().Do(createReq)
+		require.NoError(t, err)
+		defer createResp.Body.Close()
+		require.Equal(t, http.StatusCreated, createResp.StatusCode)
+
+		select {
+		case event := <-eventCh:
+			assert.Equal(t, "note_created", event["type"])
+			assert.Equal(t, testClientID, event["client_id"])
+		case <-sseCtx.Done():
+			t.Fatal("timed out waiting for SSE event after note creation with X-Client-Id")
 		}
 	})
 }
