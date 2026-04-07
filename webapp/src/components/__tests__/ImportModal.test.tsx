@@ -2,12 +2,14 @@ import { describe, it, expect, vi, beforeEach } from 'vitest'
 import { render, screen, waitFor, fireEvent, act } from '@testing-library/react'
 import userEvent from '@testing-library/user-event'
 
-const mockImportKeep = vi.hoisted(() => vi.fn())
+const mockImportNotes = vi.hoisted(() => vi.fn())
 
 vi.mock('@/utils/api', () => ({
   notes: {
-    importKeep: mockImportKeep,
+    importNotes: mockImportNotes,
   },
+  isAxiosError: (err: unknown): boolean =>
+    typeof err === 'object' && err !== null && (err as { isAxiosError?: boolean }).isAxiosError === true,
 }))
 
 import ImportModal from '../ImportModal'
@@ -41,6 +43,29 @@ describe('ImportModal', () => {
     })
   })
 
+  describe('format selection', () => {
+    it('shows Google Keep and Jot JSON format options', () => {
+      render(<ImportModal {...defaultProps} />)
+      expect(screen.getByRole('radio', { name: /google keep/i })).toBeInTheDocument()
+      expect(screen.getByRole('radio', { name: /jot json/i })).toBeInTheDocument()
+    })
+
+    it('defaults to Google Keep format', () => {
+      render(<ImportModal {...defaultProps} />)
+      expect(screen.getByRole('radio', { name: /google keep/i })).toBeChecked()
+      expect(screen.getByRole('radio', { name: /jot json/i })).not.toBeChecked()
+    })
+
+    it('switches to Jot JSON format when selected', async () => {
+      const user = userEvent.setup()
+      render(<ImportModal {...defaultProps} />)
+
+      await user.click(screen.getByRole('radio', { name: /jot json/i }))
+
+      expect(screen.getByRole('radio', { name: /jot json/i })).toBeChecked()
+    })
+  })
+
   describe('file selection', () => {
     it('shows the selected filename after choosing a file', async () => {
       const user = userEvent.setup()
@@ -70,7 +95,7 @@ describe('ImportModal', () => {
 
   describe('successful import', () => {
     it('displays imported count after successful import', async () => {
-      mockImportKeep.mockResolvedValue({ imported: 3, skipped: 0 })
+      mockImportNotes.mockResolvedValue({ imported: 3, skipped: 0 })
       const user = userEvent.setup()
       render(<ImportModal {...defaultProps} />)
 
@@ -83,8 +108,40 @@ describe('ImportModal', () => {
       })
     })
 
+    it('calls importNotes with google_keep type by default', async () => {
+      mockImportNotes.mockResolvedValue({ imported: 1, skipped: 0 })
+      const user = userEvent.setup()
+      render(<ImportModal {...defaultProps} />)
+
+      const fileInput = getFileInput()
+      const file = new File(['{}'], 'notes.json', { type: 'application/json' })
+      await user.upload(fileInput, file)
+      await user.click(screen.getByRole('button', { name: /import/i }))
+
+      await waitFor(() => {
+        expect(mockImportNotes).toHaveBeenCalledWith(file, 'google_keep')
+      })
+    })
+
+    it('calls importNotes with jot_json type when selected', async () => {
+      mockImportNotes.mockResolvedValue({ imported: 2, skipped: 0 })
+      const user = userEvent.setup()
+      render(<ImportModal {...defaultProps} />)
+
+      await user.click(screen.getByRole('radio', { name: /jot json/i }))
+
+      const fileInput = getFileInput()
+      const file = new File(['{}'], 'export.json', { type: 'application/json' })
+      await user.upload(fileInput, file)
+      await user.click(screen.getByRole('button', { name: /import/i }))
+
+      await waitFor(() => {
+        expect(mockImportNotes).toHaveBeenCalledWith(file, 'jot_json')
+      })
+    })
+
     it('calls onSuccess after a successful import', async () => {
-      mockImportKeep.mockResolvedValue({ imported: 1, skipped: 0 })
+      mockImportNotes.mockResolvedValue({ imported: 1, skipped: 0 })
       const onSuccess = vi.fn()
       const user = userEvent.setup()
       render(<ImportModal {...defaultProps} onSuccess={onSuccess} />)
@@ -97,7 +154,7 @@ describe('ImportModal', () => {
     })
 
     it('shows skipped count when notes were skipped', async () => {
-      mockImportKeep.mockResolvedValue({ imported: 2, skipped: 1 })
+      mockImportNotes.mockResolvedValue({ imported: 2, skipped: 1 })
       const user = userEvent.setup()
       render(<ImportModal {...defaultProps} />)
 
@@ -112,7 +169,7 @@ describe('ImportModal', () => {
     })
 
     it('shows error list when import returns errors array', async () => {
-      mockImportKeep.mockResolvedValue({
+      mockImportNotes.mockResolvedValue({
         imported: 1,
         skipped: 0,
         errors: ['failed to import "bad note": invalid color'],
@@ -131,10 +188,12 @@ describe('ImportModal', () => {
   })
 
   describe('error handling', () => {
-    it('shows an error message when importKeep rejects', async () => {
-      mockImportKeep.mockRejectedValue({
+    it('shows an error message when importNotes rejects with a server error', async () => {
+      const axiosError = Object.assign(new Error('Request failed'), {
+        isAxiosError: true,
         response: { data: 'invalid JSON file' },
       })
+      mockImportNotes.mockRejectedValue(axiosError)
       const user = userEvent.setup()
       render(<ImportModal {...defaultProps} />)
 
@@ -148,7 +207,7 @@ describe('ImportModal', () => {
     })
 
     it('shows fallback error message when response has no data', async () => {
-      mockImportKeep.mockRejectedValue(new Error('network error'))
+      mockImportNotes.mockRejectedValue(new Error('network error'))
       const user = userEvent.setup()
       render(<ImportModal {...defaultProps} />)
 
@@ -186,7 +245,7 @@ describe('ImportModal', () => {
       expect(screen.getByText('notes.json')).toBeInTheDocument()
     })
 
-    it('accepts a .zip file dropped onto the drop zone', () => {
+    it('accepts a .zip file dropped onto the drop zone for Google Keep', () => {
       render(<ImportModal {...defaultProps} />)
       const dropZone = getDropZone()
       const file = new File(['PK'], 'export.zip', { type: 'application/zip' })
@@ -217,6 +276,20 @@ describe('ImportModal', () => {
       act(() => { fireEvent.drop(dropZone, createDragEvent(new File(['{}'], 'notes.json', { type: 'application/json' }))) })
 
       expect(screen.getByRole('button', { name: /import/i })).not.toBeDisabled()
+    })
+
+    it('rejects a .zip file when Jot JSON format is selected', async () => {
+      const user = userEvent.setup()
+      render(<ImportModal {...defaultProps} />)
+
+      await user.click(screen.getByRole('radio', { name: /jot json/i }))
+
+      const dropZone = getDropZone()
+      const file = new File(['PK'], 'export.zip', { type: 'application/zip' })
+      act(() => { fireEvent.drop(dropZone, createDragEvent(file)) })
+
+      expect(screen.queryByText('export.zip')).not.toBeInTheDocument()
+      expect(screen.getByText(/please select a .json file/i)).toBeInTheDocument()
     })
   })
 

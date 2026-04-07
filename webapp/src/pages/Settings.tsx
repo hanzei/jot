@@ -1,37 +1,30 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { useNavigate } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import i18n from '@/i18n';
-import { auth, users, sessions as sessionsApi, pats as patsApi, isAxiosError } from '@/utils/api';
-import { getUser, setUser, removeUser, getSettings, setSettings, isAdmin } from '@/utils/auth';
+import { auth, users, notes as notesApi, sessions as sessionsApi, pats as patsApi, isAxiosError } from '@/utils/api';
+import { getUser, setUser, getSettings, setSettings } from '@/utils/auth';
 import { getLanguagePreference, resolveLanguage, LanguagePreference } from '@/utils/language';
 import { isPasswordTooShort } from '@/utils/userValidation';
 import { getThemePreference, applyTheme, ThemePreference } from '@/utils/theme';
-import AppLayout from '@/components/AppLayout';
-import SearchBar from '@/components/SearchBar';
+import PageContent from '@/components/PageContent';
 import ImportModal from '@/components/ImportModal';
 import AboutModal from '@/components/AboutModal';
 import NewPATModal from '@/components/NewPATModal';
-import SidebarLabels from '@/components/SidebarLabels';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { useToast } from '@/hooks/useToast';
-import { useNavigationLinkTabs } from '@/hooks/useNavigationTabs';
-import { useSidebarLabelsController } from '@/hooks/useSidebarLabelsController';
 import type { ActiveSession, PersonalAccessToken } from '@jot/shared';
 import { IdentitySecurityColumn, PreferencesInfoColumn } from './settings/SettingsSections';
 
 interface SettingsProps {
-  onLogout: () => void;
   passwordMinLength: number;
 }
 
-const Settings = ({ onLogout, passwordMinLength }: SettingsProps) => {
+const Settings = ({ passwordMinLength }: SettingsProps) => {
   const { t } = useTranslation();
   const { showToast } = useToast();
   useEffect(() => { document.title = t('pageTitle.settings'); }, [t]);
   const displayMsg = (msg: string) => (i18n.exists(msg) ? t(msg) : msg);
   const currentUser = getUser();
-  const navigate = useNavigate();
   // currentUsername tracks the persisted value shown in the nav header.
   // draftUsername is the live value bound to the input field.
   const [currentUsername, setCurrentUsername] = useState(currentUser?.username ?? '');
@@ -40,14 +33,13 @@ const Settings = ({ onLogout, passwordMinLength }: SettingsProps) => {
   const [draftLastName, setDraftLastName] = useState(currentUser?.last_name ?? '');
   const [saving, setSaving] = useState(false);
   const [error, setError] = useState('');
-  const [searchQuery, setSearchQuery] = useState('');
-
   const [currentPassword, setCurrentPassword] = useState('');
   const [newPassword, setNewPassword] = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
   const [passwordSaving, setPasswordSaving] = useState(false);
   const [passwordError, setPasswordError] = useState('');
   const [isImportModalOpen, setIsImportModalOpen] = useState(false);
+  const [isExporting, setIsExporting] = useState(false);
   const [isAboutModalOpen, setIsAboutModalOpen] = useState(false);
   const [hasProfileIcon, setHasProfileIcon] = useState(currentUser?.has_profile_icon ?? false);
   const [iconError, setIconError] = useState('');
@@ -171,16 +163,6 @@ const Settings = ({ onLogout, passwordMinLength }: SettingsProps) => {
     }).catch(() => { /* keep cached/system default */ });
   }, []);
 
-  const handleLogout = async () => {
-    try {
-      await auth.logout();
-      removeUser();
-      onLogout();
-    } catch {
-      setError('settings.logoutFailed');
-    }
-  };
-
   const handlePasswordChange = async (e: React.FormEvent) => {
     e.preventDefault();
     setPasswordError('');
@@ -240,15 +222,6 @@ const Settings = ({ onLogout, passwordMinLength }: SettingsProps) => {
     }
   };
 
-  const handleSearch = () => {
-    const trimmed = searchQuery.trim();
-    if (trimmed) {
-      navigate(`/?search=${encodeURIComponent(trimmed)}`);
-    } else {
-      navigate('/');
-    }
-  };
-
   const handleLanguageChange = async (pref: LanguagePreference) => {
     const prev = languagePref;
     const current = getSettings();
@@ -269,20 +242,6 @@ const Settings = ({ onLogout, passwordMinLength }: SettingsProps) => {
       }
     }
   };
-
-  const {
-    labels: labelsList,
-    labelCounts,
-    loadLabels,
-    loadLabelCounts,
-    handleCreateLabel,
-    handleRenameLabel,
-    handleDeleteLabel,
-  } = useSidebarLabelsController();
-
-  useEffect(() => {
-    void Promise.all([loadLabels(), loadLabelCounts()]);
-  }, [loadLabels, loadLabelCounts]);
 
   const handleThemeChange = async (pref: ThemePreference) => {
     const prev = themePref;
@@ -346,7 +305,25 @@ const Settings = ({ onLogout, passwordMinLength }: SettingsProps) => {
     }
   };
 
-  const { tabs: navigationTabs, bottomTabs: bottomNavigationTabs } = useNavigationLinkTabs();
+  const handleExport = async () => {
+    setIsExporting(true);
+    try {
+      const { blob, filename } = await notesApi.exportNotes();
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement('a');
+      a.href = url;
+      a.download = filename;
+      document.body.appendChild(a);
+      a.click();
+      document.body.removeChild(a);
+      URL.revokeObjectURL(url);
+    } catch {
+      showToast(t('settings.exportFailed'), 'error');
+    } finally {
+      setIsExporting(false);
+    }
+  };
+
   const sessionPendingRevokeLabel = sessionPendingRevoke
     ? (
       sessionPendingRevoke.os !== 'Unknown'
@@ -355,110 +332,82 @@ const Settings = ({ onLogout, passwordMinLength }: SettingsProps) => {
     )
     : '';
 
-  const searchBar = (
-    <SearchBar
-      value={searchQuery}
-      onChange={setSearchQuery}
-      onSubmit={handleSearch}
-      stopEscapePropagation={true}
-    />
-  );
-  const sidebarChildren = (
-    <SidebarLabels
-      labels={labelsList}
-      labelCounts={labelCounts}
-      onSelect={(labelId) => navigate(`/?label=${encodeURIComponent(labelId)}`)}
-      onCreate={handleCreateLabel}
-      onRename={handleRenameLabel}
-      onDelete={handleDeleteLabel}
-    />
-  );
-
   return (
-    <AppLayout
-      onLogout={handleLogout}
-      username={currentUsername}
-      isAdmin={isAdmin()}
-      settingsLinkActive={true}
-      sidebarTabs={navigationTabs}
-      sidebarBottomTabs={bottomNavigationTabs}
-      sidebarChildren={sidebarChildren}
-      searchBar={searchBar}
-    >
-      <div className="max-w-6xl mx-auto py-6 sm:px-6 lg:px-8">
-        <div className="px-4 py-6 sm:px-0">
-          <div className="mb-6">
-            <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{t('settings.title')}</h1>
-          </div>
-
-          <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
-            <IdentitySecurityColumn
-              t={t}
-              currentUser={currentUser}
-              currentUsername={currentUsername}
-              profileIcon={{
-                hasProfileIcon,
-                fileInputRef,
-                iconUploading,
-                iconDeleting,
-                iconError,
-                onIconUpload: handleIconUpload,
-                onIconDelete: handleIconDelete,
-              }}
-              accountForm={{
-                draftFirstName,
-                draftLastName,
-                draftUsername,
-                onDraftFirstNameChange: setDraftFirstName,
-                onDraftLastNameChange: setDraftLastName,
-                onDraftUsernameChange: setDraftUsername,
-                saving,
-                error,
-                onAccountSubmit: handleSubmit,
-              }}
-              passwordForm={{
-                currentPassword,
-                newPassword,
-                confirmPassword,
-                onCurrentPasswordChange: setCurrentPassword,
-                onNewPasswordChange: setNewPassword,
-                onConfirmPasswordChange: setConfirmPassword,
-                passwordSaving,
-                passwordError,
-                passwordMinLength,
-                onPasswordSubmit: handlePasswordChange,
-              }}
-              patsSection={{
-                pats: patsList,
-                patsLoading,
-                patsError,
-                creatingPAT,
-                revokingPATIds,
-                onCreatePAT: handleCreatePAT,
-                onRevokePAT: handleRevokePAT,
-                displayMsg,
-              }}
-              displayMsg={displayMsg}
-            />
-
-            <PreferencesInfoColumn
-              t={t}
-              sessionsLoading={sessionsLoading}
-              sessionsError={sessionsError}
-              activeSessions={activeSessions}
-              revokingSessionId={revokingSessionId}
-              onRequestRevokeSession={handleRequestRevokeSession}
-              displayMsg={displayMsg}
-              languagePref={languagePref}
-              onLanguageChange={handleLanguageChange}
-              themePref={themePref}
-              onThemeChange={handleThemeChange}
-              onOpenImportModal={() => setIsImportModalOpen(true)}
-              onOpenAboutModal={() => setIsAboutModalOpen(true)}
-            />
-          </div>
+    <>
+    <PageContent>
+        <div className="mb-6">
+          <h1 className="text-3xl font-bold text-gray-900 dark:text-white">{t('settings.title')}</h1>
         </div>
-      </div>
+
+        <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 items-start">
+          <IdentitySecurityColumn
+            t={t}
+            currentUser={currentUser}
+            currentUsername={currentUsername}
+            profileIcon={{
+              hasProfileIcon,
+              fileInputRef,
+              iconUploading,
+              iconDeleting,
+              iconError,
+              onIconUpload: handleIconUpload,
+              onIconDelete: handleIconDelete,
+            }}
+            accountForm={{
+              draftFirstName,
+              draftLastName,
+              draftUsername,
+              onDraftFirstNameChange: setDraftFirstName,
+              onDraftLastNameChange: setDraftLastName,
+              onDraftUsernameChange: setDraftUsername,
+              saving,
+              error,
+              onAccountSubmit: handleSubmit,
+            }}
+            passwordForm={{
+              currentPassword,
+              newPassword,
+              confirmPassword,
+              onCurrentPasswordChange: setCurrentPassword,
+              onNewPasswordChange: setNewPassword,
+              onConfirmPasswordChange: setConfirmPassword,
+              passwordSaving,
+              passwordError,
+              passwordMinLength,
+              onPasswordSubmit: handlePasswordChange,
+            }}
+            patsSection={{
+              pats: patsList,
+              patsLoading,
+              patsError,
+              creatingPAT,
+              revokingPATIds,
+              onCreatePAT: handleCreatePAT,
+              onRevokePAT: handleRevokePAT,
+              displayMsg,
+            }}
+            displayMsg={displayMsg}
+          />
+
+          <PreferencesInfoColumn
+            t={t}
+            sessionsLoading={sessionsLoading}
+            sessionsError={sessionsError}
+            activeSessions={activeSessions}
+            revokingSessionId={revokingSessionId}
+            onRequestRevokeSession={handleRequestRevokeSession}
+            displayMsg={displayMsg}
+            languagePref={languagePref}
+            onLanguageChange={handleLanguageChange}
+            themePref={themePref}
+            onThemeChange={handleThemeChange}
+            onOpenImportModal={() => setIsImportModalOpen(true)}
+            onOpenAboutModal={() => setIsAboutModalOpen(true)}
+            onExport={handleExport}
+            isExporting={isExporting}
+          />
+        </div>
+      </PageContent>
 
       <ConfirmDialog
         open={Boolean(sessionPendingRevoke)}
@@ -486,7 +435,7 @@ const Settings = ({ onLogout, passwordMinLength }: SettingsProps) => {
         token={newlyCreatedPAT?.token ?? ''}
         onClose={() => setNewlyCreatedPAT(null)}
       />
-    </AppLayout>
+    </>
   );
 };
 

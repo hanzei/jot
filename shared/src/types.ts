@@ -146,6 +146,7 @@ export interface UserListResponse {
 
 export interface AdminUserStats {
   total: number;
+  admins: number;
 }
 
 export interface AdminNoteStats {

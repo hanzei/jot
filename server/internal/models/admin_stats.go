@@ -7,7 +7,8 @@ import (
 )
 
 type AdminUserStats struct {
-	Total int64 `json:"total"`
+	Total  int64 `json:"total"`
+	Admins int64 `json:"admins"`
 }
 
 type AdminNoteStats struct {
@@ -58,7 +59,12 @@ func NewAdminStatsStore(db *sql.DB) *AdminStatsStore {
 func (s *AdminStatsStore) GetStats(ctx context.Context) (*AdminStats, error) {
 	stats := &AdminStats{}
 
-	if err := s.db.QueryRowContext(ctx, `SELECT COUNT(*) FROM users`).Scan(&stats.Users.Total); err != nil {
+	if err := s.db.QueryRowContext(ctx, `
+		SELECT
+			COUNT(*),
+			COALESCE(SUM(CASE WHEN role = 'admin' THEN 1 ELSE 0 END), 0)
+		FROM users
+	`).Scan(&stats.Users.Total, &stats.Users.Admins); err != nil {
 		return nil, fmt.Errorf("count users: %w", err)
 	}
 

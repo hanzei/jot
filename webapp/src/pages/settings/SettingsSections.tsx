@@ -1,6 +1,6 @@
 import type { ChangeEvent, FormEvent, ReactNode, RefObject } from 'react';
 import { useState } from 'react';
-import { ArrowUpTrayIcon } from '@heroicons/react/24/outline';
+import { ArrowUpTrayIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
 import type { TFunction } from 'i18next';
 import LetterAvatar from '@/components/LetterAvatar';
 import ConfirmDialog from '@/components/ConfirmDialog';
@@ -11,6 +11,7 @@ import type { ActiveSession, PersonalAccessToken, User } from '@jot/shared';
 
 const CARD_CLASSES = 'bg-white dark:bg-slate-800 shadow rounded-lg p-6 border border-gray-200 dark:border-slate-700';
 const SECTION_TITLE_CLASSES = 'text-lg font-medium text-gray-900 dark:text-white mb-4';
+const SETTINGS_BTN_CLASSES = 'inline-flex items-center px-4 py-2 border border-gray-300 dark:border-slate-600 text-sm font-medium rounded-md shadow-sm text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 focus:ring-offset-gray-50 dark:focus:ring-offset-slate-900';
 
 type Translate = TFunction;
 
@@ -405,6 +406,8 @@ interface PreferencesInfoColumnProps {
   onThemeChange: (pref: ThemePreference) => void;
   onOpenImportModal: () => void;
   onOpenAboutModal: () => void;
+  onExport: () => void;
+  isExporting: boolean;
 }
 
 export const PreferencesInfoColumn = ({
@@ -421,6 +424,8 @@ export const PreferencesInfoColumn = ({
   onThemeChange,
   onOpenImportModal,
   onOpenAboutModal,
+  onExport,
+  isExporting,
 }: PreferencesInfoColumnProps) => (
   <div className="space-y-6">
     <SettingsSectionCard title={t('settings.sessionsSection')}>
@@ -512,14 +517,25 @@ export const PreferencesInfoColumn = ({
       <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
         {t('settings.importDescription')}
       </p>
-      <button
-        type="button"
-        onClick={onOpenImportModal}
-        className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-slate-600 text-sm font-medium rounded-md shadow-sm text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 focus:ring-offset-gray-50 dark:focus:ring-offset-slate-900"
-      >
-        <ArrowUpTrayIcon className="h-5 w-5 mr-2" aria-hidden="true" />
-        {t('settings.importButton')}
-      </button>
+      <div className="flex flex-wrap gap-3">
+        <button
+          type="button"
+          onClick={onExport}
+          disabled={isExporting}
+          className={`${SETTINGS_BTN_CLASSES} disabled:opacity-50 disabled:cursor-not-allowed`}
+        >
+          <ArrowDownTrayIcon className="h-5 w-5 mr-2" aria-hidden="true" />
+          {isExporting ? t('settings.exporting') : t('settings.exportButton')}
+        </button>
+        <button
+          type="button"
+          onClick={onOpenImportModal}
+          className={SETTINGS_BTN_CLASSES}
+        >
+          <ArrowUpTrayIcon className="h-5 w-5 mr-2" aria-hidden="true" />
+          {t('settings.importButton')}
+        </button>
+      </div>
     </SettingsSectionCard>
 
     <SettingsSectionCard title={t('settings.aboutSection')}>

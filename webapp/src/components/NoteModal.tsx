@@ -701,6 +701,11 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     return newItem.id;
   };
 
+  const addTodoItemAndFocus = () => {
+    const newId = addTodoItem();
+    setTimeout(() => itemInputRefs.current.get(newId)?.focus(), 0);
+  };
+
   const insertTodoItemAfter = (afterItemId: string) => {
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
@@ -1643,8 +1648,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                         input.setSelectionRange(input.value.length, input.value.length);
                       }
                     } else {
-                      const newId = addTodoItem();
-                      setTimeout(() => itemInputRefs.current.get(newId)?.focus(), 0);
+                      addTodoItemAndFocus();
                     }
                   }
                 }
@@ -1717,7 +1721,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                     </SortableContext>
                   </DndContext>
                   <button
-                    onClick={addTodoItem}
+                    onClick={addTodoItemAndFocus}
                     className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-white p-1"
                   >
                     <PlusIcon className="h-4 w-4" />

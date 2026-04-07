@@ -81,11 +81,20 @@ export const notes = {
   reorder: (noteIDs: string[]): Promise<void> =>
     api.post('/notes/reorder', { note_ids: noteIDs }),
 
-  importKeep: (file: File): Promise<ImportResponse> => {
+  importNotes: (file: File, importType: 'jot_json' | 'google_keep'): Promise<ImportResponse> => {
     const formData = new FormData();
     formData.append('file', file);
+    formData.append('import_type', importType);
     return api.post('/notes/import', formData).then(res => res.data);
   },
+
+  exportNotes: (): Promise<{ blob: Blob; filename: string }> =>
+    api.get('/notes/export', { responseType: 'blob' }).then(res => {
+      const disposition = res.headers['content-disposition'] as string | undefined;
+      const match = disposition?.match(/filename="?([^";\r\n]+)"?/);
+      const filename = match?.[1] ?? 'jot-export.json';
+      return { blob: res.data as Blob, filename };
+    }),
 
   addLabel: (noteId: string, name: string): Promise<Note> =>
     api.post(`/notes/${noteId}/labels`, { name }).then(res => res.data),

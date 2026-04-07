@@ -193,6 +193,93 @@ test.describe('Settings', () => {
   });
 });
 
+test.describe('Export & Import', () => {
+  test('shows Backup & Restore section with Export Notes and Import Notes buttons', async ({ authenticatedUser, settingsPage, page }) => {
+    await settingsPage.goto();
+
+    await expect(page.getByText('Backup & Restore')).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Export Notes' })).toBeVisible();
+    await expect(page.getByRole('button', { name: 'Import Notes' })).toBeVisible();
+
+    void authenticatedUser;
+  });
+
+  test('export button triggers a file download', async ({ authenticatedUser, dashboardPage, settingsPage, page }) => {
+    // Create a note to ensure there is something to export
+    await dashboardPage.goto();
+    await dashboardPage.createNote('Export test note', 'some content');
+
+    await settingsPage.goto();
+
+    const downloadPromise = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Export Notes' }).click();
+    const download = await downloadPromise;
+
+    expect(download.suggestedFilename()).toMatch(/^jot-export-.*\.json$/);
+
+    void authenticatedUser;
+  });
+
+  test('import modal shows format selector with Google Keep and Jot JSON options', async ({ authenticatedUser, settingsPage, page }) => {
+    await settingsPage.goto();
+
+    await page.getByRole('button', { name: 'Import Notes' }).click();
+
+    await expect(page.getByRole('heading', { name: 'Import Notes' })).toBeVisible();
+    await expect(page.getByRole('radio', { name: 'Google Keep' })).toBeVisible();
+    await expect(page.getByRole('radio', { name: 'Jot JSON' })).toBeVisible();
+    await expect(page.getByRole('radio', { name: 'Google Keep' })).toBeChecked();
+
+    void authenticatedUser;
+  });
+
+  test('import modal switches description when format changes', async ({ authenticatedUser, settingsPage, page }) => {
+    await settingsPage.goto();
+
+    await page.getByRole('button', { name: 'Import Notes' }).click();
+
+    // Default shows Google Keep description
+    await expect(page.getByText(/Google Takeout/i)).toBeVisible();
+
+    // Switch to Jot JSON
+    await page.getByRole('radio', { name: 'Jot JSON' }).click();
+    await expect(page.getByText(/Jot JSON export file/i)).toBeVisible();
+
+    void authenticatedUser;
+  });
+
+  test('can import a Jot JSON file', async ({ authenticatedUser, settingsPage, dashboardPage, page }) => {
+    // First export notes to get a valid Jot JSON file
+    await dashboardPage.goto();
+    await dashboardPage.createNote('Note to round-trip', 'round-trip content');
+
+    await settingsPage.goto();
+
+    const downloadPromise = page.waitForEvent('download');
+    await page.getByRole('button', { name: 'Export Notes' }).click();
+    const download = await downloadPromise;
+    const exportPath = await download.path();
+
+    // Now import the exported file using Jot JSON format
+    await page.getByRole('button', { name: 'Import Notes' }).click();
+    await page.getByRole('radio', { name: 'Jot JSON' }).click();
+
+    const fileInput = page.getByTestId('import-dropzone').locator('input[type="file"]');
+    await fileInput.setInputFiles(exportPath!);
+
+    const importResponse = page.waitForResponse(
+      resp => resp.url().includes('/api/v1/notes/import') && resp.request().method() === 'POST'
+    );
+    await page.getByRole('button', { name: 'Import' }).click();
+    const resp = await importResponse;
+    expect(resp.status()).toBe(200);
+
+    await expect(page.getByText(/Imported/i)).toBeVisible();
+
+    void authenticatedUser;
+  });
+});
+
 test.describe('Settings sidebar labels — Mobile', () => {
   test.use({ viewport: { width: 375, height: 812 } });
 
