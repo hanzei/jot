@@ -117,6 +117,7 @@ export default function CreateUserModal({ passwordMinLength, onClose, onSuccess 
                   <input
                     id="create-username"
                     type="text"
+                    autoCapitalize="none"
                     required
                     value={formData.username}
                     onBlur={() => handleFieldBlur('username')}
