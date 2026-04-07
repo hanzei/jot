@@ -107,7 +107,7 @@ func (h *NotesHandler) ExportNotes(w http.ResponseWriter, r *http.Request) (int,
 	w.WriteHeader(http.StatusOK)
 
 	if err := json.NewEncoder(w).Encode(export); err != nil {
-		logutil.FromContext(r.Context()).WithError(err).Error("failed to encode export")
+		logutil.FromContext(r.Context()).WithError(err).Error("Failed to encode export")
 	}
 
 	return 0, nil, nil

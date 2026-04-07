@@ -626,7 +626,7 @@ func (h *AuthHandler) publishProfileIconEvent(ctx context.Context, user *models.
 	}
 	collaboratorIDs, err := h.noteStore.GetCollaboratorIDs(ctx, user.ID)
 	if err != nil {
-		logutil.FromContext(ctx).WithError(err).WithField("user_id", user.ID).Error("failed to get collaborator IDs for profile icon SSE publish")
+		logutil.FromContext(ctx).WithError(err).WithField("user_id", user.ID).Error("Failed to get collaborator IDs for profile icon SSE publish")
 		return
 	}
 	if len(collaboratorIDs) == 0 {
