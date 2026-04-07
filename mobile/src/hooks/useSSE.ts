@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useAuth } from '../store/AuthContext';
 import { SSEConnectionManager } from '../api/events';
+import { CLIENT_ID } from '../api/client';
 import type { SSEEvent } from '@jot/shared';
 import { useNetworkStatus } from './useNetworkStatus';
 import { saveNote, markLocalNoteDeleted } from '../db/noteQueries';
@@ -42,6 +43,9 @@ export function useSSE(onNoteUpdatedByOther?: SSENotificationCallback): void {
     managerRef.current = manager;
 
     manager.connect((event: SSEEvent) => {
+      // Drop events that originated from this device to avoid redundant invalidations.
+      if (event.client_id && event.client_id === CLIENT_ID) return;
+
       // Note-related events require refreshing the notes list
       if (
         event.type === 'note_created' ||
@@ -63,9 +67,9 @@ export function useSSE(onNoteUpdatedByOther?: SSENotificationCallback): void {
         }
         queryClient.invalidateQueries({ queryKey: noteQueryKey(note_id) });
         queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(note_id) });
-        // Only notify subscribers about updates from other users. Updates from
-        // the current user (possibly from another device) are handled by query
-        // invalidation above and don't need an "updated by someone else" toast.
+        // Don't fire the "updated by someone else" notification for changes
+        // from the same user on another device — query invalidation above is
+        // sufficient to sync the state.
         if (event.source_user_id !== userIdRef.current) {
           onNoteUpdatedRef.current?.(event);
         }

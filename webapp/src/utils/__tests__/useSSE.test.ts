@@ -1,6 +1,7 @@
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { renderHook, act } from '@testing-library/react'
 import { useSSE, SSEEvent } from '../useSSE'
+import { CLIENT_ID } from '../api'
 
 // Controllable mock for EventSource that exposes lifecycle handlers.
 class MockEventSource {
@@ -109,6 +110,59 @@ describe('useSSE', () => {
       })
 
       expect(onEvent).toHaveBeenCalledTimes(1)
+      expect(onEvent).toHaveBeenCalledWith(event)
+    })
+
+    it('drops events whose client_id matches CLIENT_ID', () => {
+      const onEvent = vi.fn()
+      renderHook(() => useSSE({ onEvent }))
+
+      const event: SSEEvent = {
+        type: 'note_updated',
+        source_user_id: 'user1',
+        client_id: CLIENT_ID,
+        data: { note_id: 'note123', note: null },
+      }
+
+      act(() => {
+        MockEventSource.instances[0].simulateMessage(event)
+      })
+
+      expect(onEvent).not.toHaveBeenCalled()
+    })
+
+    it('passes through events whose client_id differs from CLIENT_ID', () => {
+      const onEvent = vi.fn()
+      renderHook(() => useSSE({ onEvent }))
+
+      const event: SSEEvent = {
+        type: 'note_updated',
+        source_user_id: 'user1',
+        client_id: 'other-tab-id',
+        data: { note_id: 'note123', note: null },
+      }
+
+      act(() => {
+        MockEventSource.instances[0].simulateMessage(event)
+      })
+
+      expect(onEvent).toHaveBeenCalledWith(event)
+    })
+
+    it('passes through events with no client_id', () => {
+      const onEvent = vi.fn()
+      renderHook(() => useSSE({ onEvent }))
+
+      const event: SSEEvent = {
+        type: 'note_updated',
+        source_user_id: 'user1',
+        data: { note_id: 'note123', note: null },
+      }
+
+      act(() => {
+        MockEventSource.instances[0].simulateMessage(event)
+      })
+
       expect(onEvent).toHaveBeenCalledWith(event)
     })
 

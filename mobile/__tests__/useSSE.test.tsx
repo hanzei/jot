@@ -20,6 +20,13 @@ jest.mock('expo-sqlite', () => ({
   })),
 }));
 
+// Fixed CLIENT_ID for tests — matches what useSSE imports from api/client.
+const TEST_CLIENT_ID = 'test-device-client-id';
+jest.mock('../src/api/client', () => ({
+  ...jest.requireActual('../src/api/client'),
+  CLIENT_ID: TEST_CLIENT_ID,
+}));
+
 // Mock SSEConnectionManager
 let capturedCallback: ((event: SSEEvent) => void) | null = null;
 const mockConnect = jest.fn().mockImplementation(async (cb: (event: SSEEvent) => void) => {
@@ -151,7 +158,7 @@ describe('useSSE', () => {
     expect(removeSpy).toHaveBeenCalledWith({ queryKey: noteQueryKey('note-123') });
   });
 
-  it('invalidates queries for same-user events to support cross-device sync', () => {
+  it('invalidates queries for same-user events from a different device', () => {
     const { queryClient, Wrapper } = createWrapper();
     const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
 
@@ -164,13 +171,35 @@ describe('useSSE', () => {
       capturedCallback?.({
         type: 'note_updated',
         source_user_id: 'current-user', // Same user, different device
+        client_id: 'other-device-client-id', // Different device — must not be filtered
         data: { note_id: 'note-123', note: null },
       });
     });
 
-    // Queries must be invalidated so another device of the same user sees the change
+    // Queries must be invalidated so the current device syncs the remote change
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: notesQueryScopeKey() });
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: noteQueryKey('note-123') });
+  });
+
+  it('filters out events from the same device (matching client_id)', () => {
+    const { queryClient, Wrapper } = createWrapper();
+    const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
+    const onNotify = jest.fn();
+
+    renderHook(() => useSSE(onNotify), { wrapper: Wrapper });
+    invalidateSpy.mockClear();
+
+    act(() => {
+      capturedCallback?.({
+        type: 'note_updated',
+        source_user_id: 'current-user',
+        client_id: TEST_CLIENT_ID, // Same device — must be filtered
+        data: { note_id: 'note-123', note: null },
+      });
+    });
+
+    expect(invalidateSpy).not.toHaveBeenCalled();
+    expect(onNotify).not.toHaveBeenCalled();
   });
 
   it('does not call notification callback for same-user events', () => {

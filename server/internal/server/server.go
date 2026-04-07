@@ -163,7 +163,7 @@ func (s *Server) setupRoutes() error {
 
 	corsOpts := cors.Options{
 		AllowedMethods:   []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodOptions},
-		AllowedHeaders:   []string{"Accept", "Content-Type", "Authorization"},
+		AllowedHeaders:   []string{"Accept", "Content-Type", "Authorization", "X-Client-Id"},
 		ExposedHeaders:   []string{"Link"},
 		AllowCredentials: true,
 		MaxAge:           300,
@@ -193,6 +193,7 @@ func (s *Server) setupRoutes() error {
 
 		r.Group(func(r chi.Router) {
 			r.Use(s.sessionService.AuthMiddleware)
+			r.Use(handlers.ClientIDMiddleware)
 
 			r.Get("/events", s.eventsHandler.ServeSSE)
 

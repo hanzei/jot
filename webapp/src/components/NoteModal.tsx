@@ -1320,6 +1320,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
         }
       );
       if (newArchivedState) {
+        onRefresh?.();
         onClose();
       } else {
         onRefresh?.();

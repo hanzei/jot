@@ -93,6 +93,7 @@ func (h *NotesHandler) publishNoteEvent(ctx context.Context, noteID string, even
 	h.hub.Publish(ctx, audienceIDs, sse.Event{
 		Type:         eventType,
 		SourceUserID: sourceUserID,
+		ClientID:     clientIDFromContext(ctx),
 		Data:         sse.NoteEventData{NoteID: noteID, Note: note},
 	})
 }
@@ -105,6 +106,7 @@ func (h *NotesHandler) publishPersonalizedNoteEvent(ctx context.Context, noteID 
 	if h.hub == nil {
 		return
 	}
+	clientID := clientIDFromContext(ctx)
 	for _, uid := range audienceIDs {
 		n, err := h.noteStore.GetByID(ctx, noteID, uid)
 		if err != nil {
@@ -114,6 +116,7 @@ func (h *NotesHandler) publishPersonalizedNoteEvent(ctx context.Context, noteID 
 		h.hub.Publish(ctx, []string{uid}, sse.Event{
 			Type:         sse.EventNoteUpdated,
 			SourceUserID: sourceUserID,
+			ClientID:     clientID,
 			Data:         sse.NoteEventData{NoteID: noteID, Note: n},
 		})
 	}
@@ -127,6 +130,7 @@ func (h *NotesHandler) publishDeletedNoteEvent(ctx context.Context, noteID strin
 	h.hub.Publish(ctx, audienceIDs, sse.Event{
 		Type:         sse.EventNoteDeleted,
 		SourceUserID: sourceUserID,
+		ClientID:     clientIDFromContext(ctx),
 		Data:         sse.NoteEventData{NoteID: noteID},
 	})
 }
@@ -626,6 +630,7 @@ func (h *NotesHandler) publishUpdateEvent(ctx context.Context, noteID string, no
 		h.hub.Publish(ctx, []string{userID}, sse.Event{
 			Type:         sse.EventNoteUpdated,
 			SourceUserID: userID,
+			ClientID:     clientIDFromContext(ctx),
 			Data:         sse.NoteEventData{NoteID: noteID, Note: note},
 		})
 	}

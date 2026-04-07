@@ -1,9 +1,13 @@
 import axios from 'axios';
 import type { ServerConfig, AboutInfo, AuthResponse, LoginRequest, RegisterRequest, Note, CreateNoteRequest, UpdateNoteRequest, User, CreateUserRequest, UserListResponse, AdminStatsResponse, ShareNoteRequest, NoteShare, ImportResponse, UpdateMeRequest, ChangePasswordRequest, UpdateUserRoleRequest, Label, ActiveSession, EmptyTrashResponse, PersonalAccessToken, CreatePATRequest } from '@jot/shared';
 
+// Unique ID for this browser tab, used to suppress SSE echoes of our own mutations.
+export const CLIENT_ID = crypto.randomUUID();
+
 const api = axios.create({
   baseURL: '/api/v1',
   withCredentials: true,
+  headers: { 'X-Client-Id': CLIENT_ID },
 });
 
 // Handle auth errors

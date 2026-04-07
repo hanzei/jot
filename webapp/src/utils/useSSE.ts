@@ -1,5 +1,6 @@
 import { useEffect, useRef } from 'react';
 import type { SSEEvent } from '@jot/shared';
+import { CLIENT_ID } from '@/utils/api';
 
 export type { SSEEvent };
 
@@ -35,6 +36,8 @@ export function useSSE({ onEvent, onConnected }: UseSSEOptions): void {
         // ignore malformed events
         return;
       }
+      // Drop events that originated from this tab to avoid redundant refetches.
+      if (event.client_id && event.client_id === CLIENT_ID) return;
       onEventRef.current(event);
     };
 
