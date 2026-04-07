@@ -610,7 +610,7 @@ func (h *AuthHandler) DeleteProfileIcon(w http.ResponseWriter, r *http.Request) 
 		// The deletion already succeeded; log the re-fetch failure but don't
 		// report it as an error to the caller.
 		logutil.FromContext(r.Context()).WithError(err).WithField("user_id", currentUser.ID).
-			Error("failed to re-fetch user after profile icon deletion; skipping SSE publish")
+			Error("Failed to re-fetch user after profile icon deletion; skipping SSE publish")
 	} else {
 		h.publishProfileIconEvent(r.Context(), user)
 	}
