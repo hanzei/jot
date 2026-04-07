@@ -1245,13 +1245,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
         archived,
         color,
         checked_items_collapsed: checkedItemsCollapsed,
-        items: note.note_type === 'todo' ? items.map((item, idx) => ({
-          text: item.text,
-          position: idx,
-          completed: item.completed,
-          indent_level: item.indentLevel,
-          assigned_to: item.assignedTo,
-        })) : undefined,
+        items: note.note_type === 'todo' ? mapItemsForAutoSave(items) : undefined,
       };
       await notes.update(note.id, updateData);
       onRefresh?.();
@@ -1292,13 +1286,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
         archived: newArchivedState,
         color,
         checked_items_collapsed: checkedItemsCollapsed,
-        items: note.note_type === 'todo' ? items.map((item, idx) => ({
-          text: item.text,
-          position: idx,
-          completed: item.completed,
-          indent_level: item.indentLevel,
-          assigned_to: item.assignedTo,
-        })) : undefined,
+        items: note.note_type === 'todo' ? mapItemsForAutoSave(items) : undefined,
       };
       await notes.update(note.id, updateData);
       showToast(
@@ -1359,13 +1347,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
         archived,
         color,
         checked_items_collapsed: newCollapsedState,
-        items: note.note_type === 'todo' ? items.map((item, idx) => ({
-          text: item.text,
-          position: idx,
-          completed: item.completed,
-          indent_level: item.indentLevel,
-          assigned_to: item.assignedTo,
-        })) : undefined,
+        items: note.note_type === 'todo' ? mapItemsForAutoSave(items) : undefined,
       };
       await notes.update(note.id, updateData);
       onRefresh?.();
