@@ -31,6 +31,18 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
     return isJson || isZip;
   };
 
+  const resetFields = (type: ImportType = 'google_keep') => {
+    setImportType(type);
+    setSelectedFile(null);
+    setError('');
+    setResult(null);
+    if (fileInputRef.current) {
+      fileInputRef.current.value = '';
+    }
+  };
+
+  const handleFormatChange = (type: ImportType) => resetFields(type);
+
   const handleFileChange = (e: React.ChangeEvent<HTMLInputElement>) => {
     const file = e.target.files?.[0] ?? null;
     setSelectedFile(file);
@@ -54,16 +66,6 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
 
   const handleDragOver = (e: React.DragEvent<HTMLDivElement>) => {
     e.preventDefault();
-  };
-
-  const handleFormatChange = (type: ImportType) => {
-    setImportType(type);
-    setSelectedFile(null);
-    setError('');
-    setResult(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
   };
 
   const handleImport = async () => {
@@ -90,13 +92,7 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
   };
 
   const handleClose = () => {
-    setImportType('google_keep');
-    setSelectedFile(null);
-    setError('');
-    setResult(null);
-    if (fileInputRef.current) {
-      fileInputRef.current.value = '';
-    }
+    resetFields();
     onClose();
   };
 

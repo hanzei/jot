@@ -11,6 +11,7 @@ import type { ActiveSession, PersonalAccessToken, User } from '@jot/shared';
 
 const CARD_CLASSES = 'bg-white dark:bg-slate-800 shadow rounded-lg p-6 border border-gray-200 dark:border-slate-700';
 const SECTION_TITLE_CLASSES = 'text-lg font-medium text-gray-900 dark:text-white mb-4';
+const SETTINGS_BTN_CLASSES = 'inline-flex items-center px-4 py-2 border border-gray-300 dark:border-slate-600 text-sm font-medium rounded-md shadow-sm text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 focus:ring-offset-gray-50 dark:focus:ring-offset-slate-900';
 
 type Translate = TFunction;
 
@@ -521,7 +522,7 @@ export const PreferencesInfoColumn = ({
           type="button"
           onClick={onExport}
           disabled={isExporting}
-          className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-slate-600 text-sm font-medium rounded-md shadow-sm text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 focus:ring-offset-gray-50 dark:focus:ring-offset-slate-900 disabled:opacity-50 disabled:cursor-not-allowed"
+          className={`${SETTINGS_BTN_CLASSES} disabled:opacity-50 disabled:cursor-not-allowed`}
         >
           <ArrowDownTrayIcon className="h-5 w-5 mr-2" aria-hidden="true" />
           {isExporting ? t('settings.exporting') : t('settings.exportButton')}
@@ -529,7 +530,7 @@ export const PreferencesInfoColumn = ({
         <button
           type="button"
           onClick={onOpenImportModal}
-          className="inline-flex items-center px-4 py-2 border border-gray-300 dark:border-slate-600 text-sm font-medium rounded-md shadow-sm text-gray-700 dark:text-gray-300 bg-white dark:bg-slate-700 hover:bg-gray-50 dark:hover:bg-slate-600 focus:outline-none focus:ring-2 focus:ring-offset-2 focus:ring-blue-500 focus:ring-offset-gray-50 dark:focus:ring-offset-slate-900"
+          className={SETTINGS_BTN_CLASSES}
         >
           <ArrowUpTrayIcon className="h-5 w-5 mr-2" aria-hidden="true" />
           {t('settings.importButton')}
