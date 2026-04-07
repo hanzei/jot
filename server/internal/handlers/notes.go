@@ -169,6 +169,18 @@ type EmptyTrashResponse struct {
 	Deleted int `json:"deleted"`
 }
 
+func validateCreateNoteItems(items []CreateNoteItem) (int, error) {
+	for _, item := range items {
+		if err := validateTodoItemText(item.Text); err != nil {
+			return http.StatusBadRequest, err
+		}
+		if item.IndentLevel < 0 || item.IndentLevel > 1 {
+			return http.StatusBadRequest, errors.New("indent_level must be 0 or 1")
+		}
+	}
+	return http.StatusOK, nil
+}
+
 func normalizeCreateNoteRequest(req *CreateNoteRequest) (int, error) {
 	if req.Title == "" && req.Content == "" && len(req.Items) == 0 {
 		return http.StatusBadRequest, errors.New("note must have a title, content, or items")
@@ -189,6 +201,9 @@ func normalizeCreateNoteRequest(req *CreateNoteRequest) (int, error) {
 			req.NoteType = models.NoteTypeTodo
 		} else if req.NoteType != models.NoteTypeTodo {
 			return http.StatusBadRequest, errors.New("note_type must be 'todo' when items are provided")
+		}
+		if status, err := validateCreateNoteItems(req.Items); err != nil {
+			return status, err
 		}
 	} else if req.NoteType == "" {
 		req.NoteType = models.NoteTypeText
@@ -223,11 +238,11 @@ func (h *NotesHandler) createNoteLabels(ctx context.Context, noteID, userID stri
 
 func (h *NotesHandler) createTodoItems(ctx context.Context, noteID string, items []CreateNoteItem) (int, error) {
 	for _, item := range items {
+		if err := validateTodoItemText(item.Text); err != nil {
+			return http.StatusBadRequest, err
+		}
 		if item.IndentLevel < 0 || item.IndentLevel > 1 {
 			return http.StatusBadRequest, errors.New("indent_level must be 0 or 1")
-		}
-		if utf8.RuneCountInString(item.Text) > noteItemTextMaxLength {
-			return http.StatusBadRequest, fmt.Errorf("item text must be %d characters or fewer", noteItemTextMaxLength)
 		}
 		if _, err := h.noteStore.CreateItemWithCompleted(ctx, noteID, item.Text, item.Position, item.Completed, item.IndentLevel, ""); err != nil {
 			return http.StatusInternalServerError, fmt.Errorf("create todo item: %w", err)
@@ -447,11 +462,11 @@ func (h *NotesHandler) validateTodoItems(ctx context.Context, noteID string, ite
 	}
 
 	for _, item := range items {
+		if err := validateTodoItemText(item.Text); err != nil {
+			return http.StatusBadRequest, err
+		}
 		if item.IndentLevel < 0 || item.IndentLevel > 1 {
 			return http.StatusBadRequest, errors.New("indent_level must be 0 or 1")
-		}
-		if utf8.RuneCountInString(item.Text) > noteItemTextMaxLength {
-			return http.StatusBadRequest, fmt.Errorf("item text must be %d characters or fewer", noteItemTextMaxLength)
 		}
 	}
 

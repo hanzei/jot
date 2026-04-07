@@ -34,7 +34,7 @@ type TFunction = (key: string, opts?: Record<string, unknown>) => string;
 
 const validateItemText = (text: string, t: TFunction): string | null => {
   const trimmed = text.trim();
-  if (trimmed.length === 0) return null; // Allow empty items (will be removed on save)
+  if (trimmed.length === 0) return null; // Empty items are filtered out on save
   if (trimmed.length > VALIDATION.ITEM_TEXT_MAX_LENGTH) return t('note.itemTooLong', { max: VALIDATION.ITEM_TEXT_MAX_LENGTH });
   if (/[<>]/g.test(trimmed)) return t('note.itemInvalidChars');
   return null;
@@ -433,13 +433,16 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     })
   );
 
-  const mapItemsForAutoSave = useCallback((sourceItems: TodoItem[]) => sourceItems.map((item) => ({
-    text: item.text,
-    position: item.position,
-    completed: item.completed,
-    indent_level: item.indentLevel,
-    assigned_to: item.assignedTo,
-  })), []);
+  const mapItemsForAutoSave = useCallback((sourceItems: TodoItem[]) =>
+    sourceItems
+      .filter(item => item.text.trim() !== '')
+      .map((item) => ({
+        text: item.text,
+        position: item.position,
+        completed: item.completed,
+        indent_level: item.indentLevel,
+        assigned_to: item.assignedTo,
+      })), []);
 
   const buildAutoSaveRequest = useCallback((sourceItems: TodoItem[]): UpdateNoteRequest => ({
     ...autoSaveDraftRef.current,
@@ -1153,18 +1156,12 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       archived,
       color,
       checked_items_collapsed: checkedItemsCollapsed,
-      items: noteType === 'todo' ? items.map((item, idx) => ({
-        text: item.text,
-        position: idx,
-        completed: item.completed,
-        indent_level: item.indentLevel,
-        assigned_to: item.assignedTo,
-      })) : undefined,
+      items: noteType === 'todo' ? mapItemsForAutoSave(items) : undefined,
     };
 
     await notes.update(note.id, updateData);
     onRefresh?.();
-  }, [archived, checkedItemsCollapsed, color, content, items, note, noteType, onRefresh, pinned, title]);
+  }, [archived, checkedItemsCollapsed, color, content, items, mapItemsForAutoSave, note, noteType, onRefresh, pinned, title]);
 
   const handleSave = async () => {
     if (savingRef.current) return;
@@ -1185,12 +1182,14 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
           content,
           note_type: noteType,
           color,
-          items: noteType === 'todo' ? items.map((item, idx) => ({
-            text: item.text,
-            position: idx,
-            completed: item.completed,
-            indent_level: item.indentLevel,
-          })) : undefined,
+          items: noteType === 'todo' ? items
+            .filter(item => item.text.trim() !== '')
+            .map((item, idx) => ({
+              text: item.text,
+              position: idx,
+              completed: item.completed,
+              indent_level: item.indentLevel,
+            })) : undefined,
           labels: noteLabels.length > 0 ? noteLabels.map(l => l.name) : undefined,
         };
         await notes.create(createData);
@@ -1246,13 +1245,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
         archived,
         color,
         checked_items_collapsed: checkedItemsCollapsed,
-        items: note.note_type === 'todo' ? items.map((item, idx) => ({
-          text: item.text,
-          position: idx,
-          completed: item.completed,
-          indent_level: item.indentLevel,
-          assigned_to: item.assignedTo,
-        })) : undefined,
+        items: note.note_type === 'todo' ? mapItemsForAutoSave(items) : undefined,
       };
       await notes.update(note.id, updateData);
       onRefresh?.();
@@ -1293,13 +1286,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
         archived: newArchivedState,
         color,
         checked_items_collapsed: checkedItemsCollapsed,
-        items: note.note_type === 'todo' ? items.map((item, idx) => ({
-          text: item.text,
-          position: idx,
-          completed: item.completed,
-          indent_level: item.indentLevel,
-          assigned_to: item.assignedTo,
-        })) : undefined,
+        items: note.note_type === 'todo' ? mapItemsForAutoSave(items) : undefined,
       };
       await notes.update(note.id, updateData);
       showToast(
@@ -1360,13 +1347,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
         archived,
         color,
         checked_items_collapsed: newCollapsedState,
-        items: note.note_type === 'todo' ? items.map((item, idx) => ({
-          text: item.text,
-          position: idx,
-          completed: item.completed,
-          indent_level: item.indentLevel,
-          assigned_to: item.assignedTo,
-        })) : undefined,
+        items: note.note_type === 'todo' ? mapItemsForAutoSave(items) : undefined,
       };
       await notes.update(note.id, updateData);
       onRefresh?.();

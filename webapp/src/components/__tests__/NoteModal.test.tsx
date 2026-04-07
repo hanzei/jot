@@ -504,7 +504,6 @@ describe('NoteModal', () => {
       expect(mockNotesUpdate).toHaveBeenLastCalledWith('1', expect.objectContaining({
         items: [
           expect.objectContaining({ text: 'parent', position: 0, completed: false, indent_level: 1 }),
-          expect.objectContaining({ text: '', position: 1, completed: false, indent_level: 1 }),
         ],
       }))
     })
@@ -543,7 +542,6 @@ describe('NoteModal', () => {
       expect(mockNotesUpdate).toHaveBeenLastCalledWith('1', expect.objectContaining({
         items: [
           expect.objectContaining({ text: 'parent', position: 0, completed: false, indent_level: 1 }),
-          expect.objectContaining({ text: '', position: 1, completed: false, indent_level: 1 }),
         ],
       }))
     })
@@ -597,7 +595,6 @@ describe('NoteModal', () => {
           title: 'Updated title while saving',
           items: [
             expect.objectContaining({ text: 'parent', position: 0, completed: false, indent_level: 1 }),
-            expect.objectContaining({ text: '', position: 1, completed: false, indent_level: 1 }),
           ],
         }),
       )
