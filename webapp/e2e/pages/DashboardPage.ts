@@ -285,7 +285,7 @@ export class DashboardPage {
   async switchToMyTodo() {
     await this.ensureSidebarOpen();
     await this.page
-      .locator('aside[aria-label="Main navigation"] nav [aria-label="My Todo"]')
+      .locator('aside[aria-label="Main navigation"] nav [aria-label="My Tasks"]')
       .click();
   }
 

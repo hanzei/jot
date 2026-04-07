@@ -7,7 +7,7 @@ import { DocumentTextIcon, ArchiveBoxIcon, TrashIcon, ClipboardDocumentCheckIcon
  * with the Dashboard's tab structure.
  *
  * Returns `{ tabs, bottomTabs }` matching the Dashboard layout:
- *   tabs       → Notes, My Todo
+ *   tabs       → Notes, My Tasks
  *   bottomTabs → Archive, Bin
  */
 export function useNavigationLinkTabs() {

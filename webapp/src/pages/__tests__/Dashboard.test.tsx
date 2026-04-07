@@ -1485,8 +1485,8 @@ describe('Dashboard', () => {
       renderDashboard(['/?view=my-todo'])
 
       await waitFor(() => {
-        expect(screen.getByText('No assigned to-do items')).toBeInTheDocument()
-        expect(screen.getByText('No to-do items assigned to you yet. When someone assigns a to-do item to you in a shared note, it will appear here.')).toBeInTheDocument()
+        expect(screen.getByText('No assigned tasks')).toBeInTheDocument()
+        expect(screen.getByText('No tasks assigned to you yet. When someone assigns a task to you in a shared note, it will appear here.')).toBeInTheDocument()
       })
     })
 
@@ -1496,7 +1496,7 @@ describe('Dashboard', () => {
       renderDashboard(['/?view=my-todo'])
 
       await waitFor(() => {
-        expect(screen.getByText('Showing notes that include your assigned to-do items.')).toBeInTheDocument()
+        expect(screen.getByText('Showing notes that include your assigned tasks.')).toBeInTheDocument()
       })
     })
 
@@ -1504,7 +1504,7 @@ describe('Dashboard', () => {
       renderDashboard(['/?view=my-todo'])
 
       await waitFor(() => {
-        expect(document.title).toBe('My Todo - Jot')
+        expect(document.title).toBe('My Tasks - Jot')
       })
     })
 
