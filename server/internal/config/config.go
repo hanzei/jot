@@ -5,6 +5,7 @@ import (
 	"os"
 	"path/filepath"
 	"strconv"
+	"strings"
 )
 
 // Config holds all server configuration values.
@@ -128,7 +129,17 @@ func Load() (*Config, error) {
 	}
 	cfg.OTelEnabled = otelEnabled
 
-	cfg.OTelEndpoint = os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT")
+	// Normalize the OTLP endpoint to a full URL with scheme so the OTel SDK
+	// can parse it correctly. Bare "host:port" values (no scheme) are common
+	// for gRPC but cause url.Parse to fail inside the SDK. Adding "http://"
+	// is safe: the gRPC transport ignores the scheme and uses the Insecure
+	// flag to control TLS.
+	if v := os.Getenv("OTEL_EXPORTER_OTLP_ENDPOINT"); v != "" {
+		if !strings.Contains(v, "://") {
+			v = "http://" + v
+		}
+		cfg.OTelEndpoint = v
+	}
 
 	if v := os.Getenv("OTEL_SERVICE_NAME"); v != "" {
 		cfg.OTelServiceName = v

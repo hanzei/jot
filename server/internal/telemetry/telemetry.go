@@ -144,9 +144,11 @@ func Setup(ctx context.Context, cfg Config) (shutdown func(context.Context) erro
 }
 
 func setupOTLP(ctx context.Context, res *resource.Resource, endpoint string, insecure bool, promExp *promexporter.Exporter) (*sdktrace.TracerProvider, *metric.MeterProvider, *sdklog.LoggerProvider, []func(context.Context) error, error) {
-	traceOpts := []otlptracegrpc.Option{otlptracegrpc.WithEndpoint(endpoint)}
-	metricOpts := []otlpmetricgrpc.Option{otlpmetricgrpc.WithEndpoint(endpoint)}
-	logOpts := []otlploggrpc.Option{otlploggrpc.WithEndpoint(endpoint)}
+	// endpoint is already a full URL (normalized by config.Load); use
+	// WithEndpointURL so the SDK receives a value it can url.Parse cleanly.
+	traceOpts := []otlptracegrpc.Option{otlptracegrpc.WithEndpointURL(endpoint)}
+	metricOpts := []otlpmetricgrpc.Option{otlpmetricgrpc.WithEndpointURL(endpoint)}
+	logOpts := []otlploggrpc.Option{otlploggrpc.WithEndpointURL(endpoint)}
 	if insecure {
 		traceOpts = append(traceOpts, otlptracegrpc.WithInsecure())
 		metricOpts = append(metricOpts, otlpmetricgrpc.WithInsecure())
