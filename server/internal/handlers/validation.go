@@ -83,6 +83,16 @@ func validatePATName(name string) error {
 	return nil
 }
 
+func validateTodoItemText(text string) error {
+	if strings.TrimSpace(text) == "" {
+		return errors.New("item text must not be empty")
+	}
+	if utf8.RuneCountInString(text) > noteItemTextMaxLength {
+		return fmt.Errorf("item text must be %d characters or fewer", noteItemTextMaxLength)
+	}
+	return nil
+}
+
 // normalizeLabels trims whitespace from each label name, drops empty names, and
 // removes duplicates while preserving first-occurrence order.
 func normalizeLabels(rawLabels []string) []string {

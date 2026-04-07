@@ -223,6 +223,48 @@ func TestNoteValidation(t *testing.T) {
 		})
 	})
 
+	t.Run("empty item text", func(t *testing.T) {
+		t.Run("empty text on create returns 400", func(t *testing.T) {
+			_, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
+				Items: []client.CreateNoteItem{{Text: "", Position: 0}},
+			})
+			assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
+		})
+
+		t.Run("whitespace-only text on create returns 400", func(t *testing.T) {
+			_, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
+				Items: []client.CreateNoteItem{{Text: "   ", Position: 0}},
+			})
+			assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
+		})
+
+		t.Run("empty text on update returns 400", func(t *testing.T) {
+			note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
+				Items: []client.CreateNoteItem{{Text: "original", Position: 0}},
+			})
+			require.NoError(t, err)
+
+			updateItems := []client.UpdateNoteItem{{Text: "", Position: 0}}
+			_, err = user.Client.UpdateNote(t.Context(), note.ID, &client.UpdateNoteRequest{
+				Items: &updateItems,
+			})
+			assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
+		})
+
+		t.Run("whitespace-only text on update returns 400", func(t *testing.T) {
+			note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
+				Items: []client.CreateNoteItem{{Text: "original", Position: 0}},
+			})
+			require.NoError(t, err)
+
+			updateItems := []client.UpdateNoteItem{{Text: "\t\n", Position: 0}}
+			_, err = user.Client.UpdateNote(t.Context(), note.ID, &client.UpdateNoteRequest{
+				Items: &updateItems,
+			})
+			assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
+		})
+	})
+
 	t.Run("update with explicit empty items clears todo items", func(t *testing.T) {
 		note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
 			Items: []client.CreateNoteItem{
