@@ -225,7 +225,7 @@ test.describe('Export & Import', () => {
 
     await page.getByRole('button', { name: 'Import Notes' }).click();
 
-    await expect(page.getByRole('dialog', { name: 'Import Notes' })).toBeVisible();
+    await expect(page.getByRole('heading', { name: 'Import Notes' })).toBeVisible();
     await expect(page.getByRole('radio', { name: 'Google Keep' })).toBeVisible();
     await expect(page.getByRole('radio', { name: 'Jot JSON' })).toBeVisible();
     await expect(page.getByRole('radio', { name: 'Google Keep' })).toBeChecked();
@@ -264,7 +264,7 @@ test.describe('Export & Import', () => {
     await page.getByRole('button', { name: 'Import Notes' }).click();
     await page.getByRole('radio', { name: 'Jot JSON' }).click();
 
-    const fileInput = page.locator('input[type="file"]');
+    const fileInput = page.getByTestId('import-dropzone').locator('input[type="file"]');
     await fileInput.setInputFiles(exportPath!);
 
     const importResponse = page.waitForResponse(
