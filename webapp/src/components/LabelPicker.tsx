@@ -201,6 +201,7 @@ export default function LabelPicker({ note, selectedLabels, onLocalChange, onRef
             <input
               ref={inputRef}
               type="text"
+              autoCapitalize="none"
               value={newName}
               onChange={e => setNewName(e.target.value)}
               onKeyDown={e => {

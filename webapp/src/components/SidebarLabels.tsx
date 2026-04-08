@@ -160,6 +160,7 @@ const SidebarLabels = ({
                   <input
                     ref={inputRef}
                     type="text"
+                    autoCapitalize="none"
                     value={draftName}
                     onChange={(event) => setDraftName(event.target.value)}
                     onClick={(event) => event.stopPropagation()}
@@ -267,6 +268,7 @@ const SidebarLabels = ({
               <input
                 ref={createInputRef}
                 type="text"
+                autoCapitalize="none"
                 value={newLabelName}
                 onChange={(event) => setNewLabelName(event.target.value)}
                 onClick={(event) => event.stopPropagation()}

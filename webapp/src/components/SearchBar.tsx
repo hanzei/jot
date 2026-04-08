@@ -39,6 +39,7 @@ const SearchBar = ({ value, onChange, onSubmit, inputRef, shortcutHint, stopEsca
           <input
             ref={inputRef}
             type="text"
+            autoCapitalize="none"
             placeholder={t('dashboard.searchPlaceholder')}
             aria-label={t('dashboard.searchAriaLabel')}
             className={`w-full pl-9 sm:pl-10 ${shortcutHint ? 'pr-20 sm:pr-24' : 'pr-4'} py-2 text-sm sm:text-base border border-gray-300 dark:border-slate-600 rounded-lg bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent`}

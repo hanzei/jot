@@ -106,6 +106,7 @@ export default function Register({ onRegister, passwordMinLength }: RegisterProp
                 id="username"
                 name="username"
                 type="text"
+                autoCapitalize="none"
                 autoComplete="username"
                 required
                 aria-invalid={usernameValidationMessage ? 'true' : 'false'}

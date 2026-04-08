@@ -202,6 +202,7 @@ export const IdentitySecurityColumn = ({
             <input
               id="first-name"
               type="text"
+              autoCapitalize="words"
               value={draftFirstName}
               onChange={(e) => onDraftFirstNameChange(e.target.value)}
               className="mt-1 block w-full border border-gray-300 dark:border-slate-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
@@ -215,6 +216,7 @@ export const IdentitySecurityColumn = ({
             <input
               id="last-name"
               type="text"
+              autoCapitalize="words"
               value={draftLastName}
               onChange={(e) => onDraftLastNameChange(e.target.value)}
               className="mt-1 block w-full border border-gray-300 dark:border-slate-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
@@ -229,6 +231,7 @@ export const IdentitySecurityColumn = ({
           <input
             id="username"
             type="text"
+            autoCapitalize="none"
             required
             value={draftUsername}
             onChange={(e) => onDraftUsernameChange(e.target.value)}
@@ -325,6 +328,7 @@ export const IdentitySecurityColumn = ({
       <form onSubmit={handleCreateSubmit} className="flex gap-2 mb-4">
         <input
           type="text"
+          autoCapitalize="sentences"
           value={newPATName}
           onChange={(e) => setNewPATName(e.target.value)}
           placeholder={t('settings.patsNamePlaceholder')}
