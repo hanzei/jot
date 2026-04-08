@@ -239,13 +239,22 @@ definitions:
       total:
         type: integer
     type: object
+  models.AdminListItemStats:
+    properties:
+      assigned:
+        type: integer
+      completed:
+        type: integer
+      total:
+        type: integer
+    type: object
   models.AdminNoteStats:
     properties:
       archived:
         type: integer
-      text:
-        type: integer
       list:
+        type: integer
+      text:
         type: integer
       total:
         type: integer
@@ -263,29 +272,20 @@ definitions:
     properties:
       labels:
         $ref: '#/definitions/models.AdminLabelStats'
+      list_items:
+        $ref: '#/definitions/models.AdminListItemStats'
       notes:
         $ref: '#/definitions/models.AdminNoteStats'
       sharing:
         $ref: '#/definitions/models.AdminSharingStats'
       storage:
         $ref: '#/definitions/models.AdminStorageStats'
-      list_items:
-        $ref: '#/definitions/models.AdminListItemStats'
       users:
         $ref: '#/definitions/models.AdminUserStats'
     type: object
   models.AdminStorageStats:
     properties:
       database_size_bytes:
-        type: integer
-    type: object
-  models.AdminListItemStats:
-    properties:
-      assigned:
-        type: integer
-      completed:
-        type: integer
-      total:
         type: integer
     type: object
   models.AdminUserStats:

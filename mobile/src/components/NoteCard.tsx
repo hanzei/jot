@@ -173,7 +173,7 @@ function NoteCard({ note, onPress, onLongPress, onMenuPress }: NoteCardProps) {
         </Text>
       ) : null}
 
-      {note.note_type === 'todo' && note.items && note.items.length > 0 ? (
+      {note.note_type === 'list' && note.items && note.items.length > 0 ? (
         <TodoPreview items={note.items} hasColor={hasColor} />
       ) : null}
 

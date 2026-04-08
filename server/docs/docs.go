@@ -2553,16 +2553,30 @@ const docTemplate = `{
                 }
             }
         },
+        "models.AdminListItemStats": {
+            "type": "object",
+            "properties": {
+                "assigned": {
+                    "type": "integer"
+                },
+                "completed": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
         "models.AdminNoteStats": {
             "type": "object",
             "properties": {
                 "archived": {
                     "type": "integer"
                 },
-                "text": {
+                "list": {
                     "type": "integer"
                 },
-                "list": {
+                "text": {
                     "type": "integer"
                 },
                 "total": {
@@ -2590,6 +2604,9 @@ const docTemplate = `{
                 "labels": {
                     "$ref": "#/definitions/models.AdminLabelStats"
                 },
+                "list_items": {
+                    "$ref": "#/definitions/models.AdminListItemStats"
+                },
                 "notes": {
                     "$ref": "#/definitions/models.AdminNoteStats"
                 },
@@ -2598,9 +2615,6 @@ const docTemplate = `{
                 },
                 "storage": {
                     "$ref": "#/definitions/models.AdminStorageStats"
-                },
-                "list_items": {
-                    "$ref": "#/definitions/models.AdminListItemStats"
                 },
                 "users": {
                     "$ref": "#/definitions/models.AdminUserStats"
@@ -2611,20 +2625,6 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "database_size_bytes": {
-                    "type": "integer"
-                }
-            }
-        },
-        "models.AdminListItemStats": {
-            "type": "object",
-            "properties": {
-                "assigned": {
-                    "type": "integer"
-                },
-                "completed": {
-                    "type": "integer"
-                },
-                "total": {
                     "type": "integer"
                 }
             }

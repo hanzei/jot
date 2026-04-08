@@ -58,7 +58,7 @@ describe('NoteCard', () => {
   it('renders todo item previews for todo notes', () => {
     const todoNote: Note = {
       ...baseNote,
-      note_type: 'todo',
+      note_type: 'list',
       content: '',
       items: [
         {
@@ -95,7 +95,7 @@ describe('NoteCard', () => {
   it('indents todo preview rows using indent_level', () => {
     const todoWithNestedItems: Note = {
       ...baseNote,
-      note_type: 'todo',
+      note_type: 'list',
       content: '',
       items: [
         {
@@ -135,7 +135,7 @@ describe('NoteCard', () => {
   it('clamps negative todo preview indentation to zero', () => {
     const todoWithNegativeIndent: Note = {
       ...baseNote,
-      note_type: 'todo',
+      note_type: 'list',
       content: '',
       items: [
         {
@@ -161,7 +161,7 @@ describe('NoteCard', () => {
   it('allows todo preview text to wrap instead of truncating', () => {
     const longTodoNote: Note = {
       ...baseNote,
-      note_type: 'todo',
+      note_type: 'list',
       content: '',
       items: [
         {
@@ -241,7 +241,7 @@ describe('NoteCard', () => {
   it('does not show assignee avatar for assigned todo items', () => {
     const sharedTodo: Note = {
       ...baseNote,
-      note_type: 'todo',
+      note_type: 'list',
       content: '',
       is_shared: true,
       items: [

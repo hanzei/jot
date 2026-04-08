@@ -133,12 +133,12 @@ describe('NoteContextMenu labels action', () => {
     expect(queryByTestId('context-label')).toBeNull();
   });
 
-  it('renders label action in my-todo context for synced notes', () => {
+  it('renders label action in my-tasks context for synced notes', () => {
     const { getByTestId } = render(
       <NoteContextMenu
         visible
         note={baseNote}
-        viewContext="my-todo"
+        viewContext="my-tasks"
         onClose={jest.fn()}
         onPin={jest.fn()}
         onArchive={jest.fn()}

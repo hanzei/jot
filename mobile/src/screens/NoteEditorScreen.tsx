@@ -244,7 +244,7 @@ export default function NoteEditorScreen() {
           content: currentContent,
           note_type: currentNoteType,
           color: !isWhiteHexColor(currentColor) ? currentColor : undefined,
-          items: currentNoteType === 'todo' ? serializeItems(currentItems) : undefined,
+          items: currentNoteType === 'list' ? serializeItems(currentItems) : undefined,
         });
         hasPendingChangesRef.current = false;
         if (!isMountedRef.current || unmounting) return true;
@@ -261,7 +261,7 @@ export default function NoteEditorScreen() {
           color: currentColor,
           checked_items_collapsed: currentCollapsed,
         };
-        if (currentNoteType === 'todo') {
+        if (currentNoteType === 'list') {
           updateData.items = serializeItems(currentItems);
         }
         await updateMutateRef.current({
@@ -536,7 +536,7 @@ export default function NoteEditorScreen() {
       checked_items_collapsed: checkedItemsCollapsedRef.current,
       ...overrides,
     };
-    if (noteTypeRef.current === 'todo') {
+    if (noteTypeRef.current === 'list') {
       data.items = serializeItems(itemsRef.current);
     }
     return data;
@@ -733,7 +733,7 @@ export default function NoteEditorScreen() {
 
   const handleToggleNoteType = useCallback(() => {
     if (hasCreated) return;
-    setNoteType((prev) => (prev === 'text' ? 'todo' : 'text'));
+    setNoteType((prev) => (prev === 'text' ? 'list' : 'text'));
   }, [hasCreated]);
 
   const handleDuplicate = useCallback(async () => {
