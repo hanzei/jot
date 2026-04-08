@@ -303,7 +303,7 @@ test.describe('Notes', () => {
     await expect(duplicatedTextCard.getByText('text-label')).toBeVisible();
 
     await dashboardPage.createListNote('Source List', ['Prepare agenda', 'Send follow-up']);
-    await dashboardPage.addLabelToNote('Source List', 'todo-label');
+    await dashboardPage.addLabelToNote('Source List', 'list-label');
     await dashboardPage.shareNoteWithUser('Source List', collaboratorName);
     await dashboardPage.assignListItemToUser('Source List', 0, collaboratorName);
 
@@ -363,7 +363,7 @@ test.describe('Notes', () => {
     await dashboardPage.expectNoteAtPosition(0, 'Copy of Source List');
 
     const duplicatedList = await findNoteByTitle('Copy of Source List');
-    expect(duplicatedList.labels.map((label) => label.name)).toEqual(['todo-label']);
+    expect(duplicatedList.labels.map((label) => label.name)).toEqual(['list-label']);
     expect(duplicatedList.shared_with ?? []).toEqual([]);
     expect(duplicatedList.items ?? []).toEqual([
       expect.objectContaining({
