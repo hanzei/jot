@@ -151,6 +151,7 @@ func (h *NotesHandler) UnshareNote(w http.ResponseWriter, r *http.Request) (int,
 			Type:         sse.EventNoteUnshared,
 			SourceUserID: user.ID,
 			TargetUserID: userID,
+			ClientID:     clientIDFromContext(r.Context()),
 			Data:         sse.NoteEventData{NoteID: id},
 		})
 	}

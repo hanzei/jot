@@ -223,6 +223,7 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
                   ref={searchRef}
                   type="text"
                   id="user-search"
+                  autoCapitalize="none"
                   value={searchQuery}
                   onChange={(e) => setSearchQuery(e.target.value)}
                   onFocus={handleInputFocus}

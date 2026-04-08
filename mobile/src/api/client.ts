@@ -192,12 +192,16 @@ export async function probeServerReachability(url: string): Promise<ServerReacha
   }
 }
 
+// Unique ID for this app launch, used to suppress SSE echoes of our own mutations.
+export const CLIENT_ID = crypto.randomUUID();
+
 const api = axios.create({
   baseURL: `${currentBaseUrl}/api/v1`,
   timeout: 15000,
   headers: {
     'Content-Type': 'application/json',
     'User-Agent': `JotMobile/1.0 (${platformLabel[Platform.OS] ?? Platform.OS})`,
+    'X-Client-Id': CLIENT_ID,
   },
 });
 

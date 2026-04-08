@@ -227,6 +227,7 @@ function SortableItem({ id, index, item, onUpdateListItem, onRemoveListItem, isC
             data-testid="list-item-input"
             placeholder={placeholder}
             rows={1}
+            autoCapitalize="sentences"
             className={`w-full pt-0 pb-1 pl-1 pr-0 bg-transparent border-none outline-none min-w-0 resize-none overflow-hidden whitespace-pre-wrap break-words placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white ${
               isCompleted ? 'line-through text-gray-500 dark:text-gray-400' : ''
             }`}
@@ -1320,6 +1321,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
         }
       );
       if (newArchivedState) {
+        onRefresh?.();
         onClose();
       } else {
         onRefresh?.();
@@ -1608,6 +1610,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
             {/* Title */}
             <input
               type="text"
+              autoCapitalize="sentences"
               placeholder={t('note.titlePlaceholder')}
               className="w-full p-2 text-lg font-medium bg-transparent border-none outline-none placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white"
               value={title}
@@ -1659,6 +1662,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
             {noteType === 'text' ? (
               <textarea
                 ref={contentRef}
+                autoCapitalize="sentences"
                 placeholder={t('note.contentPlaceholder')}
                 rows={4}
                 className="w-full p-2 bg-transparent border-none outline-none resize-none placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white min-h-[6rem]"
