@@ -198,7 +198,7 @@ func duplicateLabelsTx(ctx context.Context, tx *sql.Tx, noteID, userID string, l
 	return nil
 }
 
-func buildGetByUserIDQuery(userID string, archived bool, trashed bool, search string, labelID string, myTodo bool) (string, []any) {
+func buildGetByUserIDQuery(userID string, archived bool, trashed bool, search string, labelID string, myTasks bool) (string, []any) {
 	const selectCols = `SELECT DISTINCT n.id, n.user_id, n.title, n.content, n.note_type,
 				  nus.color, nus.pinned, nus.archived, nus.position, nus.unpinned_position, nus.checked_items_collapsed,
 				  n.deleted_at, n.created_at, n.updated_at`
@@ -212,7 +212,7 @@ func buildGetByUserIDQuery(userID string, archived bool, trashed bool, search st
 				  LEFT JOIN note_items ni ON n.id = ni.note_id
 				  WHERE n.user_id = ? AND n.deleted_at IS NOT NULL`
 		args = []any{userID, userID}
-	} else if myTodo {
+	} else if myTasks {
 		query = selectCols + `
 				  FROM active_notes n
 				  INNER JOIN note_user_state nus ON n.id = nus.note_id AND nus.user_id = ?
@@ -250,8 +250,8 @@ func scanNote(rows *sql.Rows) (Note, error) {
 	return note, err
 }
 
-func (s *NoteStore) GetByUserID(ctx context.Context, userID string, archived bool, trashed bool, search string, labelID string, myTodo bool) ([]*Note, error) {
-	query, args := buildGetByUserIDQuery(userID, archived, trashed, search, labelID, myTodo)
+func (s *NoteStore) GetByUserID(ctx context.Context, userID string, archived bool, trashed bool, search string, labelID string, myTasks bool) ([]*Note, error) {
+	query, args := buildGetByUserIDQuery(userID, archived, trashed, search, labelID, myTasks)
 
 	rows, err := s.db.QueryContext(ctx, query, args...)
 	if err != nil {
@@ -275,13 +275,13 @@ func (s *NoteStore) GetByUserID(ctx context.Context, userID string, archived boo
 	return notes, nil
 }
 
-// populateNoteItemsAndDefaults converts scanned notes to []*Note, loading todo items
-// for each todo note and initializing slice fields to non-nil defaults.
+// populateNoteItemsAndDefaults converts scanned notes to []*Note, loading list items
+// for each list note and initializing slice fields to non-nil defaults.
 func (s *NoteStore) populateNoteItemsAndDefaults(ctx context.Context, scannedNotes []Note) ([]*Note, error) {
 	notes := make([]*Note, 0, len(scannedNotes))
 	for i := range scannedNotes {
 		note := &scannedNotes[i]
-		if note.NoteType == NoteTypeTodo {
+		if note.NoteType == NoteTypeList {
 			items, err := s.getItemsByNoteID(ctx, note.ID)
 			if err != nil {
 				return nil, fmt.Errorf("failed to get note items: %w", err)
@@ -403,7 +403,7 @@ func (s *NoteStore) GetByIDAnyState(ctx context.Context, id string, userID strin
 }
 
 func (s *NoteStore) populateNoteDetails(ctx context.Context, note *Note, userID string) error {
-	if note.NoteType == NoteTypeTodo {
+	if note.NoteType == NoteTypeList {
 		var items []NoteItem
 		items, err := s.getItemsByNoteID(ctx, note.ID)
 		if err != nil {
@@ -1296,7 +1296,7 @@ func (s *NoteStore) AddLabelToNote(ctx context.Context, noteID, labelID, userID 
 }
 
 // GetOwnedNotesForExport returns all non-trashed notes owned by userID,
-// including their todo items and labels, for use in the export endpoint.
+// including their list items and labels, for use in the export endpoint.
 // It filters on notes.user_id (not note_user_state.user_id) so notes merely
 // shared with the current user are never included.
 func (s *NoteStore) GetOwnedNotesForExport(ctx context.Context, userID string) ([]*Note, error) {
@@ -1321,7 +1321,7 @@ func (s *NoteStore) GetOwnedNotesForExport(ctx context.Context, userID string) (
 	notes := make([]*Note, 0, len(scannedNotes))
 	for i := range scannedNotes {
 		note := &scannedNotes[i]
-		if note.NoteType == NoteTypeTodo {
+		if note.NoteType == NoteTypeList {
 			items, err := s.getItemsByNoteID(ctx, note.ID)
 			if err != nil {
 				return nil, fmt.Errorf("get items for note %s: %w", note.ID, err)
@@ -1340,7 +1340,7 @@ func (s *NoteStore) GetOwnedNotesForExport(ctx context.Context, userID string) (
 	return notes, nil
 }
 
-// JotImportNoteItem is a single todo item in a Jot JSON import payload.
+// JotImportNoteItem is a single list item in a Jot JSON import payload.
 type JotImportNoteItem struct {
 	Text        string
 	Completed   bool
@@ -1401,7 +1401,7 @@ func (s *NoteStore) ImportJotNotes(ctx context.Context, userID string, notes []J
 	return tx.Commit()
 }
 
-// insertImportedNoteTx inserts a single note, its todo items, and its labels
+// insertImportedNoteTx inserts a single note, its list items, and its labels
 // into the database within the provided transaction. It returns the new note ID.
 func insertImportedNoteTx(ctx context.Context, tx *sql.Tx, userID string, n JotImportNote) (string, error) {
 	noteID, err := generateID()

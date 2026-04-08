@@ -80,7 +80,7 @@ func (h *NotesHandler) ExportNotes(w http.ResponseWriter, r *http.Request) (int,
 		for _, l := range n.Labels {
 			exportNote.Labels = append(exportNote.Labels, l.Name)
 		}
-		if n.NoteType == models.NoteTypeTodo {
+		if n.NoteType == models.NoteTypeList {
 			exportNote.Items = make([]jotExportNoteItem, 0, len(n.Items))
 			for _, item := range n.Items {
 				exportNote.Items = append(exportNote.Items, jotExportNoteItem{

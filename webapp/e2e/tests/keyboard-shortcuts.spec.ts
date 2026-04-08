@@ -82,7 +82,7 @@ test.describe('Keyboard shortcuts help dialog', () => {
 
     await page.locator('main').click();
     await page.keyboard.press('t');
-    await expect(page).toHaveURL(/\/\?view=my-todo$/);
+    await expect(page).toHaveURL(/\/\?view=my-tasks$/);
 
     await page.locator('main').click();
     await page.keyboard.press('a');

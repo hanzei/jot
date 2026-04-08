@@ -42,7 +42,7 @@ function rowToNote(row: NoteRow, items: NoteItem[] = []): Note {
     user_id: row.user_id,
     title: row.title,
     content: row.content,
-    note_type: row.note_type as 'text' | 'todo',
+    note_type: row.note_type as 'text' | 'list',
     color: row.color,
     pinned: row.pinned === 1,
     archived: row.archived === 1,
@@ -137,7 +137,7 @@ export async function getLocalNotes(db: SQLiteDatabase, params?: GetNotesParams)
   let sql = 'SELECT * FROM notes WHERE 1=1';
   const args: (string | number | null)[] = [];
 
-  if (params?.my_todo) {
+  if (params?.my_tasks) {
     if (!params.user_id) return [];
     sql += ' AND deleted_at IS NULL AND id IN (SELECT note_id FROM note_items WHERE assigned_to = ?)';
     args.push(params.user_id);
@@ -159,14 +159,14 @@ export async function getLocalNotes(db: SQLiteDatabase, params?: GetNotesParams)
 
   if (rows.length === 0) return [];
 
-  // Batch-fetch all note_items for todo notes in a single query (avoids N+1)
-  const todoIds = rows.filter((r) => r.note_type === 'todo').map((r) => r.id);
+  // Batch-fetch all note_items for list notes in a single query (avoids N+1)
+  const listIds = rows.filter((r) => r.note_type === 'list').map((r) => r.id);
   const itemsByNoteId = new Map<string, NoteItem[]>();
-  if (todoIds.length > 0) {
-    const placeholders = todoIds.map(() => '?').join(', ');
+  if (listIds.length > 0) {
+    const placeholders = listIds.map(() => '?').join(', ');
     const itemRows = await db.getAllAsync<NoteItemRow>(
       `SELECT * FROM note_items WHERE note_id IN (${placeholders}) ORDER BY note_id ASC, position ASC`,
-      todoIds,
+      listIds,
     );
     for (const itemRow of itemRows) {
       const existing = itemsByNoteId.get(itemRow.note_id) ?? [];
@@ -186,7 +186,7 @@ export async function getLocalNotes(db: SQLiteDatabase, params?: GetNotesParams)
 export async function getLocalNote(db: SQLiteDatabase, id: string): Promise<Note | null> {
   const row = await db.getFirstAsync<NoteRow>('SELECT * FROM notes WHERE id = ?', [id]);
   if (!row) return null;
-  const items = row.note_type === 'todo' ? await getItemsForNote(db, id) : [];
+  const items = row.note_type === 'list' ? await getItemsForNote(db, id) : [];
   return rowToNote(row, items);
 }
 
@@ -328,9 +328,9 @@ export async function removeLocalNotesNotIn(
   serverIds: Set<string>,
   params?: GetNotesParams,
 ): Promise<void> {
-  // my_todo is a cross-cutting filter (overlaps with the main "notes" scope),
+  // my_tasks is a cross-cutting filter (overlaps with the main "notes" scope),
   // so we must not remove notes that may still belong in other views.
-  if (params?.my_todo) return;
+  if (params?.my_tasks) return;
 
   const scopeArgs: (string | number | null)[] = [];
   let scopedWhereSql = "id NOT LIKE 'local_%'";

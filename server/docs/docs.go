@@ -721,8 +721,8 @@ const docTemplate = `{
                     },
                     {
                         "type": "boolean",
-                        "description": "Return only notes with todos assigned to current user",
-                        "name": "my_todo",
+                        "description": "Return only notes with tasks assigned to current user",
+                        "name": "my_tasks",
                         "in": "query"
                     }
                 ],
@@ -2562,7 +2562,7 @@ const docTemplate = `{
                 "text": {
                     "type": "integer"
                 },
-                "todo": {
+                "list": {
                     "type": "integer"
                 },
                 "total": {
@@ -2599,8 +2599,8 @@ const docTemplate = `{
                 "storage": {
                     "$ref": "#/definitions/models.AdminStorageStats"
                 },
-                "todo_items": {
-                    "$ref": "#/definitions/models.AdminTodoItemStats"
+                "list_items": {
+                    "$ref": "#/definitions/models.AdminListItemStats"
                 },
                 "users": {
                     "$ref": "#/definitions/models.AdminUserStats"
@@ -2615,7 +2615,7 @@ const docTemplate = `{
                 }
             }
         },
-        "models.AdminTodoItemStats": {
+        "models.AdminListItemStats": {
             "type": "object",
             "properties": {
                 "assigned": {
@@ -2799,11 +2799,11 @@ const docTemplate = `{
             "type": "string",
             "enum": [
                 "text",
-                "todo"
+                "list"
             ],
             "x-enum-varnames": [
                 "NoteTypeText",
-                "NoteTypeTodo"
+                "NoteTypeList"
             ]
         },
         "models.User": {

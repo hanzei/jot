@@ -18,7 +18,7 @@ vi.mock('@/utils/api', () => ({
 const mockConsoleError = vi.fn()
 vi.spyOn(console, 'error').mockImplementation(mockConsoleError)
 
-const createMockTodoItems = (): NoteItem[] => [
+const createMockListItems = (): NoteItem[] => [
   {
     id: 'item1',
     note_id: '1',
@@ -473,11 +473,11 @@ describe('NoteCard', () => {
     })
   })
 
-  describe('Todo List Rendering', () => {
-    it('renders todo items correctly', () => {
+  describe('List Rendering', () => {
+    it('renders list items correctly', () => {
       const todoNote = createMockNote({
-        note_type: 'todo',
-        items: createMockTodoItems(),
+        note_type: 'list',
+        items: createMockListItems(),
         content: '', // Todo notes typically have empty content
       })
 
@@ -487,9 +487,9 @@ describe('NoteCard', () => {
       expect(screen.getByText('+1 completed items')).toBeInTheDocument()
     })
 
-    it('handles empty todo list', () => {
+    it('handles empty list', () => {
       const emptyTodoNote = createMockNote({
-        note_type: 'todo',
+        note_type: 'list',
         items: [],
       })
 
@@ -499,9 +499,9 @@ describe('NoteCard', () => {
       expect(screen.getByText('Test Note')).toBeInTheDocument()
     })
 
-    it('handles todo list with only completed items', () => {
+    it('handles list with only completed items', () => {
       const completedOnlyNote = createMockNote({
-        note_type: 'todo',
+        note_type: 'list',
         items: [{
           id: 'item1',
           note_id: '1',
@@ -520,10 +520,10 @@ describe('NoteCard', () => {
       expect(screen.getByText('+1 completed items')).toBeInTheDocument()
     })
 
-    it('handles todo items with extremely long text', () => {
+    it('handles list items with extremely long text', () => {
       const longText = 'A'.repeat(1000)
       const longTextTodoNote = createMockNote({
-        note_type: 'todo',
+        note_type: 'list',
         items: [{
           id: 'item1',
           note_id: '1',
@@ -542,9 +542,9 @@ describe('NoteCard', () => {
       expect(screen.getByText(longText)).toBeInTheDocument()
     })
 
-    it('applies wrapping classes for long todo preview text', () => {
+    it('applies wrapping classes for long list preview text', () => {
       const todoNote = createMockNote({
-        note_type: 'todo',
+        note_type: 'list',
         items: [
           {
             id: 'item-wrap',

@@ -245,7 +245,7 @@ definitions:
         type: integer
       text:
         type: integer
-      todo:
+      list:
         type: integer
       total:
         type: integer
@@ -269,8 +269,8 @@ definitions:
         $ref: '#/definitions/models.AdminSharingStats'
       storage:
         $ref: '#/definitions/models.AdminStorageStats'
-      todo_items:
-        $ref: '#/definitions/models.AdminTodoItemStats'
+      list_items:
+        $ref: '#/definitions/models.AdminListItemStats'
       users:
         $ref: '#/definitions/models.AdminUserStats'
     type: object
@@ -279,7 +279,7 @@ definitions:
       database_size_bytes:
         type: integer
     type: object
-  models.AdminTodoItemStats:
+  models.AdminListItemStats:
     properties:
       assigned:
         type: integer
@@ -400,11 +400,11 @@ definitions:
   models.NoteType:
     enum:
     - text
-    - todo
+    - list
     type: string
     x-enum-varnames:
     - NoteTypeText
-    - NoteTypeTodo
+    - NoteTypeList
   models.User:
     properties:
       created_at:
@@ -901,9 +901,9 @@ paths:
         in: query
         name: label
         type: string
-      - description: Return only notes with todos assigned to current user
+      - description: Return only notes with tasks assigned to current user
         in: query
-        name: my_todo
+        name: my_tasks
         type: boolean
       produces:
       - application/json

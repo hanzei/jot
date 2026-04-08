@@ -229,7 +229,7 @@ const Admin = ({ passwordMinLength }: AdminProps) => {
                   valueTestId="admin-stats-notes-total"
                 >
                   <StatLine label={t('admin.stats.metrics.text')} value={formatNumber(stats.notes.text)} />
-                  <StatLine label={t('admin.stats.metrics.todo')} value={formatNumber(stats.notes.todo)} />
+                  <StatLine label={t('admin.stats.metrics.list')} value={formatNumber(stats.notes.list)} />
                   <StatLine label={t('admin.stats.metrics.archived')} value={formatNumber(stats.notes.archived)} />
                   <StatLine label={t('admin.stats.metrics.trashed')} value={formatNumber(stats.notes.trashed)} />
                 </StatCard>
@@ -251,12 +251,12 @@ const Admin = ({ passwordMinLength }: AdminProps) => {
                 </StatCard>
 
                 <StatCard
-                  title={t('admin.stats.cards.todoItems')}
-                  value={formatNumber(stats.todo_items.total)}
-                  valueTestId="admin-stats-todo-items-total"
+                  title={t('admin.stats.cards.listItems')}
+                  value={formatNumber(stats.list_items.total)}
+                  valueTestId="admin-stats-list-items-total"
                 >
-                  <StatLine label={t('admin.stats.metrics.completed')} value={formatNumber(stats.todo_items.completed)} />
-                  <StatLine label={t('admin.stats.metrics.assigned')} value={formatNumber(stats.todo_items.assigned)} />
+                  <StatLine label={t('admin.stats.metrics.completed')} value={formatNumber(stats.list_items.completed)} />
+                  <StatLine label={t('admin.stats.metrics.assigned')} value={formatNumber(stats.list_items.assigned)} />
                 </StatCard>
 
                 <StatCard

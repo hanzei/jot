@@ -368,17 +368,17 @@ describe('API Module', () => {
         expect(result).toEqual(mockNote)
       })
 
-      it('creates new todo note with items', async () => {
+      it('creates new list note with items', async () => {
         const todoNote: CreateNoteRequest = {
-          title: 'Todo Note',
+          title: 'List Note',
           content: '',
-          note_type: 'todo',
+          note_type: 'list',
           items: [
             { text: 'First task', position: 0 },
             { text: 'Second task', position: 1 }
           ]
         }
-        const mockTodoNote = { ...mockNote, note_type: 'todo' as const }
+        const mockTodoNote = { ...mockNote, note_type: 'list' as const }
         mockPost.mockResolvedValue({ data: mockTodoNote })
 
         const result = await notes.create(todoNote)
@@ -637,10 +637,10 @@ describe('API Module', () => {
       it('gets aggregate admin stats', async () => {
         const mockResponse: AdminStatsResponse = {
           users: { total: 3, admins: 1 },
-          notes: { total: 4, text: 2, todo: 2, trashed: 1, archived: 1 },
+          notes: { total: 4, text: 2, list: 2, trashed: 1, archived: 1 },
           sharing: { shared_notes: 1, share_links: 2 },
           labels: { total: 2, note_associations: 3 },
-          todo_items: { total: 3, completed: 1, assigned: 2 },
+          list_items: { total: 3, completed: 1, assigned: 2 },
           storage: { database_size_bytes: 2048 },
         }
         mockGet.mockResolvedValue({ data: mockResponse })

@@ -223,7 +223,7 @@ func TestNoteValidation(t *testing.T) {
 		})
 	})
 
-	t.Run("update with explicit empty items clears todo items", func(t *testing.T) {
+	t.Run("update with explicit empty items clears list items", func(t *testing.T) {
 		note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
 			Items: []client.CreateNoteItem{
 				{Text: "only item", Position: 0},

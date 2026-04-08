@@ -31,9 +31,9 @@ export default function KeyboardShortcutsDialog({ isOpen, onClose }: KeyboardSho
       description: t('keyboardShortcuts.notesDescription'),
     },
     {
-      id: 'my-todo-view',
-      key: t('keyboardShortcuts.myTodoKey'),
-      description: t('keyboardShortcuts.myTodoDescription'),
+      id: 'my-tasks-view',
+      key: t('keyboardShortcuts.myTasksKey'),
+      description: t('keyboardShortcuts.myTasksDescription'),
     },
     {
       id: 'archive-view',

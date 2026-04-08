@@ -25,7 +25,7 @@ import {
   notesQueryScopeKey,
 } from './queryKeys';
 
-type LabelSyncScope = { archived?: true; trashed?: true; my_todo?: true } | undefined;
+type LabelSyncScope = { archived?: true; trashed?: true; my_tasks?: true } | undefined;
 
 function assertSwitchWriteAllowed(): void {
   if (isServerSwitchInProgress()) {
@@ -40,8 +40,8 @@ function describeLabelSyncScope(scope: LabelSyncScope): string {
   if (scope?.trashed) {
     return 'trashed';
   }
-  if (scope?.my_todo) {
-    return 'my_todo';
+  if (scope?.my_tasks) {
+    return 'my_tasks';
   }
   return 'active';
 }
@@ -51,7 +51,7 @@ async function syncLocalNotesAfterLabelMutation(db: SQLiteDatabase) {
     undefined,
     { archived: true },
     { trashed: true },
-    { my_todo: true },
+    { my_tasks: true },
   ] as const;
   const failures: string[] = [];
 

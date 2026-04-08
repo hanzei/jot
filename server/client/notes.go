@@ -30,8 +30,8 @@ func (c *Client) ListNotes(ctx context.Context, opts *ListNotesOptions) ([]Note,
 		if opts.Label != "" {
 			q.Set("label", opts.Label)
 		}
-		if opts.MyTodo {
-			q.Set("my_todo", "true")
+		if opts.MyTasks {
+			q.Set("my_tasks", "true")
 		}
 		if encoded := q.Encode(); encoded != "" {
 			path += "?" + encoded

@@ -14,7 +14,7 @@ type AdminUserStats struct {
 type AdminNoteStats struct {
 	Total    int64 `json:"total"`
 	Text     int64 `json:"text"`
-	Todo     int64 `json:"todo"`
+	List     int64 `json:"list"`
 	Trashed  int64 `json:"trashed"`
 	Archived int64 `json:"archived"`
 }
@@ -29,7 +29,7 @@ type AdminLabelStats struct {
 	NoteAssociations int64 `json:"note_associations"`
 }
 
-type AdminTodoItemStats struct {
+type AdminListItemStats struct {
 	Total     int64 `json:"total"`
 	Completed int64 `json:"completed"`
 	Assigned  int64 `json:"assigned"`
@@ -44,7 +44,7 @@ type AdminStats struct {
 	Notes     AdminNoteStats     `json:"notes"`
 	Sharing   AdminSharingStats  `json:"sharing"`
 	Labels    AdminLabelStats    `json:"labels"`
-	TodoItems AdminTodoItemStats `json:"todo_items"`
+	ListItems AdminListItemStats `json:"list_items"`
 	Storage   AdminStorageStats  `json:"storage"`
 }
 
@@ -77,10 +77,10 @@ func (s *AdminStatsStore) GetStats(ctx context.Context) (*AdminStats, error) {
 			COALESCE(SUM(CASE WHEN nus.archived = 1 AND n.deleted_at IS NULL THEN 1 ELSE 0 END), 0)
 		FROM notes n
 		LEFT JOIN note_user_state nus ON n.id = nus.note_id AND nus.user_id = n.user_id
-	`, NoteTypeText, NoteTypeTodo).Scan(
+	`, NoteTypeText, NoteTypeList).Scan(
 		&stats.Notes.Total,
 		&stats.Notes.Text,
-		&stats.Notes.Todo,
+		&stats.Notes.List,
 		&stats.Notes.Trashed,
 		&stats.Notes.Archived,
 	); err != nil {
@@ -110,7 +110,7 @@ func (s *AdminStatsStore) GetStats(ctx context.Context) (*AdminStats, error) {
 			COALESCE(SUM(CASE WHEN completed = 1 THEN 1 ELSE 0 END), 0),
 			COALESCE(SUM(CASE WHEN assigned_to IS NOT NULL THEN 1 ELSE 0 END), 0)
 		FROM note_items
-	`).Scan(&stats.TodoItems.Total, &stats.TodoItems.Completed, &stats.TodoItems.Assigned); err != nil {
+	`).Scan(&stats.ListItems.Total, &stats.ListItems.Completed, &stats.ListItems.Assigned); err != nil {
 		return nil, fmt.Errorf("count note items: %w", err)
 	}
 

@@ -57,7 +57,7 @@ export interface Label {
   updated_at: string;
 }
 
-export type NoteType = 'text' | 'todo';
+export type NoteType = 'text' | 'list';
 
 export interface NoteItem {
   id: string;
@@ -110,8 +110,8 @@ export interface GetNotesParams {
   search?: string;
   trashed?: boolean;
   label?: string;
-  my_todo?: boolean;
-  /** Used locally to filter my-todo notes by assigned_to; not sent to the server. */
+  my_tasks?: boolean;
+  /** Used locally to filter my-tasks notes by assigned_to; not sent to the server. */
   user_id?: string;
 }
 
@@ -152,7 +152,7 @@ export interface AdminUserStats {
 export interface AdminNoteStats {
   total: number;
   text: number;
-  todo: number;
+  list: number;
   trashed: number;
   archived: number;
 }
@@ -167,7 +167,7 @@ export interface AdminLabelStats {
   note_associations: number;
 }
 
-export interface AdminTodoItemStats {
+export interface AdminListItemStats {
   total: number;
   completed: number;
   assigned: number;
@@ -182,7 +182,7 @@ export interface AdminStatsResponse {
   notes: AdminNoteStats;
   sharing: AdminSharingStats;
   labels: AdminLabelStats;
-  todo_items: AdminTodoItemStats;
+  list_items: AdminListItemStats;
   storage: AdminStorageStats;
 }
 

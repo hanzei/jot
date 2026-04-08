@@ -387,32 +387,32 @@ func TestEdgeCases(t *testing.T) {
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 
-	t.Run("create note with todo items", func(t *testing.T) {
+	t.Run("create note with list items", func(t *testing.T) {
 		note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-			Title:    "Todo List",
-			NoteType: client.NoteTypeTodo,
+			Title:    "List Note",
+			NoteType: client.NoteTypeList,
 			Items: []client.CreateNoteItem{
 				{Text: "Item 1", Position: 0},
 				{Text: "Item 2", Position: 1},
 			},
 		})
 		require.NoError(t, err)
-		assert.Equal(t, client.NoteTypeTodo, note.NoteType)
+		assert.Equal(t, client.NoteTypeList, note.NoteType)
 	})
 
-	t.Run("create note with items defaults note_type to todo", func(t *testing.T) {
+	t.Run("create note with items defaults note_type to list", func(t *testing.T) {
 		note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-			Title: "Implicit Todo",
+			Title: "Implicit List",
 			Items: []client.CreateNoteItem{
 				{Text: "Item 1", Position: 0},
 			},
 		})
 		require.NoError(t, err)
-		assert.Equal(t, client.NoteTypeTodo, note.NoteType)
+		assert.Equal(t, client.NoteTypeList, note.NoteType)
 		assert.Len(t, note.Items, 1)
 	})
 
-	t.Run("create note rejects non-todo note_type when items are provided", func(t *testing.T) {
+	t.Run("create note rejects non-list note_type when items are provided", func(t *testing.T) {
 		_, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
 			Title:    "Conflicting Note Type",
 			NoteType: client.NoteTypeText,

@@ -174,7 +174,7 @@ test.describe('Admin', () => {
       notes: { total: number };
       sharing: { shared_notes: number };
       labels: { total: number };
-      todo_items: { total: number };
+      list_items: { total: number };
     };
 
     await adminPage.goto();
@@ -185,7 +185,7 @@ test.describe('Admin', () => {
     expect(await adminPage.getNotesTotal()).toBe(String(stats.notes.total));
     expect(await adminPage.getSharedNotesCount()).toBe(String(stats.sharing.shared_notes));
     expect(await adminPage.getLabelsTotal()).toBe(String(stats.labels.total));
-    expect(await adminPage.getTodoItemsTotal()).toBe(String(stats.todo_items.total));
+    expect(await adminPage.getListItemsTotal()).toBe(String(stats.list_items.total));
     expect(await adminPage.getDatabaseSizeText()).not.toBe('0 B');
   });
 

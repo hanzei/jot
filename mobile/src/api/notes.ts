@@ -10,8 +10,8 @@ import type {
 } from '@jot/shared';
 
 function stripClientOnlyParams(params: GetNotesParams): Omit<GetNotesParams, 'user_id'> {
-  const { archived, search, trashed, label, my_todo } = params;
-  return { archived, search, trashed, label, my_todo };
+  const { archived, search, trashed, label, my_tasks } = params;
+  return { archived, search, trashed, label, my_tasks };
 }
 
 export async function getNotes(params?: GetNotesParams): Promise<Note[]> {

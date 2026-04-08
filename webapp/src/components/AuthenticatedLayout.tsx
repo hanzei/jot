@@ -103,11 +103,11 @@ const AuthenticatedLayout = ({ onLogout }: AuthenticatedLayoutProps) => {
       isActive: isAtDashboard && !view && !selectedLabelId,
     },
     {
-      label: t('dashboard.tabMyTodo'),
+      label: t('dashboard.tabMyTasks'),
       icon: <ClipboardDocumentCheckIcon className="h-4 w-4 shrink-0" />,
-      href: '/?view=my-todo',
-      isActive: isAtDashboard && view === 'my-todo',
-      title: t('dashboard.myTodoTooltip'),
+      href: '/?view=my-tasks',
+      isActive: isAtDashboard && view === 'my-tasks',
+      title: t('dashboard.myTasksTooltip'),
     },
   ], [t, isAtDashboard, view, selectedLabelId]);
 

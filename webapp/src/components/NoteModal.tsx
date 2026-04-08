@@ -50,7 +50,7 @@ const validateContent = (content: string, t: TFunction): string | null => {
   return null;
 };
 
-const haveTodoItemsChanged = (currentItems: TodoItem[], originalItems: Note['items'] | undefined): boolean => {
+const haveListItemsChanged = (currentItems: ListItem[], originalItems: Note['items'] | undefined): boolean => {
   const baseItems = originalItems ?? [];
   if (currentItems.length !== baseItems.length) return true;
 
@@ -70,7 +70,7 @@ const haveTodoItemsChanged = (currentItems: TodoItem[], originalItems: Note['ite
 
 // Timeout management now handled via useRef instead of global window property
 
-// Utility function to generate unique IDs for todo items
+// Utility function to generate unique IDs for list items
 const generateItemId = () => crypto.randomUUID();
 const TEXT_NOTE_MIN_HEIGHT_PX = 96;
 const TEXT_NOTE_MAX_HEIGHT_PX = 320;
@@ -89,7 +89,7 @@ interface NoteModalProps {
   currentUserId?: string;
 }
 
-interface TodoItem {
+interface ListItem {
   id: string;
   text: string;
   completed: boolean;
@@ -107,9 +107,9 @@ interface QueuedAutoSaveRequest {
 interface SortableItemProps {
   id: string;
   index: number;
-  item: TodoItem;
-  onUpdateTodoItem: (index: number, field: 'text' | 'completed', value: string | boolean) => Promise<void>;
-  onRemoveTodoItem: (itemId: string) => void;
+  item: ListItem;
+  onUpdateListItem: (index: number, field: 'text' | 'completed', value: string | boolean) => Promise<void>;
+  onRemoveListItem: (itemId: string) => void;
   isCompleted?: boolean;
   onKeyDown?: (index: number, e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   onPaste?: (index: number, e: React.ClipboardEvent<HTMLTextAreaElement>) => void;
@@ -123,13 +123,13 @@ interface SortableItemProps {
   onAcceptSuggestion?: (currentItemId: string, suggestionText: string) => void;
 }
 
-function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isCompleted = false, onKeyDown, onPaste, inputRef, onIndentChange, isShared, collaborators, usersById, onAssignItem, completedItemTexts = [], onAcceptSuggestion }: SortableItemProps) {
+function SortableItem({ id, index, item, onUpdateListItem, onRemoveListItem, isCompleted = false, onKeyDown, onPaste, inputRef, onIndentChange, isShared, collaborators, usersById, onAssignItem, completedItemTexts = [], onAcceptSuggestion }: SortableItemProps) {
   const { t } = useTranslation();
   const [showAssigneePicker, setShowAssigneePicker] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
   const suggestionsRef = useRef<HTMLDivElement>(null);
-  const todoTextRef = useRef<HTMLTextAreaElement | null>(null);
+  const listItemTextRef = useRef<HTMLTextAreaElement | null>(null);
   const closeAssigneePicker = useCallback(() => setShowAssigneePicker(false), []);
   const {
     attributes,
@@ -152,21 +152,21 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
   const assignedUser = item.assignedTo ? usersById?.get(item.assignedTo) : undefined;
   const showAssignUI = isShared && collaborators && collaborators.length > 0 && onAssignItem;
   const placeholder = item.text ? '' : t('note.itemPlaceholder');
-  const autoResizeTodoText = useCallback((textarea: HTMLTextAreaElement | null) => {
+  const autoResizeListItemText = useCallback((textarea: HTMLTextAreaElement | null) => {
     if (!textarea) return;
     textarea.style.height = 'auto';
     textarea.style.height = `${textarea.scrollHeight}px`;
   }, []);
 
-  const setTodoTextRef = useCallback((textarea: HTMLTextAreaElement | null) => {
-    todoTextRef.current = textarea;
-    autoResizeTodoText(textarea);
+  const setListItemTextRef = useCallback((textarea: HTMLTextAreaElement | null) => {
+    listItemTextRef.current = textarea;
+    autoResizeListItemText(textarea);
     inputRef?.(textarea);
-  }, [autoResizeTodoText, inputRef]);
+  }, [autoResizeListItemText, inputRef]);
 
   useEffect(() => {
-    autoResizeTodoText(todoTextRef.current);
-  }, [item.text, autoResizeTodoText]);
+    autoResizeListItemText(listItemTextRef.current);
+  }, [item.text, autoResizeListItemText]);
 
   const suggestions = useMemo(() => {
     const trimmed = item.text.trim();
@@ -187,7 +187,7 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
     if (onAcceptSuggestion) {
       onAcceptSuggestion(item.id, text);
     } else {
-      onUpdateTodoItem(index, 'text', text);
+      onUpdateListItem(index, 'text', text);
     }
     setShowSuggestions(false);
     setSelectedSuggestionIndex(-1);
@@ -197,7 +197,7 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
     <div
       ref={setNodeRef}
       style={style}
-      data-testid="todo-item-row"
+      data-testid="list-item-row"
       className={`group/item flex items-start gap-2 ${isDragging ? 'opacity-50' : ''} ${
         isCompleted ? 'opacity-60' : ''
       }`}
@@ -218,22 +218,22 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
       <input
         type="checkbox"
         checked={item.completed}
-        onChange={(e) => onUpdateTodoItem(index, 'completed', e.target.checked)}
+        onChange={(e) => onUpdateListItem(index, 'completed', e.target.checked)}
         className="h-4 w-4 text-blue-600 rounded mt-0.5 flex-shrink-0"
       />
       <div className="flex flex-1 items-start min-w-0">
         <div className="relative min-w-0 flex-1">
           <textarea
-            data-testid="todo-item-input"
+            data-testid="list-item-input"
             placeholder={placeholder}
             rows={1}
             className={`w-full pt-0 pb-1 pl-1 pr-0 bg-transparent border-none outline-none min-w-0 resize-none overflow-hidden whitespace-pre-wrap break-words placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white ${
               isCompleted ? 'line-through text-gray-500 dark:text-gray-400' : ''
             }`}
             value={item.text}
-            onInput={(e) => autoResizeTodoText(e.currentTarget)}
+            onInput={(e) => autoResizeListItemText(e.currentTarget)}
             onChange={(e) => {
-              onUpdateTodoItem(index, 'text', e.target.value);
+              onUpdateListItem(index, 'text', e.target.value);
               if (e.target.value.trim()) setShowSuggestions(true);
               setSelectedSuggestionIndex(-1);
             }}
@@ -287,7 +287,7 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
               if (onKeyDown) onKeyDown(index, e);
             }}
             onPaste={(e) => onPaste?.(index, e)}
-            ref={setTodoTextRef}
+            ref={setListItemTextRef}
           />
           {showSuggestions && suggestions.length > 0 && !isCompleted && (
             <div
@@ -368,7 +368,7 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
       </div>
 
       <button
-        onClick={() => onRemoveTodoItem(item.id)}
+        onClick={() => onRemoveListItem(item.id)}
         className="ml-auto p-1 text-gray-400 dark:text-gray-300 hover:text-gray-600 dark:hover:text-gray-100"
       >
         <TrashIcon className="h-4 w-4" />
@@ -386,7 +386,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   const [color, setColor] = useState('#ffffff');
   const [pinned, setPinned] = useState(false);
   const [archived, setArchived] = useState(false);
-  const [items, setItems] = useState<TodoItem[]>([]);
+  const [items, setItems] = useState<ListItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [showSaved, setShowSaved] = useState(false);
   const [checkedItemsCollapsed, setCheckedItemsCollapsed] = useState(false);
@@ -407,7 +407,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     color: '#ffffff',
     checked_items_collapsed: false,
   });
-  const itemsRef = useRef<TodoItem[]>([]);
+  const itemsRef = useRef<ListItem[]>([]);
   const pendingAutoSaveRequestRef = useRef<QueuedAutoSaveRequest | null>(null);
   const itemInputRefs = useRef<Map<string, HTMLTextAreaElement>>(new Map());
   const contentRef = useRef<HTMLTextAreaElement>(null);
@@ -433,7 +433,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     })
   );
 
-  const mapItemsForAutoSave = useCallback((sourceItems: TodoItem[]) => sourceItems.map((item) => ({
+  const mapItemsForAutoSave = useCallback((sourceItems: ListItem[]) => sourceItems.map((item) => ({
     text: item.text,
     position: item.position,
     completed: item.completed,
@@ -441,12 +441,12 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     assigned_to: item.assignedTo,
   })), []);
 
-  const buildAutoSaveRequest = useCallback((sourceItems: TodoItem[]): UpdateNoteRequest => ({
+  const buildAutoSaveRequest = useCallback((sourceItems: ListItem[]): UpdateNoteRequest => ({
     ...autoSaveDraftRef.current,
     items: mapItemsForAutoSave(sourceItems),
   }), [mapItemsForAutoSave]);
 
-  const commitItems = useCallback((nextItems: TodoItem[]) => {
+  const commitItems = useCallback((nextItems: ListItem[]) => {
     itemsRef.current = nextItems;
     setItems(nextItems);
     if (savingRef.current && noteIdRef.current) {
@@ -594,7 +594,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   }, []);
 
   // Simplified position restoration logic using Map for position tracking
-  const restoreItemPosition = (items: TodoItem[], itemToRestore: TodoItem): TodoItem[] => {
+  const restoreItemPosition = (items: ListItem[], itemToRestore: ListItem): ListItem[] => {
     // Remove the item to restore from the items array
     const otherItems = items.filter(item => item.id !== itemToRestore.id);
     const uncompletedItems = otherItems.filter(item => !item.completed);
@@ -606,7 +606,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     );
     
     // Create restored item
-    const restoredItem: TodoItem = {
+    const restoredItem: ListItem = {
       ...itemToRestore,
       completed: false,
       originalPosition: undefined,
@@ -628,7 +628,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   const INDENT_DRAG_THRESHOLD = 50;
   const MAX_INDENT = 1;
 
-  const indentTodoItem = async (itemId: string, delta: 1 | -1) => {
+  const indentListItem = async (itemId: string, delta: 1 | -1) => {
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
       saveTimeoutRef.current = undefined;
@@ -651,7 +651,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     if (Math.abs(delta.x) >= INDENT_DRAG_THRESHOLD) {
       const draggedItem = uncompletedItems.find(item => item.id === active.id);
       if (draggedItem) {
-        await indentTodoItem(draggedItem.id, delta.x > 0 ? 1 : -1);
+        await indentListItem(draggedItem.id, delta.x > 0 ? 1 : -1);
       }
       return;
     }
@@ -680,14 +680,14 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     }
   };
 
-  const addTodoItem = () => {
+  const addListItem = () => {
     const currentItems = itemsRef.current;
     const uncompletedItems = currentItems.filter(item => !item.completed);
     const lastUncompletedItem = uncompletedItems[uncompletedItems.length - 1];
     const indentLevel = lastUncompletedItem
       ? Math.max(0, Math.min(MAX_INDENT, lastUncompletedItem.indentLevel))
       : 0;
-    const newItem: TodoItem = {
+    const newItem: ListItem = {
       id: generateItemId(),
       text: '',
       completed: false,
@@ -701,12 +701,12 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     return newItem.id;
   };
 
-  const addTodoItemAndFocus = () => {
-    const newId = addTodoItem();
+  const addListItemAndFocus = () => {
+    const newId = addListItem();
     setTimeout(() => itemInputRefs.current.get(newId)?.focus(), 0);
   };
 
-  const insertTodoItemAfter = (afterItemId: string) => {
+  const insertListItemAfter = (afterItemId: string) => {
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
       saveTimeoutRef.current = undefined;
@@ -714,7 +714,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     const currentItems = itemsRef.current;
     const afterItemPos = currentItems.findIndex(item => item.id === afterItemId);
     const sourceIndentLevel = afterItemPos >= 0 ? currentItems[afterItemPos].indentLevel : 0;
-    const newItem: TodoItem = {
+    const newItem: ListItem = {
       id: generateItemId(),
       text: '',
       completed: false,
@@ -780,7 +780,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     if (e.key === 'Enter') {
       e.preventDefault();
       const currentItem = uncompletedItems[index];
-      const newId = insertTodoItemAfter(currentItem?.id ?? '');
+      const newId = insertListItemAfter(currentItem?.id ?? '');
       setTimeout(() => {
         itemInputRefs.current.get(newId)?.focus();
       }, 0);
@@ -796,7 +796,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
         ? uncompletedItems[index - 1]
         : uncompletedItems[index + 1];
 
-      removeTodoItem(currentItem.id);
+      removeListItem(currentItem.id);
 
       if (focusTarget) {
         setTimeout(() => {
@@ -836,7 +836,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     const firstLineText = (before + lines[0]).slice(0, VALIDATION.ITEM_TEXT_MAX_LENGTH);
 
     const remainingLines = lines.slice(1);
-    const newItems: TodoItem[] = remainingLines.map((line, i) => {
+    const newItems: ListItem[] = remainingLines.map((line, i) => {
       const isLast = i === remainingLines.length - 1;
       const lineText = isLast ? line + after : line;
       return {
@@ -886,7 +886,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     }, 0);
   };
 
-  const removeTodoItem = (itemId: string) => {
+  const removeListItem = (itemId: string) => {
     const newItems = itemsRef.current.filter(item => item.id !== itemId);
     
     let uncompletedCount = 0;
@@ -919,7 +919,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     }
   }, []);
 
-  const autoSaveNote = async (updatedItems: TodoItem[]) => {
+  const autoSaveNote = async (updatedItems: ListItem[]) => {
     if (!noteIdRef.current) return;
     // Cancel any pending debounced text-save snapshot so it can't overwrite
     // a newer structural update (indent, insert, reorder, completion, etc.).
@@ -1026,7 +1026,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   };
 
   // Helper function to find target item by index (for backward compatibility)
-  const findTargetItem = (index: number): TodoItem | null => {
+  const findTargetItem = (index: number): ListItem | null => {
     if (index < uncompletedItems.length) {
       return uncompletedItems[index];
     } else {
@@ -1038,8 +1038,8 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     return null;
   };
 
-  // Main updateTodoItem function - now much simpler and more reliable
-  const updateTodoItem = async (index: number, field: 'text' | 'completed', value: string | boolean) => {
+  // Main updateListItem function - now much simpler and more reliable
+  const updateListItem = async (index: number, field: 'text' | 'completed', value: string | boolean) => {
     const targetItem = findTargetItem(index);
     if (!targetItem) return;
 
@@ -1091,7 +1091,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     );
 
     // Restore the completed item: uncompleted, keep assignee and indent
-    const restoredItem: TodoItem = {
+    const restoredItem: ListItem = {
       ...completedItem,
       completed: false,
       originalPosition: undefined,
@@ -1153,7 +1153,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       archived,
       color,
       checked_items_collapsed: checkedItemsCollapsed,
-      items: noteType === 'todo' ? items.map((item, idx) => ({
+      items: noteType === 'list' ? items.map((item, idx) => ({
         text: item.text,
         position: idx,
         completed: item.completed,
@@ -1185,7 +1185,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
           content,
           note_type: noteType,
           color,
-          items: noteType === 'todo' ? items.map((item, idx) => ({
+          items: noteType === 'list' ? items.map((item, idx) => ({
             text: item.text,
             position: idx,
             completed: item.completed,
@@ -1246,7 +1246,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
         archived,
         color,
         checked_items_collapsed: checkedItemsCollapsed,
-        items: note.note_type === 'todo' ? items.map((item, idx) => ({
+        items: note.note_type === 'list' ? items.map((item, idx) => ({
           text: item.text,
           position: idx,
           completed: item.completed,
@@ -1293,7 +1293,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
         archived: newArchivedState,
         color,
         checked_items_collapsed: checkedItemsCollapsed,
-        items: note.note_type === 'todo' ? items.map((item, idx) => ({
+        items: note.note_type === 'list' ? items.map((item, idx) => ({
           text: item.text,
           position: idx,
           completed: item.completed,
@@ -1360,7 +1360,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
         archived,
         color,
         checked_items_collapsed: newCollapsedState,
-        items: note.note_type === 'todo' ? items.map((item, idx) => ({
+        items: note.note_type === 'list' ? items.map((item, idx) => ({
           text: item.text,
           position: idx,
           completed: item.completed,
@@ -1379,7 +1379,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
 
   const hasUnsavedChanges = () => {
     if (note) {
-      const todoItemsChanged = note.note_type === 'todo' && haveTodoItemsChanged(items, note.items);
+      const listItemsChanged = note.note_type === 'list' && haveListItemsChanged(items, note.items);
       return (
         title !== note.title ||
         content !== note.content ||
@@ -1387,13 +1387,13 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
         pinned !== note.pinned ||
         archived !== note.archived ||
         checkedItemsCollapsed !== note.checked_items_collapsed ||
-        todoItemsChanged
+        listItemsChanged
       );
     } else {
       return (
         title.trim() !== '' ||
         content.trim() !== '' ||
-        (noteType === 'todo' && items.some(item => item.text.trim() !== '')) ||
+        (noteType === 'list' && items.some(item => item.text.trim() !== '')) ||
         noteLabels.length > 0
       );
     }
@@ -1593,14 +1593,14 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                   {t('note.typeText')}
                 </button>
                 <button
-                  onClick={() => setNoteType('todo')}
+                  onClick={() => setNoteType('list')}
                   className={`px-3 py-1 text-sm rounded-md ${
-                    noteType === 'todo'
+                    noteType === 'list'
                       ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
                       : 'bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-600'
                   }`}
                 >
-                  {t('note.typeTodo')}
+                  {t('note.typeList')}
                 </button>
               </div>
             )}
@@ -1648,7 +1648,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                         input.setSelectionRange(input.value.length, input.value.length);
                       }
                     } else {
-                      addTodoItemAndFocus();
+                      addListItemAndFocus();
                     }
                   }
                 }
@@ -1700,12 +1700,12 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                           id={item.id}
                           index={index}
                           item={item}
-                          onUpdateTodoItem={updateTodoItem}
-                          onRemoveTodoItem={removeTodoItem}
+                          onUpdateListItem={updateListItem}
+                          onRemoveListItem={removeListItem}
                           isCompleted={false}
                           onKeyDown={handleItemKeyDown}
                           onPaste={handleItemPaste}
-                          onIndentChange={indentTodoItem}
+                          onIndentChange={indentListItem}
                           inputRef={(el) => {
                             if (el) itemInputRefs.current.set(item.id, el);
                             else itemInputRefs.current.delete(item.id);
@@ -1721,7 +1721,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                     </SortableContext>
                   </DndContext>
                   <button
-                    onClick={addTodoItemAndFocus}
+                    onClick={addListItemAndFocus}
                     className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-white p-1"
                   >
                     <PlusIcon className="h-4 w-4" />
@@ -1750,8 +1750,8 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                             id={item.id}
                             index={index + uncompletedItems.length}
                             item={item}
-                            onUpdateTodoItem={(idx, field, value) => updateTodoItem(idx, field, value)}
-                            onRemoveTodoItem={removeTodoItem}
+                            onUpdateListItem={(idx, field, value) => updateListItem(idx, field, value)}
+                            onRemoveListItem={removeListItem}
                             isCompleted={true}
                             isShared={note?.is_shared}
                             collaborators={collaborators}

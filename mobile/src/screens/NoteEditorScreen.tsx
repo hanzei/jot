@@ -883,7 +883,7 @@ export default function NoteEditorScreen() {
                 color={colors.primary}
               />
               <Text style={[styles.typeToggleText, { color: colors.primary }]}>
-                {noteType === 'text' ? t('note.typeTodo') : t('note.typeText')}
+                {noteType === 'text' ? t('note.typeList') : t('note.typeText')}
               </Text>
             </TouchableOpacity>
           )}
