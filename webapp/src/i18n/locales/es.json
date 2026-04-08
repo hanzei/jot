@@ -56,6 +56,7 @@
     "otherNotes": "Otras notas",
     "searchPlaceholder": "Buscar notas...",
     "searchAriaLabel": "Buscar notas",
+    "searchClearAriaLabel": "Borrar búsqueda",
     "sortLabel": "Ordenar notas",
     "sortOption": {
       "manual": "Manual",

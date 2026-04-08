@@ -56,6 +56,7 @@
     "otherNotes": "Inne notatki",
     "searchPlaceholder": "Szukaj notatek...",
     "searchAriaLabel": "Szukaj notatek",
+    "searchClearAriaLabel": "Wyczyść wyszukiwanie",
     "sortLabel": "Sortuj notatki",
     "sortOption": {
       "manual": "Ręcznie",
