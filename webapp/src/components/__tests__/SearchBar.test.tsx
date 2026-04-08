@@ -21,6 +21,24 @@ describe('SearchBar', () => {
     expect(screen.getByTestId('search-shortcut-hint')).toHaveTextContent('Ctrl + F')
   })
 
+  it('shows clear button when value is non-empty and clears on click', () => {
+    const onChange = vi.fn()
+
+    render(<SearchBar value="query" onChange={onChange} />)
+
+    const clearButton = screen.getByRole('button', { name: /clear search/i })
+    expect(clearButton).toBeInTheDocument()
+
+    fireEvent.click(clearButton)
+    expect(onChange).toHaveBeenCalledWith('')
+  })
+
+  it('does not show clear button when value is empty', () => {
+    render(<SearchBar value="" onChange={vi.fn()} />)
+
+    expect(screen.queryByRole('button', { name: /clear search/i })).not.toBeInTheDocument()
+  })
+
   it('clears the input value when Escape is pressed', () => {
     const onChange = vi.fn()
 

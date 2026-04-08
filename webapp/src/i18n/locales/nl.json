@@ -56,6 +56,7 @@
     "otherNotes": "Andere notities",
     "searchPlaceholder": "Notities zoeken...",
     "searchAriaLabel": "Notities zoeken",
+    "searchClearAriaLabel": "Zoekopdracht wissen",
     "sortLabel": "Notities sorteren",
     "sortOption": {
       "manual": "Handmatig",
