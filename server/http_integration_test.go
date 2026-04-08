@@ -494,8 +494,8 @@ func TestAdminStatsEndpoint(t *testing.T) {
 		Title:    "Archived list note",
 		NoteType: client.NoteTypeList,
 		Items: []client.CreateNoteItem{
-			{Text: "First todo", Position: 0},
-			{Text: "Second todo", Position: 1},
+			{Text: "First item", Position: 0},
+			{Text: "Second item", Position: 1},
 		},
 	})
 	require.NoError(t, err)
@@ -504,7 +504,7 @@ func TestAdminStatsEndpoint(t *testing.T) {
 		Title:    "Active list note",
 		NoteType: client.NoteTypeList,
 		Items: []client.CreateNoteItem{
-			{Text: "Assigned todo", Position: 0},
+			{Text: "Assigned item", Position: 0},
 		},
 	})
 	require.NoError(t, err)
@@ -523,15 +523,15 @@ func TestAdminStatsEndpoint(t *testing.T) {
 	_, err = adminUser.Client.UpdateNote(t.Context(), archivedListNote.ID, &client.UpdateNoteRequest{
 		Archived: &archived,
 		Items: &[]client.UpdateNoteItem{
-			{Text: "First todo", Position: 0, Completed: true, AssignedTo: member1.User.ID},
-			{Text: "Second todo", Position: 1, Completed: false, AssignedTo: ""},
+			{Text: "First item", Position: 0, Completed: true, AssignedTo: member1.User.ID},
+			{Text: "Second item", Position: 1, Completed: false, AssignedTo: ""},
 		},
 	})
 	require.NoError(t, err)
 
 	_, err = adminUser.Client.UpdateNote(t.Context(), activeListNote.ID, &client.UpdateNoteRequest{
 		Items: &[]client.UpdateNoteItem{
-			{Text: "Assigned todo", Position: 0, Completed: false, AssignedTo: member2.User.ID},
+			{Text: "Assigned item", Position: 0, Completed: false, AssignedTo: member2.User.ID},
 		},
 	})
 	require.NoError(t, err)
