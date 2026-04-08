@@ -100,7 +100,7 @@ func (d *DB) applyMigration(ctx context.Context, file fs.DirEntry) error {
 	// migration rebuilds tables (DROP + recreate), because SQLite would otherwise
 	// cascade-delete child rows. It is a no-op inside a transaction, so it must
 	// be set on the raw connection before BeginTx.
-	if _, err := d.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); err != nil {
+	if _, err = d.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); err != nil {
 		return fmt.Errorf("failed to disable foreign keys for migration %s: %w", file.Name(), err)
 	}
 	defer func() { _, _ = d.ExecContext(ctx, `PRAGMA foreign_keys = ON`) }()
