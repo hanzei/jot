@@ -167,7 +167,7 @@ describe('NoteCard', () => {
         {
           id: 'item-wrap',
           note_id: 'note-1',
-          text: 'This is a very long todo item that should wrap to multiple lines in note previews on mobile',
+          text: 'This is a very long list item that should wrap to multiple lines in note previews on mobile',
           completed: false,
           position: 0,
           indent_level: 0,
