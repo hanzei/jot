@@ -15,7 +15,7 @@ import UserAvatar from './UserAvatar';
 import { useTheme } from '../theme/ThemeContext';
 import { VALIDATION, type Collaborator } from '@jot/shared';
 
-interface TodoItemProps {
+interface ListItemProps {
   text: string;
   completed: boolean;
   indentLevel?: number;
@@ -44,7 +44,7 @@ function isHorizontalSwipe(gestureState: PanResponderGestureState): boolean {
   return Math.abs(gestureState.dx) > Math.abs(gestureState.dy) && Math.abs(gestureState.dx) >= SWIPE_ACTIVATION_PX;
 }
 
-function TodoItem({
+function ListItem({
   text,
   completed,
   indentLevel = 0,
@@ -64,7 +64,7 @@ function TodoItem({
   onAssignPress,
   onFocus,
   onIndent,
-}: TodoItemProps) {
+}: ListItemProps) {
   const { colors } = useTheme();
   const { t } = useTranslation();
   const showAssignUI = isShared && collaborators && collaborators.length > 0 && onAssignPress;
@@ -94,7 +94,7 @@ function TodoItem({
   return (
     <View
       style={[styles.container, { marginLeft: normalizedIndentLevel * VALIDATION.INDENT_PX_PER_LEVEL }]}
-      testID="todo-item-row"
+      testID="list-item-row"
       {...panResponder.panHandlers}
     >
       {showDragHandle && onDrag && (
@@ -102,7 +102,7 @@ function TodoItem({
           onLongPress={onDrag}
           disabled={isActive}
           style={styles.dragHandle}
-          testID="todo-item-drag-handle"
+          testID="list-item-drag-handle"
           accessibilityLabel={t('note.dragToReorder')}
         >
           <Ionicons name="reorder-three" size={20} color={colors.iconMuted} />
@@ -111,7 +111,7 @@ function TodoItem({
       <TouchableOpacity
         onPress={editable ? onToggle : undefined}
         style={styles.checkbox}
-        testID="todo-item-checkbox"
+        testID="list-item-checkbox"
         accessibilityRole="checkbox"
         accessibilityState={{ checked: completed, disabled: !editable }}
         accessibilityLabel={t('note.itemCheckbox', { item: text || t('note.listItemLabel') })}
@@ -142,13 +142,13 @@ function TodoItem({
             onBackspaceOnEmpty?.();
           }
         }}
-        testID="todo-item-text"
+        testID="list-item-text"
       />
       {showAssignUI && assignedTo ? (
         <TouchableOpacity
           onPress={!completed ? onAssignPress : undefined}
           style={styles.assignBtn}
-          testID="todo-item-assignee"
+          testID="list-item-assignee"
           accessibilityLabel={t('note.assignedTo', {
             name: assignedUser?.username ?? t('common.unknown'),
           })}
@@ -164,7 +164,7 @@ function TodoItem({
         <TouchableOpacity
           onPress={onAssignPress}
           style={styles.assignBtn}
-          testID="todo-item-assign"
+          testID="list-item-assign"
           accessibilityLabel={t('note.assignItem')}
         >
           <View style={[styles.assignPlaceholder, { borderColor: colors.border }]}>
@@ -173,7 +173,7 @@ function TodoItem({
         </TouchableOpacity>
       ) : null}
       {editable && onDelete && (
-        <TouchableOpacity onPress={onDelete} style={styles.deleteBtn} testID="todo-item-delete">
+        <TouchableOpacity onPress={onDelete} style={styles.deleteBtn} testID="list-item-delete">
           <Ionicons name="close" size={18} color={colors.iconMuted} />
         </TouchableOpacity>
       )}
@@ -225,4 +225,4 @@ const styles = StyleSheet.create({
   },
 });
 
-export default React.memo(TodoItem);
+export default React.memo(ListItem);

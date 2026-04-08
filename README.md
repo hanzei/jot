@@ -5,13 +5,13 @@ A self-hosted note-taking application built with Go backend and React frontend. 
 ## Features
 
 - **Notes Management**: Create, edit, delete, and organize notes
-- **Note Types**: Support for both plain text notes and todo lists with checkboxes
+- **Note Types**: Support for both plain text notes and lists with checkboxes
 - **Search & Filter**: Find notes quickly with search and filtering capabilities
 - **Responsive Design**: Works on desktop and mobile devices
 - **Self-hosted**: Complete control over your data
 - **SQLite Database**: Lightweight, file-based database
 - **Admin Support**: First registered user becomes admin
-- **Admin Instance Overview**: Admin page shows live usage metrics like users, notes, sharing, labels, todo items, and DB size
+- **Admin Instance Overview**: Admin page shows live usage metrics like users, notes, sharing, labels, list items, and DB size
 - **Single Binary**: Frontend and backend served from one Go binary
 - **Sliding Sessions**: 30-day sessions auto-extend when less than 7 days remain
 
@@ -23,8 +23,8 @@ A self-hosted note-taking application built with Go backend and React frontend. 
 ### Search and filter
 ![Search and filter](images/feature-search-filter.png)
 
-### Todo note editor
-![Todo note editor](images/feature-todo-note-editor.png)
+### List note editor
+![List note editor](images/feature-todo-note-editor.png)
 
 ### Archive view
 ![Archive view](images/feature-archive-view.png)

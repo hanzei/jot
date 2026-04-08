@@ -49,8 +49,8 @@ test.describe('Keyboard shortcuts help dialog', () => {
     await expect(shortcutsDialog.getByTestId('shortcut-description-new-note')).toBeVisible();
     await expect(shortcutsDialog.getByTestId('shortcut-key-notes-view')).toBeVisible();
     await expect(shortcutsDialog.getByTestId('shortcut-description-notes-view')).toBeVisible();
-    await expect(shortcutsDialog.getByTestId('shortcut-key-my-todo-view')).toBeVisible();
-    await expect(shortcutsDialog.getByTestId('shortcut-description-my-todo-view')).toBeVisible();
+    await expect(shortcutsDialog.getByTestId('shortcut-key-my-tasks-view')).toBeVisible();
+    await expect(shortcutsDialog.getByTestId('shortcut-description-my-tasks-view')).toBeVisible();
     await expect(shortcutsDialog.getByTestId('shortcut-key-archive-view')).toBeVisible();
     await expect(shortcutsDialog.getByTestId('shortcut-description-archive-view')).toBeVisible();
     await expect(shortcutsDialog.getByTestId('shortcut-key-bin-view')).toBeVisible();
@@ -76,7 +76,7 @@ test.describe('Keyboard shortcuts help dialog', () => {
     await expect(shortcutsDialog.getByRole('heading', { name: 'Keyboard shortcuts' })).toBeVisible();
   });
 
-  test('opens notes/todo/archive/bin views with d/t/a/b', async ({ authenticatedUser, page, dashboardPage }) => {
+  test('opens notes/list/archive/bin views with d/t/a/b', async ({ authenticatedUser, page, dashboardPage }) => {
     void authenticatedUser;
     await dashboardPage.goto();
 

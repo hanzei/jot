@@ -369,7 +369,7 @@ describe('API Module', () => {
       })
 
       it('creates new list note with items', async () => {
-        const todoNote: CreateNoteRequest = {
+        const listNote: CreateNoteRequest = {
           title: 'List Note',
           content: '',
           note_type: 'list',
@@ -378,13 +378,13 @@ describe('API Module', () => {
             { text: 'Second task', position: 1 }
           ]
         }
-        const mockTodoNote = { ...mockNote, note_type: 'list' as const }
-        mockPost.mockResolvedValue({ data: mockTodoNote })
+        const mockListNote = { ...mockNote, note_type: 'list' as const }
+        mockPost.mockResolvedValue({ data: mockListNote })
 
-        const result = await notes.create(todoNote)
+        const result = await notes.create(listNote)
 
-        expect(mockPost).toHaveBeenCalledWith('/notes', todoNote)
-        expect(result).toEqual(mockTodoNote)
+        expect(mockPost).toHaveBeenCalledWith('/notes', listNote)
+        expect(result).toEqual(mockListNote)
       })
 
       it('handles creation with invalid data', async () => {

@@ -1,40 +1,40 @@
 import React from 'react';
 import { fireEvent, render } from '@testing-library/react-native';
-import TodoItem from '../src/components/TodoItem';
+import ListItem from '../src/components/ListItem';
 
-describe('TodoItem drag handle', () => {
+describe('ListItem drag handle', () => {
   it('renders drag handle when showDragHandle is true and onDrag provided', () => {
     const onDrag = jest.fn();
     const { getByTestId } = render(
-      <TodoItem text="Task" completed={false} showDragHandle onDrag={onDrag} />,
+      <ListItem text="Task" completed={false} showDragHandle onDrag={onDrag} />,
     );
 
-    expect(getByTestId('todo-item-drag-handle')).toBeTruthy();
+    expect(getByTestId('list-item-drag-handle')).toBeTruthy();
   });
 
   it('calls onDrag on long press', () => {
     const onDrag = jest.fn();
     const { getByTestId } = render(
-      <TodoItem text="Task" completed={false} showDragHandle onDrag={onDrag} />,
+      <ListItem text="Task" completed={false} showDragHandle onDrag={onDrag} />,
     );
 
-    fireEvent(getByTestId('todo-item-drag-handle'), 'onLongPress');
+    fireEvent(getByTestId('list-item-drag-handle'), 'onLongPress');
     expect(onDrag).toHaveBeenCalledTimes(1);
   });
 
   it('does not render drag handle by default', () => {
     const { queryByTestId } = render(
-      <TodoItem text="Task" completed={false} />,
+      <ListItem text="Task" completed={false} />,
     );
 
-    expect(queryByTestId('todo-item-drag-handle')).toBeNull();
+    expect(queryByTestId('list-item-drag-handle')).toBeNull();
   });
 
   it('does not render drag handle when showDragHandle is true but onDrag is not provided', () => {
     const { queryByTestId } = render(
-      <TodoItem text="Task" completed={false} showDragHandle />,
+      <ListItem text="Task" completed={false} showDragHandle />,
     );
 
-    expect(queryByTestId('todo-item-drag-handle')).toBeNull();
+    expect(queryByTestId('list-item-drag-handle')).toBeNull();
   });
 });

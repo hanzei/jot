@@ -23,7 +23,7 @@ import { useOfflineNote } from '../hooks/useOfflineNotes';
 import { isLocalId } from '../db/noteQueries';
 import { useSSESubscription } from '../store/SSEContext';
 import { useToast } from '../hooks/useToast';
-import TodoItem from '../components/TodoItem';
+import ListItem from '../components/ListItem';
 import ColorPicker from '../components/ColorPicker';
 import LabelPicker from '../components/LabelPicker';
 import AssigneePicker from '../components/AssigneePicker';
@@ -49,7 +49,7 @@ interface LocalItem {
   assigned_to: string;
 }
 
-const MAX_TODO_ITEM_INDENT = 1;
+const MAX_LIST_ITEM_INDENT = 1;
 
 function toLocalItems(serverItems: NoteItem[]): LocalItem[] {
   return [...serverItems]
@@ -513,7 +513,7 @@ export default function NoteEditorScreen() {
       setItems((prev) =>
         prev.map((item, i) => {
           if (i !== index) return item;
-          const nextIndentLevel = Math.max(0, Math.min(MAX_TODO_ITEM_INDENT, item.indent_level + delta));
+          const nextIndentLevel = Math.max(0, Math.min(MAX_LIST_ITEM_INDENT, item.indent_level + delta));
           if (nextIndentLevel === item.indent_level) return item;
           changed = true;
           return { ...item, indent_level: nextIndentLevel };
@@ -777,11 +777,11 @@ export default function NoteEditorScreen() {
   const uncheckedItems = useMemo(() => items.filter((item) => !item.completed), [items]);
   const checkedItems = useMemo(() => items.filter((item) => item.completed), [items]);
 
-  // Use ref to avoid recreating handleTodoReorder on every items change
+  // Use ref to avoid recreating handleListReorder on every items change
   const checkedItemsRef = useRef(checkedItems);
   checkedItemsRef.current = checkedItems;
 
-  const handleTodoReorder = useCallback(
+  const handleListReorder = useCallback(
     (reorderedUnchecked: LocalItem[]) => {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
       // Merge reordered unchecked with existing checked items
@@ -796,15 +796,15 @@ export default function NoteEditorScreen() {
     [markDirtyAndScheduleUpdate],
   );
 
-  const handleTodoDragStart = useCallback(() => {
+  const handleListDragStart = useCallback(() => {
     Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Light).catch(() => {});
   }, []);
 
-  const handleTodoItemFocus = useCallback<NonNullable<TextInputProps['onFocus']>>((event) => {
+  const handleListItemFocus = useCallback<NonNullable<TextInputProps['onFocus']>>((event) => {
     const nativeTarget = event.nativeEvent.target;
     if (nativeTarget == null) return;
 
-    // Use ScrollView's native keyboard helper so focused todo inputs stay visible.
+    // Use ScrollView's native keyboard helper so focused list item inputs stay visible.
     const responder = scrollViewRef.current?.getScrollResponder?.();
     if (
       responder &&
@@ -819,15 +819,15 @@ export default function NoteEditorScreen() {
     }
   }, []);
 
-  const renderTodoItem = useCallback(
+  const renderListItem = useCallback(
     ({ item, drag, isActive }: { item: LocalItem; drag: () => void; isActive: boolean }) => {
       const originalIndex = itemIndexMapRef.current.get(item.id);
       if (originalIndex === undefined) return null;
       const itemRef = getItemRef(item.id);
       return (
         <ScaleDecorator>
-          <View style={isActive ? [styles.draggingTodoItem, { shadowColor: isDark ? colors.border : '#000' }] : undefined}>
-            <TodoItem
+          <View style={isActive ? [styles.draggingListItem, { shadowColor: isDark ? colors.border : '#000' }] : undefined}>
+            <ListItem
               inputRef={itemRef}
               text={item.text}
               completed={item.completed}
@@ -844,14 +844,14 @@ export default function NoteEditorScreen() {
               onSubmitEditing={() => handleInsertItemAfter(originalIndex)}
               onBackspaceOnEmpty={() => handleBackspaceOnEmpty(originalIndex)}
               onAssignPress={() => openAssigneePicker(item.id)}
-              onFocus={handleTodoItemFocus}
+              onFocus={handleListItemFocus}
               onIndent={(delta) => handleIndentItem(originalIndex, delta)}
             />
           </View>
         </ScaleDecorator>
       );
     },
-    [getItemRef, handleToggleItem, handleItemTextChange, handleDeleteItem, handleInsertItemAfter, handleBackspaceOnEmpty, isNoteShared, collaborators, openAssigneePicker, handleIndentItem, isDark, colors, handleTodoItemFocus],
+    [getItemRef, handleToggleItem, handleItemTextChange, handleDeleteItem, handleInsertItemAfter, handleBackspaceOnEmpty, isNoteShared, collaborators, openAssigneePicker, handleIndentItem, isDark, colors, handleListItemFocus],
   );
 
   const hasNoteColor = !!color && !isWhiteHexColor(color);
@@ -953,17 +953,17 @@ export default function NoteEditorScreen() {
             testID="note-content-input"
           />
         ) : (
-          <View style={styles.todoContainer}>
+          <View style={styles.listContainer}>
             <DraggableFlatList
               data={uncheckedItems}
               keyExtractor={(item) => item.id}
               scrollEnabled={false}
-              onDragBegin={handleTodoDragStart}
-              onDragEnd={({ data }) => handleTodoReorder(data)}
-              renderItem={renderTodoItem}
+              onDragBegin={handleListDragStart}
+              onDragEnd={({ data }) => handleListReorder(data)}
+              renderItem={renderListItem}
             />
 
-            <TouchableOpacity style={styles.addItemRow} onPress={handleAddItem} testID="add-todo-item">
+            <TouchableOpacity style={styles.addItemRow} onPress={handleAddItem} testID="add-list-item">
               <Ionicons name="add" size={22} color={colors.primary} />
               <Text style={[styles.addItemText, { color: colors.primary }]}>{t('note.addItem')}</Text>
             </TouchableOpacity>
@@ -990,7 +990,7 @@ export default function NoteEditorScreen() {
                     const originalIndex = itemIndexMap.get(item.id);
                     if (originalIndex === undefined) return null;
                     return (
-                      <TodoItem
+                      <ListItem
                         key={item.id}
                         inputRef={getItemRef(item.id)}
                         text={item.text}
@@ -1006,7 +1006,7 @@ export default function NoteEditorScreen() {
                         onSubmitEditing={() => handleInsertItemAfter(originalIndex)}
                         onBackspaceOnEmpty={() => handleBackspaceOnEmpty(originalIndex)}
                         onAssignPress={() => openAssigneePicker(item.id)}
-                        onFocus={handleTodoItemFocus}
+                        onFocus={handleListItemFocus}
                         onIndent={(delta) => handleIndentItem(originalIndex, delta)}
                       />
                     );
@@ -1185,7 +1185,7 @@ const styles = StyleSheet.create({
     minHeight: 200,
     paddingHorizontal: 0,
   },
-  todoContainer: {
+  listContainer: {
     paddingBottom: 16,
   },
   addItemRow: {
@@ -1244,7 +1244,7 @@ const styles = StyleSheet.create({
     fontSize: 14,
     textAlign: 'center',
   },
-  draggingTodoItem: {
+  draggingListItem: {
     borderRadius: 8,
     elevation: 4,
     shadowColor: '#000',

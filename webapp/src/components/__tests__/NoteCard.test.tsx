@@ -475,25 +475,25 @@ describe('NoteCard', () => {
 
   describe('List Rendering', () => {
     it('renders list items correctly', () => {
-      const todoNote = createMockNote({
+      const listNote = createMockNote({
         note_type: 'list',
         items: createMockListItems(),
-        content: '', // Todo notes typically have empty content
+        content: '', // List notes typically have empty content
       })
 
-      renderNoteCard({ ...defaultProps, note: todoNote })
+      renderNoteCard({ ...defaultProps, note: listNote })
 
       expect(screen.getByText('Uncompleted item')).toBeInTheDocument()
       expect(screen.getByText('+1 completed items')).toBeInTheDocument()
     })
 
     it('handles empty list', () => {
-      const emptyTodoNote = createMockNote({
+      const emptyListNote = createMockNote({
         note_type: 'list',
         items: [],
       })
 
-      renderNoteCard({ ...defaultProps, note: emptyTodoNote })
+      renderNoteCard({ ...defaultProps, note: emptyListNote })
 
       // Should render without errors
       expect(screen.getByText('Test Note')).toBeInTheDocument()
@@ -522,7 +522,7 @@ describe('NoteCard', () => {
 
     it('handles list items with extremely long text', () => {
       const longText = 'A'.repeat(1000)
-      const longTextTodoNote = createMockNote({
+      const longTextListNote = createMockNote({
         note_type: 'list',
         items: [{
           id: 'item1',
@@ -537,19 +537,19 @@ describe('NoteCard', () => {
         }],
       })
 
-      renderNoteCard({ ...defaultProps, note: longTextTodoNote })
+      renderNoteCard({ ...defaultProps, note: longTextListNote })
 
       expect(screen.getByText(longText)).toBeInTheDocument()
     })
 
     it('applies wrapping classes for long list preview text', () => {
-      const todoNote = createMockNote({
+      const listNote = createMockNote({
         note_type: 'list',
         items: [
           {
             id: 'item-wrap',
             note_id: '1',
-            text: 'very long todo content that should wrap in preview',
+            text: 'very long list item content that should wrap in preview',
             completed: false,
             position: 0,
             indent_level: 0,
@@ -560,7 +560,7 @@ describe('NoteCard', () => {
         ],
       })
 
-      const { container } = renderNoteCard({ ...defaultProps, note: todoNote })
+      const { container } = renderNoteCard({ ...defaultProps, note: listNote })
       const textSpan = container.querySelector('span.text-gray-700')
       expect(textSpan).toBeTruthy()
       expect(textSpan).toHaveClass('whitespace-pre-wrap')

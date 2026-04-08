@@ -84,28 +84,28 @@ test.describe('Admin', () => {
     await expectOk(sharedTextResponse, 'create shared text note');
     const sharedTextNote = await sharedTextResponse.json() as { id: string };
 
-    const archivedTodoResponse = await page.request.post('/api/v1/notes', {
+    const archivedListResponse = await page.request.post('/api/v1/notes', {
       data: {
-        title: 'Archived todo note',
-        note_type: 'todo',
+        title: 'Archived list note',
+        note_type: 'list',
         items: [
-          { text: 'First todo', position: 0 },
-          { text: 'Second todo', position: 1 },
+          { text: 'First item', position: 0 },
+          { text: 'Second item', position: 1 },
         ],
       },
     });
-    await expectOk(archivedTodoResponse, 'create archived todo note');
-    const archivedTodoNote = await archivedTodoResponse.json() as { id: string };
+    await expectOk(archivedListResponse, 'create archived list note');
+    const archivedListNote = await archivedListResponse.json() as { id: string };
 
-    const activeTodoResponse = await page.request.post('/api/v1/notes', {
+    const activeListResponse = await page.request.post('/api/v1/notes', {
       data: {
-        title: 'Active todo note',
-        note_type: 'todo',
-        items: [{ text: 'Assigned todo', position: 0 }],
+        title: 'Active list note',
+        note_type: 'list',
+        items: [{ text: 'Assigned item', position: 0 }],
       },
     });
-    await expectOk(activeTodoResponse, 'create active todo note');
-    const activeTodoNote = await activeTodoResponse.json() as { id: string };
+    await expectOk(activeListResponse, 'create active list note');
+    const activeListNote = await activeListResponse.json() as { id: string };
 
     const trashedTextResponse = await page.request.post('/api/v1/notes', {
       data: { title: 'Trashed text note', content: 'trashed content', note_type: 'text' },
@@ -114,33 +114,33 @@ test.describe('Admin', () => {
     const trashedTextNote = await trashedTextResponse.json() as { id: string };
 
     await expectOk(
-      await page.request.post(`/api/v1/notes/${archivedTodoNote.id}/share`, { data: { user_id: memberOne.user.id } }),
-      'share archived todo note with member one',
+      await page.request.post(`/api/v1/notes/${archivedListNote.id}/share`, { data: { user_id: memberOne.user.id } }),
+      'share archived list note with member one',
     );
     await expectOk(
-      await page.request.post(`/api/v1/notes/${activeTodoNote.id}/share`, { data: { user_id: memberTwo.user.id } }),
-      'share active todo note with member two',
+      await page.request.post(`/api/v1/notes/${activeListNote.id}/share`, { data: { user_id: memberTwo.user.id } }),
+      'share active list note with member two',
     );
 
-    const updateArchivedTodoResponse = await page.request.patch(`/api/v1/notes/${archivedTodoNote.id}`, {
+    const updateArchivedListResponse = await page.request.patch(`/api/v1/notes/${archivedListNote.id}`, {
       data: {
         archived: true,
         items: [
-          { text: 'First todo', position: 0, completed: true, assigned_to: memberOne.user.id },
-          { text: 'Second todo', position: 1, completed: false, assigned_to: '' },
+          { text: 'First item', position: 0, completed: true, assigned_to: memberOne.user.id },
+          { text: 'Second item', position: 1, completed: false, assigned_to: '' },
         ],
       },
     });
-    await expectOk(updateArchivedTodoResponse, 'update archived todo note');
+    await expectOk(updateArchivedListResponse, 'update archived list note');
 
-    const updateActiveTodoResponse = await page.request.patch(`/api/v1/notes/${activeTodoNote.id}`, {
+    const updateActiveListResponse = await page.request.patch(`/api/v1/notes/${activeListNote.id}`, {
       data: {
         items: [
-          { text: 'Assigned todo', position: 0, completed: false, assigned_to: memberTwo.user.id },
+          { text: 'Assigned item', position: 0, completed: false, assigned_to: memberTwo.user.id },
         ],
       },
     });
-    await expectOk(updateActiveTodoResponse, 'update active todo note');
+    await expectOk(updateActiveListResponse, 'update active list note');
 
     const trashNoteResponse = await page.request.delete(`/api/v1/notes/${trashedTextNote.id}`);
     await expectOk(trashNoteResponse, 'trash text note');
@@ -163,8 +163,8 @@ test.describe('Admin', () => {
       'add urgent label',
     );
     await expectOk(
-      await page.request.post(`/api/v1/notes/${archivedTodoNote.id}/labels`, { data: { name: 'work' } }),
-      'add work label to archived todo',
+      await page.request.post(`/api/v1/notes/${archivedListNote.id}/labels`, { data: { name: 'work' } }),
+      'add work label to archived list note',
     );
 
     const statsResponse = await page.request.get('/api/v1/admin/stats');

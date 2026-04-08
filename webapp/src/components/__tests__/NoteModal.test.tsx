@@ -258,8 +258,8 @@ describe('NoteModal', () => {
       renderNoteModal(defaultProps)
 
       // Switch to list mode
-      const todoButton = screen.getByText('List')
-      fireEvent.click(todoButton)
+      const listTypeButton = screen.getByText('List')
+      fireEvent.click(listTypeButton)
 
       // Add a new item
       const addItemButton = screen.getByText('Add item')
@@ -276,8 +276,8 @@ describe('NoteModal', () => {
       renderNoteModal(defaultProps)
 
       // Switch to list mode
-      const todoButton = screen.getByText('List')
-      fireEvent.click(todoButton)
+      const listTypeButton = screen.getByText('List')
+      fireEvent.click(listTypeButton)
 
       // Add a new item
       const addItemButton = screen.getByText('Add item')
@@ -324,8 +324,8 @@ describe('NoteModal', () => {
       expect(screen.getByPlaceholderText('Take a note...')).toBeInTheDocument()
 
       // Switch to list mode
-      const todoButton = screen.getByText('List')
-      fireEvent.click(todoButton)
+      const listTypeButton = screen.getByText('List')
+      fireEvent.click(listTypeButton)
 
       expect(screen.getByText('Add item')).toBeInTheDocument()
       expect(screen.queryByPlaceholderText('Take a note...')).not.toBeInTheDocument()
@@ -342,8 +342,8 @@ describe('NoteModal', () => {
       renderNoteModal(defaultProps)
 
       // Switch to list mode
-      const todoButton = screen.getByText('List')
-      fireEvent.click(todoButton)
+      const listTypeButton = screen.getByText('List')
+      fireEvent.click(listTypeButton)
 
       // Should show add item button
       expect(screen.getByText('Add item')).toBeInTheDocument()
@@ -355,17 +355,17 @@ describe('NoteModal', () => {
       fireEvent.click(screen.getByText('List'))
       fireEvent.click(screen.getByText('Add item'))
 
-      const todoInput = screen.getByTestId('list-item-input')
-      expect(todoInput.tagName).toBe('TEXTAREA')
-      expect(todoInput).toHaveAttribute('rows', '1')
+      const listInput = screen.getByTestId('list-item-input')
+      expect(listInput.tagName).toBe('TEXTAREA')
+      expect(listInput).toHaveAttribute('rows', '1')
     })
 
     it('renders existing list items', async () => {
-      const todoNote = createMockNote({
+      const listNote = createMockNote({
         note_type: 'list',
         items: createMockListItems(),
       })
-      renderNoteModal({ ...defaultProps, note: todoNote })
+      renderNoteModal({ ...defaultProps, note: listNote })
 
       // Should show list items
       expect(screen.getByDisplayValue('First item')).toBeInTheDocument()
@@ -477,7 +477,7 @@ describe('NoteModal', () => {
     })
 
     it('persisted update keeps inherited indent after quick Tab then Enter on existing note', async () => {
-      const todoNote = createMockNote({
+      const listNote = createMockNote({
         note_type: 'list',
         items: [
           {
@@ -494,7 +494,7 @@ describe('NoteModal', () => {
         ],
       })
 
-      renderNoteModal({ ...defaultProps, note: todoNote })
+      renderNoteModal({ ...defaultProps, note: listNote })
       const inputs = screen.getAllByTestId('list-item-input')
 
       fireEvent.keyDown(inputs[0], { key: 'Tab', code: 'Tab' })
@@ -510,7 +510,7 @@ describe('NoteModal', () => {
     })
 
     it('debounced text autosave does not overwrite quick Tab then Enter changes', async () => {
-      const todoNote = createMockNote({
+      const listNote = createMockNote({
         note_type: 'list',
         items: [
           {
@@ -527,7 +527,7 @@ describe('NoteModal', () => {
         ],
       })
 
-      renderNoteModal({ ...defaultProps, note: todoNote })
+      renderNoteModal({ ...defaultProps, note: listNote })
       const inputs = screen.getAllByTestId('list-item-input')
 
       // Arms debounced text autosave.
@@ -549,7 +549,7 @@ describe('NoteModal', () => {
     })
 
     it('queued autosave retries use latest note fields while a save is in-flight', async () => {
-      const todoNote = createMockNote({
+      const listNote = createMockNote({
         note_type: 'list',
         title: 'Initial title',
         items: [
@@ -572,19 +572,19 @@ describe('NoteModal', () => {
         resolveFirstUpdate = resolve
       }))
 
-      renderNoteModal({ ...defaultProps, note: todoNote })
+      renderNoteModal({ ...defaultProps, note: listNote })
 
-      const todoInput = screen.getByDisplayValue('parent')
+      const listInput = screen.getByDisplayValue('parent')
       const titleInput = screen.getByDisplayValue('Initial title')
 
       // Start first autosave and keep it in-flight.
-      fireEvent.keyDown(todoInput, { key: 'Tab', code: 'Tab' })
+      fireEvent.keyDown(listInput, { key: 'Tab', code: 'Tab' })
 
       // Change non-item draft fields while autosave is still in-flight.
       fireEvent.change(titleInput, { target: { value: 'Updated title while saving' } })
 
       // Queue another autosave with updated item + title snapshot.
-      fireEvent.keyDown(todoInput, { key: 'Enter', code: 'Enter' })
+      fireEvent.keyDown(listInput, { key: 'Enter', code: 'Enter' })
 
       // Release first request, then flush queued retry.
       resolveFirstUpdate?.({})
@@ -816,7 +816,7 @@ describe('NoteModal', () => {
     })
 
     it('removing a list item from an existing note triggers auto-save', async () => {
-      const todoNote = createMockNote({
+      const listNote = createMockNote({
         note_type: 'list',
         items: [
           { id: 'item1', note_id: '1', text: 'First', completed: false, position: 0, indent_level: 0, assigned_to: '', created_at: '', updated_at: '' },
@@ -824,7 +824,7 @@ describe('NoteModal', () => {
         ],
       })
       mockNotesUpdate.mockClear()
-      renderNoteModal({ ...defaultProps, note: todoNote })
+      renderNoteModal({ ...defaultProps, note: listNote })
 
       const inputs = screen.getAllByTestId('list-item-input')
       expect(inputs).toHaveLength(2)
@@ -839,14 +839,14 @@ describe('NoteModal', () => {
     })
 
     it('removing the only list item from an existing note sends empty items array', async () => {
-      const todoNote = createMockNote({
+      const listNote = createMockNote({
         note_type: 'list',
         items: [
           { id: 'item1', note_id: '1', text: '', completed: false, position: 0, indent_level: 0, assigned_to: '', created_at: '', updated_at: '' },
         ],
       })
       mockNotesUpdate.mockClear()
-      renderNoteModal({ ...defaultProps, note: todoNote })
+      renderNoteModal({ ...defaultProps, note: listNote })
 
       const inputs = screen.getAllByTestId('list-item-input')
       expect(inputs).toHaveLength(1)
@@ -886,7 +886,7 @@ describe('NoteModal', () => {
     })
 
     it('saves existing list note on close when item text changed', async () => {
-      const todoNote = createMockNote({
+      const listNote = createMockNote({
         note_type: 'list',
         content: '',
         items: [
@@ -904,7 +904,7 @@ describe('NoteModal', () => {
         ],
       })
       const onSave = vi.fn()
-      renderNoteModal({ ...defaultProps, note: todoNote, onSave })
+      renderNoteModal({ ...defaultProps, note: listNote, onSave })
 
       const input = screen.getByDisplayValue('Original item')
       fireEvent.change(input, { target: { value: 'Updated item' } })
