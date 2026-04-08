@@ -1409,15 +1409,9 @@ func insertImportedNoteTx(ctx context.Context, tx *sql.Tx, userID string, n JotI
 		return "", fmt.Errorf("generate note ID: %w", err)
 	}
 
-	// Normalize legacy 'todo' type from pre-rename exports.
-	noteType := n.NoteType
-	if noteType == "todo" {
-		noteType = NoteTypeList
-	}
-
 	if _, err = tx.ExecContext(ctx,
 		`INSERT INTO notes (id, user_id, title, content, note_type) VALUES (?, ?, ?, ?, ?)`,
-		noteID, userID, n.Title, n.Content, noteType,
+		noteID, userID, n.Title, n.Content, n.NoteType,
 	); err != nil {
 		return "", fmt.Errorf("create note: %w", err)
 	}
