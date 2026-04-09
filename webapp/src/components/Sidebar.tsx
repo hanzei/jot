@@ -1,6 +1,6 @@
-import { ReactNode, useMemo, useState } from 'react';
+import { ReactNode, useState } from 'react';
 import { Link } from 'react-router';
-import SidebarContext from '@/components/SidebarContext';
+import { SidebarContext } from '@/components/SidebarContext';
 
 export interface SidebarTab {
   label: string;
@@ -94,10 +94,7 @@ const Sidebar = ({ tabs, bottomTabs, children, collapsed, onCollapse }: SidebarP
       onMouseEnter={() => collapsed && setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      <SidebarContext.Provider value={useMemo(() => ({
-          isExpanded,
-          onMobileCollapse: () => { if (isMobile() && onCollapse) onCollapse(); },
-        }), [isExpanded, onCollapse])}>
+      <SidebarContext.Provider value={isExpanded}>
         <nav className="flex flex-col shrink-0 space-y-1.5 pt-4 px-2 pb-2">
           {tabs.map(renderTab)}
         </nav>
