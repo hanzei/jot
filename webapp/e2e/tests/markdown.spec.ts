@@ -18,6 +18,8 @@ test.describe('Markdown note editing', () => {
 
   test('preview renders markdown and clicking enters edit mode', async ({ page, dashboardPage }) => {
     await dashboardPage.goto();
+    // Intentionally keep the modal open after creation to test in-modal interactions,
+    // so we bypass dashboardPage.createNote() which closes the dialog before returning.
     await dashboardPage.clickNewNote();
     await page.fill('input[placeholder="Note title..."]', 'Heading Note');
     await page.fill('textarea[placeholder="Take a note..."]', '## Heading');
@@ -38,10 +40,11 @@ test.describe('Markdown note editing', () => {
     await dialog.getByRole('button', { name: 'Close' }).click();
   });
 
-  test('two-step backdrop dismiss: first click collapses to preview, second closes modal', async ({ page, dashboardPage }) => {
+  test('two-step Escape dismiss: first Escape collapses to preview, second Escape closes modal', async ({ page, dashboardPage }) => {
     await dashboardPage.goto();
+    // Intentionally keep the modal open — see comment in previous test.
     await dashboardPage.clickNewNote();
-    await page.fill('input[placeholder="Note title..."]', 'Backdrop Test');
+    await page.fill('input[placeholder="Note title..."]', 'Dismiss Test');
     await page.fill('textarea[placeholder="Take a note..."]', 'Some content');
 
     const dialog = page.getByRole('dialog');
