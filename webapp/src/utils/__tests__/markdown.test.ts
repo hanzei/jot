@@ -1,3 +1,4 @@
+import { describe, it, expect } from 'vitest';
 import { renderMarkdown } from '../markdown';
 
 describe('renderMarkdown', () => {
