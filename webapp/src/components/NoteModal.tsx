@@ -558,9 +558,9 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   }, []);
 
   useEffect(() => {
-    if (noteType !== 'text') return;
+    if (noteType !== 'text' || !isEditingContent) return;
     resizeContentTextarea(contentRef.current);
-  }, [content, noteType, resizeContentTextarea]);
+  }, [content, noteType, isEditingContent, resizeContentTextarea]);
 
   useEffect(() => {
     if (noteType !== 'text') return;
