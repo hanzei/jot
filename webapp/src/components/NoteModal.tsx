@@ -1734,7 +1734,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                     className="w-full p-2 bg-transparent border-none outline-none resize-none placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white min-h-[6rem]"
                     value={content}
                     onKeyDown={(e) => {
-                      if (e.nativeEvent?.isComposing || e.nativeEvent?.keyCode === 229) return;
+                      if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
                       if (e.key === 'Escape') {
                         e.preventDefault();
                         setIsEditingContent(false);
