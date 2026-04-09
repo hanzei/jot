@@ -1,5 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
-import { useSidebarExpanded } from '@/components/SidebarContext';
+import { useSidebarExpanded, useSidebarMobileCollapse } from '@/components/SidebarContext';
 import {
   CheckIcon,
   EllipsisVerticalIcon,
@@ -35,6 +35,7 @@ const SidebarLabels = ({
 }: SidebarLabelsProps) => {
   const { t } = useTranslation();
   const isExpanded = useSidebarExpanded();
+  const onMobileCollapse = useSidebarMobileCollapse();
   const [editingLabelId, setEditingLabelId] = useState<string | null>(null);
   const [draftName, setDraftName] = useState('');
   const [renamingLabelId, setRenamingLabelId] = useState<string | null>(null);
@@ -205,7 +206,7 @@ const SidebarLabels = ({
                 <div className="relative">
                   <button
                     type="button"
-                    onClick={() => onSelect?.(label.id)}
+                    onClick={(e) => { e.stopPropagation(); onSelect?.(label.id); onMobileCollapse(); }}
                     className={className}
                     aria-describedby={labelCounts ? `label-count-${label.id}` : undefined}
                     aria-pressed={isActive ? true : undefined}

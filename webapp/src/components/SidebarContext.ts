@@ -1,4 +1,12 @@
 import { createContext, useContext } from 'react';
 
-export const SidebarContext = createContext(true);
-export const useSidebarExpanded = () => useContext(SidebarContext);
+interface SidebarContextValue {
+  isExpanded: boolean;
+  onMobileCollapse: () => void;
+}
+
+const SidebarContext = createContext<SidebarContextValue>({ isExpanded: true, onMobileCollapse: () => {} });
+
+export const useSidebarExpanded = () => useContext(SidebarContext).isExpanded;
+export const useSidebarMobileCollapse = () => useContext(SidebarContext).onMobileCollapse;
+export default SidebarContext;
