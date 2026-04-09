@@ -154,7 +154,7 @@ const SidebarLabels = ({
               ? 'bg-blue-100 dark:bg-blue-900/30'
               : 'hover:bg-gray-100 dark:hover:bg-slate-700'
           }`;
-          const buttonClass = `group/label flex items-center flex-1 min-w-0 py-1.5 rounded-md text-sm ${
+          const buttonClass = `group/label flex items-center flex-1 min-w-[2rem] py-1.5 rounded-md text-sm ${
             isActive
               ? 'text-blue-700 dark:text-blue-300 font-medium'
               : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
