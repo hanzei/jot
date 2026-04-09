@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useSidebarExpanded } from '@/components/SidebarContext';
 import {
   CheckIcon,
   EllipsisVerticalIcon,
@@ -33,6 +34,7 @@ const SidebarLabels = ({
   onDelete,
 }: SidebarLabelsProps) => {
   const { t } = useTranslation();
+  const isExpanded = useSidebarExpanded();
   const [editingLabelId, setEditingLabelId] = useState<string | null>(null);
   const [draftName, setDraftName] = useState('');
   const [renamingLabelId, setRenamingLabelId] = useState<string | null>(null);
@@ -207,7 +209,7 @@ const SidebarLabels = ({
                     aria-pressed={isActive ? true : undefined}
                   >
                     <TagIcon className="h-4 w-4 shrink-0" />
-                    <span className="truncate min-w-0">{label.name}</span>
+                    {isExpanded && <span className="truncate min-w-0">{label.name}</span>}
                     {labelCounts && (
                       <span
                         id={`label-count-${label.id}`}
@@ -218,7 +220,7 @@ const SidebarLabels = ({
                       </span>
                     )}
                   </button>
-                  {onRename && onDelete && (
+                  {isExpanded && onRename && onDelete && (
                     <Menu as="div" className="relative shrink-0">
                       <MenuButton
                         aria-label={t('labels.menuOptions', { name: label.name })}
@@ -312,7 +314,7 @@ const SidebarLabels = ({
               className="flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-left text-sm text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20"
             >
               <PlusIcon className="h-4 w-4 shrink-0" />
-              <span>{t('labels.newSidebar')}</span>
+              {isExpanded && <span>{t('labels.newSidebar')}</span>}
             </button>
           )}
         </div>

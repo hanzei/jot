@@ -1,5 +1,6 @@
 import { ReactNode, useState } from 'react';
 import { Link } from 'react-router';
+import { SidebarContext } from '@/components/SidebarContext';
 
 export interface SidebarTab {
   label: string;
@@ -47,6 +48,7 @@ const Sidebar = ({ tabs, bottomTabs, children, collapsed, onCollapse }: SidebarP
       onMouseEnter={() => collapsed && setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
+      <SidebarContext.Provider value={isExpanded}>
       <nav className="flex flex-col shrink-0 space-y-1.5 pt-4 px-2 pb-2">
         {tabs.map((tab) =>
           tab.href ? (
@@ -112,6 +114,7 @@ const Sidebar = ({ tabs, bottomTabs, children, collapsed, onCollapse }: SidebarP
           </nav>
         )}
       </div>
+      </SidebarContext.Provider>
     </aside>
   );
 };
