@@ -1540,10 +1540,10 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     const lineStart = content.lastIndexOf('\n', pos - 1) + 1;
     const lineEnd = content.indexOf('\n', pos);
     const line = content.slice(lineStart, lineEnd === -1 ? undefined : lineEnd);
-    if (line.startsWith('## ')) return;
-    const newContent = content.slice(0, lineStart) + '## ' + content.slice(lineStart);
+    if (line.startsWith('# ')) return;
+    const newContent = content.slice(0, lineStart) + '# ' + content.slice(lineStart);
     setContent(newContent);
-    pendingSelectionRef.current = { start: pos + 3, end: pos + 3 };
+    pendingSelectionRef.current = { start: pos + 2, end: pos + 2 };
     scheduleAutoSaveAfterToolbar();
   }, [content, scheduleAutoSaveAfterToolbar]);
 
