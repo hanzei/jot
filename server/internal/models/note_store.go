@@ -12,12 +12,12 @@ import (
 	"github.com/sirupsen/logrus"
 )
 
-type NoteStore struct {
+type noteStore struct {
 	db *sql.DB
 }
 
-func NewNoteStore(db *sql.DB) *NoteStore {
-	return &NoteStore{db: db}
+func newNoteStore(db *sql.DB) *noteStore {
+	return &noteStore{db: db}
 }
 
 // deref returns *p if p is non-nil, otherwise def.
@@ -28,7 +28,7 @@ func deref[T any](p *T, def T) T {
 	return def
 }
 
-func (s *NoteStore) Create(ctx context.Context, userID string, title, content string, noteType NoteType, color string) (*Note, error) {
+func (s *noteStore) Create(ctx context.Context, userID string, title, content string, noteType NoteType, color string) (*Note, error) {
 	noteID, err := generateID()
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate note ID: %w", err)
@@ -91,7 +91,7 @@ func duplicateNoteTitle(title string) string {
 	return "Copy of " + title
 }
 
-func (s *NoteStore) Duplicate(ctx context.Context, source *Note, userID string) (*Note, error) {
+func (s *noteStore) Duplicate(ctx context.Context, source *Note, userID string) (*Note, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
@@ -250,7 +250,7 @@ func scanNote(rows *sql.Rows) (Note, error) {
 	return note, err
 }
 
-func (s *NoteStore) GetByUserID(ctx context.Context, userID string, archived bool, trashed bool, search string, labelID string, myTasks bool) ([]*Note, error) {
+func (s *noteStore) GetByUserID(ctx context.Context, userID string, archived bool, trashed bool, search string, labelID string, myTasks bool) ([]*Note, error) {
 	query, args := buildGetByUserIDQuery(userID, archived, trashed, search, labelID, myTasks)
 
 	rows, err := s.db.QueryContext(ctx, query, args...)
@@ -277,7 +277,7 @@ func (s *NoteStore) GetByUserID(ctx context.Context, userID string, archived boo
 
 // populateNoteItemsAndDefaults converts scanned notes to []*Note, loading list items
 // for each list note and initializing slice fields to non-nil defaults.
-func (s *NoteStore) populateNoteItemsAndDefaults(ctx context.Context, scannedNotes []Note) ([]*Note, error) {
+func (s *noteStore) populateNoteItemsAndDefaults(ctx context.Context, scannedNotes []Note) ([]*Note, error) {
 	notes := make([]*Note, 0, len(scannedNotes))
 	for i := range scannedNotes {
 		note := &scannedNotes[i]
@@ -297,7 +297,7 @@ func (s *NoteStore) populateNoteItemsAndDefaults(ctx context.Context, scannedNot
 }
 
 // batchLoadSharesAndLabels batch-loads shares and labels for a slice of notes, updating each note in place.
-func (s *NoteStore) batchLoadSharesAndLabels(ctx context.Context, notes []*Note, userID string) error {
+func (s *noteStore) batchLoadSharesAndLabels(ctx context.Context, notes []*Note, userID string) error {
 	if len(notes) == 0 {
 		return nil
 	}
@@ -331,7 +331,7 @@ func (s *NoteStore) batchLoadSharesAndLabels(ctx context.Context, notes []*Note,
 	return nil
 }
 
-func (s *NoteStore) GetByID(ctx context.Context, id string, userID string) (*Note, error) {
+func (s *noteStore) GetByID(ctx context.Context, id string, userID string) (*Note, error) {
 	query := `SELECT n.id, n.user_id, n.title, n.content, n.note_type,
 			  nus.color, nus.pinned, nus.archived, nus.position, nus.unpinned_position, nus.checked_items_collapsed,
 			  n.deleted_at, n.created_at, n.updated_at
@@ -359,7 +359,7 @@ func (s *NoteStore) GetByID(ctx context.Context, id string, userID string) (*Not
 }
 
 // GetByIDAnyState returns an accessible note, including owner-only trashed notes.
-func (s *NoteStore) GetByIDAnyState(ctx context.Context, id string, userID string) (*Note, error) {
+func (s *noteStore) GetByIDAnyState(ctx context.Context, id string, userID string) (*Note, error) {
 	note, err := s.GetByID(ctx, id, userID)
 	if err == nil {
 		return note, nil
@@ -402,7 +402,7 @@ func (s *NoteStore) GetByIDAnyState(ctx context.Context, id string, userID strin
 	return &ownedNote, nil
 }
 
-func (s *NoteStore) populateNoteDetails(ctx context.Context, note *Note, userID string) error {
+func (s *noteStore) populateNoteDetails(ctx context.Context, note *Note, userID string) error {
 	if note.NoteType == NoteTypeList {
 		var items []NoteItem
 		items, err := s.getItemsByNoteID(ctx, note.ID)
@@ -428,7 +428,7 @@ func (s *NoteStore) populateNoteDetails(ctx context.Context, note *Note, userID 
 	return nil
 }
 
-func (s *NoteStore) Update(ctx context.Context, id string, userID string, title, content, color *string, pinned, archived, checkedItemsCollapsed *bool) error {
+func (s *noteStore) Update(ctx context.Context, id string, userID string, title, content, color *string, pinned, archived, checkedItemsCollapsed *bool) error {
 	hasAccess, err := s.HasAccess(ctx, id, userID)
 	if err != nil {
 		return fmt.Errorf("failed to check access: %w", err)
@@ -498,7 +498,7 @@ func (s *NoteStore) Update(ctx context.Context, id string, userID string, title,
 }
 
 // handlePinStatusChangeTx updates note positions when a note is pinned or unpinned within a transaction.
-func (s *NoteStore) handlePinStatusChangeTx(ctx context.Context, tx *sql.Tx, id, ownerID string, currentNote *Note, nowPinned bool) error {
+func (s *noteStore) handlePinStatusChangeTx(ctx context.Context, tx *sql.Tx, id, ownerID string, currentNote *Note, nowPinned bool) error {
 	if nowPinned {
 		return s.handlePinningTx(ctx, tx, id, ownerID, currentNote)
 	}
@@ -506,7 +506,7 @@ func (s *NoteStore) handlePinStatusChangeTx(ctx context.Context, tx *sql.Tx, id,
 }
 
 // handlePinningTx stores the current position as unpinned_position and moves the note to the end of the pinned list.
-func (s *NoteStore) handlePinningTx(ctx context.Context, tx *sql.Tx, id, userID string, currentNote *Note) error {
+func (s *noteStore) handlePinningTx(ctx context.Context, tx *sql.Tx, id, userID string, currentNote *Note) error {
 	var maxPosition int
 	posQuery := `SELECT COALESCE(MAX(nus.position), -1)
 	             FROM note_user_state nus
@@ -526,7 +526,7 @@ func (s *NoteStore) handlePinningTx(ctx context.Context, tx *sql.Tx, id, userID 
 }
 
 // handleUnpinningTx restores the note to its saved unpinned_position, or appends it to the end of the unpinned list.
-func (s *NoteStore) handleUnpinningTx(ctx context.Context, tx *sql.Tx, id, userID string, currentNote *Note) error {
+func (s *noteStore) handleUnpinningTx(ctx context.Context, tx *sql.Tx, id, userID string, currentNote *Note) error {
 	var targetPosition int
 
 	if currentNote.UnpinnedPosition != nil {
@@ -564,7 +564,7 @@ func (s *NoteStore) handleUnpinningTx(ctx context.Context, tx *sql.Tx, id, userI
 	return nil
 }
 
-func (s *NoteStore) Delete(ctx context.Context, id string, userID string) error {
+func (s *noteStore) Delete(ctx context.Context, id string, userID string) error {
 	isOwner, err := s.IsOwner(ctx, id, userID)
 	if err != nil {
 		return fmt.Errorf("failed to check ownership: %w", err)
@@ -619,7 +619,7 @@ func buildInClauseArgs(ids []string) (string, []any) {
 	return strings.Join(placeholders, ","), args
 }
 
-func (s *NoteStore) getTrashedOwnedNoteIDsTx(ctx context.Context, tx *sql.Tx, userID string) ([]string, error) {
+func (s *noteStore) getTrashedOwnedNoteIDsTx(ctx context.Context, tx *sql.Tx, userID string) ([]string, error) {
 	rows, err := tx.QueryContext(ctx, `SELECT id FROM notes WHERE user_id = ? AND deleted_at IS NOT NULL ORDER BY deleted_at ASC, id ASC`, userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to query trashed notes: %w", err)
@@ -636,7 +636,7 @@ func (s *NoteStore) getTrashedOwnedNoteIDsTx(ctx context.Context, tx *sql.Tx, us
 	return ids, nil
 }
 
-func (s *NoteStore) getNoteAudiencesTx(ctx context.Context, tx *sql.Tx, noteIDs []string) (map[string][]string, error) {
+func (s *noteStore) getNoteAudiencesTx(ctx context.Context, tx *sql.Tx, noteIDs []string) (map[string][]string, error) {
 	if len(noteIDs) == 0 {
 		return map[string][]string{}, nil
 	}
@@ -692,7 +692,7 @@ func deleteNoteDependenciesTx(ctx context.Context, tx *sql.Tx, noteIDs []string)
 
 // MoveToTrash soft-deletes a note by setting deleted_at to the current time.
 // Only the owner can move a note to trash; it disappears from all collaborators' views.
-func (s *NoteStore) MoveToTrash(ctx context.Context, id string, userID string) error {
+func (s *noteStore) MoveToTrash(ctx context.Context, id string, userID string) error {
 	isOwner, err := s.IsOwner(ctx, id, userID)
 	if err != nil {
 		return fmt.Errorf("failed to check ownership: %w", err)
@@ -741,7 +741,7 @@ func (s *NoteStore) MoveToTrash(ctx context.Context, id string, userID string) e
 
 // RestoreFromTrash clears deleted_at and places the restored note at position 0
 // of the unpinned active list, shifting existing notes down.
-func (s *NoteStore) RestoreFromTrash(ctx context.Context, id string, userID string) error {
+func (s *noteStore) RestoreFromTrash(ctx context.Context, id string, userID string) error {
 	isOwner, err := s.IsOwner(ctx, id, userID)
 	if err != nil {
 		return fmt.Errorf("failed to check ownership: %w", err)
@@ -804,7 +804,7 @@ func (s *NoteStore) RestoreFromTrash(ctx context.Context, id string, userID stri
 
 // DeleteFromTrash permanently removes a note that is already in the trash.
 // It returns ErrNoteNotInTrash if the note is not found in the trash or not owned by the user.
-func (s *NoteStore) DeleteFromTrash(ctx context.Context, id string, userID string) error {
+func (s *noteStore) DeleteFromTrash(ctx context.Context, id string, userID string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
@@ -840,7 +840,7 @@ func (s *NoteStore) DeleteFromTrash(ctx context.Context, id string, userID strin
 // EmptyTrash permanently removes all notes the user currently has in the trash.
 // It returns the deleted note IDs and their audiences so handlers can publish
 // note_deleted SSE events after the transaction commits.
-func (s *NoteStore) EmptyTrash(ctx context.Context, userID string) ([]DeletedNoteAudience, error) {
+func (s *noteStore) EmptyTrash(ctx context.Context, userID string) ([]DeletedNoteAudience, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
@@ -903,7 +903,7 @@ func (s *NoteStore) EmptyTrash(ctx context.Context, userID string) ([]DeletedNot
 
 // PurgeOldTrashedNotes permanently deletes all notes that have been in the trash
 // longer than the given duration. This is intended to be called periodically.
-func (s *NoteStore) PurgeOldTrashedNotes(ctx context.Context, olderThan time.Duration) error {
+func (s *noteStore) PurgeOldTrashedNotes(ctx context.Context, olderThan time.Duration) error {
 	cutoff := time.Now().Add(-olderThan)
 
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -950,7 +950,7 @@ func scanNoteItem(rows *sql.Rows) (NoteItem, error) {
 	return item, err
 }
 
-func (s *NoteStore) getItemsByNoteID(ctx context.Context, noteID string) ([]NoteItem, error) {
+func (s *noteStore) getItemsByNoteID(ctx context.Context, noteID string) ([]NoteItem, error) {
 	query := `SELECT id, note_id, text, completed, position, indent_level,
 			  assigned_to, created_at, updated_at
 			  FROM note_items WHERE note_id = ? ORDER BY position`
@@ -967,7 +967,7 @@ func (s *NoteStore) getItemsByNoteID(ctx context.Context, noteID string) ([]Note
 	return items, nil
 }
 
-func (s *NoteStore) CreateItem(ctx context.Context, noteID string, text string, position, indentLevel int, assignedTo string) (*NoteItem, error) {
+func (s *noteStore) CreateItem(ctx context.Context, noteID string, text string, position, indentLevel int, assignedTo string) (*NoteItem, error) {
 	itemID, err := generateID()
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate item ID: %w", err)
@@ -999,7 +999,7 @@ func (s *NoteStore) CreateItem(ctx context.Context, noteID string, text string, 
 // UpdateItem updates text, completed, position, and indent_level for a note item.
 // It does NOT update assigned_to. The current update flow uses delete-and-recreate
 // via CreateItemWithCompleted which preserves assignments via the caller-supplied value.
-func (s *NoteStore) UpdateItem(ctx context.Context, id string, text string, completed bool, position, indentLevel int) error {
+func (s *noteStore) UpdateItem(ctx context.Context, id string, text string, completed bool, position, indentLevel int) error {
 	query := `UPDATE note_items SET text = ?, completed = ?, position = ?, indent_level = ?, updated_at = CURRENT_TIMESTAMP
 			  WHERE id = ?`
 
@@ -1011,7 +1011,7 @@ func (s *NoteStore) UpdateItem(ctx context.Context, id string, text string, comp
 	return nil
 }
 
-func (s *NoteStore) DeleteItem(ctx context.Context, id string) error {
+func (s *noteStore) DeleteItem(ctx context.Context, id string) error {
 	_, err := s.db.ExecContext(ctx, "DELETE FROM note_items WHERE id = ?", id)
 	if err != nil {
 		return fmt.Errorf("failed to delete note item: %w", err)
@@ -1020,7 +1020,7 @@ func (s *NoteStore) DeleteItem(ctx context.Context, id string) error {
 	return nil
 }
 
-func (s *NoteStore) DeleteItemsByNoteID(ctx context.Context, noteID string) error {
+func (s *noteStore) DeleteItemsByNoteID(ctx context.Context, noteID string) error {
 	_, err := s.db.ExecContext(ctx, "DELETE FROM note_items WHERE note_id = ?", noteID)
 	if err != nil {
 		return fmt.Errorf("failed to delete note items: %w", err)
@@ -1028,7 +1028,7 @@ func (s *NoteStore) DeleteItemsByNoteID(ctx context.Context, noteID string) erro
 	return nil
 }
 
-func (s *NoteStore) CreateItemWithCompleted(ctx context.Context, noteID string, text string, position int, completed bool, indentLevel int, assignedTo string) (*NoteItem, error) {
+func (s *noteStore) CreateItemWithCompleted(ctx context.Context, noteID string, text string, position int, completed bool, indentLevel int, assignedTo string) (*NoteItem, error) {
 	itemID, err := generateID()
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate item ID: %w", err)
@@ -1057,7 +1057,7 @@ func (s *NoteStore) CreateItemWithCompleted(ctx context.Context, noteID string, 
 	return &item, nil
 }
 
-func (s *NoteStore) HasAccess(ctx context.Context, noteID string, userID string) (bool, error) {
+func (s *noteStore) HasAccess(ctx context.Context, noteID string, userID string) (bool, error) {
 	// Use the same predicate as GetByID: a note_user_state row exists for both
 	// owners and collaborators, so this is a single consistent access check.
 	var count int
@@ -1073,7 +1073,7 @@ func (s *NoteStore) HasAccess(ctx context.Context, noteID string, userID string)
 	return count > 0, nil
 }
 
-func (s *NoteStore) IsOwner(ctx context.Context, noteID string, userID string) (bool, error) {
+func (s *noteStore) IsOwner(ctx context.Context, noteID string, userID string) (bool, error) {
 	var count int
 	query := `SELECT COUNT(*) FROM notes WHERE id = ? AND user_id = ?`
 
@@ -1086,7 +1086,7 @@ func (s *NoteStore) IsOwner(ctx context.Context, noteID string, userID string) (
 }
 
 // GetOwnerID returns the owner user ID for a note.
-func (s *NoteStore) GetOwnerID(ctx context.Context, noteID string) (string, error) {
+func (s *noteStore) GetOwnerID(ctx context.Context, noteID string) (string, error) {
 	var ownerID string
 	err := s.db.QueryRowContext(ctx, `SELECT user_id FROM notes WHERE id = ?`, noteID).Scan(&ownerID)
 	if err != nil {
@@ -1098,7 +1098,7 @@ func (s *NoteStore) GetOwnerID(ctx context.Context, noteID string) (string, erro
 	return ownerID, nil
 }
 
-func (s *NoteStore) ReorderNotes(ctx context.Context, userID string, noteIDs []string) error {
+func (s *noteStore) ReorderNotes(ctx context.Context, userID string, noteIDs []string) error {
 	if len(noteIDs) == 0 {
 		return nil
 	}
@@ -1146,7 +1146,7 @@ func (s *NoteStore) ReorderNotes(ctx context.Context, userID string, noteIDs []s
 // GetCollaboratorIDs returns the IDs of all users who share at least one note
 // with userID (in either direction). Used to determine who to notify when a
 // user's profile icon changes.
-func (s *NoteStore) GetCollaboratorIDs(ctx context.Context, userID string) ([]string, error) {
+func (s *noteStore) GetCollaboratorIDs(ctx context.Context, userID string) ([]string, error) {
 	query := `
 		SELECT DISTINCT shared_with_user_id FROM note_shares WHERE shared_by_user_id = ?
 		UNION
@@ -1170,7 +1170,7 @@ func (s *NoteStore) GetCollaboratorIDs(ctx context.Context, userID string) ([]st
 
 // GetNoteAudienceIDs returns the owner's user ID plus all shared_with user IDs for a note.
 // Used by handlers to determine who to broadcast SSE events to.
-func (s *NoteStore) GetNoteAudienceIDs(ctx context.Context, noteID string) ([]string, error) {
+func (s *noteStore) GetNoteAudienceIDs(ctx context.Context, noteID string) ([]string, error) {
 	query := `
 		SELECT user_id FROM notes WHERE id = ?
 		UNION
@@ -1193,7 +1193,7 @@ func (s *NoteStore) GetNoteAudienceIDs(ctx context.Context, noteID string) ([]st
 }
 
 // GetNoteLabels returns labels attached to a note by a specific user.
-func (s *NoteStore) GetNoteLabels(ctx context.Context, noteID string, userID string) ([]Label, error) {
+func (s *noteStore) GetNoteLabels(ctx context.Context, noteID string, userID string) ([]Label, error) {
 	query := `SELECT l.id, l.user_id, l.name, l.created_at, l.updated_at
 			  FROM labels l
 			  JOIN note_labels nl ON l.id = nl.label_id
@@ -1215,7 +1215,7 @@ func (s *NoteStore) GetNoteLabels(ctx context.Context, noteID string, userID str
 }
 
 // getLabelsByNoteIDs batch-loads labels for a set of note IDs for a specific user, returning a map of noteID -> []Label.
-func (s *NoteStore) getLabelsByNoteIDs(ctx context.Context, noteIDs []string, userID string) (map[string][]Label, error) {
+func (s *noteStore) getLabelsByNoteIDs(ctx context.Context, noteIDs []string, userID string) (map[string][]Label, error) {
 	if len(noteIDs) == 0 {
 		return map[string][]Label{}, nil
 	}
@@ -1260,7 +1260,7 @@ func (s *NoteStore) getLabelsByNoteIDs(ctx context.Context, noteIDs []string, us
 }
 
 // AddLabelToNote attaches a label to a note (user must have access).
-func (s *NoteStore) AddLabelToNote(ctx context.Context, noteID, labelID, userID string) error {
+func (s *noteStore) AddLabelToNote(ctx context.Context, noteID, labelID, userID string) error {
 	hasAccess, err := s.HasAccess(ctx, noteID, userID)
 	if err != nil {
 		return fmt.Errorf("failed to check access: %w", err)
@@ -1299,7 +1299,7 @@ func (s *NoteStore) AddLabelToNote(ctx context.Context, noteID, labelID, userID 
 // including their list items and labels, for use in the export endpoint.
 // It filters on notes.user_id (not note_user_state.user_id) so notes merely
 // shared with the current user are never included.
-func (s *NoteStore) GetOwnedNotesForExport(ctx context.Context, userID string) ([]*Note, error) {
+func (s *noteStore) GetOwnedNotesForExport(ctx context.Context, userID string) ([]*Note, error) {
 	query := `SELECT n.id, n.user_id, n.title, n.content, n.note_type,
 			  nus.color, nus.pinned, nus.archived, nus.position, nus.unpinned_position, nus.checked_items_collapsed,
 			  n.deleted_at, n.created_at, n.updated_at
@@ -1374,7 +1374,7 @@ type importedNote struct {
 // unpinned, archived pinned, and archived unpinned notes each get sequential positions
 // matching the exported ordering. unpinned_position is preserved when present in the
 // import payload and falls back to the assigned rank within the bucket otherwise.
-func (s *NoteStore) ImportJotNotes(ctx context.Context, userID string, notes []JotImportNote) error {
+func (s *noteStore) ImportJotNotes(ctx context.Context, userID string, notes []JotImportNote) error {
 	if len(notes) == 0 {
 		return nil
 	}
@@ -1543,7 +1543,7 @@ func reorderImportedNotesTx(ctx context.Context, tx *sql.Tx, userID string, impo
 }
 
 // RemoveLabelFromNote detaches a label from a note (user must have access).
-func (s *NoteStore) RemoveLabelFromNote(ctx context.Context, noteID, labelID, userID string) error {
+func (s *noteStore) RemoveLabelFromNote(ctx context.Context, noteID, labelID, userID string) error {
 	hasAccess, err := s.HasAccess(ctx, noteID, userID)
 	if err != nil {
 		return fmt.Errorf("failed to check access: %w", err)

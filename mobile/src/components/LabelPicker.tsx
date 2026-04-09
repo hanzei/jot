@@ -7,11 +7,11 @@ import {
   ScrollView,
   TextInput,
   StyleSheet,
-  SafeAreaView,
   Pressable,
   ActivityIndicator,
   Alert,
 } from 'react-native';
+import { SafeAreaView } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useTranslation } from 'react-i18next';
 import type { Label } from '@jot/shared';

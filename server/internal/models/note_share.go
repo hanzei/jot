@@ -18,7 +18,7 @@ func scanNoteShare(rows *sql.Rows) (NoteShare, error) {
 	return share, err
 }
 
-func (s *NoteStore) GetNoteShares(ctx context.Context, noteID string) ([]NoteShare, error) {
+func (s *noteStore) GetNoteShares(ctx context.Context, noteID string) ([]NoteShare, error) {
 	query := `SELECT ns.id, ns.note_id, ns.shared_with_user_id, ns.shared_by_user_id,
 			  ns.permission_level, u.username, u.first_name, u.last_name,
 			  u.profile_icon IS NOT NULL AS has_profile_icon,
@@ -43,7 +43,7 @@ func (s *NoteStore) GetNoteShares(ctx context.Context, noteID string) ([]NoteSha
 	return shares, nil
 }
 
-func (s *NoteStore) ShareNote(ctx context.Context, noteID string, sharedByUserID, sharedWithUserID string) error {
+func (s *noteStore) ShareNote(ctx context.Context, noteID string, sharedByUserID, sharedWithUserID string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
@@ -77,7 +77,7 @@ func (s *NoteStore) ShareNote(ctx context.Context, noteID string, sharedByUserID
 	return tx.Commit()
 }
 
-func (s *NoteStore) UnshareNote(ctx context.Context, noteID string, sharedWithUserID string) error {
+func (s *noteStore) UnshareNote(ctx context.Context, noteID string, sharedWithUserID string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)
@@ -150,7 +150,7 @@ func (s *NoteStore) UnshareNote(ctx context.Context, noteID string, sharedWithUs
 //  2. Removes any remaining note_shares rows where the user was the sharer.
 //  3. Clears assignments from other users on notes that are now fully unshared,
 //     enforcing the invariant that unshared notes cannot have assignments.
-func (s *NoteStore) ClearUserAssignmentsTx(ctx context.Context, tx *sql.Tx, userID string) error {
+func (s *noteStore) ClearUserAssignmentsTx(ctx context.Context, tx *sql.Tx, userID string) error {
 	if _, err := tx.ExecContext(
 		ctx,
 		`DELETE FROM note_shares WHERE shared_with_user_id = ?`,
@@ -201,7 +201,7 @@ func (s *NoteStore) ClearUserAssignmentsTx(ctx context.Context, tx *sql.Tx, user
 const sharesBatchSize = 500
 
 // getSharesByNoteIDs batch-loads note shares for a set of note IDs, returning a map of noteID -> []NoteShare.
-func (s *NoteStore) getSharesByNoteIDs(ctx context.Context, noteIDs []string) (map[string][]NoteShare, error) {
+func (s *noteStore) getSharesByNoteIDs(ctx context.Context, noteIDs []string) (map[string][]NoteShare, error) {
 	if len(noteIDs) == 0 {
 		return map[string][]NoteShare{}, nil
 	}

@@ -16,18 +16,18 @@ type UserSettings struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
-type UserSettingsStore struct {
+type userSettingsStore struct {
 	db *sql.DB
 }
 
-func NewUserSettingsStore(db *sql.DB) *UserSettingsStore {
-	return &UserSettingsStore{db: db}
+func newUserSettingsStore(db *sql.DB) *userSettingsStore {
+	return &userSettingsStore{db: db}
 }
 
 // GetOrCreate returns existing settings for the user, or creates a row with
 // defaults and returns those. The operation is atomic: if two goroutines race
 // to create the row, one will win the INSERT and both will read consistent data.
-func (s *UserSettingsStore) GetOrCreate(ctx context.Context, userID string) (*UserSettings, error) {
+func (s *userSettingsStore) GetOrCreate(ctx context.Context, userID string) (*UserSettings, error) {
 	settings := &UserSettings{UserID: userID}
 	err := s.db.QueryRowContext(ctx,
 		`INSERT INTO user_settings (user_id, language, theme, note_sort) VALUES (?, 'system', 'system', 'manual')
@@ -54,7 +54,7 @@ func (s *UserSettingsStore) GetOrCreate(ctx context.Context, userID string) (*Us
 
 // Update persists the language, theme, and note sort preferences for the given user and
 // returns the updated settings.
-func (s *UserSettingsStore) Update(ctx context.Context, userID, language, theme, noteSort string) (*UserSettings, error) {
+func (s *userSettingsStore) Update(ctx context.Context, userID, language, theme, noteSort string) (*UserSettings, error) {
 	settings := &UserSettings{UserID: userID}
 	err := s.db.QueryRowContext(ctx,
 		`INSERT INTO user_settings (user_id, language, theme, note_sort) VALUES (?, ?, ?, ?)

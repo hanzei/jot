@@ -20,12 +20,12 @@ type PersonalAccessToken struct {
 	CreatedAt time.Time `json:"created_at"`
 }
 
-type PATStore struct {
+type patStore struct {
 	db *sql.DB
 }
 
-func NewPATStore(db *sql.DB) *PATStore {
-	return &PATStore{db: db}
+func newPATStore(db *sql.DB) *patStore {
+	return &patStore{db: db}
 }
 
 func generatePATToken() (string, error) {
@@ -45,7 +45,7 @@ func hashPATToken(rawToken string) string {
 // It returns the PAT record and the raw token string. The raw token is
 // returned only once — callers must present it to the user immediately,
 // as only the hash is stored.
-func (s *PATStore) Create(ctx context.Context, userID, name string) (*PersonalAccessToken, string, error) {
+func (s *patStore) Create(ctx context.Context, userID, name string) (*PersonalAccessToken, string, error) {
 	id, err := generateID()
 	if err != nil {
 		return nil, "", fmt.Errorf("create personal access token: %w", err)
@@ -73,7 +73,7 @@ func (s *PATStore) Create(ctx context.Context, userID, name string) (*PersonalAc
 }
 
 // GetByUserID returns all personal access tokens for the given user, ordered by creation date descending.
-func (s *PATStore) GetByUserID(ctx context.Context, userID string) (pats []*PersonalAccessToken, err error) {
+func (s *patStore) GetByUserID(ctx context.Context, userID string) (pats []*PersonalAccessToken, err error) {
 	query := `SELECT id, user_id, name, created_at FROM personal_access_tokens WHERE user_id = ? ORDER BY created_at DESC, id DESC`
 
 	rows, err := s.db.QueryContext(ctx, query, userID)
@@ -102,7 +102,7 @@ func (s *PATStore) GetByUserID(ctx context.Context, userID string) (pats []*Pers
 
 // GetByTokenHash looks up a personal access token by the SHA-256 hash of the raw token.
 // Used by the auth middleware to validate Bearer tokens.
-func (s *PATStore) GetByTokenHash(ctx context.Context, rawToken string) (*PersonalAccessToken, error) {
+func (s *patStore) GetByTokenHash(ctx context.Context, rawToken string) (*PersonalAccessToken, error) {
 	tokenHash := hashPATToken(rawToken)
 
 	var pat PersonalAccessToken
@@ -120,7 +120,7 @@ func (s *PATStore) GetByTokenHash(ctx context.Context, rawToken string) (*Person
 
 // Delete removes a personal access token by ID, but only if it belongs to the given user.
 // Returns true if a token was deleted, false if not found or not owned by the user.
-func (s *PATStore) Delete(ctx context.Context, id, userID string) (bool, error) {
+func (s *patStore) Delete(ctx context.Context, id, userID string) (bool, error) {
 	query := `DELETE FROM personal_access_tokens WHERE id = ? AND user_id = ?`
 	result, err := s.db.ExecContext(ctx, query, id, userID)
 	if err != nil {

@@ -60,7 +60,9 @@ func (s *SessionService) AuthMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func (s *SessionService) authenticateWithPAT(ctx context.Context, rawToken string) (*models.User, error) {
+func (s *SessionService) authenticateWithPAT(ctx context.Context, rawToken string) (_ *models.User, err error) {
+	ctx, end := startSpan(ctx, s.tracer, "SessionService.authenticateWithPAT", &err)
+	defer end()
 	pat, err := s.patStore.GetByTokenHash(ctx, rawToken)
 	if err != nil {
 		return nil, err

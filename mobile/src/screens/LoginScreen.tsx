@@ -61,6 +61,7 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
     <KeyboardAvoidingView
       style={[styles.container, { backgroundColor: colors.surface }]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
+      enabled={Platform.OS === 'ios'}
     >
       <View style={styles.inner}>
         <Text style={[styles.title, { color: colors.text }]}>Jot</Text>
