@@ -155,7 +155,7 @@ const SidebarLabels = ({
           const isRenaming = renamingLabelId === label.id;
 
           return (
-            <li key={label.id} className="group">
+            <li key={label.id}>
               {isEditing ? (
                 <div className="flex items-center gap-1 rounded-md px-2 py-1.5 bg-gray-100 dark:bg-slate-700">
                   <TagIcon className="h-4 w-4 shrink-0 text-gray-500 dark:text-gray-300" />
@@ -204,23 +204,24 @@ const SidebarLabels = ({
                   <button
                     type="button"
                     onClick={() => onSelect?.(label.id)}
-                    className={className}
+                    className={`group/label ${className}`}
                     aria-describedby={labelCounts ? `label-count-${label.id}` : undefined}
                     aria-pressed={isActive ? true : undefined}
                   >
                     <TagIcon className="h-4 w-4 shrink-0" />
-                    {isExpanded && <span className="truncate min-w-0">{label.name}</span>}
+                    <span className={`truncate min-w-0 overflow-hidden transition-[max-width,opacity] duration-200 ${isExpanded ? 'max-w-[12rem] opacity-100' : 'max-w-0 opacity-0'}`}>{label.name}</span>
                     {labelCounts && (
                       <span
                         id={`label-count-${label.id}`}
                         data-testid={`label-count-${label.id}`}
-                        className={`ml-auto shrink-0 text-xs transition-opacity opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 ${isActive ? 'text-blue-600 dark:text-blue-300' : 'text-gray-400 dark:text-gray-500'}`}
+                        className={`ml-auto shrink-0 text-xs transition-opacity opacity-0 group-hover/label:opacity-100 ${isActive ? 'text-blue-600 dark:text-blue-300' : 'text-gray-400 dark:text-gray-500'}`}
                       >
                         {labelCounts[label.id] ?? 0}
                       </span>
                     )}
                   </button>
-                  {isExpanded && onRename && onDelete && (
+                  {onRename && onDelete && (
+                    <div className={`transition-opacity duration-200 shrink-0 ${isExpanded ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
                     <Menu as="div" className="relative shrink-0">
                       <MenuButton
                         aria-label={t('labels.menuOptions', { name: label.name })}
@@ -255,6 +256,7 @@ const SidebarLabels = ({
                         </div>
                       </MenuItems>
                     </Menu>
+                    </div>
                   )}
                 </div>
               )}
@@ -263,7 +265,7 @@ const SidebarLabels = ({
         })}
       </ul>
       {onCreate && (
-        <div className="mt-2 border-t border-gray-200 pt-2 dark:border-slate-700">
+        <div className="mt-2">
           {creatingLabel ? (
             <div className="flex items-center gap-1 rounded-md px-2 py-1.5 bg-gray-100 dark:bg-slate-700">
               <TagIcon className="h-4 w-4 shrink-0 text-gray-500 dark:text-gray-300" />
@@ -308,14 +310,19 @@ const SidebarLabels = ({
               </button>
             </div>
           ) : (
-            <button
-              type="button"
-              onClick={startCreate}
-              className="flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-left text-sm text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20"
-            >
-              <PlusIcon className="h-4 w-4 shrink-0" />
-              {isExpanded && <span>{t('labels.newSidebar')}</span>}
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={startCreate}
+                className="flex w-full items-center rounded-md py-1.5 text-sm text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20"
+              >
+                <span className="flex items-center justify-center shrink-0 w-8">
+                  <PlusIcon className="h-4 w-4" />
+                </span>
+                <span className={`overflow-hidden whitespace-nowrap transition-[max-width,opacity] duration-200 ${isExpanded ? 'max-w-[12rem] opacity-100' : 'max-w-0 opacity-0'}`}>{t('labels.newSidebar')}</span>
+              </button>
+              <div className="mt-2 border-t border-gray-200 dark:border-slate-700" />
+            </>
           )}
         </div>
       )}
