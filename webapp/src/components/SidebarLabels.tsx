@@ -146,7 +146,9 @@ const SidebarLabels = ({
       <ul className="space-y-0.5">
         {labels.map((label) => {
           const isActive = selectedLabelId === label.id;
-          const className = `flex items-center gap-2 flex-1 min-w-0 text-left px-3 py-1.5 rounded-md text-sm ${
+          const className = `group/label flex items-center w-full h-8 rounded-md text-sm ${
+            onRename && onDelete ? 'pr-7' : ''
+          } ${
             isActive
               ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium'
               : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-slate-700'
@@ -200,15 +202,17 @@ const SidebarLabels = ({
                   </button>
                 </div>
               ) : (
-                <div className="flex items-center gap-1">
+                <div className="relative">
                   <button
                     type="button"
                     onClick={() => onSelect?.(label.id)}
-                    className={`group/label ${className}`}
+                    className={className}
                     aria-describedby={labelCounts ? `label-count-${label.id}` : undefined}
                     aria-pressed={isActive ? true : undefined}
                   >
-                    <TagIcon className="h-4 w-4 shrink-0" />
+                    <span className="flex items-center justify-center shrink-0 w-8">
+                      <TagIcon className="h-4 w-4" />
+                    </span>
                     <span className={`truncate min-w-0 overflow-hidden transition-[max-width,opacity] duration-200 ${isExpanded ? 'max-w-[12rem] opacity-100' : 'max-w-0 opacity-0'}`}>{label.name}</span>
                     {labelCounts && (
                       <span
@@ -221,41 +225,41 @@ const SidebarLabels = ({
                     )}
                   </button>
                   {onRename && onDelete && (
-                    <div className={`transition-opacity duration-200 shrink-0 ${isExpanded ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
-                    <Menu as="div" className="relative shrink-0">
-                      <MenuButton
-                        aria-label={t('labels.menuOptions', { name: label.name })}
-                        className="shrink-0 rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-slate-700 dark:hover:text-white"
-                      >
-                        <EllipsisVerticalIcon className="h-4 w-4" />
-                      </MenuButton>
-                      <MenuItems
-                        className="absolute right-0 z-20 mt-1 w-40 rounded-md border border-gray-200 bg-white shadow-lg ring-1 ring-black/5 focus:outline-none dark:border-slate-600 dark:bg-slate-800"
-                      >
-                        <div className="py-1">
-                          <MenuItem>
-                            <button
-                              type="button"
-                              onClick={() => startRename(label)}
-                              className="flex w-full items-center px-4 py-2 text-sm text-gray-700 data-[focus]:bg-gray-100 dark:text-gray-200 dark:data-[focus]:bg-slate-700"
-                            >
-                              <PencilIcon className="mr-2 h-4 w-4" />
-                              {t('labels.rename')}
-                            </button>
-                          </MenuItem>
-                          <MenuItem>
-                            <button
-                              type="button"
-                              onClick={() => setDeleteTarget(label)}
-                              className="flex w-full items-center px-4 py-2 text-sm text-red-600 data-[focus]:bg-gray-100 dark:text-red-400 dark:data-[focus]:bg-slate-700"
-                            >
-                              <TrashIcon className="mr-2 h-4 w-4" />
-                              {t('labels.delete')}
-                            </button>
-                          </MenuItem>
-                        </div>
-                      </MenuItems>
-                    </Menu>
+                    <div className={`absolute right-0 inset-y-0 flex items-center transition-opacity duration-200 ${isExpanded ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+                      <Menu as="div" className="relative">
+                        <MenuButton
+                          aria-label={t('labels.menuOptions', { name: label.name })}
+                          className="rounded-md p-1.5 text-gray-400"
+                        >
+                          <EllipsisVerticalIcon className="h-4 w-4" />
+                        </MenuButton>
+                        <MenuItems
+                          className="absolute right-0 z-20 mt-1 w-40 rounded-md border border-gray-200 bg-white shadow-lg ring-1 ring-black/5 focus:outline-none dark:border-slate-600 dark:bg-slate-800"
+                        >
+                          <div className="py-1">
+                            <MenuItem>
+                              <button
+                                type="button"
+                                onClick={() => startRename(label)}
+                                className="flex w-full items-center px-4 py-2 text-sm text-gray-700 data-[focus]:bg-gray-100 dark:text-gray-200 dark:data-[focus]:bg-slate-700"
+                              >
+                                <PencilIcon className="mr-2 h-4 w-4" />
+                                {t('labels.rename')}
+                              </button>
+                            </MenuItem>
+                            <MenuItem>
+                              <button
+                                type="button"
+                                onClick={() => setDeleteTarget(label)}
+                                className="flex w-full items-center px-4 py-2 text-sm text-red-600 data-[focus]:bg-gray-100 dark:text-red-400 dark:data-[focus]:bg-slate-700"
+                              >
+                                <TrashIcon className="mr-2 h-4 w-4" />
+                                {t('labels.delete')}
+                              </button>
+                            </MenuItem>
+                          </div>
+                        </MenuItems>
+                      </Menu>
                     </div>
                   )}
                 </div>
