@@ -163,7 +163,7 @@ const SidebarLabels = ({
               ? 'bg-blue-100 dark:bg-blue-900/30'
               : 'hover:bg-gray-100 dark:hover:bg-slate-700'
           }`;
-          const buttonClass = `group/label flex items-center gap-2 flex-1 min-w-0 text-left px-3 py-1.5 rounded-md text-sm ${
+          const buttonClass = `group/label flex items-center flex-1 min-w-0 py-1.5 rounded-md text-sm ${
             isActive
               ? 'text-blue-700 dark:text-blue-300 font-medium'
               : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
@@ -225,7 +225,9 @@ const SidebarLabels = ({
                     aria-describedby={labelCounts ? `label-count-${label.id}` : undefined}
                     aria-pressed={isActive ? true : undefined}
                   >
-                    <TagIcon className="h-4 w-4 shrink-0" />
+                    <span className="flex items-center justify-center shrink-0 w-8">
+                      <TagIcon className="h-4 w-4" />
+                    </span>
                     <span className={`truncate min-w-0 overflow-hidden transition-[max-width,opacity] duration-200 ${isExpanded ? 'max-w-[12rem] opacity-100' : 'max-w-0 opacity-0'}`}>{label.name}</span>
                     {labelCounts && (
                       <span
