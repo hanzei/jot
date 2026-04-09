@@ -36,6 +36,9 @@ body {
 
 @layer components {
   /* Rendered markdown content — applied to both note cards and the modal preview div. */
+  .markdown-content h1 {
+    @apply font-bold text-[1.2em] mb-1 mt-2 first:mt-0;
+  }
   .markdown-content h2 {
     @apply font-bold text-[1.05em] mb-1 mt-2 first:mt-0;
   }

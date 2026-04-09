@@ -59,9 +59,9 @@ describe('renderMarkdown', () => {
     expect(renderMarkdown('hello world')).toContain('hello world');
   });
 
-  it('strips h1 headings (only h2/h3 allowed)', () => {
+  it('renders h1 headings', () => {
     const result = renderMarkdown('# Top heading');
-    expect(result).not.toContain('<h1>');
-    expect(result).toContain('Top heading'); // text still present
+    expect(result).toContain('<h1>');
+    expect(result).toContain('Top heading');
   });
 });

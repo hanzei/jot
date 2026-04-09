@@ -13,9 +13,8 @@ marked.use({
   },
 });
 
-// h1 excluded intentionally — note titles are rendered as h1 in the UI; allowing ## and ### only
 const ALLOWED_TAGS = [
-  'p', 'br', 'h2', 'h3',
+  'p', 'br', 'h1', 'h2', 'h3',
   'strong', 'em',
   'ul', 'ol', 'li',
   'blockquote', 'code',
