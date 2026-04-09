@@ -1188,19 +1188,5 @@ describe('NoteModal', () => {
       expect(screen.getByTestId('note-content-preview')).toBeInTheDocument()
     })
 
-    it('shows formatting toolbar when editing', () => {
-      const note = createMockNote({ note_type: 'text', content: '' })
-      renderNoteModal({ ...defaultProps, note })
-      fireEvent.click(screen.getByTestId('note-content-preview'))
-      expect(screen.getByRole('button', { name: /bold/i })).toBeInTheDocument()
-      expect(screen.getByRole('button', { name: /italic/i })).toBeInTheDocument()
-    })
-
-    it('hides formatting toolbar in preview mode', () => {
-      const note = createMockNote({ note_type: 'text', content: 'Hello' })
-      renderNoteModal({ ...defaultProps, note })
-      expect(screen.queryByRole('button', { name: /bold/i })).not.toBeInTheDocument()
-      expect(screen.queryByRole('button', { name: /italic/i })).not.toBeInTheDocument()
-    })
   })
 })

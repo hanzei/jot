@@ -1503,61 +1503,6 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
-  // Stable ref so scheduleAutoSaveAfterToolbar can call autoSaveNote without
-  // listing an unstable function reference in its useCallback deps.
-  const autoSaveNoteRef = useRef(autoSaveNote);
-  autoSaveNoteRef.current = autoSaveNote;
-
-  const scheduleAutoSaveAfterToolbar = useCallback(() => {
-    if (!note) return;
-    markDirty();
-    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-    saveTimeoutRef.current = setTimeout(async () => {
-      saveTimeoutRef.current = undefined;
-      await autoSaveNoteRef.current(itemsRef.current);
-    }, VALIDATION.AUTO_SAVE_TIMEOUT_MS);
-  }, [note, markDirty]);
-
-  const wrapContentSelection = useCallback((before: string, after: string) => {
-    const textarea = contentRef.current;
-    if (!textarea) return;
-    const start = textarea.selectionStart;
-    const end = textarea.selectionEnd;
-    const selected = content.slice(start, end) || 'text';
-    const newContent = content.slice(0, start) + before + selected + after + content.slice(end);
-    setContent(newContent);
-    pendingSelectionRef.current = {
-      start: start + before.length,
-      end: start + before.length + selected.length,
-    };
-    scheduleAutoSaveAfterToolbar();
-  }, [content, scheduleAutoSaveAfterToolbar]);
-
-  const insertContentHeading = useCallback(() => {
-    const textarea = contentRef.current;
-    if (!textarea) return;
-    const pos = textarea.selectionStart;
-    const lineStart = content.lastIndexOf('\n', pos - 1) + 1;
-    const lineEnd = content.indexOf('\n', pos);
-    const line = content.slice(lineStart, lineEnd === -1 ? undefined : lineEnd);
-    if (line.startsWith('# ')) return;
-    const newContent = content.slice(0, lineStart) + '# ' + content.slice(lineStart);
-    setContent(newContent);
-    pendingSelectionRef.current = { start: pos + 2, end: pos + 2 };
-    scheduleAutoSaveAfterToolbar();
-  }, [content, scheduleAutoSaveAfterToolbar]);
-
-  const insertContentBullet = useCallback(() => {
-    const textarea = contentRef.current;
-    if (!textarea) return;
-    const pos = textarea.selectionStart;
-    const before = content.slice(0, pos);
-    const insert = (before.endsWith('\n') || before === '') ? '- ' : '\n- ';
-    const newContent = before + insert + content.slice(pos);
-    setContent(newContent);
-    pendingSelectionRef.current = { start: pos + insert.length, end: pos + insert.length };
-    scheduleAutoSaveAfterToolbar();
-  }, [content, scheduleAutoSaveAfterToolbar]);
 
   return (
     <>
@@ -1837,47 +1782,6 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                         `<span class="text-gray-400 dark:text-gray-500 pointer-events-none">${t('note.contentPlaceholder')}</span>`,
                     }}
                   />
-                )}
-                {isEditingContent && (
-                  <div className="flex items-center gap-1 pt-1 border-t border-gray-100 dark:border-slate-700">
-                    <button
-                      type="button"
-                      aria-label={t('note.formatBold')}
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => wrapContentSelection('**', '**')}
-                      className="px-2 py-1 text-sm font-bold text-gray-600 dark:text-gray-300 rounded hover:bg-gray-100 dark:hover:bg-slate-700"
-                    >
-                      B
-                    </button>
-                    <button
-                      type="button"
-                      aria-label={t('note.formatItalic')}
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={() => wrapContentSelection('*', '*')}
-                      className="px-2 py-1 text-sm italic text-gray-600 dark:text-gray-300 rounded hover:bg-gray-100 dark:hover:bg-slate-700"
-                    >
-                      I
-                    </button>
-                    <div className="w-px h-4 bg-gray-200 dark:bg-slate-600 mx-1" />
-                    <button
-                      type="button"
-                      aria-label={t('note.formatHeading')}
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={insertContentHeading}
-                      className="px-2 py-1 text-sm text-gray-600 dark:text-gray-300 rounded hover:bg-gray-100 dark:hover:bg-slate-700"
-                    >
-                      H₁
-                    </button>
-                    <button
-                      type="button"
-                      aria-label={t('note.formatBulletList')}
-                      onMouseDown={(e) => e.preventDefault()}
-                      onClick={insertContentBullet}
-                      className="px-2 py-1 text-sm text-gray-600 dark:text-gray-300 rounded hover:bg-gray-100 dark:hover:bg-slate-700"
-                    >
-                      • list
-                    </button>
-                  </div>
                 )}
               </>
             ) : (
