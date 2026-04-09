@@ -937,11 +937,12 @@ describe('NoteModal', () => {
       // Trigger resize after loading existing note content.
       fireEvent.change(contentInput, { target: { value: 'Existing long content with update' } })
 
-      expect(contentInput.style.height).toBe('320px')
-      expect(contentInput.style.overflowY).toBe('auto')
+      // Textarea grows to full content height — no max cap; modal scroll handles overflow
+      expect(contentInput.style.height).toBe('500px')
+      expect(contentInput.style.overflowY).toBe('hidden')
     })
 
-    it('grows up to the maximum height and becomes scrollable', () => {
+    it('grows to full content height without a maximum cap', () => {
       renderNoteModal(defaultProps)
 
       const contentInput = screen.getByPlaceholderText('Take a note...') as HTMLTextAreaElement
@@ -952,8 +953,8 @@ describe('NoteModal', () => {
 
       fireEvent.change(contentInput, { target: { value: 'Very long content' } })
 
-      expect(contentInput.style.height).toBe('320px')
-      expect(contentInput.style.overflowY).toBe('auto')
+      expect(contentInput.style.height).toBe('500px')
+      expect(contentInput.style.overflowY).toBe('hidden')
     })
 
     it('uses content height when within min and max bounds', () => {

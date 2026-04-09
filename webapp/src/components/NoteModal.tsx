@@ -74,7 +74,6 @@ const haveListItemsChanged = (currentItems: ListItem[], originalItems: Note['ite
 // Utility function to generate unique IDs for list items
 const generateItemId = () => crypto.randomUUID();
 const TEXT_NOTE_MIN_HEIGHT_PX = 96;
-const TEXT_NOTE_MAX_HEIGHT_PX = 320;
 const TEXT_NOTE_RESIZE_DEBOUNCE_MS = 120;
 
 interface NoteModalProps {
@@ -422,13 +421,9 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   const resizeContentTextarea = useCallback((textarea: HTMLTextAreaElement | null) => {
     if (!textarea) return;
     textarea.style.height = 'auto';
-    const contentHeight = textarea.scrollHeight;
-    const nextHeight = Math.min(
-      Math.max(contentHeight, TEXT_NOTE_MIN_HEIGHT_PX),
-      TEXT_NOTE_MAX_HEIGHT_PX
-    );
+    const nextHeight = Math.max(textarea.scrollHeight, TEXT_NOTE_MIN_HEIGHT_PX);
     textarea.style.height = `${nextHeight}px`;
-    textarea.style.overflowY = contentHeight > nextHeight ? 'auto' : 'hidden';
+    textarea.style.overflowY = 'hidden';
   }, []);
 
   const sensors = useSensors(
