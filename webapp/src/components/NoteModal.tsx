@@ -1575,7 +1575,14 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
         }}
         className="relative z-50"
       >
-        <div className="fixed inset-0 bg-black/30 dark:bg-black/50" aria-hidden="true" />
+        <div
+          className={`fixed inset-0 transition-colors duration-200 ${
+            isEditingContent
+              ? 'bg-blue-950/50 dark:bg-blue-950/70'
+              : 'bg-black/30 dark:bg-black/50'
+          }`}
+          aria-hidden="true"
+        />
 
         {/* Backdrop click: fire the same two-step dismiss as Dialog.onClose.
             target===currentTarget ensures clicks inside the panel that bubble up
