@@ -164,7 +164,8 @@ describe('NoteModal', () => {
 
       expect(screen.getByText('Edit Note')).toBeInTheDocument()
       expect(screen.getByDisplayValue('Test Note')).toBeInTheDocument()
-      expect(screen.getByDisplayValue('Test content')).toBeInTheDocument()
+      // Existing notes show content in preview mode
+      expect(screen.getByTestId('note-content-preview')).toBeInTheDocument()
     })
 
     it('shows note type selector only for new notes', () => {
@@ -924,6 +925,9 @@ describe('NoteModal', () => {
       const note = createMockNote({ content: 'Existing long content', note_type: 'text' })
       renderNoteModal({ ...defaultProps, note })
 
+      // Click the preview to enter edit mode
+      fireEvent.click(screen.getByTestId('note-content-preview'))
+
       const contentInput = screen.getByDisplayValue('Existing long content') as HTMLTextAreaElement
       Object.defineProperty(contentInput, 'scrollHeight', {
         configurable: true,
@@ -1025,6 +1029,9 @@ describe('NoteModal', () => {
       const note = createMockNote()
       const onRefresh = vi.fn()
       renderNoteModal({ ...defaultProps, onRefresh, note })
+
+      // Click the preview to enter edit mode
+      fireEvent.click(screen.getByTestId('note-content-preview'))
 
       const contentInput = screen.getByDisplayValue('Test content')
       fireEvent.change(contentInput, { target: { value: 'Updated content' } })
@@ -1154,6 +1161,46 @@ describe('NoteModal', () => {
       }))
       expect(onDuplicate).toHaveBeenCalledWith('1')
       expect(onClose).toHaveBeenCalled()
+    })
+  })
+
+  describe('markdown editing in text notes', () => {
+    it('renders markdown in preview mode by default for existing notes', () => {
+      const note = createMockNote({ note_type: 'text', content: '**bold**' })
+      renderNoteModal({ ...defaultProps, note })
+      const preview = screen.getByTestId('note-content-preview')
+      expect(preview.innerHTML).toContain('<strong>bold</strong>')
+    })
+
+    it('switches to textarea when preview is clicked', () => {
+      const note = createMockNote({ note_type: 'text', content: 'Hello' })
+      renderNoteModal({ ...defaultProps, note })
+      fireEvent.click(screen.getByTestId('note-content-preview'))
+      expect(screen.getByPlaceholderText('Take a note...')).toBeInTheDocument()
+    })
+
+    it('collapses to preview on Escape', () => {
+      const note = createMockNote({ note_type: 'text', content: 'Hello' })
+      renderNoteModal({ ...defaultProps, note })
+      fireEvent.click(screen.getByTestId('note-content-preview'))
+      const textarea = screen.getByPlaceholderText('Take a note...')
+      fireEvent.keyDown(textarea, { key: 'Escape', code: 'Escape' })
+      expect(screen.getByTestId('note-content-preview')).toBeInTheDocument()
+    })
+
+    it('shows formatting toolbar when editing', () => {
+      const note = createMockNote({ note_type: 'text', content: '' })
+      renderNoteModal({ ...defaultProps, note })
+      fireEvent.click(screen.getByTestId('note-content-preview'))
+      expect(screen.getByRole('button', { name: /bold/i })).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: /italic/i })).toBeInTheDocument()
+    })
+
+    it('hides formatting toolbar in preview mode', () => {
+      const note = createMockNote({ note_type: 'text', content: 'Hello' })
+      renderNoteModal({ ...defaultProps, note })
+      expect(screen.queryByRole('button', { name: /bold/i })).not.toBeInTheDocument()
+      expect(screen.queryByRole('button', { name: /italic/i })).not.toBeInTheDocument()
     })
   })
 })

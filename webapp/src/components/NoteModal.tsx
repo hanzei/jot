@@ -4,6 +4,7 @@ import { Dialog, DialogPanel } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
 import { VALIDATION, NOTE_COLORS, buildCollaborators, type Note, type NoteType, type CreateNoteRequest, type UpdateNoteRequest, type Label, type User, type Collaborator } from '@jot/shared';
 import { notes } from '@/utils/api';
+import { renderMarkdown } from '@/utils/markdown';
 import LabelPicker from '@/components/LabelPicker';
 import LetterAvatar from '@/components/LetterAvatar';
 import AssigneePicker from '@/components/AssigneePicker';
@@ -395,7 +396,9 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showLabelPicker, setShowLabelPicker] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  
+  const [isEditingContent, setIsEditingContent] = useState(false);
+  const pendingSelectionRef = useRef<{ start: number; end: number } | null>(null);
+
   // Use useRef for timeout management instead of global window property
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const errorTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -528,6 +531,8 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       commitItems([]);
       setNoteLabels([]);
     }
+    // Start in edit mode for new notes; preview mode for existing notes
+    setIsEditingContent(!note);
   }, [commitItems, note]);
 
   useEffect(() => {
@@ -578,6 +583,15 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       }
     };
   }, [noteType, resizeContentTextarea]);
+
+  useEffect(() => {
+    if (pendingSelectionRef.current && contentRef.current) {
+      const { start, end } = pendingSelectionRef.current;
+      contentRef.current.focus();
+      contentRef.current.setSelectionRange(start, end);
+      pendingSelectionRef.current = null;
+    }
+  }, [content]);
 
   // Helper function to show error messages with auto-dismiss
   const showError = useCallback((message: string) => {
@@ -1465,10 +1479,57 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
+  const wrapContentSelection = useCallback((before: string, after: string) => {
+    const textarea = contentRef.current;
+    if (!textarea) return;
+    const start = textarea.selectionStart;
+    const end = textarea.selectionEnd;
+    const selected = content.slice(start, end) || 'text';
+    const newContent = content.slice(0, start) + before + selected + after + content.slice(end);
+    setContent(newContent);
+    pendingSelectionRef.current = {
+      start: start + before.length,
+      end: start + before.length + selected.length,
+    };
+  }, [content]);
+
+  const insertContentHeading = useCallback(() => {
+    const textarea = contentRef.current;
+    if (!textarea) return;
+    const pos = textarea.selectionStart;
+    const lineStart = content.lastIndexOf('\n', pos - 1) + 1;
+    const lineEnd = content.indexOf('\n', pos);
+    const line = content.slice(lineStart, lineEnd === -1 ? undefined : lineEnd);
+    if (line.startsWith('## ')) return;
+    const newContent = content.slice(0, lineStart) + '## ' + content.slice(lineStart);
+    setContent(newContent);
+    pendingSelectionRef.current = { start: pos + 3, end: pos + 3 };
+  }, [content]);
+
+  const insertContentBullet = useCallback(() => {
+    const textarea = contentRef.current;
+    if (!textarea) return;
+    const pos = textarea.selectionStart;
+    const before = content.slice(0, pos);
+    const insert = (before.endsWith('\n') || before === '') ? '- ' : '\n- ';
+    const newContent = before + insert + content.slice(pos);
+    setContent(newContent);
+    pendingSelectionRef.current = { start: pos + insert.length, end: pos + insert.length };
+  }, [content]);
 
   return (
     <>
-      <Dialog open={true} onClose={handleCloseRequest} className="relative z-50">
+      <Dialog
+        open={true}
+        onClose={() => {
+          if (isEditingContent) {
+            setIsEditingContent(false);
+          } else {
+            handleCloseRequest();
+          }
+        }}
+        className="relative z-50"
+      >
         <div className="fixed inset-0 bg-black/30 dark:bg-black/50" aria-hidden="true" />
       
       <div className="fixed inset-0 flex items-center justify-center p-2 sm:p-4 overflow-hidden">
@@ -1637,11 +1698,14 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                 if (e.key === 'Enter') {
                   e.preventDefault();
                   if (noteType === 'text') {
-                    const textarea = contentRef.current;
-                    if (textarea) {
-                      textarea.focus();
-                      textarea.setSelectionRange(textarea.value.length, textarea.value.length);
-                    }
+                    setIsEditingContent(true);
+                    requestAnimationFrame(() => {
+                      const textarea = contentRef.current;
+                      if (textarea) {
+                        textarea.focus();
+                        textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+                      }
+                    });
                   } else {
                     const firstItem = uncompletedItems[0];
                     if (firstItem) {
@@ -1660,31 +1724,103 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
 
             {/* Content based on type */}
             {noteType === 'text' ? (
-              <textarea
-                ref={contentRef}
-                autoCapitalize="sentences"
-                placeholder={t('note.contentPlaceholder')}
-                rows={4}
-                className="w-full p-2 bg-transparent border-none outline-none resize-none placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white min-h-[6rem]"
-                value={content}
-                onChange={(e) => {
-                  const newContent = e.target.value;
-                  const validationError = validateContent(newContent, t);
-                  if (validationError) {
-                    showError(validationError);
-                    return;
-                  }
-                  setContent(newContent);
-                  if (note) {
-                    markDirty();
-                    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-                    saveTimeoutRef.current = setTimeout(async () => {
-                      saveTimeoutRef.current = undefined;
-                      await autoSaveNote(itemsRef.current);
-                    }, VALIDATION.AUTO_SAVE_TIMEOUT_MS);
-                  }
-                }}
-              />
+              <>
+                {isEditingContent ? (
+                  <textarea
+                    ref={contentRef}
+                    autoCapitalize="sentences"
+                    placeholder={t('note.contentPlaceholder')}
+                    rows={4}
+                    className="w-full p-2 bg-transparent border-none outline-none resize-none placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white min-h-[6rem]"
+                    value={content}
+                    onKeyDown={(e) => {
+                      if (e.nativeEvent?.isComposing || e.nativeEvent?.keyCode === 229) return;
+                      if (e.key === 'Escape') {
+                        e.preventDefault();
+                        setIsEditingContent(false);
+                      }
+                    }}
+                    onChange={(e) => {
+                      const newContent = e.target.value;
+                      const validationError = validateContent(newContent, t);
+                      if (validationError) {
+                        showError(validationError);
+                        return;
+                      }
+                      setContent(newContent);
+                      if (note) {
+                        markDirty();
+                        if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+                        saveTimeoutRef.current = setTimeout(async () => {
+                          saveTimeoutRef.current = undefined;
+                          await autoSaveNote(itemsRef.current);
+                        }, VALIDATION.AUTO_SAVE_TIMEOUT_MS);
+                      }
+                    }}
+                  />
+                ) : (
+                  <div
+                    data-testid="note-content-preview"
+                    role="textbox"
+                    aria-label={t('note.contentPlaceholder')}
+                    aria-multiline="true"
+                    tabIndex={0}
+                    onClick={() => setIsEditingContent(true)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setIsEditingContent(true);
+                      }
+                    }}
+                    className="w-full p-2 min-h-[6rem] cursor-text text-gray-900 dark:text-white markdown-content"
+                    dangerouslySetInnerHTML={{
+                      __html: renderMarkdown(content) ||
+                        `<span class="text-gray-400 dark:text-gray-500 pointer-events-none">${t('note.contentPlaceholder')}</span>`,
+                    }}
+                  />
+                )}
+                {isEditingContent && (
+                  <div className="flex items-center gap-1 pt-1 border-t border-gray-100 dark:border-slate-700">
+                    <button
+                      type="button"
+                      aria-label={t('note.formatBold')}
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => wrapContentSelection('**', '**')}
+                      className="px-2 py-1 text-sm font-bold text-gray-600 dark:text-gray-300 rounded hover:bg-gray-100 dark:hover:bg-slate-700"
+                    >
+                      B
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={t('note.formatItalic')}
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={() => wrapContentSelection('*', '*')}
+                      className="px-2 py-1 text-sm italic text-gray-600 dark:text-gray-300 rounded hover:bg-gray-100 dark:hover:bg-slate-700"
+                    >
+                      I
+                    </button>
+                    <div className="w-px h-4 bg-gray-200 dark:bg-slate-600 mx-1" />
+                    <button
+                      type="button"
+                      aria-label={t('note.formatHeading')}
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={insertContentHeading}
+                      className="px-2 py-1 text-sm text-gray-600 dark:text-gray-300 rounded hover:bg-gray-100 dark:hover:bg-slate-700"
+                    >
+                      H₁
+                    </button>
+                    <button
+                      type="button"
+                      aria-label={t('note.formatBulletList')}
+                      onMouseDown={(e) => e.preventDefault()}
+                      onClick={insertContentBullet}
+                      className="px-2 py-1 text-sm text-gray-600 dark:text-gray-300 rounded hover:bg-gray-100 dark:hover:bg-slate-700"
+                    >
+                      • list
+                    </button>
+                  </div>
+                )}
+              </>
             ) : (
               <div className="space-y-4">
                 {/* Uncompleted items section */}
