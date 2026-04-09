@@ -1575,14 +1575,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
         }}
         className="relative z-50"
       >
-        <div
-          className={`fixed inset-0 transition-colors duration-200 ${
-            isEditingContent
-              ? 'bg-blue-950/50 dark:bg-blue-950/70'
-              : 'bg-black/30 dark:bg-black/50'
-          }`}
-          aria-hidden="true"
-        />
+        <div className="fixed inset-0 bg-black/30 dark:bg-black/50" aria-hidden="true" />
 
         {/* Backdrop click: fire the same two-step dismiss as Dialog.onClose.
             target===currentTarget ensures clicks inside the panel that bubble up
@@ -1796,7 +1789,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                     autoCapitalize="sentences"
                     placeholder={t('note.contentPlaceholder')}
                     rows={4}
-                    className="w-full p-2 bg-transparent border-none outline-none resize-none placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white min-h-[6rem]"
+                    className="w-full p-2 border-none outline-none resize-none placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white min-h-[6rem] rounded-md bg-gray-50 dark:bg-slate-700/40 transition-colors duration-150"
                     value={content}
                     onKeyDown={(e) => {
                       if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
