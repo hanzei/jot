@@ -37,15 +37,15 @@ type User struct {
 	UpdatedAt      time.Time `json:"updated_at"`
 }
 
-type UserStore struct {
+type userStore struct {
 	db *sql.DB
 }
 
-func NewUserStore(db *sql.DB) *UserStore {
-	return &UserStore{db: db}
+func newUserStore(db *sql.DB) *userStore {
+	return &userStore{db: db}
 }
 
-func (s *UserStore) Create(ctx context.Context, username, password string) (*User, error) {
+func (s *userStore) Create(ctx context.Context, username, password string) (*User, error) {
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return nil, fmt.Errorf("failed to hash password: %w", err)
@@ -90,7 +90,7 @@ func (s *UserStore) Create(ctx context.Context, username, password string) (*Use
 	return &user, nil
 }
 
-func (s *UserStore) GetByUsername(ctx context.Context, username string) (*User, error) {
+func (s *userStore) GetByUsername(ctx context.Context, username string) (*User, error) {
 	var user User
 	query := `SELECT id, username, first_name, last_name, password_hash, role,
 			         profile_icon IS NOT NULL AS has_profile_icon,
@@ -110,7 +110,7 @@ func (s *UserStore) GetByUsername(ctx context.Context, username string) (*User, 
 	return &user, nil
 }
 
-func (s *UserStore) GetByID(ctx context.Context, id string) (*User, error) {
+func (s *userStore) GetByID(ctx context.Context, id string) (*User, error) {
 	var user User
 	query := `SELECT id, username, first_name, last_name, password_hash, role,
 			         profile_icon IS NOT NULL AS has_profile_icon,
@@ -145,7 +145,7 @@ func scanUser(rows *sql.Rows) (User, error) {
 	return user, err
 }
 
-func (s *UserStore) GetAll(ctx context.Context) ([]*User, error) {
+func (s *userStore) GetAll(ctx context.Context) ([]*User, error) {
 	query := `SELECT id, username, first_name, last_name, password_hash, role,
 			         profile_icon IS NOT NULL AS has_profile_icon,
 			         created_at, updated_at
@@ -171,7 +171,7 @@ func (s *UserStore) GetAll(ctx context.Context) ([]*User, error) {
 // Search returns users whose username, first name, or last name contain the
 // given search term (case-insensitive). Results are ordered by creation date
 // descending.
-func (s *UserStore) Search(ctx context.Context, term string) ([]*User, error) {
+func (s *userStore) Search(ctx context.Context, term string) ([]*User, error) {
 	like := "%" + term + "%"
 	query := `SELECT id, username, first_name, last_name, password_hash, role,
 			         profile_icon IS NOT NULL AS has_profile_icon,
@@ -200,7 +200,7 @@ func (s *UserStore) Search(ctx context.Context, term string) ([]*User, error) {
 // UpdateUsername sets a new username for the user with the given id and returns
 // the updated user. Returns ErrUsernameTaken if the username is already in use,
 // or another error if the id does not exist or the query fails.
-func (s *UserStore) UpdateUsername(ctx context.Context, id, newUsername string) (*User, error) {
+func (s *userStore) UpdateUsername(ctx context.Context, id, newUsername string) (*User, error) {
 	query := `UPDATE users SET username = ?, updated_at = CURRENT_TIMESTAMP
 			  WHERE id = ? RETURNING id, username, first_name, last_name, role,
 			  profile_icon IS NOT NULL AS has_profile_icon,
@@ -221,7 +221,7 @@ func (s *UserStore) UpdateUsername(ctx context.Context, id, newUsername string) 
 	return &user, nil
 }
 
-func (s *UserStore) UpdateProfileIcon(ctx context.Context, id string, data []byte, contentType string) error {
+func (s *userStore) UpdateProfileIcon(ctx context.Context, id string, data []byte, contentType string) error {
 	if len(data) == 0 {
 		return errors.New("profile icon data must not be empty")
 	}
@@ -245,7 +245,7 @@ func (s *UserStore) UpdateProfileIcon(ctx context.Context, id string, data []byt
 	return nil
 }
 
-func (s *UserStore) GetProfileIcon(ctx context.Context, id string) ([]byte, string, error) {
+func (s *userStore) GetProfileIcon(ctx context.Context, id string) ([]byte, string, error) {
 	var data []byte
 	var contentType sql.Null[string]
 	err := s.db.QueryRowContext(ctx,
@@ -263,7 +263,7 @@ func (s *UserStore) GetProfileIcon(ctx context.Context, id string) ([]byte, stri
 	return data, contentType.V, nil
 }
 
-func (s *UserStore) DeleteProfileIcon(ctx context.Context, id string) error {
+func (s *userStore) DeleteProfileIcon(ctx context.Context, id string) error {
 	result, err := s.db.ExecContext(ctx,
 		`UPDATE users SET profile_icon = NULL, profile_icon_content_type = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
 		id,
@@ -281,7 +281,7 @@ func (s *UserStore) DeleteProfileIcon(ctx context.Context, id string) error {
 	return nil
 }
 
-func (s *UserStore) UpdatePassword(ctx context.Context, id, newPassword string) error {
+func (s *userStore) UpdatePassword(ctx context.Context, id, newPassword string) error {
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(newPassword), bcrypt.DefaultCost)
 	if err != nil {
 		return fmt.Errorf("failed to hash password: %w", err)
@@ -306,7 +306,7 @@ func (s *UserStore) UpdatePassword(ctx context.Context, id, newPassword string) 
 	return nil
 }
 
-func (s *UserStore) UpdateName(ctx context.Context, id, firstName, lastName string) (*User, error) {
+func (s *userStore) UpdateName(ctx context.Context, id, firstName, lastName string) (*User, error) {
 	query := `UPDATE users SET first_name = ?, last_name = ?, updated_at = CURRENT_TIMESTAMP
 			  WHERE id = ? RETURNING id, username, first_name, last_name, role,
 			  profile_icon IS NOT NULL AS has_profile_icon,
@@ -328,7 +328,7 @@ func (s *UserStore) UpdateName(ctx context.Context, id, firstName, lastName stri
 // the given user in a single transaction. Returns ErrUsernameTaken if the new
 // username conflicts with an existing account, or ErrUserNotFound if the id
 // does not exist.
-func (s *UserStore) UpdateProfile(ctx context.Context, id, username, firstName, lastName string) (*User, error) {
+func (s *userStore) UpdateProfile(ctx context.Context, id, username, firstName, lastName string) (*User, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
@@ -359,7 +359,7 @@ func (s *UserStore) UpdateProfile(ctx context.Context, id, username, firstName, 
 	return &user, nil
 }
 
-func (s *UserStore) UpdateRole(ctx context.Context, id, role string) (*User, error) {
+func (s *userStore) UpdateRole(ctx context.Context, id, role string) (*User, error) {
 	if role != RoleUser && role != RoleAdmin {
 		return nil, fmt.Errorf("invalid role %q: must be %q or %q", role, RoleUser, RoleAdmin)
 	}
@@ -412,7 +412,7 @@ func (s *UserStore) UpdateRole(ctx context.Context, id, role string) (*User, err
 	return &user, nil
 }
 
-func (s *UserStore) Delete(ctx context.Context, id, requestingUserID string) error {
+func (s *userStore) Delete(ctx context.Context, id, requestingUserID string) error {
 	return s.DeleteWithCleanup(ctx, id, requestingUserID, nil)
 }
 
@@ -420,7 +420,7 @@ func (s *UserStore) Delete(ctx context.Context, id, requestingUserID string) err
 // inside the same transaction. The callback executes after the user row is
 // deleted (and cascade effects like note_shares removal have taken place) but
 // before the transaction commits, so any cleanup is atomic with the delete.
-func (s *UserStore) DeleteWithCleanup(ctx context.Context, id, requestingUserID string, postDelete func(ctx context.Context, tx *sql.Tx) error) error {
+func (s *userStore) DeleteWithCleanup(ctx context.Context, id, requestingUserID string, postDelete func(ctx context.Context, tx *sql.Tx) error) error {
 	if id == requestingUserID {
 		return fmt.Errorf("%w", ErrCannotDeleteSelf)
 	}
@@ -474,7 +474,7 @@ func (s *UserStore) DeleteWithCleanup(ctx context.Context, id, requestingUserID 
 	return nil
 }
 
-func (s *UserStore) CreateByAdmin(ctx context.Context, username, password string, role string) (*User, error) {
+func (s *userStore) CreateByAdmin(ctx context.Context, username, password string, role string) (*User, error) {
 	hashedPassword, err := bcrypt.GenerateFromPassword([]byte(password), bcrypt.DefaultCost)
 	if err != nil {
 		return nil, fmt.Errorf("failed to hash password: %w", err)

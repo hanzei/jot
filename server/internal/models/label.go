@@ -25,16 +25,16 @@ type Label struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
-type LabelStore struct {
+type labelStore struct {
 	db *sql.DB
 }
 
-func NewLabelStore(db *sql.DB) *LabelStore {
-	return &LabelStore{db: db}
+func newLabelStore(db *sql.DB) *labelStore {
+	return &labelStore{db: db}
 }
 
 // GetLabels returns all labels belonging to a user.
-func (s *LabelStore) GetLabels(ctx context.Context, userID string) ([]Label, error) {
+func (s *labelStore) GetLabels(ctx context.Context, userID string) ([]Label, error) {
 	query := `SELECT id, user_id, name, created_at, updated_at FROM labels WHERE user_id = ? ORDER BY name ASC`
 	rows, err := s.db.QueryContext(ctx, query, userID)
 	if err != nil {
@@ -53,7 +53,7 @@ func (s *LabelStore) GetLabels(ctx context.Context, userID string) ([]Label, err
 
 // GetLabelCounts returns a map of label ID to note count for active notes.
 // Counts exclude archived and trashed notes to match the default notes view.
-func (s *LabelStore) GetLabelCounts(ctx context.Context, userID string) (map[string]int, error) {
+func (s *labelStore) GetLabelCounts(ctx context.Context, userID string) (map[string]int, error) {
 	rows, err := s.db.QueryContext(ctx, `
 		SELECT l.id, COUNT(nus.note_id) AS note_count
 		FROM labels l
@@ -94,7 +94,7 @@ func (s *LabelStore) GetLabelCounts(ctx context.Context, userID string) (map[str
 
 // GetOrCreateLabel finds an existing label by name for a user or creates a new one.
 // Uses an atomic upsert to avoid race conditions when multiple callers create the same label concurrently.
-func (s *LabelStore) GetOrCreateLabel(ctx context.Context, userID, name string) (*Label, error) {
+func (s *labelStore) GetOrCreateLabel(ctx context.Context, userID, name string) (*Label, error) {
 	id, err := generateID()
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate label ID: %w", err)
@@ -114,7 +114,7 @@ func (s *LabelStore) GetOrCreateLabel(ctx context.Context, userID, name string) 
 }
 
 // GetLabelNoteIDs returns note IDs currently associated with a user-owned label.
-func (s *LabelStore) GetLabelNoteIDs(ctx context.Context, labelID, userID string) ([]string, error) {
+func (s *labelStore) GetLabelNoteIDs(ctx context.Context, labelID, userID string) ([]string, error) {
 	var exists int
 	if err := s.db.QueryRowContext(ctx,
 		`SELECT 1 FROM labels WHERE id = ? AND user_id = ?`,
@@ -149,7 +149,7 @@ func (s *LabelStore) GetLabelNoteIDs(ctx context.Context, labelID, userID string
 }
 
 // RenameLabel renames a user-owned label and returns the updated row.
-func (s *LabelStore) RenameLabel(ctx context.Context, labelID, userID, newName string) (*Label, error) {
+func (s *labelStore) RenameLabel(ctx context.Context, labelID, userID, newName string) (*Label, error) {
 	var l Label
 	err := s.db.QueryRowContext(ctx,
 		`UPDATE labels
@@ -171,7 +171,7 @@ func (s *LabelStore) RenameLabel(ctx context.Context, labelID, userID, newName s
 }
 
 // DeleteLabel deletes a user-owned label and all note label associations in one transaction.
-func (s *LabelStore) DeleteLabel(ctx context.Context, labelID, userID string) error {
+func (s *labelStore) DeleteLabel(ctx context.Context, labelID, userID string) error {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("begin delete label transaction: %w", err)

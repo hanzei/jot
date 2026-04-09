@@ -48,15 +48,15 @@ type AdminStats struct {
 	Storage   AdminStorageStats  `json:"storage"`
 }
 
-type AdminStatsStore struct {
+type adminStatsStore struct {
 	db *sql.DB
 }
 
-func NewAdminStatsStore(db *sql.DB) *AdminStatsStore {
-	return &AdminStatsStore{db: db}
+func newAdminStatsStore(db *sql.DB) *adminStatsStore {
+	return &adminStatsStore{db: db}
 }
 
-func (s *AdminStatsStore) GetStats(ctx context.Context) (*AdminStats, error) {
+func (s *adminStatsStore) GetStats(ctx context.Context) (*AdminStats, error) {
 	stats := &AdminStats{}
 
 	if err := s.db.QueryRowContext(ctx, `
