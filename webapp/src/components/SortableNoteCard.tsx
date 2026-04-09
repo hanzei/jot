@@ -58,7 +58,7 @@ export default function SortableNoteCard({
       data-drag-disabled={disabled ? 'true' : 'false'}
       {...(!disabled ? attributes : {})}
       {...(!disabled ? listeners : {})}
-      className={`group touch-none select-none relative ${
+      className={`group select-none relative ${
         disabled ? 'cursor-default' : isDragging ? 'cursor-grabbing scale-105 shadow-xl' : 'cursor-grab'
       }`}
     >
