@@ -146,12 +146,15 @@ const SidebarLabels = ({
       <ul className="space-y-0.5">
         {labels.map((label) => {
           const isActive = selectedLabelId === label.id;
-          const className = `group/label flex items-center h-8 rounded-md text-sm ${
-            onRename && onDelete ? 'w-[calc(100%-1.75rem)]' : 'w-full'
-          } ${
+          const rowClass = `relative rounded-md ${
             isActive
-              ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium'
-              : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-slate-700'
+              ? 'bg-blue-100 dark:bg-blue-900/30'
+              : 'hover:bg-gray-100 dark:hover:bg-slate-700'
+          }`;
+          const className = `group/label flex items-center w-full h-8 rounded-md text-sm ${
+            isActive
+              ? 'text-blue-700 dark:text-blue-300 font-medium'
+              : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
           }`;
           const isEditing = editingLabelId === label.id;
           const isRenaming = renamingLabelId === label.id;
@@ -202,7 +205,7 @@ const SidebarLabels = ({
                   </button>
                 </div>
               ) : (
-                <div className="relative">
+                <div className={rowClass}>
                   <button
                     type="button"
                     onClick={() => onSelect?.(label.id)}
@@ -225,7 +228,7 @@ const SidebarLabels = ({
                     )}
                   </button>
                   {onRename && onDelete && (
-                    <div className={`absolute right-0 inset-y-0 flex items-center transition-opacity duration-200 ${isExpanded ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
+                    <div className={`absolute right-0 inset-y-0 z-10 flex items-center transition-opacity duration-200 ${isExpanded ? 'opacity-100' : 'opacity-0 pointer-events-none'}`}>
                       <Menu as="div" className="relative">
                         <MenuButton
                           aria-label={t('labels.menuOptions', { name: label.name })}
