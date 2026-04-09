@@ -146,8 +146,8 @@ const SidebarLabels = ({
       <ul className="space-y-0.5">
         {labels.map((label) => {
           const isActive = selectedLabelId === label.id;
-          const className = `group/label flex items-center w-full h-8 rounded-md text-sm ${
-            onRename && onDelete ? 'pr-7' : ''
+          const className = `group/label flex items-center h-8 rounded-md text-sm ${
+            onRename && onDelete ? 'w-[calc(100%-1.75rem)]' : 'w-full'
           } ${
             isActive
               ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium'
