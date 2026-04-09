@@ -58,6 +58,7 @@ type Server struct {
 	ctx             context.Context
 	cancel          context.CancelFunc
 	bgWg            sync.WaitGroup
+	hub             *sse.Hub
 	sessionService  *auth.SessionService
 	authHandler     *handlers.AuthHandler
 	notesHandler    *handlers.NotesHandler
@@ -124,6 +125,7 @@ func New(cfg *config.Config) (*Server, error) {
 		startReady:      make(chan struct{}),
 		ctx:             ctx,
 		cancel:          cancel,
+		hub:             hub,
 		sessionService:  sessionService,
 		authHandler:     authHandler,
 		notesHandler:    notesHandler,
@@ -569,6 +571,10 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	if err := s.WaitUntilStarted(ctx); err != nil {
 		return fmt.Errorf("wait until started: %w", err)
 	}
+
+	// Close the SSE hub first so that long-lived SSE connections are
+	// terminated and http.Server.Shutdown can complete within the deadline.
+	s.hub.Close()
 
 	s.serverMu.RLock()
 	httpServer := s.httpServer
