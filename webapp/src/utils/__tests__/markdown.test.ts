@@ -52,4 +52,10 @@ describe('renderMarkdown', () => {
   it('plain text passes through safely', () => {
     expect(renderMarkdown('hello world')).toContain('hello world');
   });
+
+  it('strips h1 headings (only h2/h3 allowed)', () => {
+    const result = renderMarkdown('# Top heading');
+    expect(result).not.toContain('<h1>');
+    expect(result).toContain('Top heading'); // text still present
+  });
 });

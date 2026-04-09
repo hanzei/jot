@@ -7,11 +7,13 @@ marked.use({
   renderer: {
     link({ href, tokens }: Tokens.Link): string {
       const text = this.parser.parseInline(tokens);
-      return `<a href="${href}" target="_blank" rel="noopener noreferrer">${text}</a>`;
+      const safeHref = encodeURI(href);
+      return `<a href="${safeHref}" target="_blank" rel="noopener noreferrer">${text}</a>`;
     },
   },
 });
 
+// h1 excluded intentionally — note titles are rendered as h1 in the UI; allowing ## and ### only
 const ALLOWED_TAGS = [
   'p', 'br', 'h2', 'h3',
   'strong', 'em',
@@ -23,6 +25,6 @@ const ALLOWED_ATTR = ['href', 'target', 'rel'];
 
 export function renderMarkdown(content: string): string {
   if (!content.trim()) return '';
-  const raw = marked(content) as string;
+  const raw = marked.parse(content, { async: false });
   return DOMPurify.sanitize(raw, { ALLOWED_TAGS, ALLOWED_ATTR });
 }
