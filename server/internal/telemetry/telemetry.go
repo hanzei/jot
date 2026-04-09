@@ -44,6 +44,10 @@ type Config struct {
 	// Defaults to "jot".
 	ServiceName string
 
+	// ServiceVersion is the application version reported in all traces, metrics,
+	// and logs. Set from the build-time version string (e.g. "v1.2.3" or "dev").
+	ServiceVersion string
+
 	// Insecure controls whether OTLP gRPC connections skip TLS verification.
 	// Set to true only for local collectors or development environments.
 	// Defaults to false (TLS enabled).
@@ -71,7 +75,10 @@ func Setup(ctx context.Context, cfg Config) (shutdown func(context.Context) erro
 		resource.WithProcess(),
 		resource.WithHost(),
 		resource.WithTelemetrySDK(),
-		resource.WithAttributes(semconv.ServiceName(cfg.ServiceName)),
+		resource.WithAttributes(
+			semconv.ServiceName(cfg.ServiceName),
+			semconv.ServiceVersion(cfg.ServiceVersion),
+		),
 	)
 	if err != nil {
 		if !errors.Is(err, resource.ErrPartialResource) && !errors.Is(err, resource.ErrSchemaURLConflict) {
