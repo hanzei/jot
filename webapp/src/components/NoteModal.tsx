@@ -592,6 +592,31 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     }
   }, [content]);
 
+  // Focus the textarea whenever the content area transitions into edit mode
+  // (but not on initial mount to avoid stealing focus from the title input).
+  const prevIsEditingContentRef = useRef(isEditingContent);
+  useEffect(() => {
+    if (isEditingContent && !prevIsEditingContentRef.current) {
+      requestAnimationFrame(() => {
+        contentRef.current?.focus();
+      });
+    }
+    prevIsEditingContentRef.current = isEditingContent;
+  }, [isEditingContent]);
+
+  // Pre-compute the rendered markdown for the preview div.
+  // If markdown renders to nothing but content is non-empty (e.g. plain text
+  // with HTML-special chars that DOMPurify stripped), fall back to an
+  // HTML-escaped version of the raw content so it is never silently hidden.
+  const renderedContent = useMemo(() => {
+    if (!content?.trim()) return '';
+    const md = renderMarkdown(content);
+    if (md) return md;
+    return content.replace(/[&<>"']/g, (c) => (
+      { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[c] ?? c
+    ));
+  }, [content]);
+
   // Helper function to show error messages with auto-dismiss
   const showError = useCallback((message: string) => {
     setErrorMessage(message);
@@ -1478,6 +1503,21 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     return () => window.removeEventListener('keydown', handler);
   }, []);
 
+  // Stable ref so scheduleAutoSaveAfterToolbar can call autoSaveNote without
+  // listing an unstable function reference in its useCallback deps.
+  const autoSaveNoteRef = useRef(autoSaveNote);
+  autoSaveNoteRef.current = autoSaveNote;
+
+  const scheduleAutoSaveAfterToolbar = useCallback(() => {
+    if (!note) return;
+    markDirty();
+    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+    saveTimeoutRef.current = setTimeout(async () => {
+      saveTimeoutRef.current = undefined;
+      await autoSaveNoteRef.current(itemsRef.current);
+    }, VALIDATION.AUTO_SAVE_TIMEOUT_MS);
+  }, [note, markDirty]);
+
   const wrapContentSelection = useCallback((before: string, after: string) => {
     const textarea = contentRef.current;
     if (!textarea) return;
@@ -1490,7 +1530,8 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       start: start + before.length,
       end: start + before.length + selected.length,
     };
-  }, [content]);
+    scheduleAutoSaveAfterToolbar();
+  }, [content, scheduleAutoSaveAfterToolbar]);
 
   const insertContentHeading = useCallback(() => {
     const textarea = contentRef.current;
@@ -1503,7 +1544,8 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     const newContent = content.slice(0, lineStart) + '## ' + content.slice(lineStart);
     setContent(newContent);
     pendingSelectionRef.current = { start: pos + 3, end: pos + 3 };
-  }, [content]);
+    scheduleAutoSaveAfterToolbar();
+  }, [content, scheduleAutoSaveAfterToolbar]);
 
   const insertContentBullet = useCallback(() => {
     const textarea = contentRef.current;
@@ -1514,20 +1556,30 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     const newContent = before + insert + content.slice(pos);
     setContent(newContent);
     pendingSelectionRef.current = { start: pos + insert.length, end: pos + insert.length };
-  }, [content]);
+    scheduleAutoSaveAfterToolbar();
+  }, [content, scheduleAutoSaveAfterToolbar]);
 
   return (
     <>
       <Dialog
         open={true}
-        onClose={handleCloseRequest}
+        onClose={() => {
+          // Two-step dismiss: collapse content to preview on first trigger (Escape or
+          // backdrop click), then close on the second. Both the Escape key (via
+          // HeadlessUI's onClose) and the backdrop onClick below share this logic.
+          if (isEditingContent) {
+            setIsEditingContent(false);
+          } else {
+            handleCloseRequest();
+          }
+        }}
         className="relative z-50"
       >
         <div className="fixed inset-0 bg-black/30 dark:bg-black/50" aria-hidden="true" />
 
-        {/* Backdrop click does a two-step dismiss: collapse to preview first (if editing),
-            then close on a second click. Using target===currentTarget so clicks inside
-            the modal panel that bubble up do not trigger the dismiss. */}
+        {/* Backdrop click: fire the same two-step dismiss as Dialog.onClose.
+            target===currentTarget ensures clicks inside the panel that bubble up
+            are ignored. */}
         <div
           className="fixed inset-0 flex items-center justify-center p-2 sm:p-4 overflow-hidden"
           onClick={(e) => {
@@ -1780,7 +1832,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                     }}
                     className="w-full p-2 min-h-[6rem] cursor-text text-gray-900 dark:text-white markdown-content"
                     dangerouslySetInnerHTML={{
-                      __html: renderMarkdown(content) ||
+                      __html: renderedContent ||
                         `<span class="text-gray-400 dark:text-gray-500 pointer-events-none">${t('note.contentPlaceholder')}</span>`,
                     }}
                   />

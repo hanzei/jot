@@ -40,6 +40,11 @@ describe('renderMarkdown', () => {
     expect(result).not.toContain('<script>');
   });
 
+  it('strips javascript: href from links', () => {
+    const result = renderMarkdown('[click](javascript:alert(1))');
+    expect(result).not.toContain('javascript:alert');
+  });
+
   it('strips onclick attributes', () => {
     const result = renderMarkdown('<a onclick="evil()">link</a>');
     expect(result).not.toContain('onclick');
