@@ -1517,12 +1517,15 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       >
         <div className="fixed inset-0 bg-black/30 dark:bg-black/50" aria-hidden="true" />
 
-        {/* Backdrop click: fire the same two-step dismiss as Dialog.onClose.
+        {/* Backdrop mousedown: two-step dismiss matching Dialog.onClose.
+            Using onMouseDown (not onClick) so both this handler and HeadlessUI's
+            outside-click detection (which also fires on mousedown) see the same
+            isEditingContent value before any React re-render between events.
             target===currentTarget ensures clicks inside the panel that bubble up
             are ignored. */}
         <div
           className="fixed inset-0 flex items-center justify-center p-2 sm:p-4 overflow-hidden"
-          onClick={(e) => {
+          onMouseDown={(e) => {
             if (e.target !== e.currentTarget) return;
             if (isEditingContent) {
               setIsEditingContent(false);
@@ -1777,6 +1780,17 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                         `<span class="text-gray-400 dark:text-gray-500 pointer-events-none">${t('note.contentPlaceholder')}</span>`,
                     }}
                   />
+                )}
+                {isEditingContent && (
+                  <div className="flex justify-end pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingContent(false)}
+                      className="text-xs font-medium text-blue-500 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+                    >
+                      {t('common.done')}
+                    </button>
+                  </div>
                 )}
               </>
             ) : (

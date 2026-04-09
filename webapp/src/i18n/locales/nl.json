@@ -1,6 +1,7 @@
 {
   "common": {
-    "close": "Sluiten"
+    "close": "Sluiten",
+    "done": "Klaar"
   },
   "nav": {
     "profileMenu": "Profielmenu",
