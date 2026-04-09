@@ -417,6 +417,9 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   const contentRef = useRef<HTMLTextAreaElement>(null);
   const colorPickerRef = useRef<HTMLDivElement>(null);
   const savingRef = useRef(false);
+  // Set to true when the backdrop mousedown handler has already handled a dismiss,
+  // so Dialog.onClose (which HeadlessUI fires after the mousedown) skips its logic.
+  const backdropHandledRef = useRef(false);
   const savedTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const resizeContentTextarea = useCallback((textarea: HTMLTextAreaElement | null) => {
     if (!textarea) return;
@@ -1504,9 +1507,12 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       <Dialog
         open={true}
         onClose={() => {
-          // Two-step dismiss: collapse content to preview on first trigger (Escape or
-          // backdrop click), then close on the second. Both the Escape key (via
-          // HeadlessUI's onClose) and the backdrop onClick below share this logic.
+          // If the backdrop mousedown already handled this dismiss, skip.
+          if (backdropHandledRef.current) {
+            backdropHandledRef.current = false;
+            return;
+          }
+          // Escape key: two-step dismiss — collapse first, then close on second press.
           if (isEditingContent) {
             setIsEditingContent(false);
           } else {
@@ -1527,6 +1533,8 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
           className="fixed inset-0 flex items-center justify-center p-2 sm:p-4 overflow-hidden"
           onMouseDown={(e) => {
             if (e.target !== e.currentTarget) return;
+            // Signal onClose to skip its logic — we're handling this dismiss.
+            backdropHandledRef.current = true;
             if (isEditingContent) {
               setIsEditingContent(false);
             } else {
