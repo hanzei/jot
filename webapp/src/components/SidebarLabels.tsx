@@ -41,7 +41,13 @@ const SidebarLabels = ({
   // (which would make the row background flash or shift during open/close).
   const [showMenus, setShowMenus] = useState(isExpanded);
   useEffect(() => {
-    const timer = setTimeout(() => setShowMenus(isExpanded), 200);
+    // On expand: show immediately (0ms) so the menu is available as soon as
+    // the sidebar opens — required for tests and general responsiveness.
+    // On collapse: delay by 200ms (matching the width transition) so the
+    // flex-1 label button doesn't change width mid-animation, which would
+    // cause the row background to visibly shift.
+    const delay = isExpanded ? 0 : 200;
+    const timer = setTimeout(() => setShowMenus(isExpanded), delay);
     return () => clearTimeout(timer);
   }, [isExpanded]);
 
