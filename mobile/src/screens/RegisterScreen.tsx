@@ -83,7 +83,6 @@ export default function RegisterScreen({ navigation }: RegisterScreenProps) {
     <KeyboardAvoidingView
       style={[styles.container, { backgroundColor: colors.surface }]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-      enabled={Platform.OS === 'ios'}
     >
       <ScrollView contentContainerStyle={styles.inner} keyboardShouldPersistTaps="handled">
         <Text style={[styles.title, { color: colors.text }]}>{t('auth.createAccountTitle')}</Text>

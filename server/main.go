@@ -61,10 +61,11 @@ func main() {
 
 	ctx := context.Background()
 	otelShutdown, err := telemetry.Setup(ctx, telemetry.Config{
-		Enabled:     cfg.OTelEnabled,
-		Endpoint:    cfg.OTelEndpoint,
-		ServiceName: cfg.OTelServiceName,
-		Insecure:    cfg.OTelInsecure,
+		Enabled:        cfg.OTelEnabled,
+		Endpoint:       cfg.OTelEndpoint,
+		ServiceName:    cfg.OTelServiceName,
+		ServiceVersion: server.Version(),
+		Insecure:       cfg.OTelInsecure,
 	})
 	if err != nil {
 		logrus.WithError(err).Fatal("Failed to initialize OpenTelemetry")

@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -42,43 +43,57 @@ func (s *NoteStore) GetByUserID(ctx context.Context, userID string, archived boo
 }
 
 func (s *NoteStore) GetByID(ctx context.Context, id string, userID string) (_ *Note, err error) {
-	ctx, end := startSpan(ctx, s.tracer, "NoteStore.GetByID", &err)
+	ctx, end := startSpan(ctx, s.tracer, "NoteStore.GetByID", &err,
+		attribute.String("note.id", id),
+	)
 	defer end()
 	return s.inner.GetByID(ctx, id, userID)
 }
 
 func (s *NoteStore) GetByIDAnyState(ctx context.Context, id string, userID string) (_ *Note, err error) {
-	ctx, end := startSpan(ctx, s.tracer, "NoteStore.GetByIDAnyState", &err)
+	ctx, end := startSpan(ctx, s.tracer, "NoteStore.GetByIDAnyState", &err,
+		attribute.String("note.id", id),
+	)
 	defer end()
 	return s.inner.GetByIDAnyState(ctx, id, userID)
 }
 
 func (s *NoteStore) Update(ctx context.Context, id string, userID string, title, content, color *string, pinned, archived, checkedItemsCollapsed *bool) (err error) {
-	ctx, end := startSpan(ctx, s.tracer, "NoteStore.Update", &err)
+	ctx, end := startSpan(ctx, s.tracer, "NoteStore.Update", &err,
+		attribute.String("note.id", id),
+	)
 	defer end()
 	return s.inner.Update(ctx, id, userID, title, content, color, pinned, archived, checkedItemsCollapsed)
 }
 
 func (s *NoteStore) Delete(ctx context.Context, id string, userID string) (err error) {
-	ctx, end := startSpan(ctx, s.tracer, "NoteStore.Delete", &err)
+	ctx, end := startSpan(ctx, s.tracer, "NoteStore.Delete", &err,
+		attribute.String("note.id", id),
+	)
 	defer end()
 	return s.inner.Delete(ctx, id, userID)
 }
 
 func (s *NoteStore) MoveToTrash(ctx context.Context, id string, userID string) (err error) {
-	ctx, end := startSpan(ctx, s.tracer, "NoteStore.MoveToTrash", &err)
+	ctx, end := startSpan(ctx, s.tracer, "NoteStore.MoveToTrash", &err,
+		attribute.String("note.id", id),
+	)
 	defer end()
 	return s.inner.MoveToTrash(ctx, id, userID)
 }
 
 func (s *NoteStore) RestoreFromTrash(ctx context.Context, id string, userID string) (err error) {
-	ctx, end := startSpan(ctx, s.tracer, "NoteStore.RestoreFromTrash", &err)
+	ctx, end := startSpan(ctx, s.tracer, "NoteStore.RestoreFromTrash", &err,
+		attribute.String("note.id", id),
+	)
 	defer end()
 	return s.inner.RestoreFromTrash(ctx, id, userID)
 }
 
 func (s *NoteStore) DeleteFromTrash(ctx context.Context, id string, userID string) (err error) {
-	ctx, end := startSpan(ctx, s.tracer, "NoteStore.DeleteFromTrash", &err)
+	ctx, end := startSpan(ctx, s.tracer, "NoteStore.DeleteFromTrash", &err,
+		attribute.String("note.id", id),
+	)
 	defer end()
 	return s.inner.DeleteFromTrash(ctx, id, userID)
 }
@@ -96,49 +111,65 @@ func (s *NoteStore) PurgeOldTrashedNotes(ctx context.Context, olderThan time.Dur
 }
 
 func (s *NoteStore) CreateItem(ctx context.Context, noteID string, text string, position, indentLevel int, assignedTo string) (_ *NoteItem, err error) {
-	ctx, end := startSpan(ctx, s.tracer, "NoteStore.CreateItem", &err)
+	ctx, end := startSpan(ctx, s.tracer, "NoteStore.CreateItem", &err,
+		attribute.String("note.id", noteID),
+	)
 	defer end()
 	return s.inner.CreateItem(ctx, noteID, text, position, indentLevel, assignedTo)
 }
 
 func (s *NoteStore) UpdateItem(ctx context.Context, id string, text string, completed bool, position, indentLevel int) (err error) {
-	ctx, end := startSpan(ctx, s.tracer, "NoteStore.UpdateItem", &err)
+	ctx, end := startSpan(ctx, s.tracer, "NoteStore.UpdateItem", &err,
+		attribute.String("item.id", id),
+	)
 	defer end()
 	return s.inner.UpdateItem(ctx, id, text, completed, position, indentLevel)
 }
 
 func (s *NoteStore) DeleteItem(ctx context.Context, id string) (err error) {
-	ctx, end := startSpan(ctx, s.tracer, "NoteStore.DeleteItem", &err)
+	ctx, end := startSpan(ctx, s.tracer, "NoteStore.DeleteItem", &err,
+		attribute.String("item.id", id),
+	)
 	defer end()
 	return s.inner.DeleteItem(ctx, id)
 }
 
 func (s *NoteStore) DeleteItemsByNoteID(ctx context.Context, noteID string) (err error) {
-	ctx, end := startSpan(ctx, s.tracer, "NoteStore.DeleteItemsByNoteID", &err)
+	ctx, end := startSpan(ctx, s.tracer, "NoteStore.DeleteItemsByNoteID", &err,
+		attribute.String("note.id", noteID),
+	)
 	defer end()
 	return s.inner.DeleteItemsByNoteID(ctx, noteID)
 }
 
 func (s *NoteStore) CreateItemWithCompleted(ctx context.Context, noteID string, text string, position int, completed bool, indentLevel int, assignedTo string) (_ *NoteItem, err error) {
-	ctx, end := startSpan(ctx, s.tracer, "NoteStore.CreateItemWithCompleted", &err)
+	ctx, end := startSpan(ctx, s.tracer, "NoteStore.CreateItemWithCompleted", &err,
+		attribute.String("note.id", noteID),
+	)
 	defer end()
 	return s.inner.CreateItemWithCompleted(ctx, noteID, text, position, completed, indentLevel, assignedTo)
 }
 
 func (s *NoteStore) HasAccess(ctx context.Context, noteID string, userID string) (_ bool, err error) {
-	ctx, end := startSpan(ctx, s.tracer, "NoteStore.HasAccess", &err)
+	ctx, end := startSpan(ctx, s.tracer, "NoteStore.HasAccess", &err,
+		attribute.String("note.id", noteID),
+	)
 	defer end()
 	return s.inner.HasAccess(ctx, noteID, userID)
 }
 
 func (s *NoteStore) IsOwner(ctx context.Context, noteID string, userID string) (_ bool, err error) {
-	ctx, end := startSpan(ctx, s.tracer, "NoteStore.IsOwner", &err)
+	ctx, end := startSpan(ctx, s.tracer, "NoteStore.IsOwner", &err,
+		attribute.String("note.id", noteID),
+	)
 	defer end()
 	return s.inner.IsOwner(ctx, noteID, userID)
 }
 
 func (s *NoteStore) GetOwnerID(ctx context.Context, noteID string) (_ string, err error) {
-	ctx, end := startSpan(ctx, s.tracer, "NoteStore.GetOwnerID", &err)
+	ctx, end := startSpan(ctx, s.tracer, "NoteStore.GetOwnerID", &err,
+		attribute.String("note.id", noteID),
+	)
 	defer end()
 	return s.inner.GetOwnerID(ctx, noteID)
 }
@@ -156,25 +187,33 @@ func (s *NoteStore) GetCollaboratorIDs(ctx context.Context, userID string) (_ []
 }
 
 func (s *NoteStore) GetNoteAudienceIDs(ctx context.Context, noteID string) (_ []string, err error) {
-	ctx, end := startSpan(ctx, s.tracer, "NoteStore.GetNoteAudienceIDs", &err)
+	ctx, end := startSpan(ctx, s.tracer, "NoteStore.GetNoteAudienceIDs", &err,
+		attribute.String("note.id", noteID),
+	)
 	defer end()
 	return s.inner.GetNoteAudienceIDs(ctx, noteID)
 }
 
 func (s *NoteStore) GetNoteLabels(ctx context.Context, noteID string, userID string) (_ []Label, err error) {
-	ctx, end := startSpan(ctx, s.tracer, "NoteStore.GetNoteLabels", &err)
+	ctx, end := startSpan(ctx, s.tracer, "NoteStore.GetNoteLabels", &err,
+		attribute.String("note.id", noteID),
+	)
 	defer end()
 	return s.inner.GetNoteLabels(ctx, noteID, userID)
 }
 
 func (s *NoteStore) AddLabelToNote(ctx context.Context, noteID, labelID, userID string) (err error) {
-	ctx, end := startSpan(ctx, s.tracer, "NoteStore.AddLabelToNote", &err)
+	ctx, end := startSpan(ctx, s.tracer, "NoteStore.AddLabelToNote", &err,
+		attribute.String("note.id", noteID),
+	)
 	defer end()
 	return s.inner.AddLabelToNote(ctx, noteID, labelID, userID)
 }
 
 func (s *NoteStore) RemoveLabelFromNote(ctx context.Context, noteID, labelID, userID string) (err error) {
-	ctx, end := startSpan(ctx, s.tracer, "NoteStore.RemoveLabelFromNote", &err)
+	ctx, end := startSpan(ctx, s.tracer, "NoteStore.RemoveLabelFromNote", &err,
+		attribute.String("note.id", noteID),
+	)
 	defer end()
 	return s.inner.RemoveLabelFromNote(ctx, noteID, labelID, userID)
 }

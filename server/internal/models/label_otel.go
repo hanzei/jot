@@ -5,6 +5,7 @@ import (
 	"database/sql"
 
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
 )
 
@@ -41,19 +42,25 @@ func (s *LabelStore) GetOrCreateLabel(ctx context.Context, userID, name string) 
 }
 
 func (s *LabelStore) GetLabelNoteIDs(ctx context.Context, labelID, userID string) (_ []string, err error) {
-	ctx, end := startSpan(ctx, s.tracer, "LabelStore.GetLabelNoteIDs", &err)
+	ctx, end := startSpan(ctx, s.tracer, "LabelStore.GetLabelNoteIDs", &err,
+		attribute.String("label.id", labelID),
+	)
 	defer end()
 	return s.inner.GetLabelNoteIDs(ctx, labelID, userID)
 }
 
 func (s *LabelStore) RenameLabel(ctx context.Context, labelID, userID, newName string) (_ *Label, err error) {
-	ctx, end := startSpan(ctx, s.tracer, "LabelStore.RenameLabel", &err)
+	ctx, end := startSpan(ctx, s.tracer, "LabelStore.RenameLabel", &err,
+		attribute.String("label.id", labelID),
+	)
 	defer end()
 	return s.inner.RenameLabel(ctx, labelID, userID, newName)
 }
 
 func (s *LabelStore) DeleteLabel(ctx context.Context, labelID, userID string) (err error) {
-	ctx, end := startSpan(ctx, s.tracer, "LabelStore.DeleteLabel", &err)
+	ctx, end := startSpan(ctx, s.tracer, "LabelStore.DeleteLabel", &err,
+		attribute.String("label.id", labelID),
+	)
 	defer end()
 	return s.inner.DeleteLabel(ctx, labelID, userID)
 }

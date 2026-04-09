@@ -9,6 +9,8 @@ import (
 
 	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/hanzei/jot/server/internal/models"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type contextKey string
@@ -30,6 +32,7 @@ func (s *SessionService) AuthMiddleware(next http.Handler) http.Handler {
 			}
 
 			logutil.FromContext(r.Context()).AddField("user_id", user.ID)
+			trace.SpanFromContext(r.Context()).SetAttributes(attribute.String("user.id", user.ID))
 
 			ctx := context.WithValue(r.Context(), UserContextKey, user)
 			ctx = context.WithValue(ctx, SessionTokenContextKey, session.Token)
@@ -50,6 +53,7 @@ func (s *SessionService) AuthMiddleware(next http.Handler) http.Handler {
 			}
 
 			logutil.FromContext(r.Context()).AddField("user_id", user.ID)
+			trace.SpanFromContext(r.Context()).SetAttributes(attribute.String("user.id", user.ID))
 
 			ctx := context.WithValue(r.Context(), UserContextKey, user)
 			next.ServeHTTP(w, r.WithContext(ctx))
