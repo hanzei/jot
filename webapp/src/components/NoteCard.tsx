@@ -308,7 +308,7 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
         onClick={() => !inBin && onEdit(note)}
         className={`${inBin ? 'cursor-default' : 'cursor-pointer'}`}
       >
-        {note.title && (
+        {note.title && note.note_type !== 'text' && (
           <h3 className="font-medium text-gray-900 dark:text-white mb-2 line-clamp-2">
             {note.title}
           </h3>

@@ -1726,8 +1726,9 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
               </div>
             )}
 
-            {/* Title */}
+            {/* Title — hidden for text notes */}
             <input
+              hidden={noteType === 'text'}
               type="text"
               autoCapitalize="sentences"
               placeholder={t('note.titlePlaceholder')}
