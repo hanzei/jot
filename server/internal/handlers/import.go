@@ -78,7 +78,7 @@ func (h *NotesHandler) importKeepNote(ctx context.Context, userID string, kn kee
 
 	noteType := models.NoteTypeText
 	if len(kn.ListContent) > 0 {
-		noteType = models.NoteTypeTodo
+		noteType = models.NoteTypeList
 	}
 
 	color := keepColorToHex(kn.Color)
@@ -88,7 +88,7 @@ func (h *NotesHandler) importKeepNote(ctx context.Context, userID string, kn kee
 		return err
 	}
 
-	if noteType == models.NoteTypeTodo {
+	if noteType == models.NoteTypeList {
 		for i, item := range kn.ListContent {
 			if _, err := h.noteStore.CreateItemWithCompleted(ctx, note.ID, item.Text, i, item.IsChecked, 0, ""); err != nil {
 				return err
@@ -254,7 +254,7 @@ func (h *NotesHandler) importJotJSON(ctx context.Context, userID string, data []
 // validateJotImportNote validates a single note from a Jot JSON export and converts
 // it to the store import type. idx is 1-based and used only in error messages.
 func validateJotImportNote(idx int, n jotImportNote) (models.JotImportNote, error) {
-	if n.NoteType != models.NoteTypeText && n.NoteType != models.NoteTypeTodo {
+	if n.NoteType != models.NoteTypeText && n.NoteType != models.NoteTypeList {
 		return models.JotImportNote{}, fmt.Errorf("note #%d: unsupported note_type %q", idx, n.NoteType)
 	}
 	if utf8.RuneCountInString(n.Title) > noteTitleMaxLength {

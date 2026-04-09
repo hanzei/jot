@@ -214,8 +214,8 @@ func TestBinEmptyTrashCleansUpItemsLabelsAndShares(t *testing.T) {
 	sharedWith := ts.createTestUser(t, "binempty4", "password123", false)
 
 	note, err := owner.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-		Title:    "Todo in trash",
-		NoteType: client.NoteTypeTodo,
+		Title:    "List in trash",
+		NoteType: client.NoteTypeList,
 		Items: []client.CreateNoteItem{
 			{Text: "First item", Position: 0},
 			{Text: "Second item", Position: 1},

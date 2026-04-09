@@ -54,48 +54,48 @@ export class DashboardPage {
     await expect(this.page.locator('[data-testid="note-card"]').filter({ hasText: title })).toBeVisible();
   }
 
-  async createTodoNote(title: string, items: string[]) {
+  async createListNote(title: string, items: string[]) {
     await this.clickNewNote();
-    await this.selectTodoType();
+    await this.selectListType();
     await this.page.fill('input[placeholder="Note title..."]', title);
     for (const item of items) {
-      await this.addTodoItem(item);
+      await this.addListItem(item);
     }
     await this.closeActiveDialog();
     await expect(this.page.getByRole('dialog')).toHaveCount(0);
     await expect(this.page.locator('[data-testid="note-card"]').filter({ hasText: title })).toBeVisible();
   }
 
-  async selectTodoType() {
-    await this.page.click('button:has-text("Todo List")');
+  async selectListType() {
+    await this.page.click('button:has-text("List")');
   }
 
-  async addTodoItem(text: string) {
-    const inputs = this.page.locator('[data-testid="todo-item-input"]');
+  async addListItem(text: string) {
+    const inputs = this.page.locator('[data-testid="list-item-input"]');
     const existingCount = await inputs.count();
     await this.page.click('button:has-text("Add item")');
     await expect(inputs).toHaveCount(existingCount + 1);
     await inputs.nth(existingCount).fill(text);
   }
 
-  todoItemInput(index: number): Locator {
-    return this.page.locator('[data-testid="todo-item-input"]').nth(index);
+  listItemInput(index: number): Locator {
+    return this.page.locator('[data-testid="list-item-input"]').nth(index);
   }
 
-  async focusTodoItem(index: number) {
-    await this.todoItemInput(index).focus();
+  async focusListItem(index: number) {
+    await this.listItemInput(index).focus();
   }
 
-  async expectTodoItemFocused(index: number) {
-    await expect(this.todoItemInput(index)).toBeFocused();
+  async expectListItemFocused(index: number) {
+    await expect(this.listItemInput(index)).toBeFocused();
   }
 
-  async expectTodoItemCount(count: number) {
-    await expect(this.page.locator('[data-testid="todo-item-input"]')).toHaveCount(count);
+  async expectListItemCount(count: number) {
+    await expect(this.page.locator('[data-testid="list-item-input"]')).toHaveCount(count);
   }
 
-  async expectTodoItemValue(index: number, value: string) {
-    await expect(this.todoItemInput(index)).toHaveValue(value);
+  async expectListItemValue(index: number, value: string) {
+    await expect(this.listItemInput(index)).toHaveValue(value);
   }
 
   async pressKey(key: string) {
@@ -282,10 +282,10 @@ export class DashboardPage {
     await expect(this.page.getByText('Notes in the bin are deleted after 7 days')).toBeVisible();
   }
 
-  async switchToMyTodo() {
+  async switchToMyTasks() {
     await this.ensureSidebarOpen();
     await this.page
-      .locator('aside[aria-label="Main navigation"] nav [aria-label="My Todo"]')
+      .locator('aside[aria-label="Main navigation"] nav [aria-label="My Tasks"]')
       .click();
   }
 
@@ -455,12 +455,12 @@ export class DashboardPage {
     await this.expectLabelNotInSidebar(labelName);
   }
 
-  /** Opens a note, assigns a todo item at the given index to a user, then closes the modal. */
-  async assignTodoItemToUser(noteTitle: string, itemIndex: number, username: string) {
+  /** Opens a note, assigns a list item at the given index to a user, then closes the modal. */
+  async assignListItemToUser(noteTitle: string, itemIndex: number, username: string) {
     await this.openNote(noteTitle);
     await expect(this.page.getByRole('heading', { name: 'Edit Note' })).toBeVisible();
 
-    const itemRow = this.page.locator('[data-testid="todo-item-row"]').nth(itemIndex);
+    const itemRow = this.page.locator('[data-testid="list-item-row"]').nth(itemIndex);
     await itemRow.hover();
     const assignBtn = itemRow.locator('button[aria-label="Assign item"]');
     // force: true bypasses visibility so the click works on both desktop (hover

@@ -7,7 +7,7 @@ import { DocumentTextIcon, ArchiveBoxIcon, TrashIcon, ClipboardDocumentCheckIcon
  * with the Dashboard's tab structure.
  *
  * Returns `{ tabs, bottomTabs }` matching the Dashboard layout:
- *   tabs       → Notes, My Todo
+ *   tabs       → Notes, My Tasks
  *   bottomTabs → Archive, Bin
  */
 export function useNavigationLinkTabs() {
@@ -20,9 +20,9 @@ export function useNavigationLinkTabs() {
       href: '/',
     },
     {
-      label: t('dashboard.tabMyTodo'),
+      label: t('dashboard.tabMyTasks'),
       icon: <ClipboardDocumentCheckIcon className="h-4 w-4 shrink-0" />,
-      href: '/?view=my-todo',
+      href: '/?view=my-tasks',
     },
   ];
 

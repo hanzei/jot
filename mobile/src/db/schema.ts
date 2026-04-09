@@ -53,6 +53,9 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
     );
   `);
 
+  // Rename legacy note_type 'todo' → 'list' to match server migration 003.
+  await db.runAsync(`UPDATE notes SET note_type = 'list' WHERE note_type = 'todo'`);
+
   // Migrate existing databases that pre-date newer columns.
   // Check which columns exist via PRAGMA, then ALTER TABLE only for missing ones.
   const noteItemCols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(note_items)');

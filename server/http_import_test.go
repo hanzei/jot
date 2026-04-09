@@ -286,7 +286,7 @@ func TestImportValidation(t *testing.T) {
 
 	t.Run("item text exceeding max is skipped with error", func(t *testing.T) {
 		data := marshalKeepNote(t, keepNoteJSON{
-			Title:       "Todo",
+			Title:       "List Note",
 			ListContent: []keepNoteItemJSON{{Text: strings.Repeat("a", 501)}},
 		})
 		result, err := user.Client.ImportNotes(t.Context(), "google_keep", "note.json", bytes.NewReader(data))

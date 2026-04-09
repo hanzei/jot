@@ -9,7 +9,7 @@ type NoteType string
 
 const (
 	NoteTypeText     NoteType = "text"
-	NoteTypeTodo     NoteType = "todo"
+	NoteTypeList     NoteType = "list"
 	DefaultNoteColor          = "#ffffff"
 )
 

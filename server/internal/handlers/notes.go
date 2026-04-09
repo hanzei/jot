@@ -190,9 +190,9 @@ func normalizeCreateNoteRequest(req *CreateNoteRequest) (int, error) {
 
 	if len(req.Items) > 0 {
 		if req.NoteType == "" {
-			req.NoteType = models.NoteTypeTodo
-		} else if req.NoteType != models.NoteTypeTodo {
-			return http.StatusBadRequest, errors.New("note_type must be 'todo' when items are provided")
+			req.NoteType = models.NoteTypeList
+		} else if req.NoteType != models.NoteTypeList {
+			return http.StatusBadRequest, errors.New("note_type must be 'list' when items are provided")
 		}
 	} else if req.NoteType == "" {
 		req.NoteType = models.NoteTypeText
@@ -225,7 +225,7 @@ func (h *NotesHandler) createNoteLabels(ctx context.Context, noteID, userID stri
 	return http.StatusOK, nil
 }
 
-func (h *NotesHandler) createTodoItems(ctx context.Context, noteID string, items []CreateNoteItem) (int, error) {
+func (h *NotesHandler) createListItems(ctx context.Context, noteID string, items []CreateNoteItem) (int, error) {
 	for _, item := range items {
 		if item.IndentLevel < 0 || item.IndentLevel > 1 {
 			return http.StatusBadRequest, errors.New("indent_level must be 0 or 1")
@@ -234,7 +234,7 @@ func (h *NotesHandler) createTodoItems(ctx context.Context, noteID string, items
 			return http.StatusBadRequest, fmt.Errorf("item text must be %d characters or fewer", noteItemTextMaxLength)
 		}
 		if _, err := h.noteStore.CreateItemWithCompleted(ctx, noteID, item.Text, item.Position, item.Completed, item.IndentLevel, ""); err != nil {
-			return http.StatusInternalServerError, fmt.Errorf("create todo item: %w", err)
+			return http.StatusInternalServerError, fmt.Errorf("create list item: %w", err)
 		}
 	}
 	return http.StatusOK, nil
@@ -250,7 +250,7 @@ func (h *NotesHandler) createTodoItems(ctx context.Context, noteID string, items
 //	@Param		trashed		query		boolean	false	"Return trashed notes"
 //	@Param		search		query		string	false	"Full-text search query"
 //	@Param		label		query		string	false	"Filter by label ID"
-//	@Param		my_todo		query		boolean	false	"Return only notes with todos assigned to current user"
+//	@Param		my_tasks	query		boolean	false	"Return only notes with tasks assigned to current user"
 //	@Success	200			{array}		models.Note
 //	@Failure	400			{string}	string	"search query too long"
 //	@Failure	401			{string}	string	"unauthorized"
@@ -267,13 +267,13 @@ func (h *NotesHandler) GetNotes(w http.ResponseWriter, r *http.Request) (int, an
 	archived := q.Get("archived") == queryTrue
 	search := q.Get("search")
 	labelID := q.Get("label")
-	myTodo := q.Get("my_todo") == queryTrue
+	myTasks := q.Get("my_tasks") == queryTrue
 
 	if err := validateSearchQuery(search); err != nil {
 		return http.StatusBadRequest, nil, err
 	}
 
-	notes, err := h.noteStore.GetByUserID(r.Context(), user.ID, archived, trashed, search, labelID, myTodo)
+	notes, err := h.noteStore.GetByUserID(r.Context(), user.ID, archived, trashed, search, labelID, myTasks)
 	if err != nil {
 		return http.StatusInternalServerError, nil, fmt.Errorf("get notes: %w", err)
 	}
@@ -317,8 +317,8 @@ func (h *NotesHandler) CreateNote(w http.ResponseWriter, r *http.Request) (int, 
 
 	needRefetch := false
 
-	if req.NoteType == models.NoteTypeTodo && len(req.Items) > 0 {
-		if status, err := h.createTodoItems(r.Context(), note.ID, req.Items); err != nil {
+	if req.NoteType == models.NoteTypeList && len(req.Items) > 0 {
+		if status, err := h.createListItems(r.Context(), note.ID, req.Items); err != nil {
 			return status, nil, err
 		}
 		needRefetch = true
@@ -445,7 +445,7 @@ func normalizeUpdateNoteRequest(req *UpdateNoteRequest) (int, error) {
 	return http.StatusOK, nil
 }
 
-func (h *NotesHandler) validateTodoItems(ctx context.Context, noteID string, items []UpdateNoteItem) (int, error) {
+func (h *NotesHandler) validateListItems(ctx context.Context, noteID string, items []UpdateNoteItem) (int, error) {
 	if len(items) > noteItemsMaxCount {
 		return http.StatusBadRequest, fmt.Errorf("note cannot have more than %d items", noteItemsMaxCount)
 	}
@@ -513,13 +513,13 @@ func (h *NotesHandler) validateItemAssignments(ctx context.Context, noteID strin
 	return http.StatusOK, nil
 }
 
-func (h *NotesHandler) updateTodoItems(ctx context.Context, noteID string, userID string, items []UpdateNoteItem) error {
+func (h *NotesHandler) updateListItems(ctx context.Context, noteID string, userID string, items []UpdateNoteItem) error {
 	currentNote, err := h.noteStore.GetByID(ctx, noteID, userID)
 	if err != nil {
 		return fmt.Errorf("get note: %w", err)
 	}
 
-	if currentNote.NoteType == models.NoteTypeTodo {
+	if currentNote.NoteType == models.NoteTypeList {
 		if err := h.noteStore.DeleteItemsByNoteID(ctx, noteID); err != nil {
 			return fmt.Errorf("delete note items: %w", err)
 		}
@@ -578,7 +578,7 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 	// - nil: "items" omitted from payload (do not touch existing items)
 	// - empty/non-empty slice: "items" explicitly provided (replace items)
 	if req.Items != nil {
-		if status, err := h.validateTodoItems(r.Context(), id, req.Items); err != nil {
+		if status, err := h.validateListItems(r.Context(), id, req.Items); err != nil {
 			return status, nil, err
 		}
 	}
@@ -592,8 +592,8 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 	}
 
 	if req.Items != nil {
-		if updateErr := h.updateTodoItems(r.Context(), id, user.ID, req.Items); updateErr != nil {
-			return http.StatusInternalServerError, nil, fmt.Errorf("update todo items: %w", updateErr)
+		if updateErr := h.updateListItems(r.Context(), id, user.ID, req.Items); updateErr != nil {
+			return http.StatusInternalServerError, nil, fmt.Errorf("update list items: %w", updateErr)
 		}
 	}
 

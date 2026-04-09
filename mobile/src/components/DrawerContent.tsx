@@ -73,7 +73,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
   const insets = useSafeAreaInsets();
   const topItems: NavItem[] = [
     { name: 'Notes', label: t('dashboard.tabNotes'), icon: 'document-text-outline', activeIcon: 'document-text' },
-    { name: 'MyTodo', label: t('dashboard.tabMyTodo'), icon: 'clipboard-outline', activeIcon: 'clipboard' },
+    { name: 'MyTasks', label: t('dashboard.tabMyTasks'), icon: 'clipboard-outline', activeIcon: 'clipboard' },
   ];
   const bottomItems: NavItem[] = [
     { name: 'Archived', label: t('dashboard.tabArchive'), icon: 'archive-outline', activeIcon: 'archive' },

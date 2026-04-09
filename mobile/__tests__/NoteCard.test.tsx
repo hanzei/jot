@@ -55,10 +55,10 @@ describe('NoteCard', () => {
     expect(getByText('Some content here')).toBeTruthy();
   });
 
-  it('renders todo item previews for todo notes', () => {
-    const todoNote: Note = {
+  it('renders list item previews for list notes', () => {
+    const listNote: Note = {
       ...baseNote,
-      note_type: 'todo',
+      note_type: 'list',
       content: '',
       items: [
         {
@@ -86,16 +86,16 @@ describe('NoteCard', () => {
       ],
     };
 
-    const { getByText } = render(<NoteCard note={todoNote} onPress={jest.fn()} />);
+    const { getByText } = render(<NoteCard note={listNote} onPress={jest.fn()} />);
 
     expect(getByText('Buy groceries')).toBeTruthy();
     expect(getByText('+1 completed items')).toBeTruthy();
   });
 
-  it('indents todo preview rows using indent_level', () => {
-    const todoWithNestedItems: Note = {
+  it('indents list preview rows using indent_level', () => {
+    const listWithNestedItems: Note = {
       ...baseNote,
-      note_type: 'todo',
+      note_type: 'list',
       content: '',
       items: [
         {
@@ -123,19 +123,19 @@ describe('NoteCard', () => {
       ],
     };
 
-    const { getByTestId } = render(<NoteCard note={todoWithNestedItems} onPress={jest.fn()} />);
+    const { getByTestId } = render(<NoteCard note={listWithNestedItems} onPress={jest.fn()} />);
 
-    const parentRow = getByTestId('note-card-todo-row-item-parent');
-    const childRow = getByTestId('note-card-todo-row-item-child');
+    const parentRow = getByTestId('note-card-list-row-item-parent');
+    const childRow = getByTestId('note-card-list-row-item-child');
 
     expect(StyleSheet.flatten(parentRow.props.style)?.marginLeft).toBe(0);
     expect(StyleSheet.flatten(childRow.props.style)?.marginLeft).toBe(1 * VALIDATION.INDENT_PX_PER_LEVEL);
   });
 
-  it('clamps negative todo preview indentation to zero', () => {
-    const todoWithNegativeIndent: Note = {
+  it('clamps negative list preview indentation to zero', () => {
+    const listWithNegativeIndent: Note = {
       ...baseNote,
-      note_type: 'todo',
+      note_type: 'list',
       content: '',
       items: [
         {
@@ -152,22 +152,22 @@ describe('NoteCard', () => {
       ],
     };
 
-    const { getByTestId } = render(<NoteCard note={todoWithNegativeIndent} onPress={jest.fn()} />);
-    const row = getByTestId('note-card-todo-row-item-negative-indent');
+    const { getByTestId } = render(<NoteCard note={listWithNegativeIndent} onPress={jest.fn()} />);
+    const row = getByTestId('note-card-list-row-item-negative-indent');
 
     expect(StyleSheet.flatten(row.props.style)?.marginLeft).toBe(0);
   });
 
-  it('allows todo preview text to wrap instead of truncating', () => {
-    const longTodoNote: Note = {
+  it('allows list preview text to wrap instead of truncating', () => {
+    const longListNote: Note = {
       ...baseNote,
-      note_type: 'todo',
+      note_type: 'list',
       content: '',
       items: [
         {
           id: 'item-wrap',
           note_id: 'note-1',
-          text: 'This is a very long todo item that should wrap to multiple lines in note previews on mobile',
+          text: 'This is a very long list item that should wrap to multiple lines in note previews on mobile',
           completed: false,
           position: 0,
           indent_level: 0,
@@ -178,10 +178,10 @@ describe('NoteCard', () => {
       ],
     };
 
-    const { getByText } = render(<NoteCard note={longTodoNote} onPress={jest.fn()} />);
-    const todoText = getByText(longTodoNote.items?.[0]?.text ?? '');
+    const { getByText } = render(<NoteCard note={longListNote} onPress={jest.fn()} />);
+    const listText = getByText(longListNote.items?.[0]?.text ?? '');
 
-    expect(todoText.props.numberOfLines).toBeUndefined();
+    expect(listText.props.numberOfLines).toBeUndefined();
   });
 
   it('renders label chips', () => {
@@ -238,10 +238,10 @@ describe('NoteCard', () => {
     expect(queryByText('Test Note')).toBeNull();
   });
 
-  it('does not show assignee avatar for assigned todo items', () => {
-    const sharedTodo: Note = {
+  it('does not show assignee avatar for assigned list items', () => {
+    const sharedList: Note = {
       ...baseNote,
-      note_type: 'todo',
+      note_type: 'list',
       content: '',
       is_shared: true,
       items: [
@@ -260,7 +260,7 @@ describe('NoteCard', () => {
     };
 
     const { getByText, queryByText } = render(
-      <NoteCard note={sharedTodo} onPress={jest.fn()} />,
+      <NoteCard note={sharedList} onPress={jest.fn()} />,
     );
 
     expect(getByText('Assigned task')).toBeTruthy();

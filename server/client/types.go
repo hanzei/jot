@@ -2,12 +2,12 @@ package client
 
 import "time"
 
-// NoteType distinguishes text notes from todo/checklist notes.
+// NoteType distinguishes text notes from list/checklist notes.
 type NoteType string
 
 const (
 	NoteTypeText NoteType = "text"
-	NoteTypeTodo NoteType = "todo"
+	NoteTypeList NoteType = "list"
 )
 
 // Role distinguishes user permission levels.
@@ -66,7 +66,7 @@ type Note struct {
 	UpdatedAt             time.Time   `json:"updated_at"`
 }
 
-// NoteItem is a single checklist entry within a todo note.
+// NoteItem is a single checklist entry within a list note.
 type NoteItem struct {
 	ID          string    `json:"id"`
 	NoteID      string    `json:"note_id"`
@@ -123,7 +123,7 @@ type CreateNoteRequest struct {
 	Labels   []string         `json:"labels,omitempty"`
 }
 
-// CreateNoteItem describes a checklist item to create with a new todo note.
+// CreateNoteItem describes a checklist item to create with a new list note.
 // Assignment (AssignedTo) is only supported on update, not creation.
 type CreateNoteItem struct {
 	Text        string `json:"text"`
@@ -136,9 +136,9 @@ type CreateNoteItem struct {
 // Nil pointer fields are omitted and keep their server-side values.
 //
 // Items is a pointer to support tri-state update semantics with `omitempty`:
-// - nil pointer: omit "items" (do not change existing todo items)
-// - pointer to empty slice: send "items":[] (clear all todo items)
-// - pointer to non-empty slice: replace todo items
+// - nil pointer: omit "items" (do not change existing list items)
+// - pointer to empty slice: send "items":[] (clear all list items)
+// - pointer to non-empty slice: replace list items
 type UpdateNoteRequest struct {
 	Title                 *string           `json:"title,omitempty"`
 	Content               *string           `json:"content,omitempty"`
@@ -174,7 +174,7 @@ type ListNotesOptions struct {
 	Trashed  bool
 	Search   string
 	Label    string // label ID (not name) to filter by
-	MyTodo   bool
+	MyTasks  bool
 }
 
 // ImportResponse is returned by the import endpoint.
@@ -207,7 +207,7 @@ type JotExportNote struct {
 	Items                 []JotExportNoteItem `json:"items,omitempty"`
 }
 
-// JotExportNoteItem is a single todo item in a Jot JSON export.
+// JotExportNoteItem is a single list item in a Jot JSON export.
 type JotExportNoteItem struct {
 	Text        string `json:"text"`
 	Completed   bool   `json:"completed"`
@@ -231,7 +231,7 @@ type AdminStatsResponse struct {
 	Notes     AdminNoteStats     `json:"notes"`
 	Sharing   AdminSharingStats  `json:"sharing"`
 	Labels    AdminLabelStats    `json:"labels"`
-	TodoItems AdminTodoItemStats `json:"todo_items"`
+	ListItems AdminListItemStats `json:"list_items"`
 	Storage   AdminStorageStats  `json:"storage"`
 }
 
@@ -243,7 +243,7 @@ type AdminUserStats struct {
 type AdminNoteStats struct {
 	Total    int64 `json:"total"`
 	Text     int64 `json:"text"`
-	Todo     int64 `json:"todo"`
+	List     int64 `json:"list"`
 	Trashed  int64 `json:"trashed"`
 	Archived int64 `json:"archived"`
 }
@@ -258,7 +258,7 @@ type AdminLabelStats struct {
 	NoteAssociations int64 `json:"note_associations"`
 }
 
-type AdminTodoItemStats struct {
+type AdminListItemStats struct {
 	Total     int64 `json:"total"`
 	Completed int64 `json:"completed"`
 	Assigned  int64 `json:"assigned"`

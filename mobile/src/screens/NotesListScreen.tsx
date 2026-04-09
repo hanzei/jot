@@ -40,7 +40,7 @@ import { getLocalNotes, permanentDeleteLocalNote } from '../db/noteQueries';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 
 interface NotesListScreenProps {
-  variant?: 'notes' | 'archived' | 'trash' | 'my-todo';
+  variant?: 'notes' | 'archived' | 'trash' | 'my-tasks';
   labelId?: string;
 }
 
@@ -101,8 +101,8 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     trashed: variant === 'trash' ? true : undefined,
     search: debouncedSearch || undefined,
     label: variant === 'notes' ? labelId : undefined,
-    my_todo: variant === 'my-todo' ? true : undefined,
-    user_id: variant === 'my-todo' ? user?.id : undefined,
+    my_tasks: variant === 'my-tasks' ? true : undefined,
+    user_id: variant === 'my-tasks' ? user?.id : undefined,
   }), [variant, debouncedSearch, labelId, user?.id]);
 
   const { data: notes, isLoading, isError, refetch, isRefetching } = useOfflineNotes(params);
@@ -617,7 +617,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
         </TouchableOpacity>
       </View>
 
-      {/* Sort preference is global across notes, archived, trash, labels, and my-todo views. */}
+      {/* Sort preference is global across notes, archived, trash, labels, and my-tasks views. */}
       {isSortControlsOpen && (
         <View style={styles.sortControlsContainer}>
           <ScrollView
@@ -740,7 +740,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     const emptyIcon: keyof typeof Ionicons.glyphMap =
       variant === 'trash' ? 'trash-outline' :
       variant === 'archived' ? 'archive-outline' :
-      variant === 'my-todo' ? 'clipboard-outline' : 'document-text-outline';
+      variant === 'my-tasks' ? 'clipboard-outline' : 'document-text-outline';
     return (
       <View style={[styles.emptyWrapper, { backgroundColor: colors.background }]}>
         {variant === 'notes' && renderTopControls()}
@@ -768,13 +768,13 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
             />
             <Text style={[styles.emptyTitle, { color: colors.text }]}>
               {variant === 'notes' && t('dashboard.noNotesYet')}
-              {variant === 'my-todo' && t('dashboard.noAssignedTodos')}
+              {variant === 'my-tasks' && t('dashboard.noAssignedListItems')}
               {variant === 'archived' && t('dashboard.noArchivedNotes')}
               {variant === 'trash' && t('dashboard.noBinnedNotes')}
             </Text>
             <Text style={[styles.emptySubtext, { color: colors.textMuted }]}>
               {variant === 'notes' && t('dashboard.createFirstNote')}
-              {variant === 'my-todo' && t('dashboard.noMyTodoNotes')}
+              {variant === 'my-tasks' && t('dashboard.noMyTasksNotes')}
               {variant === 'archived' && t('dashboard.archivedNotesWillAppear')}
               {variant === 'trash' && t('dashboard.deletedNotesWillAppear')}
             </Text>

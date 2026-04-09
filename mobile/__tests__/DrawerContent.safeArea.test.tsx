@@ -115,7 +115,7 @@ const makeProps = (): DrawerContentComponentProps => ({
   state: {
     index: 0,
     key: 'drawer-key',
-    routeNames: ['Notes', 'MyTodo', 'Archived', 'Trash'],
+    routeNames: ['Notes', 'MyTasks', 'Archived', 'Trash'],
     routes: [{ key: 'notes-key', name: 'Notes' }],
     stale: false,
     type: 'drawer',

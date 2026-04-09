@@ -179,9 +179,9 @@ test.describe('Notes', () => {
     await dashboardPage.expectNoteNotVisible('Modal Archive Test');
   });
 
-  test('creates a todo note with items', async ({ dashboardPage }) => {
+  test('creates a list note with items', async ({ dashboardPage }) => {
     await dashboardPage.goto();
-    await dashboardPage.createTodoNote('Shopping List', ['Apples', 'Bread', 'Milk']);
+    await dashboardPage.createListNote('Shopping List', ['Apples', 'Bread', 'Milk']);
 
     const card = dashboardPage.noteCard('Shopping List');
     await expect(card.getByText('Apples')).toBeVisible();
@@ -281,7 +281,7 @@ test.describe('Notes', () => {
     await dashboardPage.expectVisibleNoteTitles(['Zulu', 'Bravo', 'alpha']);
   });
 
-  test('duplicates text and todo notes with copied labels and cleared shares/assignments', async ({ page, dashboardPage, request }) => {
+  test('duplicates text and list notes with copied labels and cleared shares/assignments', async ({ page, dashboardPage, request }) => {
     const collaboratorName = `dup-collab-${Date.now()}`;
     const collaboratorPassword = 'testpass123';
 
@@ -302,10 +302,10 @@ test.describe('Notes', () => {
     await expect(duplicatedTextCard.getByText('Original text body')).toBeVisible();
     await expect(duplicatedTextCard.getByText('text-label')).toBeVisible();
 
-    await dashboardPage.createTodoNote('Source Todo', ['Prepare agenda', 'Send follow-up']);
-    await dashboardPage.addLabelToNote('Source Todo', 'todo-label');
-    await dashboardPage.shareNoteWithUser('Source Todo', collaboratorName);
-    await dashboardPage.assignTodoItemToUser('Source Todo', 0, collaboratorName);
+    await dashboardPage.createListNote('Source List', ['Prepare agenda', 'Send follow-up']);
+    await dashboardPage.addLabelToNote('Source List', 'list-label');
+    await dashboardPage.shareNoteWithUser('Source List', collaboratorName);
+    await dashboardPage.assignListItemToUser('Source List', 0, collaboratorName);
 
     const cookies = await page.context().cookies();
     const sessionCookie = cookies.find((cookie) => cookie.name === 'jot_session');
@@ -336,17 +336,17 @@ test.describe('Notes', () => {
       };
     };
 
-    const sourceTodo = await findNoteByTitle('Source Todo');
-    const updateResp = await request.patch(`/api/v1/notes/${sourceTodo.id}`, {
+    const sourceList = await findNoteByTitle('Source List');
+    const updateResp = await request.patch(`/api/v1/notes/${sourceList.id}`, {
       headers: authHeaders,
       data: {
-        title: sourceTodo.title,
-        content: sourceTodo.content,
-        pinned: sourceTodo.pinned,
-        archived: sourceTodo.archived,
-        color: sourceTodo.color,
-        checked_items_collapsed: sourceTodo.checked_items_collapsed,
-        items: sourceTodo.items.map((item, index) => ({
+        title: sourceList.title,
+        content: sourceList.content,
+        pinned: sourceList.pinned,
+        archived: sourceList.archived,
+        color: sourceList.color,
+        checked_items_collapsed: sourceList.checked_items_collapsed,
+        items: sourceList.items.map((item, index) => ({
           text: item.text,
           position: item.position,
           completed: index === 1,
@@ -357,15 +357,15 @@ test.describe('Notes', () => {
     });
     expect(updateResp.ok()).toBeTruthy();
 
-    await dashboardPage.openNote('Source Todo');
+    await dashboardPage.openNote('Source List');
     await dashboardPage.duplicateCurrentNoteFromModal();
     await expect(page.getByText('Note duplicated')).toBeVisible();
-    await dashboardPage.expectNoteAtPosition(0, 'Copy of Source Todo');
+    await dashboardPage.expectNoteAtPosition(0, 'Copy of Source List');
 
-    const duplicatedTodo = await findNoteByTitle('Copy of Source Todo');
-    expect(duplicatedTodo.labels.map((label) => label.name)).toEqual(['todo-label']);
-    expect(duplicatedTodo.shared_with ?? []).toEqual([]);
-    expect(duplicatedTodo.items ?? []).toEqual([
+    const duplicatedList = await findNoteByTitle('Copy of Source List');
+    expect(duplicatedList.labels.map((label) => label.name)).toEqual(['list-label']);
+    expect(duplicatedList.shared_with ?? []).toEqual([]);
+    expect(duplicatedList.items ?? []).toEqual([
       expect.objectContaining({
         text: 'Prepare agenda',
         position: 0,
@@ -392,70 +392,70 @@ test.describe('Notes', () => {
     );
   });
 
-  test('pressing Enter on a non-last todo item inserts a new item below it', async ({ dashboardPage }) => {
+  test('pressing Enter on a non-last list item inserts a new item below it', async ({ dashboardPage }) => {
     await dashboardPage.goto();
     await dashboardPage.clickNewNote();
-    await dashboardPage.selectTodoType();
+    await dashboardPage.selectListType();
 
-    await dashboardPage.addTodoItem('First item');
-    await dashboardPage.addTodoItem('Second item');
+    await dashboardPage.addListItem('First item');
+    await dashboardPage.addListItem('Second item');
 
-    await dashboardPage.focusTodoItem(0);
+    await dashboardPage.focusListItem(0);
     await dashboardPage.pressKey('Enter');
 
-    await dashboardPage.expectTodoItemCount(3);
-    await dashboardPage.expectTodoItemValue(0, 'First item');
-    await dashboardPage.expectTodoItemFocused(1);
-    await dashboardPage.expectTodoItemValue(1, '');
-    await dashboardPage.expectTodoItemValue(2, 'Second item');
+    await dashboardPage.expectListItemCount(3);
+    await dashboardPage.expectListItemValue(0, 'First item');
+    await dashboardPage.expectListItemFocused(1);
+    await dashboardPage.expectListItemValue(1, '');
+    await dashboardPage.expectListItemValue(2, 'Second item');
   });
 
-  test('arrow keys navigate between todo items', async ({ dashboardPage }) => {
+  test('arrow keys navigate between list items', async ({ dashboardPage }) => {
     await dashboardPage.goto();
     await dashboardPage.clickNewNote();
-    await dashboardPage.selectTodoType();
+    await dashboardPage.selectListType();
 
     for (const text of ['Alpha', 'Beta', 'Gamma']) {
-      await dashboardPage.addTodoItem(text);
+      await dashboardPage.addListItem(text);
     }
 
-    await dashboardPage.focusTodoItem(0);
-    await dashboardPage.expectTodoItemFocused(0);
+    await dashboardPage.focusListItem(0);
+    await dashboardPage.expectListItemFocused(0);
 
     await dashboardPage.pressKey('ArrowDown');
-    await dashboardPage.expectTodoItemFocused(1);
+    await dashboardPage.expectListItemFocused(1);
 
     await dashboardPage.pressKey('ArrowDown');
-    await dashboardPage.expectTodoItemFocused(2);
+    await dashboardPage.expectListItemFocused(2);
 
     // ArrowDown on last item should keep focus there
     await dashboardPage.pressKey('ArrowDown');
-    await dashboardPage.expectTodoItemFocused(2);
+    await dashboardPage.expectListItemFocused(2);
 
     // ArrowUp back to second item
     await dashboardPage.pressKey('ArrowUp');
-    await dashboardPage.expectTodoItemFocused(1);
+    await dashboardPage.expectListItemFocused(1);
 
     // ArrowUp back to first item
     await dashboardPage.pressKey('ArrowUp');
-    await dashboardPage.expectTodoItemFocused(0);
+    await dashboardPage.expectListItemFocused(0);
 
     // ArrowUp on first item should keep focus there
     await dashboardPage.pressKey('ArrowUp');
-    await dashboardPage.expectTodoItemFocused(0);
+    await dashboardPage.expectListItemFocused(0);
   });
 
-  test('pressing Enter on the last todo item creates a new item', async ({ dashboardPage }) => {
+  test('pressing Enter on the last list item creates a new item', async ({ dashboardPage }) => {
     await dashboardPage.goto();
     await dashboardPage.clickNewNote();
-    await dashboardPage.selectTodoType();
+    await dashboardPage.selectListType();
 
-    await dashboardPage.addTodoItem('Only item');
+    await dashboardPage.addListItem('Only item');
 
-    await dashboardPage.focusTodoItem(0);
+    await dashboardPage.focusListItem(0);
     await dashboardPage.pressKey('Enter');
 
-    await dashboardPage.expectTodoItemCount(2);
-    await dashboardPage.expectTodoItemFocused(1);
+    await dashboardPage.expectListItemCount(2);
+    await dashboardPage.expectListItemFocused(1);
   });
 });

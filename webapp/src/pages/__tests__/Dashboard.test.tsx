@@ -1468,43 +1468,43 @@ describe('Dashboard', () => {
     })
   })
 
-  describe('My Todo Filtering', () => {
-    it('loads My Todo view from URL parameter', async () => {
+  describe('My Tasks Filtering', () => {
+    it('loads My Tasks view from URL parameter', async () => {
       const mockGetAll = vi.mocked(notes.getAll)
 
-      renderDashboard(['/?view=my-todo'])
+      renderDashboard(['/?view=my-tasks'])
 
       await waitFor(() => {
         expect(mockGetAll).toHaveBeenCalledWith(false, '', false, '', true)
       })
     })
 
-    it('shows empty state for My Todo with no assigned notes', async () => {
+    it('shows empty state for My Tasks with no assigned notes', async () => {
       vi.mocked(notes.getAll).mockResolvedValue([])
 
-      renderDashboard(['/?view=my-todo'])
+      renderDashboard(['/?view=my-tasks'])
 
       await waitFor(() => {
-        expect(screen.getByText('No assigned to-do items')).toBeInTheDocument()
-        expect(screen.getByText('No to-do items assigned to you yet. When someone assigns a to-do item to you in a shared note, it will appear here.')).toBeInTheDocument()
+        expect(screen.getByText('No assigned list items')).toBeInTheDocument()
+        expect(screen.getByText('No list items assigned to you yet. When someone assigns a list item to you in a shared note, it will appear here.')).toBeInTheDocument()
       })
     })
 
-    it('shows My Todo info subtitle in My Todo view', async () => {
+    it('shows My Tasks info subtitle in My Tasks view', async () => {
       vi.mocked(notes.getAll).mockResolvedValue([])
 
-      renderDashboard(['/?view=my-todo'])
+      renderDashboard(['/?view=my-tasks'])
 
       await waitFor(() => {
-        expect(screen.getByText('Showing notes that include your assigned to-do items.')).toBeInTheDocument()
+        expect(screen.getByText('Showing notes that include your assigned list items.')).toBeInTheDocument()
       })
     })
 
-    it('sets My Todo page title when My Todo view is active', async () => {
-      renderDashboard(['/?view=my-todo'])
+    it('sets My Tasks page title when My Tasks view is active', async () => {
+      renderDashboard(['/?view=my-tasks'])
 
       await waitFor(() => {
-        expect(document.title).toBe('My Todo - Jot')
+        expect(document.title).toBe('My Tasks - Jot')
       })
     })
 

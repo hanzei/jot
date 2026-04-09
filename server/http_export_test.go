@@ -246,13 +246,13 @@ func TestImportJotJSONValidation(t *testing.T) {
 
 	t.Run("item text too long returns 400", func(t *testing.T) {
 		longItem, _ := json.Marshal(strings.Repeat("a", 501))
-		payload := makePayload(`{"title":"X","content":"","note_type":"todo","color":"#ffffff","pinned":false,"archived":false,"position":0,"labels":[],"items":[{"text":` + string(longItem) + `,"completed":false,"position":0,"indent_level":0}]}`)
+		payload := makePayload(`{"title":"X","content":"","note_type":"list","color":"#ffffff","pinned":false,"archived":false,"position":0,"labels":[],"items":[{"text":` + string(longItem) + `,"completed":false,"position":0,"indent_level":0}]}`)
 		_, err := user.Client.ImportNotes(t.Context(), "jot_json", "export.json", bytes.NewReader(payload))
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 
 	t.Run("invalid indent_level returns 400", func(t *testing.T) {
-		payload := makePayload(`{"title":"X","content":"","note_type":"todo","color":"#ffffff","pinned":false,"archived":false,"position":0,"labels":[],"items":[{"text":"item","completed":false,"position":0,"indent_level":5}]}`)
+		payload := makePayload(`{"title":"X","content":"","note_type":"list","color":"#ffffff","pinned":false,"archived":false,"position":0,"labels":[],"items":[{"text":"item","completed":false,"position":0,"indent_level":5}]}`)
 		_, err := user.Client.ImportNotes(t.Context(), "jot_json", "export.json", bytes.NewReader(payload))
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
@@ -284,16 +284,16 @@ func TestImportJotJSONRoundTrip(t *testing.T) {
 	require.NoError(t, err)
 
 	collapsed := true
-	srcTodo, err := src.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-		Title:    "Todo Note",
-		NoteType: client.NoteTypeTodo,
+	srcList, err := src.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
+		Title:    "List Note",
+		NoteType: client.NoteTypeList,
 		Items: []client.CreateNoteItem{
 			{Text: "Item 1", Position: 0, IndentLevel: 0, Completed: true},
 			{Text: "Item 2", Position: 1, IndentLevel: 1, Completed: false},
 		},
 	})
 	require.NoError(t, err)
-	_, err = src.Client.UpdateNote(t.Context(), srcTodo.ID, &client.UpdateNoteRequest{CheckedItemsCollapsed: &collapsed})
+	_, err = src.Client.UpdateNote(t.Context(), srcList.ID, &client.UpdateNoteRequest{CheckedItemsCollapsed: &collapsed})
 	require.NoError(t, err)
 
 	// Create a label and attach it.
@@ -351,10 +351,10 @@ func TestImportJotJSONRoundTrip(t *testing.T) {
 	require.True(t, ok)
 	assert.True(t, an.Archived)
 
-	// Todo note with items.
-	tn, ok := byTitle["Todo Note"]
+	// List note with items.
+	tn, ok := byTitle["List Note"]
 	require.True(t, ok)
-	assert.Equal(t, client.NoteTypeTodo, tn.NoteType)
+	assert.Equal(t, client.NoteTypeList, tn.NoteType)
 	assert.True(t, tn.CheckedItemsCollapsed)
 	require.Len(t, tn.Items, 2)
 	itemsByPos := map[int]client.NoteItem{}

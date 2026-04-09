@@ -57,14 +57,14 @@ func TestDuplicateNoteEndpoint(t *testing.T) {
 		assert.Equal(t, firstVisible.ID, notes[1].ID)
 	})
 
-	t.Run("duplicates a shared todo note for a collaborator and clears assignments", func(t *testing.T) {
+	t.Run("duplicates a shared list note for a collaborator and clears assignments", func(t *testing.T) {
 		ts := setupTestServer(t)
-		owner := ts.createTestUser(t, "todo-owner", "password123", false)
-		collaborator := ts.createTestUser(t, "todo-collab", "password123", false)
+		owner := ts.createTestUser(t, "list-owner", "password123", false)
+		collaborator := ts.createTestUser(t, "list-collab", "password123", false)
 
 		source, err := owner.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
 			Title:    "Shared Tasks",
-			NoteType: client.NoteTypeTodo,
+			NoteType: client.NoteTypeList,
 			Color:    "#a7ffeb",
 			Labels:   []string{"ops"},
 			Items: []client.CreateNoteItem{
@@ -97,7 +97,7 @@ func TestDuplicateNoteEndpoint(t *testing.T) {
 
 		assert.Equal(t, collaborator.User.ID, duplicated.UserID)
 		assert.Equal(t, "Copy of Shared Tasks", duplicated.Title)
-		assert.Equal(t, client.NoteTypeTodo, duplicated.NoteType)
+		assert.Equal(t, client.NoteTypeList, duplicated.NoteType)
 		assert.Equal(t, "#00bcd4", duplicated.Color)
 		assert.False(t, duplicated.Pinned)
 		assert.False(t, duplicated.Archived)
@@ -130,7 +130,7 @@ func TestCreateNotePersistsCompletedItems(t *testing.T) {
 
 	created, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
 		Title:    "Checklist",
-		NoteType: client.NoteTypeTodo,
+		NoteType: client.NoteTypeList,
 		Items: []client.CreateNoteItem{
 			{Text: "Unchecked", Position: 0, IndentLevel: 0, Completed: false},
 			{Text: "Checked", Position: 1, IndentLevel: 1, Completed: true},

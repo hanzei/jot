@@ -3,7 +3,7 @@ import { render, fireEvent } from '@testing-library/react-native';
 import { PanResponder, StyleSheet } from 'react-native';
 import type { GestureResponderEvent, PanResponderGestureState } from 'react-native';
 import { VALIDATION } from '@jot/shared';
-import TodoItem from '../src/components/TodoItem';
+import ListItem from '../src/components/ListItem';
 import type { Collaborator } from '@jot/shared';
 
 const collaborators: Collaborator[] = [
@@ -27,7 +27,7 @@ function createGestureState(dx: number, dy: number): PanResponderGestureState {
   };
 }
 
-describe('TodoItem', () => {
+describe('ListItem', () => {
   afterEach(() => {
     jest.restoreAllMocks();
   });
@@ -41,56 +41,56 @@ describe('TodoItem', () => {
 
   it('renders text and unchecked checkbox', () => {
     const { getByTestId } = render(
-      <TodoItem text="Buy milk" completed={false} />,
+      <ListItem text="Buy milk" completed={false} />,
     );
 
-    expect(getByTestId('todo-item-text').props.value).toBe('Buy milk');
+    expect(getByTestId('list-item-text').props.value).toBe('Buy milk');
   });
 
   it('calls onToggle when checkbox pressed', () => {
     const onToggle = jest.fn();
     const { getByTestId } = render(
-      <TodoItem text="Task" completed={false} onToggle={onToggle} />,
+      <ListItem text="Task" completed={false} onToggle={onToggle} />,
     );
 
-    fireEvent.press(getByTestId('todo-item-checkbox'));
+    fireEvent.press(getByTestId('list-item-checkbox'));
     expect(onToggle).toHaveBeenCalledTimes(1);
   });
 
   it('calls onChangeText when text changed', () => {
     const onChangeText = jest.fn();
     const { getByTestId } = render(
-      <TodoItem text="Task" completed={false} onChangeText={onChangeText} />,
+      <ListItem text="Task" completed={false} onChangeText={onChangeText} />,
     );
 
-    fireEvent.changeText(getByTestId('todo-item-text'), 'Updated task');
+    fireEvent.changeText(getByTestId('list-item-text'), 'Updated task');
     expect(onChangeText).toHaveBeenCalledWith('Updated task');
   });
 
   it('calls onDelete when delete button pressed', () => {
     const onDelete = jest.fn();
     const { getByTestId } = render(
-      <TodoItem text="Task" completed={false} onDelete={onDelete} />,
+      <ListItem text="Task" completed={false} onDelete={onDelete} />,
     );
 
-    fireEvent.press(getByTestId('todo-item-delete'));
+    fireEvent.press(getByTestId('list-item-delete'));
     expect(onDelete).toHaveBeenCalledTimes(1);
   });
 
   it('does not show delete button when not editable', () => {
     const { queryByTestId } = render(
-      <TodoItem text="Task" completed={false} editable={false} onDelete={jest.fn()} />,
+      <ListItem text="Task" completed={false} editable={false} onDelete={jest.fn()} />,
     );
 
-    expect(queryByTestId('todo-item-delete')).toBeNull();
+    expect(queryByTestId('list-item-delete')).toBeNull();
   });
 
   it('applies strikethrough style to completed items', () => {
     const { getByTestId } = render(
-      <TodoItem text="Done task" completed={true} />,
+      <ListItem text="Done task" completed={true} />,
     );
 
-    const textInput = getByTestId('todo-item-text');
+    const textInput = getByTestId('list-item-text');
     const flatStyle = Array.isArray(textInput.props.style)
       ? Object.assign({}, ...textInput.props.style)
       : textInput.props.style;
@@ -99,35 +99,35 @@ describe('TodoItem', () => {
 
   it('uses shared indent spacing for positive indent levels', () => {
     const { getByTestId } = render(
-      <TodoItem text="Indented task" completed={false} indentLevel={1} />,
+      <ListItem text="Indented task" completed={false} indentLevel={1} />,
     );
 
-    const row = getByTestId('todo-item-row');
+    const row = getByTestId('list-item-row');
     expect(StyleSheet.flatten(row.props.style)?.marginLeft).toBe(VALIDATION.INDENT_PX_PER_LEVEL);
   });
 
   it('clamps negative indent levels to zero', () => {
     const { getByTestId } = render(
-      <TodoItem text="Invalid indent task" completed={false} indentLevel={-2} />,
+      <ListItem text="Invalid indent task" completed={false} indentLevel={-2} />,
     );
 
-    const row = getByTestId('todo-item-row');
+    const row = getByTestId('list-item-row');
     expect(StyleSheet.flatten(row.props.style)?.marginLeft).toBe(0);
   });
 
   it('uses multiline text input for wrapping long text', () => {
     const { getByTestId } = render(
-      <TodoItem text="A very long task text that should wrap to the next line" completed={false} />,
+      <ListItem text="A very long task text that should wrap to the next line" completed={false} />,
     );
 
-    expect(getByTestId('todo-item-text').props.multiline).toBe(true);
+    expect(getByTestId('list-item-text').props.multiline).toBe(true);
   });
 
   it('calls onIndent with +1 for right swipe beyond threshold', () => {
     const onIndent = jest.fn();
     const createSpy = jest.spyOn(PanResponder, 'create');
     const callsBefore = createSpy.mock.calls.length;
-    render(<TodoItem text="Task" completed={false} onIndent={onIndent} />);
+    render(<ListItem text="Task" completed={false} onIndent={onIndent} />);
     const config = getPanResponderConfig(createSpy, callsBefore);
     expect(config).toBeDefined();
     config?.onPanResponderRelease?.(gestureEvent, createGestureState(60, 0));
@@ -138,7 +138,7 @@ describe('TodoItem', () => {
     const onIndent = jest.fn();
     const createSpy = jest.spyOn(PanResponder, 'create');
     const callsBefore = createSpy.mock.calls.length;
-    render(<TodoItem text="Task" completed={false} onIndent={onIndent} />);
+    render(<ListItem text="Task" completed={false} onIndent={onIndent} />);
     const config = getPanResponderConfig(createSpy, callsBefore);
     expect(config).toBeDefined();
     config?.onPanResponderRelease?.(gestureEvent, createGestureState(-60, 0));
@@ -149,7 +149,7 @@ describe('TodoItem', () => {
     const onIndent = jest.fn();
     const createSpy = jest.spyOn(PanResponder, 'create');
     const callsBefore = createSpy.mock.calls.length;
-    render(<TodoItem text="Task" completed={false} onIndent={onIndent} />);
+    render(<ListItem text="Task" completed={false} onIndent={onIndent} />);
     const config = getPanResponderConfig(createSpy, callsBefore);
     expect(config).toBeDefined();
     config?.onPanResponderRelease?.(gestureEvent, createGestureState(20, 0));
@@ -160,7 +160,7 @@ describe('TodoItem', () => {
     const onIndent = jest.fn();
     const createSpy = jest.spyOn(PanResponder, 'create');
     const callsBefore = createSpy.mock.calls.length;
-    render(<TodoItem text="Task" completed={false} onIndent={onIndent} />);
+    render(<ListItem text="Task" completed={false} onIndent={onIndent} />);
     const config = getPanResponderConfig(createSpy, callsBefore);
     expect(config).toBeDefined();
     config?.onPanResponderRelease?.(gestureEvent, createGestureState(60, 80));
@@ -171,7 +171,7 @@ describe('TodoItem', () => {
     const onIndent = jest.fn();
     const createSpy = jest.spyOn(PanResponder, 'create');
     const callsBefore = createSpy.mock.calls.length;
-    render(<TodoItem text="Task" completed={false} editable={false} onIndent={onIndent} />);
+    render(<ListItem text="Task" completed={false} editable={false} onIndent={onIndent} />);
     const config = getPanResponderConfig(createSpy, callsBefore);
     expect(config).toBeDefined();
     config?.onPanResponderRelease?.(gestureEvent, createGestureState(60, 0));
@@ -181,7 +181,7 @@ describe('TodoItem', () => {
   it('shows assign button when shared with collaborators', () => {
     const onAssignPress = jest.fn();
     const { getByTestId } = render(
-      <TodoItem
+      <ListItem
         text="Task"
         completed={false}
         isShared={true}
@@ -190,14 +190,14 @@ describe('TodoItem', () => {
       />,
     );
 
-    expect(getByTestId('todo-item-assign')).toBeTruthy();
-    fireEvent.press(getByTestId('todo-item-assign'));
+    expect(getByTestId('list-item-assign')).toBeTruthy();
+    fireEvent.press(getByTestId('list-item-assign'));
     expect(onAssignPress).toHaveBeenCalledTimes(1);
   });
 
   it('hides assign button when not shared', () => {
     const { queryByTestId } = render(
-      <TodoItem
+      <ListItem
         text="Task"
         completed={false}
         isShared={false}
@@ -206,12 +206,12 @@ describe('TodoItem', () => {
       />,
     );
 
-    expect(queryByTestId('todo-item-assign')).toBeNull();
+    expect(queryByTestId('list-item-assign')).toBeNull();
   });
 
   it('hides assign button when no collaborators', () => {
     const { queryByTestId } = render(
-      <TodoItem
+      <ListItem
         text="Task"
         completed={false}
         isShared={true}
@@ -220,12 +220,12 @@ describe('TodoItem', () => {
       />,
     );
 
-    expect(queryByTestId('todo-item-assign')).toBeNull();
+    expect(queryByTestId('list-item-assign')).toBeNull();
   });
 
   it('shows assignee avatar when item is assigned', () => {
     const { getByTestId } = render(
-      <TodoItem
+      <ListItem
         text="Task"
         completed={false}
         isShared={true}
@@ -235,12 +235,12 @@ describe('TodoItem', () => {
       />,
     );
 
-    expect(getByTestId('todo-item-assignee')).toBeTruthy();
+    expect(getByTestId('list-item-assignee')).toBeTruthy();
   });
 
   it('hides unassigned placeholder for completed items', () => {
     const { queryByTestId } = render(
-      <TodoItem
+      <ListItem
         text="Task"
         completed={true}
         isShared={true}
@@ -249,12 +249,12 @@ describe('TodoItem', () => {
       />,
     );
 
-    expect(queryByTestId('todo-item-assign')).toBeNull();
+    expect(queryByTestId('list-item-assign')).toBeNull();
   });
 
   it('shows assignee avatar for completed items (read-only)', () => {
     const { getByTestId } = render(
-      <TodoItem
+      <ListItem
         text="Task"
         completed={true}
         isShared={true}
@@ -264,6 +264,6 @@ describe('TodoItem', () => {
       />,
     );
 
-    expect(getByTestId('todo-item-assignee')).toBeTruthy();
+    expect(getByTestId('list-item-assignee')).toBeTruthy();
   });
 });

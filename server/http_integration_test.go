@@ -490,21 +490,21 @@ func TestAdminStatsEndpoint(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	archivedTodoNote, err := adminUser.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-		Title:    "Archived todo note",
-		NoteType: client.NoteTypeTodo,
+	archivedListNote, err := adminUser.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
+		Title:    "Archived list note",
+		NoteType: client.NoteTypeList,
 		Items: []client.CreateNoteItem{
-			{Text: "First todo", Position: 0},
-			{Text: "Second todo", Position: 1},
+			{Text: "First item", Position: 0},
+			{Text: "Second item", Position: 1},
 		},
 	})
 	require.NoError(t, err)
 
-	activeTodoNote, err := adminUser.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-		Title:    "Active todo note",
-		NoteType: client.NoteTypeTodo,
+	activeListNote, err := adminUser.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
+		Title:    "Active list note",
+		NoteType: client.NoteTypeList,
 		Items: []client.CreateNoteItem{
-			{Text: "Assigned todo", Position: 0},
+			{Text: "Assigned item", Position: 0},
 		},
 	})
 	require.NoError(t, err)
@@ -516,22 +516,22 @@ func TestAdminStatsEndpoint(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	require.NoError(t, adminUser.Client.ShareNote(t.Context(), archivedTodoNote.ID, member1.User.ID))
-	require.NoError(t, adminUser.Client.ShareNote(t.Context(), activeTodoNote.ID, member2.User.ID))
+	require.NoError(t, adminUser.Client.ShareNote(t.Context(), archivedListNote.ID, member1.User.ID))
+	require.NoError(t, adminUser.Client.ShareNote(t.Context(), activeListNote.ID, member2.User.ID))
 
 	archived := true
-	_, err = adminUser.Client.UpdateNote(t.Context(), archivedTodoNote.ID, &client.UpdateNoteRequest{
+	_, err = adminUser.Client.UpdateNote(t.Context(), archivedListNote.ID, &client.UpdateNoteRequest{
 		Archived: &archived,
 		Items: &[]client.UpdateNoteItem{
-			{Text: "First todo", Position: 0, Completed: true, AssignedTo: member1.User.ID},
-			{Text: "Second todo", Position: 1, Completed: false, AssignedTo: ""},
+			{Text: "First item", Position: 0, Completed: true, AssignedTo: member1.User.ID},
+			{Text: "Second item", Position: 1, Completed: false, AssignedTo: ""},
 		},
 	})
 	require.NoError(t, err)
 
-	_, err = adminUser.Client.UpdateNote(t.Context(), activeTodoNote.ID, &client.UpdateNoteRequest{
+	_, err = adminUser.Client.UpdateNote(t.Context(), activeListNote.ID, &client.UpdateNoteRequest{
 		Items: &[]client.UpdateNoteItem{
-			{Text: "Assigned todo", Position: 0, Completed: false, AssignedTo: member2.User.ID},
+			{Text: "Assigned item", Position: 0, Completed: false, AssignedTo: member2.User.ID},
 		},
 	})
 	require.NoError(t, err)
@@ -544,7 +544,7 @@ func TestAdminStatsEndpoint(t *testing.T) {
 	require.NoError(t, err)
 	_, err = adminUser.Client.AddLabel(t.Context(), sharedTextNote.ID, "urgent")
 	require.NoError(t, err)
-	_, err = adminUser.Client.AddLabel(t.Context(), archivedTodoNote.ID, "work")
+	_, err = adminUser.Client.AddLabel(t.Context(), archivedListNote.ID, "work")
 	require.NoError(t, err)
 
 	t.Run("returns aggregated stats for admins", func(t *testing.T) {
@@ -554,7 +554,7 @@ func TestAdminStatsEndpoint(t *testing.T) {
 		assert.Equal(t, int64(3), stats.Users.Total)
 		assert.Equal(t, int64(4), stats.Notes.Total)
 		assert.Equal(t, int64(2), stats.Notes.Text)
-		assert.Equal(t, int64(2), stats.Notes.Todo)
+		assert.Equal(t, int64(2), stats.Notes.List)
 		assert.Equal(t, int64(1), stats.Notes.Trashed)
 		assert.Equal(t, int64(1), stats.Notes.Archived)
 
@@ -564,9 +564,9 @@ func TestAdminStatsEndpoint(t *testing.T) {
 		assert.Equal(t, int64(2), stats.Labels.Total)
 		assert.Equal(t, int64(3), stats.Labels.NoteAssociations)
 
-		assert.Equal(t, int64(3), stats.TodoItems.Total)
-		assert.Equal(t, int64(1), stats.TodoItems.Completed)
-		assert.Equal(t, int64(2), stats.TodoItems.Assigned)
+		assert.Equal(t, int64(3), stats.ListItems.Total)
+		assert.Equal(t, int64(1), stats.ListItems.Completed)
+		assert.Equal(t, int64(2), stats.ListItems.Assigned)
 
 		fileInfo, err := os.Stat(dbPath)
 		require.NoError(t, err)
@@ -934,13 +934,13 @@ func TestUserSettingsEndpoints(t *testing.T) {
 	})
 }
 
-func TestTodoItemIndentLevel(t *testing.T) {
+func TestListItemIndentLevel(t *testing.T) {
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "indentuser", "password123", false)
 
 	created, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
 		Title:    "Indent Test",
-		NoteType: client.NoteTypeTodo,
+		NoteType: client.NoteTypeList,
 		Items: []client.CreateNoteItem{
 			{Text: "top level", Position: 0, IndentLevel: 0},
 			{Text: "indented once", Position: 1, IndentLevel: 1},
@@ -981,7 +981,7 @@ func TestTodoItemIndentLevel(t *testing.T) {
 	t.Run("indent level defaults to 0 when omitted", func(t *testing.T) {
 		note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
 			Title:    "No Indent",
-			NoteType: client.NoteTypeTodo,
+			NoteType: client.NoteTypeList,
 			Items: []client.CreateNoteItem{
 				{Text: "item without indent_level", Position: 0},
 			},
@@ -994,7 +994,7 @@ func TestTodoItemIndentLevel(t *testing.T) {
 	t.Run("indent level > 1 rejected on create", func(t *testing.T) {
 		_, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
 			Title:    "Bad Indent",
-			NoteType: client.NoteTypeTodo,
+			NoteType: client.NoteTypeList,
 			Items: []client.CreateNoteItem{
 				{Text: "too deep", Position: 0, IndentLevel: 2},
 			},

@@ -379,12 +379,12 @@ func TestCreateNoteWithLabels(t *testing.T) {
 		assert.Contains(t, labelNames, "also valid")
 	})
 
-	t.Run("labels work with todo notes and items", func(t *testing.T) {
+	t.Run("labels work with list notes and items", func(t *testing.T) {
 		user := createNoteWithLabelsFixture(t)
 		note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-			Title:    "Todo With Labels",
+			Title:    "List With Labels",
 			Content:  "",
-			NoteType: client.NoteTypeTodo,
+			NoteType: client.NoteTypeList,
 			Items: []client.CreateNoteItem{
 				{Text: "Buy milk", Position: 0},
 				{Text: "Buy eggs", Position: 1},

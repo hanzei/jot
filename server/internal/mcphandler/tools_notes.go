@@ -87,7 +87,7 @@ func (h *Handler) handleGetNote(userID string) mcp.ToolHandlerFor[getNoteInput, 
 type createNoteInput struct {
 	Title    string           `json:"title,omitempty"     jsonschema:"Note title"`
 	Content  string           `json:"content,omitempty"   jsonschema:"Note body text (for text notes)"`
-	NoteType models.NoteType  `json:"note_type,omitempty" jsonschema:"Note type: text (default) or todo"`
+	NoteType models.NoteType  `json:"note_type,omitempty" jsonschema:"Note type: text (default) or list"`
 	Color    string           `json:"color,omitempty"     jsonschema:"Background color as a hex string, e.g. #ffffff"`
 }
 
@@ -122,7 +122,7 @@ type updateNoteInput struct {
 	Pinned                *bool   `json:"pinned,omitempty"                 jsonschema:"Pin or unpin the note (omit to keep current)"`
 	Archived              *bool   `json:"archived,omitempty"               jsonschema:"Archive or unarchive the note (omit to keep current)"`
 	Color                 *string `json:"color,omitempty"                  jsonschema:"Background color as a hex string (omit to keep current)"`
-	CheckedItemsCollapsed *bool   `json:"checked_items_collapsed,omitempty" jsonschema:"Collapse completed todo items (omit to keep current)"`
+	CheckedItemsCollapsed *bool   `json:"checked_items_collapsed,omitempty" jsonschema:"Collapse completed list items (omit to keep current)"`
 }
 
 func (h *Handler) handleUpdateNote(userID string) mcp.ToolHandlerFor[updateNoteInput, any] {

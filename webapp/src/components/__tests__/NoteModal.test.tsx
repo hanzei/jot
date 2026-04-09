@@ -88,7 +88,7 @@ vi.mock('@dnd-kit/utilities', () => ({
 // Mock console.error to silence error logs in tests
 const mockConsoleError = vi.fn()
 
-const createMockTodoItems = (): NoteItem[] => [
+const createMockListItems = (): NoteItem[] => [
   {
     id: 'item1',
     note_id: '1',
@@ -171,7 +171,7 @@ describe('NoteModal', () => {
       renderNoteModal(defaultProps)
 
       expect(screen.getByText('Text')).toBeInTheDocument()
-      expect(screen.getByText('Todo List')).toBeInTheDocument()
+      expect(screen.getByText('List')).toBeInTheDocument()
     })
 
     it('does not show note type selector for existing notes', () => {
@@ -179,7 +179,7 @@ describe('NoteModal', () => {
       renderNoteModal({ ...defaultProps, note })
 
       expect(screen.queryByText('Text')).not.toBeInTheDocument()
-      expect(screen.queryByText('Todo List')).not.toBeInTheDocument()
+      expect(screen.queryByText('List')).not.toBeInTheDocument()
     })
 
     it('displays last edited time for existing notes', () => {
@@ -254,37 +254,37 @@ describe('NoteModal', () => {
       expect(screen.getByText(/Content must be 10000 characters or less/)).toBeInTheDocument()
     })
 
-    it('handles todo item text validation', async () => {
+    it('handles list item text validation', async () => {
       renderNoteModal(defaultProps)
 
-      // Switch to todo mode
-      const todoButton = screen.getByText('Todo List')
-      fireEvent.click(todoButton)
+      // Switch to list mode
+      const listTypeButton = screen.getByText('List')
+      fireEvent.click(listTypeButton)
 
       // Add a new item
       const addItemButton = screen.getByText('Add item')
       fireEvent.click(addItemButton)
 
       // Find the input field and add invalid content using change event
-      const itemInput = screen.getByTestId('todo-item-input')
+      const itemInput = screen.getByTestId('list-item-input')
       fireEvent.change(itemInput, { target: { value: '<script>alert("xss")</script>' } })
 
       expect(screen.getByText(/Item text cannot contain < or > characters/)).toBeInTheDocument()
     })
 
-    it('validates todo item length limits', async () => {
+    it('validates list item length limits', async () => {
       renderNoteModal(defaultProps)
 
-      // Switch to todo mode
-      const todoButton = screen.getByText('Todo List')
-      fireEvent.click(todoButton)
+      // Switch to list mode
+      const listTypeButton = screen.getByText('List')
+      fireEvent.click(listTypeButton)
 
       // Add a new item
       const addItemButton = screen.getByText('Add item')
       fireEvent.click(addItemButton)
 
       // Add very long text using change event
-      const itemInput = screen.getByTestId('todo-item-input')
+      const itemInput = screen.getByTestId('list-item-input')
       const longText = 'a'.repeat(501)
       fireEvent.change(itemInput, { target: { value: longText } })
 
@@ -316,16 +316,16 @@ describe('NoteModal', () => {
     })
   })
 
-  describe('Todo List Functionality', () => {
-    it('switches between text and todo modes', async () => {
+  describe('List Functionality', () => {
+    it('switches between text and list modes', async () => {
       renderNoteModal(defaultProps)
 
       // Start in text mode
       expect(screen.getByPlaceholderText('Take a note...')).toBeInTheDocument()
 
-      // Switch to todo mode
-      const todoButton = screen.getByText('Todo List')
-      fireEvent.click(todoButton)
+      // Switch to list mode
+      const listTypeButton = screen.getByText('List')
+      fireEvent.click(listTypeButton)
 
       expect(screen.getByText('Add item')).toBeInTheDocument()
       expect(screen.queryByPlaceholderText('Take a note...')).not.toBeInTheDocument()
@@ -338,36 +338,36 @@ describe('NoteModal', () => {
       expect(screen.queryByText('Add item')).not.toBeInTheDocument()
     })
 
-    it('shows todo interface when in todo mode', async () => {
+    it('shows list interface when in list mode', async () => {
       renderNoteModal(defaultProps)
 
-      // Switch to todo mode
-      const todoButton = screen.getByText('Todo List')
-      fireEvent.click(todoButton)
+      // Switch to list mode
+      const listTypeButton = screen.getByText('List')
+      fireEvent.click(listTypeButton)
 
       // Should show add item button
       expect(screen.getByText('Add item')).toBeInTheDocument()
     })
 
-    it('uses multiline todo textarea so long text can wrap', async () => {
+    it('uses multiline list textarea so long text can wrap', async () => {
       renderNoteModal(defaultProps)
 
-      fireEvent.click(screen.getByText('Todo List'))
+      fireEvent.click(screen.getByText('List'))
       fireEvent.click(screen.getByText('Add item'))
 
-      const todoInput = screen.getByTestId('todo-item-input')
-      expect(todoInput.tagName).toBe('TEXTAREA')
-      expect(todoInput).toHaveAttribute('rows', '1')
+      const listInput = screen.getByTestId('list-item-input')
+      expect(listInput.tagName).toBe('TEXTAREA')
+      expect(listInput).toHaveAttribute('rows', '1')
     })
 
-    it('renders existing todo items', async () => {
-      const todoNote = createMockNote({
-        note_type: 'todo',
-        items: createMockTodoItems(),
+    it('renders existing list items', async () => {
+      const listNote = createMockNote({
+        note_type: 'list',
+        items: createMockListItems(),
       })
-      renderNoteModal({ ...defaultProps, note: todoNote })
+      renderNoteModal({ ...defaultProps, note: listNote })
 
-      // Should show todo items
+      // Should show list items
       expect(screen.getByDisplayValue('First item')).toBeInTheDocument()
       expect(screen.getByDisplayValue('Second item')).toBeInTheDocument()
     })
@@ -375,30 +375,30 @@ describe('NoteModal', () => {
     it('pressing Enter on the last uncompleted item creates a new item', async () => {
       renderNoteModal(defaultProps)
 
-      // Switch to todo mode and add an item
-      fireEvent.click(screen.getByText('Todo List'))
+      // Switch to list mode and add an item
+      fireEvent.click(screen.getByText('List'))
       fireEvent.click(screen.getByText('Add item'))
 
-      const inputs = screen.getAllByTestId('todo-item-input')
+      const inputs = screen.getAllByTestId('list-item-input')
       expect(inputs).toHaveLength(1)
 
       // Press Enter on the only (last) item
       fireEvent.keyDown(inputs[0], { key: 'Enter', code: 'Enter' })
 
       // A new item should have been added
-      const inputsAfter = screen.getAllByTestId('todo-item-input')
+      const inputsAfter = screen.getAllByTestId('list-item-input')
       expect(inputsAfter).toHaveLength(2)
     })
 
     it('pressing Enter on a non-last uncompleted item inserts a new item below it', async () => {
       renderNoteModal(defaultProps)
 
-      // Switch to todo mode and add two items
-      fireEvent.click(screen.getByText('Todo List'))
+      // Switch to list mode and add two items
+      fireEvent.click(screen.getByText('List'))
       fireEvent.click(screen.getByText('Add item'))
       fireEvent.click(screen.getByText('Add item'))
 
-      const inputs = screen.getAllByTestId('todo-item-input')
+      const inputs = screen.getAllByTestId('list-item-input')
       expect(inputs).toHaveLength(2)
 
       // Give the first item a value so we can identify it after insertion
@@ -410,7 +410,7 @@ describe('NoteModal', () => {
       await vi.runAllTimersAsync()
 
       // Three items total
-      const inputsAfter = screen.getAllByTestId('todo-item-input')
+      const inputsAfter = screen.getAllByTestId('list-item-input')
       expect(inputsAfter).toHaveLength(3)
 
       // Original first item stays at index 0
@@ -429,11 +429,11 @@ describe('NoteModal', () => {
     it('pressing Enter on an indented item creates an equally indented item below it', async () => {
       renderNoteModal(defaultProps)
 
-      fireEvent.click(screen.getByText('Todo List'))
+      fireEvent.click(screen.getByText('List'))
       fireEvent.click(screen.getByText('Add item'))
 
-      let inputs = screen.getAllByTestId('todo-item-input')
-      let rows = screen.getAllByTestId('todo-item-row')
+      let inputs = screen.getAllByTestId('list-item-input')
+      let rows = screen.getAllByTestId('list-item-row')
       expect(inputs).toHaveLength(1)
 
       fireEvent.change(inputs[0], { target: { value: 'parent' } })
@@ -441,16 +441,16 @@ describe('NoteModal', () => {
       // Indent the current item with Tab.
       fireEvent.keyDown(inputs[0], { key: 'Tab', code: 'Tab' })
 
-      inputs = screen.getAllByTestId('todo-item-input')
-      rows = screen.getAllByTestId('todo-item-row')
+      inputs = screen.getAllByTestId('list-item-input')
+      rows = screen.getAllByTestId('list-item-row')
       expect(rows[0].style.marginLeft).toBe(`${VALIDATION.INDENT_PX_PER_LEVEL}px`)
 
       // Press Enter on the indented item.
       fireEvent.keyDown(inputs[0], { key: 'Enter', code: 'Enter' })
       await vi.runAllTimersAsync()
 
-      const inputsAfter = screen.getAllByTestId('todo-item-input')
-      const rowsAfter = screen.getAllByTestId('todo-item-row')
+      const inputsAfter = screen.getAllByTestId('list-item-input')
+      const rowsAfter = screen.getAllByTestId('list-item-row')
       expect(inputsAfter).toHaveLength(2)
       expect(rowsAfter[1].style.marginLeft).toBe(`${VALIDATION.INDENT_PX_PER_LEVEL}px`)
       expect(inputsAfter[1]).toHaveFocus()
@@ -459,10 +459,10 @@ describe('NoteModal', () => {
     it('pressing Tab then Enter quickly keeps indentation on the new item', async () => {
       renderNoteModal(defaultProps)
 
-      fireEvent.click(screen.getByText('Todo List'))
+      fireEvent.click(screen.getByText('List'))
       fireEvent.click(screen.getByText('Add item'))
 
-      const inputs = screen.getAllByTestId('todo-item-input')
+      const inputs = screen.getAllByTestId('list-item-input')
       fireEvent.change(inputs[0], { target: { value: 'parent' } })
 
       // Simulate quick sequential key presses on the same input.
@@ -470,15 +470,15 @@ describe('NoteModal', () => {
       fireEvent.keyDown(inputs[0], { key: 'Enter', code: 'Enter' })
       await vi.runAllTimersAsync()
 
-      const rowsAfter = screen.getAllByTestId('todo-item-row')
+      const rowsAfter = screen.getAllByTestId('list-item-row')
       expect(rowsAfter).toHaveLength(2)
       expect(rowsAfter[0].style.marginLeft).toBe(`${VALIDATION.INDENT_PX_PER_LEVEL}px`)
       expect(rowsAfter[1].style.marginLeft).toBe(`${VALIDATION.INDENT_PX_PER_LEVEL}px`)
     })
 
     it('persisted update keeps inherited indent after quick Tab then Enter on existing note', async () => {
-      const todoNote = createMockNote({
-        note_type: 'todo',
+      const listNote = createMockNote({
+        note_type: 'list',
         items: [
           {
             id: 'item1',
@@ -494,8 +494,8 @@ describe('NoteModal', () => {
         ],
       })
 
-      renderNoteModal({ ...defaultProps, note: todoNote })
-      const inputs = screen.getAllByTestId('todo-item-input')
+      renderNoteModal({ ...defaultProps, note: listNote })
+      const inputs = screen.getAllByTestId('list-item-input')
 
       fireEvent.keyDown(inputs[0], { key: 'Tab', code: 'Tab' })
       fireEvent.keyDown(inputs[0], { key: 'Enter', code: 'Enter' })
@@ -510,8 +510,8 @@ describe('NoteModal', () => {
     })
 
     it('debounced text autosave does not overwrite quick Tab then Enter changes', async () => {
-      const todoNote = createMockNote({
-        note_type: 'todo',
+      const listNote = createMockNote({
+        note_type: 'list',
         items: [
           {
             id: 'item1',
@@ -527,8 +527,8 @@ describe('NoteModal', () => {
         ],
       })
 
-      renderNoteModal({ ...defaultProps, note: todoNote })
-      const inputs = screen.getAllByTestId('todo-item-input')
+      renderNoteModal({ ...defaultProps, note: listNote })
+      const inputs = screen.getAllByTestId('list-item-input')
 
       // Arms debounced text autosave.
       fireEvent.change(inputs[0], { target: { value: 'parent' } })
@@ -549,8 +549,8 @@ describe('NoteModal', () => {
     })
 
     it('queued autosave retries use latest note fields while a save is in-flight', async () => {
-      const todoNote = createMockNote({
-        note_type: 'todo',
+      const listNote = createMockNote({
+        note_type: 'list',
         title: 'Initial title',
         items: [
           {
@@ -572,19 +572,19 @@ describe('NoteModal', () => {
         resolveFirstUpdate = resolve
       }))
 
-      renderNoteModal({ ...defaultProps, note: todoNote })
+      renderNoteModal({ ...defaultProps, note: listNote })
 
-      const todoInput = screen.getByDisplayValue('parent')
+      const listInput = screen.getByDisplayValue('parent')
       const titleInput = screen.getByDisplayValue('Initial title')
 
       // Start first autosave and keep it in-flight.
-      fireEvent.keyDown(todoInput, { key: 'Tab', code: 'Tab' })
+      fireEvent.keyDown(listInput, { key: 'Tab', code: 'Tab' })
 
       // Change non-item draft fields while autosave is still in-flight.
       fireEvent.change(titleInput, { target: { value: 'Updated title while saving' } })
 
       // Queue another autosave with updated item + title snapshot.
-      fireEvent.keyDown(todoInput, { key: 'Enter', code: 'Enter' })
+      fireEvent.keyDown(listInput, { key: 'Enter', code: 'Enter' })
 
       // Release first request, then flush queued retry.
       resolveFirstUpdate?.({})
@@ -603,26 +603,26 @@ describe('NoteModal', () => {
       )
     })
 
-    it('pressing a key other than Enter on a todo item does not create a new item', async () => {
+    it('pressing a key other than Enter on a list item does not create a new item', async () => {
       renderNoteModal(defaultProps)
 
-      fireEvent.click(screen.getByText('Todo List'))
+      fireEvent.click(screen.getByText('List'))
       fireEvent.click(screen.getByText('Add item'))
 
-      const inputs = screen.getAllByTestId('todo-item-input')
+      const inputs = screen.getAllByTestId('list-item-input')
       fireEvent.keyDown(inputs[0], { key: 'Escape', code: 'Escape' })
 
-      expect(screen.getAllByTestId('todo-item-input')).toHaveLength(1)
+      expect(screen.getAllByTestId('list-item-input')).toHaveLength(1)
     })
 
-    it('pressing Backspace on an empty todo item deletes it', async () => {
+    it('pressing Backspace on an empty list item deletes it', async () => {
       renderNoteModal(defaultProps)
 
-      fireEvent.click(screen.getByText('Todo List'))
+      fireEvent.click(screen.getByText('List'))
       fireEvent.click(screen.getByText('Add item'))
       fireEvent.click(screen.getByText('Add item'))
 
-      const inputs = screen.getAllByTestId('todo-item-input')
+      const inputs = screen.getAllByTestId('list-item-input')
       expect(inputs).toHaveLength(2)
 
       fireEvent.change(inputs[0], { target: { value: 'keep me' } })
@@ -630,19 +630,19 @@ describe('NoteModal', () => {
       // Press Backspace on the second (empty) item
       fireEvent.keyDown(inputs[1], { key: 'Backspace', code: 'Backspace' })
 
-      const inputsAfter = screen.getAllByTestId('todo-item-input')
+      const inputsAfter = screen.getAllByTestId('list-item-input')
       expect(inputsAfter).toHaveLength(1)
       expect(inputsAfter[0]).toHaveValue('keep me')
     })
 
-    it('pressing Delete on an empty todo item deletes it', async () => {
+    it('pressing Delete on an empty list item deletes it', async () => {
       renderNoteModal(defaultProps)
 
-      fireEvent.click(screen.getByText('Todo List'))
+      fireEvent.click(screen.getByText('List'))
       fireEvent.click(screen.getByText('Add item'))
       fireEvent.click(screen.getByText('Add item'))
 
-      const inputs = screen.getAllByTestId('todo-item-input')
+      const inputs = screen.getAllByTestId('list-item-input')
       expect(inputs).toHaveLength(2)
 
       fireEvent.change(inputs[1], { target: { value: 'keep me' } })
@@ -650,84 +650,84 @@ describe('NoteModal', () => {
       // Press Delete on the first (empty) item
       fireEvent.keyDown(inputs[0], { key: 'Delete', code: 'Delete' })
 
-      const inputsAfter = screen.getAllByTestId('todo-item-input')
+      const inputsAfter = screen.getAllByTestId('list-item-input')
       expect(inputsAfter).toHaveLength(1)
       expect(inputsAfter[0]).toHaveValue('keep me')
     })
 
-    it('pressing Backspace on a non-empty todo item does not delete it', async () => {
+    it('pressing Backspace on a non-empty list item does not delete it', async () => {
       renderNoteModal(defaultProps)
 
-      fireEvent.click(screen.getByText('Todo List'))
+      fireEvent.click(screen.getByText('List'))
       fireEvent.click(screen.getByText('Add item'))
 
-      const inputs = screen.getAllByTestId('todo-item-input')
+      const inputs = screen.getAllByTestId('list-item-input')
       fireEvent.change(inputs[0], { target: { value: 'has text' } })
 
       fireEvent.keyDown(inputs[0], { key: 'Backspace', code: 'Backspace' })
 
-      expect(screen.getAllByTestId('todo-item-input')).toHaveLength(1)
+      expect(screen.getAllByTestId('list-item-input')).toHaveLength(1)
       expect(screen.getByDisplayValue('has text')).toBeInTheDocument()
     })
 
-    it('pressing Delete on a non-empty todo item does not delete it', async () => {
+    it('pressing Delete on a non-empty list item does not delete it', async () => {
       renderNoteModal(defaultProps)
 
-      fireEvent.click(screen.getByText('Todo List'))
+      fireEvent.click(screen.getByText('List'))
       fireEvent.click(screen.getByText('Add item'))
 
-      const inputs = screen.getAllByTestId('todo-item-input')
+      const inputs = screen.getAllByTestId('list-item-input')
       fireEvent.change(inputs[0], { target: { value: 'has text' } })
 
       fireEvent.keyDown(inputs[0], { key: 'Delete', code: 'Delete' })
 
-      expect(screen.getAllByTestId('todo-item-input')).toHaveLength(1)
+      expect(screen.getAllByTestId('list-item-input')).toHaveLength(1)
       expect(screen.getByDisplayValue('has text')).toBeInTheDocument()
     })
 
-    it('pressing Backspace on the only empty todo item deletes it without error', async () => {
+    it('pressing Backspace on the only empty list item deletes it without error', async () => {
       renderNoteModal(defaultProps)
 
-      fireEvent.click(screen.getByText('Todo List'))
+      fireEvent.click(screen.getByText('List'))
       fireEvent.click(screen.getByText('Add item'))
 
-      const inputs = screen.getAllByTestId('todo-item-input')
+      const inputs = screen.getAllByTestId('list-item-input')
       expect(inputs).toHaveLength(1)
 
       fireEvent.keyDown(inputs[0], { key: 'Backspace', code: 'Backspace' })
 
-      expect(screen.queryAllByTestId('todo-item-input')).toHaveLength(0)
+      expect(screen.queryAllByTestId('list-item-input')).toHaveLength(0)
     })
 
-    it('pressing Backspace on a whitespace-only todo item deletes it', async () => {
+    it('pressing Backspace on a whitespace-only list item deletes it', async () => {
       renderNoteModal(defaultProps)
 
-      fireEvent.click(screen.getByText('Todo List'))
+      fireEvent.click(screen.getByText('List'))
       fireEvent.click(screen.getByText('Add item'))
 
-      const inputs = screen.getAllByTestId('todo-item-input')
+      const inputs = screen.getAllByTestId('list-item-input')
       fireEvent.change(inputs[0], { target: { value: '   ' } })
 
       fireEvent.keyDown(inputs[0], { key: 'Backspace', code: 'Backspace' })
 
-      expect(screen.queryAllByTestId('todo-item-input')).toHaveLength(0)
+      expect(screen.queryAllByTestId('list-item-input')).toHaveLength(0)
     })
 
     it('pressing Backspace on an empty item focuses the previous item', async () => {
       renderNoteModal(defaultProps)
 
-      fireEvent.click(screen.getByText('Todo List'))
+      fireEvent.click(screen.getByText('List'))
       fireEvent.click(screen.getByText('Add item'))
       fireEvent.click(screen.getByText('Add item'))
 
-      const inputs = screen.getAllByTestId('todo-item-input')
+      const inputs = screen.getAllByTestId('list-item-input')
       fireEvent.change(inputs[0], { target: { value: 'first' } })
 
       // Press Backspace on the second (empty) item
       fireEvent.keyDown(inputs[1], { key: 'Backspace', code: 'Backspace' })
       await vi.runAllTimersAsync()
 
-      const inputsAfter = screen.getAllByTestId('todo-item-input')
+      const inputsAfter = screen.getAllByTestId('list-item-input')
       expect(inputsAfter).toHaveLength(1)
       expect(inputsAfter[0]).toHaveFocus()
     })
@@ -735,18 +735,18 @@ describe('NoteModal', () => {
     it('pressing Delete on an empty item focuses the next item', async () => {
       renderNoteModal(defaultProps)
 
-      fireEvent.click(screen.getByText('Todo List'))
+      fireEvent.click(screen.getByText('List'))
       fireEvent.click(screen.getByText('Add item'))
       fireEvent.click(screen.getByText('Add item'))
 
-      const inputs = screen.getAllByTestId('todo-item-input')
+      const inputs = screen.getAllByTestId('list-item-input')
       fireEvent.change(inputs[1], { target: { value: 'second' } })
 
       // Press Delete on the first (empty) item
       fireEvent.keyDown(inputs[0], { key: 'Delete', code: 'Delete' })
       await vi.runAllTimersAsync()
 
-      const inputsAfter = screen.getAllByTestId('todo-item-input')
+      const inputsAfter = screen.getAllByTestId('list-item-input')
       expect(inputsAfter).toHaveLength(1)
       expect(inputsAfter[0]).toHaveFocus()
     })
@@ -754,11 +754,11 @@ describe('NoteModal', () => {
     it('pressing ArrowDown moves focus to the next item', async () => {
       renderNoteModal(defaultProps)
 
-      fireEvent.click(screen.getByText('Todo List'))
+      fireEvent.click(screen.getByText('List'))
       fireEvent.click(screen.getByText('Add item'))
       fireEvent.click(screen.getByText('Add item'))
 
-      const inputs = screen.getAllByTestId('todo-item-input')
+      const inputs = screen.getAllByTestId('list-item-input')
       fireEvent.change(inputs[0], { target: { value: 'first' } })
       fireEvent.change(inputs[1], { target: { value: 'second' } })
 
@@ -771,11 +771,11 @@ describe('NoteModal', () => {
     it('pressing ArrowUp moves focus to the previous item', async () => {
       renderNoteModal(defaultProps)
 
-      fireEvent.click(screen.getByText('Todo List'))
+      fireEvent.click(screen.getByText('List'))
       fireEvent.click(screen.getByText('Add item'))
       fireEvent.click(screen.getByText('Add item'))
 
-      const inputs = screen.getAllByTestId('todo-item-input')
+      const inputs = screen.getAllByTestId('list-item-input')
       fireEvent.change(inputs[0], { target: { value: 'first' } })
       fireEvent.change(inputs[1], { target: { value: 'second' } })
 
@@ -788,11 +788,11 @@ describe('NoteModal', () => {
     it('pressing ArrowUp on the first item does not change focus', async () => {
       renderNoteModal(defaultProps)
 
-      fireEvent.click(screen.getByText('Todo List'))
+      fireEvent.click(screen.getByText('List'))
       fireEvent.click(screen.getByText('Add item'))
       fireEvent.click(screen.getByText('Add item'))
 
-      const inputs = screen.getAllByTestId('todo-item-input')
+      const inputs = screen.getAllByTestId('list-item-input')
       inputs[0].focus()
       fireEvent.keyDown(inputs[0], { key: 'ArrowUp', code: 'ArrowUp' })
 
@@ -803,11 +803,11 @@ describe('NoteModal', () => {
     it('pressing ArrowDown on the last item does not change focus', async () => {
       renderNoteModal(defaultProps)
 
-      fireEvent.click(screen.getByText('Todo List'))
+      fireEvent.click(screen.getByText('List'))
       fireEvent.click(screen.getByText('Add item'))
       fireEvent.click(screen.getByText('Add item'))
 
-      const inputs = screen.getAllByTestId('todo-item-input')
+      const inputs = screen.getAllByTestId('list-item-input')
       inputs[1].focus()
       fireEvent.keyDown(inputs[1], { key: 'ArrowDown', code: 'ArrowDown' })
 
@@ -815,59 +815,59 @@ describe('NoteModal', () => {
       expect(inputs[1]).toHaveFocus()
     })
 
-    it('removing a todo item from an existing note triggers auto-save', async () => {
-      const todoNote = createMockNote({
-        note_type: 'todo',
+    it('removing a list item from an existing note triggers auto-save', async () => {
+      const listNote = createMockNote({
+        note_type: 'list',
         items: [
           { id: 'item1', note_id: '1', text: 'First', completed: false, position: 0, indent_level: 0, assigned_to: '', created_at: '', updated_at: '' },
           { id: 'item2', note_id: '1', text: '', completed: false, position: 1, indent_level: 0, assigned_to: '', created_at: '', updated_at: '' },
         ],
       })
       mockNotesUpdate.mockClear()
-      renderNoteModal({ ...defaultProps, note: todoNote })
+      renderNoteModal({ ...defaultProps, note: listNote })
 
-      const inputs = screen.getAllByTestId('todo-item-input')
+      const inputs = screen.getAllByTestId('list-item-input')
       expect(inputs).toHaveLength(2)
 
       // Press Backspace on the empty second item
       fireEvent.keyDown(inputs[1], { key: 'Backspace', code: 'Backspace' })
 
-      expect(screen.getAllByTestId('todo-item-input')).toHaveLength(1)
+      expect(screen.getAllByTestId('list-item-input')).toHaveLength(1)
       expect(mockNotesUpdate).toHaveBeenCalledWith('1', expect.objectContaining({
         items: [expect.objectContaining({ text: 'First', position: 0 })],
       }))
     })
 
-    it('removing the only todo item from an existing note sends empty items array', async () => {
-      const todoNote = createMockNote({
-        note_type: 'todo',
+    it('removing the only list item from an existing note sends empty items array', async () => {
+      const listNote = createMockNote({
+        note_type: 'list',
         items: [
           { id: 'item1', note_id: '1', text: '', completed: false, position: 0, indent_level: 0, assigned_to: '', created_at: '', updated_at: '' },
         ],
       })
       mockNotesUpdate.mockClear()
-      renderNoteModal({ ...defaultProps, note: todoNote })
+      renderNoteModal({ ...defaultProps, note: listNote })
 
-      const inputs = screen.getAllByTestId('todo-item-input')
+      const inputs = screen.getAllByTestId('list-item-input')
       expect(inputs).toHaveLength(1)
 
       // Press Backspace on the only empty item
       fireEvent.keyDown(inputs[0], { key: 'Backspace', code: 'Backspace' })
 
-      expect(screen.queryAllByTestId('todo-item-input')).toHaveLength(0)
+      expect(screen.queryAllByTestId('list-item-input')).toHaveLength(0)
       expect(mockNotesUpdate).toHaveBeenCalledWith('1', expect.objectContaining({
         items: [],
       }))
     })
 
-    it('preserves completed state when creating a new todo note', async () => {
+    it('preserves completed state when creating a new list note', async () => {
       renderNoteModal(defaultProps)
 
-      fireEvent.click(screen.getByText('Todo List'))
+      fireEvent.click(screen.getByText('List'))
       fireEvent.click(screen.getByText('Add item'))
       fireEvent.click(screen.getByText('Add item'))
 
-      const inputs = screen.getAllByTestId('todo-item-input')
+      const inputs = screen.getAllByTestId('list-item-input')
       fireEvent.change(inputs[0], { target: { value: 'First item' } })
       fireEvent.change(inputs[1], { target: { value: 'Second item' } })
 
@@ -885,9 +885,9 @@ describe('NoteModal', () => {
       }))
     })
 
-    it('saves existing todo note on close when item text changed', async () => {
-      const todoNote = createMockNote({
-        note_type: 'todo',
+    it('saves existing list note on close when item text changed', async () => {
+      const listNote = createMockNote({
+        note_type: 'list',
         content: '',
         items: [
           {
@@ -904,7 +904,7 @@ describe('NoteModal', () => {
         ],
       })
       const onSave = vi.fn()
-      renderNoteModal({ ...defaultProps, note: todoNote, onSave })
+      renderNoteModal({ ...defaultProps, note: listNote, onSave })
 
       const input = screen.getByDisplayValue('Original item')
       fireEvent.change(input, { target: { value: 'Updated item' } })

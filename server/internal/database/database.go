@@ -96,6 +96,15 @@ func (d *DB) applyMigration(ctx context.Context, file fs.DirEntry) error {
 		return fmt.Errorf("failed to read migration file %s: %w", file.Name(), err)
 	}
 
+	// Foreign key enforcement must be disabled before the transaction when a
+	// migration rebuilds tables (DROP + recreate), because SQLite would otherwise
+	// cascade-delete child rows. It is a no-op inside a transaction, so it must
+	// be set on the raw connection before BeginTx.
+	if _, err = d.ExecContext(ctx, `PRAGMA foreign_keys = OFF`); err != nil {
+		return fmt.Errorf("failed to disable foreign keys for migration %s: %w", file.Name(), err)
+	}
+	defer func() { _, _ = d.ExecContext(ctx, `PRAGMA foreign_keys = ON`) }()
+
 	tx, err := d.BeginTx(ctx, nil)
 	if err != nil {
 		return fmt.Errorf("failed to begin transaction: %w", err)

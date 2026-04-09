@@ -64,24 +64,25 @@ describe('Notes API', () => {
       expect(mockAxiosInstance.get).toHaveBeenCalledWith('/notes', { params: undefined });
     });
 
-    it('passes my_todo param to GET /notes', async () => {
+    it('passes my_tasks param to GET /notes', async () => {
       mockAxiosInstance.get.mockResolvedValueOnce({ data: [] });
 
-      await getNotes({ my_todo: true });
+      await getNotes({ my_tasks: true });
 
       expect(mockAxiosInstance.get).toHaveBeenCalledWith('/notes', {
-        params: { my_todo: true },
+        params: { my_tasks: true },
       });
     });
 
     it('strips user_id from server request params', async () => {
       mockAxiosInstance.get.mockResolvedValueOnce({ data: [] });
 
-      await getNotes({ my_todo: true, user_id: 'user-123' });
+      await getNotes({ my_tasks: true, user_id: 'user-123' });
 
       expect(mockAxiosInstance.get).toHaveBeenCalledWith('/notes', {
-        params: { my_todo: true },
+        params: { my_tasks: true },
       });
+
     });
 
     it('throws on network error', async () => {
