@@ -349,7 +349,11 @@
     "assignItem": "Assigner l'élément",
     "unassign": "Désassigner",
     "assignedTo": "Assigné à {{name}}",
-    "completedSuggestions": "Suggestions d'éléments terminés"
+    "completedSuggestions": "Suggestions d'éléments terminés",
+    "formatBold": "Gras",
+    "formatItalic": "Italique",
+    "formatHeading": "Titre",
+    "formatBulletList": "Liste à puces"
   },
   "labels": {
     "title": "Étiquettes",

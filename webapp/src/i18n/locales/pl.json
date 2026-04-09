@@ -349,7 +349,11 @@
     "assignItem": "Przypisz element",
     "unassign": "Usuń przypisanie",
     "assignedTo": "Przypisano do {{name}}",
-    "completedSuggestions": "Podpowiedzi z ukończonych elementów"
+    "completedSuggestions": "Podpowiedzi z ukończonych elementów",
+    "formatBold": "Pogrubienie",
+    "formatItalic": "Kursywa",
+    "formatHeading": "Nagłówek",
+    "formatBulletList": "Lista punktowana"
   },
   "labels": {
     "title": "Etykiety",

@@ -349,7 +349,11 @@
     "assignItem": "Assegna elemento",
     "unassign": "Rimuovi assegnazione",
     "assignedTo": "Assegnato a {{name}}",
-    "completedSuggestions": "Suggerimenti da elementi completati"
+    "completedSuggestions": "Suggerimenti da elementi completati",
+    "formatBold": "Grassetto",
+    "formatItalic": "Corsivo",
+    "formatHeading": "Intestazione",
+    "formatBulletList": "Elenco puntato"
   },
   "labels": {
     "title": "Etichette",
