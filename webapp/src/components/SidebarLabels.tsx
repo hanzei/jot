@@ -152,6 +152,8 @@ const SidebarLabels = ({
               : 'hover:bg-gray-100 dark:hover:bg-slate-700'
           }`;
           const className = `group/label flex items-center w-full h-8 rounded-md text-sm ${
+            onRename && onDelete ? 'pr-7' : ''
+          } ${
             isActive
               ? 'text-blue-700 dark:text-blue-300 font-medium'
               : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
