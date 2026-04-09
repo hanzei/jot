@@ -396,7 +396,8 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showLabelPicker, setShowLabelPicker] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  const [isEditingContent, setIsEditingContent] = useState(false);
+  // New notes start in edit mode; existing notes start in preview mode.
+  const [isEditingContent, setIsEditingContent] = useState(!note);
   const pendingSelectionRef = useRef<{ start: number; end: number } | null>(null);
 
   // Use useRef for timeout management instead of global window property
@@ -531,8 +532,6 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       commitItems([]);
       setNoteLabels([]);
     }
-    // Start in edit mode for new notes; preview mode for existing notes
-    setIsEditingContent(!note);
   }, [commitItems, note]);
 
   useEffect(() => {
@@ -1521,18 +1520,25 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     <>
       <Dialog
         open={true}
-        onClose={() => {
-          if (isEditingContent) {
-            setIsEditingContent(false);
-          } else {
-            handleCloseRequest();
-          }
-        }}
+        onClose={handleCloseRequest}
         className="relative z-50"
       >
         <div className="fixed inset-0 bg-black/30 dark:bg-black/50" aria-hidden="true" />
-      
-      <div className="fixed inset-0 flex items-center justify-center p-2 sm:p-4 overflow-hidden">
+
+        {/* Backdrop click does a two-step dismiss: collapse to preview first (if editing),
+            then close on a second click. Using target===currentTarget so clicks inside
+            the modal panel that bubble up do not trigger the dismiss. */}
+        <div
+          className="fixed inset-0 flex items-center justify-center p-2 sm:p-4 overflow-hidden"
+          onClick={(e) => {
+            if (e.target !== e.currentTarget) return;
+            if (isEditingContent) {
+              setIsEditingContent(false);
+            } else {
+              handleCloseRequest();
+            }
+          }}
+        >
         <DialogPanel
           className={`mx-auto w-full max-w-md max-h-[90vh] overflow-hidden rounded-lg shadow-xl ${
             colors.find(c => c.value === color)?.class || 'bg-white dark:bg-slate-800 border-gray-300 dark:border-slate-600'
