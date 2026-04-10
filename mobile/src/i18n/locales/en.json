@@ -5,6 +5,7 @@
     "cancel": "Cancel",
     "delete": "Delete",
     "retry": "Retry",
+    "dbOpenError": "Failed to open database.",
     "clearSearch": "Clear search",
     "error": "Error",
     "unknown": "unknown",

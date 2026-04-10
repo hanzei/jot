@@ -348,6 +348,7 @@ function NavigationWrapper() {
 }
 
 export default function App() {
+  const { t } = useTranslation();
   const [activeServerId, setActiveServerId] = React.useState<string | null>(null);
   const [isServerContextReady, setIsServerContextReady] = React.useState(false);
   const [serverContextInitError, setServerContextInitError] = React.useState<string | null>(null);
@@ -438,7 +439,7 @@ export default function App() {
           <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
             <View style={{ alignItems: 'center', paddingHorizontal: 24 }}>
               <Text style={{ textAlign: 'center', marginBottom: 12 }}>
-                Failed to open database.
+                {t('common.dbOpenError')}
               </Text>
               <TouchableOpacity
                 onPress={() => {
@@ -447,7 +448,7 @@ export default function App() {
                 }}
                 style={{ paddingHorizontal: 14, paddingVertical: 10 }}
               >
-                <Text>Retry</Text>
+                <Text>{t('common.retry')}</Text>
               </TouchableOpacity>
             </View>
           </View>

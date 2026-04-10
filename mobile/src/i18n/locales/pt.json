@@ -5,6 +5,7 @@
     "cancel": "Cancelar",
     "delete": "Excluir",
     "retry": "Tentar novamente",
+    "dbOpenError": "Não foi possível abrir o banco de dados.",
     "clearSearch": "Limpar pesquisa",
     "error": "Erro",
     "unknown": "desconhecido",
