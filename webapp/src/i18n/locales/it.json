@@ -382,7 +382,6 @@
     "deleteConfirmMessage": "Eliminare l'etichetta \"{{name}}\"? Verrà rimossa da tutte le note che la utilizzano."
   },
   "share": {
-    "title": "Condividi \"{{noteTitle}}\"",
     "untitledNote": "Nota senza titolo",
     "shareWithUser": "Condividi con utente:",
     "searchUsersPlaceholder": "Cerca utenti per nome...",

@@ -1,5 +1,5 @@
 import { useState, useEffect, useRef, useCallback } from 'react';
-import { Dialog, DialogPanel, DialogTitle } from '@headlessui/react';
+import { Dialog, DialogPanel } from '@headlessui/react';
 import { XMarkIcon, TrashIcon, ChevronDownIcon } from '@heroicons/react/24/outline';
 import { useTranslation } from 'react-i18next';
 import { ROLES, type Note, type NoteShare, type User } from '@jot/shared';
@@ -183,16 +183,13 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
   if (!note) return null;
 
   return (
-    <Dialog open={isOpen} onClose={handleClose} className="relative z-50">
+    <Dialog open={isOpen} onClose={handleClose} aria-label={t('note.share')} className="relative z-50">
       <div className="fixed inset-0 bg-black/25" />
       
       <div className="fixed inset-0 overflow-y-auto">
         <div className="flex min-h-full items-center justify-center p-4">
           <DialogPanel className="mx-auto max-w-md rounded bg-white dark:bg-slate-800 p-6 shadow-xl border border-gray-200 dark:border-slate-700">
-            <div className="flex items-center justify-between mb-4">
-              <DialogTitle className="text-lg font-medium text-gray-900 dark:text-white">
-                {t('share.title', { noteTitle: (note.note_type === 'list' ? note.title : '') || t('share.untitledNote') })}
-              </DialogTitle>
+            <div className="flex justify-end mb-4">
               <button
                 onClick={handleClose}
                 aria-label={t('common.close')}
