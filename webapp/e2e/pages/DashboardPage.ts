@@ -45,8 +45,8 @@ export class DashboardPage {
         await this.page.keyboard.press('Enter');
       }
       await expect(this.page.getByRole('checkbox', { name: labelName })).toBeChecked();
-      // Click back on the content textarea to close the label picker without triggering list item behavior.
-      await this.page.locator('textarea[placeholder="Take a note..."]').click();
+      // Click "Add labels" again to toggle the picker closed without triggering Dialog.onClose.
+      await this.page.getByRole('button', { name: 'Add labels' }).click();
     }
 
     await this.closeActiveDialog();
@@ -373,7 +373,7 @@ export class DashboardPage {
 
   async editNote(title: string, newTitle: string, _newContent: string) {
     await this.openNote(title);
-    await expect(this.page.getByRole('heading', { name: 'Edit Note' })).toBeVisible();
+    await expect(this.page.getByRole('button', { name: 'Close' })).toBeVisible();
     // createNote creates list notes which have a title input; edit only the title.
     await this.page.fill('input[placeholder="Note title..."]', newTitle);
     await this.closeActiveDialog();
@@ -473,7 +473,7 @@ export class DashboardPage {
   /** Opens a note, assigns a list item at the given index to a user, then closes the modal. */
   async assignListItemToUser(noteTitle: string, itemIndex: number, username: string) {
     await this.openNote(noteTitle);
-    await expect(this.page.getByRole('heading', { name: 'Edit Note' })).toBeVisible();
+    await expect(this.page.getByRole('dialog').getByRole('button', { name: 'Close' })).toBeVisible();
 
     const itemRow = this.page.locator('[data-testid="list-item-row"]').nth(itemIndex);
     await itemRow.hover();

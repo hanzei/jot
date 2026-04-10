@@ -179,8 +179,9 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
       data-note-card="true"
       tabIndex={0}
       aria-label={(note.note_type === 'list' ? note.title : note.content?.slice(0, 50)) || t('share.untitledNote')}
-      className={`note-card ${getColorClass(note.color)} p-4 relative group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1 ${isUpdating ? 'opacity-50' : ''
+      className={`note-card ${getColorClass(note.color)} p-4 relative group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1 ${isUpdating ? 'opacity-50' : ''} ${!inBin ? 'cursor-pointer' : ''
         }`}
+      onClick={() => !inBin && onEdit(note)}
       onKeyDown={(e) => {
         if (e.target !== e.currentTarget) return;
         if (!inBin && (e.key === 'Enter' || e.key === ' ')) {
@@ -198,7 +199,7 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
       )}
 
       {/* Menu */}
-      <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
+      <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
       <Menu>
         <MenuButton aria-label={t('note.menuOptions')} className="p-1 rounded-full hover:bg-gray-200 transition-colors">
           <EllipsisVerticalIcon className="h-4 w-4 text-gray-600" />
@@ -302,10 +303,7 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
       </div>
 
       {/* Content */}
-      <div
-        onClick={() => !inBin && onEdit(note)}
-        className={`${inBin ? 'cursor-default' : 'cursor-pointer'}`}
-      >
+      <div>
         {note.note_type === 'list' && note.title && (
           <h3 className="font-medium text-gray-900 dark:text-white mb-2 line-clamp-2">
             {note.title}

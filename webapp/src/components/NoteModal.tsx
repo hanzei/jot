@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { XMarkIcon, PlusIcon, TrashIcon, ChevronDownIcon, ArchiveBoxIcon, ArchiveBoxXMarkIcon, ShareIcon, UserPlusIcon, CheckIcon, TagIcon, DocumentDuplicateIcon, DevicePhoneMobileIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon, PlusIcon, TrashIcon, ChevronDownIcon, ArchiveBoxIcon, ArchiveBoxXMarkIcon, ShareIcon, UserPlusIcon, CheckIcon, TagIcon, DocumentDuplicateIcon, DevicePhoneMobileIcon, PaintBrushIcon } from '@heroicons/react/24/outline';
 import { Dialog, DialogPanel } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
 import { VALIDATION, NOTE_COLORS, buildCollaborators, type Note, type NoteItem, type NoteType, type CreateNoteRequest, type UpdateNoteRequest, type Label, type User, type Collaborator } from '@jot/shared';
@@ -403,6 +403,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   const [noteLabels, setNoteLabels] = useState<Label[]>(note?.labels ?? []);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showLabelPicker, setShowLabelPicker] = useState(false);
+  const [showColorPicker, setShowColorPicker] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
   // New notes start in edit mode; existing notes start in preview mode.
   const [isEditingContent, setIsEditingContent] = useState(!note);
@@ -587,6 +588,17 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       if (savedTimeoutRef.current) clearTimeout(savedTimeoutRef.current);
     };
   }, []);
+
+  useEffect(() => {
+    if (!showColorPicker) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (colorPickerRef.current && !colorPickerRef.current.contains(e.target as Node)) {
+        setShowColorPicker(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showColorPicker]);
 
   useEffect(() => {
     if (noteType !== 'text' || !isEditingContent) return;
@@ -1527,7 +1539,14 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       setShowLabelPicker(v => !v);
     } else if (key === 'c') {
       e.preventDefault();
-      colorPickerRef.current?.querySelector<HTMLButtonElement>('button[tabindex="0"]')?.focus();
+      setShowColorPicker(v => {
+        if (!v) {
+          requestAnimationFrame(() => {
+            colorPickerRef.current?.querySelector<HTMLButtonElement>('button[tabindex="0"]')?.focus();
+          });
+        }
+        return !v;
+      });
     }
   };
 
@@ -1579,97 +1598,29 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
           }}
         >
         <DialogPanel
-          className={`mx-auto w-full max-w-md max-h-[90vh] overflow-hidden rounded-lg shadow-xl ${
+          className={`mx-auto w-full max-w-lg max-h-[90vh] overflow-hidden rounded-lg shadow-xl relative ${
             colors.find(c => c.value === color)?.class || 'bg-white dark:bg-slate-800 border-gray-300 dark:border-slate-600'
           }`}
         >
-          {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-white/20">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-              {note ? t('note.editNote') : t('note.newNote')}
-            </h2>
-            <div className="flex items-center space-x-2">
-              {note && (
-                <>
-                  {noteDeepLinkHref && (
-                    <a
-                      href={noteDeepLinkHref}
-                      className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
-                      title={t('nav.openMobileApp')}
-                      aria-label={t('nav.openMobileApp')}
-                      data-testid="note-open-mobile-app-toolbar-link"
-                    >
-                      <DevicePhoneMobileIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
-                    </a>
-                  )}
-                  {isOwner && onShare && (
-                    <button
-                      onClick={() => onShare(note)}
-                      className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
-                      title={t('note.share')}
-                      aria-label={t('note.share')}
-                    >
-                      <ShareIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
-                    </button>
-                  )}
-                  <button
-                    onClick={handlePinToggle}
-                    className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
-                    title={pinned ? t('note.unpinNote') : t('note.pinNote')}
-                    aria-label={pinned ? t('note.unpinNote') : t('note.pinNote')}
-                  >
-                    {pinned ? (
-                      <svg className="h-5 w-5 text-blue-500" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/>
-                      </svg>
-                    ) : (
-                      <svg className="h-5 w-5 text-gray-600 dark:text-gray-300" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                        <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/>
-                      </svg>
-                    )}
-                  </button>
-                  <button
-                    onClick={handleArchiveToggle}
-                    className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
-                    title={archived ? t('note.unarchiveNote') : t('note.archiveNote')}
-                    aria-label={archived ? t('note.unarchiveNote') : t('note.archiveNote')}
-                  >
-                    {archived ? (
-                      <ArchiveBoxXMarkIcon className="h-5 w-5 text-blue-500" />
-                    ) : (
-                      <ArchiveBoxIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
-                    )}
-                  </button>
-                  {onDuplicate && (
-                    <button
-                      onClick={handleDuplicate}
-                      className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
-                      title={t('note.duplicate')}
-                      aria-label={t('note.duplicate')}
-                    >
-                      <DocumentDuplicateIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
-                    </button>
-                  )}
-                  {isOwner && onDelete && (
-                    <button
-                      onClick={handleDelete}
-                      className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
-                      title={t('note.delete')}
-                      aria-label={t('note.delete')}
-                    >
-                      <TrashIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
-                    </button>
-                  )}
-                </>
-              )}
+          {/* Top-right controls — close button, and Done when editing */}
+          <div className="absolute top-2 right-2 z-10 flex items-center gap-1">
+            {noteType === 'text' && isEditingContent && (
               <button
-                aria-label={t('common.close')}
-                onClick={handleCloseRequest}
+                type="button"
+                aria-label={t('common.done')}
+                onClick={() => setIsEditingContent(false)}
                 className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
               >
-                <XMarkIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+                <CheckIcon className="h-5 w-5 text-blue-500 dark:text-blue-400" />
               </button>
-            </div>
+            )}
+            <button
+              aria-label={t('common.close')}
+              onClick={handleCloseRequest}
+              className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+            >
+              <XMarkIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+            </button>
           </div>
 
           {/* Error Message */}
@@ -1686,7 +1637,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
           )}
 
           {/* Content */}
-          <div className="p-2 sm:p-4 space-y-4 overflow-y-auto max-h-[calc(90vh-8rem)]">
+          <div className="p-2 sm:p-4 pt-10 space-y-4 overflow-y-auto max-h-[calc(90vh-8rem)]">
             {/* Note type selector (only for new notes) */}
             {!note && (
               <div className="flex space-x-2">
@@ -1815,17 +1766,6 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                     }}
                   />
                 )}
-                {isEditingContent && (
-                  <div className="flex justify-end pt-1">
-                    <button
-                      type="button"
-                      onClick={() => setIsEditingContent(false)}
-                      className="text-xs font-medium text-blue-500 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
-                    >
-                      {t('common.done')}
-                    </button>
-                  </div>
-                )}
               </>
             ) : (
               <div className="space-y-4">
@@ -1912,8 +1852,30 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
               </div>
             )}
 
-            {/* Labels row: badges + add button with popover */}
-            <div className="flex flex-wrap items-center gap-1">
+            {/* Avatars + Labels row */}
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Share avatars */}
+              {note?.is_shared && (() => {
+                const avatars = buildShareAvatars(note, currentUserId, usersById);
+                if (avatars.length === 0) return null;
+                return (
+                  <div className="flex items-center">
+                    {avatars.map((a, index) => (
+                      <div key={a.key} title={a.displayName}>
+                        <LetterAvatar
+                          firstName={a.firstName}
+                          username={a.username}
+                          userId={a.userId}
+                          hasProfileIcon={a.hasProfileIcon}
+                          iconVersion={a.iconVersion}
+                          className={`w-6 h-6 ring-2 ring-white dark:ring-slate-800 ${index > 0 ? '-ml-1' : ''}`}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+              {/* Label badges + add button */}
               {noteLabels.map(label => (
                 <span
                   key={label.id}
@@ -1944,98 +1906,171 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
               </div>
             </div>
 
-
-            {/* Sharing info */}
-            {note?.is_shared && (() => {
-              const avatars = buildShareAvatars(note, currentUserId, usersById);
-              if (avatars.length === 0) return null;
-              return (
-                <div className="flex items-center">
-                  {avatars.map((a, index) => (
-                    <div key={a.key} title={a.displayName}>
-                      <LetterAvatar
-                        firstName={a.firstName}
-                        username={a.username}
-                        userId={a.userId}
-                        hasProfileIcon={a.hasProfileIcon}
-                        iconVersion={a.iconVersion}
-                        className={`w-6 h-6 ring-2 ring-white dark:ring-slate-800 ${index > 0 ? '-ml-1' : ''}`}
-                      />
-                    </div>
-                  ))}
-                </div>
-              );
-            })()}
-
-            {/* Color selector */}
-            <div
-              ref={colorPickerRef}
-              role="group"
-              aria-label={t('note.colorPickerLabel')}
-              className="flex space-x-2"
-              onKeyDown={(e) => {
-                if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
-                e.preventDefault();
-                const currentIndex = colors.findIndex(c => c.value === color);
-                const nextIndex = currentIndex === -1
-                  ? (e.key === 'ArrowLeft' ? colors.length - 1 : 0)
-                  : e.key === 'ArrowLeft'
-                    ? Math.max(0, currentIndex - 1)
-                    : Math.min(colors.length - 1, currentIndex + 1);
-                if (nextIndex === currentIndex) return;
-                const nextColor = colors[nextIndex].value;
-                setColor(nextColor);
-                if (note) {
-                  markDirty();
-                  autoSaveDraftRef.current = { ...autoSaveDraftRef.current, color: nextColor };
-                  autoSaveNote(itemsRef.current);
-                }
-                colorPickerRef.current?.querySelectorAll<HTMLButtonElement>('button')[nextIndex]?.focus();
-              }}
-            >
-              {colors.map((colorOption) => (
-                <button
-                  key={colorOption.value}
-                  tabIndex={colorOption.value === color ? 0 : -1}
-                  onClick={() => {
-                    const newColor = colorOption.value;
-                    setColor(newColor);
-                    if (note) {
-                      markDirty();
-                      autoSaveDraftRef.current = { ...autoSaveDraftRef.current, color: newColor };
-                      autoSaveNote(itemsRef.current);
-                    }
-                  }}
-                  className={`w-8 h-8 rounded-full border-2 ${colorOption.class} ${
-                    color === colorOption.value ? 'ring-2 ring-blue-500' : ''
-                  }`}
-                  title={colorOption.name}
-                  aria-label={colorOption.name}
-                  aria-pressed={color === colorOption.value}
-                />
-              ))}
-            </div>
           </div>
 
-          {/* Footer */}
-          <div className="flex justify-between items-center p-4 border-t border-gray-200 dark:border-white/20">
-            {note && (
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                {t('note.lastEdited', { date: new Date(note.updated_at).toLocaleString(i18n.resolvedLanguage) })}
-              </p>
+          {/* Footer toolbar */}
+          <div className="border-t border-gray-200 dark:border-white/20">
+            {/* Color picker popover */}
+            {showColorPicker && (
+              <div
+                ref={colorPickerRef}
+                role="group"
+                aria-label={t('note.colorPickerLabel')}
+                className="flex flex-wrap gap-2 p-3 border-b border-gray-100 dark:border-white/10"
+                aria-roledescription="color swatches"
+                onKeyDown={(e) => {
+                  if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+                  e.preventDefault();
+                  const currentIndex = colors.findIndex(c => c.value === color);
+                  const nextIndex = currentIndex === -1
+                    ? (e.key === 'ArrowLeft' ? colors.length - 1 : 0)
+                    : e.key === 'ArrowLeft'
+                      ? Math.max(0, currentIndex - 1)
+                      : Math.min(colors.length - 1, currentIndex + 1);
+                  if (nextIndex === currentIndex) return;
+                  const nextColor = colors[nextIndex].value;
+                  setColor(nextColor);
+                  if (note) {
+                    markDirty();
+                    autoSaveDraftRef.current = { ...autoSaveDraftRef.current, color: nextColor };
+                    autoSaveNote(itemsRef.current);
+                  }
+                  colorPickerRef.current?.querySelectorAll<HTMLButtonElement>('button')[nextIndex]?.focus();
+                }}
+              >
+                {colors.map((colorOption) => (
+                  <button
+                    key={colorOption.value}
+                    tabIndex={colorOption.value === color ? 0 : -1}
+                    onClick={() => {
+                      const newColor = colorOption.value;
+                      setColor(newColor);
+                      setShowColorPicker(false);
+                      if (note) {
+                        markDirty();
+                        autoSaveDraftRef.current = { ...autoSaveDraftRef.current, color: newColor };
+                        autoSaveNote(itemsRef.current);
+                      }
+                    }}
+                    className={`w-8 h-8 rounded-full border-2 ${colorOption.class} ${
+                      color === colorOption.value ? 'ring-2 ring-blue-500' : ''
+                    }`}
+                    title={colorOption.name}
+                    aria-label={colorOption.name}
+                    aria-pressed={color === colorOption.value}
+                  />
+                ))}
+              </div>
             )}
-            <div className="flex items-center ml-auto" role="status" aria-live="polite">
-              {loading ? (
-                <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600"></div>
-                  <span>{t('note.saving')}</span>
-                </div>
-              ) : showSaved ? (
-                <div className="flex items-center space-x-1 text-sm text-green-600 dark:text-green-400 transition-opacity">
-                  <CheckIcon className="h-4 w-4" />
-                  <span>{t('note.saved')}</span>
-                </div>
-              ) : null}
+
+            {/* Action buttons row */}
+            <div className="flex items-center justify-between p-2 sm:p-3">
+              <div className="flex items-center space-x-1">
+                {/* Color picker toggle */}
+                <button
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={() => setShowColorPicker(v => !v)}
+                  className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                  title={t('note.colorPickerLabel')}
+                  aria-label={t('note.colorPickerLabel')}
+                  aria-expanded={showColorPicker}
+                >
+                  <PaintBrushIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+                </button>
+
+                {note && (
+                  <>
+                    {noteDeepLinkHref && (
+                      <a
+                        href={noteDeepLinkHref}
+                        className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                        title={t('nav.openMobileApp')}
+                        aria-label={t('nav.openMobileApp')}
+                        data-testid="note-open-mobile-app-toolbar-link"
+                      >
+                        <DevicePhoneMobileIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+                      </a>
+                    )}
+                    <button
+                      onClick={handlePinToggle}
+                      className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                      title={pinned ? t('note.unpinNote') : t('note.pinNote')}
+                      aria-label={pinned ? t('note.unpinNote') : t('note.pinNote')}
+                    >
+                      {pinned ? (
+                        <svg className="h-5 w-5 text-blue-500" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/>
+                        </svg>
+                      ) : (
+                        <svg className="h-5 w-5 text-gray-600 dark:text-gray-300" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                          <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/>
+                        </svg>
+                      )}
+                    </button>
+                    <button
+                      onClick={handleArchiveToggle}
+                      className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                      title={archived ? t('note.unarchiveNote') : t('note.archiveNote')}
+                      aria-label={archived ? t('note.unarchiveNote') : t('note.archiveNote')}
+                    >
+                      {archived ? (
+                        <ArchiveBoxXMarkIcon className="h-5 w-5 text-blue-500" />
+                      ) : (
+                        <ArchiveBoxIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+                      )}
+                    </button>
+                    {isOwner && onShare && (
+                      <button
+                        onClick={() => onShare(note)}
+                        className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                        title={t('note.share')}
+                        aria-label={t('note.share')}
+                      >
+                        <ShareIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+                      </button>
+                    )}
+                    {onDuplicate && (
+                      <button
+                        onClick={handleDuplicate}
+                        className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                        title={t('note.duplicate')}
+                        aria-label={t('note.duplicate')}
+                      >
+                        <DocumentDuplicateIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+                      </button>
+                    )}
+                    {isOwner && onDelete && (
+                      <button
+                        onClick={handleDelete}
+                        className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                        title={t('note.delete')}
+                        aria-label={t('note.delete')}
+                      >
+                        <TrashIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
+
+              {/* Right: last edited / save status */}
+              <div className="flex items-center" role="status" aria-live="polite">
+                {loading ? (
+                  <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600"></div>
+                    <span>{t('note.saving')}</span>
+                  </div>
+                ) : showSaved ? (
+                  <div className="flex items-center space-x-1 text-sm text-green-600 dark:text-green-400 transition-opacity">
+                    <CheckIcon className="h-4 w-4" />
+                    <span>{t('note.saved')}</span>
+                  </div>
+                ) : note ? (
+                  <p className="text-xs text-gray-400 dark:text-gray-500">
+                    {t('note.lastEdited', { date: new Date(note.updated_at).toLocaleString(i18n.resolvedLanguage) })}
+                  </p>
+                ) : null}
+              </div>
             </div>
           </div>
         </DialogPanel>
