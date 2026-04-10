@@ -10,6 +10,8 @@ import (
 
 func TestLoadDefaults(t *testing.T) {
 	t.Setenv("PORT", "")
+	t.Setenv("DB_DRIVER", "")
+	t.Setenv("DB_DSN", "")
 	t.Setenv("DB_PATH", "")
 	t.Setenv("STATIC_DIR", "")
 	t.Setenv("CORS_ALLOWED_ORIGIN", "")
@@ -21,7 +23,8 @@ func TestLoadDefaults(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, 8080, cfg.Port)
-	assert.Equal(t, "./jot.db", cfg.DBPath)
+	assert.Equal(t, "sqlite", cfg.DBDriver)
+	assert.Equal(t, "./jot.db", cfg.DBDSN)
 	assert.Contains(t, cfg.StaticDir, filepath.Join("webapp", "build"))
 	assert.Empty(t, cfg.CORSAllowedOrigin)
 	assert.True(t, cfg.CookieSecure)
@@ -31,7 +34,8 @@ func TestLoadDefaults(t *testing.T) {
 
 func TestLoadCustomValues(t *testing.T) {
 	t.Setenv("PORT", "3000")
-	t.Setenv("DB_PATH", "/data/my.db")
+	t.Setenv("DB_DRIVER", "postgres")
+	t.Setenv("DB_DSN", "postgres://user:pass@localhost/jot")
 	t.Setenv("STATIC_DIR", "/var/www/")
 	t.Setenv("CORS_ALLOWED_ORIGIN", "https://example.com")
 	t.Setenv("COOKIE_SECURE", "false")
@@ -42,12 +46,26 @@ func TestLoadCustomValues(t *testing.T) {
 	require.NoError(t, err)
 
 	assert.Equal(t, 3000, cfg.Port)
-	assert.Equal(t, "/data/my.db", cfg.DBPath)
+	assert.Equal(t, "postgres", cfg.DBDriver)
+	assert.Equal(t, "postgres://user:pass@localhost/jot", cfg.DBDSN)
 	assert.Equal(t, "/var/www", cfg.StaticDir)
 	assert.Equal(t, "https://example.com", cfg.CORSAllowedOrigin)
 	assert.False(t, cfg.CookieSecure)
 	assert.False(t, cfg.RegistrationEnabled)
 	assert.Equal(t, 4, cfg.PasswordMinLength)
+}
+
+func TestLoadDBPathAlias(t *testing.T) {
+	t.Setenv("DB_DRIVER", "")
+	t.Setenv("DB_DSN", "")
+	t.Setenv("DB_PATH", "/data/my.db")
+	t.Setenv("STATIC_DIR", "/tmp/static")
+
+	cfg, err := Load()
+	require.NoError(t, err)
+
+	assert.Equal(t, "sqlite", cfg.DBDriver)
+	assert.Equal(t, "/data/my.db", cfg.DBDSN)
 }
 
 func TestLoadInvalidPort(t *testing.T) {

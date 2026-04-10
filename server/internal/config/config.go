@@ -13,7 +13,8 @@ type Config struct {
 	MetricsEnabled      bool
 	MetricsPort         int
 	MetricsHost         string
-	DBPath              string
+	DBDriver            string
+	DBDSN               string
 	StaticDir           string
 	CORSAllowedOrigin   string
 	CookieSecure        bool
@@ -62,7 +63,8 @@ func parseIntRangeEnv(name string, defaultVal, min, max int) (int, error) {
 func Load() (*Config, error) {
 	cfg := &Config{
 		MetricsHost:         "127.0.0.1",
-		DBPath:              "./jot.db",
+		DBDriver:            "sqlite",
+		DBDSN:               "./jot.db",
 		CookieSecure:        true,
 		RegistrationEnabled: true,
 		OTelServiceName:     "jot",
@@ -90,8 +92,14 @@ func Load() (*Config, error) {
 	}
 	cfg.MetricsEnabled = metricsEnabled
 
-	if v := os.Getenv("DB_PATH"); v != "" {
-		cfg.DBPath = v
+	if v := os.Getenv("DB_DRIVER"); v != "" {
+		cfg.DBDriver = v
+	}
+	if v := os.Getenv("DB_DSN"); v != "" {
+		cfg.DBDSN = v
+	} else if v := os.Getenv("DB_PATH"); v != "" {
+		// DB_PATH is a deprecated alias for DB_DSN when DB_DRIVER=sqlite.
+		cfg.DBDSN = v
 	}
 
 	if v := os.Getenv("STATIC_DIR"); v != "" {
