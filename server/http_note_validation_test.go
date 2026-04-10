@@ -308,6 +308,26 @@ func TestNoteValidation(t *testing.T) {
 				"content": "should not be allowed",
 			}))
 		})
+
+		t.Run("update text note with items returns 400", func(t *testing.T) {
+			textNote, err := user.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{Content: "original"})
+			require.NoError(t, err)
+
+			// Send a raw request to test server-side rejection of items on a text note.
+			assert.Equal(t, http.StatusBadRequest, patchNote(t, textNote.ID, map[string]any{
+				"items": []map[string]any{{"text": "item", "position": 0}},
+			}))
+		})
+
+		t.Run("update text note with checked_items_collapsed returns 400", func(t *testing.T) {
+			textNote, err := user.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{Content: "original"})
+			require.NoError(t, err)
+
+			// Send a raw request to test server-side rejection of checked_items_collapsed on a text note.
+			assert.Equal(t, http.StatusBadRequest, patchNote(t, textNote.ID, map[string]any{
+				"checked_items_collapsed": true,
+			}))
+		})
 	})
 
 	t.Run("update with explicit empty items clears list items", func(t *testing.T) {

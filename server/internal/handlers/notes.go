@@ -468,6 +468,12 @@ func validateUpdateNoteTypeFields(noteType models.NoteType, req *UpdateNoteReque
 	if noteType == models.NoteTypeList && req.Content != nil && *req.Content != "" {
 		return http.StatusBadRequest, errors.New("list notes cannot have content")
 	}
+	if noteType == models.NoteTypeText && req.Items != nil {
+		return http.StatusBadRequest, errors.New("text notes cannot have items")
+	}
+	if noteType == models.NoteTypeText && req.CheckedItemsCollapsed != nil {
+		return http.StatusBadRequest, errors.New("text notes cannot have checked_items_collapsed")
+	}
 	return http.StatusOK, nil
 }
 
