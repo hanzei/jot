@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"time"
 
+	"github.com/hanzei/jot/server/internal/database/dialect"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -16,8 +17,8 @@ type SessionStore struct {
 }
 
 // NewSessionStore creates an instrumented SessionStore.
-func NewSessionStore(db *sql.DB) (*SessionStore, error) {
-	inner, err := newSessionStore(db)
+func NewSessionStore(db *sql.DB, d *dialect.Dialect) (*SessionStore, error) {
+	inner, err := newSessionStore(db, d)
 	if err != nil {
 		return nil, err
 	}

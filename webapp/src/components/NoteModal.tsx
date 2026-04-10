@@ -2,7 +2,7 @@ import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
 import { XMarkIcon, PlusIcon, TrashIcon, ChevronDownIcon, ArchiveBoxIcon, ArchiveBoxXMarkIcon, ShareIcon, UserPlusIcon, CheckIcon, TagIcon, DocumentDuplicateIcon, DevicePhoneMobileIcon } from '@heroicons/react/24/outline';
 import { Dialog, DialogPanel } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
-import { VALIDATION, NOTE_COLORS, buildCollaborators, type Note, type NoteType, type CreateNoteRequest, type UpdateNoteRequest, type Label, type User, type Collaborator } from '@jot/shared';
+import { VALIDATION, NOTE_COLORS, buildCollaborators, type Note, type NoteItem, type NoteType, type CreateNoteRequest, type UpdateNoteRequest, type Label, type User, type Collaborator } from '@jot/shared';
 import { notes } from '@/utils/api';
 import { renderMarkdown } from '@/utils/markdown';
 import LabelPicker from '@/components/LabelPicker';
@@ -51,7 +51,7 @@ const validateContent = (content: string, t: TFunction): string | null => {
   return null;
 };
 
-const haveListItemsChanged = (currentItems: ListItem[], originalItems: Note['items'] | undefined): boolean => {
+const haveListItemsChanged = (currentItems: ListItem[], originalItems: NoteItem[] | undefined): boolean => {
   const baseItems = originalItems ?? [];
   if (currentItems.length !== baseItems.length) return true;
 
@@ -102,6 +102,15 @@ interface ListItem {
 interface QueuedAutoSaveRequest {
   noteId: string;
   updateData: UpdateNoteRequest;
+}
+
+interface AutoSaveDraft {
+  title?: string;
+  content?: string;
+  pinned?: boolean;
+  archived?: boolean;
+  color?: string;
+  checked_items_collapsed?: boolean;
 }
 
 interface SortableItemProps {
@@ -403,7 +412,8 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const errorTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const noteIdRef = useRef<string | null>(note?.id ?? null);
-  const autoSaveDraftRef = useRef<Omit<UpdateNoteRequest, 'items'>>({
+  const noteTypeRef = useRef<NoteType>(note?.note_type ?? 'text');
+  const autoSaveDraftRef = useRef<AutoSaveDraft>({
     title: '',
     content: '',
     pinned: false,
@@ -436,18 +446,33 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     })
   );
 
-  const mapItemsForAutoSave = useCallback((sourceItems: ListItem[]) => sourceItems.map((item) => ({
+  const mapItemsForAutoSave = useCallback((sourceItems: ListItem[]) => sourceItems.map((item, idx) => ({
     text: item.text,
-    position: item.position,
+    position: idx,
     completed: item.completed,
     indent_level: item.indentLevel,
     assigned_to: item.assignedTo,
   })), []);
 
-  const buildAutoSaveRequest = useCallback((sourceItems: ListItem[]): UpdateNoteRequest => ({
-    ...autoSaveDraftRef.current,
-    items: mapItemsForAutoSave(sourceItems),
-  }), [mapItemsForAutoSave]);
+  const buildAutoSaveRequest = useCallback((sourceItems: ListItem[]): UpdateNoteRequest => {
+    const draft = autoSaveDraftRef.current;
+    if (noteTypeRef.current === 'list') {
+      return {
+        title: draft.title,
+        pinned: draft.pinned,
+        archived: draft.archived,
+        color: draft.color,
+        checked_items_collapsed: draft.checked_items_collapsed,
+        items: mapItemsForAutoSave(sourceItems),
+      };
+    }
+    return {
+      content: draft.content,
+      pinned: draft.pinned,
+      archived: draft.archived,
+      color: draft.color,
+    };
+  }, [mapItemsForAutoSave]);
 
   const commitItems = useCallback((nextItems: ListItem[]) => {
     itemsRef.current = nextItems;
@@ -503,22 +528,26 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
 
   useEffect(() => {
     if (note) {
-      setTitle(note.title);
-      setContent(note.content);
       setNoteType(note.note_type);
       setColor(note.color);
       setPinned(note.pinned);
       setArchived(note.archived);
-      setCheckedItemsCollapsed(note.checked_items_collapsed);
-      const mappedItems = note.items?.map((item, index) => ({
-        id: item.id || `existing_${item.position}_${index}`,
-        text: item.text,
-        completed: item.completed,
-        position: item.position,
-        indentLevel: item.indent_level ?? 0,
-        assignedTo: item.assigned_to ?? '',
-      })) || [];
-      commitItems(mappedItems);
+      if (note.note_type === 'list') {
+        setTitle(note.title);
+        setCheckedItemsCollapsed(note.checked_items_collapsed);
+        const mappedItems = note.items?.map((item, index) => ({
+          id: item.id || `existing_${item.position}_${index}`,
+          text: item.text,
+          completed: item.completed,
+          position: item.position,
+          indentLevel: item.indent_level ?? 0,
+          assignedTo: item.assigned_to ?? '',
+        })) || [];
+        commitItems(mappedItems);
+      } else {
+        setContent(note.content);
+        commitItems([]);
+      }
       setNoteLabels(note.labels ?? []);
     } else {
       setTitle('');
@@ -535,6 +564,10 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   useEffect(() => {
     noteIdRef.current = note?.id ?? null;
   }, [note?.id]);
+
+  useEffect(() => {
+    noteTypeRef.current = noteType;
+  }, [noteType]);
 
   useEffect(() => {
     autoSaveDraftRef.current = {
@@ -1183,25 +1216,25 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       saveTimeoutRef.current = undefined;
     }
 
-    const updateData: UpdateNoteRequest = {
-      title,
-      content,
-      pinned,
-      archived,
-      color,
-      checked_items_collapsed: checkedItemsCollapsed,
-      items: noteType === 'list' ? items.map((item, idx) => ({
-        text: item.text,
-        position: idx,
-        completed: item.completed,
-        indent_level: item.indentLevel,
-        assigned_to: item.assignedTo,
-      })) : undefined,
-    };
+    const updateData: UpdateNoteRequest = note.note_type === 'list'
+      ? {
+          title,
+          pinned,
+          archived,
+          color,
+          checked_items_collapsed: checkedItemsCollapsed,
+          items: mapItemsForAutoSave(items),
+        }
+      : {
+          content,
+          pinned,
+          archived,
+          color,
+        };
 
     await notes.update(note.id, updateData);
     onRefresh?.();
-  }, [archived, checkedItemsCollapsed, color, content, items, note, noteType, onRefresh, pinned, title]);
+  }, [archived, checkedItemsCollapsed, color, content, items, mapItemsForAutoSave, note, onRefresh, pinned, title]);
 
   const handleSave = async () => {
     if (savingRef.current) return;
@@ -1217,19 +1250,25 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       if (note) {
         await persistExistingNote();
       } else {
-        const createData: CreateNoteRequest = {
-          title,
-          content,
-          note_type: noteType,
-          color,
-          items: noteType === 'list' ? items.map((item, idx) => ({
-            text: item.text,
-            position: idx,
-            completed: item.completed,
-            indent_level: item.indentLevel,
-          })) : undefined,
-          labels: noteLabels.length > 0 ? noteLabels.map(l => l.name) : undefined,
-        };
+        const createData: CreateNoteRequest = noteType === 'list'
+          ? {
+              note_type: 'list',
+              title,
+              color,
+              items: items.map((item, idx) => ({
+                text: item.text,
+                position: idx,
+                completed: item.completed,
+                indent_level: item.indentLevel,
+              })),
+              labels: noteLabels.length > 0 ? noteLabels.map(l => l.name) : undefined,
+            }
+          : {
+              note_type: 'text',
+              content,
+              color,
+              labels: noteLabels.length > 0 ? noteLabels.map(l => l.name) : undefined,
+            };
         await notes.create(createData);
       }
       onSave();
@@ -1276,21 +1315,16 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     setPinned(newPinnedState);
     
     try {
-      const updateData: UpdateNoteRequest = {
-        title,
-        content,
-        pinned: newPinnedState,
-        archived,
-        color,
-        checked_items_collapsed: checkedItemsCollapsed,
-        items: note.note_type === 'list' ? items.map((item, idx) => ({
-          text: item.text,
-          position: idx,
-          completed: item.completed,
-          indent_level: item.indentLevel,
-          assigned_to: item.assignedTo,
-        })) : undefined,
-      };
+      const updateData: UpdateNoteRequest = note.note_type === 'list'
+        ? {
+            title,
+            pinned: newPinnedState,
+            archived,
+            color,
+            checked_items_collapsed: checkedItemsCollapsed,
+            items: mapItemsForAutoSave(items),
+          }
+        : { content, pinned: newPinnedState, archived, color };
       await notes.update(note.id, updateData);
       onRefresh?.();
       showToast(
@@ -1300,7 +1334,10 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
           label: t('dashboard.undo'),
           onClick: async () => {
             try {
-              await notes.update(note.id, { pinned: !newPinnedState });
+              await notes.update(note.id, note.note_type === 'list'
+                ? { pinned: !newPinnedState, archived, title, color, checked_items_collapsed: checkedItemsCollapsed, items: mapItemsForAutoSave(items) }
+                : { pinned: !newPinnedState, archived, content, color }
+              );
               setPinned(!newPinnedState);
               onRefresh?.();
             } catch (undoError) {
@@ -1323,21 +1360,16 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     setArchived(newArchivedState);
     
     try {
-      const updateData: UpdateNoteRequest = {
-        title,
-        content,
-        pinned,
-        archived: newArchivedState,
-        color,
-        checked_items_collapsed: checkedItemsCollapsed,
-        items: note.note_type === 'list' ? items.map((item, idx) => ({
-          text: item.text,
-          position: idx,
-          completed: item.completed,
-          indent_level: item.indentLevel,
-          assigned_to: item.assignedTo,
-        })) : undefined,
-      };
+      const updateData: UpdateNoteRequest = note.note_type === 'list'
+        ? {
+            title,
+            pinned,
+            archived: newArchivedState,
+            color,
+            checked_items_collapsed: checkedItemsCollapsed,
+            items: mapItemsForAutoSave(items),
+          }
+        : { content, pinned, archived: newArchivedState, color };
       await notes.update(note.id, updateData);
       showToast(
         newArchivedState ? t('dashboard.noteArchived') : t('dashboard.noteUnarchived'),
@@ -1346,7 +1378,10 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
           label: t('dashboard.undo'),
           onClick: async () => {
             try {
-              await notes.update(note.id, { archived: !newArchivedState });
+              await notes.update(note.id, note.note_type === 'list'
+                ? { archived: !newArchivedState, pinned, title, color, checked_items_collapsed: checkedItemsCollapsed, items: mapItemsForAutoSave(items) }
+                : { archived: !newArchivedState, pinned, content, color }
+              );
               setArchived(!newArchivedState);
               onRefresh?.();
             } catch (undoError) {
@@ -1391,21 +1426,16 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     setCheckedItemsCollapsed(newCollapsedState);
     
     try {
-      const updateData: UpdateNoteRequest = {
-        title,
-        content,
-        pinned,
-        archived,
-        color,
-        checked_items_collapsed: newCollapsedState,
-        items: note.note_type === 'list' ? items.map((item, idx) => ({
-          text: item.text,
-          position: idx,
-          completed: item.completed,
-          indent_level: item.indentLevel,
-          assigned_to: item.assignedTo,
-        })) : undefined,
-      };
+      const updateData: UpdateNoteRequest = note.note_type === 'list'
+        ? {
+            title,
+            pinned,
+            archived,
+            color,
+            checked_items_collapsed: newCollapsedState,
+            items: mapItemsForAutoSave(items),
+          }
+        : { content, pinned, archived, color };
       await notes.update(note.id, updateData);
       onRefresh?.();
     } catch (error) {
@@ -1417,23 +1447,29 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
 
   const hasUnsavedChanges = () => {
     if (note) {
-      const listItemsChanged = note.note_type === 'list' && haveListItemsChanged(items, note.items);
-      return (
-        title !== note.title ||
-        content !== note.content ||
-        color !== note.color ||
-        pinned !== note.pinned ||
-        archived !== note.archived ||
-        checkedItemsCollapsed !== note.checked_items_collapsed ||
-        listItemsChanged
-      );
+      if (note.note_type === 'list') {
+        return (
+          title !== note.title ||
+          color !== note.color ||
+          pinned !== note.pinned ||
+          archived !== note.archived ||
+          checkedItemsCollapsed !== note.checked_items_collapsed ||
+          haveListItemsChanged(items, note.items)
+        );
+      } else {
+        return (
+          content !== note.content ||
+          color !== note.color ||
+          pinned !== note.pinned ||
+          archived !== note.archived
+        );
+      }
     } else {
-      return (
-        title.trim() !== '' ||
-        content.trim() !== '' ||
-        (noteType === 'list' && items.some(item => item.text.trim() !== '')) ||
-        noteLabels.length > 0
-      );
+      if (noteType === 'list') {
+        return title.trim() !== '' || items.some(item => item.text.trim() !== '') || noteLabels.length > 0;
+      } else {
+        return content.trim() !== '' || noteLabels.length > 0;
+      }
     }
   };
 
@@ -1677,45 +1713,36 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
               </div>
             )}
 
-            {/* Title */}
-            <input
-              type="text"
-              autoCapitalize="sentences"
-              placeholder={t('note.titlePlaceholder')}
-              className="w-full p-2 text-lg font-medium bg-transparent border-none outline-none placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white"
-              value={title}
-              onChange={(e) => {
-                const newTitle = e.target.value;
-                const validationError = validateTitle(newTitle, t);
-                if (validationError) {
-                  showError(validationError);
-                  return;
-                }
-                setTitle(newTitle);
-                if (note) {
-                  markDirty();
-                  if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-                  saveTimeoutRef.current = setTimeout(async () => {
-                    saveTimeoutRef.current = undefined;
-                    await autoSaveNote(itemsRef.current);
-                  }, VALIDATION.AUTO_SAVE_TIMEOUT_MS);
-                }
-              }}
-              onKeyDown={(e) => {
-                if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
-                if (e.repeat) return;
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  if (noteType === 'text') {
-                    setIsEditingContent(true);
-                    requestAnimationFrame(() => {
-                      const textarea = contentRef.current;
-                      if (textarea) {
-                        textarea.focus();
-                        textarea.setSelectionRange(textarea.value.length, textarea.value.length);
-                      }
-                    });
-                  } else {
+            {/* Title (list notes only) */}
+            {noteType === 'list' && (
+              <input
+                type="text"
+                autoCapitalize="sentences"
+                placeholder={t('note.titlePlaceholder')}
+                className="w-full p-2 text-lg font-medium bg-transparent border-none outline-none placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white"
+                value={title}
+                onChange={(e) => {
+                  const newTitle = e.target.value;
+                  const validationError = validateTitle(newTitle, t);
+                  if (validationError) {
+                    showError(validationError);
+                    return;
+                  }
+                  setTitle(newTitle);
+                  if (note) {
+                    markDirty();
+                    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+                    saveTimeoutRef.current = setTimeout(async () => {
+                      saveTimeoutRef.current = undefined;
+                      await autoSaveNote(itemsRef.current);
+                    }, VALIDATION.AUTO_SAVE_TIMEOUT_MS);
+                  }
+                }}
+                onKeyDown={(e) => {
+                  if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
+                  if (e.repeat) return;
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
                     const firstItem = uncompletedItems[0];
                     if (firstItem) {
                       const input = itemInputRefs.current.get(firstItem.id);
@@ -1727,9 +1754,9 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                       addListItemAndFocus();
                     }
                   }
-                }
-              }}
-            />
+                }}
+              />
+            )}
 
             {/* Content based on type */}
             {noteType === 'text' ? (

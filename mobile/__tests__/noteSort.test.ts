@@ -1,18 +1,16 @@
 import type { Note } from '@jot/shared';
 import { compareDescendingTimestamps, getNoteSortLabel, normalizeNoteSort, sortNotesForDisplay } from '../src/utils/noteSort';
 
-function buildNote(overrides: Partial<Note> = {}): Note {
+function buildNote(overrides: { id?: string; pinned?: boolean; created_at?: string; updated_at?: string } = {}): Note {
   return {
     id: 'note-1',
     user_id: 'user-1',
-    title: 'Test Note',
     content: '',
     note_type: 'text',
     color: '#ffffff',
     pinned: false,
     archived: false,
     position: 0,
-    checked_items_collapsed: false,
     is_shared: false,
     labels: [],
     shared_with: [],
@@ -38,10 +36,10 @@ describe('mobile noteSort', () => {
 
   it('keeps manual ordering within pinned and unpinned groups', () => {
     const sorted = sortNotesForDisplay([
-      buildNote({ id: 'unpinned-1', title: 'Second', pinned: false }),
-      buildNote({ id: 'pinned-1', title: 'Pinned A', pinned: true }),
-      buildNote({ id: 'unpinned-2', title: 'Third', pinned: false }),
-      buildNote({ id: 'pinned-2', title: 'Pinned B', pinned: true }),
+      buildNote({ id: 'unpinned-1', pinned: false }),
+      buildNote({ id: 'pinned-1', pinned: true }),
+      buildNote({ id: 'unpinned-2', pinned: false }),
+      buildNote({ id: 'pinned-2', pinned: true }),
     ], 'manual');
 
     expect([...sorted.pinned, ...sorted.other].map(note => note.id)).toEqual([
@@ -54,9 +52,9 @@ describe('mobile noteSort', () => {
 
   it('sorts by last modified descending', () => {
     const sorted = sortNotesForDisplay([
-      buildNote({ id: 'note-1', title: 'Old', updated_at: '2024-01-01T00:00:00Z' }),
-      buildNote({ id: 'note-2', title: 'Newest', updated_at: '2024-01-03T00:00:00Z' }),
-      buildNote({ id: 'note-3', title: 'Middle', updated_at: '2024-01-02T00:00:00Z' }),
+      buildNote({ id: 'note-1', updated_at: '2024-01-01T00:00:00Z' }),
+      buildNote({ id: 'note-2', updated_at: '2024-01-03T00:00:00Z' }),
+      buildNote({ id: 'note-3', updated_at: '2024-01-02T00:00:00Z' }),
     ], 'updated_at');
 
     expect([...sorted.pinned, ...sorted.other].map(note => note.id)).toEqual(['note-2', 'note-3', 'note-1']);
@@ -64,9 +62,9 @@ describe('mobile noteSort', () => {
 
   it('sorts by creation date descending', () => {
     const sorted = sortNotesForDisplay([
-      buildNote({ id: 'note-1', title: 'First', created_at: '2024-01-01T00:00:00Z' }),
-      buildNote({ id: 'note-2', title: 'Third', created_at: '2024-01-03T00:00:00Z' }),
-      buildNote({ id: 'note-3', title: 'Second', created_at: '2024-01-02T00:00:00Z' }),
+      buildNote({ id: 'note-1', created_at: '2024-01-01T00:00:00Z' }),
+      buildNote({ id: 'note-2', created_at: '2024-01-03T00:00:00Z' }),
+      buildNote({ id: 'note-3', created_at: '2024-01-02T00:00:00Z' }),
     ], 'created_at');
 
     expect([...sorted.pinned, ...sorted.other].map(note => note.id)).toEqual(['note-2', 'note-3', 'note-1']);
@@ -74,10 +72,10 @@ describe('mobile noteSort', () => {
 
   it('keeps pinned notes above unpinned notes for non-manual sorts', () => {
     const sorted = sortNotesForDisplay([
-      buildNote({ id: 'unpinned-newer', title: 'Bravo', pinned: false, created_at: '2024-01-03T00:00:00Z' }),
-      buildNote({ id: 'pinned-older', title: 'Alpha', pinned: true, created_at: '2024-01-01T00:00:00Z' }),
-      buildNote({ id: 'unpinned-older', title: 'Charlie', pinned: false, created_at: '2024-01-02T00:00:00Z' }),
-      buildNote({ id: 'pinned-newer', title: 'Zulu', pinned: true, created_at: '2024-01-04T00:00:00Z' }),
+      buildNote({ id: 'unpinned-newer', pinned: false, created_at: '2024-01-03T00:00:00Z' }),
+      buildNote({ id: 'pinned-older', pinned: true, created_at: '2024-01-01T00:00:00Z' }),
+      buildNote({ id: 'unpinned-older', pinned: false, created_at: '2024-01-02T00:00:00Z' }),
+      buildNote({ id: 'pinned-newer', pinned: true, created_at: '2024-01-04T00:00:00Z' }),
     ], 'created_at');
 
     expect([...sorted.pinned, ...sorted.other].map(note => note.id)).toEqual([

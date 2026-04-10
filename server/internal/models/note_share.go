@@ -28,7 +28,7 @@ func (s *noteStore) GetNoteShares(ctx context.Context, noteID string) ([]NoteSha
 			  WHERE ns.note_id = ?
 			  ORDER BY u.username`
 
-	rows, err := s.db.QueryContext(ctx, query, noteID)
+	rows, err := s.db.QueryContext(ctx, s.d.RewritePlaceholders(query), noteID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get note shares: %w", err)
 	}
@@ -56,21 +56,21 @@ func (s *noteStore) ShareNote(ctx context.Context, noteID string, sharedByUserID
 	}
 
 	_, err = tx.ExecContext(ctx,
-		`INSERT INTO note_shares (id, note_id, shared_with_user_id, shared_by_user_id, permission_level)
-		 VALUES (?, ?, ?, ?, 'edit')`,
+		s.d.RewritePlaceholders(`INSERT INTO note_shares (id, note_id, shared_with_user_id, shared_by_user_id, permission_level)
+		 VALUES (?, ?, ?, ?, 'edit')`),
 		shareID, noteID, sharedWithUserID, sharedByUserID,
 	)
 	if err != nil {
-		if isUniqueConstraintError(err) {
+		if s.d.IsUniqueConstraintError(err) {
 			return ErrNoteAlreadyShared
 		}
 		return fmt.Errorf("failed to share note: %w", err)
 	}
 
-	if _, err = tx.ExecContext(ctx,
-		`INSERT OR IGNORE INTO note_user_state (note_id, user_id) VALUES (?, ?)`,
-		noteID, sharedWithUserID,
-	); err != nil {
+	ignoreQ := s.d.RewritePlaceholders(
+		s.d.InsertIgnore("note_user_state", "note_id, user_id", "?, ?"),
+	)
+	if _, err = tx.ExecContext(ctx, ignoreQ, noteID, sharedWithUserID); err != nil {
 		return fmt.Errorf("failed to create note user state for collaborator: %w", err)
 	}
 
@@ -84,7 +84,7 @@ func (s *noteStore) UnshareNote(ctx context.Context, noteID string, sharedWithUs
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	result, err := tx.ExecContext(ctx, `DELETE FROM note_shares WHERE note_id = ? AND shared_with_user_id = ?`, noteID, sharedWithUserID)
+	result, err := tx.ExecContext(ctx, s.d.RewritePlaceholders(`DELETE FROM note_shares WHERE note_id = ? AND shared_with_user_id = ?`), noteID, sharedWithUserID)
 	if err != nil {
 		return fmt.Errorf("failed to unshare note: %w", err)
 	}
@@ -99,20 +99,20 @@ func (s *noteStore) UnshareNote(ctx context.Context, noteID string, sharedWithUs
 	}
 
 	if _, err = tx.ExecContext(ctx,
-		`UPDATE note_items SET assigned_to = NULL WHERE note_id = ? AND assigned_to = ?`,
+		s.d.RewritePlaceholders(`UPDATE note_items SET assigned_to = NULL WHERE note_id = ? AND assigned_to = ?`),
 		noteID, sharedWithUserID,
 	); err != nil {
 		return fmt.Errorf("failed to clear assignments for unshared user: %w", err)
 	}
 
 	var remainingShares int
-	if err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM note_shares WHERE note_id = ?`, noteID).Scan(&remainingShares); err != nil {
+	if err = tx.QueryRowContext(ctx, s.d.RewritePlaceholders(`SELECT COUNT(*) FROM note_shares WHERE note_id = ?`), noteID).Scan(&remainingShares); err != nil {
 		return fmt.Errorf("failed to count remaining shares: %w", err)
 	}
 
 	if remainingShares == 0 {
 		if _, err = tx.ExecContext(ctx,
-			`UPDATE note_items SET assigned_to = NULL WHERE note_id = ? AND assigned_to IS NOT NULL`,
+			s.d.RewritePlaceholders(`UPDATE note_items SET assigned_to = NULL WHERE note_id = ? AND assigned_to IS NOT NULL`),
 			noteID,
 		); err != nil {
 			return fmt.Errorf("failed to clear all assignments: %w", err)
@@ -121,14 +121,14 @@ func (s *noteStore) UnshareNote(ctx context.Context, noteID string, sharedWithUs
 
 	// Remove per-user state and labels for the unshared collaborator.
 	if _, err = tx.ExecContext(ctx,
-		`DELETE FROM note_user_state WHERE note_id = ? AND user_id = ?`,
+		s.d.RewritePlaceholders(`DELETE FROM note_user_state WHERE note_id = ? AND user_id = ?`),
 		noteID, sharedWithUserID,
 	); err != nil {
 		return fmt.Errorf("failed to delete note user state for unshared user: %w", err)
 	}
 
 	if _, err = tx.ExecContext(ctx,
-		`DELETE FROM note_labels WHERE note_id = ? AND user_id = ?`,
+		s.d.RewritePlaceholders(`DELETE FROM note_labels WHERE note_id = ? AND user_id = ?`),
 		noteID, sharedWithUserID,
 	); err != nil {
 		return fmt.Errorf("failed to delete note labels for unshared user: %w", err)
@@ -153,7 +153,7 @@ func (s *noteStore) UnshareNote(ctx context.Context, noteID string, sharedWithUs
 func (s *noteStore) ClearUserAssignmentsTx(ctx context.Context, tx *sql.Tx, userID string) error {
 	if _, err := tx.ExecContext(
 		ctx,
-		`DELETE FROM note_shares WHERE shared_with_user_id = ?`,
+		s.d.RewritePlaceholders(`DELETE FROM note_shares WHERE shared_with_user_id = ?`),
 		userID,
 	); err != nil {
 		return fmt.Errorf("failed to remove deleted user shares: %w", err)
@@ -161,7 +161,7 @@ func (s *noteStore) ClearUserAssignmentsTx(ctx context.Context, tx *sql.Tx, user
 
 	if _, err := tx.ExecContext(
 		ctx,
-		`DELETE FROM note_shares WHERE shared_by_user_id = ?`,
+		s.d.RewritePlaceholders(`DELETE FROM note_shares WHERE shared_by_user_id = ?`),
 		userID,
 	); err != nil {
 		return fmt.Errorf("failed to remove shares created by deleted user: %w", err)
@@ -169,9 +169,9 @@ func (s *noteStore) ClearUserAssignmentsTx(ctx context.Context, tx *sql.Tx, user
 
 	if _, err := tx.ExecContext(
 		ctx,
-		`UPDATE note_items SET assigned_to = NULL
+		s.d.RewritePlaceholders(`UPDATE note_items SET assigned_to = NULL
 		 WHERE assigned_to IS NOT NULL
-		   AND note_id NOT IN (SELECT DISTINCT note_id FROM note_shares)`,
+		   AND note_id NOT IN (SELECT DISTINCT note_id FROM note_shares)`),
 	); err != nil {
 		return fmt.Errorf("failed to clear assignments on unshared notes: %w", err)
 	}
@@ -182,14 +182,14 @@ func (s *noteStore) ClearUserAssignmentsTx(ctx context.Context, tx *sql.Tx, user
 	// The explicit deletes guard against any future code path where FK
 	// enforcement might not be active.
 	if _, err := tx.ExecContext(ctx,
-		`DELETE FROM note_user_state WHERE user_id = ?`,
+		s.d.RewritePlaceholders(`DELETE FROM note_user_state WHERE user_id = ?`),
 		userID,
 	); err != nil {
 		return fmt.Errorf("failed to delete note user state for deleted user: %w", err)
 	}
 
 	if _, err := tx.ExecContext(ctx,
-		`DELETE FROM note_labels WHERE user_id = ?`,
+		s.d.RewritePlaceholders(`DELETE FROM note_labels WHERE user_id = ?`),
 		userID,
 	); err != nil {
 		return fmt.Errorf("failed to delete note labels for deleted user: %w", err)
@@ -224,7 +224,7 @@ func (s *noteStore) getSharesByNoteIDs(ctx context.Context, noteIDs []string) (m
 				  WHERE ns.note_id IN (` + placeholders + `)
 				  ORDER BY ns.note_id, u.username` // #nosec G202 -- only "?" placeholders are joined, no user input
 
-		rows, err := s.db.QueryContext(ctx, query, args...)
+		rows, err := s.db.QueryContext(ctx, s.d.RewritePlaceholders(query), args...)
 		if err != nil {
 			return nil, fmt.Errorf("failed to batch-get note shares: %w", err)
 		}

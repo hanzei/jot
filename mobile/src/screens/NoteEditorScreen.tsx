@@ -27,7 +27,7 @@ import ListItem from '../components/ListItem';
 import ColorPicker from '../components/ColorPicker';
 import LabelPicker from '../components/LabelPicker';
 import AssigneePicker from '../components/AssigneePicker';
-import { buildCollaborators, VALIDATION, type Collaborator, type NoteType, type NoteItem, type UpdateNoteRequest, type Label } from '@jot/shared';
+import { buildCollaborators, VALIDATION, type Collaborator, type NoteType, type NoteItem, type CreateNoteRequest, type UpdateNoteRequest, type Label } from '@jot/shared';
 import { useUsers } from '../store/UsersContext';
 import { useTheme } from '../theme/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -180,16 +180,19 @@ export default function NoteEditorScreen() {
   // Load existing note data
   useEffect(() => {
     if (existingNote && !isInitializedRef.current) {
-      setTitle(existingNote.title);
-      setContent(existingNote.content);
       setNoteType(existingNote.note_type);
-      setCheckedItemsCollapsed(existingNote.checked_items_collapsed);
       setPinned(existingNote.pinned);
       setArchived(existingNote.archived);
       setColor(existingNote.color);
       setLabels(existingNote.labels ?? []);
-      if (existingNote.items) {
-        setItems(toLocalItems(existingNote.items));
+      if (existingNote.note_type === 'list') {
+        setTitle(existingNote.title);
+        setCheckedItemsCollapsed(existingNote.checked_items_collapsed);
+        if (existingNote.items) {
+          setItems(toLocalItems(existingNote.items));
+        }
+      } else {
+        setContent(existingNote.content);
       }
       isInitializedRef.current = true;
       requiresHydrationRef.current = false;
@@ -235,17 +238,26 @@ export default function NoteEditorScreen() {
       const currentColor = colorRef.current;
 
       if (!currentNoteId) {
-        if (!currentTitle && !currentContent && currentItems.length === 0) {
+        const isEmpty = currentNoteType === 'list'
+          ? !currentTitle && currentItems.length === 0
+          : !currentContent;
+        if (isEmpty) {
           hasPendingChangesRef.current = false;
           return true;
         }
-        const newNote = await createMutateRef.current({
-          title: currentTitle,
-          content: currentContent,
-          note_type: currentNoteType,
-          color: !isWhiteHexColor(currentColor) ? currentColor : undefined,
-          items: currentNoteType === 'list' ? serializeItems(currentItems) : undefined,
-        });
+        const req: CreateNoteRequest = currentNoteType === 'list'
+          ? {
+              note_type: 'list',
+              title: currentTitle,
+              color: !isWhiteHexColor(currentColor) ? currentColor : undefined,
+              items: serializeItems(currentItems),
+            }
+          : {
+              note_type: 'text',
+              content: currentContent,
+              color: !isWhiteHexColor(currentColor) ? currentColor : undefined,
+            };
+        const newNote = await createMutateRef.current(req);
         hasPendingChangesRef.current = false;
         if (!isMountedRef.current || unmounting) return true;
         noteIdRef.current = newNote.id;
@@ -253,17 +265,21 @@ export default function NoteEditorScreen() {
         setHasCreated(true);
         setSaveError(null);
       } else {
-        const updateData: UpdateNoteRequest = {
-          title: currentTitle,
-          content: currentContent,
-          pinned: pinnedRef.current,
-          archived: archivedRef.current,
-          color: currentColor,
-          checked_items_collapsed: currentCollapsed,
-        };
-        if (currentNoteType === 'list') {
-          updateData.items = serializeItems(currentItems);
-        }
+        const updateData: UpdateNoteRequest = currentNoteType === 'list'
+          ? {
+              title: currentTitle,
+              pinned: pinnedRef.current,
+              archived: archivedRef.current,
+              color: currentColor,
+              checked_items_collapsed: currentCollapsed,
+              items: serializeItems(currentItems),
+            }
+          : {
+              content: currentContent,
+              pinned: pinnedRef.current,
+              archived: archivedRef.current,
+              color: currentColor,
+            };
         await updateMutateRef.current({
           id: currentNoteId,
           data: updateData,
@@ -527,19 +543,24 @@ export default function NoteEditorScreen() {
   );
 
   const buildMetadataUpdateData = useCallback((overrides: Partial<UpdateNoteRequest>): UpdateNoteRequest => {
-    const data: UpdateNoteRequest = {
-      title: titleRef.current,
+    if (noteTypeRef.current === 'list') {
+      return {
+        title: titleRef.current,
+        pinned: pinnedRef.current,
+        archived: archivedRef.current,
+        color: colorRef.current,
+        checked_items_collapsed: checkedItemsCollapsedRef.current,
+        items: serializeItems(itemsRef.current),
+        ...overrides,
+      };
+    }
+    return {
       content: contentRef.current,
       pinned: pinnedRef.current,
       archived: archivedRef.current,
       color: colorRef.current,
-      checked_items_collapsed: checkedItemsCollapsedRef.current,
       ...overrides,
     };
-    if (noteTypeRef.current === 'list') {
-      data.items = serializeItems(itemsRef.current);
-    }
-    return data;
   }, []);
 
   const handleTitleSubmit = useCallback(() => {
@@ -675,14 +696,7 @@ export default function NoteEditorScreen() {
             try {
               await updateMutation.mutateAsync({
                 id: noteId,
-                data: {
-                  title: titleRef.current,
-                  content: contentRef.current,
-                  pinned: pinnedRef.current,
-                  archived: false,
-                  color: colorRef.current,
-                  checked_items_collapsed: checkedItemsCollapsedRef.current,
-                },
+                data: buildMetadataUpdateData({ archived: false }),
               });
               setArchived(false);
               showToast(t('dashboard.noteUnarchived'));
@@ -923,20 +937,22 @@ export default function NoteEditorScreen() {
         contentContainerStyle={styles.scrollContentContainer}
         keyboardShouldPersistTaps="handled"
       >
-        <TextInput
-          ref={titleInputRef}
-          style={[styles.titleInput, { color: hasNoteColor ? '#1a1a1a' : colors.text }]}
-          value={title}
-          onChangeText={handleTitleChange}
-          placeholder={t('note.titlePlaceholder')}
-          placeholderTextColor={hasNoteColor ? '#999' : colors.placeholder}
-          maxLength={VALIDATION.TITLE_MAX_LENGTH}
-          returnKeyType="next"
-          onSubmitEditing={handleTitleSubmit}
-          blurOnSubmit={false}
-          editable={!isHydrating}
-          testID="note-title-input"
-        />
+        {noteType === 'list' && (
+          <TextInput
+            ref={titleInputRef}
+            style={[styles.titleInput, { color: hasNoteColor ? '#1a1a1a' : colors.text }]}
+            value={title}
+            onChangeText={handleTitleChange}
+            placeholder={t('note.titlePlaceholder')}
+            placeholderTextColor={hasNoteColor ? '#999' : colors.placeholder}
+            maxLength={VALIDATION.TITLE_MAX_LENGTH}
+            returnKeyType="next"
+            onSubmitEditing={handleTitleSubmit}
+            blurOnSubmit={false}
+            editable={!isHydrating}
+            testID="note-title-input"
+          />
+        )}
 
         {noteType === 'text' ? (
           <TextInput

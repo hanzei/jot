@@ -147,7 +147,7 @@ function NoteCard({ note, onPress, onLongPress, onMenuPress }: NoteCardProps) {
     >
       <View style={styles.cardHeader}>
         <View style={styles.cardHeaderContent}>
-          {note.title ? (
+          {note.note_type === 'list' && note.title ? (
             <Text style={[styles.title, { color: hasColor ? '#1a1a1a' : colors.text }]} numberOfLines={1}>
               {note.title}
             </Text>

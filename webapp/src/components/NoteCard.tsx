@@ -67,14 +67,10 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
     setIsUpdating(true);
     try {
       const willArchive = !note.archived;
-      await notes.update(note.id, {
-        title: note.title,
-        content: note.content,
-        pinned: note.pinned,
-        archived: willArchive,
-        color: note.color,
-        checked_items_collapsed: note.checked_items_collapsed,
-      });
+      await notes.update(note.id, note.note_type === 'list'
+        ? { archived: willArchive, title: note.title, color: note.color, pinned: note.pinned, checked_items_collapsed: note.checked_items_collapsed }
+        : { archived: willArchive, content: note.content, color: note.color, pinned: note.pinned }
+      );
       onRefresh?.();
       showToast(
         willArchive ? t('dashboard.noteArchived') : t('dashboard.noteUnarchived'),
@@ -83,7 +79,10 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
           label: t('dashboard.undo'),
           onClick: async () => {
             try {
-              await notes.update(note.id, { archived: !willArchive });
+              await notes.update(note.id, note.note_type === 'list'
+                ? { archived: !willArchive, title: note.title, color: note.color, pinned: note.pinned, checked_items_collapsed: note.checked_items_collapsed }
+                : { archived: !willArchive, content: note.content, color: note.color, pinned: note.pinned }
+              );
               onRefresh?.();
             } catch (undoError) {
               console.error('Failed to undo archive toggle:', undoError);
@@ -104,14 +103,10 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
     setIsUpdating(true);
     try {
       const willPin = !note.pinned;
-      await notes.update(note.id, {
-        title: note.title,
-        content: note.content,
-        pinned: willPin,
-        archived: note.archived,
-        color: note.color,
-        checked_items_collapsed: note.checked_items_collapsed,
-      });
+      await notes.update(note.id, note.note_type === 'list'
+        ? { pinned: willPin, archived: note.archived, title: note.title, color: note.color, checked_items_collapsed: note.checked_items_collapsed }
+        : { pinned: willPin, archived: note.archived, content: note.content, color: note.color }
+      );
       onRefresh?.();
       showToast(
         willPin ? t('dashboard.notePinned') : t('dashboard.noteUnpinned'),
@@ -120,7 +115,10 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
           label: t('dashboard.undo'),
           onClick: async () => {
             try {
-              await notes.update(note.id, { pinned: !willPin });
+              await notes.update(note.id, note.note_type === 'list'
+                ? { pinned: !willPin, archived: note.archived, title: note.title, color: note.color, checked_items_collapsed: note.checked_items_collapsed }
+                : { pinned: !willPin, archived: note.archived, content: note.content, color: note.color }
+              );
               onRefresh?.();
             } catch (undoError) {
               console.error('Failed to undo pin toggle:', undoError);
@@ -180,7 +178,7 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
       data-testid="note-card"
       data-note-card="true"
       tabIndex={0}
-      aria-label={note.title || t('share.untitledNote')}
+      aria-label={(note.note_type === 'list' ? note.title : note.content?.slice(0, 50)) || t('share.untitledNote')}
       className={`note-card ${getColorClass(note.color)} p-4 relative group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1 ${isUpdating ? 'opacity-50' : ''
         }`}
       onKeyDown={(e) => {
@@ -308,7 +306,7 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
         onClick={() => !inBin && onEdit(note)}
         className={`${inBin ? 'cursor-default' : 'cursor-pointer'}`}
       >
-        {note.title && (
+        {note.note_type === 'list' && note.title && (
           <h3 className="font-medium text-gray-900 dark:text-white mb-2 line-clamp-2">
             {note.title}
           </h3>

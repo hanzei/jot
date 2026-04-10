@@ -85,18 +85,14 @@ export interface NoteShare {
   updated_at: string;
 }
 
-export interface Note {
+interface BaseNote {
   id: string;
   user_id: string;
-  title: string;
-  content: string;
   note_type: NoteType;
   color: string;
   pinned: boolean;
   archived: boolean;
   position: number;
-  checked_items_collapsed: boolean;
-  items?: NoteItem[];
   shared_with?: NoteShare[];
   is_shared: boolean;
   labels: Label[];
@@ -104,6 +100,20 @@ export interface Note {
   created_at: string;
   updated_at: string;
 }
+
+export interface TextNote extends BaseNote {
+  note_type: 'text';
+  content: string;
+}
+
+export interface ListNote extends BaseNote {
+  note_type: 'list';
+  title: string;
+  items?: NoteItem[];
+  checked_items_collapsed: boolean;
+}
+
+export type Note = TextNote | ListNote;
 
 export interface GetNotesParams {
   archived?: boolean;
@@ -115,24 +125,51 @@ export interface GetNotesParams {
   user_id?: string;
 }
 
-export interface CreateNoteRequest {
-  title: string;
+export interface CreateNoteItemRequest {
+  text: string;
+  position: number;
+  completed?: boolean;
+  indent_level?: number;
+}
+
+export interface UpdateNoteItemRequest extends CreateNoteItemRequest {
+  assigned_to?: string;
+}
+
+export interface CreateTextNoteRequest {
   content: string;
-  note_type: NoteType;
+  note_type: 'text';
   color?: string;
-  items?: { text: string; position: number; completed?: boolean; indent_level?: number }[];
   labels?: string[];
 }
 
-export interface UpdateNoteRequest {
-  title?: string;
+export interface CreateListNoteRequest {
+  title: string;
+  note_type: 'list';
+  color?: string;
+  items?: CreateNoteItemRequest[];
+  labels?: string[];
+}
+
+export type CreateNoteRequest = CreateTextNoteRequest | CreateListNoteRequest;
+
+export interface UpdateTextNoteRequest {
   content?: string;
   pinned?: boolean;
   archived?: boolean;
   color?: string;
-  checked_items_collapsed?: boolean;
-  items?: { text: string; position: number; completed?: boolean; indent_level?: number; assigned_to?: string }[];
 }
+
+export interface UpdateListNoteRequest {
+  title?: string;
+  pinned?: boolean;
+  archived?: boolean;
+  color?: string;
+  checked_items_collapsed?: boolean;
+  items?: UpdateNoteItemRequest[];
+}
+
+export type UpdateNoteRequest = UpdateTextNoteRequest | UpdateListNoteRequest;
 
 export interface CreateUserRequest {
   username: string;

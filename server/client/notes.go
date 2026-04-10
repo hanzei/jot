@@ -45,13 +45,39 @@ func (c *Client) ListNotes(ctx context.Context, opts *ListNotesOptions) ([]Note,
 	return notes, nil
 }
 
-// CreateNote creates a new note.
-func (c *Client) CreateNote(ctx context.Context, req *CreateNoteRequest) (*Note, error) {
+// createTextNoteBody is the wire format for creating a text note.
+type createTextNoteBody struct {
+	NoteType string `json:"note_type"`
+	*CreateTextNoteRequest
+}
+
+// createListNoteBody is the wire format for creating a list note.
+type createListNoteBody struct {
+	NoteType string `json:"note_type"`
+	*CreateListNoteRequest
+}
+
+// CreateTextNote creates a new text note.
+func (c *Client) CreateTextNote(ctx context.Context, req *CreateTextNoteRequest) (*Note, error) {
 	if req == nil {
 		return nil, errors.New("request must not be nil")
 	}
+	body := createTextNoteBody{NoteType: "text", CreateTextNoteRequest: req}
 	var note Note
-	if err := c.doJSON(ctx, http.MethodPost, "/api/v1/notes", req, &note); err != nil {
+	if err := c.doJSON(ctx, http.MethodPost, "/api/v1/notes", body, &note); err != nil {
+		return nil, err
+	}
+	return &note, nil
+}
+
+// CreateListNote creates a new list note.
+func (c *Client) CreateListNote(ctx context.Context, req *CreateListNoteRequest) (*Note, error) {
+	if req == nil {
+		return nil, errors.New("request must not be nil")
+	}
+	body := createListNoteBody{NoteType: "list", CreateListNoteRequest: req}
+	var note Note
+	if err := c.doJSON(ctx, http.MethodPost, "/api/v1/notes", body, &note); err != nil {
 		return nil, err
 	}
 	return &note, nil
@@ -66,14 +92,27 @@ func (c *Client) GetNote(ctx context.Context, id string) (*Note, error) {
 	return &note, nil
 }
 
-// UpdateNote partially updates a note. Pointer fields update when non-nil, and
-// omitted (nil) pointer fields keep their current server-side values.
+// UpdateTextNote partially updates a text note. Nil pointer fields are omitted
+// and keep their current server-side values.
+func (c *Client) UpdateTextNote(ctx context.Context, id string, req *UpdateTextNoteRequest) (*Note, error) {
+	if req == nil {
+		return nil, errors.New("request must not be nil")
+	}
+	var note Note
+	if err := c.doJSON(ctx, http.MethodPatch, fmt.Sprintf("/api/v1/notes/%s", id), req, &note); err != nil {
+		return nil, err
+	}
+	return &note, nil
+}
+
+// UpdateListNote partially updates a list note. Nil pointer fields are omitted
+// and keep their current server-side values.
 //
-// Note: UpdateNoteRequest.Items is a pointer-to-slice with `omitempty`.
+// Items is a pointer-to-slice with `omitempty`:
 // - nil pointer omits "items" (no item update)
 // - pointer to empty slice sends `"items":[]` (clear all items)
 // - pointer to non-empty slice sends replacement items
-func (c *Client) UpdateNote(ctx context.Context, id string, req *UpdateNoteRequest) (*Note, error) {
+func (c *Client) UpdateListNote(ctx context.Context, id string, req *UpdateListNoteRequest) (*Note, error) {
 	if req == nil {
 		return nil, errors.New("request must not be nil")
 	}

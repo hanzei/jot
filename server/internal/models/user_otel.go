@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 
+	"github.com/hanzei/jot/server/internal/database/dialect"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -16,9 +17,9 @@ type UserStore struct {
 }
 
 // NewUserStore creates an instrumented UserStore.
-func NewUserStore(db *sql.DB) *UserStore {
+func NewUserStore(db *sql.DB, d *dialect.Dialect) *UserStore {
 	return &UserStore{
-		inner:  newUserStore(db),
+		inner:  newUserStore(db, d),
 		tracer: otel.Tracer("github.com/hanzei/jot/server"),
 	}
 }

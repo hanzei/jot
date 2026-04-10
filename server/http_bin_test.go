@@ -11,11 +11,10 @@ import (
 )
 
 // createAndTrashNote creates a note and moves it to trash.
-func createAndTrashNote(t *testing.T, user *TestUser, title string) *client.Note {
+func createAndTrashNote(t *testing.T, user *TestUser, content string) *client.Note {
 	t.Helper()
-	note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-		Title:    title,
-		NoteType: client.NoteTypeText,
+	note, err := user.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{
+		Content: content,
 	})
 	require.NoError(t, err)
 	require.NoError(t, user.Client.DeleteNote(t.Context(), note.ID))
@@ -52,8 +51,8 @@ func TestBinDeleteMovesToTrash(t *testing.T) {
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "binuser1", "password123", false)
 
-	note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-		Title: "Bin Test Note", Content: "some content", NoteType: client.NoteTypeText,
+	note, err := user.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{
+		Content: "Bin Test Note",
 	})
 	require.NoError(t, err)
 
@@ -136,8 +135,8 @@ func TestBinRestoreNonTrashedReturns404(t *testing.T) {
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "binuser5", "password123", false)
 
-	note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-		Title: "Active Note", NoteType: client.NoteTypeText,
+	note, err := user.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{
+		Content: "Active Note",
 	})
 	require.NoError(t, err)
 
@@ -149,8 +148,8 @@ func TestBinPermanentDeleteNonTrashedReturns404(t *testing.T) {
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "binuser6", "password123", false)
 
-	note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-		Title: "Active Note 2", NoteType: client.NoteTypeText,
+	note, err := user.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{
+		Content: "Active Note 2",
 	})
 	require.NoError(t, err)
 
@@ -213,9 +212,8 @@ func TestBinEmptyTrashCleansUpItemsLabelsAndShares(t *testing.T) {
 	owner := ts.createTestUser(t, "binempty3", "password123", false)
 	sharedWith := ts.createTestUser(t, "binempty4", "password123", false)
 
-	note, err := owner.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-		Title:    "List in trash",
-		NoteType: client.NoteTypeList,
+	note, err := owner.Client.CreateListNote(t.Context(), &client.CreateListNoteRequest{
+		Title: "List in trash",
 		Items: []client.CreateNoteItem{
 			{Text: "First item", Position: 0},
 			{Text: "Second item", Position: 1},

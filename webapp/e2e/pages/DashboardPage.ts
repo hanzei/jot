@@ -18,22 +18,21 @@ export class DashboardPage {
     await this.page.click('button:has-text("New Note")');
   }
 
-  async createNote(title: string, content?: string) {
+  async createNote(title: string, _content?: string) {
     await this.clickNewNote();
+    // List notes have a title field; switch to list type to use the title for identification.
+    await this.selectListType();
     await this.page.fill('input[placeholder="Note title..."]', title);
-    if (content) {
-      await this.page.fill('textarea[placeholder="Take a note..."]', content);
-    }
     // Close the modal to save (auto-save on close when there are changes)
     await this.closeActiveDialog();
     await expect(this.page.locator('[data-testid="note-card"]').filter({ hasText: title })).toBeVisible();
   }
 
-  /** Creates a new note with labels attached during creation. */
-  async createNoteWithLabels(title: string, content: string, labelNames: string[]) {
+  /** Creates a new text note with labels attached during creation. */
+  async createNoteWithLabels(title: string, _content: string, labelNames: string[]) {
     await this.clickNewNote();
-    await this.page.fill('input[placeholder="Note title..."]', title);
-    await this.page.fill('textarea[placeholder="Take a note..."]', content);
+    // Text notes have a content textarea; fill with title so the card can be identified by hasText.
+    await this.page.fill('textarea[placeholder="Take a note..."]', title);
 
     for (const labelName of labelNames) {
       await this.page.getByRole('button', { name: 'Add labels' }).click();
@@ -46,8 +45,8 @@ export class DashboardPage {
         await this.page.keyboard.press('Enter');
       }
       await expect(this.page.getByRole('checkbox', { name: labelName })).toBeChecked();
-      // Click outside picker to close it
-      await this.page.locator('input[placeholder="Note title..."]').click();
+      // Click back on the content textarea to close the label picker without triggering list item behavior.
+      await this.page.locator('textarea[placeholder="Take a note..."]').click();
     }
 
     await this.closeActiveDialog();
@@ -96,6 +95,22 @@ export class DashboardPage {
 
   async expectListItemValue(index: number, value: string) {
     await expect(this.listItemInput(index)).toHaveValue(value);
+  }
+
+  /** Creates a new text note (no title) with the given content and closes the modal. */
+  async createTextNote(content: string) {
+    await this.clickNewNote();
+    const dialog = this.page.getByRole('dialog').last();
+    await dialog.locator('textarea').first().fill(content);
+    await this.closeActiveDialog();
+  }
+
+  /**
+   * Returns the note card whose visible text contains the given string.
+   * Use for text notes (which have no h3 title), filtering by content text instead.
+   */
+  noteCardByText(text: string) {
+    return this.page.locator('[data-testid="note-card"]').filter({ hasText: text });
   }
 
   async pressKey(key: string) {
@@ -356,13 +371,11 @@ export class DashboardPage {
     await expect(this.page.getByRole('button', { name: 'Profile menu' })).toHaveAttribute('title', expected);
   }
 
-  async editNote(title: string, newTitle: string, newContent: string) {
+  async editNote(title: string, newTitle: string, _newContent: string) {
     await this.openNote(title);
     await expect(this.page.getByRole('heading', { name: 'Edit Note' })).toBeVisible();
+    // createNote creates list notes which have a title input; edit only the title.
     await this.page.fill('input[placeholder="Note title..."]', newTitle);
-    // Existing notes open in preview mode — click preview to enter edit mode first
-    await this.page.getByTestId('note-content-preview').click();
-    await this.page.fill('textarea[placeholder="Take a note..."]', newContent);
     await this.closeActiveDialog();
   }
 

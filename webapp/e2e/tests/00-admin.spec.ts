@@ -70,7 +70,7 @@ test.describe('Admin', () => {
     const memberTwo = await memberTwoResponse.json() as { user: { id: string } };
 
     const sharedTextResponse = await page.request.post('/api/v1/notes', {
-      data: { title: 'Shared text note', content: 'shared content', note_type: 'text' },
+      data: { content: 'shared content', note_type: 'text' },
     });
     await expectOk(sharedTextResponse, 'create shared text note');
     const sharedTextNote = await sharedTextResponse.json() as { id: string };
@@ -99,7 +99,7 @@ test.describe('Admin', () => {
     const activeListNote = await activeListResponse.json() as { id: string };
 
     const trashedTextResponse = await page.request.post('/api/v1/notes', {
-      data: { title: 'Trashed text note', content: 'trashed content', note_type: 'text' },
+      data: { content: 'trashed content', note_type: 'text' },
     });
     await expectOk(trashedTextResponse, 'create trashed text note');
     const trashedTextNote = await trashedTextResponse.json() as { id: string };
