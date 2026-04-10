@@ -138,7 +138,7 @@ describe('useNotes hooks', () => {
 
       const { result } = renderHook(() => useCreateNote(), { wrapper: createWrapper() });
 
-      result.current.mutate({ title: 'Created', content: '', note_type: 'text' });
+      result.current.mutate({ content: 'Created', note_type: 'text' });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
@@ -152,7 +152,7 @@ describe('useNotes hooks', () => {
       const { result } = renderHook(() => useCreateNote(), { wrapper: createWrapper() });
 
       await expect(
-        result.current.mutateAsync({ title: 'Blocked', content: '', note_type: 'text' }),
+        result.current.mutateAsync({ content: 'Blocked', note_type: 'text' }),
       ).rejects.toThrow('Server switch in progress; write blocked');
 
       expect(mockNotesApi.createNote).not.toHaveBeenCalled();

@@ -32,12 +32,32 @@ import NoteCard from '../components/NoteCard';
 import NoteContextMenu, { ContextMenuViewContext } from '../components/NoteContextMenu';
 import ColorPicker from '../components/ColorPicker';
 import LabelPicker from '../components/LabelPicker';
-import type { Note, NoteSort } from '@jot/shared';
+import type { Note, NoteSort, UpdateNoteRequest } from '@jot/shared';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { NOTE_SORT_OPTIONS, getNoteSortLabel, normalizeNoteSort, sortNotesForDisplay } from '../utils/noteSort';
 import { emptyTrash as emptyTrashNotes } from '../api/notes';
 import { getLocalNotes, permanentDeleteLocalNote } from '../db/noteQueries';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
+
+function buildUpdateRequest(note: Note, overrides: Partial<UpdateNoteRequest> = {}): UpdateNoteRequest {
+  if (note.note_type === 'list') {
+    return {
+      title: note.title,
+      pinned: note.pinned,
+      archived: note.archived,
+      color: note.color,
+      checked_items_collapsed: note.checked_items_collapsed,
+      ...overrides,
+    };
+  }
+  return {
+    content: note.content,
+    pinned: note.pinned,
+    archived: note.archived,
+    color: note.color,
+    ...overrides,
+  };
+}
 
 interface NotesListScreenProps {
   variant?: 'notes' | 'archived' | 'trash' | 'my-tasks';
@@ -188,14 +208,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     try {
       await updateNote.mutateAsync({
         id: note.id,
-        data: {
-          title: note.title,
-          content: note.content,
-          pinned: !note.pinned,
-          archived: note.archived,
-          color: note.color,
-          checked_items_collapsed: note.checked_items_collapsed,
-        },
+        data: buildUpdateRequest(note, { pinned: !note.pinned }),
       });
     } catch {
       Alert.alert(t('common.error'), t('note.failedUpdate'));
@@ -206,14 +219,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     try {
       await updateNote.mutateAsync({
         id: note.id,
-        data: {
-          title: note.title,
-          content: note.content,
-          pinned: note.pinned,
-          archived: true,
-          color: note.color,
-          checked_items_collapsed: note.checked_items_collapsed,
-        },
+        data: buildUpdateRequest(note, { archived: true }),
       });
       showToast(t('dashboard.noteArchived'), 'success', {
         label: t('dashboard.undo'),
@@ -221,14 +227,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
           try {
             await updateNote.mutateAsync({
               id: note.id,
-              data: {
-                title: note.title,
-                content: note.content,
-                pinned: note.pinned,
-                archived: false,
-                color: note.color,
-                checked_items_collapsed: note.checked_items_collapsed,
-              },
+              data: buildUpdateRequest(note, { archived: false }),
             });
             showToast(t('dashboard.noteUnarchived'));
           } catch {
@@ -245,14 +244,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     try {
       await updateNote.mutateAsync({
         id: note.id,
-        data: {
-          title: note.title,
-          content: note.content,
-          pinned: note.pinned,
-          archived: false,
-          color: note.color,
-          checked_items_collapsed: note.checked_items_collapsed,
-        },
+        data: buildUpdateRequest(note, { archived: false }),
       });
       showToast(t('dashboard.noteUnarchived'));
     } catch {
@@ -389,14 +381,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     try {
       await updateNote.mutateAsync({
         id: colorPickerNote.id,
-        data: {
-          title: colorPickerNote.title,
-          content: colorPickerNote.content,
-          pinned: colorPickerNote.pinned,
-          archived: colorPickerNote.archived,
-          color,
-          checked_items_collapsed: colorPickerNote.checked_items_collapsed,
-        },
+        data: buildUpdateRequest(colorPickerNote, { color }),
       });
     } catch {
       Alert.alert(t('common.error'), t('note.failedColorUpdate'));

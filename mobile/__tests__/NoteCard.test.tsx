@@ -26,15 +26,30 @@ jest.mock('../src/store/UsersContext', () => ({
 const baseNote: Note = {
   id: 'note-1',
   user_id: 'user-1',
-  title: 'Test Note',
   content: 'Some content here',
   note_type: 'text',
   color: '#ffffff',
   pinned: false,
   archived: false,
   position: 0,
+  shared_with: [],
+  is_shared: false,
+  labels: [],
+  deleted_at: null,
+  created_at: '2024-01-01T00:00:00Z',
+  updated_at: '2024-01-01T00:00:00Z',
+};
+
+const baseListNote: Note = {
+  id: 'note-1',
+  user_id: 'user-1',
+  title: 'Test List Note',
+  note_type: 'list',
+  color: '#ffffff',
+  pinned: false,
+  archived: false,
+  position: 0,
   checked_items_collapsed: false,
-  items: [],
   shared_with: [],
   is_shared: false,
   labels: [],
@@ -48,18 +63,21 @@ describe('NoteCard', () => {
     await i18n.changeLanguage('en');
   });
 
-  it('renders title and content for text notes', () => {
+  it('renders content for text notes', () => {
     const { getByText } = render(<NoteCard note={baseNote} onPress={jest.fn()} />);
 
-    expect(getByText('Test Note')).toBeTruthy();
     expect(getByText('Some content here')).toBeTruthy();
+  });
+
+  it('renders title for list notes', () => {
+    const { getByText } = render(<NoteCard note={baseListNote} onPress={jest.fn()} />);
+
+    expect(getByText('Test List Note')).toBeTruthy();
   });
 
   it('renders list item previews for list notes', () => {
     const listNote: Note = {
-      ...baseNote,
-      note_type: 'list',
-      content: '',
+      ...baseListNote,
       items: [
         {
           id: 'item-1',
@@ -94,9 +112,7 @@ describe('NoteCard', () => {
 
   it('indents list preview rows using indent_level', () => {
     const listWithNestedItems: Note = {
-      ...baseNote,
-      note_type: 'list',
-      content: '',
+      ...baseListNote,
       items: [
         {
           id: 'item-parent',
@@ -134,9 +150,7 @@ describe('NoteCard', () => {
 
   it('clamps negative list preview indentation to zero', () => {
     const listWithNegativeIndent: Note = {
-      ...baseNote,
-      note_type: 'list',
-      content: '',
+      ...baseListNote,
       items: [
         {
           id: 'item-negative-indent',
@@ -160,9 +174,7 @@ describe('NoteCard', () => {
 
   it('allows list preview text to wrap instead of truncating', () => {
     const longListNote: Note = {
-      ...baseNote,
-      note_type: 'list',
-      content: '',
+      ...baseListNote,
       items: [
         {
           id: 'item-wrap',
@@ -231,18 +243,16 @@ describe('NoteCard', () => {
     expect(StyleSheet.flatten(card.props.style)?.backgroundColor).toBe('#fff');
   });
 
-  it('does not render title when empty', () => {
-    const noTitleNote: Note = { ...baseNote, title: '' };
+  it('does not render title when empty for list notes', () => {
+    const noTitleNote: Note = { ...baseListNote, title: '' };
     const { queryByText } = render(<NoteCard note={noTitleNote} onPress={jest.fn()} />);
 
-    expect(queryByText('Test Note')).toBeNull();
+    expect(queryByText('Test List Note')).toBeNull();
   });
 
   it('does not show assignee avatar for assigned list items', () => {
     const sharedList: Note = {
-      ...baseNote,
-      note_type: 'list',
-      content: '',
+      ...baseListNote,
       is_shared: true,
       items: [
         {

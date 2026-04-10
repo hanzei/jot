@@ -37,24 +37,33 @@ function rowToNote(row: NoteRow, items: NoteItem[] = []): Note {
   let shared_with: NoteShare[] = [];
   try { labels = JSON.parse(row.labels_json) as Label[]; } catch { /* ignore */ }
   try { shared_with = JSON.parse(row.shared_with_json) as NoteShare[]; } catch { /* ignore */ }
-  return {
+  const base = {
     id: row.id,
     user_id: row.user_id,
-    title: row.title,
-    content: row.content,
-    note_type: row.note_type as 'text' | 'list',
     color: row.color,
     pinned: row.pinned === 1,
     archived: row.archived === 1,
     position: row.position,
-    checked_items_collapsed: row.checked_items_collapsed === 1,
     is_shared: row.is_shared === 1,
     deleted_at: row.deleted_at,
     created_at: row.created_at,
     updated_at: row.updated_at,
     labels,
     shared_with,
-    items,
+  };
+  if (row.note_type === 'list') {
+    return {
+      ...base,
+      note_type: 'list',
+      title: row.title,
+      checked_items_collapsed: row.checked_items_collapsed === 1,
+      items,
+    };
+  }
+  return {
+    ...base,
+    note_type: 'text',
+    content: row.content,
   };
 }
 
@@ -83,6 +92,11 @@ async function getItemsForNote(db: SQLiteDatabase, noteId: string): Promise<Note
 // Writes a single note (and its items if provided) without wrapping in a transaction.
 // Must only be called from within an existing transaction context.
 async function saveNoteInTx(db: SQLiteDatabase, note: Note): Promise<void> {
+  const title = note.note_type === 'list' ? note.title : '';
+  const content = note.note_type === 'text' ? note.content : '';
+  const checkedItemsCollapsed = note.note_type === 'list' ? (note.checked_items_collapsed ? 1 : 0) : 0;
+  const items = note.note_type === 'list' ? note.items : undefined;
+
   await db.runAsync(
     `INSERT OR REPLACE INTO notes
        (id, user_id, title, content, note_type, color, pinned, archived, position,
@@ -92,14 +106,14 @@ async function saveNoteInTx(db: SQLiteDatabase, note: Note): Promise<void> {
     [
       note.id,
       note.user_id,
-      note.title,
-      note.content,
+      title,
+      content,
       note.note_type,
       note.color,
       note.pinned ? 1 : 0,
       note.archived ? 1 : 0,
       note.position,
-      note.checked_items_collapsed ? 1 : 0,
+      checkedItemsCollapsed,
       note.is_shared ? 1 : 0,
       note.deleted_at ?? null,
       note.created_at,
@@ -109,9 +123,9 @@ async function saveNoteInTx(db: SQLiteDatabase, note: Note): Promise<void> {
     ],
   );
 
-  if (note.items !== undefined) {
+  if (items !== undefined) {
     await db.runAsync('DELETE FROM note_items WHERE note_id = ?', [note.id]);
-    for (const item of note.items) {
+    for (const item of items) {
       await db.runAsync(
         `INSERT OR REPLACE INTO note_items (id, note_id, text, completed, position, indent_level, assigned_to, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -208,10 +222,20 @@ export async function permanentDeleteLocalNote(db: SQLiteDatabase, id: string): 
   await db.runAsync('DELETE FROM notes WHERE id = ?', [id]);
 }
 
+interface LocalNoteChanges {
+  title?: string;
+  content?: string;
+  pinned?: boolean;
+  archived?: boolean;
+  color?: string;
+  checked_items_collapsed?: boolean;
+  position?: number;
+}
+
 export async function updateLocalNote(
   db: SQLiteDatabase,
   id: string,
-  changes: Partial<Pick<Note, 'title' | 'content' | 'pinned' | 'archived' | 'color' | 'checked_items_collapsed' | 'position'>>,
+  changes: LocalNoteChanges,
 ): Promise<void> {
   const fields: string[] = [];
   const values: (string | number | null)[] = [];
