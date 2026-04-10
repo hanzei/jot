@@ -60,7 +60,7 @@ func (s *userStore) Create(ctx context.Context, username, password string) (*Use
 
 	var isFirstUser bool
 	var count int
-	err = s.db.QueryRowContext(ctx, "SELECT COUNT(*) FROM users").Scan(&count)
+	err = s.db.QueryRowContext(ctx, s.d.RewritePlaceholders("SELECT COUNT(*) FROM users")).Scan(&count)
 	if err != nil {
 		return nil, fmt.Errorf("failed to count users: %w", err)
 	}
@@ -75,11 +75,11 @@ func (s *userStore) Create(ctx context.Context, username, password string) (*Use
 			  VALUES (?, ?, ?, ?) RETURNING created_at, updated_at`
 
 	var user User
-	err = s.db.QueryRowContext(ctx, query, userID, username, string(hashedPassword), role).Scan(
+	err = s.db.QueryRowContext(ctx, s.d.RewritePlaceholders(query), userID, username, string(hashedPassword), role).Scan(
 		&user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
-		if isUniqueConstraintError(err) {
+		if s.d.IsUniqueConstraintError(err) {
 			return nil, ErrUsernameTaken
 		}
 		return nil, fmt.Errorf("failed to create user: %w", err)
@@ -99,7 +99,7 @@ func (s *userStore) GetByUsername(ctx context.Context, username string) (*User, 
 			         created_at, updated_at
 			  FROM users WHERE username = ?`
 
-	err := s.db.QueryRowContext(ctx, query, username).Scan(
+	err := s.db.QueryRowContext(ctx, s.d.RewritePlaceholders(query), username).Scan(
 		&user.ID, &user.Username, &user.FirstName, &user.LastName, &user.PasswordHash,
 		&user.Role, &user.HasProfileIcon, &user.CreatedAt, &user.UpdatedAt,
 	)
@@ -119,7 +119,7 @@ func (s *userStore) GetByID(ctx context.Context, id string) (*User, error) {
 			         created_at, updated_at
 			  FROM users WHERE id = ?`
 
-	err := s.db.QueryRowContext(ctx, query, id).Scan(
+	err := s.db.QueryRowContext(ctx, s.d.RewritePlaceholders(query), id).Scan(
 		&user.ID, &user.Username, &user.FirstName, &user.LastName, &user.PasswordHash,
 		&user.Role, &user.HasProfileIcon, &user.CreatedAt, &user.UpdatedAt,
 	)
@@ -153,7 +153,7 @@ func (s *userStore) GetAll(ctx context.Context) ([]*User, error) {
 			         created_at, updated_at
 			  FROM users ORDER BY created_at DESC`
 
-	rows, err := s.db.QueryContext(ctx, query)
+	rows, err := s.db.QueryContext(ctx, s.d.RewritePlaceholders(query))
 	if err != nil {
 		return nil, fmt.Errorf("failed to query users: %w", err)
 	}
@@ -182,7 +182,7 @@ func (s *userStore) Search(ctx context.Context, term string) ([]*User, error) {
 			  WHERE username LIKE ? OR first_name LIKE ? OR last_name LIKE ?
 			  ORDER BY created_at DESC`
 
-	rows, err := s.db.QueryContext(ctx, query, like, like, like)
+	rows, err := s.db.QueryContext(ctx, s.d.RewritePlaceholders(query), like, like, like)
 	if err != nil {
 		return nil, fmt.Errorf("failed to search users: %w", err)
 	}
@@ -208,11 +208,11 @@ func (s *userStore) UpdateUsername(ctx context.Context, id, newUsername string) 
 			  profile_icon IS NOT NULL AS has_profile_icon,
 			  created_at, updated_at`
 	var user User
-	err := s.db.QueryRowContext(ctx, query, newUsername, id).Scan(
+	err := s.db.QueryRowContext(ctx, s.d.RewritePlaceholders(query), newUsername, id).Scan(
 		&user.ID, &user.Username, &user.FirstName, &user.LastName, &user.Role, &user.HasProfileIcon, &user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
-		if isUniqueConstraintError(err) {
+		if s.d.IsUniqueConstraintError(err) {
 			return nil, ErrUsernameTaken
 		}
 		if errors.Is(err, sql.ErrNoRows) {
@@ -231,7 +231,7 @@ func (s *userStore) UpdateProfileIcon(ctx context.Context, id string, data []byt
 		return errors.New("profile icon content type must not be empty")
 	}
 	result, err := s.db.ExecContext(ctx,
-		`UPDATE users SET profile_icon = ?, profile_icon_content_type = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+		s.d.RewritePlaceholders(`UPDATE users SET profile_icon = ?, profile_icon_content_type = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`),
 		data, contentType, id,
 	)
 	if err != nil {
@@ -251,7 +251,7 @@ func (s *userStore) GetProfileIcon(ctx context.Context, id string) ([]byte, stri
 	var data []byte
 	var contentType sql.Null[string]
 	err := s.db.QueryRowContext(ctx,
-		`SELECT profile_icon, profile_icon_content_type FROM users WHERE id = ?`, id,
+		s.d.RewritePlaceholders(`SELECT profile_icon, profile_icon_content_type FROM users WHERE id = ?`), id,
 	).Scan(&data, &contentType)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -267,7 +267,7 @@ func (s *userStore) GetProfileIcon(ctx context.Context, id string) ([]byte, stri
 
 func (s *userStore) DeleteProfileIcon(ctx context.Context, id string) error {
 	result, err := s.db.ExecContext(ctx,
-		`UPDATE users SET profile_icon = NULL, profile_icon_content_type = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+		s.d.RewritePlaceholders(`UPDATE users SET profile_icon = NULL, profile_icon_content_type = NULL, updated_at = CURRENT_TIMESTAMP WHERE id = ?`),
 		id,
 	)
 	if err != nil {
@@ -290,7 +290,7 @@ func (s *userStore) UpdatePassword(ctx context.Context, id, newPassword string) 
 	}
 
 	result, err := s.db.ExecContext(ctx,
-		`UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`,
+		s.d.RewritePlaceholders(`UPDATE users SET password_hash = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`),
 		string(hashedPassword), id,
 	)
 	if err != nil {
@@ -314,7 +314,7 @@ func (s *userStore) UpdateName(ctx context.Context, id, firstName, lastName stri
 			  profile_icon IS NOT NULL AS has_profile_icon,
 			  created_at, updated_at`
 	var user User
-	err := s.db.QueryRowContext(ctx, query, firstName, lastName, id).Scan(
+	err := s.db.QueryRowContext(ctx, s.d.RewritePlaceholders(query), firstName, lastName, id).Scan(
 		&user.ID, &user.Username, &user.FirstName, &user.LastName, &user.Role, &user.HasProfileIcon, &user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
@@ -339,14 +339,14 @@ func (s *userStore) UpdateProfile(ctx context.Context, id, username, firstName, 
 
 	var user User
 	err = tx.QueryRowContext(ctx,
-		`UPDATE users SET username = ?, first_name = ?, last_name = ?, updated_at = CURRENT_TIMESTAMP
+		s.d.RewritePlaceholders(`UPDATE users SET username = ?, first_name = ?, last_name = ?, updated_at = CURRENT_TIMESTAMP
 		 WHERE id = ? RETURNING id, username, first_name, last_name, role,
 		 profile_icon IS NOT NULL AS has_profile_icon,
-		 created_at, updated_at`,
+		 created_at, updated_at`),
 		username, firstName, lastName, id,
 	).Scan(&user.ID, &user.Username, &user.FirstName, &user.LastName, &user.Role, &user.HasProfileIcon, &user.CreatedAt, &user.UpdatedAt)
 	if err != nil {
-		if isUniqueConstraintError(err) {
+		if s.d.IsUniqueConstraintError(err) {
 			return nil, ErrUsernameTaken
 		}
 		if errors.Is(err, sql.ErrNoRows) {
@@ -375,7 +375,7 @@ func (s *userStore) UpdateRole(ctx context.Context, id, role string) (*User, err
 	// Guard: if we're demoting an admin to user, ensure they're not the last admin.
 	if role == RoleUser {
 		var currentRole string
-		err = tx.QueryRowContext(ctx, `SELECT role FROM users WHERE id = ?`, id).Scan(&currentRole)
+		err = tx.QueryRowContext(ctx, s.d.RewritePlaceholders(`SELECT role FROM users WHERE id = ?`), id).Scan(&currentRole)
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, fmt.Errorf("%w", ErrUserNotFound)
 		}
@@ -384,7 +384,7 @@ func (s *userStore) UpdateRole(ctx context.Context, id, role string) (*User, err
 		}
 		if currentRole == RoleAdmin {
 			var adminCount int
-			if err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM users WHERE role = 'admin'`).Scan(&adminCount); err != nil {
+			if err = tx.QueryRowContext(ctx, s.d.RewritePlaceholders(`SELECT COUNT(*) FROM users WHERE role = 'admin'`)).Scan(&adminCount); err != nil {
 				return nil, fmt.Errorf("failed to count admins: %w", err)
 			}
 			if adminCount <= 1 {
@@ -395,10 +395,10 @@ func (s *userStore) UpdateRole(ctx context.Context, id, role string) (*User, err
 
 	var user User
 	err = tx.QueryRowContext(ctx,
-		`UPDATE users SET role = ?, updated_at = CURRENT_TIMESTAMP
+		s.d.RewritePlaceholders(`UPDATE users SET role = ?, updated_at = CURRENT_TIMESTAMP
 		 WHERE id = ? RETURNING id, username, first_name, last_name, role,
 		 profile_icon IS NOT NULL AS has_profile_icon,
-		 created_at, updated_at`,
+		 created_at, updated_at`),
 		role, id,
 	).Scan(&user.ID, &user.Username, &user.FirstName, &user.LastName, &user.Role, &user.HasProfileIcon, &user.CreatedAt, &user.UpdatedAt)
 	if errors.Is(err, sql.ErrNoRows) {
@@ -434,7 +434,7 @@ func (s *userStore) DeleteWithCleanup(ctx context.Context, id, requestingUserID 
 	defer func() { _ = tx.Rollback() }()
 
 	var role string
-	err = tx.QueryRowContext(ctx, `SELECT role FROM users WHERE id = ?`, id).Scan(&role)
+	err = tx.QueryRowContext(ctx, s.d.RewritePlaceholders(`SELECT role FROM users WHERE id = ?`), id).Scan(&role)
 	if errors.Is(err, sql.ErrNoRows) {
 		return fmt.Errorf("%w", ErrUserNotFound)
 	}
@@ -444,7 +444,7 @@ func (s *userStore) DeleteWithCleanup(ctx context.Context, id, requestingUserID 
 
 	if role == RoleAdmin {
 		var adminCount int
-		if err = tx.QueryRowContext(ctx, `SELECT COUNT(*) FROM users WHERE role = 'admin'`).Scan(&adminCount); err != nil {
+		if err = tx.QueryRowContext(ctx, s.d.RewritePlaceholders(`SELECT COUNT(*) FROM users WHERE role = 'admin'`)).Scan(&adminCount); err != nil {
 			return fmt.Errorf("failed to count admins: %w", err)
 		}
 		if adminCount <= 1 {
@@ -452,7 +452,7 @@ func (s *userStore) DeleteWithCleanup(ctx context.Context, id, requestingUserID 
 		}
 	}
 
-	result, err := tx.ExecContext(ctx, `DELETE FROM users WHERE id = ?`, id)
+	result, err := tx.ExecContext(ctx, s.d.RewritePlaceholders(`DELETE FROM users WHERE id = ?`), id)
 	if err != nil {
 		return fmt.Errorf("failed to delete user: %w", err)
 	}
@@ -491,11 +491,11 @@ func (s *userStore) CreateByAdmin(ctx context.Context, username, password string
 			  VALUES (?, ?, ?, ?) RETURNING created_at, updated_at`
 
 	var user User
-	err = s.db.QueryRowContext(ctx, query, userID, username, string(hashedPassword), role).Scan(
+	err = s.db.QueryRowContext(ctx, s.d.RewritePlaceholders(query), userID, username, string(hashedPassword), role).Scan(
 		&user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
-		if isUniqueConstraintError(err) {
+		if s.d.IsUniqueConstraintError(err) {
 			return nil, ErrUsernameTaken
 		}
 		return nil, fmt.Errorf("failed to create user: %w", err)
