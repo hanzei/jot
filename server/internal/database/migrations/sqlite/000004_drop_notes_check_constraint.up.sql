@@ -1,6 +1,6 @@
--- Rename note_type value 'todo' to 'list'.
--- SQLite does not support altering CHECK constraints in-place, so we recreate the table.
--- The active_notes view must be dropped before the notes table can be dropped.
+-- Remove the CHECK constraint on note_type that was present on old installations.
+-- New installations (using the new 000001) never had this constraint, so this
+-- migration is effectively a no-op for them.
 
 DROP VIEW active_notes;
 
@@ -9,7 +9,7 @@ CREATE TABLE notes_new (
     user_id    TEXT NOT NULL,
     title      TEXT NOT NULL DEFAULT '',
     content    TEXT NOT NULL DEFAULT '',
-    note_type  TEXT NOT NULL DEFAULT 'text' CHECK (note_type IN ('text', 'list')),
+    note_type  TEXT NOT NULL DEFAULT 'text',
     deleted_at DATETIME DEFAULT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -17,15 +17,7 @@ CREATE TABLE notes_new (
 );
 
 INSERT INTO notes_new (id, user_id, title, content, note_type, deleted_at, created_at, updated_at)
-SELECT
-    id,
-    user_id,
-    title,
-    content,
-    CASE WHEN note_type = 'todo' THEN 'list' ELSE note_type END,
-    deleted_at,
-    created_at,
-    updated_at
+SELECT id, user_id, title, content, note_type, deleted_at, created_at, updated_at
 FROM notes;
 
 DROP TABLE notes;
