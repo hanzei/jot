@@ -4,6 +4,7 @@ import { Dialog, DialogPanel } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
 import { VALIDATION, NOTE_COLORS, buildCollaborators, type Note, type NoteType, type CreateNoteRequest, type UpdateNoteRequest, type Label, type User, type Collaborator } from '@jot/shared';
 import { notes } from '@/utils/api';
+import { renderMarkdown } from '@/utils/markdown';
 import LabelPicker from '@/components/LabelPicker';
 import LetterAvatar from '@/components/LetterAvatar';
 import AssigneePicker from '@/components/AssigneePicker';
@@ -73,7 +74,6 @@ const haveListItemsChanged = (currentItems: ListItem[], originalItems: Note['ite
 // Utility function to generate unique IDs for list items
 const generateItemId = () => crypto.randomUUID();
 const TEXT_NOTE_MIN_HEIGHT_PX = 96;
-const TEXT_NOTE_MAX_HEIGHT_PX = 320;
 const TEXT_NOTE_RESIZE_DEBOUNCE_MS = 120;
 
 interface NoteModalProps {
@@ -395,7 +395,10 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showLabelPicker, setShowLabelPicker] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  
+  // New notes start in edit mode; existing notes start in preview mode.
+  const [isEditingContent, setIsEditingContent] = useState(!note);
+  const pendingSelectionRef = useRef<{ start: number; end: number } | null>(null);
+
   // Use useRef for timeout management instead of global window property
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const errorTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
@@ -414,17 +417,16 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   const contentRef = useRef<HTMLTextAreaElement>(null);
   const colorPickerRef = useRef<HTMLDivElement>(null);
   const savingRef = useRef(false);
+  // Set to true when the backdrop mousedown handler has already handled a dismiss,
+  // so Dialog.onClose (which HeadlessUI fires after the mousedown) skips its logic.
+  const backdropHandledRef = useRef(false);
   const savedTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const resizeContentTextarea = useCallback((textarea: HTMLTextAreaElement | null) => {
     if (!textarea) return;
     textarea.style.height = 'auto';
-    const contentHeight = textarea.scrollHeight;
-    const nextHeight = Math.min(
-      Math.max(contentHeight, TEXT_NOTE_MIN_HEIGHT_PX),
-      TEXT_NOTE_MAX_HEIGHT_PX
-    );
+    const nextHeight = Math.max(textarea.scrollHeight, TEXT_NOTE_MIN_HEIGHT_PX);
     textarea.style.height = `${nextHeight}px`;
-    textarea.style.overflowY = contentHeight > nextHeight ? 'auto' : 'hidden';
+    textarea.style.overflowY = 'hidden';
   }, []);
 
   const sensors = useSensors(
@@ -554,9 +556,9 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   }, []);
 
   useEffect(() => {
-    if (noteType !== 'text') return;
+    if (noteType !== 'text' || !isEditingContent) return;
     resizeContentTextarea(contentRef.current);
-  }, [content, noteType, resizeContentTextarea]);
+  }, [content, noteType, isEditingContent, resizeContentTextarea]);
 
   useEffect(() => {
     if (noteType !== 'text') return;
@@ -578,6 +580,40 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       }
     };
   }, [noteType, resizeContentTextarea]);
+
+  useEffect(() => {
+    if (pendingSelectionRef.current && contentRef.current) {
+      const { start, end } = pendingSelectionRef.current;
+      contentRef.current.focus();
+      contentRef.current.setSelectionRange(start, end);
+      pendingSelectionRef.current = null;
+    }
+  }, [content]);
+
+  // Focus the textarea whenever the content area transitions into edit mode
+  // (but not on initial mount to avoid stealing focus from the title input).
+  const prevIsEditingContentRef = useRef(isEditingContent);
+  useEffect(() => {
+    if (isEditingContent && !prevIsEditingContentRef.current) {
+      requestAnimationFrame(() => {
+        contentRef.current?.focus();
+      });
+    }
+    prevIsEditingContentRef.current = isEditingContent;
+  }, [isEditingContent]);
+
+  // Pre-compute the rendered markdown for the preview div.
+  // If markdown renders to nothing but content is non-empty (e.g. plain text
+  // with HTML-special chars that DOMPurify stripped), fall back to an
+  // HTML-escaped version of the raw content so it is never silently hidden.
+  const renderedContent = useMemo(() => {
+    if (!content?.trim()) return '';
+    const md = renderMarkdown(content);
+    if (md) return md;
+    return content.replace(/[&<>"']/g, (c) => (
+      { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[c] ?? c
+    ));
+  }, [content]);
 
   // Helper function to show error messages with auto-dismiss
   const showError = useCallback((message: string) => {
@@ -1468,10 +1504,44 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
 
   return (
     <>
-      <Dialog open={true} onClose={handleCloseRequest} className="relative z-50">
+      <Dialog
+        open={true}
+        onClose={() => {
+          // If the backdrop mousedown already handled this dismiss, skip.
+          if (backdropHandledRef.current) {
+            backdropHandledRef.current = false;
+            return;
+          }
+          // Escape key: two-step dismiss — collapse first, then close on second press.
+          if (isEditingContent) {
+            setIsEditingContent(false);
+          } else {
+            handleCloseRequest();
+          }
+        }}
+        className="relative z-50"
+      >
         <div className="fixed inset-0 bg-black/30 dark:bg-black/50" aria-hidden="true" />
-      
-      <div className="fixed inset-0 flex items-center justify-center p-2 sm:p-4 overflow-hidden">
+
+        {/* Backdrop mousedown: two-step dismiss matching Dialog.onClose.
+            Using onMouseDown (not onClick) so both this handler and HeadlessUI's
+            outside-click detection (which also fires on mousedown) see the same
+            isEditingContent value before any React re-render between events.
+            target===currentTarget ensures clicks inside the panel that bubble up
+            are ignored. */}
+        <div
+          className="fixed inset-0 flex items-center justify-center p-2 sm:p-4 overflow-hidden"
+          onMouseDown={(e) => {
+            if (e.target !== e.currentTarget) return;
+            // Signal onClose to skip its logic — we're handling this dismiss.
+            backdropHandledRef.current = true;
+            if (isEditingContent) {
+              setIsEditingContent(false);
+            } else {
+              handleCloseRequest();
+            }
+          }}
+        >
         <DialogPanel
           className={`mx-auto w-full max-w-md max-h-[90vh] overflow-hidden rounded-lg shadow-xl ${
             colors.find(c => c.value === color)?.class || 'bg-white dark:bg-slate-800 border-gray-300 dark:border-slate-600'
@@ -1637,11 +1707,14 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                 if (e.key === 'Enter') {
                   e.preventDefault();
                   if (noteType === 'text') {
-                    const textarea = contentRef.current;
-                    if (textarea) {
-                      textarea.focus();
-                      textarea.setSelectionRange(textarea.value.length, textarea.value.length);
-                    }
+                    setIsEditingContent(true);
+                    requestAnimationFrame(() => {
+                      const textarea = contentRef.current;
+                      if (textarea) {
+                        textarea.focus();
+                        textarea.setSelectionRange(textarea.value.length, textarea.value.length);
+                      }
+                    });
                   } else {
                     const firstItem = uncompletedItems[0];
                     if (firstItem) {
@@ -1660,31 +1733,73 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
 
             {/* Content based on type */}
             {noteType === 'text' ? (
-              <textarea
-                ref={contentRef}
-                autoCapitalize="sentences"
-                placeholder={t('note.contentPlaceholder')}
-                rows={4}
-                className="w-full p-2 bg-transparent border-none outline-none resize-none placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white min-h-[6rem]"
-                value={content}
-                onChange={(e) => {
-                  const newContent = e.target.value;
-                  const validationError = validateContent(newContent, t);
-                  if (validationError) {
-                    showError(validationError);
-                    return;
-                  }
-                  setContent(newContent);
-                  if (note) {
-                    markDirty();
-                    if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-                    saveTimeoutRef.current = setTimeout(async () => {
-                      saveTimeoutRef.current = undefined;
-                      await autoSaveNote(itemsRef.current);
-                    }, VALIDATION.AUTO_SAVE_TIMEOUT_MS);
-                  }
-                }}
-              />
+              <>
+                {isEditingContent ? (
+                  <textarea
+                    ref={contentRef}
+                    autoCapitalize="sentences"
+                    placeholder={t('note.contentPlaceholder')}
+                    rows={4}
+                    className="w-full p-2 border-none outline-none resize-none placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white min-h-[6rem] rounded-md bg-gray-50 dark:bg-slate-700/40 transition-colors duration-150"
+                    value={content}
+                    onKeyDown={(e) => {
+                      if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
+                      if (e.key === 'Escape') {
+                        e.preventDefault();
+                        setIsEditingContent(false);
+                      }
+                    }}
+                    onChange={(e) => {
+                      const newContent = e.target.value;
+                      const validationError = validateContent(newContent, t);
+                      if (validationError) {
+                        showError(validationError);
+                        return;
+                      }
+                      setContent(newContent);
+                      if (note) {
+                        markDirty();
+                        if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+                        saveTimeoutRef.current = setTimeout(async () => {
+                          saveTimeoutRef.current = undefined;
+                          await autoSaveNote(itemsRef.current);
+                        }, VALIDATION.AUTO_SAVE_TIMEOUT_MS);
+                      }
+                    }}
+                  />
+                ) : (
+                  <div
+                    data-testid="note-content-preview"
+                    role="textbox"
+                    aria-label={t('note.contentPlaceholder')}
+                    aria-multiline="true"
+                    tabIndex={0}
+                    onClick={() => setIsEditingContent(true)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setIsEditingContent(true);
+                      }
+                    }}
+                    className="w-full p-2 min-h-[6rem] cursor-text text-gray-900 dark:text-white markdown-content"
+                    dangerouslySetInnerHTML={{
+                      __html: renderedContent ||
+                        `<span class="text-gray-400 dark:text-gray-500 pointer-events-none">${t('note.contentPlaceholder')}</span>`,
+                    }}
+                  />
+                )}
+                {isEditingContent && (
+                  <div className="flex justify-end pt-1">
+                    <button
+                      type="button"
+                      onClick={() => setIsEditingContent(false)}
+                      className="text-xs font-medium text-blue-500 dark:text-blue-400 hover:text-blue-700 dark:hover:text-blue-300 px-2 py-1 rounded hover:bg-blue-50 dark:hover:bg-blue-900/20 transition-colors"
+                    >
+                      {t('common.done')}
+                    </button>
+                  </div>
+                )}
+              </>
             ) : (
               <div className="space-y-4">
                 {/* Uncompleted items section */}
