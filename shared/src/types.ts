@@ -125,6 +125,17 @@ export interface GetNotesParams {
   user_id?: string;
 }
 
+export interface CreateNoteItemRequest {
+  text: string;
+  position: number;
+  completed?: boolean;
+  indent_level?: number;
+}
+
+export interface UpdateNoteItemRequest extends CreateNoteItemRequest {
+  assigned_to?: string;
+}
+
 export interface CreateTextNoteRequest {
   content: string;
   note_type: 'text';
@@ -136,7 +147,7 @@ export interface CreateListNoteRequest {
   title: string;
   note_type: 'list';
   color?: string;
-  items?: { text: string; position: number; completed?: boolean; indent_level?: number }[];
+  items?: CreateNoteItemRequest[];
   labels?: string[];
 }
 
@@ -155,7 +166,7 @@ export interface UpdateListNoteRequest {
   archived?: boolean;
   color?: string;
   checked_items_collapsed?: boolean;
-  items?: { text: string; position: number; completed?: boolean; indent_level?: number; assigned_to?: string }[];
+  items?: UpdateNoteItemRequest[];
 }
 
 export type UpdateNoteRequest = UpdateTextNoteRequest | UpdateListNoteRequest;

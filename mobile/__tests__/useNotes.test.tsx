@@ -146,6 +146,26 @@ describe('useNotes hooks', () => {
       expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), newNote);
     });
 
+    it('creates a list note via API and caches locally', async () => {
+      const newListNote = {
+        id: 'server-list-id', title: 'My List', note_type: 'list',
+        color: '#ffffff', pinned: false, archived: false, position: 0,
+        checked_items_collapsed: false, is_shared: false, deleted_at: null,
+        user_id: 'u1', created_at: '', updated_at: '', labels: [], shared_with: [],
+        items: [],
+      };
+      mockNotesApi.createNote.mockResolvedValueOnce(newListNote as never);
+
+      const { result } = renderHook(() => useCreateNote(), { wrapper: createWrapper() });
+
+      await result.current.mutateAsync({ title: 'My List', note_type: 'list', items: [] });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      expect(result.current.data).toEqual(newListNote);
+      expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), newListNote);
+    });
+
     it('blocks write when server switch is in progress', async () => {
       mockClientModule.isServerSwitchInProgress.mockReturnValue(true);
 
