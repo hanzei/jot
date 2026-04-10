@@ -272,7 +272,7 @@
   "labels": {
     "title": "Labels",
     "noLabels": "No labels yet",
-    "newSidebar": "+ New Label",
+    "newSidebar": "New Label",
     "newLabelPlaceholder": "New label",
     "createInputLabel": "New label name",
     "createSave": "Create label",

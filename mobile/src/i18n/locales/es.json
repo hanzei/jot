@@ -273,7 +273,7 @@
     "title": "Etiquetas",
     "noLabels": "Aún no hay etiquetas",
     "newLabelPlaceholder": "Nueva etiqueta",
-    "newSidebar": "+ Nueva etiqueta",
+    "newSidebar": "Nueva etiqueta",
     "createInputLabel": "Nuevo nombre de etiqueta",
     "createSave": "Crear etiqueta",
     "createCancel": "Cancelar creación de etiqueta",
