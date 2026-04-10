@@ -64,17 +64,11 @@ describe('NoteCard', () => {
   })
 
   describe('Basic Rendering', () => {
-    it('renders note title for list notes', () => {
-      const listNote = createMockNote({ note_type: 'list', content: 'This is a test note content' })
-      renderNoteCard({ ...defaultProps, note: listNote })
-
-      expect(screen.getByText('Test Note')).toBeInTheDocument()
-    })
-
-    it('hides title for text notes', () => {
+    it('renders note title and content', () => {
       renderNoteCard(defaultProps)
 
-      expect(screen.queryByText('Test Note')).not.toBeInTheDocument()
+      expect(screen.getByText('Test Note')).toBeInTheDocument()
+      expect(screen.getByText('This is a test note content')).toBeInTheDocument()
     })
 
     it('renders note without title', () => {
@@ -87,24 +81,21 @@ describe('NoteCard', () => {
 
     it('renders note with extremely long title', () => {
       const longTitle = 'A'.repeat(500)
-      const noteWithLongTitle = createMockNote({ note_type: 'list', title: longTitle })
+      const noteWithLongTitle = createMockNote({ title: longTitle })
       renderNoteCard({ ...defaultProps, note: noteWithLongTitle })
 
       expect(screen.getByText(longTitle)).toBeInTheDocument()
     })
 
-    it('renders special characters in title (list note)', () => {
-      const note = createMockNote({ note_type: 'list', title: 'Special <>&"\'` Characters' })
-      renderNoteCard({ ...defaultProps, note })
-      expect(screen.getByText('Special <>&"\'` Characters')).toBeInTheDocument()
-    })
-
-    it('sanitizes XSS in text note content and preserves safe content', () => {
-      const note = createMockNote({
-        note_type: 'text',
+    it('renders note with special characters in title and content', () => {
+      const specialNote = createMockNote({
+        title: 'Special <>&"\'` Characters',
         content: 'Content with <script>alert("xss")</script> and emojis 🚀💡',
       })
-      renderNoteCard({ ...defaultProps, note })
+      renderNoteCard({ ...defaultProps, note: specialNote })
+
+      expect(screen.getByText('Special <>&"\'` Characters')).toBeInTheDocument()
+      // DOMPurify strips <script> tags; the XSS attempt is sanitized out
       const card = screen.getByTestId('note-card')
       expect(card.innerHTML).not.toContain('<script>')
       expect(card.innerHTML).toContain('🚀💡')
@@ -130,14 +121,14 @@ describe('NoteCard', () => {
       renderNoteCard({ ...defaultProps, note: invalidColorNote })
 
       // Should still render without throwing errors
-      expect(screen.getByTestId('note-card')).toBeInTheDocument()
+      expect(screen.getByText('Test Note')).toBeInTheDocument()
     })
 
     it('handles malformed hex colors', () => {
       const malformedColors = ['#', '#xyz', 'rgb(255,255,255)', 'blue', '#12345g']
 
       malformedColors.forEach((color, index) => {
-        const coloredNote = createMockNote({ note_type: 'list', color, title: `Test Note ${index}` })
+        const coloredNote = createMockNote({ color, title: `Test Note ${index}` })
         const { unmount } = renderNoteCard({ ...defaultProps, note: coloredNote })
 
         expect(screen.getByText(`Test Note ${index}`)).toBeInTheDocument()
@@ -676,7 +667,7 @@ describe('NoteCard', () => {
 
       renderNoteCard(minimalProps)
 
-      expect(screen.getByTestId('note-card')).toBeInTheDocument()
+      expect(screen.getByText('Test Note')).toBeInTheDocument()
     })
   })
 
@@ -701,7 +692,7 @@ describe('NoteCard', () => {
 
       renderNoteCard({ ...defaultProps, note: malformedNote })
 
-      expect(screen.getByTestId('note-card')).toBeInTheDocument()
+      expect(screen.getByText('Test Note')).toBeInTheDocument()
     })
 
     it('handles missing note properties', () => {
