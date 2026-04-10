@@ -66,11 +66,11 @@ const mockStats: AdminStatsResponse = {
   storage: { database_size_bytes: 4_398_047 },
 }
 
-const renderAdmin = () => {
+const renderAdmin = (passwordMinLength = 10) => {
   return render(
     <MemoryRouter>
       <ToastProvider>
-        <Admin passwordMinLength={10} />
+        <Admin passwordMinLength={passwordMinLength} />
       </ToastProvider>
     </MemoryRouter>
   )
@@ -296,6 +296,25 @@ describe('Admin', () => {
       await waitFor(() => {
         expect(screen.queryByRole('dialog', { name: 'Create New User' })).not.toBeInTheDocument()
       })
+    })
+
+    it('respects the configured passwordMinLength prop instead of the hardcoded default', async () => {
+      const user = userEvent.setup()
+      renderAdmin(4)
+
+      await waitFor(() => {
+        expect(screen.getByText('regularuser')).toBeInTheDocument()
+      })
+
+      const dialog = await openCreateModal(user)
+
+      // A 5-char password satisfies min=4 but not the hardcoded default of 10
+      const passwordInput = within(dialog).getByLabelText('Password')
+      await user.type(passwordInput, '12345')
+      await user.tab()
+
+      expect(within(dialog).queryByText(/Password must be at least/)).not.toBeInTheDocument()
+      expect(within(dialog).getByRole('button', { name: 'Create User' })).toBeEnabled()
     })
 
     it('shows server error message when create user fails', async () => {

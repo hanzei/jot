@@ -19,9 +19,9 @@ vi.mock('@/utils/auth', () => ({
   setSettings: vi.fn(),
 }))
 
-const renderRegister = (onRegister = vi.fn()) => render(
+const renderRegister = (onRegister = vi.fn(), passwordMinLength = VALIDATION.PASSWORD_MIN_LENGTH) => render(
   <MemoryRouter>
-    <Register onRegister={onRegister} passwordMinLength={VALIDATION.PASSWORD_MIN_LENGTH} />
+    <Register onRegister={onRegister} passwordMinLength={passwordMinLength} />
   </MemoryRouter>
 )
 
@@ -99,6 +99,18 @@ describe('Register', () => {
 
     await user.type(confirmInput, 'xxx')
     expect(screen.getByText(t('auth.passwordsNoMatch'))).toBeInTheDocument()
+  })
+
+  it('respects a configured passwordMinLength for inline validation', async () => {
+    const user = userEvent.setup()
+    renderRegister(vi.fn(), 4)
+
+    const passwordInput = screen.getByLabelText(t('auth.passwordPlaceholder'))
+
+    // 5-char password satisfies min=4 but not the hardcoded default of 10
+    await user.type(passwordInput, '12345')
+    expect(screen.queryByText(new RegExp(t('auth.passwordMin', { min: 4 })))).not.toBeInTheDocument()
+    expect(passwordInput).toHaveAttribute('aria-invalid', 'false')
   })
 
   it('shows styled alert when register API fails', async () => {

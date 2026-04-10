@@ -33,7 +33,7 @@ export default function Register({ onRegister, passwordMinLength }: RegisterProp
   const usernameValidationMessage = usernameValidationError
     ? usernameValidationErrorTranslations[usernameValidationError]
     : null;
-  const passwordTooShort = password.length > 0 && isPasswordTooShort(password);
+  const passwordTooShort = password.length > 0 && isPasswordTooShort(password, passwordMinLength);
   const passwordsMismatch = confirmPassword.length > 0 && password !== confirmPassword;
   const usernameMessageId = 'register-username-message';
   const passwordMessageId = 'register-password-message';
