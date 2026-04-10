@@ -9,18 +9,23 @@ import (
 	sqlitedriver "modernc.org/sqlite"
 )
 
-// sqliteUniqueConstraint is the SQLite extended error code for UNIQUE constraint violations.
-const sqliteUniqueConstraint = 2067
+const (
+	// DriverPostgres is the driver name for PostgreSQL.
+	DriverPostgres = "postgres"
+
+	// sqliteUniqueConstraint is the SQLite extended error code for UNIQUE constraint violations.
+	sqliteUniqueConstraint = 2067
+)
 
 // Dialect abstracts SQL differences between database drivers.
 type Dialect struct {
-	Driver string // "sqlite" | "postgres"
+	Driver string // "sqlite" | DriverPostgres
 }
 
 // RewritePlaceholders converts ? positional placeholders to $1, $2, ... for
 // PostgreSQL. It is a no-op for SQLite.
 func (d *Dialect) RewritePlaceholders(query string) string {
-	if d.Driver != "postgres" {
+	if d.Driver != DriverPostgres {
 		return query
 	}
 	var b strings.Builder
@@ -41,7 +46,7 @@ func (d *Dialect) RewritePlaceholders(query string) string {
 // is the VALUES list using ? syntax (e.g. "?, ?, ?").
 func (d *Dialect) InsertIgnore(table, cols, placeholders string) string {
 	switch d.Driver {
-	case "postgres":
+	case DriverPostgres:
 		return fmt.Sprintf("INSERT INTO %s (%s) VALUES (%s) ON CONFLICT DO NOTHING", table, cols, placeholders)
 	default: // sqlite
 		return fmt.Sprintf("INSERT OR IGNORE INTO %s (%s) VALUES (%s)", table, cols, placeholders)
@@ -54,7 +59,7 @@ func (d *Dialect) InsertIgnore(table, cols, placeholders string) string {
 // PostgreSQL: col ILIKE ?
 func (d *Dialect) CaseInsensitiveEquals(col string) string {
 	switch d.Driver {
-	case "postgres":
+	case DriverPostgres:
 		return col + " ILIKE ?"
 	default: // sqlite
 		return fmt.Sprintf("LOWER(%s) = LOWER(?)", col)
@@ -68,7 +73,7 @@ func (d *Dialect) IsUniqueConstraintError(err error) bool {
 		return false
 	}
 	switch d.Driver {
-	case "postgres":
+	case DriverPostgres:
 		var pqErr *pq.Error
 		return errors.As(err, &pqErr) && pqErr.Code == "23505"
 	default: // sqlite
