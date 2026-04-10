@@ -46,10 +46,7 @@ async function ensureBootstrapAdmin(page: Page) {
 
 test.describe('Admin', () => {
   test.beforeEach(async ({ page }, testInfo) => {
-    // The admin tests require the first registered user to be admin (fresh DB).
-    // With multiple Playwright projects sharing a single webServer, only the
-    // first project gets a fresh DB.
-    test.skip(testInfo.project.name === 'mobile-chrome', 'Admin tests require a fresh DB (first project only)');
+    test.skip(testInfo.project.name === 'mobile-chrome', 'Admin tests cover desktop UI only');
 
     if (testInfo.title.includes('non-admin')) {
       return;

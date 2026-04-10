@@ -8,10 +8,11 @@ const E2E_DB_PATH = `/tmp/jot-e2e-${Date.now()}.db`;
 
 export default defineConfig({
   testDir: './e2e/tests',
-  fullyParallel: false,
+  globalSetup: './e2e/global-setup.ts',
+  fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
-  workers: 1,
+  workers: process.env.CI ? 4 : undefined,
   reporter: [['list'], ['html', { open: 'never' }]],
   timeout: 30_000,
   use: {
