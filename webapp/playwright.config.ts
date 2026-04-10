@@ -24,15 +24,24 @@ export default defineConfig({
     serviceWorkers: 'block',
   },
   projects: [
+    // Admin tests run first in isolation before parallel workers start.
+    // They rely on aggregate DB counts that would be skewed by concurrent registrations.
+    {
+      name: 'admin',
+      testMatch: '**/00-admin.spec.ts',
+      use: { ...devices['Desktop Chrome'] },
+    },
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
+      testIgnore: '**/00-admin.spec.ts',
+      dependencies: ['admin'],
     },
     {
       name: 'mobile-chrome',
       use: { ...devices['Pixel 5'] },
-      // Keyboard shortcuts are validated on desktop project only.
-      testIgnore: '**/keyboard-shortcuts.spec.ts',
+      testIgnore: ['**/keyboard-shortcuts.spec.ts', '**/00-admin.spec.ts'],
+      dependencies: ['admin'],
     },
   ],
   webServer: {

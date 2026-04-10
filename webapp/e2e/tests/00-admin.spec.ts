@@ -45,6 +45,8 @@ async function ensureBootstrapAdmin(page: Page) {
 }
 
 test.describe('Admin', () => {
+  // Tests share aggregate DB state (user/note counts), so they must run serially.
+  test.describe.configure({ mode: 'serial' });
   test.beforeEach(async ({ page }, testInfo) => {
     test.skip(testInfo.project.name === 'mobile-chrome', 'Admin tests cover desktop UI only');
 
