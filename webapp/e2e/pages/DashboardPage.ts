@@ -117,7 +117,9 @@ export class DashboardPage {
   }
 
   async openNote(title: string) {
-    await this.page.locator('[data-testid="note-card"]').filter({ hasText: title }).click();
+    await this.page.locator('[data-testid="note-card"]').filter({
+      has: this.page.locator('h3').getByText(title, { exact: true }),
+    }).click();
   }
 
   async closeNoteModal() {
@@ -125,7 +127,9 @@ export class DashboardPage {
   }
 
   private async openNoteMenu(title: string) {
-    const card = this.page.locator('[data-testid="note-card"]').filter({ hasText: title });
+    const card = this.page.locator('[data-testid="note-card"]').filter({
+      has: this.page.locator('h3').getByText(title, { exact: true }),
+    });
     await expect(card).toBeVisible();
     const menuButton = card.getByRole('button', { name: 'Note options' });
     // Focus + keyboard activation avoids pointer-interception flakes from overlays.

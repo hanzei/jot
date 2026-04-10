@@ -292,12 +292,13 @@ test.describe('Notes', () => {
 
     await dashboardPage.goto();
 
-    await dashboardPage.createNoteWithLabels('Source Text', 'Original text body', ['text-label']);
+    // Create a list note (has h3 title, needed for menu operations) with a label.
+    await dashboardPage.createNote('Source Text');
+    await dashboardPage.addLabelToNote('Source Text', 'text-label');
     await dashboardPage.duplicateNoteFromMenu('Source Text');
     await expect(page.getByText('Note duplicated')).toBeVisible();
-    // Text notes have no h3 title — the duplicate is identified by its content text.
-    const duplicatedTextCard = dashboardPage.noteCardByText('Source Text').first();
-    await expect(duplicatedTextCard).toBeVisible();
+    await dashboardPage.expectNoteAtPosition(0, 'Copy of Source Text');
+    const duplicatedTextCard = dashboardPage.noteCard('Copy of Source Text');
     await expect(duplicatedTextCard.getByText('text-label')).toBeVisible();
 
     await dashboardPage.createListNote('Source List', ['Prepare agenda', 'Send follow-up']);
