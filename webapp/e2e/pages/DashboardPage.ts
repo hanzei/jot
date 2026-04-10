@@ -18,22 +18,22 @@ export class DashboardPage {
     await this.page.click('button:has-text("New Note")');
   }
 
-  async createNote(title: string, content?: string) {
+  async createNote(title: string, _content?: string) {
     await this.clickNewNote();
+    // List notes have a title field; switch to list type to use the title for identification.
+    await this.selectListType();
     await this.page.fill('input[placeholder="Note title..."]', title);
-    if (content) {
-      await this.page.fill('textarea[placeholder="Take a note..."]', content);
-    }
     // Close the modal to save (auto-save on close when there are changes)
     await this.closeActiveDialog();
     await expect(this.page.locator('[data-testid="note-card"]').filter({ hasText: title })).toBeVisible();
   }
 
-  /** Creates a new note with labels attached during creation. */
-  async createNoteWithLabels(title: string, content: string, labelNames: string[]) {
+  /** Creates a new list note with labels attached during creation. */
+  async createNoteWithLabels(title: string, _content: string, labelNames: string[]) {
     await this.clickNewNote();
+    // List notes have a title field; switch to list type to use the title for identification.
+    await this.selectListType();
     await this.page.fill('input[placeholder="Note title..."]', title);
-    await this.page.fill('textarea[placeholder="Take a note..."]', content);
 
     for (const labelName of labelNames) {
       await this.page.getByRole('button', { name: 'Add labels' }).click();
@@ -96,6 +96,21 @@ export class DashboardPage {
 
   async expectListItemValue(index: number, value: string) {
     await expect(this.listItemInput(index)).toHaveValue(value);
+  }
+
+  /** Creates a new text note (no title) with the given content and closes the modal. */
+  async createTextNote(content: string) {
+    await this.clickNewNote();
+    await this.page.fill('textarea[placeholder="Take a note..."]', content);
+    await this.closeActiveDialog();
+  }
+
+  /**
+   * Returns the note card whose visible text contains the given string.
+   * Use for text notes (which have no h3 title), filtering by content text instead.
+   */
+  noteCardByText(text: string) {
+    return this.page.locator('[data-testid="note-card"]').filter({ hasText: text });
   }
 
   async pressKey(key: string) {
