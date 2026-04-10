@@ -133,6 +133,18 @@ CREATE TABLE note_user_state (
 
 CREATE INDEX idx_note_user_state_user ON note_user_state(user_id, archived, pinned, position);
 
+-- Personal access tokens table
+CREATE TABLE personal_access_tokens (
+    id         TEXT      PRIMARY KEY,
+    user_id    TEXT      NOT NULL,
+    token_hash TEXT      NOT NULL UNIQUE,
+    name       TEXT      NOT NULL,
+    created_at TIMESTAMP NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_pats_user_id ON personal_access_tokens(user_id);
+
 -- Active notes view
 CREATE VIEW active_notes AS
     SELECT id, user_id, title, content, note_type, deleted_at, created_at, updated_at
