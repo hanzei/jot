@@ -401,7 +401,9 @@ export default function Dashboard() {
       if ((event.type === 'note_updated' || event.type === 'note_shared') && event.data.note?.id === note_id) {
         setEditingNote(event.data.note);
       } else if (event.type === 'note_unshared' && !currentUserLostAccess) {
-        notes.getById(note_id).then(setEditingNote).catch(() => {});
+        notes.getById(note_id).then(refreshed => {
+          setEditingNote(prev => prev?.id === note_id ? refreshed : prev);
+        }).catch(() => {});
       }
     }
 
@@ -689,8 +691,13 @@ export default function Dashboard() {
       try {
         const refreshed = await notes.getById(noteId);
         setEditingNote(refreshed);
-      } catch {
-        // Note may have been deleted; ignore
+      } catch (err: unknown) {
+        const status = (err as { response?: { status?: number } })?.response?.status;
+        if (status === 403 || status === 404) {
+          setIsModalOpen(false);
+          setEditingNote(null);
+          restoreReturnUrl();
+        }
       }
     }
   };
