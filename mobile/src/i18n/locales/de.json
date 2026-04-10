@@ -9,7 +9,8 @@
     "clearSearch": "Suche löschen",
     "error": "Fehler",
     "unknown": "unbekannt",
-    "loading": "Lädt..."
+    "loading": "Lädt...",
+    "done": "Fertig"
   },
   "nav": {
     "settings": "Einstellungen",
@@ -248,7 +249,11 @@
     "colorLavender": "Lavendel",
     "colorPink": "Rosa",
     "colorSand": "Sand",
-    "colorGray": "Grau"
+    "colorGray": "Grau",
+    "formatBold": "Fett",
+    "formatItalic": "Kursiv",
+    "formatHeading": "Überschrift",
+    "formatBulletList": "Aufzählung"
   },
   "labels": {
     "title": "Labels",
