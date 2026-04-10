@@ -153,10 +153,10 @@ describe('NoteModal', () => {
     it('renders create mode correctly (text note)', () => {
       renderNoteModal(defaultProps)
 
-      expect(screen.getByText('New Note')).toBeInTheDocument()
       // Text notes have no title input
       expect(screen.queryByPlaceholderText('Note title...')).not.toBeInTheDocument()
       expect(screen.getByPlaceholderText('Take a note...')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument()
     })
 
     it('renders create mode correctly (list note)', () => {
@@ -165,25 +165,25 @@ describe('NoteModal', () => {
       // Switch to list mode
       fireEvent.click(screen.getByText('List'))
 
-      expect(screen.getByText('New Note')).toBeInTheDocument()
       expect(screen.getByPlaceholderText('Note title...')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument()
     })
 
     it('renders edit mode correctly for text note', () => {
       const note = createMockNote()
       renderNoteModal({ ...defaultProps, note })
 
-      expect(screen.getByText('Edit Note')).toBeInTheDocument()
       // Text notes have no title; content is shown in markdown preview mode
       expect(screen.getByTestId('note-content-preview')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument()
     })
 
     it('renders edit mode correctly for list note', () => {
       const note = createMockNote({ note_type: 'list', title: 'Test Note' })
       renderNoteModal({ ...defaultProps, note })
 
-      expect(screen.getByText('Edit Note')).toBeInTheDocument()
       expect(screen.getByDisplayValue('Test Note')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument()
     })
 
     it('shows note type selector only for new notes', () => {
@@ -1086,6 +1086,7 @@ describe('NoteModal', () => {
       const onRefresh = vi.fn()
       renderNoteModal({ ...defaultProps, onRefresh, note })
 
+      fireEvent.click(screen.getByLabelText('Select note color'))
       fireEvent.click(screen.getByTitle('Coral'))
       await vi.runAllTimersAsync()
 
@@ -1096,6 +1097,7 @@ describe('NoteModal', () => {
     it('does not autosave color on new notes', async () => {
       renderNoteModal(defaultProps)
 
+      fireEvent.click(screen.getByLabelText('Select note color'))
       fireEvent.click(screen.getByTitle('Coral'))
       await vi.runAllTimersAsync()
 
@@ -1128,6 +1130,7 @@ describe('NoteModal', () => {
       fireEvent.change(titleInput, { target: { value: 'Updated Title' } })
 
       // Immediately click a color — should cancel the title debounce and save both
+      fireEvent.click(screen.getByLabelText('Select note color'))
       fireEvent.click(screen.getByTitle('Coral'))
       await vi.runAllTimersAsync()
 
@@ -1161,7 +1164,7 @@ describe('NoteModal', () => {
       renderNoteModal({ ...defaultProps, note: malformedNote })
 
       // Should render without throwing errors
-      expect(screen.getByText('Edit Note')).toBeInTheDocument()
+      expect(screen.getByRole('button', { name: 'Close' })).toBeInTheDocument()
     })
 
     it('handles missing note properties', () => {
