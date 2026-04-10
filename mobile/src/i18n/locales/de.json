@@ -5,6 +5,7 @@
     "cancel": "Abbrechen",
     "delete": "Löschen",
     "retry": "Erneut versuchen",
+    "dbOpenError": "Datenbank konnte nicht geöffnet werden.",
     "clearSearch": "Suche löschen",
     "error": "Fehler",
     "unknown": "unbekannt",
@@ -51,11 +52,7 @@
     "serverSetupInputA11yLabel": "Eingabe für Server-URL",
     "serverSetupSubmitA11yLabel": "Server prüfen und fortfahren",
     "serverSetupConnectionFailed": "Server nicht erreichbar. Prüfe URL und Verbindung und versuche es erneut.",
-    "serverSetupConnectionInvalidServer": "Verbindung hergestellt, aber dies scheint kein kompatibler Jot-API-Endpunkt zu sein.",
-    "serverSetupExampleLocalhost": "Beispiel: http://localhost:8080 (iOS-Simulator)",
-    "serverSetupExampleAndroidEmulator": "Beispiel: http://10.0.2.2:8080 (Android-Emulator)",
-    "serverSetupExampleLan": "Beispiel: http://192.168.1.42:8080 (LAN)",
-    "serverSetupExampleHosted": "Beispiel: https://notes.example.com (selbstgehostete Domain)"
+    "serverSetupConnectionInvalidServer": "Verbindung hergestellt, aber dies scheint kein kompatibler Jot-API-Endpunkt zu sein."
   },
   "dashboard": {
     "newNote": "Neue Notiz",
@@ -257,8 +254,7 @@
     "title": "Labels",
     "noLabels": "Noch keine Labels",
     "newLabelPlaceholder": "Neues Label",
-
-    "newSidebar": "+ Neues Label",
+    "newSidebar": "Neues Label",
     "createInputLabel": "Neuer Labelname",
     "createSave": "Label erstellen",
     "createCancel": "Label-Erstellung abbrechen",

@@ -360,6 +360,8 @@ export class DashboardPage {
     await this.openNote(title);
     await expect(this.page.getByRole('heading', { name: 'Edit Note' })).toBeVisible();
     await this.page.fill('input[placeholder="Note title..."]', newTitle);
+    // Existing notes open in preview mode — click preview to enter edit mode first
+    await this.page.getByTestId('note-content-preview').click();
     await this.page.fill('textarea[placeholder="Take a note..."]', newContent);
     await this.closeActiveDialog();
   }

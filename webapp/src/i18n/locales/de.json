@@ -1,6 +1,7 @@
 {
   "common": {
-    "close": "Schließen"
+    "close": "Schließen",
+    "done": "Fertig"
   },
   "nav": {
     "profileMenu": "Profilmenü",

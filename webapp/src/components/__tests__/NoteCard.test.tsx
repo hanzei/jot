@@ -95,7 +95,10 @@ describe('NoteCard', () => {
       renderNoteCard({ ...defaultProps, note: specialNote })
 
       expect(screen.getByText('Special <>&"\'` Characters')).toBeInTheDocument()
-      expect(screen.getByText('Content with <script>alert("xss")</script> and emojis 🚀💡')).toBeInTheDocument()
+      // DOMPurify strips <script> tags; the XSS attempt is sanitized out
+      const card = screen.getByTestId('note-card')
+      expect(card.innerHTML).not.toContain('<script>')
+      expect(card.innerHTML).toContain('🚀💡')
     })
   })
 
@@ -665,6 +668,16 @@ describe('NoteCard', () => {
       renderNoteCard(minimalProps)
 
       expect(screen.getByText('Test Note')).toBeInTheDocument()
+    })
+  })
+
+  describe('Markdown Rendering', () => {
+    it('renders markdown in text note content', () => {
+      const note = createMockNote({ note_type: 'text', content: '**bold text**' })
+      renderNoteCard({ ...defaultProps, note })
+      const card = screen.getByTestId('note-card')
+      expect(card.innerHTML).toContain('<strong>bold text</strong>')
+      expect(card.innerHTML).not.toContain('**bold text**')
     })
   })
 
