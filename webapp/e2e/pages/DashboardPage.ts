@@ -20,19 +20,22 @@ export class DashboardPage {
 
   async createNote(title: string, content?: string) {
     await this.clickNewNote();
-    await this.page.fill('input[placeholder="Note title..."]', title);
+    // Title input is hidden for text notes — force-fill so the note gets saved with the title.
+    await this.page.locator('input[placeholder="Note title..."]').fill(title, { force: true });
     if (content) {
       await this.page.fill('textarea[placeholder="Take a note..."]', content);
     }
     // Close the modal to save (auto-save on close when there are changes)
     await this.closeActiveDialog();
-    await expect(this.page.locator('[data-testid="note-card"]').filter({ hasText: title })).toBeVisible();
+    // Text note cards don't display the title as visible text; use aria-label instead.
+    await expect(this.noteCard(title)).toBeVisible();
   }
 
   /** Creates a new note with labels attached during creation. */
   async createNoteWithLabels(title: string, content: string, labelNames: string[]) {
     await this.clickNewNote();
-    await this.page.fill('input[placeholder="Note title..."]', title);
+    // Title input is hidden for text notes — force-fill so the note gets saved with the title.
+    await this.page.locator('input[placeholder="Note title..."]').fill(title, { force: true });
     await this.page.fill('textarea[placeholder="Take a note..."]', content);
 
     for (const labelName of labelNames) {
@@ -46,12 +49,12 @@ export class DashboardPage {
         await this.page.keyboard.press('Enter');
       }
       await expect(this.page.getByRole('checkbox', { name: labelName })).toBeChecked();
-      // Click outside picker to close it
-      await this.page.locator('input[placeholder="Note title..."]').click();
+      // Click the content textarea to close the label picker (title input is hidden).
+      await this.page.locator('textarea[placeholder="Take a note..."]').click();
     }
 
     await this.closeActiveDialog();
-    await expect(this.page.locator('[data-testid="note-card"]').filter({ hasText: title })).toBeVisible();
+    await expect(this.noteCard(title)).toBeVisible();
   }
 
   async createListNote(title: string, items: string[]) {
@@ -103,9 +106,7 @@ export class DashboardPage {
   }
 
   async openNote(title: string) {
-    await this.page.locator('[data-testid="note-card"]').filter({
-      has: this.page.locator('h3').getByText(title, { exact: true }),
-    }).click();
+    await this.noteCard(title).click();
   }
 
   async closeNoteModal() {
@@ -113,9 +114,7 @@ export class DashboardPage {
   }
 
   private async openNoteMenu(title: string) {
-    const card = this.page.locator('[data-testid="note-card"]').filter({
-      has: this.page.locator('h3').getByText(title, { exact: true }),
-    });
+    const card = this.noteCard(title);
     await expect(card).toBeVisible();
     const menuButton = card.getByRole('button', { name: 'Note options' });
     // Focus + keyboard activation avoids pointer-interception flakes from overlays.
@@ -298,11 +297,11 @@ export class DashboardPage {
   }
 
   async expectNoteVisible(title: string) {
-    await expect(this.page.locator('[data-testid="note-card"]').filter({ hasText: title })).toBeVisible();
+    await expect(this.noteCard(title)).toBeVisible();
   }
 
   async expectNoteNotVisible(title: string) {
-    await expect(this.page.locator('[data-testid="note-card"]').filter({ hasText: title })).toHaveCount(0);
+    await expect(this.noteCard(title)).toHaveCount(0);
   }
 
   async expectEmptyState(title?: string, description?: string, expectCreateCta?: boolean) {
@@ -328,7 +327,9 @@ export class DashboardPage {
   }
 
   noteCard(title: string): Locator {
-    return this.page.locator('[data-testid="note-card"]').filter({ hasText: title });
+    // Text note cards don't render the title as visible text; use aria-label which
+    // is always set to note.title on the card element.
+    return this.page.locator(`[data-testid="note-card"][aria-label="${title}"]`);
   }
 
   /** Returns the nth note card (0-based) visible on the page. */
@@ -359,7 +360,8 @@ export class DashboardPage {
   async editNote(title: string, newTitle: string, newContent: string) {
     await this.openNote(title);
     await expect(this.page.getByRole('heading', { name: 'Edit Note' })).toBeVisible();
-    await this.page.fill('input[placeholder="Note title..."]', newTitle);
+    // Title input is hidden for text notes — force-fill to bypass visibility check.
+    await this.page.locator('input[placeholder="Note title..."]').fill(newTitle, { force: true });
     // Existing notes open in preview mode — click preview to enter edit mode first
     await this.page.getByTestId('note-content-preview').click();
     await this.page.fill('textarea[placeholder="Take a note..."]', newContent);
