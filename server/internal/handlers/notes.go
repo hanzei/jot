@@ -13,6 +13,7 @@ import (
 	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/hanzei/jot/server/internal/models"
 	"github.com/hanzei/jot/server/internal/sse"
+	"github.com/sirupsen/logrus"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
 )
@@ -185,6 +186,8 @@ func sanitizeNote(n models.Note) models.Note {
 		n.CheckedItemsCollapsed = false
 	case models.NoteTypeList:
 		n.Content = ""
+	default:
+		logrus.Warnf("sanitizeNote: unknown note type %q for note %s", n.NoteType, n.ID)
 	}
 	return n
 }
@@ -554,7 +557,10 @@ func (h *NotesHandler) validateItemAssignments(ctx context.Context, noteID strin
 	return http.StatusOK, nil
 }
 
-func (h *NotesHandler) updateListItems(ctx context.Context, noteID string, items []UpdateNoteItem) error {
+func (h *NotesHandler) updateListItems(ctx context.Context, noteID string, noteType models.NoteType, items []UpdateNoteItem) error {
+	if noteType != models.NoteTypeList {
+		return fmt.Errorf("updateListItems called on non-list note (type=%q, id=%s)", noteType, noteID)
+	}
 	if err := h.noteStore.DeleteItemsByNoteID(ctx, noteID); err != nil {
 		return fmt.Errorf("delete note items: %w", err)
 	}
@@ -568,24 +574,25 @@ func (h *NotesHandler) updateListItems(ctx context.Context, noteID string, items
 
 // validateUpdateNoteFields fetches the current note to check type-field compatibility
 // and validates list item assignments. It is called before the store update so that
-// type-mismatch errors are caught early without a partial write.
-func (h *NotesHandler) validateUpdateNoteFields(ctx context.Context, id, userID string, req *UpdateNoteRequest) (int, error) {
+// type-mismatch errors are caught early without a partial write. The note type is
+// returned so the caller can pass it to updateListItems without an extra DB fetch.
+func (h *NotesHandler) validateUpdateNoteFields(ctx context.Context, id, userID string, req *UpdateNoteRequest) (models.NoteType, int, error) {
 	currentNote, err := h.noteStore.GetByID(ctx, id, userID)
 	if err != nil {
 		if errors.Is(err, models.ErrNoteNotFound) {
-			return http.StatusNotFound, err
+			return "", http.StatusNotFound, err
 		}
-		return http.StatusInternalServerError, fmt.Errorf("get note: %w", err)
+		return "", http.StatusInternalServerError, fmt.Errorf("get note: %w", err)
 	}
 	if status, typeErr := validateUpdateNoteTypeFields(currentNote.NoteType, req); typeErr != nil {
-		return status, typeErr
+		return "", status, typeErr
 	}
 	if req.Items != nil {
 		if status, itemErr := h.validateListItems(ctx, id, req.Items); itemErr != nil {
-			return status, itemErr
+			return "", status, itemErr
 		}
 	}
-	return http.StatusOK, nil
+	return currentNote.NoteType, http.StatusOK, nil
 }
 
 // UpdateNote godoc
@@ -626,7 +633,8 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 		return status, nil, err
 	}
 
-	if status, prefetchErr := h.validateUpdateNoteFields(r.Context(), id, user.ID, &req); prefetchErr != nil {
+	noteType, status, prefetchErr := h.validateUpdateNoteFields(r.Context(), id, user.ID, &req)
+	if prefetchErr != nil {
 		return status, nil, prefetchErr
 	}
 
@@ -639,7 +647,7 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 	}
 
 	if req.Items != nil {
-		if updateErr := h.updateListItems(r.Context(), id, req.Items); updateErr != nil {
+		if updateErr := h.updateListItems(r.Context(), id, noteType, req.Items); updateErr != nil {
 			return http.StatusInternalServerError, nil, fmt.Errorf("update list items: %w", updateErr)
 		}
 	}

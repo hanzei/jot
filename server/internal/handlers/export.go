@@ -91,6 +91,8 @@ func (h *NotesHandler) ExportNotes(w http.ResponseWriter, r *http.Request) (int,
 			}
 		case models.NoteTypeText:
 			exportNote.Content = n.Content
+		default:
+			logutil.FromContext(r.Context()).Warnf("ExportNotes: unknown note type %q for note %s", n.NoteType, n.ID)
 		}
 		for _, l := range n.Labels {
 			exportNote.Labels = append(exportNote.Labels, l.Name)

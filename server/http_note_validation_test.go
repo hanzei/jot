@@ -238,6 +238,49 @@ func TestNoteValidation(t *testing.T) {
 		})
 	})
 
+	t.Run("type-field mismatch on create", func(t *testing.T) {
+		t.Run("text note with title returns 400", func(t *testing.T) {
+			_, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
+				Title:    "should not be allowed",
+				NoteType: client.NoteTypeText,
+				Content:  "some content",
+			})
+			assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
+		})
+
+		t.Run("list note with content returns 400", func(t *testing.T) {
+			_, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
+				Content:  "should not be allowed",
+				NoteType: client.NoteTypeList,
+				Title:    "some title",
+			})
+			assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
+		})
+	})
+
+	t.Run("type-field mismatch on update", func(t *testing.T) {
+		t.Run("text note with title returns 400", func(t *testing.T) {
+			textNote, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{Content: "original"})
+			require.NoError(t, err)
+
+			title := "should not be allowed"
+			_, err = user.Client.UpdateNote(t.Context(), textNote.ID, &client.UpdateNoteRequest{Title: &title})
+			assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
+		})
+
+		t.Run("list note with content returns 400", func(t *testing.T) {
+			listNote, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
+				Title:    "original",
+				NoteType: client.NoteTypeList,
+			})
+			require.NoError(t, err)
+
+			content := "should not be allowed"
+			_, err = user.Client.UpdateNote(t.Context(), listNote.ID, &client.UpdateNoteRequest{Content: &content})
+			assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
+		})
+	})
+
 	t.Run("update with explicit empty items clears list items", func(t *testing.T) {
 		note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
 			Items: []client.CreateNoteItem{
