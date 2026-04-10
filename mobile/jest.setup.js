@@ -147,21 +147,24 @@ jest.mock('@expo/vector-icons/Ionicons', () => {
 const i18n = require('./src/i18n').default;
 void i18n.changeLanguage('en');
 
-// axios 1.15.0 probes for fetch adapter support at module load time by calling
-// ReadableStream.cancel() on a stream that already has a reader. Expo's
-// ReadableStream polyfill throws in that case. Swallow the error so the probe
-// fails gracefully and axios falls back to the http/xhr adapter.
+// axios 1.15.0 probes for fetch adapter support by constructing a Request with
+// a ReadableStream body. Expo's polyfill internally calls stream.cancel() on a
+// stream that already has a reader, which returns a rejected Promise. In
+// Node.js 24, that unhandled rejection crashes the Jest worker. Intercept the
+// rejection so the probe fails silently and axios falls back to http/xhr.
 if (global.ReadableStream) {
   const originalCancel = global.ReadableStream.prototype.cancel;
   global.ReadableStream.prototype.cancel = function (reason) {
-    try {
-      return originalCancel.call(this, reason);
-    } catch (e) {
-      if (e && e.message === 'Cannot cancel a stream that already has a reader') {
-        return Promise.resolve();
-      }
-      throw e;
+    const result = originalCancel.call(this, reason);
+    if (result && typeof result.catch === 'function') {
+      return result.catch((e) => {
+        if (e && e.message === 'Cannot cancel a stream that already has a reader') {
+          return undefined;
+        }
+        return Promise.reject(e);
+      });
     }
+    return result;
   };
 }
 
