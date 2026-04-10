@@ -13,6 +13,7 @@ tasks:
     env:
       CORS_ALLOWED_ORIGIN: http://localhost:5173
       PASSWORD_MIN_LENGTH: "4" # dev only: weak password minimum for local convenience — do not use in production
+      COOKIE_SECURE: "false" # dev only: allows jotctl to work over http://localhost — do not use in production
     cmds:
       - rm -f jot
       - go build -buildvcs=false -ldflags "{{.LDFLAGS}}" -o jot .
