@@ -350,11 +350,7 @@
     "assignItem": "Element zuweisen",
     "unassign": "Zuweisung aufheben",
     "assignedTo": "Zugewiesen an {{name}}",
-    "completedSuggestions": "Vorschläge aus erledigten Elementen",
-    "formatBold": "Fett",
-    "formatItalic": "Kursiv",
-    "formatHeading": "Überschrift",
-    "formatBulletList": "Aufzählung"
+    "completedSuggestions": "Vorschläge aus erledigten Elementen"
   },
   "labels": {
     "title": "Labels",

@@ -350,11 +350,7 @@
     "assignItem": "Assign item",
     "unassign": "Unassign",
     "assignedTo": "Assigned to {{name}}",
-    "completedSuggestions": "Suggestions from completed items",
-    "formatBold": "Bold",
-    "formatItalic": "Italic",
-    "formatHeading": "Heading",
-    "formatBulletList": "Bullet list"
+    "completedSuggestions": "Suggestions from completed items"
   },
   "labels": {
     "title": "Labels",

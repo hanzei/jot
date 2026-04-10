@@ -350,11 +350,7 @@
     "assignItem": "Item toewijzen",
     "unassign": "Toewijzing opheffen",
     "assignedTo": "Toegewezen aan {{name}}",
-    "completedSuggestions": "Suggesties van voltooide items",
-    "formatBold": "Vet",
-    "formatItalic": "Cursief",
-    "formatHeading": "Kop",
-    "formatBulletList": "Opsommingsteken"
+    "completedSuggestions": "Suggesties van voltooide items"
   },
   "labels": {
     "title": "Labels",

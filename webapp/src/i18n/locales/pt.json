@@ -350,11 +350,7 @@
     "assignItem": "Atribuir item",
     "unassign": "Desatribuir",
     "assignedTo": "Atribuído a {{name}}",
-    "completedSuggestions": "Sugestões de itens concluídos",
-    "formatBold": "Negrito",
-    "formatItalic": "Itálico",
-    "formatHeading": "Título",
-    "formatBulletList": "Lista de marcadores"
+    "completedSuggestions": "Sugestões de itens concluídos"
   },
   "labels": {
     "title": "Etiquetas",

@@ -350,11 +350,7 @@
     "assignItem": "Asignar elemento",
     "unassign": "Desasignar",
     "assignedTo": "Asignado a {{name}}",
-    "completedSuggestions": "Sugerencias de elementos completados",
-    "formatBold": "Negrita",
-    "formatItalic": "Cursiva",
-    "formatHeading": "Encabezado",
-    "formatBulletList": "Lista de viñetas"
+    "completedSuggestions": "Sugerencias de elementos completados"
   },
   "labels": {
     "title": "Etiquetas",
