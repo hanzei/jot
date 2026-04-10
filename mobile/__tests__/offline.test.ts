@@ -39,6 +39,11 @@ describe('generateLocalId', () => {
     expect(id).toMatch(/^local_/);
   });
 
+  it('matches the expected format local_<base36timestamp>_<16hexchars>', () => {
+    const id = generateLocalId();
+    expect(id).toMatch(/^local_[0-9a-z]+_[0-9a-f]{16}$/);
+  });
+
   it('generates unique IDs on successive calls', () => {
     const ids = Array.from({ length: 20 }, () => generateLocalId());
     const unique = new Set(ids);

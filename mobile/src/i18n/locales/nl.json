@@ -5,6 +5,7 @@
     "cancel": "Annuleren",
     "delete": "Verwijderen",
     "retry": "Opnieuw proberen",
+    "dbOpenError": "Database kon niet worden geopend.",
     "clearSearch": "Zoekopdracht wissen",
     "error": "Fout",
     "unknown": "onbekend",

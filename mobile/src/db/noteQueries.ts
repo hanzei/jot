@@ -1,5 +1,6 @@
 import { SQLiteDatabase } from 'expo-sqlite';
 import type { Note, NoteItem, GetNotesParams, Label, NoteShare } from '@jot/shared';
+import { getRandomBytes } from '../utils/random';
 
 interface NoteRow {
   id: string;
@@ -393,7 +394,7 @@ export async function removeLocalNotesNotIn(
 export function generateLocalId(): string {
   const timestamp = Date.now().toString(36);
   const bytes = new Uint8Array(8);
-  globalThis.crypto.getRandomValues(bytes);
+  getRandomBytes(bytes);
   const random = Array.from(bytes, b => b.toString(16).padStart(2, '0')).join('');
   return `local_${timestamp}_${random}`;
 }
