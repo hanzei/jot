@@ -382,7 +382,6 @@
     "deleteConfirmMessage": "Delete label \"{{name}}\"? It will be removed from all notes that use it."
   },
   "share": {
-    "title": "Share \"{{noteTitle}}\"",
     "untitledNote": "Untitled Note",
     "shareWithUser": "Share with user:",
     "searchUsersPlaceholder": "Search users by username...",

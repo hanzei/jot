@@ -382,7 +382,6 @@
     "deleteConfirmMessage": "Label \"{{name}}\" löschen? Es wird aus allen Notizen entfernt, die es verwenden."
   },
   "share": {
-    "title": "\"{{noteTitle}}\" teilen",
     "untitledNote": "Unbenannte Notiz",
     "shareWithUser": "Mit Benutzer teilen:",
     "searchUsersPlaceholder": "Benutzer nach Namen suchen...",

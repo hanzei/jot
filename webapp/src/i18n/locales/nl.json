@@ -382,7 +382,6 @@
     "deleteConfirmMessage": "Label \"{{name}}\" verwijderen? Het wordt verwijderd uit alle notities die het gebruiken."
   },
   "share": {
-    "title": "\"{{noteTitle}}\" delen",
     "untitledNote": "Naamloze notitie",
     "shareWithUser": "Delen met gebruiker:",
     "searchUsersPlaceholder": "Gebruikers zoeken op naam...",
