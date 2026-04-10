@@ -390,7 +390,9 @@ export class DashboardPage {
     await expect(this.page.getByRole('checkbox', { name: labelName })).toBeChecked();
     // Closing the modal also dismisses the picker (outside-click fires on mousedown)
     await this.closeActiveDialog();
-    await expect(this.page.locator('[data-testid="note-card"]').filter({ hasText: noteTitle })).toBeVisible();
+    await expect(this.page.locator('[data-testid="note-card"]').filter({
+      has: this.page.locator('h3').getByText(noteTitle, { exact: true }),
+    })).toBeVisible();
   }
 
   /** Clicks a label button in the sidebar to toggle the label filter. */
