@@ -348,10 +348,13 @@ function NavigationWrapper() {
 }
 
 export default function App() {
+  const { t } = useTranslation();
   const [activeServerId, setActiveServerId] = React.useState<string | null>(null);
   const [isServerContextReady, setIsServerContextReady] = React.useState(false);
   const [serverContextInitError, setServerContextInitError] = React.useState<string | null>(null);
   const [serverContextInitAttempt, setServerContextInitAttempt] = React.useState(0);
+  const [dbInitError, setDbInitError] = React.useState<Error | null>(null);
+  const [dbInitAttempt, setDbInitAttempt] = React.useState(0);
 
   React.useEffect(() => {
     let isMounted = true;
@@ -388,8 +391,20 @@ export default function App() {
   }, [serverContextInitAttempt]);
 
   const databaseName = getDatabaseNameForServer(activeServerId);
-  const handleDatabaseInit = async (db: Parameters<typeof initializeServerDatabase>[0]) =>
-    initializeServerDatabase(db, activeServerId);
+  const handleDatabaseInit = React.useCallback(
+    async (db: Parameters<typeof initializeServerDatabase>[0]) =>
+      initializeServerDatabase(db, activeServerId),
+    [activeServerId],
+  );
+  const handleDatabaseError = React.useCallback((error: Error) => {
+    console.warn('Database initialization failed:', error);
+    setDbInitError(error);
+  }, []);
+
+  // Reset DB error when the active database changes (e.g. server switch).
+  React.useEffect(() => {
+    setDbInitError(null);
+  }, [databaseName]);
 
   if (!isServerContextReady) {
     return (
@@ -417,15 +432,41 @@ export default function App() {
     );
   }
 
+  if (dbInitError) {
+    return (
+      <GestureHandlerRootView style={{ flex: 1 }}>
+        <SafeAreaProvider>
+          <View style={{ flex: 1, justifyContent: 'center', alignItems: 'center' }}>
+            <View style={{ alignItems: 'center', paddingHorizontal: 24 }}>
+              <Text style={{ textAlign: 'center', marginBottom: 12 }}>
+                {t('common.dbOpenError')}
+              </Text>
+              <TouchableOpacity
+                onPress={() => {
+                  setDbInitError(null);
+                  setDbInitAttempt((prev) => prev + 1);
+                }}
+                style={{ paddingHorizontal: 14, paddingVertical: 10 }}
+              >
+                <Text>{t('common.retry')}</Text>
+              </TouchableOpacity>
+            </View>
+          </View>
+        </SafeAreaProvider>
+      </GestureHandlerRootView>
+    );
+  }
+
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
         <QueryClientProvider client={queryClient}>
           <AuthProvider>
             <SQLiteProvider
-              key={`sqlite-${databaseName}`}
+              key={`sqlite-${databaseName}-${dbInitAttempt}`}
               databaseName={databaseName}
               onInit={handleDatabaseInit}
+              onError={handleDatabaseError}
             >
               <MobileI18nProvider>
                 <ThemeProvider>

@@ -1,6 +1,7 @@
 {
   "common": {
-    "close": "Zamknij"
+    "close": "Zamknij",
+    "done": "Gotowe"
   },
   "nav": {
     "profileMenu": "Menu profilu",

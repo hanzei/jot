@@ -30,6 +30,9 @@ test.describe('Keyboard shortcuts help dialog', () => {
 
     const noteTitleInput = page.locator('[role="dialog"][aria-modal="true"] input[type="text"]').first();
     await expect(noteTitleInput).toBeVisible();
+    // First Escape collapses the content area from edit to preview (two-step dismiss).
+    await page.keyboard.press('Escape');
+    // Second Escape closes the modal.
     await page.keyboard.press('Escape');
     await expect(noteTitleInput).toHaveCount(0);
   });

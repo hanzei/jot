@@ -174,8 +174,8 @@ describe('NoteModal', () => {
       renderNoteModal({ ...defaultProps, note })
 
       expect(screen.getByText('Edit Note')).toBeInTheDocument()
-      // Text notes have no title, only content
-      expect(screen.getByDisplayValue('Test content')).toBeInTheDocument()
+      // Text notes have no title; content is shown in markdown preview mode
+      expect(screen.getByTestId('note-content-preview')).toBeInTheDocument()
     })
 
     it('renders edit mode correctly for list note', () => {
@@ -951,6 +951,9 @@ describe('NoteModal', () => {
       const note = createMockNote({ content: 'Existing long content', note_type: 'text' })
       renderNoteModal({ ...defaultProps, note })
 
+      // Click the preview to enter edit mode
+      fireEvent.click(screen.getByTestId('note-content-preview'))
+
       const contentInput = screen.getByDisplayValue('Existing long content') as HTMLTextAreaElement
       Object.defineProperty(contentInput, 'scrollHeight', {
         configurable: true,
@@ -960,11 +963,12 @@ describe('NoteModal', () => {
       // Trigger resize after loading existing note content.
       fireEvent.change(contentInput, { target: { value: 'Existing long content with update' } })
 
-      expect(contentInput.style.height).toBe('320px')
-      expect(contentInput.style.overflowY).toBe('auto')
+      // Textarea grows to full content height — no max cap; modal scroll handles overflow
+      expect(contentInput.style.height).toBe('500px')
+      expect(contentInput.style.overflowY).toBe('hidden')
     })
 
-    it('grows up to the maximum height and becomes scrollable', () => {
+    it('grows to full content height without a maximum cap', () => {
       renderNoteModal(defaultProps)
 
       const contentInput = screen.getByPlaceholderText('Take a note...') as HTMLTextAreaElement
@@ -975,8 +979,8 @@ describe('NoteModal', () => {
 
       fireEvent.change(contentInput, { target: { value: 'Very long content' } })
 
-      expect(contentInput.style.height).toBe('320px')
-      expect(contentInput.style.overflowY).toBe('auto')
+      expect(contentInput.style.height).toBe('500px')
+      expect(contentInput.style.overflowY).toBe('hidden')
     })
 
     it('uses content height when within min and max bounds', () => {
@@ -1055,6 +1059,9 @@ describe('NoteModal', () => {
       const note = createMockNote()
       const onRefresh = vi.fn()
       renderNoteModal({ ...defaultProps, onRefresh, note })
+
+      // Click the preview to enter edit mode
+      fireEvent.click(screen.getByTestId('note-content-preview'))
 
       const contentInput = screen.getByDisplayValue('Test content')
       fireEvent.change(contentInput, { target: { value: 'Updated content' } })
@@ -1185,5 +1192,31 @@ describe('NoteModal', () => {
       expect(onDuplicate).toHaveBeenCalledWith('1')
       expect(onClose).toHaveBeenCalled()
     })
+  })
+
+  describe('markdown editing in text notes', () => {
+    it('renders markdown in preview mode by default for existing notes', () => {
+      const note = createMockNote({ note_type: 'text', content: '**bold**' })
+      renderNoteModal({ ...defaultProps, note })
+      const preview = screen.getByTestId('note-content-preview')
+      expect(preview.innerHTML).toContain('<strong>bold</strong>')
+    })
+
+    it('switches to textarea when preview is clicked', () => {
+      const note = createMockNote({ note_type: 'text', content: 'Hello' })
+      renderNoteModal({ ...defaultProps, note })
+      fireEvent.click(screen.getByTestId('note-content-preview'))
+      expect(screen.getByPlaceholderText('Take a note...')).toBeInTheDocument()
+    })
+
+    it('collapses to preview on Escape', () => {
+      const note = createMockNote({ note_type: 'text', content: 'Hello' })
+      renderNoteModal({ ...defaultProps, note })
+      fireEvent.click(screen.getByTestId('note-content-preview'))
+      const textarea = screen.getByPlaceholderText('Take a note...')
+      fireEvent.keyDown(textarea, { key: 'Escape', code: 'Escape' })
+      expect(screen.getByTestId('note-content-preview')).toBeInTheDocument()
+    })
+
   })
 })

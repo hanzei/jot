@@ -17,6 +17,7 @@ import LinkText from '@/components/LinkText';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { useToast } from '@/hooks/useToast';
 import { buildShareAvatars } from '@/utils/shareAvatars';
+import { renderMarkdown } from '@/utils/markdown';
 
 interface NoteCardProps {
   note: Note;
@@ -312,9 +313,10 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
         )}
 
         {note.note_type === 'text' ? (
-          <div className="text-sm text-gray-700 dark:text-gray-200 line-clamp-6 whitespace-pre-wrap">
-            {note.content}
-          </div>
+          <div
+            className="text-sm text-gray-700 dark:text-gray-200 line-clamp-6 markdown-content"
+            dangerouslySetInnerHTML={{ __html: renderMarkdown(note.content) }}
+          />
         ) : (
           <div className="space-y-1">
             {(() => {

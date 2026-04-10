@@ -5,6 +5,7 @@
     "cancel": "Annuler",
     "delete": "Supprimer",
     "retry": "Réessayer",
+    "dbOpenError": "Impossible d'ouvrir la base de données.",
     "clearSearch": "Effacer la recherche",
     "error": "Erreur",
     "unknown": "inconnu",
@@ -51,11 +52,7 @@
     "serverSetupInputA11yLabel": "Champ URL du serveur",
     "serverSetupSubmitA11yLabel": "Valider le serveur et continuer",
     "serverSetupConnectionFailed": "Impossible d'atteindre ce serveur. Vérifiez l'URL et votre connexion, puis réessayez.",
-    "serverSetupConnectionInvalidServer": "Connexion établie, mais ce point de terminaison ne semble pas être une API Jot compatible.",
-    "serverSetupExampleLocalhost": "Exemple : http://localhost:8080 (simulateur iOS)",
-    "serverSetupExampleAndroidEmulator": "Exemple : http://10.0.2.2:8080 (émulateur Android)",
-    "serverSetupExampleLan": "Exemple : http://192.168.1.42:8080 (LAN)",
-    "serverSetupExampleHosted": "Exemple : https://notes.example.com (domaine auto-hébergé)"
+    "serverSetupConnectionInvalidServer": "Connexion établie, mais ce point de terminaison ne semble pas être une API Jot compatible."
   },
   "dashboard": {
     "newNote": "Nouvelle note",
@@ -257,7 +254,7 @@
     "title": "Étiquettes",
     "noLabels": "Aucune étiquette pour l'instant",
     "newLabelPlaceholder": "Nouvelle étiquette",
-    "newSidebar": "+ Nouvelle étiquette",
+    "newSidebar": "Nouvelle étiquette",
     "createInputLabel": "Nom de la nouvelle étiquette",
     "createSave": "Créer l'étiquette",
     "createCancel": "Annuler la création de l'étiquette",
