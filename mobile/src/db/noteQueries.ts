@@ -165,7 +165,7 @@ export async function getLocalNotes(db: SQLiteDatabase, params?: GetNotesParams)
   }
 
   if (params?.search) {
-    sql += ' AND (title LIKE ? OR content LIKE ?)';
+    sql += ' AND ((note_type = \'list\' AND title LIKE ?) OR (note_type = \'text\' AND content LIKE ?))';
     args.push(`%${params.search}%`, `%${params.search}%`);
   }
 

@@ -238,7 +238,10 @@ export default function NoteEditorScreen() {
       const currentColor = colorRef.current;
 
       if (!currentNoteId) {
-        if (!currentTitle && !currentContent && currentItems.length === 0) {
+        const isEmpty = currentNoteType === 'list'
+          ? !currentTitle && currentItems.length === 0
+          : !currentContent;
+        if (isEmpty) {
           hasPendingChangesRef.current = false;
           return true;
         }
