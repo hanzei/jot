@@ -184,7 +184,7 @@ export function useUpdateNote() {
       await enqueueOperation(db, {
         operation: 'update',
         endpoint: `/notes/${id}`,
-        method: 'PUT',
+        method: 'PATCH',
         body: fullData as Record<string, unknown>,
       });
 
