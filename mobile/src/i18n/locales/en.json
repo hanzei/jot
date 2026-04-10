@@ -67,11 +67,7 @@
     "serverSetupInputA11yLabel": "Server URL input",
     "serverSetupSubmitA11yLabel": "Validate server and continue",
     "serverSetupConnectionFailed": "Couldn't reach that server. Check the URL and your connection, then try again.",
-    "serverSetupConnectionInvalidServer": "Connected, but this doesn't look like a compatible Jot API endpoint.",
-    "serverSetupExampleLocalhost": "Example: http://localhost:8080 (iOS simulator)",
-    "serverSetupExampleAndroidEmulator": "Example: http://10.0.2.2:8080 (Android emulator)",
-    "serverSetupExampleLan": "Example: http://192.168.1.42:8080 (LAN)",
-    "serverSetupExampleHosted": "Example: https://notes.example.com (self-hosted domain)"
+    "serverSetupConnectionInvalidServer": "Connected, but this doesn't look like a compatible Jot API endpoint."
   },
   "dashboard": {
     "newNote": "New Note",
@@ -272,7 +268,7 @@
   "labels": {
     "title": "Labels",
     "noLabels": "No labels yet",
-    "newSidebar": "+ New Label",
+    "newSidebar": "New Label",
     "newLabelPlaceholder": "New label",
     "createInputLabel": "New label name",
     "createSave": "Create label",

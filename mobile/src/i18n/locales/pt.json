@@ -67,11 +67,7 @@
     "serverSetupInputA11yLabel": "Campo de URL do servidor",
     "serverSetupSubmitA11yLabel": "Validar servidor e continuar",
     "serverSetupConnectionFailed": "Não foi possível alcançar esse servidor. Verifique a URL e sua conexão e tente novamente.",
-    "serverSetupConnectionInvalidServer": "Conectado, mas este não parece ser um endpoint de API Jot compatível.",
-    "serverSetupExampleLocalhost": "Exemplo: http://localhost:8080 (simulador iOS)",
-    "serverSetupExampleAndroidEmulator": "Exemplo: http://10.0.2.2:8080 (emulador Android)",
-    "serverSetupExampleLan": "Exemplo: http://192.168.1.42:8080 (LAN)",
-    "serverSetupExampleHosted": "Exemplo: https://notes.example.com (domínio self-hosted)"
+    "serverSetupConnectionInvalidServer": "Conectado, mas este não parece ser um endpoint de API Jot compatível."
   },
   "dashboard": {
     "newNote": "Nova nota",
@@ -273,7 +269,7 @@
     "title": "Etiquetas",
     "noLabels": "Nenhuma etiqueta ainda",
     "newLabelPlaceholder": "Nova etiqueta",
-    "newSidebar": "+ Nova etiqueta",
+    "newSidebar": "Nova etiqueta",
     "createInputLabel": "Nome da nova etiqueta",
     "createSave": "Criar etiqueta",
     "createCancel": "Cancelar criação da etiqueta",
