@@ -1,4 +1,4 @@
-import React, { useEffect, useMemo, useState } from 'react';
+import React, { useEffect, useState } from 'react';
 import { View, Text, TextInput, TouchableOpacity, StyleSheet, ActivityIndicator } from 'react-native';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../theme/ThemeContext';
@@ -91,17 +91,6 @@ export default function ServerSetupGate({
     };
   }, [existingServerUrl, skipStoredServerCheck]);
 
-  const helperExamples = useMemo(
-    () =>
-      [
-        t('auth.serverSetupExampleLocalhost'),
-        t('auth.serverSetupExampleAndroidEmulator'),
-        t('auth.serverSetupExampleLan'),
-        t('auth.serverSetupExampleHosted'),
-      ].join('\n'),
-    [t],
-  );
-
   const handleSaveServer = async () => {
     const formatError = validateServerUrl(serverUrlInput);
     if (formatError) {
@@ -169,8 +158,6 @@ export default function ServerSetupGate({
         testID={`${testPrefix}-server-setup-input`}
       />
 
-      <Text style={[styles.setupHelper, { color: colors.textSecondary }]}>{helperExamples}</Text>
-
       {setupError ? (
         <Text
           style={[styles.error, { color: colors.error }]}
@@ -223,11 +210,6 @@ const styles = StyleSheet.create({
     textAlign: 'center',
     marginBottom: 16,
     lineHeight: 20,
-  },
-  setupHelper: {
-    fontSize: 13,
-    marginBottom: 12,
-    lineHeight: 18,
   },
   input: {
     borderWidth: 1,
