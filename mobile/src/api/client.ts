@@ -2,6 +2,7 @@ import axios, { AxiosHeaders, CanceledError, type InternalAxiosRequestConfig } f
 import { Platform } from 'react-native';
 import type { AuthResponse, LoginRequest, RegisterRequest } from '@jot/shared';
 import { canonicalizeServerOrigin } from '@jot/shared';
+import { randomUUID } from '../utils/random';
 import {
   addServer,
   ensureServerRegistryMigrated,
@@ -193,7 +194,7 @@ export async function probeServerReachability(url: string): Promise<ServerReacha
 }
 
 // Unique ID for this app launch, used to suppress SSE echoes of our own mutations.
-export const CLIENT_ID = crypto.randomUUID();
+export const CLIENT_ID = randomUUID();
 
 const api = axios.create({
   baseURL: `${currentBaseUrl}/api/v1`,
