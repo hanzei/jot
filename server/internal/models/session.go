@@ -107,13 +107,13 @@ func (s *sessionStore) Create(ctx context.Context, userID, userAgent string) (*S
 		ORDER BY created_at DESC
 		LIMIT -1 OFFSET ?
 	)`
-	evictResult, err := tx.ExecContext(ctx, evictQuery, userID, now, MaxSessionsPerUser-1)
+	evictResult, err := tx.ExecContext(ctx, s.d.RewritePlaceholders(evictQuery), userID, now, MaxSessionsPerUser-1)
 	if err != nil {
 		return nil, fmt.Errorf("failed to evict old sessions: %w", err)
 	}
 
 	insertQuery := `INSERT INTO sessions (token, user_id, user_agent, expires_at) VALUES (?, ?, ?, ?)`
-	if _, err = tx.ExecContext(ctx, insertQuery, token, userID, userAgent, expiresAt); err != nil {
+	if _, err = tx.ExecContext(ctx, s.d.RewritePlaceholders(insertQuery), token, userID, userAgent, expiresAt); err != nil {
 		return nil, fmt.Errorf("failed to create session: %w", err)
 	}
 
@@ -139,7 +139,7 @@ func (s *sessionStore) GetByToken(ctx context.Context, token string) (*Session, 
 	var session Session
 	query := `SELECT token, user_id, user_agent, created_at, expires_at FROM sessions WHERE token = ? AND expires_at > ?`
 
-	err := s.db.QueryRowContext(ctx, query, token, time.Now()).Scan(
+	err := s.db.QueryRowContext(ctx, s.d.RewritePlaceholders(query), token, time.Now()).Scan(
 		&session.Token, &session.UserID, &session.UserAgent, &session.CreatedAt, &session.ExpiresAt,
 	)
 	if err != nil {
@@ -155,7 +155,7 @@ func (s *sessionStore) GetByToken(ctx context.Context, token string) (*Session, 
 func (s *sessionStore) GetByUserID(ctx context.Context, userID string) (sessions []*Session, err error) {
 	query := `SELECT token, user_id, user_agent, created_at, expires_at FROM sessions WHERE user_id = ? AND expires_at > ? ORDER BY created_at DESC`
 
-	rows, err := s.db.QueryContext(ctx, query, userID, time.Now())
+	rows, err := s.db.QueryContext(ctx, s.d.RewritePlaceholders(query), userID, time.Now())
 	if err != nil {
 		return nil, fmt.Errorf("failed to get sessions by user ID: %w", err)
 	}
@@ -181,7 +181,7 @@ func (s *sessionStore) GetByUserID(ctx context.Context, userID string) (sessions
 
 func (s *sessionStore) Delete(ctx context.Context, token string) error {
 	query := `DELETE FROM sessions WHERE token = ?`
-	if _, err := s.db.ExecContext(ctx, query, token); err != nil {
+	if _, err := s.db.ExecContext(ctx, s.d.RewritePlaceholders(query), token); err != nil {
 		return fmt.Errorf("failed to delete session: %w", err)
 	}
 	return nil
@@ -189,7 +189,7 @@ func (s *sessionStore) Delete(ctx context.Context, token string) error {
 
 func (s *sessionStore) DeleteByUserIDAndToken(ctx context.Context, userID, token string) (bool, error) {
 	query := `DELETE FROM sessions WHERE user_id = ? AND token = ?`
-	result, err := s.db.ExecContext(ctx, query, userID, token)
+	result, err := s.db.ExecContext(ctx, s.d.RewritePlaceholders(query), userID, token)
 	if err != nil {
 		return false, fmt.Errorf("failed to delete session: %w", err)
 	}
@@ -202,7 +202,7 @@ func (s *sessionStore) DeleteByUserIDAndToken(ctx context.Context, userID, token
 
 func (s *sessionStore) DeleteByUserID(ctx context.Context, userID string) error {
 	query := `DELETE FROM sessions WHERE user_id = ?`
-	if _, err := s.db.ExecContext(ctx, query, userID); err != nil {
+	if _, err := s.db.ExecContext(ctx, s.d.RewritePlaceholders(query), userID); err != nil {
 		return fmt.Errorf("failed to delete user sessions: %w", err)
 	}
 	return nil
@@ -210,7 +210,7 @@ func (s *sessionStore) DeleteByUserID(ctx context.Context, userID string) error 
 
 func (s *sessionStore) DeleteExpired(ctx context.Context) error {
 	query := `DELETE FROM sessions WHERE expires_at <= ?`
-	result, err := s.db.ExecContext(ctx, query, time.Now())
+	result, err := s.db.ExecContext(ctx, s.d.RewritePlaceholders(query), time.Now())
 	if err != nil {
 		return fmt.Errorf("failed to delete expired sessions: %w", err)
 	}
@@ -222,7 +222,7 @@ func (s *sessionStore) DeleteExpired(ctx context.Context) error {
 
 func (s *sessionStore) UpdateExpiry(ctx context.Context, token string, expiresAt time.Time) error {
 	query := `UPDATE sessions SET expires_at = ? WHERE token = ? AND expires_at > ?`
-	result, err := s.db.ExecContext(ctx, query, expiresAt, token, time.Now())
+	result, err := s.db.ExecContext(ctx, s.d.RewritePlaceholders(query), expiresAt, token, time.Now())
 	if err != nil {
 		return fmt.Errorf("failed to update session expiry: %w", err)
 	}
