@@ -368,16 +368,15 @@ func TestNotesEndpoints(t *testing.T) {
 	})
 
 	t.Run("create note", func(t *testing.T) {
-		note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-			Content:  "This is a test note",
-			NoteType: client.NoteTypeText,
-			Color:    "#ffeb3b",
+		note, err := user.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{
+			Content: "This is a test note",
+			Color:   "#ffeb3b",
 		})
 		require.NoError(t, err)
 		assert.Equal(t, "This is a test note", note.Content)
 	})
 
-	created, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
+	created, err := user.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{
 		Content: "Test Content",
 	})
 	require.NoError(t, err)
@@ -389,7 +388,7 @@ func TestNotesEndpoints(t *testing.T) {
 	})
 
 	t.Run("update note", func(t *testing.T) {
-		updated, err := user.Client.UpdateNote(t.Context(), created.ID, &client.UpdateNoteRequest{
+		updated, err := user.Client.UpdateTextNote(t.Context(), created.ID, &client.UpdateTextNoteRequest{
 			Content: client.Ptr("Updated Content"),
 			Pinned:  client.Ptr(true),
 			Color:   client.Ptr("#ff0000"),
@@ -480,15 +479,13 @@ func TestAdminStatsEndpoint(t *testing.T) {
 	member1 := ts.createTestUser(t, "memberstats1", "password123", false)
 	member2 := ts.createTestUser(t, "memberstats2", "password123", false)
 
-	sharedTextNote, err := adminUser.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-		Content:  "shared content",
-		NoteType: client.NoteTypeText,
+	sharedTextNote, err := adminUser.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{
+		Content: "shared content",
 	})
 	require.NoError(t, err)
 
-	archivedListNote, err := adminUser.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-		Title:    "Archived list note",
-		NoteType: client.NoteTypeList,
+	archivedListNote, err := adminUser.Client.CreateListNote(t.Context(), &client.CreateListNoteRequest{
+		Title: "Archived list note",
 		Items: []client.CreateNoteItem{
 			{Text: "First item", Position: 0},
 			{Text: "Second item", Position: 1},
@@ -496,18 +493,16 @@ func TestAdminStatsEndpoint(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	activeListNote, err := adminUser.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-		Title:    "Active list note",
-		NoteType: client.NoteTypeList,
+	activeListNote, err := adminUser.Client.CreateListNote(t.Context(), &client.CreateListNoteRequest{
+		Title: "Active list note",
 		Items: []client.CreateNoteItem{
 			{Text: "Assigned item", Position: 0},
 		},
 	})
 	require.NoError(t, err)
 
-	trashedTextNote, err := adminUser.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-		Content:  "trashed content",
-		NoteType: client.NoteTypeText,
+	trashedTextNote, err := adminUser.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{
+		Content: "trashed content",
 	})
 	require.NoError(t, err)
 
@@ -515,7 +510,7 @@ func TestAdminStatsEndpoint(t *testing.T) {
 	require.NoError(t, adminUser.Client.ShareNote(t.Context(), activeListNote.ID, member2.User.ID))
 
 	archived := true
-	_, err = adminUser.Client.UpdateNote(t.Context(), archivedListNote.ID, &client.UpdateNoteRequest{
+	_, err = adminUser.Client.UpdateListNote(t.Context(), archivedListNote.ID, &client.UpdateListNoteRequest{
 		Archived: &archived,
 		Items: &[]client.UpdateNoteItem{
 			{Text: "First item", Position: 0, Completed: true, AssignedTo: member1.User.ID},
@@ -524,7 +519,7 @@ func TestAdminStatsEndpoint(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	_, err = adminUser.Client.UpdateNote(t.Context(), activeListNote.ID, &client.UpdateNoteRequest{
+	_, err = adminUser.Client.UpdateListNote(t.Context(), activeListNote.ID, &client.UpdateListNoteRequest{
 		Items: &[]client.UpdateNoteItem{
 			{Text: "Assigned item", Position: 0, Completed: false, AssignedTo: member2.User.ID},
 		},
@@ -703,9 +698,8 @@ func TestSSEEndpoint(t *testing.T) { //nolint:gocognit
 			t.Fatal("timed out waiting for SSE connection")
 		}
 
-		note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-			Content:  "SSE Test Note",
-			NoteType: client.NoteTypeText,
+		note, err := user.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{
+			Content: "SSE Test Note",
 		})
 		require.NoError(t, err)
 
@@ -932,9 +926,8 @@ func TestListItemIndentLevel(t *testing.T) {
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "indentuser", "password123", false)
 
-	created, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-		Title:    "Indent Test",
-		NoteType: client.NoteTypeList,
+	created, err := user.Client.CreateListNote(t.Context(), &client.CreateListNoteRequest{
+		Title: "Indent Test",
 		Items: []client.CreateNoteItem{
 			{Text: "top level", Position: 0, IndentLevel: 0},
 			{Text: "indented once", Position: 1, IndentLevel: 1},
@@ -953,7 +946,7 @@ func TestListItemIndentLevel(t *testing.T) {
 	})
 
 	t.Run("indent levels updated via PATCH", func(t *testing.T) {
-		_, err := user.Client.UpdateNote(t.Context(), created.ID, &client.UpdateNoteRequest{
+		_, err := user.Client.UpdateListNote(t.Context(), created.ID, &client.UpdateListNoteRequest{
 			Title: client.Ptr("Indent Test"),
 			Color: client.Ptr("#ffffff"),
 			Items: &[]client.UpdateNoteItem{
@@ -973,9 +966,8 @@ func TestListItemIndentLevel(t *testing.T) {
 	})
 
 	t.Run("indent level defaults to 0 when omitted", func(t *testing.T) {
-		note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-			Title:    "No Indent",
-			NoteType: client.NoteTypeList,
+		note, err := user.Client.CreateListNote(t.Context(), &client.CreateListNoteRequest{
+			Title: "No Indent",
 			Items: []client.CreateNoteItem{
 				{Text: "item without indent_level", Position: 0},
 			},
@@ -986,9 +978,8 @@ func TestListItemIndentLevel(t *testing.T) {
 	})
 
 	t.Run("indent level > 1 rejected on create", func(t *testing.T) {
-		_, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-			Title:    "Bad Indent",
-			NoteType: client.NoteTypeList,
+		_, err := user.Client.CreateListNote(t.Context(), &client.CreateListNoteRequest{
+			Title: "Bad Indent",
 			Items: []client.CreateNoteItem{
 				{Text: "too deep", Position: 0, IndentLevel: 2},
 			},
@@ -997,7 +988,7 @@ func TestListItemIndentLevel(t *testing.T) {
 	})
 
 	t.Run("indent level > 1 rejected on update", func(t *testing.T) {
-		_, err := user.Client.UpdateNote(t.Context(), created.ID, &client.UpdateNoteRequest{
+		_, err := user.Client.UpdateListNote(t.Context(), created.ID, &client.UpdateListNoteRequest{
 			Title: client.Ptr("Indent Test"),
 			Color: client.Ptr("#ffffff"),
 			Items: &[]client.UpdateNoteItem{

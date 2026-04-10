@@ -16,7 +16,7 @@ func TestReorderNotesEndpoint(t *testing.T) {
 
 	createNote := func(t *testing.T, content string, owner *TestUser) string {
 		t.Helper()
-		note, err := owner.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
+		note, err := owner.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{
 			Content: content,
 		})
 		require.NoError(t, err)
@@ -74,7 +74,7 @@ func TestRemoveLabelEndpoint(t *testing.T) {
 
 	createNote := func(t *testing.T, content string) string {
 		t.Helper()
-		note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
+		note, err := user.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{
 			Content: content,
 		})
 		require.NoError(t, err)

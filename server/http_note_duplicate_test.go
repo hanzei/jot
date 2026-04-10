@@ -14,12 +14,12 @@ func TestDuplicateNoteEndpoint(t *testing.T) {
 		owner := ts.createTestUser(t, "owner", "password123", false)
 		collaborator := ts.createTestUser(t, "collab", "password123", false)
 
-		firstVisible, err := owner.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
+		firstVisible, err := owner.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{
 			Content: "Visible before duplicate",
 		})
 		require.NoError(t, err)
 
-		source, err := owner.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
+		source, err := owner.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{
 			Content: "Shared content",
 			Color:   "#fbbc04",
 			Labels:  []string{"alpha", "beta"},
@@ -27,7 +27,7 @@ func TestDuplicateNoteEndpoint(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, owner.Client.ShareNote(t.Context(), source.ID, collaborator.User.ID))
 
-		_, err = owner.Client.UpdateNote(t.Context(), source.ID, &client.UpdateNoteRequest{
+		_, err = owner.Client.UpdateTextNote(t.Context(), source.ID, &client.UpdateTextNoteRequest{
 			Archived: client.Ptr(true),
 			Pinned:   client.Ptr(true),
 		})
@@ -61,11 +61,10 @@ func TestDuplicateNoteEndpoint(t *testing.T) {
 		owner := ts.createTestUser(t, "list-owner", "password123", false)
 		collaborator := ts.createTestUser(t, "list-collab", "password123", false)
 
-		source, err := owner.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-			Title:    "Shared Tasks",
-			NoteType: client.NoteTypeList,
-			Color:    "#a7ffeb",
-			Labels:   []string{"ops"},
+		source, err := owner.Client.CreateListNote(t.Context(), &client.CreateListNoteRequest{
+			Title:  "Shared Tasks",
+			Color:  "#a7ffeb",
+			Labels: []string{"ops"},
 			Items: []client.CreateNoteItem{
 				{Text: "Outline release", Position: 0, IndentLevel: 0, Completed: false},
 				{Text: "Notify team", Position: 1, IndentLevel: 1, Completed: true},
@@ -74,7 +73,7 @@ func TestDuplicateNoteEndpoint(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, owner.Client.ShareNote(t.Context(), source.ID, collaborator.User.ID))
 
-		updatedSource, err := owner.Client.UpdateNote(t.Context(), source.ID, &client.UpdateNoteRequest{
+		updatedSource, err := owner.Client.UpdateListNote(t.Context(), source.ID, &client.UpdateListNoteRequest{
 			Items: &[]client.UpdateNoteItem{
 				{Text: "Outline release", Position: 0, IndentLevel: 0, Completed: false, AssignedTo: collaborator.User.ID},
 				{Text: "Notify team", Position: 1, IndentLevel: 1, Completed: true, AssignedTo: owner.User.ID},
@@ -84,7 +83,7 @@ func TestDuplicateNoteEndpoint(t *testing.T) {
 		require.Len(t, updatedSource.Items, 2)
 
 		// Collaborator sets their own per-user state on the shared note before duplicating.
-		_, err = collaborator.Client.UpdateNote(t.Context(), source.ID, &client.UpdateNoteRequest{
+		_, err = collaborator.Client.UpdateListNote(t.Context(), source.ID, &client.UpdateListNoteRequest{
 			Color: client.Ptr("#00bcd4"),
 		})
 		require.NoError(t, err)
@@ -127,9 +126,8 @@ func TestCreateNotePersistsCompletedItems(t *testing.T) {
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "completed-items", "password123", false)
 
-	created, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-		Title:    "Checklist",
-		NoteType: client.NoteTypeList,
+	created, err := user.Client.CreateListNote(t.Context(), &client.CreateListNoteRequest{
+		Title: "Checklist",
 		Items: []client.CreateNoteItem{
 			{Text: "Unchecked", Position: 0, IndentLevel: 0, Completed: false},
 			{Text: "Checked", Position: 1, IndentLevel: 1, Completed: true},

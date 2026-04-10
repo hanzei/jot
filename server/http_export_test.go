@@ -41,7 +41,7 @@ func TestExportEnvelopeShape(t *testing.T) {
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "exportshape", "password123", false)
 
-	_, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
+	_, err := user.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{
 		Content: "Some content",
 	})
 	require.NoError(t, err)
@@ -62,7 +62,7 @@ func TestExportOnlyOwnedNotes(t *testing.T) {
 	owner := ts.createTestUser(t, "exportowner", "password123", false)
 	other := ts.createTestUser(t, "exportother", "password123", false)
 
-	ownerNote, err := owner.Client.CreateNote(t.Context(), &client.CreateNoteRequest{Content: "Owner Note"})
+	ownerNote, err := owner.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{Content: "Owner Note"})
 	require.NoError(t, err)
 
 	// Share owner's note with other user.
@@ -70,7 +70,7 @@ func TestExportOnlyOwnedNotes(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create a note owned by other.
-	_, err = other.Client.CreateNote(t.Context(), &client.CreateNoteRequest{Content: "Other Note"})
+	_, err = other.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{Content: "Other Note"})
 	require.NoError(t, err)
 
 	// other's export should only contain "Other Note", not the shared "Owner Note".
@@ -84,9 +84,9 @@ func TestExportExcludesTrashedNotes(t *testing.T) {
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "exporttrash", "password123", false)
 
-	active, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{Content: "Active"})
+	active, err := user.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{Content: "Active"})
 	require.NoError(t, err)
-	trashed, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{Content: "Trashed"})
+	trashed, err := user.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{Content: "Trashed"})
 	require.NoError(t, err)
 
 	require.NoError(t, user.Client.DeleteNote(t.Context(), trashed.ID))
@@ -102,11 +102,11 @@ func TestExportIncludesArchivedNotes(t *testing.T) {
 	user := ts.createTestUser(t, "exportarchived", "password123", false)
 
 	archived := true
-	_, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{Content: "Active"})
+	_, err := user.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{Content: "Active"})
 	require.NoError(t, err)
-	archivedNote, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{Content: "Archived"})
+	archivedNote, err := user.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{Content: "Archived"})
 	require.NoError(t, err)
-	_, err = user.Client.UpdateNote(t.Context(), archivedNote.ID, &client.UpdateNoteRequest{Archived: &archived})
+	_, err = user.Client.UpdateTextNote(t.Context(), archivedNote.ID, &client.UpdateTextNoteRequest{Archived: &archived})
 	require.NoError(t, err)
 
 	export, err := user.Client.ExportNotes(t.Context())
@@ -268,38 +268,37 @@ func TestImportJotJSONRoundTrip(t *testing.T) {
 	// Create a variety of notes for the source user.
 	pinned := true
 	archived := true
-	srcPinned, err := src.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
+	srcPinned, err := src.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{
 		Content: "pinned content",
 		Color:   "#fbbc04",
 	})
 	require.NoError(t, err)
-	_, err = src.Client.UpdateNote(t.Context(), srcPinned.ID, &client.UpdateNoteRequest{Pinned: &pinned})
+	_, err = src.Client.UpdateTextNote(t.Context(), srcPinned.ID, &client.UpdateTextNoteRequest{Pinned: &pinned})
 	require.NoError(t, err)
 
-	srcArchived, err := src.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
+	srcArchived, err := src.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{
 		Content: "archived content",
 	})
 	require.NoError(t, err)
-	_, err = src.Client.UpdateNote(t.Context(), srcArchived.ID, &client.UpdateNoteRequest{Archived: &archived})
+	_, err = src.Client.UpdateTextNote(t.Context(), srcArchived.ID, &client.UpdateTextNoteRequest{Archived: &archived})
 	require.NoError(t, err)
 
 	collapsed := true
-	srcList, err := src.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-		Title:    "List Note",
-		NoteType: client.NoteTypeList,
+	srcList, err := src.Client.CreateListNote(t.Context(), &client.CreateListNoteRequest{
+		Title: "List Note",
 		Items: []client.CreateNoteItem{
 			{Text: "Item 1", Position: 0, IndentLevel: 0, Completed: true},
 			{Text: "Item 2", Position: 1, IndentLevel: 1, Completed: false},
 		},
 	})
 	require.NoError(t, err)
-	_, err = src.Client.UpdateNote(t.Context(), srcList.ID, &client.UpdateNoteRequest{CheckedItemsCollapsed: &collapsed})
+	_, err = src.Client.UpdateListNote(t.Context(), srcList.ID, &client.UpdateListNoteRequest{CheckedItemsCollapsed: &collapsed})
 	require.NoError(t, err)
 
 	// Create a label and attach it.
 	_, err = src.Client.CreateLabel(t.Context(), "work")
 	require.NoError(t, err)
-	srcLabeled, err := src.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
+	srcLabeled, err := src.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{
 		Content: "Labeled Note",
 		Labels:  []string{"work"},
 	})
