@@ -18,7 +18,7 @@ interface QueueEntry {
 export interface EnqueueParams {
   operation: QueueOperation;
   endpoint: string;
-  method: 'POST' | 'PUT' | 'DELETE';
+  method: 'POST' | 'PATCH' | 'DELETE';
   body?: Record<string, unknown>;
 }
 
@@ -138,8 +138,8 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
             await replaceLocalNoteId(db, localId, serverNote);
           }
         }
-      } else if (entry.method === 'PUT') {
-        await api.put(endpoint, body);
+      } else if (entry.method === 'PATCH') {
+        await api.patch(endpoint, body);
       } else if (entry.method === 'DELETE') {
         await api.delete(endpoint);
       }
