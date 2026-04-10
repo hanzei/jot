@@ -1,4 +1,4 @@
-import { test, expect, uniqueUsername } from '../fixtures';
+import { test, expect, uniqueUsername, E2E_ADMIN_CREDENTIALS } from '../fixtures';
 import type { Page } from '@playwright/test';
 import { AdminPage } from '../pages/AdminPage';
 
@@ -8,15 +8,7 @@ type MeResponse = {
   };
 };
 
-type Credentials = {
-  username: string;
-  password: string;
-};
-
-const bootstrapAdmin: Credentials = {
-  username: 'e2eadmin',
-  password: 'testpass123',
-};
+const bootstrapAdmin = E2E_ADMIN_CREDENTIALS;
 
 async function ensureAdminSession(page: Page) {
   const meResponse = await page.request.get('/api/v1/me');

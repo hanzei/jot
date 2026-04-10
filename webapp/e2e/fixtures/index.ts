@@ -7,6 +7,9 @@ import { ToastPage } from '../pages/ToastPage';
 
 export { expect };
 
+/** Credentials for the bootstrap admin user (first registered → admin role). */
+export const E2E_ADMIN_CREDENTIALS = { username: 'e2eadmin', password: 'testpass123' };
+
 /** Generate a unique username safe for concurrent test runs */
 export function uniqueUsername(prefix = 'user'): string {
   return `${prefix}${Date.now()}${Math.floor(Math.random() * 9000 + 1000)}`;

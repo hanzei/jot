@@ -1,4 +1,5 @@
 import { request } from '@playwright/test';
+import { E2E_ADMIN_CREDENTIALS } from './fixtures';
 
 /**
  * Registers the bootstrap admin user before any tests run so that parallel
@@ -10,7 +11,7 @@ export default async function globalSetup(): Promise<void> {
   const context = await request.newContext({ baseURL: 'http://localhost:8080' });
   try {
     const response = await context.post('/api/v1/register', {
-      data: { username: 'e2eadmin', password: 'testpass123' },
+      data: E2E_ADMIN_CREDENTIALS,
     });
     // 201 = registered as admin (first user); 409 = already exists (idempotent re-run).
     if (!response.ok() && response.status() !== 409) {
