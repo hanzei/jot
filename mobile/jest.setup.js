@@ -157,7 +157,7 @@ if (global.ReadableStream) {
     try {
       return originalCancel.call(this, reason);
     } catch (e) {
-      if (e instanceof TypeError && e.message === 'Cannot cancel a stream that already has a reader') {
+      if (e && e.message === 'Cannot cancel a stream that already has a reader') {
         return Promise.resolve();
       }
       throw e;
