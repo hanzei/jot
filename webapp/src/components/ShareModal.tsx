@@ -183,7 +183,7 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
   if (!note) return null;
 
   return (
-    <Dialog open={isOpen} onClose={handleClose} className="relative z-50">
+    <Dialog open={isOpen} onClose={handleClose} aria-label={t('note.share')} className="relative z-50">
       <div className="fixed inset-0 bg-black/25" />
       
       <div className="fixed inset-0 overflow-y-auto">
