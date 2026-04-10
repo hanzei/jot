@@ -308,6 +308,8 @@ func validateJotImportNote(idx int, n jotImportNote) (models.JotImportNote, erro
 		n.Content = ""
 	}
 
+	// Items on a text note can't be silently discarded without data loss (they
+	// require DB writes), so reject rather than coerce.
 	if n.NoteType == models.NoteTypeText && len(n.Items) > 0 {
 		return models.JotImportNote{}, fmt.Errorf("note #%d: text notes cannot have items", idx)
 	}

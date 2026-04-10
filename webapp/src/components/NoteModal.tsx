@@ -1298,7 +1298,10 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
           label: t('dashboard.undo'),
           onClick: async () => {
             try {
-              await notes.update(note.id, { pinned: !newPinnedState });
+              await notes.update(note.id, note.note_type === 'list'
+                ? { pinned: !newPinnedState, archived, title, color, checked_items_collapsed: checkedItemsCollapsed, items: mapItemsForAutoSave(items) }
+                : { pinned: !newPinnedState, archived, content, color }
+              );
               setPinned(!newPinnedState);
               onRefresh?.();
             } catch (undoError) {
@@ -1339,7 +1342,10 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
           label: t('dashboard.undo'),
           onClick: async () => {
             try {
-              await notes.update(note.id, { archived: !newArchivedState });
+              await notes.update(note.id, note.note_type === 'list'
+                ? { archived: !newArchivedState, pinned, title, color, checked_items_collapsed: checkedItemsCollapsed, items: mapItemsForAutoSave(items) }
+                : { archived: !newArchivedState, pinned, content, color }
+              );
               setArchived(!newArchivedState);
               onRefresh?.();
             } catch (undoError) {

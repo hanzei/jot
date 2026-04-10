@@ -45,7 +45,11 @@ type AuthResponse struct {
 	Settings *UserSettings `json:"settings"`
 }
 
-// Note is a single note with optional items, shares, and labels.
+// Note is a single note returned by the API.
+// The server enforces type-specific field semantics: text notes always have
+// empty Title, nil Items, and CheckedItemsCollapsed=false; list notes always
+// have empty Content. The flat struct is kept for Go SDK simplicity — use
+// NoteType to determine which fields are meaningful.
 type Note struct {
 	ID                    string      `json:"id"`
 	UserID                string      `json:"user_id"`
