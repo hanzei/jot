@@ -42,7 +42,7 @@ export default function CreateUserModal({ passwordMinLength, onClose, onSuccess 
   };
 
   const validatePassword = (password: string): string => {
-    if (isPasswordTooShort(password)) {
+    if (isPasswordTooShort(password, passwordMinLength)) {
       return t('admin.passwordMin', { min: passwordMinLength });
     }
     return '';
