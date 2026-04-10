@@ -172,7 +172,7 @@ export default function NoteContextMenu({
         <SafeAreaView style={[styles.sheet, { backgroundColor: colors.sheetBackground }]}>
           <Pressable>
             <View style={[styles.handle, { backgroundColor: colors.handleColor }]} />
-            {note.title ? (
+            {note.note_type === 'list' && note.title ? (
               <Text style={[styles.noteTitle, { color: colors.text, borderBottomColor: colors.borderLight }]} numberOfLines={1}>
                 {note.title}
               </Text>

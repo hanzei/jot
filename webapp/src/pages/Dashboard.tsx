@@ -254,8 +254,9 @@ export default function Dashboard() {
   }, [registerLabelCallbacks, loadNotes, handleViewChange]);
 
   useEffect(() => {
-    if (isModalOpen && editingNote?.title) {
-      document.title = t('pageTitle.note', { title: editingNote.title });
+    const editingNoteTitle = editingNote?.note_type === 'list' ? editingNote.title : undefined;
+    if (isModalOpen && editingNoteTitle) {
+      document.title = t('pageTitle.note', { title: editingNoteTitle });
     } else if (showBin) {
       document.title = t('pageTitle.bin');
     } else if (showArchived) {
@@ -268,7 +269,7 @@ export default function Dashboard() {
     } else {
       document.title = t('pageTitle.notes');
     }
-  }, [editingNote?.title, isModalOpen, labelsList, selectedLabelId, showArchived, showBin, showMyTasks, t]);
+  }, [editingNote, isModalOpen, labelsList, selectedLabelId, showArchived, showBin, showMyTasks, t]);
 
   useEffect(() => {
     loadUsers();

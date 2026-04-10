@@ -335,7 +335,7 @@ describe('NoteEditorScreen list submit behavior', () => {
   it('keeps dirty state for color change when note id is not yet available', async () => {
     const { getByTestId } = render(<NoteEditorScreen />);
 
-    fireEvent.changeText(getByTestId('note-title-input'), 'Draft note');
+    fireEvent.changeText(getByTestId('note-content-input'), 'Draft note');
 
     const colorButton = getByTestId('toolbar-color-btn');
     fireEvent.press(colorButton);
@@ -346,7 +346,7 @@ describe('NoteEditorScreen list submit behavior', () => {
       () => {
         expect(mockCreateMutateAsync).toHaveBeenCalledWith(
           expect.objectContaining({
-            title: 'Draft note',
+            content: 'Draft note',
             color: '#f28b82',
           }),
         );

@@ -8,9 +8,11 @@ test.describe('Markdown note editing', () => {
 
   test('markdown renders in note card after saving', async ({ dashboardPage }) => {
     await dashboardPage.goto();
-    await dashboardPage.createNote('Bold Note', '**bold text**');
+    // Text notes have content (not title); create one with markdown content.
+    await dashboardPage.createTextNote('**bold text**');
 
-    const card = dashboardPage.noteCard('Bold Note');
+    // Find the card by its rendered content text.
+    const card = dashboardPage.noteCardByText('bold text');
     // Card content should render as <strong>, not raw **
     await expect(card.locator('strong')).toHaveText('bold text');
     await expect(card).not.toContainText('**bold text**');
@@ -21,7 +23,7 @@ test.describe('Markdown note editing', () => {
     // Intentionally keep the modal open after creation to test in-modal interactions,
     // so we bypass dashboardPage.createNote() which closes the dialog before returning.
     await dashboardPage.clickNewNote();
-    await page.fill('input[placeholder="Note title..."]', 'Heading Note');
+    // Text notes have no title input; fill content directly.
     await page.fill('textarea[placeholder="Take a note..."]', '## Heading');
 
     // Escape collapses the content area from edit mode to preview (modal stays open)
@@ -44,7 +46,7 @@ test.describe('Markdown note editing', () => {
     await dashboardPage.goto();
     // Intentionally keep the modal open — see comment in previous test.
     await dashboardPage.clickNewNote();
-    await page.fill('input[placeholder="Note title..."]', 'Dismiss Test');
+    // Text notes have no title input; fill content directly.
     await page.fill('textarea[placeholder="Take a note..."]', 'Some content');
 
     const dialog = page.getByRole('dialog');

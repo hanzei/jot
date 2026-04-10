@@ -45,7 +45,11 @@ type AuthResponse struct {
 	Settings *UserSettings `json:"settings"`
 }
 
-// Note is a single note with optional items, shares, and labels.
+// Note is a single note returned by the API.
+// The server enforces type-specific field semantics: text notes always have
+// empty Title, nil Items, and CheckedItemsCollapsed=false; list notes always
+// have empty Content. The flat struct is kept for Go SDK simplicity — use
+// NoteType to determine which fields are meaningful.
 type Note struct {
 	ID                    string      `json:"id"`
 	UserID                string      `json:"user_id"`
@@ -113,14 +117,19 @@ type UserInfo struct {
 	HasProfileIcon bool   `json:"has_profile_icon"`
 }
 
-// CreateNoteRequest is the body for POST /api/v1/notes.
-type CreateNoteRequest struct {
-	Title    string           `json:"title"`
-	Content  string           `json:"content"`
-	NoteType NoteType         `json:"note_type,omitempty"`
-	Color    string           `json:"color,omitempty"`
-	Items    []CreateNoteItem `json:"items,omitempty"`
-	Labels   []string         `json:"labels,omitempty"`
+// CreateTextNoteRequest is the body for POST /api/v1/notes with note_type "text".
+type CreateTextNoteRequest struct {
+	Content string   `json:"content"`
+	Color   string   `json:"color,omitempty"`
+	Labels  []string `json:"labels,omitempty"`
+}
+
+// CreateListNoteRequest is the body for POST /api/v1/notes with note_type "list".
+type CreateListNoteRequest struct {
+	Title  string           `json:"title"`
+	Color  string           `json:"color,omitempty"`
+	Items  []CreateNoteItem `json:"items,omitempty"`
+	Labels []string         `json:"labels,omitempty"`
 }
 
 // CreateNoteItem describes a checklist item to create with a new list note.
@@ -132,16 +141,22 @@ type CreateNoteItem struct {
 	Completed   bool   `json:"completed"`
 }
 
-// UpdateNoteRequest is the body for PATCH /api/v1/notes/{id}.
+// UpdateTextNoteRequest is the body for PATCH /api/v1/notes/{id} on a text note.
+// Nil pointer fields are omitted and keep their server-side values.
+type UpdateTextNoteRequest struct {
+	Content  *string `json:"content,omitempty"`
+	Pinned   *bool   `json:"pinned,omitempty"`
+	Archived *bool   `json:"archived,omitempty"`
+	Color    *string `json:"color,omitempty"`
+}
+
+// UpdateListNoteRequest is the body for PATCH /api/v1/notes/{id} on a list note.
 // Nil pointer fields are omitted and keep their server-side values.
 //
-// Items is a pointer to support tri-state update semantics with `omitempty`:
-// - nil pointer: omit "items" (do not change existing list items)
-// - pointer to empty slice: send "items":[] (clear all list items)
-// - pointer to non-empty slice: replace list items
-type UpdateNoteRequest struct {
+// Items is a pointer-to-slice: nil = no change, &[]UpdateNoteItem{} = clear all items,
+// &[]UpdateNoteItem{...} = replace items.
+type UpdateListNoteRequest struct {
 	Title                 *string           `json:"title,omitempty"`
-	Content               *string           `json:"content,omitempty"`
 	Pinned                *bool             `json:"pinned,omitempty"`
 	Archived              *bool             `json:"archived,omitempty"`
 	Color                 *string           `json:"color,omitempty"`

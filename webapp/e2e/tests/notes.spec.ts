@@ -232,7 +232,6 @@ test.describe('Notes', () => {
       const notes = await response.json() as Array<{
         id: string;
         title: string;
-        content: string;
         pinned: boolean;
         archived: boolean;
         color: string;
@@ -249,7 +248,6 @@ test.describe('Notes', () => {
         headers: { 'Content-Type': 'application/json' },
         body: JSON.stringify({
           title: alphaNote.title,
-          content: 'updated content',
           pinned: alphaNote.pinned,
           archived: alphaNote.archived,
           color: alphaNote.color,
@@ -294,12 +292,13 @@ test.describe('Notes', () => {
 
     await dashboardPage.goto();
 
-    await dashboardPage.createNoteWithLabels('Source Text', 'Original text body', ['text-label']);
+    // Create a list note (has h3 title, needed for menu operations) with a label.
+    await dashboardPage.createNote('Source Text');
+    await dashboardPage.addLabelToNote('Source Text', 'text-label');
     await dashboardPage.duplicateNoteFromMenu('Source Text');
     await expect(page.getByText('Note duplicated')).toBeVisible();
     await dashboardPage.expectNoteAtPosition(0, 'Copy of Source Text');
     const duplicatedTextCard = dashboardPage.noteCard('Copy of Source Text');
-    await expect(duplicatedTextCard.getByText('Original text body')).toBeVisible();
     await expect(duplicatedTextCard.getByText('text-label')).toBeVisible();
 
     await dashboardPage.createListNote('Source List', ['Prepare agenda', 'Send follow-up']);

@@ -28,13 +28,15 @@ test.describe('Keyboard shortcuts help dialog', () => {
     await page.locator('main').click();
     await page.keyboard.press('n');
 
-    const noteTitleInput = page.locator('[role="dialog"][aria-modal="true"] input[type="text"]').first();
-    await expect(noteTitleInput).toBeVisible();
+    // New notes open as text notes; text notes have a content textarea (no title input).
+    const noteContentInput = page.locator('[role="dialog"][aria-modal="true"] textarea').first();
+    await expect(noteContentInput).toBeVisible();
     // First Escape collapses the content area from edit to preview (two-step dismiss).
     await page.keyboard.press('Escape');
     // Second Escape closes the modal.
     await page.keyboard.press('Escape');
-    await expect(noteTitleInput).toHaveCount(0);
+    const dialog = page.locator('[role="dialog"][aria-modal="true"]');
+    await expect(dialog).toHaveCount(0);
   });
 
   test('opens with ? and closes with Escape', async ({ authenticatedUser, page, dashboardPage }) => {

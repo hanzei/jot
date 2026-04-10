@@ -191,7 +191,7 @@ export default function ShareModal({ note, isOpen, onClose }: ShareModalProps) {
           <DialogPanel className="mx-auto max-w-md rounded bg-white dark:bg-slate-800 p-6 shadow-xl border border-gray-200 dark:border-slate-700">
             <div className="flex items-center justify-between mb-4">
               <DialogTitle className="text-lg font-medium text-gray-900 dark:text-white">
-                {t('share.title', { noteTitle: note.title || t('share.untitledNote') })}
+                {t('share.title', { noteTitle: (note.note_type === 'list' ? note.title : '') || t('share.untitledNote') })}
               </DialogTitle>
               <button
                 onClick={handleClose}

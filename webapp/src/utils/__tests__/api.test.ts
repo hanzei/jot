@@ -355,7 +355,6 @@ describe('API Module', () => {
     describe('create', () => {
       it('creates new text note', async () => {
         const newNote: CreateNoteRequest = {
-          title: 'New Note',
           content: 'New content',
           note_type: 'text',
           color: '#ffffff'
@@ -371,7 +370,6 @@ describe('API Module', () => {
       it('creates new list note with items', async () => {
         const listNote: CreateNoteRequest = {
           title: 'List Note',
-          content: '',
           note_type: 'list',
           items: [
             { text: 'First task', position: 0 },
@@ -392,7 +390,6 @@ describe('API Module', () => {
         mockPost.mockRejectedValue(error)
 
         const invalidNote: CreateNoteRequest = {
-          title: '',
           content: '',
           note_type: 'text'
         }
@@ -405,7 +402,6 @@ describe('API Module', () => {
         mockPost.mockRejectedValue(networkError)
 
         const newNote: CreateNoteRequest = {
-          title: 'New Note',
           content: 'New content',
           note_type: 'text'
         }
@@ -415,14 +411,29 @@ describe('API Module', () => {
     })
 
     describe('update', () => {
-      it('updates existing note', async () => {
+      it('updates existing text note', async () => {
         const updateData: UpdateNoteRequest = {
-          title: 'Updated Note',
           content: 'Updated content',
           pinned: true,
           archived: false,
           color: '#fbbc04',
-          checked_items_collapsed: false
+        }
+        const updatedNote = { ...mockNote, ...updateData }
+        mockPatch.mockResolvedValue({ data: updatedNote })
+
+        const result = await notes.update('1', updateData)
+
+        expect(mockPatch).toHaveBeenCalledWith('/notes/1', updateData)
+        expect(result).toEqual(updatedNote)
+      })
+
+      it('updates existing list note', async () => {
+        const updateData: UpdateNoteRequest = {
+          title: 'Updated Note',
+          pinned: false,
+          archived: false,
+          color: '#fbbc04',
+          checked_items_collapsed: false,
         }
         const updatedNote = { ...mockNote, ...updateData }
         mockPatch.mockResolvedValue({ data: updatedNote })
@@ -438,12 +449,10 @@ describe('API Module', () => {
         mockPatch.mockRejectedValue(error)
 
         const updateData: UpdateNoteRequest = {
-          title: 'Updated Note',
           content: 'Updated content',
           pinned: false,
           archived: false,
           color: '#ffffff',
-          checked_items_collapsed: false
         }
 
         await expect(notes.update('999', updateData)).rejects.toThrow('Note not found')
@@ -452,11 +461,10 @@ describe('API Module', () => {
       it('handles concurrent updates', async () => {
         const updateData: UpdateNoteRequest = {
           title: 'Updated Note',
-          content: 'Updated content',
           pinned: false,
           archived: false,
           color: '#ffffff',
-          checked_items_collapsed: false
+          checked_items_collapsed: false,
         }
         const updatedNote = { ...mockNote, ...updateData }
         mockPatch.mockResolvedValue({ data: updatedNote })
