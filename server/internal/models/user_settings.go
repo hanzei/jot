@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	"github.com/hanzei/jot/server/internal/database/dialect"
 )
 
 type UserSettings struct {
@@ -18,10 +20,11 @@ type UserSettings struct {
 
 type userSettingsStore struct {
 	db *sql.DB
+	d  *dialect.Dialect
 }
 
-func newUserSettingsStore(db *sql.DB) *userSettingsStore {
-	return &userSettingsStore{db: db}
+func newUserSettingsStore(db *sql.DB, d *dialect.Dialect) *userSettingsStore {
+	return &userSettingsStore{db: db, d: d}
 }
 
 // GetOrCreate returns existing settings for the user, or creates a row with
@@ -30,9 +33,9 @@ func newUserSettingsStore(db *sql.DB) *userSettingsStore {
 func (s *userSettingsStore) GetOrCreate(ctx context.Context, userID string) (*UserSettings, error) {
 	settings := &UserSettings{UserID: userID}
 	err := s.db.QueryRowContext(ctx,
-		`INSERT INTO user_settings (user_id, language, theme, note_sort) VALUES (?, 'system', 'system', 'manual')
+		s.d.RewritePlaceholders(`INSERT INTO user_settings (user_id, language, theme, note_sort) VALUES (?, 'system', 'system', 'manual')
 		 ON CONFLICT(user_id) DO NOTHING
-		 RETURNING language, theme, note_sort, updated_at`,
+		 RETURNING language, theme, note_sort, updated_at`),
 		userID,
 	).Scan(&settings.Language, &settings.Theme, &settings.NoteSort, &settings.UpdatedAt)
 	if err == nil {
@@ -43,7 +46,7 @@ func (s *userSettingsStore) GetOrCreate(ctx context.Context, userID string) (*Us
 	}
 	// Row already existed; read it.
 	err = s.db.QueryRowContext(ctx,
-		`SELECT language, theme, note_sort, updated_at FROM user_settings WHERE user_id = ?`,
+		s.d.RewritePlaceholders(`SELECT language, theme, note_sort, updated_at FROM user_settings WHERE user_id = ?`),
 		userID,
 	).Scan(&settings.Language, &settings.Theme, &settings.NoteSort, &settings.UpdatedAt)
 	if err != nil {
@@ -57,9 +60,9 @@ func (s *userSettingsStore) GetOrCreate(ctx context.Context, userID string) (*Us
 func (s *userSettingsStore) Update(ctx context.Context, userID, language, theme, noteSort string) (*UserSettings, error) {
 	settings := &UserSettings{UserID: userID}
 	err := s.db.QueryRowContext(ctx,
-		`INSERT INTO user_settings (user_id, language, theme, note_sort) VALUES (?, ?, ?, ?)
+		s.d.RewritePlaceholders(`INSERT INTO user_settings (user_id, language, theme, note_sort) VALUES (?, ?, ?, ?)
 		 ON CONFLICT(user_id) DO UPDATE SET language = excluded.language, theme = excluded.theme, note_sort = excluded.note_sort, updated_at = CURRENT_TIMESTAMP
-		 RETURNING language, theme, note_sort, updated_at`,
+		 RETURNING language, theme, note_sort, updated_at`),
 		userID, language, theme, noteSort,
 	).Scan(&settings.Language, &settings.Theme, &settings.NoteSort, &settings.UpdatedAt)
 	if err != nil {

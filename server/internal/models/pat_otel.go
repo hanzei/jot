@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 
+	"github.com/hanzei/jot/server/internal/database/dialect"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/trace"
 )
@@ -15,9 +16,9 @@ type PATStore struct {
 }
 
 // NewPATStore creates an instrumented PATStore.
-func NewPATStore(db *sql.DB) *PATStore {
+func NewPATStore(db *sql.DB, d *dialect.Dialect) *PATStore {
 	return &PATStore{
-		inner:  newPATStore(db),
+		inner:  newPATStore(db, d),
 		tracer: otel.Tracer("github.com/hanzei/jot/server"),
 	}
 }

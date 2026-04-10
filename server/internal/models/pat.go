@@ -9,6 +9,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	"github.com/hanzei/jot/server/internal/database/dialect"
 )
 
 var ErrPATNotFound = errors.New("personal access token not found")
@@ -22,10 +24,11 @@ type PersonalAccessToken struct {
 
 type patStore struct {
 	db *sql.DB
+	d  *dialect.Dialect
 }
 
-func newPATStore(db *sql.DB) *patStore {
-	return &patStore{db: db}
+func newPATStore(db *sql.DB, d *dialect.Dialect) *patStore {
+	return &patStore{db: db, d: d}
 }
 
 func generatePATToken() (string, error) {
@@ -60,7 +63,7 @@ func (s *patStore) Create(ctx context.Context, userID, name string) (*PersonalAc
 	now := time.Now()
 
 	query := `INSERT INTO personal_access_tokens (id, user_id, token_hash, name, created_at) VALUES (?, ?, ?, ?, ?)`
-	if _, err := s.db.ExecContext(ctx, query, id, userID, tokenHash, name, now); err != nil {
+	if _, err := s.db.ExecContext(ctx, s.d.RewritePlaceholders(query), id, userID, tokenHash, name, now); err != nil {
 		return nil, "", fmt.Errorf("create personal access token: %w", err)
 	}
 
@@ -76,7 +79,7 @@ func (s *patStore) Create(ctx context.Context, userID, name string) (*PersonalAc
 func (s *patStore) GetByUserID(ctx context.Context, userID string) (pats []*PersonalAccessToken, err error) {
 	query := `SELECT id, user_id, name, created_at FROM personal_access_tokens WHERE user_id = ? ORDER BY created_at DESC, id DESC`
 
-	rows, err := s.db.QueryContext(ctx, query, userID)
+	rows, err := s.db.QueryContext(ctx, s.d.RewritePlaceholders(query), userID)
 	if err != nil {
 		return nil, fmt.Errorf("get personal access tokens by user ID: %w", err)
 	}
@@ -107,7 +110,7 @@ func (s *patStore) GetByTokenHash(ctx context.Context, rawToken string) (*Person
 
 	var pat PersonalAccessToken
 	query := `SELECT id, user_id, name, created_at FROM personal_access_tokens WHERE token_hash = ?`
-	err := s.db.QueryRowContext(ctx, query, tokenHash).Scan(&pat.ID, &pat.UserID, &pat.Name, &pat.CreatedAt)
+	err := s.db.QueryRowContext(ctx, s.d.RewritePlaceholders(query), tokenHash).Scan(&pat.ID, &pat.UserID, &pat.Name, &pat.CreatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrPATNotFound
@@ -122,7 +125,7 @@ func (s *patStore) GetByTokenHash(ctx context.Context, rawToken string) (*Person
 // Returns true if a token was deleted, false if not found or not owned by the user.
 func (s *patStore) Delete(ctx context.Context, id, userID string) (bool, error) {
 	query := `DELETE FROM personal_access_tokens WHERE id = ? AND user_id = ?`
-	result, err := s.db.ExecContext(ctx, query, id, userID)
+	result, err := s.db.ExecContext(ctx, s.d.RewritePlaceholders(query), id, userID)
 	if err != nil {
 		return false, fmt.Errorf("delete personal access token: %w", err)
 	}

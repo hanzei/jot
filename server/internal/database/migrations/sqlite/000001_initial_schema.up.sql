@@ -20,7 +20,7 @@ CREATE TABLE notes (
     user_id    TEXT NOT NULL,
     title      TEXT NOT NULL DEFAULT '',
     content    TEXT NOT NULL DEFAULT '',
-    note_type  TEXT NOT NULL DEFAULT 'text' CHECK (note_type IN ('text', 'todo')),
+    note_type  TEXT NOT NULL DEFAULT 'text',
     deleted_at DATETIME DEFAULT NULL,
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
     updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
@@ -31,7 +31,7 @@ CREATE INDEX idx_notes_user_id    ON notes(user_id);
 CREATE INDEX idx_notes_updated_at ON notes(updated_at DESC);
 CREATE INDEX idx_notes_deleted_at ON notes(user_id, deleted_at);
 
--- Note items table (for todo lists)
+-- Note items table
 CREATE TABLE note_items (
     id           TEXT     PRIMARY KEY,
     note_id      TEXT     NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
@@ -44,8 +44,8 @@ CREATE TABLE note_items (
     updated_at   DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
 );
 
-CREATE INDEX idx_note_items_position     ON note_items(note_id, position);
-CREATE INDEX idx_note_items_assigned_to  ON note_items(assigned_to);
+CREATE INDEX idx_note_items_position      ON note_items(note_id, position);
+CREATE INDEX idx_note_items_assigned_to   ON note_items(assigned_to);
 CREATE INDEX idx_note_items_note_assigned ON note_items(note_id, assigned_to);
 
 -- Note shares table
@@ -88,7 +88,7 @@ CREATE TABLE user_settings (
     FOREIGN KEY (user_id) REFERENCES users(id) ON DELETE CASCADE
 );
 
--- Labels table
+-- Labels table (COLLATE NOCASE for case-insensitive uniqueness on SQLite)
 CREATE TABLE labels (
     id         TEXT     PRIMARY KEY,
     user_id    TEXT     NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -101,7 +101,7 @@ CREATE TABLE labels (
 
 CREATE INDEX idx_labels_user_id ON labels(user_id);
 
--- Note labels table (per-user label assignments)
+-- Note labels table
 CREATE TABLE note_labels (
     id         TEXT     NOT NULL PRIMARY KEY,
     note_id    TEXT     NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
@@ -116,7 +116,7 @@ CREATE INDEX idx_note_labels_note_id  ON note_labels(note_id);
 CREATE INDEX idx_note_labels_label_id ON note_labels(label_id);
 CREATE INDEX idx_note_labels_user_id  ON note_labels(user_id);
 
--- Per-user note state (color, pin, archive, position, etc.)
+-- Per-user note state
 CREATE TABLE note_user_state (
     note_id                 TEXT     NOT NULL REFERENCES notes(id) ON DELETE CASCADE,
     user_id                 TEXT     NOT NULL REFERENCES users(id) ON DELETE CASCADE,
@@ -133,7 +133,19 @@ CREATE TABLE note_user_state (
 
 CREATE INDEX idx_note_user_state_user ON note_user_state(user_id, archived, pinned, position);
 
--- Active notes view (excludes soft-deleted notes)
+-- Personal access tokens table
+CREATE TABLE personal_access_tokens (
+    id         TEXT     PRIMARY KEY,
+    user_id    TEXT     NOT NULL,
+    token_hash TEXT     NOT NULL UNIQUE,
+    name       TEXT     NOT NULL,
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+    FOREIGN KEY (user_id) REFERENCES users (id) ON DELETE CASCADE
+);
+
+CREATE INDEX idx_pats_user_id ON personal_access_tokens(user_id);
+
+-- Active notes view
 CREATE VIEW active_notes AS
     SELECT id, user_id, title, content, note_type, deleted_at, created_at, updated_at
     FROM notes

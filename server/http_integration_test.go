@@ -55,7 +55,8 @@ type TestServer struct {
 func defaultTestConfig(tmpDir string) *config.Config {
 	return &config.Config{
 		Port:                0,
-		DBPath:              tmpDir + "/test.db",
+		DBDriver:            "sqlite",
+		DBDSN:               tmpDir + "/test.db",
 		StaticDir:           tmpDir,
 		CORSAllowedOrigin:   "http://localhost:5173",
 		CookieSecure:        false,
@@ -472,7 +473,7 @@ func TestDeleteUserAdminCanDeleteOtherAdmin(t *testing.T) {
 func TestAdminStatsEndpoint(t *testing.T) {
 	var dbPath string
 	ts := setupTestServerWithConfig(t, func(cfg *config.Config) {
-		dbPath = cfg.DBPath
+		dbPath = cfg.DBDSN
 	})
 
 	adminUser := ts.createTestUser(t, "adminstats", "password123", true)

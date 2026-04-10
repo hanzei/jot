@@ -67,12 +67,12 @@ func (h *AdminHandler) GetStats(w http.ResponseWriter, r *http.Request) (int, an
 		return http.StatusInternalServerError, nil, err
 	}
 
-	fileInfo, err := os.Stat(h.dbPath)
-	if err != nil {
-		return http.StatusInternalServerError, nil, err
+	// DatabaseSizeBytes is only meaningful for SQLite (file-based) installations.
+	// For PostgreSQL (and any driver where dbPath is not a file path), os.Stat
+	// will fail; in that case we leave the field at zero.
+	if fileInfo, statErr := os.Stat(h.dbPath); statErr == nil {
+		stats.Storage.DatabaseSizeBytes = fileInfo.Size()
 	}
-
-	stats.Storage.DatabaseSizeBytes = fileInfo.Size()
 
 	return http.StatusOK, stats, nil
 }

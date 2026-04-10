@@ -19,7 +19,10 @@ import (
 	"github.com/go-chi/cors"
 	"github.com/hanzei/jot/server/internal/auth"
 	"github.com/hanzei/jot/server/internal/config"
+	"database/sql"
+
 	"github.com/hanzei/jot/server/internal/database"
+	"github.com/hanzei/jot/server/internal/database/dialect"
 	"github.com/hanzei/jot/server/internal/handlers"
 	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/hanzei/jot/server/internal/mcphandler"
@@ -46,7 +49,7 @@ func buildInfo() aboutResponse {
 type Server struct {
 	cfg             *config.Config
 	router          chi.Router
-	db              *database.DB
+	db              *sql.DB
 	httpServer      *http.Server
 	metricsServer   *http.Server
 	staticRoot      *os.Root
@@ -76,25 +79,27 @@ func New(cfg *config.Config) (*Server, error) {
 		return nil, fmt.Errorf("config must not be nil")
 	}
 
-	db, err := database.New(cfg.DBPath)
+	db, err := database.New(cfg.DBDriver, cfg.DBDSN)
 	if err != nil {
 		return nil, fmt.Errorf("initialize database: %w", err)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	userStore := models.NewUserStore(db.DB)
-	noteStore := models.NewNoteStore(db.DB)
-	labelStore := models.NewLabelStore(db.DB)
-	adminStatsStore := models.NewAdminStatsStore(db.DB)
-	sessionStore, err := models.NewSessionStore(db.DB)
+	d := &dialect.Dialect{Driver: cfg.DBDriver}
+
+	userStore := models.NewUserStore(db, d)
+	noteStore := models.NewNoteStore(db, d)
+	labelStore := models.NewLabelStore(db, d)
+	adminStatsStore := models.NewAdminStatsStore(db, d)
+	sessionStore, err := models.NewSessionStore(db, d)
 	if err != nil {
 		cancel()
 		_ = db.Close()
 		return nil, fmt.Errorf("initialize session store: %w", err)
 	}
-	userSettingsStore := models.NewUserSettingsStore(db.DB)
-	patStore := models.NewPATStore(db.DB)
+	userSettingsStore := models.NewUserSettingsStore(db, d)
+	patStore := models.NewPATStore(db, d)
 
 	sessionService := auth.NewSessionService(sessionStore, userStore, patStore, cfg.CookieSecure)
 
@@ -114,7 +119,7 @@ func New(cfg *config.Config) (*Server, error) {
 	}
 	labelsHandler := handlers.NewLabelsHandler(noteStore, labelStore, hub)
 	eventsHandler := handlers.NewEventsHandler(hub)
-	adminHandler := handlers.NewAdminHandler(userStore, noteStore, adminStatsStore, userSettingsStore, cfg.DBPath, cfg.PasswordMinLength)
+	adminHandler := handlers.NewAdminHandler(userStore, noteStore, adminStatsStore, userSettingsStore, cfg.DBDSN, cfg.PasswordMinLength)
 	sessionsHandler := handlers.NewSessionsHandler(sessionStore)
 	patsHandler := handlers.NewPATsHandler(patStore)
 
@@ -436,7 +441,7 @@ func (s *Server) GetRouter() chi.Router {
 	return s.router
 }
 
-func (s *Server) GetDB() *database.DB {
+func (s *Server) GetDB() *sql.DB {
 	return s.db
 }
 

@@ -5,6 +5,7 @@ import (
 	"database/sql"
 	"time"
 
+	"github.com/hanzei/jot/server/internal/database/dialect"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -17,9 +18,9 @@ type NoteStore struct {
 }
 
 // NewNoteStore creates an instrumented NoteStore.
-func NewNoteStore(db *sql.DB) *NoteStore {
+func NewNoteStore(db *sql.DB, d *dialect.Dialect) *NoteStore {
 	return &NoteStore{
-		inner:  newNoteStore(db),
+		inner:  newNoteStore(db, d),
 		tracer: otel.Tracer("github.com/hanzei/jot/server"),
 	}
 }

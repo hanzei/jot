@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	"github.com/hanzei/jot/server/internal/database/dialect"
 )
 
 var ErrLabelNotFoundOrNotOwned = errors.New("label not found or not owned by user")
@@ -27,15 +29,16 @@ type Label struct {
 
 type labelStore struct {
 	db *sql.DB
+	d  *dialect.Dialect
 }
 
-func newLabelStore(db *sql.DB) *labelStore {
-	return &labelStore{db: db}
+func newLabelStore(db *sql.DB, d *dialect.Dialect) *labelStore {
+	return &labelStore{db: db, d: d}
 }
 
 // GetLabels returns all labels belonging to a user.
 func (s *labelStore) GetLabels(ctx context.Context, userID string) ([]Label, error) {
-	query := `SELECT id, user_id, name, created_at, updated_at FROM labels WHERE user_id = ? ORDER BY name ASC`
+	query := s.d.RewritePlaceholders(`SELECT id, user_id, name, created_at, updated_at FROM labels WHERE user_id = ? ORDER BY name ASC`)
 	rows, err := s.db.QueryContext(ctx, query, userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get labels: %w", err)
@@ -54,7 +57,7 @@ func (s *labelStore) GetLabels(ctx context.Context, userID string) ([]Label, err
 // GetLabelCounts returns a map of label ID to note count for active notes.
 // Counts exclude archived and trashed notes to match the default notes view.
 func (s *labelStore) GetLabelCounts(ctx context.Context, userID string) (map[string]int, error) {
-	rows, err := s.db.QueryContext(ctx, `
+	rows, err := s.db.QueryContext(ctx, s.d.RewritePlaceholders(`
 		SELECT l.id, COUNT(nus.note_id) AS note_count
 		FROM labels l
 		LEFT JOIN note_labels nl
@@ -68,7 +71,7 @@ func (s *labelStore) GetLabelCounts(ctx context.Context, userID string) (map[str
 			AND nus.archived = FALSE
 		WHERE l.user_id = ?
 		GROUP BY l.id
-	`, userID)
+	`), userID)
 	if err != nil {
 		return nil, fmt.Errorf("failed to get label counts: %w", err)
 	}
@@ -93,22 +96,53 @@ func (s *labelStore) GetLabelCounts(ctx context.Context, userID string) (map[str
 }
 
 // GetOrCreateLabel finds an existing label by name for a user or creates a new one.
-// Uses an atomic upsert to avoid race conditions when multiple callers create the same label concurrently.
+// Uses a select-then-insert strategy with a conflict guard to handle concurrent callers.
 func (s *labelStore) GetOrCreateLabel(ctx context.Context, userID, name string) (*Label, error) {
+	// Attempt a case-insensitive lookup first.
+	var l Label
+	selectQ := s.d.RewritePlaceholders(
+		"SELECT id, user_id, name, created_at, updated_at FROM labels WHERE user_id = ? AND " +
+			s.d.CaseInsensitiveEquals("name"),
+	)
+	err := s.db.QueryRowContext(ctx, selectQ, userID, name).Scan(
+		&l.ID, &l.UserID, &l.Name, &l.CreatedAt, &l.UpdatedAt,
+	)
+	if err == nil {
+		return &l, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
+		return nil, fmt.Errorf("failed to get or create label: %w", err)
+	}
+
+	// Not found; generate an ID and insert.
 	id, err := generateID()
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate label ID: %w", err)
 	}
 
-	var l Label
-	err = s.db.QueryRowContext(ctx,
+	// ON CONFLICT DO NOTHING handles the rare case where a concurrent request
+	// inserts the same label between our SELECT and INSERT.
+	insertQ := s.d.RewritePlaceholders(
 		`INSERT INTO labels (id, user_id, name) VALUES (?, ?, ?)
-		 ON CONFLICT(user_id, name) DO UPDATE SET name=excluded.name
+		 ON CONFLICT(user_id, name) DO NOTHING
 		 RETURNING id, user_id, name, created_at, updated_at`,
-		id, userID, name,
-	).Scan(&l.ID, &l.UserID, &l.Name, &l.CreatedAt, &l.UpdatedAt)
-	if err != nil {
+	)
+	err = s.db.QueryRowContext(ctx, insertQ, id, userID, name).Scan(
+		&l.ID, &l.UserID, &l.Name, &l.CreatedAt, &l.UpdatedAt,
+	)
+	if err == nil {
+		return &l, nil
+	}
+	if !errors.Is(err, sql.ErrNoRows) {
 		return nil, fmt.Errorf("failed to get or create label: %w", err)
+	}
+
+	// A concurrent insert won the race; retry the SELECT to get the existing row.
+	err = s.db.QueryRowContext(ctx, selectQ, userID, name).Scan(
+		&l.ID, &l.UserID, &l.Name, &l.CreatedAt, &l.UpdatedAt,
+	)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get or create label after conflict: %w", err)
 	}
 	return &l, nil
 }
@@ -117,7 +151,7 @@ func (s *labelStore) GetOrCreateLabel(ctx context.Context, userID, name string) 
 func (s *labelStore) GetLabelNoteIDs(ctx context.Context, labelID, userID string) ([]string, error) {
 	var exists int
 	if err := s.db.QueryRowContext(ctx,
-		`SELECT 1 FROM labels WHERE id = ? AND user_id = ?`,
+		s.d.RewritePlaceholders(`SELECT 1 FROM labels WHERE id = ? AND user_id = ?`),
 		labelID, userID,
 	).Scan(&exists); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -126,7 +160,7 @@ func (s *labelStore) GetLabelNoteIDs(ctx context.Context, labelID, userID string
 		return nil, fmt.Errorf("check label ownership: %w", err)
 	}
 
-	rows, err := s.db.QueryContext(ctx, `SELECT note_id FROM note_labels WHERE label_id = ? AND user_id = ?`, labelID, userID)
+	rows, err := s.db.QueryContext(ctx, s.d.RewritePlaceholders(`SELECT note_id FROM note_labels WHERE label_id = ? AND user_id = ?`), labelID, userID)
 	if err != nil {
 		return nil, fmt.Errorf("get label note IDs: %w", err)
 	}
@@ -152,14 +186,14 @@ func (s *labelStore) GetLabelNoteIDs(ctx context.Context, labelID, userID string
 func (s *labelStore) RenameLabel(ctx context.Context, labelID, userID, newName string) (*Label, error) {
 	var l Label
 	err := s.db.QueryRowContext(ctx,
-		`UPDATE labels
+		s.d.RewritePlaceholders(`UPDATE labels
 		 SET name = ?, updated_at = CURRENT_TIMESTAMP
 		 WHERE id = ? AND user_id = ?
-		 RETURNING id, user_id, name, created_at, updated_at`,
+		 RETURNING id, user_id, name, created_at, updated_at`),
 		newName, labelID, userID,
 	).Scan(&l.ID, &l.UserID, &l.Name, &l.CreatedAt, &l.UpdatedAt)
 	if err != nil {
-		if isUniqueConstraintError(err) {
+		if s.d.IsUniqueConstraintError(err) {
 			return nil, ErrLabelNameConflict
 		}
 		if errors.Is(err, sql.ErrNoRows) {
@@ -184,7 +218,7 @@ func (s *labelStore) DeleteLabel(ctx context.Context, labelID, userID string) er
 
 	var exists int
 	if err := tx.QueryRowContext(ctx,
-		`SELECT 1 FROM labels WHERE id = ? AND user_id = ?`,
+		s.d.RewritePlaceholders(`SELECT 1 FROM labels WHERE id = ? AND user_id = ?`),
 		labelID, userID,
 	).Scan(&exists); err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
@@ -193,11 +227,11 @@ func (s *labelStore) DeleteLabel(ctx context.Context, labelID, userID string) er
 		return fmt.Errorf("check label ownership: %w", err)
 	}
 
-	if _, err := tx.ExecContext(ctx, `DELETE FROM note_labels WHERE label_id = ?`, labelID); err != nil {
+	if _, err := tx.ExecContext(ctx, s.d.RewritePlaceholders(`DELETE FROM note_labels WHERE label_id = ?`), labelID); err != nil {
 		return fmt.Errorf("delete note label associations: %w", err)
 	}
 
-	if _, err := tx.ExecContext(ctx, `DELETE FROM labels WHERE id = ? AND user_id = ?`, labelID, userID); err != nil {
+	if _, err := tx.ExecContext(ctx, s.d.RewritePlaceholders(`DELETE FROM labels WHERE id = ? AND user_id = ?`), labelID, userID); err != nil {
 		return fmt.Errorf("delete label: %w", err)
 	}
 

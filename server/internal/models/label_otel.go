@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 
+	"github.com/hanzei/jot/server/internal/database/dialect"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/trace"
@@ -16,9 +17,9 @@ type LabelStore struct {
 }
 
 // NewLabelStore creates an instrumented LabelStore.
-func NewLabelStore(db *sql.DB) *LabelStore {
+func NewLabelStore(db *sql.DB, d *dialect.Dialect) *LabelStore {
 	return &LabelStore{
-		inner:  newLabelStore(db),
+		inner:  newLabelStore(db, d),
 		tracer: otel.Tracer("github.com/hanzei/jot/server"),
 	}
 }
