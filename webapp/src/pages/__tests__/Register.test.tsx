@@ -19,7 +19,7 @@ vi.mock('@/utils/auth', () => ({
   setSettings: vi.fn(),
 }))
 
-const renderRegister = (onRegister = vi.fn(), passwordMinLength = VALIDATION.PASSWORD_MIN_LENGTH) => render(
+const renderRegister = (onRegister = vi.fn(), passwordMinLength: number = VALIDATION.PASSWORD_MIN_LENGTH) => render(
   <MemoryRouter>
     <Register onRegister={onRegister} passwordMinLength={passwordMinLength} />
   </MemoryRouter>
