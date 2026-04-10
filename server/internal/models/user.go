@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/hanzei/jot/server/internal/database/dialect"
 	"golang.org/x/crypto/bcrypt"
 )
 
@@ -39,10 +40,11 @@ type User struct {
 
 type userStore struct {
 	db *sql.DB
+	d  *dialect.Dialect
 }
 
-func newUserStore(db *sql.DB) *userStore {
-	return &userStore{db: db}
+func newUserStore(db *sql.DB, d *dialect.Dialect) *userStore {
+	return &userStore{db: db, d: d}
 }
 
 func (s *userStore) Create(ctx context.Context, username, password string) (*User, error) {

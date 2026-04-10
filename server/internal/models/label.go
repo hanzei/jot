@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	"github.com/hanzei/jot/server/internal/database/dialect"
 )
 
 var ErrLabelNotFoundOrNotOwned = errors.New("label not found or not owned by user")
@@ -27,10 +29,11 @@ type Label struct {
 
 type labelStore struct {
 	db *sql.DB
+	d  *dialect.Dialect
 }
 
-func newLabelStore(db *sql.DB) *labelStore {
-	return &labelStore{db: db}
+func newLabelStore(db *sql.DB, d *dialect.Dialect) *labelStore {
+	return &labelStore{db: db, d: d}
 }
 
 // GetLabels returns all labels belonging to a user.

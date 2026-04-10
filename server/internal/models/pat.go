@@ -9,6 +9,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	"github.com/hanzei/jot/server/internal/database/dialect"
 )
 
 var ErrPATNotFound = errors.New("personal access token not found")
@@ -22,10 +24,11 @@ type PersonalAccessToken struct {
 
 type patStore struct {
 	db *sql.DB
+	d  *dialect.Dialect
 }
 
-func newPATStore(db *sql.DB) *patStore {
-	return &patStore{db: db}
+func newPATStore(db *sql.DB, d *dialect.Dialect) *patStore {
+	return &patStore{db: db, d: d}
 }
 
 func generatePATToken() (string, error) {

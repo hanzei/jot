@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	"github.com/hanzei/jot/server/internal/database/dialect"
 )
 
 type UserSettings struct {
@@ -18,10 +20,11 @@ type UserSettings struct {
 
 type userSettingsStore struct {
 	db *sql.DB
+	d  *dialect.Dialect
 }
 
-func newUserSettingsStore(db *sql.DB) *userSettingsStore {
-	return &userSettingsStore{db: db}
+func newUserSettingsStore(db *sql.DB, d *dialect.Dialect) *userSettingsStore {
+	return &userSettingsStore{db: db, d: d}
 }
 
 // GetOrCreate returns existing settings for the user, or creates a row with

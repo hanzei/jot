@@ -4,6 +4,8 @@ import (
 	"context"
 	"database/sql"
 	"fmt"
+
+	"github.com/hanzei/jot/server/internal/database/dialect"
 )
 
 type AdminUserStats struct {
@@ -50,10 +52,11 @@ type AdminStats struct {
 
 type adminStatsStore struct {
 	db *sql.DB
+	d  *dialect.Dialect
 }
 
-func newAdminStatsStore(db *sql.DB) *adminStatsStore {
-	return &adminStatsStore{db: db}
+func newAdminStatsStore(db *sql.DB, d *dialect.Dialect) *adminStatsStore {
+	return &adminStatsStore{db: db, d: d}
 }
 
 func (s *adminStatsStore) GetStats(ctx context.Context) (*AdminStats, error) {

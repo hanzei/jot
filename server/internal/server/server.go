@@ -22,6 +22,7 @@ import (
 	"database/sql"
 
 	"github.com/hanzei/jot/server/internal/database"
+	"github.com/hanzei/jot/server/internal/database/dialect"
 	"github.com/hanzei/jot/server/internal/handlers"
 	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/hanzei/jot/server/internal/mcphandler"
@@ -85,18 +86,20 @@ func New(cfg *config.Config) (*Server, error) {
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	userStore := models.NewUserStore(db)
-	noteStore := models.NewNoteStore(db)
-	labelStore := models.NewLabelStore(db)
-	adminStatsStore := models.NewAdminStatsStore(db)
-	sessionStore, err := models.NewSessionStore(db)
+	d := &dialect.Dialect{Driver: cfg.DBDriver}
+
+	userStore := models.NewUserStore(db, d)
+	noteStore := models.NewNoteStore(db, d)
+	labelStore := models.NewLabelStore(db, d)
+	adminStatsStore := models.NewAdminStatsStore(db, d)
+	sessionStore, err := models.NewSessionStore(db, d)
 	if err != nil {
 		cancel()
 		_ = db.Close()
 		return nil, fmt.Errorf("initialize session store: %w", err)
 	}
-	userSettingsStore := models.NewUserSettingsStore(db)
-	patStore := models.NewPATStore(db)
+	userSettingsStore := models.NewUserSettingsStore(db, d)
+	patStore := models.NewPATStore(db, d)
 
 	sessionService := auth.NewSessionService(sessionStore, userStore, patStore, cfg.CookieSecure)
 

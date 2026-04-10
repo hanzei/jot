@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"time"
 
+	"github.com/hanzei/jot/server/internal/database/dialect"
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/metric"
 )
@@ -32,6 +33,7 @@ type Session struct {
 
 type sessionStore struct {
 	db      *sql.DB
+	d       *dialect.Dialect
 	created metric.Int64Counter
 	evicted metric.Int64Counter
 	expired metric.Int64Counter
@@ -39,7 +41,7 @@ type sessionStore struct {
 
 // newSessionStore creates a sessionStore with OTel instruments initialized from
 // the global MeterProvider. Returns an error if any instrument cannot be created.
-func newSessionStore(db *sql.DB) (*sessionStore, error) {
+func newSessionStore(db *sql.DB, d *dialect.Dialect) (*sessionStore, error) {
 	meter := otel.GetMeterProvider().Meter("github.com/hanzei/jot/server")
 
 	created, err := meter.Int64Counter(
@@ -66,7 +68,7 @@ func newSessionStore(db *sql.DB) (*sessionStore, error) {
 		return nil, fmt.Errorf("create sessions.expired instrument: %w", err)
 	}
 
-	return &sessionStore{db: db, created: created, evicted: evicted, expired: expired}, nil
+	return &sessionStore{db: db, d: d, created: created, evicted: evicted, expired: expired}, nil
 }
 
 func generateSessionToken() (string, error) {

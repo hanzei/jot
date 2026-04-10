@@ -9,15 +9,17 @@ import (
 	"strings"
 	"time"
 
+	"github.com/hanzei/jot/server/internal/database/dialect"
 	"github.com/sirupsen/logrus"
 )
 
 type noteStore struct {
 	db *sql.DB
+	d  *dialect.Dialect
 }
 
-func newNoteStore(db *sql.DB) *noteStore {
-	return &noteStore{db: db}
+func newNoteStore(db *sql.DB, d *dialect.Dialect) *noteStore {
+	return &noteStore{db: db, d: d}
 }
 
 // deref returns *p if p is non-nil, otherwise def.
