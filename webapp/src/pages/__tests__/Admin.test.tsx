@@ -66,7 +66,7 @@ const mockStats: AdminStatsResponse = {
   storage: { database_size_bytes: 4_398_047 },
 }
 
-const renderAdmin = (passwordMinLength = 10) => {
+const renderAdmin = (passwordMinLength: number = VALIDATION.PASSWORD_MIN_LENGTH) => {
   return render(
     <MemoryRouter>
       <ToastProvider>
