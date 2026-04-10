@@ -35,7 +35,8 @@ test.describe('Keyboard shortcuts help dialog', () => {
     await page.keyboard.press('Escape');
     // Second Escape closes the modal.
     await page.keyboard.press('Escape');
-    await expect(noteContentInput).toHaveCount(0);
+    const dialog = page.locator('[role="dialog"][aria-modal="true"]');
+    await expect(dialog).toHaveCount(0);
   });
 
   test('opens with ? and closes with Escape', async ({ authenticatedUser, page, dashboardPage }) => {

@@ -1465,12 +1465,11 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
         );
       }
     } else {
-      return (
-        title.trim() !== '' ||
-        content.trim() !== '' ||
-        (noteType === 'list' && items.some(item => item.text.trim() !== '')) ||
-        noteLabels.length > 0
-      );
+      if (noteType === 'list') {
+        return title.trim() !== '' || items.some(item => item.text.trim() !== '') || noteLabels.length > 0;
+      } else {
+        return content.trim() !== '' || noteLabels.length > 0;
+      }
     }
   };
 

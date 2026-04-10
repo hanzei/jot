@@ -100,7 +100,8 @@ export class DashboardPage {
   /** Creates a new text note (no title) with the given content and closes the modal. */
   async createTextNote(content: string) {
     await this.clickNewNote();
-    await this.page.fill('textarea[placeholder="Take a note..."]', content);
+    const dialog = this.page.getByRole('dialog').last();
+    await dialog.locator('textarea').first().fill(content);
     await this.closeActiveDialog();
   }
 

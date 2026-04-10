@@ -178,7 +178,7 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
       data-testid="note-card"
       data-note-card="true"
       tabIndex={0}
-      aria-label={(note.note_type === 'list' ? note.title : '') || t('share.untitledNote')}
+      aria-label={(note.note_type === 'list' ? note.title : note.content?.slice(0, 50)) || t('share.untitledNote')}
       className={`note-card ${getColorClass(note.color)} p-4 relative group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1 ${isUpdating ? 'opacity-50' : ''
         }`}
       onKeyDown={(e) => {
