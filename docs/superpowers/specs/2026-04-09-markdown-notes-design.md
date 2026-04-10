@@ -20,7 +20,7 @@ Out of scope: todo/list note items, rich-text WYSIWYG, markdown in titles.
 
 ### Note Modal — Editor
 
-Text notes have no title field. The content area switches between two states.
+The text content area switches between two states.
 
 **Preview state (default for existing notes)**
 - Content rendered as HTML via `renderMarkdown()`
@@ -43,7 +43,7 @@ Text notes have no title field. The content area switches between two states.
 - While in edit state: backdrop click or Escape collapses to preview, modal stays open
 - While in preview state: backdrop click or Escape closes the modal
 - The `×` close button always closes immediately regardless of state
-- Implementation: HeadlessUI's `onClose` handles Escape; a `backdropHandledRef` flag prevents double-firing when clicking outside
+- Implementation: HeadlessUI's `onClose` handles Escape; a `backdropHandledRef` flag prevents double-firing when clicking the backdrop
 
 **No formatting toolbar** — removed after initial implementation; users write markdown syntax directly.
 
@@ -51,13 +51,10 @@ Text notes have no title field. The content area switches between two states.
 
 ### Note Card — Dashboard Preview
 
-- Title is **not displayed** on text note cards (title still saved, used for `aria-label` and page title)
-- Text content rendered as markdown via `renderMarkdown()`, line-clamped to 6 lines
+- Text note content rendered as markdown via `renderMarkdown()`, line-clamped to 6 lines
 - Links, bold, italic, headings, and lists render visually in the card
 
 ### Markdown Feature Set
-
-All standard ATX headings are supported:
 
 | Syntax | Output |
 |--------|--------|
@@ -91,12 +88,12 @@ Uses `marked` (v18+) for parsing and `DOMPurify` for XSS sanitization:
 ### Internationalisation
 
 i18n keys added to all 8 locale files (`en`, `de`, `es`, `fr`, `it`, `nl`, `pl`, `pt`):
-- `note.formatBold`, `note.formatItalic`, `note.formatHeading`, `note.formatBulletList` — kept for future toolbar re-introduction
+- `note.formatBold`, `note.formatItalic`, `note.formatHeading`, `note.formatBulletList` — reserved for future toolbar re-introduction
 - `common.done` — used by the Done button in the modal
 
 ## Mobile (React Native)
 
-Deferred. Design remains as originally specified (Done button in header, formatting toolbar via `InputAccessoryView`, `react-native-markdown-display`). See mobile states mockup in `docs/superpowers/`.
+Deferred. Design: Done button in header replacing the type toggle while editing, formatting toolbar via `InputAccessoryView` (iOS) / layout (Android), `react-native-markdown-display` for rendering. See mobile states mockup in `docs/superpowers/`.
 
 ## Storage
 
@@ -107,5 +104,4 @@ No schema changes. The `content` field on the `Note` model remains a plain `stri
 - No migration of existing note content
 - No server-side rendering or markdown-to-HTML storage
 - No WYSIWYG / contenteditable editor
-- No markdown support in todo/list item text
-- No title field on text notes (title stored but not displayed in modal or card)
+- No markdown support in note titles or todo/list item text
