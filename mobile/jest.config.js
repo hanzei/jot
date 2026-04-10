@@ -7,9 +7,6 @@ module.exports = {
   moduleNameMapper: {
     '^@/(.*)$': '<rootDir>/src/$1',
     '^@jot/shared$': '<rootDir>/../shared/src',
-    // Stub the axios fetch adapter to prevent its top-level ReadableStream probe
-    // from crashing against Expo's polyfill in the Jest environment.
-    '^axios/lib/adapters/fetch(\\.js)?$': '<rootDir>/__mocks__/axios-fetch-adapter.js',
   },
   // forceExit required: @testing-library/react-native's waitFor uses setInterval
   // internally which can outlive tests in the react-native-env.js environment
