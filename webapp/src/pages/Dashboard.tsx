@@ -397,8 +397,14 @@ export default function Dashboard() {
       }
     }
 
-    if (event.type === 'note_updated' && editingNote && note_id === editingNote.id && event.data.note?.id === note_id) {
-      setEditingNote(event.data.note);
+    if (editingNote && note_id === editingNote.id) {
+      if ((event.type === 'note_updated' || event.type === 'note_shared') && event.data.note?.id === note_id) {
+        setEditingNote(event.data.note);
+      } else if (event.type === 'note_unshared' && !currentUserLostAccess) {
+        notes.getById(note_id).then(refreshed => {
+          setEditingNote(prev => prev?.id === note_id ? refreshed : prev);
+        }).catch(() => {});
+      }
     }
 
     loadNotes();
@@ -676,10 +682,24 @@ export default function Dashboard() {
     setIsShareModalOpen(true);
   };
 
-  const handleShareModalClose = () => {
+  const handleShareModalClose = async () => {
+    const noteId = sharingNote?.id;
     setIsShareModalOpen(false);
     setSharingNote(null);
     loadNotes();
+    if (editingNote && noteId === editingNote.id) {
+      try {
+        const refreshed = await notes.getById(noteId);
+        setEditingNote(refreshed);
+      } catch (err: unknown) {
+        const status = (err as { response?: { status?: number } })?.response?.status;
+        if (status === 403 || status === 404) {
+          setIsModalOpen(false);
+          setEditingNote(null);
+          restoreReturnUrl();
+        }
+      }
+    }
   };
 
   const rollbackNoteSortCache = (failedSort: NoteSort, previousSettings: ReturnType<typeof getSettings>): boolean => {

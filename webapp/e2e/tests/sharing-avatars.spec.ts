@@ -1,6 +1,78 @@
 import { test, expect, uniqueUsername } from '../fixtures';
 import { LoginPage } from '../pages/LoginPage';
 
+test.describe('Sharing from NoteModal', () => {
+  test('note modal share avatars update after sharing via share modal', async ({ page, authenticatedUser, dashboardPage, request }) => {
+    const user2Name = uniqueUsername('share');
+    const user2Pass = 'testpass123';
+
+    await request.post('/api/v1/register', {
+      data: { username: user2Name, password: user2Pass },
+    });
+
+    // Create a list note (has a title shown in the modal)
+    await dashboardPage.goto();
+    await dashboardPage.createNote('Share Modal Test');
+    await dashboardPage.expectNoteVisible('Share Modal Test');
+
+    // Open the note modal
+    await dashboardPage.openNote('Share Modal Test');
+
+    // Click share button inside the NoteModal
+    const noteModal = page.getByRole('dialog');
+    await noteModal.getByRole('button', { name: /share/i }).click();
+
+    // The ShareModal opens — share with user2
+    await page.getByPlaceholder(/search users/i).fill(user2Name);
+    await page.getByText(user2Name).click();
+
+    // Verify the ShareModal shows the user in "Shared with" list
+    await expect(page.getByText(/shared with \(1\)/i)).toBeVisible();
+
+    // Close the ShareModal
+    await page.keyboard.press('Escape');
+
+    // Verify the NoteModal now shows a share avatar for user2
+    const sharingInfo = noteModal.locator(`div[title="${user2Name}"]`);
+    await expect(sharingInfo).toBeVisible();
+  });
+
+  test('note modal share avatars update after unsharing via share modal', async ({ page, authenticatedUser, dashboardPage, request }) => {
+    const user2Name = uniqueUsername('share');
+    const user2Pass = 'testpass123';
+
+    await request.post('/api/v1/register', {
+      data: { username: user2Name, password: user2Pass },
+    });
+
+    // Create a note
+    await dashboardPage.goto();
+    await dashboardPage.createNote('Unshare Modal Test');
+    await dashboardPage.expectNoteVisible('Unshare Modal Test');
+
+    // Open note modal and share via the share button
+    await dashboardPage.openNote('Unshare Modal Test');
+    const noteModal = page.getByRole('dialog');
+    await noteModal.getByRole('button', { name: /share/i }).click();
+    await page.getByPlaceholder(/search users/i).fill(user2Name);
+    await page.getByText(user2Name).click();
+    await expect(page.getByText(/shared with \(1\)/i)).toBeVisible();
+    await page.keyboard.press('Escape');
+
+    // Verify share avatar appeared in NoteModal
+    await expect(noteModal.locator(`div[title="${user2Name}"]`)).toBeVisible();
+
+    // Open share modal again and unshare
+    await noteModal.getByRole('button', { name: /share/i }).click();
+    await page.getByRole('button', { name: /remove access/i }).click();
+    await expect(page.getByText(/not shared with anyone/i)).toBeVisible();
+    await page.keyboard.press('Escape');
+
+    // Verify the NoteModal no longer shows the share avatar
+    await expect(noteModal.locator(`div[title="${user2Name}"]`)).not.toBeVisible();
+  });
+});
+
 test.describe('Sharing Avatars', () => {
   test('shared note shows recipient avatar on dashboard', async ({ page, authenticatedUser, dashboardPage, request }) => {
     const user2Name = uniqueUsername('share');
