@@ -16,10 +16,10 @@ func TestGetNotesByLabel(t *testing.T) {
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "labeluser", "password123", false)
 
-	createNote := func(title string) string {
+	createNote := func(content string) string {
 		t.Helper()
 		note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-			Title: title, Content: "content",
+			Content: content,
 		})
 		require.NoError(t, err)
 		return note.ID
@@ -47,14 +47,14 @@ func TestGetNotesByLabel(t *testing.T) {
 		notes, err := user.Client.ListNotes(t.Context(), &client.ListNotesOptions{Label: labelIDByName["work"]})
 		require.NoError(t, err)
 		require.Len(t, notes, 1)
-		assert.Equal(t, "Work Note", notes[0].Title)
+		assert.Equal(t, "Work Note", notes[0].Content)
 	})
 
 	t.Run("filter by different label returns correct notes", func(t *testing.T) {
 		notes, err := user.Client.ListNotes(t.Context(), &client.ListNotesOptions{Label: labelIDByName["personal"]})
 		require.NoError(t, err)
 		require.Len(t, notes, 1)
-		assert.Equal(t, "Personal Note", notes[0].Title)
+		assert.Equal(t, "Personal Note", notes[0].Content)
 	})
 
 	t.Run("no label param returns all notes", func(t *testing.T) {
@@ -72,7 +72,7 @@ func TestGetNotesByLabel(t *testing.T) {
 	t.Run("label from another user is not accessible", func(t *testing.T) {
 		other := ts.createTestUser(t, "otheruser", "password123", false)
 		otherNote, err := other.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-			Title: "Other Note", Content: "content",
+			Content: "Other Note",
 		})
 		require.NoError(t, err)
 
@@ -182,15 +182,15 @@ func TestGetLabelCounts(t *testing.T) {
 	user := ts.createTestUser(t, "countlabels", "password123", false)
 
 	activeNote, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-		Title: "Active with work and personal", Content: "content",
+		Content: "Active with work and personal",
 	})
 	require.NoError(t, err)
 	archivedNote, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-		Title: "Archived with work", Content: "content",
+		Content: "Archived with work",
 	})
 	require.NoError(t, err)
 	trashedNote, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-		Title: "Trashed with work", Content: "content",
+		Content: "Trashed with work",
 	})
 	require.NoError(t, err)
 
@@ -236,7 +236,7 @@ func TestGetLabelCounts(t *testing.T) {
 		collaborator := ts.createTestUser(t, "countcollab", "password123", false)
 
 		sharedNote, err := owner.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-			Title: "Shared for collaborator label", Content: "content",
+			Content: "Shared for collaborator label",
 		})
 		require.NoError(t, err)
 		require.NoError(t, owner.Client.ShareNote(t.Context(), sharedNote.ID, collaborator.User.ID))
@@ -266,7 +266,6 @@ func TestCreateNoteWithLabels(t *testing.T) {
 	t.Run("note created with labels has those labels attached", func(t *testing.T) {
 		user := createNoteWithLabelsFixture(t)
 		note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-			Title:   "Labeled Note",
 			Content: "some content",
 			Labels:  []string{"work", "urgent"},
 		})
@@ -281,7 +280,6 @@ func TestCreateNoteWithLabels(t *testing.T) {
 	t.Run("labels created during note creation appear in global label list", func(t *testing.T) {
 		user := createNoteWithLabelsFixture(t)
 		_, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-			Title:   "Labeled Note",
 			Content: "content",
 			Labels:  []string{"work", "urgent"},
 		})
@@ -300,7 +298,6 @@ func TestCreateNoteWithLabels(t *testing.T) {
 	t.Run("note without labels still works", func(t *testing.T) {
 		user := createNoteWithLabelsFixture(t)
 		note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-			Title:   "No Labels",
 			Content: "content",
 		})
 		require.NoError(t, err)
@@ -310,7 +307,6 @@ func TestCreateNoteWithLabels(t *testing.T) {
 	t.Run("duplicate label names are deduplicated", func(t *testing.T) {
 		user := createNoteWithLabelsFixture(t)
 		note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-			Title:   "Duped Labels",
 			Content: "content",
 			Labels:  []string{"same", "same"},
 		})
@@ -322,14 +318,12 @@ func TestCreateNoteWithLabels(t *testing.T) {
 	t.Run("reuses existing labels by name", func(t *testing.T) {
 		user := createNoteWithLabelsFixture(t)
 		_, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-			Title:   "First Note",
 			Content: "content",
 			Labels:  []string{"work"},
 		})
 		require.NoError(t, err)
 
 		note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-			Title:   "Second Note",
 			Content: "content",
 			Labels:  []string{"work"},
 		})
@@ -351,8 +345,7 @@ func TestCreateNoteWithLabels(t *testing.T) {
 	t.Run("note filterable by label right after creation", func(t *testing.T) {
 		user := createNoteWithLabelsFixture(t)
 		note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-			Title:   "Filterable",
-			Content: "content",
+			Content: "Filterable",
 			Labels:  []string{"filterlabel"},
 		})
 		require.NoError(t, err)
@@ -361,13 +354,12 @@ func TestCreateNoteWithLabels(t *testing.T) {
 		notes, err := user.Client.ListNotes(t.Context(), &client.ListNotesOptions{Label: note.Labels[0].ID})
 		require.NoError(t, err)
 		require.Len(t, notes, 1)
-		assert.Equal(t, "Filterable", notes[0].Title)
+		assert.Equal(t, "Filterable", notes[0].Content)
 	})
 
 	t.Run("empty and whitespace-only label names are ignored", func(t *testing.T) {
 		user := createNoteWithLabelsFixture(t)
 		note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-			Title:   "Whitespace Labels",
 			Content: "content",
 			Labels:  []string{"valid", "", "  ", "  also valid  "},
 		})
@@ -403,7 +395,7 @@ func TestRenameLabel(t *testing.T) {
 	user := ts.createTestUser(t, "renameowner", "password123", false)
 
 	note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-		Title: "Rename Me", Content: "content",
+		Content: "Rename Me",
 	})
 	require.NoError(t, err)
 
@@ -429,7 +421,7 @@ func TestRenameLabel(t *testing.T) {
 
 	t.Run("rename to conflicting name returns 400", func(t *testing.T) {
 		secondNote, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-			Title: "Other", Content: "content",
+			Content: "Other",
 		})
 		require.NoError(t, err)
 
@@ -444,7 +436,7 @@ func TestRenameLabel(t *testing.T) {
 	t.Run("rename another user's label returns 404", func(t *testing.T) {
 		other := ts.createTestUser(t, "renameother", "password123", false)
 		otherNote, err := other.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-			Title: "Other user note", Content: "content",
+			Content: "Other user note",
 		})
 		require.NoError(t, err)
 
@@ -468,12 +460,12 @@ func TestDeleteLabel(t *testing.T) {
 		user := ts.createTestUser(t, "deleteowner", "password123", false)
 
 		firstNote, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-			Title: "First", Content: "content",
+			Content: "First",
 		})
 		require.NoError(t, err)
 
 		secondNote, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-			Title: "Second", Content: "content",
+			Content: "Second",
 		})
 		require.NoError(t, err)
 
@@ -524,7 +516,7 @@ func TestDeleteLabel(t *testing.T) {
 		intruder := ts.createTestUser(t, "deleteintruder", "password123", false)
 
 		note, err := owner.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-			Title: "Protected", Content: "content",
+			Content: "Protected",
 		})
 		require.NoError(t, err)
 

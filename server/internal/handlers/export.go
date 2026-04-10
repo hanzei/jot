@@ -66,21 +66,20 @@ func (h *NotesHandler) ExportNotes(w http.ResponseWriter, r *http.Request) (int,
 	exportNotes := make([]jotExportNote, 0, len(notes))
 	for _, n := range notes {
 		exportNote := jotExportNote{
-			Title:                 n.Title,
-			Content:               n.Content,
-			NoteType:              n.NoteType,
-			Color:                 n.Color,
-			Pinned:                n.Pinned,
-			Archived:              n.Archived,
-			Position:              n.Position,
-			UnpinnedPosition:      n.UnpinnedPosition,
-			CheckedItemsCollapsed: n.CheckedItemsCollapsed,
-			Labels:                make([]string, 0, len(n.Labels)),
+			NoteType:         n.NoteType,
+			Color:            n.Color,
+			Pinned:           n.Pinned,
+			Archived:         n.Archived,
+			Position:         n.Position,
+			UnpinnedPosition: n.UnpinnedPosition,
+			Labels:           make([]string, 0, len(n.Labels)),
 		}
-		for _, l := range n.Labels {
-			exportNote.Labels = append(exportNote.Labels, l.Name)
-		}
-		if n.NoteType == models.NoteTypeList {
+		// Populate only the fields that belong to this note type so that
+		// re-importing the export does not carry mismatched data.
+		switch n.NoteType {
+		case models.NoteTypeList:
+			exportNote.Title = n.Title
+			exportNote.CheckedItemsCollapsed = n.CheckedItemsCollapsed
 			exportNote.Items = make([]jotExportNoteItem, 0, len(n.Items))
 			for _, item := range n.Items {
 				exportNote.Items = append(exportNote.Items, jotExportNoteItem{
@@ -90,6 +89,11 @@ func (h *NotesHandler) ExportNotes(w http.ResponseWriter, r *http.Request) (int,
 					IndentLevel: item.IndentLevel,
 				})
 			}
+		case models.NoteTypeText:
+			exportNote.Content = n.Content
+		}
+		for _, l := range n.Labels {
+			exportNote.Labels = append(exportNote.Labels, l.Name)
 		}
 		exportNotes = append(exportNotes, exportNote)
 	}

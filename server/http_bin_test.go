@@ -11,10 +11,10 @@ import (
 )
 
 // createAndTrashNote creates a note and moves it to trash.
-func createAndTrashNote(t *testing.T, user *TestUser, title string) *client.Note {
+func createAndTrashNote(t *testing.T, user *TestUser, content string) *client.Note {
 	t.Helper()
 	note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-		Title:    title,
+		Content:  content,
 		NoteType: client.NoteTypeText,
 	})
 	require.NoError(t, err)
@@ -53,7 +53,7 @@ func TestBinDeleteMovesToTrash(t *testing.T) {
 	user := ts.createTestUser(t, "binuser1", "password123", false)
 
 	note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-		Title: "Bin Test Note", Content: "some content", NoteType: client.NoteTypeText,
+		Content: "Bin Test Note", NoteType: client.NoteTypeText,
 	})
 	require.NoError(t, err)
 
@@ -137,7 +137,7 @@ func TestBinRestoreNonTrashedReturns404(t *testing.T) {
 	user := ts.createTestUser(t, "binuser5", "password123", false)
 
 	note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-		Title: "Active Note", NoteType: client.NoteTypeText,
+		Content: "Active Note", NoteType: client.NoteTypeText,
 	})
 	require.NoError(t, err)
 
@@ -150,7 +150,7 @@ func TestBinPermanentDeleteNonTrashedReturns404(t *testing.T) {
 	user := ts.createTestUser(t, "binuser6", "password123", false)
 
 	note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-		Title: "Active Note 2", NoteType: client.NoteTypeText,
+		Content: "Active Note 2", NoteType: client.NoteTypeText,
 	})
 	require.NoError(t, err)
 

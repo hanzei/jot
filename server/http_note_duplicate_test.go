@@ -15,13 +15,11 @@ func TestDuplicateNoteEndpoint(t *testing.T) {
 		collaborator := ts.createTestUser(t, "collab", "password123", false)
 
 		firstVisible, err := owner.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-			Title:   "Existing Note",
 			Content: "Visible before duplicate",
 		})
 		require.NoError(t, err)
 
 		source, err := owner.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-			Title:   "Project Plan",
 			Content: "Shared content",
 			Color:   "#fbbc04",
 			Labels:  []string{"alpha", "beta"},
@@ -39,7 +37,8 @@ func TestDuplicateNoteEndpoint(t *testing.T) {
 		require.NoError(t, err)
 
 		assert.Equal(t, owner.User.ID, duplicated.UserID)
-		assert.Equal(t, "Copy of Project Plan", duplicated.Title)
+		// Text notes have no title; the duplicate copies the content.
+		assert.Empty(t, duplicated.Title)
 		assert.Equal(t, source.Content, duplicated.Content)
 		assert.Equal(t, source.Color, duplicated.Color)
 		assert.False(t, duplicated.Pinned)

@@ -369,17 +369,15 @@ func TestNotesEndpoints(t *testing.T) {
 
 	t.Run("create note", func(t *testing.T) {
 		note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-			Title:    "Test Note",
 			Content:  "This is a test note",
 			NoteType: client.NoteTypeText,
 			Color:    "#ffeb3b",
 		})
 		require.NoError(t, err)
-		assert.Equal(t, "Test Note", note.Title)
+		assert.Equal(t, "This is a test note", note.Content)
 	})
 
 	created, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-		Title:   "Test Note",
 		Content: "Test Content",
 	})
 	require.NoError(t, err)
@@ -387,18 +385,17 @@ func TestNotesEndpoints(t *testing.T) {
 	t.Run("get specific note", func(t *testing.T) {
 		note, err := user.Client.GetNote(t.Context(), created.ID)
 		require.NoError(t, err)
-		assert.Equal(t, "Test Note", note.Title)
+		assert.Equal(t, "Test Content", note.Content)
 	})
 
 	t.Run("update note", func(t *testing.T) {
 		updated, err := user.Client.UpdateNote(t.Context(), created.ID, &client.UpdateNoteRequest{
-			Title:   client.Ptr("Updated Title"),
 			Content: client.Ptr("Updated Content"),
 			Pinned:  client.Ptr(true),
 			Color:   client.Ptr("#ff0000"),
 		})
 		require.NoError(t, err)
-		assert.Equal(t, "Updated Title", updated.Title)
+		assert.Equal(t, "Updated Content", updated.Content)
 	})
 
 	t.Run("delete note", func(t *testing.T) {
@@ -484,7 +481,6 @@ func TestAdminStatsEndpoint(t *testing.T) {
 	member2 := ts.createTestUser(t, "memberstats2", "password123", false)
 
 	sharedTextNote, err := adminUser.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-		Title:    "Shared text note",
 		Content:  "shared content",
 		NoteType: client.NoteTypeText,
 	})
@@ -510,7 +506,6 @@ func TestAdminStatsEndpoint(t *testing.T) {
 	require.NoError(t, err)
 
 	trashedTextNote, err := adminUser.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-		Title:    "Trashed text note",
 		Content:  "trashed content",
 		NoteType: client.NoteTypeText,
 	})
@@ -709,8 +704,7 @@ func TestSSEEndpoint(t *testing.T) { //nolint:gocognit
 		}
 
 		note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-			Title:    "SSE Test Note",
-			Content:  "test content",
+			Content:  "SSE Test Note",
 			NoteType: client.NoteTypeText,
 		})
 		require.NoError(t, err)
@@ -769,7 +763,7 @@ func TestSSEEndpoint(t *testing.T) { //nolint:gocognit
 		}
 
 		const testClientID = "test-client-abc123"
-		noteBody, err := json.Marshal(map[string]any{"title": "ClientID Test", "content": "", "note_type": "text"})
+		noteBody, err := json.Marshal(map[string]any{"content": "ClientID Test", "note_type": "text"})
 		require.NoError(t, err)
 		createReq, err := http.NewRequestWithContext(t.Context(), http.MethodPost, ts.HTTPServer.URL+"/api/v1/notes", bytes.NewReader(noteBody))
 		require.NoError(t, err)

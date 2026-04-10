@@ -60,6 +60,20 @@ func keepColorToHex(color string) string {
 	}
 }
 
+// keepNoteFields returns the title and content to store for a Google Keep note.
+// Text notes have no title; content defaults to textContent and falls back to
+// title when textContent is empty. List notes have a title but no content.
+func keepNoteFields(title, textContent string, noteType models.NoteType) (string, string) {
+	if noteType == models.NoteTypeList {
+		return title, ""
+	}
+	content := textContent
+	if content == "" {
+		content = title
+	}
+	return "", content
+}
+
 func (h *NotesHandler) importKeepNote(ctx context.Context, userID string, kn keepNote) error {
 	if utf8.RuneCountInString(kn.Title) > noteTitleMaxLength {
 		return fmt.Errorf("title exceeds %d character limit", noteTitleMaxLength)
@@ -83,7 +97,13 @@ func (h *NotesHandler) importKeepNote(ctx context.Context, userID string, kn kee
 
 	color := keepColorToHex(kn.Color)
 
-	note, err := h.noteStore.Create(ctx, userID, kn.Title, kn.TextContent, noteType, color)
+	// For list notes, title is preserved; textContent is ignored (list notes have
+	// no content field). For text notes, textContent is used as content; if
+	// textContent is empty, the Keep title is used as a fallback so title-only
+	// Keep notes are not silently imported as empty.
+	title, content := keepNoteFields(kn.Title, kn.TextContent, noteType)
+
+	note, err := h.noteStore.Create(ctx, userID, title, content, noteType, color)
 	if err != nil {
 		return err
 	}
@@ -276,6 +296,16 @@ func validateJotImportNote(idx int, n jotImportNote) (models.JotImportNote, erro
 	}
 	if err := validateColor(color); err != nil {
 		return models.JotImportNote{}, fmt.Errorf("note #%d: %w", idx, err)
+	}
+
+	// Silently strip mismatched fields — import is a migration path, not a strict
+	// API endpoint, so we coerce rather than reject to maximize import success.
+	if n.NoteType == models.NoteTypeText {
+		n.Title = ""
+		n.CheckedItemsCollapsed = false
+	}
+	if n.NoteType == models.NoteTypeList {
+		n.Content = ""
 	}
 
 	if n.NoteType == models.NoteTypeText && len(n.Items) > 0 {

@@ -14,10 +14,10 @@ func TestReorderNotesEndpoint(t *testing.T) {
 	user := ts.createTestUser(t, "reorder-user", "password123", false)
 	other := ts.createTestUser(t, "reorder-other", "password123", false)
 
-	createNote := func(t *testing.T, title string, owner *TestUser) string {
+	createNote := func(t *testing.T, content string, owner *TestUser) string {
 		t.Helper()
 		note, err := owner.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-			Title: title, Content: "content",
+			Content: content,
 		})
 		require.NoError(t, err)
 		return note.ID
@@ -72,10 +72,10 @@ func TestRemoveLabelEndpoint(t *testing.T) {
 	user := ts.createTestUser(t, "label-remove-user", "password123", false)
 	other := ts.createTestUser(t, "label-remove-other", "password123", false)
 
-	createNote := func(t *testing.T, title string) string {
+	createNote := func(t *testing.T, content string) string {
 		t.Helper()
 		note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-			Title: title, Content: "content",
+			Content: content,
 		})
 		require.NoError(t, err)
 		return note.ID

@@ -14,17 +14,20 @@ func TestNoteValidation(t *testing.T) {
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "validationuser", "password123", false)
 
+	// Title is a field on list notes. These tests use list notes to validate title length.
 	t.Run("title max length on create", func(t *testing.T) {
 		t.Run("exceeding max returns 400", func(t *testing.T) {
 			_, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-				Title: strings.Repeat("a", 201),
+				Title:    strings.Repeat("a", 201),
+				NoteType: client.NoteTypeList,
 			})
 			assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 		})
 
 		t.Run("at max length succeeds", func(t *testing.T) {
 			note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-				Title: strings.Repeat("a", 200),
+				Title:    strings.Repeat("a", 200),
+				NoteType: client.NoteTypeList,
 			})
 			require.NoError(t, err)
 			assert.Len(t, []rune(note.Title), 200)
@@ -34,14 +37,16 @@ func TestNoteValidation(t *testing.T) {
 			// "é" is 2 bytes in UTF-8 but 1 character; 200 of them must be accepted.
 			title200 := strings.Repeat("é", 200)
 			note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-				Title: title200,
+				Title:    title200,
+				NoteType: client.NoteTypeList,
 			})
 			require.NoError(t, err)
 			assert.Equal(t, title200, note.Title)
 
 			// 201 multi-byte characters must be rejected.
 			_, err = user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-				Title: strings.Repeat("é", 201),
+				Title:    strings.Repeat("é", 201),
+				NoteType: client.NoteTypeList,
 			})
 			assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 		})
@@ -64,19 +69,29 @@ func TestNoteValidation(t *testing.T) {
 		})
 	})
 
-	t.Run("title and content max length on update", func(t *testing.T) {
-		note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{Title: "original"})
+	// Use a list note for title update validation (title is a list-note field).
+	// Use a separate text note for content update validation.
+	t.Run("title max length on update", func(t *testing.T) {
+		listNote, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
+			Title:    "original",
+			NoteType: client.NoteTypeList,
+		})
 		require.NoError(t, err)
 
 		t.Run("title exceeding max returns 400", func(t *testing.T) {
 			longTitle := strings.Repeat("a", 201)
-			_, err := user.Client.UpdateNote(t.Context(), note.ID, &client.UpdateNoteRequest{Title: &longTitle})
+			_, err := user.Client.UpdateNote(t.Context(), listNote.ID, &client.UpdateNoteRequest{Title: &longTitle})
 			assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 		})
+	})
+
+	t.Run("content max length on update", func(t *testing.T) {
+		textNote, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{Content: "original"})
+		require.NoError(t, err)
 
 		t.Run("content exceeding max returns 400", func(t *testing.T) {
 			longContent := strings.Repeat("a", 10001)
-			_, err := user.Client.UpdateNote(t.Context(), note.ID, &client.UpdateNoteRequest{Content: &longContent})
+			_, err := user.Client.UpdateNote(t.Context(), textNote.ID, &client.UpdateNoteRequest{Content: &longContent})
 			assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 		})
 	})
@@ -122,8 +137,8 @@ func TestNoteValidation(t *testing.T) {
 		t.Run("invalid color on create returns 400", func(t *testing.T) {
 			for _, color := range []string{"red", "#gggggg", "#12345", "ffffff", "#1234567"} {
 				_, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-					Title: "test",
-					Color: color,
+					Content: "test",
+					Color:   color,
 				})
 				assert.Equal(t, http.StatusBadRequest, client.StatusCode(err), "expected 400 for color %q", color)
 			}
@@ -131,8 +146,8 @@ func TestNoteValidation(t *testing.T) {
 
 		t.Run("valid 3-digit hex on create succeeds", func(t *testing.T) {
 			note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-				Title: "test",
-				Color: "#fff",
+				Content: "test",
+				Color:   "#fff",
 			})
 			require.NoError(t, err)
 			assert.Equal(t, "#fff", note.Color)
@@ -140,8 +155,8 @@ func TestNoteValidation(t *testing.T) {
 
 		t.Run("valid 6-digit hex on create succeeds", func(t *testing.T) {
 			note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-				Title: "test",
-				Color: "#1a2b3c",
+				Content: "test",
+				Color:   "#1a2b3c",
 			})
 			require.NoError(t, err)
 			assert.Equal(t, "#1a2b3c", note.Color)
@@ -149,15 +164,15 @@ func TestNoteValidation(t *testing.T) {
 
 		t.Run("empty color on create uses default", func(t *testing.T) {
 			note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-				Title: "test",
-				Color: "",
+				Content: "test",
+				Color:   "",
 			})
 			require.NoError(t, err)
 			assert.Equal(t, "#ffffff", note.Color)
 		})
 
 		t.Run("invalid color on update returns 400", func(t *testing.T) {
-			note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{Title: "test"})
+			note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{Content: "test"})
 			require.NoError(t, err)
 
 			for _, color := range []string{"red", "#gggggg", "#12345", "ffffff", "#1234567"} {
@@ -168,7 +183,7 @@ func TestNoteValidation(t *testing.T) {
 		})
 
 		t.Run("valid 3-digit hex on update succeeds", func(t *testing.T) {
-			note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{Title: "test"})
+			note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{Content: "test"})
 			require.NoError(t, err)
 
 			color := "#abc"
@@ -178,7 +193,7 @@ func TestNoteValidation(t *testing.T) {
 		})
 
 		t.Run("valid 6-digit hex on update succeeds", func(t *testing.T) {
-			note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{Title: "test"})
+			note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{Content: "test"})
 			require.NoError(t, err)
 
 			color := "#FFFFFF"
@@ -188,7 +203,7 @@ func TestNoteValidation(t *testing.T) {
 		})
 
 		t.Run("empty string color on update uses default", func(t *testing.T) {
-			note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{Title: "test", Color: "#abc"})
+			note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{Content: "test", Color: "#abc"})
 			require.NoError(t, err)
 
 			empty := ""
