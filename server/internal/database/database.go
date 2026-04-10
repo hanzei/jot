@@ -53,6 +53,7 @@ func New(driver, dsn string) (*sql.DB, error) {
 	}
 
 	if err := runMigrations(db, driver); err != nil {
+		_ = db.Close()
 		return nil, fmt.Errorf("run migrations: %w", err)
 	}
 

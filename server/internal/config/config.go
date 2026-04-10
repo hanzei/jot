@@ -97,9 +97,6 @@ func Load() (*Config, error) {
 	}
 	if v := os.Getenv("DB_DSN"); v != "" {
 		cfg.DBDSN = v
-	} else if v := os.Getenv("DB_PATH"); v != "" {
-		// DB_PATH is a deprecated alias for DB_DSN when DB_DRIVER=sqlite.
-		cfg.DBDSN = v
 	}
 
 	if v := os.Getenv("STATIC_DIR"); v != "" {

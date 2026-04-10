@@ -12,7 +12,6 @@ func TestLoadDefaults(t *testing.T) {
 	t.Setenv("PORT", "")
 	t.Setenv("DB_DRIVER", "")
 	t.Setenv("DB_DSN", "")
-	t.Setenv("DB_PATH", "")
 	t.Setenv("STATIC_DIR", "")
 	t.Setenv("CORS_ALLOWED_ORIGIN", "")
 	t.Setenv("COOKIE_SECURE", "")
@@ -55,18 +54,6 @@ func TestLoadCustomValues(t *testing.T) {
 	assert.Equal(t, 4, cfg.PasswordMinLength)
 }
 
-func TestLoadDBPathAlias(t *testing.T) {
-	t.Setenv("DB_DRIVER", "")
-	t.Setenv("DB_DSN", "")
-	t.Setenv("DB_PATH", "/data/my.db")
-	t.Setenv("STATIC_DIR", "/tmp/static")
-
-	cfg, err := Load()
-	require.NoError(t, err)
-
-	assert.Equal(t, "sqlite", cfg.DBDriver)
-	assert.Equal(t, "/data/my.db", cfg.DBDSN)
-}
 
 func TestLoadInvalidPort(t *testing.T) {
 	t.Setenv("STATIC_DIR", "/tmp/static")
