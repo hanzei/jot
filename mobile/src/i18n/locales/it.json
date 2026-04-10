@@ -67,11 +67,7 @@
     "serverSetupInputA11yLabel": "Campo URL del server",
     "serverSetupSubmitA11yLabel": "Convalida il server e continua",
     "serverSetupConnectionFailed": "Impossibile raggiungere il server. Controlla URL e connessione, poi riprova.",
-    "serverSetupConnectionInvalidServer": "Connessione riuscita, ma questo endpoint API non sembra compatibile con Jot.",
-    "serverSetupExampleLocalhost": "Esempio: http://localhost:8080 (simulatore iOS)",
-    "serverSetupExampleAndroidEmulator": "Esempio: http://10.0.2.2:8080 (emulatore Android)",
-    "serverSetupExampleLan": "Esempio: http://192.168.1.42:8080 (LAN)",
-    "serverSetupExampleHosted": "Esempio: https://notes.example.com (dominio self-hosted)"
+    "serverSetupConnectionInvalidServer": "Connessione riuscita, ma questo endpoint API non sembra compatibile con Jot."
   },
   "dashboard": {
     "newNote": "Nuova nota",
