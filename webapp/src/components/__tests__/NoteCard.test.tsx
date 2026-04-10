@@ -5,7 +5,7 @@ import NoteCard from '../NoteCard'
 import { ToastProvider } from '../Toast'
 import type { Note, NoteItem, User } from '@jot/shared'
 import { notes } from '@/utils/api'
-import { createMockNote } from '@/utils/__tests__/test-helpers'
+import { createMockNote, createMockListNote } from '@/utils/__tests__/test-helpers'
 
 // Mock the API module
 vi.mock('@/utils/api', () => ({
@@ -48,7 +48,7 @@ const renderNoteCard = (props: React.ComponentProps<typeof NoteCard>) => {
 }
 
 const defaultProps = {
-  note: createMockNote({ content: 'This is a test note content' }),
+  note: createMockListNote({ title: 'Test Note' }),
   onEdit: vi.fn(),
   onDelete: vi.fn(),
   currentUserId: 'user1',
@@ -64,38 +64,50 @@ describe('NoteCard', () => {
   })
 
   describe('Basic Rendering', () => {
-    it('renders note title and content', () => {
+    it('renders list note title', () => {
       renderNoteCard(defaultProps)
 
       expect(screen.getByText('Test Note')).toBeInTheDocument()
+    })
+
+    it('renders text note content', () => {
+      const textNote = createMockNote({ content: 'This is a test note content' })
+      renderNoteCard({ ...defaultProps, note: textNote })
+
       expect(screen.getByText('This is a test note content')).toBeInTheDocument()
     })
 
-    it('renders note without title', () => {
-      const noteWithoutTitle = createMockNote({ title: '', content: 'This is a test note content' })
+    it('renders list note without title', () => {
+      const noteWithoutTitle = createMockListNote({ title: '' })
       renderNoteCard({ ...defaultProps, note: noteWithoutTitle })
 
       expect(screen.queryByRole('heading')).not.toBeInTheDocument()
-      expect(screen.getByText('This is a test note content')).toBeInTheDocument()
     })
 
-    it('renders note with extremely long title', () => {
+    it('renders list note with extremely long title', () => {
       const longTitle = 'A'.repeat(500)
-      const noteWithLongTitle = createMockNote({ title: longTitle })
+      const noteWithLongTitle = createMockListNote({ title: longTitle })
       renderNoteCard({ ...defaultProps, note: noteWithLongTitle })
 
       expect(screen.getByText(longTitle)).toBeInTheDocument()
     })
 
-    it('renders note with special characters in title and content', () => {
+    it('renders text note with special characters in content', () => {
       const specialNote = createMockNote({
-        title: 'Special <>&"\'` Characters',
         content: 'Content with <script>alert("xss")</script> and emojis 🚀💡',
       })
       renderNoteCard({ ...defaultProps, note: specialNote })
 
-      expect(screen.getByText('Special <>&"\'` Characters')).toBeInTheDocument()
       expect(screen.getByText('Content with <script>alert("xss")</script> and emojis 🚀💡')).toBeInTheDocument()
+    })
+
+    it('renders list note with special characters in title', () => {
+      const specialNote = createMockListNote({
+        title: 'Special <>&"\'` Characters',
+      })
+      renderNoteCard({ ...defaultProps, note: specialNote })
+
+      expect(screen.getByText('Special <>&"\'` Characters')).toBeInTheDocument()
     })
   })
 
@@ -114,18 +126,18 @@ describe('NoteCard', () => {
     })
 
     it('handles invalid color values gracefully', () => {
-      const invalidColorNote = createMockNote({ color: 'invalid-color' })
+      const invalidColorNote = createMockListNote({ color: 'invalid-color' })
       renderNoteCard({ ...defaultProps, note: invalidColorNote })
 
       // Should still render without throwing errors
-      expect(screen.getByText('Test Note')).toBeInTheDocument()
+      expect(screen.getByTestId('note-card')).toBeInTheDocument()
     })
 
     it('handles malformed hex colors', () => {
       const malformedColors = ['#', '#xyz', 'rgb(255,255,255)', 'blue', '#12345g']
 
       malformedColors.forEach((color, index) => {
-        const coloredNote = createMockNote({ color, title: `Test Note ${index}` })
+        const coloredNote = createMockListNote({ color, title: `Test Note ${index}` })
         const { unmount } = renderNoteCard({ ...defaultProps, note: coloredNote })
 
         expect(screen.getByText(`Test Note ${index}`)).toBeInTheDocument()
@@ -478,7 +490,6 @@ describe('NoteCard', () => {
       const listNote = createMockNote({
         note_type: 'list',
         items: createMockListItems(),
-        content: '', // List notes typically have empty content
       })
 
       renderNoteCard({ ...defaultProps, note: listNote })
@@ -630,7 +641,7 @@ describe('NoteCard', () => {
 
       renderNoteCard({ ...defaultProps, onEdit })
 
-      const noteContent = screen.getByText('This is a test note content')
+      const noteContent = screen.getByText('Test Note')
 
       // Simulate rapid clicking
       await user.click(noteContent)
@@ -657,7 +668,7 @@ describe('NoteCard', () => {
 
     it('handles missing optional props gracefully', () => {
       const minimalProps = {
-        note: createMockNote(),
+        note: createMockListNote(),
         onEdit: vi.fn(),
         onDelete: vi.fn(),
       }
@@ -671,7 +682,7 @@ describe('NoteCard', () => {
   describe('Data Integrity Edge Cases', () => {
     it('handles malformed note data', () => {
       const malformedNote = {
-        ...createMockNote(),
+        ...createMockListNote(),
         created_at: 'invalid-date',
         updated_at: null as unknown as string,
         items: null as unknown as NoteItem[],
@@ -685,6 +696,7 @@ describe('NoteCard', () => {
     it('handles missing note properties', () => {
       const incompleteNote = {
         id: '1',
+        note_type: 'list' as const,
         title: 'Test',
       } as Note
 

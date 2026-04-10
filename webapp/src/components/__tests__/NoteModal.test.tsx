@@ -150,21 +150,40 @@ describe('NoteModal', () => {
   })
 
   describe('Basic Rendering', () => {
-    it('renders create mode correctly', () => {
+    it('renders create mode correctly (text note)', () => {
       renderNoteModal(defaultProps)
 
       expect(screen.getByText('New Note')).toBeInTheDocument()
-      expect(screen.getByPlaceholderText('Note title...')).toBeInTheDocument()
+      // Text notes have no title input
+      expect(screen.queryByPlaceholderText('Note title...')).not.toBeInTheDocument()
       expect(screen.getByPlaceholderText('Take a note...')).toBeInTheDocument()
     })
 
-    it('renders edit mode correctly', () => {
+    it('renders create mode correctly (list note)', () => {
+      renderNoteModal(defaultProps)
+
+      // Switch to list mode
+      fireEvent.click(screen.getByText('List'))
+
+      expect(screen.getByText('New Note')).toBeInTheDocument()
+      expect(screen.getByPlaceholderText('Note title...')).toBeInTheDocument()
+    })
+
+    it('renders edit mode correctly for text note', () => {
       const note = createMockNote()
       renderNoteModal({ ...defaultProps, note })
 
       expect(screen.getByText('Edit Note')).toBeInTheDocument()
-      expect(screen.getByDisplayValue('Test Note')).toBeInTheDocument()
+      // Text notes have no title, only content
       expect(screen.getByDisplayValue('Test content')).toBeInTheDocument()
+    })
+
+    it('renders edit mode correctly for list note', () => {
+      const note = createMockNote({ note_type: 'list', title: 'Test Note' })
+      renderNoteModal({ ...defaultProps, note })
+
+      expect(screen.getByText('Edit Note')).toBeInTheDocument()
+      expect(screen.getByDisplayValue('Test Note')).toBeInTheDocument()
     })
 
     it('shows note type selector only for new notes', () => {
@@ -233,6 +252,9 @@ describe('NoteModal', () => {
     it('handles title validation', async () => {
       renderNoteModal(defaultProps)
 
+      // Switch to list mode to show title input
+      fireEvent.click(screen.getByText('List'))
+
       const titleInput = screen.getByPlaceholderText('Note title...')
 
       // Test maximum length - use change event instead of typing for speed
@@ -294,6 +316,9 @@ describe('NoteModal', () => {
     it('shows error messages for validation failures', async () => {
       renderNoteModal(defaultProps)
 
+      // Switch to list mode to show title input
+      fireEvent.click(screen.getByText('List'))
+
       const titleInput = screen.getByPlaceholderText('Note title...')
       const longTitle = 'a'.repeat(201)
       fireEvent.change(titleInput, { target: { value: longTitle } })
@@ -304,6 +329,9 @@ describe('NoteModal', () => {
 
     it('shows dismiss button for error messages', async () => {
       renderNoteModal(defaultProps)
+
+      // Switch to list mode to show title input
+      fireEvent.click(screen.getByText('List'))
 
       const titleInput = screen.getByPlaceholderText('Note title...')
       const longTitle = 'a'.repeat(201)
@@ -888,7 +916,6 @@ describe('NoteModal', () => {
     it('saves existing list note on close when item text changed', async () => {
       const listNote = createMockNote({
         note_type: 'list',
-        content: '',
         items: [
           {
             id: 'item1',
@@ -998,8 +1025,8 @@ describe('NoteModal', () => {
   })
 
   describe('Dashboard update on property changes', () => {
-    it('autosaves and calls onRefresh when title changes on an existing note', async () => {
-      const note = createMockNote()
+    it('autosaves and calls onRefresh when title changes on an existing list note', async () => {
+      const note = createMockNote({ note_type: 'list', title: 'Test Note' })
       const onRefresh = vi.fn()
       renderNoteModal({ ...defaultProps, onRefresh, note })
 
@@ -1011,8 +1038,11 @@ describe('NoteModal', () => {
       expect(onRefresh).toHaveBeenCalled()
     })
 
-    it('does not autosave title on new notes (no note id)', async () => {
+    it('does not autosave title on new list notes (no note id)', async () => {
       renderNoteModal(defaultProps)
+
+      // Switch to list mode to show title input
+      fireEvent.click(screen.getByText('List'))
 
       const titleInput = screen.getByPlaceholderText('Note title...')
       fireEvent.change(titleInput, { target: { value: 'Some Title' } })
@@ -1066,7 +1096,7 @@ describe('NoteModal', () => {
     })
 
     it('title autosave debounces rapid changes and sends only the latest value', async () => {
-      const note = createMockNote()
+      const note = createMockNote({ note_type: 'list', title: 'Test Note' })
       const onRefresh = vi.fn()
       renderNoteModal({ ...defaultProps, onRefresh, note })
 
@@ -1082,7 +1112,7 @@ describe('NoteModal', () => {
     })
 
     it('color change cancels a pending title debounce and the save includes both changes', async () => {
-      const note = createMockNote()
+      const note = createMockNote({ note_type: 'list', title: 'Test Note' })
       const onRefresh = vi.fn()
       renderNoteModal({ ...defaultProps, onRefresh, note })
 
@@ -1130,6 +1160,7 @@ describe('NoteModal', () => {
     it('handles missing note properties', () => {
       const incompleteNote = {
         id: '1',
+        note_type: 'list' as const,
         title: 'Test',
       } as Note
 
@@ -1149,8 +1180,7 @@ describe('NoteModal', () => {
       await vi.runAllTimersAsync()
 
       expect(mockNotesUpdate).toHaveBeenCalledWith('1', expect.objectContaining({
-        title: note.title,
-        content: note.content,
+        content: note.note_type === 'text' ? note.content : undefined,
       }))
       expect(onDuplicate).toHaveBeenCalledWith('1')
       expect(onClose).toHaveBeenCalled()
