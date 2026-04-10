@@ -77,7 +77,7 @@ func (s *adminStatsStore) GetStats(ctx context.Context) (*AdminStats, error) {
 			COALESCE(SUM(CASE WHEN n.note_type = ? THEN 1 ELSE 0 END), 0),
 			COALESCE(SUM(CASE WHEN n.note_type = ? THEN 1 ELSE 0 END), 0),
 			COALESCE(SUM(CASE WHEN n.deleted_at IS NOT NULL THEN 1 ELSE 0 END), 0),
-			COALESCE(SUM(CASE WHEN nus.archived = 1 AND n.deleted_at IS NULL THEN 1 ELSE 0 END), 0)
+			COALESCE(SUM(CASE WHEN nus.archived = TRUE AND n.deleted_at IS NULL THEN 1 ELSE 0 END), 0)
 		FROM notes n
 		LEFT JOIN note_user_state nus ON n.id = nus.note_id AND nus.user_id = n.user_id
 	`), NoteTypeText, NoteTypeList).Scan(
@@ -110,7 +110,7 @@ func (s *adminStatsStore) GetStats(ctx context.Context) (*AdminStats, error) {
 	if err := s.db.QueryRowContext(ctx, s.d.RewritePlaceholders(`
 		SELECT
 			COUNT(*),
-			COALESCE(SUM(CASE WHEN completed = 1 THEN 1 ELSE 0 END), 0),
+			COALESCE(SUM(CASE WHEN completed = TRUE THEN 1 ELSE 0 END), 0),
 			COALESCE(SUM(CASE WHEN assigned_to IS NOT NULL THEN 1 ELSE 0 END), 0)
 		FROM note_items
 	`)).Scan(&stats.ListItems.Total, &stats.ListItems.Completed, &stats.ListItems.Assigned); err != nil {

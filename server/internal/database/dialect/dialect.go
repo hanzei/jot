@@ -66,6 +66,16 @@ func (d *Dialect) CaseInsensitiveEquals(col string) string {
 	}
 }
 
+// LimitAll returns the dialect-correct expression for "no upper bound" in a
+// LIMIT clause. Use it as: "LIMIT " + d.LimitAll() + " OFFSET ?".
+// SQLite uses -1; PostgreSQL uses ALL.
+func (d *Dialect) LimitAll() string {
+	if d.Driver == DriverPostgres {
+		return "ALL"
+	}
+	return "-1"
+}
+
 // IsUniqueConstraintError reports whether err is a unique-constraint violation
 // from the configured driver.
 func (d *Dialect) IsUniqueConstraintError(err error) bool {

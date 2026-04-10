@@ -105,7 +105,7 @@ func (s *sessionStore) Create(ctx context.Context, userID, userAgent string) (*S
 	evictQuery := `DELETE FROM sessions WHERE token IN (
 		SELECT token FROM sessions WHERE user_id = ? AND expires_at > ?
 		ORDER BY created_at DESC
-		LIMIT -1 OFFSET ?
+		LIMIT ` + s.d.LimitAll() + ` OFFSET ?
 	)`
 	evictResult, err := tx.ExecContext(ctx, s.d.RewritePlaceholders(evictQuery), userID, now, MaxSessionsPerUser-1)
 	if err != nil {

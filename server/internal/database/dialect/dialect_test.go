@@ -67,6 +67,18 @@ func TestCaseInsensitiveEquals(t *testing.T) {
 	})
 }
 
+func TestLimitAll(t *testing.T) {
+	t.Run("SQLite returns -1", func(t *testing.T) {
+		d := &dialect.Dialect{Driver: "sqlite"}
+		assert.Equal(t, "-1", d.LimitAll())
+	})
+
+	t.Run("PostgreSQL returns ALL", func(t *testing.T) {
+		d := &dialect.Dialect{Driver: "postgres"}
+		assert.Equal(t, "ALL", d.LimitAll())
+	})
+}
+
 func TestIsUniqueConstraintError(t *testing.T) {
 	t.Run("PostgreSQL 23505 returns true", func(t *testing.T) {
 		d := &dialect.Dialect{Driver: "postgres"}
