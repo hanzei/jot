@@ -146,3 +146,8 @@ jest.mock('@expo/vector-icons/Ionicons', () => {
 
 const i18n = require('./src/i18n').default;
 void i18n.changeLanguage('en');
+
+// Force axios to use the http adapter in Jest to avoid the fetch adapter
+// capability probe (ReadableStream.cancel) crashing against Expo's polyfill.
+const axios = require('axios');
+axios.defaults.adapter = 'http';
