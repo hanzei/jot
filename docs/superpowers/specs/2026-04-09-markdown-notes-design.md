@@ -1,117 +1,111 @@
 # Markdown Support for Text Notes
 
 **Date:** 2026-04-09  
-**Status:** Approved
+**Updated:** 2026-04-10  
+**Status:** Implemented (webapp) — Mobile deferred
 
 ## Overview
 
-Add markdown rendering to text notes. The content field stays plain text (no schema change); markdown is stored as-is and rendered at display time. The UX uses a seamless render-on-blur pattern: the note looks formatted when not being edited, and switches to raw markdown when the user clicks or taps in.
+Add markdown rendering to text notes. The content field stays plain text (no schema change); markdown is stored as-is and rendered at display time. The UX uses a render-on-blur pattern: the note shows formatted markdown by default and switches to a raw textarea when the user clicks in.
 
 ## Scope
 
-- Webapp: note modal editor + note card preview
-- Mobile (React Native): note editor screen
-- Shared: a markdown renderer utility used by both webapp and mobile card previews
+- Webapp: note modal editor + note card preview ✅
+- Mobile (React Native): deferred to follow-up
+- Shared: markdown renderer utility (`webapp/src/utils/markdown.ts`) ✅
 
-Out of scope: todo note items, rich-text WYSIWYG, markdown in titles.
+Out of scope: todo/list note items, rich-text WYSIWYG, markdown in titles.
 
 ## Webapp
 
 ### Note Modal — Editor
 
-The text content area switches between two visual states with no border, background, or font change between them — the transition should feel invisible.
+Text notes have no title field. The content area switches between two states.
 
-**Preview state (unfocused)**
-- Content is rendered as HTML via a markdown renderer
+**Preview state (default for existing notes)**
+- Content rendered as HTML via `renderMarkdown()`
 - Clicking anywhere in the content area enters edit mode
+- The backdrop has a neutral dark overlay
 
-**Edit state (focused)**
-- A plain `<textarea>` replaces the rendered view; same font family, size (`14px`), and line-height (`1.6`) as the rendered view
-- The textarea auto-resizes to content (existing behavior preserved)
-- A formatting toolbar appears below the textarea, separated by a thin divider line:
-  - **B** — wraps selection in `**...**`
-  - *I* — wraps selection in `*...*`
-  - **H₁** — prepends `## ` to the current line
-  - **• list** — inserts `- ` at the start of the current line (or on a new line)
-- Toolbar is hidden in preview state
+**Edit state**
+- A plain `<textarea>` with a subtle grey background (`bg-gray-50 dark:bg-slate-700/40`) replaces the rendered view
+- The textarea auto-resizes to its full content height — no max-height cap; the modal's own scroll container handles overflow
+- The backdrop shifts to a deep blue-tinted overlay (`bg-blue-950/50`) to visually signal editing
+- A **Done** button appears below the textarea (right-aligned, blue text) to exit edit mode
+- Clicking "Done" or pressing Escape collapses back to preview
 
 **Collapsing to preview**
-- Pressing Esc
-- Clicking the modal backdrop while editing (first click — see dismiss flow below)
-- Toolbar buttons use `mousedown` + `preventDefault` to retain textarea focus; blur is not used to trigger collapse
+- Pressing Escape
+- Clicking the "Done" button
+- Clicking the modal backdrop (first click — see dismiss flow below)
 
 **Two-step modal dismiss**
-- While in edit state: clicking the backdrop collapses to preview, modal stays open
-- While in preview state: clicking the backdrop closes the modal (existing behavior)
+- While in edit state: backdrop click or Escape collapses to preview, modal stays open
+- While in preview state: backdrop click or Escape closes the modal
 - The `×` close button always closes immediately regardless of state
+- Implementation: HeadlessUI's `onClose` handles Escape; a `backdropHandledRef` flag prevents double-firing when clicking outside
+
+**No formatting toolbar** — removed after initial implementation; users write markdown syntax directly.
+
+**New note behaviour**: new text notes open directly in edit mode (textarea visible, no preview step).
 
 ### Note Card — Dashboard Preview
 
-- Text note content rendered as markdown (same renderer), existing `line-clamp-6` and `whitespace-pre-wrap` replaced with rendered HTML
+- Title is **not displayed** on text note cards (title still saved, used for `aria-label` and page title)
+- Text content rendered as markdown via `renderMarkdown()`, line-clamped to 6 lines
 - Links, bold, italic, headings, and lists render visually in the card
 
 ### Markdown Feature Set
 
-Supported syntax (sufficient for notes use case, avoids complexity):
+All standard ATX headings are supported:
 
 | Syntax | Output |
 |--------|--------|
+| `# Heading` | `<h1>` |
 | `## Heading` | `<h2>` |
 | `### Heading` | `<h3>` |
 | `**bold**` | `<strong>` |
 | `*italic*` | `<em>` |
 | `- item` | `<ul><li>` |
+| `1. item` | `<ol><li>` |
 | `> quote` | `<blockquote>` |
 | `` `code` `` | `<code>` |
-| `[text](url)` | `<a>` |
+| `[text](url)` | `<a target="_blank" rel="noopener noreferrer">` |
 
-Not supported in this iteration: tables, fenced code blocks, nested lists beyond one level, images.
+Not supported in this iteration: tables, fenced code blocks, images.
 
-### Markdown Renderer
+### Markdown Renderer (`webapp/src/utils/markdown.ts`)
 
-A small dedicated utility (e.g. `webapp/src/utils/markdown.ts`) wrapping a lightweight library such as [marked](https://marked.js.org/) or [micromark](https://github.com/micromark/micromark), configured to:
-- Sanitize output (no raw HTML passthrough) to prevent XSS
-- Produce only the supported subset above
+Uses `marked` (v18+) for parsing and `DOMPurify` for XSS sanitization:
+- `marked.parse(content, { async: false })` — synchronous, GFM enabled, `breaks: true`
+- Custom link renderer adds `target="_blank" rel="noopener noreferrer"` and `encodeURI` on href
+- DOMPurify allowlist: `h1, h2, h3, p, br, strong, em, ul, ol, li, blockquote, code, a`
+- `@types/dompurify` not needed — DOMPurify v3 ships its own declarations
+- Returns `''` for blank/whitespace-only input
+- Fallback: if `renderMarkdown` returns empty for non-empty content (e.g. plain text with HTML-special chars stripped), HTML-escapes the raw content so it is never silently hidden
 
-The same renderer is used in the note modal and the note card.
+### CSS (`webapp/src/index.css`)
+
+`.markdown-content` component class provides heading, list, blockquote, code, and link styles that restore browser defaults removed by Tailwind's preflight reset. Applied to both the note card preview div and the modal preview div.
+
+### Internationalisation
+
+i18n keys added to all 8 locale files (`en`, `de`, `es`, `fr`, `it`, `nl`, `pl`, `pt`):
+- `note.formatBold`, `note.formatItalic`, `note.formatHeading`, `note.formatBulletList` — kept for future toolbar re-introduction
+- `common.done` — used by the Done button in the modal
 
 ## Mobile (React Native)
 
-### Note Editor Screen
-
-The same render-on-blur pattern, adapted to touch and keyboard lifecycle.
-
-**Preview state**
-- Content rendered as markdown using a React Native markdown renderer (e.g. `react-native-markdown-display`)
-- Tapping the content area enters edit mode
-
-**Edit state (keyboard open)**
-- A `TextInput` (multiline) replaces the rendered view; same font and size
-- **Done button** appears in the top-right header, replacing the note type toggle
-  - Tapping Done: dismisses keyboard → collapses to preview
-  - Type toggle reappears in preview state
-- **Formatting toolbar** docks immediately above the keyboard:
-  - iOS: implemented as `inputAccessoryView`
-  - Android: positioned in the layout above the keyboard frame via `KeyboardAvoidingView`
-  - Buttons: **B**, *I*, **H₁**, **• list** (same actions as webapp)
-- The existing bottom toolbar (color, share, pin, archive, duplicate, labels, delete) remains visible in both states, pushed up by the keyboard in edit state
-
-**Collapsing to preview**
-- Tapping Done
-- Keyboard dismissed via system gesture (swipe down / system back)
-- Navigating back while in edit state saves content and collapses before exit
+Deferred. Design remains as originally specified (Done button in header, formatting toolbar via `InputAccessoryView`, `react-native-markdown-display`). See mobile states mockup in `docs/superpowers/`.
 
 ## Storage
 
 No schema changes. The `content` field on the `Note` model remains a plain `string`. Markdown syntax is stored verbatim and rendered at read time. Existing plain-text notes render correctly (plain text is valid markdown).
-
-## Internationalisation
-
-Formatting toolbar buttons require i18n keys for accessibility labels (e.g. `note.formatBold`, `note.formatItalic`, `note.formatHeading`, `note.formatBulletList`). Add keys to all 8 locale files (`en`, `de`, `es`, `fr`, `it`, `nl`, `pl`, `pt`) and run `task check-translations` to verify.
 
 ## Non-goals
 
 - No migration of existing note content
 - No server-side rendering or markdown-to-HTML storage
 - No WYSIWYG / contenteditable editor
-- No markdown support in note titles or todo item text
+- No markdown support in todo/list item text
+- No title field on text notes (title stored but not displayed in modal or card)
