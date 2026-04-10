@@ -28,12 +28,11 @@ export class DashboardPage {
     await expect(this.page.locator('[data-testid="note-card"]').filter({ hasText: title })).toBeVisible();
   }
 
-  /** Creates a new list note with labels attached during creation. */
+  /** Creates a new text note with labels attached during creation. */
   async createNoteWithLabels(title: string, _content: string, labelNames: string[]) {
     await this.clickNewNote();
-    // List notes have a title field; switch to list type to use the title for identification.
-    await this.selectListType();
-    await this.page.fill('input[placeholder="Note title..."]', title);
+    // Text notes have a content textarea; fill with title so the card can be identified by hasText.
+    await this.page.fill('textarea[placeholder="Take a note..."]', title);
 
     for (const labelName of labelNames) {
       await this.page.getByRole('button', { name: 'Add labels' }).click();
@@ -46,8 +45,8 @@ export class DashboardPage {
         await this.page.keyboard.press('Enter');
       }
       await expect(this.page.getByRole('checkbox', { name: labelName })).toBeChecked();
-      // Click outside picker to close it
-      await this.page.locator('input[placeholder="Note title..."]').click();
+      // Click back on the content textarea to close the label picker without triggering list item behavior.
+      await this.page.locator('textarea[placeholder="Take a note..."]').click();
     }
 
     await this.closeActiveDialog();
@@ -118,9 +117,7 @@ export class DashboardPage {
   }
 
   async openNote(title: string) {
-    await this.page.locator('[data-testid="note-card"]').filter({
-      has: this.page.locator('h3').getByText(title, { exact: true }),
-    }).click();
+    await this.page.locator('[data-testid="note-card"]').filter({ hasText: title }).click();
   }
 
   async closeNoteModal() {
@@ -128,9 +125,7 @@ export class DashboardPage {
   }
 
   private async openNoteMenu(title: string) {
-    const card = this.page.locator('[data-testid="note-card"]').filter({
-      has: this.page.locator('h3').getByText(title, { exact: true }),
-    });
+    const card = this.page.locator('[data-testid="note-card"]').filter({ hasText: title });
     await expect(card).toBeVisible();
     const menuButton = card.getByRole('button', { name: 'Note options' });
     // Focus + keyboard activation avoids pointer-interception flakes from overlays.
@@ -371,13 +366,11 @@ export class DashboardPage {
     await expect(this.page.getByRole('button', { name: 'Profile menu' })).toHaveAttribute('title', expected);
   }
 
-  async editNote(title: string, newTitle: string, newContent: string) {
+  async editNote(title: string, newTitle: string, _newContent: string) {
     await this.openNote(title);
     await expect(this.page.getByRole('heading', { name: 'Edit Note' })).toBeVisible();
+    // createNote creates list notes which have a title input; edit only the title.
     await this.page.fill('input[placeholder="Note title..."]', newTitle);
-    // Existing notes open in preview mode — click preview to enter edit mode first
-    await this.page.getByTestId('note-content-preview').click();
-    await this.page.fill('textarea[placeholder="Take a note..."]', newContent);
     await this.closeActiveDialog();
   }
 
@@ -393,9 +386,7 @@ export class DashboardPage {
     await expect(this.page.getByRole('checkbox', { name: labelName })).toBeChecked();
     // Closing the modal also dismisses the picker (outside-click fires on mousedown)
     await this.closeActiveDialog();
-    await expect(this.page.locator('[data-testid="note-card"]').filter({
-      has: this.page.locator('h3').getByText(noteTitle, { exact: true }),
-    })).toBeVisible();
+    await expect(this.page.locator('[data-testid="note-card"]').filter({ hasText: noteTitle })).toBeVisible();
   }
 
   /** Clicks a label button in the sidebar to toggle the label filter. */
