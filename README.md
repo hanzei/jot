@@ -115,7 +115,8 @@ Configure the application using environment variables or `.env` file:
 
 ```bash
 # Database configuration
-DB_PATH=./jot.db                     # SQLite database file location
+DB_DRIVER=sqlite                    # Database driver: "sqlite" (default) or "postgres"
+DB_DSN=./jot.db                     # Database connection string (SQLite file path or Postgres DSN)
 
 # Server configuration
 PORT=8080                           # Server port (optional)
@@ -161,7 +162,7 @@ Create `.env` file for production:
 
 ```bash
 # Production environment
-DB_PATH=/var/lib/jot/jot.db
+DB_DSN=/var/lib/jot/jot.db
 PORT=8080
 ```
 
@@ -221,7 +222,7 @@ services:
   jot:
     image: hanzei/jot:latest
     environment:
-      - DB_PATH=/data/production.db
+      - DB_DSN=/data/production.db
     volumes:
       - ./custom-data:/data
     ports:
