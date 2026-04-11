@@ -25,7 +25,6 @@ FROM golang:1.25-alpine AS backend-builder
 
 WORKDIR /src
 
-
 ARG COMMIT_SHA=unknown
 ARG VERSION=dev
 ARG BUILD_DATE=""
@@ -71,7 +70,7 @@ RUN mkdir -p /data
 EXPOSE 8080
 
 # Set environment variables
-ENV DB_PATH=/data/jot.db
+ENV DB_DSN=/data/jot.db
 ENV STATIC_DIR=/app/webapp/build
 
 # Run the application

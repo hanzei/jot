@@ -96,7 +96,7 @@ func TestLoadInvalidPort(t *testing.T) {
 
 func TestLoadStaticDirDefault(t *testing.T) {
 	t.Setenv("PORT", "")
-	t.Setenv("DB_PATH", "")
+	t.Setenv("DB_DSN", "")
 	t.Setenv("STATIC_DIR", "")
 	t.Setenv("CORS_ALLOWED_ORIGIN", "")
 	t.Setenv("COOKIE_SECURE", "")
