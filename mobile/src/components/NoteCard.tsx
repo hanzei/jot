@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import Markdown from 'react-native-markdown-display';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useTranslation } from 'react-i18next';
 import { VALIDATION, type Note, type NoteItem, type User } from '@jot/shared';
@@ -168,9 +169,11 @@ function NoteCard({ note, onPress, onLongPress, onMenuPress }: NoteCardProps) {
       </View>
 
       {note.note_type === 'text' && note.content ? (
-        <Text style={[styles.content, { color: hasColor ? '#666' : colors.textSecondary }]} numberOfLines={3}>
-          {note.content}
-        </Text>
+        <View style={styles.contentPreview}>
+          <Markdown style={{ body: { color: hasColor ? '#666' : colors.textSecondary, fontSize: 14, lineHeight: 20 } }}>
+            {note.content}
+          </Markdown>
+        </View>
       ) : null}
 
       {note.note_type === 'list' && note.items && note.items.length > 0 ? (
@@ -229,6 +232,10 @@ const styles = StyleSheet.create({
   content: {
     fontSize: 14,
     lineHeight: 20,
+  },
+  contentPreview: {
+    maxHeight: 60,
+    overflow: 'hidden',
   },
   listPreview: {
     marginTop: 4,

@@ -9,7 +9,8 @@
     "clearSearch": "Borrar búsqueda",
     "error": "Error",
     "unknown": "desconocido",
-    "loading": "Cargando..."
+    "loading": "Cargando...",
+    "done": "Listo"
   },
   "nav": {
     "settings": "Ajustes",
@@ -263,7 +264,11 @@
     "colorLavender": "Lavanda",
     "colorPink": "Rosa",
     "colorSand": "Arena",
-    "colorGray": "Gris"
+    "colorGray": "Gris",
+    "formatBold": "Negrita",
+    "formatItalic": "Cursiva",
+    "formatHeading": "Encabezado",
+    "formatBulletList": "Lista de viñetas"
   },
   "labels": {
     "title": "Etiquetas",

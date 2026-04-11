@@ -9,7 +9,8 @@
     "clearSearch": "Effacer la recherche",
     "error": "Erreur",
     "unknown": "inconnu",
-    "loading": "Chargement..."
+    "loading": "Chargement...",
+    "done": "Terminé"
   },
   "nav": {
     "settings": "Paramètres",
@@ -248,7 +249,11 @@
     "colorLavender": "Lavande",
     "colorPink": "Rose",
     "colorSand": "Sable",
-    "colorGray": "Gris"
+    "colorGray": "Gris",
+    "formatBold": "Gras",
+    "formatItalic": "Italique",
+    "formatHeading": "Titre",
+    "formatBulletList": "Liste à puces"
   },
   "labels": {
     "title": "Étiquettes",

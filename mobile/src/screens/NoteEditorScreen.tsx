@@ -9,9 +9,12 @@ import {
   StyleSheet,
   KeyboardAvoidingView,
   Platform,
+  InputAccessoryView,
+  Keyboard,
   type TextInputProps,
   type TextInput as TextInputType,
 } from 'react-native';
+import Markdown from 'react-native-markdown-display';
 import DraggableFlatList, { ScaleDecorator } from 'react-native-draggable-flatlist';
 import * as Haptics from 'expo-haptics';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -39,6 +42,7 @@ type EditorNavProp = NativeStackNavigationProp<RootStackParamList, 'NoteEditor'>
 
 const IOS_KEYBOARD_VERTICAL_OFFSET = 88;
 const FOCUSED_INPUT_KEYBOARD_MARGIN = 120;
+const MARKDOWN_TOOLBAR_ID = 'markdown-formatting-toolbar';
 
 interface LocalItem {
   id: string;
@@ -97,6 +101,7 @@ export default function NoteEditorScreen() {
   const [assigneePickerVisible, setAssigneePickerVisible] = useState(false);
   const [assigningItemId, setAssigningItemId] = useState<string | null>(null);
   const [syncToast, setSyncToast] = useState<string | null>(null);
+  const [isEditingContent, setIsEditingContent] = useState(initialNoteId === null);
   const { usersById } = useUsers();
   const { showToast } = useToast();
 
@@ -125,6 +130,13 @@ export default function NoteEditorScreen() {
     setSaveError(null);
     setSyncToast(null);
   }, [i18n.language]);
+
+  useEffect(() => {
+    const sub = Keyboard.addListener('keyboardDidHide', () => {
+      setIsEditingContent(false);
+    });
+    return () => sub.remove();
+  }, []);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const isMountedRef = useRef(true);
@@ -868,6 +880,36 @@ export default function NoteEditorScreen() {
     [getItemRef, handleToggleItem, handleItemTextChange, handleDeleteItem, handleInsertItemAfter, handleBackspaceOnEmpty, isNoteShared, collaborators, openAssigneePicker, handleIndentItem, isDark, colors, handleListItemFocus],
   );
 
+  const applyToolbarEdit = useCallback((updater: (prev: string) => string) => {
+    const next = updater(contentRef.current);
+    if (next === contentRef.current || next.length > VALIDATION.CONTENT_MAX_LENGTH) {
+      return;
+    }
+    setContent(next);
+    markDirtyAndScheduleUpdate();
+    contentInputRef.current?.focus();
+  }, [markDirtyAndScheduleUpdate]);
+
+  const wrapMobileSelection = useCallback((before: string, after: string) => {
+    applyToolbarEdit((prev) => prev + before + after);
+  }, [applyToolbarEdit]);
+
+  const insertMobileBullet = useCallback(() => {
+    applyToolbarEdit((prev) => {
+      const insert = (prev.endsWith('\n') || prev === '') ? '- ' : '\n- ';
+      return prev + insert;
+    });
+  }, [applyToolbarEdit]);
+
+  const insertMobileHeading = useCallback(() => {
+    applyToolbarEdit((prev) => {
+      const lines = prev.split('\n');
+      const lastLine = lines[lines.length - 1];
+      if (lastLine.startsWith('## ')) return prev;
+      return prev + (prev.endsWith('\n') || prev === '' ? '' : '\n') + '## ';
+    });
+  }, [applyToolbarEdit]);
+
   const hasNoteColor = !!color && !isWhiteHexColor(color);
   const noteBackground = hasNoteColor ? color : colors.surface;
   const completedSectionDividerColor = hasNoteColor
@@ -889,17 +931,29 @@ export default function NoteEditorScreen() {
           <Ionicons name="arrow-back" size={24} color={hasNoteColor ? '#1a1a1a' : colors.text} />
         </TouchableOpacity>
         <View style={styles.headerRight}>
-          {!hasCreated && (
-            <TouchableOpacity onPress={handleToggleNoteType} style={[styles.typeToggle, { backgroundColor: colors.primaryLight }]} testID="toggle-note-type">
-              <Ionicons
-                name={noteType === 'text' ? 'list' : 'document-text-outline'}
-                size={22}
-                color={colors.primary}
-              />
+          {noteType === 'text' && isEditingContent && hasCreated ? (
+            <TouchableOpacity
+              onPress={() => { Keyboard.dismiss(); setIsEditingContent(false); }}
+              style={[styles.typeToggle, { backgroundColor: colors.primaryLight }]}
+              testID="done-editing-btn"
+            >
               <Text style={[styles.typeToggleText, { color: colors.primary }]}>
-                {noteType === 'text' ? t('note.typeList') : t('note.typeText')}
+                {t('common.done')}
               </Text>
             </TouchableOpacity>
+          ) : (
+            !hasCreated && (
+              <TouchableOpacity onPress={handleToggleNoteType} style={[styles.typeToggle, { backgroundColor: colors.primaryLight }]} testID="toggle-note-type">
+                <Ionicons
+                  name={noteType === 'text' ? 'list' : 'document-text-outline'}
+                  size={22}
+                  color={colors.primary}
+                />
+                <Text style={[styles.typeToggleText, { color: colors.primary }]}>
+                  {noteType === 'text' ? t('note.typeList') : t('note.typeText')}
+                </Text>
+              </TouchableOpacity>
+            )
           )}
         </View>
       </View>
@@ -955,19 +1009,82 @@ export default function NoteEditorScreen() {
         )}
 
         {noteType === 'text' ? (
-          <TextInput
-            ref={contentInputRef}
-            style={[styles.contentInput, { color: hasNoteColor ? '#1a1a1a' : colors.text }]}
-            value={content}
-            onChangeText={handleContentChange}
-            placeholder={t('note.contentPlaceholder')}
-            placeholderTextColor={hasNoteColor ? '#999' : colors.placeholder}
-            multiline
-            textAlignVertical="top"
-            maxLength={VALIDATION.CONTENT_MAX_LENGTH}
-            editable={!isHydrating}
-            testID="note-content-input"
-          />
+          <>
+            {isEditingContent ? (
+              <TextInput
+                ref={contentInputRef}
+                autoFocus
+                inputAccessoryViewID={Platform.OS === 'ios' ? MARKDOWN_TOOLBAR_ID : undefined}
+                multiline
+                autoCapitalize="sentences"
+                placeholder={t('note.contentPlaceholder')}
+                placeholderTextColor={hasNoteColor ? '#999' : colors.placeholder}
+                style={[styles.contentInput, { color: hasNoteColor ? '#1a1a1a' : colors.text }]}
+                value={content}
+                onChangeText={handleContentChange}
+                textAlignVertical="top"
+                editable={!isHydrating}
+                testID="note-content-input"
+              />
+            ) : (
+              <TouchableOpacity
+                onPress={() => setIsEditingContent(true)}
+                activeOpacity={1}
+                testID="content-preview"
+                style={styles.contentPreview}
+              >
+                {content ? (
+                  <Markdown style={{ body: { color: hasNoteColor ? '#1a1a1a' : colors.text, fontSize: 14, lineHeight: 22 } }}>
+                    {content}
+                  </Markdown>
+                ) : (
+                  <Text style={{ color: hasNoteColor ? '#999' : colors.placeholder, fontSize: 14 }}>
+                    {t('note.contentPlaceholder')}
+                  </Text>
+                )}
+              </TouchableOpacity>
+            )}
+
+            {/* Android: formatting toolbar in layout (shown when editing) */}
+            {Platform.OS === 'android' && isEditingContent && (
+              <View style={[styles.formattingToolbar, { backgroundColor: colors.surfaceVariant, borderTopColor: colors.border }]}>
+                <TouchableOpacity onPress={() => wrapMobileSelection('**', '**')} style={styles.fmtBtn} accessibilityLabel={t('note.formatBold')}>
+                  <Text style={[styles.fmtBtnText, { color: colors.text, fontWeight: '700' }]}>B</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={() => wrapMobileSelection('*', '*')} style={styles.fmtBtn} accessibilityLabel={t('note.formatItalic')}>
+                  <Text style={[styles.fmtBtnText, { color: colors.text, fontStyle: 'italic' }]}>I</Text>
+                </TouchableOpacity>
+                <View style={[styles.fmtSep, { backgroundColor: colors.border }]} />
+                <TouchableOpacity onPress={insertMobileHeading} style={styles.fmtBtn} accessibilityLabel={t('note.formatHeading')}>
+                  <Text style={[styles.fmtBtnText, { color: colors.text }]}>H₂</Text>
+                </TouchableOpacity>
+                <TouchableOpacity onPress={insertMobileBullet} style={styles.fmtBtn} accessibilityLabel={t('note.formatBulletList')}>
+                  <Text style={[styles.fmtBtnText, { color: colors.text }]}>• list</Text>
+                </TouchableOpacity>
+              </View>
+            )}
+
+            {/* iOS: formatting toolbar as InputAccessoryView (docks above keyboard) */}
+            {Platform.OS === 'ios' && noteType === 'text' && (
+              <InputAccessoryView nativeID={MARKDOWN_TOOLBAR_ID}>
+                <View style={[styles.formattingToolbar, { backgroundColor: colors.surfaceVariant, borderTopColor: colors.border }]}>
+                  <TouchableOpacity onPress={() => wrapMobileSelection('**', '**')} style={styles.fmtBtn} accessibilityLabel={t('note.formatBold')}>
+                    <Text style={[styles.fmtBtnText, { color: colors.text, fontWeight: '700' }]}>B</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={() => wrapMobileSelection('*', '*')} style={styles.fmtBtn} accessibilityLabel={t('note.formatItalic')}>
+                    <Text style={[styles.fmtBtnText, { color: colors.text, fontStyle: 'italic' }]}>I</Text>
+                  </TouchableOpacity>
+                  <View style={[styles.fmtSep, { backgroundColor: colors.border }]} />
+                  <TouchableOpacity onPress={insertMobileHeading} style={styles.fmtBtn} accessibilityLabel={t('note.formatHeading')}>
+                    <Text style={[styles.fmtBtnText, { color: colors.text }]}>H₂</Text>
+                  </TouchableOpacity>
+                  <TouchableOpacity onPress={insertMobileBullet} style={styles.fmtBtn} accessibilityLabel={t('note.formatBulletList')}>
+                    <Text style={[styles.fmtBtnText, { color: colors.text }]}>• list</Text>
+                  </TouchableOpacity>
+                </View>
+              </InputAccessoryView>
+            )}
+          </>
         ) : (
           <View style={styles.listContainer}>
             <DraggableFlatList
@@ -1267,5 +1384,31 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.15,
     shadowRadius: 4,
+  },
+  contentPreview: {
+    flex: 1,
+    paddingHorizontal: 0,
+    paddingTop: 8,
+    minHeight: 120,
+  },
+  formattingToolbar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingHorizontal: 8,
+    paddingVertical: 6,
+    borderTopWidth: StyleSheet.hairlineWidth,
+  },
+  fmtBtn: {
+    paddingHorizontal: 10,
+    paddingVertical: 6,
+    borderRadius: 6,
+  },
+  fmtBtnText: {
+    fontSize: 14,
+  },
+  fmtSep: {
+    width: StyleSheet.hairlineWidth,
+    height: 18,
+    marginHorizontal: 4,
   },
 });
