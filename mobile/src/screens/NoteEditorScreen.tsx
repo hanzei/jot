@@ -880,28 +880,35 @@ export default function NoteEditorScreen() {
     [getItemRef, handleToggleItem, handleItemTextChange, handleDeleteItem, handleInsertItemAfter, handleBackspaceOnEmpty, isNoteShared, collaborators, openAssigneePicker, handleIndentItem, isDark, colors, handleListItemFocus],
   );
 
-  const wrapMobileSelection = useCallback((before: string, after: string) => {
-    setContent((prev) => prev + before + after);
+  const applyToolbarEdit = useCallback((updater: (prev: string) => string) => {
+    const next = updater(contentRef.current);
+    if (next === contentRef.current || next.length > VALIDATION.CONTENT_MAX_LENGTH) {
+      return;
+    }
+    setContent(next);
+    markDirtyAndScheduleUpdate();
     contentInputRef.current?.focus();
-  }, []);
+  }, [markDirtyAndScheduleUpdate]);
+
+  const wrapMobileSelection = useCallback((before: string, after: string) => {
+    applyToolbarEdit((prev) => prev + before + after);
+  }, [applyToolbarEdit]);
 
   const insertMobileBullet = useCallback(() => {
-    setContent((prev) => {
+    applyToolbarEdit((prev) => {
       const insert = (prev.endsWith('\n') || prev === '') ? '- ' : '\n- ';
       return prev + insert;
     });
-    contentInputRef.current?.focus();
-  }, []);
+  }, [applyToolbarEdit]);
 
   const insertMobileHeading = useCallback(() => {
-    setContent((prev) => {
+    applyToolbarEdit((prev) => {
       const lines = prev.split('\n');
       const lastLine = lines[lines.length - 1];
       if (lastLine.startsWith('## ')) return prev;
       return prev + (prev.endsWith('\n') || prev === '' ? '' : '\n') + '## ';
     });
-    contentInputRef.current?.focus();
-  }, []);
+  }, [applyToolbarEdit]);
 
   const hasNoteColor = !!color && !isWhiteHexColor(color);
   const noteBackground = hasNoteColor ? color : colors.surface;
@@ -1006,6 +1013,7 @@ export default function NoteEditorScreen() {
             {isEditingContent ? (
               <TextInput
                 ref={contentInputRef}
+                autoFocus
                 inputAccessoryViewID={Platform.OS === 'ios' ? MARKDOWN_TOOLBAR_ID : undefined}
                 multiline
                 autoCapitalize="sentences"
