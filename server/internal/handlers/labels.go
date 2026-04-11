@@ -126,6 +126,7 @@ func (h *LabelsHandler) CreateLabel(w http.ResponseWriter, r *http.Request) (int
 		return http.StatusUnauthorized, nil, errors.New("unauthorized")
 	}
 
+	r.Body = http.MaxBytesReader(w, r.Body, maxJSONBodySize)
 	var req AddLabelRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		return http.StatusBadRequest, nil, errors.New("invalid request body")
@@ -177,6 +178,7 @@ func (h *LabelsHandler) RenameLabel(w http.ResponseWriter, r *http.Request) (int
 
 	labelID := chi.URLParam(r, "id")
 
+	r.Body = http.MaxBytesReader(w, r.Body, maxJSONBodySize)
 	var req RenameLabelRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		return http.StatusBadRequest, nil, errors.New("invalid request body")
@@ -235,6 +237,7 @@ func (h *LabelsHandler) AddLabel(w http.ResponseWriter, r *http.Request) (int, a
 
 	noteID := chi.URLParam(r, "id")
 
+	r.Body = http.MaxBytesReader(w, r.Body, maxJSONBodySize)
 	var req AddLabelRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		return http.StatusBadRequest, nil, errors.New("invalid request body")

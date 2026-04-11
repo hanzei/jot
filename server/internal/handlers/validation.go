@@ -26,6 +26,8 @@ const (
 	// maxPATsPerUser caps the number of personal access tokens a user can hold.
 	// Keep in sync with shared/src/constants.ts VALIDATION.PAT_MAX_COUNT.
 	maxPATsPerUser = 50
+	// maxJSONBodySize is the maximum request body size for JSON endpoints.
+	maxJSONBodySize = 1 << 20 // 1 MiB
 )
 
 func validateUsername(username string) error {
