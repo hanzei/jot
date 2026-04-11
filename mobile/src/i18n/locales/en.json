@@ -9,7 +9,8 @@
     "clearSearch": "Clear search",
     "error": "Error",
     "unknown": "unknown",
-    "loading": "Loading..."
+    "loading": "Loading...",
+    "done": "Done"
   },
   "nav": {
     "settings": "Settings",
@@ -263,7 +264,11 @@
     "colorLavender": "Lavender",
     "colorPink": "Pink",
     "colorSand": "Sand",
-    "colorGray": "Gray"
+    "colorGray": "Gray",
+    "formatBold": "Bold",
+    "formatItalic": "Italic",
+    "formatHeading": "Heading",
+    "formatBulletList": "Bullet list"
   },
   "labels": {
     "title": "Labels",

@@ -9,7 +9,8 @@
     "clearSearch": "Wyczyść wyszukiwanie",
     "error": "Błąd",
     "unknown": "nieznany",
-    "loading": "Ładowanie..."
+    "loading": "Ładowanie...",
+    "done": "Gotowe"
   },
   "nav": {
     "settings": "Ustawienia",
@@ -248,7 +249,11 @@
     "colorLavender": "Lawendowy",
     "colorPink": "Różowy",
     "colorSand": "Piaskowy",
-    "colorGray": "Szary"
+    "colorGray": "Szary",
+    "formatBold": "Pogrubienie",
+    "formatItalic": "Kursywa",
+    "formatHeading": "Nagłówek",
+    "formatBulletList": "Lista punktowana"
   },
   "labels": {
     "title": "Etykiety",

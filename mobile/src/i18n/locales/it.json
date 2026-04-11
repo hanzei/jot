@@ -9,7 +9,8 @@
     "clearSearch": "Cancella ricerca",
     "error": "Errore",
     "unknown": "sconosciuto",
-    "loading": "Caricamento..."
+    "loading": "Caricamento...",
+    "done": "Fatto"
   },
   "nav": {
     "settings": "Impostazioni",
@@ -263,7 +264,11 @@
     "colorLavender": "Lavanda",
     "colorPink": "Rosa",
     "colorSand": "Sabbia",
-    "colorGray": "Grigio"
+    "colorGray": "Grigio",
+    "formatBold": "Grassetto",
+    "formatItalic": "Corsivo",
+    "formatHeading": "Intestazione",
+    "formatBulletList": "Elenco puntato"
   },
   "labels": {
     "title": "Etichette",
