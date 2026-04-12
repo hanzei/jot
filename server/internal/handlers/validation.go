@@ -1,12 +1,22 @@
 package handlers
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"regexp"
 	"strings"
 	"unicode/utf8"
 )
+
+// decodeJSONBody limits the request body to maxJSONBodySize and decodes it
+// into v. Handlers that accept larger bodies (e.g. multipart uploads) must
+// not call this function and should set their own limit instead.
+func decodeJSONBody(w http.ResponseWriter, r *http.Request, v any) error {
+	r.Body = http.MaxBytesReader(w, r.Body, maxJSONBodySize)
+	return json.NewDecoder(r.Body).Decode(v)
+}
 
 var usernameRegex = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 
@@ -26,6 +36,8 @@ const (
 	// maxPATsPerUser caps the number of personal access tokens a user can hold.
 	// Keep in sync with shared/src/constants.ts VALIDATION.PAT_MAX_COUNT.
 	maxPATsPerUser = 50
+	// maxJSONBodySize is the maximum request body size for JSON endpoints.
+	maxJSONBodySize = 1 << 20 // 1 MiB
 )
 
 func validateUsername(username string) error {

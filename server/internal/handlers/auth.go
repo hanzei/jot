@@ -3,7 +3,6 @@ package handlers
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"image"
@@ -78,7 +77,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) (int, any
 	}
 
 	var req RegisterRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSONBody(w, r, &req); err != nil {
 		return http.StatusBadRequest, nil, err
 	}
 
@@ -130,7 +129,7 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) (int, any
 //	@Router		/login [post]
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	var req LoginRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSONBody(w, r, &req); err != nil {
 		return http.StatusBadRequest, nil, err
 	}
 
@@ -280,7 +279,7 @@ func (h *AuthHandler) UpdateUser(w http.ResponseWriter, r *http.Request) (int, a
 	}
 
 	var req UpdateUserRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSONBody(w, r, &req); err != nil {
 		return http.StatusBadRequest, nil, err
 	}
 
@@ -353,7 +352,7 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) (in
 	}
 
 	var req ChangePasswordRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSONBody(w, r, &req); err != nil {
 		return http.StatusBadRequest, nil, err
 	}
 

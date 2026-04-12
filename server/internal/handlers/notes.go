@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -332,7 +331,7 @@ func (h *NotesHandler) CreateNote(w http.ResponseWriter, r *http.Request) (int, 
 	}
 
 	var req CreateNoteRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSONBody(w, r, &req); err != nil {
 		return http.StatusBadRequest, nil, err
 	}
 
@@ -631,7 +630,7 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 	}
 
 	var req UpdateNoteRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSONBody(w, r, &req); err != nil {
 		return http.StatusBadRequest, nil, err
 	}
 
@@ -855,7 +854,7 @@ func (h *NotesHandler) ReorderNotes(w http.ResponseWriter, r *http.Request) (int
 	}
 
 	var req ReorderNotesRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSONBody(w, r, &req); err != nil {
 		return http.StatusBadRequest, nil, err
 	}
 

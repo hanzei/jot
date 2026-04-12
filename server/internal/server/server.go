@@ -344,6 +344,12 @@ func (s *Server) wrapHandler(handler func(w http.ResponseWriter, r *http.Request
 	return func(w http.ResponseWriter, r *http.Request) {
 		statusCode, body, err := handler(w, r)
 		if err != nil {
+			// Promote body-too-large errors to 413 regardless of what the handler returned.
+			var mbe *http.MaxBytesError
+			if errors.As(err, &mbe) {
+				http.Error(w, "request body too large", http.StatusRequestEntityTooLarge)
+				return
+			}
 			log := logutil.FromContext(r.Context()).WithError(err).WithField("status_code", statusCode)
 			if statusCode >= 500 {
 				log.Error("HTTP handler error")

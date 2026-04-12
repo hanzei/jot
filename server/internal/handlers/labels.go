@@ -2,7 +2,6 @@ package handlers
 
 import (
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -127,7 +126,7 @@ func (h *LabelsHandler) CreateLabel(w http.ResponseWriter, r *http.Request) (int
 	}
 
 	var req AddLabelRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSONBody(w, r, &req); err != nil {
 		return http.StatusBadRequest, nil, errors.New("invalid request body")
 	}
 
@@ -178,7 +177,7 @@ func (h *LabelsHandler) RenameLabel(w http.ResponseWriter, r *http.Request) (int
 	labelID := chi.URLParam(r, "id")
 
 	var req RenameLabelRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSONBody(w, r, &req); err != nil {
 		return http.StatusBadRequest, nil, errors.New("invalid request body")
 	}
 
@@ -236,7 +235,7 @@ func (h *LabelsHandler) AddLabel(w http.ResponseWriter, r *http.Request) (int, a
 	noteID := chi.URLParam(r, "id")
 
 	var req AddLabelRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSONBody(w, r, &req); err != nil {
 		return http.StatusBadRequest, nil, errors.New("invalid request body")
 	}
 

@@ -1,7 +1,6 @@
 package handlers
 
 import (
-	"encoding/json"
 	"errors"
 	"fmt"
 	"net/http"
@@ -82,7 +81,7 @@ func (h *PATsHandler) CreatePAT(w http.ResponseWriter, r *http.Request) (int, an
 	}
 
 	var req createPATRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSONBody(w, r, &req); err != nil {
 		return http.StatusBadRequest, nil, errors.New("invalid request body")
 	}
 
