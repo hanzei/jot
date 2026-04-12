@@ -1,12 +1,22 @@
 package handlers
 
 import (
+	"encoding/json"
 	"errors"
 	"fmt"
+	"net/http"
 	"regexp"
 	"strings"
 	"unicode/utf8"
 )
+
+// decodeJSONBody limits the request body to maxJSONBodySize and decodes it
+// into v. Handlers that accept larger bodies (e.g. multipart uploads) must
+// not call this function and should set their own limit instead.
+func decodeJSONBody(w http.ResponseWriter, r *http.Request, v any) error {
+	r.Body = http.MaxBytesReader(w, r.Body, maxJSONBodySize)
+	return json.NewDecoder(r.Body).Decode(v)
+}
 
 var usernameRegex = regexp.MustCompile(`^[a-zA-Z0-9_-]+$`)
 

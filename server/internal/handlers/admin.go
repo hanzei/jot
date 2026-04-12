@@ -3,7 +3,6 @@ package handlers
 import (
 	"context"
 	"database/sql"
-	"encoding/json"
 	"errors"
 	"net/http"
 	"os"
@@ -115,9 +114,8 @@ func (h *AdminHandler) GetUsers(w http.ResponseWriter, r *http.Request) (int, an
 //	@Failure	409		{string}	string	"username already taken"
 //	@Router		/admin/users [post]
 func (h *AdminHandler) CreateUser(w http.ResponseWriter, r *http.Request) (int, any, error) {
-	r.Body = http.MaxBytesReader(w, r.Body, maxJSONBodySize)
 	var req CreateUserRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSONBody(w, r, &req); err != nil {
 		return http.StatusBadRequest, nil, err
 	}
 
@@ -170,9 +168,8 @@ type UpdateUserRoleRequest struct {
 //	@Router		/admin/users/{id}/role [put]
 func (h *AdminHandler) UpdateUserRole(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	userID := chi.URLParam(r, "id")
-	r.Body = http.MaxBytesReader(w, r.Body, maxJSONBodySize)
 	var req UpdateUserRoleRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSONBody(w, r, &req); err != nil {
 		return http.StatusBadRequest, nil, err
 	}
 	if err := validateRole(req.Role); err != nil {

@@ -3,7 +3,6 @@ package handlers
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"fmt"
 	"image"
@@ -77,9 +76,8 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) (int, any
 		return http.StatusForbidden, nil, errors.New("registration is disabled")
 	}
 
-	r.Body = http.MaxBytesReader(w, r.Body, maxJSONBodySize)
 	var req RegisterRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSONBody(w, r, &req); err != nil {
 		return http.StatusBadRequest, nil, err
 	}
 
@@ -130,9 +128,8 @@ func (h *AuthHandler) Register(w http.ResponseWriter, r *http.Request) (int, any
 //	@Failure	500		{string}	string	"internal server error"
 //	@Router		/login [post]
 func (h *AuthHandler) Login(w http.ResponseWriter, r *http.Request) (int, any, error) {
-	r.Body = http.MaxBytesReader(w, r.Body, maxJSONBodySize)
 	var req LoginRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSONBody(w, r, &req); err != nil {
 		return http.StatusBadRequest, nil, err
 	}
 
@@ -281,9 +278,8 @@ func (h *AuthHandler) UpdateUser(w http.ResponseWriter, r *http.Request) (int, a
 		return http.StatusUnauthorized, nil, errors.New("unauthorized")
 	}
 
-	r.Body = http.MaxBytesReader(w, r.Body, maxJSONBodySize)
 	var req UpdateUserRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSONBody(w, r, &req); err != nil {
 		return http.StatusBadRequest, nil, err
 	}
 
@@ -355,9 +351,8 @@ func (h *AuthHandler) ChangePassword(w http.ResponseWriter, r *http.Request) (in
 		return http.StatusUnauthorized, nil, errors.New("unauthorized")
 	}
 
-	r.Body = http.MaxBytesReader(w, r.Body, maxJSONBodySize)
 	var req ChangePasswordRequest
-	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+	if err := decodeJSONBody(w, r, &req); err != nil {
 		return http.StatusBadRequest, nil, err
 	}
 
