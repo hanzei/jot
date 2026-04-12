@@ -58,23 +58,16 @@ func (s *userStore) Create(ctx context.Context, username, password string) (*Use
 		return nil, fmt.Errorf("failed to generate user ID: %w", err)
 	}
 
-	// Wrap the COUNT + INSERT in a transaction to make first-user admin assignment
-	// atomic. SQLite serializes all writes through a single connection
-	// (SetMaxOpenConns(1) in database.go), so a plain transaction is sufficient
-	// to prevent two concurrent registrations from both reading count == 0.
-	tx, err := s.db.BeginTx(ctx, nil)
-	if err != nil {
-		return nil, fmt.Errorf("begin transaction: %w", err)
-	}
-	defer func() { _ = tx.Rollback() }()
-
+	var isFirstUser bool
 	var count int
-	if err = tx.QueryRowContext(ctx, s.d.RewritePlaceholders("SELECT COUNT(*) FROM users")).Scan(&count); err != nil {
+	err = s.db.QueryRowContext(ctx, s.d.RewritePlaceholders("SELECT COUNT(*) FROM users")).Scan(&count)
+	if err != nil {
 		return nil, fmt.Errorf("failed to count users: %w", err)
 	}
+	isFirstUser = count == 0
 
 	role := RoleUser
-	if count == 0 {
+	if isFirstUser {
 		role = RoleAdmin
 	}
 
@@ -82,7 +75,7 @@ func (s *userStore) Create(ctx context.Context, username, password string) (*Use
 			  VALUES (?, ?, ?, ?) RETURNING created_at, updated_at`
 
 	var user User
-	err = tx.QueryRowContext(ctx, s.d.RewritePlaceholders(query), userID, username, string(hashedPassword), role).Scan(
+	err = s.db.QueryRowContext(ctx, s.d.RewritePlaceholders(query), userID, username, string(hashedPassword), role).Scan(
 		&user.CreatedAt, &user.UpdatedAt,
 	)
 	if err != nil {
@@ -90,10 +83,6 @@ func (s *userStore) Create(ctx context.Context, username, password string) (*Use
 			return nil, ErrUsernameTaken
 		}
 		return nil, fmt.Errorf("failed to create user: %w", err)
-	}
-
-	if err = tx.Commit(); err != nil {
-		return nil, fmt.Errorf("commit transaction: %w", err)
 	}
 
 	user.ID = userID
