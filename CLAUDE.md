@@ -151,9 +151,9 @@ Jot is a self-hosted note-taking application. The backend is a Go HTTP API and t
 
 **Handler pattern** — handlers have the signature:
 ```go
-func(w http.ResponseWriter, r *http.Request) (int, error)
+func(w http.ResponseWriter, r *http.Request) (int, any, error)
 ```
-They return an HTTP status code and error. The `wrapHandler` middleware in `server.go` handles writing the status and logging the error uniformly.
+They return an HTTP status code, a response body (serialized to JSON by `wrapHandler`), and an error. The `wrapHandler` middleware in `server.go` handles writing the status, encoding the body, and logging the error uniformly.
 
 **ID generation** — most entity IDs are 22-character cryptographically random alphanumeric strings generated from `crypto/rand`. Session tokens are 64-character hex strings. PAT raw tokens are 64-character hex strings (32 random bytes); only the SHA-256 hash is stored.
 

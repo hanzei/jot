@@ -4,7 +4,7 @@ import { useTranslation } from 'react-i18next';
 import { notes, users as usersApi } from '@/utils/api';
 import { getUser, getSettings, setSettings } from '@/utils/auth';
 import type { Note, User, SSEEvent, NoteSort } from '@jot/shared';
-import { useSSE } from '@/utils/useSSE';
+import { useSSE } from '@/hooks/useSSE';
 import { useSearchParams, useParams } from 'react-router';
 import PageContent from '@/components/PageContent';
 import SearchBar from '@/components/SearchBar';
