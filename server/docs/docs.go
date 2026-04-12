@@ -23,11 +23,6 @@ const docTemplate = `{
     "paths": {
         "/about": {
             "get": {
-                "security": [
-                    {
-                        "CookieAuth": []
-                    }
-                ],
                 "produces": [
                     "application/json"
                 ],
@@ -42,16 +37,16 @@ const docTemplate = `{
                             "$ref": "#/definitions/server.aboutResponse"
                         }
                     }
-                }
-            }
-        },
-        "/admin/stats": {
-            "get": {
+                },
                 "security": [
                     {
                         "CookieAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/admin/stats": {
+            "get": {
                 "produces": [
                     "application/json"
                 ],
@@ -84,16 +79,16 @@ const docTemplate = `{
                             "type": "string"
                         }
                     }
-                }
-            }
-        },
-        "/admin/users": {
-            "get": {
+                },
                 "security": [
                     {
                         "CookieAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/admin/users": {
+            "get": {
                 "produces": [
                     "application/json"
                 ],
@@ -120,14 +115,14 @@ const docTemplate = `{
                             "type": "string"
                         }
                     }
-                }
-            },
-            "post": {
+                },
                 "security": [
                     {
                         "CookieAuth": []
                     }
-                ],
+                ]
+            },
+            "post": {
                 "consumes": [
                     "application/json"
                 ],
@@ -180,16 +175,16 @@ const docTemplate = `{
                             "type": "string"
                         }
                     }
-                }
-            }
-        },
-        "/admin/users/{id}": {
-            "delete": {
+                },
                 "security": [
                     {
                         "CookieAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/admin/users/{id}": {
+            "delete": {
                 "tags": [
                     "admin"
                 ],
@@ -231,16 +226,16 @@ const docTemplate = `{
                             "type": "string"
                         }
                     }
-                }
-            }
-        },
-        "/admin/users/{id}/role": {
-            "put": {
+                },
                 "security": [
                     {
                         "CookieAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/admin/users/{id}/role": {
+            "put": {
                 "consumes": [
                     "application/json"
                 ],
@@ -306,7 +301,12 @@ const docTemplate = `{
                             "type": "string"
                         }
                     }
-                }
+                },
+                "security": [
+                    {
+                        "CookieAuth": []
+                    }
+                ]
             }
         },
         "/config": {
@@ -330,11 +330,6 @@ const docTemplate = `{
         },
         "/labels": {
             "get": {
-                "security": [
-                    {
-                        "CookieAuth": []
-                    }
-                ],
                 "produces": [
                     "application/json"
                 ],
@@ -364,14 +359,14 @@ const docTemplate = `{
                             "type": "string"
                         }
                     }
-                }
-            },
-            "post": {
+                },
                 "security": [
                     {
                         "CookieAuth": []
                     }
-                ],
+                ]
+            },
+            "post": {
                 "consumes": [
                     "application/json"
                 ],
@@ -418,16 +413,16 @@ const docTemplate = `{
                             "type": "string"
                         }
                     }
-                }
-            }
-        },
-        "/labels/counts": {
-            "get": {
+                },
                 "security": [
                     {
                         "CookieAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/labels/counts": {
+            "get": {
                 "produces": [
                     "application/json"
                 ],
@@ -454,16 +449,16 @@ const docTemplate = `{
                             "type": "string"
                         }
                     }
-                }
-            }
-        },
-        "/labels/{id}": {
-            "delete": {
+                },
                 "security": [
                     {
                         "CookieAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/labels/{id}": {
+            "delete": {
                 "tags": [
                     "labels"
                 ],
@@ -499,14 +494,14 @@ const docTemplate = `{
                             "type": "string"
                         }
                     }
-                }
-            },
-            "patch": {
+                },
                 "security": [
                     {
                         "CookieAuth": []
                     }
-                ],
+                ]
+            },
+            "patch": {
                 "consumes": [
                     "application/json"
                 ],
@@ -566,7 +561,12 @@ const docTemplate = `{
                             "type": "string"
                         }
                     }
-                }
+                },
+                "security": [
+                    {
+                        "CookieAuth": []
+                    }
+                ]
             }
         },
         "/login": {
@@ -622,11 +622,6 @@ const docTemplate = `{
         },
         "/logout": {
             "post": {
-                "security": [
-                    {
-                        "CookieAuth": []
-                    }
-                ],
                 "tags": [
                     "auth"
                 ],
@@ -641,16 +636,16 @@ const docTemplate = `{
                             "type": "string"
                         }
                     }
-                }
-            }
-        },
-        "/me": {
-            "get": {
+                },
                 "security": [
                     {
                         "CookieAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/me": {
+            "get": {
                 "produces": [
                     "application/json"
                 ],
@@ -677,16 +672,16 @@ const docTemplate = `{
                             "type": "string"
                         }
                     }
-                }
-            }
-        },
-        "/notes": {
-            "get": {
+                },
                 "security": [
                     {
                         "CookieAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/notes": {
+            "get": {
                 "produces": [
                     "application/json"
                 ],
@@ -754,14 +749,14 @@ const docTemplate = `{
                             "type": "string"
                         }
                     }
-                }
-            },
-            "post": {
+                },
                 "security": [
                     {
                         "CookieAuth": []
                     }
-                ],
+                ]
+            },
+            "post": {
                 "consumes": [
                     "application/json"
                 ],
@@ -814,16 +809,16 @@ const docTemplate = `{
                             "type": "string"
                         }
                     }
-                }
-            }
-        },
-        "/notes/export": {
-            "get": {
+                },
                 "security": [
                     {
                         "CookieAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/notes/export": {
+            "get": {
                 "produces": [
                     "application/json"
                 ],
@@ -847,16 +842,16 @@ const docTemplate = `{
                             "type": "string"
                         }
                     }
-                }
-            }
-        },
-        "/notes/import": {
-            "post": {
+                },
                 "security": [
                     {
                         "CookieAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/notes/import": {
+            "post": {
                 "consumes": [
                     "multipart/form-data"
                 ],
@@ -908,16 +903,16 @@ const docTemplate = `{
                             "type": "string"
                         }
                     }
-                }
-            }
-        },
-        "/notes/reorder": {
-            "post": {
+                },
                 "security": [
                     {
                         "CookieAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/notes/reorder": {
+            "post": {
                 "consumes": [
                     "application/json"
                 ],
@@ -964,16 +959,16 @@ const docTemplate = `{
                             "type": "string"
                         }
                     }
-                }
-            }
-        },
-        "/notes/trash": {
-            "delete": {
+                },
                 "security": [
                     {
                         "CookieAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/notes/trash": {
+            "delete": {
                 "produces": [
                     "application/json"
                 ],
@@ -1000,16 +995,16 @@ const docTemplate = `{
                             "type": "string"
                         }
                     }
-                }
-            }
-        },
-        "/notes/{id}": {
-            "get": {
+                },
                 "security": [
                     {
                         "CookieAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/notes/{id}": {
+            "get": {
                 "produces": [
                     "application/json"
                 ],
@@ -1057,14 +1052,14 @@ const docTemplate = `{
                             "type": "string"
                         }
                     }
-                }
-            },
-            "delete": {
+                },
                 "security": [
                     {
                         "CookieAuth": []
                     }
-                ],
+                ]
+            },
+            "delete": {
                 "tags": [
                     "notes"
                 ],
@@ -1112,14 +1107,14 @@ const docTemplate = `{
                             "type": "string"
                         }
                     }
-                }
-            },
-            "patch": {
+                },
                 "security": [
                     {
                         "CookieAuth": []
                     }
-                ],
+                ]
+            },
+            "patch": {
                 "consumes": [
                     "application/json"
                 ],
@@ -1179,16 +1174,16 @@ const docTemplate = `{
                             "type": "string"
                         }
                     }
-                }
-            }
-        },
-        "/notes/{id}/duplicate": {
-            "post": {
+                },
                 "security": [
                     {
                         "CookieAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/notes/{id}/duplicate": {
+            "post": {
                 "produces": [
                     "application/json"
                 ],
@@ -1236,16 +1231,16 @@ const docTemplate = `{
                             "type": "string"
                         }
                     }
-                }
-            }
-        },
-        "/notes/{id}/labels": {
-            "post": {
+                },
                 "security": [
                     {
                         "CookieAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/notes/{id}/labels": {
+            "post": {
                 "consumes": [
                     "application/json"
                 ],
@@ -1311,16 +1306,16 @@ const docTemplate = `{
                             "type": "string"
                         }
                     }
-                }
-            }
-        },
-        "/notes/{id}/labels/{label_id}": {
-            "delete": {
+                },
                 "security": [
                     {
                         "CookieAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/notes/{id}/labels/{label_id}": {
+            "delete": {
                 "produces": [
                     "application/json"
                 ],
@@ -1369,16 +1364,16 @@ const docTemplate = `{
                             "type": "string"
                         }
                     }
-                }
-            }
-        },
-        "/notes/{id}/restore": {
-            "post": {
+                },
                 "security": [
                     {
                         "CookieAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/notes/{id}/restore": {
+            "post": {
                 "produces": [
                     "application/json"
                 ],
@@ -1426,16 +1421,16 @@ const docTemplate = `{
                             "type": "string"
                         }
                     }
-                }
-            }
-        },
-        "/notes/{id}/share": {
-            "post": {
+                },
                 "security": [
                     {
                         "CookieAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/notes/{id}/share": {
+            "post": {
                 "consumes": [
                     "application/json"
                 ],
@@ -1501,16 +1496,16 @@ const docTemplate = `{
                             "type": "string"
                         }
                     }
-                }
-            }
-        },
-        "/notes/{id}/shares": {
-            "get": {
+                },
                 "security": [
                     {
                         "CookieAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/notes/{id}/shares": {
+            "get": {
                 "produces": [
                     "application/json"
                 ],
@@ -1561,16 +1556,16 @@ const docTemplate = `{
                             "type": "string"
                         }
                     }
-                }
-            }
-        },
-        "/notes/{id}/shares/{user_id}": {
-            "delete": {
+                },
                 "security": [
                     {
                         "CookieAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/notes/{id}/shares/{user_id}": {
+            "delete": {
                 "tags": [
                     "sharing"
                 ],
@@ -1625,16 +1620,16 @@ const docTemplate = `{
                             "type": "string"
                         }
                     }
-                }
-            }
-        },
-        "/pats": {
-            "get": {
+                },
                 "security": [
                     {
                         "CookieAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/pats": {
+            "get": {
                 "produces": [
                     "application/json"
                 ],
@@ -1658,14 +1653,14 @@ const docTemplate = `{
                             "type": "string"
                         }
                     }
-                }
-            },
-            "post": {
+                },
                 "security": [
                     {
                         "CookieAuth": []
                     }
-                ],
+                ]
+            },
+            "post": {
                 "consumes": [
                     "application/json"
                 ],
@@ -1706,16 +1701,16 @@ const docTemplate = `{
                             "type": "string"
                         }
                     }
-                }
-            }
-        },
-        "/pats/{id}": {
-            "delete": {
+                },
                 "security": [
                     {
                         "CookieAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/pats/{id}": {
+            "delete": {
                 "tags": [
                     "pats"
                 ],
@@ -1745,7 +1740,12 @@ const docTemplate = `{
                             "type": "string"
                         }
                     }
-                }
+                },
+                "security": [
+                    {
+                        "CookieAuth": []
+                    }
+                ]
             }
         },
         "/register": {
@@ -1807,11 +1807,6 @@ const docTemplate = `{
         },
         "/sessions": {
             "get": {
-                "security": [
-                    {
-                        "CookieAuth": []
-                    }
-                ],
                 "produces": [
                     "application/json"
                 ],
@@ -1835,16 +1830,16 @@ const docTemplate = `{
                             "type": "string"
                         }
                     }
-                }
-            }
-        },
-        "/sessions/{id}": {
-            "delete": {
+                },
                 "security": [
                     {
                         "CookieAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/sessions/{id}": {
+            "delete": {
                 "tags": [
                     "sessions"
                 ],
@@ -1880,16 +1875,16 @@ const docTemplate = `{
                             "type": "string"
                         }
                     }
-                }
-            }
-        },
-        "/users": {
-            "get": {
+                },
                 "security": [
                     {
                         "CookieAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/users": {
+            "get": {
                 "produces": [
                     "application/json"
                 ],
@@ -1933,16 +1928,16 @@ const docTemplate = `{
                             "type": "string"
                         }
                     }
-                }
-            }
-        },
-        "/users/me": {
-            "patch": {
+                },
                 "security": [
                     {
                         "CookieAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/users/me": {
+            "patch": {
                 "consumes": [
                     "application/json"
                 ],
@@ -1995,16 +1990,16 @@ const docTemplate = `{
                             "type": "string"
                         }
                     }
-                }
-            }
-        },
-        "/users/me/password": {
-            "put": {
+                },
                 "security": [
                     {
                         "CookieAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/users/me/password": {
+            "put": {
                 "consumes": [
                     "application/json"
                 ],
@@ -2051,16 +2046,16 @@ const docTemplate = `{
                             "type": "string"
                         }
                     }
-                }
-            }
-        },
-        "/users/me/profile-icon": {
-            "post": {
+                },
                 "security": [
                     {
                         "CookieAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/users/me/profile-icon": {
+            "post": {
                 "consumes": [
                     "multipart/form-data"
                 ],
@@ -2105,14 +2100,14 @@ const docTemplate = `{
                             "type": "string"
                         }
                     }
-                }
-            },
-            "delete": {
+                },
                 "security": [
                     {
                         "CookieAuth": []
                     }
-                ],
+                ]
+            },
+            "delete": {
                 "tags": [
                     "users"
                 ],
@@ -2133,16 +2128,16 @@ const docTemplate = `{
                             "type": "string"
                         }
                     }
-                }
-            }
-        },
-        "/users/{id}/profile-icon": {
-            "get": {
+                },
                 "security": [
                     {
                         "CookieAuth": []
                     }
-                ],
+                ]
+            }
+        },
+        "/users/{id}/profile-icon": {
+            "get": {
                 "produces": [
                     "image/jpeg"
                 ],
@@ -2184,7 +2179,12 @@ const docTemplate = `{
                             "type": "string"
                         }
                     }
-                }
+                },
+                "security": [
+                    {
+                        "CookieAuth": []
+                    }
+                ]
             }
         }
     },
