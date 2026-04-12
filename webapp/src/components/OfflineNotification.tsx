@@ -1,5 +1,5 @@
 import { useTranslation } from 'react-i18next';
-import { useOnlineStatus } from '../utils/useOnlineStatus';
+import { useOnlineStatus } from '../hooks/useOnlineStatus';
 
 export function OfflineNotification() {
   const isOnline = useOnlineStatus();
