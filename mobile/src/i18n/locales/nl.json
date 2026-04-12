@@ -9,7 +9,8 @@
     "clearSearch": "Zoekopdracht wissen",
     "error": "Fout",
     "unknown": "onbekend",
-    "loading": "Laden..."
+    "loading": "Laden...",
+    "done": "Klaar"
   },
   "nav": {
     "settings": "Instellingen",
@@ -263,7 +264,11 @@
     "colorLavender": "Lavendel",
     "colorPink": "Roze",
     "colorSand": "Zand",
-    "colorGray": "Grijs"
+    "colorGray": "Grijs",
+    "formatBold": "Vet",
+    "formatItalic": "Cursief",
+    "formatHeading": "Kop",
+    "formatBulletList": "Opsommingsteken"
   },
   "labels": {
     "title": "Labels",

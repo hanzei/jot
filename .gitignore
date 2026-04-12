@@ -83,3 +83,4 @@ webapp/test-results/
 test-results/
 playwright-report/
 
+.worktrees/

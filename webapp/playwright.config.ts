@@ -3,8 +3,8 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-// Use a unique DB path per test run so concurrent or repeated runs never conflict.
-const E2E_DB_PATH = `/tmp/jot-e2e-${Date.now()}.db`;
+// Use a unique DB DSN per test run so concurrent or repeated runs never conflict.
+const E2E_DB_DSN = `/tmp/jot-e2e-${Date.now()}.db`;
 
 export default defineConfig({
   testDir: './e2e/tests',
@@ -51,7 +51,7 @@ export default defineConfig({
     reuseExistingServer: false,
     timeout: 60_000,
     env: {
-      DB_PATH: E2E_DB_PATH,
+      DB_DSN: E2E_DB_DSN,
       STATIC_DIR: path.resolve(__dirname, 'build'),
       PORT: '8080',
       JWT_SECRET: 'e2e-test-secret',

@@ -9,7 +9,8 @@
     "clearSearch": "Limpar pesquisa",
     "error": "Erro",
     "unknown": "desconhecido",
-    "loading": "Carregando..."
+    "loading": "Carregando...",
+    "done": "Concluído"
   },
   "nav": {
     "settings": "Configurações",
@@ -263,7 +264,11 @@
     "colorLavender": "Lavanda",
     "colorPink": "Rosa",
     "colorSand": "Areia",
-    "colorGray": "Cinza"
+    "colorGray": "Cinza",
+    "formatBold": "Negrito",
+    "formatItalic": "Itálico",
+    "formatHeading": "Título",
+    "formatBulletList": "Lista de marcadores"
   },
   "labels": {
     "title": "Etiquetas",

@@ -8,7 +8,7 @@ import Dashboard from '../Dashboard'
 import type { AuthResponse, Note, Label, NoteSort, UserSettings } from '@jot/shared'
 import { notes, labels, users } from '@/utils/api'
 import * as auth from '@/utils/auth'
-import { useSSE } from '@/utils/useSSE'
+import { useSSE } from '@/hooks/useSSE'
 import { useAuthenticatedLayout } from '@/components/AuthenticatedLayout'
 import { createMockNote, createMockListNote } from '@/utils/__tests__/test-helpers'
 import { ToastProvider } from '@/components/Toast'
@@ -95,7 +95,7 @@ vi.mock('@dnd-kit/modifiers', () => ({
 }))
 
 // Mock useSSE to prevent EventSource usage in jsdom environment
-vi.mock('@/utils/useSSE', () => ({
+vi.mock('@/hooks/useSSE', () => ({
   useSSE: vi.fn(),
 }))
 
