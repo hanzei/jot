@@ -1,9 +1,10 @@
 import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
-import { XMarkIcon, PlusIcon, TrashIcon, ChevronDownIcon, ArchiveBoxIcon, ArchiveBoxXMarkIcon, ShareIcon, UserPlusIcon, CheckIcon, TagIcon, DocumentDuplicateIcon, DevicePhoneMobileIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon, PlusIcon, TrashIcon, ChevronDownIcon, ArchiveBoxIcon, ArchiveBoxXMarkIcon, ShareIcon, UserPlusIcon, CheckIcon, TagIcon, DocumentDuplicateIcon, DevicePhoneMobileIcon, PaintBrushIcon } from '@heroicons/react/24/outline';
 import { Dialog, DialogPanel } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
-import { VALIDATION, NOTE_COLORS, buildCollaborators, type Note, type NoteType, type CreateNoteRequest, type UpdateNoteRequest, type Label, type User, type Collaborator } from '@jot/shared';
+import { VALIDATION, NOTE_COLORS, buildCollaborators, type Note, type NoteItem, type NoteType, type CreateNoteRequest, type UpdateNoteRequest, type Label, type User, type Collaborator } from '@jot/shared';
 import { notes } from '@/utils/api';
+import { renderMarkdown } from '@/utils/markdown';
 import LabelPicker from '@/components/LabelPicker';
 import LetterAvatar from '@/components/LetterAvatar';
 import AssigneePicker from '@/components/AssigneePicker';
@@ -50,7 +51,7 @@ const validateContent = (content: string, t: TFunction): string | null => {
   return null;
 };
 
-const haveTodoItemsChanged = (currentItems: TodoItem[], originalItems: Note['items'] | undefined): boolean => {
+const haveListItemsChanged = (currentItems: ListItem[], originalItems: NoteItem[] | undefined): boolean => {
   const baseItems = originalItems ?? [];
   if (currentItems.length !== baseItems.length) return true;
 
@@ -70,10 +71,9 @@ const haveTodoItemsChanged = (currentItems: TodoItem[], originalItems: Note['ite
 
 // Timeout management now handled via useRef instead of global window property
 
-// Utility function to generate unique IDs for todo items
+// Utility function to generate unique IDs for list items
 const generateItemId = () => crypto.randomUUID();
 const TEXT_NOTE_MIN_HEIGHT_PX = 96;
-const TEXT_NOTE_MAX_HEIGHT_PX = 320;
 const TEXT_NOTE_RESIZE_DEBOUNCE_MS = 120;
 
 interface NoteModalProps {
@@ -89,7 +89,7 @@ interface NoteModalProps {
   currentUserId?: string;
 }
 
-interface TodoItem {
+interface ListItem {
   id: string;
   text: string;
   completed: boolean;
@@ -104,12 +104,21 @@ interface QueuedAutoSaveRequest {
   updateData: UpdateNoteRequest;
 }
 
+interface AutoSaveDraft {
+  title?: string;
+  content?: string;
+  pinned?: boolean;
+  archived?: boolean;
+  color?: string;
+  checked_items_collapsed?: boolean;
+}
+
 interface SortableItemProps {
   id: string;
   index: number;
-  item: TodoItem;
-  onUpdateTodoItem: (index: number, field: 'text' | 'completed', value: string | boolean) => Promise<void>;
-  onRemoveTodoItem: (itemId: string) => void;
+  item: ListItem;
+  onUpdateListItem: (index: number, field: 'text' | 'completed', value: string | boolean) => Promise<void>;
+  onRemoveListItem: (itemId: string) => void;
   isCompleted?: boolean;
   onKeyDown?: (index: number, e: React.KeyboardEvent<HTMLTextAreaElement>) => void;
   onPaste?: (index: number, e: React.ClipboardEvent<HTMLTextAreaElement>) => void;
@@ -123,13 +132,13 @@ interface SortableItemProps {
   onAcceptSuggestion?: (currentItemId: string, suggestionText: string) => void;
 }
 
-function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isCompleted = false, onKeyDown, onPaste, inputRef, onIndentChange, isShared, collaborators, usersById, onAssignItem, completedItemTexts = [], onAcceptSuggestion }: SortableItemProps) {
+function SortableItem({ id, index, item, onUpdateListItem, onRemoveListItem, isCompleted = false, onKeyDown, onPaste, inputRef, onIndentChange, isShared, collaborators, usersById, onAssignItem, completedItemTexts = [], onAcceptSuggestion }: SortableItemProps) {
   const { t } = useTranslation();
   const [showAssigneePicker, setShowAssigneePicker] = useState(false);
   const [showSuggestions, setShowSuggestions] = useState(false);
   const [selectedSuggestionIndex, setSelectedSuggestionIndex] = useState(-1);
   const suggestionsRef = useRef<HTMLDivElement>(null);
-  const todoTextRef = useRef<HTMLTextAreaElement | null>(null);
+  const listItemTextRef = useRef<HTMLTextAreaElement | null>(null);
   const closeAssigneePicker = useCallback(() => setShowAssigneePicker(false), []);
   const {
     attributes,
@@ -152,21 +161,21 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
   const assignedUser = item.assignedTo ? usersById?.get(item.assignedTo) : undefined;
   const showAssignUI = isShared && collaborators && collaborators.length > 0 && onAssignItem;
   const placeholder = item.text ? '' : t('note.itemPlaceholder');
-  const autoResizeTodoText = useCallback((textarea: HTMLTextAreaElement | null) => {
+  const autoResizeListItemText = useCallback((textarea: HTMLTextAreaElement | null) => {
     if (!textarea) return;
     textarea.style.height = 'auto';
     textarea.style.height = `${textarea.scrollHeight}px`;
   }, []);
 
-  const setTodoTextRef = useCallback((textarea: HTMLTextAreaElement | null) => {
-    todoTextRef.current = textarea;
-    autoResizeTodoText(textarea);
+  const setListItemTextRef = useCallback((textarea: HTMLTextAreaElement | null) => {
+    listItemTextRef.current = textarea;
+    autoResizeListItemText(textarea);
     inputRef?.(textarea);
-  }, [autoResizeTodoText, inputRef]);
+  }, [autoResizeListItemText, inputRef]);
 
   useEffect(() => {
-    autoResizeTodoText(todoTextRef.current);
-  }, [item.text, autoResizeTodoText]);
+    autoResizeListItemText(listItemTextRef.current);
+  }, [item.text, autoResizeListItemText]);
 
   const suggestions = useMemo(() => {
     const trimmed = item.text.trim();
@@ -187,7 +196,7 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
     if (onAcceptSuggestion) {
       onAcceptSuggestion(item.id, text);
     } else {
-      onUpdateTodoItem(index, 'text', text);
+      onUpdateListItem(index, 'text', text);
     }
     setShowSuggestions(false);
     setSelectedSuggestionIndex(-1);
@@ -197,7 +206,7 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
     <div
       ref={setNodeRef}
       style={style}
-      data-testid="todo-item-row"
+      data-testid="list-item-row"
       className={`group/item flex items-start gap-2 ${isDragging ? 'opacity-50' : ''} ${
         isCompleted ? 'opacity-60' : ''
       }`}
@@ -218,22 +227,23 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
       <input
         type="checkbox"
         checked={item.completed}
-        onChange={(e) => onUpdateTodoItem(index, 'completed', e.target.checked)}
+        onChange={(e) => onUpdateListItem(index, 'completed', e.target.checked)}
         className="h-4 w-4 text-blue-600 rounded mt-0.5 flex-shrink-0"
       />
       <div className="flex flex-1 items-start min-w-0">
         <div className="relative min-w-0 flex-1">
           <textarea
-            data-testid="todo-item-input"
+            data-testid="list-item-input"
             placeholder={placeholder}
             rows={1}
+            autoCapitalize="sentences"
             className={`w-full pt-0 pb-1 pl-1 pr-0 bg-transparent border-none outline-none min-w-0 resize-none overflow-hidden whitespace-pre-wrap break-words placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white ${
               isCompleted ? 'line-through text-gray-500 dark:text-gray-400' : ''
             }`}
             value={item.text}
-            onInput={(e) => autoResizeTodoText(e.currentTarget)}
+            onInput={(e) => autoResizeListItemText(e.currentTarget)}
             onChange={(e) => {
-              onUpdateTodoItem(index, 'text', e.target.value);
+              onUpdateListItem(index, 'text', e.target.value);
               if (e.target.value.trim()) setShowSuggestions(true);
               setSelectedSuggestionIndex(-1);
             }}
@@ -287,7 +297,7 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
               if (onKeyDown) onKeyDown(index, e);
             }}
             onPaste={(e) => onPaste?.(index, e)}
-            ref={setTodoTextRef}
+            ref={setListItemTextRef}
           />
           {showSuggestions && suggestions.length > 0 && !isCompleted && (
             <div
@@ -368,7 +378,7 @@ function SortableItem({ id, index, item, onUpdateTodoItem, onRemoveTodoItem, isC
       </div>
 
       <button
-        onClick={() => onRemoveTodoItem(item.id)}
+        onClick={() => onRemoveListItem(item.id)}
         className="ml-auto p-1 text-gray-400 dark:text-gray-300 hover:text-gray-600 dark:hover:text-gray-100"
       >
         <TrashIcon className="h-4 w-4" />
@@ -386,20 +396,25 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   const [color, setColor] = useState('#ffffff');
   const [pinned, setPinned] = useState(false);
   const [archived, setArchived] = useState(false);
-  const [items, setItems] = useState<TodoItem[]>([]);
+  const [items, setItems] = useState<ListItem[]>([]);
   const [loading, setLoading] = useState(false);
   const [showSaved, setShowSaved] = useState(false);
   const [checkedItemsCollapsed, setCheckedItemsCollapsed] = useState(false);
   const [noteLabels, setNoteLabels] = useState<Label[]>(note?.labels ?? []);
   const [errorMessage, setErrorMessage] = useState<string | null>(null);
   const [showLabelPicker, setShowLabelPicker] = useState(false);
+  const [showColorPicker, setShowColorPicker] = useState(false);
   const [showDeleteConfirm, setShowDeleteConfirm] = useState(false);
-  
+  // New notes start in edit mode; existing notes start in preview mode.
+  const [isEditingContent, setIsEditingContent] = useState(!note);
+  const pendingSelectionRef = useRef<{ start: number; end: number } | null>(null);
+
   // Use useRef for timeout management instead of global window property
   const saveTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const errorTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const noteIdRef = useRef<string | null>(note?.id ?? null);
-  const autoSaveDraftRef = useRef<Omit<UpdateNoteRequest, 'items'>>({
+  const noteTypeRef = useRef<NoteType>(note?.note_type ?? 'text');
+  const autoSaveDraftRef = useRef<AutoSaveDraft>({
     title: '',
     content: '',
     pinned: false,
@@ -407,23 +422,22 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     color: '#ffffff',
     checked_items_collapsed: false,
   });
-  const itemsRef = useRef<TodoItem[]>([]);
+  const itemsRef = useRef<ListItem[]>([]);
   const pendingAutoSaveRequestRef = useRef<QueuedAutoSaveRequest | null>(null);
   const itemInputRefs = useRef<Map<string, HTMLTextAreaElement>>(new Map());
   const contentRef = useRef<HTMLTextAreaElement>(null);
   const colorPickerRef = useRef<HTMLDivElement>(null);
   const savingRef = useRef(false);
+  // Set to true when the backdrop mousedown handler has already handled a dismiss,
+  // so Dialog.onClose (which HeadlessUI fires after the mousedown) skips its logic.
+  const backdropHandledRef = useRef(false);
   const savedTimeoutRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined);
   const resizeContentTextarea = useCallback((textarea: HTMLTextAreaElement | null) => {
     if (!textarea) return;
     textarea.style.height = 'auto';
-    const contentHeight = textarea.scrollHeight;
-    const nextHeight = Math.min(
-      Math.max(contentHeight, TEXT_NOTE_MIN_HEIGHT_PX),
-      TEXT_NOTE_MAX_HEIGHT_PX
-    );
+    const nextHeight = Math.max(textarea.scrollHeight, TEXT_NOTE_MIN_HEIGHT_PX);
     textarea.style.height = `${nextHeight}px`;
-    textarea.style.overflowY = contentHeight > nextHeight ? 'auto' : 'hidden';
+    textarea.style.overflowY = 'hidden';
   }, []);
 
   const sensors = useSensors(
@@ -433,20 +447,35 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     })
   );
 
-  const mapItemsForAutoSave = useCallback((sourceItems: TodoItem[]) => sourceItems.map((item) => ({
+  const mapItemsForAutoSave = useCallback((sourceItems: ListItem[]) => sourceItems.map((item, idx) => ({
     text: item.text,
-    position: item.position,
+    position: idx,
     completed: item.completed,
     indent_level: item.indentLevel,
     assigned_to: item.assignedTo,
   })), []);
 
-  const buildAutoSaveRequest = useCallback((sourceItems: TodoItem[]): UpdateNoteRequest => ({
-    ...autoSaveDraftRef.current,
-    items: mapItemsForAutoSave(sourceItems),
-  }), [mapItemsForAutoSave]);
+  const buildAutoSaveRequest = useCallback((sourceItems: ListItem[]): UpdateNoteRequest => {
+    const draft = autoSaveDraftRef.current;
+    if (noteTypeRef.current === 'list') {
+      return {
+        title: draft.title,
+        pinned: draft.pinned,
+        archived: draft.archived,
+        color: draft.color,
+        checked_items_collapsed: draft.checked_items_collapsed,
+        items: mapItemsForAutoSave(sourceItems),
+      };
+    }
+    return {
+      content: draft.content,
+      pinned: draft.pinned,
+      archived: draft.archived,
+      color: draft.color,
+    };
+  }, [mapItemsForAutoSave]);
 
-  const commitItems = useCallback((nextItems: TodoItem[]) => {
+  const commitItems = useCallback((nextItems: ListItem[]) => {
     itemsRef.current = nextItems;
     setItems(nextItems);
     if (savingRef.current && noteIdRef.current) {
@@ -500,22 +529,26 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
 
   useEffect(() => {
     if (note) {
-      setTitle(note.title);
-      setContent(note.content);
       setNoteType(note.note_type);
       setColor(note.color);
       setPinned(note.pinned);
       setArchived(note.archived);
-      setCheckedItemsCollapsed(note.checked_items_collapsed);
-      const mappedItems = note.items?.map((item, index) => ({
-        id: item.id || `existing_${item.position}_${index}`,
-        text: item.text,
-        completed: item.completed,
-        position: item.position,
-        indentLevel: item.indent_level ?? 0,
-        assignedTo: item.assigned_to ?? '',
-      })) || [];
-      commitItems(mappedItems);
+      if (note.note_type === 'list') {
+        setTitle(note.title);
+        setCheckedItemsCollapsed(note.checked_items_collapsed);
+        const mappedItems = note.items?.map((item, index) => ({
+          id: item.id || `existing_${item.position}_${index}`,
+          text: item.text,
+          completed: item.completed,
+          position: item.position,
+          indentLevel: item.indent_level ?? 0,
+          assignedTo: item.assigned_to ?? '',
+        })) || [];
+        commitItems(mappedItems);
+      } else {
+        setContent(note.content);
+        commitItems([]);
+      }
       setNoteLabels(note.labels ?? []);
     } else {
       setTitle('');
@@ -532,6 +565,10 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   useEffect(() => {
     noteIdRef.current = note?.id ?? null;
   }, [note?.id]);
+
+  useEffect(() => {
+    noteTypeRef.current = noteType;
+  }, [noteType]);
 
   useEffect(() => {
     autoSaveDraftRef.current = {
@@ -553,9 +590,20 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   }, []);
 
   useEffect(() => {
-    if (noteType !== 'text') return;
+    if (!showColorPicker) return;
+    const handleClickOutside = (e: MouseEvent) => {
+      if (colorPickerRef.current && !colorPickerRef.current.contains(e.target as Node)) {
+        setShowColorPicker(false);
+      }
+    };
+    document.addEventListener('mousedown', handleClickOutside);
+    return () => document.removeEventListener('mousedown', handleClickOutside);
+  }, [showColorPicker]);
+
+  useEffect(() => {
+    if (noteType !== 'text' || !isEditingContent) return;
     resizeContentTextarea(contentRef.current);
-  }, [content, noteType, resizeContentTextarea]);
+  }, [content, noteType, isEditingContent, resizeContentTextarea]);
 
   useEffect(() => {
     if (noteType !== 'text') return;
@@ -578,6 +626,40 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     };
   }, [noteType, resizeContentTextarea]);
 
+  useEffect(() => {
+    if (pendingSelectionRef.current && contentRef.current) {
+      const { start, end } = pendingSelectionRef.current;
+      contentRef.current.focus();
+      contentRef.current.setSelectionRange(start, end);
+      pendingSelectionRef.current = null;
+    }
+  }, [content]);
+
+  // Focus the textarea whenever the content area transitions into edit mode
+  // (but not on initial mount to avoid stealing focus from the title input).
+  const prevIsEditingContentRef = useRef(isEditingContent);
+  useEffect(() => {
+    if (isEditingContent && !prevIsEditingContentRef.current) {
+      requestAnimationFrame(() => {
+        contentRef.current?.focus();
+      });
+    }
+    prevIsEditingContentRef.current = isEditingContent;
+  }, [isEditingContent]);
+
+  // Pre-compute the rendered markdown for the preview div.
+  // If markdown renders to nothing but content is non-empty (e.g. plain text
+  // with HTML-special chars that DOMPurify stripped), fall back to an
+  // HTML-escaped version of the raw content so it is never silently hidden.
+  const renderedContent = useMemo(() => {
+    if (!content?.trim()) return '';
+    const md = renderMarkdown(content);
+    if (md) return md;
+    return content.replace(/[&<>"']/g, (c) => (
+      { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#039;' }[c] ?? c
+    ));
+  }, [content]);
+
   // Helper function to show error messages with auto-dismiss
   const showError = useCallback((message: string) => {
     setErrorMessage(message);
@@ -594,7 +676,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   }, []);
 
   // Simplified position restoration logic using Map for position tracking
-  const restoreItemPosition = (items: TodoItem[], itemToRestore: TodoItem): TodoItem[] => {
+  const restoreItemPosition = (items: ListItem[], itemToRestore: ListItem): ListItem[] => {
     // Remove the item to restore from the items array
     const otherItems = items.filter(item => item.id !== itemToRestore.id);
     const uncompletedItems = otherItems.filter(item => !item.completed);
@@ -606,7 +688,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     );
     
     // Create restored item
-    const restoredItem: TodoItem = {
+    const restoredItem: ListItem = {
       ...itemToRestore,
       completed: false,
       originalPosition: undefined,
@@ -628,7 +710,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   const INDENT_DRAG_THRESHOLD = 50;
   const MAX_INDENT = 1;
 
-  const indentTodoItem = async (itemId: string, delta: 1 | -1) => {
+  const indentListItem = async (itemId: string, delta: 1 | -1) => {
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
       saveTimeoutRef.current = undefined;
@@ -651,7 +733,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     if (Math.abs(delta.x) >= INDENT_DRAG_THRESHOLD) {
       const draggedItem = uncompletedItems.find(item => item.id === active.id);
       if (draggedItem) {
-        await indentTodoItem(draggedItem.id, delta.x > 0 ? 1 : -1);
+        await indentListItem(draggedItem.id, delta.x > 0 ? 1 : -1);
       }
       return;
     }
@@ -680,14 +762,14 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     }
   };
 
-  const addTodoItem = () => {
+  const addListItem = () => {
     const currentItems = itemsRef.current;
     const uncompletedItems = currentItems.filter(item => !item.completed);
     const lastUncompletedItem = uncompletedItems[uncompletedItems.length - 1];
     const indentLevel = lastUncompletedItem
       ? Math.max(0, Math.min(MAX_INDENT, lastUncompletedItem.indentLevel))
       : 0;
-    const newItem: TodoItem = {
+    const newItem: ListItem = {
       id: generateItemId(),
       text: '',
       completed: false,
@@ -701,12 +783,12 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     return newItem.id;
   };
 
-  const addTodoItemAndFocus = () => {
-    const newId = addTodoItem();
+  const addListItemAndFocus = () => {
+    const newId = addListItem();
     setTimeout(() => itemInputRefs.current.get(newId)?.focus(), 0);
   };
 
-  const insertTodoItemAfter = (afterItemId: string) => {
+  const insertListItemAfter = (afterItemId: string) => {
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
       saveTimeoutRef.current = undefined;
@@ -714,7 +796,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     const currentItems = itemsRef.current;
     const afterItemPos = currentItems.findIndex(item => item.id === afterItemId);
     const sourceIndentLevel = afterItemPos >= 0 ? currentItems[afterItemPos].indentLevel : 0;
-    const newItem: TodoItem = {
+    const newItem: ListItem = {
       id: generateItemId(),
       text: '',
       completed: false,
@@ -780,7 +862,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     if (e.key === 'Enter') {
       e.preventDefault();
       const currentItem = uncompletedItems[index];
-      const newId = insertTodoItemAfter(currentItem?.id ?? '');
+      const newId = insertListItemAfter(currentItem?.id ?? '');
       setTimeout(() => {
         itemInputRefs.current.get(newId)?.focus();
       }, 0);
@@ -796,7 +878,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
         ? uncompletedItems[index - 1]
         : uncompletedItems[index + 1];
 
-      removeTodoItem(currentItem.id);
+      removeListItem(currentItem.id);
 
       if (focusTarget) {
         setTimeout(() => {
@@ -836,7 +918,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     const firstLineText = (before + lines[0]).slice(0, VALIDATION.ITEM_TEXT_MAX_LENGTH);
 
     const remainingLines = lines.slice(1);
-    const newItems: TodoItem[] = remainingLines.map((line, i) => {
+    const newItems: ListItem[] = remainingLines.map((line, i) => {
       const isLast = i === remainingLines.length - 1;
       const lineText = isLast ? line + after : line;
       return {
@@ -886,7 +968,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     }, 0);
   };
 
-  const removeTodoItem = (itemId: string) => {
+  const removeListItem = (itemId: string) => {
     const newItems = itemsRef.current.filter(item => item.id !== itemId);
     
     let uncompletedCount = 0;
@@ -919,7 +1001,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     }
   }, []);
 
-  const autoSaveNote = async (updatedItems: TodoItem[]) => {
+  const autoSaveNote = async (updatedItems: ListItem[]) => {
     if (!noteIdRef.current) return;
     // Cancel any pending debounced text-save snapshot so it can't overwrite
     // a newer structural update (indent, insert, reorder, completion, etc.).
@@ -1026,7 +1108,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   };
 
   // Helper function to find target item by index (for backward compatibility)
-  const findTargetItem = (index: number): TodoItem | null => {
+  const findTargetItem = (index: number): ListItem | null => {
     if (index < uncompletedItems.length) {
       return uncompletedItems[index];
     } else {
@@ -1038,8 +1120,8 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     return null;
   };
 
-  // Main updateTodoItem function - now much simpler and more reliable
-  const updateTodoItem = async (index: number, field: 'text' | 'completed', value: string | boolean) => {
+  // Main updateListItem function - now much simpler and more reliable
+  const updateListItem = async (index: number, field: 'text' | 'completed', value: string | boolean) => {
     const targetItem = findTargetItem(index);
     if (!targetItem) return;
 
@@ -1091,7 +1173,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     );
 
     // Restore the completed item: uncompleted, keep assignee and indent
-    const restoredItem: TodoItem = {
+    const restoredItem: ListItem = {
       ...completedItem,
       completed: false,
       originalPosition: undefined,
@@ -1146,25 +1228,25 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       saveTimeoutRef.current = undefined;
     }
 
-    const updateData: UpdateNoteRequest = {
-      title,
-      content,
-      pinned,
-      archived,
-      color,
-      checked_items_collapsed: checkedItemsCollapsed,
-      items: noteType === 'todo' ? items.map((item, idx) => ({
-        text: item.text,
-        position: idx,
-        completed: item.completed,
-        indent_level: item.indentLevel,
-        assigned_to: item.assignedTo,
-      })) : undefined,
-    };
+    const updateData: UpdateNoteRequest = note.note_type === 'list'
+      ? {
+          title,
+          pinned,
+          archived,
+          color,
+          checked_items_collapsed: checkedItemsCollapsed,
+          items: mapItemsForAutoSave(items),
+        }
+      : {
+          content,
+          pinned,
+          archived,
+          color,
+        };
 
     await notes.update(note.id, updateData);
     onRefresh?.();
-  }, [archived, checkedItemsCollapsed, color, content, items, note, noteType, onRefresh, pinned, title]);
+  }, [archived, checkedItemsCollapsed, color, content, items, mapItemsForAutoSave, note, onRefresh, pinned, title]);
 
   const handleSave = async () => {
     if (savingRef.current) return;
@@ -1180,19 +1262,25 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       if (note) {
         await persistExistingNote();
       } else {
-        const createData: CreateNoteRequest = {
-          title,
-          content,
-          note_type: noteType,
-          color,
-          items: noteType === 'todo' ? items.map((item, idx) => ({
-            text: item.text,
-            position: idx,
-            completed: item.completed,
-            indent_level: item.indentLevel,
-          })) : undefined,
-          labels: noteLabels.length > 0 ? noteLabels.map(l => l.name) : undefined,
-        };
+        const createData: CreateNoteRequest = noteType === 'list'
+          ? {
+              note_type: 'list',
+              title,
+              color,
+              items: items.map((item, idx) => ({
+                text: item.text,
+                position: idx,
+                completed: item.completed,
+                indent_level: item.indentLevel,
+              })),
+              labels: noteLabels.length > 0 ? noteLabels.map(l => l.name) : undefined,
+            }
+          : {
+              note_type: 'text',
+              content,
+              color,
+              labels: noteLabels.length > 0 ? noteLabels.map(l => l.name) : undefined,
+            };
         await notes.create(createData);
       }
       onSave();
@@ -1239,21 +1327,16 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     setPinned(newPinnedState);
     
     try {
-      const updateData: UpdateNoteRequest = {
-        title,
-        content,
-        pinned: newPinnedState,
-        archived,
-        color,
-        checked_items_collapsed: checkedItemsCollapsed,
-        items: note.note_type === 'todo' ? items.map((item, idx) => ({
-          text: item.text,
-          position: idx,
-          completed: item.completed,
-          indent_level: item.indentLevel,
-          assigned_to: item.assignedTo,
-        })) : undefined,
-      };
+      const updateData: UpdateNoteRequest = note.note_type === 'list'
+        ? {
+            title,
+            pinned: newPinnedState,
+            archived,
+            color,
+            checked_items_collapsed: checkedItemsCollapsed,
+            items: mapItemsForAutoSave(items),
+          }
+        : { content, pinned: newPinnedState, archived, color };
       await notes.update(note.id, updateData);
       onRefresh?.();
       showToast(
@@ -1263,7 +1346,10 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
           label: t('dashboard.undo'),
           onClick: async () => {
             try {
-              await notes.update(note.id, { pinned: !newPinnedState });
+              await notes.update(note.id, note.note_type === 'list'
+                ? { pinned: !newPinnedState, archived, title, color, checked_items_collapsed: checkedItemsCollapsed, items: mapItemsForAutoSave(items) }
+                : { pinned: !newPinnedState, archived, content, color }
+              );
               setPinned(!newPinnedState);
               onRefresh?.();
             } catch (undoError) {
@@ -1286,21 +1372,16 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     setArchived(newArchivedState);
     
     try {
-      const updateData: UpdateNoteRequest = {
-        title,
-        content,
-        pinned,
-        archived: newArchivedState,
-        color,
-        checked_items_collapsed: checkedItemsCollapsed,
-        items: note.note_type === 'todo' ? items.map((item, idx) => ({
-          text: item.text,
-          position: idx,
-          completed: item.completed,
-          indent_level: item.indentLevel,
-          assigned_to: item.assignedTo,
-        })) : undefined,
-      };
+      const updateData: UpdateNoteRequest = note.note_type === 'list'
+        ? {
+            title,
+            pinned,
+            archived: newArchivedState,
+            color,
+            checked_items_collapsed: checkedItemsCollapsed,
+            items: mapItemsForAutoSave(items),
+          }
+        : { content, pinned, archived: newArchivedState, color };
       await notes.update(note.id, updateData);
       showToast(
         newArchivedState ? t('dashboard.noteArchived') : t('dashboard.noteUnarchived'),
@@ -1309,7 +1390,10 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
           label: t('dashboard.undo'),
           onClick: async () => {
             try {
-              await notes.update(note.id, { archived: !newArchivedState });
+              await notes.update(note.id, note.note_type === 'list'
+                ? { archived: !newArchivedState, pinned, title, color, checked_items_collapsed: checkedItemsCollapsed, items: mapItemsForAutoSave(items) }
+                : { archived: !newArchivedState, pinned, content, color }
+              );
               setArchived(!newArchivedState);
               onRefresh?.();
             } catch (undoError) {
@@ -1320,6 +1404,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
         }
       );
       if (newArchivedState) {
+        onRefresh?.();
         onClose();
       } else {
         onRefresh?.();
@@ -1353,21 +1438,16 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     setCheckedItemsCollapsed(newCollapsedState);
     
     try {
-      const updateData: UpdateNoteRequest = {
-        title,
-        content,
-        pinned,
-        archived,
-        color,
-        checked_items_collapsed: newCollapsedState,
-        items: note.note_type === 'todo' ? items.map((item, idx) => ({
-          text: item.text,
-          position: idx,
-          completed: item.completed,
-          indent_level: item.indentLevel,
-          assigned_to: item.assignedTo,
-        })) : undefined,
-      };
+      const updateData: UpdateNoteRequest = note.note_type === 'list'
+        ? {
+            title,
+            pinned,
+            archived,
+            color,
+            checked_items_collapsed: newCollapsedState,
+            items: mapItemsForAutoSave(items),
+          }
+        : { content, pinned, archived, color };
       await notes.update(note.id, updateData);
       onRefresh?.();
     } catch (error) {
@@ -1379,23 +1459,29 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
 
   const hasUnsavedChanges = () => {
     if (note) {
-      const todoItemsChanged = note.note_type === 'todo' && haveTodoItemsChanged(items, note.items);
-      return (
-        title !== note.title ||
-        content !== note.content ||
-        color !== note.color ||
-        pinned !== note.pinned ||
-        archived !== note.archived ||
-        checkedItemsCollapsed !== note.checked_items_collapsed ||
-        todoItemsChanged
-      );
+      if (note.note_type === 'list') {
+        return (
+          title !== note.title ||
+          color !== note.color ||
+          pinned !== note.pinned ||
+          archived !== note.archived ||
+          checkedItemsCollapsed !== note.checked_items_collapsed ||
+          haveListItemsChanged(items, note.items)
+        );
+      } else {
+        return (
+          content !== note.content ||
+          color !== note.color ||
+          pinned !== note.pinned ||
+          archived !== note.archived
+        );
+      }
     } else {
-      return (
-        title.trim() !== '' ||
-        content.trim() !== '' ||
-        (noteType === 'todo' && items.some(item => item.text.trim() !== '')) ||
-        noteLabels.length > 0
-      );
+      if (noteType === 'list') {
+        return title.trim() !== '' || items.some(item => item.text.trim() !== '') || noteLabels.length > 0;
+      } else {
+        return content.trim() !== '' || noteLabels.length > 0;
+      }
     }
   };
 
@@ -1453,7 +1539,14 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       setShowLabelPicker(v => !v);
     } else if (key === 'c') {
       e.preventDefault();
-      colorPickerRef.current?.querySelector<HTMLButtonElement>('button[tabindex="0"]')?.focus();
+      setShowColorPicker(v => {
+        if (!v) {
+          requestAnimationFrame(() => {
+            colorPickerRef.current?.querySelector<HTMLButtonElement>('button[tabindex="0"]')?.focus();
+          });
+        }
+        return !v;
+      });
     }
   };
 
@@ -1466,102 +1559,68 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
 
   return (
     <>
-      <Dialog open={true} onClose={handleCloseRequest} className="relative z-50">
+      <Dialog
+        open={true}
+        onClose={() => {
+          // If the backdrop mousedown already handled this dismiss, skip.
+          if (backdropHandledRef.current) {
+            backdropHandledRef.current = false;
+            return;
+          }
+          // Escape key: two-step dismiss — collapse first, then close on second press.
+          if (isEditingContent) {
+            setIsEditingContent(false);
+          } else {
+            handleCloseRequest();
+          }
+        }}
+        className="relative z-50"
+      >
         <div className="fixed inset-0 bg-black/30 dark:bg-black/50" aria-hidden="true" />
-      
-      <div className="fixed inset-0 flex items-center justify-center p-2 sm:p-4 overflow-hidden">
+
+        {/* Backdrop mousedown: two-step dismiss matching Dialog.onClose.
+            Using onMouseDown (not onClick) so both this handler and HeadlessUI's
+            outside-click detection (which also fires on mousedown) see the same
+            isEditingContent value before any React re-render between events.
+            target===currentTarget ensures clicks inside the panel that bubble up
+            are ignored. */}
+        <div
+          className="fixed inset-0 flex items-center justify-center p-2 sm:p-4 overflow-hidden"
+          onMouseDown={(e) => {
+            if (e.target !== e.currentTarget) return;
+            // Signal onClose to skip its logic — we're handling this dismiss.
+            backdropHandledRef.current = true;
+            if (isEditingContent) {
+              setIsEditingContent(false);
+            } else {
+              handleCloseRequest();
+            }
+          }}
+        >
         <DialogPanel
-          className={`mx-auto w-full max-w-md max-h-[90vh] overflow-hidden rounded-lg shadow-xl ${
+          className={`mx-auto w-full max-w-lg max-h-[90vh] overflow-hidden rounded-lg shadow-xl relative ${
             colors.find(c => c.value === color)?.class || 'bg-white dark:bg-slate-800 border-gray-300 dark:border-slate-600'
           }`}
         >
-          {/* Header */}
-          <div className="flex items-center justify-between p-4 border-b border-gray-200 dark:border-white/20">
-            <h2 className="text-lg font-semibold text-gray-900 dark:text-white">
-              {note ? t('note.editNote') : t('note.newNote')}
-            </h2>
-            <div className="flex items-center space-x-2">
-              {note && (
-                <>
-                  {noteDeepLinkHref && (
-                    <a
-                      href={noteDeepLinkHref}
-                      className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
-                      title={t('nav.openMobileApp')}
-                      aria-label={t('nav.openMobileApp')}
-                      data-testid="note-open-mobile-app-toolbar-link"
-                    >
-                      <DevicePhoneMobileIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
-                    </a>
-                  )}
-                  {isOwner && onShare && (
-                    <button
-                      onClick={() => onShare(note)}
-                      className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
-                      title={t('note.share')}
-                      aria-label={t('note.share')}
-                    >
-                      <ShareIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
-                    </button>
-                  )}
-                  <button
-                    onClick={handlePinToggle}
-                    className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
-                    title={pinned ? t('note.unpinNote') : t('note.pinNote')}
-                    aria-label={pinned ? t('note.unpinNote') : t('note.pinNote')}
-                  >
-                    {pinned ? (
-                      <svg className="h-5 w-5 text-blue-500" fill="currentColor" viewBox="0 0 24 24">
-                        <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/>
-                      </svg>
-                    ) : (
-                      <svg className="h-5 w-5 text-gray-600 dark:text-gray-300" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                        <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/>
-                      </svg>
-                    )}
-                  </button>
-                  <button
-                    onClick={handleArchiveToggle}
-                    className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
-                    title={archived ? t('note.unarchiveNote') : t('note.archiveNote')}
-                    aria-label={archived ? t('note.unarchiveNote') : t('note.archiveNote')}
-                  >
-                    {archived ? (
-                      <ArchiveBoxXMarkIcon className="h-5 w-5 text-blue-500" />
-                    ) : (
-                      <ArchiveBoxIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
-                    )}
-                  </button>
-                  {onDuplicate && (
-                    <button
-                      onClick={handleDuplicate}
-                      className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
-                      title={t('note.duplicate')}
-                      aria-label={t('note.duplicate')}
-                    >
-                      <DocumentDuplicateIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
-                    </button>
-                  )}
-                  {isOwner && onDelete && (
-                    <button
-                      onClick={handleDelete}
-                      className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
-                      title={t('note.delete')}
-                      aria-label={t('note.delete')}
-                    >
-                      <TrashIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
-                    </button>
-                  )}
-                </>
-              )}
+          {/* Top-right controls — close button, and Done when editing */}
+          <div className="absolute top-2 right-2 z-10 flex items-center gap-1">
+            {noteType === 'text' && isEditingContent && (
               <button
-                aria-label={t('common.close')}
-                onClick={handleCloseRequest}
+                type="button"
+                aria-label={t('common.done')}
+                onClick={() => setIsEditingContent(false)}
                 className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
               >
-                <XMarkIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+                <CheckIcon className="h-5 w-5 text-blue-500 dark:text-blue-400" />
               </button>
-            </div>
+            )}
+            <button
+              aria-label={t('common.close')}
+              onClick={handleCloseRequest}
+              className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+            >
+              <XMarkIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+            </button>
           </div>
 
           {/* Error Message */}
@@ -1578,7 +1637,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
           )}
 
           {/* Content */}
-          <div className="p-2 sm:p-4 space-y-4 overflow-y-auto max-h-[calc(90vh-8rem)]">
+          <div className="p-2 sm:p-4 pt-10 space-y-4 overflow-y-auto max-h-[calc(90vh-8rem)]">
             {/* Note type selector (only for new notes) */}
             {!note && (
               <div className="flex space-x-2">
@@ -1593,84 +1652,34 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                   {t('note.typeText')}
                 </button>
                 <button
-                  onClick={() => setNoteType('todo')}
+                  onClick={() => setNoteType('list')}
                   className={`px-3 py-1 text-sm rounded-md ${
-                    noteType === 'todo'
+                    noteType === 'list'
                       ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
                       : 'bg-gray-100 dark:bg-slate-700 text-gray-700 dark:text-gray-300 hover:bg-gray-200 dark:hover:bg-slate-600'
                   }`}
                 >
-                  {t('note.typeTodo')}
+                  {t('note.typeList')}
                 </button>
               </div>
             )}
 
-            {/* Title */}
-            <input
-              type="text"
-              placeholder={t('note.titlePlaceholder')}
-              className="w-full p-2 text-lg font-medium bg-transparent border-none outline-none placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white"
-              value={title}
-              onChange={(e) => {
-                const newTitle = e.target.value;
-                const validationError = validateTitle(newTitle, t);
-                if (validationError) {
-                  showError(validationError);
-                  return;
-                }
-                setTitle(newTitle);
-                if (note) {
-                  markDirty();
-                  if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
-                  saveTimeoutRef.current = setTimeout(async () => {
-                    saveTimeoutRef.current = undefined;
-                    await autoSaveNote(itemsRef.current);
-                  }, VALIDATION.AUTO_SAVE_TIMEOUT_MS);
-                }
-              }}
-              onKeyDown={(e) => {
-                if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
-                if (e.repeat) return;
-                if (e.key === 'Enter') {
-                  e.preventDefault();
-                  if (noteType === 'text') {
-                    const textarea = contentRef.current;
-                    if (textarea) {
-                      textarea.focus();
-                      textarea.setSelectionRange(textarea.value.length, textarea.value.length);
-                    }
-                  } else {
-                    const firstItem = uncompletedItems[0];
-                    if (firstItem) {
-                      const input = itemInputRefs.current.get(firstItem.id);
-                      if (input) {
-                        input.focus();
-                        input.setSelectionRange(input.value.length, input.value.length);
-                      }
-                    } else {
-                      addTodoItemAndFocus();
-                    }
-                  }
-                }
-              }}
-            />
-
-            {/* Content based on type */}
-            {noteType === 'text' ? (
-              <textarea
-                ref={contentRef}
-                placeholder={t('note.contentPlaceholder')}
-                rows={4}
-                className="w-full p-2 bg-transparent border-none outline-none resize-none placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white min-h-[6rem]"
-                value={content}
+            {/* Title (list notes only) */}
+            {noteType === 'list' && (
+              <input
+                type="text"
+                autoCapitalize="sentences"
+                placeholder={t('note.titlePlaceholder')}
+                className="w-full p-2 text-lg font-medium bg-transparent border-none outline-none placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white"
+                value={title}
                 onChange={(e) => {
-                  const newContent = e.target.value;
-                  const validationError = validateContent(newContent, t);
+                  const newTitle = e.target.value;
+                  const validationError = validateTitle(newTitle, t);
                   if (validationError) {
                     showError(validationError);
                     return;
                   }
-                  setContent(newContent);
+                  setTitle(newTitle);
                   if (note) {
                     markDirty();
                     if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
@@ -1680,7 +1689,84 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                     }, VALIDATION.AUTO_SAVE_TIMEOUT_MS);
                   }
                 }}
+                onKeyDown={(e) => {
+                  if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
+                  if (e.repeat) return;
+                  if (e.key === 'Enter') {
+                    e.preventDefault();
+                    const firstItem = uncompletedItems[0];
+                    if (firstItem) {
+                      const input = itemInputRefs.current.get(firstItem.id);
+                      if (input) {
+                        input.focus();
+                        input.setSelectionRange(input.value.length, input.value.length);
+                      }
+                    } else {
+                      addListItemAndFocus();
+                    }
+                  }
+                }}
               />
+            )}
+
+            {/* Content based on type */}
+            {noteType === 'text' ? (
+              <>
+                {isEditingContent ? (
+                  <textarea
+                    ref={contentRef}
+                    autoCapitalize="sentences"
+                    placeholder={t('note.contentPlaceholder')}
+                    rows={4}
+                    className="w-full p-2 border-none outline-none resize-none placeholder-gray-500 dark:placeholder-gray-400 text-gray-900 dark:text-white min-h-[6rem] rounded-md bg-gray-50 dark:bg-slate-700/40 transition-colors duration-150"
+                    value={content}
+                    onKeyDown={(e) => {
+                      if (e.nativeEvent.isComposing || e.nativeEvent.keyCode === 229) return;
+                      if (e.key === 'Escape') {
+                        e.preventDefault();
+                        setIsEditingContent(false);
+                      }
+                    }}
+                    onChange={(e) => {
+                      const newContent = e.target.value;
+                      const validationError = validateContent(newContent, t);
+                      if (validationError) {
+                        showError(validationError);
+                        return;
+                      }
+                      setContent(newContent);
+                      if (note) {
+                        markDirty();
+                        if (saveTimeoutRef.current) clearTimeout(saveTimeoutRef.current);
+                        saveTimeoutRef.current = setTimeout(async () => {
+                          saveTimeoutRef.current = undefined;
+                          await autoSaveNote(itemsRef.current);
+                        }, VALIDATION.AUTO_SAVE_TIMEOUT_MS);
+                      }
+                    }}
+                  />
+                ) : (
+                  <div
+                    data-testid="note-content-preview"
+                    role="textbox"
+                    aria-label={t('note.contentPlaceholder')}
+                    aria-multiline="true"
+                    tabIndex={0}
+                    onClick={() => setIsEditingContent(true)}
+                    onKeyDown={(e) => {
+                      if (e.key === 'Enter' || e.key === ' ') {
+                        e.preventDefault();
+                        setIsEditingContent(true);
+                      }
+                    }}
+                    className="w-full p-2 min-h-[6rem] cursor-text text-gray-900 dark:text-white markdown-content"
+                    dangerouslySetInnerHTML={{
+                      __html: renderedContent ||
+                        `<span class="text-gray-400 dark:text-gray-500 pointer-events-none">${t('note.contentPlaceholder')}</span>`,
+                    }}
+                  />
+                )}
+              </>
             ) : (
               <div className="space-y-4">
                 {/* Uncompleted items section */}
@@ -1700,12 +1786,12 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                           id={item.id}
                           index={index}
                           item={item}
-                          onUpdateTodoItem={updateTodoItem}
-                          onRemoveTodoItem={removeTodoItem}
+                          onUpdateListItem={updateListItem}
+                          onRemoveListItem={removeListItem}
                           isCompleted={false}
                           onKeyDown={handleItemKeyDown}
                           onPaste={handleItemPaste}
-                          onIndentChange={indentTodoItem}
+                          onIndentChange={indentListItem}
                           inputRef={(el) => {
                             if (el) itemInputRefs.current.set(item.id, el);
                             else itemInputRefs.current.delete(item.id);
@@ -1721,7 +1807,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                     </SortableContext>
                   </DndContext>
                   <button
-                    onClick={addTodoItemAndFocus}
+                    onClick={addListItemAndFocus}
                     className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300 hover:text-gray-800 dark:hover:text-white p-1"
                   >
                     <PlusIcon className="h-4 w-4" />
@@ -1750,8 +1836,8 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                             id={item.id}
                             index={index + uncompletedItems.length}
                             item={item}
-                            onUpdateTodoItem={(idx, field, value) => updateTodoItem(idx, field, value)}
-                            onRemoveTodoItem={removeTodoItem}
+                            onUpdateListItem={(idx, field, value) => updateListItem(idx, field, value)}
+                            onRemoveListItem={removeListItem}
                             isCompleted={true}
                             isShared={note?.is_shared}
                             collaborators={collaborators}
@@ -1766,8 +1852,30 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
               </div>
             )}
 
-            {/* Labels row: badges + add button with popover */}
-            <div className="flex flex-wrap items-center gap-1">
+            {/* Avatars + Labels row */}
+            <div className="flex flex-wrap items-center gap-2">
+              {/* Share avatars */}
+              {note?.is_shared && (() => {
+                const avatars = buildShareAvatars(note, currentUserId, usersById);
+                if (avatars.length === 0) return null;
+                return (
+                  <div className="flex items-center">
+                    {avatars.map((a, index) => (
+                      <div key={a.key} title={a.displayName}>
+                        <LetterAvatar
+                          firstName={a.firstName}
+                          username={a.username}
+                          userId={a.userId}
+                          hasProfileIcon={a.hasProfileIcon}
+                          iconVersion={a.iconVersion}
+                          className={`w-6 h-6 ring-2 ring-white dark:ring-slate-800 ${index > 0 ? '-ml-1' : ''}`}
+                        />
+                      </div>
+                    ))}
+                  </div>
+                );
+              })()}
+              {/* Label badges + add button */}
               {noteLabels.map(label => (
                 <span
                   key={label.id}
@@ -1798,98 +1906,171 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
               </div>
             </div>
 
-
-            {/* Sharing info */}
-            {note?.is_shared && (() => {
-              const avatars = buildShareAvatars(note, currentUserId, usersById);
-              if (avatars.length === 0) return null;
-              return (
-                <div className="flex items-center">
-                  {avatars.map((a, index) => (
-                    <div key={a.key} title={a.displayName}>
-                      <LetterAvatar
-                        firstName={a.firstName}
-                        username={a.username}
-                        userId={a.userId}
-                        hasProfileIcon={a.hasProfileIcon}
-                        iconVersion={a.iconVersion}
-                        className={`w-6 h-6 ring-2 ring-white dark:ring-slate-800 ${index > 0 ? '-ml-1' : ''}`}
-                      />
-                    </div>
-                  ))}
-                </div>
-              );
-            })()}
-
-            {/* Color selector */}
-            <div
-              ref={colorPickerRef}
-              role="group"
-              aria-label={t('note.colorPickerLabel')}
-              className="flex space-x-2"
-              onKeyDown={(e) => {
-                if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
-                e.preventDefault();
-                const currentIndex = colors.findIndex(c => c.value === color);
-                const nextIndex = currentIndex === -1
-                  ? (e.key === 'ArrowLeft' ? colors.length - 1 : 0)
-                  : e.key === 'ArrowLeft'
-                    ? Math.max(0, currentIndex - 1)
-                    : Math.min(colors.length - 1, currentIndex + 1);
-                if (nextIndex === currentIndex) return;
-                const nextColor = colors[nextIndex].value;
-                setColor(nextColor);
-                if (note) {
-                  markDirty();
-                  autoSaveDraftRef.current = { ...autoSaveDraftRef.current, color: nextColor };
-                  autoSaveNote(itemsRef.current);
-                }
-                colorPickerRef.current?.querySelectorAll<HTMLButtonElement>('button')[nextIndex]?.focus();
-              }}
-            >
-              {colors.map((colorOption) => (
-                <button
-                  key={colorOption.value}
-                  tabIndex={colorOption.value === color ? 0 : -1}
-                  onClick={() => {
-                    const newColor = colorOption.value;
-                    setColor(newColor);
-                    if (note) {
-                      markDirty();
-                      autoSaveDraftRef.current = { ...autoSaveDraftRef.current, color: newColor };
-                      autoSaveNote(itemsRef.current);
-                    }
-                  }}
-                  className={`w-8 h-8 rounded-full border-2 ${colorOption.class} ${
-                    color === colorOption.value ? 'ring-2 ring-blue-500' : ''
-                  }`}
-                  title={colorOption.name}
-                  aria-label={colorOption.name}
-                  aria-pressed={color === colorOption.value}
-                />
-              ))}
-            </div>
           </div>
 
-          {/* Footer */}
-          <div className="flex justify-between items-center p-4 border-t border-gray-200 dark:border-white/20">
-            {note && (
-              <p className="text-sm text-gray-500 dark:text-gray-400">
-                {t('note.lastEdited', { date: new Date(note.updated_at).toLocaleString(i18n.resolvedLanguage) })}
-              </p>
+          {/* Footer toolbar */}
+          <div className="border-t border-gray-200 dark:border-white/20">
+            {/* Color picker popover */}
+            {showColorPicker && (
+              <div
+                ref={colorPickerRef}
+                role="group"
+                aria-label={t('note.colorPickerLabel')}
+                className="flex flex-wrap gap-2 p-3 border-b border-gray-100 dark:border-white/10"
+                aria-roledescription="color swatches"
+                onKeyDown={(e) => {
+                  if (e.key !== 'ArrowLeft' && e.key !== 'ArrowRight') return;
+                  e.preventDefault();
+                  const currentIndex = colors.findIndex(c => c.value === color);
+                  const nextIndex = currentIndex === -1
+                    ? (e.key === 'ArrowLeft' ? colors.length - 1 : 0)
+                    : e.key === 'ArrowLeft'
+                      ? Math.max(0, currentIndex - 1)
+                      : Math.min(colors.length - 1, currentIndex + 1);
+                  if (nextIndex === currentIndex) return;
+                  const nextColor = colors[nextIndex].value;
+                  setColor(nextColor);
+                  if (note) {
+                    markDirty();
+                    autoSaveDraftRef.current = { ...autoSaveDraftRef.current, color: nextColor };
+                    autoSaveNote(itemsRef.current);
+                  }
+                  colorPickerRef.current?.querySelectorAll<HTMLButtonElement>('button')[nextIndex]?.focus();
+                }}
+              >
+                {colors.map((colorOption) => (
+                  <button
+                    key={colorOption.value}
+                    tabIndex={colorOption.value === color ? 0 : -1}
+                    onClick={() => {
+                      const newColor = colorOption.value;
+                      setColor(newColor);
+                      setShowColorPicker(false);
+                      if (note) {
+                        markDirty();
+                        autoSaveDraftRef.current = { ...autoSaveDraftRef.current, color: newColor };
+                        autoSaveNote(itemsRef.current);
+                      }
+                    }}
+                    className={`w-8 h-8 rounded-full border-2 ${colorOption.class} ${
+                      color === colorOption.value ? 'ring-2 ring-blue-500' : ''
+                    }`}
+                    title={colorOption.name}
+                    aria-label={colorOption.name}
+                    aria-pressed={color === colorOption.value}
+                  />
+                ))}
+              </div>
             )}
-            <div className="flex items-center ml-auto" role="status" aria-live="polite">
-              {loading ? (
-                <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300">
-                  <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600"></div>
-                  <span>{t('note.saving')}</span>
-                </div>
-              ) : showSaved ? (
-                <div className="flex items-center space-x-1 text-sm text-green-600 dark:text-green-400 transition-opacity">
-                  <CheckIcon className="h-4 w-4" />
-                  <span>{t('note.saved')}</span>
-                </div>
-              ) : null}
+
+            {/* Action buttons row */}
+            <div className="flex items-center justify-between p-2 sm:p-3">
+              <div className="flex items-center space-x-1">
+                {/* Color picker toggle */}
+                <button
+                  onMouseDown={(e) => e.stopPropagation()}
+                  onClick={() => setShowColorPicker(v => !v)}
+                  className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                  title={t('note.colorPickerLabel')}
+                  aria-label={t('note.colorPickerLabel')}
+                  aria-expanded={showColorPicker}
+                >
+                  <PaintBrushIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+                </button>
+
+                {note && (
+                  <>
+                    {noteDeepLinkHref && (
+                      <a
+                        href={noteDeepLinkHref}
+                        className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                        title={t('nav.openMobileApp')}
+                        aria-label={t('nav.openMobileApp')}
+                        data-testid="note-open-mobile-app-toolbar-link"
+                      >
+                        <DevicePhoneMobileIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+                      </a>
+                    )}
+                    <button
+                      onClick={handlePinToggle}
+                      className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                      title={pinned ? t('note.unpinNote') : t('note.pinNote')}
+                      aria-label={pinned ? t('note.unpinNote') : t('note.pinNote')}
+                    >
+                      {pinned ? (
+                        <svg className="h-5 w-5 text-blue-500" fill="currentColor" viewBox="0 0 24 24">
+                          <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/>
+                        </svg>
+                      ) : (
+                        <svg className="h-5 w-5 text-gray-600 dark:text-gray-300" fill="none" stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                          <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z"/>
+                        </svg>
+                      )}
+                    </button>
+                    <button
+                      onClick={handleArchiveToggle}
+                      className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                      title={archived ? t('note.unarchiveNote') : t('note.archiveNote')}
+                      aria-label={archived ? t('note.unarchiveNote') : t('note.archiveNote')}
+                    >
+                      {archived ? (
+                        <ArchiveBoxXMarkIcon className="h-5 w-5 text-blue-500" />
+                      ) : (
+                        <ArchiveBoxIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+                      )}
+                    </button>
+                    {isOwner && onShare && (
+                      <button
+                        onClick={() => onShare(note)}
+                        className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                        title={t('note.share')}
+                        aria-label={t('note.share')}
+                      >
+                        <ShareIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+                      </button>
+                    )}
+                    {onDuplicate && (
+                      <button
+                        onClick={handleDuplicate}
+                        className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                        title={t('note.duplicate')}
+                        aria-label={t('note.duplicate')}
+                      >
+                        <DocumentDuplicateIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+                      </button>
+                    )}
+                    {isOwner && onDelete && (
+                      <button
+                        onClick={handleDelete}
+                        className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
+                        title={t('note.delete')}
+                        aria-label={t('note.delete')}
+                      >
+                        <TrashIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+                      </button>
+                    )}
+                  </>
+                )}
+              </div>
+
+              {/* Right: last edited / save status */}
+              <div className="flex items-center" role="status" aria-live="polite">
+                {loading ? (
+                  <div className="flex items-center space-x-2 text-sm text-gray-600 dark:text-gray-300">
+                    <div className="animate-spin rounded-full h-4 w-4 border-b-2 border-gray-600"></div>
+                    <span>{t('note.saving')}</span>
+                  </div>
+                ) : showSaved ? (
+                  <div className="flex items-center space-x-1 text-sm text-green-600 dark:text-green-400 transition-opacity">
+                    <CheckIcon className="h-4 w-4" />
+                    <span>{t('note.saved')}</span>
+                  </div>
+                ) : note ? (
+                  <p className="text-xs text-gray-400 dark:text-gray-500">
+                    {t('note.lastEdited', { date: new Date(note.updated_at).toLocaleString(i18n.resolvedLanguage) })}
+                  </p>
+                ) : null}
+              </div>
             </div>
           </div>
         </DialogPanel>

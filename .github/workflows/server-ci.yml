@@ -20,7 +20,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Set up Go
-        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
           go-version: "1.25"
           cache-dependency-path: server/go.sum
@@ -39,7 +39,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Set up Go
-        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
           go-version: "1.25"
           cache-dependency-path: server/go.sum
@@ -58,7 +58,7 @@ jobs:
       - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
 
       - name: Set up Go
-        uses: actions/setup-go@4b73464bb391d4059bd26b0524d20df3927bd417 # v6
+        uses: actions/setup-go@4a3601121dd01d1626a1e23e37211e3254c1c06c # v6
         with:
           go-version: "1.25"
           cache-dependency-path: server/go.sum
@@ -82,12 +82,14 @@ jobs:
       - name: Check migration numbers are unique
         run: |
           set -euo pipefail
-          dupes=$(ls server/internal/database/migrations/*.sql \
-            | xargs -I{} basename {} \
-            | grep -oP '^\d+' \
-            | sort | uniq -d)
-          if [ -n "$dupes" ]; then
-            echo "Duplicate migration numbers found: $dupes"
-            exit 1
-          fi
+          for dialect in sqlite postgres; do
+            dupes=$(ls server/internal/database/migrations/${dialect}/*.sql \
+              | xargs -I{} basename {} \
+              | grep -oP '^\d+' \
+              | sort | uniq -d)
+            if [ -n "$dupes" ]; then
+              echo "Duplicate migration numbers found in ${dialect}: $dupes"
+              exit 1
+            fi
+          done
           echo "All migration numbers are unique."

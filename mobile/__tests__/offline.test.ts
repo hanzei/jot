@@ -17,7 +17,7 @@ jest.mock('../src/api/client', () => ({
   __esModule: true,
   default: {
     post: jest.fn(),
-    put: jest.fn(),
+    patch: jest.fn(),
     delete: jest.fn(),
   },
 }));
@@ -37,6 +37,11 @@ describe('generateLocalId', () => {
   it('generates a string starting with "local_"', () => {
     const id = generateLocalId();
     expect(id).toMatch(/^local_/);
+  });
+
+  it('matches the expected format local_<base36timestamp>_<16hexchars>', () => {
+    const id = generateLocalId();
+    expect(id).toMatch(/^local_[0-9a-z]+_[0-9a-f]{16}$/);
   });
 
   it('generates unique IDs on successive calls', () => {
@@ -83,15 +88,15 @@ describe('drainQueue', () => {
     expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [1]);
   });
 
-  it('processes PUT operations and removes them from queue', async () => {
+  it('processes PATCH operations and removes them from queue', async () => {
     const db = makeMockDb([
-      { id: 2, operation: 'update', endpoint: '/notes/abc', method: 'PUT', body: '{"title":"updated"}', created_at: '' },
+      { id: 2, operation: 'update', endpoint: '/notes/abc', method: 'PATCH', body: '{"title":"updated"}', created_at: '' },
     ]);
-    mockApi.put.mockResolvedValueOnce({ data: {} } as never);
+    mockApi.patch.mockResolvedValueOnce({ data: {} } as never);
 
     await drainQueue(db as never);
 
-    expect(mockApi.put).toHaveBeenCalledWith('/notes/abc', { title: 'updated' });
+    expect(mockApi.patch).toHaveBeenCalledWith('/notes/abc', { title: 'updated' });
     expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [2]);
   });
 
@@ -110,10 +115,10 @@ describe('drainQueue', () => {
   it('discards 404 errors and continues processing', async () => {
     const db = makeMockDb([
       { id: 4, operation: 'delete', endpoint: '/notes/gone', method: 'DELETE', body: null, created_at: '' },
-      { id: 5, operation: 'update', endpoint: '/notes/exists', method: 'PUT', body: '{}', created_at: '' },
+      { id: 5, operation: 'update', endpoint: '/notes/exists', method: 'PATCH', body: '{}', created_at: '' },
     ]);
     mockApi.delete.mockRejectedValueOnce(makeAxiosError(404));
-    mockApi.put.mockResolvedValueOnce({ data: {} } as never);
+    mockApi.patch.mockResolvedValueOnce({ data: {} } as never);
 
     await drainQueue(db as never);
 
@@ -123,11 +128,11 @@ describe('drainQueue', () => {
 
   it('discards 409 errors and continues processing', async () => {
     const db = makeMockDb([
-      { id: 4, operation: 'update', endpoint: '/notes/conflict', method: 'PUT', body: '{}', created_at: '' },
-      { id: 5, operation: 'update', endpoint: '/notes/exists', method: 'PUT', body: '{}', created_at: '' },
+      { id: 4, operation: 'update', endpoint: '/notes/conflict', method: 'PATCH', body: '{}', created_at: '' },
+      { id: 5, operation: 'update', endpoint: '/notes/exists', method: 'PATCH', body: '{}', created_at: '' },
     ]);
-    mockApi.put.mockRejectedValueOnce(makeAxiosError(409));
-    mockApi.put.mockResolvedValueOnce({ data: {} } as never);
+    mockApi.patch.mockRejectedValueOnce(makeAxiosError(409));
+    mockApi.patch.mockResolvedValueOnce({ data: {} } as never);
 
     await drainQueue(db as never);
 
@@ -137,10 +142,10 @@ describe('drainQueue', () => {
 
   it('stops draining on network errors (non-4xx)', async () => {
     const db = makeMockDb([
-      { id: 6, operation: 'update', endpoint: '/notes/abc', method: 'PUT', body: '{}', created_at: '' },
-      { id: 7, operation: 'update', endpoint: '/notes/xyz', method: 'PUT', body: '{}', created_at: '' },
+      { id: 6, operation: 'update', endpoint: '/notes/abc', method: 'PATCH', body: '{}', created_at: '' },
+      { id: 7, operation: 'update', endpoint: '/notes/xyz', method: 'PATCH', body: '{}', created_at: '' },
     ]);
-    mockApi.put.mockRejectedValueOnce(new Error('Network Error'));
+    mockApi.patch.mockRejectedValueOnce(new Error('Network Error'));
 
     await drainQueue(db as never);
 

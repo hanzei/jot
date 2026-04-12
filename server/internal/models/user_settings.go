@@ -6,6 +6,8 @@ import (
 	"errors"
 	"fmt"
 	"time"
+
+	"github.com/hanzei/jot/server/internal/database/dialect"
 )
 
 type UserSettings struct {
@@ -16,23 +18,24 @@ type UserSettings struct {
 	UpdatedAt time.Time `json:"updated_at"`
 }
 
-type UserSettingsStore struct {
+type userSettingsStore struct {
 	db *sql.DB
+	d  *dialect.Dialect
 }
 
-func NewUserSettingsStore(db *sql.DB) *UserSettingsStore {
-	return &UserSettingsStore{db: db}
+func newUserSettingsStore(db *sql.DB, d *dialect.Dialect) *userSettingsStore {
+	return &userSettingsStore{db: db, d: d}
 }
 
 // GetOrCreate returns existing settings for the user, or creates a row with
 // defaults and returns those. The operation is atomic: if two goroutines race
 // to create the row, one will win the INSERT and both will read consistent data.
-func (s *UserSettingsStore) GetOrCreate(ctx context.Context, userID string) (*UserSettings, error) {
+func (s *userSettingsStore) GetOrCreate(ctx context.Context, userID string) (*UserSettings, error) {
 	settings := &UserSettings{UserID: userID}
 	err := s.db.QueryRowContext(ctx,
-		`INSERT INTO user_settings (user_id, language, theme, note_sort) VALUES (?, 'system', 'system', 'manual')
+		s.d.RewritePlaceholders(`INSERT INTO user_settings (user_id, language, theme, note_sort) VALUES (?, 'system', 'system', 'manual')
 		 ON CONFLICT(user_id) DO NOTHING
-		 RETURNING language, theme, note_sort, updated_at`,
+		 RETURNING language, theme, note_sort, updated_at`),
 		userID,
 	).Scan(&settings.Language, &settings.Theme, &settings.NoteSort, &settings.UpdatedAt)
 	if err == nil {
@@ -43,7 +46,7 @@ func (s *UserSettingsStore) GetOrCreate(ctx context.Context, userID string) (*Us
 	}
 	// Row already existed; read it.
 	err = s.db.QueryRowContext(ctx,
-		`SELECT language, theme, note_sort, updated_at FROM user_settings WHERE user_id = ?`,
+		s.d.RewritePlaceholders(`SELECT language, theme, note_sort, updated_at FROM user_settings WHERE user_id = ?`),
 		userID,
 	).Scan(&settings.Language, &settings.Theme, &settings.NoteSort, &settings.UpdatedAt)
 	if err != nil {
@@ -54,12 +57,12 @@ func (s *UserSettingsStore) GetOrCreate(ctx context.Context, userID string) (*Us
 
 // Update persists the language, theme, and note sort preferences for the given user and
 // returns the updated settings.
-func (s *UserSettingsStore) Update(ctx context.Context, userID, language, theme, noteSort string) (*UserSettings, error) {
+func (s *userSettingsStore) Update(ctx context.Context, userID, language, theme, noteSort string) (*UserSettings, error) {
 	settings := &UserSettings{UserID: userID}
 	err := s.db.QueryRowContext(ctx,
-		`INSERT INTO user_settings (user_id, language, theme, note_sort) VALUES (?, ?, ?, ?)
+		s.d.RewritePlaceholders(`INSERT INTO user_settings (user_id, language, theme, note_sort) VALUES (?, ?, ?, ?)
 		 ON CONFLICT(user_id) DO UPDATE SET language = excluded.language, theme = excluded.theme, note_sort = excluded.note_sort, updated_at = CURRENT_TIMESTAMP
-		 RETURNING language, theme, note_sort, updated_at`,
+		 RETURNING language, theme, note_sort, updated_at`),
 		userID, language, theme, noteSort,
 	).Scan(&settings.Language, &settings.Theme, &settings.NoteSort, &settings.UpdatedAt)
 	if err != nil {

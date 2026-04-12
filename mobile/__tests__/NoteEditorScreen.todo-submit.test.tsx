@@ -181,7 +181,7 @@ jest.mock('../src/i18n', () => ({
   default: {},
 }));
 
-describe('NoteEditorScreen todo submit behavior', () => {
+describe('NoteEditorScreen list submit behavior', () => {
   function getPanResponderConfig(createSpy: jest.SpiedFunction<typeof PanResponder.create>, callsBefore: number) {
     return createSpy.mock.calls
       .slice(callsBefore)
@@ -204,19 +204,19 @@ describe('NoteEditorScreen todo submit behavior', () => {
     mockDuplicateMutateAsync.mockResolvedValue({ id: 'duplicate-note-id' });
   });
 
-  it('creates a new todo item when submitting existing todo text input', async () => {
+  it('creates a new list item when submitting existing list item text input', async () => {
     const { getByTestId, getAllByTestId } = render(<NoteEditorScreen />);
 
     fireEvent.press(getByTestId('toggle-note-type'));
-    fireEvent.press(getByTestId('add-todo-item'));
+    fireEvent.press(getByTestId('add-list-item'));
 
-    const baselineCount = getAllByTestId('todo-item-text').length;
-    const firstInput = getAllByTestId('todo-item-text')[0];
+    const baselineCount = getAllByTestId('list-item-text').length;
+    const firstInput = getAllByTestId('list-item-text')[0];
     fireEvent.changeText(firstInput, 'Buy milk');
     fireEvent(firstInput, 'submitEditing');
 
     await waitFor(() => {
-      expect(getAllByTestId('todo-item-text').length).toBe(baselineCount + 1);
+      expect(getAllByTestId('list-item-text').length).toBe(baselineCount + 1);
     });
   });
 
@@ -264,15 +264,15 @@ describe('NoteEditorScreen todo submit behavior', () => {
     });
   });
 
-  it('updates todo indentation from horizontal swipe gesture', async () => {
+  it('updates list item indentation from horizontal swipe gesture', async () => {
     const panResponderSpy = jest.spyOn(PanResponder, 'create');
     const callsBefore = panResponderSpy.mock.calls.length;
     const { getByTestId, getAllByTestId } = render(<NoteEditorScreen />);
 
     fireEvent.press(getByTestId('toggle-note-type'));
-    fireEvent.press(getByTestId('add-todo-item'));
+    fireEvent.press(getByTestId('add-list-item'));
 
-    expect(StyleSheet.flatten(getAllByTestId('todo-item-row')[0].props.style)?.marginLeft).toBe(0);
+    expect(StyleSheet.flatten(getAllByTestId('list-item-row')[0].props.style)?.marginLeft).toBe(0);
 
     const panResponderConfig = getPanResponderConfig(panResponderSpy, callsBefore);
     expect(panResponderConfig).toBeDefined();
@@ -281,7 +281,7 @@ describe('NoteEditorScreen todo submit behavior', () => {
     });
 
     await waitFor(() => {
-      expect(StyleSheet.flatten(getAllByTestId('todo-item-row')[0].props.style)?.marginLeft).toBe(
+      expect(StyleSheet.flatten(getAllByTestId('list-item-row')[0].props.style)?.marginLeft).toBe(
         VALIDATION.INDENT_PX_PER_LEVEL,
       );
     });
@@ -293,7 +293,7 @@ describe('NoteEditorScreen todo submit behavior', () => {
     });
 
     await waitFor(() => {
-      expect(StyleSheet.flatten(getAllByTestId('todo-item-row')[0].props.style)?.marginLeft).toBe(0);
+      expect(StyleSheet.flatten(getAllByTestId('list-item-row')[0].props.style)?.marginLeft).toBe(0);
     });
 
     await waitFor(() => {
@@ -314,7 +314,7 @@ describe('NoteEditorScreen todo submit behavior', () => {
 
     mockUpdateMutateAsync.mockClear();
 
-    fireEvent.changeText(getAllByTestId('todo-item-text')[0], 'Indented item');
+    fireEvent.changeText(getAllByTestId('list-item-text')[0], 'Indented item');
     await waitFor(() => {
       expect(mockCreateMutateAsync).toHaveBeenCalledWith(
         expect.objectContaining({
@@ -335,7 +335,7 @@ describe('NoteEditorScreen todo submit behavior', () => {
   it('keeps dirty state for color change when note id is not yet available', async () => {
     const { getByTestId } = render(<NoteEditorScreen />);
 
-    fireEvent.changeText(getByTestId('note-title-input'), 'Draft note');
+    fireEvent.changeText(getByTestId('note-content-input'), 'Draft note');
 
     const colorButton = getByTestId('toolbar-color-btn');
     fireEvent.press(colorButton);
@@ -346,7 +346,7 @@ describe('NoteEditorScreen todo submit behavior', () => {
       () => {
         expect(mockCreateMutateAsync).toHaveBeenCalledWith(
           expect.objectContaining({
-            title: 'Draft note',
+            content: 'Draft note',
             color: '#f28b82',
           }),
         );

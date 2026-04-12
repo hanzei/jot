@@ -1,6 +1,7 @@
 {
   "common": {
-    "close": "Chiudi"
+    "close": "Chiudi",
+    "done": "Fatto"
   },
   "nav": {
     "profileMenu": "Menu profilo",
@@ -56,6 +57,7 @@
     "otherNotes": "Altre note",
     "searchPlaceholder": "Cerca note...",
     "searchAriaLabel": "Cerca note",
+    "searchClearAriaLabel": "Cancella ricerca",
     "sortLabel": "Ordina note",
     "sortOption": {
       "manual": "Manuale",
@@ -65,14 +67,14 @@
     "manualReorderDisabledTitle": "Riordinamento manuale disattivato.",
     "manualReorderDisabled": "Le note sono ordinate per {{sort}}, quindi il trascinamento non è disponibile.",
     "tabNotes": "Note",
-    "tabMyTodo": "Le mie attività",
-    "myTodoTooltip": "Note con attività assegnate a te",
-    "myTodoInfo": "Visualizzazione note che includono le tue attività assegnate.",
+    "tabMyTasks": "I miei compiti",
+    "myTasksTooltip": "Note con elementi di lista assegnati a te",
+    "myTasksInfo": "Visualizzazione delle note con i tuoi elementi di lista assegnati.",
     "tabArchive": "Archivio",
     "tabBin": "Cestino",
     "tabAdmin": "Admin",
-    "noMyTodoNotesTitle": "Nessuna attività assegnata",
-    "noMyTodoNotes": "Nessuna attività ti è stata ancora assegnata. Quando qualcuno ti assegnerà un'attività in una nota condivisa, apparirà qui.",
+    "noMyTasksNotesTitle": "Nessun elemento di lista assegnato",
+    "noMyTasksNotes": "Non hai ancora elementi di lista assegnati. Quando qualcuno ti assegna un elemento di lista in una nota condivisa, apparirà qui.",
     "noNotesForThisLabel": "Nessuna nota per questa etichetta",
     "labelFilterEmptyHint": "Le note con questa etichetta appariranno qui.",
     "archiveInfo": "Le note archiviate sono nascoste dalla vista principale ma conservate per sempre.",
@@ -218,8 +220,8 @@
     "newNoteDescription": "Apri una nuova nota",
     "notesKey": "D",
     "notesDescription": "Apri la vista delle note",
-    "myTodoKey": "T",
-    "myTodoDescription": "Apri la vista delle mie attività",
+    "myTasksKey": "T",
+    "myTasksDescription": "Apri la vista dei miei compiti",
     "archiveKey": "A",
     "archiveDescription": "Apri la vista dell'archivio",
     "binKey": "B",
@@ -277,12 +279,12 @@
         "users": "Utenti",
         "notes": "Note",
         "labels": "Etichette",
-        "todoItems": "Attività"
+        "listItems": "Elementi di lista"
       },
       "metrics": {
         "admins": "Amministratori",
         "text": "Testo",
-        "todo": "Attività",
+        "list": "Lista",
         "archived": "Archiviate",
         "trashed": "Nel cestino",
         "sharedNotes": "Note condivise",
@@ -317,7 +319,7 @@
     "unarchiveNote": "Rimuovi nota dall'archivio",
     "archiveNote": "Archivia nota",
     "typeText": "Testo",
-    "typeTodo": "Elenco attività",
+    "typeList": "Lista",
     "titlePlaceholder": "Titolo della nota...",
     "contentPlaceholder": "Prendi nota...",
     "itemPlaceholder": "Elemento dell'elenco...",
@@ -380,7 +382,6 @@
     "deleteConfirmMessage": "Eliminare l'etichetta \"{{name}}\"? Verrà rimossa da tutte le note che la utilizzano."
   },
   "share": {
-    "title": "Condividi \"{{noteTitle}}\"",
     "untitledNote": "Nota senza titolo",
     "shareWithUser": "Condividi con utente:",
     "searchUsersPlaceholder": "Cerca utenti per nome...",
@@ -430,7 +431,7 @@
     "register": "Crea account - Jot",
     "notes": "Jot",
     "note": "{{title}} - Jot",
-    "myTodo": "Le mie attività - Jot",
+    "myTasks": "I miei compiti - Jot",
     "archive": "Archivio - Jot",
     "bin": "Cestino - Jot",
     "admin": "Admin - Jot",

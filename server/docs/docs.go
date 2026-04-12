@@ -721,8 +721,8 @@ const docTemplate = `{
                     },
                     {
                         "type": "boolean",
-                        "description": "Return only notes with todos assigned to current user",
-                        "name": "my_todo",
+                        "description": "Return only notes with tasks assigned to current user",
+                        "name": "my_tasks",
                         "in": "query"
                     }
                 ],
@@ -2553,16 +2553,30 @@ const docTemplate = `{
                 }
             }
         },
+        "models.AdminListItemStats": {
+            "type": "object",
+            "properties": {
+                "assigned": {
+                    "type": "integer"
+                },
+                "completed": {
+                    "type": "integer"
+                },
+                "total": {
+                    "type": "integer"
+                }
+            }
+        },
         "models.AdminNoteStats": {
             "type": "object",
             "properties": {
                 "archived": {
                     "type": "integer"
                 },
-                "text": {
+                "list": {
                     "type": "integer"
                 },
-                "todo": {
+                "text": {
                     "type": "integer"
                 },
                 "total": {
@@ -2590,6 +2604,9 @@ const docTemplate = `{
                 "labels": {
                     "$ref": "#/definitions/models.AdminLabelStats"
                 },
+                "list_items": {
+                    "$ref": "#/definitions/models.AdminListItemStats"
+                },
                 "notes": {
                     "$ref": "#/definitions/models.AdminNoteStats"
                 },
@@ -2598,9 +2615,6 @@ const docTemplate = `{
                 },
                 "storage": {
                     "$ref": "#/definitions/models.AdminStorageStats"
-                },
-                "todo_items": {
-                    "$ref": "#/definitions/models.AdminTodoItemStats"
                 },
                 "users": {
                     "$ref": "#/definitions/models.AdminUserStats"
@@ -2611,20 +2625,6 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "database_size_bytes": {
-                    "type": "integer"
-                }
-            }
-        },
-        "models.AdminTodoItemStats": {
-            "type": "object",
-            "properties": {
-                "assigned": {
-                    "type": "integer"
-                },
-                "completed": {
-                    "type": "integer"
-                },
-                "total": {
                     "type": "integer"
                 }
             }
@@ -2799,11 +2799,11 @@ const docTemplate = `{
             "type": "string",
             "enum": [
                 "text",
-                "todo"
+                "list"
             ],
             "x-enum-varnames": [
                 "NoteTypeText",
-                "NoteTypeTodo"
+                "NoteTypeList"
             ]
         },
         "models.User": {

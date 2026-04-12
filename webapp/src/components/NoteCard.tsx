@@ -17,6 +17,7 @@ import LinkText from '@/components/LinkText';
 import ConfirmDialog from '@/components/ConfirmDialog';
 import { useToast } from '@/hooks/useToast';
 import { buildShareAvatars } from '@/utils/shareAvatars';
+import { renderMarkdown } from '@/utils/markdown';
 
 interface NoteCardProps {
   note: Note;
@@ -66,14 +67,10 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
     setIsUpdating(true);
     try {
       const willArchive = !note.archived;
-      await notes.update(note.id, {
-        title: note.title,
-        content: note.content,
-        pinned: note.pinned,
-        archived: willArchive,
-        color: note.color,
-        checked_items_collapsed: note.checked_items_collapsed,
-      });
+      await notes.update(note.id, note.note_type === 'list'
+        ? { archived: willArchive, title: note.title, color: note.color, pinned: note.pinned, checked_items_collapsed: note.checked_items_collapsed }
+        : { archived: willArchive, content: note.content, color: note.color, pinned: note.pinned }
+      );
       onRefresh?.();
       showToast(
         willArchive ? t('dashboard.noteArchived') : t('dashboard.noteUnarchived'),
@@ -82,7 +79,10 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
           label: t('dashboard.undo'),
           onClick: async () => {
             try {
-              await notes.update(note.id, { archived: !willArchive });
+              await notes.update(note.id, note.note_type === 'list'
+                ? { archived: !willArchive, title: note.title, color: note.color, pinned: note.pinned, checked_items_collapsed: note.checked_items_collapsed }
+                : { archived: !willArchive, content: note.content, color: note.color, pinned: note.pinned }
+              );
               onRefresh?.();
             } catch (undoError) {
               console.error('Failed to undo archive toggle:', undoError);
@@ -103,14 +103,10 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
     setIsUpdating(true);
     try {
       const willPin = !note.pinned;
-      await notes.update(note.id, {
-        title: note.title,
-        content: note.content,
-        pinned: willPin,
-        archived: note.archived,
-        color: note.color,
-        checked_items_collapsed: note.checked_items_collapsed,
-      });
+      await notes.update(note.id, note.note_type === 'list'
+        ? { pinned: willPin, archived: note.archived, title: note.title, color: note.color, checked_items_collapsed: note.checked_items_collapsed }
+        : { pinned: willPin, archived: note.archived, content: note.content, color: note.color }
+      );
       onRefresh?.();
       showToast(
         willPin ? t('dashboard.notePinned') : t('dashboard.noteUnpinned'),
@@ -119,7 +115,10 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
           label: t('dashboard.undo'),
           onClick: async () => {
             try {
-              await notes.update(note.id, { pinned: !willPin });
+              await notes.update(note.id, note.note_type === 'list'
+                ? { pinned: !willPin, archived: note.archived, title: note.title, color: note.color, checked_items_collapsed: note.checked_items_collapsed }
+                : { pinned: !willPin, archived: note.archived, content: note.content, color: note.color }
+              );
               onRefresh?.();
             } catch (undoError) {
               console.error('Failed to undo pin toggle:', undoError);
@@ -179,9 +178,10 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
       data-testid="note-card"
       data-note-card="true"
       tabIndex={0}
-      aria-label={note.title || t('share.untitledNote')}
-      className={`note-card ${getColorClass(note.color)} p-4 relative group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1 ${isUpdating ? 'opacity-50' : ''
+      aria-label={(note.note_type === 'list' ? note.title : note.content?.slice(0, 50)) || t('share.untitledNote')}
+      className={`note-card ${getColorClass(note.color)} p-4 relative group focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-blue-500 focus-visible:ring-offset-1 ${isUpdating ? 'opacity-50' : ''} ${!inBin ? 'cursor-pointer' : ''
         }`}
+      onClick={() => !inBin && onEdit(note)}
       onKeyDown={(e) => {
         if (e.target !== e.currentTarget) return;
         if (!inBin && (e.key === 'Enter' || e.key === ' ')) {
@@ -199,7 +199,7 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
       )}
 
       {/* Menu */}
-      <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity">
+      <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 transition-opacity" onClick={(e) => e.stopPropagation()}>
       <Menu>
         <MenuButton aria-label={t('note.menuOptions')} className="p-1 rounded-full hover:bg-gray-200 transition-colors">
           <EllipsisVerticalIcon className="h-4 w-4 text-gray-600" />
@@ -303,20 +303,18 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
       </div>
 
       {/* Content */}
-      <div
-        onClick={() => !inBin && onEdit(note)}
-        className={`${inBin ? 'cursor-default' : 'cursor-pointer'}`}
-      >
-        {note.title && (
+      <div>
+        {note.note_type === 'list' && note.title && (
           <h3 className="font-medium text-gray-900 dark:text-white mb-2 line-clamp-2">
             {note.title}
           </h3>
         )}
 
         {note.note_type === 'text' ? (
-          <div className="text-sm text-gray-700 dark:text-gray-200 line-clamp-6 whitespace-pre-wrap">
-            {note.content}
-          </div>
+          <div
+            className="text-sm text-gray-700 dark:text-gray-200 line-clamp-6 markdown-content"
+            dangerouslySetInnerHTML={{ __html: renderMarkdown(note.content) }}
+          />
         ) : (
           <div className="space-y-1">
             {(() => {

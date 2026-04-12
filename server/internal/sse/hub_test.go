@@ -206,7 +206,67 @@ func TestHub_Publish(t *testing.T) { //nolint:gocognit
 	})
 }
 
+func TestHub(t *testing.T) {
+	t.Run("Close", func(t *testing.T) {
+		t.Run("closes all subscriber channels", func(t *testing.T) {
+			h, err := NewHub()
+			require.NoError(t, err)
+			ch1, _ := h.Subscribe(t.Context(), "user1")
+			ch2, _ := h.Subscribe(t.Context(), "user1")
+			ch3, _ := h.Subscribe(t.Context(), "user2")
+
+			h.Close()
+
+			_, ok := <-ch1
+			assert.False(t, ok, "ch1 should be closed")
+			_, ok = <-ch2
+			assert.False(t, ok, "ch2 should be closed")
+			_, ok = <-ch3
+			assert.False(t, ok, "ch3 should be closed")
+		})
+
+		t.Run("is idempotent", func(t *testing.T) {
+			h, err := NewHub()
+			require.NoError(t, err)
+			_, _ = h.Subscribe(t.Context(), "user1")
+
+			// Should not panic when called multiple times.
+			h.Close()
+			h.Close()
+		})
+
+		t.Run("unsubscribe after Close does not panic", func(t *testing.T) {
+			h, err := NewHub()
+			require.NoError(t, err)
+			_, unsub := h.Subscribe(t.Context(), "user1")
+
+			h.Close()
+
+			// Should not panic — hub already closed the channel.
+			assert.NotPanics(t, unsub)
+		})
+	})
+}
+
 func TestHub_ConcurrentAccess(t *testing.T) {
+	t.Run("concurrent Publish and Close do not race or panic", func(t *testing.T) {
+		h, err := NewHub()
+		require.NoError(t, err)
+		_, _ = h.Subscribe(t.Context(), "user1")
+
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			h.Close()
+		}()
+		go func() {
+			defer wg.Done()
+			h.Publish(t.Context(), []string{"user1"}, Event{Type: EventNoteCreated, SourceUserID: "u1"})
+		}()
+		wg.Wait()
+	})
+
 	t.Run("concurrent subscribe, publish, and unsubscribe do not race", func(t *testing.T) {
 		h, err := NewHub()
 		require.NoError(t, err)

@@ -14,7 +14,7 @@ import type { Note } from '@jot/shared';
 import { useTheme } from '../theme/ThemeContext';
 import { isLocalId } from '../db/noteQueries';
 
-export type ContextMenuViewContext = 'notes' | 'archived' | 'trash' | 'my-todo';
+export type ContextMenuViewContext = 'notes' | 'archived' | 'trash' | 'my-tasks';
 
 interface NoteContextMenuProps {
   visible: boolean;
@@ -76,7 +76,7 @@ export default function NoteContextMenu({
 
   const actions: Action[] = [];
 
-  if (viewContext === 'notes' || viewContext === 'my-todo') {
+  if (viewContext === 'notes' || viewContext === 'my-tasks') {
     actions.push({
       icon: 'color-palette-outline',
       label: t('note.changeColor'),
@@ -172,7 +172,7 @@ export default function NoteContextMenu({
         <SafeAreaView style={[styles.sheet, { backgroundColor: colors.sheetBackground }]}>
           <Pressable>
             <View style={[styles.handle, { backgroundColor: colors.handleColor }]} />
-            {note.title ? (
+            {note.note_type === 'list' && note.title ? (
               <Text style={[styles.noteTitle, { color: colors.text, borderBottomColor: colors.borderLight }]} numberOfLines={1}>
                 {note.title}
               </Text>

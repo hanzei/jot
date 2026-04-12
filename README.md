@@ -5,13 +5,13 @@ A self-hosted note-taking application built with Go backend and React frontend. 
 ## Features
 
 - **Notes Management**: Create, edit, delete, and organize notes
-- **Note Types**: Support for both plain text notes and todo lists with checkboxes
+- **Note Types**: Support for both plain text notes and lists with checkboxes
 - **Search & Filter**: Find notes quickly with search and filtering capabilities
 - **Responsive Design**: Works on desktop and mobile devices
 - **Self-hosted**: Complete control over your data
 - **SQLite Database**: Lightweight, file-based database
 - **Admin Support**: First registered user becomes admin
-- **Admin Instance Overview**: Admin page shows live usage metrics like users, notes, sharing, labels, todo items, and DB size
+- **Admin Instance Overview**: Admin page shows live usage metrics like users, notes, sharing, labels, list items, and DB size
 - **Single Binary**: Frontend and backend served from one Go binary
 - **Sliding Sessions**: 30-day sessions auto-extend when less than 7 days remain
 
@@ -23,8 +23,8 @@ A self-hosted note-taking application built with Go backend and React frontend. 
 ### Search and filter
 ![Search and filter](images/feature-search-filter.png)
 
-### Todo note editor
-![Todo note editor](images/feature-todo-note-editor.png)
+### List note editor
+![List note editor](images/feature-todo-note-editor.png)
 
 ### Archive view
 ![Archive view](images/feature-archive-view.png)
@@ -115,7 +115,8 @@ Configure the application using environment variables or `.env` file:
 
 ```bash
 # Database configuration
-DB_PATH=./jot.db                     # SQLite database file location
+DB_DRIVER=sqlite                    # Database driver: "sqlite" (default) or "postgres"
+DB_DSN=./jot.db                     # Database connection string (SQLite file path or Postgres DSN)
 
 # Server configuration
 PORT=8080                           # Server port (optional)
@@ -161,7 +162,7 @@ Create `.env` file for production:
 
 ```bash
 # Production environment
-DB_PATH=/var/lib/jot/jot.db
+DB_DSN=/var/lib/jot/jot.db
 PORT=8080
 ```
 
@@ -221,7 +222,7 @@ services:
   jot:
     image: hanzei/jot:latest
     environment:
-      - DB_PATH=/data/production.db
+      - DB_DSN=/data/production.db
     volumes:
       - ./custom-data:/data
     ports:

@@ -20,7 +20,8 @@ import {
   DndContext,
   closestCenter,
   KeyboardSensor,
-  PointerSensor,
+  MouseSensor,
+  TouchSensor,
   useSensor,
   useSensors,
   DragEndEvent,
@@ -62,7 +63,7 @@ export default function Dashboard() {
   const initialLabel = searchParams.get('label');
   const [showArchived, setShowArchived] = useState(!initialLabel && searchParams.get('view') === 'archive');
   const [showBin, setShowBin] = useState(!initialLabel && searchParams.get('view') === 'bin');
-  const [showMyTodo, setShowMyTodo] = useState(!initialLabel && searchParams.get('view') === 'my-todo');
+  const [showMyTasks, setShowMyTasks] = useState(!initialLabel && searchParams.get('view') === 'my-tasks');
   const [selectedLabelId, setSelectedLabelId] = useState<string | null>(initialLabel);
   const [isModalOpen, setIsModalOpen] = useState(false);
   const [editingNote, setEditingNote] = useState<Note | null>(null);
@@ -93,7 +94,7 @@ export default function Dashboard() {
     setDebouncedSearchQuery(nextSearch);
     setShowArchived(!label && searchParams.get('view') === 'archive');
     setShowBin(!label && searchParams.get('view') === 'bin');
-    setShowMyTodo(!label && searchParams.get('view') === 'my-todo');
+    setShowMyTasks(!label && searchParams.get('view') === 'my-tasks');
     setSelectedLabelId(label);
   }, [searchParams]);
 
@@ -144,10 +145,10 @@ export default function Dashboard() {
     }
   }, []);
 
-  const handleViewChange = useCallback((view: 'notes' | 'archive' | 'bin' | 'my-todo') => {
+  const handleViewChange = useCallback((view: 'notes' | 'archive' | 'bin' | 'my-tasks') => {
     setShowArchived(view === 'archive');
     setShowBin(view === 'bin');
-    setShowMyTodo(view === 'my-todo');
+    setShowMyTasks(view === 'my-tasks');
     setSearchQueryState('');
     setDebouncedSearchQuery('');
     setSelectedLabelId(null);
@@ -159,8 +160,8 @@ export default function Dashboard() {
         next.set('view', 'archive');
       } else if (view === 'bin') {
         next.set('view', 'bin');
-      } else if (view === 'my-todo') {
-        next.set('view', 'my-todo');
+      } else if (view === 'my-tasks') {
+        next.set('view', 'my-tasks');
       } else {
         next.delete('view');
       }
@@ -169,9 +170,15 @@ export default function Dashboard() {
   }, [setSearchParams]);
 
   const sensors = useSensors(
-    useSensor(PointerSensor, {
+    useSensor(MouseSensor, {
       activationConstraint: {
         distance: 8,
+      },
+    }),
+    useSensor(TouchSensor, {
+      activationConstraint: {
+        delay: 250,
+        tolerance: 5,
       },
     }),
     useSensor(KeyboardSensor, {
@@ -203,13 +210,13 @@ export default function Dashboard() {
 
       if (showBin && debouncedSearchQuery) {
         const [loadedNotes, allTrashedNotes] = await Promise.all([
-          notes.getAll(showArchived, debouncedSearchQuery, showBin, selectedLabelId ?? '', showMyTodo),
+          notes.getAll(showArchived, debouncedSearchQuery, showBin, selectedLabelId ?? '', showMyTasks),
           notes.getAll(false, '', true),
         ]);
         notesData = loadedNotes;
         nextTrashCount = allTrashedNotes.length;
       } else {
-        notesData = await notes.getAll(showArchived, debouncedSearchQuery, showBin, selectedLabelId ?? '', showMyTodo);
+        notesData = await notes.getAll(showArchived, debouncedSearchQuery, showBin, selectedLabelId ?? '', showMyTasks);
         if (showBin) {
           nextTrashCount = notesData.length;
         }
@@ -229,7 +236,7 @@ export default function Dashboard() {
         setLoading(false);
       }
     }
-  }, [showArchived, showBin, debouncedSearchQuery, selectedLabelId, showMyTodo, showToast, t]);
+  }, [showArchived, showBin, debouncedSearchQuery, selectedLabelId, showMyTasks, showToast, t]);
 
   // Register Dashboard-specific label callbacks so the layout can notify us
   // after a label rename (note cards need refresh) or delete (may clear selection).
@@ -247,21 +254,22 @@ export default function Dashboard() {
   }, [registerLabelCallbacks, loadNotes, handleViewChange]);
 
   useEffect(() => {
-    if (isModalOpen && editingNote?.title) {
-      document.title = t('pageTitle.note', { title: editingNote.title });
+    const editingNoteTitle = editingNote?.note_type === 'list' ? editingNote.title : undefined;
+    if (isModalOpen && editingNoteTitle) {
+      document.title = t('pageTitle.note', { title: editingNoteTitle });
     } else if (showBin) {
       document.title = t('pageTitle.bin');
     } else if (showArchived) {
       document.title = t('pageTitle.archive');
-    } else if (showMyTodo) {
-      document.title = t('pageTitle.myTodo');
+    } else if (showMyTasks) {
+      document.title = t('pageTitle.myTasks');
     } else if (selectedLabelId) {
       const activeLabelName = labelsList.find((label) => label.id === selectedLabelId)?.name ?? '';
       document.title = activeLabelName ? t('pageTitle.label', { name: activeLabelName }) : t('pageTitle.notes');
     } else {
       document.title = t('pageTitle.notes');
     }
-  }, [editingNote?.title, isModalOpen, labelsList, selectedLabelId, showArchived, showBin, showMyTodo, t]);
+  }, [editingNote, isModalOpen, labelsList, selectedLabelId, showArchived, showBin, showMyTasks, t]);
 
   useEffect(() => {
     loadUsers();
@@ -389,8 +397,14 @@ export default function Dashboard() {
       }
     }
 
-    if (event.type === 'note_updated' && editingNote && note_id === editingNote.id && event.data.note?.id === note_id) {
-      setEditingNote(event.data.note);
+    if (editingNote && note_id === editingNote.id) {
+      if ((event.type === 'note_updated' || event.type === 'note_shared') && event.data.note?.id === note_id) {
+        setEditingNote(event.data.note);
+      } else if (event.type === 'note_unshared' && !currentUserLostAccess) {
+        notes.getById(note_id).then(refreshed => {
+          setEditingNote(prev => prev?.id === note_id ? refreshed : prev);
+        }).catch(() => {});
+      }
     }
 
     loadNotes();
@@ -519,16 +533,16 @@ export default function Dashboard() {
         return;
       }
 
-      const isMyTodoShortcut =
+      const isMyTasksShortcut =
         event.key.toLowerCase() === 't' &&
         !event.shiftKey &&
         !event.ctrlKey &&
         !event.metaKey &&
         !event.altKey;
 
-      if (isMyTodoShortcut) {
+      if (isMyTasksShortcut) {
         event.preventDefault();
-        handleViewChange('my-todo');
+        handleViewChange('my-tasks');
         return;
       }
 
@@ -668,10 +682,24 @@ export default function Dashboard() {
     setIsShareModalOpen(true);
   };
 
-  const handleShareModalClose = () => {
+  const handleShareModalClose = async () => {
+    const noteId = sharingNote?.id;
     setIsShareModalOpen(false);
     setSharingNote(null);
     loadNotes();
+    if (editingNote && noteId === editingNote.id) {
+      try {
+        const refreshed = await notes.getById(noteId);
+        setEditingNote(refreshed);
+      } catch (err: unknown) {
+        const status = (err as { response?: { status?: number } })?.response?.status;
+        if (status === 403 || status === 404) {
+          setIsModalOpen(false);
+          setEditingNote(null);
+          restoreReturnUrl();
+        }
+      }
+    }
   };
 
   const rollbackNoteSortCache = (failedSort: NoteSort, previousSettings: ReturnType<typeof getSettings>): boolean => {
@@ -729,7 +757,7 @@ export default function Dashboard() {
   }, [noteSort, showToast, t]);
 
   const handleDragEnd = async (event: DragEndEvent) => {
-    if (showArchived || showBin || showMyTodo || noteSort !== 'manual') {
+    if (showArchived || showBin || showMyTasks || noteSort !== 'manual') {
       return;
     }
 
@@ -783,13 +811,13 @@ export default function Dashboard() {
     () => sortNotesForDisplay(notesList, noteSort),
     [notesList, noteSort],
   );
-  const dragReorderingDisabled = showArchived || showBin || showMyTodo || noteSort !== 'manual';
+  const dragReorderingDisabled = showArchived || showBin || showMyTasks || noteSort !== 'manual';
   const activeSortLabel = t(`dashboard.sortOption.${noteSort}`);
   const focusSearchShortcutHint = isApplePlatform() ? '⌘ + F' : t('keyboardShortcuts.focusSearchKey');
   const showCreateFirstNoteCta =
     !showArchived &&
     !showBin &&
-    !showMyTodo &&
+    !showMyTasks &&
     !debouncedSearchQuery &&
     !selectedLabelId;
   const emptyState = useMemo(() => {
@@ -817,11 +845,11 @@ export default function Dashboard() {
       };
     }
 
-    if (showMyTodo) {
+    if (showMyTasks) {
       return {
         icon: <ClipboardDocumentCheckIcon aria-hidden="true" className="h-8 w-8" />,
-        title: t('dashboard.noMyTodoNotesTitle'),
-        description: t('dashboard.noMyTodoNotes'),
+        title: t('dashboard.noMyTasksNotesTitle'),
+        description: t('dashboard.noMyTasksNotes'),
       };
     }
 
@@ -838,7 +866,7 @@ export default function Dashboard() {
       title: t('dashboard.noNotesYet'),
       description: t('dashboard.createFirstNote'),
     };
-  }, [debouncedSearchQuery, selectedLabelId, showArchived, showBin, showMyTodo, t]);
+  }, [debouncedSearchQuery, selectedLabelId, showArchived, showBin, showMyTasks, t]);
 
   // Inject the search bar into the persistent layout header
   useLayoutEffect(() => {
@@ -920,9 +948,9 @@ export default function Dashboard() {
               <PlusIcon className="h-5 w-5 mr-2" />
               {t('dashboard.newNote')}
             </button>
-            {showMyTodo && (
+            {showMyTasks && (
               <div className="mt-3 px-4 py-2 bg-blue-50 dark:bg-slate-800 border border-blue-100 dark:border-slate-700 rounded-lg text-sm text-blue-800 dark:text-slate-200">
-                {t('dashboard.myTodoInfo')}
+                {t('dashboard.myTasksInfo')}
               </div>
             )}
           </div>

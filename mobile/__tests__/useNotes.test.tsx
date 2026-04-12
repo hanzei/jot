@@ -93,10 +93,10 @@ describe('useNotes hooks', () => {
       expect(mockNotesApi.getNotes).toHaveBeenCalledWith(params);
     });
 
-    it('passes my_todo param to getNotes', async () => {
+    it('passes my_tasks param to getNotes', async () => {
       mockNotesApi.getNotes.mockResolvedValueOnce([] as never);
 
-      const params = { my_todo: true };
+      const params = { my_tasks: true };
       const { result } = renderHook(() => useNotes(params), { wrapper: createWrapper() });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
@@ -138,12 +138,32 @@ describe('useNotes hooks', () => {
 
       const { result } = renderHook(() => useCreateNote(), { wrapper: createWrapper() });
 
-      result.current.mutate({ title: 'Created', content: '', note_type: 'text' });
+      result.current.mutate({ content: 'Created', note_type: 'text' });
 
       await waitFor(() => expect(result.current.isSuccess).toBe(true));
 
       expect(result.current.data).toEqual(newNote);
       expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), newNote);
+    });
+
+    it('creates a list note via API and caches locally', async () => {
+      const newListNote = {
+        id: 'server-list-id', title: 'My List', note_type: 'list',
+        color: '#ffffff', pinned: false, archived: false, position: 0,
+        checked_items_collapsed: false, is_shared: false, deleted_at: null,
+        user_id: 'u1', created_at: '', updated_at: '', labels: [], shared_with: [],
+        items: [],
+      };
+      mockNotesApi.createNote.mockResolvedValueOnce(newListNote as never);
+
+      const { result } = renderHook(() => useCreateNote(), { wrapper: createWrapper() });
+
+      await result.current.mutateAsync({ title: 'My List', note_type: 'list', items: [] });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      expect(result.current.data).toEqual(newListNote);
+      expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), newListNote);
     });
 
     it('blocks write when server switch is in progress', async () => {
@@ -152,7 +172,7 @@ describe('useNotes hooks', () => {
       const { result } = renderHook(() => useCreateNote(), { wrapper: createWrapper() });
 
       await expect(
-        result.current.mutateAsync({ title: 'Blocked', content: '', note_type: 'text' }),
+        result.current.mutateAsync({ content: 'Blocked', note_type: 'text' }),
       ).rejects.toThrow('Server switch in progress; write blocked');
 
       expect(mockNotesApi.createNote).not.toHaveBeenCalled();

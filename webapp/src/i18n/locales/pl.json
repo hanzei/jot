@@ -1,6 +1,7 @@
 {
   "common": {
-    "close": "Zamknij"
+    "close": "Zamknij",
+    "done": "Gotowe"
   },
   "nav": {
     "profileMenu": "Menu profilu",
@@ -56,6 +57,7 @@
     "otherNotes": "Inne notatki",
     "searchPlaceholder": "Szukaj notatek...",
     "searchAriaLabel": "Szukaj notatek",
+    "searchClearAriaLabel": "Wyczyść wyszukiwanie",
     "sortLabel": "Sortuj notatki",
     "sortOption": {
       "manual": "Ręcznie",
@@ -65,14 +67,14 @@
     "manualReorderDisabledTitle": "Ręczne sortowanie jest wyłączone.",
     "manualReorderDisabled": "Notatki są posortowane według {{sort}}, więc przeciąganie i upuszczanie jest niedostępne.",
     "tabNotes": "Notatki",
-    "tabMyTodo": "Moje zadania",
-    "myTodoTooltip": "Notatki z zadaniami przypisanymi do ciebie",
-    "myTodoInfo": "Wyświetlanie notatek zawierających twoje przypisane zadania.",
+    "tabMyTasks": "Moje zadania",
+    "myTasksTooltip": "Notatki z elementami listy przypisanymi do ciebie",
+    "myTasksInfo": "Wyświetlanie notatek z przypisanymi elementami listy.",
     "tabArchive": "Archiwum",
     "tabBin": "Kosz",
     "tabAdmin": "Admin",
-    "noMyTodoNotesTitle": "Brak przypisanych zadań",
-    "noMyTodoNotes": "Nie masz jeszcze żadnych przypisanych zadań. Gdy ktoś przypisze ci zadanie w udostępnionej notatce, pojawi się ono tutaj.",
+    "noMyTasksNotesTitle": "Brak przypisanych elementów listy",
+    "noMyTasksNotes": "Nie masz jeszcze przypisanych elementów listy. Gdy ktoś przypisze ci element listy w udostępnionej notatce, pojawi się tutaj.",
     "noNotesForThisLabel": "Brak notatek dla tej etykiety",
     "labelFilterEmptyHint": "Notatki z tą etykietą pojawią się tutaj.",
     "archiveInfo": "Zarchiwizowane notatki są ukryte w widoku głównym, ale zachowywane na zawsze.",
@@ -218,8 +220,8 @@
     "newNoteDescription": "Otwórz nową notatkę",
     "notesKey": "D",
     "notesDescription": "Otwórz widok notatek",
-    "myTodoKey": "T",
-    "myTodoDescription": "Otwórz widok moich zadań",
+    "myTasksKey": "T",
+    "myTasksDescription": "Otwórz widok moich zadań",
     "archiveKey": "A",
     "archiveDescription": "Otwórz widok archiwum",
     "binKey": "B",
@@ -277,12 +279,12 @@
         "users": "Użytkownicy",
         "notes": "Notatki",
         "labels": "Etykiety",
-        "todoItems": "Zadania"
+        "listItems": "Elementy listy"
       },
       "metrics": {
         "admins": "Administratorzy",
         "text": "Tekst",
-        "todo": "Zadania",
+        "list": "Lista",
         "archived": "Zarchiwizowane",
         "trashed": "W koszu",
         "sharedNotes": "Udostępnione notatki",
@@ -317,7 +319,7 @@
     "unarchiveNote": "Przywróć notatkę z archiwum",
     "archiveNote": "Archiwizuj notatkę",
     "typeText": "Tekst",
-    "typeTodo": "Lista zadań",
+    "typeList": "Lista",
     "titlePlaceholder": "Tytuł notatki...",
     "contentPlaceholder": "Zapisz notatkę...",
     "itemPlaceholder": "Element listy...",
@@ -380,7 +382,6 @@
     "deleteConfirmMessage": "Usunąć etykietę \"{{name}}\"? Zostanie usunięta ze wszystkich notatek, które jej używają."
   },
   "share": {
-    "title": "Udostępnij \"{{noteTitle}}\"",
     "untitledNote": "Notatka bez tytułu",
     "shareWithUser": "Udostępnij użytkownikowi:",
     "searchUsersPlaceholder": "Szukaj użytkowników po nazwie...",
@@ -430,7 +431,7 @@
     "register": "Utwórz konto - Jot",
     "notes": "Jot",
     "note": "{{title}} - Jot",
-    "myTodo": "Moje zadania - Jot",
+    "myTasks": "Moje zadania - Jot",
     "archive": "Archiwum - Jot",
     "bin": "Kosz - Jot",
     "admin": "Admin - Jot",

@@ -32,15 +32,35 @@ import NoteCard from '../components/NoteCard';
 import NoteContextMenu, { ContextMenuViewContext } from '../components/NoteContextMenu';
 import ColorPicker from '../components/ColorPicker';
 import LabelPicker from '../components/LabelPicker';
-import type { Note, NoteSort } from '@jot/shared';
+import type { Note, NoteSort, UpdateNoteRequest } from '@jot/shared';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { NOTE_SORT_OPTIONS, getNoteSortLabel, normalizeNoteSort, sortNotesForDisplay } from '../utils/noteSort';
 import { emptyTrash as emptyTrashNotes } from '../api/notes';
 import { getLocalNotes, permanentDeleteLocalNote } from '../db/noteQueries';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 
+function buildUpdateRequest(note: Note, overrides: Partial<UpdateNoteRequest> = {}): UpdateNoteRequest {
+  if (note.note_type === 'list') {
+    return {
+      title: note.title,
+      pinned: note.pinned,
+      archived: note.archived,
+      color: note.color,
+      checked_items_collapsed: note.checked_items_collapsed,
+      ...overrides,
+    };
+  }
+  return {
+    content: note.content,
+    pinned: note.pinned,
+    archived: note.archived,
+    color: note.color,
+    ...overrides,
+  };
+}
+
 interface NotesListScreenProps {
-  variant?: 'notes' | 'archived' | 'trash' | 'my-todo';
+  variant?: 'notes' | 'archived' | 'trash' | 'my-tasks';
   labelId?: string;
 }
 
@@ -101,8 +121,8 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     trashed: variant === 'trash' ? true : undefined,
     search: debouncedSearch || undefined,
     label: variant === 'notes' ? labelId : undefined,
-    my_todo: variant === 'my-todo' ? true : undefined,
-    user_id: variant === 'my-todo' ? user?.id : undefined,
+    my_tasks: variant === 'my-tasks' ? true : undefined,
+    user_id: variant === 'my-tasks' ? user?.id : undefined,
   }), [variant, debouncedSearch, labelId, user?.id]);
 
   const { data: notes, isLoading, isError, refetch, isRefetching } = useOfflineNotes(params);
@@ -188,14 +208,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     try {
       await updateNote.mutateAsync({
         id: note.id,
-        data: {
-          title: note.title,
-          content: note.content,
-          pinned: !note.pinned,
-          archived: note.archived,
-          color: note.color,
-          checked_items_collapsed: note.checked_items_collapsed,
-        },
+        data: buildUpdateRequest(note, { pinned: !note.pinned }),
       });
     } catch {
       Alert.alert(t('common.error'), t('note.failedUpdate'));
@@ -206,14 +219,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     try {
       await updateNote.mutateAsync({
         id: note.id,
-        data: {
-          title: note.title,
-          content: note.content,
-          pinned: note.pinned,
-          archived: true,
-          color: note.color,
-          checked_items_collapsed: note.checked_items_collapsed,
-        },
+        data: buildUpdateRequest(note, { archived: true }),
       });
       showToast(t('dashboard.noteArchived'), 'success', {
         label: t('dashboard.undo'),
@@ -221,14 +227,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
           try {
             await updateNote.mutateAsync({
               id: note.id,
-              data: {
-                title: note.title,
-                content: note.content,
-                pinned: note.pinned,
-                archived: false,
-                color: note.color,
-                checked_items_collapsed: note.checked_items_collapsed,
-              },
+              data: buildUpdateRequest(note, { archived: false }),
             });
             showToast(t('dashboard.noteUnarchived'));
           } catch {
@@ -245,14 +244,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     try {
       await updateNote.mutateAsync({
         id: note.id,
-        data: {
-          title: note.title,
-          content: note.content,
-          pinned: note.pinned,
-          archived: false,
-          color: note.color,
-          checked_items_collapsed: note.checked_items_collapsed,
-        },
+        data: buildUpdateRequest(note, { archived: false }),
       });
       showToast(t('dashboard.noteUnarchived'));
     } catch {
@@ -389,14 +381,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     try {
       await updateNote.mutateAsync({
         id: colorPickerNote.id,
-        data: {
-          title: colorPickerNote.title,
-          content: colorPickerNote.content,
-          pinned: colorPickerNote.pinned,
-          archived: colorPickerNote.archived,
-          color,
-          checked_items_collapsed: colorPickerNote.checked_items_collapsed,
-        },
+        data: buildUpdateRequest(colorPickerNote, { color }),
       });
     } catch {
       Alert.alert(t('common.error'), t('note.failedColorUpdate'));
@@ -617,7 +602,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
         </TouchableOpacity>
       </View>
 
-      {/* Sort preference is global across notes, archived, trash, labels, and my-todo views. */}
+      {/* Sort preference is global across notes, archived, trash, labels, and my-tasks views. */}
       {isSortControlsOpen && (
         <View style={styles.sortControlsContainer}>
           <ScrollView
@@ -740,7 +725,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     const emptyIcon: keyof typeof Ionicons.glyphMap =
       variant === 'trash' ? 'trash-outline' :
       variant === 'archived' ? 'archive-outline' :
-      variant === 'my-todo' ? 'clipboard-outline' : 'document-text-outline';
+      variant === 'my-tasks' ? 'clipboard-outline' : 'document-text-outline';
     return (
       <View style={[styles.emptyWrapper, { backgroundColor: colors.background }]}>
         {variant === 'notes' && renderTopControls()}
@@ -768,13 +753,13 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
             />
             <Text style={[styles.emptyTitle, { color: colors.text }]}>
               {variant === 'notes' && t('dashboard.noNotesYet')}
-              {variant === 'my-todo' && t('dashboard.noAssignedTodos')}
+              {variant === 'my-tasks' && t('dashboard.noAssignedListItems')}
               {variant === 'archived' && t('dashboard.noArchivedNotes')}
               {variant === 'trash' && t('dashboard.noBinnedNotes')}
             </Text>
             <Text style={[styles.emptySubtext, { color: colors.textMuted }]}>
               {variant === 'notes' && t('dashboard.createFirstNote')}
-              {variant === 'my-todo' && t('dashboard.noMyTodoNotes')}
+              {variant === 'my-tasks' && t('dashboard.noMyTasksNotes')}
               {variant === 'archived' && t('dashboard.archivedNotesWillAppear')}
               {variant === 'trash' && t('dashboard.deletedNotesWillAppear')}
             </Text>

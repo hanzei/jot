@@ -12,12 +12,11 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func createSharedTodoNote(t *testing.T, _ *TestServer, owner *TestUser, sharedWith *TestUser) (string, string) {
+func createSharedListNote(t *testing.T, _ *TestServer, owner *TestUser, sharedWith *TestUser) (string, string) {
 	t.Helper()
 
-	note, err := owner.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-		Title:    "Shared Todo",
-		NoteType: client.NoteTypeTodo,
+	note, err := owner.Client.CreateListNote(t.Context(), &client.CreateListNoteRequest{
+		Title: "Shared List",
 		Items: []client.CreateNoteItem{
 			{Text: "Item 1", Position: 0, IndentLevel: 0},
 			{Text: "Item 2", Position: 1, IndentLevel: 0},
@@ -42,9 +41,8 @@ func TestTaskAssignment(t *testing.T) {
 
 		user := ts.createTestUser(t, "user1", "password123", false)
 
-		note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-			Title:    "Todo",
-			NoteType: client.NoteTypeTodo,
+		note, err := user.Client.CreateListNote(t.Context(), &client.CreateListNoteRequest{
+			Title: "List Note",
 			Items: []client.CreateNoteItem{
 				{Text: "Buy milk", Position: 0, IndentLevel: 0},
 			},
@@ -58,8 +56,8 @@ func TestTaskAssignment(t *testing.T) {
 		user := ts.createTestUser(t, "user1", "password123", false)
 
 		body, err := json.Marshal(map[string]any{
-			"title":     "Todo",
-			"note_type": "todo",
+			"title":     "List Note",
+			"note_type": "list",
 			"items": []map[string]any{
 				{"text": "Buy milk", "position": 0, "indent_level": 0, "assigned_to": "someuser1234567890abcd"},
 			},
@@ -88,10 +86,10 @@ func TestTaskAssignment(t *testing.T) {
 		owner := ts.createTestUser(t, "owner", "password123", false)
 		collaborator := ts.createTestUser(t, "collab", "password123", false)
 
-		noteID, collabID := createSharedTodoNote(t, ts, owner, collaborator)
+		noteID, collabID := createSharedListNote(t, ts, owner, collaborator)
 
-		_, err := owner.Client.UpdateNote(t.Context(), noteID, &client.UpdateNoteRequest{
-			Title: client.Ptr("Shared Todo"),
+		_, err := owner.Client.UpdateListNote(t.Context(), noteID, &client.UpdateListNoteRequest{
+			Title: client.Ptr("Shared List"),
 			Items: &[]client.UpdateNoteItem{
 				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: collabID},
 				{Text: "Item 2", Position: 1, IndentLevel: 0},
@@ -110,10 +108,10 @@ func TestTaskAssignment(t *testing.T) {
 		owner := ts.createTestUser(t, "owner", "password123", false)
 		collaborator := ts.createTestUser(t, "collab", "password123", false)
 
-		noteID, _ := createSharedTodoNote(t, ts, owner, collaborator)
+		noteID, _ := createSharedListNote(t, ts, owner, collaborator)
 
-		_, err := owner.Client.UpdateNote(t.Context(), noteID, &client.UpdateNoteRequest{
-			Title: client.Ptr("Shared Todo"),
+		_, err := owner.Client.UpdateListNote(t.Context(), noteID, &client.UpdateListNoteRequest{
+			Title: client.Ptr("Shared List"),
 			Items: &[]client.UpdateNoteItem{
 				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: owner.User.ID},
 			},
@@ -129,17 +127,16 @@ func TestTaskAssignment(t *testing.T) {
 
 		owner := ts.createTestUser(t, "owner", "password123", false)
 
-		note, err := owner.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-			Title:    "Solo Todo",
-			NoteType: client.NoteTypeTodo,
+		note, err := owner.Client.CreateListNote(t.Context(), &client.CreateListNoteRequest{
+			Title: "Solo List",
 			Items: []client.CreateNoteItem{
 				{Text: "Item 1", Position: 0, IndentLevel: 0},
 			},
 		})
 		require.NoError(t, err)
 
-		_, err = owner.Client.UpdateNote(t.Context(), note.ID, &client.UpdateNoteRequest{
-			Title: client.Ptr("Solo Todo"),
+		_, err = owner.Client.UpdateListNote(t.Context(), note.ID, &client.UpdateListNoteRequest{
+			Title: client.Ptr("Solo List"),
 			Items: &[]client.UpdateNoteItem{
 				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: owner.User.ID},
 			},
@@ -154,10 +151,10 @@ func TestTaskAssignment(t *testing.T) {
 		collaborator := ts.createTestUser(t, "collab", "password123", false)
 		outsider := ts.createTestUser(t, "outsider", "password123", false)
 
-		noteID, _ := createSharedTodoNote(t, ts, owner, collaborator)
+		noteID, _ := createSharedListNote(t, ts, owner, collaborator)
 
-		_, err := owner.Client.UpdateNote(t.Context(), noteID, &client.UpdateNoteRequest{
-			Title: client.Ptr("Shared Todo"),
+		_, err := owner.Client.UpdateListNote(t.Context(), noteID, &client.UpdateListNoteRequest{
+			Title: client.Ptr("Shared List"),
 			Items: &[]client.UpdateNoteItem{
 				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: outsider.User.ID},
 			},
@@ -171,10 +168,10 @@ func TestTaskAssignment(t *testing.T) {
 		owner := ts.createTestUser(t, "owner", "password123", false)
 		collaborator := ts.createTestUser(t, "collab", "password123", false)
 
-		noteID, _ := createSharedTodoNote(t, ts, owner, collaborator)
+		noteID, _ := createSharedListNote(t, ts, owner, collaborator)
 
-		_, err := owner.Client.UpdateNote(t.Context(), noteID, &client.UpdateNoteRequest{
-			Title: client.Ptr("Shared Todo"),
+		_, err := owner.Client.UpdateListNote(t.Context(), noteID, &client.UpdateListNoteRequest{
+			Title: client.Ptr("Shared List"),
 			Items: &[]client.UpdateNoteItem{
 				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: "short"},
 			},
@@ -188,10 +185,10 @@ func TestTaskAssignment(t *testing.T) {
 		owner := ts.createTestUser(t, "owner", "password123", false)
 		collaborator := ts.createTestUser(t, "collab", "password123", false)
 
-		noteID, _ := createSharedTodoNote(t, ts, owner, collaborator)
+		noteID, _ := createSharedListNote(t, ts, owner, collaborator)
 
-		_, err := collaborator.Client.UpdateNote(t.Context(), noteID, &client.UpdateNoteRequest{
-			Title: client.Ptr("Shared Todo"),
+		_, err := collaborator.Client.UpdateListNote(t.Context(), noteID, &client.UpdateListNoteRequest{
+			Title: client.Ptr("Shared List"),
 			Items: &[]client.UpdateNoteItem{
 				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: owner.User.ID},
 				{Text: "Item 2", Position: 1, IndentLevel: 0},
@@ -209,10 +206,10 @@ func TestTaskAssignment(t *testing.T) {
 		owner := ts.createTestUser(t, "owner", "password123", false)
 		collaborator := ts.createTestUser(t, "collab", "password123", false)
 
-		noteID, collabID := createSharedTodoNote(t, ts, owner, collaborator)
+		noteID, collabID := createSharedListNote(t, ts, owner, collaborator)
 
-		_, err := owner.Client.UpdateNote(t.Context(), noteID, &client.UpdateNoteRequest{
-			Title: client.Ptr("Shared Todo"),
+		_, err := owner.Client.UpdateListNote(t.Context(), noteID, &client.UpdateListNoteRequest{
+			Title: client.Ptr("Shared List"),
 			Items: &[]client.UpdateNoteItem{
 				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: collabID},
 			},
@@ -221,8 +218,8 @@ func TestTaskAssignment(t *testing.T) {
 		items := getNoteItems(t, owner, noteID)
 		assert.Equal(t, collabID, items[0].AssignedTo)
 
-		_, err = owner.Client.UpdateNote(t.Context(), noteID, &client.UpdateNoteRequest{
-			Title: client.Ptr("Shared Todo"),
+		_, err = owner.Client.UpdateListNote(t.Context(), noteID, &client.UpdateListNoteRequest{
+			Title: client.Ptr("Shared List"),
 			Items: &[]client.UpdateNoteItem{
 				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: ""},
 			},
@@ -238,10 +235,10 @@ func TestTaskAssignment(t *testing.T) {
 		owner := ts.createTestUser(t, "owner", "password123", false)
 		collaborator := ts.createTestUser(t, "collab", "password123", false)
 
-		noteID, collabID := createSharedTodoNote(t, ts, owner, collaborator)
+		noteID, collabID := createSharedListNote(t, ts, owner, collaborator)
 
-		_, err := owner.Client.UpdateNote(t.Context(), noteID, &client.UpdateNoteRequest{
-			Title: client.Ptr("Shared Todo"),
+		_, err := owner.Client.UpdateListNote(t.Context(), noteID, &client.UpdateListNoteRequest{
+			Title: client.Ptr("Shared List"),
 			Items: &[]client.UpdateNoteItem{
 				{Text: "Item 1", Position: 0, IndentLevel: 0, Completed: true, AssignedTo: collabID},
 			},
@@ -254,17 +251,17 @@ func TestTaskAssignment(t *testing.T) {
 	})
 }
 
-func TestMyTodoFilter(t *testing.T) {
+func TestMyTasksFilter(t *testing.T) {
 	t.Run("returns notes with items assigned to current user", func(t *testing.T) {
 		ts := setupTestServer(t)
 
 		owner := ts.createTestUser(t, "owner", "password123", false)
 		collaborator := ts.createTestUser(t, "collab", "password123", false)
 
-		noteID, collabID := createSharedTodoNote(t, ts, owner, collaborator)
+		noteID, collabID := createSharedListNote(t, ts, owner, collaborator)
 
-		_, err := owner.Client.UpdateNote(t.Context(), noteID, &client.UpdateNoteRequest{
-			Title: client.Ptr("Shared Todo"),
+		_, err := owner.Client.UpdateListNote(t.Context(), noteID, &client.UpdateListNoteRequest{
+			Title: client.Ptr("Shared List"),
 			Items: &[]client.UpdateNoteItem{
 				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: collabID},
 				{Text: "Item 2", Position: 1, IndentLevel: 0},
@@ -272,7 +269,7 @@ func TestMyTodoFilter(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		notes, err := collaborator.Client.ListNotes(t.Context(), &client.ListNotesOptions{MyTodo: true})
+		notes, err := collaborator.Client.ListNotes(t.Context(), &client.ListNotesOptions{MyTasks: true})
 		require.NoError(t, err)
 		require.Len(t, notes, 1)
 		assert.Equal(t, noteID, notes[0].ID)
@@ -284,10 +281,10 @@ func TestMyTodoFilter(t *testing.T) {
 		owner := ts.createTestUser(t, "owner", "password123", false)
 		collaborator := ts.createTestUser(t, "collab", "password123", false)
 
-		noteID, _ := createSharedTodoNote(t, ts, owner, collaborator)
+		noteID, _ := createSharedListNote(t, ts, owner, collaborator)
 
-		_, err := owner.Client.UpdateNote(t.Context(), noteID, &client.UpdateNoteRequest{
-			Title: client.Ptr("Shared Todo"),
+		_, err := owner.Client.UpdateListNote(t.Context(), noteID, &client.UpdateListNoteRequest{
+			Title: client.Ptr("Shared List"),
 			Items: &[]client.UpdateNoteItem{
 				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: owner.User.ID},
 				{Text: "Item 2", Position: 1, IndentLevel: 0},
@@ -295,7 +292,7 @@ func TestMyTodoFilter(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		notes, err := collaborator.Client.ListNotes(t.Context(), &client.ListNotesOptions{MyTodo: true})
+		notes, err := collaborator.Client.ListNotes(t.Context(), &client.ListNotesOptions{MyTasks: true})
 		require.NoError(t, err)
 		assert.Empty(t, notes)
 	})
@@ -305,52 +302,51 @@ func TestMyTodoFilter(t *testing.T) {
 
 		owner := ts.createTestUser(t, "owner", "password123", false)
 
-		_, err := owner.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-			Title:    "Solo Todo",
-			NoteType: client.NoteTypeTodo,
+		_, err := owner.Client.CreateListNote(t.Context(), &client.CreateListNoteRequest{
+			Title: "Solo List",
 			Items: []client.CreateNoteItem{
 				{Text: "Item 1", Position: 0, IndentLevel: 0},
 			},
 		})
 		require.NoError(t, err)
 
-		notes, err := owner.Client.ListNotes(t.Context(), &client.ListNotesOptions{MyTodo: true})
+		notes, err := owner.Client.ListNotes(t.Context(), &client.ListNotesOptions{MyTasks: true})
 		require.NoError(t, err)
 		assert.Empty(t, notes)
 	})
 
-	t.Run("owner sees own assignments in my_todo filter", func(t *testing.T) {
+	t.Run("owner sees own assignments in my_tasks filter", func(t *testing.T) {
 		ts := setupTestServer(t)
 
 		owner := ts.createTestUser(t, "owner", "password123", false)
 		collaborator := ts.createTestUser(t, "collab", "password123", false)
 
-		noteID, _ := createSharedTodoNote(t, ts, owner, collaborator)
+		noteID, _ := createSharedListNote(t, ts, owner, collaborator)
 
-		_, err := owner.Client.UpdateNote(t.Context(), noteID, &client.UpdateNoteRequest{
-			Title: client.Ptr("Shared Todo"),
+		_, err := owner.Client.UpdateListNote(t.Context(), noteID, &client.UpdateListNoteRequest{
+			Title: client.Ptr("Shared List"),
 			Items: &[]client.UpdateNoteItem{
 				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: owner.User.ID},
 			},
 		})
 		require.NoError(t, err)
 
-		notes, err := owner.Client.ListNotes(t.Context(), &client.ListNotesOptions{MyTodo: true})
+		notes, err := owner.Client.ListNotes(t.Context(), &client.ListNotesOptions{MyTasks: true})
 		require.NoError(t, err)
 		require.Len(t, notes, 1)
 		assert.Equal(t, noteID, notes[0].ID)
 	})
 
-	t.Run("excludes trashed notes from my_todo filter", func(t *testing.T) {
+	t.Run("excludes trashed notes from my_tasks filter", func(t *testing.T) {
 		ts := setupTestServer(t)
 
 		owner := ts.createTestUser(t, "owner", "password123", false)
 		collaborator := ts.createTestUser(t, "collab", "password123", false)
 
-		noteID, collabID := createSharedTodoNote(t, ts, owner, collaborator)
+		noteID, collabID := createSharedListNote(t, ts, owner, collaborator)
 
-		_, err := owner.Client.UpdateNote(t.Context(), noteID, &client.UpdateNoteRequest{
-			Title: client.Ptr("Shared Todo"),
+		_, err := owner.Client.UpdateListNote(t.Context(), noteID, &client.UpdateListNoteRequest{
+			Title: client.Ptr("Shared List"),
 			Items: &[]client.UpdateNoteItem{
 				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: collabID},
 			},
@@ -359,7 +355,7 @@ func TestMyTodoFilter(t *testing.T) {
 
 		require.NoError(t, owner.Client.DeleteNote(t.Context(), noteID))
 
-		notes, err := collaborator.Client.ListNotes(t.Context(), &client.ListNotesOptions{MyTodo: true})
+		notes, err := collaborator.Client.ListNotes(t.Context(), &client.ListNotesOptions{MyTasks: true})
 		require.NoError(t, err)
 		assert.Empty(t, notes)
 	})
@@ -373,9 +369,8 @@ func TestTaskAssignmentUnshareCleanup(t *testing.T) {
 		collab1 := ts.createTestUser(t, "collab1", "password123", false)
 		collab2 := ts.createTestUser(t, "collab2", "password123", false)
 
-		note, err := owner.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-			Title:    "Shared Todo",
-			NoteType: client.NoteTypeTodo,
+		note, err := owner.Client.CreateListNote(t.Context(), &client.CreateListNoteRequest{
+			Title: "Shared List",
 			Items: []client.CreateNoteItem{
 				{Text: "Item 1", Position: 0, IndentLevel: 0},
 				{Text: "Item 2", Position: 1, IndentLevel: 0},
@@ -386,8 +381,8 @@ func TestTaskAssignmentUnshareCleanup(t *testing.T) {
 		require.NoError(t, owner.Client.ShareNote(t.Context(), note.ID, collab1.User.ID))
 		require.NoError(t, owner.Client.ShareNote(t.Context(), note.ID, collab2.User.ID))
 
-		_, err = owner.Client.UpdateNote(t.Context(), note.ID, &client.UpdateNoteRequest{
-			Title: client.Ptr("Shared Todo"),
+		_, err = owner.Client.UpdateListNote(t.Context(), note.ID, &client.UpdateListNoteRequest{
+			Title: client.Ptr("Shared List"),
 			Items: &[]client.UpdateNoteItem{
 				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: collab1.User.ID},
 				{Text: "Item 2", Position: 1, IndentLevel: 0, AssignedTo: collab2.User.ID},
@@ -408,10 +403,10 @@ func TestTaskAssignmentUnshareCleanup(t *testing.T) {
 		owner := ts.createTestUser(t, "owner", "password123", false)
 		collab := ts.createTestUser(t, "collab", "password123", false)
 
-		noteID, _ := createSharedTodoNote(t, ts, owner, collab)
+		noteID, _ := createSharedListNote(t, ts, owner, collab)
 
-		_, err := owner.Client.UpdateNote(t.Context(), noteID, &client.UpdateNoteRequest{
-			Title: client.Ptr("Shared Todo"),
+		_, err := owner.Client.UpdateListNote(t.Context(), noteID, &client.UpdateListNoteRequest{
+			Title: client.Ptr("Shared List"),
 			Items: &[]client.UpdateNoteItem{
 				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: owner.User.ID},
 				{Text: "Item 2", Position: 1, IndentLevel: 0, AssignedTo: collab.User.ID},
@@ -436,9 +431,8 @@ func TestTaskAssignmentUserDeletion(t *testing.T) {
 		collab1 := ts.createTestUser(t, "collab1", "password123", false)
 		collab2 := ts.createTestUser(t, "collab2", "password123", false)
 
-		note, err := owner.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-			Title:    "Shared Todo",
-			NoteType: client.NoteTypeTodo,
+		note, err := owner.Client.CreateListNote(t.Context(), &client.CreateListNoteRequest{
+			Title: "Shared List",
 			Items: []client.CreateNoteItem{
 				{Text: "Item 1", Position: 0, IndentLevel: 0},
 				{Text: "Item 2", Position: 1, IndentLevel: 0},
@@ -449,8 +443,8 @@ func TestTaskAssignmentUserDeletion(t *testing.T) {
 		require.NoError(t, owner.Client.ShareNote(t.Context(), note.ID, collab1.User.ID))
 		require.NoError(t, owner.Client.ShareNote(t.Context(), note.ID, collab2.User.ID))
 
-		_, err = owner.Client.UpdateNote(t.Context(), note.ID, &client.UpdateNoteRequest{
-			Title: client.Ptr("Shared Todo"),
+		_, err = owner.Client.UpdateListNote(t.Context(), note.ID, &client.UpdateListNoteRequest{
+			Title: client.Ptr("Shared List"),
 			Items: &[]client.UpdateNoteItem{
 				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: collab1.User.ID},
 				{Text: "Item 2", Position: 1, IndentLevel: 0, AssignedTo: collab2.User.ID},
@@ -472,10 +466,10 @@ func TestTaskAssignmentUserDeletion(t *testing.T) {
 		owner := ts.createTestUser(t, "owner", "password123", false)
 		collab := ts.createTestUser(t, "collab", "password123", false)
 
-		noteID, collabID := createSharedTodoNote(t, ts, owner, collab)
+		noteID, collabID := createSharedListNote(t, ts, owner, collab)
 
-		_, err := owner.Client.UpdateNote(t.Context(), noteID, &client.UpdateNoteRequest{
-			Title: client.Ptr("Shared Todo"),
+		_, err := owner.Client.UpdateListNote(t.Context(), noteID, &client.UpdateListNoteRequest{
+			Title: client.Ptr("Shared List"),
 			Items: &[]client.UpdateNoteItem{
 				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: owner.User.ID},
 				{Text: "Item 2", Position: 1, IndentLevel: 0, AssignedTo: collabID},

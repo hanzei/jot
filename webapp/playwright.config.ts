@@ -3,15 +3,16 @@ import path from 'path';
 import { fileURLToPath } from 'url';
 
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
-// Use a unique DB path per test run so concurrent or repeated runs never conflict.
-const E2E_DB_PATH = `/tmp/jot-e2e-${Date.now()}.db`;
+// Use a unique DB DSN per test run so concurrent or repeated runs never conflict.
+const E2E_DB_DSN = `/tmp/jot-e2e-${Date.now()}.db`;
 
 export default defineConfig({
   testDir: './e2e/tests',
-  fullyParallel: false,
+  globalSetup: './e2e/global-setup.ts',
+  fullyParallel: true,
   forbidOnly: !!process.env.CI,
   retries: process.env.CI ? 1 : 0,
-  workers: 1,
+  workers: process.env.CI ? 4 : undefined,
   reporter: [['list'], ['html', { open: 'never' }]],
   timeout: 30_000,
   use: {
@@ -23,15 +24,24 @@ export default defineConfig({
     serviceWorkers: 'block',
   },
   projects: [
+    // Admin tests run first in isolation before parallel workers start.
+    // They rely on aggregate DB counts that would be skewed by concurrent registrations.
+    {
+      name: 'admin',
+      testMatch: '**/00-admin.spec.ts',
+      use: { ...devices['Desktop Chrome'] },
+    },
     {
       name: 'chromium',
       use: { ...devices['Desktop Chrome'] },
+      testIgnore: '**/00-admin.spec.ts',
+      dependencies: ['admin'],
     },
     {
       name: 'mobile-chrome',
       use: { ...devices['Pixel 5'] },
-      // Keyboard shortcuts are validated on desktop project only.
-      testIgnore: '**/keyboard-shortcuts.spec.ts',
+      testIgnore: ['**/keyboard-shortcuts.spec.ts', '**/00-admin.spec.ts'],
+      dependencies: ['admin'],
     },
   ],
   webServer: {
@@ -41,7 +51,7 @@ export default defineConfig({
     reuseExistingServer: false,
     timeout: 60_000,
     env: {
-      DB_PATH: E2E_DB_PATH,
+      DB_DSN: E2E_DB_DSN,
       STATIC_DIR: path.resolve(__dirname, 'build'),
       PORT: '8080',
       JWT_SECRET: 'e2e-test-secret',

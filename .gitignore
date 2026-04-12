@@ -1,3 +1,6 @@
+# Claude Code brainstorm/scratch files
+.superpowers/
+
 # Binaries for programs and plugins
 *.exe
 *.exe~
@@ -62,10 +65,13 @@ Thumbs.db
 
 # Database files
 *.db
+*.db-shm
+*.db-wal
 *.sqlite
 *.sqlite3
 
 # Mobile build artifacts
+mobile/.expo/
 mobile/android/
 mobile/ios/
 google-services.json

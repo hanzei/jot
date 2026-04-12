@@ -1,5 +1,6 @@
 import React from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
+import Markdown from 'react-native-markdown-display';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useTranslation } from 'react-i18next';
 import { VALIDATION, type Note, type NoteItem, type User } from '@jot/shared';
@@ -91,7 +92,7 @@ function NoteAvatars({ note }: { note: Note }) {
   );
 }
 
-function TodoPreview({ items, hasColor }: { items: NoteItem[]; hasColor?: boolean }) {
+function ListPreview({ items, hasColor }: { items: NoteItem[]; hasColor?: boolean }) {
   const { colors } = useTheme();
   const { t } = useTranslation();
   const uncompleted: NoteItem[] = [];
@@ -105,17 +106,17 @@ function TodoPreview({ items, hasColor }: { items: NoteItem[]; hasColor?: boolea
   }
 
   return (
-    <View style={styles.todoPreview}>
+    <View style={styles.listPreview}>
       {uncompleted.map((item) => {
         const indentLevel = Math.max(0, item.indent_level ?? 0);
         return (
           <View
             key={item.id}
-            style={[styles.todoRow, { marginLeft: indentLevel * VALIDATION.INDENT_PX_PER_LEVEL }]}
-            testID={`note-card-todo-row-${item.id}`}
+            style={[styles.listRow, { marginLeft: indentLevel * VALIDATION.INDENT_PX_PER_LEVEL }]}
+            testID={`note-card-list-row-${item.id}`}
           >
             <Ionicons name="square-outline" size={14} color={hasColor ? '#999' : colors.iconMuted} />
-            <LinkText text={item.text} style={[styles.todoText, { color: hasColor ? '#666' : colors.textSecondary }]} />
+            <LinkText text={item.text} style={[styles.listText, { color: hasColor ? '#666' : colors.textSecondary }]} />
           </View>
         );
       })}
@@ -147,7 +148,7 @@ function NoteCard({ note, onPress, onLongPress, onMenuPress }: NoteCardProps) {
     >
       <View style={styles.cardHeader}>
         <View style={styles.cardHeaderContent}>
-          {note.title ? (
+          {note.note_type === 'list' && note.title ? (
             <Text style={[styles.title, { color: hasColor ? '#1a1a1a' : colors.text }]} numberOfLines={1}>
               {note.title}
             </Text>
@@ -168,13 +169,15 @@ function NoteCard({ note, onPress, onLongPress, onMenuPress }: NoteCardProps) {
       </View>
 
       {note.note_type === 'text' && note.content ? (
-        <Text style={[styles.content, { color: hasColor ? '#666' : colors.textSecondary }]} numberOfLines={3}>
-          {note.content}
-        </Text>
+        <View style={styles.contentPreview}>
+          <Markdown style={{ body: { color: hasColor ? '#666' : colors.textSecondary, fontSize: 14, lineHeight: 20 } }}>
+            {note.content}
+          </Markdown>
+        </View>
       ) : null}
 
-      {note.note_type === 'todo' && note.items && note.items.length > 0 ? (
-        <TodoPreview items={note.items} hasColor={hasColor} />
+      {note.note_type === 'list' && note.items && note.items.length > 0 ? (
+        <ListPreview items={note.items} hasColor={hasColor} />
       ) : null}
 
       <View style={styles.footer}>
@@ -230,16 +233,20 @@ const styles = StyleSheet.create({
     fontSize: 14,
     lineHeight: 20,
   },
-  todoPreview: {
+  contentPreview: {
+    maxHeight: 60,
+    overflow: 'hidden',
+  },
+  listPreview: {
     marginTop: 4,
   },
-  todoRow: {
+  listRow: {
     flexDirection: 'row',
     alignItems: 'flex-start',
     gap: 6,
     paddingVertical: 1,
   },
-  todoText: {
+  listText: {
     fontSize: 13,
     flex: 1,
     flexShrink: 1,

@@ -59,18 +59,18 @@ const otherAdmin: User = {
 
 const mockStats: AdminStatsResponse = {
   users: { total: 3, admins: 1 },
-  notes: { total: 4, text: 2, todo: 2, trashed: 1, archived: 1 },
+  notes: { total: 4, text: 2, list: 2, trashed: 1, archived: 1 },
   sharing: { shared_notes: 1, share_links: 2 },
   labels: { total: 2, note_associations: 3 },
-  todo_items: { total: 3, completed: 1, assigned: 2 },
+  list_items: { total: 3, completed: 1, assigned: 2 },
   storage: { database_size_bytes: 4_398_047 },
 }
 
-const renderAdmin = () => {
+const renderAdmin = (passwordMinLength: number = VALIDATION.PASSWORD_MIN_LENGTH) => {
   return render(
     <MemoryRouter>
       <ToastProvider>
-        <Admin passwordMinLength={10} />
+        <Admin passwordMinLength={passwordMinLength} />
       </ToastProvider>
     </MemoryRouter>
   )
@@ -99,7 +99,7 @@ describe('Admin', () => {
       expect(screen.getByTestId('admin-stats-notes-total')).toHaveTextContent('4')
       expect(screen.getByTestId('admin-stats-shared-notes')).toHaveTextContent('1')
       expect(screen.getByTestId('admin-stats-labels-total')).toHaveTextContent('2')
-      expect(screen.getByTestId('admin-stats-todo-items-total')).toHaveTextContent('3')
+      expect(screen.getByTestId('admin-stats-list-items-total')).toHaveTextContent('3')
       expect(screen.getByTestId('admin-stats-database-size')).toHaveTextContent('4.2 MB')
     })
 
@@ -296,6 +296,25 @@ describe('Admin', () => {
       await waitFor(() => {
         expect(screen.queryByRole('dialog', { name: 'Create New User' })).not.toBeInTheDocument()
       })
+    })
+
+    it('respects the configured passwordMinLength prop instead of the hardcoded default', async () => {
+      const user = userEvent.setup()
+      renderAdmin(4)
+
+      await waitFor(() => {
+        expect(screen.getByText('regularuser')).toBeInTheDocument()
+      })
+
+      const dialog = await openCreateModal(user)
+
+      // A 5-char password satisfies min=4 but not the hardcoded default of 10
+      const passwordInput = within(dialog).getByLabelText('Password')
+      await user.type(passwordInput, '12345')
+      await user.tab()
+
+      expect(within(dialog).queryByText(/Password must be at least/)).not.toBeInTheDocument()
+      expect(within(dialog).getByRole('button', { name: 'Create User' })).toBeEnabled()
     })
 
     it('shows server error message when create user fails', async () => {

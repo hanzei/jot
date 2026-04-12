@@ -16,9 +16,12 @@ import { getNoteShares, shareNote, unshareNote } from '../api/users';
 import type {
   Note,
   NoteShare,
+  Label,
   GetNotesParams,
   CreateNoteRequest,
   UpdateNoteRequest,
+  UpdateListNoteRequest,
+  UpdateTextNoteRequest,
 } from '@jot/shared';
 import {
   saveNote,
@@ -84,35 +87,45 @@ export function useCreateNote() {
       // Offline: create locally and queue the server operation
       const localId = generateLocalId();
       const now = new Date().toISOString();
-      const localNote: Note = {
+      const labels: Label[] = [];
+      const shared_with: NoteShare[] = [];
+      const baseLocalNote = {
         id: localId,
         user_id: user?.id ?? '',
-        title: data.title,
-        content: data.content,
-        note_type: data.note_type,
         color: data.color ?? '#ffffff',
         pinned: false,
         archived: false,
         position: 0,
-        checked_items_collapsed: false,
         is_shared: false,
-        deleted_at: null,
+        deleted_at: null as string | null,
         created_at: now,
         updated_at: now,
-        labels: [],
-        shared_with: [],
-        items: data.items?.map((item, i) => ({
-          id: generateLocalId(),
-          note_id: localId,
-          text: item.text,
-          completed: item.completed ?? false,
-          position: i,
-          indent_level: item.indent_level ?? 0,
-          assigned_to: '',
-          created_at: now,
-          updated_at: now,
-        })),
+        labels,
+        shared_with,
       };
+      const localNote: Note = data.note_type === 'list'
+        ? {
+            ...baseLocalNote,
+            note_type: 'list',
+            title: data.title,
+            checked_items_collapsed: false,
+            items: data.items?.map((item, i) => ({
+              id: generateLocalId(),
+              note_id: localId,
+              text: item.text,
+              completed: item.completed ?? false,
+              position: i,
+              indent_level: item.indent_level ?? 0,
+              assigned_to: '',
+              created_at: now,
+              updated_at: now,
+            })),
+          }
+        : {
+            ...baseLocalNote,
+            note_type: 'text',
+            content: data.content,
+          };
       await saveNote(db, localNote);
       await enqueueOperation(db, {
         operation: 'create',
@@ -151,45 +164,68 @@ export function useUpdateNote() {
         throw new Error(`Note ${id} not found in local DB`);
       }
       const now = new Date().toISOString();
-      let updatedItems = existing?.items;
 
-      if (data.items !== undefined && existing) {
-        // Persist item changes to note_items table alongside scalar field updates.
-        // Preserve existing item IDs by position to avoid re-creating stable items.
-        updatedItems = data.items.map((item, i) => ({
-          id: existing.items?.[i]?.id ?? generateLocalId(),
-          note_id: id,
-          text: item.text,
-          completed: item.completed ?? false,
-          position: i,
-          indent_level: item.indent_level ?? 0,
-          assigned_to: item.assigned_to ?? existing.items?.[i]?.assigned_to ?? '',
-          created_at: existing.items?.[i]?.created_at ?? now,
-          updated_at: now,
-        }));
-        await saveNote(db, { ...existing, ...data, items: updatedItems, updated_at: now });
+      if (existing.note_type === 'list') {
+        const listData = data as UpdateListNoteRequest;
+        let updatedItems = existing.items;
+
+        if (listData.items !== undefined) {
+          // Persist item changes to note_items table alongside scalar field updates.
+          // Preserve existing item IDs by position to avoid re-creating stable items.
+          updatedItems = listData.items.map((item, i) => ({
+            id: existing.items?.[i]?.id ?? generateLocalId(),
+            note_id: id,
+            text: item.text,
+            completed: item.completed ?? false,
+            position: i,
+            indent_level: item.indent_level ?? 0,
+            assigned_to: item.assigned_to ?? existing.items?.[i]?.assigned_to ?? '',
+            created_at: existing.items?.[i]?.created_at ?? now,
+            updated_at: now,
+          }));
+          const merged: Note = { ...existing, ...listData, items: updatedItems, updated_at: now };
+          await saveNote(db, merged);
+        } else {
+          await updateLocalNote(db, id, data);
+        }
+
+        const fullData: UpdateNoteRequest = {
+          title: listData.title ?? existing.title,
+          pinned: listData.pinned ?? existing.pinned,
+          archived: listData.archived ?? existing.archived,
+          color: listData.color ?? existing.color,
+          checked_items_collapsed: listData.checked_items_collapsed ?? existing.checked_items_collapsed,
+          items: listData.items,
+        };
+        await enqueueOperation(db, {
+          operation: 'update',
+          endpoint: `/notes/${id}`,
+          method: 'PATCH',
+          body: fullData as Record<string, unknown>,
+        });
+
+        // Build optimistic return from the data we already have (no second DB read)
+        return { ...existing, ...listData, updated_at: now, items: updatedItems };
       } else {
-        await updateLocalNote(db, id, data);
+        const textData = data as UpdateTextNoteRequest;
+        await updateLocalNote(db, id, textData);
+
+        const fullData: UpdateNoteRequest = {
+          content: textData.content ?? existing.content,
+          pinned: textData.pinned ?? existing.pinned,
+          archived: textData.archived ?? existing.archived,
+          color: textData.color ?? existing.color,
+        };
+        await enqueueOperation(db, {
+          operation: 'update',
+          endpoint: `/notes/${id}`,
+          method: 'PATCH',
+          body: fullData as Record<string, unknown>,
+        });
+
+        // Build optimistic return from the data we already have (no second DB read)
+        return { ...existing, ...textData, updated_at: now };
       }
-
-      const fullData: UpdateNoteRequest = {
-        title: data.title ?? existing.title,
-        content: data.content ?? existing.content,
-        pinned: data.pinned ?? existing.pinned,
-        archived: data.archived ?? existing.archived,
-        color: data.color ?? existing.color,
-        checked_items_collapsed: data.checked_items_collapsed ?? existing.checked_items_collapsed,
-        items: data.items,
-      };
-      await enqueueOperation(db, {
-        operation: 'update',
-        endpoint: `/notes/${id}`,
-        method: 'PUT',
-        body: fullData as Record<string, unknown>,
-      });
-
-      // Build optimistic return from the data we already have (no second DB read)
-      return { ...existing, ...data, updated_at: now, items: updatedItems };
     },
     onSuccess: (updatedNote) => {
       queryClient.setQueryData(noteQueryKey(updatedNote.id), updatedNote);

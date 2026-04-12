@@ -162,12 +162,15 @@ test.describe('Settings', () => {
     test('theme preference persists across page reload', async ({ authenticatedUser, settingsPage, page }) => {
       await settingsPage.goto();
 
+      const saveResponse = page.waitForResponse(resp =>
+        resp.url().includes('/api/v1/users/me') && !resp.url().includes('/password') && resp.request().method() === 'PATCH'
+      );
       await settingsPage.selectTheme('Dark');
-      await expect.poll(() => settingsPage.isDarkMode()).toBe(true);
+      await saveResponse;
 
       // Reload and verify the theme is still applied
       await page.reload();
-      await expect.poll(() => settingsPage.isDarkMode()).toBe(true);
+      await page.waitForLoadState('networkidle');
       await expect(page.locator('html')).toHaveClass(/dark/);
 
       void authenticatedUser;

@@ -1,4 +1,4 @@
-import { test, expect, uniqueUsername } from '../fixtures';
+import { test, expect, uniqueUsername, E2E_ADMIN_CREDENTIALS } from '../fixtures';
 import type { Page } from '@playwright/test';
 import { AdminPage } from '../pages/AdminPage';
 
@@ -8,15 +8,7 @@ type MeResponse = {
   };
 };
 
-type Credentials = {
-  username: string;
-  password: string;
-};
-
-const bootstrapAdmin: Credentials = {
-  username: 'e2eadmin',
-  password: 'testpass123',
-};
+const bootstrapAdmin = E2E_ADMIN_CREDENTIALS;
 
 async function ensureAdminSession(page: Page) {
   const meResponse = await page.request.get('/api/v1/me');
@@ -45,11 +37,10 @@ async function ensureBootstrapAdmin(page: Page) {
 }
 
 test.describe('Admin', () => {
+  // Tests share aggregate DB state (user/note counts), so they must run serially.
+  test.describe.configure({ mode: 'serial' });
   test.beforeEach(async ({ page }, testInfo) => {
-    // The admin tests require the first registered user to be admin (fresh DB).
-    // With multiple Playwright projects sharing a single webServer, only the
-    // first project gets a fresh DB.
-    test.skip(testInfo.project.name === 'mobile-chrome', 'Admin tests require a fresh DB (first project only)');
+    test.skip(testInfo.project.name === 'mobile-chrome', 'Admin tests cover desktop UI only');
 
     if (testInfo.title.includes('non-admin')) {
       return;
@@ -79,68 +70,68 @@ test.describe('Admin', () => {
     const memberTwo = await memberTwoResponse.json() as { user: { id: string } };
 
     const sharedTextResponse = await page.request.post('/api/v1/notes', {
-      data: { title: 'Shared text note', content: 'shared content', note_type: 'text' },
+      data: { content: 'shared content', note_type: 'text' },
     });
     await expectOk(sharedTextResponse, 'create shared text note');
     const sharedTextNote = await sharedTextResponse.json() as { id: string };
 
-    const archivedTodoResponse = await page.request.post('/api/v1/notes', {
+    const archivedListResponse = await page.request.post('/api/v1/notes', {
       data: {
-        title: 'Archived todo note',
-        note_type: 'todo',
+        title: 'Archived list note',
+        note_type: 'list',
         items: [
-          { text: 'First todo', position: 0 },
-          { text: 'Second todo', position: 1 },
+          { text: 'First item', position: 0 },
+          { text: 'Second item', position: 1 },
         ],
       },
     });
-    await expectOk(archivedTodoResponse, 'create archived todo note');
-    const archivedTodoNote = await archivedTodoResponse.json() as { id: string };
+    await expectOk(archivedListResponse, 'create archived list note');
+    const archivedListNote = await archivedListResponse.json() as { id: string };
 
-    const activeTodoResponse = await page.request.post('/api/v1/notes', {
+    const activeListResponse = await page.request.post('/api/v1/notes', {
       data: {
-        title: 'Active todo note',
-        note_type: 'todo',
-        items: [{ text: 'Assigned todo', position: 0 }],
+        title: 'Active list note',
+        note_type: 'list',
+        items: [{ text: 'Assigned item', position: 0 }],
       },
     });
-    await expectOk(activeTodoResponse, 'create active todo note');
-    const activeTodoNote = await activeTodoResponse.json() as { id: string };
+    await expectOk(activeListResponse, 'create active list note');
+    const activeListNote = await activeListResponse.json() as { id: string };
 
     const trashedTextResponse = await page.request.post('/api/v1/notes', {
-      data: { title: 'Trashed text note', content: 'trashed content', note_type: 'text' },
+      data: { content: 'trashed content', note_type: 'text' },
     });
     await expectOk(trashedTextResponse, 'create trashed text note');
     const trashedTextNote = await trashedTextResponse.json() as { id: string };
 
     await expectOk(
-      await page.request.post(`/api/v1/notes/${archivedTodoNote.id}/share`, { data: { user_id: memberOne.user.id } }),
-      'share archived todo note with member one',
+      await page.request.post(`/api/v1/notes/${archivedListNote.id}/share`, { data: { user_id: memberOne.user.id } }),
+      'share archived list note with member one',
     );
     await expectOk(
-      await page.request.post(`/api/v1/notes/${activeTodoNote.id}/share`, { data: { user_id: memberTwo.user.id } }),
-      'share active todo note with member two',
+      await page.request.post(`/api/v1/notes/${activeListNote.id}/share`, { data: { user_id: memberTwo.user.id } }),
+      'share active list note with member two',
     );
 
-    const updateArchivedTodoResponse = await page.request.patch(`/api/v1/notes/${archivedTodoNote.id}`, {
+    const updateArchivedListResponse = await page.request.patch(`/api/v1/notes/${archivedListNote.id}`, {
       data: {
         archived: true,
         items: [
-          { text: 'First todo', position: 0, completed: true, assigned_to: memberOne.user.id },
-          { text: 'Second todo', position: 1, completed: false, assigned_to: '' },
+          { text: 'First item', position: 0, completed: true, assigned_to: memberOne.user.id },
+          { text: 'Second item', position: 1, completed: false, assigned_to: '' },
         ],
       },
     });
-    await expectOk(updateArchivedTodoResponse, 'update archived todo note');
+    await expectOk(updateArchivedListResponse, 'update archived list note');
 
-    const updateActiveTodoResponse = await page.request.patch(`/api/v1/notes/${activeTodoNote.id}`, {
+    const updateActiveListResponse = await page.request.patch(`/api/v1/notes/${activeListNote.id}`, {
       data: {
         items: [
-          { text: 'Assigned todo', position: 0, completed: false, assigned_to: memberTwo.user.id },
+          { text: 'Assigned item', position: 0, completed: false, assigned_to: memberTwo.user.id },
         ],
       },
     });
-    await expectOk(updateActiveTodoResponse, 'update active todo note');
+    await expectOk(updateActiveListResponse, 'update active list note');
 
     const trashNoteResponse = await page.request.delete(`/api/v1/notes/${trashedTextNote.id}`);
     await expectOk(trashNoteResponse, 'trash text note');
@@ -163,8 +154,8 @@ test.describe('Admin', () => {
       'add urgent label',
     );
     await expectOk(
-      await page.request.post(`/api/v1/notes/${archivedTodoNote.id}/labels`, { data: { name: 'work' } }),
-      'add work label to archived todo',
+      await page.request.post(`/api/v1/notes/${archivedListNote.id}/labels`, { data: { name: 'work' } }),
+      'add work label to archived list note',
     );
 
     const statsResponse = await page.request.get('/api/v1/admin/stats');
@@ -174,7 +165,7 @@ test.describe('Admin', () => {
       notes: { total: number };
       sharing: { shared_notes: number };
       labels: { total: number };
-      todo_items: { total: number };
+      list_items: { total: number };
     };
 
     await adminPage.goto();
@@ -185,7 +176,7 @@ test.describe('Admin', () => {
     expect(await adminPage.getNotesTotal()).toBe(String(stats.notes.total));
     expect(await adminPage.getSharedNotesCount()).toBe(String(stats.sharing.shared_notes));
     expect(await adminPage.getLabelsTotal()).toBe(String(stats.labels.total));
-    expect(await adminPage.getTodoItemsTotal()).toBe(String(stats.todo_items.total));
+    expect(await adminPage.getListItemsTotal()).toBe(String(stats.list_items.total));
     expect(await adminPage.getDatabaseSizeText()).not.toBe('0 B');
   });
 

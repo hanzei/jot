@@ -18,22 +18,21 @@ export class DashboardPage {
     await this.page.click('button:has-text("New Note")');
   }
 
-  async createNote(title: string, content?: string) {
+  async createNote(title: string, _content?: string) {
     await this.clickNewNote();
+    // List notes have a title field; switch to list type to use the title for identification.
+    await this.selectListType();
     await this.page.fill('input[placeholder="Note title..."]', title);
-    if (content) {
-      await this.page.fill('textarea[placeholder="Take a note..."]', content);
-    }
     // Close the modal to save (auto-save on close when there are changes)
     await this.closeActiveDialog();
     await expect(this.page.locator('[data-testid="note-card"]').filter({ hasText: title })).toBeVisible();
   }
 
-  /** Creates a new note with labels attached during creation. */
-  async createNoteWithLabels(title: string, content: string, labelNames: string[]) {
+  /** Creates a new text note with labels attached during creation. */
+  async createNoteWithLabels(title: string, _content: string, labelNames: string[]) {
     await this.clickNewNote();
-    await this.page.fill('input[placeholder="Note title..."]', title);
-    await this.page.fill('textarea[placeholder="Take a note..."]', content);
+    // Text notes have a content textarea; fill with title so the card can be identified by hasText.
+    await this.page.fill('textarea[placeholder="Take a note..."]', title);
 
     for (const labelName of labelNames) {
       await this.page.getByRole('button', { name: 'Add labels' }).click();
@@ -46,56 +45,72 @@ export class DashboardPage {
         await this.page.keyboard.press('Enter');
       }
       await expect(this.page.getByRole('checkbox', { name: labelName })).toBeChecked();
-      // Click outside picker to close it
-      await this.page.locator('input[placeholder="Note title..."]').click();
+      // Click "Add labels" again to toggle the picker closed without triggering Dialog.onClose.
+      await this.page.getByRole('button', { name: 'Add labels' }).click();
     }
 
     await this.closeActiveDialog();
     await expect(this.page.locator('[data-testid="note-card"]').filter({ hasText: title })).toBeVisible();
   }
 
-  async createTodoNote(title: string, items: string[]) {
+  async createListNote(title: string, items: string[]) {
     await this.clickNewNote();
-    await this.selectTodoType();
+    await this.selectListType();
     await this.page.fill('input[placeholder="Note title..."]', title);
     for (const item of items) {
-      await this.addTodoItem(item);
+      await this.addListItem(item);
     }
     await this.closeActiveDialog();
     await expect(this.page.getByRole('dialog')).toHaveCount(0);
     await expect(this.page.locator('[data-testid="note-card"]').filter({ hasText: title })).toBeVisible();
   }
 
-  async selectTodoType() {
-    await this.page.click('button:has-text("Todo List")');
+  async selectListType() {
+    await this.page.click('button:has-text("List")');
   }
 
-  async addTodoItem(text: string) {
-    const inputs = this.page.locator('[data-testid="todo-item-input"]');
+  async addListItem(text: string) {
+    const inputs = this.page.locator('[data-testid="list-item-input"]');
     const existingCount = await inputs.count();
     await this.page.click('button:has-text("Add item")');
     await expect(inputs).toHaveCount(existingCount + 1);
     await inputs.nth(existingCount).fill(text);
   }
 
-  todoItemInput(index: number): Locator {
-    return this.page.locator('[data-testid="todo-item-input"]').nth(index);
+  listItemInput(index: number): Locator {
+    return this.page.locator('[data-testid="list-item-input"]').nth(index);
   }
 
-  async focusTodoItem(index: number) {
-    await this.todoItemInput(index).focus();
+  async focusListItem(index: number) {
+    await this.listItemInput(index).focus();
   }
 
-  async expectTodoItemFocused(index: number) {
-    await expect(this.todoItemInput(index)).toBeFocused();
+  async expectListItemFocused(index: number) {
+    await expect(this.listItemInput(index)).toBeFocused();
   }
 
-  async expectTodoItemCount(count: number) {
-    await expect(this.page.locator('[data-testid="todo-item-input"]')).toHaveCount(count);
+  async expectListItemCount(count: number) {
+    await expect(this.page.locator('[data-testid="list-item-input"]')).toHaveCount(count);
   }
 
-  async expectTodoItemValue(index: number, value: string) {
-    await expect(this.todoItemInput(index)).toHaveValue(value);
+  async expectListItemValue(index: number, value: string) {
+    await expect(this.listItemInput(index)).toHaveValue(value);
+  }
+
+  /** Creates a new text note (no title) with the given content and closes the modal. */
+  async createTextNote(content: string) {
+    await this.clickNewNote();
+    const dialog = this.page.getByRole('dialog').last();
+    await dialog.locator('textarea').first().fill(content);
+    await this.closeActiveDialog();
+  }
+
+  /**
+   * Returns the note card whose visible text contains the given string.
+   * Use for text notes (which have no h3 title), filtering by content text instead.
+   */
+  noteCardByText(text: string) {
+    return this.page.locator('[data-testid="note-card"]').filter({ hasText: text });
   }
 
   async pressKey(key: string) {
@@ -282,10 +297,10 @@ export class DashboardPage {
     await expect(this.page.getByText('Notes in the bin are deleted after 7 days')).toBeVisible();
   }
 
-  async switchToMyTodo() {
+  async switchToMyTasks() {
     await this.ensureSidebarOpen();
     await this.page
-      .locator('aside[aria-label="Main navigation"] nav [aria-label="My Todo"]')
+      .locator('aside[aria-label="Main navigation"] nav [aria-label="My Tasks"]')
       .click();
   }
 
@@ -356,11 +371,11 @@ export class DashboardPage {
     await expect(this.page.getByRole('button', { name: 'Profile menu' })).toHaveAttribute('title', expected);
   }
 
-  async editNote(title: string, newTitle: string, newContent: string) {
+  async editNote(title: string, newTitle: string, _newContent: string) {
     await this.openNote(title);
-    await expect(this.page.getByRole('heading', { name: 'Edit Note' })).toBeVisible();
+    await expect(this.page.getByRole('button', { name: 'Close' })).toBeVisible();
+    // createNote creates list notes which have a title input; edit only the title.
     await this.page.fill('input[placeholder="Note title..."]', newTitle);
-    await this.page.fill('textarea[placeholder="Take a note..."]', newContent);
     await this.closeActiveDialog();
   }
 
@@ -455,12 +470,12 @@ export class DashboardPage {
     await this.expectLabelNotInSidebar(labelName);
   }
 
-  /** Opens a note, assigns a todo item at the given index to a user, then closes the modal. */
-  async assignTodoItemToUser(noteTitle: string, itemIndex: number, username: string) {
+  /** Opens a note, assigns a list item at the given index to a user, then closes the modal. */
+  async assignListItemToUser(noteTitle: string, itemIndex: number, username: string) {
     await this.openNote(noteTitle);
-    await expect(this.page.getByRole('heading', { name: 'Edit Note' })).toBeVisible();
+    await expect(this.page.getByRole('dialog').getByRole('button', { name: 'Close' })).toBeVisible();
 
-    const itemRow = this.page.locator('[data-testid="todo-item-row"]').nth(itemIndex);
+    const itemRow = this.page.locator('[data-testid="list-item-row"]').nth(itemIndex);
     await itemRow.hover();
     const assignBtn = itemRow.locator('button[aria-label="Assign item"]');
     // force: true bypasses visibility so the click works on both desktop (hover

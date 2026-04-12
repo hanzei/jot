@@ -1,6 +1,8 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
 	"net/http"
 	"testing"
 
@@ -16,8 +18,7 @@ func TestNoteSharingEndpoints(t *testing.T) {
 	sharedUser := ts.createTestUser(t, "user", "password123", false)
 	other := ts.createTestUser(t, "other", "password123", false)
 
-	note, err := owner.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-		Title:   "Shared Note",
+	note, err := owner.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{
 		Content: "This will be shared",
 	})
 	require.NoError(t, err)
@@ -168,14 +169,14 @@ func TestPerUserNoteState(t *testing.T) {
 		owner := ts.createTestUser(t, "owner", "password123", false)
 		collab := ts.createTestUser(t, "collab", "password123", false)
 
-		note, err := owner.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-			Title: "Shared Note",
-			Color: "#ff0000",
+		note, err := owner.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{
+			Content: "Shared Note",
+			Color:   "#ff0000",
 		})
 		require.NoError(t, err)
 		require.NoError(t, owner.Client.ShareNote(t.Context(), note.ID, collab.User.ID))
 
-		_, err = collab.Client.UpdateNote(t.Context(), note.ID, &client.UpdateNoteRequest{
+		_, err = collab.Client.UpdateTextNote(t.Context(), note.ID, &client.UpdateTextNoteRequest{
 			Color: client.Ptr("#0000ff"),
 		})
 		require.NoError(t, err)
@@ -194,11 +195,11 @@ func TestPerUserNoteState(t *testing.T) {
 		owner := ts.createTestUser(t, "owner", "password123", false)
 		collab := ts.createTestUser(t, "collab", "password123", false)
 
-		note, err := owner.Client.CreateNote(t.Context(), &client.CreateNoteRequest{Title: "Shared Note"})
+		note, err := owner.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{Content: "Shared Note"})
 		require.NoError(t, err)
 		require.NoError(t, owner.Client.ShareNote(t.Context(), note.ID, collab.User.ID))
 
-		_, err = collab.Client.UpdateNote(t.Context(), note.ID, &client.UpdateNoteRequest{
+		_, err = collab.Client.UpdateTextNote(t.Context(), note.ID, &client.UpdateTextNoteRequest{
 			Archived: client.Ptr(true),
 		})
 		require.NoError(t, err)
@@ -223,11 +224,11 @@ func TestPerUserNoteState(t *testing.T) {
 		owner := ts.createTestUser(t, "owner", "password123", false)
 		collab := ts.createTestUser(t, "collab", "password123", false)
 
-		note, err := owner.Client.CreateNote(t.Context(), &client.CreateNoteRequest{Title: "Shared Note"})
+		note, err := owner.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{Content: "Shared Note"})
 		require.NoError(t, err)
 		require.NoError(t, owner.Client.ShareNote(t.Context(), note.ID, collab.User.ID))
 
-		_, err = collab.Client.UpdateNote(t.Context(), note.ID, &client.UpdateNoteRequest{
+		_, err = collab.Client.UpdateTextNote(t.Context(), note.ID, &client.UpdateTextNoteRequest{
 			Pinned: client.Ptr(true),
 		})
 		require.NoError(t, err)
@@ -246,9 +247,9 @@ func TestPerUserNoteState(t *testing.T) {
 		owner := ts.createTestUser(t, "owner", "password123", false)
 		collab := ts.createTestUser(t, "collab", "password123", false)
 
-		note, err := owner.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-			Title:  "Shared Note",
-			Labels: []string{"owner-label"},
+		note, err := owner.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{
+			Content: "Shared Note",
+			Labels:  []string{"owner-label"},
 		})
 		require.NoError(t, err)
 		require.NoError(t, owner.Client.ShareNote(t.Context(), note.ID, collab.User.ID))
@@ -267,28 +268,46 @@ func TestPerUserNoteState(t *testing.T) {
 		assert.Equal(t, "collab-label", collabNote.Labels[0].Name)
 	})
 
-	t.Run("shared fields title and content are visible to all collaborators", func(t *testing.T) {
+	t.Run("shared fields content is visible to all collaborators on text notes", func(t *testing.T) {
 		ts := setupTestServer(t)
 		owner := ts.createTestUser(t, "owner", "password123", false)
 		collab := ts.createTestUser(t, "collab", "password123", false)
 
-		note, err := owner.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-			Title:   "Original Title",
+		note, err := owner.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{
 			Content: "Original Content",
 		})
 		require.NoError(t, err)
 		require.NoError(t, owner.Client.ShareNote(t.Context(), note.ID, collab.User.ID))
 
-		_, err = collab.Client.UpdateNote(t.Context(), note.ID, &client.UpdateNoteRequest{
-			Title:   client.Ptr("Updated Title"),
+		_, err = collab.Client.UpdateTextNote(t.Context(), note.ID, &client.UpdateTextNoteRequest{
 			Content: client.Ptr("Updated Content"),
 		})
 		require.NoError(t, err)
 
 		ownerNote, err := owner.Client.GetNote(t.Context(), note.ID)
 		require.NoError(t, err)
-		assert.Equal(t, "Updated Title", ownerNote.Title)
 		assert.Equal(t, "Updated Content", ownerNote.Content)
+	})
+
+	t.Run("shared fields title is visible to all collaborators on list notes", func(t *testing.T) {
+		ts := setupTestServer(t)
+		owner := ts.createTestUser(t, "owner", "password123", false)
+		collab := ts.createTestUser(t, "collab", "password123", false)
+
+		note, err := owner.Client.CreateListNote(t.Context(), &client.CreateListNoteRequest{
+			Title: "Original Title",
+		})
+		require.NoError(t, err)
+		require.NoError(t, owner.Client.ShareNote(t.Context(), note.ID, collab.User.ID))
+
+		_, err = collab.Client.UpdateListNote(t.Context(), note.ID, &client.UpdateListNoteRequest{
+			Title: client.Ptr("Updated Title"),
+		})
+		require.NoError(t, err)
+
+		ownerNote, err := owner.Client.GetNote(t.Context(), note.ID)
+		require.NoError(t, err)
+		assert.Equal(t, "Updated Title", ownerNote.Title)
 	})
 
 	t.Run("collaborator can reorder notes independently from owner", func(t *testing.T) {
@@ -296,9 +315,9 @@ func TestPerUserNoteState(t *testing.T) {
 		owner := ts.createTestUser(t, "owner", "password123", false)
 		collab := ts.createTestUser(t, "collab", "password123", false)
 
-		noteA, err := owner.Client.CreateNote(t.Context(), &client.CreateNoteRequest{Title: "Note A"})
+		noteA, err := owner.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{Content: "Note A"})
 		require.NoError(t, err)
-		noteB, err := owner.Client.CreateNote(t.Context(), &client.CreateNoteRequest{Title: "Note B"})
+		noteB, err := owner.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{Content: "Note B"})
 		require.NoError(t, err)
 		require.NoError(t, owner.Client.ShareNote(t.Context(), noteA.ID, collab.User.ID))
 		require.NoError(t, owner.Client.ShareNote(t.Context(), noteB.ID, collab.User.ID))
@@ -337,11 +356,11 @@ func TestPerUserNoteState(t *testing.T) {
 		owner := ts.createTestUser(t, "owner", "password123", false)
 		collab := ts.createTestUser(t, "collab", "password123", false)
 
-		note, err := owner.Client.CreateNote(t.Context(), &client.CreateNoteRequest{Title: "Shared Note"})
+		note, err := owner.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{Content: "Shared Note"})
 		require.NoError(t, err)
 		require.NoError(t, owner.Client.ShareNote(t.Context(), note.ID, collab.User.ID))
 
-		_, err = collab.Client.UpdateNote(t.Context(), note.ID, &client.UpdateNoteRequest{
+		_, err = collab.Client.UpdateTextNote(t.Context(), note.ID, &client.UpdateTextNoteRequest{
 			Color: client.Ptr("#ff0000"),
 		})
 		require.NoError(t, err)
@@ -383,55 +402,58 @@ func TestEdgeCases(t *testing.T) {
 	})
 
 	t.Run("create note with empty fields", func(t *testing.T) {
-		_, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{})
+		_, err := user.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{})
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 
-	t.Run("create note with todo items", func(t *testing.T) {
-		note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-			Title:    "Todo List",
-			NoteType: client.NoteTypeTodo,
+	t.Run("create note with list items", func(t *testing.T) {
+		note, err := user.Client.CreateListNote(t.Context(), &client.CreateListNoteRequest{
+			Title: "List Note",
 			Items: []client.CreateNoteItem{
 				{Text: "Item 1", Position: 0},
 				{Text: "Item 2", Position: 1},
 			},
 		})
 		require.NoError(t, err)
-		assert.Equal(t, client.NoteTypeTodo, note.NoteType)
+		assert.Equal(t, client.NoteTypeList, note.NoteType)
 	})
 
-	t.Run("create note with items defaults note_type to todo", func(t *testing.T) {
-		note, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-			Title: "Implicit Todo",
+	t.Run("create note with items defaults note_type to list", func(t *testing.T) {
+		note, err := user.Client.CreateListNote(t.Context(), &client.CreateListNoteRequest{
+			Title: "Implicit List",
 			Items: []client.CreateNoteItem{
 				{Text: "Item 1", Position: 0},
 			},
 		})
 		require.NoError(t, err)
-		assert.Equal(t, client.NoteTypeTodo, note.NoteType)
+		assert.Equal(t, client.NoteTypeList, note.NoteType)
 		assert.Len(t, note.Items, 1)
 	})
 
-	t.Run("create note rejects non-todo note_type when items are provided", func(t *testing.T) {
-		_, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-			Title:    "Conflicting Note Type",
-			NoteType: client.NoteTypeText,
-			Items: []client.CreateNoteItem{
-				{Text: "Item 1", Position: 0},
-			},
+	t.Run("create note rejects non-list note_type when items are provided", func(t *testing.T) {
+		// Send a raw request with conflicting note_type and items to test server validation.
+		body, _ := json.Marshal(map[string]any{
+			"note_type": "text",
+			"content":   "Conflicting Note Type",
+			"items":     []map[string]any{{"text": "Item 1", "position": 0}},
 		})
-		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost,
+			ts.HTTPServer.URL+"/api/v1/notes", bytes.NewReader(body))
+		require.NoError(t, err)
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := user.Client.HTTPClient().Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 	})
 
 	t.Run("update note with default color", func(t *testing.T) {
-		created, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-			Title:   "Test Note",
-			Content: "Content",
+		created, err := user.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{
+			Content: "Test Note",
 		})
 		require.NoError(t, err)
 
-		updated, err := user.Client.UpdateNote(t.Context(), created.ID, &client.UpdateNoteRequest{
-			Title:   client.Ptr("Updated"),
+		updated, err := user.Client.UpdateTextNote(t.Context(), created.ID, &client.UpdateTextNoteRequest{
 			Content: client.Ptr("Updated"),
 		})
 		require.NoError(t, err)
@@ -449,9 +471,8 @@ func TestBatchLoadNoteSharesChunkBoundary(t *testing.T) {
 	const total = 501
 	createdIDs := make([]string, total)
 	for i := range createdIDs {
-		note, err := owner.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-			Title:   "Chunk Note",
-			Content: "content",
+		note, err := owner.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{
+			Content: "Chunk Note",
 		})
 		require.NoError(t, err)
 		createdIDs[i] = note.ID

@@ -1,6 +1,7 @@
 {
   "common": {
-    "close": "Fechar"
+    "close": "Fechar",
+    "done": "Concluído"
   },
   "nav": {
     "profileMenu": "Menu de perfil",
@@ -56,6 +57,7 @@
     "otherNotes": "Outras notas",
     "searchPlaceholder": "Pesquisar notas...",
     "searchAriaLabel": "Pesquisar notas",
+    "searchClearAriaLabel": "Limpar pesquisa",
     "sortLabel": "Ordenar notas",
     "sortOption": {
       "manual": "Manual",
@@ -65,14 +67,14 @@
     "manualReorderDisabledTitle": "A reordenação manual está desativada.",
     "manualReorderDisabled": "As notas estão ordenadas por {{sort}}, portanto arrastar e soltar não está disponível.",
     "tabNotes": "Notas",
-    "tabMyTodo": "Minhas tarefas",
-    "myTodoTooltip": "Notas com tarefas atribuídas a você",
-    "myTodoInfo": "Exibindo notas que incluem suas tarefas atribuídas.",
+    "tabMyTasks": "Minhas tarefas",
+    "myTasksTooltip": "Notas com itens de lista atribuídos a você",
+    "myTasksInfo": "Exibindo notas que incluem seus itens de lista atribuídos.",
     "tabArchive": "Arquivo",
     "tabBin": "Lixeira",
     "tabAdmin": "Admin",
-    "noMyTodoNotesTitle": "Nenhuma tarefa atribuída",
-    "noMyTodoNotes": "Nenhuma tarefa foi atribuída a você ainda. Quando alguém atribuir uma tarefa a você em uma nota compartilhada, ela aparecerá aqui.",
+    "noMyTasksNotesTitle": "Nenhum item de lista atribuído",
+    "noMyTasksNotes": "Nenhum item de lista foi atribuído a você ainda. Quando alguém atribuir um item de lista a você em uma nota compartilhada, ele aparecerá aqui.",
     "noNotesForThisLabel": "Nenhuma nota para este rótulo",
     "labelFilterEmptyHint": "As notas com este rótulo aparecerão aqui.",
     "archiveInfo": "As notas arquivadas ficam ocultas da visualização principal, mas são mantidas para sempre.",
@@ -218,8 +220,8 @@
     "newNoteDescription": "Abrir uma nova nota",
     "notesKey": "D",
     "notesDescription": "Abrir visualização de notas",
-    "myTodoKey": "T",
-    "myTodoDescription": "Abrir visualização de minhas tarefas",
+    "myTasksKey": "T",
+    "myTasksDescription": "Abrir visualização de minhas tarefas",
     "archiveKey": "A",
     "archiveDescription": "Abrir visualização de arquivo",
     "binKey": "B",
@@ -277,12 +279,12 @@
         "users": "Usuários",
         "notes": "Notas",
         "labels": "Etiquetas",
-        "todoItems": "Tarefas"
+        "listItems": "Itens de lista"
       },
       "metrics": {
         "admins": "Administradores",
         "text": "Texto",
-        "todo": "Tarefas",
+        "list": "Lista",
         "archived": "Arquivadas",
         "trashed": "Na lixeira",
         "sharedNotes": "Notas compartilhadas",
@@ -317,7 +319,7 @@
     "unarchiveNote": "Desarquivar nota",
     "archiveNote": "Arquivar nota",
     "typeText": "Texto",
-    "typeTodo": "Lista de tarefas",
+    "typeList": "Lista",
     "titlePlaceholder": "Título da nota...",
     "contentPlaceholder": "Fazer uma anotação...",
     "itemPlaceholder": "Item da lista...",
@@ -380,7 +382,6 @@
     "deleteConfirmMessage": "Excluir a etiqueta \"{{name}}\"? Ela será removida de todas as notas que a utilizam."
   },
   "share": {
-    "title": "Compartilhar \"{{noteTitle}}\"",
     "untitledNote": "Nota sem título",
     "shareWithUser": "Compartilhar com usuário:",
     "searchUsersPlaceholder": "Pesquisar usuários por nome...",
@@ -430,7 +431,7 @@
     "register": "Criar conta - Jot",
     "notes": "Jot",
     "note": "{{title}} - Jot",
-    "myTodo": "Minhas tarefas - Jot",
+    "myTasks": "Minhas tarefas - Jot",
     "archive": "Arquivo - Jot",
     "bin": "Lixeira - Jot",
     "admin": "Admin - Jot",

@@ -1,4 +1,5 @@
 import { useEffect, useRef, useState } from 'react';
+import { useSidebarExpanded } from '@/components/SidebarContext';
 import {
   CheckIcon,
   EllipsisVerticalIcon,
@@ -33,6 +34,8 @@ const SidebarLabels = ({
   onDelete,
 }: SidebarLabelsProps) => {
   const { t } = useTranslation();
+  const isExpanded = useSidebarExpanded();
+
   const [editingLabelId, setEditingLabelId] = useState<string | null>(null);
   const [draftName, setDraftName] = useState('');
   const [renamingLabelId, setRenamingLabelId] = useState<string | null>(null);
@@ -144,22 +147,30 @@ const SidebarLabels = ({
       <ul className="space-y-0.5">
         {labels.map((label) => {
           const isActive = selectedLabelId === label.id;
-          const className = `flex items-center gap-2 flex-1 min-w-0 text-left px-3 py-1.5 rounded-md text-sm ${
+          // Background on the row div keeps the highlight full-width regardless
+          // of whether the flex-1 label button has a menu sibling or not.
+          const rowClass = `rounded-md flex items-center gap-1 ${
             isActive
-              ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300 font-medium'
-              : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-slate-700'
+              ? 'bg-blue-100 dark:bg-blue-900/30'
+              : 'hover:bg-gray-100 dark:hover:bg-slate-700'
+          }`;
+          const buttonClass = `group/label flex items-center flex-1 min-w-[2rem] py-1.5 rounded-md text-sm ${
+            isActive
+              ? 'text-blue-700 dark:text-blue-300 font-medium'
+              : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white'
           }`;
           const isEditing = editingLabelId === label.id;
           const isRenaming = renamingLabelId === label.id;
 
           return (
-            <li key={label.id} className="group">
+            <li key={label.id}>
               {isEditing ? (
                 <div className="flex items-center gap-1 rounded-md px-2 py-1.5 bg-gray-100 dark:bg-slate-700">
                   <TagIcon className="h-4 w-4 shrink-0 text-gray-500 dark:text-gray-300" />
                   <input
                     ref={inputRef}
                     type="text"
+                    autoCapitalize="none"
                     value={draftName}
                     onChange={(event) => setDraftName(event.target.value)}
                     onClick={(event) => event.stopPropagation()}
@@ -197,21 +208,23 @@ const SidebarLabels = ({
                   </button>
                 </div>
               ) : (
-                <div className="flex items-center gap-1">
+                <div className={rowClass}>
                   <button
                     type="button"
                     onClick={() => onSelect?.(label.id)}
-                    className={className}
+                    className={buttonClass}
                     aria-describedby={labelCounts ? `label-count-${label.id}` : undefined}
                     aria-pressed={isActive ? true : undefined}
                   >
-                    <TagIcon className="h-4 w-4 shrink-0" />
-                    <span className="truncate min-w-0">{label.name}</span>
+                    <span className="flex items-center justify-center shrink-0 w-8">
+                      <TagIcon className="h-4 w-4" />
+                    </span>
+                    <span className={`truncate min-w-0 overflow-hidden transition-[max-width,opacity] duration-200 ${isExpanded ? 'max-w-[12rem] opacity-100' : 'max-w-0 opacity-0'}`}>{label.name}</span>
                     {labelCounts && (
                       <span
                         id={`label-count-${label.id}`}
                         data-testid={`label-count-${label.id}`}
-                        className={`ml-auto shrink-0 text-xs transition-opacity opacity-0 group-hover:opacity-100 group-focus-within:opacity-100 ${isActive ? 'text-blue-600 dark:text-blue-300' : 'text-gray-400 dark:text-gray-500'}`}
+                        className={`ml-auto shrink-0 text-xs transition-opacity opacity-0 group-hover/label:opacity-100 ${isActive ? 'text-blue-600 dark:text-blue-300' : 'text-gray-400 dark:text-gray-500'}`}
                       >
                         {labelCounts[label.id] ?? 0}
                       </span>
@@ -221,7 +234,7 @@ const SidebarLabels = ({
                     <Menu as="div" className="relative shrink-0">
                       <MenuButton
                         aria-label={t('labels.menuOptions', { name: label.name })}
-                        className="shrink-0 rounded-md p-1.5 text-gray-400 hover:bg-gray-100 hover:text-gray-700 dark:hover:bg-slate-700 dark:hover:text-white"
+                        className="shrink-0 rounded-md p-1.5 text-gray-400"
                       >
                         <EllipsisVerticalIcon className="h-4 w-4" />
                       </MenuButton>
@@ -260,13 +273,14 @@ const SidebarLabels = ({
         })}
       </ul>
       {onCreate && (
-        <div className="mt-2 border-t border-gray-200 pt-2 dark:border-slate-700">
+        <div className="mt-2">
           {creatingLabel ? (
             <div className="flex items-center gap-1 rounded-md px-2 py-1.5 bg-gray-100 dark:bg-slate-700">
               <TagIcon className="h-4 w-4 shrink-0 text-gray-500 dark:text-gray-300" />
               <input
                 ref={createInputRef}
                 type="text"
+                autoCapitalize="none"
                 value={newLabelName}
                 onChange={(event) => setNewLabelName(event.target.value)}
                 onClick={(event) => event.stopPropagation()}
@@ -304,14 +318,19 @@ const SidebarLabels = ({
               </button>
             </div>
           ) : (
-            <button
-              type="button"
-              onClick={startCreate}
-              className="flex w-full items-center gap-2 rounded-md px-3 py-1.5 text-left text-sm text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20"
-            >
-              <PlusIcon className="h-4 w-4 shrink-0" />
-              <span>{t('labels.newSidebar')}</span>
-            </button>
+            <>
+              <button
+                type="button"
+                onClick={startCreate}
+                className="flex w-full items-center rounded-md py-1.5 text-sm text-blue-600 hover:bg-blue-50 dark:text-blue-400 dark:hover:bg-blue-900/20"
+              >
+                <span className="flex items-center justify-center shrink-0 w-8">
+                  <PlusIcon className="h-4 w-4" />
+                </span>
+                <span className={`overflow-hidden whitespace-nowrap transition-[max-width,opacity] duration-200 ${isExpanded ? 'max-w-[12rem] opacity-100' : 'max-w-0 opacity-0'}`}>{t('labels.newSidebar')}</span>
+              </button>
+              <div className="mt-2 border-t border-gray-200 dark:border-slate-700" />
+            </>
           )}
         </div>
       )}

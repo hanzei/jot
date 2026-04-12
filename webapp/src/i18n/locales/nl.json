@@ -1,6 +1,7 @@
 {
   "common": {
-    "close": "Sluiten"
+    "close": "Sluiten",
+    "done": "Klaar"
   },
   "nav": {
     "profileMenu": "Profielmenu",
@@ -56,6 +57,7 @@
     "otherNotes": "Andere notities",
     "searchPlaceholder": "Notities zoeken...",
     "searchAriaLabel": "Notities zoeken",
+    "searchClearAriaLabel": "Zoekopdracht wissen",
     "sortLabel": "Notities sorteren",
     "sortOption": {
       "manual": "Handmatig",
@@ -65,14 +67,14 @@
     "manualReorderDisabledTitle": "Handmatig sorteren is uitgeschakeld.",
     "manualReorderDisabled": "Notities zijn gesorteerd op {{sort}}, dus slepen en neerzetten is niet beschikbaar.",
     "tabNotes": "Notities",
-    "tabMyTodo": "Mijn taken",
-    "myTodoTooltip": "Notities met aan jou toegewezen taken",
-    "myTodoInfo": "Notities met je toegewezen taken worden weergegeven.",
+    "tabMyTasks": "Mijn taken",
+    "myTasksTooltip": "Notities met lijstitems die aan jou zijn toegewezen",
+    "myTasksInfo": "Notities met jouw toegewezen lijstitems worden weergegeven.",
     "tabArchive": "Archief",
     "tabBin": "Prullenbak",
     "tabAdmin": "Admin",
-    "noMyTodoNotesTitle": "Geen toegewezen taken",
-    "noMyTodoNotes": "Er zijn nog geen taken aan jou toegewezen. Wanneer iemand je een taak toewijst in een gedeelde notitie, verschijnt deze hier.",
+    "noMyTasksNotesTitle": "Geen toegewezen lijstitems",
+    "noMyTasksNotes": "Er zijn nog geen lijstitems aan jou toegewezen. Wanneer iemand een lijstitem in een gedeelde notitie aan jou toewijst, verschijnt het hier.",
     "noNotesForThisLabel": "Geen notities voor dit label",
     "labelFilterEmptyHint": "Notities met dit label verschijnen hier.",
     "archiveInfo": "Gearchiveerde notities zijn verborgen in de hoofdweergave maar worden voor altijd bewaard.",
@@ -218,8 +220,8 @@
     "newNoteDescription": "Een nieuwe notitie openen",
     "notesKey": "D",
     "notesDescription": "Notitieweergave openen",
-    "myTodoKey": "T",
-    "myTodoDescription": "Weergave mijn taken openen",
+    "myTasksKey": "T",
+    "myTasksDescription": "Open mijn taken",
     "archiveKey": "A",
     "archiveDescription": "Archiefweergave openen",
     "binKey": "B",
@@ -277,12 +279,12 @@
         "users": "Gebruikers",
         "notes": "Notities",
         "labels": "Labels",
-        "todoItems": "Taken"
+        "listItems": "Lijstitems"
       },
       "metrics": {
         "admins": "Beheerders",
         "text": "Tekst",
-        "todo": "Taken",
+        "list": "Lijst",
         "archived": "Gearchiveerd",
         "trashed": "Prullenbak",
         "sharedNotes": "Gedeelde notities",
@@ -317,7 +319,7 @@
     "unarchiveNote": "Notitie uit archief halen",
     "archiveNote": "Notitie archiveren",
     "typeText": "Tekst",
-    "typeTodo": "Takenlijst",
+    "typeList": "Lijst",
     "titlePlaceholder": "Notitietitel...",
     "contentPlaceholder": "Een notitie maken...",
     "itemPlaceholder": "Lijstitem...",
@@ -380,7 +382,6 @@
     "deleteConfirmMessage": "Label \"{{name}}\" verwijderen? Het wordt verwijderd uit alle notities die het gebruiken."
   },
   "share": {
-    "title": "\"{{noteTitle}}\" delen",
     "untitledNote": "Naamloze notitie",
     "shareWithUser": "Delen met gebruiker:",
     "searchUsersPlaceholder": "Gebruikers zoeken op naam...",
@@ -430,7 +431,7 @@
     "register": "Account aanmaken - Jot",
     "notes": "Jot",
     "note": "{{title}} - Jot",
-    "myTodo": "Mijn taken - Jot",
+    "myTasks": "Mijn taken - Jot",
     "archive": "Archief - Jot",
     "bin": "Prullenbak - Jot",
     "admin": "Admin - Jot",

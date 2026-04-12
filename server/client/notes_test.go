@@ -8,22 +8,22 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestUpdateNoteRejectsExplicitEmptyItemsSlice(t *testing.T) {
+func TestUpdateListNoteRejectsExplicitEmptyItemsSlice(t *testing.T) {
 	tests := []struct {
 		name     string
-		req      UpdateNoteRequest
+		req      UpdateListNoteRequest
 		contains string
 	}{
 		{
 			name: "omits items when pointer is nil",
-			req: UpdateNoteRequest{
+			req: UpdateListNoteRequest{
 				Title: ptr("updated"),
 			},
 			contains: `"title":"updated"`,
 		},
 		{
 			name: "encodes empty items array when pointer targets empty slice",
-			req: UpdateNoteRequest{
+			req: UpdateListNoteRequest{
 				Items: ptr([]UpdateNoteItem{}),
 			},
 			contains: `"items":[]`,

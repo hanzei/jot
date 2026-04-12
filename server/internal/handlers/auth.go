@@ -610,7 +610,7 @@ func (h *AuthHandler) DeleteProfileIcon(w http.ResponseWriter, r *http.Request) 
 		// The deletion already succeeded; log the re-fetch failure but don't
 		// report it as an error to the caller.
 		logutil.FromContext(r.Context()).WithError(err).WithField("user_id", currentUser.ID).
-			Error("failed to re-fetch user after profile icon deletion; skipping SSE publish")
+			Error("Failed to re-fetch user after profile icon deletion; skipping SSE publish")
 	} else {
 		h.publishProfileIconEvent(r.Context(), user)
 	}
@@ -626,7 +626,7 @@ func (h *AuthHandler) publishProfileIconEvent(ctx context.Context, user *models.
 	}
 	collaboratorIDs, err := h.noteStore.GetCollaboratorIDs(ctx, user.ID)
 	if err != nil {
-		logutil.FromContext(ctx).WithError(err).WithField("user_id", user.ID).Error("failed to get collaborator IDs for profile icon SSE publish")
+		logutil.FromContext(ctx).WithError(err).WithField("user_id", user.ID).Error("Failed to get collaborator IDs for profile icon SSE publish")
 		return
 	}
 	if len(collaboratorIDs) == 0 {
@@ -635,6 +635,7 @@ func (h *AuthHandler) publishProfileIconEvent(ctx context.Context, user *models.
 	h.hub.Publish(ctx, collaboratorIDs, sse.Event{
 		Type:         sse.EventProfileIconUpdated,
 		SourceUserID: user.ID,
+		ClientID:     clientIDFromContext(ctx),
 		Data:         sse.ProfileIconEventData{User: user},
 	})
 }

@@ -39,7 +39,7 @@ func TestProfileIconUploadSendsSSEToCollaborator(t *testing.T) {
 	collaborator := ts.createTestUser(t, "collaborator", "password123", false)
 
 	// Link the two users via a shared note.
-	note, err := iconOwner.Client.CreateNote(t.Context(), &client.CreateNoteRequest{Title: "shared"})
+	note, err := iconOwner.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{Content: "shared"})
 	require.NoError(t, err)
 	require.NoError(t, iconOwner.Client.ShareNote(t.Context(), note.ID, collaborator.User.ID))
 
@@ -74,7 +74,7 @@ func TestProfileIconDeleteSendsSSEToCollaborator(t *testing.T) {
 	collaborator := ts.createTestUser(t, "delcollaborator", "password123", false)
 
 	// Link the two users via a shared note.
-	note, err := iconOwner.Client.CreateNote(t.Context(), &client.CreateNoteRequest{Title: "shared"})
+	note, err := iconOwner.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{Content: "shared"})
 	require.NoError(t, err)
 	require.NoError(t, iconOwner.Client.ShareNote(t.Context(), note.ID, collaborator.User.ID))
 

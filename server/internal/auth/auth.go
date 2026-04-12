@@ -7,6 +7,8 @@ import (
 	"time"
 
 	"github.com/hanzei/jot/server/internal/models"
+	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/trace"
 )
 const (
 	SessionCookieName = "jot_session"
@@ -17,6 +19,7 @@ type SessionService struct {
 	userStore    *models.UserStore
 	patStore     *models.PATStore
 	cookieSecure bool
+	tracer       trace.Tracer
 }
 
 func NewSessionService(sessionStore *models.SessionStore, userStore *models.UserStore, patStore *models.PATStore, cookieSecure bool) *SessionService {
@@ -25,6 +28,7 @@ func NewSessionService(sessionStore *models.SessionStore, userStore *models.User
 		userStore:    userStore,
 		patStore:     patStore,
 		cookieSecure: cookieSecure,
+		tracer:       otel.Tracer("github.com/hanzei/jot/server"),
 	}
 }
 
@@ -67,18 +71,21 @@ func (s *SessionService) GetSessionUser(r *http.Request) (*models.User, error) {
 	return user, nil
 }
 
-func (s *SessionService) GetSessionAndUser(r *http.Request) (*models.Session, *models.User, error) {
+func (s *SessionService) GetSessionAndUser(r *http.Request) (_ *models.Session, _ *models.User, err error) {
+	ctx, end := startSpan(r.Context(), s.tracer, "SessionService.GetSessionAndUser", &err)
+	defer end()
+
 	cookie, err := r.Cookie(SessionCookieName)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	session, err := s.sessionStore.GetByToken(r.Context(), cookie.Value)
+	session, err := s.sessionStore.GetByToken(ctx, cookie.Value)
 	if err != nil {
 		return nil, nil, err
 	}
 
-	user, err := s.userStore.GetByID(r.Context(), session.UserID)
+	user, err := s.userStore.GetByID(ctx, session.UserID)
 	if err != nil {
 		return nil, nil, err
 	}

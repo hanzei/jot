@@ -57,7 +57,7 @@ export interface Label {
   updated_at: string;
 }
 
-export type NoteType = 'text' | 'todo';
+export type NoteType = 'text' | 'list';
 
 export interface NoteItem {
   id: string;
@@ -85,18 +85,14 @@ export interface NoteShare {
   updated_at: string;
 }
 
-export interface Note {
+interface BaseNote {
   id: string;
   user_id: string;
-  title: string;
-  content: string;
   note_type: NoteType;
   color: string;
   pinned: boolean;
   archived: boolean;
   position: number;
-  checked_items_collapsed: boolean;
-  items?: NoteItem[];
   shared_with?: NoteShare[];
   is_shared: boolean;
   labels: Label[];
@@ -105,34 +101,75 @@ export interface Note {
   updated_at: string;
 }
 
+export interface TextNote extends BaseNote {
+  note_type: 'text';
+  content: string;
+}
+
+export interface ListNote extends BaseNote {
+  note_type: 'list';
+  title: string;
+  items?: NoteItem[];
+  checked_items_collapsed: boolean;
+}
+
+export type Note = TextNote | ListNote;
+
 export interface GetNotesParams {
   archived?: boolean;
   search?: string;
   trashed?: boolean;
   label?: string;
-  my_todo?: boolean;
-  /** Used locally to filter my-todo notes by assigned_to; not sent to the server. */
+  my_tasks?: boolean;
+  /** Used locally to filter my-tasks notes by assigned_to; not sent to the server. */
   user_id?: string;
 }
 
-export interface CreateNoteRequest {
-  title: string;
+export interface CreateNoteItemRequest {
+  text: string;
+  position: number;
+  completed?: boolean;
+  indent_level?: number;
+}
+
+export interface UpdateNoteItemRequest extends CreateNoteItemRequest {
+  assigned_to?: string;
+}
+
+export interface CreateTextNoteRequest {
   content: string;
-  note_type: NoteType;
+  note_type: 'text';
   color?: string;
-  items?: { text: string; position: number; completed?: boolean; indent_level?: number }[];
   labels?: string[];
 }
 
-export interface UpdateNoteRequest {
-  title?: string;
+export interface CreateListNoteRequest {
+  title: string;
+  note_type: 'list';
+  color?: string;
+  items?: CreateNoteItemRequest[];
+  labels?: string[];
+}
+
+export type CreateNoteRequest = CreateTextNoteRequest | CreateListNoteRequest;
+
+export interface UpdateTextNoteRequest {
   content?: string;
   pinned?: boolean;
   archived?: boolean;
   color?: string;
-  checked_items_collapsed?: boolean;
-  items?: { text: string; position: number; completed?: boolean; indent_level?: number; assigned_to?: string }[];
 }
+
+export interface UpdateListNoteRequest {
+  title?: string;
+  pinned?: boolean;
+  archived?: boolean;
+  color?: string;
+  checked_items_collapsed?: boolean;
+  items?: UpdateNoteItemRequest[];
+}
+
+export type UpdateNoteRequest = UpdateTextNoteRequest | UpdateListNoteRequest;
 
 export interface CreateUserRequest {
   username: string;
@@ -152,7 +189,7 @@ export interface AdminUserStats {
 export interface AdminNoteStats {
   total: number;
   text: number;
-  todo: number;
+  list: number;
   trashed: number;
   archived: number;
 }
@@ -167,7 +204,7 @@ export interface AdminLabelStats {
   note_associations: number;
 }
 
-export interface AdminTodoItemStats {
+export interface AdminListItemStats {
   total: number;
   completed: number;
   assigned: number;
@@ -182,7 +219,7 @@ export interface AdminStatsResponse {
   notes: AdminNoteStats;
   sharing: AdminSharingStats;
   labels: AdminLabelStats;
-  todo_items: AdminTodoItemStats;
+  list_items: AdminListItemStats;
   storage: AdminStorageStats;
 }
 
@@ -231,6 +268,7 @@ export interface NoteSSEEvent {
   type: 'note_created' | 'note_updated' | 'note_deleted' | 'note_shared' | 'note_unshared';
   source_user_id: string;
   target_user_id?: string;
+  client_id?: string;
   data: {
     note_id: string;
     note: Note | null;
@@ -240,6 +278,7 @@ export interface NoteSSEEvent {
 export interface LabelsChangedSSEEvent {
   type: 'labels_changed';
   source_user_id: string;
+  client_id?: string;
   data: {
     label: Label;
   };
@@ -260,6 +299,7 @@ export interface CreatePATRequest {
 export interface ProfileIconSSEEvent {
   type: 'profile_icon_updated';
   source_user_id: string;
+  client_id?: string;
   data: {
     user: User;
   };

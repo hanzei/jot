@@ -1,9 +1,13 @@
 import axios from 'axios';
 import type { ServerConfig, AboutInfo, AuthResponse, LoginRequest, RegisterRequest, Note, CreateNoteRequest, UpdateNoteRequest, User, CreateUserRequest, UserListResponse, AdminStatsResponse, ShareNoteRequest, NoteShare, ImportResponse, UpdateMeRequest, ChangePasswordRequest, UpdateUserRoleRequest, Label, ActiveSession, EmptyTrashResponse, PersonalAccessToken, CreatePATRequest } from '@jot/shared';
 
+// Unique ID for this browser tab, used to suppress SSE echoes of our own mutations.
+export const CLIENT_ID = crypto.randomUUID();
+
 const api = axios.create({
   baseURL: '/api/v1',
   withCredentials: true,
+  headers: { 'X-Client-Id': CLIENT_ID },
 });
 
 // Handle auth errors
@@ -43,8 +47,8 @@ export const auth = {
 };
 
 export const notes = {
-  getAll: (archived = false, search = '', trashed = false, labelId = '', myTodo = false): Promise<Note[]> =>
-    api.get('/notes', { params: { archived, search, trashed, ...(labelId ? { label: labelId } : {}), ...(myTodo ? { my_todo: true } : {}) } }).then(res => res.data),
+  getAll: (archived = false, search = '', trashed = false, labelId = '', myTasks = false): Promise<Note[]> =>
+    api.get('/notes', { params: { archived, search, trashed, ...(labelId ? { label: labelId } : {}), ...(myTasks ? { my_tasks: true } : {}) } }).then(res => res.data),
 
   getById: (id: string): Promise<Note> =>
     api.get(`/notes/${id}`).then(res => res.data),

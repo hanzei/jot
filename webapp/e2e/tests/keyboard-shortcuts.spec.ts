@@ -28,10 +28,15 @@ test.describe('Keyboard shortcuts help dialog', () => {
     await page.locator('main').click();
     await page.keyboard.press('n');
 
-    const noteTitleInput = page.locator('[role="dialog"][aria-modal="true"] input[type="text"]').first();
-    await expect(noteTitleInput).toBeVisible();
+    // New notes open as text notes; text notes have a content textarea (no title input).
+    const noteContentInput = page.locator('[role="dialog"][aria-modal="true"] textarea').first();
+    await expect(noteContentInput).toBeVisible();
+    // First Escape collapses the content area from edit to preview (two-step dismiss).
     await page.keyboard.press('Escape');
-    await expect(noteTitleInput).toHaveCount(0);
+    // Second Escape closes the modal.
+    await page.keyboard.press('Escape');
+    const dialog = page.locator('[role="dialog"][aria-modal="true"]');
+    await expect(dialog).toHaveCount(0);
   });
 
   test('opens with ? and closes with Escape', async ({ authenticatedUser, page, dashboardPage }) => {
@@ -49,8 +54,8 @@ test.describe('Keyboard shortcuts help dialog', () => {
     await expect(shortcutsDialog.getByTestId('shortcut-description-new-note')).toBeVisible();
     await expect(shortcutsDialog.getByTestId('shortcut-key-notes-view')).toBeVisible();
     await expect(shortcutsDialog.getByTestId('shortcut-description-notes-view')).toBeVisible();
-    await expect(shortcutsDialog.getByTestId('shortcut-key-my-todo-view')).toBeVisible();
-    await expect(shortcutsDialog.getByTestId('shortcut-description-my-todo-view')).toBeVisible();
+    await expect(shortcutsDialog.getByTestId('shortcut-key-my-tasks-view')).toBeVisible();
+    await expect(shortcutsDialog.getByTestId('shortcut-description-my-tasks-view')).toBeVisible();
     await expect(shortcutsDialog.getByTestId('shortcut-key-archive-view')).toBeVisible();
     await expect(shortcutsDialog.getByTestId('shortcut-description-archive-view')).toBeVisible();
     await expect(shortcutsDialog.getByTestId('shortcut-key-bin-view')).toBeVisible();
@@ -76,13 +81,13 @@ test.describe('Keyboard shortcuts help dialog', () => {
     await expect(shortcutsDialog.getByRole('heading', { name: 'Keyboard shortcuts' })).toBeVisible();
   });
 
-  test('opens notes/todo/archive/bin views with d/t/a/b', async ({ authenticatedUser, page, dashboardPage }) => {
+  test('opens notes/list/archive/bin views with d/t/a/b', async ({ authenticatedUser, page, dashboardPage }) => {
     void authenticatedUser;
     await dashboardPage.goto();
 
     await page.locator('main').click();
     await page.keyboard.press('t');
-    await expect(page).toHaveURL(/\/\?view=my-todo$/);
+    await expect(page).toHaveURL(/\/\?view=my-tasks$/);
 
     await page.locator('main').click();
     await page.keyboard.press('a');

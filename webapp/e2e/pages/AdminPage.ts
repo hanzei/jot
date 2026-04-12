@@ -29,8 +29,8 @@ export class AdminPage {
     return this.page.getByTestId('admin-stats-labels-total').innerText();
   }
 
-  async getTodoItemsTotal() {
-    return this.page.getByTestId('admin-stats-todo-items-total').innerText();
+  async getListItemsTotal() {
+    return this.page.getByTestId('admin-stats-list-items-total').innerText();
   }
 
   async getDatabaseSizeText() {

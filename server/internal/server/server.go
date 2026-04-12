@@ -19,7 +19,10 @@ import (
 	"github.com/go-chi/cors"
 	"github.com/hanzei/jot/server/internal/auth"
 	"github.com/hanzei/jot/server/internal/config"
+	"database/sql"
+
 	"github.com/hanzei/jot/server/internal/database"
+	"github.com/hanzei/jot/server/internal/database/dialect"
 	"github.com/hanzei/jot/server/internal/handlers"
 	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/hanzei/jot/server/internal/mcphandler"
@@ -46,7 +49,7 @@ func buildInfo() aboutResponse {
 type Server struct {
 	cfg             *config.Config
 	router          chi.Router
-	db              *database.DB
+	db              *sql.DB
 	httpServer      *http.Server
 	metricsServer   *http.Server
 	staticRoot      *os.Root
@@ -58,6 +61,7 @@ type Server struct {
 	ctx             context.Context
 	cancel          context.CancelFunc
 	bgWg            sync.WaitGroup
+	hub             *sse.Hub
 	sessionService  *auth.SessionService
 	authHandler     *handlers.AuthHandler
 	notesHandler    *handlers.NotesHandler
@@ -75,25 +79,27 @@ func New(cfg *config.Config) (*Server, error) {
 		return nil, fmt.Errorf("config must not be nil")
 	}
 
-	db, err := database.New(cfg.DBPath)
+	db, err := database.New(cfg.DBDriver, cfg.DBDSN)
 	if err != nil {
 		return nil, fmt.Errorf("initialize database: %w", err)
 	}
 
 	ctx, cancel := context.WithCancel(context.Background())
 
-	userStore := models.NewUserStore(db.DB)
-	noteStore := models.NewNoteStore(db.DB)
-	labelStore := models.NewLabelStore(db.DB)
-	adminStatsStore := models.NewAdminStatsStore(db.DB)
-	sessionStore, err := models.NewSessionStore(db.DB)
+	d := &dialect.Dialect{Driver: cfg.DBDriver}
+
+	userStore := models.NewUserStore(db, d)
+	noteStore := models.NewNoteStore(db, d)
+	labelStore := models.NewLabelStore(db, d)
+	adminStatsStore := models.NewAdminStatsStore(db, d)
+	sessionStore, err := models.NewSessionStore(db, d)
 	if err != nil {
 		cancel()
 		_ = db.Close()
 		return nil, fmt.Errorf("initialize session store: %w", err)
 	}
-	userSettingsStore := models.NewUserSettingsStore(db.DB)
-	patStore := models.NewPATStore(db.DB)
+	userSettingsStore := models.NewUserSettingsStore(db, d)
+	patStore := models.NewPATStore(db, d)
 
 	sessionService := auth.NewSessionService(sessionStore, userStore, patStore, cfg.CookieSecure)
 
@@ -113,7 +119,7 @@ func New(cfg *config.Config) (*Server, error) {
 	}
 	labelsHandler := handlers.NewLabelsHandler(noteStore, labelStore, hub)
 	eventsHandler := handlers.NewEventsHandler(hub)
-	adminHandler := handlers.NewAdminHandler(userStore, noteStore, adminStatsStore, userSettingsStore, cfg.DBPath, cfg.PasswordMinLength)
+	adminHandler := handlers.NewAdminHandler(userStore, noteStore, adminStatsStore, userSettingsStore, cfg.DBDSN, cfg.PasswordMinLength)
 	sessionsHandler := handlers.NewSessionsHandler(sessionStore)
 	patsHandler := handlers.NewPATsHandler(patStore)
 
@@ -124,6 +130,7 @@ func New(cfg *config.Config) (*Server, error) {
 		startReady:      make(chan struct{}),
 		ctx:             ctx,
 		cancel:          cancel,
+		hub:             hub,
 		sessionService:  sessionService,
 		authHandler:     authHandler,
 		notesHandler:    notesHandler,
@@ -163,7 +170,7 @@ func (s *Server) setupRoutes() error {
 
 	corsOpts := cors.Options{
 		AllowedMethods:   []string{http.MethodGet, http.MethodPost, http.MethodPut, http.MethodPatch, http.MethodDelete, http.MethodOptions},
-		AllowedHeaders:   []string{"Accept", "Content-Type", "Authorization"},
+		AllowedHeaders:   []string{"Accept", "Content-Type", "Authorization", "X-Client-Id"},
 		ExposedHeaders:   []string{"Link"},
 		AllowCredentials: true,
 		MaxAge:           300,
@@ -193,6 +200,7 @@ func (s *Server) setupRoutes() error {
 
 		r.Group(func(r chi.Router) {
 			r.Use(s.sessionService.AuthMiddleware)
+			r.Use(handlers.ClientIDMiddleware)
 
 			r.Get("/events", s.eventsHandler.ServeSSE)
 
@@ -356,7 +364,7 @@ func (s *Server) wrapHandler(handler func(w http.ResponseWriter, r *http.Request
 			w.Header().Set("Content-Type", "application/json")
 			w.WriteHeader(statusCode)
 			if err := json.NewEncoder(w).Encode(body); err != nil {
-				logutil.FromContext(r.Context()).WithError(err).Error("failed to encode response body")
+				logutil.FromContext(r.Context()).WithError(err).Error("Failed to encode response body")
 			}
 		} else if statusCode > 0 {
 			w.WriteHeader(statusCode)
@@ -433,7 +441,7 @@ func (s *Server) GetRouter() chi.Router {
 	return s.router
 }
 
-func (s *Server) GetDB() *database.DB {
+func (s *Server) GetDB() *sql.DB {
 	return s.db
 }
 
@@ -490,7 +498,7 @@ func requestLoggerMiddleware(next http.Handler) http.Handler {
 		rl.WithFields(logrus.Fields{
 			"status":   ww.Status(),
 			"duration": time.Since(start).String(),
-		}).Info("request completed")
+		}).Info("Request completed")
 	})
 }
 
@@ -521,7 +529,7 @@ func (s *Server) Start(addr string) error {
 		go func() {
 			defer s.bgWg.Done()
 			if err := metricsServer.Serve(metricsListener); err != nil && !errors.Is(err, http.ErrServerClosed) {
-				logrus.WithError(err).Error("metrics server stopped unexpectedly")
+				logrus.WithError(err).Error("Metrics server stopped unexpectedly")
 			}
 		}()
 		logrus.Infof("Metrics server listening on %s", metricsAddr)
@@ -569,6 +577,10 @@ func (s *Server) Shutdown(ctx context.Context) error {
 		return fmt.Errorf("wait until started: %w", err)
 	}
 
+	// Close the SSE hub first so that long-lived SSE connections are
+	// terminated and http.Server.Shutdown can complete within the deadline.
+	s.hub.Close()
+
 	s.serverMu.RLock()
 	httpServer := s.httpServer
 	s.serverMu.RUnlock()
@@ -592,7 +604,7 @@ func (s *Server) Shutdown(ctx context.Context) error {
 	s.serverMu.RUnlock()
 	if metricsServer != nil {
 		if err := metricsServer.Shutdown(ctx); err != nil {
-			logrus.WithError(err).Warn("metrics server shutdown error")
+			logrus.WithError(err).Warn("Metrics server shutdown error")
 		}
 	}
 
@@ -653,7 +665,7 @@ func startPeriodicTask(wg *sync.WaitGroup, ctx context.Context, interval time.Du
 		defer wg.Done()
 		if runNow {
 			if err := fn(); err != nil {
-				logrus.WithError(err).Errorf("failed to %s", logMsg)
+				logrus.WithError(err).Errorf("Failed to %s", logMsg)
 			}
 		}
 		ticker := time.NewTicker(interval)
@@ -662,7 +674,7 @@ func startPeriodicTask(wg *sync.WaitGroup, ctx context.Context, interval time.Du
 			select {
 			case <-ticker.C:
 				if err := fn(); err != nil {
-					logrus.WithError(err).Errorf("failed to %s", logMsg)
+					logrus.WithError(err).Errorf("Failed to %s", logMsg)
 				}
 			case <-ctx.Done():
 				return

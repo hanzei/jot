@@ -25,6 +25,9 @@ import (
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.26.0"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials"
+	"google.golang.org/grpc/credentials/insecure"
 )
 
 // Config holds OpenTelemetry configuration values loaded from environment variables.
@@ -43,6 +46,10 @@ type Config struct {
 	// ServiceName is the service name reported in all traces, metrics, and logs.
 	// Defaults to "jot".
 	ServiceName string
+
+	// ServiceVersion is the application version reported in all traces, metrics,
+	// and logs. Set from the build-time version string (e.g. "v1.2.3" or "dev").
+	ServiceVersion string
 
 	// Insecure controls whether OTLP gRPC connections skip TLS verification.
 	// Set to true only for local collectors or development environments.
@@ -71,7 +78,10 @@ func Setup(ctx context.Context, cfg Config) (shutdown func(context.Context) erro
 		resource.WithProcess(),
 		resource.WithHost(),
 		resource.WithTelemetrySDK(),
-		resource.WithAttributes(semconv.ServiceName(cfg.ServiceName)),
+		resource.WithAttributes(
+			semconv.ServiceName(cfg.ServiceName),
+			semconv.ServiceVersion(cfg.ServiceVersion),
+		),
 	)
 	if err != nil {
 		if !errors.Is(err, resource.ErrPartialResource) && !errors.Is(err, resource.ErrSchemaURLConflict) {
@@ -143,31 +153,37 @@ func Setup(ctx context.Context, cfg Config) (shutdown func(context.Context) erro
 	}, nil
 }
 
-func setupOTLP(ctx context.Context, res *resource.Resource, endpoint string, insecure bool, promExp *promexporter.Exporter) (*sdktrace.TracerProvider, *metric.MeterProvider, *sdklog.LoggerProvider, []func(context.Context) error, error) {
-	traceOpts := []otlptracegrpc.Option{otlptracegrpc.WithEndpoint(endpoint)}
-	metricOpts := []otlpmetricgrpc.Option{otlpmetricgrpc.WithEndpoint(endpoint)}
-	logOpts := []otlploggrpc.Option{otlploggrpc.WithEndpoint(endpoint)}
-	if insecure {
-		traceOpts = append(traceOpts, otlptracegrpc.WithInsecure())
-		metricOpts = append(metricOpts, otlpmetricgrpc.WithInsecure())
-		logOpts = append(logOpts, otlploggrpc.WithInsecure())
+func setupOTLP(ctx context.Context, res *resource.Resource, endpoint string, insecureConn bool, promExp *promexporter.Exporter) (*sdktrace.TracerProvider, *metric.MeterProvider, *sdklog.LoggerProvider, []func(context.Context) error, error) {
+	var creds credentials.TransportCredentials
+	if insecureConn {
+		creds = insecure.NewCredentials()
+	} else {
+		creds = credentials.NewTLS(nil)
 	}
 
-	traceExporter, err := otlptracegrpc.New(ctx, traceOpts...)
+	conn, err := grpc.NewClient(endpoint, grpc.WithTransportCredentials(creds))
 	if err != nil {
+		return nil, nil, nil, nil, fmt.Errorf("create OTLP gRPC connection: %w", err)
+	}
+
+	traceExporter, err := otlptracegrpc.New(ctx, otlptracegrpc.WithGRPCConn(conn))
+	if err != nil {
+		_ = conn.Close()
 		return nil, nil, nil, nil, fmt.Errorf("create OTLP trace exporter: %w", err)
 	}
 
-	metricExporter, err := otlpmetricgrpc.New(ctx, metricOpts...)
+	metricExporter, err := otlpmetricgrpc.New(ctx, otlpmetricgrpc.WithGRPCConn(conn))
 	if err != nil {
 		_ = traceExporter.Shutdown(ctx)
+		_ = conn.Close()
 		return nil, nil, nil, nil, fmt.Errorf("create OTLP metric exporter: %w", err)
 	}
 
-	logExporter, err := otlploggrpc.New(ctx, logOpts...)
+	logExporter, err := otlploggrpc.New(ctx, otlploggrpc.WithGRPCConn(conn))
 	if err != nil {
 		_ = traceExporter.Shutdown(ctx)
 		_ = metricExporter.Shutdown(ctx)
+		_ = conn.Close()
 		return nil, nil, nil, nil, fmt.Errorf("create OTLP log exporter: %w", err)
 	}
 
@@ -187,7 +203,13 @@ func setupOTLP(ctx context.Context, res *resource.Resource, endpoint string, ins
 		sdklog.WithResource(res),
 	)
 
-	shutdowns := []func(context.Context) error{tp.Shutdown, mp.Shutdown, lp.Shutdown}
+	// conn.Close is last: exporters must flush before the connection closes.
+	shutdowns := []func(context.Context) error{
+		tp.Shutdown,
+		mp.Shutdown,
+		lp.Shutdown,
+		func(_ context.Context) error { return conn.Close() },
+	}
 	return tp, mp, lp, shutdowns, nil
 }
 

@@ -5,10 +5,12 @@
     "cancel": "Abbrechen",
     "delete": "Löschen",
     "retry": "Erneut versuchen",
+    "dbOpenError": "Datenbank konnte nicht geöffnet werden.",
     "clearSearch": "Suche löschen",
     "error": "Fehler",
     "unknown": "unbekannt",
-    "loading": "Lädt..."
+    "loading": "Lädt...",
+    "done": "Fertig"
   },
   "nav": {
     "settings": "Einstellungen",
@@ -51,17 +53,13 @@
     "serverSetupInputA11yLabel": "Eingabe für Server-URL",
     "serverSetupSubmitA11yLabel": "Server prüfen und fortfahren",
     "serverSetupConnectionFailed": "Server nicht erreichbar. Prüfe URL und Verbindung und versuche es erneut.",
-    "serverSetupConnectionInvalidServer": "Verbindung hergestellt, aber dies scheint kein kompatibler Jot-API-Endpunkt zu sein.",
-    "serverSetupExampleLocalhost": "Beispiel: http://localhost:8080 (iOS-Simulator)",
-    "serverSetupExampleAndroidEmulator": "Beispiel: http://10.0.2.2:8080 (Android-Emulator)",
-    "serverSetupExampleLan": "Beispiel: http://192.168.1.42:8080 (LAN)",
-    "serverSetupExampleHosted": "Beispiel: https://notes.example.com (selbstgehostete Domain)"
+    "serverSetupConnectionInvalidServer": "Verbindung hergestellt, aber dies scheint kein kompatibler Jot-API-Endpunkt zu sein."
   },
   "dashboard": {
     "newNote": "Neue Notiz",
     "searchPlaceholder": "Notizen suchen...",
     "tabNotes": "Notizen",
-    "tabMyTodo": "Meine Aufgaben",
+    "tabMyTasks": "Meine Aufgaben",
     "tabArchive": "Archiv",
     "tabBin": "Papierkorb",
     "noteArchived": "Notiz archiviert",
@@ -72,8 +70,8 @@
     "pinned": "Angeheftet",
     "otherNotes": "Weitere Notizen",
     "noNotesYet": "Noch keine Notizen",
-    "noAssignedTodos": "Keine zugewiesenen Aufgaben",
-    "noMyTodoNotes": "Dir sind noch keine Aufgaben zugewiesen. Wenn dir jemand in einer geteilten Notiz eine Aufgabe zuweist, erscheint sie hier.",
+    "noAssignedListItems": "Keine zugewiesenen Listeneinträge",
+    "noMyTasksNotes": "Dir wurden noch keine Listeneinträge zugewiesen. Wenn jemand einen Listeneintrag in einer geteilten Notiz zuweist, erscheint er hier.",
     "noArchivedNotes": "Keine archivierten Notizen",
     "noBinnedNotes": "Papierkorb ist leer",
     "createFirstNote": "Tippe auf +, um deine erste Notiz zu erstellen",
@@ -217,7 +215,7 @@
     "completedItems": "Erledigte Elemente ({{count}})",
     "moreCompletedItems": "+{{count}} erledigte Elemente",
     "typeText": "Text",
-    "typeTodo": "Aufgaben",
+    "typeList": "Liste",
     "titlePlaceholder": "Notiz-Titel...",
     "contentPlaceholder": "Eine Notiz aufschreiben...",
     "itemPlaceholder": "Listenelement...",
@@ -251,14 +249,17 @@
     "colorLavender": "Lavendel",
     "colorPink": "Rosa",
     "colorSand": "Sand",
-    "colorGray": "Grau"
+    "colorGray": "Grau",
+    "formatBold": "Fett",
+    "formatItalic": "Kursiv",
+    "formatHeading": "Überschrift",
+    "formatBulletList": "Aufzählung"
   },
   "labels": {
     "title": "Labels",
     "noLabels": "Noch keine Labels",
     "newLabelPlaceholder": "Neues Label",
-
-    "newSidebar": "+ Neues Label",
+    "newSidebar": "Neues Label",
     "createInputLabel": "Neuer Labelname",
     "createSave": "Label erstellen",
     "createCancel": "Label-Erstellung abbrechen",

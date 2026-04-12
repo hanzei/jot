@@ -201,7 +201,7 @@ func TestImportNotesAppearInNotesList(t *testing.T) {
 
 	found := false
 	for _, n := range notes {
-		if n.Title == "Findable Import" {
+		if n.Content == "# Findable Import\n\nunique text" {
 			found = true
 			break
 		}
@@ -214,6 +214,7 @@ func TestImportPinnedAndArchivedNote(t *testing.T) {
 	user := ts.createTestUser(t, "importpinuser", "password123", false)
 
 	t.Run("pinned note is imported as pinned", func(t *testing.T) {
+		// Title-only Keep notes are stored as "# Title" (H1 heading) in content.
 		data := marshalKeepNote(t, keepNoteJSON{Title: "Pinned Import", IsPinned: true})
 		result, err := user.Client.ImportNotes(t.Context(), "google_keep", "note.json", bytes.NewReader(data))
 		require.NoError(t, err)
@@ -223,7 +224,7 @@ func TestImportPinnedAndArchivedNote(t *testing.T) {
 		require.NoError(t, err)
 		var found bool
 		for _, n := range notes {
-			if n.Title == "Pinned Import" {
+			if n.Content == "# Pinned Import" {
 				found = true
 				assert.True(t, n.Pinned)
 				break
@@ -233,6 +234,7 @@ func TestImportPinnedAndArchivedNote(t *testing.T) {
 	})
 
 	t.Run("archived note is imported as archived", func(t *testing.T) {
+		// Title-only Keep notes are stored as "# Title" (H1 heading) in content.
 		data := marshalKeepNote(t, keepNoteJSON{Title: "Archived Import", IsArchived: true})
 		result, err := user.Client.ImportNotes(t.Context(), "google_keep", "note.json", bytes.NewReader(data))
 		require.NoError(t, err)
@@ -242,7 +244,7 @@ func TestImportPinnedAndArchivedNote(t *testing.T) {
 		require.NoError(t, err)
 		var found bool
 		for _, n := range notes {
-			if n.Title == "Archived Import" {
+			if n.Content == "# Archived Import" {
 				found = true
 				assert.True(t, n.Archived)
 				break
@@ -286,7 +288,7 @@ func TestImportValidation(t *testing.T) {
 
 	t.Run("item text exceeding max is skipped with error", func(t *testing.T) {
 		data := marshalKeepNote(t, keepNoteJSON{
-			Title:       "Todo",
+			Title:       "List Note",
 			ListContent: []keepNoteItemJSON{{Text: strings.Repeat("a", 501)}},
 		})
 		result, err := user.Client.ImportNotes(t.Context(), "google_keep", "note.json", bytes.NewReader(data))

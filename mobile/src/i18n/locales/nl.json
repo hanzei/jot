@@ -5,10 +5,12 @@
     "cancel": "Annuleren",
     "delete": "Verwijderen",
     "retry": "Opnieuw proberen",
+    "dbOpenError": "Database kon niet worden geopend.",
     "clearSearch": "Zoekopdracht wissen",
     "error": "Fout",
     "unknown": "onbekend",
-    "loading": "Laden..."
+    "loading": "Laden...",
+    "done": "Klaar"
   },
   "nav": {
     "settings": "Instellingen",
@@ -66,24 +68,20 @@
     "serverSetupInputA11yLabel": "Invoer server-URL",
     "serverSetupSubmitA11yLabel": "Server valideren en doorgaan",
     "serverSetupConnectionFailed": "Kon die server niet bereiken. Controleer de URL en je verbinding en probeer het opnieuw.",
-    "serverSetupConnectionInvalidServer": "Verbonden, maar dit lijkt geen compatibel Jot API-eindpunt.",
-    "serverSetupExampleLocalhost": "Voorbeeld: http://localhost:8080 (iOS-simulator)",
-    "serverSetupExampleAndroidEmulator": "Voorbeeld: http://10.0.2.2:8080 (Android-emulator)",
-    "serverSetupExampleLan": "Voorbeeld: http://192.168.1.42:8080 (LAN)",
-    "serverSetupExampleHosted": "Voorbeeld: https://notes.example.com (zelfgehost domein)"
+    "serverSetupConnectionInvalidServer": "Verbonden, maar dit lijkt geen compatibel Jot API-eindpunt."
   },
   "dashboard": {
     "newNote": "Nieuwe notitie",
     "searchPlaceholder": "Notities zoeken...",
     "tabNotes": "Notities",
-    "tabMyTodo": "Mijn taken",
+    "tabMyTasks": "Mijn taken",
     "tabArchive": "Archief",
     "tabBin": "Prullenbak",
     "pinned": "Vastgezet",
     "otherNotes": "Andere notities",
     "noNotesYet": "Nog geen notities",
-    "noAssignedTodos": "Geen toegewezen taken",
-    "noMyTodoNotes": "Er zijn nog geen taken aan jou toegewezen. Wanneer iemand je een taak toewijst in een gedeelde notitie, verschijnt deze hier.",
+    "noAssignedListItems": "Geen toegewezen lijstitems",
+    "noMyTasksNotes": "Er zijn nog geen lijstitems aan jou toegewezen. Wanneer iemand een lijstitem in een gedeelde notitie aan jou toewijst, verschijnt het hier.",
     "noArchivedNotes": "Geen gearchiveerde notities",
     "noBinnedNotes": "Prullenbak is leeg",
     "createFirstNote": "Tik op + om je eerste notitie te maken",
@@ -232,7 +230,7 @@
     "completedItems": "Voltooide items ({{count}})",
     "moreCompletedItems": "+{{count}} voltooide items",
     "typeText": "Tekst",
-    "typeTodo": "Taken",
+    "typeList": "Lijst",
     "titlePlaceholder": "Notitietitel...",
     "contentPlaceholder": "Een notitie maken...",
     "itemPlaceholder": "Lijstitem...",
@@ -266,14 +264,17 @@
     "colorLavender": "Lavendel",
     "colorPink": "Roze",
     "colorSand": "Zand",
-    "colorGray": "Grijs"
+    "colorGray": "Grijs",
+    "formatBold": "Vet",
+    "formatItalic": "Cursief",
+    "formatHeading": "Kop",
+    "formatBulletList": "Opsommingsteken"
   },
   "labels": {
     "title": "Labels",
     "noLabels": "Nog geen labels",
     "newLabelPlaceholder": "Nieuw label",
-
-    "newSidebar": "+ Nieuw label",
+    "newSidebar": "Nieuw label",
     "createInputLabel": "Nieuwe labelnaam",
     "createSave": "Label aanmaken",
     "createCancel": "Label maken annuleren",

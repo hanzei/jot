@@ -96,19 +96,20 @@ test.describe('Label Filtering', () => {
 
   test('clicking active label again deselects filter and shows all notes', async ({ dashboardPage }) => {
     await dashboardPage.goto();
-    await dashboardPage.createNote('Tagged Note', 'content');
-    await dashboardPage.createNote('Untagged Note', 'content');
-    await dashboardPage.addLabelToNote('Tagged Note', 'personal');
+    // Use note names that are not substrings of each other to avoid hasText ambiguity.
+    await dashboardPage.createNote('Marked Note', 'content');
+    await dashboardPage.createNote('Plain Note', 'content');
+    await dashboardPage.addLabelToNote('Marked Note', 'personal');
 
     await dashboardPage.expectLabelInSidebar('personal');
     await dashboardPage.selectSidebarLabel('personal');
-    await dashboardPage.expectNoteNotVisible('Untagged Note');
+    await dashboardPage.expectNoteNotVisible('Plain Note');
 
     // Click again to deselect
     await dashboardPage.selectSidebarLabel('personal');
 
-    await dashboardPage.expectNoteVisible('Tagged Note');
-    await dashboardPage.expectNoteVisible('Untagged Note');
+    await dashboardPage.expectNoteVisible('Marked Note');
+    await dashboardPage.expectNoteVisible('Plain Note');
   });
 
   test('selected label is reflected in the URL', async ({ page, dashboardPage }) => {

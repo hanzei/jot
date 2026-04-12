@@ -1,5 +1,6 @@
 import { ReactNode, useState } from 'react';
 import { Link } from 'react-router';
+import { SidebarContext } from '@/components/SidebarContext';
 
 export interface SidebarTab {
   label: string;
@@ -18,11 +19,18 @@ interface SidebarProps {
   onCollapse?: () => void;
 }
 
+// No layout-affecting classes change between states — the icon wrapper is always w-8,
+// keeping the icon at a fixed position regardless of sidebar width.
 const tabClass = (isActive: boolean | undefined) =>
-  `flex items-center gap-2 px-3 w-full h-8 rounded-md text-sm font-medium whitespace-nowrap ${
+  `flex items-center w-full h-8 rounded-md text-sm font-medium ${
     isActive
       ? 'bg-blue-100 dark:bg-blue-900/30 text-blue-700 dark:text-blue-300'
       : 'text-gray-600 dark:text-gray-300 hover:text-gray-900 dark:hover:text-white hover:bg-gray-100 dark:hover:bg-slate-700'
+  }`;
+
+const labelClass = (isExpanded: boolean) =>
+  `overflow-hidden whitespace-nowrap transition-[max-width,opacity] duration-200 ${
+    isExpanded ? 'max-w-[12rem] opacity-100' : 'max-w-0 opacity-0'
   }`;
 
 const isMobile = () => window.matchMedia('(max-width: 639px)').matches;
@@ -36,6 +44,45 @@ const Sidebar = ({ tabs, bottomTabs, children, collapsed, onCollapse }: SidebarP
     if (isMobile() && onCollapse) onCollapse();
   };
 
+  const renderTab = (tab: SidebarTab) => {
+    // w-8 (32px) matches the nav content width when the sidebar is collapsed (w-12 minus px-2
+    // on each side). The icon is always centered within this fixed-width wrapper, so it never
+    // moves as the sidebar animates open or closed.
+    const content = (
+      <>
+        <span className="flex items-center justify-center shrink-0 w-8">
+          {tab.icon}
+        </span>
+        <span className={labelClass(isExpanded)}>{tab.label}</span>
+      </>
+    );
+
+    return tab.href ? (
+      <Link
+        key={tab.label}
+        to={tab.href}
+        aria-label={tab.label}
+        title={tab.title}
+        aria-current={tab.isActive ? 'page' : undefined}
+        className={tabClass(tab.isActive)}
+        onClick={() => handleTabClick()}
+      >
+        {content}
+      </Link>
+    ) : (
+      <button
+        key={tab.label}
+        onClick={() => handleTabClick(tab.onClick)}
+        aria-label={tab.label}
+        title={tab.title}
+        aria-current={tab.isActive ? 'page' : undefined}
+        className={tabClass(tab.isActive)}
+      >
+        {content}
+      </button>
+    );
+  };
+
   return (
     <aside
       aria-label="Main navigation"
@@ -47,71 +94,19 @@ const Sidebar = ({ tabs, bottomTabs, children, collapsed, onCollapse }: SidebarP
       onMouseEnter={() => collapsed && setHovered(true)}
       onMouseLeave={() => setHovered(false)}
     >
-      <nav className="flex flex-col shrink-0 space-y-1.5 pt-4 px-2 pb-2">
-        {tabs.map((tab) =>
-          tab.href ? (
-            <Link
-              key={tab.label}
-              to={tab.href}
-              aria-label={tab.label}
-              title={tab.title}
-              aria-current={tab.isActive ? 'page' : undefined}
-              className={tabClass(tab.isActive)}
-              onClick={() => handleTabClick()}
-            >
-              {tab.icon}
-              {isExpanded && tab.label}
-            </Link>
-          ) : (
-            <button
-              key={tab.label}
-              onClick={() => handleTabClick(tab.onClick)}
-              aria-label={tab.label}
-              title={tab.title}
-              aria-current={tab.isActive ? 'page' : undefined}
-              className={tabClass(tab.isActive)}
-            >
-              {tab.icon}
-              {isExpanded && tab.label}
-            </button>
-          )
-        )}
-      </nav>
-      <div className="flex-1 overflow-y-auto min-h-0" onClick={() => handleTabClick()}>
-        {children}
-        {bottomTabs && bottomTabs.length > 0 && (
-          <nav aria-label="Secondary navigation" className="flex flex-col space-y-1.5 pt-2 px-2 pb-2">
-            {bottomTabs.map((tab) =>
-              tab.href ? (
-                <Link
-                  key={tab.label}
-                  to={tab.href}
-                  aria-label={tab.label}
-                  title={tab.title}
-                  aria-current={tab.isActive ? 'page' : undefined}
-                  className={tabClass(tab.isActive)}
-                  onClick={() => handleTabClick()}
-                >
-                  {tab.icon}
-                  {isExpanded && tab.label}
-                </Link>
-              ) : (
-                <button
-                  key={tab.label}
-                  onClick={() => handleTabClick(tab.onClick)}
-                  aria-label={tab.label}
-                  title={tab.title}
-                  aria-current={tab.isActive ? 'page' : undefined}
-                  className={tabClass(tab.isActive)}
-                >
-                  {tab.icon}
-                  {isExpanded && tab.label}
-                </button>
-              )
-            )}
-          </nav>
-        )}
-      </div>
+      <SidebarContext.Provider value={isExpanded}>
+        <nav className="flex flex-col shrink-0 space-y-1.5 pt-4 px-2 pb-2">
+          {tabs.map(renderTab)}
+        </nav>
+        <div className="flex-1 overflow-y-auto min-h-0" onClick={() => handleTabClick()}>
+          {children}
+          {bottomTabs && bottomTabs.length > 0 && (
+            <nav aria-label="Secondary navigation" className="flex flex-col space-y-1.5 pt-2 px-2 pb-2">
+              {bottomTabs.map(renderTab)}
+            </nav>
+          )}
+        </div>
+      </SidebarContext.Provider>
     </aside>
   );
 };

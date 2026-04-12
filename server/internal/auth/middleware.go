@@ -9,6 +9,8 @@ import (
 
 	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/hanzei/jot/server/internal/models"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/trace"
 )
 
 type contextKey string
@@ -26,10 +28,11 @@ func (s *SessionService) AuthMiddleware(next http.Handler) http.Handler {
 				return
 			}
 			if err := s.RenewSessionIfExpiringSoon(r.Context(), w, session); err != nil {
-				logutil.FromContext(r.Context()).WithError(err).Warn("failed to renew session")
+				logutil.FromContext(r.Context()).WithError(err).Warn("Failed to renew session")
 			}
 
 			logutil.FromContext(r.Context()).AddField("user_id", user.ID)
+			trace.SpanFromContext(r.Context()).SetAttributes(attribute.String("user.id", user.ID))
 
 			ctx := context.WithValue(r.Context(), UserContextKey, user)
 			ctx = context.WithValue(ctx, SessionTokenContextKey, session.Token)
@@ -50,6 +53,7 @@ func (s *SessionService) AuthMiddleware(next http.Handler) http.Handler {
 			}
 
 			logutil.FromContext(r.Context()).AddField("user_id", user.ID)
+			trace.SpanFromContext(r.Context()).SetAttributes(attribute.String("user.id", user.ID))
 
 			ctx := context.WithValue(r.Context(), UserContextKey, user)
 			next.ServeHTTP(w, r.WithContext(ctx))
@@ -60,7 +64,9 @@ func (s *SessionService) AuthMiddleware(next http.Handler) http.Handler {
 	})
 }
 
-func (s *SessionService) authenticateWithPAT(ctx context.Context, rawToken string) (*models.User, error) {
+func (s *SessionService) authenticateWithPAT(ctx context.Context, rawToken string) (_ *models.User, err error) {
+	ctx, end := startSpan(ctx, s.tracer, "SessionService.authenticateWithPAT", &err)
+	defer end()
 	pat, err := s.patStore.GetByTokenHash(ctx, rawToken)
 	if err != nil {
 		return nil, err

@@ -10,7 +10,7 @@ import { notes, labels, users } from '@/utils/api'
 import * as auth from '@/utils/auth'
 import { useSSE } from '@/utils/useSSE'
 import { useAuthenticatedLayout } from '@/components/AuthenticatedLayout'
-import { createMockNote } from '@/utils/__tests__/test-helpers'
+import { createMockNote, createMockListNote } from '@/utils/__tests__/test-helpers'
 import { ToastProvider } from '@/components/Toast'
 
 // Mock dependencies
@@ -72,7 +72,8 @@ vi.mock('@dnd-kit/core', () => ({
   ),
   closestCenter: vi.fn(),
   KeyboardSensor: vi.fn(),
-  PointerSensor: vi.fn(),
+  MouseSensor: vi.fn(),
+  TouchSensor: vi.fn(),
   useSensor: vi.fn(),
   useSensors: vi.fn(() => []),
 }))
@@ -132,8 +133,8 @@ vi.mock('@/components/SortableNoteCard', () => ({
     onRefresh?: () => void;
   }) => (
     <div data-testid={`note-card-${note.id}`} data-disabled={disabled ? 'true' : 'false'}>
-      <h3>{note.title}</h3>
-      <p>{note.content}</p>
+      <h3>{note.note_type === 'list' ? note.title : ''}</h3>
+      <p>{note.note_type === 'text' ? note.content : ''}</p>
       {inBin ? (
         <>
           <button onClick={() => onRestore?.(note.id)} data-testid={`restore-${note.id}`}>Restore</button>
@@ -166,7 +167,7 @@ vi.mock('@/components/ShareModal', () => ({
   default: ({ note, isOpen, onClose }: { note?: Note | null; isOpen?: boolean; onClose?: () => void }) => (
     isOpen ? (
       <div data-testid="share-modal">
-        <h2>Share Note: {note?.title}</h2>
+        <h2>Share Note: {note?.note_type === 'list' ? note.title : ''}</h2>
         <button onClick={onClose} data-testid="share-modal-close">Close</button>
       </div>
     ) : null
@@ -723,13 +724,13 @@ describe('Dashboard', () => {
 
     it('displays notes correctly', async () => {
       const mockNotes = [
-        createMockNote({ id: '1', title: 'Note 1' }),
-        createMockNote({ id: '2', title: 'Note 2' }),
+        createMockListNote({ id: '1', title: 'Note 1' }),
+        createMockListNote({ id: '2', title: 'Note 2' }),
       ]
       vi.mocked(notes.getAll).mockResolvedValue(mockNotes)
-      
+
       renderDashboard()
-      
+
       await waitFor(() => {
         expect(screen.getByTestId('note-card-1')).toBeInTheDocument()
         expect(screen.getByTestId('note-card-2')).toBeInTheDocument()
@@ -740,13 +741,13 @@ describe('Dashboard', () => {
 
     it('separates pinned and unpinned notes', async () => {
       const mockNotes = [
-        createMockNote({ id: '1', title: 'Pinned Note', pinned: true }),
-        createMockNote({ id: '2', title: 'Regular Note', pinned: false }),
+        createMockListNote({ id: '1', title: 'Pinned Note', pinned: true }),
+        createMockListNote({ id: '2', title: 'Regular Note', pinned: false }),
       ]
       vi.mocked(notes.getAll).mockResolvedValue(mockNotes)
-      
+
       renderDashboard()
-      
+
       await waitFor(() => {
         expect(screen.getByText('Pinned')).toBeInTheDocument()
         expect(screen.getByText('Other Notes')).toBeInTheDocument()
@@ -979,7 +980,7 @@ describe('Dashboard', () => {
 
     it('opens share modal for note sharing', async () => {
       const user = userEvent.setup()
-      const mockNotes = [createMockNote({ id: '1', title: 'Test Note' })]
+      const mockNotes = [createMockListNote({ id: '1', title: 'Test Note' })]
       vi.mocked(notes.getAll).mockResolvedValue(mockNotes)
 
       renderDashboard()
@@ -1019,13 +1020,13 @@ describe('Dashboard', () => {
   describe('Drag and Drop', () => {
     it('renders drag and drop context correctly', async () => {
       const mockNotes = [
-        createMockNote({ id: '1', title: 'Note 1', pinned: false }),
-        createMockNote({ id: '2', title: 'Note 2', pinned: false }),
+        createMockListNote({ id: '1', title: 'Note 1', pinned: false }),
+        createMockListNote({ id: '2', title: 'Note 2', pinned: false }),
       ]
       vi.mocked(notes.getAll).mockResolvedValue(mockNotes)
-      
+
       renderDashboard()
-      
+
       await waitFor(() => {
         expect(screen.getByTestId('dnd-context')).toBeInTheDocument()
         expect(screen.getByTestId('sortable-context')).toBeInTheDocument()
@@ -1036,13 +1037,13 @@ describe('Dashboard', () => {
 
     it('displays pinned and unpinned notes in separate sections', async () => {
       const mockNotes = [
-        createMockNote({ id: '1', title: 'Pinned Note', pinned: true }),
-        createMockNote({ id: '2', title: 'Regular Note', pinned: false }),
+        createMockListNote({ id: '1', title: 'Pinned Note', pinned: true }),
+        createMockListNote({ id: '2', title: 'Regular Note', pinned: false }),
       ]
       vi.mocked(notes.getAll).mockResolvedValue(mockNotes)
-      
+
       renderDashboard()
-      
+
       await waitFor(() => {
         expect(screen.getByTestId('dnd-context')).toBeInTheDocument()
         expect(screen.getByText('Pinned Note')).toBeInTheDocument()
@@ -1052,7 +1053,7 @@ describe('Dashboard', () => {
 
 
     it('handles single note display correctly', async () => {
-      const mockNotes = [createMockNote({ id: '1', title: 'Note 1' })]
+      const mockNotes = [createMockListNote({ id: '1', title: 'Note 1' })]
       vi.mocked(notes.getAll).mockResolvedValue(mockNotes)
       
       renderDashboard()
@@ -1468,48 +1469,48 @@ describe('Dashboard', () => {
     })
   })
 
-  describe('My Todo Filtering', () => {
-    it('loads My Todo view from URL parameter', async () => {
+  describe('My Tasks Filtering', () => {
+    it('loads My Tasks view from URL parameter', async () => {
       const mockGetAll = vi.mocked(notes.getAll)
 
-      renderDashboard(['/?view=my-todo'])
+      renderDashboard(['/?view=my-tasks'])
 
       await waitFor(() => {
         expect(mockGetAll).toHaveBeenCalledWith(false, '', false, '', true)
       })
     })
 
-    it('shows empty state for My Todo with no assigned notes', async () => {
+    it('shows empty state for My Tasks with no assigned notes', async () => {
       vi.mocked(notes.getAll).mockResolvedValue([])
 
-      renderDashboard(['/?view=my-todo'])
+      renderDashboard(['/?view=my-tasks'])
 
       await waitFor(() => {
-        expect(screen.getByText('No assigned to-do items')).toBeInTheDocument()
-        expect(screen.getByText('No to-do items assigned to you yet. When someone assigns a to-do item to you in a shared note, it will appear here.')).toBeInTheDocument()
+        expect(screen.getByText('No assigned list items')).toBeInTheDocument()
+        expect(screen.getByText('No list items assigned to you yet. When someone assigns a list item to you in a shared note, it will appear here.')).toBeInTheDocument()
       })
     })
 
-    it('shows My Todo info subtitle in My Todo view', async () => {
+    it('shows My Tasks info subtitle in My Tasks view', async () => {
       vi.mocked(notes.getAll).mockResolvedValue([])
 
-      renderDashboard(['/?view=my-todo'])
+      renderDashboard(['/?view=my-tasks'])
 
       await waitFor(() => {
-        expect(screen.getByText('Showing notes that include your assigned to-do items.')).toBeInTheDocument()
+        expect(screen.getByText('Showing notes that include your assigned list items.')).toBeInTheDocument()
       })
     })
 
-    it('sets My Todo page title when My Todo view is active', async () => {
-      renderDashboard(['/?view=my-todo'])
+    it('sets My Tasks page title when My Tasks view is active', async () => {
+      renderDashboard(['/?view=my-tasks'])
 
       await waitFor(() => {
-        expect(document.title).toBe('My Todo - Jot')
+        expect(document.title).toBe('My Tasks - Jot')
       })
     })
 
-    it('sets note title in page title when a note with a title is opened', async () => {
-      const mockNote = createMockNote({ id: 'abc123', title: 'My Important Note' })
+    it('sets note title in page title when a list note with a title is opened', async () => {
+      const mockNote = createMockListNote({ id: 'abc123', title: 'My Important Note' })
       vi.mocked(notes.getById).mockResolvedValue(mockNote)
 
       renderDashboard(['/notes/abc123'])
@@ -1520,8 +1521,8 @@ describe('Dashboard', () => {
       })
     })
 
-    it('keeps section title when a note without a title is opened', async () => {
-      const mockNote = createMockNote({ id: 'abc123', title: '' })
+    it('keeps section title when a text note is opened (no title)', async () => {
+      const mockNote = createMockNote({ id: 'abc123' })
       vi.mocked(notes.getById).mockResolvedValue(mockNote)
 
       renderDashboard(['/notes/abc123'])
@@ -1534,7 +1535,7 @@ describe('Dashboard', () => {
 
     it('restores section title when note modal is closed', async () => {
       const user = userEvent.setup()
-      const mockNote = createMockNote({ id: 'abc123', title: 'My Important Note' })
+      const mockNote = createMockListNote({ id: 'abc123', title: 'My Important Note' })
       vi.mocked(notes.getById).mockResolvedValue(mockNote)
 
       renderDashboard(['/notes/abc123'])

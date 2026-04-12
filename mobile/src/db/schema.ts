@@ -1,10 +1,13 @@
 import { SQLiteDatabase } from 'expo-sqlite';
 
 export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
-  await db.execAsync(`
-    PRAGMA journal_mode = WAL;
-    PRAGMA foreign_keys = ON;
+  // Run PRAGMAs separately: sqlite3_exec (used by execAsync) stops on the
+  // first error, so mixing PRAGMAs with DDL means a PRAGMA failure would
+  // silently prevent the tables from being created.
+  await db.runAsync('PRAGMA journal_mode = WAL');
+  await db.runAsync('PRAGMA foreign_keys = ON');
 
+  await db.execAsync(`
     CREATE TABLE IF NOT EXISTS notes (
       id TEXT PRIMARY KEY,
       user_id TEXT NOT NULL,
@@ -52,6 +55,9 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
       created_at TEXT NOT NULL
     );
   `);
+
+  // Rename legacy note_type 'todo' → 'list' to match server migration 003.
+  await db.runAsync(`UPDATE notes SET note_type = 'list' WHERE note_type = 'todo'`);
 
   // Migrate existing databases that pre-date newer columns.
   // Check which columns exist via PRAGMA, then ALTER TABLE only for missing ones.

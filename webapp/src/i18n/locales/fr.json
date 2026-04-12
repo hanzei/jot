@@ -1,6 +1,7 @@
 {
   "common": {
-    "close": "Fermer"
+    "close": "Fermer",
+    "done": "Terminé"
   },
   "nav": {
     "profileMenu": "Menu profil",
@@ -56,6 +57,7 @@
     "otherNotes": "Autres notes",
     "searchPlaceholder": "Rechercher des notes...",
     "searchAriaLabel": "Rechercher des notes",
+    "searchClearAriaLabel": "Effacer la recherche",
     "sortLabel": "Trier les notes",
     "sortOption": {
       "manual": "Manuel",
@@ -65,14 +67,14 @@
     "manualReorderDisabledTitle": "Le tri manuel est désactivé.",
     "manualReorderDisabled": "Les notes sont triées par {{sort}}, le glisser-déposer n'est donc pas disponible.",
     "tabNotes": "Notes",
-    "tabMyTodo": "Mes tâches",
-    "myTodoTooltip": "Notes avec des tâches qui vous sont assignées",
-    "myTodoInfo": "Affichage des notes incluant vos tâches assignées.",
+    "tabMyTasks": "Mes tâches",
+    "myTasksTooltip": "Notes avec des éléments de liste qui vous sont attribués",
+    "myTasksInfo": "Affichage des notes contenant vos éléments de liste attribués.",
     "tabArchive": "Archive",
     "tabBin": "Corbeille",
     "tabAdmin": "Admin",
-    "noMyTodoNotesTitle": "Aucune tâche assignée",
-    "noMyTodoNotes": "Aucune tâche ne vous a encore été assignée. Lorsque quelqu'un vous assignera une tâche dans une note partagée, elle apparaîtra ici.",
+    "noMyTasksNotesTitle": "Aucun élément de liste attribué",
+    "noMyTasksNotes": "Aucun élément de liste ne vous a encore été attribué. Lorsque quelqu'un vous attribue un élément de liste dans une note partagée, il apparaîtra ici.",
     "noNotesForThisLabel": "Aucune note pour ce libellé",
     "labelFilterEmptyHint": "Les notes avec ce libellé apparaîtront ici.",
     "archiveInfo": "Les notes archivées sont masquées de la vue principale mais conservées indéfiniment.",
@@ -218,8 +220,8 @@
     "newNoteDescription": "Ouvrir une nouvelle note",
     "notesKey": "D",
     "notesDescription": "Ouvrir la vue des notes",
-    "myTodoKey": "T",
-    "myTodoDescription": "Ouvrir la vue de mes tâches",
+    "myTasksKey": "T",
+    "myTasksDescription": "Ouvrir la vue mes tâches",
     "archiveKey": "A",
     "archiveDescription": "Ouvrir la vue des archives",
     "binKey": "B",
@@ -277,12 +279,12 @@
         "users": "Utilisateurs",
         "notes": "Notes",
         "labels": "Étiquettes",
-        "todoItems": "Tâches"
+        "listItems": "Éléments de liste"
       },
       "metrics": {
         "admins": "Administrateurs",
         "text": "Texte",
-        "todo": "Tâches",
+        "list": "Liste",
         "archived": "Archivées",
         "trashed": "Corbeille",
         "sharedNotes": "Notes partagées",
@@ -317,7 +319,7 @@
     "unarchiveNote": "Désarchiver la note",
     "archiveNote": "Archiver la note",
     "typeText": "Texte",
-    "typeTodo": "Liste de tâches",
+    "typeList": "Liste",
     "titlePlaceholder": "Titre de la note...",
     "contentPlaceholder": "Prendre une note...",
     "itemPlaceholder": "Élément de liste...",
@@ -380,7 +382,6 @@
     "deleteConfirmMessage": "Supprimer l'étiquette « {{name}} » ? Elle sera retirée de toutes les notes qui l'utilisent."
   },
   "share": {
-    "title": "Partager « {{noteTitle}} »",
     "untitledNote": "Note sans titre",
     "shareWithUser": "Partager avec un utilisateur :",
     "searchUsersPlaceholder": "Rechercher des utilisateurs par nom...",
@@ -430,7 +431,7 @@
     "register": "Créer un compte - Jot",
     "notes": "Jot",
     "note": "{{title}} - Jot",
-    "myTodo": "Mes tâches - Jot",
+    "myTasks": "Mes tâches - Jot",
     "archive": "Archive - Jot",
     "bin": "Corbeille - Jot",
     "admin": "Admin - Jot",

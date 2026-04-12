@@ -10,7 +10,7 @@ import { useTheme } from '../theme/ThemeContext';
 
 export type MainDrawerParamList = {
   Notes: { labelId?: string; labelName?: string } | undefined;
-  MyTodo: undefined;
+  MyTasks: undefined;
   Archived: undefined;
   Trash: undefined;
 };
@@ -23,8 +23,8 @@ function NotesScreen() {
   return <NotesListScreen variant="notes" labelId={labelId} />;
 }
 
-function MyTodoScreen() {
-  return <NotesListScreen variant="my-todo" />;
+function MyTasksScreen() {
+  return <NotesListScreen variant="my-tasks" />;
 }
 
 function ArchivedScreen() {
@@ -71,9 +71,9 @@ export default function MainDrawer() {
         options={{ headerShown: false }}
       />
       <Drawer.Screen
-        name="MyTodo"
-        component={MyTodoScreen}
-        options={{ title: t('dashboard.tabMyTodo') }}
+        name="MyTasks"
+        component={MyTasksScreen}
+        options={{ title: t('dashboard.tabMyTasks') }}
       />
       <Drawer.Screen name="Archived" component={ArchivedScreen} options={{ title: t('dashboard.tabArchive') }} />
       <Drawer.Screen name="Trash" component={TrashScreen} options={{ title: t('dashboard.tabBin') }} />

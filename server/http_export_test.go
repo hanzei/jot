@@ -41,8 +41,7 @@ func TestExportEnvelopeShape(t *testing.T) {
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "exportshape", "password123", false)
 
-	_, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-		Title:   "My Note",
+	_, err := user.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{
 		Content: "Some content",
 	})
 	require.NoError(t, err)
@@ -52,7 +51,7 @@ func TestExportEnvelopeShape(t *testing.T) {
 	assert.Equal(t, "jot_export", export.Format)
 	assert.Equal(t, 1, export.Version)
 	require.Len(t, export.Notes, 1)
-	assert.Equal(t, "My Note", export.Notes[0].Title)
+	assert.Empty(t, export.Notes[0].Title)
 	assert.Equal(t, "Some content", export.Notes[0].Content)
 	assert.Equal(t, client.NoteTypeText, export.Notes[0].NoteType)
 	assert.NotNil(t, export.Notes[0].Labels)
@@ -63,7 +62,7 @@ func TestExportOnlyOwnedNotes(t *testing.T) {
 	owner := ts.createTestUser(t, "exportowner", "password123", false)
 	other := ts.createTestUser(t, "exportother", "password123", false)
 
-	ownerNote, err := owner.Client.CreateNote(t.Context(), &client.CreateNoteRequest{Title: "Owner Note"})
+	ownerNote, err := owner.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{Content: "Owner Note"})
 	require.NoError(t, err)
 
 	// Share owner's note with other user.
@@ -71,23 +70,23 @@ func TestExportOnlyOwnedNotes(t *testing.T) {
 	require.NoError(t, err)
 
 	// Create a note owned by other.
-	_, err = other.Client.CreateNote(t.Context(), &client.CreateNoteRequest{Title: "Other Note"})
+	_, err = other.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{Content: "Other Note"})
 	require.NoError(t, err)
 
 	// other's export should only contain "Other Note", not the shared "Owner Note".
 	export, err := other.Client.ExportNotes(t.Context())
 	require.NoError(t, err)
 	require.Len(t, export.Notes, 1)
-	assert.Equal(t, "Other Note", export.Notes[0].Title)
+	assert.Equal(t, "Other Note", export.Notes[0].Content)
 }
 
 func TestExportExcludesTrashedNotes(t *testing.T) {
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "exporttrash", "password123", false)
 
-	active, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{Title: "Active"})
+	active, err := user.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{Content: "Active"})
 	require.NoError(t, err)
-	trashed, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{Title: "Trashed"})
+	trashed, err := user.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{Content: "Trashed"})
 	require.NoError(t, err)
 
 	require.NoError(t, user.Client.DeleteNote(t.Context(), trashed.ID))
@@ -95,7 +94,7 @@ func TestExportExcludesTrashedNotes(t *testing.T) {
 	export, err := user.Client.ExportNotes(t.Context())
 	require.NoError(t, err)
 	require.Len(t, export.Notes, 1)
-	assert.Equal(t, active.Title, export.Notes[0].Title)
+	assert.Equal(t, active.Content, export.Notes[0].Content)
 }
 
 func TestExportIncludesArchivedNotes(t *testing.T) {
@@ -103,11 +102,11 @@ func TestExportIncludesArchivedNotes(t *testing.T) {
 	user := ts.createTestUser(t, "exportarchived", "password123", false)
 
 	archived := true
-	_, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{Title: "Active"})
+	_, err := user.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{Content: "Active"})
 	require.NoError(t, err)
-	archivedNote, err := user.Client.CreateNote(t.Context(), &client.CreateNoteRequest{Title: "Archived"})
+	archivedNote, err := user.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{Content: "Archived"})
 	require.NoError(t, err)
-	_, err = user.Client.UpdateNote(t.Context(), archivedNote.ID, &client.UpdateNoteRequest{Archived: &archived})
+	_, err = user.Client.UpdateTextNote(t.Context(), archivedNote.ID, &client.UpdateTextNoteRequest{Archived: &archived})
 	require.NoError(t, err)
 
 	export, err := user.Client.ExportNotes(t.Context())
@@ -139,6 +138,8 @@ func TestImportJotJSONBasic(t *testing.T) {
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "jotimport1", "password123", false)
 
+	// The "title" field in the JSON is for a text note — it will be silently stripped
+	// on import since text notes do not have titles; only "content" is preserved.
 	payload := `{
 		"format": "jot_export",
 		"version": 1,
@@ -166,7 +167,8 @@ func TestImportJotJSONBasic(t *testing.T) {
 	notes, err := user.Client.ListNotes(t.Context(), nil)
 	require.NoError(t, err)
 	require.Len(t, notes, 1)
-	assert.Equal(t, "Hello", notes[0].Title)
+	// Title is stripped for text notes on import; only content is preserved.
+	assert.Empty(t, notes[0].Title)
 	assert.Equal(t, "World", notes[0].Content)
 }
 
@@ -246,13 +248,13 @@ func TestImportJotJSONValidation(t *testing.T) {
 
 	t.Run("item text too long returns 400", func(t *testing.T) {
 		longItem, _ := json.Marshal(strings.Repeat("a", 501))
-		payload := makePayload(`{"title":"X","content":"","note_type":"todo","color":"#ffffff","pinned":false,"archived":false,"position":0,"labels":[],"items":[{"text":` + string(longItem) + `,"completed":false,"position":0,"indent_level":0}]}`)
+		payload := makePayload(`{"title":"X","content":"","note_type":"list","color":"#ffffff","pinned":false,"archived":false,"position":0,"labels":[],"items":[{"text":` + string(longItem) + `,"completed":false,"position":0,"indent_level":0}]}`)
 		_, err := user.Client.ImportNotes(t.Context(), "jot_json", "export.json", bytes.NewReader(payload))
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 
 	t.Run("invalid indent_level returns 400", func(t *testing.T) {
-		payload := makePayload(`{"title":"X","content":"","note_type":"todo","color":"#ffffff","pinned":false,"archived":false,"position":0,"labels":[],"items":[{"text":"item","completed":false,"position":0,"indent_level":5}]}`)
+		payload := makePayload(`{"title":"X","content":"","note_type":"list","color":"#ffffff","pinned":false,"archived":false,"position":0,"labels":[],"items":[{"text":"item","completed":false,"position":0,"indent_level":5}]}`)
 		_, err := user.Client.ImportNotes(t.Context(), "jot_json", "export.json", bytes.NewReader(payload))
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
@@ -266,42 +268,39 @@ func TestImportJotJSONRoundTrip(t *testing.T) {
 	// Create a variety of notes for the source user.
 	pinned := true
 	archived := true
-	srcPinned, err := src.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-		Title:   "Pinned Note",
+	srcPinned, err := src.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{
 		Content: "pinned content",
 		Color:   "#fbbc04",
 	})
 	require.NoError(t, err)
-	_, err = src.Client.UpdateNote(t.Context(), srcPinned.ID, &client.UpdateNoteRequest{Pinned: &pinned})
+	_, err = src.Client.UpdateTextNote(t.Context(), srcPinned.ID, &client.UpdateTextNoteRequest{Pinned: &pinned})
 	require.NoError(t, err)
 
-	srcArchived, err := src.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-		Title:   "Archived Note",
+	srcArchived, err := src.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{
 		Content: "archived content",
 	})
 	require.NoError(t, err)
-	_, err = src.Client.UpdateNote(t.Context(), srcArchived.ID, &client.UpdateNoteRequest{Archived: &archived})
+	_, err = src.Client.UpdateTextNote(t.Context(), srcArchived.ID, &client.UpdateTextNoteRequest{Archived: &archived})
 	require.NoError(t, err)
 
 	collapsed := true
-	srcTodo, err := src.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-		Title:    "Todo Note",
-		NoteType: client.NoteTypeTodo,
+	srcList, err := src.Client.CreateListNote(t.Context(), &client.CreateListNoteRequest{
+		Title: "List Note",
 		Items: []client.CreateNoteItem{
 			{Text: "Item 1", Position: 0, IndentLevel: 0, Completed: true},
 			{Text: "Item 2", Position: 1, IndentLevel: 1, Completed: false},
 		},
 	})
 	require.NoError(t, err)
-	_, err = src.Client.UpdateNote(t.Context(), srcTodo.ID, &client.UpdateNoteRequest{CheckedItemsCollapsed: &collapsed})
+	_, err = src.Client.UpdateListNote(t.Context(), srcList.ID, &client.UpdateListNoteRequest{CheckedItemsCollapsed: &collapsed})
 	require.NoError(t, err)
 
 	// Create a label and attach it.
 	_, err = src.Client.CreateLabel(t.Context(), "work")
 	require.NoError(t, err)
-	srcLabeled, err := src.Client.CreateNote(t.Context(), &client.CreateNoteRequest{
-		Title:  "Labeled Note",
-		Labels: []string{"work"},
+	srcLabeled, err := src.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{
+		Content: "Labeled Note",
+		Labels:  []string{"work"},
 	})
 	require.NoError(t, err)
 	_ = srcLabeled
@@ -335,26 +334,29 @@ func TestImportJotJSONRoundTrip(t *testing.T) {
 	allNotes = append(allNotes, archivedNotes...)
 	assert.Len(t, allNotes, 4)
 
+	// Look up notes by content or title depending on type.
+	byContent := map[string]client.Note{}
 	byTitle := map[string]client.Note{}
 	for _, n := range allNotes {
+		byContent[n.Content] = n
 		byTitle[n.Title] = n
 	}
 
-	// Pinned note.
-	pn, ok := byTitle["Pinned Note"]
+	// Pinned note (text note — identified by content).
+	pn, ok := byContent["pinned content"]
 	require.True(t, ok)
 	assert.True(t, pn.Pinned)
 	assert.Equal(t, "#fbbc04", pn.Color)
 
-	// Archived note.
-	an, ok := byTitle["Archived Note"]
+	// Archived note (text note — identified by content).
+	an, ok := byContent["archived content"]
 	require.True(t, ok)
 	assert.True(t, an.Archived)
 
-	// Todo note with items.
-	tn, ok := byTitle["Todo Note"]
+	// List note with items (identified by title).
+	tn, ok := byTitle["List Note"]
 	require.True(t, ok)
-	assert.Equal(t, client.NoteTypeTodo, tn.NoteType)
+	assert.Equal(t, client.NoteTypeList, tn.NoteType)
 	assert.True(t, tn.CheckedItemsCollapsed)
 	require.Len(t, tn.Items, 2)
 	itemsByPos := map[int]client.NoteItem{}
@@ -368,8 +370,8 @@ func TestImportJotJSONRoundTrip(t *testing.T) {
 	assert.False(t, itemsByPos[1].Completed)
 	assert.Equal(t, 1, itemsByPos[1].IndentLevel)
 
-	// Labeled note.
-	ln, ok := byTitle["Labeled Note"]
+	// Labeled note (text note — identified by content).
+	ln, ok := byContent["Labeled Note"]
 	require.True(t, ok)
 	require.Len(t, ln.Labels, 1)
 	assert.Equal(t, "work", ln.Labels[0].Name)

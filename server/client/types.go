@@ -2,12 +2,12 @@ package client
 
 import "time"
 
-// NoteType distinguishes text notes from todo/checklist notes.
+// NoteType distinguishes text notes from list/checklist notes.
 type NoteType string
 
 const (
 	NoteTypeText NoteType = "text"
-	NoteTypeTodo NoteType = "todo"
+	NoteTypeList NoteType = "list"
 )
 
 // Role distinguishes user permission levels.
@@ -45,7 +45,11 @@ type AuthResponse struct {
 	Settings *UserSettings `json:"settings"`
 }
 
-// Note is a single note with optional items, shares, and labels.
+// Note is a single note returned by the API.
+// The server enforces type-specific field semantics: text notes always have
+// empty Title, nil Items, and CheckedItemsCollapsed=false; list notes always
+// have empty Content. The flat struct is kept for Go SDK simplicity — use
+// NoteType to determine which fields are meaningful.
 type Note struct {
 	ID                    string      `json:"id"`
 	UserID                string      `json:"user_id"`
@@ -66,7 +70,7 @@ type Note struct {
 	UpdatedAt             time.Time   `json:"updated_at"`
 }
 
-// NoteItem is a single checklist entry within a todo note.
+// NoteItem is a single checklist entry within a list note.
 type NoteItem struct {
 	ID          string    `json:"id"`
 	NoteID      string    `json:"note_id"`
@@ -113,17 +117,22 @@ type UserInfo struct {
 	HasProfileIcon bool   `json:"has_profile_icon"`
 }
 
-// CreateNoteRequest is the body for POST /api/v1/notes.
-type CreateNoteRequest struct {
-	Title    string           `json:"title"`
-	Content  string           `json:"content"`
-	NoteType NoteType         `json:"note_type,omitempty"`
-	Color    string           `json:"color,omitempty"`
-	Items    []CreateNoteItem `json:"items,omitempty"`
-	Labels   []string         `json:"labels,omitempty"`
+// CreateTextNoteRequest is the body for POST /api/v1/notes with note_type "text".
+type CreateTextNoteRequest struct {
+	Content string   `json:"content"`
+	Color   string   `json:"color,omitempty"`
+	Labels  []string `json:"labels,omitempty"`
 }
 
-// CreateNoteItem describes a checklist item to create with a new todo note.
+// CreateListNoteRequest is the body for POST /api/v1/notes with note_type "list".
+type CreateListNoteRequest struct {
+	Title  string           `json:"title"`
+	Color  string           `json:"color,omitempty"`
+	Items  []CreateNoteItem `json:"items,omitempty"`
+	Labels []string         `json:"labels,omitempty"`
+}
+
+// CreateNoteItem describes a checklist item to create with a new list note.
 // Assignment (AssignedTo) is only supported on update, not creation.
 type CreateNoteItem struct {
 	Text        string `json:"text"`
@@ -132,16 +141,22 @@ type CreateNoteItem struct {
 	Completed   bool   `json:"completed"`
 }
 
-// UpdateNoteRequest is the body for PATCH /api/v1/notes/{id}.
+// UpdateTextNoteRequest is the body for PATCH /api/v1/notes/{id} on a text note.
+// Nil pointer fields are omitted and keep their server-side values.
+type UpdateTextNoteRequest struct {
+	Content  *string `json:"content,omitempty"`
+	Pinned   *bool   `json:"pinned,omitempty"`
+	Archived *bool   `json:"archived,omitempty"`
+	Color    *string `json:"color,omitempty"`
+}
+
+// UpdateListNoteRequest is the body for PATCH /api/v1/notes/{id} on a list note.
 // Nil pointer fields are omitted and keep their server-side values.
 //
-// Items is a pointer to support tri-state update semantics with `omitempty`:
-// - nil pointer: omit "items" (do not change existing todo items)
-// - pointer to empty slice: send "items":[] (clear all todo items)
-// - pointer to non-empty slice: replace todo items
-type UpdateNoteRequest struct {
+// Items is a pointer-to-slice: nil = no change, &[]UpdateNoteItem{} = clear all items,
+// &[]UpdateNoteItem{...} = replace items.
+type UpdateListNoteRequest struct {
 	Title                 *string           `json:"title,omitempty"`
-	Content               *string           `json:"content,omitempty"`
 	Pinned                *bool             `json:"pinned,omitempty"`
 	Archived              *bool             `json:"archived,omitempty"`
 	Color                 *string           `json:"color,omitempty"`
@@ -174,7 +189,7 @@ type ListNotesOptions struct {
 	Trashed  bool
 	Search   string
 	Label    string // label ID (not name) to filter by
-	MyTodo   bool
+	MyTasks  bool
 }
 
 // ImportResponse is returned by the import endpoint.
@@ -207,7 +222,7 @@ type JotExportNote struct {
 	Items                 []JotExportNoteItem `json:"items,omitempty"`
 }
 
-// JotExportNoteItem is a single todo item in a Jot JSON export.
+// JotExportNoteItem is a single list item in a Jot JSON export.
 type JotExportNoteItem struct {
 	Text        string `json:"text"`
 	Completed   bool   `json:"completed"`
@@ -231,7 +246,7 @@ type AdminStatsResponse struct {
 	Notes     AdminNoteStats     `json:"notes"`
 	Sharing   AdminSharingStats  `json:"sharing"`
 	Labels    AdminLabelStats    `json:"labels"`
-	TodoItems AdminTodoItemStats `json:"todo_items"`
+	ListItems AdminListItemStats `json:"list_items"`
 	Storage   AdminStorageStats  `json:"storage"`
 }
 
@@ -243,7 +258,7 @@ type AdminUserStats struct {
 type AdminNoteStats struct {
 	Total    int64 `json:"total"`
 	Text     int64 `json:"text"`
-	Todo     int64 `json:"todo"`
+	List     int64 `json:"list"`
 	Trashed  int64 `json:"trashed"`
 	Archived int64 `json:"archived"`
 }
@@ -258,7 +273,7 @@ type AdminLabelStats struct {
 	NoteAssociations int64 `json:"note_associations"`
 }
 
-type AdminTodoItemStats struct {
+type AdminListItemStats struct {
 	Total     int64 `json:"total"`
 	Completed int64 `json:"completed"`
 	Assigned  int64 `json:"assigned"`

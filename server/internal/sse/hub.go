@@ -45,6 +45,7 @@ type Event struct {
 	Type         EventType `json:"type"`
 	SourceUserID string    `json:"source_user_id"`           // who triggered the change
 	TargetUserID string    `json:"target_user_id,omitempty"` // user affected (e.g. unshared)
+	ClientID     string    `json:"client_id,omitempty"`      // tab/device that triggered the mutation
 	Data         any       `json:"data,omitempty"`
 }
 
@@ -52,6 +53,7 @@ type Event struct {
 type Hub struct {
 	mu                sync.RWMutex
 	clients           map[string][]chan Event // user_id -> subscriber channels
+	closed            bool
 	subscribersActive metric.Int64UpDownCounter
 	eventsPublished   metric.Int64Counter
 	eventsDropped     metric.Int64Counter
@@ -109,6 +111,11 @@ func (h *Hub) Subscribe(ctx context.Context, userID string) (<-chan Event, func(
 	unsubscribe := func() { //nolint:contextcheck // request ctx is already canceled when unsubscribe runs
 		h.mu.Lock()
 		defer h.mu.Unlock()
+		if h.closed {
+			// Hub.Close already closed this channel; just decrement the counter.
+			h.subscribersActive.Add(context.Background(), -1)
+			return
+		}
 		channels := h.clients[userID]
 		for i, c := range channels {
 			if c == ch {
@@ -126,13 +133,35 @@ func (h *Hub) Subscribe(ctx context.Context, userID string) (<-chan Event, func(
 	return ch, unsubscribe
 }
 
+// Close terminates all active SSE subscriptions by closing their channels,
+// causing any ServeSSE goroutines blocked on channel reads to exit. It is
+// safe to call Close multiple times. After Close, calls to unsubscribe from
+// existing subscriptions are safe and will not double-close channels. Publish
+// becomes a no-op after Close. Subscribe must not be called after Close.
+func (h *Hub) Close() {
+	h.mu.Lock()
+	defer h.mu.Unlock()
+	if h.closed {
+		return
+	}
+	h.closed = true
+	for _, channels := range h.clients {
+		for _, ch := range channels {
+			close(ch)
+		}
+	}
+}
+
 // Publish sends an event to all channels registered for each of the given user IDs.
 // Duplicate user IDs are ignored. Events are dropped (non-blocking) if a channel's buffer is full.
 // ctx should be the request context of the caller so that OTel exemplars can link
-// the metric increments to the active trace span.
+// the metric increments to the active trace span. Publish is a no-op after Close.
 func (h *Hub) Publish(ctx context.Context, userIDs []string, event Event) {
 	h.mu.RLock()
 	defer h.mu.RUnlock()
+	if h.closed {
+		return
+	}
 
 	eventAttr := attribute.String("event.type", string(event.Type))
 
@@ -147,7 +176,7 @@ func (h *Hub) Publish(ctx context.Context, userIDs []string, event Event) {
 			case ch <- event:
 				h.eventsPublished.Add(ctx, 1, metric.WithAttributes(eventAttr))
 			default:
-				logutil.FromContext(ctx).WithField("type", string(event.Type)).WithField("user_id", uid).Warn("sse: dropping event, channel full")
+				logutil.FromContext(ctx).WithField("type", string(event.Type)).WithField("user_id", uid).Warn("SSE: dropping event, channel full")
 				h.eventsDropped.Add(ctx, 1, metric.WithAttributes(eventAttr))
 			}
 		}
