@@ -872,7 +872,7 @@ const docTemplate = `{
                     },
                     {
                         "type": "string",
-                        "description": "Import format: jot_json or google_keep",
+                        "description": "Import format: jot_json, google_keep, or usememos",
                         "name": "import_type",
                         "in": "formData",
                         "required": true

@@ -1397,7 +1397,7 @@ paths:
         name: file
         required: true
         type: file
-      - description: 'Import format: jot_json or google_keep'
+      - description: 'Import format: jot_json, google_keep, or usememos'
         in: formData
         name: import_type
         required: true
