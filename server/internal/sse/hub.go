@@ -3,6 +3,7 @@ package sse
 import (
 	"context"
 	"fmt"
+	"maps"
 	"sync"
 
 	"github.com/hanzei/jot/server/internal/logutil"
@@ -145,7 +146,7 @@ func (h *Hub) Close() {
 		return
 	}
 	h.closed = true
-	for _, channels := range h.clients {
+	for channels := range maps.Values(h.clients) {
 		for _, ch := range channels {
 			close(ch)
 		}

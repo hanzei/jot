@@ -4,6 +4,7 @@ import (
 	"bytes"
 	"encoding/json"
 	"net/http"
+	"slices"
 	"strings"
 	"testing"
 
@@ -329,9 +330,7 @@ func TestImportJotJSONRoundTrip(t *testing.T) {
 	archivedNotes, err := dst.Client.ListNotes(t.Context(), &client.ListNotesOptions{Archived: true})
 	require.NoError(t, err)
 
-	allNotes := make([]client.Note, 0, len(activeNotes)+len(archivedNotes))
-	allNotes = append(allNotes, activeNotes...)
-	allNotes = append(allNotes, archivedNotes...)
+	allNotes := slices.Concat(activeNotes, archivedNotes)
 	assert.Len(t, allNotes, 4)
 
 	// Look up notes by content or title depending on type.

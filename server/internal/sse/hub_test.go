@@ -3,7 +3,7 @@ package sse
 import (
 	"sync"
 	"testing"
-	"time"
+	"testing/synctest"
 
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
@@ -73,7 +73,7 @@ func TestHub_Unsubscribe(t *testing.T) {
 	})
 }
 
-func TestHub_Publish(t *testing.T) { //nolint:gocognit
+func TestHubPublish(t *testing.T) {
 	event := Event{
 		Type:         EventNoteCreated,
 		SourceUserID: "user1",
@@ -164,45 +164,34 @@ func TestHub_Publish(t *testing.T) { //nolint:gocognit
 	})
 
 	t.Run("drops events without blocking when channel buffer is full", func(t *testing.T) {
-		h, err := NewHub()
-		require.NoError(t, err)
-		ch, unsub := h.Subscribe(t.Context(), "user1")
-		defer unsub()
+		synctest.Test(t, func(t *testing.T) {
+			h, err := NewHub()
+			require.NoError(t, err)
+			_, unsub := h.Subscribe(t.Context(), "user1")
+			defer unsub()
 
-		// Fill the channel buffer (capacity 16).
-		for range 16 {
-			h.Publish(t.Context(), []string{"user1"}, event)
-		}
-
-		// This 17th publish must not block.
-		done := make(chan struct{})
-		go func() {
-			h.Publish(t.Context(), []string{"user1"}, event)
-			close(done)
-		}()
-
-		// Wait for the goroutine with a timeout; drain one buffered event first
-		// to give Publish room to proceed if it ended up in the default branch.
-		select {
-		case <-done:
-			// good — did not block
-		case <-time.After(2 * time.Second):
-			t.Fatal("Publish blocked: channel was not full or took too long to return")
-		default:
-			// The goroutine has not finished yet; drain one buffered slot and
-			// wait again with a generous timeout so the goroutine can proceed.
-			select {
-			case <-ch:
-			case <-time.After(2 * time.Second):
-				t.Fatal("timed out draining event from full channel")
+			// Fill the channel buffer (capacity 16).
+			for range 16 {
+				h.Publish(t.Context(), []string{"user1"}, event)
 			}
+
+			// 17th publish must not block; Publish uses a non-blocking select internally.
+			done := make(chan struct{})
+			go func() {
+				h.Publish(t.Context(), []string{"user1"}, event)
+				close(done)
+			}()
+
+			// Block until all goroutines in the bubble are idle.
+			synctest.Wait()
+
 			select {
 			case <-done:
-				// good
-			case <-time.After(2 * time.Second):
-				t.Fatal("Publish did not return after draining a slot from the full channel")
+				// good — Publish returned without blocking
+			default:
+				t.Fatal("Publish blocked on full channel")
 			}
-		}
+		})
 	})
 }
 
