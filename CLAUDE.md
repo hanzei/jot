@@ -134,7 +134,7 @@ Jot is a self-hosted note-taking application. The backend is a Go HTTP API and t
 
 ### Technology Stack
 
-- **Go 1.25**
+- **Go 1.26**
 - **Chi v5** — HTTP router with middleware
 - **go-chi/cors** — CORS middleware
 - **SQLite 3** — File-based database (pure Go, no CGO required)
@@ -284,7 +284,7 @@ The server at `localhost:8080` serves the API. Vite is configured with a proxy t
 
 Multi-stage `Dockerfile`:
 1. **Node 24 Alpine** — builds the React app (`npm ci && npm run build`)
-2. **Go 1.25 Alpine** — compiles the Go binary (pure Go, no CGO)
+2. **Go 1.26 Alpine** — compiles the Go binary (pure Go, no CGO)
 3. **Alpine runtime** — copies binary and frontend build; exposes port 8080
 
 ```bash

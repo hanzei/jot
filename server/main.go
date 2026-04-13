@@ -105,9 +105,8 @@ func main() {
 		serverErrCh <- s.Start(addr)
 	}()
 
-	signalCh := make(chan os.Signal, 1)
-	signal.Notify(signalCh, os.Interrupt, syscall.SIGTERM)
-	defer signal.Stop(signalCh)
+	signalCtx, stopSignals := signal.NotifyContext(context.Background(), os.Interrupt, syscall.SIGTERM)
+	defer stopSignals()
 
 	select {
 	case err := <-serverErrCh:
@@ -115,20 +114,28 @@ func main() {
 			logrus.WithError(err).Fatal("Server stopped unexpectedly")
 		}
 		logrus.Info("Server shutdown complete")
-	case sig := <-signalCh:
-		logrus.WithField("signal", sig.String()).Info("Shutdown signal received")
-		s.BeginShutdown()
-		const readinessDrainInterval = 2 * time.Second
-		logrus.WithField("drain_interval", readinessDrainInterval.String()).Info("Marked server not ready, waiting before shutdown")
-		<-time.After(readinessDrainInterval)
-		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
-		defer cancel()
-		if err := s.Shutdown(ctx); err != nil {
-			logrus.WithError(err).Fatal("Graceful shutdown failed")
-		}
-		if err := <-serverErrCh; err != nil {
-			logrus.WithError(err).Fatal("Server stopped with error after shutdown")
-		}
-		logrus.Info("Server shutdown complete")
+	case <-signalCtx.Done():
+		gracefulShutdown(ctx, signalCtx, s, serverErrCh)
 	}
+}
+
+func gracefulShutdown(baseCtx, signalCtx context.Context, s *server.Server, serverErrCh <-chan error) {
+	if cause := context.Cause(signalCtx); cause != nil {
+		logrus.WithField("signal", cause.Error()).Info("Shutdown signal received")
+	} else {
+		logrus.Info("Shutdown signal received")
+	}
+	s.BeginShutdown()
+	const readinessDrainInterval = 2 * time.Second
+	logrus.WithField("drain_interval", readinessDrainInterval.String()).Info("Marked server not ready, waiting before shutdown")
+	<-time.After(readinessDrainInterval)
+	ctx, cancel := context.WithTimeout(baseCtx, 15*time.Second)
+	defer cancel()
+	if err := s.Shutdown(ctx); err != nil {
+		logrus.WithError(err).Fatal("Graceful shutdown failed")
+	}
+	if err := <-serverErrCh; err != nil {
+		logrus.WithError(err).Fatal("Server stopped with error after shutdown")
+	}
+	logrus.Info("Server shutdown complete")
 }
