@@ -6,6 +6,7 @@ import (
 	"encoding/json"
 	"mime/multipart"
 	"net/http"
+	"net/http/httptest"
 	"strings"
 	"testing"
 
@@ -309,4 +310,286 @@ func TestImportValidation(t *testing.T) {
 		assert.Equal(t, 1, result.Imported)
 		assert.Len(t, result.Errors, 1)
 	})
+}
+
+// --- usememos import tests ---
+
+// usememosPage holds the memos and optional pagination token for a mock page.
+type usememosPage struct {
+	memos         []map[string]any
+	nextPageToken string
+}
+
+// buildUsememosServer starts an httptest.Server that serves pages of mock usememos
+// API responses at GET /api/v1/memos. The pages slice is served in order; after the
+// last page NextPageToken is empty. Requests must carry "Authorization: Bearer testtoken".
+func buildUsememosServer(t *testing.T, pages []usememosPage) *httptest.Server {
+	t.Helper()
+	pageIdx := 0
+	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/memos" {
+			http.NotFound(w, r)
+			return
+		}
+		if r.Header.Get("Authorization") != "Bearer testtoken" {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		if pageIdx >= len(pages) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`{"memos":[]}`))
+			return
+		}
+		p := pages[pageIdx]
+		pageIdx++
+		resp := map[string]any{
+			"memos":         p.memos,
+			"nextPageToken": p.nextPageToken,
+		}
+		w.Header().Set("Content-Type", "application/json")
+		assert.NoError(t, json.NewEncoder(w).Encode(resp))
+	}))
+}
+
+func TestImportUsememosHappyPath(t *testing.T) {
+	ts := setupTestServer(t)
+	user := ts.createTestUser(t, "usememosuser1", "password123", false)
+
+	memos := []map[string]any{
+		{"name": "memos/1", "state": "ACTIVE", "content": "Hello world", "pinned": false},
+		{"name": "memos/2", "state": "ACTIVE", "content": "Second memo", "pinned": false},
+	}
+	mockSrv := buildUsememosServer(t, []usememosPage{{memos: memos}})
+	defer mockSrv.Close()
+
+	result, err := user.Client.ImportUsememos(t.Context(), mockSrv.URL, "testtoken")
+	require.NoError(t, err)
+	assert.Equal(t, 2, result.Imported)
+	assert.Equal(t, 0, result.Skipped)
+	assert.Empty(t, result.Errors)
+}
+
+func TestImportUsememosDeletedSkipped(t *testing.T) {
+	ts := setupTestServer(t)
+	user := ts.createTestUser(t, "usememosuser2", "password123", false)
+
+	memos := []map[string]any{
+		{"name": "memos/1", "state": "ACTIVE", "content": "Keep me"},
+		{"name": "memos/2", "state": "DELETED", "content": "Delete me"},
+	}
+	mockSrv := buildUsememosServer(t, []usememosPage{{memos: memos}})
+	defer mockSrv.Close()
+
+	result, err := user.Client.ImportUsememos(t.Context(), mockSrv.URL, "testtoken")
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.Imported)
+	assert.Equal(t, 1, result.Skipped)
+}
+
+func TestImportUsememosArchivedImportedAsArchived(t *testing.T) {
+	ts := setupTestServer(t)
+	user := ts.createTestUser(t, "usememosuser3", "password123", false)
+
+	memos := []map[string]any{
+		{"name": "memos/1", "state": "ARCHIVED", "content": "Archived memo"},
+	}
+	mockSrv := buildUsememosServer(t, []usememosPage{{memos: memos}})
+	defer mockSrv.Close()
+
+	result, err := user.Client.ImportUsememos(t.Context(), mockSrv.URL, "testtoken")
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.Imported)
+
+	notes, err := user.Client.ListNotes(t.Context(), &client.ListNotesOptions{Archived: true})
+	require.NoError(t, err)
+	require.Len(t, notes, 1, "expected exactly one archived note")
+	assert.Equal(t, "Archived memo", notes[0].Content)
+	assert.True(t, notes[0].Archived)
+}
+
+func TestImportUsememosPinnedImportedAsPinned(t *testing.T) {
+	ts := setupTestServer(t)
+	user := ts.createTestUser(t, "usememosuser4", "password123", false)
+
+	memos := []map[string]any{
+		{"name": "memos/1", "state": "ACTIVE", "content": "Pinned memo", "pinned": true},
+	}
+	mockSrv := buildUsememosServer(t, []usememosPage{{memos: memos}})
+	defer mockSrv.Close()
+
+	result, err := user.Client.ImportUsememos(t.Context(), mockSrv.URL, "testtoken")
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.Imported)
+
+	notes, err := user.Client.ListNotes(t.Context(), nil)
+	require.NoError(t, err)
+	require.Len(t, notes, 1, "expected exactly one note")
+	assert.Equal(t, "Pinned memo", notes[0].Content)
+	assert.True(t, notes[0].Pinned)
+}
+
+func TestImportUsememosTagsExtractedAndStripped(t *testing.T) {
+	ts := setupTestServer(t)
+	user := ts.createTestUser(t, "usememosuser5", "password123", false)
+
+	memos := []map[string]any{
+		{"name": "memos/1", "state": "ACTIVE", "content": "My note #golang #testing"},
+	}
+	mockSrv := buildUsememosServer(t, []usememosPage{{memos: memos}})
+	defer mockSrv.Close()
+
+	result, err := user.Client.ImportUsememos(t.Context(), mockSrv.URL, "testtoken")
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.Imported)
+
+	notes, err := user.Client.ListNotes(t.Context(), nil)
+	require.NoError(t, err)
+	require.Len(t, notes, 1)
+
+	assert.NotContains(t, notes[0].Content, "#golang")
+	assert.NotContains(t, notes[0].Content, "#testing")
+
+	labelNames := make([]string, 0, len(notes[0].Labels))
+	for _, l := range notes[0].Labels {
+		labelNames = append(labelNames, l.Name)
+	}
+	assert.ElementsMatch(t, []string{"golang", "testing"}, labelNames)
+}
+
+func TestImportUsememosTagsInCodeFenceNotExtracted(t *testing.T) {
+	ts := setupTestServer(t)
+	user := ts.createTestUser(t, "usememosuser6", "password123", false)
+
+	content := "Before\n```\n#notag\n```\nAfter #realtag"
+	memos := []map[string]any{
+		{"name": "memos/1", "state": "ACTIVE", "content": content},
+	}
+	mockSrv := buildUsememosServer(t, []usememosPage{{memos: memos}})
+	defer mockSrv.Close()
+
+	result, err := user.Client.ImportUsememos(t.Context(), mockSrv.URL, "testtoken")
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.Imported)
+
+	notes, err := user.Client.ListNotes(t.Context(), nil)
+	require.NoError(t, err)
+	require.Len(t, notes, 1)
+
+	assert.Contains(t, notes[0].Content, "#notag")
+	assert.NotContains(t, notes[0].Content, "#realtag")
+
+	labelNames := make([]string, 0, len(notes[0].Labels))
+	for _, l := range notes[0].Labels {
+		labelNames = append(labelNames, l.Name)
+	}
+	assert.Equal(t, []string{"realtag"}, labelNames)
+}
+
+func TestImportUsememosPagination(t *testing.T) {
+	ts := setupTestServer(t)
+	user := ts.createTestUser(t, "usememosuser7", "password123", false)
+
+	page1 := []map[string]any{
+		{"name": "memos/1", "state": "ACTIVE", "content": "Page 1 memo"},
+	}
+	page2 := []map[string]any{
+		{"name": "memos/2", "state": "ACTIVE", "content": "Page 2 memo"},
+	}
+	mockSrv := buildUsememosServer(t, []usememosPage{
+		{memos: page1, nextPageToken: "token2"},
+		{memos: page2},
+	})
+	defer mockSrv.Close()
+
+	result, err := user.Client.ImportUsememos(t.Context(), mockSrv.URL, "testtoken")
+	require.NoError(t, err)
+	assert.Equal(t, 2, result.Imported)
+}
+
+func TestImportUsememosInvalidURLReturns400(t *testing.T) {
+	ts := setupTestServer(t)
+	user := ts.createTestUser(t, "usememosuser8", "password123", false)
+
+	_, err := user.Client.ImportUsememos(t.Context(), "ftp://not-http.example.com", "testtoken")
+	assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
+}
+
+func TestImportUsememosMissingURLReturns400(t *testing.T) {
+	ts := setupTestServer(t)
+	user := ts.createTestUser(t, "usememosuser9", "password123", false)
+
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	require.NoError(t, mw.WriteField("import_type", "usememos"))
+	require.NoError(t, mw.WriteField("token", "tok"))
+	require.NoError(t, mw.Close())
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, ts.HTTPServer.URL+"/api/v1/notes/import", &buf)
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+
+	resp, err := user.Client.HTTPClient().Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
+}
+
+func TestImportUsememosUnauthenticatedReturns401(t *testing.T) {
+	ts := setupTestServer(t)
+
+	memos := []map[string]any{{"name": "memos/1", "state": "ACTIVE", "content": "hello"}}
+	mockSrv := buildUsememosServer(t, []usememosPage{{memos: memos}})
+	defer mockSrv.Close()
+
+	var buf bytes.Buffer
+	mw := multipart.NewWriter(&buf)
+	require.NoError(t, mw.WriteField("import_type", "usememos"))
+	require.NoError(t, mw.WriteField("url", mockSrv.URL))
+	require.NoError(t, mw.WriteField("token", "testtoken"))
+	require.NoError(t, mw.Close())
+
+	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, ts.HTTPServer.URL+"/api/v1/notes/import", &buf)
+	require.NoError(t, err)
+	req.Header.Set("Content-Type", mw.FormDataContentType())
+
+	resp, err := http.DefaultClient.Do(req)
+	require.NoError(t, err)
+	defer resp.Body.Close()
+	assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+}
+
+func TestImportUsememosOlderAPIFormat(t *testing.T) {
+	ts := setupTestServer(t)
+	user := ts.createTestUser(t, "usememosuser10", "password123", false)
+
+	// Simulate the older API format using "data" and "rowStatus" fields.
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Header.Get("Authorization") != "Bearer testtoken" {
+			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		resp := map[string]any{
+			"data": []map[string]any{
+				{"id": 1, "rowStatus": "NORMAL", "content": "Old format memo"},
+				{"id": 2, "rowStatus": "ARCHIVED", "content": "Old archived"},
+			},
+		}
+		assert.NoError(t, json.NewEncoder(w).Encode(resp))
+	}))
+	defer srv.Close()
+
+	result, err := user.Client.ImportUsememos(t.Context(), srv.URL, "testtoken")
+	require.NoError(t, err)
+	assert.Equal(t, 2, result.Imported)
+
+	archived, err := user.Client.ListNotes(t.Context(), &client.ListNotesOptions{Archived: true})
+	require.NoError(t, err)
+	var found bool
+	for _, n := range archived {
+		if n.Content == "Old archived" {
+			found = true
+			assert.True(t, n.Archived)
+		}
+	}
+	assert.True(t, found)
 }

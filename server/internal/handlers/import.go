@@ -9,7 +9,10 @@ import (
 	"fmt"
 	"io"
 	"net/http"
+	"net/url"
+	"regexp"
 	"strings"
+	"time"
 	"unicode/utf8"
 
 	"github.com/hanzei/jot/server/internal/auth"
@@ -214,6 +217,7 @@ func (h *NotesHandler) importKeepNotes(ctx context.Context, userID string, keepN
 const (
 	importTypeJotJSON    = "jot_json"
 	importTypeGoogleKeep = "google_keep"
+	importTypeUsememos   = "usememos"
 	jotExportFormat      = "jot_export"
 	jotExportVersion     = 1
 )
@@ -374,7 +378,7 @@ func validateJotImportItems(noteIdx int, items []jotImportNoteItem) ([]models.Jo
 //	@Accept		multipart/form-data
 //	@Produce	json
 //	@Param		file			formData	file	true	"Export file to import"
-//	@Param		import_type		formData	string	true	"Import format: jot_json or google_keep"
+//	@Param		import_type		formData	string	true	"Import format: jot_json, google_keep, or usememos"
 //	@Success	200				{object}	ImportResponse
 //	@Failure	400				{string}	string	"bad request"
 //	@Failure	401				{string}	string	"unauthorized"
@@ -393,12 +397,26 @@ func (h *NotesHandler) ImportNotes(w http.ResponseWriter, r *http.Request) (int,
 
 	importType := r.FormValue("import_type")
 	switch importType {
-	case importTypeJotJSON, importTypeGoogleKeep:
+	case importTypeJotJSON, importTypeGoogleKeep, importTypeUsememos:
 		// valid
 	case "":
 		return http.StatusBadRequest, nil, errors.New("missing import_type")
 	default:
 		return http.StatusBadRequest, nil, fmt.Errorf("unsupported import_type %q", importType)
+	}
+
+	if importType == importTypeUsememos {
+		rawURL := r.FormValue("url")
+		token := r.FormValue("token")
+		if rawURL == "" || token == "" {
+			return http.StatusBadRequest, nil, errors.New("url and token are required for usememos import")
+		}
+		parsed, err := url.Parse(rawURL)
+		if err != nil || (parsed.Scheme != "http" && parsed.Scheme != "https") {
+			return http.StatusBadRequest, nil, errors.New("url must be a valid http or https URL")
+		}
+		imported, skipped, importErrors := h.importMemosFromUsememos(r.Context(), user.ID, rawURL, token)
+		return http.StatusOK, ImportResponse{Imported: imported, Skipped: skipped, Errors: importErrors}, nil
 	}
 
 	file, header, err := r.FormFile("file")
@@ -427,4 +445,275 @@ func (h *NotesHandler) ImportNotes(w http.ResponseWriter, r *http.Request) (int,
 		imported, skipped, importErrors := h.importKeepNotes(r.Context(), user.ID, keepNotes)
 		return http.StatusOK, ImportResponse{Imported: imported, Skipped: skipped, Errors: importErrors}, nil
 	}
+}
+
+// --- usememos import ---
+
+const (
+	usememosMaxPages       = 100
+	usememosPageSize       = 100
+	usememosRequestTimeout = 30 * time.Second
+)
+
+// usememosHTTPClient is shared across import calls so TCP connections are pooled
+// across the paginated requests of a single import session.
+var usememosHTTPClient = &http.Client{
+	Transport: &http.Transport{
+		ResponseHeaderTimeout: 15 * time.Second,
+		TLSHandshakeTimeout:   10 * time.Second,
+	},
+}
+
+type usememosAPIMemo struct {
+	Name      string   `json:"name"`
+	State     string   `json:"state"`     // "ACTIVE", "ARCHIVED", "DELETED" (v1 API)
+	RowStatus string   `json:"rowStatus"` // "NORMAL", "ARCHIVED" (older API)
+	Content   string   `json:"content"`
+	Tags      []string `json:"tags"`
+	Pinned    bool     `json:"pinned"`
+}
+
+const (
+	usememosStateActive   = "ACTIVE"
+	usememosStateArchived = "ARCHIVED"
+	usememosStateDeleted  = "DELETED"
+)
+
+// normalizedState returns a canonical state string regardless of API version.
+func (m usememosAPIMemo) normalizedState() string {
+	if m.State != "" {
+		return m.State
+	}
+	switch m.RowStatus {
+	case usememosStateArchived:
+		return usememosStateArchived
+	case "NORMAL", "":
+		return usememosStateActive
+	default:
+		return usememosStateDeleted
+	}
+}
+
+type usememosAPIResponse struct {
+	Memos         []usememosAPIMemo `json:"memos"` // v1 API
+	Data          []usememosAPIMemo `json:"data"`  // older API
+	NextPageToken string            `json:"nextPageToken"`
+}
+
+func (r usememosAPIResponse) memos() []usememosAPIMemo {
+	if len(r.Memos) > 0 {
+		return r.Memos
+	}
+	return r.Data
+}
+
+var (
+	// inlineCodeRE matches backtick-delimited inline code spans.
+	inlineCodeRE = regexp.MustCompile("`[^`\n]+`")
+	// hashTagRE matches a #hashtag preceded by start-of-string or a space/tab.
+	// The tag must start with a letter and continue with word characters.
+	hashTagRE = regexp.MustCompile(`(?:^|[ \t])#([a-zA-Z]\w*)`)
+)
+
+// extractAndStripTags removes standalone #hashtag tokens from content,
+// skipping fenced code blocks and inline code spans. It returns the cleaned
+// content and a deduplicated, ordered list of tag names (without the # prefix).
+func extractAndStripTags(content string) (string, []string) {
+	seen := map[string]struct{}{}
+	var tags []string
+
+	lines := strings.Split(content, "\n")
+	inFence := false
+	var fenceMarker string
+	resultLines := make([]string, 0, len(lines))
+
+	for _, line := range lines {
+		trimmed := strings.TrimLeft(line, " \t")
+		if isFenceMarker(trimmed) {
+			if !inFence {
+				inFence = true
+				fenceMarker = trimmed[:3]
+			} else if strings.HasPrefix(trimmed, fenceMarker) {
+				inFence = false
+			}
+			resultLines = append(resultLines, line)
+			continue
+		}
+		if inFence {
+			resultLines = append(resultLines, line)
+			continue
+		}
+		resultLines = append(resultLines, stripTagsFromLine(line, seen, &tags))
+	}
+
+	return strings.TrimSpace(strings.Join(resultLines, "\n")), tags
+}
+
+func isFenceMarker(trimmed string) bool {
+	return strings.HasPrefix(trimmed, "```") || strings.HasPrefix(trimmed, "~~~")
+}
+
+// stripTagsFromLine extracts and strips #hashtag tokens from a single non-fenced
+// line. Hashtags inside inline code spans are left untouched.
+func stripTagsFromLine(line string, seen map[string]struct{}, tags *[]string) string {
+	// Mask inline code spans with NUL bytes (length-preserving) so the tag
+	// regex cannot match hashtags inside them.
+	masked := inlineCodeRE.ReplaceAllStringFunc(line, func(s string) string {
+		return strings.Repeat("\x00", len(s))
+	})
+
+	// FindAllStringSubmatchIndex returns [fullStart, fullEnd, group1Start, group1End] per match,
+	// so we collect tag names and full-match bounds in a single pass.
+	all := hashTagRE.FindAllStringSubmatchIndex(masked, -1)
+	if len(all) == 0 {
+		return line
+	}
+
+	matchIdxs := make([][]int, len(all))
+	for i, m := range all {
+		tag := masked[m[2]:m[3]]
+		if _, dup := seen[tag]; !dup {
+			seen[tag] = struct{}{}
+			*tags = append(*tags, tag)
+		}
+		matchIdxs[i] = m[:2]
+	}
+
+	return rebuildLineWithoutTags(line, masked, matchIdxs)
+}
+
+// rebuildLineWithoutTags reconstructs line with the tag tokens removed.
+// NUL bytes in masked mark inline code spans whose original bytes are taken from line.
+// Leading whitespace before each tag is preserved; the tag itself is dropped.
+func rebuildLineWithoutTags(line, masked string, matchIdxs [][]int) string {
+	var buf strings.Builder
+	buf.Grow(len(line))
+	pos := 0
+	for _, idx := range matchIdxs {
+		matchStart, matchEnd := idx[0], idx[1]
+		writeOriginal(&buf, line, masked, pos, matchStart)
+		// Preserve a leading space/tab before the '#' but drop the tag itself.
+		if matchStart < len(masked) && masked[matchStart] != '#' {
+			buf.WriteByte(line[matchStart])
+		}
+		pos = matchEnd
+	}
+	writeOriginal(&buf, line, masked, pos, len(line))
+	return strings.TrimRight(buf.String(), " \t")
+}
+
+// writeOriginal writes bytes from line[start:end], using line for NUL positions
+// (which correspond to inline code spans) and masked elsewhere.
+func writeOriginal(buf *strings.Builder, line, masked string, start, end int) {
+	for i := start; i < end; i++ {
+		if masked[i] == '\x00' {
+			buf.WriteByte(line[i])
+		} else {
+			buf.WriteByte(masked[i])
+		}
+	}
+}
+
+// fetchUsememosMemos pages through the usememos v1 API and returns all memos.
+// It validates that baseURL uses an http or https scheme, and caps the fetch
+// at usememosMaxPages pages to prevent unbounded requests.
+func fetchUsememosMemos(ctx context.Context, baseURL, token string) ([]usememosAPIMemo, error) {
+	base := strings.TrimRight(baseURL, "/")
+	var all []usememosAPIMemo
+	pageToken := ""
+
+	for pageNum := range usememosMaxPages {
+		apiURL := fmt.Sprintf("%s/api/v1/memos?pageSize=%d", base, usememosPageSize)
+		if pageToken != "" {
+			apiURL += "&pageToken=" + url.QueryEscape(pageToken)
+		}
+
+		pageCtx, cancel := context.WithTimeout(ctx, usememosRequestTimeout)
+		req, err := http.NewRequestWithContext(pageCtx, http.MethodGet, apiURL, nil) //nolint:gosec // URL is validated to be http/https in the handler before this function is called
+		if err != nil {
+			cancel()
+			return nil, fmt.Errorf("build request: %w", err)
+		}
+		req.Header.Set("Authorization", "Bearer "+token)
+
+		resp, err := usememosHTTPClient.Do(req) //nolint:gosec // same as above
+		cancel()
+		if err != nil {
+			return nil, fmt.Errorf("fetch memos (page %d): %w", pageNum+1, err)
+		}
+		body, readErr := io.ReadAll(io.LimitReader(resp.Body, 32<<20))
+		_ = resp.Body.Close()
+		if readErr != nil {
+			return nil, fmt.Errorf("read response (page %d): %w", pageNum+1, readErr)
+		}
+		if resp.StatusCode != http.StatusOK {
+			return nil, fmt.Errorf("usememos returned status %d — check your URL and token", resp.StatusCode)
+		}
+
+		var apiResp usememosAPIResponse
+		if err := json.Unmarshal(body, &apiResp); err != nil {
+			return nil, fmt.Errorf("parse response: %w", err)
+		}
+		all = append(all, apiResp.memos()...)
+
+		if apiResp.NextPageToken == "" {
+			break
+		}
+		if len(all) >= usememosMaxPages*usememosPageSize {
+			return nil, fmt.Errorf("too many memos: import is capped at %d", usememosMaxPages*usememosPageSize)
+		}
+		pageToken = apiResp.NextPageToken
+	}
+	return all, nil
+}
+
+// importMemosFromUsememos fetches all memos from the given usememos instance
+// and imports them into Jot. ACTIVE and ARCHIVED memos are imported (preserving
+// pinned and archived state); DELETED memos are skipped. Inline #hashtags are
+// extracted as Jot labels and stripped from the note content.
+func (h *NotesHandler) importMemosFromUsememos(ctx context.Context, userID, baseURL, token string) (imported, skipped int, importErrors []string) {
+	memos, err := fetchUsememosMemos(ctx, baseURL, token)
+	if err != nil {
+		return 0, 0, []string{err.Error()}
+	}
+
+	for i, memo := range memos {
+		state := memo.normalizedState()
+		if state == usememosStateDeleted {
+			skipped++
+			continue
+		}
+
+		if utf8.RuneCountInString(memo.Content) > noteContentMaxLength {
+			label := fmt.Sprintf("memo #%d", i+1)
+			importErrors = append(importErrors, fmt.Sprintf("skipped %s: content exceeds %d character limit", label, noteContentMaxLength))
+			skipped++
+			continue
+		}
+
+		content, tags := extractAndStripTags(memo.Content)
+
+		note, err := h.noteStore.Create(ctx, userID, "", content, models.NoteTypeText, models.DefaultNoteColor)
+		if err != nil {
+			importErrors = append(importErrors, fmt.Sprintf("failed to import memo #%d: %v", i+1, err))
+			continue
+		}
+
+		if len(tags) > 0 {
+			if _, labelErr := h.createNoteLabels(ctx, note.ID, userID, tags); labelErr != nil {
+				importErrors = append(importErrors, fmt.Sprintf("memo #%d: failed to create labels: %v", i+1, labelErr))
+			}
+		}
+
+		archived := state == usememosStateArchived
+		if memo.Pinned || archived {
+			f := false
+			if err := h.noteStore.Update(ctx, note.ID, userID, nil, nil, nil, &memo.Pinned, &archived, &f); err != nil {
+				importErrors = append(importErrors, fmt.Sprintf("memo #%d: failed to set pinned/archived: %v", i+1, err))
+			}
+		}
+
+		imported++
+	}
+	return imported, skipped, importErrors
 }

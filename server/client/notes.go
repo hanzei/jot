@@ -167,22 +167,19 @@ func (c *Client) ReorderNotes(ctx context.Context, noteIDs []string) error {
 	})
 }
 
-// ImportNotes uploads a note export file. importType must be "jot_json" or "google_keep".
-func (c *Client) ImportNotes(ctx context.Context, importType string, filename string, data io.Reader) (*ImportResponse, error) {
+// doImportRequest builds and executes a multipart POST to /api/v1/notes/import.
+// writeParts is called after the import_type field is written and before the writer is closed.
+func (c *Client) doImportRequest(ctx context.Context, importType string, writeParts func(*multipart.Writer) error) (*ImportResponse, error) {
 	var buf bytes.Buffer
 	mw := multipart.NewWriter(&buf)
 	if err := mw.WriteField("import_type", importType); err != nil {
 		return nil, fmt.Errorf("write import_type field: %w", err)
 	}
-	part, err := mw.CreateFormFile("file", filename)
-	if err != nil {
-		return nil, fmt.Errorf("create form file: %w", err)
-	}
-	if _, err = io.Copy(part, data); err != nil {
-		return nil, fmt.Errorf("copy file data: %w", err)
+	if err := writeParts(mw); err != nil {
+		return nil, err
 	}
 	contentType := mw.FormDataContentType()
-	if err = mw.Close(); err != nil {
+	if err := mw.Close(); err != nil {
 		return nil, fmt.Errorf("close multipart writer: %w", err)
 	}
 
@@ -211,6 +208,33 @@ func (c *Client) ImportNotes(ctx context.Context, importType string, filename st
 		return nil, fmt.Errorf("unmarshal response: %w", err)
 	}
 	return &result, nil
+}
+
+// ImportNotes uploads a note export file. importType must be "jot_json" or "google_keep".
+func (c *Client) ImportNotes(ctx context.Context, importType string, filename string, data io.Reader) (*ImportResponse, error) {
+	return c.doImportRequest(ctx, importType, func(mw *multipart.Writer) error {
+		part, err := mw.CreateFormFile("file", filename)
+		if err != nil {
+			return fmt.Errorf("create form file: %w", err)
+		}
+		if _, err = io.Copy(part, data); err != nil {
+			return fmt.Errorf("copy file data: %w", err)
+		}
+		return nil
+	})
+}
+
+// ImportUsememos imports notes directly from a Memos instance.
+func (c *Client) ImportUsememos(ctx context.Context, rawURL, token string) (*ImportResponse, error) {
+	return c.doImportRequest(ctx, "usememos", func(mw *multipart.Writer) error {
+		if err := mw.WriteField("url", rawURL); err != nil {
+			return fmt.Errorf("write url field: %w", err)
+		}
+		if err := mw.WriteField("token", token); err != nil {
+			return fmt.Errorf("write token field: %w", err)
+		}
+		return nil
+	})
 }
 
 // ExportNotes downloads the authenticated user's notes as a Jot JSON export.

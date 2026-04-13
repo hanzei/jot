@@ -5,7 +5,7 @@ import { useTranslation } from 'react-i18next';
 import { notes, isAxiosError } from '@/utils/api';
 import type { ImportResponse } from '@jot/shared';
 
-type ImportType = 'jot_json' | 'google_keep';
+type ImportType = 'jot_json' | 'google_keep' | 'usememos';
 
 interface ImportModalProps {
   isOpen: boolean;
@@ -17,11 +17,14 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
   const { t } = useTranslation();
   const [importType, setImportType] = useState<ImportType>('google_keep');
   const [selectedFile, setSelectedFile] = useState<File | null>(null);
+  const [usememosURL, setUsememosURL] = useState('');
+  const [usememosToken, setUsememosToken] = useState('');
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState('');
   const [result, setResult] = useState<ImportResponse | null>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
+  const isFileType = importType !== 'usememos';
   const acceptedFileTypes = importType === 'jot_json' ? '.json' : '.json,.zip';
 
   const isValidFile = (file: File): boolean => {
@@ -34,6 +37,8 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
   const resetFields = (type: ImportType = 'google_keep') => {
     setImportType(type);
     setSelectedFile(null);
+    setUsememosURL('');
+    setUsememosToken('');
     setError('');
     setResult(null);
     if (fileInputRef.current) {
@@ -68,23 +73,29 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
     e.preventDefault();
   };
 
+  const isImportReady = importType === 'usememos'
+    ? usememosURL.trim() !== '' && usememosToken.trim() !== ''
+    : selectedFile !== null;
+
   const handleImport = async () => {
-    if (!selectedFile) return;
+    if (!isImportReady) return;
 
     setIsLoading(true);
     setError('');
     setResult(null);
 
     try {
-      const response = await notes.importNotes(selectedFile, importType);
+      const response = importType === 'usememos'
+        ? await notes.importNotes({ importType: 'usememos', url: usememosURL.trim(), token: usememosToken.trim() })
+        : await notes.importNotes({ file: selectedFile!, importType });
       setResult(response);
       onSuccess();
     } catch (err: unknown) {
       if (isAxiosError(err)) {
         const msg = typeof err.response?.data === 'string' ? err.response.data.trim() : '';
-        setError(msg || t('import.importFailed'));
+        setError(msg || (importType === 'usememos' ? t('import.importFailedUsememos') : t('import.importFailed')));
       } else {
-        setError(t('import.importFailed'));
+        setError(importType === 'usememos' ? t('import.importFailedUsememos') : t('import.importFailed'));
       }
     } finally {
       setIsLoading(false);
@@ -98,7 +109,9 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
 
   const description = importType === 'jot_json'
     ? t('import.descriptionJotJson')
-    : t('import.description');
+    : importType === 'usememos'
+      ? t('import.descriptionUsememos')
+      : t('import.description');
 
   return (
     <Dialog open={isOpen} onClose={handleClose} className="relative z-50">
@@ -123,7 +136,7 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
               <p className="text-sm font-medium text-gray-700 dark:text-gray-300 mb-2">
                 {t('import.formatLabel')}
               </p>
-              <div className="flex gap-4">
+              <div className="flex gap-4 flex-wrap">
                 <label className="flex items-center gap-2 cursor-pointer">
                   <input
                     type="radio"
@@ -145,6 +158,17 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
                     className="text-blue-600"
                   />
                   <span className="text-sm text-gray-700 dark:text-gray-300">{t('import.formatJotJson')}</span>
+                </label>
+                <label className="flex items-center gap-2 cursor-pointer">
+                  <input
+                    type="radio"
+                    name="import-format"
+                    value="usememos"
+                    checked={importType === 'usememos'}
+                    onChange={() => handleFormatChange('usememos')}
+                    className="text-blue-600"
+                  />
+                  <span className="text-sm text-gray-700 dark:text-gray-300">{t('import.formatUsememos')}</span>
                 </label>
               </div>
             </div>
@@ -178,34 +202,65 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
               </>
             )}
 
-            <div
-              data-testid="import-dropzone"
-              className="border-2 border-dashed border-gray-300 dark:border-slate-600 rounded-lg p-6 text-center cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 transition-colors"
-              onClick={() => fileInputRef.current?.click()}
-              onDrop={handleDrop}
-              onDragOver={handleDragOver}
-            >
-              <ArrowUpTrayIcon className="h-8 w-8 mx-auto text-gray-400 dark:text-gray-500 mb-2" />
-              {selectedFile ? (
-                <p className="text-sm text-gray-700 dark:text-gray-300 font-medium">{selectedFile.name}</p>
-              ) : (
-                <>
-                  <p className="text-sm text-gray-500 dark:text-gray-400">
-                    {t('import.dropFile')} <span className="text-blue-600 dark:text-blue-400">{t('import.browse')}</span>
-                  </p>
-                  <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
-                    {importType === 'jot_json' ? t('import.fileTypesJson') : t('import.fileTypes')}
-                  </p>
-                </>
-              )}
-              <input
-                ref={fileInputRef}
-                type="file"
-                accept={acceptedFileTypes}
-                className="hidden"
-                onChange={handleFileChange}
-              />
-            </div>
+            {isFileType ? (
+              <div
+                data-testid="import-dropzone"
+                className="border-2 border-dashed border-gray-300 dark:border-slate-600 rounded-lg p-6 text-center cursor-pointer hover:border-blue-400 dark:hover:border-blue-500 transition-colors"
+                onClick={() => fileInputRef.current?.click()}
+                onDrop={handleDrop}
+                onDragOver={handleDragOver}
+              >
+                <ArrowUpTrayIcon className="h-8 w-8 mx-auto text-gray-400 dark:text-gray-500 mb-2" />
+                {selectedFile ? (
+                  <p className="text-sm text-gray-700 dark:text-gray-300 font-medium">{selectedFile.name}</p>
+                ) : (
+                  <>
+                    <p className="text-sm text-gray-500 dark:text-gray-400">
+                      {t('import.dropFile')} <span className="text-blue-600 dark:text-blue-400">{t('import.browse')}</span>
+                    </p>
+                    <p className="text-xs text-gray-400 dark:text-gray-500 mt-1">
+                      {importType === 'jot_json' ? t('import.fileTypesJson') : t('import.fileTypes')}
+                    </p>
+                  </>
+                )}
+                <input
+                  ref={fileInputRef}
+                  type="file"
+                  accept={acceptedFileTypes}
+                  className="hidden"
+                  onChange={handleFileChange}
+                />
+              </div>
+            ) : (
+              <div className="space-y-3" data-testid="usememos-inputs">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    {t('import.urlLabel')}
+                  </label>
+                  <input
+                    type="url"
+                    value={usememosURL}
+                    onChange={e => setUsememosURL(e.target.value)}
+                    placeholder={t('import.urlPlaceholder')}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    data-testid="usememos-url"
+                  />
+                </div>
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 dark:text-gray-300 mb-1">
+                    {t('import.tokenLabel')}
+                  </label>
+                  <input
+                    type="password"
+                    value={usememosToken}
+                    onChange={e => setUsememosToken(e.target.value)}
+                    placeholder={t('import.tokenPlaceholder')}
+                    className="w-full px-3 py-2 text-sm border border-gray-300 dark:border-slate-600 rounded-md bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-400 dark:placeholder-gray-500 focus:outline-none focus:ring-2 focus:ring-blue-500"
+                    data-testid="usememos-token"
+                  />
+                </div>
+              </div>
+            )}
 
             <div className="mt-4 flex justify-end gap-3">
               <button
@@ -217,7 +272,7 @@ export default function ImportModal({ isOpen, onClose, onSuccess }: ImportModalP
               {!result && (
                 <button
                   onClick={handleImport}
-                  disabled={!selectedFile || isLoading}
+                  disabled={!isImportReady || isLoading}
                   className="px-4 py-2 text-sm font-medium text-white bg-blue-600 hover:bg-blue-700 disabled:opacity-50 disabled:cursor-not-allowed rounded-md"
                 >
                   {isLoading ? t('import.importing') : t('import.importButton')}
