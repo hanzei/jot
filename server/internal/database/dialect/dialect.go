@@ -84,10 +84,10 @@ func (d *Dialect) IsUniqueConstraintError(err error) bool {
 	}
 	switch d.Driver {
 	case DriverPostgres:
-		var pqErr *pq.Error
-		return errors.As(err, &pqErr) && pqErr.Code == "23505"
+		pqErr, ok := errors.AsType[*pq.Error](err)
+		return ok && pqErr.Code == "23505"
 	default: // sqlite
-		var sqliteErr *sqlitedriver.Error
-		return errors.As(err, &sqliteErr) && sqliteErr.Code() == sqliteUniqueConstraint
+		sqliteErr, ok := errors.AsType[*sqlitedriver.Error](err)
+		return ok && sqliteErr.Code() == sqliteUniqueConstraint
 	}
 }
