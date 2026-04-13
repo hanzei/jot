@@ -130,11 +130,10 @@ func gracefulShutdown(baseCtx, signalCtx context.Context, s *server.Server, serv
 	logrus.WithField("drain_interval", readinessDrainInterval.String()).Info("Marked server not ready, waiting before shutdown")
 	<-time.After(readinessDrainInterval)
 	ctx, cancel := context.WithTimeout(baseCtx, 15*time.Second)
+	defer cancel()
 	if err := s.Shutdown(ctx); err != nil {
-		cancel()
 		logrus.WithError(err).Fatal("Graceful shutdown failed")
 	}
-	cancel()
 	if err := <-serverErrCh; err != nil {
 		logrus.WithError(err).Fatal("Server stopped with error after shutdown")
 	}
