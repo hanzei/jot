@@ -73,7 +73,7 @@ func TestHub_Unsubscribe(t *testing.T) {
 	})
 }
 
-func TestHub_Publish(t *testing.T) {
+func TestHubPublish(t *testing.T) {
 	event := Event{
 		Type:         EventNoteCreated,
 		SourceUserID: "user1",
