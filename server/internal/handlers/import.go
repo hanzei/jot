@@ -637,12 +637,13 @@ func fetchUsememosMemos(ctx context.Context, baseURL, token string) ([]usememosA
 		req.Header.Set("Authorization", "Bearer "+token)
 
 		resp, err := usememosHTTPClient.Do(req) //nolint:gosec // same as above
-		cancel()
 		if err != nil {
+			cancel()
 			return nil, fmt.Errorf("fetch memos (page %d): %w", pageNum+1, err)
 		}
 		body, readErr := io.ReadAll(io.LimitReader(resp.Body, 32<<20))
 		_ = resp.Body.Close()
+		cancel() // cancel after body is fully read so the context stays live during streaming
 		if readErr != nil {
 			return nil, fmt.Errorf("read response (page %d): %w", pageNum+1, readErr)
 		}
