@@ -348,6 +348,26 @@ describe('ImportModal', () => {
       expect(importBtn).not.toBeDisabled()
     })
 
+    it('disables the import button when URL or token is whitespace-only', async () => {
+      const user = userEvent.setup()
+      render(<ImportModal {...defaultProps} />)
+
+      await user.click(screen.getByRole('radio', { name: /memos/i }))
+
+      const importBtn = screen.getByRole('button', { name: /^import$/i })
+      await user.type(screen.getByTestId('usememos-url'), '   ')
+      await user.type(screen.getByTestId('usememos-token'), '   ')
+      expect(importBtn).toBeDisabled()
+
+      await user.clear(screen.getByTestId('usememos-token'))
+      await user.type(screen.getByTestId('usememos-token'), 'mytoken')
+      expect(importBtn).toBeDisabled() // URL is still whitespace-only
+
+      await user.clear(screen.getByTestId('usememos-url'))
+      await user.type(screen.getByTestId('usememos-url'), 'https://memos.example.com')
+      expect(importBtn).not.toBeDisabled()
+    })
+
     it('calls importNotes with usememos payload and shows result on success', async () => {
       const user = userEvent.setup()
       mockImportNotes.mockResolvedValue({ imported: 5, skipped: 1, errors: [] })

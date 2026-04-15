@@ -323,6 +323,8 @@ type usememosPage struct {
 // buildUsememosServer starts an httptest.Server that serves pages of mock usememos
 // API responses at GET /api/v1/memos. The pages slice is served in order; after the
 // last page NextPageToken is empty. Requests must carry "Authorization: Bearer testtoken".
+// The handler validates that each request sends the pageToken returned by the previous page,
+// failing the test if the client omits or misuses the token.
 func buildUsememosServer(t *testing.T, pages []usememosPage) *httptest.Server {
 	t.Helper()
 	pageIdx := 0
@@ -333,6 +335,18 @@ func buildUsememosServer(t *testing.T, pages []usememosPage) *httptest.Server {
 		}
 		if r.Header.Get("Authorization") != "Bearer testtoken" {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
+			return
+		}
+		// Validate the incoming pageToken: first request must have none; subsequent
+		// requests must echo the nextPageToken from the previous response.
+		gotToken := r.URL.Query().Get("pageToken")
+		var wantToken string
+		if pageIdx > 0 {
+			wantToken = pages[pageIdx-1].nextPageToken
+		}
+		if gotToken != wantToken {
+			http.Error(w, "unexpected pageToken", http.StatusBadRequest)
+			assert.Failf(t, "unexpected pageToken", "got %q, want %q", gotToken, wantToken)
 			return
 		}
 		if pageIdx >= len(pages) {
@@ -564,6 +578,10 @@ func TestImportUsememosOlderAPIFormat(t *testing.T) {
 
 	// Simulate the older API format using "data" and "rowStatus" fields.
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != "/api/v1/memos" {
+			http.NotFound(w, r)
+			return
+		}
 		if r.Header.Get("Authorization") != "Bearer testtoken" {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return

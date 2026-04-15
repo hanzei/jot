@@ -1392,15 +1392,23 @@ paths:
       consumes:
       - multipart/form-data
       parameters:
-      - description: Export file to import
-        in: formData
-        name: file
-        required: true
-        type: file
-      - description: 'Import format: jot_json, google_keep, or usememos'
+      - description: 'Import format: jot_json or google_keep (requires file); usememos
+          (requires url and token)'
         in: formData
         name: import_type
         required: true
+        type: string
+      - description: Export file (required when import_type is jot_json or google_keep)
+        in: formData
+        name: file
+        type: file
+      - description: Memos instance URL (required when import_type is usememos)
+        in: formData
+        name: url
+        type: string
+      - description: Memos API token (required when import_type is usememos)
+        in: formData
+        name: token
         type: string
       produces:
       - application/json
