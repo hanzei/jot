@@ -1,0 +1,17 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "server",
+      "runtimeExecutable": "powershell",
+      "runtimeArgs": ["-NoProfile", "-Command", "Set-Location server; $env:PATH += ';C:\\Program Files\\Go\\bin'; $env:CORS_ALLOWED_ORIGIN='http://localhost:5173'; $env:PASSWORD_MIN_LENGTH='4'; $env:COOKIE_SECURE='false'; $env:STATIC_DIR='.'; go run ."],
+      "port": 8080
+    },
+    {
+      "name": "webapp",
+      "runtimeExecutable": "cmd",
+      "runtimeArgs": ["/c", "cd webapp&&npm run dev"],
+      "port": 5173
+    }
+  ]
+}
