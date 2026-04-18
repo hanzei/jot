@@ -52,19 +52,21 @@ RUN --mount=type=cache,id=gomodcache-${TARGETARCH},target=/go/pkg/mod \
 # Production stage
 FROM alpine:3.22
 
-# Install runtime dependencies
-RUN apk --no-cache add ca-certificates
+# Install runtime dependencies and create non-root user (used by rootless deployments)
+RUN apk --no-cache add ca-certificates wget && \
+    addgroup -g 1001 -S jot && \
+    adduser -u 1001 -S jot -G jot
 
 WORKDIR /app
 
 # Copy the backend binary
-COPY --from=backend-builder /src/server/main ./
+COPY --from=backend-builder --chown=jot:jot /src/server/main ./
 
 # Copy the built frontend files
-COPY --from=frontend-builder /app/webapp/build ./webapp/build/
+COPY --from=frontend-builder --chown=jot:jot /app/webapp/build ./webapp/build/
 
-# Create data directory for SQLite database
-RUN mkdir -p /data
+# Create data directory for SQLite database; pre-owned by jot for rootless deployments
+RUN mkdir -p /data && chown jot:jot /data
 
 # Expose port
 EXPOSE 8080

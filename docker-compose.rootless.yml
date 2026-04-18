@@ -1,0 +1,25 @@
+# Rootless overlay for docker-compose.yml — runs Jot as a non-root user (uid/gid 1001).
+#
+# Usage:
+#   docker compose -f docker-compose.yml -f docker-compose.rootless.yml up -d
+#
+# The jot user (uid/gid 1001) is pre-created in the image. This overlay:
+#   - Switches the process to uid/gid 1001
+#   - Replaces the bind-mount with a Docker-managed named volume so that
+#     the jot user always has write access to /data regardless of host
+#     directory ownership.
+#
+# Migrating existing data from a bind-mount:
+#   docker run --rm \
+#     -v ./data:/source:ro \
+#     -v jot_jot-data:/dest \
+#     alpine sh -c "cp -a /source/. /dest/ && chown -R 1001:1001 /dest"
+
+services:
+  jot:
+    user: "1001:1001"
+    volumes:
+      - jot-data:/data
+
+volumes:
+  jot-data:
