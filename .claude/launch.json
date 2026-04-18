@@ -3,14 +3,22 @@
   "configurations": [
     {
       "name": "server",
-      "runtimeExecutable": "powershell",
-      "runtimeArgs": ["-NoProfile", "-Command", "Set-Location server; $env:PATH += ';C:\\Program Files\\Go\\bin'; $env:CORS_ALLOWED_ORIGIN='http://localhost:5173'; $env:PASSWORD_MIN_LENGTH='4'; $env:COOKIE_SECURE='false'; $env:STATIC_DIR='.'; go run ."],
+      "runtimeExecutable": "go",
+      "runtimeArgs": ["run", "."],
+      "cwd": "server",
+      "env": {
+        "CORS_ALLOWED_ORIGIN": "http://localhost:5173",
+        "PASSWORD_MIN_LENGTH": "4",
+        "COOKIE_SECURE": "false",
+        "STATIC_DIR": "."
+      },
       "port": 8080
     },
     {
       "name": "webapp",
-      "runtimeExecutable": "cmd",
-      "runtimeArgs": ["/c", "cd webapp&&npm run dev"],
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "cwd": "webapp",
       "port": 5173
     }
   ]
