@@ -193,7 +193,17 @@
     "patsLoadError": "Tokens laden mislukt.",
     "aboutSection": "Over",
     "aboutButton": "Over Jot",
-    "patsLoading": "Tokens laden..."
+    "patsLoading": "Tokens laden...",
+    "patsExpiryLabel": "Verloopt",
+    "patsExpiry_7": "Over 7 dagen",
+    "patsExpiry_30": "Over 30 dagen",
+    "patsExpiry_90": "Over 90 dagen",
+    "patsExpiry_365": "Over 1 jaar",
+    "patsExpiry_never": "Geen verloopdatum",
+    "patsCreatedOn": "Aangemaakt op {{date}}",
+    "patsExpiresOn": "Verloopt op {{date}}",
+    "patsNoExpiry": "Verloopt niet",
+    "patsExpired": "Verlopen"
   },
   "about": {
     "title": "Over Jot",

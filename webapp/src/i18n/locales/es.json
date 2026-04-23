@@ -193,7 +193,17 @@
     "patsLoadError": "No se pudieron cargar los tokens.",
     "aboutSection": "Acerca de",
     "aboutButton": "Acerca de Jot",
-    "patsLoading": "Cargando tokens..."
+    "patsLoading": "Cargando tokens...",
+    "patsExpiryLabel": "Expira",
+    "patsExpiry_7": "En 7 días",
+    "patsExpiry_30": "En 30 días",
+    "patsExpiry_90": "En 90 días",
+    "patsExpiry_365": "En 1 año",
+    "patsExpiry_never": "Sin caducidad",
+    "patsCreatedOn": "Creado el {{date}}",
+    "patsExpiresOn": "Expira el {{date}}",
+    "patsNoExpiry": "No caduca",
+    "patsExpired": "Caducado"
   },
   "about": {
     "title": "Acerca de Jot",

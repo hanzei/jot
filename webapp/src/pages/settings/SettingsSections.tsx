@@ -1,5 +1,5 @@
 import type { ChangeEvent, FormEvent, ReactNode, RefObject } from 'react';
-import { useState } from 'react';
+import { useEffect, useState } from 'react';
 import { ArrowUpTrayIcon, ArrowDownTrayIcon } from '@heroicons/react/24/outline';
 import type { TFunction } from 'i18next';
 import LetterAvatar from '@/components/LetterAvatar';
@@ -33,9 +33,31 @@ interface PATsSectionProps {
   patsError: string;
   creatingPAT: boolean;
   revokingPATIds: Set<string>;
-  onCreatePAT: (name: string) => void;
+  onCreatePAT: (name: string, expiresAt: string | undefined) => void;
   onRevokePAT: (id: string) => void;
   displayMsg: (msg: string) => string;
+}
+
+// PAT_EXPIRY_PRESETS maps i18n key suffixes to duration in days. A value of 0
+// means "no expiration". Keep ordered from shortest lifetime to longest so the
+// defaults surface safer (shorter) options first.
+const PAT_EXPIRY_PRESETS: ReadonlyArray<{ key: string; days: number }> = [
+  { key: '7', days: 7 },
+  { key: '30', days: 30 },
+  { key: '90', days: 90 },
+  { key: '365', days: 365 },
+  { key: 'never', days: 0 },
+];
+
+// PAT_DEFAULT_EXPIRY_KEY is the preset selected on initial render. Defaulting
+// to a bounded lifetime nudges users toward short-lived tokens.
+const PAT_DEFAULT_EXPIRY_KEY = '30';
+
+function computeExpiresAtISO(presetKey: string): string | undefined {
+  const preset = PAT_EXPIRY_PRESETS.find((p) => p.key === presetKey);
+  if (!preset || preset.days === 0) return undefined;
+  const d = new Date(Date.now() + preset.days * 24 * 60 * 60 * 1000);
+  return d.toISOString();
 }
 
 interface IdentitySecurityColumnProps {
@@ -133,14 +155,25 @@ export const IdentitySecurityColumn = ({
   displayMsg,
 }: IdentitySecurityColumnProps) => {
   const [newPATName, setNewPATName] = useState('');
+  const [newPATExpiry, setNewPATExpiry] = useState<string>(PAT_DEFAULT_EXPIRY_KEY);
   const [patPendingRevoke, setPATpendingRevoke] = useState<PersonalAccessToken | null>(null);
+  // nowSnapshot keeps the "expired" badge fresh without calling Date.now()
+  // during render (flagged by react-hooks/purity). It seeds with the current
+  // time on mount and re-checks every minute, which is more than fine for an
+  // expiry indicator.
+  const [nowSnapshot, setNowSnapshot] = useState<number>(() => Date.now());
+  useEffect(() => {
+    const id = setInterval(() => setNowSnapshot(Date.now()), 60_000);
+    return () => clearInterval(id);
+  }, []);
 
   const handleCreateSubmit = (e: FormEvent) => {
     e.preventDefault();
     const name = newPATName.trim();
     if (!name || creatingPAT) return;
-    onCreatePAT(name);
+    onCreatePAT(name, computeExpiresAtISO(newPATExpiry));
     setNewPATName('');
+    setNewPATExpiry(PAT_DEFAULT_EXPIRY_KEY);
   };
 
   return (
@@ -325,7 +358,7 @@ export const IdentitySecurityColumn = ({
       <p className="text-sm text-gray-500 dark:text-gray-400 mb-4">
         {t('settings.patsDescription')}
       </p>
-      <form onSubmit={handleCreateSubmit} className="flex gap-2 mb-4">
+      <form onSubmit={handleCreateSubmit} className="flex flex-wrap gap-2 mb-4">
         <input
           type="text"
           autoCapitalize="sentences"
@@ -333,8 +366,21 @@ export const IdentitySecurityColumn = ({
           onChange={(e) => setNewPATName(e.target.value)}
           placeholder={t('settings.patsNamePlaceholder')}
           maxLength={VALIDATION.PAT_NAME_MAX_LENGTH}
+          aria-label={t('settings.patsNamePlaceholder')}
           className="flex-1 min-w-0 border border-gray-300 dark:border-slate-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white placeholder-gray-500 dark:placeholder-gray-400 focus:outline-none focus:ring-blue-500 focus:border-blue-500"
         />
+        <select
+          value={newPATExpiry}
+          onChange={(e) => setNewPATExpiry(e.target.value)}
+          aria-label={t('settings.patsExpiryLabel')}
+          className="border border-gray-300 dark:border-slate-600 rounded-md px-3 py-2 text-sm bg-white dark:bg-slate-700 text-gray-900 dark:text-white focus:outline-none focus:ring-blue-500 focus:border-blue-500"
+        >
+          {PAT_EXPIRY_PRESETS.map((preset) => (
+            <option key={preset.key} value={preset.key}>
+              {t(`settings.patsExpiry_${preset.key}`)}
+            </option>
+          ))}
+        </select>
         <button
           type="submit"
           disabled={creatingPAT || !newPATName.trim()}
@@ -352,29 +398,49 @@ export const IdentitySecurityColumn = ({
         <p className="text-sm text-gray-500 dark:text-gray-400">{t('settings.patsNone')}</p>
       ) : (
         <ul className="space-y-3">
-          {pats.map((pat) => (
-            <li
-              key={pat.id}
-              className="flex items-center justify-between rounded-md border border-gray-200 dark:border-slate-600 px-4 py-3"
-            >
-              <div className="min-w-0">
-                <span className="text-sm font-medium text-gray-900 dark:text-white truncate block">
-                  {pat.name}
-                </span>
-                <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
-                  {new Date(pat.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' })}
-                </p>
-              </div>
-              <button
-                type="button"
-                onClick={() => setPATpendingRevoke(pat)}
-                disabled={revokingPATIds.has(pat.id)}
-                className="ml-4 flex-shrink-0 text-sm text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 disabled:opacity-50"
+          {pats.map((pat) => {
+            const expiresDate = pat.expires_at ? new Date(pat.expires_at) : null;
+            const isExpired = expiresDate !== null && expiresDate.getTime() <= nowSnapshot;
+            return (
+              <li
+                key={pat.id}
+                className="flex items-center justify-between rounded-md border border-gray-200 dark:border-slate-600 px-4 py-3"
               >
-                {revokingPATIds.has(pat.id) ? t('settings.patsRevoking') : t('settings.patsRevoke')}
-              </button>
-            </li>
-          ))}
+                <div className="min-w-0">
+                  <div className="flex items-center gap-2">
+                    <span className="text-sm font-medium text-gray-900 dark:text-white truncate">
+                      {pat.name}
+                    </span>
+                    {isExpired && (
+                      <span className="inline-flex items-center rounded-full bg-red-100 dark:bg-red-900 px-2 py-0.5 text-xs font-medium text-red-800 dark:text-red-200">
+                        {t('settings.patsExpired')}
+                      </span>
+                    )}
+                  </div>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                    {t('settings.patsCreatedOn', {
+                      date: new Date(pat.created_at).toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }),
+                    })}
+                  </p>
+                  <p className="text-xs text-gray-500 dark:text-gray-400 mt-0.5">
+                    {expiresDate
+                      ? t('settings.patsExpiresOn', {
+                          date: expiresDate.toLocaleDateString(undefined, { year: 'numeric', month: 'short', day: 'numeric' }),
+                        })
+                      : t('settings.patsNoExpiry')}
+                  </p>
+                </div>
+                <button
+                  type="button"
+                  onClick={() => setPATpendingRevoke(pat)}
+                  disabled={revokingPATIds.has(pat.id)}
+                  className="ml-4 flex-shrink-0 text-sm text-red-600 dark:text-red-400 hover:text-red-700 dark:hover:text-red-300 disabled:opacity-50"
+                >
+                  {revokingPATIds.has(pat.id) ? t('settings.patsRevoking') : t('settings.patsRevoke')}
+                </button>
+              </li>
+            );
+          })}
         </ul>
       )}
     </SettingsSectionCard>

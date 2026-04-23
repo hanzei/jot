@@ -193,7 +193,17 @@
     "patsLoadError": "Nie udało się załadować tokenów.",
     "aboutSection": "O aplikacji",
     "aboutButton": "O Jot",
-    "patsLoading": "Ładowanie tokenów..."
+    "patsLoading": "Ładowanie tokenów...",
+    "patsExpiryLabel": "Wygasa",
+    "patsExpiry_7": "Za 7 dni",
+    "patsExpiry_30": "Za 30 dni",
+    "patsExpiry_90": "Za 90 dni",
+    "patsExpiry_365": "Za 1 rok",
+    "patsExpiry_never": "Bez wygaśnięcia",
+    "patsCreatedOn": "Utworzono {{date}}",
+    "patsExpiresOn": "Wygasa {{date}}",
+    "patsNoExpiry": "Nie wygasa",
+    "patsExpired": "Wygasł"
   },
   "about": {
     "title": "O Jot",

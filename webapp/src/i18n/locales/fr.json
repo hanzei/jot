@@ -193,7 +193,17 @@
     "patsLoadError": "Échec du chargement des jetons.",
     "aboutSection": "À propos",
     "aboutButton": "À propos de Jot",
-    "patsLoading": "Chargement des jetons..."
+    "patsLoading": "Chargement des jetons...",
+    "patsExpiryLabel": "Expiration",
+    "patsExpiry_7": "Dans 7 jours",
+    "patsExpiry_30": "Dans 30 jours",
+    "patsExpiry_90": "Dans 90 jours",
+    "patsExpiry_365": "Dans 1 an",
+    "patsExpiry_never": "Sans expiration",
+    "patsCreatedOn": "Créé le {{date}}",
+    "patsExpiresOn": "Expire le {{date}}",
+    "patsNoExpiry": "N'expire pas",
+    "patsExpired": "Expiré"
   },
   "about": {
     "title": "À propos de Jot",

@@ -99,7 +99,12 @@ func New(cfg *config.Config) (*Server, error) {
 		return nil, fmt.Errorf("initialize session store: %w", err)
 	}
 	userSettingsStore := models.NewUserSettingsStore(db, d)
-	patStore := models.NewPATStore(db, d)
+	patStore, err := models.NewPATStore(db, d)
+	if err != nil {
+		cancel()
+		_ = db.Close()
+		return nil, fmt.Errorf("initialize personal access token store: %w", err)
+	}
 
 	sessionService := auth.NewSessionService(sessionStore, userStore, patStore, cfg.CookieSecure)
 
@@ -149,6 +154,16 @@ func New(cfg *config.Config) (*Server, error) {
 	startPeriodicTask(&s.bgWg, ctx, time.Hour, true, func() error {
 		return noteStore.PurgeOldTrashedNotes(ctx, 7*24*time.Hour)
 	}, "purge old trashed notes")
+	startPeriodicTask(&s.bgWg, ctx, time.Hour, false, func() error {
+		n, err := patStore.DeleteExpired(ctx)
+		if err != nil {
+			return err
+		}
+		if n > 0 {
+			logrus.WithField("count", n).Info("Purged expired personal access tokens")
+		}
+		return nil
+	}, "purge expired personal access tokens")
 
 	if err := s.setupRoutes(); err != nil {
 		cancel()

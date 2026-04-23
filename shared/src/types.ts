@@ -288,12 +288,23 @@ export interface PersonalAccessToken {
   id: string;
   name: string;
   created_at: string;
+  /**
+   * Absolute expiration timestamp (RFC3339) when the token becomes unusable.
+   * Omitted / undefined means the token does not automatically expire.
+   */
+  expires_at?: string;
   /** Only present in the create response; never returned by list. */
   token?: string;
 }
 
 export interface CreatePATRequest {
   name: string;
+  /**
+   * Optional absolute expiration timestamp (RFC3339). If omitted, the token
+   * does not automatically expire. Must be at least one minute in the future
+   * and no more than one year out.
+   */
+  expires_at?: string;
 }
 
 export interface ProfileIconSSEEvent {

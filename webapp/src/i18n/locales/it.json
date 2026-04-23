@@ -193,7 +193,17 @@
     "patsLoadError": "Impossibile caricare i token.",
     "aboutSection": "Informazioni",
     "aboutButton": "Informazioni su Jot",
-    "patsLoading": "Caricamento token..."
+    "patsLoading": "Caricamento token...",
+    "patsExpiryLabel": "Scadenza",
+    "patsExpiry_7": "Tra 7 giorni",
+    "patsExpiry_30": "Tra 30 giorni",
+    "patsExpiry_90": "Tra 90 giorni",
+    "patsExpiry_365": "Tra 1 anno",
+    "patsExpiry_never": "Nessuna scadenza",
+    "patsCreatedOn": "Creato il {{date}}",
+    "patsExpiresOn": "Scade il {{date}}",
+    "patsNoExpiry": "Non scade",
+    "patsExpired": "Scaduto"
   },
   "about": {
     "title": "Informazioni su Jot",

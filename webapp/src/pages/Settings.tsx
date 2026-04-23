@@ -92,11 +92,11 @@ const Settings = ({ passwordMinLength }: SettingsProps) => {
     return () => { mounted = false; };
   }, []);
 
-  const handleCreatePAT = async (name: string) => {
+  const handleCreatePAT = async (name: string, expiresAt: string | undefined) => {
     setCreatingPAT(true);
     setPatsError('');
     try {
-      const pat = await patsApi.create({ name });
+      const pat = await patsApi.create({ name, expires_at: expiresAt });
       setPatsList(prev => [pat, ...prev]);
       setNewlyCreatedPAT(pat);
     } catch (err: unknown) {

@@ -218,12 +218,16 @@ definitions:
     type: object
   handlers.createPATRequest:
     properties:
+      expires_at:
+        type: string
       name:
         type: string
     type: object
   handlers.patResponse:
     properties:
       created_at:
+        type: string
+      expires_at:
         type: string
       id:
         type: string
@@ -1507,7 +1511,7 @@ paths:
       consumes:
       - application/json
       parameters:
-      - description: Token name
+      - description: Token name and optional expires_at (RFC3339 timestamp)
         in: body
         name: body
         required: true

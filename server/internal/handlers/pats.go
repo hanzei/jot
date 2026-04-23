@@ -8,6 +8,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/hanzei/jot/server/internal/auth"
+	"github.com/hanzei/jot/server/internal/logutil"
 	"github.com/hanzei/jot/server/internal/models"
 )
 
@@ -20,14 +21,16 @@ func NewPATsHandler(patStore *models.PATStore) *PATsHandler {
 }
 
 type createPATRequest struct {
-	Name string `json:"name"`
+	Name      string     `json:"name"`
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
 }
 
 type patResponse struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	CreatedAt time.Time `json:"created_at"`
-	Token     string    `json:"token,omitempty"`
+	ID        string     `json:"id"`
+	Name      string     `json:"name"`
+	CreatedAt time.Time  `json:"created_at"`
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+	Token     string     `json:"token,omitempty"`
 }
 
 // ListPATs godoc
@@ -56,6 +59,7 @@ func (h *PATsHandler) ListPATs(w http.ResponseWriter, r *http.Request) (int, any
 			ID:        p.ID,
 			Name:      p.Name,
 			CreatedAt: p.CreatedAt,
+			ExpiresAt: p.ExpiresAt,
 		})
 	}
 
@@ -69,7 +73,7 @@ func (h *PATsHandler) ListPATs(w http.ResponseWriter, r *http.Request) (int, any
 //	@Security	CookieAuth
 //	@Accept		json
 //	@Produce	json
-//	@Param		body	body		createPATRequest	true	"Token name"
+//	@Param		body	body		createPATRequest	true	"Token name and optional expires_at (RFC3339 timestamp)"
 //	@Success	201	{object}	patResponse
 //	@Failure	400	{string}	string	"bad request"
 //	@Failure	401	{string}	string	"unauthorized"
@@ -89,6 +93,12 @@ func (h *PATsHandler) CreatePAT(w http.ResponseWriter, r *http.Request) (int, an
 		return http.StatusBadRequest, nil, err
 	}
 
+	if req.ExpiresAt != nil {
+		if err := validatePATExpiresAt(*req.ExpiresAt); err != nil {
+			return http.StatusBadRequest, nil, err
+		}
+	}
+
 	existing, err := h.patStore.GetByUserID(r.Context(), user.ID)
 	if err != nil {
 		return http.StatusInternalServerError, nil, err
@@ -97,15 +107,22 @@ func (h *PATsHandler) CreatePAT(w http.ResponseWriter, r *http.Request) (int, an
 		return http.StatusUnprocessableEntity, nil, fmt.Errorf("maximum number of personal access tokens (%d) reached", maxPATsPerUser)
 	}
 
-	pat, rawToken, err := h.patStore.Create(r.Context(), user.ID, req.Name)
+	pat, rawToken, err := h.patStore.Create(r.Context(), user.ID, req.Name, req.ExpiresAt)
 	if err != nil {
 		return http.StatusInternalServerError, nil, err
 	}
+
+	logger := logutil.FromContext(r.Context()).WithField("pat_id", pat.ID)
+	if pat.ExpiresAt != nil {
+		logger = logger.WithField("expires_at", pat.ExpiresAt.UTC().Format(time.RFC3339))
+	}
+	logger.Info("Personal access token created")
 
 	return http.StatusCreated, patResponse{
 		ID:        pat.ID,
 		Name:      pat.Name,
 		CreatedAt: pat.CreatedAt,
+		ExpiresAt: pat.ExpiresAt,
 		Token:     rawToken,
 	}, nil
 }
@@ -135,6 +152,8 @@ func (h *PATsHandler) RevokePAT(w http.ResponseWriter, r *http.Request) (int, an
 	if !deleted {
 		return http.StatusNotFound, nil, errors.New("personal access token not found")
 	}
+
+	logutil.FromContext(r.Context()).WithField("pat_id", id).Info("Personal access token revoked")
 
 	return http.StatusNoContent, nil, nil
 }

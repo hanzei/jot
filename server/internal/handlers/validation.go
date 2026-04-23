@@ -7,7 +7,10 @@ import (
 	"net/http"
 	"regexp"
 	"strings"
+	"time"
 	"unicode/utf8"
+
+	"github.com/hanzei/jot/server/internal/models"
 )
 
 // decodeJSONBody limits the request body to maxJSONBodySize and decodes it
@@ -91,6 +94,22 @@ func validatePATName(name string) error {
 	}
 	if n > patNameMaxLength {
 		return fmt.Errorf("token name must be %d characters or fewer", patNameMaxLength)
+	}
+	return nil
+}
+
+// validatePATExpiresAt ensures a caller-supplied PAT expiry is a sensible
+// absolute timestamp in the future and no further out than PATMaxLifetime.
+func validatePATExpiresAt(expiresAt time.Time) error {
+	if expiresAt.IsZero() {
+		return errors.New("expires_at must not be zero")
+	}
+	now := time.Now()
+	if expiresAt.Sub(now) < models.PATMinLifetime {
+		return fmt.Errorf("expires_at must be at least %s in the future", models.PATMinLifetime)
+	}
+	if expiresAt.Sub(now) > models.PATMaxLifetime {
+		return fmt.Errorf("expires_at must be at most %s in the future", models.PATMaxLifetime)
 	}
 	return nil
 }

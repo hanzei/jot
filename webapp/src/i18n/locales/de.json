@@ -193,7 +193,17 @@
     "patsLoadError": "Token konnten nicht geladen werden.",
     "aboutSection": "Info",
     "aboutButton": "Info zu Jot",
-    "patsLoading": "Token werden geladen..."
+    "patsLoading": "Token werden geladen...",
+    "patsExpiryLabel": "Läuft ab",
+    "patsExpiry_7": "In 7 Tagen",
+    "patsExpiry_30": "In 30 Tagen",
+    "patsExpiry_90": "In 90 Tagen",
+    "patsExpiry_365": "In 1 Jahr",
+    "patsExpiry_never": "Ohne Ablauf",
+    "patsCreatedOn": "Erstellt am {{date}}",
+    "patsExpiresOn": "Läuft ab am {{date}}",
+    "patsNoExpiry": "Läuft nicht ab",
+    "patsExpired": "Abgelaufen"
   },
   "about": {
     "title": "Info zu Jot",

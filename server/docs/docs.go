@@ -1673,7 +1673,7 @@ const docTemplate = `{
                 "summary": "Create a new personal access token",
                 "parameters": [
                     {
-                        "description": "Token name",
+                        "description": "Token name and optional expires_at (RFC3339 timestamp)",
                         "name": "body",
                         "in": "body",
                         "required": true,
@@ -2520,6 +2520,9 @@ const docTemplate = `{
         "handlers.createPATRequest": {
             "type": "object",
             "properties": {
+                "expires_at": {
+                    "type": "string"
+                },
                 "name": {
                     "type": "string"
                 }
@@ -2529,6 +2532,9 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "created_at": {
+                    "type": "string"
+                },
+                "expires_at": {
                     "type": "string"
                 },
                 "id": {

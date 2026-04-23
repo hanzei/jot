@@ -8,20 +8,28 @@ import (
 	"testing"
 	"time"
 
+	"github.com/hanzei/jot/server/internal/database/dialect"
+	"github.com/hanzei/jot/server/internal/models"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 )
 
 type patResponse struct {
-	ID        string    `json:"id"`
-	Name      string    `json:"name"`
-	CreatedAt time.Time `json:"created_at"`
-	Token     string    `json:"token"`
+	ID        string     `json:"id"`
+	Name      string     `json:"name"`
+	CreatedAt time.Time  `json:"created_at"`
+	ExpiresAt *time.Time `json:"expires_at,omitempty"`
+	Token     string     `json:"token"`
 }
 
 func createPAT(t *testing.T, ts *TestServer, tu *TestUser, name string) *patResponse {
 	t.Helper()
-	body, err := json.Marshal(map[string]string{"name": name})
+	return createPATWithBody(t, ts, tu, map[string]any{"name": name}, http.StatusCreated)
+}
+
+func createPATWithBody(t *testing.T, ts *TestServer, tu *TestUser, reqBody map[string]any, wantStatus int) *patResponse {
+	t.Helper()
+	body, err := json.Marshal(reqBody)
 	require.NoError(t, err)
 
 	req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, ts.HTTPServer.URL+"/api/v1/pats", bytes.NewReader(body))
@@ -32,7 +40,11 @@ func createPAT(t *testing.T, ts *TestServer, tu *TestUser, name string) *patResp
 	require.NoError(t, err)
 	defer resp.Body.Close()
 
-	require.Equal(t, http.StatusCreated, resp.StatusCode)
+	require.Equal(t, wantStatus, resp.StatusCode)
+
+	if wantStatus != http.StatusCreated {
+		return nil
+	}
 
 	var pat patResponse
 	require.NoError(t, json.NewDecoder(resp.Body).Decode(&pat))
@@ -296,5 +308,139 @@ func TestPATs(t *testing.T) {
 		require.NoError(t, err)
 		defer resp.Body.Close()
 		assert.Equal(t, http.StatusUnprocessableEntity, resp.StatusCode)
+	})
+
+	t.Run("create with expires_at persists and returns it", func(t *testing.T) {
+		ts := setupTestServer(t)
+		u := ts.createTestUser(t, "alice", "password123", false)
+
+		expires := time.Now().Add(2 * time.Hour).UTC().Truncate(time.Second)
+		pat := createPATWithBody(t, ts, u, map[string]any{
+			"name":       "short-lived",
+			"expires_at": expires.Format(time.RFC3339),
+		}, http.StatusCreated)
+
+		require.NotNil(t, pat.ExpiresAt)
+		assert.WithinDuration(t, expires, pat.ExpiresAt.UTC(), 2*time.Second)
+
+		pats := listPATs(t, ts, u)
+		require.Len(t, pats, 1)
+		require.NotNil(t, pats[0].ExpiresAt)
+		assert.WithinDuration(t, expires, pats[0].ExpiresAt.UTC(), 2*time.Second)
+	})
+
+	t.Run("create without expires_at omits it from responses", func(t *testing.T) {
+		ts := setupTestServer(t)
+		u := ts.createTestUser(t, "alice", "password123", false)
+
+		pat := createPAT(t, ts, u, "no-expiry")
+		assert.Nil(t, pat.ExpiresAt, "expires_at must be null when omitted on create")
+
+		pats := listPATs(t, ts, u)
+		require.Len(t, pats, 1)
+		assert.Nil(t, pats[0].ExpiresAt)
+	})
+
+	t.Run("create with expires_at in the past returns 400", func(t *testing.T) {
+		ts := setupTestServer(t)
+		u := ts.createTestUser(t, "alice", "password123", false)
+
+		createPATWithBody(t, ts, u, map[string]any{
+			"name":       "expired-on-arrival",
+			"expires_at": time.Now().Add(-time.Minute).UTC().Format(time.RFC3339),
+		}, http.StatusBadRequest)
+	})
+
+	t.Run("create with expires_at too soon returns 400", func(t *testing.T) {
+		ts := setupTestServer(t)
+		u := ts.createTestUser(t, "alice", "password123", false)
+
+		createPATWithBody(t, ts, u, map[string]any{
+			"name":       "sub-minute",
+			"expires_at": time.Now().Add(10 * time.Second).UTC().Format(time.RFC3339),
+		}, http.StatusBadRequest)
+	})
+
+	t.Run("create with expires_at more than one year out returns 400", func(t *testing.T) {
+		ts := setupTestServer(t)
+		u := ts.createTestUser(t, "alice", "password123", false)
+
+		createPATWithBody(t, ts, u, map[string]any{
+			"name":       "too-long",
+			"expires_at": time.Now().Add(400 * 24 * time.Hour).UTC().Format(time.RFC3339),
+		}, http.StatusBadRequest)
+	})
+
+	t.Run("expired Bearer token is rejected", func(t *testing.T) {
+		ts := setupTestServer(t)
+		u := ts.createTestUser(t, "alice", "password123", false)
+
+		// Create a token with a valid expires_at so the handler accepts it,
+		// then directly backdate its expiry in the database to simulate the
+		// token having expired since creation.
+		pat := createPATWithBody(t, ts, u, map[string]any{
+			"name":       "expiring",
+			"expires_at": time.Now().Add(time.Hour).UTC().Format(time.RFC3339),
+		}, http.StatusCreated)
+		require.NotNil(t, pat.ExpiresAt)
+
+		_, err := ts.Server.GetDB().ExecContext(t.Context(),
+			"UPDATE personal_access_tokens SET expires_at = ? WHERE id = ?",
+			time.Now().Add(-time.Hour), pat.ID)
+		require.NoError(t, err)
+
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodGet, ts.HTTPServer.URL+"/api/v1/me", nil)
+		require.NoError(t, err)
+		req.Header.Set("Authorization", "Bearer "+pat.Token)
+
+		freshClient := &http.Client{}
+		resp, err := freshClient.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		assert.Equal(t, http.StatusUnauthorized, resp.StatusCode)
+
+		// The expired token is still listed (owner still sees it) until the
+		// background cleanup task runs or it is explicitly revoked.
+		pats := listPATs(t, ts, u)
+		require.Len(t, pats, 1)
+		require.NotNil(t, pats[0].ExpiresAt)
+	})
+
+	t.Run("background cleanup purges expired tokens", func(t *testing.T) {
+		ts := setupTestServer(t)
+		u := ts.createTestUser(t, "alice", "password123", false)
+
+		keep := createPAT(t, ts, u, "no-expiry")
+		future := createPATWithBody(t, ts, u, map[string]any{
+			"name":       "future",
+			"expires_at": time.Now().Add(time.Hour).UTC().Format(time.RFC3339),
+		}, http.StatusCreated)
+		past := createPATWithBody(t, ts, u, map[string]any{
+			"name":       "expires-soon",
+			"expires_at": time.Now().Add(time.Hour).UTC().Format(time.RFC3339),
+		}, http.StatusCreated)
+
+		// Backdate the "expires-soon" token so it is effectively expired.
+		_, err := ts.Server.GetDB().ExecContext(t.Context(),
+			"UPDATE personal_access_tokens SET expires_at = ? WHERE id = ?",
+			time.Now().Add(-time.Minute), past.ID)
+		require.NoError(t, err)
+
+		// Directly invoke the model-level cleanup that the periodic task runs.
+		d := &dialect.Dialect{Driver: "sqlite"}
+		store, err := models.NewPATStore(ts.Server.GetDB(), d)
+		require.NoError(t, err)
+		n, err := store.DeleteExpired(t.Context())
+		require.NoError(t, err)
+		assert.Equal(t, int64(1), n, "exactly one token should be purged")
+
+		pats := listPATs(t, ts, u)
+		ids := make(map[string]bool, len(pats))
+		for _, p := range pats {
+			ids[p.ID] = true
+		}
+		assert.True(t, ids[keep.ID], "tokens without expiry must not be purged")
+		assert.True(t, ids[future.ID], "tokens with a future expiry must not be purged")
+		assert.False(t, ids[past.ID], "expired token must be purged")
 	})
 }

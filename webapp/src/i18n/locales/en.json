@@ -193,7 +193,17 @@
     "patsLoadError": "Failed to load tokens.",
     "aboutSection": "About",
     "aboutButton": "About Jot",
-    "patsLoading": "Loading tokens..."
+    "patsLoading": "Loading tokens...",
+    "patsExpiryLabel": "Expires",
+    "patsExpiry_7": "In 7 days",
+    "patsExpiry_30": "In 30 days",
+    "patsExpiry_90": "In 90 days",
+    "patsExpiry_365": "In 1 year",
+    "patsExpiry_never": "No expiration",
+    "patsCreatedOn": "Created {{date}}",
+    "patsExpiresOn": "Expires {{date}}",
+    "patsNoExpiry": "Does not expire",
+    "patsExpired": "Expired"
   },
   "about": {
     "title": "About Jot",

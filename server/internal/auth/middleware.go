@@ -45,7 +45,17 @@ func (s *SessionService) AuthMiddleware(next http.Handler) http.Handler {
 			rawToken := strings.TrimPrefix(authHeader, "Bearer ")
 			user, err := s.authenticateWithPAT(r.Context(), rawToken)
 			if err != nil {
-				if !errors.Is(err, models.ErrPATNotFound) {
+				switch {
+				case errors.Is(err, models.ErrPATExpired):
+					// Audit-level info: an operator watching for compromised
+					// tokens needs to see every expired-PAT rejection.
+					logutil.FromContext(r.Context()).
+						WithField("event", "pat_expired_rejected").
+						Warn("Rejected expired personal access token")
+				case errors.Is(err, models.ErrPATNotFound):
+					// Do nothing — common case for clients probing with a
+					// stale or typo'd token.
+				default:
 					logutil.FromContext(r.Context()).WithError(err).Warn("PAT authentication error")
 				}
 				http.Error(w, "Unauthorized", http.StatusUnauthorized)
