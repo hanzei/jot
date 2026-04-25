@@ -995,7 +995,7 @@
             "uid": "${datasource}"
           },
           "expr": "sum(rate(otel_notes_deleted_total[$__rate_interval]))",
-          "legendFormat": "deleted / trashed",
+          "legendFormat": "deleted",
           "refId": "C"
         },
         {
@@ -1737,8 +1737,8 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "rate(otel_go_gc_duration_seconds_sum[$__rate_interval]) / rate(otel_go_gc_duration_seconds_count[$__rate_interval])",
-          "legendFormat": "avg GC pause",
+          "expr": "rate(otel_go_schedule_duration_seconds_sum[$__rate_interval]) / rate(otel_go_schedule_duration_seconds_count[$__rate_interval])",
+          "legendFormat": "avg scheduler latency",
           "refId": "A"
         },
         {
@@ -1746,12 +1746,12 @@
             "type": "prometheus",
             "uid": "${datasource}"
           },
-          "expr": "histogram_quantile(0.75, sum by (le) (rate(otel_go_gc_duration_seconds_bucket[$__rate_interval])))",
-          "legendFormat": "p75 GC pause",
+          "expr": "histogram_quantile(0.75, sum by (le) (rate(otel_go_schedule_duration_seconds_bucket[$__rate_interval])))",
+          "legendFormat": "p75 scheduler latency",
           "refId": "B"
         }
       ],
-      "title": "GC Pause Duration",
+      "title": "Goroutine Scheduler Latency",
       "type": "timeseries"
     }
   ],
