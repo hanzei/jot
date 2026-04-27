@@ -85,10 +85,19 @@ export const notes = {
   reorder: (noteIDs: string[]): Promise<void> =>
     api.post('/notes/reorder', { note_ids: noteIDs }),
 
-  importNotes: (file: File, importType: 'jot_json' | 'google_keep'): Promise<ImportResponse> => {
+  importNotes: (
+    payload:
+      | { file: File; importType: 'jot_json' | 'google_keep' }
+      | { importType: 'usememos'; url: string; token: string },
+  ): Promise<ImportResponse> => {
     const formData = new FormData();
-    formData.append('file', file);
-    formData.append('import_type', importType);
+    formData.append('import_type', payload.importType);
+    if (payload.importType === 'usememos') {
+      formData.append('url', payload.url);
+      formData.append('token', payload.token);
+    } else {
+      formData.append('file', payload.file);
+    }
     return api.post('/notes/import', formData).then(res => res.data);
   },
 

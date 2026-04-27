@@ -857,18 +857,29 @@
                 "summary": "Import notes from a supported export format",
                 "parameters": [
                     {
-                        "type": "file",
-                        "description": "Export file to import",
-                        "name": "file",
+                        "type": "string",
+                        "description": "Import format: jot_json or google_keep (requires file); usememos (requires url and token)",
+                        "name": "import_type",
                         "in": "formData",
                         "required": true
                     },
                     {
+                        "type": "file",
+                        "description": "Export file (required when import_type is jot_json or google_keep)",
+                        "name": "file",
+                        "in": "formData"
+                    },
+                    {
                         "type": "string",
-                        "description": "Import format: jot_json or google_keep",
-                        "name": "import_type",
-                        "in": "formData",
-                        "required": true
+                        "description": "Memos instance URL (required when import_type is usememos)",
+                        "name": "url",
+                        "in": "formData"
+                    },
+                    {
+                        "type": "string",
+                        "description": "Memos API token (required when import_type is usememos)",
+                        "name": "token",
+                        "in": "formData"
                     }
                 ],
                 "responses": {
