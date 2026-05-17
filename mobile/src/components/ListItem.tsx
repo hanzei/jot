@@ -73,6 +73,7 @@ function ListItem({
   const effectiveTextMuted = hasNoteColor ? '#777' : colors.textMuted;
   const effectivePlaceholder = hasNoteColor ? '#999' : colors.placeholder;
   const effectiveIconMuted = hasNoteColor ? '#888' : colors.iconMuted;
+  const effectiveBorder = hasNoteColor ? '#bbb' : colors.border;
   const showAssignUI = isShared && collaborators && collaborators.length > 0 && onAssignPress;
   const assignedUser = assignedTo ? collaborators?.find((c) => c.userId === assignedTo) : undefined;
   const normalizedIndentLevel = Math.max(0, indentLevel);
@@ -173,7 +174,7 @@ function ListItem({
           testID="list-item-assign"
           accessibilityLabel={t('note.assignItem')}
         >
-          <View style={[styles.assignPlaceholder, { borderColor: hasNoteColor ? '#bbb' : colors.border }]}>
+          <View style={[styles.assignPlaceholder, { borderColor: effectiveBorder }]}>
             <Ionicons name="person-add-outline" size={12} color={effectiveIconMuted} />
           </View>
         </TouchableOpacity>
