@@ -845,6 +845,8 @@ export default function NoteEditorScreen() {
     }
   }, []);
 
+  const hasNoteColor = !!color && !isWhiteHexColor(color);
+
   const renderListItem = useCallback(
     ({ item, drag, isActive }: { item: LocalItem; drag: () => void; isActive: boolean }) => {
       const originalIndex = itemIndexMapRef.current.get(item.id);
@@ -911,7 +913,6 @@ export default function NoteEditorScreen() {
     });
   }, [applyToolbarEdit]);
 
-  const hasNoteColor = !!color && !isWhiteHexColor(color);
   const noteBackground = hasNoteColor ? color : colors.surface;
   const completedSectionDividerColor = hasNoteColor
     ? getCompletedSectionDividerColor(noteBackground)
