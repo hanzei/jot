@@ -161,7 +161,7 @@ func New(cfg *config.Config) (*Server, error) {
 func (s *Server) setupRoutes() error {
 	s.router.Use(middleware.RequestID)
 	s.router.Use(otelhttp.NewMiddleware("", otelhttp.WithFilter(func(r *http.Request) bool {
-		return r.URL.Path != "/livez" && r.URL.Path != "/readyz"
+		return r.URL.Path != "/livez" && r.URL.Path != "/readyz" && r.URL.Path != "/api/v1/events"
 	})))
 	// otelhttp sets the span name before chi populates RoutePattern, so a
 	// second middleware renames the span after routing is complete.

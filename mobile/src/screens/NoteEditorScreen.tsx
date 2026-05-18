@@ -845,6 +845,8 @@ export default function NoteEditorScreen() {
     }
   }, []);
 
+  const hasNoteColor = !!color && !isWhiteHexColor(color);
+
   const renderListItem = useCallback(
     ({ item, drag, isActive }: { item: LocalItem; drag: () => void; isActive: boolean }) => {
       const originalIndex = itemIndexMapRef.current.get(item.id);
@@ -863,6 +865,7 @@ export default function NoteEditorScreen() {
               assignedTo={item.assigned_to}
               isShared={!!isNoteShared}
               collaborators={collaborators}
+              hasNoteColor={hasNoteColor}
               onDrag={drag}
               onToggle={() => handleToggleItem(originalIndex)}
               onChangeText={(text) => handleItemTextChange(originalIndex, text)}
@@ -877,7 +880,7 @@ export default function NoteEditorScreen() {
         </ScaleDecorator>
       );
     },
-    [getItemRef, handleToggleItem, handleItemTextChange, handleDeleteItem, handleInsertItemAfter, handleBackspaceOnEmpty, isNoteShared, collaborators, openAssigneePicker, handleIndentItem, isDark, colors, handleListItemFocus],
+    [getItemRef, handleToggleItem, handleItemTextChange, handleDeleteItem, handleInsertItemAfter, handleBackspaceOnEmpty, isNoteShared, collaborators, openAssigneePicker, handleIndentItem, isDark, colors, handleListItemFocus, hasNoteColor],
   );
 
   const applyToolbarEdit = useCallback((updater: (prev: string) => string) => {
@@ -910,7 +913,6 @@ export default function NoteEditorScreen() {
     });
   }, [applyToolbarEdit]);
 
-  const hasNoteColor = !!color && !isWhiteHexColor(color);
   const noteBackground = hasNoteColor ? color : colors.surface;
   const completedSectionDividerColor = hasNoteColor
     ? getCompletedSectionDividerColor(noteBackground)
@@ -1111,9 +1113,9 @@ export default function NoteEditorScreen() {
                   <Ionicons
                     name={checkedItemsCollapsed ? 'chevron-forward' : 'chevron-down'}
                     size={18}
-                    color={colors.iconMuted}
+                    color={hasNoteColor ? '#888' : colors.iconMuted}
                   />
-                  <Text style={[styles.checkedHeaderText, { color: colors.textMuted }]}>
+                  <Text style={[styles.checkedHeaderText, { color: hasNoteColor ? '#777' : colors.textMuted }]}>
                     {t('note.completedItems', { count: checkedItems.length })}
                   </Text>
                 </TouchableOpacity>
@@ -1133,6 +1135,7 @@ export default function NoteEditorScreen() {
                         assignedTo={item.assigned_to}
                         isShared={!!isNoteShared}
                         collaborators={collaborators}
+                        hasNoteColor={hasNoteColor}
                         onToggle={() => handleToggleItem(originalIndex)}
                         onChangeText={(text) => handleItemTextChange(originalIndex, text)}
                         onDelete={() => handleDeleteItem(originalIndex)}
