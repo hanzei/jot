@@ -81,9 +81,9 @@ func (h *NotesHandler) ShareNote(w http.ResponseWriter, r *http.Request) (int, a
 		return http.StatusInternalServerError, nil, fmt.Errorf("share note: %w", err)
 	}
 
-	// Fetch the note to include in the SSE payload; audience now includes the new target.
-	if sharedNote, err := h.noteStore.GetByID(r.Context(), id, user.ID); err == nil {
-		h.publishNoteEvent(r.Context(), id, sse.EventNoteShared, sharedNote, user.ID)
+	// Publish personalized events so each recipient sees only their own labels.
+	if audienceIDs, err := h.noteStore.GetNoteAudienceIDs(r.Context(), id); err == nil {
+		h.publishPersonalizedNoteEventWithType(r.Context(), id, audienceIDs, user.ID, sse.EventNoteShared)
 	}
 
 	return http.StatusNoContent, nil, nil
