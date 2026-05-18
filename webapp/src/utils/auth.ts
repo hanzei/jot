@@ -17,6 +17,9 @@ export const setUser = (user: User): void => {
 export const removeUser = (): void => {
   localStorage.removeItem('user');
   localStorage.removeItem('settings');
+  if ('caches' in window) {
+    caches.delete('api-cache').catch(() => {});
+  }
 };
 
 export const getSettings = (): UserSettings | null => {

@@ -1,5 +1,6 @@
 import axios from 'axios';
 import type { ServerConfig, AboutInfo, AuthResponse, LoginRequest, RegisterRequest, Note, CreateNoteRequest, UpdateNoteRequest, User, CreateUserRequest, UserListResponse, AdminStatsResponse, ShareNoteRequest, NoteShare, ImportResponse, UpdateMeRequest, ChangePasswordRequest, UpdateUserRoleRequest, Label, ActiveSession, EmptyTrashResponse, PersonalAccessToken, CreatePATRequest } from '@jot/shared';
+import { removeUser } from '@/utils/auth';
 
 // Unique ID for this browser tab, used to suppress SSE echoes of our own mutations.
 export const CLIENT_ID = crypto.randomUUID();
@@ -18,8 +19,7 @@ api.interceptors.response.use(
       const url = error.config?.url || '';
       const isAuthEndpoint = url === '/login' || url === '/register' || url === '/me';
       if (!isAuthEndpoint) {
-        localStorage.removeItem('user');
-        localStorage.removeItem('settings');
+        removeUser();
         window.location.href = '/login';
       }
     }
