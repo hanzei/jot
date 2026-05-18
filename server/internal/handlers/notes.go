@@ -106,6 +106,7 @@ func (h *NotesHandler) publishPersonalizedNoteEvent(ctx context.Context, noteID 
 	h.publishPersonalizedNoteEventWithType(ctx, noteID, audienceIDs, sourceUserID, sse.EventNoteUpdated)
 }
 
+// publishPersonalizedNoteEventWithType is like publishPersonalizedNoteEvent but allows the caller to specify the SSE event type.
 func (h *NotesHandler) publishPersonalizedNoteEventWithType(ctx context.Context, noteID string, audienceIDs []string, sourceUserID string, eventType sse.EventType) {
 	if h.hub == nil {
 		return
@@ -832,6 +833,8 @@ func (h *NotesHandler) RestoreNote(w http.ResponseWriter, r *http.Request) (int,
 	sanitized := sanitizeNote(*note)
 	if audienceIDs, aErr := h.noteStore.GetNoteAudienceIDs(r.Context(), id); aErr == nil {
 		h.publishPersonalizedNoteEvent(r.Context(), id, audienceIDs, user.ID)
+	} else {
+		logutil.FromContext(r.Context()).WithError(aErr).WithField("note_id", id).Error("Failed to get note audience for SSE publish")
 	}
 	return http.StatusOK, sanitized, nil
 }
