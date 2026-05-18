@@ -26,6 +26,7 @@ func TestSecurityHeaders(t *testing.T) {
 		assert.Equal(t, "strict-origin-when-cross-origin", resp.Header.Get("Referrer-Policy"))
 		assert.Equal(t, "camera=(), microphone=(), geolocation=()", resp.Header.Get("Permissions-Policy"))
 		assert.Equal(t, "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; frame-ancestors 'none'", resp.Header.Get("Content-Security-Policy"))
+		assert.Empty(t, resp.Header.Get("Cache-Control"), "non-API endpoint should not have Cache-Control: no-store")
 	})
 
 	t.Run("standard headers are present on authenticated API endpoint", func(t *testing.T) {
@@ -45,6 +46,7 @@ func TestSecurityHeaders(t *testing.T) {
 		assert.Equal(t, "strict-origin-when-cross-origin", resp.Header.Get("Referrer-Policy"))
 		assert.Equal(t, "camera=(), microphone=(), geolocation=()", resp.Header.Get("Permissions-Policy"))
 		assert.Equal(t, "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; frame-ancestors 'none'", resp.Header.Get("Content-Security-Policy"))
+		assert.Equal(t, "no-store", resp.Header.Get("Cache-Control"))
 	})
 
 	t.Run("HSTS absent when CookieSecure is false", func(t *testing.T) {

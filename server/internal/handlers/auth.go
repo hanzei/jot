@@ -670,7 +670,6 @@ func (h *AuthHandler) GetUserProfileIcon(w http.ResponseWriter, r *http.Request)
 	}
 
 	w.Header().Set("Content-Type", contentType)
-	w.Header().Set("Cache-Control", "private, max-age=3600")
 	w.Header().Set("X-Content-Type-Options", "nosniff")
 	if _, err := w.Write(data); err != nil { // #nosec G705 -- data is validated image bytes; MIME confirmed via http.DetectContentType at upload, Content-Type and X-Content-Type-Options: nosniff are set
 		return http.StatusInternalServerError, nil, fmt.Errorf("failed to write response: %w", err)
