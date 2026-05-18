@@ -145,7 +145,7 @@ const AuthenticatedLayout = ({ onLogout }: AuthenticatedLayoutProps) => {
     } catch {
       // Continue with logout even if the server call fails
     }
-    removeUser();
+    await removeUser();
     onLogout();
   }, [onLogout]);
 

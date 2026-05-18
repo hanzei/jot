@@ -465,6 +465,9 @@ func securityHeaders(cookieSecure bool) func(http.Handler) http.Handler {
 			if cookieSecure {
 				h.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
 			}
+			if strings.HasPrefix(r.URL.Path, "/api/v1/") {
+				h.Set("Cache-Control", "no-store")
+			}
 			next.ServeHTTP(w, r)
 		})
 	}

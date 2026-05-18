@@ -59,6 +59,21 @@ describe('Auth Utilities', () => {
       expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('user')
     })
 
+    it('deletes the api-cache from CacheStorage', async () => {
+      const mockDelete = vi.fn().mockResolvedValue(true)
+      Object.defineProperty(window, 'caches', {
+        value: { delete: mockDelete },
+        writable: true,
+        configurable: true,
+      })
+
+      await removeUser()
+
+      expect(mockDelete).toHaveBeenCalledWith('api-cache')
+
+      delete (window as unknown as Record<string, unknown>)['caches']
+    })
+
     it('handles localStorage errors during user removal', () => {
       mockLocalStorage.removeItem.mockImplementation(() => {
         throw new Error('localStorage error')
