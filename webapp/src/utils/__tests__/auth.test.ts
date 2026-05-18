@@ -71,7 +71,7 @@ describe('Auth Utilities', () => {
 
       expect(mockDelete).toHaveBeenCalledWith('api-cache')
 
-      delete (window as Record<string, unknown>)['caches']
+      delete (window as unknown as Record<string, unknown>)['caches']
     })
 
     it('handles localStorage errors during user removal', () => {
