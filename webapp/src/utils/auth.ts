@@ -14,12 +14,13 @@ export const setUser = (user: User): void => {
   localStorage.setItem('user', JSON.stringify(user));
 };
 
-export const removeUser = (): void => {
+export const removeUser = (): Promise<void> => {
   localStorage.removeItem('user');
   localStorage.removeItem('settings');
   if (window.caches) {
-    caches.delete('api-cache').catch(() => {});
+    return caches.delete('api-cache').then(() => {}).catch(() => {});
   }
+  return Promise.resolve();
 };
 
 export const getSettings = (): UserSettings | null => {

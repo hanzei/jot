@@ -59,7 +59,7 @@ describe('Auth Utilities', () => {
       expect(mockLocalStorage.removeItem).toHaveBeenCalledWith('user')
     })
 
-    it('deletes the api-cache from CacheStorage', () => {
+    it('deletes the api-cache from CacheStorage', async () => {
       const mockDelete = vi.fn().mockResolvedValue(true)
       Object.defineProperty(window, 'caches', {
         value: { delete: mockDelete },
@@ -67,15 +67,12 @@ describe('Auth Utilities', () => {
         configurable: true,
       })
 
-      removeUser()
+      await removeUser()
 
       expect(mockDelete).toHaveBeenCalledWith('api-cache')
 
-      Object.defineProperty(window, 'caches', {
-        value: undefined,
-        writable: true,
-        configurable: true,
-      })
+      // eslint-disable-next-line @typescript-eslint/no-dynamic-delete
+      delete (window as Record<string, unknown>)['caches']
     })
 
     it('handles localStorage errors during user removal', () => {

@@ -19,8 +19,9 @@ api.interceptors.response.use(
       const url = error.config?.url || '';
       const isAuthEndpoint = url === '/login' || url === '/register' || url === '/me';
       if (!isAuthEndpoint) {
-        removeUser();
-        window.location.href = '/login';
+        removeUser().finally(() => {
+          window.location.href = '/login';
+        });
       }
     }
     return Promise.reject(error);
