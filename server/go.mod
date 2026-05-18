@@ -287,5 +287,3 @@ tool (
 	github.com/golangci/golangci-lint/v2/cmd/golangci-lint
 	github.com/swaggo/swag/cmd/swag
 )
-
-replace google.golang.org/genproto v0.0.0-20220519153652-3a47de7e79bd => google.golang.org/genproto v0.0.0-20260401024825-9d38bb4040a9

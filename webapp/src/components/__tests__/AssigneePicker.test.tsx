@@ -10,8 +10,8 @@ const collaborators: Collaborator[] = [
 ]
 
 describe('AssigneePicker', () => {
-  let onAssign: ReturnType<typeof vi.fn>
-  let onClose: ReturnType<typeof vi.fn>
+  let onAssign: (userId: string) => void
+  let onClose: () => void
 
   beforeEach(() => {
     onAssign = vi.fn()
