@@ -6,7 +6,7 @@ import { useOnlineStatus } from '../useOnlineStatus'
 const mockNavigator = {
   onLine: true,
 }
-Object.defineProperty(global, 'navigator', {
+Object.defineProperty(globalThis, 'navigator', {
   value: mockNavigator,
   writable: true,
 })
@@ -14,11 +14,11 @@ Object.defineProperty(global, 'navigator', {
 // Mock window event methods
 const mockAddEventListener = vi.fn()
 const mockRemoveEventListener = vi.fn()
-Object.defineProperty(global.window, 'addEventListener', {
+Object.defineProperty(window, 'addEventListener', {
   value: mockAddEventListener,
   writable: true,
 })
-Object.defineProperty(global.window, 'removeEventListener', {
+Object.defineProperty(window, 'removeEventListener', {
   value: mockRemoveEventListener,
   writable: true,
 })
