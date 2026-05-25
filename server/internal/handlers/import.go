@@ -616,16 +616,58 @@ func writeOriginal(buf *strings.Builder, line, masked string, start, end int) {
 	}
 }
 
-// fetchUsememosMemos pages through the usememos v1 API and returns all memos.
-// It validates that baseURL uses an http or https scheme, and caps the fetch
-// at usememosMaxPages pages to prevent unbounded requests.
-func fetchUsememosMemos(ctx context.Context, baseURL, token string) ([]usememosAPIMemo, error) {
+// mergeTagLists appends additional tags to the existing list, deduplicating
+// case-insensitively and skipping empty/whitespace-only entries. The Memos API
+// returns tags as a separate `tags` field; merging them with hashtags extracted
+// from content ensures tags managed via the Memos UI (not inline) are imported.
+func mergeTagLists(existing, additional []string) []string {
+	seen := make(map[string]struct{}, len(existing)+len(additional))
+	for _, t := range existing {
+		seen[strings.ToLower(t)] = struct{}{}
+	}
+	out := existing
+	for _, t := range additional {
+		trimmed := strings.TrimSpace(t)
+		if trimmed == "" {
+			continue
+		}
+		key := strings.ToLower(trimmed)
+		if _, dup := seen[key]; dup {
+			continue
+		}
+		seen[key] = struct{}{}
+		out = append(out, trimmed)
+	}
+	return out
+}
+
+// fetchUsememosMemos pages through the usememos v1 API and returns all memos
+// across both ACTIVE and ARCHIVED states. The v1 API defaults to returning only
+// NORMAL memos, so archived memos require a second pass with state=ARCHIVED.
+// Returns the combined memo list and a boolean that is true when the page-cap
+// was hit before all results were fetched.
+func fetchUsememosMemos(ctx context.Context, baseURL, token string) ([]usememosAPIMemo, bool, error) {
+	active, activeCapped, err := fetchUsememosMemosForState(ctx, baseURL, token, usememosStateActive)
+	if err != nil {
+		return nil, false, err
+	}
+	archived, archivedCapped, err := fetchUsememosMemosForState(ctx, baseURL, token, usememosStateArchived)
+	if err != nil {
+		return nil, false, err
+	}
+	return append(active, archived...), activeCapped || archivedCapped, nil
+}
+
+// fetchUsememosMemosForState pages through memos in a single state. Returns the
+// fetched memos and a boolean indicating whether the page-cap was hit before
+// the API stopped paginating (i.e., the result is incomplete).
+func fetchUsememosMemosForState(ctx context.Context, baseURL, token, state string) ([]usememosAPIMemo, bool, error) {
 	base := strings.TrimRight(baseURL, "/")
 	var all []usememosAPIMemo
 	pageToken := ""
 
 	for pageNum := range usememosMaxPages {
-		apiURL := fmt.Sprintf("%s/api/v1/memos?pageSize=%d", base, usememosPageSize)
+		apiURL := fmt.Sprintf("%s/api/v1/memos?pageSize=%d&state=%s", base, usememosPageSize, state)
 		if pageToken != "" {
 			apiURL += "&pageToken=" + url.QueryEscape(pageToken)
 		}
@@ -634,40 +676,38 @@ func fetchUsememosMemos(ctx context.Context, baseURL, token string) ([]usememosA
 		req, err := http.NewRequestWithContext(pageCtx, http.MethodGet, apiURL, nil) //nolint:gosec // URL is validated to be http/https in the handler before this function is called
 		if err != nil {
 			cancel()
-			return nil, fmt.Errorf("build request: %w", err)
+			return nil, false, fmt.Errorf("build request: %w", err)
 		}
 		req.Header.Set("Authorization", "Bearer "+token)
 
 		resp, err := usememosHTTPClient.Do(req) //nolint:gosec // same as above
 		if err != nil {
 			cancel()
-			return nil, fmt.Errorf("fetch memos (page %d): %w", pageNum+1, err)
+			return nil, false, fmt.Errorf("fetch memos (page %d): %w", pageNum+1, err)
 		}
 		body, readErr := io.ReadAll(io.LimitReader(resp.Body, 32<<20))
 		_ = resp.Body.Close()
 		cancel() // cancel after body is fully read so the context stays live during streaming
 		if readErr != nil {
-			return nil, fmt.Errorf("read response (page %d): %w", pageNum+1, readErr)
+			return nil, false, fmt.Errorf("read response (page %d): %w", pageNum+1, readErr)
 		}
 		if resp.StatusCode != http.StatusOK {
-			return nil, fmt.Errorf("usememos returned status %d — check your URL and token", resp.StatusCode)
+			return nil, false, fmt.Errorf("usememos returned status %d — check your URL and token", resp.StatusCode)
 		}
 
 		var apiResp usememosAPIResponse
 		if err := json.Unmarshal(body, &apiResp); err != nil {
-			return nil, fmt.Errorf("parse response: %w", err)
+			return nil, false, fmt.Errorf("parse response: %w", err)
 		}
 		all = append(all, apiResp.memos()...)
 
 		if apiResp.NextPageToken == "" {
-			break
-		}
-		if len(all) >= usememosMaxPages*usememosPageSize {
-			return nil, fmt.Errorf("too many memos: import is capped at %d", usememosMaxPages*usememosPageSize)
+			return all, false, nil
 		}
 		pageToken = apiResp.NextPageToken
 	}
-	return all, nil
+	// Loop exhausted its page budget while the server still had more pages.
+	return all, true, nil
 }
 
 // importMemosFromUsememos fetches all memos from the given usememos instance
@@ -675,48 +715,61 @@ func fetchUsememosMemos(ctx context.Context, baseURL, token string) ([]usememosA
 // pinned and archived state); DELETED memos are skipped. Inline #hashtags are
 // extracted as Jot labels and stripped from the note content.
 func (h *NotesHandler) importMemosFromUsememos(ctx context.Context, userID, baseURL, token string) (imported, skipped int, importErrors []string) {
-	memos, err := fetchUsememosMemos(ctx, baseURL, token)
+	memos, capped, err := fetchUsememosMemos(ctx, baseURL, token)
 	if err != nil {
 		return 0, 0, []string{err.Error()}
 	}
+	if capped {
+		importErrors = append(importErrors, fmt.Sprintf("import was capped at %d memos per state; some memos were not imported", usememosMaxPages*usememosPageSize))
+	}
 
 	for i, memo := range memos {
-		state := memo.normalizedState()
-		if state == usememosStateDeleted {
+		didImport, memoErrs := h.importSingleMemo(ctx, userID, i, memo)
+		importErrors = append(importErrors, memoErrs...)
+		if didImport {
+			imported++
+		} else {
 			skipped++
-			continue
 		}
-
-		if utf8.RuneCountInString(memo.Content) > noteContentMaxLength {
-			label := fmt.Sprintf("memo #%d", i+1)
-			importErrors = append(importErrors, fmt.Sprintf("skipped %s: content exceeds %d character limit", label, noteContentMaxLength))
-			skipped++
-			continue
-		}
-
-		content, tags := extractAndStripTags(memo.Content)
-
-		note, err := h.noteStore.Create(ctx, userID, "", content, models.NoteTypeText, models.DefaultNoteColor)
-		if err != nil {
-			importErrors = append(importErrors, fmt.Sprintf("failed to import memo #%d: %v", i+1, err))
-			continue
-		}
-
-		if len(tags) > 0 {
-			if _, labelErr := h.createNoteLabels(ctx, note.ID, userID, tags); labelErr != nil {
-				importErrors = append(importErrors, fmt.Sprintf("memo #%d: failed to create labels: %v", i+1, labelErr))
-			}
-		}
-
-		archived := state == usememosStateArchived
-		if memo.Pinned || archived {
-			f := false
-			if err := h.noteStore.Update(ctx, note.ID, userID, nil, nil, nil, &memo.Pinned, &archived, &f); err != nil {
-				importErrors = append(importErrors, fmt.Sprintf("memo #%d: failed to set pinned/archived: %v", i+1, err))
-			}
-		}
-
-		imported++
 	}
 	return imported, skipped, importErrors
+}
+
+// importSingleMemo imports a single memo, returning whether it was actually
+// imported (false means it was skipped) and any non-fatal errors that occurred.
+func (h *NotesHandler) importSingleMemo(ctx context.Context, userID string, idx int, memo usememosAPIMemo) (bool, []string) {
+	state := memo.normalizedState()
+	if state == usememosStateDeleted {
+		return false, nil
+	}
+	if utf8.RuneCountInString(memo.Content) > noteContentMaxLength {
+		return false, []string{fmt.Sprintf("skipped memo #%d: content exceeds %d character limit", idx+1, noteContentMaxLength)}
+	}
+
+	content, tags := extractAndStripTags(memo.Content)
+	tags = mergeTagLists(tags, memo.Tags)
+	if content == "" && len(tags) == 0 {
+		return false, nil
+	}
+
+	note, err := h.noteStore.Create(ctx, userID, "", content, models.NoteTypeText, models.DefaultNoteColor)
+	if err != nil {
+		return false, []string{fmt.Sprintf("failed to import memo #%d: %v", idx+1, err)}
+	}
+
+	var errs []string
+	if len(tags) > 0 {
+		if _, labelErr := h.createNoteLabels(ctx, note.ID, userID, tags); labelErr != nil {
+			errs = append(errs, fmt.Sprintf("memo #%d: failed to create labels: %v", idx+1, labelErr))
+		}
+	}
+
+	archived := state == usememosStateArchived
+	if memo.Pinned || archived {
+		f := false
+		if err := h.noteStore.Update(ctx, note.ID, userID, nil, nil, nil, &memo.Pinned, &archived, &f); err != nil {
+			errs = append(errs, fmt.Sprintf("memo #%d: failed to set pinned/archived: %v", idx+1, err))
+		}
+	}
+	return true, errs
 }

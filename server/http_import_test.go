@@ -314,6 +314,13 @@ func TestImportValidation(t *testing.T) {
 
 // --- usememos import tests ---
 
+const (
+	usememosTestPath = "/api/v1/memos"
+	usememosTestAuth = "Bearer testtoken"
+	stateActive      = "ACTIVE"
+	stateArchived    = "ARCHIVED"
+)
+
 // usememosPage holds the memos and optional pagination token for a mock page.
 type usememosPage struct {
 	memos         []map[string]any
@@ -321,24 +328,34 @@ type usememosPage struct {
 }
 
 // buildUsememosServer starts an httptest.Server that serves pages of mock usememos
-// API responses at GET /api/v1/memos. The pages slice is served in order; after the
-// last page NextPageToken is empty. Requests must carry "Authorization: Bearer testtoken".
-// The handler validates that each request sends the pageToken returned by the previous page,
-// failing the test if the client omits or misuses the token.
+// API responses at GET /api/v1/memos. The pages slice is served in order, filtered
+// by the request's `state` query parameter — only memos whose `state` field matches
+// the requested state are returned (this mirrors the real Memos v1 API, which only
+// returns NORMAL memos by default and requires a separate ?state=ARCHIVED pass for
+// archived memos). Pagination state is tracked independently per state. Requests
+// must carry "Authorization: Bearer testtoken" and a `state` query parameter.
 func buildUsememosServer(t *testing.T, pages []usememosPage) *httptest.Server {
 	t.Helper()
-	pageIdx := 0
+	pageIdxByState := map[string]int{}
 	return httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/v1/memos" {
+		if r.URL.Path != usememosTestPath {
 			http.NotFound(w, r)
 			return
 		}
-		if r.Header.Get("Authorization") != "Bearer testtoken" {
+		if r.Header.Get("Authorization") != usememosTestAuth {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
-		// Validate the incoming pageToken: first request must have none; subsequent
-		// requests must echo the nextPageToken from the previous response.
+		state := r.URL.Query().Get("state")
+		if state == "" {
+			http.Error(w, "missing state", http.StatusBadRequest)
+			assert.Fail(t, "request missing state query param")
+			return
+		}
+		pageIdx := pageIdxByState[state]
+		// Validate the incoming pageToken: first request for a state must have none;
+		// subsequent requests must echo the nextPageToken from the previous response
+		// for the same state.
 		gotToken := r.URL.Query().Get("pageToken")
 		var wantToken string
 		if pageIdx > 0 {
@@ -346,7 +363,7 @@ func buildUsememosServer(t *testing.T, pages []usememosPage) *httptest.Server {
 		}
 		if gotToken != wantToken {
 			http.Error(w, "unexpected pageToken", http.StatusBadRequest)
-			assert.Failf(t, "unexpected pageToken", "got %q, want %q", gotToken, wantToken)
+			assert.Failf(t, "unexpected pageToken", "state=%s got %q, want %q", state, gotToken, wantToken)
 			return
 		}
 		if pageIdx >= len(pages) {
@@ -355,14 +372,31 @@ func buildUsememosServer(t *testing.T, pages []usememosPage) *httptest.Server {
 			return
 		}
 		p := pages[pageIdx]
-		pageIdx++
+		pageIdxByState[state] = pageIdx + 1
+		filtered := filterMemosByState(p.memos, state)
 		resp := map[string]any{
-			"memos":         p.memos,
+			"memos":         filtered,
 			"nextPageToken": p.nextPageToken,
 		}
 		w.Header().Set("Content-Type", "application/json")
 		assert.NoError(t, json.NewEncoder(w).Encode(resp))
 	}))
+}
+
+// filterMemosByState returns only memos whose "state" field equals state.
+// Memos with no state field default to ACTIVE.
+func filterMemosByState(memos []map[string]any, state string) []map[string]any {
+	out := make([]map[string]any, 0, len(memos))
+	for _, m := range memos {
+		ms, _ := m["state"].(string)
+		if ms == "" {
+			ms = stateActive
+		}
+		if ms == state {
+			out = append(out, m)
+		}
+	}
+	return out
 }
 
 func TestImportUsememosHappyPath(t *testing.T) {
@@ -387,6 +421,9 @@ func TestImportUsememosDeletedSkipped(t *testing.T) {
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "usememosuser2", "password123", false)
 
+	// The Memos v1 API only returns NORMAL or ARCHIVED memos in response to
+	// ?state=ACTIVE / ?state=ARCHIVED queries (which is all the importer issues),
+	// so DELETED memos are filtered server-side and never reach the importer.
 	memos := []map[string]any{
 		{"name": "memos/1", "state": "ACTIVE", "content": "Keep me"},
 		{"name": "memos/2", "state": "DELETED", "content": "Delete me"},
@@ -397,7 +434,7 @@ func TestImportUsememosDeletedSkipped(t *testing.T) {
 	result, err := user.Client.ImportUsememos(t.Context(), mockSrv.URL, "testtoken")
 	require.NoError(t, err)
 	assert.Equal(t, 1, result.Imported)
-	assert.Equal(t, 1, result.Skipped)
+	assert.Equal(t, 0, result.Skipped)
 }
 
 func TestImportUsememosArchivedImportedAsArchived(t *testing.T) {
@@ -577,21 +614,34 @@ func TestImportUsememosOlderAPIFormat(t *testing.T) {
 	user := ts.createTestUser(t, "usememosuser10", "password123", false)
 
 	// Simulate the older API format using "data" and "rowStatus" fields.
+	// The server filters by the requested state, mapping rowStatus → state
+	// (NORMAL → ACTIVE, ARCHIVED → ARCHIVED).
+	all := []map[string]any{
+		{"id": 1, "rowStatus": "NORMAL", "content": "Old format memo"},
+		{"id": 2, "rowStatus": "ARCHIVED", "content": "Old archived"},
+	}
 	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if r.URL.Path != "/api/v1/memos" {
+		if r.URL.Path != usememosTestPath {
 			http.NotFound(w, r)
 			return
 		}
-		if r.Header.Get("Authorization") != "Bearer testtoken" {
+		if r.Header.Get("Authorization") != usememosTestAuth {
 			http.Error(w, "unauthorized", http.StatusUnauthorized)
 			return
 		}
-		resp := map[string]any{
-			"data": []map[string]any{
-				{"id": 1, "rowStatus": "NORMAL", "content": "Old format memo"},
-				{"id": 2, "rowStatus": "ARCHIVED", "content": "Old archived"},
-			},
+		state := r.URL.Query().Get("state")
+		filtered := make([]map[string]any, 0, len(all))
+		for _, m := range all {
+			rs, _ := m["rowStatus"].(string)
+			mapped := stateActive
+			if rs == stateArchived {
+				mapped = stateArchived
+			}
+			if mapped == state {
+				filtered = append(filtered, m)
+			}
 		}
+		resp := map[string]any{"data": filtered}
 		assert.NoError(t, json.NewEncoder(w).Encode(resp))
 	}))
 	defer srv.Close()
@@ -610,4 +660,113 @@ func TestImportUsememosOlderAPIFormat(t *testing.T) {
 		}
 	}
 	assert.True(t, found)
+}
+
+// TestImportUsememosEmptyMemoSkipped verifies that memos with no content and no
+// tags (e.g. a Memos memo that contained only attachments/resources) are skipped
+// rather than imported as blank notes.
+func TestImportUsememosEmptyMemoSkipped(t *testing.T) {
+	ts := setupTestServer(t)
+	user := ts.createTestUser(t, "usememosempty", "password123", false)
+
+	memos := []map[string]any{
+		{"name": "memos/1", "state": "ACTIVE", "content": ""},
+		{"name": "memos/2", "state": "ACTIVE", "content": "real content"},
+	}
+	mockSrv := buildUsememosServer(t, []usememosPage{{memos: memos}})
+	defer mockSrv.Close()
+
+	result, err := user.Client.ImportUsememos(t.Context(), mockSrv.URL, "testtoken")
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.Imported)
+	assert.Equal(t, 1, result.Skipped)
+
+	notes, err := user.Client.ListNotes(t.Context(), nil)
+	require.NoError(t, err)
+	require.Len(t, notes, 1)
+	assert.Equal(t, "real content", notes[0].Content)
+}
+
+// TestImportUsememosAPITagsMergedWithExtracted verifies that tags returned by
+// the Memos API in the `tags` field are imported as labels alongside hashtags
+// extracted from content, deduplicated case-insensitively.
+func TestImportUsememosAPITagsMergedWithExtracted(t *testing.T) {
+	ts := setupTestServer(t)
+	user := ts.createTestUser(t, "usememosapitags", "password123", false)
+
+	memos := []map[string]any{
+		{
+			"name":    "memos/1",
+			"state":   "ACTIVE",
+			"content": "Body #inline",
+			"tags":    []string{"fromapi", "INLINE", "  spaced  "},
+		},
+	}
+	mockSrv := buildUsememosServer(t, []usememosPage{{memos: memos}})
+	defer mockSrv.Close()
+
+	result, err := user.Client.ImportUsememos(t.Context(), mockSrv.URL, "testtoken")
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.Imported)
+
+	notes, err := user.Client.ListNotes(t.Context(), nil)
+	require.NoError(t, err)
+	require.Len(t, notes, 1)
+
+	labelNames := make([]string, 0, len(notes[0].Labels))
+	for _, l := range notes[0].Labels {
+		labelNames = append(labelNames, l.Name)
+	}
+	// "inline" from content; "fromapi" and "spaced" from API tags;
+	// "INLINE" is deduped case-insensitively against "inline".
+	assert.ElementsMatch(t, []string{"inline", "fromapi", "spaced"}, labelNames)
+}
+
+// TestImportUsememosArchivedFetchedSeparately verifies that the importer
+// issues separate paginated requests for ACTIVE and ARCHIVED states, matching
+// the Memos v1 API which only returns NORMAL memos by default.
+func TestImportUsememosArchivedFetchedSeparately(t *testing.T) {
+	ts := setupTestServer(t)
+	user := ts.createTestUser(t, "usememostwopass", "password123", false)
+
+	var activeCalls, archivedCalls int
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != usememosTestPath || r.Header.Get("Authorization") != usememosTestAuth {
+			http.Error(w, "no", http.StatusUnauthorized)
+			return
+		}
+		state := r.URL.Query().Get("state")
+		var memos []map[string]any
+		switch state {
+		case stateActive:
+			activeCalls++
+			memos = []map[string]any{{"name": "memos/1", "state": stateActive, "content": "active memo"}}
+		case stateArchived:
+			archivedCalls++
+			memos = []map[string]any{{"name": "memos/2", "state": stateArchived, "content": "archived memo"}}
+		default:
+			http.Error(w, "missing state", http.StatusBadRequest)
+			assert.Failf(t, "unexpected state", "got %q", state)
+			return
+		}
+		assert.NoError(t, json.NewEncoder(w).Encode(map[string]any{"memos": memos}))
+	}))
+	defer srv.Close()
+
+	result, err := user.Client.ImportUsememos(t.Context(), srv.URL, "testtoken")
+	require.NoError(t, err)
+	assert.Equal(t, 2, result.Imported)
+	assert.GreaterOrEqual(t, activeCalls, 1)
+	assert.GreaterOrEqual(t, archivedCalls, 1)
+
+	archived, err := user.Client.ListNotes(t.Context(), &client.ListNotesOptions{Archived: true})
+	require.NoError(t, err)
+	var foundArchived bool
+	for _, n := range archived {
+		if n.Content == "archived memo" {
+			foundArchived = true
+			assert.True(t, n.Archived)
+		}
+	}
+	assert.True(t, foundArchived, "archived memo should be imported with archived=true")
 }
