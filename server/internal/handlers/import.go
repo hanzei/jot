@@ -468,15 +468,22 @@ var usememosHTTPClient = &http.Client{
 
 type usememosAPIMemo struct {
 	Name      string   `json:"name"`
-	State     string   `json:"state"`     // "ACTIVE", "ARCHIVED", "DELETED" (v1 API)
+	State     string   `json:"state"`     // "NORMAL" or "ARCHIVED" (v1 API). Some servers also report "DELETED".
 	RowStatus string   `json:"rowStatus"` // "NORMAL", "ARCHIVED" (older API)
 	Content   string   `json:"content"`
 	Tags      []string `json:"tags"`
 	Pinned    bool     `json:"pinned"`
 }
 
+// The Memos v1 API State enum (proto/api/v1/common.proto) defines:
+//
+//	STATE_UNSPECIFIED, NORMAL, ARCHIVED
+//
+// There is no "ACTIVE" value — the active/non-archived state is named NORMAL.
+// usememosStateDeleted is not part of the v1 enum but is kept for older API
+// versions whose row_status field may report a deleted state.
 const (
-	usememosStateActive   = "ACTIVE"
+	usememosStateNormal   = "NORMAL"
 	usememosStateArchived = "ARCHIVED"
 	usememosStateDeleted  = "DELETED"
 )
@@ -490,7 +497,7 @@ func (m usememosAPIMemo) normalizedState() string {
 	case usememosStateArchived:
 		return usememosStateArchived
 	case "NORMAL", "":
-		return usememosStateActive
+		return usememosStateNormal
 	default:
 		return usememosStateDeleted
 	}
@@ -642,12 +649,12 @@ func mergeTagLists(existing, additional []string) []string {
 }
 
 // fetchUsememosMemos pages through the usememos v1 API and returns all memos
-// across both ACTIVE and ARCHIVED states. The v1 API defaults to returning only
+// across both NORMAL and ARCHIVED states. The v1 API defaults to returning only
 // NORMAL memos, so archived memos require a second pass with state=ARCHIVED.
 // Returns the combined memo list and a boolean that is true when the page-cap
 // was hit before all results were fetched.
 func fetchUsememosMemos(ctx context.Context, baseURL, token string) ([]usememosAPIMemo, bool, error) {
-	active, activeCapped, err := fetchUsememosMemosForState(ctx, baseURL, token, usememosStateActive)
+	active, activeCapped, err := fetchUsememosMemosForState(ctx, baseURL, token, usememosStateNormal)
 	if err != nil {
 		return nil, false, err
 	}
@@ -711,7 +718,7 @@ func fetchUsememosMemosForState(ctx context.Context, baseURL, token, state strin
 }
 
 // importMemosFromUsememos fetches all memos from the given usememos instance
-// and imports them into Jot. ACTIVE and ARCHIVED memos are imported (preserving
+// and imports them into Jot. NORMAL and ARCHIVED memos are imported (preserving
 // pinned and archived state); DELETED memos are skipped. Inline #hashtags are
 // extracted as Jot labels and stripped from the note content.
 func (h *NotesHandler) importMemosFromUsememos(ctx context.Context, userID, baseURL, token string) (imported, skipped int, importErrors []string) {

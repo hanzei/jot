@@ -317,7 +317,7 @@ func TestImportValidation(t *testing.T) {
 const (
 	usememosTestPath = "/api/v1/memos"
 	usememosTestAuth = "Bearer testtoken"
-	stateActive      = "ACTIVE"
+	stateActive      = "NORMAL"
 	stateArchived    = "ARCHIVED"
 )
 
@@ -384,7 +384,7 @@ func buildUsememosServer(t *testing.T, pages []usememosPage) *httptest.Server {
 }
 
 // filterMemosByState returns only memos whose "state" field equals state.
-// Memos with no state field default to ACTIVE.
+// Memos with no state field default to NORMAL.
 func filterMemosByState(memos []map[string]any, state string) []map[string]any {
 	out := make([]map[string]any, 0, len(memos))
 	for _, m := range memos {
@@ -404,8 +404,8 @@ func TestImportUsememosHappyPath(t *testing.T) {
 	user := ts.createTestUser(t, "usememosuser1", "password123", false)
 
 	memos := []map[string]any{
-		{"name": "memos/1", "state": "ACTIVE", "content": "Hello world", "pinned": false},
-		{"name": "memos/2", "state": "ACTIVE", "content": "Second memo", "pinned": false},
+		{"name": "memos/1", "state": "NORMAL", "content": "Hello world", "pinned": false},
+		{"name": "memos/2", "state": "NORMAL", "content": "Second memo", "pinned": false},
 	}
 	mockSrv := buildUsememosServer(t, []usememosPage{{memos: memos}})
 	defer mockSrv.Close()
@@ -422,10 +422,10 @@ func TestImportUsememosDeletedSkipped(t *testing.T) {
 	user := ts.createTestUser(t, "usememosuser2", "password123", false)
 
 	// The Memos v1 API only returns NORMAL or ARCHIVED memos in response to
-	// ?state=ACTIVE / ?state=ARCHIVED queries (which is all the importer issues),
+	// ?state=NORMAL / ?state=ARCHIVED queries (which is all the importer issues),
 	// so DELETED memos are filtered server-side and never reach the importer.
 	memos := []map[string]any{
-		{"name": "memos/1", "state": "ACTIVE", "content": "Keep me"},
+		{"name": "memos/1", "state": "NORMAL", "content": "Keep me"},
 		{"name": "memos/2", "state": "DELETED", "content": "Delete me"},
 	}
 	mockSrv := buildUsememosServer(t, []usememosPage{{memos: memos}})
@@ -463,7 +463,7 @@ func TestImportUsememosPinnedImportedAsPinned(t *testing.T) {
 	user := ts.createTestUser(t, "usememosuser4", "password123", false)
 
 	memos := []map[string]any{
-		{"name": "memos/1", "state": "ACTIVE", "content": "Pinned memo", "pinned": true},
+		{"name": "memos/1", "state": "NORMAL", "content": "Pinned memo", "pinned": true},
 	}
 	mockSrv := buildUsememosServer(t, []usememosPage{{memos: memos}})
 	defer mockSrv.Close()
@@ -484,7 +484,7 @@ func TestImportUsememosTagsExtractedAndStripped(t *testing.T) {
 	user := ts.createTestUser(t, "usememosuser5", "password123", false)
 
 	memos := []map[string]any{
-		{"name": "memos/1", "state": "ACTIVE", "content": "My note #golang #testing"},
+		{"name": "memos/1", "state": "NORMAL", "content": "My note #golang #testing"},
 	}
 	mockSrv := buildUsememosServer(t, []usememosPage{{memos: memos}})
 	defer mockSrv.Close()
@@ -513,7 +513,7 @@ func TestImportUsememosTagsInCodeFenceNotExtracted(t *testing.T) {
 
 	content := "Before\n```\n#notag\n```\nAfter #realtag"
 	memos := []map[string]any{
-		{"name": "memos/1", "state": "ACTIVE", "content": content},
+		{"name": "memos/1", "state": "NORMAL", "content": content},
 	}
 	mockSrv := buildUsememosServer(t, []usememosPage{{memos: memos}})
 	defer mockSrv.Close()
@@ -541,10 +541,10 @@ func TestImportUsememosPagination(t *testing.T) {
 	user := ts.createTestUser(t, "usememosuser7", "password123", false)
 
 	page1 := []map[string]any{
-		{"name": "memos/1", "state": "ACTIVE", "content": "Page 1 memo"},
+		{"name": "memos/1", "state": "NORMAL", "content": "Page 1 memo"},
 	}
 	page2 := []map[string]any{
-		{"name": "memos/2", "state": "ACTIVE", "content": "Page 2 memo"},
+		{"name": "memos/2", "state": "NORMAL", "content": "Page 2 memo"},
 	}
 	mockSrv := buildUsememosServer(t, []usememosPage{
 		{memos: page1, nextPageToken: "token2"},
@@ -588,7 +588,7 @@ func TestImportUsememosMissingURLReturns400(t *testing.T) {
 func TestImportUsememosUnauthenticatedReturns401(t *testing.T) {
 	ts := setupTestServer(t)
 
-	memos := []map[string]any{{"name": "memos/1", "state": "ACTIVE", "content": "hello"}}
+	memos := []map[string]any{{"name": "memos/1", "state": "NORMAL", "content": "hello"}}
 	mockSrv := buildUsememosServer(t, []usememosPage{{memos: memos}})
 	defer mockSrv.Close()
 
@@ -615,7 +615,7 @@ func TestImportUsememosOlderAPIFormat(t *testing.T) {
 
 	// Simulate the older API format using "data" and "rowStatus" fields.
 	// The server filters by the requested state, mapping rowStatus → state
-	// (NORMAL → ACTIVE, ARCHIVED → ARCHIVED).
+	// (NORMAL → NORMAL, ARCHIVED → ARCHIVED).
 	all := []map[string]any{
 		{"id": 1, "rowStatus": "NORMAL", "content": "Old format memo"},
 		{"id": 2, "rowStatus": "ARCHIVED", "content": "Old archived"},
@@ -670,8 +670,8 @@ func TestImportUsememosEmptyMemoSkipped(t *testing.T) {
 	user := ts.createTestUser(t, "usememosempty", "password123", false)
 
 	memos := []map[string]any{
-		{"name": "memos/1", "state": "ACTIVE", "content": ""},
-		{"name": "memos/2", "state": "ACTIVE", "content": "real content"},
+		{"name": "memos/1", "state": "NORMAL", "content": ""},
+		{"name": "memos/2", "state": "NORMAL", "content": "real content"},
 	}
 	mockSrv := buildUsememosServer(t, []usememosPage{{memos: memos}})
 	defer mockSrv.Close()
@@ -697,7 +697,7 @@ func TestImportUsememosAPITagsMergedWithExtracted(t *testing.T) {
 	memos := []map[string]any{
 		{
 			"name":    "memos/1",
-			"state":   "ACTIVE",
+			"state":   "NORMAL",
 			"content": "Body #inline",
 			"tags":    []string{"fromapi", "INLINE", "  spaced  "},
 		},
@@ -723,7 +723,7 @@ func TestImportUsememosAPITagsMergedWithExtracted(t *testing.T) {
 }
 
 // TestImportUsememosArchivedFetchedSeparately verifies that the importer
-// issues separate paginated requests for ACTIVE and ARCHIVED states, matching
+// issues separate paginated requests for NORMAL and ARCHIVED states, matching
 // the Memos v1 API which only returns NORMAL memos by default.
 func TestImportUsememosArchivedFetchedSeparately(t *testing.T) {
 	ts := setupTestServer(t)
