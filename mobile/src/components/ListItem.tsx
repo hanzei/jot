@@ -26,6 +26,7 @@ interface ListItemProps {
   isShared?: boolean;
   collaborators?: Collaborator[];
   inputRef?: React.RefObject<TextInputType | null>;
+  hasNoteColor?: boolean;
   onDrag?: () => void;
   onToggle?: () => void;
   onChangeText?: (text: string) => void;
@@ -55,6 +56,7 @@ function ListItem({
   isShared,
   collaborators,
   inputRef,
+  hasNoteColor = false,
   onDrag,
   onToggle,
   onChangeText,
@@ -67,6 +69,11 @@ function ListItem({
 }: ListItemProps) {
   const { colors } = useTheme();
   const { t } = useTranslation();
+  const effectiveText = hasNoteColor ? '#1a1a1a' : colors.text;
+  const effectiveTextMuted = hasNoteColor ? '#777' : colors.textMuted;
+  const effectivePlaceholder = hasNoteColor ? '#999' : colors.placeholder;
+  const effectiveIconMuted = hasNoteColor ? '#888' : colors.iconMuted;
+  const effectiveBorder = hasNoteColor ? '#bbb' : colors.border;
   const showAssignUI = isShared && collaborators && collaborators.length > 0 && onAssignPress;
   const assignedUser = assignedTo ? collaborators?.find((c) => c.userId === assignedTo) : undefined;
   const normalizedIndentLevel = Math.max(0, indentLevel);
@@ -105,7 +112,7 @@ function ListItem({
           testID="list-item-drag-handle"
           accessibilityLabel={t('note.dragToReorder')}
         >
-          <Ionicons name="reorder-three" size={20} color={colors.iconMuted} />
+          <Ionicons name="reorder-three" size={20} color={effectiveIconMuted} />
         </TouchableOpacity>
       )}
       <TouchableOpacity
@@ -119,17 +126,17 @@ function ListItem({
         <Ionicons
           name={completed ? 'checkbox' : 'square-outline'}
           size={22}
-          color={completed ? colors.primary : colors.iconMuted}
+          color={completed ? colors.primary : effectiveIconMuted}
         />
       </TouchableOpacity>
       <TextInput
         ref={inputRef}
-        style={[styles.textInput, { color: completed ? colors.textMuted : colors.text }, completed && styles.completedText]}
+        style={[styles.textInput, { color: completed ? effectiveTextMuted : effectiveText }, completed && styles.completedText]}
         value={text}
         onChangeText={onChangeText}
         editable={editable}
         placeholder={t('note.itemPlaceholder')}
-        placeholderTextColor={colors.placeholder}
+        placeholderTextColor={effectivePlaceholder}
         returnKeyType="next"
         onSubmitEditing={onSubmitEditing}
         blurOnSubmit={false}
@@ -167,14 +174,14 @@ function ListItem({
           testID="list-item-assign"
           accessibilityLabel={t('note.assignItem')}
         >
-          <View style={[styles.assignPlaceholder, { borderColor: colors.border }]}>
-            <Ionicons name="person-add-outline" size={12} color={colors.iconMuted} />
+          <View style={[styles.assignPlaceholder, { borderColor: effectiveBorder }]}>
+            <Ionicons name="person-add-outline" size={12} color={effectiveIconMuted} />
           </View>
         </TouchableOpacity>
       ) : null}
       {editable && onDelete && (
         <TouchableOpacity onPress={onDelete} style={styles.deleteBtn} testID="list-item-delete">
-          <Ionicons name="close" size={18} color={colors.iconMuted} />
+          <Ionicons name="close" size={18} color={effectiveIconMuted} />
         </TouchableOpacity>
       )}
     </View>

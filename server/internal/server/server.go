@@ -160,7 +160,9 @@ func New(cfg *config.Config) (*Server, error) {
 
 func (s *Server) setupRoutes() error {
 	s.router.Use(middleware.RequestID)
-	s.router.Use(otelhttp.NewMiddleware(""))
+	s.router.Use(otelhttp.NewMiddleware("", otelhttp.WithFilter(func(r *http.Request) bool {
+		return r.URL.Path != "/livez" && r.URL.Path != "/readyz" && r.URL.Path != "/api/v1/events"
+	})))
 	// otelhttp sets the span name before chi populates RoutePattern, so a
 	// second middleware renames the span after routing is complete.
 	s.router.Use(chiRouteSpanNamer)
@@ -462,6 +464,9 @@ func securityHeaders(cookieSecure bool) func(http.Handler) http.Handler {
 			h.Set("Content-Security-Policy", "default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self' data: blob:; connect-src 'self'; font-src 'self'; object-src 'none'; frame-ancestors 'none'")
 			if cookieSecure {
 				h.Set("Strict-Transport-Security", "max-age=31536000; includeSubDomains")
+			}
+			if strings.HasPrefix(r.URL.Path, "/api/v1/") {
+				h.Set("Cache-Control", "no-store")
 			}
 			next.ServeHTTP(w, r)
 		})

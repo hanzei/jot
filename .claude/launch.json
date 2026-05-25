@@ -1,0 +1,25 @@
+{
+  "version": "0.0.1",
+  "configurations": [
+    {
+      "name": "server",
+      "runtimeExecutable": "go",
+      "runtimeArgs": ["run", "."],
+      "cwd": "server",
+      "env": {
+        "CORS_ALLOWED_ORIGIN": "http://localhost:5173",
+        "PASSWORD_MIN_LENGTH": "4",
+        "COOKIE_SECURE": "false",
+        "STATIC_DIR": "."
+      },
+      "port": 8080
+    },
+    {
+      "name": "webapp",
+      "runtimeExecutable": "npm",
+      "runtimeArgs": ["run", "dev"],
+      "cwd": "webapp",
+      "port": 5173
+    }
+  ]
+}

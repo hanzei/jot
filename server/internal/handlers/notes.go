@@ -103,6 +103,11 @@ func (h *NotesHandler) publishNoteEvent(ctx context.Context, noteID string, even
 // change so every collaborator receives the update with their own per-user state intact.
 // Errors are logged but never fail the HTTP request.
 func (h *NotesHandler) publishPersonalizedNoteEvent(ctx context.Context, noteID string, audienceIDs []string, sourceUserID string) {
+	h.publishPersonalizedNoteEventWithType(ctx, noteID, audienceIDs, sourceUserID, sse.EventNoteUpdated)
+}
+
+// publishPersonalizedNoteEventWithType is like publishPersonalizedNoteEvent but allows the caller to specify the SSE event type.
+func (h *NotesHandler) publishPersonalizedNoteEventWithType(ctx context.Context, noteID string, audienceIDs []string, sourceUserID string, eventType sse.EventType) {
 	if h.hub == nil {
 		return
 	}
@@ -115,7 +120,7 @@ func (h *NotesHandler) publishPersonalizedNoteEvent(ctx context.Context, noteID 
 		}
 		sanitized := sanitizeNote(*n)
 		h.hub.Publish(ctx, []string{uid}, sse.Event{
-			Type:         sse.EventNoteUpdated,
+			Type:         eventType,
 			SourceUserID: sourceUserID,
 			ClientID:     clientID,
 			Data:         sse.NoteEventData{NoteID: noteID, Note: sanitized},
@@ -826,7 +831,11 @@ func (h *NotesHandler) RestoreNote(w http.ResponseWriter, r *http.Request) (int,
 
 	h.notesRestored.Add(r.Context(), 1)
 	sanitized := sanitizeNote(*note)
-	h.publishNoteEvent(r.Context(), id, sse.EventNoteUpdated, sanitized, user.ID)
+	if audienceIDs, aErr := h.noteStore.GetNoteAudienceIDs(r.Context(), id); aErr == nil {
+		h.publishPersonalizedNoteEvent(r.Context(), id, audienceIDs, user.ID)
+	} else {
+		logutil.FromContext(r.Context()).WithError(aErr).WithField("note_id", id).Error("Failed to get note audience for SSE publish")
+	}
 	return http.StatusOK, sanitized, nil
 }
 
