@@ -623,28 +623,30 @@ func writeOriginal(buf *strings.Builder, line, masked string, start, end int) {
 	}
 }
 
-// mergeTagLists appends additional tags to the existing list, deduplicating
-// case-insensitively and skipping empty/whitespace-only entries. The Memos API
-// returns tags as a separate `tags` field; merging them with hashtags extracted
-// from content ensures tags managed via the Memos UI (not inline) are imported.
+// mergeTagLists merges existing and additional tags into a single list,
+// trimming whitespace, skipping empties, and deduplicating case-insensitively
+// (preserving the case of the first occurrence). The Memos API returns tags as
+// a separate `tags` field; merging them with hashtags extracted from content
+// ensures tags managed via the Memos UI (not inline) are imported.
 func mergeTagLists(existing, additional []string) []string {
 	seen := make(map[string]struct{}, len(existing)+len(additional))
-	for _, t := range existing {
-		seen[strings.ToLower(t)] = struct{}{}
-	}
-	out := existing
-	for _, t := range additional {
-		trimmed := strings.TrimSpace(t)
-		if trimmed == "" {
-			continue
+	out := make([]string, 0, len(existing)+len(additional))
+	add := func(tags []string) {
+		for _, t := range tags {
+			trimmed := strings.TrimSpace(t)
+			if trimmed == "" {
+				continue
+			}
+			key := strings.ToLower(trimmed)
+			if _, dup := seen[key]; dup {
+				continue
+			}
+			seen[key] = struct{}{}
+			out = append(out, trimmed)
 		}
-		key := strings.ToLower(trimmed)
-		if _, dup := seen[key]; dup {
-			continue
-		}
-		seen[key] = struct{}{}
-		out = append(out, trimmed)
 	}
+	add(existing)
+	add(additional)
 	return out
 }
 

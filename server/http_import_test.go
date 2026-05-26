@@ -662,6 +662,47 @@ func TestImportUsememosOlderAPIFormat(t *testing.T) {
 	assert.True(t, found)
 }
 
+// TestImportUsememosDeletedMemoFromServerSkipped verifies importSingleMemo's
+// defensive DELETED-skip branch. Real Memos servers only return NORMAL/ARCHIVED
+// memos when queried with state=NORMAL/ARCHIVED, but a buggy or legacy server
+// could return a DELETED memo anyway — the importer must skip it rather than
+// importing a "deleted" record. This test uses a mock that does NOT filter by
+// state so a DELETED memo reaches the importer.
+func TestImportUsememosDeletedMemoFromServerSkipped(t *testing.T) {
+	ts := setupTestServer(t)
+	user := ts.createTestUser(t, "usememosdeleted", "password123", false)
+
+	srv := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.URL.Path != usememosTestPath || r.Header.Get("Authorization") != usememosTestAuth {
+			http.Error(w, "no", http.StatusUnauthorized)
+			return
+		}
+		// Return both memos regardless of the requested state — simulating a
+		// non-conforming server that ignores the state filter.
+		resp := map[string]any{"memos": []map[string]any{
+			{"name": "memos/1", "state": "DELETED", "content": "should be skipped"},
+			{"name": "memos/2", "state": stateActive, "content": "should be imported"},
+		}}
+		assert.NoError(t, json.NewEncoder(w).Encode(resp))
+	}))
+	defer srv.Close()
+
+	result, err := user.Client.ImportUsememos(t.Context(), srv.URL, "testtoken")
+	require.NoError(t, err)
+	// The server is queried twice (NORMAL + ARCHIVED) and returns both memos
+	// each time, so the deduplicated-by-position counts are 2 imported (the
+	// NORMAL memo, once per pass) and 2 skipped (the DELETED memo, once per
+	// pass). What matters is that the DELETED memo is never imported.
+	assert.Equal(t, 2, result.Imported)
+	assert.Equal(t, 2, result.Skipped)
+
+	notes, err := user.Client.ListNotes(t.Context(), nil)
+	require.NoError(t, err)
+	for _, n := range notes {
+		assert.NotEqual(t, "should be skipped", n.Content, "DELETED memo must not be imported")
+	}
+}
+
 // TestImportUsememosEmptyMemoSkipped verifies that memos with no content and no
 // tags (e.g. a Memos memo that contained only attachments/resources) are skipped
 // rather than imported as blank notes.
