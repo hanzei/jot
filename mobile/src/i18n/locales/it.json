@@ -269,7 +269,11 @@
     "formatItalic": "Corsivo",
     "formatHeading": "Intestazione",
     "formatBulletList": "Elenco puntato",
-    "completedSuggestions": "Suggerimenti da elementi completati"
+    "completedSuggestions": "Suggerimenti da elementi completati",
+    "indentItem": "Rientro",
+    "outdentItem": "Rimuovi rientro",
+    "itemsPasted_one": "1 elemento incollato",
+    "itemsPasted_other": "{{count}} elementi incollati"
   },
   "labels": {
     "title": "Etichette",

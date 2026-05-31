@@ -254,7 +254,11 @@
     "formatItalic": "Kursywa",
     "formatHeading": "Nagłówek",
     "formatBulletList": "Lista punktowana",
-    "completedSuggestions": "Sugestie z ukończonych elementów"
+    "completedSuggestions": "Sugestie z ukończonych elementów",
+    "indentItem": "Wcięcie",
+    "outdentItem": "Usuń wcięcie",
+    "itemsPasted_one": "1 element wklejony",
+    "itemsPasted_other": "{{count}} elementy wklejone"
   },
   "labels": {
     "title": "Etykiety",

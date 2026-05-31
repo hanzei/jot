@@ -269,7 +269,11 @@
     "formatItalic": "Cursief",
     "formatHeading": "Kop",
     "formatBulletList": "Opsommingsteken",
-    "completedSuggestions": "Suggesties van voltooide items"
+    "completedSuggestions": "Suggesties van voltooide items",
+    "indentItem": "Inspringing toevoegen",
+    "outdentItem": "Inspringing verwijderen",
+    "itemsPasted_one": "1 item geplakt",
+    "itemsPasted_other": "{{count}} items geplakt"
   },
   "labels": {
     "title": "Labels",
