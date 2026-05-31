@@ -26,6 +26,7 @@ interface ListItemProps {
   isShared?: boolean;
   collaborators?: Collaborator[];
   inputRef?: React.RefObject<TextInputType | null>;
+  inputAccessoryViewID?: string;
   hasNoteColor?: boolean;
   onDrag?: () => void;
   onToggle?: () => void;
@@ -35,6 +36,7 @@ interface ListItemProps {
   onBackspaceOnEmpty?: () => void;
   onAssignPress?: () => void;
   onFocus?: TextInputProps['onFocus'];
+  onBlur?: TextInputProps['onBlur'];
   onIndent?: (delta: 1 | -1) => void;
 }
 
@@ -56,6 +58,7 @@ function ListItem({
   isShared,
   collaborators,
   inputRef,
+  inputAccessoryViewID,
   hasNoteColor = false,
   onDrag,
   onToggle,
@@ -65,6 +68,7 @@ function ListItem({
   onBackspaceOnEmpty,
   onAssignPress,
   onFocus,
+  onBlur,
   onIndent,
 }: ListItemProps) {
   const { colors } = useTheme();
@@ -141,9 +145,11 @@ function ListItem({
         onSubmitEditing={onSubmitEditing}
         blurOnSubmit={false}
         onFocus={onFocus}
+        onBlur={onBlur}
         multiline
         submitBehavior="submit"
         textAlignVertical="top"
+        inputAccessoryViewID={inputAccessoryViewID}
         onKeyPress={({ nativeEvent }) => {
           if (nativeEvent.key === 'Backspace' && text === '') {
             onBackspaceOnEmpty?.();

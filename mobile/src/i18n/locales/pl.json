@@ -254,6 +254,8 @@
     "formatItalic": "Kursywa",
     "formatHeading": "Nagłówek",
     "formatBulletList": "Lista punktowana",
+    "indentItem": "Wcięcie",
+    "outdentItem": "Usuń wcięcie",
     "itemsPasted_one": "1 element wklejony",
     "itemsPasted_other": "{{count}} elementy wklejone"
   },

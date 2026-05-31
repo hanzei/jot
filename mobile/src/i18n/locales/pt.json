@@ -269,6 +269,8 @@
     "formatItalic": "Itálico",
     "formatHeading": "Título",
     "formatBulletList": "Lista de marcadores",
+    "indentItem": "Indentar",
+    "outdentItem": "Remover recuo",
     "itemsPasted_one": "1 item colado",
     "itemsPasted_other": "{{count}} itens colados"
   },

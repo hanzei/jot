@@ -269,6 +269,8 @@
     "formatItalic": "Cursief",
     "formatHeading": "Kop",
     "formatBulletList": "Opsommingsteken",
+    "indentItem": "Inspringing toevoegen",
+    "outdentItem": "Inspringing verwijderen",
     "itemsPasted_one": "1 item geplakt",
     "itemsPasted_other": "{{count}} items geplakt"
   },
