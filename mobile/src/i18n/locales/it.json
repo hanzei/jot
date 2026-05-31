@@ -270,7 +270,9 @@
     "formatHeading": "Intestazione",
     "formatBulletList": "Elenco puntato",
     "indentItem": "Rientro",
-    "outdentItem": "Rimuovi rientro"
+    "outdentItem": "Rimuovi rientro",
+    "itemsPasted_one": "1 elemento incollato",
+    "itemsPasted_other": "{{count}} elementi incollati"
   },
   "labels": {
     "title": "Etichette",

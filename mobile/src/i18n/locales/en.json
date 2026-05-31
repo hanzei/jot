@@ -270,7 +270,9 @@
     "formatHeading": "Heading",
     "formatBulletList": "Bullet list",
     "indentItem": "Indent",
-    "outdentItem": "Outdent"
+    "outdentItem": "Outdent",
+    "itemsPasted_one": "1 item pasted",
+    "itemsPasted_other": "{{count}} items pasted"
   },
   "labels": {
     "title": "Labels",

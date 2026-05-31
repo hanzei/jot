@@ -255,7 +255,9 @@
     "formatHeading": "Titre",
     "formatBulletList": "Liste à puces",
     "indentItem": "Indenter",
-    "outdentItem": "Désindenter"
+    "outdentItem": "Désindenter",
+    "itemsPasted_one": "1 élément collé",
+    "itemsPasted_other": "{{count}} éléments collés"
   },
   "labels": {
     "title": "Étiquettes",

@@ -270,7 +270,9 @@
     "formatHeading": "Título",
     "formatBulletList": "Lista de marcadores",
     "indentItem": "Indentar",
-    "outdentItem": "Remover recuo"
+    "outdentItem": "Remover recuo",
+    "itemsPasted_one": "1 item colado",
+    "itemsPasted_other": "{{count}} itens colados"
   },
   "labels": {
     "title": "Etiquetas",

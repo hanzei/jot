@@ -255,7 +255,9 @@
     "formatHeading": "Überschrift",
     "formatBulletList": "Aufzählung",
     "indentItem": "Einrücken",
-    "outdentItem": "Ausrücken"
+    "outdentItem": "Ausrücken",
+    "itemsPasted_one": "1 Element eingefügt",
+    "itemsPasted_other": "{{count}} Elemente eingefügt"
   },
   "labels": {
     "title": "Labels",
