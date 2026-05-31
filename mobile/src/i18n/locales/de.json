@@ -254,6 +254,7 @@
     "formatItalic": "Kursiv",
     "formatHeading": "Überschrift",
     "formatBulletList": "Aufzählung",
+    "completedSuggestions": "Vorschläge aus erledigten Einträgen",
     "indentItem": "Einrücken",
     "outdentItem": "Ausrücken",
     "itemsPasted_one": "1 Element eingefügt",

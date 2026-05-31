@@ -254,6 +254,7 @@
     "formatItalic": "Italique",
     "formatHeading": "Titre",
     "formatBulletList": "Liste à puces",
+    "completedSuggestions": "Suggestions d'éléments complétés",
     "indentItem": "Indenter",
     "outdentItem": "Désindenter",
     "itemsPasted_one": "1 élément collé",

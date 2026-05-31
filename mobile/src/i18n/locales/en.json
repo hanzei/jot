@@ -269,6 +269,7 @@
     "formatItalic": "Italic",
     "formatHeading": "Heading",
     "formatBulletList": "Bullet list",
+    "completedSuggestions": "Suggestions from completed items",
     "indentItem": "Indent",
     "outdentItem": "Outdent",
     "itemsPasted_one": "1 item pasted",

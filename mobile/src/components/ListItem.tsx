@@ -1,7 +1,9 @@
-import React, { useEffect, useMemo, useRef } from 'react';
+import React, { useEffect, useMemo, useRef, useState } from 'react';
 import {
   View,
+  Text,
   TextInput,
+  ScrollView,
   StyleSheet,
   PanResponder,
   type TextInputProps,
@@ -28,6 +30,7 @@ interface ListItemProps {
   inputRef?: React.RefObject<TextInputType | null>;
   inputAccessoryViewID?: string;
   hasNoteColor?: boolean;
+  completedItemTexts?: string[];
   onDrag?: () => void;
   onToggle?: () => void;
   onChangeText?: (text: string) => void;
@@ -38,6 +41,7 @@ interface ListItemProps {
   onFocus?: TextInputProps['onFocus'];
   onBlur?: TextInputProps['onBlur'];
   onIndent?: (delta: 1 | -1) => void;
+  onAcceptSuggestion?: (text: string) => void;
 }
 
 const INDENT_SWIPE_THRESHOLD_PX = 50;
@@ -60,6 +64,7 @@ function ListItem({
   inputRef,
   inputAccessoryViewID,
   hasNoteColor = false,
+  completedItemTexts,
   onDrag,
   onToggle,
   onChangeText,
@@ -70,9 +75,33 @@ function ListItem({
   onFocus,
   onBlur,
   onIndent,
+  onAcceptSuggestion,
 }: ListItemProps) {
   const { colors } = useTheme();
   const { t } = useTranslation();
+  const [showSuggestions, setShowSuggestions] = useState(false);
+  const blurTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  useEffect(() => {
+    return () => {
+      if (blurTimeoutRef.current) clearTimeout(blurTimeoutRef.current);
+    };
+  }, []);
+
+  const suggestions = useMemo(() => {
+    if (!completedItemTexts || !text.trim()) return [];
+    const q = text.trim().toLowerCase();
+    const results: string[] = [];
+    for (const s of completedItemTexts) {
+      const lower = s.toLowerCase();
+      if (lower.includes(q) && lower !== q) {
+        results.push(s);
+        if (results.length === 5) break;
+      }
+    }
+    return results;
+  }, [text, completedItemTexts]);
+
   const effectiveText = hasNoteColor ? '#1a1a1a' : colors.text;
   const effectiveTextMuted = hasNoteColor ? '#777' : colors.textMuted;
   const effectivePlaceholder = hasNoteColor ? '#999' : colors.placeholder;
@@ -133,63 +162,104 @@ function ListItem({
           color={completed ? colors.primary : effectiveIconMuted}
         />
       </TouchableOpacity>
-      <TextInput
-        ref={inputRef}
-        style={[styles.textInput, { color: completed ? effectiveTextMuted : effectiveText }, completed && styles.completedText]}
-        value={text}
-        onChangeText={onChangeText}
-        editable={editable}
-        placeholder={t('note.itemPlaceholder')}
-        placeholderTextColor={effectivePlaceholder}
-        returnKeyType="next"
-        onSubmitEditing={onSubmitEditing}
-        blurOnSubmit={false}
-        onFocus={onFocus}
-        onBlur={onBlur}
-        multiline
-        submitBehavior="submit"
-        textAlignVertical="top"
-        inputAccessoryViewID={inputAccessoryViewID}
-        onKeyPress={({ nativeEvent }) => {
-          if (nativeEvent.key === 'Backspace' && text === '') {
-            onBackspaceOnEmpty?.();
-          }
-        }}
-        testID="list-item-text"
-      />
-      {showAssignUI && assignedTo ? (
-        <TouchableOpacity
-          onPress={!completed ? onAssignPress : undefined}
-          style={styles.assignBtn}
-          testID="list-item-assignee"
-          accessibilityLabel={t('note.assignedTo', {
-            name: assignedUser?.username ?? t('common.unknown'),
-          })}
-        >
-          <UserAvatar
-            userId={assignedTo}
-            username={assignedUser?.username ?? '?'}
-            hasProfileIcon={assignedUser?.hasProfileIcon}
-            size="small"
+      <View style={styles.inputColumn}>
+        <View style={styles.inputRow}>
+          <TextInput
+            ref={inputRef}
+            style={[styles.textInput, { color: completed ? effectiveTextMuted : effectiveText }, completed && styles.completedText]}
+            value={text}
+            onChangeText={(newText) => {
+              onChangeText?.(newText);
+              if (!completed) setShowSuggestions(newText.trim().length > 0);
+            }}
+            editable={editable}
+            placeholder={t('note.itemPlaceholder')}
+            placeholderTextColor={effectivePlaceholder}
+            returnKeyType="next"
+            onSubmitEditing={onSubmitEditing}
+            blurOnSubmit={false}
+            onFocus={(event) => {
+              onFocus?.(event);
+              if (!completed) setShowSuggestions(true);
+            }}
+            onBlur={(event) => {
+              onBlur?.(event);
+              blurTimeoutRef.current = setTimeout(() => setShowSuggestions(false), 200);
+            }}
+            multiline
+            submitBehavior="submit"
+            textAlignVertical="top"
+            inputAccessoryViewID={inputAccessoryViewID}
+            onKeyPress={({ nativeEvent }) => {
+              if (nativeEvent.key === 'Backspace' && text === '') {
+                onBackspaceOnEmpty?.();
+              }
+            }}
+            testID="list-item-text"
           />
-        </TouchableOpacity>
-      ) : showAssignUI && !completed ? (
-        <TouchableOpacity
-          onPress={onAssignPress}
-          style={styles.assignBtn}
-          testID="list-item-assign"
-          accessibilityLabel={t('note.assignItem')}
-        >
-          <View style={[styles.assignPlaceholder, { borderColor: effectiveBorder }]}>
-            <Ionicons name="person-add-outline" size={12} color={effectiveIconMuted} />
-          </View>
-        </TouchableOpacity>
-      ) : null}
-      {editable && onDelete && (
-        <TouchableOpacity onPress={onDelete} style={styles.deleteBtn} testID="list-item-delete">
-          <Ionicons name="close" size={18} color={effectiveIconMuted} />
-        </TouchableOpacity>
-      )}
+          {showAssignUI && assignedTo ? (
+            <TouchableOpacity
+              onPress={!completed ? onAssignPress : undefined}
+              style={styles.assignBtn}
+              testID="list-item-assignee"
+              accessibilityLabel={t('note.assignedTo', {
+                name: assignedUser?.username ?? t('common.unknown'),
+              })}
+            >
+              <UserAvatar
+                userId={assignedTo}
+                username={assignedUser?.username ?? '?'}
+                hasProfileIcon={assignedUser?.hasProfileIcon}
+                size="small"
+              />
+            </TouchableOpacity>
+          ) : showAssignUI && !completed ? (
+            <TouchableOpacity
+              onPress={onAssignPress}
+              style={styles.assignBtn}
+              testID="list-item-assign"
+              accessibilityLabel={t('note.assignItem')}
+            >
+              <View style={[styles.assignPlaceholder, { borderColor: effectiveBorder }]}>
+                <Ionicons name="person-add-outline" size={12} color={effectiveIconMuted} />
+              </View>
+            </TouchableOpacity>
+          ) : null}
+          {editable && onDelete && (
+            <TouchableOpacity onPress={onDelete} style={styles.deleteBtn} testID="list-item-delete">
+              <Ionicons name="close" size={18} color={effectiveIconMuted} />
+            </TouchableOpacity>
+          )}
+        </View>
+        {showSuggestions && suggestions.length > 0 && !completed && (
+          <ScrollView
+            horizontal
+            showsHorizontalScrollIndicator={false}
+            keyboardShouldPersistTaps="handled"
+            style={styles.suggestionsRow}
+            contentContainerStyle={styles.suggestionsContent}
+            accessibilityLabel={t('note.completedSuggestions')}
+          >
+            {suggestions.map((s) => (
+              <TouchableOpacity
+                key={s}
+                style={[styles.suggestionChip, { backgroundColor: colors.primaryLight, borderColor: colors.primary }]}
+                onPress={() => {
+                  if (blurTimeoutRef.current) clearTimeout(blurTimeoutRef.current);
+                  setShowSuggestions(false);
+                  onAcceptSuggestion?.(s);
+                }}
+                testID={`suggestion-chip-${s}`}
+                accessibilityRole="button"
+              >
+                <Text style={[styles.suggestionChipText, { color: colors.primary }]} numberOfLines={1}>
+                  {s}
+                </Text>
+              </TouchableOpacity>
+            ))}
+          </ScrollView>
+        )}
+      </View>
     </View>
   );
 }
@@ -208,6 +278,14 @@ const styles = StyleSheet.create({
   checkbox: {
     padding: 4,
     marginRight: 8,
+  },
+  inputColumn: {
+    flex: 1,
+    minWidth: 0,
+  },
+  inputRow: {
+    flexDirection: 'row',
+    alignItems: 'flex-start',
   },
   textInput: {
     flex: 1,
@@ -235,6 +313,24 @@ const styles = StyleSheet.create({
     borderStyle: 'dashed',
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  suggestionsRow: {
+    marginTop: 2,
+    marginBottom: 2,
+  },
+  suggestionsContent: {
+    gap: 6,
+    paddingRight: 8,
+  },
+  suggestionChip: {
+    borderRadius: 12,
+    borderWidth: 1,
+    paddingHorizontal: 10,
+    paddingVertical: 3,
+    maxWidth: 180,
+  },
+  suggestionChipText: {
+    fontSize: 13,
   },
 });
 
