@@ -137,6 +137,10 @@ export default function NoteEditorScreen() {
   useEffect(() => {
     const sub = Keyboard.addListener('keyboardDidHide', () => {
       setIsEditingContent(false);
+      if (listItemBlurTimerRef.current) {
+        clearTimeout(listItemBlurTimerRef.current);
+        listItemBlurTimerRef.current = null;
+      }
       setListItemFocused(false);
       focusedListItemIdRef.current = null;
     });
@@ -182,6 +186,7 @@ export default function NoteEditorScreen() {
   const contentInputRef = useRef<TextInputType>(null);
   const scrollViewRef = useRef<ScrollView>(null);
   const itemInputRefsMap = useRef(new Map<string, React.RefObject<TextInputType | null>>());
+  const listItemBlurTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
 
   const getItemRef = useCallback((id: string): React.RefObject<TextInputType | null> => {
     if (!itemInputRefsMap.current.has(id)) {
@@ -861,12 +866,25 @@ export default function NoteEditorScreen() {
 
   const handleFocusListItem = useCallback(
     (itemId: string, event: Parameters<NonNullable<TextInputProps['onFocus']>>[0]) => {
+      if (listItemBlurTimerRef.current) {
+        clearTimeout(listItemBlurTimerRef.current);
+        listItemBlurTimerRef.current = null;
+      }
       focusedListItemIdRef.current = itemId;
       setListItemFocused(true);
       handleListItemFocus(event);
     },
     [handleListItemFocus],
   );
+
+  const handleBlurListItem = useCallback(() => {
+    // Delay so toolbar button onPress fires before state clears (Android blur-before-press ordering)
+    listItemBlurTimerRef.current = setTimeout(() => {
+      listItemBlurTimerRef.current = null;
+      focusedListItemIdRef.current = null;
+      setListItemFocused(false);
+    }, 200);
+  }, []);
 
   const handleListIndent = useCallback(
     (delta: 1 | -1) => {
@@ -920,6 +938,7 @@ export default function NoteEditorScreen() {
               onBackspaceOnEmpty={() => handleBackspaceOnEmpty(originalIndex)}
               onAssignPress={() => openAssigneePicker(item.id)}
               onFocus={(event) => handleFocusListItem(item.id, event)}
+              onBlur={handleBlurListItem}
               onIndent={(delta) => handleIndentItem(originalIndex, delta)}
               inputAccessoryViewID={Platform.OS === 'ios' ? LIST_INDENT_TOOLBAR_ID : undefined}
             />
@@ -927,7 +946,7 @@ export default function NoteEditorScreen() {
         </ScaleDecorator>
       );
     },
-    [getItemRef, handleToggleItem, handleItemTextChange, handleDeleteItem, handleInsertItemAfter, handleBackspaceOnEmpty, isNoteShared, collaborators, openAssigneePicker, handleIndentItem, isDark, colors, handleFocusListItem, hasNoteColor],
+    [getItemRef, handleToggleItem, handleItemTextChange, handleDeleteItem, handleInsertItemAfter, handleBackspaceOnEmpty, isNoteShared, collaborators, openAssigneePicker, handleIndentItem, isDark, colors, handleFocusListItem, handleBlurListItem, hasNoteColor],
   );
 
   const applyToolbarEdit = useCallback((updater: (prev: string) => string) => {
@@ -1190,6 +1209,7 @@ export default function NoteEditorScreen() {
                         onBackspaceOnEmpty={() => handleBackspaceOnEmpty(originalIndex)}
                         onAssignPress={() => openAssigneePicker(item.id)}
                         onFocus={(event) => handleFocusListItem(item.id, event)}
+                        onBlur={handleBlurListItem}
                         onIndent={(delta) => handleIndentItem(originalIndex, delta)}
                         inputAccessoryViewID={Platform.OS === 'ios' ? LIST_INDENT_TOOLBAR_ID : undefined}
                       />

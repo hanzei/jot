@@ -36,6 +36,7 @@ interface ListItemProps {
   onBackspaceOnEmpty?: () => void;
   onAssignPress?: () => void;
   onFocus?: TextInputProps['onFocus'];
+  onBlur?: TextInputProps['onBlur'];
   onIndent?: (delta: 1 | -1) => void;
 }
 
@@ -67,6 +68,7 @@ function ListItem({
   onBackspaceOnEmpty,
   onAssignPress,
   onFocus,
+  onBlur,
   onIndent,
 }: ListItemProps) {
   const { colors } = useTheme();
@@ -143,6 +145,7 @@ function ListItem({
         onSubmitEditing={onSubmitEditing}
         blurOnSubmit={false}
         onFocus={onFocus}
+        onBlur={onBlur}
         multiline
         submitBehavior="submit"
         textAlignVertical="top"
