@@ -268,7 +268,9 @@
     "formatBold": "Vet",
     "formatItalic": "Cursief",
     "formatHeading": "Kop",
-    "formatBulletList": "Opsommingsteken"
+    "formatBulletList": "Opsommingsteken",
+    "itemsPasted_one": "1 item geplakt",
+    "itemsPasted_other": "{{count}} items geplakt"
   },
   "labels": {
     "title": "Labels",

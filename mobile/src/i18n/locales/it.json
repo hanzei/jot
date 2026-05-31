@@ -268,7 +268,9 @@
     "formatBold": "Grassetto",
     "formatItalic": "Corsivo",
     "formatHeading": "Intestazione",
-    "formatBulletList": "Elenco puntato"
+    "formatBulletList": "Elenco puntato",
+    "itemsPasted_one": "1 elemento incollato",
+    "itemsPasted_other": "{{count}} elementi incollati"
   },
   "labels": {
     "title": "Etichette",

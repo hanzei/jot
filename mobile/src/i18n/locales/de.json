@@ -253,7 +253,9 @@
     "formatBold": "Fett",
     "formatItalic": "Kursiv",
     "formatHeading": "Überschrift",
-    "formatBulletList": "Aufzählung"
+    "formatBulletList": "Aufzählung",
+    "itemsPasted_one": "1 Element eingefügt",
+    "itemsPasted_other": "{{count}} Elemente eingefügt"
   },
   "labels": {
     "title": "Labels",

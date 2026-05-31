@@ -449,6 +449,7 @@ export default function NoteEditorScreen() {
         return;
       }
 
+      const prepasteItems = [...itemsRef.current];
       const [firstLine, ...remainingLines] = lines;
       const newIds = remainingLines.map(() => nextTempId());
 
@@ -470,11 +471,19 @@ export default function NoteEditorScreen() {
       });
       markDirtyAndScheduleUpdate();
 
+      showToast(t('note.itemsPasted', { count: remainingLines.length }), 'info', {
+        label: t('dashboard.undo'),
+        onPress: () => {
+          setItems(prepasteItems);
+          markDirtyAndScheduleUpdate();
+        },
+      });
+
       const lastId = newIds[newIds.length - 1];
       const lastItemRef = getItemRef(lastId);
       setTimeout(() => lastItemRef.current?.focus(), 50);
     },
-    [markDirtyAndScheduleUpdate, getItemRef],
+    [markDirtyAndScheduleUpdate, getItemRef, showToast, t],
   );
 
   const handleDeleteItem = useCallback(

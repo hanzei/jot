@@ -253,7 +253,9 @@
     "formatBold": "Gras",
     "formatItalic": "Italique",
     "formatHeading": "Titre",
-    "formatBulletList": "Liste à puces"
+    "formatBulletList": "Liste à puces",
+    "itemsPasted_one": "1 élément collé",
+    "itemsPasted_other": "{{count}} éléments collés"
   },
   "labels": {
     "title": "Étiquettes",
