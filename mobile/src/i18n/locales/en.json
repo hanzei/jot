@@ -268,7 +268,9 @@
     "formatBold": "Bold",
     "formatItalic": "Italic",
     "formatHeading": "Heading",
-    "formatBulletList": "Bullet list"
+    "formatBulletList": "Bullet list",
+    "itemsPasted_one": "1 item pasted",
+    "itemsPasted_other": "{{count}} items pasted"
   },
   "labels": {
     "title": "Labels",

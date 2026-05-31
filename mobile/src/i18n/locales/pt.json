@@ -268,7 +268,9 @@
     "formatBold": "Negrito",
     "formatItalic": "Itálico",
     "formatHeading": "Título",
-    "formatBulletList": "Lista de marcadores"
+    "formatBulletList": "Lista de marcadores",
+    "itemsPasted_one": "1 item colado",
+    "itemsPasted_other": "{{count}} itens colados"
   },
   "labels": {
     "title": "Etiquetas",
