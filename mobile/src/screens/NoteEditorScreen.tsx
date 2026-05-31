@@ -554,6 +554,57 @@ export default function NoteEditorScreen() {
     [markDirtyAndScheduleUpdate],
   );
 
+  const handleAcceptSuggestion = useCallback(
+    (itemId: string, suggestionText: string) => {
+      // Capture the completed item ID from the ref snapshot so we can focus it after setItems
+      const restoredId = itemsRef.current.find(
+        (item) => item.completed && item.text.trim().toLowerCase() === suggestionText.toLowerCase(),
+      )?.id;
+
+      setItems((prev) => {
+        const completedItem = prev.find(
+          (item) => item.completed && item.text.trim().toLowerCase() === suggestionText.toLowerCase(),
+        );
+
+        if (!completedItem) {
+          return prev.map((item) => (item.id === itemId ? { ...item, text: suggestionText } : item));
+        }
+
+        const currentUnchecked = prev.filter((item) => !item.completed);
+        // itemId is always an unchecked item so findIndex should never return -1; Math.max guards against stale ref races
+        const insertAt = Math.max(0, currentUnchecked.findIndex((item) => item.id === itemId));
+
+        const filtered = prev.filter(
+          (item) => item.id !== itemId && item.id !== completedItem.id,
+        );
+
+        const restoredItem: LocalItem = { ...completedItem, completed: false };
+        const remainingUncompleted = filtered.filter((item) => !item.completed);
+        const remainingCompleted = filtered.filter((item) => item.completed);
+
+        const newUncompleted = [
+          ...remainingUncompleted.slice(0, insertAt),
+          restoredItem,
+          ...remainingUncompleted.slice(insertAt),
+        ].map((item, i) => ({ ...item, position: i }));
+
+        return [
+          ...newUncompleted,
+          ...remainingCompleted.map((item, i) => ({ ...item, position: newUncompleted.length + i })),
+        ];
+      });
+
+      markDirtyAndScheduleUpdate();
+
+      if (restoredId) {
+        setTimeout(() => {
+          itemInputRefsMap.current.get(restoredId)?.current?.focus();
+        }, 50);
+      }
+    },
+    [markDirtyAndScheduleUpdate],
+  );
+
   const buildMetadataUpdateData = useCallback((overrides: Partial<UpdateNoteRequest>): UpdateNoteRequest => {
     if (noteTypeRef.current === 'list') {
       return {
@@ -803,6 +854,19 @@ export default function NoteEditorScreen() {
   const uncheckedItems = useMemo(() => items.filter((item) => !item.completed), [items]);
   const checkedItems = useMemo(() => items.filter((item) => item.completed), [items]);
 
+  const completedItemTexts = useMemo(() => {
+    const seen = new Set<string>();
+    const texts: string[] = [];
+    for (const item of checkedItems) {
+      const trimmed = item.text.trim();
+      if (trimmed && !seen.has(trimmed.toLowerCase())) {
+        seen.add(trimmed.toLowerCase());
+        texts.push(trimmed);
+      }
+    }
+    return texts;
+  }, [checkedItems]);
+
   // Use ref to avoid recreating handleListReorder on every items change
   const checkedItemsRef = useRef(checkedItems);
   checkedItemsRef.current = checkedItems;
@@ -866,6 +930,7 @@ export default function NoteEditorScreen() {
               isShared={!!isNoteShared}
               collaborators={collaborators}
               hasNoteColor={hasNoteColor}
+              completedItemTexts={completedItemTexts}
               onDrag={drag}
               onToggle={() => handleToggleItem(originalIndex)}
               onChangeText={(text) => handleItemTextChange(originalIndex, text)}
@@ -875,12 +940,13 @@ export default function NoteEditorScreen() {
               onAssignPress={() => openAssigneePicker(item.id)}
               onFocus={handleListItemFocus}
               onIndent={(delta) => handleIndentItem(originalIndex, delta)}
+              onAcceptSuggestion={(text) => handleAcceptSuggestion(item.id, text)}
             />
           </View>
         </ScaleDecorator>
       );
     },
-    [getItemRef, handleToggleItem, handleItemTextChange, handleDeleteItem, handleInsertItemAfter, handleBackspaceOnEmpty, isNoteShared, collaborators, openAssigneePicker, handleIndentItem, isDark, colors, handleListItemFocus, hasNoteColor],
+    [getItemRef, handleToggleItem, handleItemTextChange, handleDeleteItem, handleInsertItemAfter, handleBackspaceOnEmpty, isNoteShared, collaborators, openAssigneePicker, handleIndentItem, isDark, colors, handleListItemFocus, hasNoteColor, completedItemTexts, handleAcceptSuggestion],
   );
 
   const applyToolbarEdit = useCallback((updater: (prev: string) => string) => {

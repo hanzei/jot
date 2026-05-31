@@ -268,7 +268,8 @@
     "formatBold": "Bold",
     "formatItalic": "Italic",
     "formatHeading": "Heading",
-    "formatBulletList": "Bullet list"
+    "formatBulletList": "Bullet list",
+    "completedSuggestions": "Suggestions from completed items"
   },
   "labels": {
     "title": "Labels",

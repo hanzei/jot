@@ -268,7 +268,8 @@
     "formatBold": "Negrito",
     "formatItalic": "Itálico",
     "formatHeading": "Título",
-    "formatBulletList": "Lista de marcadores"
+    "formatBulletList": "Lista de marcadores",
+    "completedSuggestions": "Sugestões de itens concluídos"
   },
   "labels": {
     "title": "Etiquetas",

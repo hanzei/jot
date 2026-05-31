@@ -253,7 +253,8 @@
     "formatBold": "Gras",
     "formatItalic": "Italique",
     "formatHeading": "Titre",
-    "formatBulletList": "Liste à puces"
+    "formatBulletList": "Liste à puces",
+    "completedSuggestions": "Suggestions d'éléments complétés"
   },
   "labels": {
     "title": "Étiquettes",

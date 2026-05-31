@@ -268,7 +268,8 @@
     "formatBold": "Grassetto",
     "formatItalic": "Corsivo",
     "formatHeading": "Intestazione",
-    "formatBulletList": "Elenco puntato"
+    "formatBulletList": "Elenco puntato",
+    "completedSuggestions": "Suggerimenti da elementi completati"
   },
   "labels": {
     "title": "Etichette",

@@ -253,7 +253,8 @@
     "formatBold": "Fett",
     "formatItalic": "Kursiv",
     "formatHeading": "Überschrift",
-    "formatBulletList": "Aufzählung"
+    "formatBulletList": "Aufzählung",
+    "completedSuggestions": "Vorschläge aus erledigten Einträgen"
   },
   "labels": {
     "title": "Labels",

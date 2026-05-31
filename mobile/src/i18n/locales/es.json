@@ -268,7 +268,8 @@
     "formatBold": "Negrita",
     "formatItalic": "Cursiva",
     "formatHeading": "Encabezado",
-    "formatBulletList": "Lista de viñetas"
+    "formatBulletList": "Lista de viñetas",
+    "completedSuggestions": "Sugerencias de elementos completados"
   },
   "labels": {
     "title": "Etiquetas",

@@ -268,7 +268,8 @@
     "formatBold": "Vet",
     "formatItalic": "Cursief",
     "formatHeading": "Kop",
-    "formatBulletList": "Opsommingsteken"
+    "formatBulletList": "Opsommingsteken",
+    "completedSuggestions": "Suggesties van voltooide items"
   },
   "labels": {
     "title": "Labels",
