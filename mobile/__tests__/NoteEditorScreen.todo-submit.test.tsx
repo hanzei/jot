@@ -332,6 +332,39 @@ describe('NoteEditorScreen list submit behavior', () => {
     }, { timeout: 3000 });
   });
 
+  it('indents and outdents list item via toolbar buttons', async () => {
+    const { getByTestId, getAllByTestId } = render(<NoteEditorScreen />);
+
+    fireEvent.press(getByTestId('toggle-note-type'));
+    fireEvent.press(getByTestId('add-list-item'));
+
+    const itemRow = getAllByTestId('list-item-row')[0];
+    expect(StyleSheet.flatten(itemRow.props.style)?.marginLeft).toBe(0);
+
+    // Focus the list item input to set focusedListItemId
+    fireEvent(getAllByTestId('list-item-text')[0], 'focus', { nativeEvent: { target: 1 } });
+
+    // Tap indent button
+    await act(async () => {
+      fireEvent.press(getByTestId('list-indent-btn'));
+    });
+
+    await waitFor(() => {
+      expect(StyleSheet.flatten(getAllByTestId('list-item-row')[0].props.style)?.marginLeft).toBe(
+        VALIDATION.INDENT_PX_PER_LEVEL,
+      );
+    });
+
+    // Tap outdent button
+    await act(async () => {
+      fireEvent.press(getByTestId('list-outdent-btn'));
+    });
+
+    await waitFor(() => {
+      expect(StyleSheet.flatten(getAllByTestId('list-item-row')[0].props.style)?.marginLeft).toBe(0);
+    });
+  });
+
   it('keeps dirty state for color change when note id is not yet available', async () => {
     const { getByTestId } = render(<NoteEditorScreen />);
 

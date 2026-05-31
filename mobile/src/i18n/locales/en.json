@@ -268,7 +268,9 @@
     "formatBold": "Bold",
     "formatItalic": "Italic",
     "formatHeading": "Heading",
-    "formatBulletList": "Bullet list"
+    "formatBulletList": "Bullet list",
+    "indentItem": "Indent",
+    "outdentItem": "Outdent"
   },
   "labels": {
     "title": "Labels",

@@ -253,7 +253,9 @@
     "formatBold": "Pogrubienie",
     "formatItalic": "Kursywa",
     "formatHeading": "Nagłówek",
-    "formatBulletList": "Lista punktowana"
+    "formatBulletList": "Lista punktowana",
+    "indentItem": "Wcięcie",
+    "outdentItem": "Usuń wcięcie"
   },
   "labels": {
     "title": "Etykiety",

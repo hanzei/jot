@@ -268,7 +268,9 @@
     "formatBold": "Vet",
     "formatItalic": "Cursief",
     "formatHeading": "Kop",
-    "formatBulletList": "Opsommingsteken"
+    "formatBulletList": "Opsommingsteken",
+    "indentItem": "Inspringing toevoegen",
+    "outdentItem": "Inspringing verwijderen"
   },
   "labels": {
     "title": "Labels",

@@ -268,7 +268,9 @@
     "formatBold": "Negrito",
     "formatItalic": "Itálico",
     "formatHeading": "Título",
-    "formatBulletList": "Lista de marcadores"
+    "formatBulletList": "Lista de marcadores",
+    "indentItem": "Indentar",
+    "outdentItem": "Remover recuo"
   },
   "labels": {
     "title": "Etiquetas",

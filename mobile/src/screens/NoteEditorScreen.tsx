@@ -43,6 +43,7 @@ type EditorNavProp = NativeStackNavigationProp<RootStackParamList, 'NoteEditor'>
 const IOS_KEYBOARD_VERTICAL_OFFSET = 88;
 const FOCUSED_INPUT_KEYBOARD_MARGIN = 120;
 const MARKDOWN_TOOLBAR_ID = 'markdown-formatting-toolbar';
+const LIST_INDENT_TOOLBAR_ID = 'list-indent-toolbar';
 
 interface LocalItem {
   id: string;
@@ -102,6 +103,8 @@ export default function NoteEditorScreen() {
   const [assigningItemId, setAssigningItemId] = useState<string | null>(null);
   const [syncToast, setSyncToast] = useState<string | null>(null);
   const [isEditingContent, setIsEditingContent] = useState(initialNoteId === null);
+  const [listItemFocused, setListItemFocused] = useState(false);
+  const focusedListItemIdRef = useRef<string | null>(null);
   const { usersById } = useUsers();
   const { showToast } = useToast();
 
@@ -134,6 +137,8 @@ export default function NoteEditorScreen() {
   useEffect(() => {
     const sub = Keyboard.addListener('keyboardDidHide', () => {
       setIsEditingContent(false);
+      setListItemFocused(false);
+      focusedListItemIdRef.current = null;
     });
     return () => sub.remove();
   }, []);
@@ -845,7 +850,39 @@ export default function NoteEditorScreen() {
     }
   }, []);
 
+  const handleFocusListItem = useCallback(
+    (itemId: string, event: Parameters<NonNullable<TextInputProps['onFocus']>>[0]) => {
+      focusedListItemIdRef.current = itemId;
+      setListItemFocused(true);
+      handleListItemFocus(event);
+    },
+    [handleListItemFocus],
+  );
+
+  const handleListIndent = useCallback(
+    (delta: 1 | -1) => {
+      const id = focusedListItemIdRef.current;
+      if (!id) return;
+      const index = itemIndexMapRef.current.get(id);
+      if (index === undefined) return;
+      handleIndentItem(index, delta);
+    },
+    [handleIndentItem],
+  );
+
   const hasNoteColor = !!color && !isWhiteHexColor(color);
+
+  const listIndentToolbarContent = noteType === 'list' ? (
+    <View style={[styles.formattingToolbar, { backgroundColor: colors.surfaceVariant, borderTopColor: colors.border }]}>
+      <TouchableOpacity onPress={() => handleListIndent(-1)} style={styles.fmtBtn} accessibilityLabel={t('note.outdentItem')} testID="list-outdent-btn">
+        <Ionicons name="arrow-back-outline" size={18} color={colors.text} />
+      </TouchableOpacity>
+      <View style={[styles.fmtSep, { backgroundColor: colors.border }]} />
+      <TouchableOpacity onPress={() => handleListIndent(1)} style={styles.fmtBtn} accessibilityLabel={t('note.indentItem')} testID="list-indent-btn">
+        <Ionicons name="arrow-forward-outline" size={18} color={colors.text} />
+      </TouchableOpacity>
+    </View>
+  ) : null;
 
   const renderListItem = useCallback(
     ({ item, drag, isActive }: { item: LocalItem; drag: () => void; isActive: boolean }) => {
@@ -873,14 +910,15 @@ export default function NoteEditorScreen() {
               onSubmitEditing={() => handleInsertItemAfter(originalIndex)}
               onBackspaceOnEmpty={() => handleBackspaceOnEmpty(originalIndex)}
               onAssignPress={() => openAssigneePicker(item.id)}
-              onFocus={handleListItemFocus}
+              onFocus={(event) => handleFocusListItem(item.id, event)}
               onIndent={(delta) => handleIndentItem(originalIndex, delta)}
+              inputAccessoryViewID={Platform.OS === 'ios' ? LIST_INDENT_TOOLBAR_ID : undefined}
             />
           </View>
         </ScaleDecorator>
       );
     },
-    [getItemRef, handleToggleItem, handleItemTextChange, handleDeleteItem, handleInsertItemAfter, handleBackspaceOnEmpty, isNoteShared, collaborators, openAssigneePicker, handleIndentItem, isDark, colors, handleListItemFocus, hasNoteColor],
+    [getItemRef, handleToggleItem, handleItemTextChange, handleDeleteItem, handleInsertItemAfter, handleBackspaceOnEmpty, isNoteShared, collaborators, openAssigneePicker, handleIndentItem, isDark, colors, handleFocusListItem, hasNoteColor],
   );
 
   const applyToolbarEdit = useCallback((updater: (prev: string) => string) => {
@@ -1142,8 +1180,9 @@ export default function NoteEditorScreen() {
                         onSubmitEditing={() => handleInsertItemAfter(originalIndex)}
                         onBackspaceOnEmpty={() => handleBackspaceOnEmpty(originalIndex)}
                         onAssignPress={() => openAssigneePicker(item.id)}
-                        onFocus={handleListItemFocus}
+                        onFocus={(event) => handleFocusListItem(item.id, event)}
                         onIndent={(delta) => handleIndentItem(originalIndex, delta)}
+                        inputAccessoryViewID={Platform.OS === 'ios' ? LIST_INDENT_TOOLBAR_ID : undefined}
                       />
                     );
                   })}
@@ -1152,6 +1191,16 @@ export default function NoteEditorScreen() {
           </View>
         )}
       </ScrollView>
+
+      {/* Android: show toolbar when a list item is focused (state-gated since no native focus binding) */}
+      {Platform.OS === 'android' && listItemFocused && listIndentToolbarContent}
+
+      {/* iOS: InputAccessoryView is implicitly focus-gated via inputAccessoryViewID on the TextInput */}
+      {Platform.OS === 'ios' && listIndentToolbarContent !== null && (
+        <InputAccessoryView nativeID={LIST_INDENT_TOOLBAR_ID}>
+          {listIndentToolbarContent}
+        </InputAccessoryView>
+      )}
 
       <View style={[styles.toolbar, { backgroundColor: noteBackground, borderTopColor: hasNoteColor ? 'transparent' : colors.border, paddingBottom: insets.bottom || 8 }]}>
         {/* Color picker button */}

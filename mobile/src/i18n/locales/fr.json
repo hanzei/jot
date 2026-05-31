@@ -253,7 +253,9 @@
     "formatBold": "Gras",
     "formatItalic": "Italique",
     "formatHeading": "Titre",
-    "formatBulletList": "Liste à puces"
+    "formatBulletList": "Liste à puces",
+    "indentItem": "Indenter",
+    "outdentItem": "Désindenter"
   },
   "labels": {
     "title": "Étiquettes",

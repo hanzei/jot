@@ -268,7 +268,9 @@
     "formatBold": "Negrita",
     "formatItalic": "Cursiva",
     "formatHeading": "Encabezado",
-    "formatBulletList": "Lista de viñetas"
+    "formatBulletList": "Lista de viñetas",
+    "indentItem": "Sangría",
+    "outdentItem": "Quitar sangría"
   },
   "labels": {
     "title": "Etiquetas",

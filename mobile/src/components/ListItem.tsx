@@ -26,6 +26,7 @@ interface ListItemProps {
   isShared?: boolean;
   collaborators?: Collaborator[];
   inputRef?: React.RefObject<TextInputType | null>;
+  inputAccessoryViewID?: string;
   hasNoteColor?: boolean;
   onDrag?: () => void;
   onToggle?: () => void;
@@ -56,6 +57,7 @@ function ListItem({
   isShared,
   collaborators,
   inputRef,
+  inputAccessoryViewID,
   hasNoteColor = false,
   onDrag,
   onToggle,
@@ -144,6 +146,7 @@ function ListItem({
         multiline
         submitBehavior="submit"
         textAlignVertical="top"
+        inputAccessoryViewID={inputAccessoryViewID}
         onKeyPress={({ nativeEvent }) => {
           if (nativeEvent.key === 'Backspace' && text === '') {
             onBackspaceOnEmpty?.();
