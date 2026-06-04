@@ -151,6 +151,58 @@ func (s *NoteStore) CreateItemWithCompleted(ctx context.Context, noteID string, 
 	return s.inner.CreateItemWithCompleted(ctx, noteID, text, position, completed, indentLevel, assignedTo)
 }
 
+func (s *NoteStore) CountItems(ctx context.Context, noteID string) (_ int, err error) {
+	ctx, end := startSpan(ctx, s.tracer, "NoteStore.CountItems", &err,
+		attribute.String("note.id", noteID),
+	)
+	defer end()
+	return s.inner.CountItems(ctx, noteID)
+}
+
+func (s *NoteStore) GetItemForNote(ctx context.Context, noteID, itemID string) (_ *NoteItem, err error) {
+	ctx, end := startSpan(ctx, s.tracer, "NoteStore.GetItemForNote", &err,
+		attribute.String("note.id", noteID),
+		attribute.String("item.id", itemID),
+	)
+	defer end()
+	return s.inner.GetItemForNote(ctx, noteID, itemID)
+}
+
+func (s *NoteStore) CreateItemWithID(ctx context.Context, noteID, itemID, text string, position int, completed bool, indentLevel int, assignedTo string) (_ *NoteItem, err error) {
+	ctx, end := startSpan(ctx, s.tracer, "NoteStore.CreateItemWithID", &err,
+		attribute.String("note.id", noteID),
+		attribute.String("item.id", itemID),
+	)
+	defer end()
+	return s.inner.CreateItemWithID(ctx, noteID, itemID, text, position, completed, indentLevel, assignedTo)
+}
+
+func (s *NoteStore) PatchItem(ctx context.Context, noteID, itemID string, patch NoteItemPatch) (_ *NoteItem, err error) {
+	ctx, end := startSpan(ctx, s.tracer, "NoteStore.PatchItem", &err,
+		attribute.String("note.id", noteID),
+		attribute.String("item.id", itemID),
+	)
+	defer end()
+	return s.inner.PatchItem(ctx, noteID, itemID, patch)
+}
+
+func (s *NoteStore) DeleteItemFromNote(ctx context.Context, noteID, itemID string) (err error) {
+	ctx, end := startSpan(ctx, s.tracer, "NoteStore.DeleteItemFromNote", &err,
+		attribute.String("note.id", noteID),
+		attribute.String("item.id", itemID),
+	)
+	defer end()
+	return s.inner.DeleteItemFromNote(ctx, noteID, itemID)
+}
+
+func (s *NoteStore) ReorderItems(ctx context.Context, noteID string, itemIDs []string) (err error) {
+	ctx, end := startSpan(ctx, s.tracer, "NoteStore.ReorderItems", &err,
+		attribute.String("note.id", noteID),
+	)
+	defer end()
+	return s.inner.ReorderItems(ctx, noteID, itemIDs)
+}
+
 func (s *NoteStore) HasAccess(ctx context.Context, noteID string, userID string) (_ bool, err error) {
 	ctx, end := startSpan(ctx, s.tracer, "NoteStore.HasAccess", &err,
 		attribute.String("note.id", noteID),

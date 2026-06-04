@@ -173,6 +173,27 @@ type UpdateNoteItem struct {
 	AssignedTo  string `json:"assigned_to"`
 }
 
+// CreateNoteItemRequest is the body for POST /api/v1/notes/{id}/items. ID is
+// optional; when empty the server generates one.
+type CreateNoteItemRequest struct {
+	ID          string `json:"id,omitempty"`
+	Text        string `json:"text"`
+	Position    int    `json:"position"`
+	Completed   bool   `json:"completed"`
+	IndentLevel int    `json:"indent_level"`
+	AssignedTo  string `json:"assigned_to,omitempty"`
+}
+
+// PatchNoteItemRequest is the body for PATCH /api/v1/notes/{id}/items/{item_id}.
+// Nil fields are left unchanged so concurrent edits to different columns merge.
+type PatchNoteItemRequest struct {
+	Text        *string `json:"text,omitempty"`
+	Completed   *bool   `json:"completed,omitempty"`
+	Position    *int    `json:"position,omitempty"`
+	IndentLevel *int    `json:"indent_level,omitempty"`
+	AssignedTo  *string `json:"assigned_to,omitempty"`
+}
+
 // UpdateUserRequest is the body for PATCH /api/v1/users/me.
 type UpdateUserRequest struct {
 	Username  *string `json:"username,omitempty"`

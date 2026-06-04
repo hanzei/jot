@@ -225,6 +225,11 @@ func (s *Server) setupRoutes() error {
 			r.Delete("/notes/{id}", s.wrapHandler(s.notesHandler.DeleteNote))
 			r.Post("/notes/{id}/duplicate", s.wrapHandler(s.notesHandler.DuplicateNote))
 
+			r.Post("/notes/{id}/items", s.wrapHandler(s.notesHandler.CreateNoteItem))
+			r.Post("/notes/{id}/items/reorder", s.wrapHandler(s.notesHandler.ReorderNoteItems))
+			r.Patch("/notes/{id}/items/{item_id}", s.wrapHandler(s.notesHandler.UpdateNoteItem))
+			r.Delete("/notes/{id}/items/{item_id}", s.wrapHandler(s.notesHandler.DeleteNoteItem))
+
 			r.Post("/notes/{id}/restore", s.wrapHandler(s.notesHandler.RestoreNote))
 
 			r.Post("/notes/{id}/share", s.wrapHandler(s.notesHandler.ShareNote))

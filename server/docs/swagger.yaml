@@ -30,6 +30,21 @@ definitions:
       text:
         type: string
     type: object
+  handlers.CreateNoteItemRequest:
+    properties:
+      assigned_to:
+        type: string
+      completed:
+        type: boolean
+      id:
+        type: string
+      indent_level:
+        type: integer
+      position:
+        type: integer
+      text:
+        type: string
+    type: object
   handlers.CreateNoteRequest:
     properties:
       color:
@@ -85,6 +100,19 @@ definitions:
       username:
         type: string
     type: object
+  handlers.PatchNoteItemRequest:
+    properties:
+      assigned_to:
+        type: string
+      completed:
+        type: boolean
+      indent_level:
+        type: integer
+      position:
+        type: integer
+      text:
+        type: string
+    type: object
   handlers.RegisterRequest:
     properties:
       password:
@@ -96,6 +124,13 @@ definitions:
     properties:
       name:
         type: string
+    type: object
+  handlers.ReorderNoteItemsRequest:
+    properties:
+      item_ids:
+        items:
+          type: string
+        type: array
     type: object
   handlers.ReorderNotesRequest:
     properties:
@@ -1117,6 +1152,179 @@ paths:
       security:
       - CookieAuth: []
       summary: Duplicate an existing note
+      tags:
+      - notes
+  /notes/{id}/items:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Note ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Item to add
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.CreateNoteItemRequest'
+      produces:
+      - application/json
+      responses:
+        "201":
+          description: Created
+          schema:
+            $ref: '#/definitions/models.NoteItem'
+        "400":
+          description: bad request
+          schema:
+            type: string
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "404":
+          description: not found
+          schema:
+            type: string
+        "409":
+          description: item already exists
+          schema:
+            type: string
+        "500":
+          description: internal server error
+          schema:
+            type: string
+      security:
+      - CookieAuth: []
+      summary: Add a single item to a list note
+      tags:
+      - notes
+  /notes/{id}/items/{item_id}:
+    delete:
+      parameters:
+      - description: Note ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Item ID
+        in: path
+        name: item_id
+        required: true
+        type: string
+      responses:
+        "204":
+          description: no content
+        "400":
+          description: bad request
+          schema:
+            type: string
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "404":
+          description: not found
+          schema:
+            type: string
+        "500":
+          description: internal server error
+          schema:
+            type: string
+      security:
+      - CookieAuth: []
+      summary: Delete a single list item
+      tags:
+      - notes
+    patch:
+      consumes:
+      - application/json
+      parameters:
+      - description: Note ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Item ID
+        in: path
+        name: item_id
+        required: true
+        type: string
+      - description: Fields to update
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.PatchNoteItemRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/models.NoteItem'
+        "400":
+          description: bad request
+          schema:
+            type: string
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "404":
+          description: not found
+          schema:
+            type: string
+        "500":
+          description: internal server error
+          schema:
+            type: string
+      security:
+      - CookieAuth: []
+      summary: Update a single list item
+      tags:
+      - notes
+  /notes/{id}/items/reorder:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Note ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Ordered item IDs
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.ReorderNoteItemsRequest'
+      responses:
+        "204":
+          description: no content
+        "400":
+          description: bad request
+          schema:
+            type: string
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "404":
+          description: not found
+          schema:
+            type: string
+        "500":
+          description: internal server error
+          schema:
+            type: string
+      security:
+      - CookieAuth: []
+      summary: Reorder a list note's items
       tags:
       - notes
   /notes/{id}/labels:

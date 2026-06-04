@@ -24,6 +24,12 @@ func generateID() (string, error) {
 	return string(result), nil
 }
 
+// GenerateID returns a new 22-character alphanumeric ID. Exported for callers
+// outside the models package (e.g. handlers generating IDs for new entities).
+func GenerateID() (string, error) {
+	return generateID()
+}
+
 func IsValidID(id string) bool {
 	const chars = "0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ"
 	if len(id) != 22 {

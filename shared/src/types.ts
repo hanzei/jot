@@ -126,14 +126,41 @@ export interface GetNotesParams {
 }
 
 export interface CreateNoteItemRequest {
+  /**
+   * Client-supplied item ID. Optional for bulk creation at note-creation time
+   * (the server generates one when omitted); supplied by the granular
+   * `POST /notes/{id}/items` endpoint so the item has a stable identity for
+   * subsequent per-item updates and offline replay.
+   */
+  id?: string;
   text: string;
   position: number;
   completed?: boolean;
   indent_level?: number;
+  assigned_to?: string;
 }
 
 export interface UpdateNoteItemRequest extends CreateNoteItemRequest {
   assigned_to?: string;
+}
+
+/**
+ * Partial update for a single list item via `PATCH /notes/{id}/items/{itemId}`.
+ * Only the provided fields are changed, so concurrent edits to different
+ * columns of the same item (e.g. one client toggling `completed` while another
+ * edits `text`) merge instead of overwriting each other.
+ */
+export interface PatchNoteItemRequest {
+  text?: string;
+  completed?: boolean;
+  position?: number;
+  indent_level?: number;
+  assigned_to?: string;
+}
+
+/** Reorder a list's items via `POST /notes/{id}/items/reorder`. */
+export interface ReorderNoteItemsRequest {
+  item_ids: string[];
 }
 
 export interface CreateTextNoteRequest {
