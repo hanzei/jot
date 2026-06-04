@@ -953,9 +953,12 @@ func scanNoteItem(rows *sql.Rows) (NoteItem, error) {
 }
 
 func (s *noteStore) getItemsByNoteID(ctx context.Context, noteID string) ([]NoteItem, error) {
+	// Tiebreak on created_at, id so display order is deterministic even if two
+	// items share a position (which can happen transiently after a partial
+	// reorder from a client that did not include every item).
 	query := s.d.RewritePlaceholders(`SELECT id, note_id, text, completed, position, indent_level,
 			  assigned_to, created_at, updated_at
-			  FROM note_items WHERE note_id = ? ORDER BY position`)
+			  FROM note_items WHERE note_id = ? ORDER BY position, created_at, id`)
 
 	rows, err := s.db.QueryContext(ctx, query, noteID)
 	if err != nil {
@@ -1071,18 +1074,6 @@ func touchNoteTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID str
 	return nil
 }
 
-// CountItems returns the number of items belonging to a note.
-func (s *noteStore) CountItems(ctx context.Context, noteID string) (int, error) {
-	var count int
-	if err := s.db.QueryRowContext(ctx,
-		s.d.RewritePlaceholders(`SELECT COUNT(*) FROM note_items WHERE note_id = ?`),
-		noteID,
-	).Scan(&count); err != nil {
-		return 0, fmt.Errorf("failed to count note items: %w", err)
-	}
-	return count, nil
-}
-
 // GetItemForNote returns a single item scoped to its note, or ErrNoteItemNotFound.
 func (s *noteStore) GetItemForNote(ctx context.Context, noteID, itemID string) (*NoteItem, error) {
 	query := s.d.RewritePlaceholders(`SELECT id, note_id, text, completed, position, indent_level,
@@ -1107,8 +1098,10 @@ func (s *noteStore) GetItemForNote(ctx context.Context, noteID, itemID string) (
 
 // CreateItemWithID inserts a list item using a caller-supplied ID. Returns
 // ErrNoteItemExists if an item with that ID already exists, and bumps the
-// parent note's updated_at.
-func (s *noteStore) CreateItemWithID(ctx context.Context, noteID, itemID, text string, position int, completed bool, indentLevel int, assignedTo string) (*NoteItem, error) {
+// parent note's updated_at. When maxItems > 0 the note's item count is checked
+// inside the transaction and ErrNoteItemCapExceeded is returned if adding the
+// item would exceed the cap (atomic, so concurrent creates cannot race past it).
+func (s *noteStore) CreateItemWithID(ctx context.Context, noteID, itemID, text string, position int, completed bool, indentLevel int, assignedTo string, maxItems int) (*NoteItem, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
@@ -1124,6 +1117,19 @@ func (s *noteStore) CreateItemWithID(ctx context.Context, noteID, itemID, text s
 	}
 	if exists > 0 {
 		return nil, ErrNoteItemExists
+	}
+
+	if maxItems > 0 {
+		var count int
+		if err = tx.QueryRowContext(ctx,
+			s.d.RewritePlaceholders(`SELECT COUNT(*) FROM note_items WHERE note_id = ?`),
+			noteID,
+		).Scan(&count); err != nil {
+			return nil, fmt.Errorf("failed to count note items: %w", err)
+		}
+		if count >= maxItems {
+			return nil, ErrNoteItemCapExceeded
+		}
 	}
 
 	var item NoteItem

@@ -540,7 +540,10 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   }, []);
 
   // Persists item changes as granular create/patch/delete/reorder operations
-  // (diffed against the baseline) and advances the baseline to match.
+  // (diffed against the baseline). The baseline is advanced incrementally after
+  // each successful op so that if a later op fails (e.g. network error), the
+  // already-applied ops are not re-sent on the next retry — which would
+  // otherwise re-create items and get stuck on 409 Conflict.
   const persistItemDiff = useCallback(async (noteId: string, listItems: ListItem[]) => {
     const base = savedItemsRef.current;
     const curIds = new Set(listItems.map(it => it.id));
@@ -548,14 +551,21 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     for (const it of listItems) {
       const snap = base.get(it.id);
       if (!snap) {
-        await notes.createItem(noteId, {
-          id: it.id,
-          text: it.text,
-          position: it.position,
-          completed: it.completed,
-          indent_level: it.indentLevel,
-          ...(it.assignedTo ? { assigned_to: it.assignedTo } : {}),
-        });
+        try {
+          await notes.createItem(noteId, {
+            id: it.id,
+            text: it.text,
+            position: it.position,
+            completed: it.completed,
+            indent_level: it.indentLevel,
+            ...(it.assignedTo ? { assigned_to: it.assignedTo } : {}),
+          });
+        } catch (err) {
+          // 409 means a prior attempt already created this item; treat as done.
+          const status = (err as { response?: { status?: number } })?.response?.status;
+          if (status !== 409) throw err;
+        }
+        base.set(it.id, itemSnapshot(it));
         continue;
       }
       const data: PatchNoteItemRequest = {};
@@ -565,12 +575,14 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       if (it.assignedTo !== snap.assignedTo) data.assigned_to = it.assignedTo;
       if (Object.keys(data).length > 0) {
         await notes.updateItem(noteId, it.id, data);
+        base.set(it.id, itemSnapshot(it));
       }
     }
 
-    for (const id of base.keys()) {
+    for (const id of [...base.keys()]) {
       if (!curIds.has(id)) {
         await notes.deleteItem(noteId, id);
+        base.delete(id);
       }
     }
 
@@ -580,12 +592,6 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     if (orderChanged && curOrder.length > 0) {
       await notes.reorderItems(noteId, curOrder);
     }
-
-    const map = new Map<string, ItemSnapshot>();
-    for (const it of listItems) {
-      map.set(it.id, itemSnapshot(it));
-    }
-    savedItemsRef.current = map;
     savedOrderRef.current = curOrder;
   }, []);
 

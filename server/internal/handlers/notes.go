@@ -273,7 +273,7 @@ func (h *NotesHandler) createListItems(ctx context.Context, noteID string, items
 			if !models.IsValidID(item.ID) {
 				return http.StatusBadRequest, errors.New("invalid item ID format")
 			}
-			if _, err := h.noteStore.CreateItemWithID(ctx, noteID, item.ID, item.Text, item.Position, item.Completed, item.IndentLevel, ""); err != nil {
+			if _, err := h.noteStore.CreateItemWithID(ctx, noteID, item.ID, item.Text, item.Position, item.Completed, item.IndentLevel, "", 0); err != nil {
 				if errors.Is(err, models.ErrNoteItemExists) {
 					return http.StatusConflict, fmt.Errorf("create list item: %w", err)
 				}

@@ -157,18 +157,14 @@ func (h *NotesHandler) CreateNoteItem(w http.ResponseWriter, r *http.Request) (i
 		return status, nil, err
 	}
 
-	count, err := h.noteStore.CountItems(r.Context(), noteID)
-	if err != nil {
-		return http.StatusInternalServerError, nil, fmt.Errorf("count items: %w", err)
-	}
-	if count >= noteItemsMaxCount {
-		return http.StatusBadRequest, nil, fmt.Errorf("note cannot have more than %d items", noteItemsMaxCount)
-	}
-
-	item, err := h.noteStore.CreateItemWithID(r.Context(), noteID, itemID, req.Text, req.Position, req.Completed, req.IndentLevel, req.AssignedTo)
+	// The item-count cap is enforced atomically inside the create transaction.
+	item, err := h.noteStore.CreateItemWithID(r.Context(), noteID, itemID, req.Text, req.Position, req.Completed, req.IndentLevel, req.AssignedTo, noteItemsMaxCount)
 	if err != nil {
 		if errors.Is(err, models.ErrNoteItemExists) {
 			return http.StatusConflict, nil, err
+		}
+		if errors.Is(err, models.ErrNoteItemCapExceeded) {
+			return http.StatusBadRequest, nil, fmt.Errorf("note cannot have more than %d items", noteItemsMaxCount)
 		}
 		return http.StatusInternalServerError, nil, fmt.Errorf("create item: %w", err)
 	}

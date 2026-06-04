@@ -290,20 +290,30 @@ export default function NoteEditorScreen() {
     const base = savedItemsRef.current;
     const curIds = new Set(currentItems.map((it) => it.id));
 
+    // Advance the baseline incrementally after each successful op so a later
+    // failure does not re-send already-applied ops on the next retry (which
+    // would re-create items and get stuck on 409 Conflict).
     for (const it of currentItems) {
       const snap = base.get(it.id);
       if (!snap) {
-        await createItemRef.current({
-          noteId: currentNoteId,
-          item: {
-            id: it.id,
-            text: it.text,
-            position: it.position,
-            completed: it.completed,
-            indent_level: it.indent_level,
-            assigned_to: it.assigned_to || undefined,
-          },
-        });
+        try {
+          await createItemRef.current({
+            noteId: currentNoteId,
+            item: {
+              id: it.id,
+              text: it.text,
+              position: it.position,
+              completed: it.completed,
+              indent_level: it.indent_level,
+              assigned_to: it.assigned_to || undefined,
+            },
+          });
+        } catch (err) {
+          // 409 means a prior attempt already created this item; treat as done.
+          const status = (err as { response?: { status?: number } })?.response?.status;
+          if (status !== 409) throw err;
+        }
+        base.set(it.id, itemSnapshot(it));
         continue;
       }
       const data: PatchNoteItemRequest = {};
@@ -313,12 +323,14 @@ export default function NoteEditorScreen() {
       if (it.assigned_to !== snap.assigned_to) data.assigned_to = it.assigned_to;
       if (Object.keys(data).length > 0) {
         await updateItemRef.current({ noteId: currentNoteId, itemId: it.id, data });
+        base.set(it.id, itemSnapshot(it));
       }
     }
 
-    for (const id of base.keys()) {
+    for (const id of [...base.keys()]) {
       if (!curIds.has(id)) {
         await deleteItemRef.current({ noteId: currentNoteId, itemId: id });
+        base.delete(id);
       }
     }
 
@@ -328,6 +340,7 @@ export default function NoteEditorScreen() {
     if (orderChanged && curOrder.length > 0) {
       await reorderItemsRef.current({ noteId: currentNoteId, itemIds: curOrder });
     }
+    savedOrderRef.current = curOrder;
   }, []);
 
   const flushSave = useCallback(async (unmounting = false): Promise<boolean> => {
@@ -740,25 +753,13 @@ export default function NoteEditorScreen() {
     [markDirtyAndScheduleUpdate],
   );
 
+  // Metadata actions (pin/archive/color) flush pending item edits first, then
+  // PATCH only the field that changed. Sending just the changed scalar avoids
+  // re-sending (and clobbering) items or other fields edited concurrently
+  // elsewhere. The saved baseline is advanced so the next diff stays accurate.
   const buildMetadataUpdateData = useCallback((overrides: Partial<UpdateNoteRequest>): UpdateNoteRequest => {
-    if (noteTypeRef.current === 'list') {
-      return {
-        title: titleRef.current,
-        pinned: pinnedRef.current,
-        archived: archivedRef.current,
-        color: colorRef.current,
-        checked_items_collapsed: checkedItemsCollapsedRef.current,
-        items: serializeItems(itemsRef.current),
-        ...overrides,
-      };
-    }
-    return {
-      content: contentRef.current,
-      pinned: pinnedRef.current,
-      archived: archivedRef.current,
-      color: colorRef.current,
-      ...overrides,
-    };
+    Object.assign(savedScalarsRef.current, overrides);
+    return { ...overrides } as UpdateNoteRequest;
   }, []);
 
   const handleTitleSubmit = useCallback(() => {

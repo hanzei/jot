@@ -21,6 +21,7 @@ var ErrNoteShareNotFound = errors.New("note share not found")
 var ErrNoteAlreadyShared = errors.New("note already shared with user")
 var ErrNoteItemNotFound = errors.New("note item not found")
 var ErrNoteItemExists = errors.New("note item already exists")
+var ErrNoteItemCapExceeded = errors.New("note item limit reached")
 
 // NoteItemPatch carries the fields that may be changed by a partial single-item
 // update. Nil fields are left untouched (resolved against the item's current
