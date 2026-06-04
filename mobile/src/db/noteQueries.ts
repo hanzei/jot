@@ -414,6 +414,78 @@ export async function removeLocalNotesNotIn(
   await db.runAsync(sql, args);
 }
 
+// --- Granular local list-item mutations -----------------------------------
+// These mirror the server's per-item endpoints so the local SQLite cache stays
+// consistent when items are edited one at a time (online or offline).
+
+async function touchLocalNote(db: SQLiteDatabase, noteId: string): Promise<void> {
+  await db.runAsync('UPDATE notes SET updated_at = ? WHERE id = ?', [new Date().toISOString(), noteId]);
+}
+
+export interface LocalItemInput {
+  id: string;
+  text: string;
+  completed: boolean;
+  position: number;
+  indent_level: number;
+  assigned_to: string;
+}
+
+export async function createLocalItem(db: SQLiteDatabase, noteId: string, item: LocalItemInput): Promise<void> {
+  const now = new Date().toISOString();
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(
+      `INSERT OR REPLACE INTO note_items (id, note_id, text, completed, position, indent_level, assigned_to, created_at, updated_at)
+       VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+      [item.id, noteId, item.text, item.completed ? 1 : 0, item.position, item.indent_level, item.assigned_to ?? '', now, now],
+    );
+    await touchLocalNote(db, noteId);
+  });
+}
+
+export interface LocalItemPatch {
+  text?: string;
+  completed?: boolean;
+  position?: number;
+  indent_level?: number;
+  assigned_to?: string;
+}
+
+export async function patchLocalItem(db: SQLiteDatabase, noteId: string, itemId: string, patch: LocalItemPatch): Promise<void> {
+  const fields: string[] = [];
+  const values: (string | number | null)[] = [];
+  if (patch.text !== undefined) { fields.push('text = ?'); values.push(patch.text); }
+  if (patch.completed !== undefined) { fields.push('completed = ?'); values.push(patch.completed ? 1 : 0); }
+  if (patch.position !== undefined) { fields.push('position = ?'); values.push(patch.position); }
+  if (patch.indent_level !== undefined) { fields.push('indent_level = ?'); values.push(patch.indent_level); }
+  if (patch.assigned_to !== undefined) { fields.push('assigned_to = ?'); values.push(patch.assigned_to); }
+  if (fields.length === 0) return;
+  fields.push('updated_at = ?');
+  values.push(new Date().toISOString());
+  values.push(itemId, noteId);
+  await db.withTransactionAsync(async () => {
+    await db.runAsync(`UPDATE note_items SET ${fields.join(', ')} WHERE id = ? AND note_id = ?`, values);
+    await touchLocalNote(db, noteId);
+  });
+}
+
+export async function deleteLocalItem(db: SQLiteDatabase, noteId: string, itemId: string): Promise<void> {
+  await db.withTransactionAsync(async () => {
+    await db.runAsync('DELETE FROM note_items WHERE id = ? AND note_id = ?', [itemId, noteId]);
+    await touchLocalNote(db, noteId);
+  });
+}
+
+export async function reorderLocalItems(db: SQLiteDatabase, noteId: string, itemIds: string[]): Promise<void> {
+  const now = new Date().toISOString();
+  await db.withTransactionAsync(async () => {
+    for (let i = 0; i < itemIds.length; i++) {
+      await db.runAsync('UPDATE note_items SET position = ?, updated_at = ? WHERE id = ? AND note_id = ?', [i, now, itemIds[i], noteId]);
+    }
+    await touchLocalNote(db, noteId);
+  });
+}
+
 /** Generate a unique local ID for offline-created notes (prefixed so they are identifiable). */
 export function generateLocalId(): string {
   const timestamp = Date.now().toString(36);

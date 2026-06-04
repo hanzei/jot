@@ -2,9 +2,12 @@ import api from './client';
 import { Platform } from 'react-native';
 import type {
   Note,
+  NoteItem,
   GetNotesParams,
   CreateNoteRequest,
   UpdateNoteRequest,
+  CreateNoteItemRequest,
+  PatchNoteItemRequest,
   EmptyTrashResponse,
   ImportResponse,
 } from '@jot/shared';
@@ -36,6 +39,24 @@ export async function updateNote(id: string, data: UpdateNoteRequest): Promise<N
 
 export async function deleteNote(id: string): Promise<void> {
   await api.delete(`/notes/${id}`);
+}
+
+export async function createNoteItem(noteId: string, data: CreateNoteItemRequest): Promise<NoteItem> {
+  const res = await api.post(`/notes/${noteId}/items`, data);
+  return res.data;
+}
+
+export async function updateNoteItem(noteId: string, itemId: string, data: PatchNoteItemRequest): Promise<NoteItem> {
+  const res = await api.patch(`/notes/${noteId}/items/${itemId}`, data);
+  return res.data;
+}
+
+export async function deleteNoteItem(noteId: string, itemId: string): Promise<void> {
+  await api.delete(`/notes/${noteId}/items/${itemId}`);
+}
+
+export async function reorderNoteItems(noteId: string, itemIds: string[]): Promise<void> {
+  await api.post(`/notes/${noteId}/items/reorder`, { item_ids: itemIds });
 }
 
 export async function restoreNote(id: string): Promise<void> {

@@ -151,6 +151,10 @@ type CreateNoteRequest struct {
 }
 
 type CreateNoteItem struct {
+	// ID is an optional client-supplied item ID. When provided it is honored so
+	// the item keeps a stable identity for later per-item updates and offline
+	// replay; when empty the server generates one.
+	ID          string `json:"id"`
 	Text        string `json:"text"`
 	Position    int    `json:"position"`
 	IndentLevel int    `json:"indent_level"`
@@ -262,6 +266,20 @@ func (h *NotesHandler) createListItems(ctx context.Context, noteID string, items
 		}
 		if utf8.RuneCountInString(item.Text) > noteItemTextMaxLength {
 			return http.StatusBadRequest, fmt.Errorf("item text must be %d characters or fewer", noteItemTextMaxLength)
+		}
+		// Honor a valid client-supplied item ID so it stays stable for later
+		// per-item updates; otherwise let the store generate one.
+		if item.ID != "" {
+			if !models.IsValidID(item.ID) {
+				return http.StatusBadRequest, errors.New("invalid item ID format")
+			}
+			if _, err := h.noteStore.CreateItemWithID(ctx, noteID, item.ID, item.Text, item.Position, item.Completed, item.IndentLevel, ""); err != nil {
+				if errors.Is(err, models.ErrNoteItemExists) {
+					return http.StatusConflict, fmt.Errorf("create list item: %w", err)
+				}
+				return http.StatusInternalServerError, fmt.Errorf("create list item: %w", err)
+			}
+			continue
 		}
 		if _, err := h.noteStore.CreateItemWithCompleted(ctx, noteID, item.Text, item.Position, item.Completed, item.IndentLevel, ""); err != nil {
 			return http.StatusInternalServerError, fmt.Errorf("create list item: %w", err)

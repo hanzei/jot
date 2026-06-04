@@ -2506,6 +2506,10 @@ const docTemplate = `{
                 "completed": {
                     "type": "boolean"
                 },
+                "id": {
+                    "description": "ID is an optional client-supplied item ID. When provided it is honored so\nthe item keeps a stable identity for later per-item updates and offline\nreplay; when empty the server generates one.",
+                    "type": "string"
+                },
                 "indent_level": {
                     "type": "integer"
                 },
