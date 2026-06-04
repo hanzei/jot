@@ -756,10 +756,14 @@ export default function NoteEditorScreen() {
   // Metadata actions (pin/archive/color) flush pending item edits first, then
   // PATCH only the field that changed. Sending just the changed scalar avoids
   // re-sending (and clobbering) items or other fields edited concurrently
-  // elsewhere. The saved baseline is advanced so the next diff stays accurate.
+  // elsewhere. The caller advances the saved baseline only after the PATCH
+  // succeeds (see commitMetadataBaseline).
   const buildMetadataUpdateData = useCallback((overrides: Partial<UpdateNoteRequest>): UpdateNoteRequest => {
-    Object.assign(savedScalarsRef.current, overrides);
     return { ...overrides } as UpdateNoteRequest;
+  }, []);
+
+  const commitMetadataBaseline = useCallback((overrides: Partial<UpdateNoteRequest>) => {
+    Object.assign(savedScalarsRef.current, overrides);
   }, []);
 
   const handleTitleSubmit = useCallback(() => {
@@ -869,11 +873,12 @@ export default function NoteEditorScreen() {
         id: noteId,
         data: buildMetadataUpdateData({ pinned: newPinned }),
       });
+      commitMetadataBaseline({ pinned: newPinned });
     } catch {
       setPinned(!newPinned);
       Alert.alert(t('common.error'), t('note.failedUpdate'));
     }
-  }, [buildMetadataUpdateData, flushPendingChanges, noteId, t, updateMutation]);
+  }, [buildMetadataUpdateData, commitMetadataBaseline, flushPendingChanges, noteId, t, updateMutation]);
 
   const handleToggleArchive = useCallback(async () => {
     if (!noteId) return;
@@ -888,6 +893,7 @@ export default function NoteEditorScreen() {
         id: noteId,
         data: buildMetadataUpdateData({ archived: newArchived }),
       });
+      commitMetadataBaseline({ archived: newArchived });
       if (newArchived) {
         showToast(t('dashboard.noteArchived'), 'success', {
           label: t('dashboard.undo'),
@@ -897,6 +903,7 @@ export default function NoteEditorScreen() {
                 id: noteId,
                 data: buildMetadataUpdateData({ archived: false }),
               });
+              commitMetadataBaseline({ archived: false });
               setArchived(false);
               showToast(t('dashboard.noteUnarchived'));
             } catch {
@@ -911,7 +918,7 @@ export default function NoteEditorScreen() {
       setArchived(!newArchived);
       Alert.alert(t('common.error'), t('note.failedUpdate'));
     }
-  }, [buildMetadataUpdateData, flushPendingChanges, noteId, showToast, t, updateMutation]);
+  }, [buildMetadataUpdateData, commitMetadataBaseline, flushPendingChanges, noteId, showToast, t, updateMutation]);
 
   const handleColorSelect = useCallback(async (selectedColor: string) => {
     const saveSucceeded = await flushPendingChanges();
@@ -938,11 +945,12 @@ export default function NoteEditorScreen() {
         id: currentNoteId,
         data: buildMetadataUpdateData({ color: selectedColor }),
       });
+      commitMetadataBaseline({ color: selectedColor });
     } catch {
       setColor(prevColor);
       Alert.alert(t('common.error'), t('note.failedColorUpdate'));
     }
-  }, [buildMetadataUpdateData, flushPendingChanges, markDirtyAndScheduleUpdate, t, updateMutation]);
+  }, [buildMetadataUpdateData, commitMetadataBaseline, flushPendingChanges, markDirtyAndScheduleUpdate, t, updateMutation]);
 
   const handleToggleNoteType = useCallback(() => {
     if (hasCreated) return;

@@ -601,8 +601,12 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     if (!noteId) return;
     const scalarPatch = buildScalarPatch();
     if (scalarPatch) {
+      // Snapshot the scalar state now, before awaiting, so the baseline reflects
+      // exactly what was sent — not any later edits made while the request (or a
+      // subsequent failing item op) was in flight.
+      const scalarSnapshot = { ...autoSaveDraftRef.current };
       await notes.update(noteId, scalarPatch);
-      savedScalarsRef.current = { ...autoSaveDraftRef.current };
+      savedScalarsRef.current = scalarSnapshot;
     }
     if (noteTypeRef.current === 'list') {
       await persistItemDiff(noteId, itemsRef.current);
@@ -1582,8 +1586,9 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     if (hasUnsavedChanges()) {
       if (savingRef.current) {
         // An auto-save is already in flight. Cancel any pending debounced
-        // text-save and request one more pass so the in-flight save flushes
-        // the latest edits before the component unmounts.
+        // text-save and request one more pass; the in-flight autoSaveNote loop
+        // keeps running after unmount (refs persist in its closure) and flushes
+        // the latest edits, so closing now does not drop them.
         if (saveTimeoutRef.current) {
           clearTimeout(saveTimeoutRef.current);
           saveTimeoutRef.current = undefined;
