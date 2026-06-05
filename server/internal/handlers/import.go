@@ -744,6 +744,77 @@ func (h *NotesHandler) importMemosFromUsememos(ctx context.Context, userID, base
 	return imported, skipped, importErrors
 }
 
+// memoChecklistItem is a single Markdown task-list item parsed from a memo body.
+type memoChecklistItem struct {
+	text        string
+	completed   bool
+	indentLevel int
+}
+
+// memoTaskItemRE matches a single Markdown task-list item, e.g. "- [ ] foo" or
+// "  * [x] bar". Group 1 is the leading indentation, group 2 is the checkbox
+// state (" ", "x", or "X"), and group 3 is the item text.
+var memoTaskItemRE = regexp.MustCompile(`^([ \t]*)[-*+] \[([ xX])\][ \t]*(.*)$`)
+
+// memoHeadingRE matches an ATX Markdown heading line (e.g. "# Groceries"),
+// capturing the heading text. Used to derive a list note's title from a memo
+// whose first line is a heading.
+var memoHeadingRE = regexp.MustCompile(`^#{1,6}[ \t]+(.+?)[ \t]*$`)
+
+// parseMemoChecklist detects a memo body that should become a Jot list note. A
+// body qualifies when every non-empty line is a Markdown task-list item ("- [ ]"
+// / "- [x]"), optionally preceded by a single ATX heading line that becomes the
+// note title. The boolean is false when the body is not such a checklist or when
+// it exceeds Jot's list-note limits, in which case the caller imports the memo
+// as a text note instead so no content is lost. Indentation maps to a single
+// indent level (Jot supports 0–1).
+func parseMemoChecklist(content string) (title string, items []memoChecklistItem, ok bool) {
+	lines := strings.Split(content, "\n")
+
+	// An optional heading on the first non-empty line becomes the note title.
+	start := 0
+	for start < len(lines) && strings.TrimSpace(lines[start]) == "" {
+		start++
+	}
+	if start < len(lines) {
+		if m := memoHeadingRE.FindStringSubmatch(lines[start]); m != nil {
+			title = m[1]
+			start++
+		}
+	}
+	if utf8.RuneCountInString(title) > noteTitleMaxLength {
+		return "", nil, false
+	}
+
+	items = make([]memoChecklistItem, 0, len(lines)-start)
+	for _, line := range lines[start:] {
+		if strings.TrimSpace(line) == "" {
+			continue
+		}
+		m := memoTaskItemRE.FindStringSubmatch(line)
+		if m == nil {
+			return "", nil, false
+		}
+		text := strings.TrimRight(m[3], " \t")
+		if utf8.RuneCountInString(text) > noteItemTextMaxLength {
+			return "", nil, false
+		}
+		indentLevel := 0
+		if len(m[1]) > 0 {
+			indentLevel = 1
+		}
+		items = append(items, memoChecklistItem{
+			text:        text,
+			completed:   m[2] == "x" || m[2] == "X",
+			indentLevel: indentLevel,
+		})
+	}
+	if len(items) == 0 || len(items) > noteItemsMaxCount {
+		return "", nil, false
+	}
+	return title, items, true
+}
+
 // importSingleMemo imports a single memo, returning whether it was actually
 // imported (false means it was skipped) and any non-fatal errors that occurred.
 func (h *NotesHandler) importSingleMemo(ctx context.Context, userID string, idx int, memo usememosAPIMemo) (bool, []string) {
@@ -761,12 +832,34 @@ func (h *NotesHandler) importSingleMemo(ctx context.Context, userID string, idx 
 		return false, nil
 	}
 
-	note, err := h.noteStore.Create(ctx, userID, "", content, models.NoteTypeText, models.DefaultNoteColor)
+	// A memo whose body is entirely a Markdown checklist (optionally preceded by
+	// a heading that becomes the title) becomes a Jot list note so the items stay
+	// individually checkable; anything else is a text note that preserves the raw
+	// Markdown content.
+	title, items, isChecklist := parseMemoChecklist(content)
+	noteType := models.NoteTypeText
+	noteTitle := ""
+	noteContent := content
+	if isChecklist {
+		noteType = models.NoteTypeList
+		noteTitle = title
+		noteContent = ""
+	}
+
+	note, err := h.noteStore.Create(ctx, userID, noteTitle, noteContent, noteType, models.DefaultNoteColor)
 	if err != nil {
 		return false, []string{fmt.Sprintf("failed to import memo #%d: %v", idx+1, err)}
 	}
 
 	var errs []string
+	if isChecklist {
+		for i, item := range items {
+			if _, err := h.noteStore.CreateItemWithCompleted(ctx, note.ID, item.text, i, item.completed, item.indentLevel, ""); err != nil {
+				errs = append(errs, fmt.Sprintf("memo #%d: failed to create list item: %v", idx+1, err))
+			}
+		}
+	}
+
 	if len(tags) > 0 {
 		if _, labelErr := h.createNoteLabels(ctx, note.ID, userID, tags); labelErr != nil {
 			errs = append(errs, fmt.Sprintf("memo #%d: failed to create labels: %v", idx+1, labelErr))
