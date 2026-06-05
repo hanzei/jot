@@ -140,10 +140,6 @@ export interface CreateNoteItemRequest {
   assigned_to?: string;
 }
 
-export interface UpdateNoteItemRequest extends CreateNoteItemRequest {
-  assigned_to?: string;
-}
-
 /**
  * Partial update for a single list item via `PATCH /notes/{id}/items/{itemId}`.
  * Only the provided fields are changed, so concurrent edits to different
@@ -193,7 +189,6 @@ export interface UpdateListNoteRequest {
   archived?: boolean;
   color?: string;
   checked_items_collapsed?: boolean;
-  items?: UpdateNoteItemRequest[];
 }
 
 export type UpdateNoteRequest = UpdateTextNoteRequest | UpdateListNoteRequest;

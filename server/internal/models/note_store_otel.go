@@ -111,38 +111,6 @@ func (s *NoteStore) PurgeOldTrashedNotes(ctx context.Context, olderThan time.Dur
 	return s.inner.PurgeOldTrashedNotes(ctx, olderThan)
 }
 
-func (s *NoteStore) CreateItem(ctx context.Context, noteID string, text string, position, indentLevel int, assignedTo string) (_ *NoteItem, err error) {
-	ctx, end := startSpan(ctx, s.tracer, "NoteStore.CreateItem", &err,
-		attribute.String("note.id", noteID),
-	)
-	defer end()
-	return s.inner.CreateItem(ctx, noteID, text, position, indentLevel, assignedTo)
-}
-
-func (s *NoteStore) UpdateItem(ctx context.Context, id string, text string, completed bool, position, indentLevel int) (err error) {
-	ctx, end := startSpan(ctx, s.tracer, "NoteStore.UpdateItem", &err,
-		attribute.String("item.id", id),
-	)
-	defer end()
-	return s.inner.UpdateItem(ctx, id, text, completed, position, indentLevel)
-}
-
-func (s *NoteStore) DeleteItem(ctx context.Context, id string) (err error) {
-	ctx, end := startSpan(ctx, s.tracer, "NoteStore.DeleteItem", &err,
-		attribute.String("item.id", id),
-	)
-	defer end()
-	return s.inner.DeleteItem(ctx, id)
-}
-
-func (s *NoteStore) DeleteItemsByNoteID(ctx context.Context, noteID string) (err error) {
-	ctx, end := startSpan(ctx, s.tracer, "NoteStore.DeleteItemsByNoteID", &err,
-		attribute.String("note.id", noteID),
-	)
-	defer end()
-	return s.inner.DeleteItemsByNoteID(ctx, noteID)
-}
-
 func (s *NoteStore) CreateItemWithCompleted(ctx context.Context, noteID string, text string, position int, completed bool, indentLevel int, assignedTo string) (_ *NoteItem, err error) {
 	ctx, end := startSpan(ctx, s.tracer, "NoteStore.CreateItemWithCompleted", &err,
 		attribute.String("note.id", noteID),

@@ -145,17 +145,14 @@ func TestNoteValidation(t *testing.T) {
 			assert.Len(t, []rune(note.Items[0].Text), 500)
 		})
 
-		t.Run("exceeding max on update returns 400", func(t *testing.T) {
+		t.Run("exceeding max on item create returns 400", func(t *testing.T) {
 			note, err := user.Client.CreateListNote(t.Context(), &client.CreateListNoteRequest{
 				Items: []client.CreateNoteItem{{Text: "original", Position: 0}},
 			})
 			require.NoError(t, err)
 
-			updateItems := []client.UpdateNoteItem{
-				{Text: strings.Repeat("a", 501), Position: 0},
-			}
-			_, err = user.Client.UpdateListNote(t.Context(), note.ID, &client.UpdateListNoteRequest{
-				Items: &updateItems,
+			_, err = user.Client.CreateNoteItem(t.Context(), note.ID, &client.CreateNoteItemRequest{
+				Text: strings.Repeat("a", 501), Position: 1,
 			})
 			assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 		})
@@ -251,17 +248,12 @@ func TestNoteValidation(t *testing.T) {
 			assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 		})
 
-		t.Run("exceeding max on update returns 400", func(t *testing.T) {
-			note, err := user.Client.CreateListNote(t.Context(), &client.CreateListNoteRequest{
-				Items: []client.CreateNoteItem{{Text: "original", Position: 0}},
-			})
-			require.NoError(t, err)
-
-			items := make([]client.UpdateNoteItem, 501)
+		t.Run("exceeding max via second create batch returns 400", func(t *testing.T) {
+			items := make([]client.CreateNoteItem, 501)
 			for i := range items {
-				items[i] = client.UpdateNoteItem{Text: "item", Position: i}
+				items[i] = client.CreateNoteItem{Text: "item", Position: i}
 			}
-			_, err = user.Client.UpdateListNote(t.Context(), note.ID, &client.UpdateListNoteRequest{Items: &items})
+			_, err := user.Client.CreateListNote(t.Context(), &client.CreateListNoteRequest{Items: items})
 			assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 		})
 	})
@@ -309,16 +301,6 @@ func TestNoteValidation(t *testing.T) {
 			}))
 		})
 
-		t.Run("update text note with items returns 400", func(t *testing.T) {
-			textNote, err := user.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{Content: "original"})
-			require.NoError(t, err)
-
-			// Send a raw request to test server-side rejection of items on a text note.
-			assert.Equal(t, http.StatusBadRequest, patchNote(t, textNote.ID, map[string]any{
-				"items": []map[string]any{{"text": "item", "position": 0}},
-			}))
-		})
-
 		t.Run("update text note with checked_items_collapsed returns 400", func(t *testing.T) {
 			textNote, err := user.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{Content: "original"})
 			require.NoError(t, err)
@@ -330,7 +312,7 @@ func TestNoteValidation(t *testing.T) {
 		})
 	})
 
-	t.Run("update with explicit empty items clears list items", func(t *testing.T) {
+	t.Run("deleting the only item clears list items", func(t *testing.T) {
 		note, err := user.Client.CreateListNote(t.Context(), &client.CreateListNoteRequest{
 			Items: []client.CreateNoteItem{
 				{Text: "only item", Position: 0},
@@ -339,12 +321,7 @@ func TestNoteValidation(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, note.Items, 1)
 
-		emptyItems := []client.UpdateNoteItem{}
-		updated, err := user.Client.UpdateListNote(t.Context(), note.ID, &client.UpdateListNoteRequest{
-			Items: &emptyItems,
-		})
-		require.NoError(t, err)
-		assert.Empty(t, updated.Items)
+		require.NoError(t, user.Client.DeleteNoteItem(t.Context(), note.ID, note.Items[0].ID))
 
 		reloaded, err := user.Client.GetNote(t.Context(), note.ID)
 		require.NoError(t, err)

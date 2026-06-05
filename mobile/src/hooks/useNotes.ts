@@ -178,28 +178,10 @@ export function useUpdateNote() {
       const now = new Date().toISOString();
 
       if (existing.note_type === 'list') {
+        // List items are edited via the granular item mutations; this path only
+        // carries scalar fields (title, pinned, archived, color, collapsed).
         const listData = data as UpdateListNoteRequest;
-        let updatedItems = existing.items;
-
-        if (listData.items !== undefined) {
-          // Persist item changes to note_items table alongside scalar field updates.
-          // Preserve existing item IDs by position to avoid re-creating stable items.
-          updatedItems = listData.items.map((item, i) => ({
-            id: existing.items?.[i]?.id ?? generateLocalId(),
-            note_id: id,
-            text: item.text,
-            completed: item.completed ?? false,
-            position: i,
-            indent_level: item.indent_level ?? 0,
-            assigned_to: item.assigned_to ?? existing.items?.[i]?.assigned_to ?? '',
-            created_at: existing.items?.[i]?.created_at ?? now,
-            updated_at: now,
-          }));
-          const merged: Note = { ...existing, ...listData, items: updatedItems, updated_at: now };
-          await saveNote(db, merged);
-        } else {
-          await updateLocalNote(db, id, data);
-        }
+        await updateLocalNote(db, id, listData);
 
         const fullData: UpdateNoteRequest = {
           title: listData.title ?? existing.title,
@@ -207,7 +189,6 @@ export function useUpdateNote() {
           archived: listData.archived ?? existing.archived,
           color: listData.color ?? existing.color,
           checked_items_collapsed: listData.checked_items_collapsed ?? existing.checked_items_collapsed,
-          items: listData.items,
         };
         await enqueueOperation(db, {
           operation: 'update',
@@ -217,7 +198,7 @@ export function useUpdateNote() {
         });
 
         // Build optimistic return from the data we already have (no second DB read)
-        return { ...existing, ...listData, updated_at: now, items: updatedItems };
+        return { ...existing, ...listData, updated_at: now };
       } else {
         const textData = data as UpdateTextNoteRequest;
         await updateLocalNote(db, id, textData);

@@ -2721,26 +2721,6 @@ const docTemplate = `{
                 }
             }
         },
-        "handlers.UpdateNoteItem": {
-            "type": "object",
-            "properties": {
-                "assigned_to": {
-                    "type": "string"
-                },
-                "completed": {
-                    "type": "boolean"
-                },
-                "indent_level": {
-                    "type": "integer"
-                },
-                "position": {
-                    "type": "integer"
-                },
-                "text": {
-                    "type": "string"
-                }
-            }
-        },
         "handlers.UpdateNoteRequest": {
             "type": "object",
             "properties": {
@@ -2755,12 +2735,6 @@ const docTemplate = `{
                 },
                 "content": {
                     "type": "string"
-                },
-                "items": {
-                    "type": "array",
-                    "items": {
-                        "$ref": "#/definitions/handlers.UpdateNoteItem"
-                    }
                 },
                 "pinned": {
                     "type": "boolean"

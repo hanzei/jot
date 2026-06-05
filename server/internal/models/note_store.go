@@ -972,66 +972,6 @@ func (s *noteStore) getItemsByNoteID(ctx context.Context, noteID string) ([]Note
 	return items, nil
 }
 
-func (s *noteStore) CreateItem(ctx context.Context, noteID string, text string, position, indentLevel int, assignedTo string) (*NoteItem, error) {
-	itemID, err := generateID()
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate item ID: %w", err)
-	}
-
-	query := s.d.RewritePlaceholders(`INSERT INTO note_items (id, note_id, text, position, indent_level, assigned_to)
-			  VALUES (?, ?, ?, ?, ?, ?) RETURNING completed, created_at, updated_at`)
-
-	var item NoteItem
-	err = s.db.QueryRowContext(ctx, query, itemID, noteID, text, position, indentLevel,
-		nullableAssignedTo(assignedTo),
-	).Scan(
-		&item.Completed, &item.CreatedAt, &item.UpdatedAt,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create note item: %w", err)
-	}
-
-	item.ID = itemID
-	item.NoteID = noteID
-	item.Text = text
-	item.Position = position
-	item.IndentLevel = indentLevel
-	item.AssignedTo = assignedTo
-
-	return &item, nil
-}
-
-// UpdateItem updates text, completed, position, and indent_level for a note item.
-// It does NOT update assigned_to. The current update flow uses delete-and-recreate
-// via CreateItemWithCompleted which preserves assignments via the caller-supplied value.
-func (s *noteStore) UpdateItem(ctx context.Context, id string, text string, completed bool, position, indentLevel int) error {
-	query := s.d.RewritePlaceholders(`UPDATE note_items SET text = ?, completed = ?, position = ?, indent_level = ?, updated_at = CURRENT_TIMESTAMP
-			  WHERE id = ?`)
-
-	_, err := s.db.ExecContext(ctx, query, text, completed, position, indentLevel, id)
-	if err != nil {
-		return fmt.Errorf("failed to update note item: %w", err)
-	}
-
-	return nil
-}
-
-func (s *noteStore) DeleteItem(ctx context.Context, id string) error {
-	_, err := s.db.ExecContext(ctx, s.d.RewritePlaceholders("DELETE FROM note_items WHERE id = ?"), id)
-	if err != nil {
-		return fmt.Errorf("failed to delete note item: %w", err)
-	}
-
-	return nil
-}
-
-func (s *noteStore) DeleteItemsByNoteID(ctx context.Context, noteID string) error {
-	_, err := s.db.ExecContext(ctx, s.d.RewritePlaceholders("DELETE FROM note_items WHERE note_id = ?"), noteID)
-	if err != nil {
-		return fmt.Errorf("failed to delete note items: %w", err)
-	}
-	return nil
-}
 
 func (s *noteStore) CreateItemWithCompleted(ctx context.Context, noteID string, text string, position int, completed bool, indentLevel int, assignedTo string) (*NoteItem, error) {
 	itemID, err := generateID()

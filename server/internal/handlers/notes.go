@@ -162,21 +162,12 @@ type CreateNoteItem struct {
 }
 
 type UpdateNoteRequest struct {
-	Title                 *string          `json:"title"`
-	Content               *string          `json:"content"`
-	Pinned                *bool            `json:"pinned"`
-	Archived              *bool            `json:"archived"`
-	Color                 *string          `json:"color"`
-	CheckedItemsCollapsed *bool            `json:"checked_items_collapsed"`
-	Items                 []UpdateNoteItem `json:"items,omitempty"`
-}
-
-type UpdateNoteItem struct {
-	Text        string `json:"text"`
-	Position    int    `json:"position"`
-	Completed   bool   `json:"completed"`
-	IndentLevel int    `json:"indent_level"`
-	AssignedTo  string `json:"assigned_to"`
+	Title                 *string `json:"title"`
+	Content               *string `json:"content"`
+	Pinned                *bool   `json:"pinned"`
+	Archived              *bool   `json:"archived"`
+	Color                 *string `json:"color"`
+	CheckedItemsCollapsed *bool   `json:"checked_items_collapsed"`
 }
 
 type EmptyTrashResponse struct {
@@ -490,9 +481,6 @@ func validateUpdateNoteTypeFields(noteType models.NoteType, req *UpdateNoteReque
 	if noteType == models.NoteTypeList && req.Content != nil && *req.Content != "" {
 		return http.StatusBadRequest, errors.New("list notes cannot have content")
 	}
-	if noteType == models.NoteTypeText && req.Items != nil {
-		return http.StatusBadRequest, errors.New("text notes cannot have items")
-	}
 	if noteType == models.NoteTypeText && req.CheckedItemsCollapsed != nil {
 		return http.StatusBadRequest, errors.New("text notes cannot have checked_items_collapsed")
 	}
@@ -517,110 +505,22 @@ func normalizeUpdateNoteRequest(req *UpdateNoteRequest) (int, error) {
 	return http.StatusOK, nil
 }
 
-func (h *NotesHandler) validateListItems(ctx context.Context, noteID string, items []UpdateNoteItem) (int, error) {
-	if len(items) > noteItemsMaxCount {
-		return http.StatusBadRequest, fmt.Errorf("note cannot have more than %d items", noteItemsMaxCount)
-	}
-
-	for _, item := range items {
-		if item.IndentLevel < 0 || item.IndentLevel > 1 {
-			return http.StatusBadRequest, errors.New("indent_level must be 0 or 1")
-		}
-		if utf8.RuneCountInString(item.Text) > noteItemTextMaxLength {
-			return http.StatusBadRequest, fmt.Errorf("item text must be %d characters or fewer", noteItemTextMaxLength)
-		}
-	}
-
-	if status, err := h.validateItemAssignments(ctx, noteID, items); err != nil {
-		return status, err
-	}
-
-	return http.StatusOK, nil
-}
-
-// validateItemAssignments checks that all assigned user IDs are valid and have access to the note.
-func (h *NotesHandler) validateItemAssignments(ctx context.Context, noteID string, items []UpdateNoteItem) (int, error) {
-	hasAssignment := false
-	for _, item := range items {
-		if item.AssignedTo != "" {
-			hasAssignment = true
-			break
-		}
-	}
-	if !hasAssignment {
-		return http.StatusOK, nil
-	}
-
-	shares, err := h.noteStore.GetNoteShares(ctx, noteID)
-	if err != nil {
-		return http.StatusInternalServerError, fmt.Errorf("failed to check note shares: %w", err)
-	}
-	if len(shares) == 0 {
-		return http.StatusBadRequest, errors.New("cannot assign items on an unshared note")
-	}
-
-	ownerID, err := h.noteStore.GetOwnerID(ctx, noteID)
-	if err != nil {
-		return http.StatusInternalServerError, fmt.Errorf("failed to get note owner: %w", err)
-	}
-
-	accessSet := make(map[string]struct{})
-	accessSet[ownerID] = struct{}{}
-	for _, share := range shares {
-		accessSet[share.SharedWithUserID] = struct{}{}
-	}
-
-	for _, item := range items {
-		if item.AssignedTo == "" {
-			continue
-		}
-		if !models.IsValidID(item.AssignedTo) {
-			return http.StatusBadRequest, errors.New("invalid assigned_to format")
-		}
-		if _, ok := accessSet[item.AssignedTo]; !ok {
-			return http.StatusBadRequest, errors.New("assigned user does not have access to this note")
-		}
-	}
-
-	return http.StatusOK, nil
-}
-
-func (h *NotesHandler) updateListItems(ctx context.Context, noteID string, noteType models.NoteType, items []UpdateNoteItem) error {
-	if noteType != models.NoteTypeList {
-		return fmt.Errorf("updateListItems called on non-list note (type=%q, id=%s)", noteType, noteID)
-	}
-	if err := h.noteStore.DeleteItemsByNoteID(ctx, noteID); err != nil {
-		return fmt.Errorf("delete note items: %w", err)
-	}
-	for _, item := range items {
-		if _, err := h.noteStore.CreateItemWithCompleted(ctx, noteID, item.Text, item.Position, item.Completed, item.IndentLevel, item.AssignedTo); err != nil {
-			return fmt.Errorf("create note item: %w", err)
-		}
-	}
-	return nil
-}
-
-// validateUpdateNoteFields fetches the current note to check type-field compatibility
-// and validates list item assignments. It is called before the store update so that
-// type-mismatch errors are caught early without a partial write. The note type is
-// returned so the caller can pass it to updateListItems without an extra DB fetch.
-func (h *NotesHandler) validateUpdateNoteFields(ctx context.Context, id, userID string, req *UpdateNoteRequest) (models.NoteType, int, error) {
+// validateUpdateNoteFields fetches the current note to check that the requested
+// fields are compatible with the note's type (e.g. a title cannot be set on a
+// text note). It is called before the store update so type-mismatch errors are
+// caught without a partial write.
+func (h *NotesHandler) validateUpdateNoteFields(ctx context.Context, id, userID string, req *UpdateNoteRequest) (int, error) {
 	currentNote, err := h.noteStore.GetByID(ctx, id, userID)
 	if err != nil {
 		if errors.Is(err, models.ErrNoteNotFound) {
-			return "", http.StatusNotFound, err
+			return http.StatusNotFound, err
 		}
-		return "", http.StatusInternalServerError, fmt.Errorf("get note: %w", err)
+		return http.StatusInternalServerError, fmt.Errorf("get note: %w", err)
 	}
 	if status, typeErr := validateUpdateNoteTypeFields(currentNote.NoteType, req); typeErr != nil {
-		return "", status, typeErr
+		return status, typeErr
 	}
-	if req.Items != nil {
-		if status, itemErr := h.validateListItems(ctx, id, req.Items); itemErr != nil {
-			return "", status, itemErr
-		}
-	}
-	return currentNote.NoteType, http.StatusOK, nil
+	return http.StatusOK, nil
 }
 
 // UpdateNote godoc
@@ -661,8 +561,7 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 		return status, nil, err
 	}
 
-	noteType, status, prefetchErr := h.validateUpdateNoteFields(r.Context(), id, user.ID, &req)
-	if prefetchErr != nil {
+	if status, prefetchErr := h.validateUpdateNoteFields(r.Context(), id, user.ID, &req); prefetchErr != nil {
 		return status, nil, prefetchErr
 	}
 
@@ -674,22 +573,17 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 		return http.StatusInternalServerError, nil, fmt.Errorf("update note: %w", err)
 	}
 
-	if req.Items != nil {
-		if updateErr := h.updateListItems(r.Context(), id, noteType, req.Items); updateErr != nil {
-			return http.StatusInternalServerError, nil, fmt.Errorf("update list items: %w", updateErr)
-		}
-	}
-
 	note, err := h.noteStore.GetByID(r.Context(), id, user.ID)
 	if err != nil {
 		return http.StatusInternalServerError, nil, fmt.Errorf("get note: %w", err)
 	}
 
-	// Title, content, and items are shared fields: every collaborator must receive
-	// their own personalized copy of the note (preserving their per-user state).
-	// Per-user-only changes (color, pinned, archived, checked_items_collapsed) only
-	// need to be delivered to the acting user.
-	hasSharedFieldChange := req.Title != nil || req.Content != nil || req.Items != nil
+	// Title and content are shared fields: every collaborator must receive their
+	// own personalized copy of the note (preserving their per-user state).
+	// Per-user-only changes (color, pinned, archived, checked_items_collapsed)
+	// only need to be delivered to the acting user. (List items are edited via
+	// the dedicated item endpoints, which publish their own events.)
+	hasSharedFieldChange := req.Title != nil || req.Content != nil
 	sanitized := sanitizeNote(*note)
 	h.publishUpdateEvent(r.Context(), id, &sanitized, user.ID, hasSharedFieldChange)
 

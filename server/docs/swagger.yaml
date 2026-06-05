@@ -165,19 +165,6 @@ definitions:
       user_id:
         type: string
     type: object
-  handlers.UpdateNoteItem:
-    properties:
-      assigned_to:
-        type: string
-      completed:
-        type: boolean
-      indent_level:
-        type: integer
-      position:
-        type: integer
-      text:
-        type: string
-    type: object
   handlers.UpdateNoteRequest:
     properties:
       archived:
@@ -188,10 +175,6 @@ definitions:
         type: string
       content:
         type: string
-      items:
-        items:
-          $ref: '#/definitions/handlers.UpdateNoteItem'
-        type: array
       pinned:
         type: boolean
       title:
