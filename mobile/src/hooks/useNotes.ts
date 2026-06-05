@@ -11,8 +11,13 @@ import {
   duplicateNote,
   permanentDeleteNote,
   reorderNotes,
+  createNoteItem,
+  updateNoteItem,
+  deleteNoteItem,
+  reorderNoteItems,
 } from '../api/notes';
 import { getNoteShares, shareNote, unshareNote } from '../api/users';
+import { generateId } from '@jot/shared';
 import type {
   Note,
   NoteShare,
@@ -22,6 +27,8 @@ import type {
   UpdateNoteRequest,
   UpdateListNoteRequest,
   UpdateTextNoteRequest,
+  CreateNoteItemRequest,
+  PatchNoteItemRequest,
 } from '@jot/shared';
 import {
   saveNote,
@@ -32,6 +39,10 @@ import {
   permanentDeleteLocalNote,
   updateLocalNote,
   generateLocalId,
+  createLocalItem,
+  patchLocalItem,
+  deleteLocalItem,
+  reorderLocalItems,
 } from '../db/noteQueries';
 import { enqueueOperation } from '../db/syncQueue';
 import { useNetworkStatus } from './useNetworkStatus';
@@ -110,7 +121,9 @@ export function useCreateNote() {
             title: data.title,
             checked_items_collapsed: false,
             items: data.items?.map((item, i) => ({
-              id: generateLocalId(),
+              // Honor the client-supplied item ID so it stays stable when the
+              // note create is replayed and items are later edited granularly.
+              id: item.id ?? generateLocalId(),
               note_id: localId,
               text: item.text,
               completed: item.completed ?? false,
@@ -166,28 +179,10 @@ export function useUpdateNote() {
       const now = new Date().toISOString();
 
       if (existing.note_type === 'list') {
+        // List items are edited via the granular item mutations; this path only
+        // carries scalar fields (title, pinned, archived, color, collapsed).
         const listData = data as UpdateListNoteRequest;
-        let updatedItems = existing.items;
-
-        if (listData.items !== undefined) {
-          // Persist item changes to note_items table alongside scalar field updates.
-          // Preserve existing item IDs by position to avoid re-creating stable items.
-          updatedItems = listData.items.map((item, i) => ({
-            id: existing.items?.[i]?.id ?? generateLocalId(),
-            note_id: id,
-            text: item.text,
-            completed: item.completed ?? false,
-            position: i,
-            indent_level: item.indent_level ?? 0,
-            assigned_to: item.assigned_to ?? existing.items?.[i]?.assigned_to ?? '',
-            created_at: existing.items?.[i]?.created_at ?? now,
-            updated_at: now,
-          }));
-          const merged: Note = { ...existing, ...listData, items: updatedItems, updated_at: now };
-          await saveNote(db, merged);
-        } else {
-          await updateLocalNote(db, id, data);
-        }
+        await updateLocalNote(db, id, listData);
 
         const fullData: UpdateNoteRequest = {
           title: listData.title ?? existing.title,
@@ -195,7 +190,6 @@ export function useUpdateNote() {
           archived: listData.archived ?? existing.archived,
           color: listData.color ?? existing.color,
           checked_items_collapsed: listData.checked_items_collapsed ?? existing.checked_items_collapsed,
-          items: listData.items,
         };
         await enqueueOperation(db, {
           operation: 'update',
@@ -205,7 +199,7 @@ export function useUpdateNote() {
         });
 
         // Build optimistic return from the data we already have (no second DB read)
-        return { ...existing, ...listData, updated_at: now, items: updatedItems };
+        return { ...existing, ...listData, updated_at: now };
       } else {
         const textData = data as UpdateTextNoteRequest;
         await updateLocalNote(db, id, textData);
@@ -231,6 +225,151 @@ export function useUpdateNote() {
       queryClient.setQueryData(noteQueryKey(updatedNote.id), updatedNote);
       queryClient.setQueryData(noteLocalQueryKey(updatedNote.id), updatedNote);
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+      queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
+    },
+  });
+}
+
+// --- Granular list-item mutations ----------------------------------------
+// Editing list items one at a time (rather than re-sending the whole note)
+// lets concurrent edits — including offline edits replayed later — merge with
+// other devices' changes instead of overwriting them.
+
+export function useCreateNoteItem() {
+  const queryClient = useQueryClient();
+  const db = useSQLiteContext();
+  const { isConnected } = useNetworkStatus();
+  const isConnectedRef = useRef(isConnected);
+  isConnectedRef.current = isConnected;
+
+  return useMutation({
+    mutationFn: async ({ noteId, item }: { noteId: string; item: CreateNoteItemRequest }): Promise<void> => {
+      assertSwitchWriteAllowed();
+      // Ensure a stable, server-format ID up front so the local row, the server
+      // request, and any queued op all reference the same item (the SQLite
+      // insert must never receive an undefined id).
+      const itemId: string = item.id ?? generateId();
+      const itemWithId: CreateNoteItemRequest = { ...item, id: itemId };
+      const local = {
+        id: itemId,
+        text: itemWithId.text,
+        completed: itemWithId.completed ?? false,
+        position: itemWithId.position,
+        indent_level: itemWithId.indent_level ?? 0,
+        assigned_to: itemWithId.assigned_to ?? '',
+      };
+      if (isConnectedRef.current) {
+        await createNoteItem(noteId, itemWithId);
+        await createLocalItem(db, noteId, local);
+      } else {
+        await createLocalItem(db, noteId, local);
+        await enqueueOperation(db, {
+          operation: 'createItem',
+          endpoint: `/notes/${noteId}/items`,
+          method: 'POST',
+          body: itemWithId as unknown as Record<string, unknown>,
+        });
+      }
+    },
+    onSuccess: (_data, { noteId }) => {
+      queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
+      queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+      queryClient.invalidateQueries({ queryKey: noteQueryKey(noteId) });
+      queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
+    },
+  });
+}
+
+export function useUpdateNoteItem() {
+  const queryClient = useQueryClient();
+  const db = useSQLiteContext();
+  const { isConnected } = useNetworkStatus();
+  const isConnectedRef = useRef(isConnected);
+  isConnectedRef.current = isConnected;
+
+  return useMutation({
+    mutationFn: async ({ noteId, itemId, data }: { noteId: string; itemId: string; data: PatchNoteItemRequest }): Promise<void> => {
+      assertSwitchWriteAllowed();
+      if (isConnectedRef.current) {
+        await updateNoteItem(noteId, itemId, data);
+        await patchLocalItem(db, noteId, itemId, data);
+      } else {
+        await patchLocalItem(db, noteId, itemId, data);
+        await enqueueOperation(db, {
+          operation: 'updateItem',
+          endpoint: `/notes/${noteId}/items/${itemId}`,
+          method: 'PATCH',
+          body: data as Record<string, unknown>,
+        });
+      }
+    },
+    onSuccess: (_data, { noteId }) => {
+      queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
+      queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+      queryClient.invalidateQueries({ queryKey: noteQueryKey(noteId) });
+      queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
+    },
+  });
+}
+
+export function useDeleteNoteItem() {
+  const queryClient = useQueryClient();
+  const db = useSQLiteContext();
+  const { isConnected } = useNetworkStatus();
+  const isConnectedRef = useRef(isConnected);
+  isConnectedRef.current = isConnected;
+
+  return useMutation({
+    mutationFn: async ({ noteId, itemId }: { noteId: string; itemId: string }): Promise<void> => {
+      assertSwitchWriteAllowed();
+      if (isConnectedRef.current) {
+        await deleteNoteItem(noteId, itemId);
+        await deleteLocalItem(db, noteId, itemId);
+      } else {
+        await deleteLocalItem(db, noteId, itemId);
+        await enqueueOperation(db, {
+          operation: 'deleteItem',
+          endpoint: `/notes/${noteId}/items/${itemId}`,
+          method: 'DELETE',
+        });
+      }
+    },
+    onSuccess: (_data, { noteId }) => {
+      queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
+      queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+      queryClient.invalidateQueries({ queryKey: noteQueryKey(noteId) });
+      queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
+    },
+  });
+}
+
+export function useReorderNoteItems() {
+  const queryClient = useQueryClient();
+  const db = useSQLiteContext();
+  const { isConnected } = useNetworkStatus();
+  const isConnectedRef = useRef(isConnected);
+  isConnectedRef.current = isConnected;
+
+  return useMutation({
+    mutationFn: async ({ noteId, itemIds }: { noteId: string; itemIds: string[] }): Promise<void> => {
+      assertSwitchWriteAllowed();
+      if (isConnectedRef.current) {
+        await reorderNoteItems(noteId, itemIds);
+        await reorderLocalItems(db, noteId, itemIds);
+      } else {
+        await reorderLocalItems(db, noteId, itemIds);
+        await enqueueOperation(db, {
+          operation: 'reorderItems',
+          endpoint: `/notes/${noteId}/items/reorder`,
+          method: 'POST',
+          body: { item_ids: itemIds } as Record<string, unknown>,
+        });
+      }
+    },
+    onSuccess: (_data, { noteId }) => {
+      queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
+      queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+      queryClient.invalidateQueries({ queryKey: noteQueryKey(noteId) });
       queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
     },
   });

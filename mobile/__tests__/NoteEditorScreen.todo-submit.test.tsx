@@ -16,6 +16,10 @@ const mockCreateMutateAsync = jest.fn();
 const mockUpdateMutateAsync = jest.fn();
 const mockDeleteMutateAsync = jest.fn();
 const mockDuplicateMutateAsync = jest.fn();
+const mockCreateItemMutateAsync = jest.fn();
+const mockUpdateItemMutateAsync = jest.fn();
+const mockDeleteItemMutateAsync = jest.fn();
+const mockReorderItemsMutateAsync = jest.fn();
 const mockUseOfflineNote = jest.fn();
 const mockGestureResponderEvent = {} as GestureResponderEvent;
 const createPanState = (dx: number, dy: number): PanResponderGestureState => ({
@@ -98,6 +102,18 @@ jest.mock('../src/hooks/useNotes', () => ({
   }),
   useDuplicateNote: () => ({
     mutateAsync: mockDuplicateMutateAsync,
+  }),
+  useCreateNoteItem: () => ({
+    mutateAsync: mockCreateItemMutateAsync,
+  }),
+  useUpdateNoteItem: () => ({
+    mutateAsync: mockUpdateItemMutateAsync,
+  }),
+  useDeleteNoteItem: () => ({
+    mutateAsync: mockDeleteItemMutateAsync,
+  }),
+  useReorderNoteItems: () => ({
+    mutateAsync: mockReorderItemsMutateAsync,
   }),
 }));
 
@@ -250,6 +266,62 @@ describe('NoteEditorScreen list submit behavior', () => {
     await waitFor(() => {
       expect(mockUpdateMutateAsync).not.toHaveBeenCalled();
     });
+  });
+
+  it('edits an existing list item via the granular per-item endpoint', async () => {
+    const existingNote = {
+      id: 'note-789',
+      user_id: 'u1',
+      title: 'Groceries',
+      content: '',
+      note_type: 'list',
+      color: '#ffffff',
+      pinned: false,
+      archived: false,
+      position: 0,
+      checked_items_collapsed: false,
+      is_shared: false,
+      deleted_at: null,
+      created_at: '2026-01-01T00:00:00.000Z',
+      updated_at: '2026-01-01T00:00:00.000Z',
+      labels: [],
+      shared_with: [],
+      items: [
+        {
+          id: 'aaaaaaaaaaaaaaaaaaaaaa',
+          note_id: 'note-789',
+          text: 'Milk',
+          completed: false,
+          position: 0,
+          indent_level: 0,
+          assigned_to: '',
+          created_at: '2026-01-01T00:00:00.000Z',
+          updated_at: '2026-01-01T00:00:00.000Z',
+        },
+      ],
+    };
+
+    mockUseRoute.mockReturnValue({ params: { noteId: 'note-789' } });
+    mockUseOfflineNote.mockReturnValue({ data: existingNote });
+    mockUpdateMutateAsync.mockClear();
+    mockUpdateItemMutateAsync.mockClear();
+
+    const { getAllByTestId, unmount } = render(<NoteEditorScreen />);
+
+    fireEvent.changeText(getAllByTestId('list-item-text')[0], 'Oat milk');
+    unmount();
+
+    await waitFor(() => {
+      // The item is patched individually; the whole note is not re-sent.
+      expect(mockUpdateItemMutateAsync).toHaveBeenCalledWith(
+        expect.objectContaining({
+          noteId: 'note-789',
+          itemId: 'aaaaaaaaaaaaaaaaaaaaaa',
+          data: expect.objectContaining({ text: 'Oat milk' }),
+        }),
+      );
+    });
+    expect(mockUpdateMutateAsync).not.toHaveBeenCalled();
   });
 
   it('does not persist when existing note is still hydrating and user leaves', async () => {

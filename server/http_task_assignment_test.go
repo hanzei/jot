@@ -88,16 +88,11 @@ func TestTaskAssignment(t *testing.T) {
 
 		noteID, collabID := createSharedListNote(t, ts, owner, collaborator)
 
-		_, err := owner.Client.UpdateListNote(t.Context(), noteID, &client.UpdateListNoteRequest{
-			Title: client.Ptr("Shared List"),
-			Items: &[]client.UpdateNoteItem{
-				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: collabID},
-				{Text: "Item 2", Position: 1, IndentLevel: 0},
-			},
-		})
+		items := getNoteItems(t, owner, noteID)
+		_, err := owner.Client.UpdateNoteItem(t.Context(), noteID, items[0].ID, &client.PatchNoteItemRequest{AssignedTo: client.Ptr(collabID)})
 		require.NoError(t, err)
 
-		items := getNoteItems(t, owner, noteID)
+		items = getNoteItems(t, owner, noteID)
 		assert.Equal(t, collabID, items[0].AssignedTo)
 		assert.Empty(t, items[1].AssignedTo)
 	})
@@ -110,15 +105,11 @@ func TestTaskAssignment(t *testing.T) {
 
 		noteID, _ := createSharedListNote(t, ts, owner, collaborator)
 
-		_, err := owner.Client.UpdateListNote(t.Context(), noteID, &client.UpdateListNoteRequest{
-			Title: client.Ptr("Shared List"),
-			Items: &[]client.UpdateNoteItem{
-				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: owner.User.ID},
-			},
-		})
+		items := getNoteItems(t, owner, noteID)
+		_, err := owner.Client.UpdateNoteItem(t.Context(), noteID, items[0].ID, &client.PatchNoteItemRequest{AssignedTo: client.Ptr(owner.User.ID)})
 		require.NoError(t, err)
 
-		items := getNoteItems(t, owner, noteID)
+		items = getNoteItems(t, owner, noteID)
 		assert.Equal(t, owner.User.ID, items[0].AssignedTo)
 	})
 
@@ -135,12 +126,8 @@ func TestTaskAssignment(t *testing.T) {
 		})
 		require.NoError(t, err)
 
-		_, err = owner.Client.UpdateListNote(t.Context(), note.ID, &client.UpdateListNoteRequest{
-			Title: client.Ptr("Solo List"),
-			Items: &[]client.UpdateNoteItem{
-				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: owner.User.ID},
-			},
-		})
+		itemID := getNoteItems(t, owner, note.ID)[0].ID
+		_, err = owner.Client.UpdateNoteItem(t.Context(), note.ID, itemID, &client.PatchNoteItemRequest{AssignedTo: client.Ptr(owner.User.ID)})
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 
@@ -153,12 +140,8 @@ func TestTaskAssignment(t *testing.T) {
 
 		noteID, _ := createSharedListNote(t, ts, owner, collaborator)
 
-		_, err := owner.Client.UpdateListNote(t.Context(), noteID, &client.UpdateListNoteRequest{
-			Title: client.Ptr("Shared List"),
-			Items: &[]client.UpdateNoteItem{
-				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: outsider.User.ID},
-			},
-		})
+		itemID := getNoteItems(t, owner, noteID)[0].ID
+		_, err := owner.Client.UpdateNoteItem(t.Context(), noteID, itemID, &client.PatchNoteItemRequest{AssignedTo: client.Ptr(outsider.User.ID)})
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 
@@ -170,12 +153,8 @@ func TestTaskAssignment(t *testing.T) {
 
 		noteID, _ := createSharedListNote(t, ts, owner, collaborator)
 
-		_, err := owner.Client.UpdateListNote(t.Context(), noteID, &client.UpdateListNoteRequest{
-			Title: client.Ptr("Shared List"),
-			Items: &[]client.UpdateNoteItem{
-				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: "short"},
-			},
-		})
+		itemID := getNoteItems(t, owner, noteID)[0].ID
+		_, err := owner.Client.UpdateNoteItem(t.Context(), noteID, itemID, &client.PatchNoteItemRequest{AssignedTo: client.Ptr("short")})
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 
@@ -187,16 +166,11 @@ func TestTaskAssignment(t *testing.T) {
 
 		noteID, _ := createSharedListNote(t, ts, owner, collaborator)
 
-		_, err := collaborator.Client.UpdateListNote(t.Context(), noteID, &client.UpdateListNoteRequest{
-			Title: client.Ptr("Shared List"),
-			Items: &[]client.UpdateNoteItem{
-				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: owner.User.ID},
-				{Text: "Item 2", Position: 1, IndentLevel: 0},
-			},
-		})
+		items := getNoteItems(t, owner, noteID)
+		_, err := collaborator.Client.UpdateNoteItem(t.Context(), noteID, items[0].ID, &client.PatchNoteItemRequest{AssignedTo: client.Ptr(owner.User.ID)})
 		require.NoError(t, err)
 
-		items := getNoteItems(t, owner, noteID)
+		items = getNoteItems(t, owner, noteID)
 		assert.Equal(t, owner.User.ID, items[0].AssignedTo)
 	})
 
@@ -208,22 +182,13 @@ func TestTaskAssignment(t *testing.T) {
 
 		noteID, collabID := createSharedListNote(t, ts, owner, collaborator)
 
-		_, err := owner.Client.UpdateListNote(t.Context(), noteID, &client.UpdateListNoteRequest{
-			Title: client.Ptr("Shared List"),
-			Items: &[]client.UpdateNoteItem{
-				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: collabID},
-			},
-		})
-		require.NoError(t, err)
 		items := getNoteItems(t, owner, noteID)
+		_, err := owner.Client.UpdateNoteItem(t.Context(), noteID, items[0].ID, &client.PatchNoteItemRequest{AssignedTo: client.Ptr(collabID)})
+		require.NoError(t, err)
+		items = getNoteItems(t, owner, noteID)
 		assert.Equal(t, collabID, items[0].AssignedTo)
 
-		_, err = owner.Client.UpdateListNote(t.Context(), noteID, &client.UpdateListNoteRequest{
-			Title: client.Ptr("Shared List"),
-			Items: &[]client.UpdateNoteItem{
-				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: ""},
-			},
-		})
+		_, err = owner.Client.UpdateNoteItem(t.Context(), noteID, items[0].ID, &client.PatchNoteItemRequest{AssignedTo: client.Ptr("")})
 		require.NoError(t, err)
 		items = getNoteItems(t, owner, noteID)
 		assert.Empty(t, items[0].AssignedTo)
@@ -237,15 +202,14 @@ func TestTaskAssignment(t *testing.T) {
 
 		noteID, collabID := createSharedListNote(t, ts, owner, collaborator)
 
-		_, err := owner.Client.UpdateListNote(t.Context(), noteID, &client.UpdateListNoteRequest{
-			Title: client.Ptr("Shared List"),
-			Items: &[]client.UpdateNoteItem{
-				{Text: "Item 1", Position: 0, IndentLevel: 0, Completed: true, AssignedTo: collabID},
-			},
+		items := getNoteItems(t, owner, noteID)
+		_, err := owner.Client.UpdateNoteItem(t.Context(), noteID, items[0].ID, &client.PatchNoteItemRequest{
+			Completed:  client.Ptr(true),
+			AssignedTo: client.Ptr(collabID),
 		})
 		require.NoError(t, err)
 
-		items := getNoteItems(t, owner, noteID)
+		items = getNoteItems(t, owner, noteID)
 		assert.True(t, items[0].Completed)
 		assert.Equal(t, collabID, items[0].AssignedTo)
 	})
@@ -260,13 +224,8 @@ func TestMyTasksFilter(t *testing.T) {
 
 		noteID, collabID := createSharedListNote(t, ts, owner, collaborator)
 
-		_, err := owner.Client.UpdateListNote(t.Context(), noteID, &client.UpdateListNoteRequest{
-			Title: client.Ptr("Shared List"),
-			Items: &[]client.UpdateNoteItem{
-				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: collabID},
-				{Text: "Item 2", Position: 1, IndentLevel: 0},
-			},
-		})
+		items := getNoteItems(t, owner, noteID)
+		_, err := owner.Client.UpdateNoteItem(t.Context(), noteID, items[0].ID, &client.PatchNoteItemRequest{AssignedTo: client.Ptr(collabID)})
 		require.NoError(t, err)
 
 		notes, err := collaborator.Client.ListNotes(t.Context(), &client.ListNotesOptions{MyTasks: true})
@@ -283,13 +242,8 @@ func TestMyTasksFilter(t *testing.T) {
 
 		noteID, _ := createSharedListNote(t, ts, owner, collaborator)
 
-		_, err := owner.Client.UpdateListNote(t.Context(), noteID, &client.UpdateListNoteRequest{
-			Title: client.Ptr("Shared List"),
-			Items: &[]client.UpdateNoteItem{
-				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: owner.User.ID},
-				{Text: "Item 2", Position: 1, IndentLevel: 0},
-			},
-		})
+		items := getNoteItems(t, owner, noteID)
+		_, err := owner.Client.UpdateNoteItem(t.Context(), noteID, items[0].ID, &client.PatchNoteItemRequest{AssignedTo: client.Ptr(owner.User.ID)})
 		require.NoError(t, err)
 
 		notes, err := collaborator.Client.ListNotes(t.Context(), &client.ListNotesOptions{MyTasks: true})
@@ -323,12 +277,8 @@ func TestMyTasksFilter(t *testing.T) {
 
 		noteID, _ := createSharedListNote(t, ts, owner, collaborator)
 
-		_, err := owner.Client.UpdateListNote(t.Context(), noteID, &client.UpdateListNoteRequest{
-			Title: client.Ptr("Shared List"),
-			Items: &[]client.UpdateNoteItem{
-				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: owner.User.ID},
-			},
-		})
+		items := getNoteItems(t, owner, noteID)
+		_, err := owner.Client.UpdateNoteItem(t.Context(), noteID, items[0].ID, &client.PatchNoteItemRequest{AssignedTo: client.Ptr(owner.User.ID)})
 		require.NoError(t, err)
 
 		notes, err := owner.Client.ListNotes(t.Context(), &client.ListNotesOptions{MyTasks: true})
@@ -345,12 +295,8 @@ func TestMyTasksFilter(t *testing.T) {
 
 		noteID, collabID := createSharedListNote(t, ts, owner, collaborator)
 
-		_, err := owner.Client.UpdateListNote(t.Context(), noteID, &client.UpdateListNoteRequest{
-			Title: client.Ptr("Shared List"),
-			Items: &[]client.UpdateNoteItem{
-				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: collabID},
-			},
-		})
+		items := getNoteItems(t, owner, noteID)
+		_, err := owner.Client.UpdateNoteItem(t.Context(), noteID, items[0].ID, &client.PatchNoteItemRequest{AssignedTo: client.Ptr(collabID)})
 		require.NoError(t, err)
 
 		require.NoError(t, owner.Client.DeleteNote(t.Context(), noteID))
@@ -381,18 +327,15 @@ func TestTaskAssignmentUnshareCleanup(t *testing.T) {
 		require.NoError(t, owner.Client.ShareNote(t.Context(), note.ID, collab1.User.ID))
 		require.NoError(t, owner.Client.ShareNote(t.Context(), note.ID, collab2.User.ID))
 
-		_, err = owner.Client.UpdateListNote(t.Context(), note.ID, &client.UpdateListNoteRequest{
-			Title: client.Ptr("Shared List"),
-			Items: &[]client.UpdateNoteItem{
-				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: collab1.User.ID},
-				{Text: "Item 2", Position: 1, IndentLevel: 0, AssignedTo: collab2.User.ID},
-			},
-		})
+		items := getNoteItems(t, owner, note.ID)
+		_, err = owner.Client.UpdateNoteItem(t.Context(), note.ID, items[0].ID, &client.PatchNoteItemRequest{AssignedTo: client.Ptr(collab1.User.ID)})
+		require.NoError(t, err)
+		_, err = owner.Client.UpdateNoteItem(t.Context(), note.ID, items[1].ID, &client.PatchNoteItemRequest{AssignedTo: client.Ptr(collab2.User.ID)})
 		require.NoError(t, err)
 
 		require.NoError(t, owner.Client.UnshareNote(t.Context(), note.ID, collab1.User.ID))
 
-		items := getNoteItems(t, owner, note.ID)
+		items = getNoteItems(t, owner, note.ID)
 		assert.Empty(t, items[0].AssignedTo, "collab1's assignment should be cleared")
 		assert.Equal(t, collab2.User.ID, items[1].AssignedTo, "collab2's assignment should remain")
 	})
@@ -405,18 +348,15 @@ func TestTaskAssignmentUnshareCleanup(t *testing.T) {
 
 		noteID, _ := createSharedListNote(t, ts, owner, collab)
 
-		_, err := owner.Client.UpdateListNote(t.Context(), noteID, &client.UpdateListNoteRequest{
-			Title: client.Ptr("Shared List"),
-			Items: &[]client.UpdateNoteItem{
-				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: owner.User.ID},
-				{Text: "Item 2", Position: 1, IndentLevel: 0, AssignedTo: collab.User.ID},
-			},
-		})
+		items := getNoteItems(t, owner, noteID)
+		_, err := owner.Client.UpdateNoteItem(t.Context(), noteID, items[0].ID, &client.PatchNoteItemRequest{AssignedTo: client.Ptr(owner.User.ID)})
+		require.NoError(t, err)
+		_, err = owner.Client.UpdateNoteItem(t.Context(), noteID, items[1].ID, &client.PatchNoteItemRequest{AssignedTo: client.Ptr(collab.User.ID)})
 		require.NoError(t, err)
 
 		require.NoError(t, owner.Client.UnshareNote(t.Context(), noteID, collab.User.ID))
 
-		items := getNoteItems(t, owner, noteID)
+		items = getNoteItems(t, owner, noteID)
 		assert.Empty(t, items[0].AssignedTo, "owner's self-assignment should be cleared")
 		assert.Empty(t, items[1].AssignedTo, "collab's assignment should be cleared")
 	})
@@ -443,18 +383,15 @@ func TestTaskAssignmentUserDeletion(t *testing.T) {
 		require.NoError(t, owner.Client.ShareNote(t.Context(), note.ID, collab1.User.ID))
 		require.NoError(t, owner.Client.ShareNote(t.Context(), note.ID, collab2.User.ID))
 
-		_, err = owner.Client.UpdateListNote(t.Context(), note.ID, &client.UpdateListNoteRequest{
-			Title: client.Ptr("Shared List"),
-			Items: &[]client.UpdateNoteItem{
-				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: collab1.User.ID},
-				{Text: "Item 2", Position: 1, IndentLevel: 0, AssignedTo: collab2.User.ID},
-			},
-		})
+		items := getNoteItems(t, owner, note.ID)
+		_, err = owner.Client.UpdateNoteItem(t.Context(), note.ID, items[0].ID, &client.PatchNoteItemRequest{AssignedTo: client.Ptr(collab1.User.ID)})
+		require.NoError(t, err)
+		_, err = owner.Client.UpdateNoteItem(t.Context(), note.ID, items[1].ID, &client.PatchNoteItemRequest{AssignedTo: client.Ptr(collab2.User.ID)})
 		require.NoError(t, err)
 
 		require.NoError(t, admin.Client.AdminDeleteUser(t.Context(), collab1.User.ID))
 
-		items := getNoteItems(t, owner, note.ID)
+		items = getNoteItems(t, owner, note.ID)
 		assert.Empty(t, items[0].AssignedTo, "deleted user's assignment should be cleared")
 		assert.Equal(t, collab2.User.ID, items[1].AssignedTo, "other collab's assignment should remain")
 	})
@@ -468,18 +405,15 @@ func TestTaskAssignmentUserDeletion(t *testing.T) {
 
 		noteID, collabID := createSharedListNote(t, ts, owner, collab)
 
-		_, err := owner.Client.UpdateListNote(t.Context(), noteID, &client.UpdateListNoteRequest{
-			Title: client.Ptr("Shared List"),
-			Items: &[]client.UpdateNoteItem{
-				{Text: "Item 1", Position: 0, IndentLevel: 0, AssignedTo: owner.User.ID},
-				{Text: "Item 2", Position: 1, IndentLevel: 0, AssignedTo: collabID},
-			},
-		})
+		items := getNoteItems(t, owner, noteID)
+		_, err := owner.Client.UpdateNoteItem(t.Context(), noteID, items[0].ID, &client.PatchNoteItemRequest{AssignedTo: client.Ptr(owner.User.ID)})
+		require.NoError(t, err)
+		_, err = owner.Client.UpdateNoteItem(t.Context(), noteID, items[1].ID, &client.PatchNoteItemRequest{AssignedTo: client.Ptr(collabID)})
 		require.NoError(t, err)
 
 		require.NoError(t, admin.Client.AdminDeleteUser(t.Context(), collabID))
 
-		items := getNoteItems(t, owner, noteID)
+		items = getNoteItems(t, owner, noteID)
 		assert.Empty(t, items[0].AssignedTo, "owner's self-assignment should be cleared when note becomes unshared")
 		assert.Empty(t, items[1].AssignedTo, "deleted collab's assignment should be cleared")
 	})

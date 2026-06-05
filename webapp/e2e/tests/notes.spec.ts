@@ -329,32 +329,27 @@ test.describe('Notes', () => {
         archived: boolean;
         color: string;
         checked_items_collapsed: boolean;
-        items: Array<{ text: string; position: number; completed: boolean; indent_level: number; assigned_to: string }>;
+        items: Array<{ id: string; text: string; position: number; completed: boolean; indent_level: number; assigned_to: string }>;
         labels: Array<{ name: string }>;
         shared_with: Array<{ shared_with_user_id: string }>;
       };
     };
 
     const sourceList = await findNoteByTitle('Source List');
-    const updateResp = await request.patch(`/api/v1/notes/${sourceList.id}`, {
+    // Set up the source list via the granular item endpoints: assign the first
+    // item to the collaborator and mark the second completed + indented.
+    // Duplication should copy text/position/completed/indent but clear
+    // assignments (and shares).
+    const assignResp = await request.patch(`/api/v1/notes/${sourceList.id}/items/${sourceList.items[0].id}`, {
       headers: authHeaders,
-      data: {
-        title: sourceList.title,
-        content: sourceList.content,
-        pinned: sourceList.pinned,
-        archived: sourceList.archived,
-        color: sourceList.color,
-        checked_items_collapsed: sourceList.checked_items_collapsed,
-        items: sourceList.items.map((item, index) => ({
-          text: item.text,
-          position: item.position,
-          completed: index === 1,
-          indent_level: index === 1 ? 1 : item.indent_level,
-          assigned_to: index === 0 ? collaboratorId : '',
-        })),
-      },
+      data: { assigned_to: collaboratorId },
     });
-    expect(updateResp.ok()).toBeTruthy();
+    expect(assignResp.ok()).toBeTruthy();
+    const secondItemResp = await request.patch(`/api/v1/notes/${sourceList.id}/items/${sourceList.items[1].id}`, {
+      headers: authHeaders,
+      data: { completed: true, indent_level: 1 },
+    });
+    expect(secondItemResp.ok()).toBeTruthy();
 
     await dashboardPage.openNote('Source List');
     await dashboardPage.duplicateCurrentNoteFromModal();

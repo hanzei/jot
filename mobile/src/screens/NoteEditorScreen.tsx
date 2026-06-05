@@ -21,7 +21,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
-import { useCreateNote, useUpdateNote, useDeleteNote, useRestoreNote, useDuplicateNote } from '../hooks/useNotes';
+import { useCreateNote, useUpdateNote, useDeleteNote, useRestoreNote, useDuplicateNote, useCreateNoteItem, useUpdateNoteItem, useDeleteNoteItem, useReorderNoteItems } from '../hooks/useNotes';
 import { useOfflineNote } from '../hooks/useOfflineNotes';
 import { isLocalId } from '../db/noteQueries';
 import { useSSESubscription } from '../store/SSEContext';
@@ -30,7 +30,7 @@ import ListItem from '../components/ListItem';
 import ColorPicker from '../components/ColorPicker';
 import LabelPicker from '../components/LabelPicker';
 import AssigneePicker from '../components/AssigneePicker';
-import { buildCollaborators, VALIDATION, type Collaborator, type NoteType, type NoteItem, type CreateNoteRequest, type UpdateNoteRequest, type Label } from '@jot/shared';
+import { buildCollaborators, generateId, VALIDATION, type Collaborator, type NoteType, type NoteItem, type CreateNoteRequest, type UpdateNoteRequest, type UpdateListNoteRequest, type UpdateTextNoteRequest, type PatchNoteItemRequest, type Label } from '@jot/shared';
 import { useUsers } from '../store/UsersContext';
 import { useTheme } from '../theme/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -71,6 +71,9 @@ function toLocalItems(serverItems: NoteItem[]): LocalItem[] {
 
 function serializeItems(items: LocalItem[]) {
   return items.map((item, i) => ({
+    // Include the (client-generated, server-format) ID so the server keeps a
+    // stable identity for later per-item updates.
+    id: item.id,
     text: item.text,
     position: i,
     completed: item.completed,
@@ -78,6 +81,16 @@ function serializeItems(items: LocalItem[]) {
     assigned_to: item.assigned_to,
   }));
 }
+
+// Mergeable fields of a list item, used as the per-item baseline for diffing
+// local edits against the last-saved state.
+type ItemSnapshot = Pick<LocalItem, 'text' | 'completed' | 'indent_level' | 'assigned_to'>;
+const itemSnapshot = (item: LocalItem): ItemSnapshot => ({
+  text: item.text,
+  completed: item.completed,
+  indent_level: item.indent_level,
+  assigned_to: item.assigned_to,
+});
 
 export default function NoteEditorScreen() {
   const navigation = useNavigation<EditorNavProp>();
@@ -116,6 +129,10 @@ export default function NoteEditorScreen() {
   const deleteMutation = useDeleteNote();
   const restoreMutation = useRestoreNote();
   const duplicateMutation = useDuplicateNote();
+  const createItemMutation = useCreateNoteItem();
+  const updateItemMutation = useUpdateNoteItem();
+  const deleteItemMutation = useDeleteNoteItem();
+  const reorderItemsMutation = useReorderNoteItems();
 
   // Show a toast when another user updates this note while editor is open
   useSSESubscription(noteId, useCallback(() => {
@@ -153,7 +170,6 @@ export default function NoteEditorScreen() {
   const intentionalExitRef = useRef(false);
   const hasPendingChangesRef = useRef(false);
   const saveInFlightRef = useRef<Promise<boolean> | null>(null);
-  const tempIdCounterRef = useRef(0);
   const requiresHydrationRef = useRef(initialNoteId !== null);
 
   // Refs for current state to avoid stale closures in debounced save
@@ -179,6 +195,20 @@ export default function NoteEditorScreen() {
   createMutateRef.current = createMutation.mutateAsync;
   const updateMutateRef = useRef(updateMutation.mutateAsync);
   updateMutateRef.current = updateMutation.mutateAsync;
+  const createItemRef = useRef(createItemMutation.mutateAsync);
+  createItemRef.current = createItemMutation.mutateAsync;
+  const updateItemRef = useRef(updateItemMutation.mutateAsync);
+  updateItemRef.current = updateItemMutation.mutateAsync;
+  const deleteItemRef = useRef(deleteItemMutation.mutateAsync);
+  deleteItemRef.current = deleteItemMutation.mutateAsync;
+  const reorderItemsRef = useRef(reorderItemsMutation.mutateAsync);
+  reorderItemsRef.current = reorderItemsMutation.mutateAsync;
+  // Baseline of the last-saved state, used to diff local edits into granular
+  // per-item operations (and field-only scalar patches) instead of re-sending
+  // the whole note — so a save here can't overwrite another device's edits.
+  const savedItemsRef = useRef<Map<string, ItemSnapshot>>(new Map());
+  const savedOrderRef = useRef<string[]>([]);
+  const savedScalarsRef = useRef({ title: '', content: '', pinned: false, archived: false, color: '#ffffff', checked_items_collapsed: false });
   const isHydratingRef = useRef(initialNoteId !== null && !existingNote);
   isHydratingRef.current = initialNoteId !== null && !existingNote;
 
@@ -195,8 +225,10 @@ export default function NoteEditorScreen() {
     return itemInputRefsMap.current.get(id)!;
   }, []);
 
+  // New list items get a server-format ID up front so they keep a stable
+  // identity across granular per-item updates and offline replay.
   function nextTempId(): string {
-    return `temp-${++tempIdCounterRef.current}`;
+    return generateId();
   }
 
   // Load existing note data
@@ -207,15 +239,29 @@ export default function NoteEditorScreen() {
       setArchived(existingNote.archived);
       setColor(existingNote.color);
       setLabels(existingNote.labels ?? []);
+      let initialItems: LocalItem[] = [];
       if (existingNote.note_type === 'list') {
         setTitle(existingNote.title);
         setCheckedItemsCollapsed(existingNote.checked_items_collapsed);
         if (existingNote.items) {
-          setItems(toLocalItems(existingNote.items));
+          initialItems = toLocalItems(existingNote.items);
+          setItems(initialItems);
         }
       } else {
         setContent(existingNote.content);
       }
+      // Seed the save baseline from the hydrated note so the first edit diffs
+      // against the server state rather than re-sending everything.
+      savedScalarsRef.current = {
+        title: existingNote.note_type === 'list' ? existingNote.title : '',
+        content: existingNote.note_type === 'text' ? existingNote.content : '',
+        pinned: existingNote.pinned,
+        archived: existingNote.archived,
+        color: existingNote.color,
+        checked_items_collapsed: existingNote.note_type === 'list' ? existingNote.checked_items_collapsed : false,
+      };
+      savedItemsRef.current = new Map(initialItems.map((it) => [it.id, itemSnapshot(it)]));
+      savedOrderRef.current = initialItems.map((it) => it.id);
       isInitializedRef.current = true;
       requiresHydrationRef.current = false;
     }
@@ -238,6 +284,65 @@ export default function NoteEditorScreen() {
     }
   }, [existingNote?.id, noteId, navigation]); // eslint-disable-line react-hooks/exhaustive-deps
 
+  // Persists list-item changes as granular create/patch/delete/reorder ops by
+  // diffing the current items against the saved baseline.
+  const persistItemDiff = useCallback(async (currentNoteId: string, currentItems: LocalItem[]) => {
+    const base = savedItemsRef.current;
+    const curIds = new Set(currentItems.map((it) => it.id));
+
+    // Advance the baseline incrementally after each successful op so a later
+    // failure does not re-send already-applied ops on the next retry (which
+    // would re-create items and get stuck on 409 Conflict).
+    for (const it of currentItems) {
+      const snap = base.get(it.id);
+      if (!snap) {
+        try {
+          await createItemRef.current({
+            noteId: currentNoteId,
+            item: {
+              id: it.id,
+              text: it.text,
+              position: it.position,
+              completed: it.completed,
+              indent_level: it.indent_level,
+              assigned_to: it.assigned_to || undefined,
+            },
+          });
+        } catch (err) {
+          // 409 means a prior attempt already created this item; treat as done.
+          const status = (err as { response?: { status?: number } })?.response?.status;
+          if (status !== 409) throw err;
+        }
+        base.set(it.id, itemSnapshot(it));
+        continue;
+      }
+      const data: PatchNoteItemRequest = {};
+      if (it.text !== snap.text) data.text = it.text;
+      if (it.completed !== snap.completed) data.completed = it.completed;
+      if (it.indent_level !== snap.indent_level) data.indent_level = it.indent_level;
+      if (it.assigned_to !== snap.assigned_to) data.assigned_to = it.assigned_to;
+      if (Object.keys(data).length > 0) {
+        await updateItemRef.current({ noteId: currentNoteId, itemId: it.id, data });
+        base.set(it.id, itemSnapshot(it));
+      }
+    }
+
+    for (const id of [...base.keys()]) {
+      if (!curIds.has(id)) {
+        await deleteItemRef.current({ noteId: currentNoteId, itemId: id });
+        base.delete(id);
+      }
+    }
+
+    const curOrder = currentItems.map((it) => it.id);
+    const orderChanged = curOrder.length !== savedOrderRef.current.length
+      || curOrder.some((id, i) => savedOrderRef.current[i] !== id);
+    if (orderChanged && curOrder.length > 0) {
+      await reorderItemsRef.current({ noteId: currentNoteId, itemIds: curOrder });
+    }
+    savedOrderRef.current = curOrder;
+  }, []);
+
   const flushSave = useCallback(async (unmounting = false): Promise<boolean> => {
     if (!hasPendingChangesRef.current) return true;
     // If an existing note has local edits flagged but hasn't hydrated yet,
@@ -258,6 +363,21 @@ export default function NoteEditorScreen() {
       const currentCollapsed = checkedItemsCollapsedRef.current;
       const currentNoteType = noteTypeRef.current;
       const currentColor = colorRef.current;
+      const currentPinned = pinnedRef.current;
+      const currentArchived = archivedRef.current;
+
+      const captureBaseline = () => {
+        savedScalarsRef.current = {
+          title: currentTitle,
+          content: currentContent,
+          pinned: currentPinned,
+          archived: currentArchived,
+          color: currentColor,
+          checked_items_collapsed: currentCollapsed,
+        };
+        savedItemsRef.current = new Map(currentItems.map((it) => [it.id, itemSnapshot(it)]));
+        savedOrderRef.current = currentItems.map((it) => it.id);
+      };
 
       if (!currentNoteId) {
         const isEmpty = currentNoteType === 'list'
@@ -281,32 +401,41 @@ export default function NoteEditorScreen() {
             };
         const newNote = await createMutateRef.current(req);
         hasPendingChangesRef.current = false;
+        // The server honors the client-supplied item IDs, so the items we just
+        // sent become the baseline for subsequent granular edits.
+        captureBaseline();
         if (!isMountedRef.current || unmounting) return true;
         noteIdRef.current = newNote.id;
         setNoteId(newNote.id);
         setHasCreated(true);
         setSaveError(null);
       } else {
-        const updateData: UpdateNoteRequest = currentNoteType === 'list'
-          ? {
-              title: currentTitle,
-              pinned: pinnedRef.current,
-              archived: archivedRef.current,
-              color: currentColor,
-              checked_items_collapsed: currentCollapsed,
-              items: serializeItems(currentItems),
-            }
-          : {
-              content: currentContent,
-              pinned: pinnedRef.current,
-              archived: archivedRef.current,
-              color: currentColor,
-            };
-        await updateMutateRef.current({
-          id: currentNoteId,
-          data: updateData,
-        });
+        // Patch only the scalar fields that changed, so a list-item edit never
+        // re-sends the title and vice versa, and another device's concurrent
+        // changes to untouched fields are preserved.
+        const base = savedScalarsRef.current;
+        const scalarData: UpdateNoteRequest = {};
+        if (currentNoteType === 'list') {
+          if (currentTitle !== base.title) (scalarData as UpdateListNoteRequest).title = currentTitle;
+          if (currentCollapsed !== base.checked_items_collapsed) (scalarData as UpdateListNoteRequest).checked_items_collapsed = currentCollapsed;
+        } else if (currentContent !== base.content) {
+          (scalarData as UpdateTextNoteRequest).content = currentContent;
+        }
+        if (currentPinned !== base.pinned) scalarData.pinned = currentPinned;
+        if (currentArchived !== base.archived) scalarData.archived = currentArchived;
+        if (currentColor !== base.color) scalarData.color = currentColor;
+
+        if (Object.keys(scalarData).length > 0) {
+          await updateMutateRef.current({ id: currentNoteId, data: scalarData });
+        }
+
+        // Items are persisted as granular per-item operations.
+        if (currentNoteType === 'list') {
+          await persistItemDiff(currentNoteId, currentItems);
+        }
+
         hasPendingChangesRef.current = false;
+        captureBaseline();
         if (!isMountedRef.current || unmounting) return true;
         setSaveError(null);
       }
@@ -329,7 +458,7 @@ export default function NoteEditorScreen() {
         saveInFlightRef.current = null;
       }
     }
-  }, [t]);
+  }, [t, persistItemDiff]);
 
   const scheduleUpdate = useCallback(() => {
     if (debounceRef.current) {
@@ -624,25 +753,17 @@ export default function NoteEditorScreen() {
     [markDirtyAndScheduleUpdate],
   );
 
+  // Metadata actions (pin/archive/color) flush pending item edits first, then
+  // PATCH only the field that changed. Sending just the changed scalar avoids
+  // re-sending (and clobbering) items or other fields edited concurrently
+  // elsewhere. The caller advances the saved baseline only after the PATCH
+  // succeeds (see commitMetadataBaseline).
   const buildMetadataUpdateData = useCallback((overrides: Partial<UpdateNoteRequest>): UpdateNoteRequest => {
-    if (noteTypeRef.current === 'list') {
-      return {
-        title: titleRef.current,
-        pinned: pinnedRef.current,
-        archived: archivedRef.current,
-        color: colorRef.current,
-        checked_items_collapsed: checkedItemsCollapsedRef.current,
-        items: serializeItems(itemsRef.current),
-        ...overrides,
-      };
-    }
-    return {
-      content: contentRef.current,
-      pinned: pinnedRef.current,
-      archived: archivedRef.current,
-      color: colorRef.current,
-      ...overrides,
-    };
+    return { ...overrides } as UpdateNoteRequest;
+  }, []);
+
+  const commitMetadataBaseline = useCallback((overrides: Partial<UpdateNoteRequest>) => {
+    Object.assign(savedScalarsRef.current, overrides);
   }, []);
 
   const handleTitleSubmit = useCallback(() => {
@@ -752,11 +873,12 @@ export default function NoteEditorScreen() {
         id: noteId,
         data: buildMetadataUpdateData({ pinned: newPinned }),
       });
+      commitMetadataBaseline({ pinned: newPinned });
     } catch {
       setPinned(!newPinned);
       Alert.alert(t('common.error'), t('note.failedUpdate'));
     }
-  }, [buildMetadataUpdateData, flushPendingChanges, noteId, t, updateMutation]);
+  }, [buildMetadataUpdateData, commitMetadataBaseline, flushPendingChanges, noteId, t, updateMutation]);
 
   const handleToggleArchive = useCallback(async () => {
     if (!noteId) return;
@@ -771,6 +893,7 @@ export default function NoteEditorScreen() {
         id: noteId,
         data: buildMetadataUpdateData({ archived: newArchived }),
       });
+      commitMetadataBaseline({ archived: newArchived });
       if (newArchived) {
         showToast(t('dashboard.noteArchived'), 'success', {
           label: t('dashboard.undo'),
@@ -780,6 +903,7 @@ export default function NoteEditorScreen() {
                 id: noteId,
                 data: buildMetadataUpdateData({ archived: false }),
               });
+              commitMetadataBaseline({ archived: false });
               setArchived(false);
               showToast(t('dashboard.noteUnarchived'));
             } catch {
@@ -794,7 +918,7 @@ export default function NoteEditorScreen() {
       setArchived(!newArchived);
       Alert.alert(t('common.error'), t('note.failedUpdate'));
     }
-  }, [buildMetadataUpdateData, flushPendingChanges, noteId, showToast, t, updateMutation]);
+  }, [buildMetadataUpdateData, commitMetadataBaseline, flushPendingChanges, noteId, showToast, t, updateMutation]);
 
   const handleColorSelect = useCallback(async (selectedColor: string) => {
     const saveSucceeded = await flushPendingChanges();
@@ -821,11 +945,12 @@ export default function NoteEditorScreen() {
         id: currentNoteId,
         data: buildMetadataUpdateData({ color: selectedColor }),
       });
+      commitMetadataBaseline({ color: selectedColor });
     } catch {
       setColor(prevColor);
       Alert.alert(t('common.error'), t('note.failedColorUpdate'));
     }
-  }, [buildMetadataUpdateData, flushPendingChanges, markDirtyAndScheduleUpdate, t, updateMutation]);
+  }, [buildMetadataUpdateData, commitMetadataBaseline, flushPendingChanges, markDirtyAndScheduleUpdate, t, updateMutation]);
 
   const handleToggleNoteType = useCallback(() => {
     if (hasCreated) return;

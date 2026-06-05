@@ -73,14 +73,12 @@ func TestDuplicateNoteEndpoint(t *testing.T) {
 		require.NoError(t, err)
 		require.NoError(t, owner.Client.ShareNote(t.Context(), source.ID, collaborator.User.ID))
 
-		updatedSource, err := owner.Client.UpdateListNote(t.Context(), source.ID, &client.UpdateListNoteRequest{
-			Items: &[]client.UpdateNoteItem{
-				{Text: "Outline release", Position: 0, IndentLevel: 0, Completed: false, AssignedTo: collaborator.User.ID},
-				{Text: "Notify team", Position: 1, IndentLevel: 1, Completed: true, AssignedTo: owner.User.ID},
-			},
-		})
+		sourceItems := getNoteItems(t, owner, source.ID)
+		require.Len(t, sourceItems, 2)
+		_, err = owner.Client.UpdateNoteItem(t.Context(), source.ID, sourceItems[0].ID, &client.PatchNoteItemRequest{AssignedTo: client.Ptr(collaborator.User.ID)})
 		require.NoError(t, err)
-		require.Len(t, updatedSource.Items, 2)
+		_, err = owner.Client.UpdateNoteItem(t.Context(), source.ID, sourceItems[1].ID, &client.PatchNoteItemRequest{AssignedTo: client.Ptr(owner.User.ID)})
+		require.NoError(t, err)
 
 		// Collaborator sets their own per-user state on the shared note before duplicating.
 		_, err = collaborator.Client.UpdateListNote(t.Context(), source.ID, &client.UpdateListNoteRequest{

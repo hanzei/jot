@@ -4,7 +4,17 @@ import api from '../api/client';
 import type { Note } from '@jot/shared';
 import { replaceLocalNoteId, saveNote } from './noteQueries';
 
-export type QueueOperation = 'create' | 'update' | 'delete' | 'restore' | 'permanentDelete' | 'reorder';
+export type QueueOperation =
+  | 'create'
+  | 'update'
+  | 'delete'
+  | 'restore'
+  | 'permanentDelete'
+  | 'reorder'
+  | 'createItem'
+  | 'updateItem'
+  | 'deleteItem'
+  | 'reorderItems';
 
 interface QueueEntry {
   id: number;

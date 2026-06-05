@@ -123,6 +123,44 @@ func (c *Client) UpdateListNote(ctx context.Context, id string, req *UpdateListN
 	return &note, nil
 }
 
+// CreateNoteItem adds a single item to a list note. If req.ID is empty the
+// server generates one. Returns the created item.
+func (c *Client) CreateNoteItem(ctx context.Context, noteID string, req *CreateNoteItemRequest) (*NoteItem, error) {
+	if req == nil {
+		return nil, errors.New("request must not be nil")
+	}
+	var item NoteItem
+	if err := c.doJSON(ctx, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/items", noteID), req, &item); err != nil {
+		return nil, err
+	}
+	return &item, nil
+}
+
+// UpdateNoteItem applies a partial update to a single list item. Nil pointer
+// fields are omitted and keep their current server-side values.
+func (c *Client) UpdateNoteItem(ctx context.Context, noteID, itemID string, req *PatchNoteItemRequest) (*NoteItem, error) {
+	if req == nil {
+		return nil, errors.New("request must not be nil")
+	}
+	var item NoteItem
+	if err := c.doJSON(ctx, http.MethodPatch, fmt.Sprintf("/api/v1/notes/%s/items/%s", noteID, itemID), req, &item); err != nil {
+		return nil, err
+	}
+	return &item, nil
+}
+
+// DeleteNoteItem deletes a single list item.
+func (c *Client) DeleteNoteItem(ctx context.Context, noteID, itemID string) error {
+	return c.doNoContent(ctx, http.MethodDelete, fmt.Sprintf("/api/v1/notes/%s/items/%s", noteID, itemID), nil)
+}
+
+// ReorderNoteItems sets the order of a list note's items by item ID.
+func (c *Client) ReorderNoteItems(ctx context.Context, noteID string, itemIDs []string) error {
+	return c.doNoContent(ctx, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/items/reorder", noteID), map[string][]string{
+		"item_ids": itemIDs,
+	})
+}
+
 // DeleteNote soft-deletes a note (moves it to trash).
 func (c *Client) DeleteNote(ctx context.Context, id string) error {
 	return c.doNoContent(ctx, http.MethodDelete, fmt.Sprintf("/api/v1/notes/%s", id), nil)

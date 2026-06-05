@@ -953,9 +953,12 @@ func scanNoteItem(rows *sql.Rows) (NoteItem, error) {
 }
 
 func (s *noteStore) getItemsByNoteID(ctx context.Context, noteID string) ([]NoteItem, error) {
+	// Tiebreak on created_at, id so display order is deterministic even if two
+	// items share a position (which can happen transiently after a partial
+	// reorder from a client that did not include every item).
 	query := s.d.RewritePlaceholders(`SELECT id, note_id, text, completed, position, indent_level,
 			  assigned_to, created_at, updated_at
-			  FROM note_items WHERE note_id = ? ORDER BY position`)
+			  FROM note_items WHERE note_id = ? ORDER BY position, created_at, id`)
 
 	rows, err := s.db.QueryContext(ctx, query, noteID)
 	if err != nil {
@@ -969,66 +972,6 @@ func (s *noteStore) getItemsByNoteID(ctx context.Context, noteID string) ([]Note
 	return items, nil
 }
 
-func (s *noteStore) CreateItem(ctx context.Context, noteID string, text string, position, indentLevel int, assignedTo string) (*NoteItem, error) {
-	itemID, err := generateID()
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate item ID: %w", err)
-	}
-
-	query := s.d.RewritePlaceholders(`INSERT INTO note_items (id, note_id, text, position, indent_level, assigned_to)
-			  VALUES (?, ?, ?, ?, ?, ?) RETURNING completed, created_at, updated_at`)
-
-	var item NoteItem
-	err = s.db.QueryRowContext(ctx, query, itemID, noteID, text, position, indentLevel,
-		nullableAssignedTo(assignedTo),
-	).Scan(
-		&item.Completed, &item.CreatedAt, &item.UpdatedAt,
-	)
-	if err != nil {
-		return nil, fmt.Errorf("failed to create note item: %w", err)
-	}
-
-	item.ID = itemID
-	item.NoteID = noteID
-	item.Text = text
-	item.Position = position
-	item.IndentLevel = indentLevel
-	item.AssignedTo = assignedTo
-
-	return &item, nil
-}
-
-// UpdateItem updates text, completed, position, and indent_level for a note item.
-// It does NOT update assigned_to. The current update flow uses delete-and-recreate
-// via CreateItemWithCompleted which preserves assignments via the caller-supplied value.
-func (s *noteStore) UpdateItem(ctx context.Context, id string, text string, completed bool, position, indentLevel int) error {
-	query := s.d.RewritePlaceholders(`UPDATE note_items SET text = ?, completed = ?, position = ?, indent_level = ?, updated_at = CURRENT_TIMESTAMP
-			  WHERE id = ?`)
-
-	_, err := s.db.ExecContext(ctx, query, text, completed, position, indentLevel, id)
-	if err != nil {
-		return fmt.Errorf("failed to update note item: %w", err)
-	}
-
-	return nil
-}
-
-func (s *noteStore) DeleteItem(ctx context.Context, id string) error {
-	_, err := s.db.ExecContext(ctx, s.d.RewritePlaceholders("DELETE FROM note_items WHERE id = ?"), id)
-	if err != nil {
-		return fmt.Errorf("failed to delete note item: %w", err)
-	}
-
-	return nil
-}
-
-func (s *noteStore) DeleteItemsByNoteID(ctx context.Context, noteID string) error {
-	_, err := s.db.ExecContext(ctx, s.d.RewritePlaceholders("DELETE FROM note_items WHERE note_id = ?"), noteID)
-	if err != nil {
-		return fmt.Errorf("failed to delete note items: %w", err)
-	}
-	return nil
-}
 
 func (s *noteStore) CreateItemWithCompleted(ctx context.Context, noteID string, text string, position int, completed bool, indentLevel int, assignedTo string) (*NoteItem, error) {
 	itemID, err := generateID()
@@ -1057,6 +1000,230 @@ func (s *noteStore) CreateItemWithCompleted(ctx context.Context, noteID string, 
 	item.AssignedTo = assignedTo
 
 	return &item, nil
+}
+
+// touchNoteTx bumps a note's updated_at so item-level changes are reflected in
+// note ordering (updated_at sort) and client freshness checks.
+func touchNoteTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID string) error {
+	if _, err := tx.ExecContext(ctx,
+		d.RewritePlaceholders(`UPDATE notes SET updated_at = CURRENT_TIMESTAMP WHERE id = ?`),
+		noteID,
+	); err != nil {
+		return fmt.Errorf("failed to touch note: %w", err)
+	}
+	return nil
+}
+
+// GetItemForNote returns a single item scoped to its note, or ErrNoteItemNotFound.
+func (s *noteStore) GetItemForNote(ctx context.Context, noteID, itemID string) (*NoteItem, error) {
+	query := s.d.RewritePlaceholders(`SELECT id, note_id, text, completed, position, indent_level,
+			  assigned_to, created_at, updated_at
+			  FROM note_items WHERE id = ? AND note_id = ?`)
+	var item NoteItem
+	var assignedTo sql.NullString
+	err := s.db.QueryRowContext(ctx, query, itemID, noteID).Scan(
+		&item.ID, &item.NoteID, &item.Text, &item.Completed,
+		&item.Position, &item.IndentLevel, &assignedTo,
+		&item.CreatedAt, &item.UpdatedAt,
+	)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNoteItemNotFound
+		}
+		return nil, fmt.Errorf("failed to get note item: %w", err)
+	}
+	item.AssignedTo = assignedTo.String
+	return &item, nil
+}
+
+// CreateItemWithID inserts a list item using a caller-supplied ID. Returns
+// ErrNoteItemExists if an item with that ID already exists, and bumps the
+// parent note's updated_at. When maxItems > 0 the note's item count is checked
+// inside the transaction and ErrNoteItemCapExceeded is returned if adding the
+// item would exceed the cap (atomic, so concurrent creates cannot race past it).
+func (s *noteStore) CreateItemWithID(ctx context.Context, noteID, itemID, text string, position int, completed bool, indentLevel int, assignedTo string, maxItems int) (*NoteItem, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var exists int
+	if err = tx.QueryRowContext(ctx,
+		s.d.RewritePlaceholders(`SELECT COUNT(*) FROM note_items WHERE id = ?`),
+		itemID,
+	).Scan(&exists); err != nil {
+		return nil, fmt.Errorf("failed to check item existence: %w", err)
+	}
+	if exists > 0 {
+		return nil, ErrNoteItemExists
+	}
+
+	if maxItems > 0 {
+		var count int
+		if err = tx.QueryRowContext(ctx,
+			s.d.RewritePlaceholders(`SELECT COUNT(*) FROM note_items WHERE note_id = ?`),
+			noteID,
+		).Scan(&count); err != nil {
+			return nil, fmt.Errorf("failed to count note items: %w", err)
+		}
+		if count >= maxItems {
+			return nil, ErrNoteItemCapExceeded
+		}
+	}
+
+	var item NoteItem
+	if err = tx.QueryRowContext(ctx,
+		s.d.RewritePlaceholders(`INSERT INTO note_items (id, note_id, text, position, completed, indent_level, assigned_to)
+			  VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING created_at, updated_at`),
+		itemID, noteID, text, position, completed, indentLevel, nullableAssignedTo(assignedTo),
+	).Scan(&item.CreatedAt, &item.UpdatedAt); err != nil {
+		return nil, fmt.Errorf("failed to create note item: %w", err)
+	}
+
+	if err = touchNoteTx(ctx, tx, s.d, noteID); err != nil {
+		return nil, err
+	}
+	if err = tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit create note item: %w", err)
+	}
+
+	item.ID = itemID
+	item.NoteID = noteID
+	item.Text = text
+	item.Position = position
+	item.Completed = completed
+	item.IndentLevel = indentLevel
+	item.AssignedTo = assignedTo
+	return &item, nil
+}
+
+// PatchItem applies a partial update to a single item. Unset fields are resolved
+// against the item's current stored value (read inside the transaction), so a
+// concurrent edit to a different column is preserved. Returns the updated item
+// or ErrNoteItemNotFound.
+func (s *noteStore) PatchItem(ctx context.Context, noteID, itemID string, patch NoteItemPatch) (*NoteItem, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var current NoteItem
+	var assignedTo sql.NullString
+	err = tx.QueryRowContext(ctx,
+		s.d.RewritePlaceholders(`SELECT id, note_id, text, completed, position, indent_level, assigned_to, created_at
+			  FROM note_items WHERE id = ? AND note_id = ?`),
+		itemID, noteID,
+	).Scan(&current.ID, &current.NoteID, &current.Text, &current.Completed,
+		&current.Position, &current.IndentLevel, &assignedTo, &current.CreatedAt)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNoteItemNotFound
+		}
+		return nil, fmt.Errorf("failed to load note item: %w", err)
+	}
+	current.AssignedTo = assignedTo.String
+
+	resolvedText := deref(patch.Text, current.Text)
+	resolvedCompleted := deref(patch.Completed, current.Completed)
+	resolvedPosition := deref(patch.Position, current.Position)
+	resolvedIndent := deref(patch.IndentLevel, current.IndentLevel)
+	resolvedAssignedTo := deref(patch.AssignedTo, current.AssignedTo)
+
+	var item NoteItem
+	if err = tx.QueryRowContext(ctx,
+		s.d.RewritePlaceholders(`UPDATE note_items SET text = ?, completed = ?, position = ?, indent_level = ?, assigned_to = ?, updated_at = CURRENT_TIMESTAMP
+			  WHERE id = ? AND note_id = ? RETURNING created_at, updated_at`),
+		resolvedText, resolvedCompleted, resolvedPosition, resolvedIndent, nullableAssignedTo(resolvedAssignedTo), itemID, noteID,
+	).Scan(&item.CreatedAt, &item.UpdatedAt); err != nil {
+		return nil, fmt.Errorf("failed to update note item: %w", err)
+	}
+
+	if err = touchNoteTx(ctx, tx, s.d, noteID); err != nil {
+		return nil, err
+	}
+	if err = tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit update note item: %w", err)
+	}
+
+	item.ID = itemID
+	item.NoteID = noteID
+	item.Text = resolvedText
+	item.Completed = resolvedCompleted
+	item.Position = resolvedPosition
+	item.IndentLevel = resolvedIndent
+	item.AssignedTo = resolvedAssignedTo
+	return &item, nil
+}
+
+// DeleteItemFromNote deletes a single item scoped to its note and bumps the
+// parent note's updated_at. Returns ErrNoteItemNotFound if no such item exists.
+func (s *noteStore) DeleteItemFromNote(ctx context.Context, noteID, itemID string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	result, err := tx.ExecContext(ctx,
+		s.d.RewritePlaceholders(`DELETE FROM note_items WHERE id = ? AND note_id = ?`),
+		itemID, noteID,
+	)
+	if err != nil {
+		return fmt.Errorf("failed to delete note item: %w", err)
+	}
+	rowsAffected, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+	if rowsAffected == 0 {
+		return ErrNoteItemNotFound
+	}
+
+	if err = touchNoteTx(ctx, tx, s.d, noteID); err != nil {
+		return err
+	}
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("commit delete note item: %w", err)
+	}
+	return nil
+}
+
+// ReorderItems sets each item's position to its index in itemIDs. Every ID must
+// belong to the note; otherwise ErrNoteItemNotFound is returned and no change is
+// committed.
+func (s *noteStore) ReorderItems(ctx context.Context, noteID string, itemIDs []string) error {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	for i, itemID := range itemIDs {
+		result, execErr := tx.ExecContext(ctx,
+			s.d.RewritePlaceholders(`UPDATE note_items SET position = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND note_id = ?`),
+			i, itemID, noteID,
+		)
+		if execErr != nil {
+			return fmt.Errorf("failed to reorder note item: %w", execErr)
+		}
+		n, raErr := result.RowsAffected()
+		if raErr != nil {
+			return fmt.Errorf("failed to get rows affected: %w", raErr)
+		}
+		if n == 0 {
+			return ErrNoteItemNotFound
+		}
+	}
+
+	if err = touchNoteTx(ctx, tx, s.d, noteID); err != nil {
+		return err
+	}
+	if err = tx.Commit(); err != nil {
+		return fmt.Errorf("commit reorder note items: %w", err)
+	}
+	return nil
 }
 
 func (s *noteStore) HasAccess(ctx context.Context, noteID string, userID string) (bool, error) {

@@ -7,14 +7,29 @@ import { VALIDATION, type Note, type NoteItem } from '@jot/shared'
 import { createMockNote } from '@/utils/__tests__/test-helpers'
 
 // Mock the API module
-const { mockNotesUpdate, mockNotesCreate } = vi.hoisted(() => ({
+const {
+  mockNotesUpdate,
+  mockNotesCreate,
+  mockCreateItem,
+  mockUpdateItem,
+  mockDeleteItem,
+  mockReorderItems,
+} = vi.hoisted(() => ({
   mockNotesUpdate: vi.fn().mockResolvedValue({}),
   mockNotesCreate: vi.fn().mockResolvedValue({}),
+  mockCreateItem: vi.fn().mockImplementation((_noteId, data) => Promise.resolve({ ...data })),
+  mockUpdateItem: vi.fn().mockImplementation((_noteId, itemId, data) => Promise.resolve({ id: itemId, ...data })),
+  mockDeleteItem: vi.fn().mockResolvedValue(undefined),
+  mockReorderItems: vi.fn().mockResolvedValue(undefined),
 }))
 vi.mock('@/utils/api', () => ({
   notes: {
     create: mockNotesCreate,
     update: mockNotesUpdate,
+    createItem: mockCreateItem,
+    updateItem: mockUpdateItem,
+    deleteItem: mockDeleteItem,
+    reorderItems: mockReorderItems,
     addLabel: vi.fn(),
     removeLabel: vi.fn(),
   },
@@ -529,12 +544,9 @@ describe('NoteModal', () => {
       fireEvent.keyDown(inputs[0], { key: 'Enter', code: 'Enter' })
       await vi.runAllTimersAsync()
 
-      expect(mockNotesUpdate).toHaveBeenLastCalledWith('1', expect.objectContaining({
-        items: [
-          expect.objectContaining({ text: 'parent', position: 0, completed: false, indent_level: 1 }),
-          expect.objectContaining({ text: '', position: 1, completed: false, indent_level: 1 }),
-        ],
-      }))
+      // Tab indents the existing item; Enter inserts a new item inheriting indent 1.
+      expect(mockUpdateItem).toHaveBeenCalledWith('1', 'item1', expect.objectContaining({ indent_level: 1 }))
+      expect(mockCreateItem).toHaveBeenCalledWith('1', expect.objectContaining({ text: '', indent_level: 1 }))
     })
 
     it('debounced text autosave does not overwrite quick Tab then Enter changes', async () => {
@@ -568,12 +580,11 @@ describe('NoteModal', () => {
       // Flush pending timers and async work.
       await vi.runAllTimersAsync()
 
-      expect(mockNotesUpdate).toHaveBeenLastCalledWith('1', expect.objectContaining({
-        items: [
-          expect.objectContaining({ text: 'parent', position: 0, completed: false, indent_level: 1 }),
-          expect.objectContaining({ text: '', position: 1, completed: false, indent_level: 1 }),
-        ],
-      }))
+      // The debounced text edit and the structural indent/insert are both
+      // persisted: item1 keeps its text and gains indent 1, and the new item
+      // inherits indent 1.
+      expect(mockUpdateItem).toHaveBeenCalledWith('1', 'item1', expect.objectContaining({ text: 'parent', indent_level: 1 }))
+      expect(mockCreateItem).toHaveBeenCalledWith('1', expect.objectContaining({ text: '', indent_level: 1 }))
     })
 
     it('queued autosave retries use latest note fields while a save is in-flight', async () => {
@@ -595,9 +606,9 @@ describe('NoteModal', () => {
         ],
       })
 
-      let resolveFirstUpdate: ((value: unknown) => void) | undefined
-      mockNotesUpdate.mockImplementationOnce(() => new Promise(resolve => {
-        resolveFirstUpdate = resolve
+      let resolveFirstItem: ((value: unknown) => void) | undefined
+      mockUpdateItem.mockImplementationOnce(() => new Promise(resolve => {
+        resolveFirstItem = resolve
       }))
 
       renderNoteModal({ ...defaultProps, note: listNote })
@@ -605,30 +616,24 @@ describe('NoteModal', () => {
       const listInput = screen.getByDisplayValue('parent')
       const titleInput = screen.getByDisplayValue('Initial title')
 
-      // Start first autosave and keep it in-flight.
+      // Start first save (indent patch) and keep it in-flight.
       fireEvent.keyDown(listInput, { key: 'Tab', code: 'Tab' })
 
-      // Change non-item draft fields while autosave is still in-flight.
+      // Change non-item draft fields while the save is still in-flight.
       fireEvent.change(titleInput, { target: { value: 'Updated title while saving' } })
 
-      // Queue another autosave with updated item + title snapshot.
+      // Queue another save with the inserted item while still in-flight.
       fireEvent.keyDown(listInput, { key: 'Enter', code: 'Enter' })
 
       // Release first request, then flush queued retry.
-      resolveFirstUpdate?.({})
+      resolveFirstItem?.({})
       await vi.runAllTimersAsync()
 
-      expect(mockNotesUpdate).toHaveBeenCalledTimes(2)
-      expect(mockNotesUpdate).toHaveBeenLastCalledWith(
-        '1',
-        expect.objectContaining({
-          title: 'Updated title while saving',
-          items: [
-            expect.objectContaining({ text: 'parent', position: 0, completed: false, indent_level: 1 }),
-            expect.objectContaining({ text: '', position: 1, completed: false, indent_level: 1 }),
-          ],
-        }),
-      )
+      // The in-flight indent patch is applied, and the queued retry flushes the
+      // latest title (scalar patch) and the newly inserted item.
+      expect(mockUpdateItem).toHaveBeenCalledWith('1', 'item1', expect.objectContaining({ indent_level: 1 }))
+      expect(mockNotesUpdate).toHaveBeenCalledWith('1', expect.objectContaining({ title: 'Updated title while saving' }))
+      expect(mockCreateItem).toHaveBeenCalledWith('1', expect.objectContaining({ text: '', indent_level: 1 }))
     })
 
     it('pressing a key other than Enter on a list item does not create a new item', async () => {
@@ -851,7 +856,7 @@ describe('NoteModal', () => {
           { id: 'item2', note_id: '1', text: '', completed: false, position: 1, indent_level: 0, assigned_to: '', created_at: '', updated_at: '' },
         ],
       })
-      mockNotesUpdate.mockClear()
+      mockDeleteItem.mockClear()
       renderNoteModal({ ...defaultProps, note: listNote })
 
       const inputs = screen.getAllByTestId('list-item-input')
@@ -859,21 +864,20 @@ describe('NoteModal', () => {
 
       // Press Backspace on the empty second item
       fireEvent.keyDown(inputs[1], { key: 'Backspace', code: 'Backspace' })
+      await vi.runAllTimersAsync()
 
       expect(screen.getAllByTestId('list-item-input')).toHaveLength(1)
-      expect(mockNotesUpdate).toHaveBeenCalledWith('1', expect.objectContaining({
-        items: [expect.objectContaining({ text: 'First', position: 0 })],
-      }))
+      expect(mockDeleteItem).toHaveBeenCalledWith('1', 'item2')
     })
 
-    it('removing the only list item from an existing note sends empty items array', async () => {
+    it('removing the only list item from an existing note deletes it', async () => {
       const listNote = createMockNote({
         note_type: 'list',
         items: [
           { id: 'item1', note_id: '1', text: '', completed: false, position: 0, indent_level: 0, assigned_to: '', created_at: '', updated_at: '' },
         ],
       })
-      mockNotesUpdate.mockClear()
+      mockDeleteItem.mockClear()
       renderNoteModal({ ...defaultProps, note: listNote })
 
       const inputs = screen.getAllByTestId('list-item-input')
@@ -881,11 +885,10 @@ describe('NoteModal', () => {
 
       // Press Backspace on the only empty item
       fireEvent.keyDown(inputs[0], { key: 'Backspace', code: 'Backspace' })
+      await vi.runAllTimersAsync()
 
       expect(screen.queryAllByTestId('list-item-input')).toHaveLength(0)
-      expect(mockNotesUpdate).toHaveBeenCalledWith('1', expect.objectContaining({
-        items: [],
-      }))
+      expect(mockDeleteItem).toHaveBeenCalledWith('1', 'item1')
     })
 
     it('preserves completed state when creating a new list note', async () => {
@@ -939,9 +942,7 @@ describe('NoteModal', () => {
       fireEvent.click(screen.getByRole('button', { name: 'Close' }))
       await vi.runAllTimersAsync()
 
-      expect(mockNotesUpdate).toHaveBeenCalledWith('1', expect.objectContaining({
-        items: [expect.objectContaining({ text: 'Updated item', completed: false })],
-      }))
+      expect(mockUpdateItem).toHaveBeenCalledWith('1', 'item1', expect.objectContaining({ text: 'Updated item' }))
       expect(onSave).toHaveBeenCalled()
     })
   })
@@ -1180,18 +1181,21 @@ describe('NoteModal', () => {
     })
 
     it('duplicates an existing note through the toolbar button', async () => {
-      const note = createMockNote()
+      const note = createMockNote({ note_type: 'text', content: 'Original' })
       const onDuplicate = vi.fn().mockResolvedValue(undefined)
       const onClose = vi.fn()
+      mockNotesUpdate.mockClear()
 
       renderNoteModal({ ...defaultProps, note, onDuplicate, onClose })
+
+      // Make a pending edit, then duplicate: the edit must be flushed first.
+      fireEvent.click(screen.getByTestId('note-content-preview'))
+      fireEvent.change(screen.getByDisplayValue('Original'), { target: { value: 'Edited' } })
 
       fireEvent.click(screen.getByRole('button', { name: 'Duplicate' }))
       await vi.runAllTimersAsync()
 
-      expect(mockNotesUpdate).toHaveBeenCalledWith('1', expect.objectContaining({
-        content: note.note_type === 'text' ? note.content : undefined,
-      }))
+      expect(mockNotesUpdate).toHaveBeenCalledWith('1', expect.objectContaining({ content: 'Edited' }))
       expect(onDuplicate).toHaveBeenCalledWith('1')
       expect(onClose).toHaveBeenCalled()
     })

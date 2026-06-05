@@ -513,17 +513,18 @@ func TestAdminStatsEndpoint(t *testing.T) {
 	archived := true
 	_, err = adminUser.Client.UpdateListNote(t.Context(), archivedListNote.ID, &client.UpdateListNoteRequest{
 		Archived: &archived,
-		Items: &[]client.UpdateNoteItem{
-			{Text: "First item", Position: 0, Completed: true, AssignedTo: member1.User.ID},
-			{Text: "Second item", Position: 1, Completed: false, AssignedTo: ""},
-		},
+	})
+	require.NoError(t, err)
+	archivedItems := getNoteItems(t, adminUser, archivedListNote.ID)
+	_, err = adminUser.Client.UpdateNoteItem(t.Context(), archivedListNote.ID, archivedItems[0].ID, &client.PatchNoteItemRequest{
+		Completed:  client.Ptr(true),
+		AssignedTo: client.Ptr(member1.User.ID),
 	})
 	require.NoError(t, err)
 
-	_, err = adminUser.Client.UpdateListNote(t.Context(), activeListNote.ID, &client.UpdateListNoteRequest{
-		Items: &[]client.UpdateNoteItem{
-			{Text: "Assigned item", Position: 0, Completed: false, AssignedTo: member2.User.ID},
-		},
+	activeItems := getNoteItems(t, adminUser, activeListNote.ID)
+	_, err = adminUser.Client.UpdateNoteItem(t.Context(), activeListNote.ID, activeItems[0].ID, &client.PatchNoteItemRequest{
+		AssignedTo: client.Ptr(member2.User.ID),
 	})
 	require.NoError(t, err)
 
@@ -947,14 +948,11 @@ func TestListItemIndentLevel(t *testing.T) {
 	})
 
 	t.Run("indent levels updated via PATCH", func(t *testing.T) {
-		_, err := user.Client.UpdateListNote(t.Context(), created.ID, &client.UpdateListNoteRequest{
-			Title: client.Ptr("Indent Test"),
-			Color: client.Ptr("#ffffff"),
-			Items: &[]client.UpdateNoteItem{
-				{Text: "top level", Position: 0, IndentLevel: 0},
-				{Text: "indented once", Position: 1, IndentLevel: 1},
-				{Text: "promoted to top", Position: 2, IndentLevel: 0},
-			},
+		items := getNoteItems(t, user, created.ID)
+		require.Len(t, items, 3)
+		// Promote the third item from indent level 1 to 0.
+		_, err := user.Client.UpdateNoteItem(t.Context(), created.ID, items[2].ID, &client.PatchNoteItemRequest{
+			IndentLevel: client.Ptr(0),
 		})
 		require.NoError(t, err)
 
@@ -989,13 +987,10 @@ func TestListItemIndentLevel(t *testing.T) {
 	})
 
 	t.Run("indent level > 1 rejected on update", func(t *testing.T) {
-		_, err := user.Client.UpdateListNote(t.Context(), created.ID, &client.UpdateListNoteRequest{
-			Title: client.Ptr("Indent Test"),
-			Color: client.Ptr("#ffffff"),
-			Items: &[]client.UpdateNoteItem{
-				{Text: "top level", Position: 0, IndentLevel: 0},
-				{Text: "too deep", Position: 1, IndentLevel: 2},
-			},
+		items := getNoteItems(t, user, created.ID)
+		require.NotEmpty(t, items)
+		_, err := user.Client.UpdateNoteItem(t.Context(), created.ID, items[1].ID, &client.PatchNoteItemRequest{
+			IndentLevel: client.Ptr(2),
 		})
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})

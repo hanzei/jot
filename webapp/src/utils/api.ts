@@ -1,5 +1,5 @@
 import axios from 'axios';
-import type { ServerConfig, AboutInfo, AuthResponse, LoginRequest, RegisterRequest, Note, CreateNoteRequest, UpdateNoteRequest, User, CreateUserRequest, UserListResponse, AdminStatsResponse, ShareNoteRequest, NoteShare, ImportResponse, UpdateMeRequest, ChangePasswordRequest, UpdateUserRoleRequest, Label, ActiveSession, EmptyTrashResponse, PersonalAccessToken, CreatePATRequest } from '@jot/shared';
+import type { ServerConfig, AboutInfo, AuthResponse, LoginRequest, RegisterRequest, Note, NoteItem, CreateNoteRequest, UpdateNoteRequest, CreateNoteItemRequest, PatchNoteItemRequest, User, CreateUserRequest, UserListResponse, AdminStatsResponse, ShareNoteRequest, NoteShare, ImportResponse, UpdateMeRequest, ChangePasswordRequest, UpdateUserRoleRequest, Label, ActiveSession, EmptyTrashResponse, PersonalAccessToken, CreatePATRequest } from '@jot/shared';
 import { removeUser } from '@/utils/auth';
 
 // Unique ID for this browser tab, used to suppress SSE echoes of our own mutations.
@@ -115,6 +115,21 @@ export const notes = {
 
   removeLabel: (noteId: string, labelId: string): Promise<Note> =>
     api.delete(`/notes/${noteId}/labels/${labelId}`).then(res => res.data),
+
+  // Granular list-item operations. Editing items one at a time (rather than
+  // replacing the whole array) lets concurrent edits to a shared list merge
+  // server-side instead of overwriting each other.
+  createItem: (noteId: string, data: CreateNoteItemRequest): Promise<NoteItem> =>
+    api.post(`/notes/${noteId}/items`, data).then(res => res.data),
+
+  updateItem: (noteId: string, itemId: string, data: PatchNoteItemRequest): Promise<NoteItem> =>
+    api.patch(`/notes/${noteId}/items/${itemId}`, data).then(res => res.data),
+
+  deleteItem: (noteId: string, itemId: string): Promise<void> =>
+    api.delete(`/notes/${noteId}/items/${itemId}`).then(() => undefined),
+
+  reorderItems: (noteId: string, itemIds: string[]): Promise<void> =>
+    api.post(`/notes/${noteId}/items/reorder`, { item_ids: itemIds }).then(() => undefined),
 };
 
 export const labels = {
