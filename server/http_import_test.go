@@ -536,6 +536,164 @@ func TestImportUsememosTagsInCodeFenceNotExtracted(t *testing.T) {
 	assert.Equal(t, []string{"realtag"}, labelNames)
 }
 
+func TestImportUsememosChecklistImportedAsListNote(t *testing.T) {
+	ts := setupTestServer(t)
+	user := ts.createTestUser(t, "usememoschecklist1", "password123", false)
+
+	content := "- [ ] buy milk\n- [x] walk the dog\n  - [ ] feed the cat"
+	memos := []map[string]any{
+		{"name": "memos/1", "state": "NORMAL", "content": content},
+	}
+	mockSrv := buildUsememosServer(t, []usememosPage{{memos: memos}})
+	defer mockSrv.Close()
+
+	result, err := user.Client.ImportUsememos(t.Context(), mockSrv.URL, "testtoken")
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.Imported)
+	assert.Empty(t, result.Errors)
+
+	notes, err := user.Client.ListNotes(t.Context(), nil)
+	require.NoError(t, err)
+	require.Len(t, notes, 1)
+	assert.Equal(t, client.NoteTypeList, notes[0].NoteType)
+	assert.Empty(t, notes[0].Content)
+
+	note, err := user.Client.GetNote(t.Context(), notes[0].ID)
+	require.NoError(t, err)
+	require.Len(t, note.Items, 3)
+
+	assert.Equal(t, "buy milk", note.Items[0].Text)
+	assert.False(t, note.Items[0].Completed)
+	assert.Equal(t, 0, note.Items[0].IndentLevel)
+
+	assert.Equal(t, "walk the dog", note.Items[1].Text)
+	assert.True(t, note.Items[1].Completed)
+	assert.Equal(t, 0, note.Items[1].IndentLevel)
+
+	assert.Equal(t, "feed the cat", note.Items[2].Text)
+	assert.False(t, note.Items[2].Completed)
+	assert.Equal(t, 1, note.Items[2].IndentLevel)
+}
+
+func TestImportUsememosTitledChecklistImportedAsListNote(t *testing.T) {
+	ts := setupTestServer(t)
+	user := ts.createTestUser(t, "usememoschecklist4", "password123", false)
+
+	// A heading on the first line followed by a checklist becomes a titled list
+	// note: the heading is the note title and the remaining lines are items.
+	content := "# Groceries\n- [ ] buy milk\n- [x] walk the dog"
+	memos := []map[string]any{
+		{"name": "memos/1", "state": "NORMAL", "content": content},
+	}
+	mockSrv := buildUsememosServer(t, []usememosPage{{memos: memos}})
+	defer mockSrv.Close()
+
+	result, err := user.Client.ImportUsememos(t.Context(), mockSrv.URL, "testtoken")
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.Imported)
+
+	notes, err := user.Client.ListNotes(t.Context(), nil)
+	require.NoError(t, err)
+	require.Len(t, notes, 1)
+	assert.Equal(t, client.NoteTypeList, notes[0].NoteType)
+	assert.Equal(t, "Groceries", notes[0].Title)
+	assert.Empty(t, notes[0].Content)
+
+	note, err := user.Client.GetNote(t.Context(), notes[0].ID)
+	require.NoError(t, err)
+	require.Len(t, note.Items, 2)
+	assert.Equal(t, "buy milk", note.Items[0].Text)
+	assert.False(t, note.Items[0].Completed)
+	assert.Equal(t, "walk the dog", note.Items[1].Text)
+	assert.True(t, note.Items[1].Completed)
+}
+
+func TestImportUsememosHeadingOnlyStaysTextNote(t *testing.T) {
+	ts := setupTestServer(t)
+	user := ts.createTestUser(t, "usememoschecklist5", "password123", false)
+
+	// A heading with non-checklist body is not a todo list and must stay a text
+	// note that preserves the full Markdown content.
+	content := "# Journal\nToday I learned a lot."
+	memos := []map[string]any{
+		{"name": "memos/1", "state": "NORMAL", "content": content},
+	}
+	mockSrv := buildUsememosServer(t, []usememosPage{{memos: memos}})
+	defer mockSrv.Close()
+
+	result, err := user.Client.ImportUsememos(t.Context(), mockSrv.URL, "testtoken")
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.Imported)
+
+	notes, err := user.Client.ListNotes(t.Context(), nil)
+	require.NoError(t, err)
+	require.Len(t, notes, 1)
+	assert.Equal(t, client.NoteTypeText, notes[0].NoteType)
+	assert.Empty(t, notes[0].Title)
+	assert.Equal(t, content, notes[0].Content)
+}
+
+func TestImportUsememosMixedContentStaysTextNote(t *testing.T) {
+	ts := setupTestServer(t)
+	user := ts.createTestUser(t, "usememoschecklist2", "password123", false)
+
+	// A memo mixing prose with checklist lines is not a pure checklist, so it
+	// must be preserved verbatim as a text note rather than losing the prose.
+	content := "Groceries:\n- [ ] buy milk\n- [x] walk the dog"
+	memos := []map[string]any{
+		{"name": "memos/1", "state": "NORMAL", "content": content},
+	}
+	mockSrv := buildUsememosServer(t, []usememosPage{{memos: memos}})
+	defer mockSrv.Close()
+
+	result, err := user.Client.ImportUsememos(t.Context(), mockSrv.URL, "testtoken")
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.Imported)
+
+	notes, err := user.Client.ListNotes(t.Context(), nil)
+	require.NoError(t, err)
+	require.Len(t, notes, 1)
+	assert.Equal(t, client.NoteTypeText, notes[0].NoteType)
+	assert.Equal(t, content, notes[0].Content)
+}
+
+func TestImportUsememosChecklistWithTags(t *testing.T) {
+	ts := setupTestServer(t)
+	user := ts.createTestUser(t, "usememoschecklist3", "password123", false)
+
+	// Hashtags on their own line are stripped before checklist detection, so the
+	// remaining body is a pure checklist and still imports as a list note while
+	// the tag becomes a label.
+	content := "#chores\n- [ ] buy milk\n- [x] walk the dog"
+	memos := []map[string]any{
+		{"name": "memos/1", "state": "NORMAL", "content": content},
+	}
+	mockSrv := buildUsememosServer(t, []usememosPage{{memos: memos}})
+	defer mockSrv.Close()
+
+	result, err := user.Client.ImportUsememos(t.Context(), mockSrv.URL, "testtoken")
+	require.NoError(t, err)
+	assert.Equal(t, 1, result.Imported)
+
+	notes, err := user.Client.ListNotes(t.Context(), nil)
+	require.NoError(t, err)
+	require.Len(t, notes, 1)
+	assert.Equal(t, client.NoteTypeList, notes[0].NoteType)
+
+	labelNames := make([]string, 0, len(notes[0].Labels))
+	for _, l := range notes[0].Labels {
+		labelNames = append(labelNames, l.Name)
+	}
+	assert.Equal(t, []string{"chores"}, labelNames)
+
+	note, err := user.Client.GetNote(t.Context(), notes[0].ID)
+	require.NoError(t, err)
+	require.Len(t, note.Items, 2)
+	assert.Equal(t, "buy milk", note.Items[0].Text)
+	assert.Equal(t, "walk the dog", note.Items[1].Text)
+	assert.True(t, note.Items[1].Completed)
+}
+
 func TestImportUsememosPagination(t *testing.T) {
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "usememosuser7", "password123", false)
