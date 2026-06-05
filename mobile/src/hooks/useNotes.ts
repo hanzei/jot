@@ -17,6 +17,7 @@ import {
   reorderNoteItems,
 } from '../api/notes';
 import { getNoteShares, shareNote, unshareNote } from '../api/users';
+import { generateId } from '@jot/shared';
 import type {
   Note,
   NoteShare,
@@ -244,16 +245,21 @@ export function useCreateNoteItem() {
   return useMutation({
     mutationFn: async ({ noteId, item }: { noteId: string; item: CreateNoteItemRequest }): Promise<void> => {
       assertSwitchWriteAllowed();
+      // Ensure a stable, server-format ID up front so the local row, the server
+      // request, and any queued op all reference the same item (the SQLite
+      // insert must never receive an undefined id).
+      const itemId: string = item.id ?? generateId();
+      const itemWithId: CreateNoteItemRequest = { ...item, id: itemId };
       const local = {
-        id: item.id!,
-        text: item.text,
-        completed: item.completed ?? false,
-        position: item.position,
-        indent_level: item.indent_level ?? 0,
-        assigned_to: item.assigned_to ?? '',
+        id: itemId,
+        text: itemWithId.text,
+        completed: itemWithId.completed ?? false,
+        position: itemWithId.position,
+        indent_level: itemWithId.indent_level ?? 0,
+        assigned_to: itemWithId.assigned_to ?? '',
       };
       if (isConnectedRef.current) {
-        await createNoteItem(noteId, item);
+        await createNoteItem(noteId, itemWithId);
         await createLocalItem(db, noteId, local);
       } else {
         await createLocalItem(db, noteId, local);
@@ -261,13 +267,15 @@ export function useCreateNoteItem() {
           operation: 'createItem',
           endpoint: `/notes/${noteId}/items`,
           method: 'POST',
-          body: item as unknown as Record<string, unknown>,
+          body: itemWithId as unknown as Record<string, unknown>,
         });
       }
     },
     onSuccess: (_data, { noteId }) => {
       queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+      queryClient.invalidateQueries({ queryKey: noteQueryKey(noteId) });
+      queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
     },
   });
 }
@@ -298,6 +306,8 @@ export function useUpdateNoteItem() {
     onSuccess: (_data, { noteId }) => {
       queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+      queryClient.invalidateQueries({ queryKey: noteQueryKey(noteId) });
+      queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
     },
   });
 }
@@ -327,6 +337,8 @@ export function useDeleteNoteItem() {
     onSuccess: (_data, { noteId }) => {
       queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+      queryClient.invalidateQueries({ queryKey: noteQueryKey(noteId) });
+      queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
     },
   });
 }
@@ -357,6 +369,8 @@ export function useReorderNoteItems() {
     onSuccess: (_data, { noteId }) => {
       queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+      queryClient.invalidateQueries({ queryKey: noteQueryKey(noteId) });
+      queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
     },
   });
 }
