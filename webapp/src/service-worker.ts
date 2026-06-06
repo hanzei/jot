@@ -27,9 +27,15 @@ registerRoute(
   })
 );
 
+// The SSE endpoint is a long-lived event stream. It must never be handled by
+// the service worker: NetworkFirst would try to buffer the never-ending
+// response to cache it and, after networkTimeoutSeconds, abort the request
+// (NS_BINDING_ABORTED), breaking EventSource. Let it go straight to the network.
+const SSE_PATH = '/api/v1/events';
+
 // API caching strategy - Network First with offline fallback
 registerRoute(
-  ({ url }) => url.pathname.startsWith('/api/v1/'),
+  ({ url }) => url.pathname.startsWith('/api/v1/') && url.pathname !== SSE_PATH,
   new NetworkFirst({
     cacheName: 'api-cache',
     networkTimeoutSeconds: 3,
