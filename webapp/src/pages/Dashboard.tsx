@@ -209,6 +209,13 @@ export default function Dashboard() {
       let notesData: Note[] = [];
       let nextTrashCount = 0;
 
+      // When searching outside the bin/archive views, also pull in archived
+      // matches so they surface in search; they are shown in a separate
+      // "Archived" section in the UI. My Tasks already returns archived notes,
+      // so it needs no extra request.
+      const includeArchivedInSearch =
+        !!debouncedSearchQuery && !showBin && !showArchived && !showMyTasks;
+
       if (showBin && debouncedSearchQuery) {
         const [loadedNotes, allTrashedNotes] = await Promise.all([
           notes.getAll(showArchived, debouncedSearchQuery, showBin, selectedLabelId ?? '', showMyTasks),
@@ -216,6 +223,12 @@ export default function Dashboard() {
         ]);
         notesData = loadedNotes;
         nextTrashCount = allTrashedNotes.length;
+      } else if (includeArchivedInSearch) {
+        const [activeMatches, archivedMatches] = await Promise.all([
+          notes.getAll(false, debouncedSearchQuery, false, selectedLabelId ?? '', false),
+          notes.getAll(true, debouncedSearchQuery, false, selectedLabelId ?? '', false),
+        ]);
+        notesData = [...activeMatches, ...archivedMatches];
       } else {
         notesData = await notes.getAll(showArchived, debouncedSearchQuery, showBin, selectedLabelId ?? '', showMyTasks);
         if (showBin) {
@@ -758,7 +771,7 @@ export default function Dashboard() {
   }, [noteSort, showToast, t]);
 
   const handleDragEnd = async (event: DragEndEvent) => {
-    if (showArchived || showBin || showMyTasks || noteSort !== 'manual') {
+    if (showArchived || showBin || showMyTasks || debouncedSearchQuery || noteSort !== 'manual') {
       return;
     }
 
@@ -808,11 +821,28 @@ export default function Dashboard() {
     }
   };
 
+  // While searching outside the bin/archive views, archived matches are mixed
+  // into notesList; split them out so they render in their own section.
+  const isSearching = !!debouncedSearchQuery;
+  const showArchivedSplit = isSearching && !showBin && !showArchived;
+  const { activeMatches, archivedMatches } = useMemo(() => {
+    if (!showArchivedSplit) {
+      return { activeMatches: notesList, archivedMatches: [] as Note[] };
+    }
+    return {
+      activeMatches: notesList.filter(note => !note.archived),
+      archivedMatches: notesList.filter(note => note.archived),
+    };
+  }, [notesList, showArchivedSplit]);
   const { pinned: displayedPinned, other: displayedOther } = useMemo(
-    () => sortNotesForDisplay(notesList, noteSort),
-    [notesList, noteSort],
+    () => sortNotesForDisplay(activeMatches, noteSort),
+    [activeMatches, noteSort],
   );
-  const dragReorderingDisabled = showArchived || showBin || showMyTasks || noteSort !== 'manual';
+  const displayedArchived = useMemo(() => {
+    const { pinned, other } = sortNotesForDisplay(archivedMatches, noteSort);
+    return [...pinned, ...other];
+  }, [archivedMatches, noteSort]);
+  const dragReorderingDisabled = showArchived || showBin || showMyTasks || isSearching || noteSort !== 'manual';
   const activeSortLabel = t(`dashboard.sortOption.${noteSort}`);
   const focusSearchShortcutHint = isApplePlatform() ? '⌘ + F' : t('keyboardShortcuts.focusSearchKey');
   const showCreateFirstNoteCta =
@@ -986,7 +1016,7 @@ export default function Dashboard() {
           </div>
         )}
 
-        {displayedPinned.length === 0 && displayedOther.length === 0 ? (
+        {displayedPinned.length === 0 && displayedOther.length === 0 && displayedArchived.length === 0 ? (
           <div className="py-12">
             <div
               data-testid="dashboard-empty-state"
@@ -1086,6 +1116,40 @@ export default function Dashboard() {
                           currentUserId={user?.id}
                           usersById={usersById}
                           disabled={dragReorderingDisabled}
+                          inBin={showBin}
+                          onRefresh={loadNotes}
+                        />
+                      ))}
+                    </div>
+                  </SortableContext>
+                </div>
+              )}
+
+              {/* Archived search results section */}
+              {displayedArchived.length > 0 && (
+                <div>
+                  <h2 className="text-lg font-semibold text-gray-900 dark:text-white mb-4 flex items-center">
+                    <ArchiveBoxIcon aria-hidden="true" className="h-4 w-4 text-gray-500 dark:text-gray-400 mr-2" />
+                    {t('dashboard.archivedResults')}
+                  </h2>
+                  <SortableContext
+                    items={displayedArchived.map(note => note.id)}
+                    strategy={rectSortingStrategy}
+                  >
+                    <div className="columns-1 sm:columns-2 lg:columns-3 xl:columns-4 gap-4 space-y-0">
+                      {displayedArchived.map((note) => (
+                        <SortableNoteCard
+                          key={note.id}
+                          note={note}
+                          onEdit={handleEditNote}
+                          onDelete={handleDeleteNote}
+                          onDuplicate={handleDuplicateNote}
+                          onShare={handleShareNote}
+                          onRestore={handleRestoreNote}
+                          onPermanentlyDelete={handlePermanentlyDeleteNote}
+                          currentUserId={user?.id}
+                          usersById={usersById}
+                          disabled={true}
                           inBin={showBin}
                           onRefresh={loadNotes}
                         />

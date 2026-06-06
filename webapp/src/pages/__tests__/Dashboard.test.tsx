@@ -371,6 +371,54 @@ describe('Dashboard', () => {
       })
     })
 
+    it('fetches and separates archived results when searching', async () => {
+      const user = userEvent.setup()
+      const mockGetAll = vi.mocked(notes.getAll)
+      mockGetAll.mockImplementation((archived = false) =>
+        Promise.resolve(
+          archived
+            ? [createMockNote({ id: 'arch1', content: 'Archived match', archived: true })]
+            : [createMockNote({ id: 'act1', content: 'Active match' })],
+        ),
+      )
+
+      renderDashboard()
+
+      await waitFor(() => {
+        expect(screen.getByPlaceholderText('Search notes...')).toBeInTheDocument()
+      })
+
+      const searchInput = screen.getByPlaceholderText('Search notes...')
+      await user.type(searchInput, 'match')
+
+      // Both an active (archived=false) and archived (archived=true) fetch happen
+      await waitFor(() => {
+        expect(mockGetAll).toHaveBeenCalledWith(true, 'match', false, '', false)
+      })
+      expect(mockGetAll).toHaveBeenCalledWith(false, 'match', false, '', false)
+
+      // Archived matches surface under a dedicated "Archived" splitter
+      await waitFor(() => {
+        expect(screen.getByText('Archived match')).toBeInTheDocument()
+      })
+      expect(screen.getByText('Archived')).toBeInTheDocument()
+      expect(screen.getByText('Active match')).toBeInTheDocument()
+    })
+
+    it('does not show the archived splitter when not searching', async () => {
+      vi.mocked(notes.getAll).mockResolvedValue([
+        createMockNote({ id: 'act1', content: 'Active note' }),
+      ])
+
+      renderDashboard()
+
+      await waitFor(() => {
+        expect(screen.getByText('Active note')).toBeInTheDocument()
+      })
+
+      expect(screen.queryByText('Archived')).not.toBeInTheDocument()
+    })
+
     it('handles special characters in search', async () => {
       const user = userEvent.setup()
       const mockGetAll = vi.mocked(notes.getAll)

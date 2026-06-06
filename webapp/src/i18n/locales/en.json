@@ -55,6 +55,7 @@
     "createFirstNoteCta": "Create your first note",
     "pinned": "Pinned",
     "otherNotes": "Other Notes",
+    "archivedResults": "Archived",
     "searchPlaceholder": "Search notes...",
     "searchAriaLabel": "Search notes",
     "searchClearAriaLabel": "Clear search",
