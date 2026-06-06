@@ -13,17 +13,19 @@ import {
   notesLocalQueryScopeKey,
 } from './queryKeys';
 
-export function useOfflineNotes(params?: GetNotesParams) {
+export function useOfflineNotes(params?: GetNotesParams, options?: { enabled?: boolean }) {
   const db = useSQLiteContext();
   const queryClient = useQueryClient();
   const { isConnected } = useNetworkStatus();
   const paramsRef = useRef(params);
   paramsRef.current = params;
+  const enabled = options?.enabled ?? true;
 
   // Primary query: reads from local SQLite (instant on subsequent launches)
   const query = useQuery<Note[]>({
     queryKey: notesLocalQueryKey(params),
     queryFn: () => getLocalNotes(db, params),
+    enabled,
     staleTime: Infinity,
     gcTime: Infinity,
   });
@@ -45,10 +47,10 @@ export function useOfflineNotes(params?: GetNotesParams) {
 
   // Background sync when online: fetch from server and update local DB
   useEffect(() => {
-    if (isConnected) {
+    if (enabled && isConnected) {
       syncFromServer().catch(() => {});
     }
-  }, [isConnected, syncFromServer]);
+  }, [enabled, isConnected, syncFromServer]);
 
   const refetch = useCallback(async () => {
     await syncFromServer();

@@ -27,6 +27,26 @@ test.describe('Search', () => {
     await dashboardPage.expectNoteNotVisible('React Hooks');
   });
 
+  test('includes archived notes under a separate section when searching', async ({ page, dashboardPage }) => {
+    await dashboardPage.createNote('Active Report');
+    await dashboardPage.createNote('Archived Report');
+    await dashboardPage.archiveNote('Archived Report');
+
+    await dashboardPage.search('Report');
+
+    // Active match renders as usual
+    await dashboardPage.expectNoteVisible('Active Report');
+    // Archived match renders under the dedicated "Archived" splitter
+    await expect(page.getByRole('heading', { name: 'Archived' })).toBeVisible();
+    await dashboardPage.expectNoteVisible('Archived Report');
+
+    // Clearing the search hides the archived note (and the splitter) again
+    await dashboardPage.clearSearch();
+    await expect(page.getByRole('heading', { name: 'Archived' })).toHaveCount(0);
+    await dashboardPage.expectNoteNotVisible('Archived Report');
+    await dashboardPage.expectNoteVisible('Active Report');
+  });
+
   test('shows empty state when search has no results', async ({ page, dashboardPage }) => {
     await dashboardPage.search('xyznonexistent');
     await expect(page.locator('[data-testid="note-card"]')).toHaveCount(0);

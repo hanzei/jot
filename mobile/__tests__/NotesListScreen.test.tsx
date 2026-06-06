@@ -641,3 +641,63 @@ describe('NotesListScreen label picker', () => {
     expect(screen.queryByTestId('label-picker-label-l1')).toBeNull();
   });
 });
+
+describe('NotesListScreen archived search', () => {
+  const offlineResult = (notes: ReturnType<typeof buildNote>[]) => ({
+    data: notes,
+    isLoading: false,
+    isError: false,
+    refetch: jest.fn(),
+    isRefetching: false,
+  });
+
+  beforeEach(() => {
+    jest.clearAllMocks();
+    mockUseToast.mockReturnValue({ showToast: jest.fn() });
+    notesHooks.useUpdateNote.mockReturnValue({ mutateAsync: mockMutateAsync });
+    notesHooks.useDeleteNote.mockReturnValue({ mutateAsync: mockMutateAsync });
+    notesHooks.useRestoreNote.mockReturnValue({ mutateAsync: mockMutateAsync });
+    notesHooks.usePermanentDeleteNote.mockReturnValue({ mutateAsync: mockMutateAsync });
+    notesHooks.useReorderNotes.mockReturnValue({ mutateAsync: mockMutateAsync });
+    notesHooks.useDuplicateNote.mockReturnValue({ mutateAsync: mockMutateAsync });
+    mockUseUsers.mockReturnValue({ refreshUsers: jest.fn() });
+    mockUseTheme.mockReturnValue({ colors: lightColors });
+    mockUseAuth.mockReturnValue({ user: mockUser, settings: baseSettings, setSettings: jest.fn() });
+    mockUseOfflineNote.mockReturnValue({ data: null });
+  });
+
+  it('separates archived matches into their own section when searching', async () => {
+    // Stable result references per branch so the notes-dependent effects don't loop.
+    const activeResult = offlineResult([buildNote({ id: 'active-1', title: 'active match' })]);
+    const archivedResult = offlineResult([buildNote({ id: 'archived-1', title: 'archived match', archived: true })]);
+    mockUseOfflineNotes.mockImplementation((params?: { archived?: boolean }) =>
+      params?.archived ? archivedResult : activeResult,
+    );
+
+    render(<NotesListScreen variant="notes" />);
+
+    // No archived section before a search is entered
+    expect(screen.queryByText('Archived')).toBeNull();
+
+    fireEvent.changeText(screen.getByTestId('search-input'), 'match');
+
+    await waitFor(() => {
+      expect(screen.getByText('Archived')).toBeTruthy();
+    });
+    expect(screen.getByText('archived match')).toBeTruthy();
+    expect(screen.getByText('active match')).toBeTruthy();
+  });
+
+  it('disables the archived fetch until a search is active', () => {
+    const activeResult = offlineResult([buildNote({ id: 'active-1', title: 'active match' })]);
+    mockUseOfflineNotes.mockImplementation(() => activeResult);
+
+    render(<NotesListScreen variant="notes" />);
+
+    // The second (archived) hook call is invoked with enabled: false while idle
+    const archivedCall = mockUseOfflineNotes.mock.calls.find(
+      ([params]) => params?.archived === true,
+    );
+    expect(archivedCall?.[1]).toEqual({ enabled: false });
+  });
+});
