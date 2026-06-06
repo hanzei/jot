@@ -170,7 +170,7 @@ export default function LabelPicker({ note, selectedLabels, onLocalChange, onRef
   const handleInputKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'ArrowDown') {
       e.preventDefault();
-      setHighlightIndex(i => Math.min(optionCount - 1, i + 1));
+      setHighlightIndex(i => Math.max(0, Math.min(optionCount - 1, i + 1)));
     } else if (e.key === 'ArrowUp') {
       e.preventDefault();
       setHighlightIndex(i => Math.max(0, i - 1));

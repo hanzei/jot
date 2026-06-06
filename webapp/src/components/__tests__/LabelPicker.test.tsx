@@ -138,6 +138,23 @@ describe('LabelPicker', () => {
     expect(baz).not.toHaveClass('bg-gray-100')
   })
 
+  it('keeps Enter working when an Arrow key is pressed before labels load', async () => {
+    let resolveGetAll: (labels: Label[]) => void = () => {}
+    mockGetAll.mockReturnValue(new Promise<Label[]>(r => { resolveGetAll = r }))
+    const onLocalChange = vi.fn()
+    render(<LabelPicker selectedLabels={[]} onLocalChange={onLocalChange} onClose={vi.fn()} />)
+
+    // ArrowDown while there are zero options must not drive highlightIndex negative.
+    const input = screen.getByRole('textbox')
+    fireEvent.keyDown(input, { key: 'ArrowDown' })
+
+    resolveGetAll([makeLabel('Bar')])
+    await screen.findByText('Bar')
+
+    fireEvent.keyDown(input, { key: 'Enter' })
+    expect(onLocalChange).toHaveBeenCalledWith([expect.objectContaining({ name: 'Bar' })])
+  })
+
   it('activates the highlighted option with the keyboard', async () => {
     const onLocalChange = vi.fn()
     render(<LabelPicker selectedLabels={[]} onLocalChange={onLocalChange} onClose={vi.fn()} />)
