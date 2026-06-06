@@ -434,6 +434,11 @@
   "offline": {
     "message": "Jesteś w trybie offline. Niektóre funkcje mogą być niedostępne."
   },
+  "sse": {
+    "connecting": "Łączenie…",
+    "reconnecting": "Ponowne łączenie…",
+    "disconnected": "Utracono połączenie"
+  },
   "pageTitle": {
     "login": "Logowanie - Jot",
     "register": "Utwórz konto - Jot",

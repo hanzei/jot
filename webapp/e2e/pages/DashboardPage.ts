@@ -14,6 +14,11 @@ export class DashboardPage {
     await this.page.goto('/');
   }
 
+  /** The live-update (SSE) connection status indicator. */
+  sseStatusIndicator(): Locator {
+    return this.page.getByTestId('sse-status-indicator');
+  }
+
   async clickNewNote() {
     await this.page.click('button:has-text("New Note")');
   }

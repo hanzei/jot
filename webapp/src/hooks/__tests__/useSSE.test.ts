@@ -7,8 +7,14 @@ import { CLIENT_ID } from '@/utils/api'
 class MockEventSource {
   static instances: MockEventSource[] = []
 
+  // Mirror the spec's readyState constants.
+  static readonly CONNECTING = 0
+  static readonly OPEN = 1
+  static readonly CLOSED = 2
+
   url: string
   withCredentials: boolean
+  readyState = MockEventSource.CONNECTING
   onopen: (() => void) | null = null
   onmessage: ((e: MessageEvent) => void) | null = null
   onerror: (() => void) | null = null
@@ -22,11 +28,20 @@ class MockEventSource {
 
   close() {
     this.closeCalled = true
+    this.readyState = MockEventSource.CLOSED
   }
 
   // Test helpers to simulate server events.
   simulateOpen() {
+    this.readyState = MockEventSource.OPEN
     this.onopen?.()
+  }
+
+  // Simulate an error while the browser is still retrying (CONNECTING) or after
+  // it has given up (CLOSED).
+  simulateError(readyState: number = MockEventSource.CONNECTING) {
+    this.readyState = readyState
+    this.onerror?.()
   }
 
   simulateMessage(data: unknown) {
@@ -70,6 +85,56 @@ describe('useSSE', () => {
     it('only creates one EventSource on mount', () => {
       renderHook(() => useSSE({ onEvent: vi.fn() }))
       expect(MockEventSource.instances).toHaveLength(1)
+    })
+  })
+
+  describe('connection status', () => {
+    it('starts in the connecting state', () => {
+      const { result } = renderHook(() => useSSE({ onEvent: vi.fn() }))
+      expect(result.current).toBe('connecting')
+    })
+
+    it('reports connected once the stream opens', () => {
+      const { result } = renderHook(() => useSSE({ onEvent: vi.fn() }))
+
+      act(() => {
+        MockEventSource.instances[0].simulateOpen()
+      })
+
+      expect(result.current).toBe('connected')
+    })
+
+    it('stays connecting when the first connection attempt errors (never opened)', () => {
+      const { result } = renderHook(() => useSSE({ onEvent: vi.fn() }))
+
+      act(() => {
+        MockEventSource.instances[0].simulateError(MockEventSource.CONNECTING)
+      })
+
+      expect(result.current).toBe('connecting')
+    })
+
+    it('reports reconnecting when a previously-open connection drops and retries', () => {
+      const { result } = renderHook(() => useSSE({ onEvent: vi.fn() }))
+
+      act(() => {
+        MockEventSource.instances[0].simulateOpen()
+      })
+      act(() => {
+        MockEventSource.instances[0].simulateError(MockEventSource.CONNECTING)
+      })
+
+      expect(result.current).toBe('reconnecting')
+    })
+
+    it('reports disconnected once the browser gives up (CLOSED)', () => {
+      const { result } = renderHook(() => useSSE({ onEvent: vi.fn() }))
+
+      act(() => {
+        MockEventSource.instances[0].simulateError(MockEventSource.CLOSED)
+      })
+
+      expect(result.current).toBe('disconnected')
     })
   })
 

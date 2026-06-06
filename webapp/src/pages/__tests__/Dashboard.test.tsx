@@ -96,7 +96,7 @@ vi.mock('@dnd-kit/modifiers', () => ({
 
 // Mock useSSE to prevent EventSource usage in jsdom environment
 vi.mock('@/hooks/useSSE', () => ({
-  useSSE: vi.fn(),
+  useSSE: vi.fn(() => 'connected'),
 }))
 
 vi.mock('@/components/AuthenticatedLayout', () => ({

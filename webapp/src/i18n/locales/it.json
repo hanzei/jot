@@ -434,6 +434,11 @@
   "offline": {
     "message": "Sei attualmente offline. Alcune funzionalità potrebbero essere limitate."
   },
+  "sse": {
+    "connecting": "Connessione…",
+    "reconnecting": "Riconnessione…",
+    "disconnected": "Connessione persa"
+  },
   "pageTitle": {
     "login": "Accedi - Jot",
     "register": "Crea account - Jot",

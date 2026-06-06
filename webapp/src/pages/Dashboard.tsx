@@ -5,6 +5,7 @@ import { notes, users as usersApi } from '@/utils/api';
 import { getUser, getSettings, setSettings } from '@/utils/auth';
 import type { Note, User, SSEEvent, NoteSort } from '@jot/shared';
 import { useSSE } from '@/hooks/useSSE';
+import { SSEStatusIndicator } from '@/components/SSEStatusIndicator';
 import { useSearchParams, useParams } from 'react-router';
 import PageContent from '@/components/PageContent';
 import SearchBar from '@/components/SearchBar';
@@ -427,7 +428,7 @@ export default function Dashboard() {
     }
   }, [editingNote, sharingNote, loadNotes, loadLabels, loadLabelCounts, setSearchParams, user?.id, restoreReturnUrl]);
 
-  useSSE({
+  const sseStatus = useSSE({
     onEvent: handleSSEEvent,
     onConnected: loadNotes,
   });
@@ -968,6 +969,7 @@ export default function Dashboard() {
 
   return (
     <PageContent>
+        <SSEStatusIndicator status={sseStatus} />
         {/* Create note button — hidden in bin view */}
         {!showBin && (
           <div className="mb-8">
