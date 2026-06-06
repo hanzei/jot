@@ -312,6 +312,14 @@ export class DashboardPage {
     await expect(this.page.locator('[aria-label="Search notes"]')).toHaveValue(value);
   }
 
+  async expectArchivedSectionVisible() {
+    await expect(this.page.getByRole('heading', { name: 'Archived', exact: true })).toBeVisible();
+  }
+
+  async expectArchivedSectionHidden() {
+    await expect(this.page.getByRole('heading', { name: 'Archived', exact: true })).toHaveCount(0);
+  }
+
   async expectNoteVisible(title: string) {
     await expect(this.page.locator('[data-testid="note-card"]').filter({ hasText: title })).toBeVisible();
   }

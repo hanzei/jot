@@ -27,7 +27,7 @@ test.describe('Search', () => {
     await dashboardPage.expectNoteNotVisible('React Hooks');
   });
 
-  test('includes archived notes under a separate section when searching', async ({ page, dashboardPage }) => {
+  test('includes archived notes under a separate section when searching', async ({ dashboardPage }) => {
     await dashboardPage.createNote('Active Report');
     await dashboardPage.createNote('Archived Report');
     await dashboardPage.archiveNote('Archived Report');
@@ -36,14 +36,13 @@ test.describe('Search', () => {
 
     // Active match renders as usual
     await dashboardPage.expectNoteVisible('Active Report');
-    // Archived match renders under the dedicated "Archived" splitter.
-    // exact avoids matching the "Archived Report" note title heading.
-    await expect(page.getByRole('heading', { name: 'Archived', exact: true })).toBeVisible();
+    // Archived match renders under the dedicated "Archived" splitter
+    await dashboardPage.expectArchivedSectionVisible();
     await dashboardPage.expectNoteVisible('Archived Report');
 
     // Clearing the search hides the archived note (and the splitter) again
     await dashboardPage.clearSearch();
-    await expect(page.getByRole('heading', { name: 'Archived', exact: true })).toHaveCount(0);
+    await dashboardPage.expectArchivedSectionHidden();
     await dashboardPage.expectNoteNotVisible('Archived Report');
     await dashboardPage.expectNoteVisible('Active Report');
   });

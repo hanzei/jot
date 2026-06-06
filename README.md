@@ -6,7 +6,7 @@ A self-hosted note-taking application built with Go backend and React frontend. 
 
 - **Notes Management**: Create, edit, delete, and organize notes
 - **Note Types**: Support for both plain text notes and lists with checkboxes
-- **Search & Filter**: Find notes quickly with search and filtering capabilities
+- **Search & Filter**: Find notes quickly with search and filtering capabilities; searching also surfaces matching archived notes in a separate "Archived" section
 - **Responsive Design**: Works on desktop and mobile devices
 - **Self-hosted**: Complete control over your data
 - **SQLite Database**: Lightweight, file-based database
