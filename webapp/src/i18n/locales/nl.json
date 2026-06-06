@@ -433,6 +433,10 @@
   "offline": {
     "message": "Je bent momenteel offline. Sommige functies zijn mogelijk beperkt."
   },
+  "sse": {
+    "reconnecting": "Opnieuw verbinden…",
+    "disconnected": "Verbinding verbroken"
+  },
   "pageTitle": {
     "login": "Inloggen - Jot",
     "register": "Account aanmaken - Jot",

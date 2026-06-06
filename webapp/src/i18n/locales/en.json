@@ -433,6 +433,10 @@
   "offline": {
     "message": "You're currently offline. Some features may be limited."
   },
+  "sse": {
+    "reconnecting": "Reconnecting…",
+    "disconnected": "Connection lost"
+  },
   "pageTitle": {
     "login": "Sign In - Jot",
     "register": "Create Account - Jot",

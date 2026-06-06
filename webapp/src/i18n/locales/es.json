@@ -433,6 +433,10 @@
   "offline": {
     "message": "Estás sin conexión. Algunas funciones pueden estar limitadas."
   },
+  "sse": {
+    "reconnecting": "Reconectando…",
+    "disconnected": "Conexión perdida"
+  },
   "pageTitle": {
     "login": "Iniciar sesión - Jot",
     "register": "Crear cuenta - Jot",

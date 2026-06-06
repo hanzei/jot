@@ -1,18 +1,27 @@
-import { useEffect, useRef } from 'react';
+import { useEffect, useRef, useState } from 'react';
 import type { SSEEvent } from '@jot/shared';
 import { CLIENT_ID } from '@/utils/api';
 
 export type { SSEEvent };
+
+// Connection lifecycle exposed to the UI:
+// - 'connecting'   — establishing the initial connection, or the browser is
+//                    retrying after a transient failure (auto-reconnect).
+// - 'connected'    — the stream is open and receiving events.
+// - 'disconnected' — the browser gave up reconnecting (EventSource CLOSED),
+//                    e.g. the server returned a non-2xx response.
+export type SSEStatus = 'connecting' | 'connected' | 'disconnected';
 
 interface UseSSEOptions {
   onEvent: (event: SSEEvent) => void;
   onConnected?: () => void;
 }
 
-export function useSSE({ onEvent, onConnected }: UseSSEOptions): void {
+export function useSSE({ onEvent, onConnected }: UseSSEOptions): SSEStatus {
   // Store callbacks in refs so updates don't trigger reconnection.
   const onEventRef = useRef(onEvent);
   const onConnectedRef = useRef(onConnected);
+  const [status, setStatus] = useState<SSEStatus>('connecting');
   // Keep refs in sync after every render. useEffect (no deps) runs after every
   // render and is guaranteed to fire before the next scheduled effect, so the
   // EventSource handlers always see the latest callbacks.
@@ -25,6 +34,7 @@ export function useSSE({ onEvent, onConnected }: UseSSEOptions): void {
     const es = new EventSource('/api/v1/events', { withCredentials: true });
 
     es.onopen = () => {
+      setStatus('connected');
       onConnectedRef.current?.();
     };
 
@@ -46,10 +56,14 @@ export function useSSE({ onEvent, onConnected }: UseSSEOptions): void {
     // readyState becomes CLOSED and no reconnection occurs. Session expiry is
     // handled by the axios 401 interceptor on the next regular API call, which
     // redirects to /login and tears down this component.
-    es.onerror = () => {};
+    es.onerror = () => {
+      setStatus(es.readyState === EventSource.CLOSED ? 'disconnected' : 'connecting');
+    };
 
     return () => {
       es.close();
     };
   }, []); // empty deps — connect once, stay connected
+
+  return status;
 }

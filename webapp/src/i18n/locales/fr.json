@@ -433,6 +433,10 @@
   "offline": {
     "message": "Vous êtes actuellement hors ligne. Certaines fonctionnalités peuvent être limitées."
   },
+  "sse": {
+    "reconnecting": "Reconnexion…",
+    "disconnected": "Connexion perdue"
+  },
   "pageTitle": {
     "login": "Connexion - Jot",
     "register": "Créer un compte - Jot",

@@ -433,6 +433,10 @@
   "offline": {
     "message": "Du bist derzeit offline. Einige Funktionen sind möglicherweise eingeschränkt."
   },
+  "sse": {
+    "reconnecting": "Verbindung wird wiederhergestellt …",
+    "disconnected": "Verbindung getrennt"
+  },
   "pageTitle": {
     "login": "Anmelden - Jot",
     "register": "Konto erstellen - Jot",
