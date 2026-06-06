@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import { useState, useEffect, useRef, useMemo } from 'react';
 import { PlusIcon } from '@heroicons/react/24/outline';
 import { useTranslation } from 'react-i18next';
 import type { Label, Note } from '@jot/shared';
@@ -24,6 +24,9 @@ export default function LabelPicker({ note, selectedLabels, onLocalChange, onRef
   const [highlightIndex, setHighlightIndex] = useState(0);
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
+  // Guards the remote create path against duplicate submissions while a request
+  // is in flight (rapid Enter presses / repeated create-row clicks).
+  const isCreatingRef = useRef(false);
 
   const isLocalMode = !note;
   const currentLabelIds = new Set(
@@ -139,6 +142,8 @@ export default function LabelPicker({ note, selectedLabels, onLocalChange, onRef
       return;
     }
 
+    if (isCreatingRef.current) return;
+    isCreatingRef.current = true;
     try {
       const updatedNote = await notesApi.addLabel(note.id, trimmed);
       labelsApi.getAll().then(setAllLabels).catch((err: Error) => onError?.(err.message));
@@ -147,6 +152,8 @@ export default function LabelPicker({ note, selectedLabels, onLocalChange, onRef
       onRefresh?.();
     } catch (err) {
       onError?.((err as Error).message);
+    } finally {
+      isCreatingRef.current = false;
     }
   };
 
@@ -160,7 +167,7 @@ export default function LabelPicker({ note, selectedLabels, onLocalChange, onRef
     }
   };
 
-  const handleInputKeyDown = useCallback((e: React.KeyboardEvent) => {
+  const handleInputKeyDown = (e: React.KeyboardEvent) => {
     if (e.key === 'ArrowDown') {
       e.preventDefault();
       setHighlightIndex(i => Math.min(optionCount - 1, i + 1));
@@ -174,8 +181,7 @@ export default function LabelPicker({ note, selectedLabels, onLocalChange, onRef
       e.preventDefault();
       onClose();
     }
-    // eslint-disable-next-line react-hooks/exhaustive-deps
-  }, [optionCount, effectiveHighlight, createIndex, filteredLabels, onClose]);
+  };
 
   return (
     <div

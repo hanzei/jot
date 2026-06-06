@@ -88,8 +88,54 @@ describe('LabelPicker', () => {
     fireEvent.change(screen.getByRole('textbox'), { target: { value: 'Fresh' } })
     fireEvent.click(screen.getByText('Create "Fresh"'))
 
-    await waitFor(() => expect(mockAddLabel).toHaveBeenCalledWith('note1', 'Fresh'))
-    await waitFor(() => expect(onNoteUpdate).toHaveBeenCalled())
+    await waitFor(() => {
+      expect(mockAddLabel).toHaveBeenCalledWith('note1', 'Fresh')
+      expect(onNoteUpdate).toHaveBeenCalled()
+    })
+  })
+
+  it('does not fire duplicate API requests while a create is in flight', async () => {
+    const note = {
+      id: 'note1', user_id: 'user1', note_type: 'text' as const, content: '', pinned: false,
+      archived: false, color: '#fff', is_shared: false, deleted_at: null,
+      created_at: '2023-01-01T00:00:00Z', updated_at: '2023-01-01T00:00:00Z', labels: [], position: 0,
+    }
+    // Never-resolving promise keeps the request "in flight".
+    mockAddLabel.mockReturnValue(new Promise(() => {}))
+    render(<LabelPicker note={note} onClose={vi.fn()} />)
+    await screen.findByText('Bar')
+
+    const input = screen.getByRole('textbox')
+    fireEvent.change(input, { target: { value: 'Fresh' } })
+    const createOption = screen.getByRole('option', { name: 'Create "Fresh"' })
+    fireEvent.click(createOption)
+    fireEvent.click(createOption)
+    fireEvent.keyDown(input, { key: 'Enter' })
+
+    expect(mockAddLabel).toHaveBeenCalledTimes(1)
+  })
+
+  it('moves the highlight with Arrow keys', async () => {
+    render(<LabelPicker selectedLabels={[]} onLocalChange={vi.fn()} onClose={vi.fn()} />)
+    await screen.findByText('Bar')
+
+    const input = screen.getByRole('textbox')
+    fireEvent.change(input, { target: { value: 'ba' } }) // matches Bar, Baz
+
+    const bar = screen.getByRole('option', { name: 'Bar' })
+    const baz = screen.getByRole('option', { name: 'Baz' })
+
+    // First option is highlighted by default.
+    expect(bar).toHaveClass('bg-gray-100')
+    expect(baz).not.toHaveClass('bg-gray-100')
+
+    fireEvent.keyDown(input, { key: 'ArrowDown' })
+    expect(baz).toHaveClass('bg-gray-100')
+    expect(bar).not.toHaveClass('bg-gray-100')
+
+    fireEvent.keyDown(input, { key: 'ArrowUp' })
+    expect(bar).toHaveClass('bg-gray-100')
+    expect(baz).not.toHaveClass('bg-gray-100')
   })
 
   it('activates the highlighted option with the keyboard', async () => {
