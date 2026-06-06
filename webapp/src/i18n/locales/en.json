@@ -435,6 +435,7 @@
     "message": "You're currently offline. Some features may be limited."
   },
   "sse": {
+    "connecting": "Connecting…",
     "reconnecting": "Reconnecting…",
     "disconnected": "Connection lost"
   },

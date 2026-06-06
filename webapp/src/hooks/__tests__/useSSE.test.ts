@@ -104,7 +104,17 @@ describe('useSSE', () => {
       expect(result.current).toBe('connected')
     })
 
-    it('reports connecting while the browser is retrying after an error', () => {
+    it('stays connecting when the first connection attempt errors (never opened)', () => {
+      const { result } = renderHook(() => useSSE({ onEvent: vi.fn() }))
+
+      act(() => {
+        MockEventSource.instances[0].simulateError(MockEventSource.CONNECTING)
+      })
+
+      expect(result.current).toBe('connecting')
+    })
+
+    it('reports reconnecting when a previously-open connection drops and retries', () => {
       const { result } = renderHook(() => useSSE({ onEvent: vi.fn() }))
 
       act(() => {
@@ -114,7 +124,7 @@ describe('useSSE', () => {
         MockEventSource.instances[0].simulateError(MockEventSource.CONNECTING)
       })
 
-      expect(result.current).toBe('connecting')
+      expect(result.current).toBe('reconnecting')
     })
 
     it('reports disconnected once the browser gives up (CLOSED)', () => {

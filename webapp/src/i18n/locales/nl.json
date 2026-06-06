@@ -435,6 +435,7 @@
     "message": "Je bent momenteel offline. Sommige functies zijn mogelijk beperkt."
   },
   "sse": {
+    "connecting": "Verbinden…",
     "reconnecting": "Opnieuw verbinden…",
     "disconnected": "Verbinding verbroken"
   },

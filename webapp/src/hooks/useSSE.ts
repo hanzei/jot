@@ -5,12 +5,13 @@ import { CLIENT_ID } from '@/utils/api';
 export type { SSEEvent };
 
 // Connection lifecycle exposed to the UI:
-// - 'connecting'   — establishing the initial connection, or the browser is
-//                    retrying after a transient failure (auto-reconnect).
+// - 'connecting'   — establishing the very first connection (never opened yet).
 // - 'connected'    — the stream is open and receiving events.
+// - 'reconnecting' — the connection dropped after having been open and the
+//                    browser is retrying (auto-reconnect).
 // - 'disconnected' — the browser gave up reconnecting (EventSource CLOSED),
 //                    e.g. the server returned a non-2xx response.
-export type SSEStatus = 'connecting' | 'connected' | 'disconnected';
+export type SSEStatus = 'connecting' | 'connected' | 'reconnecting' | 'disconnected';
 
 interface UseSSEOptions {
   onEvent: (event: SSEEvent) => void;
@@ -21,6 +22,9 @@ export function useSSE({ onEvent, onConnected }: UseSSEOptions): SSEStatus {
   // Store callbacks in refs so updates don't trigger reconnection.
   const onEventRef = useRef(onEvent);
   const onConnectedRef = useRef(onConnected);
+  // Tracks whether the stream has opened at least once, so we can distinguish a
+  // slow first connect ('connecting') from a dropped connection ('reconnecting').
+  const hasConnectedRef = useRef(false);
   const [status, setStatus] = useState<SSEStatus>('connecting');
   // Keep refs in sync after every render. useEffect (no deps) runs after every
   // render and is guaranteed to fire before the next scheduled effect, so the
@@ -34,6 +38,7 @@ export function useSSE({ onEvent, onConnected }: UseSSEOptions): SSEStatus {
     const es = new EventSource('/api/v1/events', { withCredentials: true });
 
     es.onopen = () => {
+      hasConnectedRef.current = true;
       setStatus('connected');
       onConnectedRef.current?.();
     };
@@ -57,7 +62,11 @@ export function useSSE({ onEvent, onConnected }: UseSSEOptions): SSEStatus {
     // handled by the axios 401 interceptor on the next regular API call, which
     // redirects to /login and tears down this component.
     es.onerror = () => {
-      setStatus(es.readyState === EventSource.CLOSED ? 'disconnected' : 'connecting');
+      if (es.readyState === EventSource.CLOSED) {
+        setStatus('disconnected');
+      } else {
+        setStatus(hasConnectedRef.current ? 'reconnecting' : 'connecting');
+      }
     };
 
     return () => {

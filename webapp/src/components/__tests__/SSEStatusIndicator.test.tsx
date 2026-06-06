@@ -31,8 +31,15 @@ describe('SSEStatusIndicator', () => {
     expect(screen.queryByTestId('sse-status-indicator')).not.toBeInTheDocument()
   })
 
-  it('shows a reconnecting indicator after the delay while connecting', () => {
+  it('shows a connecting indicator after the delay on the first connect', () => {
     render(<SSEStatusIndicator status="connecting" />)
+    act(() => vi.advanceTimersByTime(SHOW_DELAY_MS))
+    expect(screen.getByTestId('sse-status-indicator')).toBeInTheDocument()
+    expect(screen.getByText('Connecting…')).toBeInTheDocument()
+  })
+
+  it('shows a reconnecting indicator after the delay when reconnecting', () => {
+    render(<SSEStatusIndicator status="reconnecting" />)
     act(() => vi.advanceTimersByTime(SHOW_DELAY_MS))
     expect(screen.getByTestId('sse-status-indicator')).toBeInTheDocument()
     expect(screen.getByText('Reconnecting…')).toBeInTheDocument()
