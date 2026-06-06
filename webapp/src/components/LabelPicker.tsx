@@ -84,14 +84,18 @@ export default function LabelPicker({ note, selectedLabels, onLocalChange, onRef
     const spaceAbove = rect.top;
     const spaceBelow = window.innerHeight - rect.bottom;
     const openUpward = spaceAbove >= menuHeight + GAP || spaceAbove >= spaceBelow;
+    // Shrink the menu on viewports narrower than its preferred width so it never
+    // overflows horizontally, then clamp its left edge inside the viewport.
+    const available = window.innerWidth - 2 * VIEWPORT_MARGIN;
+    const width = available > 0 ? Math.min(MENU_WIDTH, available) : MENU_WIDTH;
     const left = Math.max(
       VIEWPORT_MARGIN,
-      Math.min(rect.left, window.innerWidth - MENU_WIDTH - VIEWPORT_MARGIN),
+      Math.min(rect.left, window.innerWidth - width - VIEWPORT_MARGIN),
     );
     setMenuStyle({
       position: 'fixed',
       left,
-      width: MENU_WIDTH,
+      width,
       maxHeight: `${Math.max(spaceAbove, spaceBelow) - GAP - VIEWPORT_MARGIN}px`,
       ...(openUpward
         ? { bottom: window.innerHeight - rect.top + GAP }
@@ -104,13 +108,24 @@ export default function LabelPicker({ note, selectedLabels, onLocalChange, onRef
     // the intended use of a layout effect (avoids a visible flash at 0,0).
     // eslint-disable-next-line react-hooks/set-state-in-effect
     updatePosition();
-    window.addEventListener('resize', updatePosition);
+    // Coalesce high-frequency scroll/resize events into one update per frame so
+    // scrolling the modal content while the picker is open doesn't thrash layout.
+    let rafId = 0;
+    const scheduleUpdate = () => {
+      if (rafId) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = 0;
+        updatePosition();
+      });
+    };
+    window.addEventListener('resize', scheduleUpdate);
     // Capture scroll on any ancestor (the modal content scrolls) to keep the
-    // menu glued to its trigger.
-    window.addEventListener('scroll', updatePosition, true);
+    // menu glued to its trigger; passive since we never preventDefault.
+    window.addEventListener('scroll', scheduleUpdate, { capture: true, passive: true });
     return () => {
-      window.removeEventListener('resize', updatePosition);
-      window.removeEventListener('scroll', updatePosition, true);
+      if (rafId) cancelAnimationFrame(rafId);
+      window.removeEventListener('resize', scheduleUpdate);
+      window.removeEventListener('scroll', scheduleUpdate, { capture: true });
     };
   }, [updatePosition, allLabels.length, creating]);
 
