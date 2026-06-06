@@ -36,15 +36,7 @@ export class DashboardPage {
 
     for (const labelName of labelNames) {
       await this.page.getByRole('button', { name: 'Add labels' }).click();
-      const existingCheckbox = this.page.getByRole('checkbox', { name: labelName });
-      if (await existingCheckbox.count() > 0 && !(await existingCheckbox.isChecked())) {
-        await existingCheckbox.click();
-      } else if (await existingCheckbox.count() === 0) {
-        await this.page.getByRole('button', { name: 'Create new...' }).click();
-        await this.page.getByPlaceholder('Label name...').fill(labelName);
-        await this.page.keyboard.press('Enter');
-      }
-      await expect(this.page.getByRole('checkbox', { name: labelName })).toBeChecked();
+      await this.selectOrCreateLabelInPicker(labelName);
       // Click "Add labels" again to toggle the picker closed without triggering Dialog.onClose.
       await this.page.getByRole('button', { name: 'Add labels' }).click();
     }
@@ -387,16 +379,32 @@ export class DashboardPage {
     await this.closeActiveDialog();
   }
 
+  /**
+   * Within an open label picker, selects an existing label or creates a new one
+   * by typing into the search box, then waits for it to be selected.
+   */
+  async selectOrCreateLabelInPicker(labelName: string) {
+    const search = this.page.getByRole('textbox', { name: 'Search or create label...' });
+    await search.fill(labelName);
+    const existing = this.page.getByRole('option', { name: labelName, exact: true });
+    if (await existing.count() > 0) {
+      if ((await existing.first().getAttribute('aria-selected')) !== 'true') {
+        await existing.first().click();
+      }
+    } else {
+      await this.page.getByRole('option', { name: `Create "${labelName}"`, exact: true }).click();
+    }
+    await expect(
+      this.page.getByRole('option', { name: labelName, exact: true, selected: true }),
+    ).toBeVisible();
+  }
+
   /** Opens a note and creates a new label, attaching it to the note. */
   async addLabelToNote(noteTitle: string, labelName: string) {
     await this.openNote(noteTitle);
     await this.page.getByRole('button', { name: 'Add labels' }).waitFor();
     await this.page.getByRole('button', { name: 'Add labels' }).click();
-    await this.page.getByRole('button', { name: 'Create new...' }).click();
-    await this.page.getByPlaceholder('Label name...').fill(labelName);
-    await this.pressKey('Enter');
-    // Wait for the label to be created and checked before closing the modal
-    await expect(this.page.getByRole('checkbox', { name: labelName })).toBeChecked();
+    await this.selectOrCreateLabelInPicker(labelName);
     // Closing the modal also dismisses the picker (outside-click fires on mousedown)
     await this.closeActiveDialog();
     await expect(this.page.locator('[data-testid="note-card"]').filter({

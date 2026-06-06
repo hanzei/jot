@@ -44,6 +44,33 @@ test.describe('Labels on Note Creation', () => {
     await dashboardPage.expectNoteNotVisible('Plain');
   });
 
+  test('label picker filters by query and creates a new label inline', async ({ page, dashboardPage }) => {
+    await dashboardPage.goto();
+    // Seed two labels so the picker has something to filter.
+    await dashboardPage.createNoteWithLabels('Seed Note', 'content', ['frontend', 'backend']);
+
+    await dashboardPage.createNote('Filter Target', 'content');
+    await dashboardPage.openNote('Filter Target');
+    await page.getByRole('button', { name: 'Add labels' }).click();
+
+    const search = page.getByRole('textbox', { name: 'Search or create label...' });
+
+    // Typing filters the list down to matching labels only.
+    await search.fill('front');
+    await expect(page.getByRole('option', { name: 'frontend', exact: true })).toBeVisible();
+    await expect(page.getByRole('option', { name: 'backend', exact: true })).toHaveCount(0);
+
+    // A query with no exact match offers an inline create row that creates and selects the label.
+    await search.fill('design');
+    const createRow = page.getByRole('option', { name: 'Create "design"', exact: true });
+    await expect(createRow).toBeVisible();
+    await createRow.click();
+    await expect(page.getByRole('option', { name: 'design', exact: true, selected: true })).toBeVisible();
+
+    await dashboardPage.closeNoteModal();
+    await dashboardPage.expectLabelInSidebar('design');
+  })
+
   test('multiple labels can be added during creation', async ({ dashboardPage }) => {
     await dashboardPage.goto();
     await dashboardPage.createNoteWithLabels('Multi Label', 'content', ['alpha', 'beta']);
