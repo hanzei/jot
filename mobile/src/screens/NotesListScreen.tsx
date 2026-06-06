@@ -126,6 +126,19 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   }), [variant, debouncedSearch, labelId, user?.id]);
 
   const { data: notes, isLoading, isError, refetch, isRefetching } = useOfflineNotes(params);
+
+  // While searching outside the archive/trash views, also surface archived
+  // matches in a separate section. My Tasks already returns archived notes,
+  // so it needs no extra request — its archived matches are split from `notes`.
+  const showArchivedSplit = !!debouncedSearch && variant !== 'archived' && variant !== 'trash';
+  const fetchArchivedSeparately = showArchivedSplit && variant !== 'my-tasks';
+  const archivedParams = useMemo(() => ({
+    archived: true,
+    search: debouncedSearch || undefined,
+    label: variant === 'notes' ? labelId : undefined,
+  }), [debouncedSearch, labelId, variant]);
+  const { data: archivedSearchNotes } = useOfflineNotes(archivedParams, { enabled: fetchArchivedSeparately });
+
   const { data: labelPickerNoteData } = useOfflineNote(labelPickerNote?.id ?? null);
   const isSearchLoading = isLoading && !notes && !!debouncedSearch;
   const updateNote = useUpdateNote();
@@ -388,10 +401,31 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     }
   }, [colorPickerNote, t, updateNote]);
 
+  // Separate active from archived matches. For My Tasks the archived notes are
+  // mixed into `notes`; otherwise they come from the dedicated archived fetch.
+  const { activeNotes, archivedNotes } = useMemo(() => {
+    const all = notes ?? EMPTY_NOTES;
+    if (!showArchivedSplit) {
+      return { activeNotes: all, archivedNotes: EMPTY_NOTES };
+    }
+    if (variant === 'my-tasks') {
+      return {
+        activeNotes: all.filter((n) => !n.archived),
+        archivedNotes: all.filter((n) => n.archived),
+      };
+    }
+    return { activeNotes: all, archivedNotes: archivedSearchNotes ?? EMPTY_NOTES };
+  }, [notes, showArchivedSplit, variant, archivedSearchNotes]);
+
   const { pinned: pinnedNotes, other: otherNotes } = useMemo(
-    () => sortNotesForDisplay(notes ?? EMPTY_NOTES, sortMode),
-    [notes, sortMode],
+    () => sortNotesForDisplay(activeNotes, sortMode),
+    [activeNotes, sortMode],
   );
+
+  const displayedArchived = useMemo(() => {
+    const { pinned, other } = sortNotesForDisplay(archivedNotes, sortMode);
+    return [...pinned, ...other];
+  }, [archivedNotes, sortMode]);
 
   // Clear local order overrides when server data changes
   useEffect(() => {
@@ -537,8 +571,27 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     [handleNotePress, handleOpenMenu, variant],
   );
 
-  // Drag-and-drop is only available in the notes variant while manual sorting is active.
-  const isDraggable = variant === 'notes' && sortMode === 'manual';
+  const renderArchivedSection = useCallback(() => {
+    if (displayedArchived.length === 0) return null;
+    return (
+      <>
+        <Text style={[styles.sectionHeader, { color: colors.textMuted }]}>{t('dashboard.archivedResults')}</Text>
+        {displayedArchived.map((item) => (
+          <NoteCard
+            key={item.id}
+            note={item}
+            onPress={() => handleNotePress(item.id)}
+            onMenuPress={() => handleOpenMenu(item)}
+          />
+        ))}
+      </>
+    );
+  }, [displayedArchived, colors.textMuted, t, handleNotePress, handleOpenMenu]);
+
+  // Drag-and-drop is only available in the notes variant while manual sorting is
+  // active and no search is in progress (search results mix in archived notes
+  // and reordering a filtered list is not meaningful).
+  const isDraggable = variant === 'notes' && sortMode === 'manual' && !debouncedSearch;
   const activeSortLabel = getNoteSortLabel(sortMode, t);
 
   const renderTopControls = () => (
@@ -890,7 +943,8 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
                 ))}
               </>
             )}
-            {displayPinned.length === 0 && displayUnpinned.length === 0 && listEmptyComponent}
+            {renderArchivedSection()}
+            {displayPinned.length === 0 && displayUnpinned.length === 0 && displayedArchived.length === 0 && listEmptyComponent}
           </ScrollView>
         )
       ) : isDraggable ? (
@@ -908,6 +962,25 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
           ListEmptyComponent={listEmptyComponent}
           testID="notes-flat-list"
         />
+      ) : showArchivedSplit ? (
+        <ScrollView
+          refreshControl={
+            <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={colors.primary} />
+          }
+          contentContainerStyle={[styles.listContent, { paddingBottom: listBottomPadding }]}
+          testID="notes-section-list"
+        >
+          {displayUnpinned.map((item) => (
+            <NoteCard
+              key={item.id}
+              note={item}
+              onPress={() => handleNotePress(item.id)}
+              onMenuPress={() => handleOpenMenu(item)}
+            />
+          ))}
+          {renderArchivedSection()}
+          {displayUnpinned.length === 0 && displayedArchived.length === 0 && listEmptyComponent}
+        </ScrollView>
       ) : (
         <FlatList
           data={displayUnpinned}

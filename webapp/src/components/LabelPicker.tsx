@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef, useMemo } from 'react';
+import { useState, useEffect, useLayoutEffect, useRef, useCallback, useMemo } from 'react';
 import { PlusIcon } from '@heroicons/react/24/outline';
 import { useTranslation } from 'react-i18next';
 import type { Label, Note } from '@jot/shared';
@@ -22,6 +22,7 @@ export default function LabelPicker({ note, selectedLabels, onLocalChange, onRef
   const [allLabels, setAllLabels] = useState<Label[]>([]);
   const [query, setQuery] = useState('');
   const [highlightIndex, setHighlightIndex] = useState(0);
+  const [menuStyle, setMenuStyle] = useState<React.CSSProperties | null>(null);
   const containerRef = useRef<HTMLDivElement>(null);
   const inputRef = useRef<HTMLInputElement>(null);
   // Guards the remote create path against duplicate submissions while a request
@@ -67,9 +68,10 @@ export default function LabelPicker({ note, selectedLabels, onLocalChange, onRef
 
   useEffect(() => {
     const handler = (e: MouseEvent) => {
-      if (containerRef.current && !containerRef.current.contains(e.target as Node)) {
-        onClose();
-      }
+      const target = e.target as Node;
+      const wrapper = containerRef.current?.parentElement;
+      if (containerRef.current?.contains(target) || wrapper?.contains(target)) return;
+      onClose();
     };
     document.addEventListener('mousedown', handler);
     return () => document.removeEventListener('mousedown', handler);
@@ -84,6 +86,71 @@ export default function LabelPicker({ note, selectedLabels, onLocalChange, onRef
   useEffect(() => {
     setHighlightIndex(0);
   }, [trimmedQuery]);
+
+  // `position: fixed` lets the menu escape the modal's overflow-y-auto content
+  // area, which would otherwise clip it — the labels row is the last child, so
+  // neither an upward nor downward in-flow (absolute) menu fits when the note is
+  // short. A fixed element is positioned against the viewport, so we compute its
+  // coordinates from the trigger and flip vertically based on available space.
+  // (Relies on no ancestor establishing a containing block via transform/filter;
+  // the note modal's dialog panel has none.)
+  const MENU_WIDTH = 224; // w-56
+  const GAP = 4; // matches the old mb-1 / mt-1
+  const VIEWPORT_MARGIN = 8;
+  const updatePosition = useCallback(() => {
+    const menu = containerRef.current;
+    const wrapper = menu?.parentElement;
+    if (!wrapper) return;
+    const rect = wrapper.getBoundingClientRect();
+    const menuHeight = menu?.offsetHeight ?? 0;
+    const spaceAbove = rect.top;
+    const spaceBelow = window.innerHeight - rect.bottom;
+    const openUpward = spaceAbove >= menuHeight + GAP || spaceAbove >= spaceBelow;
+    // Shrink the menu on viewports narrower than its preferred width so it never
+    // overflows horizontally, then clamp its left edge inside the viewport.
+    const available = window.innerWidth - 2 * VIEWPORT_MARGIN;
+    const width = available > 0 ? Math.min(MENU_WIDTH, available) : MENU_WIDTH;
+    const left = Math.max(
+      VIEWPORT_MARGIN,
+      Math.min(rect.left, window.innerWidth - width - VIEWPORT_MARGIN),
+    );
+    setMenuStyle({
+      position: 'fixed',
+      left,
+      width,
+      maxHeight: `${Math.max(spaceAbove, spaceBelow) - GAP - VIEWPORT_MARGIN}px`,
+      ...(openUpward
+        ? { bottom: window.innerHeight - rect.top + GAP }
+        : { top: rect.bottom + GAP }),
+    });
+  }, []);
+
+  useLayoutEffect(() => {
+    // Measuring the trigger and setting position synchronously before paint is
+    // the intended use of a layout effect (avoids a visible flash at 0,0).
+    updatePosition();
+    // Coalesce high-frequency scroll/resize events into one update per frame so
+    // scrolling the modal content while the picker is open doesn't thrash layout.
+    let rafId = 0;
+    const scheduleUpdate = () => {
+      if (rafId) return;
+      rafId = requestAnimationFrame(() => {
+        rafId = 0;
+        updatePosition();
+      });
+    };
+    window.addEventListener('resize', scheduleUpdate);
+    // Capture scroll on any ancestor (the modal content scrolls) to keep the
+    // menu glued to its trigger; passive since we never preventDefault.
+    window.addEventListener('scroll', scheduleUpdate, { capture: true, passive: true });
+    return () => {
+      if (rafId) cancelAnimationFrame(rafId);
+      window.removeEventListener('resize', scheduleUpdate);
+      window.removeEventListener('scroll', scheduleUpdate, { capture: true });
+    };
+    // Re-measure when the rendered height changes (filtered list grows/shrinks
+    // or the create row toggles), which affects upward/downward placement.
+  }, [updatePosition, filteredLabels.length, showCreate]);
 
   const isSelected = (label: Label) =>
     currentLabelIds.has(label.id) || currentLabelNames.has(label.name);
@@ -186,9 +253,10 @@ export default function LabelPicker({ note, selectedLabels, onLocalChange, onRef
   return (
     <div
       ref={containerRef}
-      className="absolute z-20 bottom-full mb-1 w-56 bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded-md shadow-lg py-1"
+      style={menuStyle ?? { position: 'fixed', visibility: 'hidden' }}
+      className="z-[1000] flex flex-col overflow-hidden bg-white dark:bg-slate-800 border border-gray-200 dark:border-slate-600 rounded-md shadow-lg"
     >
-      <div className="px-2 pt-1 pb-1.5 border-b border-gray-200 dark:border-slate-600">
+      <div className="flex-none px-2 pt-1 pb-1.5 border-b border-gray-200 dark:border-slate-600">
         <input
           ref={inputRef}
           type="text"
@@ -202,7 +270,7 @@ export default function LabelPicker({ note, selectedLabels, onLocalChange, onRef
         />
       </div>
 
-      <div className="max-h-56 overflow-y-auto py-1" role="listbox">
+      <div className="flex-1 min-h-0 overflow-y-auto py-1" role="listbox">
         {filteredLabels.length === 0 && !showCreate && (
           <p className="px-3 py-2 text-xs text-gray-500 dark:text-gray-400">{t('labels.noLabels')}</p>
         )}
