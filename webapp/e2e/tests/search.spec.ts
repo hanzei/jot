@@ -36,13 +36,14 @@ test.describe('Search', () => {
 
     // Active match renders as usual
     await dashboardPage.expectNoteVisible('Active Report');
-    // Archived match renders under the dedicated "Archived" splitter
-    await expect(page.getByRole('heading', { name: 'Archived' })).toBeVisible();
+    // Archived match renders under the dedicated "Archived" splitter.
+    // exact avoids matching the "Archived Report" note title heading.
+    await expect(page.getByRole('heading', { name: 'Archived', exact: true })).toBeVisible();
     await dashboardPage.expectNoteVisible('Archived Report');
 
     // Clearing the search hides the archived note (and the splitter) again
     await dashboardPage.clearSearch();
-    await expect(page.getByRole('heading', { name: 'Archived' })).toHaveCount(0);
+    await expect(page.getByRole('heading', { name: 'Archived', exact: true })).toHaveCount(0);
     await dashboardPage.expectNoteNotVisible('Archived Report');
     await dashboardPage.expectNoteVisible('Active Report');
   });
