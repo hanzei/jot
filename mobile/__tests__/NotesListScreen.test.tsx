@@ -184,6 +184,7 @@ const buildNote = (overrides: Partial<{
   id: string;
   title: string;
   pinned: boolean;
+  archived: boolean;
   labels: Label[];
   created_at: string;
   updated_at: string;
