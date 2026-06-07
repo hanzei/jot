@@ -301,7 +301,7 @@ test.describe('Notes', () => {
     // includes an Undo action, so it auto-dismisses after 7 s. If we don't wait, a second
     // duplicate later in the same test will cause a strict-mode violation because both
     // "Note duplicated" toasts are simultaneously in the DOM.
-    await expect(page.getByText('Note duplicated')).toBeHidden({ timeout: 10000 });
+    await expect(page.getByText('Note duplicated')).toHaveCount(0, { timeout: 10000 });
     await dashboardPage.expectNoteAtPosition(0, 'Copy of Source Text');
     const duplicatedTextCard = dashboardPage.noteCard('Copy of Source Text');
     await expect(duplicatedTextCard.getByText('text-label')).toBeVisible();
