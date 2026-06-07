@@ -9,6 +9,7 @@ import { useAuth } from '../store/AuthContext';
 import { useUsers } from '../store/UsersContext';
 import UserAvatar from './UserAvatar';
 import { isWhiteHexColor } from '../utils/colorContrast';
+import { compactMarkdownStyles, preprocessMarkdown } from '../utils/markdownStyles';
 import LinkText from './LinkText';
 
 interface NoteCardProps {
@@ -170,8 +171,8 @@ function NoteCard({ note, onPress, onLongPress, onMenuPress }: NoteCardProps) {
 
       {note.note_type === 'text' && note.content ? (
         <View style={styles.contentPreview}>
-          <Markdown style={{ body: { color: hasColor ? '#666' : colors.textSecondary, fontSize: 14, lineHeight: 20 } }}>
-            {note.content}
+          <Markdown style={compactMarkdownStyles(hasColor ? '#666' : colors.textSecondary)}>
+            {preprocessMarkdown(note.content)}
           </Markdown>
         </View>
       ) : null}

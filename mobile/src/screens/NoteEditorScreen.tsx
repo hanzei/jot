@@ -36,6 +36,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { getCompletedSectionDividerColor, isWhiteHexColor } from '../utils/colorContrast';
+import { fullMarkdownStyles, preprocessMarkdown } from '../utils/markdownStyles';
 
 type EditorRouteProp = RouteProp<RootStackParamList, 'NoteEditor'>;
 type EditorNavProp = NativeStackNavigationProp<RootStackParamList, 'NoteEditor'>;
@@ -1293,8 +1294,8 @@ export default function NoteEditorScreen() {
                 style={styles.contentPreview}
               >
                 {content ? (
-                  <Markdown style={{ body: { color: hasNoteColor ? '#1a1a1a' : colors.text, fontSize: 14, lineHeight: 22 } }}>
-                    {content}
+                  <Markdown style={fullMarkdownStyles(hasNoteColor ? '#1a1a1a' : colors.text)}>
+                    {preprocessMarkdown(content)}
                   </Markdown>
                 ) : (
                   <Text style={{ color: hasNoteColor ? '#999' : colors.placeholder, fontSize: 14 }}>
