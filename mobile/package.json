@@ -4,6 +4,9 @@
   "private": true,
   "license": "MIT",
   "main": "index.tsx",
+  "engines": {
+    "node": ">=24.0.0"
+  },
   "scripts": {
     "start": "expo start",
     "android": "expo start --android",
