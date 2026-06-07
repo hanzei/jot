@@ -112,6 +112,8 @@ jobs:
 
       - name: Install Playwright browsers
         working-directory: ./webapp
+        env:
+          DEBIAN_FRONTEND: noninteractive
         run: npx playwright install --with-deps chromium
 
       - name: Run e2e tests
