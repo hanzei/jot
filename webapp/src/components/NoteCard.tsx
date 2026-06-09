@@ -33,6 +33,14 @@ interface NoteCardProps {
   onRefresh?: () => void;
 }
 
+function MenuKbd({ children }: { children: React.ReactNode }) {
+  return (
+    <kbd aria-hidden="true" className="ml-2 inline-flex rounded border border-gray-300 dark:border-slate-600 bg-gray-100 dark:bg-slate-700 px-1.5 py-0.5 font-mono text-xs text-gray-500 dark:text-gray-400">
+      {children}
+    </kbd>
+  );
+}
+
 export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare, onRestore, onPermanentlyDelete, currentUserId, usersById, inBin = false, onRefresh }: NoteCardProps) {
   const { t } = useTranslation();
   const { showToast } = useToast();
@@ -46,6 +54,26 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
   }>({ open: false, title: '', message: '', confirmLabel: '', onConfirm: () => {} });
 
   const isOwner = note.user_id === currentUserId;
+
+  const handleMenuKeyDown = (e: React.KeyboardEvent) => {
+    if (inBin) return;
+    if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
+
+    const key = e.key.toLowerCase();
+    const isDeleteKey = e.key === 'Delete' || e.key === 'Backspace';
+
+    if (key === 'p') {
+      e.preventDefault(); e.stopPropagation(); handleTogglePin();
+    } else if (key === 'a') {
+      e.preventDefault(); e.stopPropagation(); handleToggleArchive();
+    } else if (key === 'd' && onDuplicate) {
+      e.preventDefault(); e.stopPropagation(); handleDuplicate();
+    } else if (key === 's' && isOwner && onShare) {
+      e.preventDefault(); e.stopPropagation(); onShare(note);
+    } else if (isDeleteKey && isOwner) {
+      e.preventDefault(); e.stopPropagation(); handleDelete();
+    }
+  };
 
   const getColorClass = (color: string) => {
     const colorMap: Record<string, string> = {
@@ -204,7 +232,7 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
         <MenuButton aria-label={t('note.menuOptions')} className="p-1 rounded-full hover:bg-gray-200 transition-colors">
           <EllipsisVerticalIcon className="h-4 w-4 text-gray-600" />
         </MenuButton>
-        <MenuItems className="absolute right-0 mt-1 w-48 bg-white dark:bg-slate-800 rounded-md shadow-lg ring-1 ring-black dark:ring-slate-600 ring-opacity-5 focus:outline-none z-10 border border-gray-200 dark:border-slate-600">
+        <MenuItems onKeyDownCapture={handleMenuKeyDown} className="absolute right-0 mt-1 w-52 bg-white dark:bg-slate-800 rounded-md shadow-lg ring-1 ring-black dark:ring-slate-600 ring-opacity-5 focus:outline-none z-10 border border-gray-200 dark:border-slate-600">
           <div className="py-1">
             {inBin ? (
               <>
@@ -237,50 +265,62 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
                   <MenuItem>
                     <button
                       onClick={() => onShare(note)}
-                      className="flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-200 data-[focus]:bg-gray-100 dark:data-[focus]:bg-slate-700"
+                      className="flex items-center justify-between w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-200 data-[focus]:bg-gray-100 dark:data-[focus]:bg-slate-700"
                     >
-                      <ShareIcon className="h-4 w-4 mr-2" />
-                      {t('note.share')}
+                      <span className="flex items-center">
+                        <ShareIcon className="h-4 w-4 mr-2" />
+                        {t('note.share')}
+                      </span>
+                      <MenuKbd>S</MenuKbd>
                     </button>
                   </MenuItem>
                 )}
                 <MenuItem>
                   <button
                     onClick={handleTogglePin}
-                    className="flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-200 data-[focus]:bg-gray-100 dark:data-[focus]:bg-slate-700"
+                    className="flex items-center justify-between w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-200 data-[focus]:bg-gray-100 dark:data-[focus]:bg-slate-700"
                   >
-                    <svg className="h-4 w-4 mr-2" fill={note.pinned ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
-                      <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z" />
-                    </svg>
-                    {note.pinned ? t('note.unpin') : t('note.pin')}
+                    <span className="flex items-center">
+                      <svg className="h-4 w-4 mr-2" fill={note.pinned ? 'currentColor' : 'none'} stroke="currentColor" strokeWidth="2" viewBox="0 0 24 24">
+                        <path d="M16 12V4h1V2H7v2h1v8l-2 2v2h5.2v6h1.6v-6H18v-2l-2-2z" />
+                      </svg>
+                      {note.pinned ? t('note.unpin') : t('note.pin')}
+                    </span>
+                    <MenuKbd>P</MenuKbd>
                   </button>
                 </MenuItem>
                 <MenuItem>
                   <button
                     onClick={handleToggleArchive}
-                    className="flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-200 data-[focus]:bg-gray-100 dark:data-[focus]:bg-slate-700"
+                    className="flex items-center justify-between w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-200 data-[focus]:bg-gray-100 dark:data-[focus]:bg-slate-700"
                   >
-                    {note.archived ? (
-                      <>
-                        <ArchiveBoxXMarkIcon className="h-4 w-4 mr-2" />
-                        {t('note.unarchive')}
-                      </>
-                    ) : (
-                      <>
-                        <ArchiveBoxIcon className="h-4 w-4 mr-2" />
-                        {t('note.archive')}
-                      </>
-                    )}
+                    <span className="flex items-center">
+                      {note.archived ? (
+                        <>
+                          <ArchiveBoxXMarkIcon className="h-4 w-4 mr-2" />
+                          {t('note.unarchive')}
+                        </>
+                      ) : (
+                        <>
+                          <ArchiveBoxIcon className="h-4 w-4 mr-2" />
+                          {t('note.archive')}
+                        </>
+                      )}
+                    </span>
+                    <MenuKbd>A</MenuKbd>
                   </button>
                 </MenuItem>
                 {onDuplicate && (
                   <MenuItem>
                     <button
                       onClick={handleDuplicate}
-                      className="flex items-center w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-200 data-[focus]:bg-gray-100 dark:data-[focus]:bg-slate-700"
+                      className="flex items-center justify-between w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-200 data-[focus]:bg-gray-100 dark:data-[focus]:bg-slate-700"
                     >
-                      <DocumentDuplicateIcon className="h-4 w-4 mr-2" />
-                      {t('note.duplicate')}
+                      <span className="flex items-center">
+                        <DocumentDuplicateIcon className="h-4 w-4 mr-2" />
+                        {t('note.duplicate')}
+                      </span>
+                      <MenuKbd>D</MenuKbd>
                     </button>
                   </MenuItem>
                 )}
@@ -288,10 +328,13 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
                   <MenuItem>
                     <button
                       onClick={handleDelete}
-                      className="flex items-center w-full px-4 py-2 text-sm text-red-600 dark:text-red-400 data-[focus]:bg-gray-100 dark:data-[focus]:bg-slate-700"
+                      className="flex items-center justify-between w-full px-4 py-2 text-sm text-red-600 dark:text-red-400 data-[focus]:bg-gray-100 dark:data-[focus]:bg-slate-700"
                     >
-                      <TrashIcon className="h-4 w-4 mr-2" />
-                      {t('note.delete')}
+                      <span className="flex items-center">
+                        <TrashIcon className="h-4 w-4 mr-2" />
+                        {t('note.delete')}
+                      </span>
+                      <MenuKbd>Del</MenuKbd>
                     </button>
                   </MenuItem>
                 )}
