@@ -78,7 +78,7 @@ func runResetCmd(cmd *cobra.Command, _ []string) error {
 	}
 
 	for _, u := range users {
-		if u.ID == me.User.ID {
+		if u.ID == me.User.ID || u.Role == client.RoleAdmin {
 			continue
 		}
 		if err := jotClient.AdminDeleteUser(cmd.Context(), u.ID); err != nil {
@@ -133,7 +133,9 @@ func runSeed(ctx context.Context, adminClient *client.Client, jsonOutput bool) (
 	usersCreated := 0
 	for _, u := range seedDataset {
 		if id, exists := existingByUsername[u.username]; exists {
-			fmt.Fprintf(os.Stderr, "  ⚠ User %s already exists, skipping\n", u.username)
+			if !jsonOutput {
+				fmt.Fprintf(os.Stderr, "  ⚠ User %s already exists, skipping\n", u.username)
+			}
 			userIDs[u.username] = id
 			continue
 		}
