@@ -274,7 +274,8 @@
     "indentItem": "Indent",
     "outdentItem": "Outdent",
     "itemsPasted_one": "1 item pasted",
-    "itemsPasted_other": "{{count}} items pasted"
+    "itemsPasted_other": "{{count}} items pasted",
+    "filterByLabel": "Filter by label: {{label}}"
   },
   "labels": {
     "title": "Labels",

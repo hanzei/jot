@@ -274,7 +274,8 @@
     "indentItem": "Indentar",
     "outdentItem": "Remover recuo",
     "itemsPasted_one": "1 item colado",
-    "itemsPasted_other": "{{count}} itens colados"
+    "itemsPasted_other": "{{count}} itens colados",
+    "filterByLabel": "Filtrar por etiqueta: {{label}}"
   },
   "labels": {
     "title": "Etiquetas",

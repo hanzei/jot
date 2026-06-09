@@ -192,6 +192,8 @@ function NoteCard({ note, onPress, onLongPress, onMenuPress, onLabelPress }: Not
                   style={[styles.labelChip, { backgroundColor: hasColor ? 'rgba(0,0,0,0.08)' : colors.borderLight }]}
                   onPress={() => onLabelPress(label.id, label.name)}
                   activeOpacity={0.6}
+                  accessibilityRole="button"
+                  accessibilityLabel={t('note.filterByLabel', { label: label.name })}
                 >
                   <Text style={[styles.labelText, { color: hasColor ? '#666' : colors.textSecondary }]}>{label.name}</Text>
                 </TouchableOpacity>

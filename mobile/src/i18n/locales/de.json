@@ -259,7 +259,8 @@
     "indentItem": "Einrücken",
     "outdentItem": "Ausrücken",
     "itemsPasted_one": "1 Element eingefügt",
-    "itemsPasted_other": "{{count}} Elemente eingefügt"
+    "itemsPasted_other": "{{count}} Elemente eingefügt",
+    "filterByLabel": "Nach Label filtern: {{label}}"
   },
   "labels": {
     "title": "Labels",
