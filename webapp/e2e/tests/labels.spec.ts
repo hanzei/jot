@@ -256,6 +256,30 @@ test.describe('Label Filtering', () => {
 
     await dashboardPage.expectArchiveAndBinDirectlyAfterLabel('sidebar-order');
   });
+
+  test('clicking a label chip on a note card filters to that label', async ({ page, dashboardPage }) => {
+    await dashboardPage.goto();
+    await dashboardPage.createNote('Chip Note', 'has chip label');
+    await dashboardPage.createNote('Other Note', 'no label');
+    await dashboardPage.addLabelToNote('Chip Note', 'chiplabel');
+
+    await dashboardPage.clickNoteLabelChip('Chip Note', 'chiplabel');
+
+    await expect(page).toHaveURL(/[?&]label=/);
+    await dashboardPage.expectNoteVisible('Chip Note');
+    await dashboardPage.expectNoteNotVisible('Other Note');
+  });
+
+  test('clicking a note card label chip does not open the note', async ({ page, dashboardPage }) => {
+    await dashboardPage.goto();
+    await dashboardPage.createNote('No Open Note', 'content');
+    await dashboardPage.addLabelToNote('No Open Note', 'noopentest');
+
+    await dashboardPage.clickNoteLabelChip('No Open Note', 'noopentest');
+
+    await expect(page.getByRole('dialog')).not.toBeVisible();
+    await expect(page).toHaveURL(/[?&]label=/);
+  });
 });
 
 test.describe('Label Filtering — Mobile', () => {

@@ -16,6 +16,7 @@ interface SortableNoteCardProps {
   disabled?: boolean;
   inBin?: boolean;
   onRefresh?: () => void;
+  onLabelClick?: (labelId: string) => void;
 }
 
 export default function SortableNoteCard({
@@ -31,6 +32,7 @@ export default function SortableNoteCard({
   disabled = false,
   inBin = false,
   onRefresh,
+  onLabelClick,
 }: SortableNoteCardProps) {
   const {
     attributes,
@@ -75,6 +77,7 @@ export default function SortableNoteCard({
           usersById={usersById}
           inBin={inBin}
           onRefresh={onRefresh}
+          onLabelClick={onLabelClick}
         />
       </div>
     </div>

@@ -170,6 +170,16 @@ export default function Dashboard() {
     });
   }, [setSearchParams]);
 
+  const handleLabelClick = useCallback((labelId: string) => {
+    setSearchParams(prev => {
+      const next = new URLSearchParams(prev);
+      next.set('label', labelId);
+      next.delete('view');
+      next.delete('search');
+      return next;
+    });
+  }, [setSearchParams]);
+
   const sensors = useSensors(
     useSensor(MouseSensor, {
       activationConstraint: {
@@ -1088,6 +1098,7 @@ export default function Dashboard() {
                           disabled={dragReorderingDisabled}
                           inBin={showBin}
                           onRefresh={loadNotes}
+                          onLabelClick={!showBin ? handleLabelClick : undefined}
                         />
                       ))}
                     </div>
@@ -1123,6 +1134,7 @@ export default function Dashboard() {
                           disabled={dragReorderingDisabled}
                           inBin={showBin}
                           onRefresh={loadNotes}
+                          onLabelClick={!showBin ? handleLabelClick : undefined}
                         />
                       ))}
                     </div>
@@ -1157,6 +1169,7 @@ export default function Dashboard() {
                           disabled={true}
                           inBin={showBin}
                           onRefresh={loadNotes}
+                          onLabelClick={!showBin ? handleLabelClick : undefined}
                         />
                       ))}
                     </div>

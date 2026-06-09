@@ -164,6 +164,10 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     navigation.dispatch(DrawerActions.toggleDrawer());
   }, [navigation]);
 
+  const handleLabelPress = useCallback((pressedLabelId: string, pressedLabelName: string) => {
+    navigation.dispatch(DrawerActions.jumpTo('Notes', { labelId: pressedLabelId, labelName: pressedLabelName }));
+  }, [navigation]);
+
   const handleSortChange = useCallback(async (nextSort: NoteSort) => {
     if (nextSort === sortMode) {
       return;
@@ -553,11 +557,12 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
             onPress={() => handleNotePress(item.id)}
             onLongPress={drag}
             onMenuPress={() => handleOpenMenu(item)}
+            onLabelPress={variant === 'notes' ? handleLabelPress : undefined}
           />
         </View>
       </ScaleDecorator>
     ),
-    [handleNotePress, handleOpenMenu],
+    [handleNotePress, handleOpenMenu, handleLabelPress, variant],
   );
 
   const renderNonDraggableNoteCard = useCallback(
@@ -567,9 +572,10 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
         onPress={() => handleNotePress(item.id)}
         onMenuPress={variant !== 'trash' ? () => handleOpenMenu(item) : undefined}
         onLongPress={variant === 'trash' ? () => handleOpenMenu(item) : undefined}
+        onLabelPress={variant === 'notes' ? handleLabelPress : undefined}
       />
     ),
-    [handleNotePress, handleOpenMenu, variant],
+    [handleNotePress, handleOpenMenu, variant, handleLabelPress],
   );
 
   const renderArchivedSection = useCallback(() => {
@@ -583,11 +589,12 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
             note={item}
             onPress={() => handleNotePress(item.id)}
             onMenuPress={() => handleOpenMenu(item)}
+            onLabelPress={variant === 'notes' ? handleLabelPress : undefined}
           />
         ))}
       </>
     );
-  }, [displayedArchived, colors.textMuted, t, handleNotePress, handleOpenMenu]);
+  }, [displayedArchived, colors.textMuted, t, handleNotePress, handleOpenMenu, handleLabelPress, variant]);
 
   // Drag-and-drop is only available in the notes variant while manual sorting is
   // active and no search is in progress (search results mix in archived notes
@@ -924,6 +931,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
                     onPress={() => handleNotePress(item.id)}
                     onMenuPress={variant !== 'trash' ? () => handleOpenMenu(item) : undefined}
                     onLongPress={variant === 'trash' ? () => handleOpenMenu(item) : undefined}
+                    onLabelPress={variant === 'notes' ? handleLabelPress : undefined}
                   />
                 ))}
               </>
@@ -940,6 +948,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
                     onPress={() => handleNotePress(item.id)}
                     onMenuPress={variant !== 'trash' ? () => handleOpenMenu(item) : undefined}
                     onLongPress={variant === 'trash' ? () => handleOpenMenu(item) : undefined}
+                    onLabelPress={variant === 'notes' ? handleLabelPress : undefined}
                   />
                 ))}
               </>
@@ -977,6 +986,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
               note={item}
               onPress={() => handleNotePress(item.id)}
               onMenuPress={() => handleOpenMenu(item)}
+              onLabelPress={variant === 'notes' ? handleLabelPress : undefined}
             />
           ))}
           {renderArchivedSection()}

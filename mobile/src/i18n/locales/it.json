@@ -274,7 +274,8 @@
     "indentItem": "Rientro",
     "outdentItem": "Rimuovi rientro",
     "itemsPasted_one": "1 elemento incollato",
-    "itemsPasted_other": "{{count}} elementi incollati"
+    "itemsPasted_other": "{{count}} elementi incollati",
+    "filterByLabel": "Filtra per etichetta: {{label}}"
   },
   "labels": {
     "title": "Etichette",
