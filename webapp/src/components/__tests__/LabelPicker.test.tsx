@@ -75,6 +75,8 @@ describe('LabelPicker', () => {
     fireEvent.mouseDown(barButton, { preventDefault: () => {} })
     fireEvent.click(barButton)
 
+    expect(input).toHaveFocus()
+
     // Arrow navigation should still work after clicking
     fireEvent.keyDown(input, { key: 'ArrowDown' })
     const baz = screen.getByRole('option', { name: 'Baz' })
