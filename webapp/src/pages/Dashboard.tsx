@@ -209,12 +209,13 @@ export default function Dashboard() {
       let notesData: Note[] = [];
       let nextTrashCount = 0;
 
-      // When searching outside the bin/archive views, also pull in archived
-      // matches so they surface in search; they are shown in a separate
-      // "Archived" section in the UI. My Tasks already returns archived notes,
-      // so it needs no extra request.
-      const includeArchivedInSearch =
-        !!debouncedSearchQuery && !showBin && !showArchived && !showMyTasks;
+      // When searching or filtering by label outside the bin/archive views,
+      // also pull in archived matches so they surface in a separate "Archived"
+      // section in the UI. My Tasks already returns archived notes, so it
+      // needs no extra request.
+      const includeArchivedSplit =
+        !showBin && !showArchived && !showMyTasks &&
+        (!!debouncedSearchQuery || !!selectedLabelId);
 
       if (showBin && debouncedSearchQuery) {
         const [loadedNotes, allTrashedNotes] = await Promise.all([
@@ -223,7 +224,7 @@ export default function Dashboard() {
         ]);
         notesData = loadedNotes;
         nextTrashCount = allTrashedNotes.length;
-      } else if (includeArchivedInSearch) {
+      } else if (includeArchivedSplit) {
         const [activeMatches, archivedMatches] = await Promise.all([
           notes.getAll(false, debouncedSearchQuery, false, selectedLabelId ?? '', false),
           notes.getAll(true, debouncedSearchQuery, false, selectedLabelId ?? '', false),
@@ -821,10 +822,12 @@ export default function Dashboard() {
     }
   };
 
-  // While searching outside the bin/archive views, archived matches are mixed
-  // into notesList; split them out so they render in their own section.
+  // While searching or filtering by label outside the bin/archive views,
+  // archived matches are mixed into notesList; split them out so they render
+  // in their own section.
   const isSearching = !!debouncedSearchQuery;
-  const showArchivedSplit = isSearching && !showBin && !showArchived;
+  const isFilteringByLabel = !!selectedLabelId;
+  const showArchivedSplit = (isSearching || isFilteringByLabel) && !showBin && !showArchived;
   const { activeMatches, archivedMatches } = useMemo(() => {
     if (!showArchivedSplit) {
       return { activeMatches: notesList, archivedMatches: [] as Note[] };
@@ -842,7 +845,7 @@ export default function Dashboard() {
     const { pinned, other } = sortNotesForDisplay(archivedMatches, noteSort);
     return [...pinned, ...other];
   }, [archivedMatches, noteSort]);
-  const dragReorderingDisabled = showArchived || showBin || showMyTasks || isSearching || noteSort !== 'manual';
+  const dragReorderingDisabled = showArchived || showBin || showMyTasks || isSearching || isFilteringByLabel || noteSort !== 'manual';
   const activeSortLabel = t(`dashboard.sortOption.${noteSort}`);
   const focusSearchShortcutHint = isApplePlatform() ? '⌘ + F' : t('keyboardShortcuts.focusSearchKey');
   const showCreateFirstNoteCta =
