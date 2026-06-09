@@ -1621,60 +1621,35 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     if (e.defaultPrevented) return;
     if (showDeleteConfirm) return;
 
-    const withModifier = (e.ctrlKey || e.metaKey) && e.shiftKey;
-    const bare = !e.ctrlKey && !e.metaKey && !e.altKey && !e.shiftKey;
+    if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
+    if (!note || isEditableElementFocused()) return;
+
     const key = e.key === 'Backspace' ? 'backspace' : e.key === 'Delete' ? 'delete' : e.key.toLowerCase();
 
-    if (withModifier) {
-      if (key === 'p') {
-        if (!note) return;
-        e.preventDefault();
-        handlePinToggle();
-      } else if (key === 'a') {
-        if (!note) return;
-        e.preventDefault();
-        handleArchiveToggle();
-      } else if (key === 'd') {
-        if (!note || !onDuplicate) return;
-        e.preventDefault();
-        handleDuplicate();
-      } else if (key === 'backspace') {
-        if (!note || !onDelete || !isOwner) return;
-        e.preventDefault();
-        handleDelete();
-      } else if (key === 'l') {
-        e.preventDefault();
-        setShowLabelPicker(v => !v);
-      } else if (key === 'c') {
-        e.preventDefault();
-        toggleColorPicker();
-      }
-    } else if (bare && note && !isEditableElementFocused()) {
-      if (key === 'a') {
-        e.preventDefault();
-        handleArchiveToggle();
-      } else if (key === 'p') {
-        e.preventDefault();
-        handlePinToggle();
-      } else if (key === 'd') {
-        if (!onDuplicate) return;
-        e.preventDefault();
-        handleDuplicate();
-      } else if (key === 's') {
-        if (!onShare || !isOwner) return;
-        e.preventDefault();
-        onShare(note);
-      } else if (key === 'l') {
-        e.preventDefault();
-        setShowLabelPicker(v => !v);
-      } else if (key === 'c') {
-        e.preventDefault();
-        toggleColorPicker();
-      } else if (key === 'backspace' || key === 'delete') {
-        if (!onDelete || !isOwner) return;
-        e.preventDefault();
-        handleDelete();
-      }
+    if (key === 'a') {
+      e.preventDefault();
+      handleArchiveToggle();
+    } else if (key === 'p') {
+      e.preventDefault();
+      handlePinToggle();
+    } else if (key === 'd') {
+      if (!onDuplicate) return;
+      e.preventDefault();
+      handleDuplicate();
+    } else if (key === 's') {
+      if (!onShare || !isOwner) return;
+      e.preventDefault();
+      onShare(note);
+    } else if (key === 'l') {
+      e.preventDefault();
+      setShowLabelPicker(v => !v);
+    } else if (key === 'c') {
+      e.preventDefault();
+      toggleColorPicker();
+    } else if (key === 'backspace' || key === 'delete') {
+      if (!onDelete || !isOwner) return;
+      e.preventDefault();
+      handleDelete();
     }
   };
 
