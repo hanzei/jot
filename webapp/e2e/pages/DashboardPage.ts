@@ -417,6 +417,12 @@ export class DashboardPage {
     })).toBeVisible();
   }
 
+  /** Clicks a label chip on a note card to activate the label filter. */
+  async clickNoteLabelChip(noteTitle: string, labelName: string) {
+    const card = this.noteCard(noteTitle);
+    await card.getByRole('button', { name: labelName, exact: true }).click();
+  }
+
   /** Clicks a label button in the sidebar to toggle the label filter. */
   async selectSidebarLabel(labelName: string) {
     await this.ensureSidebarOpen();
