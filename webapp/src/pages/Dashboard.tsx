@@ -477,8 +477,10 @@ export default function Dashboard() {
           for (const card of cards) {
             if (card === currentCard) continue;
             const rect = card.getBoundingClientRect();
+            // Require non-overlapping vertical position so multi-line cards that
+            // share the same visual row are not treated as up/down candidates.
+            if (goingUp ? rect.bottom > currentRect.top : rect.top < currentRect.bottom) continue;
             const centerY = rect.top + rect.height / 2;
-            if (goingUp ? centerY > currentCenterY : centerY < currentCenterY) continue;
             const dy = Math.abs(centerY - currentCenterY);
             const dx = Math.abs(rect.left + rect.width / 2 - currentCenterX);
             // Prefer cards that are more directly above/below (weight vertical distance heavily)
