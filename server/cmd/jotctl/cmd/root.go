@@ -42,6 +42,8 @@ func init() {
 	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json", false, "Output as JSON")
 	rootCmd.AddCommand(loginCmd)
 	rootCmd.AddCommand(logoutCmd)
+	rootCmd.AddCommand(seedCmd)
+	rootCmd.AddCommand(resetCmd)
 	rootCmd.AddCommand(usersCmd)
 	rootCmd.AddCommand(versionCmd)
 }
