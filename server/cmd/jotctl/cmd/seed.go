@@ -60,7 +60,7 @@ func runResetCmd(cmd *cobra.Command, _ []string) error {
 	if !resetYes {
 		fmt.Printf("This will DELETE all non-admin users and their data on %s. Continue? [y/N]: ", jotClient.BaseURL())
 		var answer string
-		fmt.Scanln(&answer) //nolint:errcheck // interactive prompt; partial input is treated as "no"
+		fmt.Scanln(&answer) //nolint:errcheck,gosec // interactive prompt; partial input is treated as "no"
 		if strings.ToLower(strings.TrimSpace(answer)) != "y" {
 			fmt.Println("Aborted.")
 			return nil
@@ -81,8 +81,8 @@ func runResetCmd(cmd *cobra.Command, _ []string) error {
 		if u.ID == me.User.ID || u.Role == client.RoleAdmin {
 			continue
 		}
-		if err := jotClient.AdminDeleteUser(cmd.Context(), u.ID); err != nil {
-			return wrapAPIError(fmt.Errorf("delete user %s: %w", u.Username, err))
+		if deleteErr := jotClient.AdminDeleteUser(cmd.Context(), u.ID); deleteErr != nil {
+			return wrapAPIError(fmt.Errorf("delete user %s: %w", u.Username, deleteErr))
 		}
 		if !jsonOutput {
 			fmt.Printf("  ✓ Deleted user %s\n", u.Username)
@@ -106,7 +106,7 @@ func runResetCmd(cmd *cobra.Command, _ []string) error {
 
 // runSeed creates all seed users and their notes/settings via the API.
 // Returns (usersCreated, notesCreated, labelsCreated, error).
-func runSeed(ctx context.Context, adminClient *client.Client, jsonOutput bool) (int, int, int, error) {
+func runSeed(ctx context.Context, adminClient *client.Client, jsonOutput bool) (int, int, int, error) { //nolint:gocognit,gocyclo
 	logf := func(format string, args ...any) {
 		if !jsonOutput {
 			fmt.Printf(format+"\n", args...)
@@ -233,7 +233,7 @@ func runSeed(ctx context.Context, adminClient *client.Client, jsonOutput bool) (
 // createNote creates one note (text or list) and applies any post-create
 // mutations (pinned, archived, checkedItemsCollapsed). It returns the note ID.
 // Trashing is handled by the caller after sharing is done.
-func createNote(ctx context.Context, uc *client.Client, n seedNote) (string, error) {
+func createNote(ctx context.Context, uc *client.Client, n seedNote) (string, error) { //nolint:gocognit
 	switch n.noteType {
 	case "text":
 		created, err := uc.CreateTextNote(ctx, &client.CreateTextNoteRequest{
