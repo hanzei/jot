@@ -17,6 +17,7 @@ interface NoteCardProps {
   onPress: () => void;
   onLongPress?: () => void;
   onMenuPress?: () => void;
+  onLabelPress?: (labelId: string, labelName: string) => void;
 }
 
 const MAX_PREVIEW_ITEMS = 10;
@@ -130,7 +131,7 @@ function ListPreview({ items, hasColor }: { items: NoteItem[]; hasColor?: boolea
   );
 }
 
-function NoteCard({ note, onPress, onLongPress, onMenuPress }: NoteCardProps) {
+function NoteCard({ note, onPress, onLongPress, onMenuPress, onLabelPress }: NoteCardProps) {
   const { colors } = useTheme();
   const { t } = useTranslation();
   const hasColor = !!(note.color && !isWhiteHexColor(note.color));
@@ -185,9 +186,20 @@ function NoteCard({ note, onPress, onLongPress, onMenuPress }: NoteCardProps) {
         {note.labels && note.labels.length > 0 ? (
           <View style={styles.labels}>
             {note.labels.map((label) => (
-              <View key={label.id} style={[styles.labelChip, { backgroundColor: hasColor ? 'rgba(0,0,0,0.08)' : colors.borderLight }]}>
-                <Text style={[styles.labelText, { color: hasColor ? '#666' : colors.textSecondary }]}>{label.name}</Text>
-              </View>
+              onLabelPress ? (
+                <TouchableOpacity
+                  key={label.id}
+                  style={[styles.labelChip, { backgroundColor: hasColor ? 'rgba(0,0,0,0.08)' : colors.borderLight }]}
+                  onPress={() => onLabelPress(label.id, label.name)}
+                  activeOpacity={0.6}
+                >
+                  <Text style={[styles.labelText, { color: hasColor ? '#666' : colors.textSecondary }]}>{label.name}</Text>
+                </TouchableOpacity>
+              ) : (
+                <View key={label.id} style={[styles.labelChip, { backgroundColor: hasColor ? 'rgba(0,0,0,0.08)' : colors.borderLight }]}>
+                  <Text style={[styles.labelText, { color: hasColor ? '#666' : colors.textSecondary }]}>{label.name}</Text>
+                </View>
+              )
             ))}
           </View>
         ) : null}
