@@ -63,6 +63,24 @@ describe('LabelPicker', () => {
     expect(onLocalChange).toHaveBeenCalledWith([expect.objectContaining({ name: 'Bar' })])
   })
 
+  it('keeps input focused after clicking a label so keyboard navigation still works', async () => {
+    const onLocalChange = vi.fn()
+    render(<LabelPicker selectedLabels={[]} onLocalChange={onLocalChange} onClose={vi.fn()} />)
+    await screen.findByText('Bar')
+
+    const input = screen.getByRole('textbox')
+    const barButton = screen.getByRole('option', { name: 'Bar' })
+
+    // mousedown with preventDefault should not move focus away from the input
+    fireEvent.mouseDown(barButton, { preventDefault: () => {} })
+    fireEvent.click(barButton)
+
+    // Arrow navigation should still work after clicking
+    fireEvent.keyDown(input, { key: 'ArrowDown' })
+    const baz = screen.getByRole('option', { name: 'Baz' })
+    expect(baz).toHaveClass('bg-gray-100')
+  })
+
   it('creates a new label locally from the create option', async () => {
     const onLocalChange = vi.fn()
     render(<LabelPicker selectedLabels={[]} onLocalChange={onLocalChange} onClose={vi.fn()} />)

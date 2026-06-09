@@ -282,6 +282,7 @@ export default function LabelPicker({ note, selectedLabels, onLocalChange, onRef
             type="button"
             role="option"
             aria-selected={isSelected(label)}
+            onMouseDown={(e) => e.preventDefault()}
             onClick={() => { setHighlightIndex(index); toggleLabel(label); }}
             onMouseEnter={() => setHighlightIndex(index)}
             className={`flex items-center w-full px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 ${index === effectiveHighlight ? 'bg-gray-100 dark:bg-slate-700' : ''}`}
@@ -303,6 +304,7 @@ export default function LabelPicker({ note, selectedLabels, onLocalChange, onRef
             type="button"
             role="option"
             aria-selected={createIndex === effectiveHighlight}
+            onMouseDown={(e) => e.preventDefault()}
             onClick={() => { setHighlightIndex(createIndex); handleCreate(); }}
             onMouseEnter={() => setHighlightIndex(createIndex)}
             className={`flex items-center w-full px-3 py-1.5 text-sm text-blue-600 dark:text-blue-400 ${createIndex === effectiveHighlight ? 'bg-gray-100 dark:bg-slate-700' : ''}`}
