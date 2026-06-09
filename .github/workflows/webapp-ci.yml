@@ -110,11 +110,21 @@ jobs:
         working-directory: ./webapp
         run: npm ci
 
-      - name: Install Playwright browsers
+      - name: Install Playwright system deps
         working-directory: ./webapp
-        env:
-          DEBIAN_FRONTEND: noninteractive
-        run: npx playwright install --with-deps chromium
+        run: sudo DEBIAN_FRONTEND=noninteractive npx playwright install-deps chromium
+
+      - name: Cache Playwright browsers
+        uses: actions/cache@27d5ce7f107fe9357f9df03efb73ab90386fccae # v4
+        id: playwright-cache
+        with:
+          path: ~/.cache/ms-playwright
+          key: playwright-${{ runner.os }}-${{ hashFiles('webapp/package-lock.json') }}
+
+      - name: Install Playwright browsers
+        if: steps.playwright-cache.outputs.cache-hit != 'true'
+        working-directory: ./webapp
+        run: npx playwright install chromium
 
       - name: Run e2e tests
         run: task test-e2e
