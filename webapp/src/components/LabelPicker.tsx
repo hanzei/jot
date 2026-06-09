@@ -77,10 +77,17 @@ export default function LabelPicker({ note, selectedLabels, onLocalChange, onRef
     return () => document.removeEventListener('mousedown', handler);
   }, [onClose]);
 
-  // Keep the search input focused so typing always works (keyboard-open UX).
-  useEffect(() => {
+  // Focus the search input the first time the menu becomes visible (i.e. after
+  // useLayoutEffect has computed menuStyle and the container is no longer hidden).
+  // Using useLayoutEffect ensures focus is set synchronously before the browser
+  // paints, eliminating the race where a user presses a key before the async
+  // useEffect fires.
+  const hasFocusedRef = useRef(false);
+  useLayoutEffect(() => {
+    if (!menuStyle || hasFocusedRef.current) return;
+    hasFocusedRef.current = true;
     inputRef.current?.focus();
-  }, []);
+  }, [menuStyle]);
 
   // Reset the highlight to the top whenever the query changes the option list.
   useEffect(() => {
@@ -282,6 +289,7 @@ export default function LabelPicker({ note, selectedLabels, onLocalChange, onRef
             type="button"
             role="option"
             aria-selected={isSelected(label)}
+            onMouseDown={(e) => e.preventDefault()}
             onClick={() => { setHighlightIndex(index); toggleLabel(label); }}
             onMouseEnter={() => setHighlightIndex(index)}
             className={`flex items-center w-full px-3 py-1.5 text-sm text-gray-700 dark:text-gray-200 ${index === effectiveHighlight ? 'bg-gray-100 dark:bg-slate-700' : ''}`}
@@ -303,6 +311,7 @@ export default function LabelPicker({ note, selectedLabels, onLocalChange, onRef
             type="button"
             role="option"
             aria-selected={createIndex === effectiveHighlight}
+            onMouseDown={(e) => e.preventDefault()}
             onClick={() => { setHighlightIndex(createIndex); handleCreate(); }}
             onMouseEnter={() => setHighlightIndex(createIndex)}
             className={`flex items-center w-full px-3 py-1.5 text-sm text-blue-600 dark:text-blue-400 ${createIndex === effectiveHighlight ? 'bg-gray-100 dark:bg-slate-700' : ''}`}
