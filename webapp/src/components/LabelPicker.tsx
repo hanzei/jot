@@ -246,6 +246,7 @@ export default function LabelPicker({ note, selectedLabels, onLocalChange, onRef
       activateHighlight();
     } else if (e.key === 'Escape') {
       e.preventDefault();
+      e.nativeEvent.stopPropagation();
       onClose();
     }
   };
