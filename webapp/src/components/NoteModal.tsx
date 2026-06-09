@@ -12,6 +12,7 @@ import ConfirmDialog from '@/components/ConfirmDialog';
 import { useToast } from '@/hooks/useToast';
 import { buildShareAvatars } from '@/utils/shareAvatars';
 import { buildMobileDeepLink } from '@/utils/deepLink';
+import { isEditableElementFocused } from '@/utils/keyboardShortcuts';
 import {
   DndContext,
   closestCenter,
@@ -1603,44 +1604,52 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     }
   };
 
+  const toggleColorPicker = () => {
+    setShowColorPicker(v => {
+      if (!v) {
+        requestAnimationFrame(() => {
+          colorPickerRef.current?.querySelector<HTMLButtonElement>('button[tabindex="0"]')?.focus();
+        });
+      }
+      return !v;
+    });
+  };
+
   // Stable ref always holds the latest handler so the listener never goes stale.
   const modalShortcutRef = useRef<((e: KeyboardEvent) => void) | null>(null);
   modalShortcutRef.current = (e: KeyboardEvent) => {
-    if (!(e.ctrlKey || e.metaKey) || !e.shiftKey) return;
     if (e.defaultPrevented) return;
     if (showDeleteConfirm) return;
 
-    const key = e.key === 'Backspace' ? 'backspace' : e.key.toLowerCase();
+    if (e.ctrlKey || e.metaKey || e.altKey || e.shiftKey) return;
+    if (!note || isEditableElementFocused()) return;
 
-    if (key === 'p') {
-      if (!note) return;
-      e.preventDefault();
-      handlePinToggle();
-    } else if (key === 'a') {
-      if (!note) return;
+    const key = e.key === 'Backspace' ? 'backspace' : e.key === 'Delete' ? 'delete' : e.key.toLowerCase();
+
+    if (key === 'a') {
       e.preventDefault();
       handleArchiveToggle();
+    } else if (key === 'p') {
+      e.preventDefault();
+      handlePinToggle();
     } else if (key === 'd') {
-      if (!note || !onDuplicate) return;
       e.preventDefault();
+      if (!onDuplicate) return;
       handleDuplicate();
-    } else if (key === 'backspace') {
-      if (!note || !onDelete || !isOwner) return;
+    } else if (key === 's') {
       e.preventDefault();
-      handleDelete();
+      if (!onShare || !isOwner) return;
+      onShare(note);
     } else if (key === 'l') {
       e.preventDefault();
       setShowLabelPicker(v => !v);
     } else if (key === 'c') {
       e.preventDefault();
-      setShowColorPicker(v => {
-        if (!v) {
-          requestAnimationFrame(() => {
-            colorPickerRef.current?.querySelector<HTMLButtonElement>('button[tabindex="0"]')?.focus();
-          });
-        }
-        return !v;
-      });
+      toggleColorPicker();
+    } else if (key === 'backspace' || key === 'delete') {
+      e.preventDefault();
+      if (!onDelete || !isOwner) return;
+      handleDelete();
     }
   };
 
@@ -2063,7 +2072,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                 {/* Color picker toggle */}
                 <button
                   onMouseDown={(e) => e.stopPropagation()}
-                  onClick={() => setShowColorPicker(v => !v)}
+                  onClick={() => toggleColorPicker()}
                   className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
                   title={t('note.colorPickerLabel')}
                   aria-label={t('note.colorPickerLabel')}

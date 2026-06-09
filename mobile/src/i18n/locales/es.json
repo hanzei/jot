@@ -274,7 +274,8 @@
     "indentItem": "Sangría",
     "outdentItem": "Quitar sangría",
     "itemsPasted_one": "1 elemento pegado",
-    "itemsPasted_other": "{{count}} elementos pegados"
+    "itemsPasted_other": "{{count}} elementos pegados",
+    "filterByLabel": "Filtrar por etiqueta: {{label}}"
   },
   "labels": {
     "title": "Etiquetas",

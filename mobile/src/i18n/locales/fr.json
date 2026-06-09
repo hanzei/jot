@@ -259,7 +259,8 @@
     "indentItem": "Indenter",
     "outdentItem": "Désindenter",
     "itemsPasted_one": "1 élément collé",
-    "itemsPasted_other": "{{count}} éléments collés"
+    "itemsPasted_other": "{{count}} éléments collés",
+    "filterByLabel": "Filtrer par étiquette : {{label}}"
   },
   "labels": {
     "title": "Étiquettes",

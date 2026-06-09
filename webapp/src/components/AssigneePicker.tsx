@@ -54,6 +54,7 @@ export default function AssigneePicker({ collaborators, currentAssigneeId, onAss
     switch (e.key) {
       case 'Escape':
         e.preventDefault();
+        e.nativeEvent.stopPropagation();
         onClose();
         break;
       case 'ArrowDown':
