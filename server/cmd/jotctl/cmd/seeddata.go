@@ -1,14 +1,16 @@
 package cmd
 
+import "github.com/hanzei/jot/server/client"
+
 type seedItem struct {
 	text      string
 	completed bool
 }
 
 type seedNote struct {
-	noteType              string // "text" or "list"
-	content               string // text notes
-	title                 string // list notes
+	noteType              client.NoteType // "text" or "list"
+	content               string          // text notes
+	title                 string          // list notes
 	color                 string
 	pinned                bool
 	archived              bool
@@ -47,7 +49,7 @@ var seedDataset = []seedUser{
 		notes: []seedNote{
 			// active text notes (4)
 			{
-				noteType: "text",
+				noteType: client.NoteTypeText,
 				content: "# Project Notes\n\n**Important:** Check the _deadline_ before Thursday.\n\n" +
 					"Install with `npm install`:\n\n```bash\nnpm install\nnpm start\n```\n\n" +
 					"See [the docs](https://example.com) for full reference.",
@@ -62,13 +64,13 @@ var seedDataset = []seedUser{
 				shareWith: []string{"bob"},
 			},
 			{
-				noteType: "text",
+				noteType: client.NoteTypeText,
 				content:  "Build a note-taking app with offline support and mobile sync",
 				color:    "blue",
 				labels:   []string{"ideas"},
 			},
 			{
-				noteType: "text",
+				noteType: client.NoteTypeText,
 				content:  "Call dentist to reschedule appointment",
 			},
 			// active list notes (3)
@@ -94,7 +96,7 @@ var seedDataset = []seedUser{
 				},
 			},
 			{
-				noteType: "list",
+				noteType: client.NoteTypeList,
 				title:    "Groceries",
 				items: []seedItem{
 					{text: "Apples", completed: false},
@@ -103,19 +105,19 @@ var seedDataset = []seedUser{
 				},
 			},
 			// archived notes (3)
-			{noteType: "text", content: "Old meeting notes from Q3", archived: true},
-			{noteType: "text", content: "Draft blog post: Getting started with Go", archived: true},
+			{noteType: client.NoteTypeText, content: "Old meeting notes from Q3", archived: true},
+			{noteType: client.NoteTypeText, content: "Draft blog post: Getting started with Go", archived: true},
 			{
-				noteType: "list",
+				noteType: client.NoteTypeList,
 				title:    "Old shopping list",
 				archived: true,
 				items:    []seedItem{{text: "Milk"}, {text: "Eggs"}},
 			},
 			// trashed notes (3)
-			{noteType: "text", content: "Temporary scratch note", trashed: true},
-			{noteType: "text", content: "Draft email that was never sent", trashed: true},
+			{noteType: client.NoteTypeText, content: "Temporary scratch note", trashed: true},
+			{noteType: client.NoteTypeText, content: "Draft email that was never sent", trashed: true},
 			{
-				noteType: "list",
+				noteType: client.NoteTypeList,
 				title:    "Abandoned todo list",
 				trashed:  true,
 				items:    []seedItem{{text: "Task A"}, {text: "Task B"}},
@@ -131,9 +133,9 @@ var seedDataset = []seedUser{
 		noteSort:  "updated_at",
 		language:  "de",
 		notes: []seedNote{
-			{noteType: "text", content: "Work in progress: API design notes", labels: []string{"work"}},
-			{noteType: "text", content: "Team standup notes"},
-			{noteType: "text", content: "Monthly goals and OKRs"},
+			{noteType: client.NoteTypeText, content: "Work in progress: API design notes", labels: []string{"work"}},
+			{noteType: client.NoteTypeText, content: "Team standup notes"},
+			{noteType: client.NoteTypeText, content: "Monthly goals and OKRs"},
 		},
 	},
 	{
@@ -144,9 +146,9 @@ var seedDataset = []seedUser{
 		noteSort:  "created_at",
 		language:  "fr",
 		notes: []seedNote{
-			{noteType: "text", content: "Learning French vocabulary: bonjour, merci, au revoir"},
-			{noteType: "text", content: "Recipe: Quiche Lorraine\n\nIngredients: eggs, cream, bacon, gruyère"},
-			{noteType: "text", content: "Travel itinerary for Paris trip in July"},
+			{noteType: client.NoteTypeText, content: "Learning French vocabulary: bonjour, merci, au revoir"},
+			{noteType: client.NoteTypeText, content: "Recipe: Quiche Lorraine\n\nIngredients: eggs, cream, bacon, gruyère"},
+			{noteType: client.NoteTypeText, content: "Travel itinerary for Paris trip in July"},
 		},
 	},
 }

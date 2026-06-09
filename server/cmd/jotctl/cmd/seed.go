@@ -235,7 +235,7 @@ func runSeed(ctx context.Context, adminClient *client.Client, jsonOutput bool) (
 // Trashing is handled by the caller after sharing is done.
 func createNote(ctx context.Context, uc *client.Client, n seedNote) (string, error) { //nolint:gocognit
 	switch n.noteType {
-	case "text":
+	case client.NoteTypeText:
 		created, err := uc.CreateTextNote(ctx, &client.CreateTextNoteRequest{
 			Content: n.content,
 			Color:   n.color,
@@ -258,7 +258,7 @@ func createNote(ctx context.Context, uc *client.Client, n seedNote) (string, err
 		}
 		return created.ID, nil
 
-	case "list":
+	case client.NoteTypeList:
 		items := make([]client.CreateNoteItem, len(n.items))
 		for i, item := range n.items {
 			items[i] = client.CreateNoteItem{
