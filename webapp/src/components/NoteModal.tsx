@@ -1633,12 +1633,12 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       e.preventDefault();
       handlePinToggle();
     } else if (key === 'd') {
-      if (!onDuplicate) return;
       e.preventDefault();
+      if (!onDuplicate) return;
       handleDuplicate();
     } else if (key === 's') {
-      if (!onShare || !isOwner) return;
       e.preventDefault();
+      if (!onShare || !isOwner) return;
       onShare(note);
     } else if (key === 'l') {
       e.preventDefault();
@@ -1647,8 +1647,8 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       e.preventDefault();
       toggleColorPicker();
     } else if (key === 'backspace' || key === 'delete') {
-      if (!onDelete || !isOwner) return;
       e.preventDefault();
+      if (!onDelete || !isOwner) return;
       handleDelete();
     }
   };
@@ -2072,7 +2072,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                 {/* Color picker toggle */}
                 <button
                   onMouseDown={(e) => e.stopPropagation()}
-                  onClick={() => setShowColorPicker(v => !v)}
+                  onClick={() => toggleColorPicker()}
                   className="p-1 rounded-full hover:bg-gray-200 dark:hover:bg-slate-700 transition-colors"
                   title={t('note.colorPickerLabel')}
                   aria-label={t('note.colorPickerLabel')}
