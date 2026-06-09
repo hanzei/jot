@@ -1098,7 +1098,7 @@ export default function Dashboard() {
                           disabled={dragReorderingDisabled}
                           inBin={showBin}
                           onRefresh={loadNotes}
-                          onLabelClick={handleLabelClick}
+                          onLabelClick={!showBin ? handleLabelClick : undefined}
                         />
                       ))}
                     </div>
@@ -1134,7 +1134,7 @@ export default function Dashboard() {
                           disabled={dragReorderingDisabled}
                           inBin={showBin}
                           onRefresh={loadNotes}
-                          onLabelClick={handleLabelClick}
+                          onLabelClick={!showBin ? handleLabelClick : undefined}
                         />
                       ))}
                     </div>
@@ -1169,7 +1169,7 @@ export default function Dashboard() {
                           disabled={true}
                           inBin={showBin}
                           onRefresh={loadNotes}
-                          onLabelClick={handleLabelClick}
+                          onLabelClick={!showBin ? handleLabelClick : undefined}
                         />
                       ))}
                     </div>
