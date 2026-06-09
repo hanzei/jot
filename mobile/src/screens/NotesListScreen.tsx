@@ -127,10 +127,11 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
 
   const { data: notes, isLoading, isError, refetch, isRefetching } = useOfflineNotes(params);
 
-  // While searching outside the archive/trash views, also surface archived
-  // matches in a separate section. My Tasks already returns archived notes,
-  // so it needs no extra request — its archived matches are split from `notes`.
-  const showArchivedSplit = !!debouncedSearch && variant !== 'archived' && variant !== 'trash';
+  // While searching or filtering by label outside the archive/trash views,
+  // also surface archived matches in a separate section. My Tasks already
+  // returns archived notes, so it needs no extra request — its archived
+  // matches are split from `notes`.
+  const showArchivedSplit = (!!debouncedSearch || !!labelId) && variant !== 'archived' && variant !== 'trash';
   const fetchArchivedSeparately = showArchivedSplit && variant !== 'my-tasks';
   const archivedParams = useMemo(() => ({
     archived: true,
