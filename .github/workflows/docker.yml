@@ -37,18 +37,21 @@ jobs:
 
       - name: Log in to Docker Hub
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4
-        with:
-          username: ${{ secrets.DOCKER_HUB_USERNAME }}
-          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+        run: |
+          for i in 1 2 3 4; do
+            echo "${{ secrets.DOCKER_HUB_TOKEN }}" | docker login -u "${{ secrets.DOCKER_HUB_USERNAME }}" --password-stdin && break
+            echo "Login attempt $i failed, retrying in $((2**i))s..."
+            sleep $((2**i))
+          done
 
       - name: Log in to GitHub Container Registry
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for i in 1 2 3 4; do
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin && break
+            echo "Login attempt $i failed, retrying in $((2**i))s..."
+            sleep $((2**i))
+          done
 
       - name: Extract metadata
         id: meta
@@ -112,18 +115,21 @@ jobs:
 
       - name: Log in to Docker Hub
         if: github.event_name == 'push' && github.ref == 'refs/heads/master'
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4
-        with:
-          username: ${{ secrets.DOCKER_HUB_USERNAME }}
-          password: ${{ secrets.DOCKER_HUB_TOKEN }}
+        run: |
+          for i in 1 2 3 4; do
+            echo "${{ secrets.DOCKER_HUB_TOKEN }}" | docker login -u "${{ secrets.DOCKER_HUB_USERNAME }}" --password-stdin && break
+            echo "Login attempt $i failed, retrying in $((2**i))s..."
+            sleep $((2**i))
+          done
 
       - name: Log in to GitHub Container Registry
         if: github.event_name == 'pull_request' && github.event.pull_request.head.repo.full_name == github.repository
-        uses: docker/login-action@4907a6ddec9925e35a0a9e82d7399ccc52663121 # v4
-        with:
-          registry: ghcr.io
-          username: ${{ github.actor }}
-          password: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          for i in 1 2 3 4; do
+            echo "${{ secrets.GITHUB_TOKEN }}" | docker login ghcr.io -u "${{ github.actor }}" --password-stdin && break
+            echo "Login attempt $i failed, retrying in $((2**i))s..."
+            sleep $((2**i))
+          done
 
       - name: Extract metadata
         id: meta
