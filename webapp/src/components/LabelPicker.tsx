@@ -77,10 +77,17 @@ export default function LabelPicker({ note, selectedLabels, onLocalChange, onRef
     return () => document.removeEventListener('mousedown', handler);
   }, [onClose]);
 
-  // Keep the search input focused so typing always works (keyboard-open UX).
-  useEffect(() => {
+  // Focus the search input the first time the menu becomes visible (i.e. after
+  // useLayoutEffect has computed menuStyle and the container is no longer hidden).
+  // Using useLayoutEffect ensures focus is set synchronously before the browser
+  // paints, eliminating the race where a user presses a key before the async
+  // useEffect fires.
+  const hasFocusedRef = useRef(false);
+  useLayoutEffect(() => {
+    if (!menuStyle || hasFocusedRef.current) return;
+    hasFocusedRef.current = true;
     inputRef.current?.focus();
-  }, []);
+  }, [menuStyle]);
 
   // Reset the highlight to the top whenever the query changes the option list.
   useEffect(() => {
