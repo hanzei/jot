@@ -1,5 +1,87 @@
 import { test, expect } from '../fixtures';
 
+test.describe('Arrow key card navigation', () => {
+  test('navigates between cards with ArrowDown and ArrowUp', async ({ authenticatedUser, page, dashboardPage }) => {
+    void authenticatedUser;
+    // Single-column layout so DOM order matches visual top-to-bottom order
+    await page.setViewportSize({ width: 500, height: 900 });
+    await dashboardPage.goto();
+    // Create three notes; newest-first ordering means last-created = nth(0) = topmost
+    await dashboardPage.createNote('KS Nav Alpha');
+    await dashboardPage.createNote('KS Nav Beta');
+    await dashboardPage.createNote('KS Nav Gamma');
+
+    const cards = page.locator('[data-testid="note-card"]');
+    await expect(cards).toHaveCount(3);
+
+    await cards.first().focus();
+    await expect(cards.first()).toBeFocused();
+
+    await page.keyboard.press('ArrowDown');
+    await expect(cards.nth(1)).toBeFocused();
+
+    await page.keyboard.press('ArrowDown');
+    await expect(cards.nth(2)).toBeFocused();
+
+    await page.keyboard.press('ArrowUp');
+    await expect(cards.nth(1)).toBeFocused();
+
+    await page.keyboard.press('ArrowUp');
+    await expect(cards.first()).toBeFocused();
+  });
+
+  test('navigates between cards with ArrowLeft and ArrowRight', async ({ authenticatedUser, page, dashboardPage }) => {
+    void authenticatedUser;
+    await dashboardPage.goto();
+    await dashboardPage.createNote('KS LR One');
+    await dashboardPage.createNote('KS LR Two');
+
+    const cards = page.locator('[data-testid="note-card"]');
+    await expect(cards).toHaveCount(2);
+
+    await cards.first().focus();
+
+    await page.keyboard.press('ArrowRight');
+    await expect(cards.nth(1)).toBeFocused();
+
+    await page.keyboard.press('ArrowLeft');
+    await expect(cards.first()).toBeFocused();
+  });
+
+  test('navigates through multi-line cards without skipping', async ({ authenticatedUser, page, dashboardPage }) => {
+    void authenticatedUser;
+    // Single-column layout to ensure deterministic vertical stacking
+    await page.setViewportSize({ width: 500, height: 900 });
+    await dashboardPage.goto();
+    // Create a short note, then a tall multi-line text note, then another short note.
+    // Newest-first: display order is short-bottom (nth 0), multi-line (nth 1), short-top (nth 2).
+    await dashboardPage.createNote('KS ML Short Top');
+    await dashboardPage.createTextNote(
+      Array(12).fill('A line of content in this multi-line note.').join('\n')
+    );
+    await dashboardPage.createNote('KS ML Short Bottom');
+
+    const cards = page.locator('[data-testid="note-card"]');
+    await expect(cards).toHaveCount(3);
+
+    await cards.first().focus();
+
+    // All three cards must be reachable via ArrowDown — tall cards must not break navigation
+    await page.keyboard.press('ArrowDown');
+    await expect(cards.nth(1)).toBeFocused();
+
+    await page.keyboard.press('ArrowDown');
+    await expect(cards.nth(2)).toBeFocused();
+
+    // Reversible via ArrowUp
+    await page.keyboard.press('ArrowUp');
+    await expect(cards.nth(1)).toBeFocused();
+
+    await page.keyboard.press('ArrowUp');
+    await expect(cards.first()).toBeFocused();
+  });
+});
+
 test.describe('Keyboard shortcuts help dialog', () => {
   test('focuses search with Cmd+F', async ({ authenticatedUser, page, dashboardPage }) => {
     void authenticatedUser;
