@@ -101,7 +101,7 @@ func (a *App) runResetCmd(cmd *cobra.Command, _ []string, yes bool) error {
 		fmt.Fprintf(a.out, "  ✓ Deleted %d notes\n", notesDeleted)
 	}
 
-	usersDeleted, err := deleteNonAdminUsers(cmd.Context(), a.client, users, me.User.ID)
+	usersDeleted, err := a.deleteNonAdminUsers(cmd.Context(), a.client, users, me.User.ID)
 	if err != nil {
 		return wrapAPIError(err)
 	}
@@ -132,7 +132,7 @@ func deleteAdminNotes(ctx context.Context, c *client.Client, users []*client.Use
 
 // deleteNonAdminUsers deletes every non-admin user (which removes their notes
 // via cascade), skipping the current user. Returns the number of users deleted.
-func deleteNonAdminUsers(ctx context.Context, c *client.Client, users []*client.User, selfID string) (int, error) {
+func (a *App) deleteNonAdminUsers(ctx context.Context, c *client.Client, users []*client.User, selfID string) (int, error) {
 	usersDeleted := 0
 	for _, u := range users {
 		if u.ID == selfID || u.Role == client.RoleAdmin {
@@ -140,6 +140,9 @@ func deleteNonAdminUsers(ctx context.Context, c *client.Client, users []*client.
 		}
 		if err := c.AdminDeleteUser(ctx, u.ID); err != nil {
 			return 0, fmt.Errorf("delete user %s: %w", u.Username, err)
+		}
+		if !a.jsonOutput {
+			fmt.Fprintf(a.out, "  ✓ Deleted user %s\n", u.Username)
 		}
 		usersDeleted++
 	}
