@@ -52,3 +52,13 @@ func (c *Client) AdminUpdateUserRole(ctx context.Context, userID string, role Ro
 func (c *Client) AdminDeleteUser(ctx context.Context, userID string) error {
 	return c.doNoContent(ctx, http.MethodDelete, fmt.Sprintf("/api/v1/admin/users/%s", userID), nil)
 }
+
+// AdminDeleteUserNotes permanently deletes all notes owned by the user (admin
+// only). It returns the number of notes removed.
+func (c *Client) AdminDeleteUserNotes(ctx context.Context, userID string) (int, error) {
+	var resp DeleteUserNotesResponse
+	if err := c.doJSON(ctx, http.MethodDelete, fmt.Sprintf("/api/v1/admin/users/%s/notes", userID), nil, &resp); err != nil {
+		return 0, err
+	}
+	return resp.Deleted, nil
+}

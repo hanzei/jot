@@ -470,6 +470,57 @@ func TestDeleteUserAdminCanDeleteOtherAdmin(t *testing.T) {
 	require.NoError(t, admin1.Client.AdminDeleteUser(t.Context(), admin2.User.ID))
 }
 
+func TestAdminDeleteUserNotes(t *testing.T) {
+	ts := setupTestServer(t)
+	adminUser := ts.createTestUser(t, "notesadmin", "password123", true)
+	otherAdmin := ts.createTestUser(t, "notesadmin2", "password123", true)
+	user := ts.createTestUser(t, "notesuser", "password123", false)
+
+	// Give otherAdmin notes in every state: active, archived, and trashed.
+	active, err := otherAdmin.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{Content: "active"})
+	require.NoError(t, err)
+	archived, err := otherAdmin.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{Content: "archived"})
+	require.NoError(t, err)
+	_, err = otherAdmin.Client.UpdateTextNote(t.Context(), archived.ID, &client.UpdateTextNoteRequest{Archived: client.Ptr(true)})
+	require.NoError(t, err)
+	trashed, err := otherAdmin.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{Content: "trashed"})
+	require.NoError(t, err)
+	require.NoError(t, otherAdmin.Client.DeleteNote(t.Context(), trashed.ID))
+	_ = active
+
+	t.Run("non-admin is forbidden", func(t *testing.T) {
+		_, err := user.Client.AdminDeleteUserNotes(t.Context(), otherAdmin.User.ID)
+		assert.Equal(t, http.StatusForbidden, client.StatusCode(err))
+	})
+
+	t.Run("invalid user ID returns 400", func(t *testing.T) {
+		_, err := adminUser.Client.AdminDeleteUserNotes(t.Context(), "bad")
+		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
+	})
+
+	t.Run("deletes all notes regardless of state", func(t *testing.T) {
+		deleted, err := adminUser.Client.AdminDeleteUserNotes(t.Context(), otherAdmin.User.ID)
+		require.NoError(t, err)
+		assert.Equal(t, 3, deleted)
+
+		notes, err := otherAdmin.Client.ListNotes(t.Context(), nil)
+		require.NoError(t, err)
+		assert.Empty(t, notes)
+		archivedNotes, err := otherAdmin.Client.ListNotes(t.Context(), &client.ListNotesOptions{Archived: true})
+		require.NoError(t, err)
+		assert.Empty(t, archivedNotes)
+		trashedNotes, err := otherAdmin.Client.ListNotes(t.Context(), &client.ListNotesOptions{Trashed: true})
+		require.NoError(t, err)
+		assert.Empty(t, trashedNotes)
+	})
+
+	t.Run("deleting notes for a user with none returns zero", func(t *testing.T) {
+		deleted, err := adminUser.Client.AdminDeleteUserNotes(t.Context(), user.User.ID)
+		require.NoError(t, err)
+		assert.Equal(t, 0, deleted)
+	})
+}
+
 func TestAdminStatsEndpoint(t *testing.T) {
 	var dbPath string
 	ts := setupTestServerWithConfig(t, func(cfg *config.Config) {

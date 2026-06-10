@@ -105,6 +105,12 @@ func (s *NoteStore) EmptyTrash(ctx context.Context, userID string) (_ []DeletedN
 	return s.inner.EmptyTrash(ctx, userID)
 }
 
+func (s *NoteStore) DeleteAllByUser(ctx context.Context, userID string) (_ int, err error) {
+	ctx, end := startSpan(ctx, s.tracer, "NoteStore.DeleteAllByUser", &err)
+	defer end()
+	return s.inner.DeleteAllByUser(ctx, userID)
+}
+
 func (s *NoteStore) PurgeOldTrashedNotes(ctx context.Context, olderThan time.Duration) (err error) {
 	ctx, end := startSpan(ctx, s.tracer, "NoteStore.PurgeOldTrashedNotes", &err)
 	defer end()
