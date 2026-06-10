@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useContext, useState } from 'react';
 import {
   Modal,
   View,
@@ -7,11 +7,11 @@ import {
   ScrollView,
   TextInput,
   StyleSheet,
-  SafeAreaView,
   Pressable,
   ActivityIndicator,
   Alert,
 } from 'react-native';
+import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useTranslation } from 'react-i18next';
 import type { Label } from '@jot/shared';
@@ -36,6 +36,7 @@ export default function LabelPicker({
   const [newLabelText, setNewLabelText] = useState('');
   const { colors } = useTheme();
   const { t } = useTranslation();
+  const insets = useContext(SafeAreaInsetsContext) ?? { top: 0, right: 0, bottom: 0, left: 0 };
   const { data: allLabels, isLoading } = useLabels();
   const addLabel = useAddLabelToNote();
   const removeLabel = useRemoveLabelFromNote();
@@ -77,7 +78,7 @@ export default function LabelPicker({
       onRequestClose={onClose}
     >
       <Pressable style={[styles.overlay, { backgroundColor: colors.overlay }]} onPress={onClose}>
-        <SafeAreaView style={[styles.sheet, { backgroundColor: colors.sheetBackground }]}>
+        <View style={[styles.sheet, { backgroundColor: colors.sheetBackground, paddingBottom: insets.bottom }]}>
           <Pressable>
             <View style={[styles.handle, { backgroundColor: colors.handleColor }]} />
             <Text style={[styles.title, { color: colors.text }]}>{t('labels.title')}</Text>
@@ -133,7 +134,7 @@ export default function LabelPicker({
               </TouchableOpacity>
             </View>
           </Pressable>
-        </SafeAreaView>
+        </View>
       </Pressable>
     </Modal>
   );
