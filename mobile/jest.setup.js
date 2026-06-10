@@ -73,22 +73,6 @@ jest.mock('react-native-reanimated', () => {
   };
 });
 
-jest.mock('react-native-safe-area-context', () => {
-  const React = require('react');
-  const { View } = require('react-native');
-  const insets = { top: 0, right: 0, bottom: 0, left: 0 };
-  const SafeAreaInsetsContext = React.createContext(insets);
-  return {
-    __esModule: true,
-    SafeAreaView: View,
-    SafeAreaProvider: ({ children }) => children,
-    SafeAreaInsetsContext,
-    useSafeAreaInsets: () => insets,
-    useSafeAreaFrame: () => ({ x: 0, y: 0, width: 390, height: 844 }),
-    initialWindowMetrics: { insets, frame: { x: 0, y: 0, width: 390, height: 844 } },
-  };
-});
-
 jest.mock('react-native-gesture-handler', () => {
   const RN = require('react-native');
   return {

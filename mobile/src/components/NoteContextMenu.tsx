@@ -7,7 +7,7 @@ import {
   StyleSheet,
   Pressable,
 } from 'react-native';
-import { SafeAreaView } from 'react-native-safe-area-context';
+import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useTranslation } from 'react-i18next';
 import type { Note } from '@jot/shared';
@@ -59,6 +59,7 @@ export default function NoteContextMenu({
 }: NoteContextMenuProps) {
   const { colors } = useTheme();
   const { t } = useTranslation();
+  const insets = useSafeAreaInsets();
 
   if (!note) return null;
 
@@ -169,7 +170,7 @@ export default function NoteContextMenu({
       onRequestClose={onClose}
     >
       <Pressable style={[styles.overlay, { backgroundColor: colors.overlay }]} onPress={onClose}>
-        <SafeAreaView style={[styles.sheet, { backgroundColor: colors.sheetBackground }]}>
+        <View style={[styles.sheet, { backgroundColor: colors.sheetBackground, paddingBottom: insets.bottom }]}>
           <Pressable>
             <View style={[styles.handle, { backgroundColor: colors.handleColor }]} />
             {note.note_type === 'list' && note.title ? (
@@ -208,7 +209,7 @@ export default function NoteContextMenu({
               );
             })}
           </Pressable>
-        </SafeAreaView>
+        </View>
       </Pressable>
     </Modal>
   );
