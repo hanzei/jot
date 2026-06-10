@@ -66,7 +66,7 @@ var seedDataset = []seedUser{
 			{
 				noteType: client.NoteTypeText,
 				content:  "Build a note-taking app with offline support and mobile sync",
-				color:    "blue",
+				color:    "#aecbfa",
 				labels:   []string{"ideas"},
 			},
 			{

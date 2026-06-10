@@ -22,6 +22,12 @@ type seedSummary struct {
 	LabelsCreated int `json:"labels_created"`
 }
 
+// resetSummary is emitted as JSON when --json is set.
+type resetSummary struct {
+	UsersDeleted int `json:"users_deleted"`
+	NotesDeleted int `json:"notes_deleted"`
+}
+
 var seedCmd = &cobra.Command{
 	Use:   "seed",
 	Short: "Add test data to the server (additive, safe to run multiple times)",
@@ -32,7 +38,7 @@ var resetYes bool
 
 var resetCmd = &cobra.Command{
 	Use:   "reset",
-	Short: "Delete all non-admin users and their data, then reseed",
+	Short: "Delete all non-admin users and their data",
 	RunE:  runResetCmd,
 }
 
@@ -58,7 +64,7 @@ func runSeedCmd(cmd *cobra.Command, _ []string) error {
 
 func runResetCmd(cmd *cobra.Command, _ []string) error {
 	if !resetYes {
-		fmt.Printf("This will DELETE all non-admin users and their data on %s. Continue? [y/N]: ", jotClient.BaseURL())
+		fmt.Printf("This will DELETE all non-admin users and ALL notes (including your own) on %s. Continue? [y/N]: ", jotClient.BaseURL())
 		var answer string
 		fmt.Scanln(&answer) //nolint:errcheck,gosec // interactive prompt; partial input is treated as "no"
 		if strings.ToLower(strings.TrimSpace(answer)) != "y" {
@@ -77,6 +83,7 @@ func runResetCmd(cmd *cobra.Command, _ []string) error {
 		return wrapAPIError(fmt.Errorf("list users: %w", err))
 	}
 
+	usersDeleted := 0
 	for _, u := range users {
 		if u.ID == me.User.ID || u.Role == client.RoleAdmin {
 			continue
@@ -87,21 +94,51 @@ func runResetCmd(cmd *cobra.Command, _ []string) error {
 		if !jsonOutput {
 			fmt.Printf("  ✓ Deleted user %s\n", u.Username)
 		}
+		usersDeleted++
 	}
 
-	usersCreated, notesCreated, labelsCreated, err := runSeed(cmd.Context(), jotClient, jsonOutput)
+	// Deleting non-admin users removes their notes, but admin accounts (such as
+	// the current user) are preserved, so wipe the current admin's notes too.
+	notesDeleted, err := deleteAllNotes(cmd.Context(), jotClient)
 	if err != nil {
 		return wrapAPIError(err)
 	}
-	if jsonOutput {
-		return printJSON(seedSummary{
-			UsersCreated:  usersCreated,
-			NotesCreated:  notesCreated,
-			LabelsCreated: labelsCreated,
-		})
+	if !jsonOutput && notesDeleted > 0 {
+		fmt.Printf("  ✓ Deleted %d notes\n", notesDeleted)
 	}
-	fmt.Printf("Done. %d users, %d notes, %d labels created.\n", usersCreated, notesCreated, labelsCreated)
+
+	if jsonOutput {
+		return printJSON(resetSummary{UsersDeleted: usersDeleted, NotesDeleted: notesDeleted})
+	}
+	fmt.Printf("Done. %d users and %d notes deleted.\n", usersDeleted, notesDeleted)
 	return nil
+}
+
+// deleteAllNotes permanently removes every note owned by the authenticated
+// user: active, archived, and already-trashed. Active and archived notes are
+// moved to trash first, then the trash is emptied. Returns the count of notes
+// removed.
+func deleteAllNotes(ctx context.Context, c *client.Client) (int, error) {
+	active, err := c.ListNotes(ctx, nil)
+	if err != nil {
+		return 0, fmt.Errorf("list active notes: %w", err)
+	}
+	archived, err := c.ListNotes(ctx, &client.ListNotesOptions{Archived: true})
+	if err != nil {
+		return 0, fmt.Errorf("list archived notes: %w", err)
+	}
+
+	for _, n := range append(active, archived...) {
+		if err := c.DeleteNote(ctx, n.ID); err != nil {
+			return 0, fmt.Errorf("trash note %s: %w", n.ID, err)
+		}
+	}
+
+	result, err := c.EmptyTrash(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("empty trash: %w", err)
+	}
+	return result.Deleted, nil
 }
 
 // runSeed creates all seed users and their notes/settings via the API.
