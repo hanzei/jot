@@ -5,7 +5,6 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/hanzei/jot/server/client"
@@ -28,80 +27,88 @@ type resetSummary struct {
 	NotesDeleted int `json:"notes_deleted"`
 }
 
-var seedCmd = &cobra.Command{
-	Use:   "seed",
-	Short: "Add test data to the server (additive, safe to run multiple times)",
-	RunE:  runSeedCmd,
+func (a *App) newSeedCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "seed",
+		Short: "Add test data to the server (additive, safe to run multiple times)",
+		RunE:  a.runSeedCmd,
+	}
 }
 
-var resetYes bool
+func (a *App) newResetCmd() *cobra.Command {
+	var yes bool
 
-var resetCmd = &cobra.Command{
-	Use:   "reset",
-	Short: "Delete all non-admin users and their data",
-	RunE:  runResetCmd,
+	cmd := &cobra.Command{
+		Use:   "reset",
+		Short: "Delete all non-admin users and their data",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return a.runResetCmd(cmd, args, yes)
+		},
+	}
+	cmd.Flags().BoolVar(&yes, "yes", false, "Skip confirmation prompt")
+	return cmd
 }
 
-func init() {
-	resetCmd.Flags().BoolVar(&resetYes, "yes", false, "Skip confirmation prompt")
-}
-
-func runSeedCmd(cmd *cobra.Command, _ []string) error {
-	usersCreated, notesCreated, labelsCreated, err := runSeed(cmd.Context(), jotClient, jsonOutput)
+func (a *App) runSeedCmd(cmd *cobra.Command, _ []string) error {
+	usersCreated, notesCreated, labelsCreated, err := a.runSeed(cmd.Context(), a.client)
 	if err != nil {
 		return wrapAPIError(err)
 	}
-	if jsonOutput {
-		return printJSON(seedSummary{
+	return a.printSeedSummary(usersCreated, notesCreated, labelsCreated)
+}
+
+func (a *App) printSeedSummary(usersCreated, notesCreated, labelsCreated int) error {
+	if a.jsonOutput {
+		return a.printJSON(seedSummary{
 			UsersCreated:  usersCreated,
 			NotesCreated:  notesCreated,
 			LabelsCreated: labelsCreated,
 		})
 	}
-	fmt.Printf("Done. %d users, %d notes, %d labels created.\n", usersCreated, notesCreated, labelsCreated)
+	a.printf("Done. %d users, %d notes, %d labels created.\n", usersCreated, notesCreated, labelsCreated)
 	return nil
 }
 
-func runResetCmd(cmd *cobra.Command, _ []string) error {
-	if !resetYes {
-		fmt.Printf("This will DELETE all non-admin users and ALL notes (including your own) on %s. Continue? [y/N]: ", jotClient.BaseURL())
+func (a *App) runResetCmd(cmd *cobra.Command, _ []string, yes bool) error {
+	if !yes {
+		a.printf("This will DELETE all non-admin users and ALL notes (including your own) on %s. Continue? [y/N]: ", a.client.BaseURL())
 		var answer string
 		fmt.Scanln(&answer) //nolint:errcheck,gosec // interactive prompt; partial input is treated as "no"
 		if strings.ToLower(strings.TrimSpace(answer)) != "y" {
-			fmt.Println("Aborted.")
+			a.printf("Aborted.\n")
 			return nil
 		}
 	}
 
-	me, err := jotClient.Me(cmd.Context())
+	me, err := a.client.Me(cmd.Context())
 	if err != nil {
 		return wrapAPIError(fmt.Errorf("get current user: %w", err))
 	}
 
-	users, err := jotClient.AdminListUsers(cmd.Context())
+	users, err := a.client.AdminListUsers(cmd.Context())
 	if err != nil {
 		return wrapAPIError(fmt.Errorf("list users: %w", err))
 	}
 
 	// Wipe every admin's notes (including the current user's). Non-admin users
 	// are deleted below, which removes their notes via cascade.
-	notesDeleted, err := deleteAdminNotes(cmd.Context(), jotClient, users)
+	notesDeleted, err := deleteAdminNotes(cmd.Context(), a.client, users)
 	if err != nil {
 		return wrapAPIError(err)
 	}
-	if !jsonOutput && notesDeleted > 0 {
-		fmt.Printf("  ✓ Deleted %d notes\n", notesDeleted)
+	if !a.jsonOutput && notesDeleted > 0 {
+		a.printf("  ✓ Deleted %d notes\n", notesDeleted)
 	}
 
-	usersDeleted, err := deleteNonAdminUsers(cmd.Context(), jotClient, users, me.User.ID)
+	usersDeleted, err := a.deleteNonAdminUsers(cmd.Context(), a.client, users, me.User.ID)
 	if err != nil {
 		return wrapAPIError(err)
 	}
 
-	if jsonOutput {
-		return printJSON(resetSummary{UsersDeleted: usersDeleted, NotesDeleted: notesDeleted})
+	if a.jsonOutput {
+		return a.printJSON(resetSummary{UsersDeleted: usersDeleted, NotesDeleted: notesDeleted})
 	}
-	fmt.Printf("Done. %d users and %d notes deleted.\n", usersDeleted, notesDeleted)
+	a.printf("Done. %d users and %d notes deleted.\n", usersDeleted, notesDeleted)
 	return nil
 }
 
@@ -124,7 +131,7 @@ func deleteAdminNotes(ctx context.Context, c *client.Client, users []*client.Use
 
 // deleteNonAdminUsers deletes every non-admin user (which removes their notes
 // via cascade), skipping the current user. Returns the number of users deleted.
-func deleteNonAdminUsers(ctx context.Context, c *client.Client, users []*client.User, selfID string) (int, error) {
+func (a *App) deleteNonAdminUsers(ctx context.Context, c *client.Client, users []*client.User, selfID string) (int, error) {
 	usersDeleted := 0
 	for _, u := range users {
 		if u.ID == selfID || u.Role == client.RoleAdmin {
@@ -133,8 +140,8 @@ func deleteNonAdminUsers(ctx context.Context, c *client.Client, users []*client.
 		if err := c.AdminDeleteUser(ctx, u.ID); err != nil {
 			return 0, fmt.Errorf("delete user %s: %w", u.Username, err)
 		}
-		if !jsonOutput {
-			fmt.Printf("  ✓ Deleted user %s\n", u.Username)
+		if !a.jsonOutput {
+			a.printf("  ✓ Deleted user %s\n", u.Username)
 		}
 		usersDeleted++
 	}
@@ -143,15 +150,15 @@ func deleteNonAdminUsers(ctx context.Context, c *client.Client, users []*client.
 
 // runSeed creates all seed users and their notes/settings via the API.
 // Returns (usersCreated, notesCreated, labelsCreated, error).
-func runSeed(ctx context.Context, adminClient *client.Client, jsonOutput bool) (int, int, int, error) { //nolint:gocognit,gocyclo
+func (a *App) runSeed(ctx context.Context, adminClient *client.Client) (int, int, int, error) { //nolint:gocognit,gocyclo
 	logf := func(format string, args ...any) {
-		if !jsonOutput {
-			fmt.Printf(format+"\n", args...)
+		if !a.jsonOutput {
+			a.printf(format+"\n", args...)
 		}
 	}
 
-	if !jsonOutput {
-		fmt.Printf("Seeding test data on %s...\n", adminClient.BaseURL())
+	if !a.jsonOutput {
+		a.printf("Seeding test data on %s...\n", adminClient.BaseURL())
 	}
 
 	// Pre-load existing users so we can warn-and-skip duplicates while still
@@ -170,8 +177,8 @@ func runSeed(ctx context.Context, adminClient *client.Client, jsonOutput bool) (
 	usersCreated := 0
 	for _, u := range seedDataset {
 		if id, exists := existingByUsername[u.username]; exists {
-			if !jsonOutput {
-				fmt.Fprintf(os.Stderr, "  ⚠ User %s already exists, skipping\n", u.username)
+			if !a.jsonOutput {
+				a.printf("  ⚠ User %s already exists, skipping\n", u.username)
 			}
 			userIDs[u.username] = id
 			continue
