@@ -250,6 +250,11 @@ type UserListResponse struct {
 	Users []*User `json:"users"`
 }
 
+// DeleteUserNotesResponse reports how many notes an admin note purge removed.
+type DeleteUserNotesResponse struct {
+	Deleted int `json:"deleted"`
+}
+
 // AdminStatsResponse wraps the admin system statistics response.
 type AdminStatsResponse struct {
 	Users     AdminUserStats     `json:"users"`

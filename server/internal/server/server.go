@@ -266,6 +266,7 @@ func (s *Server) setupRoutes() error {
 			r.Post("/admin/users", s.wrapHandler(s.adminHandler.CreateUser))
 			r.Put("/admin/users/{id}/role", s.wrapHandler(s.adminHandler.UpdateUserRole))
 			r.Delete("/admin/users/{id}", s.wrapHandler(s.adminHandler.DeleteUser))
+			r.Delete("/admin/users/{id}/notes", s.wrapHandler(s.adminHandler.DeleteUserNotes))
 		})
 	})
 

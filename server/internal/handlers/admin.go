@@ -4,6 +4,7 @@ import (
 	"context"
 	"database/sql"
 	"errors"
+	"fmt"
 	"net/http"
 	"os"
 
@@ -224,6 +225,41 @@ func (h *AdminHandler) DeleteUser(w http.ResponseWriter, r *http.Request) (int, 
 	}
 
 	return http.StatusNoContent, nil, nil
+}
+
+// DeleteUserNotesResponse reports how many notes were removed.
+type DeleteUserNotesResponse struct {
+	Deleted int `json:"deleted"`
+}
+
+// DeleteUserNotes godoc
+//
+//	@Summary	Delete all notes owned by a user (admin only)
+//	@Tags		admin
+//	@Security	CookieAuth
+//	@Produce	json
+//	@Param		id	path		string	true	"User ID"
+//	@Success	200	{object}	DeleteUserNotesResponse
+//	@Failure	400	{string}	string	"bad request"
+//	@Failure	401	{string}	string	"unauthorized"
+//	@Failure	500	{string}	string	"internal server error"
+//	@Router		/admin/users/{id}/notes [delete]
+func (h *AdminHandler) DeleteUserNotes(w http.ResponseWriter, r *http.Request) (int, any, error) {
+	if _, ok := auth.GetUserFromContext(r.Context()); !ok {
+		return http.StatusUnauthorized, nil, errors.New("unauthorized")
+	}
+
+	targetID := chi.URLParam(r, "id")
+	if !models.IsValidID(targetID) {
+		return http.StatusBadRequest, nil, errors.New("invalid user ID format")
+	}
+
+	deleted, err := h.noteStore.DeleteAllByUser(r.Context(), targetID)
+	if err != nil {
+		return http.StatusInternalServerError, nil, fmt.Errorf("delete notes for user: %w", err)
+	}
+
+	return http.StatusOK, DeleteUserNotesResponse{Deleted: deleted}, nil
 }
 
 func validateRole(role string) error {

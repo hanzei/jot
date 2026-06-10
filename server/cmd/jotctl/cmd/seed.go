@@ -83,28 +83,19 @@ func runResetCmd(cmd *cobra.Command, _ []string) error {
 		return wrapAPIError(fmt.Errorf("list users: %w", err))
 	}
 
-	usersDeleted := 0
-	for _, u := range users {
-		if u.ID == me.User.ID || u.Role == client.RoleAdmin {
-			continue
-		}
-		if deleteErr := jotClient.AdminDeleteUser(cmd.Context(), u.ID); deleteErr != nil {
-			return wrapAPIError(fmt.Errorf("delete user %s: %w", u.Username, deleteErr))
-		}
-		if !jsonOutput {
-			fmt.Printf("  ✓ Deleted user %s\n", u.Username)
-		}
-		usersDeleted++
-	}
-
-	// Deleting non-admin users removes their notes, but admin accounts (such as
-	// the current user) are preserved, so wipe the current admin's notes too.
-	notesDeleted, err := deleteAllNotes(cmd.Context(), jotClient)
+	// Wipe every admin's notes (including the current user's). Non-admin users
+	// are deleted below, which removes their notes via cascade.
+	notesDeleted, err := deleteAdminNotes(cmd.Context(), jotClient, users)
 	if err != nil {
 		return wrapAPIError(err)
 	}
 	if !jsonOutput && notesDeleted > 0 {
 		fmt.Printf("  ✓ Deleted %d notes\n", notesDeleted)
+	}
+
+	usersDeleted, err := deleteNonAdminUsers(cmd.Context(), jotClient, users, me.User.ID)
+	if err != nil {
+		return wrapAPIError(err)
 	}
 
 	if jsonOutput {
@@ -114,31 +105,40 @@ func runResetCmd(cmd *cobra.Command, _ []string) error {
 	return nil
 }
 
-// deleteAllNotes permanently removes every note owned by the authenticated
-// user: active, archived, and already-trashed. Active and archived notes are
-// moved to trash first, then the trash is emptied. Returns the count of notes
-// removed.
-func deleteAllNotes(ctx context.Context, c *client.Client) (int, error) {
-	active, err := c.ListNotes(ctx, nil)
-	if err != nil {
-		return 0, fmt.Errorf("list active notes: %w", err)
-	}
-	archived, err := c.ListNotes(ctx, &client.ListNotesOptions{Archived: true})
-	if err != nil {
-		return 0, fmt.Errorf("list archived notes: %w", err)
-	}
-
-	for _, n := range append(active, archived...) {
-		if err := c.DeleteNote(ctx, n.ID); err != nil {
-			return 0, fmt.Errorf("trash note %s: %w", n.ID, err)
+// deleteAdminNotes permanently removes every note owned by each admin user
+// (including the current user). Returns the total number of notes deleted.
+func deleteAdminNotes(ctx context.Context, c *client.Client, users []*client.User) (int, error) {
+	notesDeleted := 0
+	for _, u := range users {
+		if u.Role != client.RoleAdmin {
+			continue
 		}
+		deleted, err := c.AdminDeleteUserNotes(ctx, u.ID)
+		if err != nil {
+			return 0, fmt.Errorf("delete notes for %s: %w", u.Username, err)
+		}
+		notesDeleted += deleted
 	}
+	return notesDeleted, nil
+}
 
-	result, err := c.EmptyTrash(ctx)
-	if err != nil {
-		return 0, fmt.Errorf("empty trash: %w", err)
+// deleteNonAdminUsers deletes every non-admin user (which removes their notes
+// via cascade), skipping the current user. Returns the number of users deleted.
+func deleteNonAdminUsers(ctx context.Context, c *client.Client, users []*client.User, selfID string) (int, error) {
+	usersDeleted := 0
+	for _, u := range users {
+		if u.ID == selfID || u.Role == client.RoleAdmin {
+			continue
+		}
+		if err := c.AdminDeleteUser(ctx, u.ID); err != nil {
+			return 0, fmt.Errorf("delete user %s: %w", u.Username, err)
+		}
+		if !jsonOutput {
+			fmt.Printf("  ✓ Deleted user %s\n", u.Username)
+		}
+		usersDeleted++
 	}
-	return result.Deleted, nil
+	return usersDeleted, nil
 }
 
 // runSeed creates all seed users and their notes/settings via the API.
