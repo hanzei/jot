@@ -52,7 +52,7 @@ func (a *App) runLogin(cmd *cobra.Command, server, username, password string) er
 	reader := bufio.NewReader(os.Stdin)
 
 	if username == "" {
-		fmt.Fprint(a.out, "Username: ")
+		a.printf("Username: ")
 		input, err := reader.ReadString('\n')
 		if err != nil {
 			return fmt.Errorf("read username: %w", err)
@@ -61,12 +61,12 @@ func (a *App) runLogin(cmd *cobra.Command, server, username, password string) er
 	}
 
 	if password == "" {
-		fmt.Fprint(a.out, "Password: ")
+		a.printf("Password: ")
 		pw, err := term.ReadPassword(0) // 0 = stdin fd
 		if err != nil {
 			return fmt.Errorf("read password: %w", err)
 		}
-		fmt.Fprintln(a.out)
+		a.printf("\n")
 		password = string(pw)
 	}
 
@@ -108,7 +108,7 @@ func (a *App) runLogin(cmd *cobra.Command, server, username, password string) er
 		return fmt.Errorf("save session: %w", err)
 	}
 
-	fmt.Fprintf(a.out, "Logged in as %s. Session saved.\n", username)
+	a.printf("Logged in as %s. Session saved.\n", username)
 	return nil
 }
 
@@ -131,6 +131,6 @@ func (a *App) runLogout(cmd *cobra.Command, _ []string) error {
 		return err
 	}
 
-	fmt.Fprintln(a.out, "Logged out.")
+	a.printf("Logged out.\n")
 	return nil
 }

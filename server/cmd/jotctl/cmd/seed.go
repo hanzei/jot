@@ -66,17 +66,17 @@ func (a *App) printSeedSummary(usersCreated, notesCreated, labelsCreated int) er
 			LabelsCreated: labelsCreated,
 		})
 	}
-	fmt.Fprintf(a.out, "Done. %d users, %d notes, %d labels created.\n", usersCreated, notesCreated, labelsCreated)
+	a.printf("Done. %d users, %d notes, %d labels created.\n", usersCreated, notesCreated, labelsCreated)
 	return nil
 }
 
 func (a *App) runResetCmd(cmd *cobra.Command, _ []string, yes bool) error {
 	if !yes {
-		fmt.Fprintf(a.out, "This will DELETE all non-admin users and ALL notes (including your own) on %s. Continue? [y/N]: ", a.client.BaseURL())
+		a.printf("This will DELETE all non-admin users and ALL notes (including your own) on %s. Continue? [y/N]: ", a.client.BaseURL())
 		var answer string
 		fmt.Scanln(&answer) //nolint:errcheck,gosec // interactive prompt; partial input is treated as "no"
 		if strings.ToLower(strings.TrimSpace(answer)) != "y" {
-			fmt.Fprintln(a.out, "Aborted.")
+			a.printf("Aborted.\n")
 			return nil
 		}
 	}
@@ -98,7 +98,7 @@ func (a *App) runResetCmd(cmd *cobra.Command, _ []string, yes bool) error {
 		return wrapAPIError(err)
 	}
 	if !a.jsonOutput && notesDeleted > 0 {
-		fmt.Fprintf(a.out, "  ✓ Deleted %d notes\n", notesDeleted)
+		a.printf("  ✓ Deleted %d notes\n", notesDeleted)
 	}
 
 	usersDeleted, err := a.deleteNonAdminUsers(cmd.Context(), a.client, users, me.User.ID)
@@ -109,7 +109,7 @@ func (a *App) runResetCmd(cmd *cobra.Command, _ []string, yes bool) error {
 	if a.jsonOutput {
 		return a.printJSON(resetSummary{UsersDeleted: usersDeleted, NotesDeleted: notesDeleted})
 	}
-	fmt.Fprintf(a.out, "Done. %d users and %d notes deleted.\n", usersDeleted, notesDeleted)
+	a.printf("Done. %d users and %d notes deleted.\n", usersDeleted, notesDeleted)
 	return nil
 }
 
@@ -142,7 +142,7 @@ func (a *App) deleteNonAdminUsers(ctx context.Context, c *client.Client, users [
 			return 0, fmt.Errorf("delete user %s: %w", u.Username, err)
 		}
 		if !a.jsonOutput {
-			fmt.Fprintf(a.out, "  ✓ Deleted user %s\n", u.Username)
+			a.printf("  ✓ Deleted user %s\n", u.Username)
 		}
 		usersDeleted++
 	}
@@ -154,12 +154,12 @@ func (a *App) deleteNonAdminUsers(ctx context.Context, c *client.Client, users [
 func (a *App) runSeed(ctx context.Context, adminClient *client.Client) (int, int, int, error) { //nolint:gocognit,gocyclo
 	logf := func(format string, args ...any) {
 		if !a.jsonOutput {
-			fmt.Fprintf(a.out, format+"\n", args...)
+			a.printf(format+"\n", args...)
 		}
 	}
 
 	if !a.jsonOutput {
-		fmt.Fprintf(a.out, "Seeding test data on %s...\n", adminClient.BaseURL())
+		a.printf("Seeding test data on %s...\n", adminClient.BaseURL())
 	}
 
 	// Pre-load existing users so we can warn-and-skip duplicates while still

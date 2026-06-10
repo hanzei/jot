@@ -189,6 +189,13 @@ func (t *tableWriter) flush() error {
 	return t.tw.Flush()
 }
 
+// printf writes a formatted string to a.out. Write errors are intentionally
+// discarded: a.out is either os.Stdout (CLI) or a bytes.Buffer (tests), and
+// neither can meaningfully fail.
+func (a *App) printf(format string, args ...any) {
+	fmt.Fprintf(a.out, format, args...) //nolint:errcheck
+}
+
 func (a *App) printJSON(v any) error {
 	enc := json.NewEncoder(a.out)
 	enc.SetIndent("", "  ")

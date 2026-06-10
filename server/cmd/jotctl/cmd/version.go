@@ -1,7 +1,6 @@
 package cmd
 
 import (
-	"fmt"
 	"runtime"
 	"strings"
 
@@ -48,7 +47,7 @@ func (a *App) runVersion(_ *cobra.Command, _ []string) error {
 	if built == "" {
 		built = "unknown"
 	}
-	fmt.Fprintf(a.out, "jotctl %s (commit: %s, built: %s, %s)\n",
+	a.printf("jotctl %s (commit: %s, built: %s, %s)\n",
 		info.Version, info.Commit, built, info.GoVersion)
 	return nil
 }

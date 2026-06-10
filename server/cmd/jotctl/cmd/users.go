@@ -98,7 +98,7 @@ func (a *App) runUsersCreate(cmd *cobra.Command, username, password, roleStr str
 		return a.printJSON(u)
 	}
 
-	fmt.Fprintf(a.out, "Created user %s (ID: %s, role: %s)\n", u.Username, u.ID, u.Role)
+	a.printf("Created user %s (ID: %s, role: %s)\n", u.Username, u.ID, u.Role)
 	return nil
 }
 
@@ -109,7 +109,7 @@ func (a *App) runUsersDelete(cmd *cobra.Command, args []string) error {
 		return wrapAPIError(err)
 	}
 
-	fmt.Fprintf(a.out, "Deleted user %s\n", userID)
+	a.printf("Deleted user %s\n", userID)
 	return nil
 }
 
@@ -130,7 +130,7 @@ func (a *App) runUsersSetRole(cmd *cobra.Command, args []string) error {
 		return a.printJSON(u)
 	}
 
-	fmt.Fprintf(a.out, "Updated user %s role to %s\n", u.Username, u.Role)
+	a.printf("Updated user %s role to %s\n", u.Username, u.Role)
 	return nil
 }
 
