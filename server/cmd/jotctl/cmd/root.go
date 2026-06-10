@@ -17,38 +17,49 @@ import (
 
 const sessionCookieName = "jot_session"
 
-var (
+// App holds shared state for a single jotctl invocation.
+type App struct {
+	out        io.Writer
 	jsonOutput bool
-	jotClient  *client.Client
-)
-
-var rootCmd = &cobra.Command{
-	Use:   "jotctl",
-	Short: "Jot admin CLI",
-	Long:  "jotctl manages users on a Jot server.\n\nRun 'jotctl login' first to authenticate.",
-	PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
-		return loadSession(cmd)
-	},
+	client     *client.Client
 }
 
-// Execute runs the root command.
+// NewApp creates an App that writes output to out.
+func NewApp(out io.Writer) *App {
+	return &App{out: out}
+}
+
+// Execute is the entry point for the jotctl binary.
 func Execute() {
-	if err := rootCmd.Execute(); err != nil {
+	app := NewApp(os.Stdout)
+	if err := app.newRootCmd().Execute(); err != nil {
 		os.Exit(1)
 	}
 }
 
-func init() {
-	rootCmd.PersistentFlags().BoolVar(&jsonOutput, "json", false, "Output as JSON")
-	rootCmd.AddCommand(loginCmd)
-	rootCmd.AddCommand(logoutCmd)
-	rootCmd.AddCommand(seedCmd)
-	rootCmd.AddCommand(resetCmd)
-	rootCmd.AddCommand(usersCmd)
-	rootCmd.AddCommand(versionCmd)
+func (a *App) newRootCmd() *cobra.Command {
+	root := &cobra.Command{
+		Use:   "jotctl",
+		Short: "Jot admin CLI",
+		Long:  "jotctl manages users on a Jot server.\n\nRun 'jotctl login' first to authenticate.",
+		PersistentPreRunE: func(cmd *cobra.Command, _ []string) error {
+			return a.loadSession()
+		},
+		SilenceErrors: true,
+	}
+
+	root.PersistentFlags().BoolVar(&a.jsonOutput, "json", false, "Output as JSON")
+	root.AddCommand(a.newLoginCmd())
+	root.AddCommand(a.newLogoutCmd())
+	root.AddCommand(a.newSeedCmd())
+	root.AddCommand(a.newResetCmd())
+	root.AddCommand(a.newUsersCmd())
+	root.AddCommand(a.newVersionCmd())
+
+	return root
 }
 
-func loadSession(_ *cobra.Command) error {
+func (a *App) loadSession() error {
 	sf, err := readSessionFile()
 	if err != nil {
 		if errors.Is(err, os.ErrNotExist) {
@@ -57,14 +68,14 @@ func loadSession(_ *cobra.Command) error {
 		return fmt.Errorf("load session: %w", err)
 	}
 
-	jotClient = client.New(sf.Server)
+	a.client = client.New(sf.Server)
 
 	u, err := url.Parse(sf.Server)
 	if err != nil {
 		return fmt.Errorf("invalid server URL in session file: %w", err)
 	}
 
-	jotClient.HTTPClient().Jar.SetCookies(u, []*http.Cookie{
+	a.client.HTTPClient().Jar.SetCookies(u, []*http.Cookie{
 		{Name: sessionCookieName, Value: sf.SessionToken},
 	})
 
@@ -77,7 +88,13 @@ type sessionData struct {
 	SessionToken string `json:"session_token"`
 }
 
+// sessionFilePath returns the path to the session file.
+// If JOTCTL_CONFIG_DIR is set it is used as the parent directory, which
+// allows tests to redirect the file without touching the real user config.
 func sessionFilePath() (string, error) {
+	if dir := os.Getenv("JOTCTL_CONFIG_DIR"); dir != "" {
+		return filepath.Join(dir, "session"), nil
+	}
 	dir, err := os.UserConfigDir()
 	if err != nil {
 		return "", fmt.Errorf("get config dir: %w", err)
@@ -172,8 +189,8 @@ func (t *tableWriter) flush() error {
 	return t.tw.Flush()
 }
 
-func printJSON(v any) error {
-	enc := json.NewEncoder(os.Stdout)
+func (a *App) printJSON(v any) error {
+	enc := json.NewEncoder(a.out)
 	enc.SetIndent("", "  ")
 	return enc.Encode(v)
 }

@@ -22,57 +22,65 @@ type seedSummary struct {
 	LabelsCreated int `json:"labels_created"`
 }
 
-var seedCmd = &cobra.Command{
-	Use:   "seed",
-	Short: "Add test data to the server (additive, safe to run multiple times)",
-	RunE:  runSeedCmd,
+func (a *App) newSeedCmd() *cobra.Command {
+	return &cobra.Command{
+		Use:   "seed",
+		Short: "Add test data to the server (additive, safe to run multiple times)",
+		RunE:  a.runSeedCmd,
+	}
 }
 
-var resetYes bool
+func (a *App) newResetCmd() *cobra.Command {
+	var yes bool
 
-var resetCmd = &cobra.Command{
-	Use:   "reset",
-	Short: "Delete all non-admin users and their data, then reseed",
-	RunE:  runResetCmd,
+	cmd := &cobra.Command{
+		Use:   "reset",
+		Short: "Delete all non-admin users and their data, then reseed",
+		RunE: func(cmd *cobra.Command, args []string) error {
+			return a.runResetCmd(cmd, args, yes)
+		},
+	}
+	cmd.Flags().BoolVar(&yes, "yes", false, "Skip confirmation prompt")
+	return cmd
 }
 
-func init() {
-	resetCmd.Flags().BoolVar(&resetYes, "yes", false, "Skip confirmation prompt")
-}
-
-func runSeedCmd(cmd *cobra.Command, _ []string) error {
-	usersCreated, notesCreated, labelsCreated, err := runSeed(cmd.Context(), jotClient, jsonOutput)
+func (a *App) runSeedCmd(cmd *cobra.Command, _ []string) error {
+	usersCreated, notesCreated, labelsCreated, err := a.runSeed(cmd.Context(), a.client)
 	if err != nil {
 		return wrapAPIError(err)
 	}
-	if jsonOutput {
-		return printJSON(seedSummary{
+	return a.printSeedSummary(usersCreated, notesCreated, labelsCreated)
+}
+
+func (a *App) printSeedSummary(usersCreated, notesCreated, labelsCreated int) error {
+	if a.jsonOutput {
+		return a.printJSON(seedSummary{
 			UsersCreated:  usersCreated,
 			NotesCreated:  notesCreated,
 			LabelsCreated: labelsCreated,
 		})
 	}
-	fmt.Printf("Done. %d users, %d notes, %d labels created.\n", usersCreated, notesCreated, labelsCreated)
+	fmt.Fprintf(a.out, "Done. %d users, %d notes, %d labels created.\n", usersCreated, notesCreated, labelsCreated)
 	return nil
 }
 
-func runResetCmd(cmd *cobra.Command, _ []string) error {
-	if !resetYes {
-		fmt.Printf("This will DELETE all non-admin users and their data on %s. Continue? [y/N]: ", jotClient.BaseURL())
+func (a *App) runResetCmd(cmd *cobra.Command, _ []string, yes bool) error {
+	if !yes {
+		fmt.Fprintf(a.out, "This will DELETE all non-admin users and their data on %s. Continue? [y/N]: ", a.client.BaseURL())
 		var answer string
 		fmt.Scanln(&answer) //nolint:errcheck,gosec // interactive prompt; partial input is treated as "no"
 		if strings.ToLower(strings.TrimSpace(answer)) != "y" {
-			fmt.Println("Aborted.")
+			fmt.Fprintln(a.out, "Aborted.")
 			return nil
 		}
 	}
 
-	me, err := jotClient.Me(cmd.Context())
+	me, err := a.client.Me(cmd.Context())
 	if err != nil {
 		return wrapAPIError(fmt.Errorf("get current user: %w", err))
 	}
 
-	users, err := jotClient.AdminListUsers(cmd.Context())
+	users, err := a.client.AdminListUsers(cmd.Context())
 	if err != nil {
 		return wrapAPIError(fmt.Errorf("list users: %w", err))
 	}
@@ -81,40 +89,32 @@ func runResetCmd(cmd *cobra.Command, _ []string) error {
 		if u.ID == me.User.ID || u.Role == client.RoleAdmin {
 			continue
 		}
-		if deleteErr := jotClient.AdminDeleteUser(cmd.Context(), u.ID); deleteErr != nil {
+		if deleteErr := a.client.AdminDeleteUser(cmd.Context(), u.ID); deleteErr != nil {
 			return wrapAPIError(fmt.Errorf("delete user %s: %w", u.Username, deleteErr))
 		}
-		if !jsonOutput {
-			fmt.Printf("  ✓ Deleted user %s\n", u.Username)
+		if !a.jsonOutput {
+			fmt.Fprintf(a.out, "  ✓ Deleted user %s\n", u.Username)
 		}
 	}
 
-	usersCreated, notesCreated, labelsCreated, err := runSeed(cmd.Context(), jotClient, jsonOutput)
+	usersCreated, notesCreated, labelsCreated, err := a.runSeed(cmd.Context(), a.client)
 	if err != nil {
 		return wrapAPIError(err)
 	}
-	if jsonOutput {
-		return printJSON(seedSummary{
-			UsersCreated:  usersCreated,
-			NotesCreated:  notesCreated,
-			LabelsCreated: labelsCreated,
-		})
-	}
-	fmt.Printf("Done. %d users, %d notes, %d labels created.\n", usersCreated, notesCreated, labelsCreated)
-	return nil
+	return a.printSeedSummary(usersCreated, notesCreated, labelsCreated)
 }
 
 // runSeed creates all seed users and their notes/settings via the API.
 // Returns (usersCreated, notesCreated, labelsCreated, error).
-func runSeed(ctx context.Context, adminClient *client.Client, jsonOutput bool) (int, int, int, error) { //nolint:gocognit,gocyclo
+func (a *App) runSeed(ctx context.Context, adminClient *client.Client) (int, int, int, error) { //nolint:gocognit,gocyclo
 	logf := func(format string, args ...any) {
-		if !jsonOutput {
-			fmt.Printf(format+"\n", args...)
+		if !a.jsonOutput {
+			fmt.Fprintf(a.out, format+"\n", args...)
 		}
 	}
 
-	if !jsonOutput {
-		fmt.Printf("Seeding test data on %s...\n", adminClient.BaseURL())
+	if !a.jsonOutput {
+		fmt.Fprintf(a.out, "Seeding test data on %s...\n", adminClient.BaseURL())
 	}
 
 	// Pre-load existing users so we can warn-and-skip duplicates while still
@@ -133,7 +133,7 @@ func runSeed(ctx context.Context, adminClient *client.Client, jsonOutput bool) (
 	usersCreated := 0
 	for _, u := range seedDataset {
 		if id, exists := existingByUsername[u.username]; exists {
-			if !jsonOutput {
+			if !a.jsonOutput {
 				fmt.Fprintf(os.Stderr, "  ⚠ User %s already exists, skipping\n", u.username)
 			}
 			userIDs[u.username] = id

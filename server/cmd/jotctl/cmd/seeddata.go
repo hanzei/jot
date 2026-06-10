@@ -33,7 +33,7 @@ type seedUser struct {
 	notes       []seedNote
 }
 
-const seedPassword = "test"
+const seedPassword = "seed-password"
 
 // seedDataset covers every valid theme (system/light/dark), every NoteSort
 // (manual/updated_at/created_at), and a representative spread of note states.
@@ -66,7 +66,7 @@ var seedDataset = []seedUser{
 			{
 				noteType: client.NoteTypeText,
 				content:  "Build a note-taking app with offline support and mobile sync",
-				color:    "blue",
+				color:    "#4a90d9",
 				labels:   []string{"ideas"},
 			},
 			{
