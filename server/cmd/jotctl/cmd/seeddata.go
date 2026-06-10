@@ -33,7 +33,7 @@ type seedUser struct {
 	notes       []seedNote
 }
 
-const seedPassword = "seed-password"
+const seedPassword = "test"
 
 // seedDataset covers every valid theme (system/light/dark), every NoteSort
 // (manual/updated_at/created_at), and a representative spread of note states.

@@ -285,10 +285,19 @@ func TestVersionCmd(t *testing.T) {
 	})
 }
 
+// setupSeedServer returns a test server with a relaxed password minimum so
+// the seed dataset's short password ("test") is accepted.
+func setupSeedServer(t *testing.T) *jotTestServer {
+	t.Helper()
+	return setupTestServerWithConfig(t, func(cfg *config.Config) {
+		cfg.PasswordMinLength = 4
+	})
+}
+
 func TestSeedCmd(t *testing.T) {
 	t.Run("seeds users and notes", func(t *testing.T) {
-		ts := setupTestServer(t)
-		admin := ts.createAdmin(t, "admin", "adminpassword")
+		ts := setupSeedServer(t)
+		admin := ts.createAdmin(t, "admin", "adminp")
 
 		res := runJotCTL(t, ts, admin, "seed")
 		require.NoError(t, res.Err)
@@ -301,8 +310,8 @@ func TestSeedCmd(t *testing.T) {
 	})
 
 	t.Run("json output", func(t *testing.T) {
-		ts := setupTestServer(t)
-		admin := ts.createAdmin(t, "admin", "adminpassword")
+		ts := setupSeedServer(t)
+		admin := ts.createAdmin(t, "admin", "adminp")
 
 		res := runJotCTL(t, ts, admin, "--json", "seed")
 		require.NoError(t, res.Err)
@@ -314,8 +323,8 @@ func TestSeedCmd(t *testing.T) {
 	})
 
 	t.Run("is idempotent", func(t *testing.T) {
-		ts := setupTestServer(t)
-		admin := ts.createAdmin(t, "admin", "adminpassword")
+		ts := setupSeedServer(t)
+		admin := ts.createAdmin(t, "admin", "adminp")
 
 		res := runJotCTL(t, ts, admin, "--json", "seed")
 		require.NoError(t, res.Err)
@@ -331,8 +340,8 @@ func TestSeedCmd(t *testing.T) {
 }
 
 func TestResetCmd(t *testing.T) {
-	ts := setupTestServer(t)
-	admin := ts.createAdmin(t, "admin", "adminpassword")
+	ts := setupSeedServer(t)
+	admin := ts.createAdmin(t, "admin", "adminp")
 
 	// Seed first so there's something to reset.
 	res := runJotCTL(t, ts, admin, "seed")
