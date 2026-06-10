@@ -55,10 +55,15 @@ jest.mock('@react-navigation/elements', () => ({
   useHeaderHeight: () => 56,
 }));
 
-jest.mock('react-native-safe-area-context', () => ({
-  __esModule: true,
-  useSafeAreaInsets: () => ({ top: 0, right: 0, bottom: 0, left: 0 }),
-}));
+jest.mock('react-native-safe-area-context', () => {
+  const React = require('react');
+  const insets = { top: 0, right: 0, bottom: 0, left: 0 };
+  return {
+    __esModule: true,
+    useSafeAreaInsets: () => insets,
+    SafeAreaInsetsContext: React.createContext(insets),
+  };
+});
 
 jest.mock('expo-haptics', () => ({
   __esModule: true,
