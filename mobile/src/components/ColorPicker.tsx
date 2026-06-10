@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useContext } from 'react';
 import {
   Modal,
   View,
@@ -6,9 +6,9 @@ import {
   TouchableOpacity,
   ScrollView,
   StyleSheet,
-  SafeAreaView,
   Pressable,
 } from 'react-native';
+import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useTranslation } from 'react-i18next';
 import { useTheme } from '../theme/ThemeContext';
@@ -37,6 +37,7 @@ const COLOR_LABELS: Record<string, string> = {
 export default function ColorPicker({ visible, currentColor, onSelect, onClose }: ColorPickerProps) {
   const { colors } = useTheme();
   const { t } = useTranslation();
+  const insets = useContext(SafeAreaInsetsContext) ?? { top: 0, right: 0, bottom: 0, left: 0 };
 
   return (
     <Modal
@@ -46,7 +47,7 @@ export default function ColorPicker({ visible, currentColor, onSelect, onClose }
       onRequestClose={onClose}
     >
       <Pressable style={[styles.overlay, { backgroundColor: colors.overlay }]} onPress={onClose}>
-        <SafeAreaView style={[styles.sheet, { backgroundColor: colors.sheetBackground }]}>
+        <View style={[styles.sheet, { backgroundColor: colors.sheetBackground, paddingBottom: insets.bottom }]}>
           <Pressable>
             <View style={[styles.handle, { backgroundColor: colors.handleColor }]} />
             <Text style={[styles.title, { color: colors.text }]}>{t('note.changeColor')}</Text>
@@ -81,7 +82,7 @@ export default function ColorPicker({ visible, currentColor, onSelect, onClose }
               ))}
             </ScrollView>
           </Pressable>
-        </SafeAreaView>
+        </View>
       </Pressable>
     </Modal>
   );

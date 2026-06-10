@@ -79,6 +79,11 @@ definitions:
       username:
         type: string
     type: object
+  handlers.DeleteUserNotesResponse:
+    properties:
+      deleted:
+        type: integer
+    type: object
   handlers.EmptyTrashResponse:
     properties:
       deleted:
@@ -624,6 +629,38 @@ paths:
       security:
       - CookieAuth: []
       summary: Delete a user (admin only)
+      tags:
+      - admin
+  /admin/users/{id}/notes:
+    delete:
+      parameters:
+      - description: User ID
+        in: path
+        name: id
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            $ref: '#/definitions/handlers.DeleteUserNotesResponse'
+        "400":
+          description: bad request
+          schema:
+            type: string
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "500":
+          description: internal server error
+          schema:
+            type: string
+      security:
+      - CookieAuth: []
+      summary: Delete all notes owned by a user (admin only)
       tags:
       - admin
   /admin/users/{id}/role:

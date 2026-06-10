@@ -338,15 +338,29 @@ func TestResetCmd(t *testing.T) {
 	res := runJotCTL(t, ts, admin, "seed")
 	require.NoError(t, res.Err)
 
-	t.Run("deletes non-admin users and reseeds", func(t *testing.T) {
+	t.Run("deletes non-admin users", func(t *testing.T) {
 		res := runJotCTL(t, ts, admin, "reset", "--yes")
 		require.NoError(t, res.Err)
 		assert.Contains(t, res.Stdout, "Done.")
 
+		// Only admin should remain after reset.
 		users, err := admin.AdminListUsers(t.Context())
 		require.NoError(t, err)
-		// admin + 3 seed users
-		assert.Equal(t, 4, len(users))
+		assert.Equal(t, 1, len(users))
+		assert.Equal(t, "admin", users[0].Username)
+	})
+
+	t.Run("json output", func(t *testing.T) {
+		// Re-seed so there's something to delete.
+		res := runJotCTL(t, ts, admin, "seed")
+		require.NoError(t, res.Err)
+
+		res = runJotCTL(t, ts, admin, "--json", "reset", "--yes")
+		require.NoError(t, res.Err)
+
+		var summary resetSummary
+		require.NoError(t, json.Unmarshal([]byte(res.Stdout), &summary))
+		assert.Equal(t, 3, summary.UsersDeleted)
 	})
 }
 

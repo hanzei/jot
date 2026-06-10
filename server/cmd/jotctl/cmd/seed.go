@@ -22,6 +22,12 @@ type seedSummary struct {
 	LabelsCreated int `json:"labels_created"`
 }
 
+// resetSummary is emitted as JSON when --json is set.
+type resetSummary struct {
+	UsersDeleted int `json:"users_deleted"`
+	NotesDeleted int `json:"notes_deleted"`
+}
+
 func (a *App) newSeedCmd() *cobra.Command {
 	return &cobra.Command{
 		Use:   "seed",
@@ -35,7 +41,7 @@ func (a *App) newResetCmd() *cobra.Command {
 
 	cmd := &cobra.Command{
 		Use:   "reset",
-		Short: "Delete all non-admin users and their data, then reseed",
+		Short: "Delete all non-admin users and their data",
 		RunE: func(cmd *cobra.Command, args []string) error {
 			return a.runResetCmd(cmd, args, yes)
 		},
@@ -66,7 +72,7 @@ func (a *App) printSeedSummary(usersCreated, notesCreated, labelsCreated int) er
 
 func (a *App) runResetCmd(cmd *cobra.Command, _ []string, yes bool) error {
 	if !yes {
-		fmt.Fprintf(a.out, "This will DELETE all non-admin users and their data on %s. Continue? [y/N]: ", a.client.BaseURL())
+		fmt.Fprintf(a.out, "This will DELETE all non-admin users and ALL notes (including your own) on %s. Continue? [y/N]: ", a.client.BaseURL())
 		var answer string
 		fmt.Scanln(&answer) //nolint:errcheck,gosec // interactive prompt; partial input is treated as "no"
 		if strings.ToLower(strings.TrimSpace(answer)) != "y" {
@@ -85,23 +91,59 @@ func (a *App) runResetCmd(cmd *cobra.Command, _ []string, yes bool) error {
 		return wrapAPIError(fmt.Errorf("list users: %w", err))
 	}
 
-	for _, u := range users {
-		if u.ID == me.User.ID || u.Role == client.RoleAdmin {
-			continue
-		}
-		if deleteErr := a.client.AdminDeleteUser(cmd.Context(), u.ID); deleteErr != nil {
-			return wrapAPIError(fmt.Errorf("delete user %s: %w", u.Username, deleteErr))
-		}
-		if !a.jsonOutput {
-			fmt.Fprintf(a.out, "  ✓ Deleted user %s\n", u.Username)
-		}
-	}
-
-	usersCreated, notesCreated, labelsCreated, err := a.runSeed(cmd.Context(), a.client)
+	// Wipe every admin's notes (including the current user's). Non-admin users
+	// are deleted below, which removes their notes via cascade.
+	notesDeleted, err := deleteAdminNotes(cmd.Context(), a.client, users)
 	if err != nil {
 		return wrapAPIError(err)
 	}
-	return a.printSeedSummary(usersCreated, notesCreated, labelsCreated)
+	if !a.jsonOutput && notesDeleted > 0 {
+		fmt.Fprintf(a.out, "  ✓ Deleted %d notes\n", notesDeleted)
+	}
+
+	usersDeleted, err := deleteNonAdminUsers(cmd.Context(), a.client, users, me.User.ID)
+	if err != nil {
+		return wrapAPIError(err)
+	}
+
+	if a.jsonOutput {
+		return a.printJSON(resetSummary{UsersDeleted: usersDeleted, NotesDeleted: notesDeleted})
+	}
+	fmt.Fprintf(a.out, "Done. %d users and %d notes deleted.\n", usersDeleted, notesDeleted)
+	return nil
+}
+
+// deleteAdminNotes permanently removes every note owned by each admin user
+// (including the current user). Returns the total number of notes deleted.
+func deleteAdminNotes(ctx context.Context, c *client.Client, users []*client.User) (int, error) {
+	notesDeleted := 0
+	for _, u := range users {
+		if u.Role != client.RoleAdmin {
+			continue
+		}
+		deleted, err := c.AdminDeleteUserNotes(ctx, u.ID)
+		if err != nil {
+			return 0, fmt.Errorf("delete notes for %s: %w", u.Username, err)
+		}
+		notesDeleted += deleted
+	}
+	return notesDeleted, nil
+}
+
+// deleteNonAdminUsers deletes every non-admin user (which removes their notes
+// via cascade), skipping the current user. Returns the number of users deleted.
+func deleteNonAdminUsers(ctx context.Context, c *client.Client, users []*client.User, selfID string) (int, error) {
+	usersDeleted := 0
+	for _, u := range users {
+		if u.ID == selfID || u.Role == client.RoleAdmin {
+			continue
+		}
+		if err := c.AdminDeleteUser(ctx, u.ID); err != nil {
+			return 0, fmt.Errorf("delete user %s: %w", u.Username, err)
+		}
+		usersDeleted++
+	}
+	return usersDeleted, nil
 }
 
 // runSeed creates all seed users and their notes/settings via the API.
