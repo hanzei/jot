@@ -56,12 +56,12 @@ jest.mock('@react-navigation/elements', () => ({
 }));
 
 jest.mock('react-native-safe-area-context', () => {
-  const React = require('react');
+  const { createContext } = jest.requireActual<typeof import('react')>('react');
   const insets = { top: 0, right: 0, bottom: 0, left: 0 };
   return {
     __esModule: true,
     useSafeAreaInsets: () => insets,
-    SafeAreaInsetsContext: React.createContext(insets),
+    SafeAreaInsetsContext: createContext(insets),
   };
 });
 
