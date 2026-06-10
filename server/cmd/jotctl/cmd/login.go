@@ -62,7 +62,7 @@ func (a *App) runLogin(cmd *cobra.Command, server, username, password string) er
 
 	if password == "" {
 		a.printf("Password: ")
-		pw, err := term.ReadPassword(0) // 0 = stdin fd
+		pw, err := term.ReadPassword(int(os.Stdin.Fd())) //nolint:gosec // file descriptors are always small non-negative integers
 		if err != nil {
 			return fmt.Errorf("read password: %w", err)
 		}

@@ -5,7 +5,6 @@ import (
 	"context"
 	_ "embed"
 	"fmt"
-	"os"
 	"strings"
 
 	"github.com/hanzei/jot/server/client"
@@ -179,7 +178,7 @@ func (a *App) runSeed(ctx context.Context, adminClient *client.Client) (int, int
 	for _, u := range seedDataset {
 		if id, exists := existingByUsername[u.username]; exists {
 			if !a.jsonOutput {
-				fmt.Fprintf(os.Stderr, "  ⚠ User %s already exists, skipping\n", u.username)
+				a.printf("  ⚠ User %s already exists, skipping\n", u.username)
 			}
 			userIDs[u.username] = id
 			continue

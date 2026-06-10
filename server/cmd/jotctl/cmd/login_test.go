@@ -50,7 +50,9 @@ func TestLoginCmd(t *testing.T) {
 			"--username", "logintest",
 			"--password", "wrongpass",
 		})
-		require.Error(t, root.Execute())
+		err := root.Execute()
+		require.Error(t, err)
+		assert.Contains(t, err.Error(), "invalid credentials")
 	})
 }
 

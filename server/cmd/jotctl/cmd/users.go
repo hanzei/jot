@@ -102,6 +102,11 @@ func (a *App) runUsersCreate(cmd *cobra.Command, username, password, roleStr str
 	return nil
 }
 
+type deleteResult struct {
+	ID      string `json:"id"`
+	Deleted bool   `json:"deleted"`
+}
+
 func (a *App) runUsersDelete(cmd *cobra.Command, args []string) error {
 	userID := args[0]
 
@@ -109,6 +114,9 @@ func (a *App) runUsersDelete(cmd *cobra.Command, args []string) error {
 		return wrapAPIError(err)
 	}
 
+	if a.jsonOutput {
+		return a.printJSON(deleteResult{ID: userID, Deleted: true})
+	}
 	a.printf("Deleted user %s\n", userID)
 	return nil
 }

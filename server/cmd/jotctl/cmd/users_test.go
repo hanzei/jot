@@ -116,6 +116,26 @@ func TestUsersDeleteCmd(t *testing.T) {
 			assert.NotEqual(t, u.ID, listed.ID)
 		}
 	})
+
+	t.Run("json output", func(t *testing.T) {
+		u, err := admin.AdminCreateUser(t.Context(), "todelete2", "pass", client.RoleUser)
+		require.NoError(t, err)
+
+		res := runJotCTL(t, ts, admin, "--json", "users", "delete", u.ID)
+		require.NoError(t, res.Err)
+
+		var result deleteResult
+		require.NoError(t, json.Unmarshal([]byte(res.Stdout), &result))
+		assert.Equal(t, u.ID, result.ID)
+		assert.True(t, result.Deleted)
+
+		// Verify via API that the user is gone.
+		users, err := admin.AdminListUsers(t.Context())
+		require.NoError(t, err)
+		for _, listed := range users {
+			assert.NotEqual(t, u.ID, listed.ID)
+		}
+	})
 }
 
 func TestUsersSetRoleCmd(t *testing.T) {
