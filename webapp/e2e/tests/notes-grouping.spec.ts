@@ -27,7 +27,8 @@ test.describe('Grouped to-do items', () => {
     await expect(page.getByText('Completed items (3)')).toBeVisible();
   });
 
-  test('unchecking a child returns it to its group', async ({ page, dashboardPage }) => {
+  test('unchecking a child returns it to its group', async ({ page, dashboardPage, authenticatedUser }) => {
+    expect(authenticatedUser.username).toBeTruthy();
     await dashboardPage.createListNote('Trip', ['Packing', 'Socks']);
     await dashboardPage.openNote('Trip');
 
@@ -50,7 +51,8 @@ test.describe('Grouped to-do items', () => {
     await dashboardPage.expectListItemValue(1, 'Socks');
   });
 
-  test('deleting a parent promotes its children to top-level', async ({ page, dashboardPage }) => {
+  test('deleting a parent promotes its children to top-level', async ({ page, dashboardPage, authenticatedUser }) => {
+    expect(authenticatedUser.username).toBeTruthy();
     await dashboardPage.createListNote('Chores', ['Kitchen', 'Dishes']);
     await dashboardPage.openNote('Chores');
 

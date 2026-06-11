@@ -334,7 +334,7 @@ test.describe('Notes', () => {
         archived: boolean;
         color: string;
         checked_items_collapsed: boolean;
-        items: Array<{ id: string; text: string; position: number; completed: boolean; indent_level: number; assigned_to: string }>;
+        items: Array<{ id: string; text: string; position: number; completed: boolean; parent_id: string | null; assigned_to: string }>;
         labels: Array<{ name: string }>;
         shared_with: Array<{ shared_with_user_id: string }>;
       };
@@ -342,8 +342,8 @@ test.describe('Notes', () => {
 
     const sourceList = await findNoteByTitle('Source List');
     // Set up the source list via the granular item endpoints: assign the first
-    // item to the collaborator and mark the second completed + indented.
-    // Duplication should copy text/position/completed/indent but clear
+    // item to the collaborator and mark the second completed + nested under the
+    // first. Duplication should copy text/position/completed/grouping but clear
     // assignments (and shares).
     const assignResp = await request.patch(`/api/v1/notes/${sourceList.id}/items/${sourceList.items[0].id}`, {
       headers: authHeaders,
@@ -352,7 +352,7 @@ test.describe('Notes', () => {
     expect(assignResp.ok()).toBeTruthy();
     const secondItemResp = await request.patch(`/api/v1/notes/${sourceList.id}/items/${sourceList.items[1].id}`, {
       headers: authHeaders,
-      data: { completed: true, indent_level: 1 },
+      data: { completed: true, parent_id: sourceList.items[0].id },
     });
     expect(secondItemResp.ok()).toBeTruthy();
 
@@ -364,22 +364,28 @@ test.describe('Notes', () => {
     const duplicatedList = await findNoteByTitle('Copy of Source List');
     expect(duplicatedList.labels.map((label) => label.name)).toEqual(['list-label']);
     expect(duplicatedList.shared_with ?? []).toEqual([]);
-    expect(duplicatedList.items ?? []).toEqual([
+    const duplicatedItems = duplicatedList.items ?? [];
+    expect(duplicatedItems).toHaveLength(2);
+    expect(duplicatedItems[0]).toEqual(
       expect.objectContaining({
         text: 'Prepare agenda',
         position: 0,
         completed: false,
-        indent_level: 0,
+        parent_id: null,
         assigned_to: '',
       }),
+    );
+    // The nested child is re-pointed at the duplicated parent's new ID, so the
+    // group survives duplication.
+    expect(duplicatedItems[1]).toEqual(
       expect.objectContaining({
         text: 'Send follow-up',
         position: 1,
         completed: true,
-        indent_level: 1,
+        parent_id: duplicatedItems[0].id,
         assigned_to: '',
       }),
-    ]);
+    );
   });
 
   test('shows empty state when no notes exist', async ({ dashboardPage }) => {
