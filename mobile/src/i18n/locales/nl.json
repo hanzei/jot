@@ -32,7 +32,11 @@
     "switchFailed": "Server wisselen mislukt.",
     "duplicateTitle": "Server al toegevoegd",
     "duplicateMessage": "Deze server bestaat al in je lijst.",
-    "switchToExisting": "Naar bestaande server"
+    "switchToExisting": "Naar bestaande server",
+    "deleteButton": "Verwijderen",
+    "deleteConfirmTitle": "Server verwijderen",
+    "deleteConfirmMessage": "\"{{name}}\" uit je serverlijst verwijderen?",
+    "deleteFailed": "Server verwijderen mislukt."
   },
   "auth": {
     "signInTitle": "Inloggen bij Jot",

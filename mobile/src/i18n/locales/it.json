@@ -32,7 +32,11 @@
     "invalidUrl": "Inserisci un URL server valido",
     "duplicateTitle": "Server già aggiunto",
     "duplicateMessage": "Questo server esiste già. Vuoi passare alla voce esistente?",
-    "switchToExisting": "Passa a esistente"
+    "switchToExisting": "Passa a esistente",
+    "deleteButton": "Rimuovi",
+    "deleteConfirmTitle": "Rimuovi server",
+    "deleteConfirmMessage": "Rimuovere \"{{name}}\" dalla lista dei server?",
+    "deleteFailed": "Impossibile rimuovere il server."
   },
   "auth": {
     "signInTitle": "Accedi a Jot",

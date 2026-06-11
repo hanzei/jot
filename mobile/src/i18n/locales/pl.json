@@ -329,7 +329,11 @@
     "duplicateMessage": "Ten serwer jest już na liście.",
     "switchToExisting": "Przełącz na istniejący",
     "switchFailed": "Nie udało się przełączyć serwera.",
-    "addFailed": "Nie udało się dodać serwera."
+    "addFailed": "Nie udało się dodać serwera.",
+    "deleteButton": "Usuń",
+    "deleteConfirmTitle": "Usuń serwer",
+    "deleteConfirmMessage": "Usunąć \"{{name}}\" z listy serwerów?",
+    "deleteFailed": "Nie udało się usunąć serwera."
   },
   "import": {
     "title": "Importuj z Google Keep",

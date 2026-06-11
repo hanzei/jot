@@ -32,7 +32,11 @@
     "switchFailed": "Failed to switch server.",
     "duplicateTitle": "Server already added",
     "duplicateMessage": "That server already exists in your list.",
-    "switchToExisting": "Switch to existing"
+    "switchToExisting": "Switch to existing",
+    "deleteButton": "Remove",
+    "deleteConfirmTitle": "Remove server",
+    "deleteConfirmMessage": "Remove \"{{name}}\" from your server list?",
+    "deleteFailed": "Failed to remove server."
   },
   "auth": {
     "signInTitle": "Sign in to Jot",
