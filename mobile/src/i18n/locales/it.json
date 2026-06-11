@@ -229,6 +229,7 @@
     "duplicate": "Duplica",
     "duplicated": "Nota duplicata",
     "completedItems": "Elementi completati ({{count}})",
+    "completedItemGroup": "Gruppo: {{title}}",
     "moreCompletedItems": "+{{count}} elementi completati",
     "typeText": "Testo",
     "typeList": "Lista",

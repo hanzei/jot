@@ -229,6 +229,7 @@
     "duplicate": "Dupliceren",
     "duplicated": "Notitie gedupliceerd",
     "completedItems": "Voltooide items ({{count}})",
+    "completedItemGroup": "Groep: {{title}}",
     "moreCompletedItems": "+{{count}} voltooide items",
     "typeText": "Tekst",
     "typeList": "Lijst",

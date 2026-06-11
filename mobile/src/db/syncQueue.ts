@@ -2,7 +2,8 @@ import { SQLiteDatabase } from 'expo-sqlite';
 import axios from 'axios';
 import api from '../api/client';
 import type { Note } from '@jot/shared';
-import { replaceLocalNoteId, saveNote } from './noteQueries';
+import { replaceLocalNoteId, saveNote, patchLocalItem } from './noteQueries';
+import type { NoteItem } from '@jot/shared';
 
 export type QueueOperation =
   | 'create'
@@ -14,7 +15,8 @@ export type QueueOperation =
   | 'createItem'
   | 'updateItem'
   | 'deleteItem'
-  | 'reorderItems';
+  | 'reorderItems'
+  | 'toggleItemCompleted';
 
 interface QueueEntry {
   id: number;
@@ -146,6 +148,15 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
             idMappings.push({ localId, serverNote });
             // Replace local note in DB with server note
             await replaceLocalNoteId(db, localId, serverNote);
+          }
+        } else if (entry.operation === 'toggleItemCompleted') {
+          const items = response?.data as NoteItem[] | undefined;
+          if (Array.isArray(items) && items.length > 0) {
+            // endpoint: /notes/{noteId}/items/{itemId}/toggle-completed
+            const noteId = endpoint.split('/')[2];
+            for (const item of items) {
+              await patchLocalItem(db, noteId, item.id, { completed: item.completed });
+            }
           }
         }
       } else if (entry.method === 'PATCH') {

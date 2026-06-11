@@ -27,7 +27,7 @@ interface NoteItemRow {
   text: string;
   completed: number;
   position: number;
-  indent_level: number;
+  parent_id: string | null;
   assigned_to: string;
   created_at: string;
   updated_at: string;
@@ -75,7 +75,7 @@ function itemRowToNoteItem(row: NoteItemRow): NoteItem {
     text: row.text,
     completed: row.completed === 1,
     position: row.position,
-    indent_level: row.indent_level,
+    parent_id: row.parent_id ?? null,
     assigned_to: row.assigned_to ?? '',
     created_at: row.created_at ?? '',
     updated_at: row.updated_at ?? '',
@@ -128,9 +128,9 @@ async function saveNoteInTx(db: SQLiteDatabase, note: Note): Promise<void> {
     await db.runAsync('DELETE FROM note_items WHERE note_id = ?', [note.id]);
     for (const item of items) {
       await db.runAsync(
-        `INSERT OR REPLACE INTO note_items (id, note_id, text, completed, position, indent_level, assigned_to, created_at, updated_at)
+        `INSERT OR REPLACE INTO note_items (id, note_id, text, completed, position, parent_id, assigned_to, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [item.id, note.id, item.text, item.completed ? 1 : 0, item.position, item.indent_level ?? 0, item.assigned_to ?? '', item.created_at ?? '', item.updated_at ?? ''],
+        [item.id, note.id, item.text, item.completed ? 1 : 0, item.position, item.parent_id ?? null, item.assigned_to ?? '', item.created_at ?? '', item.updated_at ?? ''],
       );
     }
   }
@@ -427,7 +427,7 @@ export interface LocalItemInput {
   text: string;
   completed: boolean;
   position: number;
-  indent_level: number;
+  parent_id: string | null;
   assigned_to: string;
 }
 
@@ -435,9 +435,9 @@ export async function createLocalItem(db: SQLiteDatabase, noteId: string, item: 
   const now = new Date().toISOString();
   await db.withTransactionAsync(async () => {
     await db.runAsync(
-      `INSERT OR REPLACE INTO note_items (id, note_id, text, completed, position, indent_level, assigned_to, created_at, updated_at)
+      `INSERT OR REPLACE INTO note_items (id, note_id, text, completed, position, parent_id, assigned_to, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-      [item.id, noteId, item.text, item.completed ? 1 : 0, item.position, item.indent_level, item.assigned_to ?? '', now, now],
+      [item.id, noteId, item.text, item.completed ? 1 : 0, item.position, item.parent_id ?? null, item.assigned_to ?? '', now, now],
     );
     await touchLocalNote(db, noteId);
   });
@@ -447,7 +447,7 @@ export interface LocalItemPatch {
   text?: string;
   completed?: boolean;
   position?: number;
-  indent_level?: number;
+  parent_id?: string | null;
   assigned_to?: string;
 }
 
@@ -457,7 +457,7 @@ export async function patchLocalItem(db: SQLiteDatabase, noteId: string, itemId:
   if (patch.text !== undefined) { fields.push('text = ?'); values.push(patch.text); }
   if (patch.completed !== undefined) { fields.push('completed = ?'); values.push(patch.completed ? 1 : 0); }
   if (patch.position !== undefined) { fields.push('position = ?'); values.push(patch.position); }
-  if (patch.indent_level !== undefined) { fields.push('indent_level = ?'); values.push(patch.indent_level); }
+  if (patch.parent_id !== undefined) { fields.push('parent_id = ?'); values.push(patch.parent_id === '' ? null : patch.parent_id); }
   if (patch.assigned_to !== undefined) { fields.push('assigned_to = ?'); values.push(patch.assigned_to); }
   if (fields.length === 0) return;
   fields.push('updated_at = ?');

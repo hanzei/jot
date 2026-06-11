@@ -65,21 +65,8 @@ export interface NoteItem {
   text: string;
   completed: boolean;
   position: number;
-  /**
-   * The item this one is nested under, or null for a top-level item. A "group"
-   * is a top-level item plus the items whose parent_id points at it. Replaces
-   * the former indent_level column (a child renders one level indented). The
-   * server always sends it; it is optional here only so the not-yet-migrated
-   * mobile client (which does not yet read it) still type-checks.
-   */
-  parent_id?: string | null;
-  /**
-   * @deprecated Removed from the API; the server no longer returns it (grouping
-   * is keyed off parent_id). Retained as optional only so the not-yet-migrated
-   * mobile client still type-checks; it renders items flat until it adopts
-   * parent_id.
-   */
-  indent_level?: number;
+  /** The item this one is nested under, or null for a top-level item. */
+  parent_id: string | null;
   assigned_to: string;
   created_at: string;
   updated_at: string;
@@ -175,11 +162,6 @@ export interface PatchNoteItemRequest {
   position?: number;
   /** Re-parents the item; empty string makes it top-level, null leaves it unchanged. */
   parent_id?: string | null;
-  /**
-   * @deprecated The granular item endpoints ignore this; grouping is set via
-   * parent_id. Retained only so the not-yet-migrated mobile client compiles.
-   */
-  indent_level?: number;
   assigned_to?: string;
 }
 
