@@ -173,6 +173,24 @@ const precedingTopLevelId = (items: ListItem[], itemId: string): string | null =
   return null;
 };
 
+// dropTargetParentId decides which group a vertically-dragged item joins, based
+// on where it landed in the freshly-moved (not yet normalized) array. This is
+// what lets an item be dragged from one group into another:
+//   - a parent (item with children) can't become a child, so it stays top-level;
+//   - dropped right after a child → joins that child's group (same parent);
+//   - dropped between a top-level item and its first child → becomes that item's
+//     first child (joins/forms the group);
+//   - otherwise → a top-level item.
+const dropTargetParentId = (items: ListItem[], index: number, draggedId: string): string | null => {
+  if (itemHasChildren(items, draggedId)) return null;
+  const prev = items[index - 1];
+  if (!prev) return null; // dropped at the very top of the list
+  if (prev.parentId !== null) return prev.parentId; // dropped inside prev's group
+  const next = items[index + 1];
+  if (next && next.parentId === prev.id) return prev.id; // dropped as prev's first child
+  return null; // a top-level sibling after prev
+};
+
 interface AutoSaveDraft {
   title?: string;
   content?: string;
@@ -934,15 +952,22 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     }
 
     if (over && active.id !== over.id) {
-      // Move within the single ordered array, then normalize. Because normalize
-      // re-groups each parent's children right after it, dragging a parent
-      // carries its whole group along.
+      // Move within the single ordered array, then re-parent the dragged item to
+      // the group it was dropped into (so an item can be moved between groups),
+      // then normalize. Because normalize re-groups each parent's children right
+      // after it, dragging a parent carries its whole group along.
       const currentItems = itemsRef.current;
       const fromIndex = currentItems.findIndex(item => item.id === active.id);
       const toIndex = currentItems.findIndex(item => item.id === over.id);
       if (fromIndex === -1 || toIndex === -1) return;
 
-      commitItems(normalizeItemOrder(arrayMove(currentItems, fromIndex, toIndex)));
+      const moved = arrayMove(currentItems, fromIndex, toIndex);
+      const droppedIndex = moved.findIndex(item => item.id === active.id);
+      const newParentId = dropTargetParentId(moved, droppedIndex, active.id as string);
+      const reparented = moved.map(item =>
+        item.id === active.id ? { ...item, parentId: newParentId } : item,
+      );
+      commitItems(normalizeItemOrder(reparented));
       await autoSaveNote();
     }
   };

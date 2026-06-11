@@ -1,4 +1,4 @@
-import { render, screen, fireEvent, within } from '@testing-library/react'
+import { render, screen, fireEvent, within, act } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { type ReactNode } from 'react'
 import NoteModal from '../NoteModal'
@@ -15,7 +15,12 @@ const {
   mockDeleteItem,
   mockReorderItems,
   mockToggleItemCompleted,
+  dragEndRef,
 } = vi.hoisted(() => ({
+  // Captures the latest DndContext onDragEnd so tests can invoke a drag directly
+  // with a plain { active, over, delta } payload (DOM drop events don't carry
+  // dnd-kit's drag data through React's SyntheticEvent).
+  dragEndRef: { current: undefined as undefined | ((event: Record<string, unknown>) => void) },
   mockNotesUpdate: vi.fn().mockResolvedValue({}),
   mockNotesCreate: vi.fn().mockResolvedValue({}),
   mockCreateItem: vi.fn().mockImplementation((_noteId, data) => Promise.resolve({ ...data })),
@@ -65,11 +70,10 @@ vi.mock('@headlessui/react', () => {
 
 // Mock @dnd-kit components
 vi.mock('@dnd-kit/core', () => ({
-  DndContext: ({ children, onDragEnd }: { children?: ReactNode; onDragEnd?: (event: Record<string, unknown>) => void }) => (
-    <div data-testid="dnd-context" onDrop={(e) => onDragEnd && onDragEnd(e as unknown as Record<string, unknown>)}>
-      {children}
-    </div>
-  ),
+  DndContext: ({ children, onDragEnd }: { children?: ReactNode; onDragEnd?: (event: Record<string, unknown>) => void }) => {
+    dragEndRef.current = onDragEnd;
+    return <div data-testid="dnd-context">{children}</div>;
+  },
   closestCenter: vi.fn(),
   KeyboardSensor: vi.fn(),
   PointerSensor: vi.fn(),
@@ -1147,6 +1151,29 @@ describe('NoteModal', () => {
       // TARGET lands back between X2 and X4 — its relative slot — not at the end.
       const values = screen.getAllByTestId('list-item-input').map(el => (el as HTMLTextAreaElement).value)
       expect(values).toEqual(['X2', 'TARGET', 'X4'])
+    })
+
+    // An item dragged from one group and dropped into another must re-parent to
+    // the destination group, not snap back to its original parent.
+    it('dragging an item into another group re-parents it', async () => {
+      const listNote = createMockNote({
+        note_type: 'list',
+        items: [
+          item('parentA', { text: 'A', position: 0 }),
+          item('childA', { text: 'a1', position: 1, parent_id: 'parentA' }),
+          item('parentB', { text: 'B', position: 2 }),
+          item('childB', { text: 'b1', position: 3, parent_id: 'parentB' }),
+        ],
+      })
+      renderNoteModal({ ...defaultProps, note: listNote })
+
+      // Drop childA onto childB (group B) — vertical drag (delta.x ~ 0), no indent.
+      await act(async () => {
+        dragEndRef.current?.({ active: { id: 'childA' }, over: { id: 'childB' }, delta: { x: 0, y: 0 } })
+      })
+      await vi.runAllTimersAsync()
+
+      expect(mockUpdateItem).toHaveBeenCalledWith('1', 'childA', expect.objectContaining({ parent_id: 'parentB' }))
     })
   })
 
