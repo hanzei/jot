@@ -326,7 +326,11 @@
     "addFailed": "Impossible d'ajouter le serveur",
     "duplicateTitle": "Serveur déjà ajouté",
     "duplicateMessage": "Ce serveur existe déjà. Souhaitez-vous y basculer ?",
-    "switchToExisting": "Basculer vers l'existant"
+    "switchToExisting": "Basculer vers l'existant",
+    "deleteButton": "Supprimer",
+    "deleteConfirmTitle": "Supprimer le serveur",
+    "deleteConfirmMessage": "Supprimer « {{name}} » de votre liste de serveurs ?",
+    "deleteFailed": "Impossible de supprimer le serveur."
   },
   "offline": {
     "message": "Vous êtes hors ligne. Les modifications seront synchronisées lors de la reconnexion."

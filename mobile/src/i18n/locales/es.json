@@ -32,7 +32,11 @@
     "switchFailed": "No se pudo cambiar de servidor.",
     "duplicateTitle": "Servidor ya añadido",
     "duplicateMessage": "Este servidor ya existe en tu lista.",
-    "switchToExisting": "Cambiar al existente"
+    "switchToExisting": "Cambiar al existente",
+    "deleteButton": "Eliminar",
+    "deleteConfirmTitle": "Eliminar servidor",
+    "deleteConfirmMessage": "¿Eliminar \"{{name}}\" de tu lista de servidores?",
+    "deleteFailed": "No se pudo eliminar el servidor."
   },
   "auth": {
     "signInTitle": "Iniciar sesión en Jot",

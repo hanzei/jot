@@ -326,7 +326,11 @@
     "switchFailed": "Serverwechsel fehlgeschlagen",
     "duplicateTitle": "Server bereits hinzugefügt",
     "duplicateMessage": "Dieser Server ist bereits in deiner Liste.",
-    "switchToExisting": "Zu vorhandenem wechseln"
+    "switchToExisting": "Zu vorhandenem wechseln",
+    "deleteButton": "Entfernen",
+    "deleteConfirmTitle": "Server entfernen",
+    "deleteConfirmMessage": "\"{{name}}\" aus deiner Serverliste entfernen?",
+    "deleteFailed": "Server konnte nicht entfernt werden."
   },
   "offline": {
     "message": "Du bist offline. Änderungen werden synchronisiert, sobald du wieder verbunden bist."

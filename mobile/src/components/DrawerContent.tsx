@@ -18,7 +18,7 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '../store/AuthContext';
 import { useCreateLabel, useDeleteLabel, useLabelCounts, useLabels, useRenameLabel } from '../hooks/useLabels';
 import { useTheme } from '../theme/ThemeContext';
-import { getActiveServer, listServers, type ServerAccountEntry } from '../store/serverAccounts';
+import { getActiveServer, listServers, removeServer, type ServerAccountEntry } from '../store/serverAccounts';
 import { switchActiveServer } from '../api/client';
 import UserAvatar from './UserAvatar';
 import ServerSetupGate from './ServerSetupGate';
@@ -308,6 +308,36 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
     setIsServerPickerVisible(false);
     setIsServerSetupVisible(true);
   }, [isServerActionPending]);
+
+  const handleDeleteServer = useCallback((server: ServerAccountEntry) => {
+    Alert.alert(
+      t('serverPicker.deleteConfirmTitle'),
+      t('serverPicker.deleteConfirmMessage', { name: server.displayName || server.serverUrl }),
+      [
+        { text: t('common.cancel'), style: 'cancel' },
+        {
+          text: t('serverPicker.deleteButton'),
+          style: 'destructive',
+          onPress: async () => {
+            setIsServerActionPending(true);
+            try {
+              await removeServer(server.serverId);
+              const [serverList, activeServer] = await Promise.all([listServers(), getActiveServer()]);
+              setServers(serverList);
+              setActiveServerId(activeServer?.serverId ?? null);
+              if (serverList.length === 0) {
+                setIsServerPickerVisible(false);
+              }
+            } catch {
+              Alert.alert(t('common.error'), t('serverPicker.deleteFailed'));
+            } finally {
+              setIsServerActionPending(false);
+            }
+          },
+        },
+      ],
+    );
+  }, [t]);
 
   const handleBackToDashboardFromServerSetup = useCallback(() => {
     setIsServerSetupVisible(false);
@@ -695,27 +725,42 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
                 servers.map((server) => {
                   const isActive = server.serverId === activeServerId;
                   return (
-                    <TouchableOpacity
+                    <View
                       key={server.serverId}
                       style={[styles.serverRow, { borderColor: colors.borderLight }]}
-                      onPress={() => {
-                        if (!isActive) {
-                          void handleSwitchToServer(server.serverId);
-                        }
-                      }}
-                      disabled={isServerActionPending}
-                      testID={`server-picker-row-${server.serverId}`}
                     >
-                      <View style={styles.serverRowContent}>
-                        <Text style={[styles.serverRowTitle, { color: colors.text }]} numberOfLines={1}>
-                          {server.displayName || server.serverUrl}
-                        </Text>
-                        <Text style={[styles.serverRowSubtext, { color: colors.textSecondary }]} numberOfLines={1}>
-                          {server.serverUrl}
-                        </Text>
-                      </View>
-                      {isActive ? <Ionicons name="checkmark-circle" size={20} color={colors.primary} /> : null}
-                    </TouchableOpacity>
+                      <TouchableOpacity
+                        style={styles.serverRowPressable}
+                        onPress={() => {
+                          if (!isActive) {
+                            void handleSwitchToServer(server.serverId);
+                          }
+                        }}
+                        disabled={isServerActionPending}
+                        testID={`server-picker-row-${server.serverId}`}
+                      >
+                        <View style={styles.serverRowContent}>
+                          <Text style={[styles.serverRowTitle, { color: colors.text }]} numberOfLines={1}>
+                            {server.displayName || server.serverUrl}
+                          </Text>
+                          <Text style={[styles.serverRowSubtext, { color: colors.textSecondary }]} numberOfLines={1}>
+                            {server.serverUrl}
+                          </Text>
+                        </View>
+                        {isActive ? <Ionicons name="checkmark-circle" size={20} color={colors.primary} /> : null}
+                      </TouchableOpacity>
+                      <TouchableOpacity
+                        onPress={() => handleDeleteServer(server)}
+                        disabled={isServerActionPending}
+                        style={styles.serverDeleteButton}
+                        hitSlop={{ top: 8, right: 0, bottom: 8, left: 8 }}
+                        accessibilityRole="button"
+                        accessibilityLabel={t('serverPicker.deleteButton')}
+                        testID={`server-picker-delete-${server.serverId}`}
+                      >
+                        <Ionicons name="trash-outline" size={18} color={colors.error} />
+                      </TouchableOpacity>
+                    </View>
                   );
                 })
               )}
@@ -967,12 +1012,21 @@ const styles = StyleSheet.create({
   serverRow: {
     borderWidth: 1,
     borderRadius: 10,
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  serverRowPressable: {
+    flex: 1,
     paddingHorizontal: 12,
     paddingVertical: 10,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'space-between',
     gap: 12,
+  },
+  serverDeleteButton: {
+    paddingRight: 12,
+    paddingVertical: 10,
   },
   serverRowContent: {
     flex: 1,
