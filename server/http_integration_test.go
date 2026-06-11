@@ -975,12 +975,12 @@ func TestUserSettingsEndpoints(t *testing.T) {
 	})
 }
 
-func TestListItemIndentLevel(t *testing.T) {
+func TestListItemGrouping(t *testing.T) {
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "indentuser", "password123", false)
 
 	created, err := user.Client.CreateListNote(t.Context(), &client.CreateListNoteRequest{
-		Title: "Indent Test",
+		Title: "Group Test",
 		Items: []client.CreateNoteItem{
 			{Text: "top level", Position: 0, IndentLevel: 0},
 			{Text: "indented once", Position: 1, IndentLevel: 1},
@@ -989,33 +989,39 @@ func TestListItemIndentLevel(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	t.Run("indent levels persisted on create", func(t *testing.T) {
+	t.Run("grouping persisted on create via indent_level", func(t *testing.T) {
+		// The bulk-create payload remains positional and uses indent_level; the
+		// server reconstructs parent_id so each indented item points at the
+		// preceding top-level item.
 		note, err := user.Client.GetNote(t.Context(), created.ID)
 		require.NoError(t, err)
 		require.Len(t, note.Items, 3)
-		assert.Equal(t, 0, note.Items[0].IndentLevel)
-		assert.Equal(t, 1, note.Items[1].IndentLevel)
-		assert.Equal(t, 1, note.Items[2].IndentLevel)
+		assert.Nil(t, note.Items[0].ParentID)
+		require.NotNil(t, note.Items[1].ParentID)
+		require.NotNil(t, note.Items[2].ParentID)
+		assert.Equal(t, note.Items[0].ID, *note.Items[1].ParentID)
+		assert.Equal(t, note.Items[0].ID, *note.Items[2].ParentID)
 	})
 
-	t.Run("indent levels updated via PATCH", func(t *testing.T) {
+	t.Run("child promoted to top-level via PATCH parent_id", func(t *testing.T) {
 		items := getNoteItems(t, user, created.ID)
 		require.Len(t, items, 3)
-		// Promote the third item from indent level 1 to 0.
+		// Promote the third item to top-level by clearing its parent.
 		_, err := user.Client.UpdateNoteItem(t.Context(), created.ID, items[2].ID, &client.PatchNoteItemRequest{
-			IndentLevel: client.Ptr(0),
+			ParentID: client.Ptr(""),
 		})
 		require.NoError(t, err)
 
 		note, err := user.Client.GetNote(t.Context(), created.ID)
 		require.NoError(t, err)
 		require.Len(t, note.Items, 3)
-		assert.Equal(t, 0, note.Items[0].IndentLevel)
-		assert.Equal(t, 1, note.Items[1].IndentLevel)
-		assert.Equal(t, 0, note.Items[2].IndentLevel)
+		assert.Nil(t, note.Items[0].ParentID)
+		require.NotNil(t, note.Items[1].ParentID)
+		assert.Equal(t, note.Items[0].ID, *note.Items[1].ParentID)
+		assert.Nil(t, note.Items[2].ParentID)
 	})
 
-	t.Run("indent level defaults to 0 when omitted", func(t *testing.T) {
+	t.Run("parent defaults to top-level when omitted", func(t *testing.T) {
 		note, err := user.Client.CreateListNote(t.Context(), &client.CreateListNoteRequest{
 			Title: "No Indent",
 			Items: []client.CreateNoteItem{
@@ -1024,7 +1030,7 @@ func TestListItemIndentLevel(t *testing.T) {
 		})
 		require.NoError(t, err)
 		require.Len(t, note.Items, 1)
-		assert.Equal(t, 0, note.Items[0].IndentLevel)
+		assert.Nil(t, note.Items[0].ParentID)
 	})
 
 	t.Run("indent level > 1 rejected on create", func(t *testing.T) {
@@ -1037,11 +1043,11 @@ func TestListItemIndentLevel(t *testing.T) {
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})
 
-	t.Run("indent level > 1 rejected on update", func(t *testing.T) {
+	t.Run("unknown parent_id rejected on update", func(t *testing.T) {
 		items := getNoteItems(t, user, created.ID)
 		require.NotEmpty(t, items)
-		_, err := user.Client.UpdateNoteItem(t.Context(), created.ID, items[1].ID, &client.PatchNoteItemRequest{
-			IndentLevel: client.Ptr(2),
+		_, err := user.Client.UpdateNoteItem(t.Context(), created.ID, items[0].ID, &client.PatchNoteItemRequest{
+			ParentID: client.Ptr("doesnotexist0000000000"),
 		})
 		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
 	})

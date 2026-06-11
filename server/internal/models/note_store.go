@@ -155,15 +155,35 @@ func (s *noteStore) Duplicate(ctx context.Context, source *Note, userID string) 
 }
 
 func duplicateItemsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID string, items []NoteItem) error {
-	for _, item := range items {
+	// Process in position order so a parent (lower position than its children,
+	// since children form a contiguous block beneath it) is always inserted
+	// before its children and present in idMap when they are remapped.
+	ordered := make([]NoteItem, len(items))
+	copy(ordered, items)
+	slices.SortStableFunc(ordered, func(a, b NoteItem) int { return a.Position - b.Position })
+
+	idMap := make(map[string]string, len(ordered))
+	for _, item := range ordered {
 		itemID, err := generateID()
 		if err != nil {
 			return fmt.Errorf("failed to generate note item ID: %w", err)
 		}
+		idMap[item.ID] = itemID
+
+		// Re-point parent_id at the duplicated parent's new ID. A child whose
+		// parent was not yet seen (shouldn't happen for contiguous groups) is
+		// promoted to top-level rather than left dangling.
+		var newParent sql.NullString
+		if item.ParentID != nil {
+			if mapped, ok := idMap[*item.ParentID]; ok {
+				newParent = sql.NullString{String: mapped, Valid: true}
+			}
+		}
+
 		if _, err = tx.ExecContext(ctx,
-			d.RewritePlaceholders(`INSERT INTO note_items (id, note_id, text, completed, position, indent_level, assigned_to)
+			d.RewritePlaceholders(`INSERT INTO note_items (id, note_id, text, completed, position, parent_id, assigned_to)
 			 VALUES (?, ?, ?, ?, ?, ?, ?)`),
-			itemID, noteID, item.Text, item.Completed, item.Position, item.IndentLevel, nullableAssignedTo(""),
+			itemID, noteID, item.Text, item.Completed, item.Position, newParent, nullableAssignedTo(""),
 		); err != nil {
 			return fmt.Errorf("failed to duplicate note item: %w", err)
 		}
@@ -983,23 +1003,81 @@ func nullableAssignedTo(s string) sql.NullString {
 	return sql.NullString{String: s, Valid: s != ""}
 }
 
+// nullableParentID maps an empty string to a SQL NULL (top-level item) and any
+// non-empty value to a stored parent reference.
+func nullableParentID(s string) sql.NullString {
+	return sql.NullString{String: s, Valid: s != ""}
+}
+
+// parentIDPtr converts a scanned parent_id into the *string used on NoteItem,
+// where nil means the item is top-level.
+func parentIDPtr(ns sql.NullString) *string {
+	if !ns.Valid {
+		return nil
+	}
+	v := ns.String
+	return &v
+}
+
 func scanNoteItem(rows *sql.Rows) (NoteItem, error) {
 	var item NoteItem
-	var assignedTo sql.NullString
+	var assignedTo, parentID sql.NullString
 	err := rows.Scan(
 		&item.ID, &item.NoteID, &item.Text, &item.Completed,
-		&item.Position, &item.IndentLevel, &assignedTo,
+		&item.Position, &parentID, &assignedTo,
 		&item.CreatedAt, &item.UpdatedAt,
 	)
 	item.AssignedTo = assignedTo.String
+	item.ParentID = parentIDPtr(parentID)
 	return item, err
+}
+
+// validateParentRefTx enforces the grouping invariants for a non-empty
+// parentID: the parent must be a different item in the same note that is itself
+// top-level (parent_id IS NULL). This caps nesting at one level (no
+// grandchildren) and rejects cross-note or self references. An empty parentID
+// (top-level) is always valid.
+func validateParentRefTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID, itemID, parentID string) error {
+	if parentID == "" {
+		return nil
+	}
+	if parentID == itemID {
+		return ErrInvalidParentRef
+	}
+	var parentIsTopLevel bool
+	err := tx.QueryRowContext(ctx,
+		d.RewritePlaceholders(`SELECT parent_id IS NULL FROM note_items WHERE id = ? AND note_id = ?`),
+		parentID, noteID,
+	).Scan(&parentIsTopLevel)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return ErrInvalidParentRef
+		}
+		return fmt.Errorf("validate parent ref: %w", err)
+	}
+	if !parentIsTopLevel {
+		return ErrInvalidParentRef
+	}
+	// The item being nested must not itself have children, otherwise those
+	// children would become grandchildren and break the one-level cap.
+	var childCount int
+	if err := tx.QueryRowContext(ctx,
+		d.RewritePlaceholders(`SELECT COUNT(*) FROM note_items WHERE note_id = ? AND parent_id = ?`),
+		noteID, itemID,
+	).Scan(&childCount); err != nil {
+		return fmt.Errorf("validate parent ref children: %w", err)
+	}
+	if childCount > 0 {
+		return ErrInvalidParentRef
+	}
+	return nil
 }
 
 func (s *noteStore) getItemsByNoteID(ctx context.Context, noteID string) ([]NoteItem, error) {
 	// Tiebreak on created_at, id so display order is deterministic even if two
 	// items share a position (which can happen transiently after a partial
 	// reorder from a client that did not include every item).
-	query := s.d.RewritePlaceholders(`SELECT id, note_id, text, completed, position, indent_level,
+	query := s.d.RewritePlaceholders(`SELECT id, note_id, text, completed, position, parent_id,
 			  assigned_to, created_at, updated_at
 			  FROM note_items WHERE note_id = ? ORDER BY position, created_at, id`)
 
@@ -1016,16 +1094,16 @@ func (s *noteStore) getItemsByNoteID(ctx context.Context, noteID string) ([]Note
 }
 
 
-func (s *noteStore) CreateItemWithCompleted(ctx context.Context, noteID string, text string, position int, completed bool, indentLevel int, assignedTo string) (*NoteItem, error) {
+func (s *noteStore) CreateItemWithCompleted(ctx context.Context, noteID string, text string, position int, completed bool, parentID string, assignedTo string) (*NoteItem, error) {
 	itemID, err := generateID()
 	if err != nil {
 		return nil, fmt.Errorf("failed to generate item ID: %w", err)
 	}
 
-	query := s.d.RewritePlaceholders(`INSERT INTO note_items (id, note_id, text, position, completed, indent_level, assigned_to)
+	query := s.d.RewritePlaceholders(`INSERT INTO note_items (id, note_id, text, position, completed, parent_id, assigned_to)
 			  VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING created_at, updated_at`)
 	var item NoteItem
-	err = s.db.QueryRowContext(ctx, query, itemID, noteID, text, position, completed, indentLevel,
+	err = s.db.QueryRowContext(ctx, query, itemID, noteID, text, position, completed, nullableParentID(parentID),
 		nullableAssignedTo(assignedTo),
 	).Scan(
 		&item.CreatedAt, &item.UpdatedAt,
@@ -1039,7 +1117,7 @@ func (s *noteStore) CreateItemWithCompleted(ctx context.Context, noteID string, 
 	item.Text = text
 	item.Position = position
 	item.Completed = completed
-	item.IndentLevel = indentLevel
+	item.ParentID = parentIDPtr(nullableParentID(parentID))
 	item.AssignedTo = assignedTo
 
 	return &item, nil
@@ -1059,14 +1137,14 @@ func touchNoteTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID str
 
 // GetItemForNote returns a single item scoped to its note, or ErrNoteItemNotFound.
 func (s *noteStore) GetItemForNote(ctx context.Context, noteID, itemID string) (*NoteItem, error) {
-	query := s.d.RewritePlaceholders(`SELECT id, note_id, text, completed, position, indent_level,
+	query := s.d.RewritePlaceholders(`SELECT id, note_id, text, completed, position, parent_id,
 			  assigned_to, created_at, updated_at
 			  FROM note_items WHERE id = ? AND note_id = ?`)
 	var item NoteItem
-	var assignedTo sql.NullString
+	var assignedTo, parentID sql.NullString
 	err := s.db.QueryRowContext(ctx, query, itemID, noteID).Scan(
 		&item.ID, &item.NoteID, &item.Text, &item.Completed,
-		&item.Position, &item.IndentLevel, &assignedTo,
+		&item.Position, &parentID, &assignedTo,
 		&item.CreatedAt, &item.UpdatedAt,
 	)
 	if err != nil {
@@ -1076,6 +1154,7 @@ func (s *noteStore) GetItemForNote(ctx context.Context, noteID, itemID string) (
 		return nil, fmt.Errorf("failed to get note item: %w", err)
 	}
 	item.AssignedTo = assignedTo.String
+	item.ParentID = parentIDPtr(parentID)
 	return &item, nil
 }
 
@@ -1084,7 +1163,7 @@ func (s *noteStore) GetItemForNote(ctx context.Context, noteID, itemID string) (
 // parent note's updated_at. When maxItems > 0 the note's item count is checked
 // inside the transaction and ErrNoteItemCapExceeded is returned if adding the
 // item would exceed the cap (atomic, so concurrent creates cannot race past it).
-func (s *noteStore) CreateItemWithID(ctx context.Context, noteID, itemID, text string, position int, completed bool, indentLevel int, assignedTo string, maxItems int) (*NoteItem, error) {
+func (s *noteStore) CreateItemWithID(ctx context.Context, noteID, itemID, text string, position int, completed bool, parentID string, assignedTo string, maxItems int) (*NoteItem, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
@@ -1115,11 +1194,15 @@ func (s *noteStore) CreateItemWithID(ctx context.Context, noteID, itemID, text s
 		}
 	}
 
+	if err = validateParentRefTx(ctx, tx, s.d, noteID, itemID, parentID); err != nil {
+		return nil, err
+	}
+
 	var item NoteItem
 	if err = tx.QueryRowContext(ctx,
-		s.d.RewritePlaceholders(`INSERT INTO note_items (id, note_id, text, position, completed, indent_level, assigned_to)
+		s.d.RewritePlaceholders(`INSERT INTO note_items (id, note_id, text, position, completed, parent_id, assigned_to)
 			  VALUES (?, ?, ?, ?, ?, ?, ?) RETURNING created_at, updated_at`),
-		itemID, noteID, text, position, completed, indentLevel, nullableAssignedTo(assignedTo),
+		itemID, noteID, text, position, completed, nullableParentID(parentID), nullableAssignedTo(assignedTo),
 	).Scan(&item.CreatedAt, &item.UpdatedAt); err != nil {
 		return nil, fmt.Errorf("failed to create note item: %w", err)
 	}
@@ -1136,7 +1219,7 @@ func (s *noteStore) CreateItemWithID(ctx context.Context, noteID, itemID, text s
 	item.Text = text
 	item.Position = position
 	item.Completed = completed
-	item.IndentLevel = indentLevel
+	item.ParentID = parentIDPtr(nullableParentID(parentID))
 	item.AssignedTo = assignedTo
 	return &item, nil
 }
@@ -1153,13 +1236,13 @@ func (s *noteStore) PatchItem(ctx context.Context, noteID, itemID string, patch 
 	defer func() { _ = tx.Rollback() }()
 
 	var current NoteItem
-	var assignedTo sql.NullString
+	var assignedTo, currentParent sql.NullString
 	err = tx.QueryRowContext(ctx,
-		s.d.RewritePlaceholders(`SELECT id, note_id, text, completed, position, indent_level, assigned_to, created_at
+		s.d.RewritePlaceholders(`SELECT id, note_id, text, completed, position, parent_id, assigned_to, created_at
 			  FROM note_items WHERE id = ? AND note_id = ?`),
 		itemID, noteID,
 	).Scan(&current.ID, &current.NoteID, &current.Text, &current.Completed,
-		&current.Position, &current.IndentLevel, &assignedTo, &current.CreatedAt)
+		&current.Position, &currentParent, &assignedTo, &current.CreatedAt)
 	if err != nil {
 		if errors.Is(err, sql.ErrNoRows) {
 			return nil, ErrNoteItemNotFound
@@ -1171,14 +1254,22 @@ func (s *noteStore) PatchItem(ctx context.Context, noteID, itemID string, patch 
 	resolvedText := deref(patch.Text, current.Text)
 	resolvedCompleted := deref(patch.Completed, current.Completed)
 	resolvedPosition := deref(patch.Position, current.Position)
-	resolvedIndent := deref(patch.IndentLevel, current.IndentLevel)
+	resolvedParent := deref(patch.ParentID, currentParent.String)
 	resolvedAssignedTo := deref(patch.AssignedTo, current.AssignedTo)
+
+	// Only re-validate the parent when the caller is changing it, so a patch to
+	// another field never trips on a parent that became top-level meanwhile.
+	if patch.ParentID != nil {
+		if err = validateParentRefTx(ctx, tx, s.d, noteID, itemID, resolvedParent); err != nil {
+			return nil, err
+		}
+	}
 
 	var item NoteItem
 	if err = tx.QueryRowContext(ctx,
-		s.d.RewritePlaceholders(`UPDATE note_items SET text = ?, completed = ?, position = ?, indent_level = ?, assigned_to = ?, updated_at = CURRENT_TIMESTAMP
+		s.d.RewritePlaceholders(`UPDATE note_items SET text = ?, completed = ?, position = ?, parent_id = ?, assigned_to = ?, updated_at = CURRENT_TIMESTAMP
 			  WHERE id = ? AND note_id = ? RETURNING created_at, updated_at`),
-		resolvedText, resolvedCompleted, resolvedPosition, resolvedIndent, nullableAssignedTo(resolvedAssignedTo), itemID, noteID,
+		resolvedText, resolvedCompleted, resolvedPosition, nullableParentID(resolvedParent), nullableAssignedTo(resolvedAssignedTo), itemID, noteID,
 	).Scan(&item.CreatedAt, &item.UpdatedAt); err != nil {
 		return nil, fmt.Errorf("failed to update note item: %w", err)
 	}
@@ -1195,7 +1286,7 @@ func (s *noteStore) PatchItem(ctx context.Context, noteID, itemID string, patch 
 	item.Text = resolvedText
 	item.Completed = resolvedCompleted
 	item.Position = resolvedPosition
-	item.IndentLevel = resolvedIndent
+	item.ParentID = parentIDPtr(nullableParentID(resolvedParent))
 	item.AssignedTo = resolvedAssignedTo
 	return &item, nil
 }
@@ -1267,6 +1358,58 @@ func (s *noteStore) ReorderItems(ctx context.Context, noteID string, itemIDs []s
 		return fmt.Errorf("commit reorder note items: %w", err)
 	}
 	return nil
+}
+
+// ToggleItemCompleted sets an item's completed flag and, when the item is a
+// top-level (parent) item, cascades the same value to all of its children in a
+// single transaction. The cascade is one-directional (parent -> children only):
+// completing the last child never auto-completes the parent. It returns the
+// note's full item list so callers reconcile every affected item from one
+// response. Returns ErrNoteItemNotFound if the item does not belong to the note.
+func (s *noteStore) ToggleItemCompleted(ctx context.Context, noteID, itemID string, completed bool) ([]NoteItem, error) {
+	tx, err := s.db.BeginTx(ctx, nil)
+	if err != nil {
+		return nil, fmt.Errorf("failed to begin transaction: %w", err)
+	}
+	defer func() { _ = tx.Rollback() }()
+
+	var parentID sql.NullString
+	err = tx.QueryRowContext(ctx,
+		s.d.RewritePlaceholders(`SELECT parent_id FROM note_items WHERE id = ? AND note_id = ?`),
+		itemID, noteID,
+	).Scan(&parentID)
+	if err != nil {
+		if errors.Is(err, sql.ErrNoRows) {
+			return nil, ErrNoteItemNotFound
+		}
+		return nil, fmt.Errorf("failed to load note item: %w", err)
+	}
+
+	if _, err = tx.ExecContext(ctx,
+		s.d.RewritePlaceholders(`UPDATE note_items SET completed = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ? AND note_id = ?`),
+		completed, itemID, noteID,
+	); err != nil {
+		return nil, fmt.Errorf("failed to update note item: %w", err)
+	}
+
+	// Cascade only from a top-level item to its children.
+	if !parentID.Valid {
+		if _, err = tx.ExecContext(ctx,
+			s.d.RewritePlaceholders(`UPDATE note_items SET completed = ?, updated_at = CURRENT_TIMESTAMP WHERE note_id = ? AND parent_id = ?`),
+			completed, noteID, itemID,
+		); err != nil {
+			return nil, fmt.Errorf("failed to cascade completion to children: %w", err)
+		}
+	}
+
+	if err = touchNoteTx(ctx, tx, s.d, noteID); err != nil {
+		return nil, err
+	}
+	if err = tx.Commit(); err != nil {
+		return nil, fmt.Errorf("commit toggle item completed: %w", err)
+	}
+
+	return s.getItemsByNoteID(ctx, noteID)
 }
 
 func (s *noteStore) HasAccess(ctx context.Context, noteID string, userID string) (bool, error) {
@@ -1649,15 +1792,29 @@ func insertImportedNoteTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, u
 }
 
 func insertImportedItemsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteID string, items []JotImportNoteItem) error {
-	for _, item := range items {
+	// The import format is positional and carries indent_level (0/1) rather than
+	// item IDs, so reconstruct grouping the same way the migration backfill does:
+	// each indented item attaches to the most recent top-level item by position.
+	ordered := make([]JotImportNoteItem, len(items))
+	copy(ordered, items)
+	slices.SortStableFunc(ordered, func(a, b JotImportNoteItem) int { return a.Position - b.Position })
+
+	var lastTopLevel sql.NullString
+	for _, item := range ordered {
 		itemID, err := generateID()
 		if err != nil {
 			return fmt.Errorf("generate item ID: %w", err)
 		}
+		var parent sql.NullString
+		if item.IndentLevel <= 0 {
+			lastTopLevel = sql.NullString{String: itemID, Valid: true}
+		} else {
+			parent = lastTopLevel
+		}
 		if _, err = tx.ExecContext(ctx,
-			d.RewritePlaceholders(`INSERT INTO note_items (id, note_id, text, position, completed, indent_level, assigned_to)
+			d.RewritePlaceholders(`INSERT INTO note_items (id, note_id, text, position, completed, parent_id, assigned_to)
 			 VALUES (?, ?, ?, ?, ?, ?, NULL)`),
-			itemID, noteID, item.Text, item.Position, item.Completed, item.IndentLevel,
+			itemID, noteID, item.Text, item.Position, item.Completed, parent,
 		); err != nil {
 			return fmt.Errorf("create note item: %w", err)
 		}

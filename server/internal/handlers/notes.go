@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"slices"
 	"unicode/utf8"
 
 	"github.com/go-chi/chi/v5"
@@ -251,32 +252,67 @@ func (h *NotesHandler) createNoteLabels(ctx context.Context, noteID, userID stri
 }
 
 func (h *NotesHandler) createListItems(ctx context.Context, noteID string, items []CreateNoteItem) (int, error) {
-	for _, item := range items {
+	// The bulk-create payload is positional and carries indent_level (0/1), so
+	// reconstruct grouping the same way the migration backfill and Jot import do:
+	// each indented item attaches to the most recent top-level item by position.
+	// Sort by position so a parent is always created before its children.
+	ordered := make([]CreateNoteItem, len(items))
+	copy(ordered, items)
+	slices.SortStableFunc(ordered, func(a, b CreateNoteItem) int { return a.Position - b.Position })
+
+	var lastTopLevelID string
+	for _, item := range ordered {
 		if item.IndentLevel < 0 || item.IndentLevel > 1 {
 			return http.StatusBadRequest, errors.New("indent_level must be 0 or 1")
 		}
 		if utf8.RuneCountInString(item.Text) > noteItemTextMaxLength {
 			return http.StatusBadRequest, fmt.Errorf("item text must be %d characters or fewer", noteItemTextMaxLength)
 		}
-		// Honor a valid client-supplied item ID so it stays stable for later
-		// per-item updates; otherwise let the store generate one.
-		if item.ID != "" {
-			if !models.IsValidID(item.ID) {
-				return http.StatusBadRequest, errors.New("invalid item ID format")
-			}
-			if _, err := h.noteStore.CreateItemWithID(ctx, noteID, item.ID, item.Text, item.Position, item.Completed, item.IndentLevel, "", 0); err != nil {
-				if errors.Is(err, models.ErrNoteItemExists) {
-					return http.StatusConflict, fmt.Errorf("create list item: %w", err)
-				}
-				return http.StatusInternalServerError, fmt.Errorf("create list item: %w", err)
-			}
-			continue
+
+		parentID := ""
+		if item.IndentLevel == 1 {
+			parentID = lastTopLevelID // "" when no preceding top-level item exists
 		}
-		if _, err := h.noteStore.CreateItemWithCompleted(ctx, noteID, item.Text, item.Position, item.Completed, item.IndentLevel, ""); err != nil {
-			return http.StatusInternalServerError, fmt.Errorf("create list item: %w", err)
+
+		created, status, err := h.createBulkListItem(ctx, noteID, item, parentID)
+		if err != nil {
+			return status, err
+		}
+
+		if item.IndentLevel == 0 {
+			lastTopLevelID = created.ID
 		}
 	}
 	return http.StatusOK, nil
+}
+
+// createBulkListItem creates one item for the positional bulk-create path,
+// honoring a valid client-supplied ID (so it stays stable for later per-item
+// updates) and otherwise letting the store generate one. It returns the HTTP
+// status to surface on error.
+func (h *NotesHandler) createBulkListItem(ctx context.Context, noteID string, item CreateNoteItem, parentID string) (*models.NoteItem, int, error) {
+	if item.ID != "" {
+		if !models.IsValidID(item.ID) {
+			return nil, http.StatusBadRequest, errors.New("invalid item ID format")
+		}
+		created, err := h.noteStore.CreateItemWithID(ctx, noteID, item.ID, item.Text, item.Position, item.Completed, parentID, "", 0)
+		if err != nil {
+			if errors.Is(err, models.ErrNoteItemExists) {
+				return nil, http.StatusConflict, fmt.Errorf("create list item: %w", err)
+			}
+			if errors.Is(err, models.ErrInvalidParentRef) {
+				return nil, http.StatusBadRequest, fmt.Errorf("create list item: %w", err)
+			}
+			return nil, http.StatusInternalServerError, fmt.Errorf("create list item: %w", err)
+		}
+		return created, http.StatusOK, nil
+	}
+
+	created, err := h.noteStore.CreateItemWithCompleted(ctx, noteID, item.Text, item.Position, item.Completed, parentID, "")
+	if err != nil {
+		return nil, http.StatusInternalServerError, fmt.Errorf("create list item: %w", err)
+	}
+	return created, http.StatusOK, nil
 }
 
 // GetNotes godoc

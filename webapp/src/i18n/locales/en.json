@@ -328,6 +328,7 @@
     "deleteForeverTitle": "Delete forever",
     "restore": "Restore",
     "completedItems": "Completed items ({{count}})",
+    "completedItemGroup": "Group: {{title}}",
     "moreCompletedItems": "+{{count}} completed items",
     "editNote": "Edit Note",
     "newNote": "New Note",

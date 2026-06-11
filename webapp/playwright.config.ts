@@ -40,7 +40,7 @@ export default defineConfig({
     {
       name: 'mobile-chrome',
       use: { ...devices['Pixel 5'] },
-      testIgnore: ['**/keyboard-shortcuts.spec.ts', '**/00-admin.spec.ts'],
+      testIgnore: ['**/keyboard-shortcuts.spec.ts', '**/00-admin.spec.ts', '**/notes-grouping.spec.ts'],
       dependencies: ['admin'],
     },
   ],

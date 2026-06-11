@@ -118,8 +118,9 @@ func (h *NotesHandler) importKeepNote(ctx context.Context, userID string, kn kee
 	}
 
 	if noteType == models.NoteTypeList {
+		// Google Keep list items are flat (no nesting), so every item is top-level.
 		for i, item := range kn.ListContent {
-			if _, err := h.noteStore.CreateItemWithCompleted(ctx, note.ID, item.Text, i, item.IsChecked, 0, ""); err != nil {
+			if _, err := h.noteStore.CreateItemWithCompleted(ctx, note.ID, item.Text, i, item.IsChecked, "", ""); err != nil {
 				return err
 			}
 		}
@@ -853,11 +854,7 @@ func (h *NotesHandler) importSingleMemo(ctx context.Context, userID string, idx 
 
 	var errs []string
 	if isChecklist {
-		for i, item := range items {
-			if _, err := h.noteStore.CreateItemWithCompleted(ctx, note.ID, item.text, i, item.completed, item.indentLevel, ""); err != nil {
-				errs = append(errs, fmt.Sprintf("memo #%d: failed to create list item: %v", idx+1, err))
-			}
-		}
+		errs = append(errs, h.createMemoChecklistItems(ctx, note.ID, idx, items)...)
 	}
 
 	if len(tags) > 0 {
@@ -874,4 +871,28 @@ func (h *NotesHandler) importSingleMemo(ctx context.Context, userID string, idx 
 		}
 	}
 	return true, errs
+}
+
+// createMemoChecklistItems creates the parsed checklist items for an imported
+// memo, converting parsed indent levels into parent references: each indented
+// item attaches to the most recent top-level item. It returns one error string
+// per item that failed to create.
+func (h *NotesHandler) createMemoChecklistItems(ctx context.Context, noteID string, idx int, items []memoChecklistItem) []string {
+	var errs []string
+	var lastTopLevelID string
+	for i, item := range items {
+		parentID := ""
+		if item.indentLevel == 1 {
+			parentID = lastTopLevelID
+		}
+		created, err := h.noteStore.CreateItemWithCompleted(ctx, noteID, item.text, i, item.completed, parentID, "")
+		if err != nil {
+			errs = append(errs, fmt.Sprintf("memo #%d: failed to create list item: %v", idx+1, err))
+			continue
+		}
+		if item.indentLevel == 0 {
+			lastTopLevelID = created.ID
+		}
+	}
+	return errs
 }

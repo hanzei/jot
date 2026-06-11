@@ -149,6 +149,19 @@ func (c *Client) UpdateNoteItem(ctx context.Context, noteID, itemID string, req 
 	return &item, nil
 }
 
+// ToggleNoteItemCompleted sets an item's completed state. When the item is a
+// top-level (parent) item, the same value cascades to all of its children
+// atomically. Returns the note's full item list.
+func (c *Client) ToggleNoteItemCompleted(ctx context.Context, noteID, itemID string, completed bool) ([]NoteItem, error) {
+	var items []NoteItem
+	if err := c.doJSON(ctx, http.MethodPost, fmt.Sprintf("/api/v1/notes/%s/items/%s/toggle-completed", noteID, itemID), map[string]bool{
+		"completed": completed,
+	}, &items); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 // DeleteNoteItem deletes a single list item.
 func (c *Client) DeleteNoteItem(ctx context.Context, noteID, itemID string) error {
 	return c.doNoContent(ctx, http.MethodDelete, fmt.Sprintf("/api/v1/notes/%s/items/%s", noteID, itemID), nil)

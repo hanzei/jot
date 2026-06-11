@@ -44,8 +44,11 @@ definitions:
         type: boolean
       id:
         type: string
-      indent_level:
-        type: integer
+      parent_id:
+        description: |-
+          ParentID nests the item under a top-level item in the same note. Empty or
+          omitted means the item is top-level. Replaces the former indent_level.
+        type: string
       position:
         type: integer
       text:
@@ -117,8 +120,9 @@ definitions:
         type: string
       completed:
         type: boolean
-      indent_level:
-        type: integer
+      parent_id:
+        description: ParentID, when present, re-parents the item ("" makes it top-level).
+        type: string
       position:
         type: integer
       text:
@@ -169,6 +173,14 @@ definitions:
     properties:
       user_id:
         type: string
+    type: object
+  handlers.ToggleNoteItemCompletedRequest:
+    properties:
+      completed:
+        description: |-
+          Completed is a pointer so an omitted field is rejected by the handler
+          rather than silently decoding to false and unchecking the item.
+        type: boolean
     type: object
   handlers.UpdateNoteRequest:
     properties:
@@ -390,9 +402,14 @@ definitions:
         type: string
       id:
         type: string
-      indent_level:
-        type: integer
       note_id:
+        type: string
+      parent_id:
+        description: |-
+          ParentID is the item this one is nested under, or nil for a top-level
+          item. It replaces the former indent_level column: a group is a top-level
+          item plus the children that reference it. Nesting is capped at one level,
+          so a parent always has ParentID == nil.
         type: string
       position:
         type: integer
@@ -1311,6 +1328,60 @@ paths:
       security:
       - CookieAuth: []
       summary: Update a single list item
+      tags:
+      - notes
+  /notes/{id}/items/{item_id}/toggle-completed:
+    post:
+      consumes:
+      - application/json
+      description: Sets the item's completed flag. When the item is a top-level (parent)
+        item, the same value cascades to all of its children atomically. Returns the
+        note's full item list.
+      parameters:
+      - description: Note ID
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Item ID
+        in: path
+        name: item_id
+        required: true
+        type: string
+      - description: Completed state
+        in: body
+        name: body
+        required: true
+        schema:
+          $ref: '#/definitions/handlers.ToggleNoteItemCompletedRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: OK
+          schema:
+            items:
+              $ref: '#/definitions/models.NoteItem'
+            type: array
+        "400":
+          description: bad request
+          schema:
+            type: string
+        "401":
+          description: unauthorized
+          schema:
+            type: string
+        "404":
+          description: not found
+          schema:
+            type: string
+        "500":
+          description: internal server error
+          schema:
+            type: string
+      security:
+      - CookieAuth: []
+      summary: Toggle a list item's completed state, cascading to children
       tags:
       - notes
   /notes/{id}/items/reorder:

@@ -1,4 +1,4 @@
-import { useState, useEffect, useMemo, useRef, useCallback } from 'react';
+import { useState, useEffect, useMemo, useRef, useCallback, type ReactElement } from 'react';
 import { XMarkIcon, PlusIcon, TrashIcon, ChevronDownIcon, ArchiveBoxIcon, ArchiveBoxXMarkIcon, ShareIcon, UserPlusIcon, CheckIcon, TagIcon, DocumentDuplicateIcon, DevicePhoneMobileIcon, PaintBrushIcon } from '@heroicons/react/24/outline';
 import { Dialog, DialogPanel } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
@@ -64,7 +64,7 @@ const haveListItemsChanged = (currentItems: ListItem[], originalItems: NoteItem[
       item.text !== baseItem.text ||
       item.completed !== baseItem.completed ||
       item.position !== baseItem.position ||
-      item.indentLevel !== (baseItem.indent_level ?? 0) ||
+      item.parentId !== (baseItem.parent_id ?? null) ||
       item.assignedTo !== (baseItem.assigned_to ?? '')
     );
   });
@@ -79,11 +79,11 @@ const generateItemId = () => generateId();
 
 // Mergeable fields of a list item, used as the per-item baseline for diffing
 // local edits against the last-known server state.
-type ItemSnapshot = Pick<ListItem, 'text' | 'completed' | 'indentLevel' | 'assignedTo'>;
+type ItemSnapshot = Pick<ListItem, 'text' | 'completed' | 'parentId' | 'assignedTo'>;
 const itemSnapshot = (item: ListItem): ItemSnapshot => ({
   text: item.text,
   completed: item.completed,
-  indentLevel: item.indentLevel,
+  parentId: item.parentId,
   assignedTo: item.assignedTo,
 });
 const TEXT_NOTE_MIN_HEIGHT_PX = 96;
@@ -107,10 +107,89 @@ interface ListItem {
   text: string;
   completed: boolean;
   position: number;
-  indentLevel: number;
+  // The item this one is nested under, or null for a top-level item. Source of
+  // truth for grouping; the one-level indent shown in the UI is derived from it
+  // via indentOf(). Replaces the former indentLevel field.
+  parentId: string | null;
   assignedTo: string;
-  originalPosition?: number;
 }
+
+// indentOf derives the render indent (0 = top-level, 1 = nested) from parentId.
+// Nesting is capped at one level, so a child is always exactly one level in.
+const indentOf = (item: { parentId: string | null }): number => (item.parentId ? 1 : 0);
+
+// normalizeItemOrder is the single source of item ordering. It walks top-level
+// items in their current order and emits each immediately followed by its
+// children (so a group is always contiguous), promotes any orphaned child whose
+// parent no longer exists to top-level, then assigns position = 0..N across the
+// whole set. Calling it after every structural mutation keeps each group intact
+// and keeps a checked item's slot relative to its neighbours, so unchecking
+// lands it back where it belongs even after items above were added or removed.
+const normalizeItemOrder = (items: ListItem[]): ListItem[] => {
+  const childrenByParent = new Map<string, ListItem[]>();
+  for (const it of items) {
+    if (it.parentId !== null) {
+      const siblings = childrenByParent.get(it.parentId) ?? [];
+      siblings.push(it);
+      childrenByParent.set(it.parentId, siblings);
+    }
+  }
+
+  const ordered: ListItem[] = [];
+  const placed = new Set<string>();
+  for (const it of items) {
+    if (it.parentId !== null) continue; // children are emitted under their parent
+    ordered.push(it);
+    placed.add(it.id);
+    for (const child of childrenByParent.get(it.id) ?? []) {
+      ordered.push(child);
+      placed.add(child.id);
+    }
+  }
+  // Any item not placed is an orphan (its parent is missing or is itself a
+  // child); promote it to top-level so it is never dropped.
+  for (const it of items) {
+    if (!placed.has(it.id)) ordered.push({ ...it, parentId: null });
+  }
+
+  return ordered.map((it, index) => ({ ...it, position: index }));
+};
+
+// itemHasChildren reports whether any item is nested under itemId. Indenting an
+// item that has children would create grandchildren, which the server rejects
+// (nesting is capped at one level), so callers must refuse it.
+const itemHasChildren = (items: ListItem[], itemId: string): boolean =>
+  items.some(it => it.parentId === itemId);
+
+// precedingTopLevelId returns the id of the nearest top-level item before itemId
+// in the (normalized) order, or null if there is none — i.e. the item an indent
+// gesture should nest itemId under.
+const precedingTopLevelId = (items: ListItem[], itemId: string): string | null => {
+  let last: string | null = null;
+  for (const it of items) {
+    if (it.id === itemId) return last;
+    if (it.parentId === null) last = it.id;
+  }
+  return null;
+};
+
+// dropTargetParentId decides which group a vertically-dragged item joins, based
+// on where it landed in the freshly-moved (not yet normalized) array. This is
+// what lets an item be dragged from one group into another:
+//   - a parent (item with children) can't become a child, so it stays top-level;
+//   - dropped right after a child → joins that child's group (same parent);
+//   - dropped between a top-level item and its first child → becomes that item's
+//     first child (joins/forms the group);
+//   - otherwise → a top-level item.
+const dropTargetParentId = (items: ListItem[], index: number, draggedId: string): string | null => {
+  if (itemHasChildren(items, draggedId)) return null;
+  const prev = items[index - 1];
+  if (!prev) return null; // dropped at the very top of the list
+  if (prev.parentId !== null) return prev.parentId; // dropped inside prev's group
+  const next = items[index + 1];
+  if (next && next.parentId === prev.id) return prev.id; // dropped as prev's first child
+  return null; // a top-level sibling after prev
+};
 
 interface AutoSaveDraft {
   title?: string;
@@ -163,7 +242,7 @@ function SortableItem({ id, index, item, onUpdateListItem, onRemoveListItem, isC
   const style = {
     transform: CSS.Transform.toString(transform),
     transition,
-    marginLeft: item.indentLevel * VALIDATION.INDENT_PX_PER_LEVEL,
+    marginLeft: indentOf(item) * VALIDATION.INDENT_PX_PER_LEVEL,
   };
 
   const assignedUser = item.assignedTo ? usersById?.get(item.assignedTo) : undefined;
@@ -514,7 +593,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       if (savedOrderRef.current[i] !== it.id) return true;
       const snap = savedItemsRef.current.get(it.id);
       if (!snap || snap.text !== it.text || snap.completed !== it.completed
-        || snap.indentLevel !== it.indentLevel || snap.assignedTo !== it.assignedTo) {
+        || snap.parentId !== it.parentId || snap.assignedTo !== it.assignedTo) {
         return true;
       }
     }
@@ -558,7 +637,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
             text: it.text,
             position: it.position,
             completed: it.completed,
-            indent_level: it.indentLevel,
+            parent_id: it.parentId ?? '',
             ...(it.assignedTo ? { assigned_to: it.assignedTo } : {}),
           });
         } catch (err) {
@@ -572,7 +651,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       const data: PatchNoteItemRequest = {};
       if (it.text !== snap.text) data.text = it.text;
       if (it.completed !== snap.completed) data.completed = it.completed;
-      if (it.indentLevel !== snap.indentLevel) data.indent_level = it.indentLevel;
+      if (it.parentId !== snap.parentId) data.parent_id = it.parentId ?? '';
       if (it.assignedTo !== snap.assignedTo) data.assigned_to = it.assignedTo;
       if (Object.keys(data).length > 0) {
         await notes.updateItem(noteId, it.id, data);
@@ -679,14 +758,17 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       if (note.note_type === 'list') {
         setTitle(note.title);
         setCheckedItemsCollapsed(note.checked_items_collapsed);
-        listItems = note.items?.map((item, index) => ({
+        // Items arrive ordered by position from the server. normalizeItemOrder
+        // keeps each group contiguous and re-sequences positions so all later
+        // mutations build on a consistent ordering.
+        listItems = normalizeItemOrder((note.items ?? []).map((item, index) => ({
           id: item.id || `existing_${item.position}_${index}`,
           text: item.text,
           completed: item.completed,
           position: item.position,
-          indentLevel: item.indent_level ?? 0,
+          parentId: item.parent_id ?? null,
           assignedTo: item.assigned_to ?? '',
-        })) || [];
+        })));
         commitItems(listItems);
         draft = { title: note.title, content: '', pinned: note.pinned, archived: note.archived, color: note.color, checked_items_collapsed: note.checked_items_collapsed };
       } else {
@@ -822,54 +904,38 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     }, 5000);
   }, []);
 
-  // Simplified position restoration logic using Map for position tracking
-  const restoreItemPosition = (items: ListItem[], itemToRestore: ListItem): ListItem[] => {
-    // Remove the item to restore from the items array
-    const otherItems = items.filter(item => item.id !== itemToRestore.id);
-    const uncompletedItems = otherItems.filter(item => !item.completed);
-    
-    // Determine target position (use stored original position or end)
-    const targetPosition = Math.min(
-      itemToRestore.originalPosition ?? uncompletedItems.length, 
-      uncompletedItems.length
-    );
-    
-    // Create restored item
-    const restoredItem: ListItem = {
-      ...itemToRestore,
-      completed: false,
-      originalPosition: undefined,
-      position: targetPosition,
-    };
-    
-    // Insert the restored item and renumber positions
-    const uncompletedWithRestored = [
-      ...uncompletedItems.slice(0, targetPosition),
-      restoredItem,
-      ...uncompletedItems.slice(targetPosition),
-    ].map((item, index) => ({ ...item, position: index }));
-    
-    // Combine with completed items (keep their positions unchanged)
-    const completedItems = otherItems.filter(item => item.completed);
-    return [...uncompletedWithRestored, ...completedItems];
-  };
-
   const INDENT_DRAG_THRESHOLD = 50;
-  const MAX_INDENT = 1;
 
+  // indentListItem nests (delta 1) or un-nests (delta -1) an item by changing its
+  // parentId, the source of truth for grouping. Indenting attaches the item to
+  // the nearest preceding top-level item; un-indenting promotes it to top-level.
+  // It refuses to nest an item that already has children (that would create a
+  // grandchild, which the server rejects) and is a no-op when nothing changes.
   const indentListItem = async (itemId: string, delta: 1 | -1) => {
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
       saveTimeoutRef.current = undefined;
     }
-    const updatedItems = itemsRef.current.map(item => {
-      if (item.id === itemId) {
-        const newLevel = Math.max(0, Math.min(MAX_INDENT, item.indentLevel + delta));
-        return { ...item, indentLevel: newLevel };
-      }
-      return item;
-    });
-    commitItems(updatedItems);
+    const currentItems = itemsRef.current;
+    const target = currentItems.find(item => item.id === itemId);
+    if (!target) return;
+
+    let newParentId: string | null = target.parentId;
+    if (delta === 1) {
+      if (target.parentId !== null) return; // already nested (max one level)
+      if (itemHasChildren(currentItems, itemId)) return; // would create a grandchild
+      const parentId = precedingTopLevelId(currentItems, itemId);
+      if (!parentId) return; // nothing to nest under
+      newParentId = parentId;
+    } else {
+      if (target.parentId === null) return; // already top-level
+      newParentId = null;
+    }
+
+    const updated = normalizeItemOrder(
+      currentItems.map(item => (item.id === itemId ? { ...item, parentId: newParentId } : item)),
+    );
+    commitItems(updated);
     await autoSaveNote();
   };
 
@@ -886,25 +952,22 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     }
 
     if (over && active.id !== over.id) {
-      // Find the active and over items by their IDs
-      const activeIndex = uncompletedItems.findIndex(item => item.id === active.id);
-      const overIndex = uncompletedItems.findIndex(item => item.id === over.id);
+      // Move within the single ordered array, then re-parent the dragged item to
+      // the group it was dropped into (so an item can be moved between groups),
+      // then normalize. Because normalize re-groups each parent's children right
+      // after it, dragging a parent carries its whole group along.
+      const currentItems = itemsRef.current;
+      const fromIndex = currentItems.findIndex(item => item.id === active.id);
+      const toIndex = currentItems.findIndex(item => item.id === over.id);
+      if (fromIndex === -1 || toIndex === -1) return;
 
-      if (activeIndex === -1 || overIndex === -1) return;
-
-      const reorderedUncompletedItems = arrayMove(uncompletedItems, activeIndex, overIndex);
-
-      // Update uncompleted items and renumber their positions
-      const updatedUncompletedItems = reorderedUncompletedItems.map((item, index) => ({
-        ...item,
-        position: index,
-      }));
-
-      // Combine with completed items to create new items array
-      const newItems = [...updatedUncompletedItems, ...completedItems];
-      commitItems(newItems);
-
-      // Auto-save if editing an existing note
+      const moved = arrayMove(currentItems, fromIndex, toIndex);
+      const droppedIndex = moved.findIndex(item => item.id === active.id);
+      const newParentId = dropTargetParentId(moved, droppedIndex, active.id as string);
+      const reparented = moved.map(item =>
+        item.id === active.id ? { ...item, parentId: newParentId } : item,
+      );
+      commitItems(normalizeItemOrder(reparented));
       await autoSaveNote();
     }
   };
@@ -913,19 +976,17 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     const currentItems = itemsRef.current;
     const uncompletedItems = currentItems.filter(item => !item.completed);
     const lastUncompletedItem = uncompletedItems[uncompletedItems.length - 1];
-    const indentLevel = lastUncompletedItem
-      ? Math.max(0, Math.min(MAX_INDENT, lastUncompletedItem.indentLevel))
-      : 0;
+    // Inherit the last item's group so appending under a child stays in the group.
+    const parentId = lastUncompletedItem ? lastUncompletedItem.parentId : null;
     const newItem: ListItem = {
       id: generateItemId(),
       text: '',
       completed: false,
-      position: uncompletedItems.length,
-      indentLevel,
+      position: 0,
+      parentId,
       assignedTo: '',
     };
-    const newItems = [...currentItems, newItem];
-    commitItems(newItems);
+    commitItems(normalizeItemOrder([...currentItems, newItem]));
     autoSaveNote();
     return newItem.id;
   };
@@ -942,23 +1003,19 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     }
     const currentItems = itemsRef.current;
     const afterItemPos = currentItems.findIndex(item => item.id === afterItemId);
-    const sourceIndentLevel = afterItemPos >= 0 ? currentItems[afterItemPos].indentLevel : 0;
+    const afterItem = afterItemPos >= 0 ? currentItems[afterItemPos] : undefined;
     const newItem: ListItem = {
       id: generateItemId(),
       text: '',
       completed: false,
       position: 0,
-      indentLevel: Math.max(0, Math.min(MAX_INDENT, sourceIndentLevel)),
+      parentId: afterItem ? afterItem.parentId : null,
       assignedTo: '',
     };
     const insertPos = afterItemPos >= 0 ? afterItemPos + 1 : currentItems.length;
     const newItems = [...currentItems];
     newItems.splice(insertPos, 0, newItem);
-    let pos = 0;
-    const renumbered = newItems.map(item =>
-      item.completed ? item : { ...item, position: pos++ }
-    );
-    commitItems(renumbered);
+    commitItems(normalizeItemOrder(newItems));
     autoSaveNote();
     return newItem.id;
   };
@@ -1073,7 +1130,8 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
         text: lineText.slice(0, VALIDATION.ITEM_TEXT_MAX_LENGTH),
         completed: false,
         position: 0,
-        indentLevel: 0,
+        // Pasted lines join the same group as the item they split from.
+        parentId: currentItem.parentId,
         assignedTo: '',
       };
     });
@@ -1092,12 +1150,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     );
     updatedItems.splice(insertAfterPos + 1, 0, ...newItems);
 
-    let pos = 0;
-    const renumbered = updatedItems.map(item =>
-      item.completed ? item : { ...item, position: pos++ }
-    );
-
-    commitItems(renumbered);
+    commitItems(normalizeItemOrder(updatedItems));
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
       saveTimeoutRef.current = undefined;
@@ -1116,17 +1169,11 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
   };
 
   const removeListItem = (itemId: string) => {
-    const newItems = itemsRef.current.filter(item => item.id !== itemId);
-    
-    let uncompletedCount = 0;
-    const updatedItems = newItems.map((item) => {
-      if (!item.completed) {
-        return { ...item, position: uncompletedCount++ };
-      }
-      return item;
-    });
-    
-    commitItems(updatedItems);
+    // Removing a parent leaves its children as orphans; normalizeItemOrder
+    // promotes them to top-level, mirroring the server's ON DELETE SET NULL.
+    const newItems = normalizeItemOrder(itemsRef.current.filter(item => item.id !== itemId));
+
+    commitItems(newItems);
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
       saveTimeoutRef.current = undefined;
@@ -1181,37 +1228,74 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     }
   };
 
-  // Helper function to handle item completion
-  const handleItemCompletion = async (itemId: string) => {
-    const currentItems = itemsRef.current;
-    const itemToComplete = currentItems.find(item => item.id === itemId);
-    if (!itemToComplete || itemToComplete.completed) return;
-    
-    const updatedItems = currentItems.map(item => {
-      if (item.id === itemId) {
-        return {
-          ...item,
-          completed: true,
-          originalPosition: item.position, // Store original position
-        };
-      }
+  // applyCompletedCascade mirrors the server's cascade locally: toggling a
+  // top-level item also toggles its children; toggling a child touches only it.
+  const applyCompletedCascade = (items: ListItem[], itemId: string, completed: boolean): ListItem[] => {
+    const target = items.find(item => item.id === itemId);
+    if (!target) return items;
+    const cascadeToChildren = target.parentId === null;
+    return items.map(item => {
+      if (item.id === itemId) return { ...item, completed };
+      if (cascadeToChildren && item.parentId === itemId) return { ...item, completed };
       return item;
     });
-    
-    commitItems(updatedItems);
-    await autoSaveNote();
   };
 
-  // Helper function to handle item un-completion
-  const handleItemUncompletion = async (itemId: string) => {
-    const currentItems = itemsRef.current;
-    const itemToUncomplete = currentItems.find(item => item.id === itemId);
-    if (!itemToUncomplete || !itemToUncomplete.completed) return;
-    
-    const finalItems = restoreItemPosition(currentItems, itemToUncomplete);
-    
-    commitItems(finalItems);
-    await autoSaveNote();
+  // handleItemCompletedToggle checks/unchecks an item through the dedicated
+  // toggle-completed endpoint so a parent's children cascade atomically in one
+  // request. It applies an optimistic local cascade first, then reconciles only
+  // the completed flags the server reports — never replacing the whole list, so
+  // unsaved edits and not-yet-created items are preserved. Items keep their slot
+  // in the single ordered array, so unchecking returns an item to where it was.
+  const handleItemCompletedToggle = async (itemId: string, completed: boolean) => {
+    const before = itemsRef.current;
+    const target = before.find(item => item.id === itemId);
+    if (!target || target.completed === completed) return;
+
+    // Remember the pre-toggle completed state of just the items this toggle
+    // touches (the target and, for a parent, its children), so an error reverts
+    // only those flags without clobbering edits made to other items meanwhile.
+    const revertCompleted = new Map<string, boolean>([[target.id, target.completed]]);
+    if (target.parentId === null) {
+      for (const item of before) {
+        if (item.parentId === itemId) revertCompleted.set(item.id, item.completed);
+      }
+    }
+
+    commitItems(applyCompletedCascade(before, itemId, completed));
+
+    // A not-yet-persisted note has no server-side item to toggle; the bulk
+    // create on save carries the completed flags instead.
+    if (!noteIdRef.current) return;
+
+    if (saveTimeoutRef.current) {
+      clearTimeout(saveTimeoutRef.current);
+      saveTimeoutRef.current = undefined;
+    }
+
+    try {
+      const serverItems = await notes.toggleItemCompleted(noteIdRef.current, itemId, completed);
+      const completedById = new Map(serverItems.map(item => [item.id, item.completed]));
+      commitItems(itemsRef.current.map(item => {
+        const serverCompleted = completedById.get(item.id);
+        return serverCompleted === undefined ? item : { ...item, completed: serverCompleted };
+      }));
+      // Advance the baseline so the diff engine does not re-patch completed.
+      for (const [id, comp] of completedById) {
+        const snap = savedItemsRef.current.get(id);
+        if (snap) savedItemsRef.current.set(id, { ...snap, completed: comp });
+      }
+      onRefresh?.();
+      flashSaved();
+    } catch (error) {
+      console.error('Failed to toggle item:', error);
+      // Revert only the toggled completed flags; leave any concurrent edits.
+      commitItems(itemsRef.current.map(item => {
+        const original = revertCompleted.get(item.id);
+        return original === undefined ? item : { ...item, completed: original };
+      }));
+      showError(t('note.failedSaveChanges'));
+    }
   };
 
   // Helper function to handle text updates with debouncing
@@ -1267,13 +1351,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     if (!targetItem) return;
 
     if (field === 'completed') {
-      const isCompleting = value as boolean;
-      
-      if (isCompleting) {
-        await handleItemCompletion(targetItem.id);
-      } else {
-        await handleItemUncompletion(targetItem.id);
-      }
+      await handleItemCompletedToggle(targetItem.id, value as boolean);
     } else if (field === 'text') {
       handleTextUpdate(targetItem.id, value as string);
     }
@@ -1301,36 +1379,19 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       return;
     }
 
-    // Position in uncompleted list where the placeholder lives
-    const insertAt = Math.max(
-      0,
-      uncompletedItems.findIndex(item => item.id === currentItemId)
-    );
-
-    // Remove the placeholder and the matched completed item from the full list
+    // Drop the empty placeholder and re-activate the matched completed item in
+    // its place, keeping its assignee and group (parentId). normalizeItemOrder
+    // settles it back into its group and re-sequences positions.
     const currentItems = itemsRef.current;
-    const filtered = currentItems.filter(
+    const placeholderIndex = currentItems.findIndex(item => item.id === currentItemId);
+    const withoutBoth = currentItems.filter(
       item => item.id !== currentItemId && item.id !== completedItem.id
     );
+    const restoredItem: ListItem = { ...completedItem, completed: false };
+    const insertIndex = placeholderIndex >= 0 ? Math.min(placeholderIndex, withoutBoth.length) : withoutBoth.length;
+    withoutBoth.splice(insertIndex, 0, restoredItem);
 
-    // Restore the completed item: uncompleted, keep assignee and indent
-    const restoredItem: ListItem = {
-      ...completedItem,
-      completed: false,
-      originalPosition: undefined,
-    };
-
-    const remainingUncompleted = filtered.filter(item => !item.completed);
-    const remainingCompleted = filtered.filter(item => item.completed);
-
-    const newUncompleted = [
-      ...remainingUncompleted.slice(0, insertAt),
-      restoredItem,
-      ...remainingUncompleted.slice(insertAt),
-    ].map((item, i) => ({ ...item, position: i }));
-
-    const newItems = [...newUncompleted, ...remainingCompleted];
-    commitItems(newItems);
+    commitItems(normalizeItemOrder(withoutBoth));
 
     if (saveTimeoutRef.current) {
       clearTimeout(saveTimeoutRef.current);
@@ -1393,12 +1454,16 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
               note_type: 'list',
               title,
               color,
+              // The bulk create path is positional: it reconstructs parent_id by
+              // attaching each indented item to the nearest preceding top-level
+              // one. items is kept in normalized order (a parent precedes its
+              // children), so deriving indent_level from parentId is sufficient.
               items: items.map((item, idx) => ({
                 id: item.id,
                 text: item.text,
                 position: idx,
                 completed: item.completed,
-                indent_level: item.indentLevel,
+                indent_level: indentOf(item),
               })),
               labels: noteLabels.length > 0 ? noteLabels.map(l => l.name) : undefined,
             }
@@ -1933,21 +1998,69 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                     
                     {!checkedItemsCollapsed && (
                       <div className="space-y-2">
-                        {completedItems.map((item, index) => (
-                          <SortableItem
-                            key={item.id}
-                            id={item.id}
-                            index={index + uncompletedItems.length}
-                            item={item}
-                            onUpdateListItem={(idx, field, value) => updateListItem(idx, field, value)}
-                            onRemoveListItem={removeListItem}
-                            isCompleted={true}
-                            isShared={note?.is_shared}
-                            collaborators={collaborators}
-                            usersById={usersById}
-                            onAssignItem={assignItem}
-                          />
-                        ))}
+                        {(() => {
+                          // Render completed items keeping groups intact. A completed
+                          // child whose parent is still active is shown under a
+                          // non-interactive "ghost" copy of that parent, so the child
+                          // never escapes its group into a flat pile. A parent that was
+                          // completed (cascading to its children) renders as a normal
+                          // checked parent followed by its children; top-level completed
+                          // items render on their own.
+                          const completedIds = new Set(completedItems.map(i => i.id));
+                          const itemsById = new Map(items.map(i => [i.id, i]));
+                          const rows: ReactElement[] = [];
+                          let lastGhostParentId: string | null = null;
+
+                          completedItems.forEach((item, completedIndex) => {
+                            const parent = item.parentId ? itemsById.get(item.parentId) : undefined;
+                            const parentIsCompleted = item.parentId ? completedIds.has(item.parentId) : false;
+
+                            if (parent && !parentIsCompleted) {
+                              if (lastGhostParentId !== parent.id) {
+                                lastGhostParentId = parent.id;
+                                rows.push(
+                                  <div
+                                    key={`ghost-${parent.id}`}
+                                    className="flex items-start min-w-0 text-sm opacity-60 select-none"
+                                    aria-label={t('note.completedItemGroup', { title: parent.text })}
+                                  >
+                                    <input
+                                      type="checkbox"
+                                      checked={false}
+                                      disabled
+                                      readOnly
+                                      aria-hidden="true"
+                                      className="h-4 w-4 rounded mr-2 mt-0.5 flex-shrink-0 cursor-default"
+                                    />
+                                    <span className="min-w-0 whitespace-pre-wrap break-words font-semibold text-gray-500 dark:text-gray-400">
+                                      {parent.text}
+                                    </span>
+                                  </div>,
+                                );
+                              }
+                            } else {
+                              lastGhostParentId = null;
+                            }
+
+                            rows.push(
+                              <SortableItem
+                                key={item.id}
+                                id={item.id}
+                                index={uncompletedItems.length + completedIndex}
+                                item={item}
+                                onUpdateListItem={(idx, field, value) => updateListItem(idx, field, value)}
+                                onRemoveListItem={removeListItem}
+                                isCompleted={true}
+                                isShared={note?.is_shared}
+                                collaborators={collaborators}
+                                usersById={usersById}
+                                onAssignItem={assignItem}
+                              />,
+                            );
+                          });
+
+                          return rows;
+                        })()}
                       </div>
                     )}
                   </div>
