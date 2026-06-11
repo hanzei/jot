@@ -33,7 +33,7 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
       text TEXT NOT NULL DEFAULT '',
       completed INTEGER NOT NULL DEFAULT 0,
       position INTEGER NOT NULL DEFAULT 0,
-      indent_level INTEGER NOT NULL DEFAULT 0,
+      parent_id TEXT DEFAULT NULL,
       assigned_to TEXT NOT NULL DEFAULT '',
       created_at TEXT NOT NULL DEFAULT '',
       updated_at TEXT NOT NULL DEFAULT '',
@@ -66,6 +66,28 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
   for (const col of ['created_at', 'updated_at', 'assigned_to']) {
     if (!noteItemColNames.has(col)) {
       await db.runAsync(`ALTER TABLE note_items ADD COLUMN ${col} TEXT NOT NULL DEFAULT ''`);
+    }
+  }
+  if (!noteItemColNames.has('parent_id')) {
+    await db.runAsync(`ALTER TABLE note_items ADD COLUMN parent_id TEXT DEFAULT NULL`);
+    // Backfill parent_id from indent_level for databases that used the old column.
+    if (noteItemColNames.has('indent_level')) {
+      const rows = await db.getAllAsync<{ id: string; note_id: string; indent_level: number }>(
+        `SELECT id, note_id, indent_level FROM note_items ORDER BY note_id, position`,
+      );
+      let lastNoteId: string | null = null;
+      let lastTopLevelId: string | null = null;
+      for (const row of rows) {
+        if (row.note_id !== lastNoteId) {
+          lastNoteId = row.note_id;
+          lastTopLevelId = null;
+        }
+        if (row.indent_level === 0) {
+          lastTopLevelId = row.id;
+        } else if (lastTopLevelId !== null) {
+          await db.runAsync(`UPDATE note_items SET parent_id = ? WHERE id = ?`, [lastTopLevelId, row.id]);
+        }
+      }
     }
   }
 

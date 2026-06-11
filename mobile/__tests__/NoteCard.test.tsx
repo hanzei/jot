@@ -85,7 +85,7 @@ describe('NoteCard', () => {
           text: 'Buy groceries',
           completed: false,
           position: 0,
-          indent_level: 0,
+          parent_id: null,
           assigned_to: '',
           created_at: '2024-01-01T00:00:00Z',
           updated_at: '2024-01-01T00:00:00Z',
@@ -96,7 +96,7 @@ describe('NoteCard', () => {
           text: 'Done task',
           completed: true,
           position: 1,
-          indent_level: 0,
+          parent_id: null,
           assigned_to: '',
           created_at: '2024-01-01T00:00:00Z',
           updated_at: '2024-01-01T00:00:00Z',
@@ -110,7 +110,7 @@ describe('NoteCard', () => {
     expect(getByText('+1 completed items')).toBeTruthy();
   });
 
-  it('indents list preview rows using indent_level', () => {
+  it('indents list preview rows using parent_id', () => {
     const listWithNestedItems: Note = {
       ...baseListNote,
       items: [
@@ -120,7 +120,7 @@ describe('NoteCard', () => {
           text: 'Parent task',
           completed: false,
           position: 0,
-          indent_level: 0,
+          parent_id: null,
           assigned_to: '',
           created_at: '2024-01-01T00:00:00Z',
           updated_at: '2024-01-01T00:00:00Z',
@@ -131,7 +131,7 @@ describe('NoteCard', () => {
           text: 'Child task',
           completed: false,
           position: 1,
-          indent_level: 1,
+          parent_id: 'item-parent',
           assigned_to: '',
           created_at: '2024-01-01T00:00:00Z',
           updated_at: '2024-01-01T00:00:00Z',
@@ -148,17 +148,17 @@ describe('NoteCard', () => {
     expect(StyleSheet.flatten(childRow.props.style)?.marginLeft).toBe(1 * VALIDATION.INDENT_PX_PER_LEVEL);
   });
 
-  it('clamps negative list preview indentation to zero', () => {
-    const listWithNegativeIndent: Note = {
+  it('renders top-level list item with zero indentation', () => {
+    const listWithTopLevelItem: Note = {
       ...baseListNote,
       items: [
         {
-          id: 'item-negative-indent',
+          id: 'item-top-level',
           note_id: 'note-1',
-          text: 'Task with invalid indent',
+          text: 'Top-level task',
           completed: false,
           position: 0,
-          indent_level: -2,
+          parent_id: null,
           assigned_to: '',
           created_at: '2024-01-01T00:00:00Z',
           updated_at: '2024-01-01T00:00:00Z',
@@ -166,8 +166,8 @@ describe('NoteCard', () => {
       ],
     };
 
-    const { getByTestId } = render(<NoteCard note={listWithNegativeIndent} onPress={jest.fn()} />);
-    const row = getByTestId('note-card-list-row-item-negative-indent');
+    const { getByTestId } = render(<NoteCard note={listWithTopLevelItem} onPress={jest.fn()} />);
+    const row = getByTestId('note-card-list-row-item-top-level');
 
     expect(StyleSheet.flatten(row.props.style)?.marginLeft).toBe(0);
   });
@@ -182,7 +182,7 @@ describe('NoteCard', () => {
           text: 'This is a very long list item that should wrap to multiple lines in note previews on mobile',
           completed: false,
           position: 0,
-          indent_level: 0,
+          parent_id: null,
           assigned_to: '',
           created_at: '2024-01-01T00:00:00Z',
           updated_at: '2024-01-01T00:00:00Z',
@@ -261,7 +261,7 @@ describe('NoteCard', () => {
           text: 'Assigned task',
           completed: false,
           position: 0,
-          indent_level: 0,
+          parent_id: null,
           assigned_to: 'user-2',
           created_at: '2024-01-01T00:00:00Z',
           updated_at: '2024-01-01T00:00:00Z',

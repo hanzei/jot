@@ -59,6 +59,11 @@ export async function reorderNoteItems(noteId: string, itemIds: string[]): Promi
   await api.post(`/notes/${noteId}/items/reorder`, { item_ids: itemIds });
 }
 
+export async function toggleItemCompleted(noteId: string, itemId: string, completed: boolean): Promise<NoteItem[]> {
+  const res = await api.post(`/notes/${noteId}/items/${itemId}/toggle-completed`, { completed });
+  return res.data;
+}
+
 export async function restoreNote(id: string): Promise<void> {
   await api.post(`/notes/${id}/restore`);
 }

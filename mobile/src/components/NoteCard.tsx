@@ -110,7 +110,7 @@ function ListPreview({ items, hasColor }: { items: NoteItem[]; hasColor?: boolea
   return (
     <View style={styles.listPreview}>
       {uncompleted.map((item) => {
-        const indentLevel = Math.max(0, item.indent_level ?? 0);
+        const indentLevel = item.parent_id ? 1 : 0;
         return (
           <View
             key={item.id}

@@ -15,11 +15,13 @@ import {
   updateNoteItem,
   deleteNoteItem,
   reorderNoteItems,
+  toggleItemCompleted,
 } from '../api/notes';
 import { getNoteShares, shareNote, unshareNote } from '../api/users';
 import { generateId } from '@jot/shared';
 import type {
   Note,
+  NoteItem,
   NoteShare,
   Label,
   GetNotesParams,
@@ -44,6 +46,7 @@ import {
   deleteLocalItem,
   reorderLocalItems,
 } from '../db/noteQueries';
+import type { LocalItemPatch } from '../db/noteQueries';
 import { enqueueOperation } from '../db/syncQueue';
 import { useNetworkStatus } from './useNetworkStatus';
 import { useAuth } from '../store/AuthContext';
@@ -120,19 +123,28 @@ export function useCreateNote() {
             note_type: 'list',
             title: data.title,
             checked_items_collapsed: false,
-            items: data.items?.map((item, i) => ({
-              // Honor the client-supplied item ID so it stays stable when the
-              // note create is replayed and items are later edited granularly.
-              id: item.id ?? generateLocalId(),
-              note_id: localId,
-              text: item.text,
-              completed: item.completed ?? false,
-              position: i,
-              indent_level: item.indent_level ?? 0,
-              assigned_to: '',
-              created_at: now,
-              updated_at: now,
-            })),
+            items: (() => {
+              let lastTopLevelId: string | null = null;
+              return data.items?.map((item, i) => {
+                // Honor the client-supplied item ID so it stays stable when the
+                // note create is replayed and items are later edited granularly.
+                const id = item.id ?? generateLocalId();
+                const isChild = (item.indent_level ?? 0) === 1;
+                const parentId = isChild ? lastTopLevelId : null;
+                if (!isChild) lastTopLevelId = id;
+                return {
+                  id,
+                  note_id: localId,
+                  text: item.text,
+                  completed: item.completed ?? false,
+                  position: i,
+                  parent_id: parentId,
+                  assigned_to: '',
+                  created_at: now,
+                  updated_at: now,
+                };
+              });
+            })(),
           }
         : {
             ...baseLocalNote,
@@ -255,7 +267,7 @@ export function useCreateNoteItem() {
         text: itemWithId.text,
         completed: itemWithId.completed ?? false,
         position: itemWithId.position,
-        indent_level: itemWithId.indent_level ?? 0,
+        parent_id: itemWithId.parent_id ?? null,
         assigned_to: itemWithId.assigned_to ?? '',
       };
       if (isConnectedRef.current) {
@@ -561,6 +573,55 @@ export function useUnshareNote() {
       queryClient.invalidateQueries({ queryKey: noteSharesQueryKey(noteId) });
       queryClient.invalidateQueries({ queryKey: noteQueryKey(noteId) });
       queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
+    },
+  });
+}
+
+export function useToggleNoteItemCompleted() {
+  const db = useSQLiteContext();
+  const queryClient = useQueryClient();
+  const { isConnected } = useNetworkStatus();
+  const isConnectedRef = useRef(isConnected);
+  isConnectedRef.current = isConnected;
+
+  return useMutation({
+    mutationFn: async ({ noteId, itemId, completed }: { noteId: string; itemId: string; completed: boolean }): Promise<NoteItem[]> => {
+      assertSwitchWriteAllowed();
+      if (isConnectedRef.current) {
+        const serverItems = await toggleItemCompleted(noteId, itemId, completed);
+        for (const item of serverItems) {
+          await patchLocalItem(db, noteId, item.id, { completed: item.completed });
+        }
+        queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
+        return serverItems;
+      }
+
+      // Offline: apply cascade to local DB, enqueue a single toggle op
+      const note = await getLocalNote(db, noteId);
+      if (note && note.note_type === 'list' && note.items) {
+        const target = note.items.find((i) => i.id === itemId);
+        if (target) {
+          const cascadeToChildren = target.parent_id === null;
+          const patches: Array<{ id: string; patch: LocalItemPatch }> = [];
+          for (const item of note.items) {
+            const shouldToggle =
+              item.id === itemId || (cascadeToChildren && item.parent_id === itemId);
+            if (shouldToggle && item.completed !== completed) {
+              patches.push({ id: item.id, patch: { completed } });
+            }
+          }
+          for (const { id, patch } of patches) {
+            await patchLocalItem(db, noteId, id, patch);
+          }
+        }
+      }
+      await enqueueOperation(db, {
+        operation: 'toggleItemCompleted',
+        endpoint: `/notes/${noteId}/items/${itemId}/toggle-completed`,
+        method: 'POST',
+        body: { completed } as Record<string, unknown>,
+      });
+      return [];
     },
   });
 }

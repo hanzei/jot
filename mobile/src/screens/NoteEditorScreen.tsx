@@ -21,7 +21,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
-import { useCreateNote, useUpdateNote, useDeleteNote, useRestoreNote, useDuplicateNote, useCreateNoteItem, useUpdateNoteItem, useDeleteNoteItem, useReorderNoteItems } from '../hooks/useNotes';
+import { useCreateNote, useUpdateNote, useDeleteNote, useRestoreNote, useDuplicateNote, useCreateNoteItem, useUpdateNoteItem, useDeleteNoteItem, useReorderNoteItems, useToggleNoteItemCompleted } from '../hooks/useNotes';
 import { useOfflineNote } from '../hooks/useOfflineNotes';
 import { isLocalId } from '../db/noteQueries';
 import { useSSESubscription } from '../store/SSEContext';
@@ -51,11 +51,9 @@ interface LocalItem {
   text: string;
   completed: boolean;
   position: number;
-  indent_level: number;
+  parentId: string | null;
   assigned_to: string;
 }
-
-const MAX_LIST_ITEM_INDENT = 1;
 
 function toLocalItems(serverItems: NoteItem[]): LocalItem[] {
   return [...serverItems]
@@ -65,35 +63,86 @@ function toLocalItems(serverItems: NoteItem[]): LocalItem[] {
       text: item.text,
       completed: item.completed,
       position: item.position,
-      // indent_level was removed from the API; the server no longer sends it, so
-      // fall back to 0 (flat) until mobile adopts parent_id-based grouping.
-      indent_level: item.indent_level ?? 0,
+      parentId: item.parent_id ?? null,
       assigned_to: item.assigned_to ?? '',
     }));
 }
 
 function serializeItems(items: LocalItem[]) {
   return items.map((item, i) => ({
-    // Include the (client-generated, server-format) ID so the server keeps a
-    // stable identity for later per-item updates.
     id: item.id,
     text: item.text,
     position: i,
     completed: item.completed,
-    indent_level: item.indent_level,
+    indent_level: item.parentId ? 1 : 0,
     assigned_to: item.assigned_to,
   }));
 }
 
 // Mergeable fields of a list item, used as the per-item baseline for diffing
 // local edits against the last-saved state.
-type ItemSnapshot = Pick<LocalItem, 'text' | 'completed' | 'indent_level' | 'assigned_to'>;
+type ItemSnapshot = Pick<LocalItem, 'text' | 'completed' | 'parentId' | 'assigned_to'>;
 const itemSnapshot = (item: LocalItem): ItemSnapshot => ({
   text: item.text,
   completed: item.completed,
-  indent_level: item.indent_level,
+  parentId: item.parentId,
   assigned_to: item.assigned_to,
 });
+
+// normalizeItemOrder walks top-level items in order and emits each one followed
+// by its children (keeping a group contiguous). Orphaned children (parent gone)
+// are promoted to top-level. Renumbers position = 0..N across the whole set.
+function normalizeItemOrder(items: LocalItem[]): LocalItem[] {
+  const childrenByParent = new Map<string, LocalItem[]>();
+  for (const it of items) {
+    if (it.parentId !== null) {
+      const siblings = childrenByParent.get(it.parentId) ?? [];
+      siblings.push(it);
+      childrenByParent.set(it.parentId, siblings);
+    }
+  }
+  const ordered: LocalItem[] = [];
+  const placed = new Set<string>();
+  for (const it of items) {
+    if (it.parentId !== null) continue;
+    ordered.push(it);
+    placed.add(it.id);
+    for (const child of childrenByParent.get(it.id) ?? []) {
+      ordered.push(child);
+      placed.add(child.id);
+    }
+  }
+  for (const it of items) {
+    if (!placed.has(it.id)) ordered.push({ ...it, parentId: null });
+  }
+  return ordered.map((it, index) => ({ ...it, position: index }));
+}
+
+function itemHasChildren(items: LocalItem[], itemId: string): boolean {
+  return items.some((it) => it.parentId === itemId);
+}
+
+function precedingTopLevelId(items: LocalItem[], itemId: string): string | null {
+  let last: string | null = null;
+  for (const it of items) {
+    if (it.id === itemId) return last;
+    if (it.parentId === null) last = it.id;
+  }
+  return null;
+}
+
+// applyCompletedCascade mirrors the server: toggling a top-level item also
+// toggles all its children; toggling a child touches only that item.
+function applyCompletedCascade(items: LocalItem[], itemId: string, completed: boolean): LocalItem[] {
+  const target = items.find((item) => item.id === itemId);
+  if (!target) return items;
+  const cascadeToChildren = target.parentId === null;
+  return items.map((item) => {
+    if (item.id === itemId) return { ...item, completed };
+    if (cascadeToChildren && item.parentId === itemId) return { ...item, completed };
+    return item;
+  });
+}
 
 export default function NoteEditorScreen() {
   const navigation = useNavigation<EditorNavProp>();
@@ -136,6 +185,7 @@ export default function NoteEditorScreen() {
   const updateItemMutation = useUpdateNoteItem();
   const deleteItemMutation = useDeleteNoteItem();
   const reorderItemsMutation = useReorderNoteItems();
+  const toggleItemCompletedMutation = useToggleNoteItemCompleted();
 
   // Show a toast when another user updates this note while editor is open
   useSSESubscription(noteId, useCallback(() => {
@@ -206,6 +256,8 @@ export default function NoteEditorScreen() {
   deleteItemRef.current = deleteItemMutation.mutateAsync;
   const reorderItemsRef = useRef(reorderItemsMutation.mutateAsync);
   reorderItemsRef.current = reorderItemsMutation.mutateAsync;
+  const toggleItemCompletedRef = useRef(toggleItemCompletedMutation.mutateAsync);
+  toggleItemCompletedRef.current = toggleItemCompletedMutation.mutateAsync;
   // Baseline of the last-saved state, used to diff local edits into granular
   // per-item operations (and field-only scalar patches) instead of re-sending
   // the whole note — so a save here can't overwrite another device's edits.
@@ -307,7 +359,7 @@ export default function NoteEditorScreen() {
               text: it.text,
               position: it.position,
               completed: it.completed,
-              indent_level: it.indent_level,
+              parent_id: it.parentId,
               assigned_to: it.assigned_to || undefined,
             },
           });
@@ -322,7 +374,7 @@ export default function NoteEditorScreen() {
       const data: PatchNoteItemRequest = {};
       if (it.text !== snap.text) data.text = it.text;
       if (it.completed !== snap.completed) data.completed = it.completed;
-      if (it.indent_level !== snap.indent_level) data.indent_level = it.indent_level;
+      if (it.parentId !== snap.parentId) data.parent_id = it.parentId ?? '';
       if (it.assigned_to !== snap.assigned_to) data.assigned_to = it.assigned_to;
       if (Object.keys(data).length > 0) {
         await updateItemRef.current({ noteId: currentNoteId, itemId: it.id, data });
@@ -551,14 +603,63 @@ export default function NoteEditorScreen() {
     [markDirtyAndScheduleUpdate],
   );
 
-  const handleToggleItem = useCallback(
-    (index: number) => {
-      setItems((prev) =>
-        prev.map((item, i) => (i === index ? { ...item, completed: !item.completed } : item)),
-      );
-      markDirtyAndScheduleUpdate();
+  const handleItemCompletedToggle = useCallback(
+    async (itemId: string, completed: boolean) => {
+      const before = itemsRef.current;
+      const target = before.find((item) => item.id === itemId);
+      if (!target || target.completed === completed) return;
+
+      // Optimistic cascade applied immediately
+      const cascaded = applyCompletedCascade(before, itemId, completed);
+      setItems(cascaded);
+
+      // For unsaved new notes, let the bulk-create carry completed flags
+      if (!noteIdRef.current) {
+        markDirtyAndScheduleUpdate();
+        return;
+      }
+
+      // Cancel any pending debounced save to avoid a race with the toggle API call
+      if (debounceRef.current) {
+        clearTimeout(debounceRef.current);
+        debounceRef.current = null;
+      }
+
+      try {
+        const serverItems = await toggleItemCompletedRef.current({
+          noteId: noteIdRef.current,
+          itemId,
+          completed,
+        });
+        if (serverItems.length > 0) {
+          // Online: reconcile only completed flags from server response
+          const completedById = new Map(serverItems.map((item) => [item.id, item.completed]));
+          setItems((prev) =>
+            prev.map((item) => {
+              const serverCompleted = completedById.get(item.id);
+              return serverCompleted === undefined ? item : { ...item, completed: serverCompleted };
+            }),
+          );
+          // Advance the baseline so the diff engine does not re-patch completed
+          for (const [id, comp] of completedById) {
+            const snap = savedItemsRef.current.get(id);
+            if (snap) savedItemsRef.current.set(id, { ...snap, completed: comp });
+          }
+        } else {
+          // Offline: cascade was applied to local DB; advance baseline here too
+          for (const item of cascaded) {
+            const snap = savedItemsRef.current.get(item.id);
+            if (snap && snap.completed !== item.completed) {
+              savedItemsRef.current.set(item.id, { ...snap, completed: item.completed });
+            }
+          }
+        }
+      } catch {
+        setItems(before);
+        setSaveError(t('note.failedSaveChanges'));
+      }
     },
-    [markDirtyAndScheduleUpdate],
+    [markDirtyAndScheduleUpdate, t],
   );
 
   const handleItemTextChange = useCallback(
@@ -596,13 +697,13 @@ export default function NoteEditorScreen() {
       const newIds = remainingLines.map(() => nextTempId());
 
       setItems((prev) => {
-        const sourceIndentLevel = prev[index]?.indent_level ?? 0;
+        const sourceParentId = prev[index]?.parentId ?? null;
         const newItems: LocalItem[] = remainingLines.map((line, i) => ({
           id: newIds[i],
           text: line.slice(0, VALIDATION.ITEM_TEXT_MAX_LENGTH),
           completed: false,
           position: 0,
-          indent_level: sourceIndentLevel,
+          parentId: sourceParentId,
           assigned_to: '',
         }));
         const updated = prev.map((item, i) =>
@@ -645,7 +746,7 @@ export default function NoteEditorScreen() {
     const newItemRef = getItemRef(newId);
     setItems((prev) => [
       ...prev,
-      { id: newId, text: '', completed: false, position: prev.length, indent_level: 0, assigned_to: '' },
+      { id: newId, text: '', completed: false, position: prev.length, parentId: null, assigned_to: '' },
     ]);
     markDirtyAndScheduleUpdate();
     setTimeout(() => newItemRef.current?.focus(), 50);
@@ -660,7 +761,7 @@ export default function NoteEditorScreen() {
         text: '',
         completed: false,
         position: index + 1,
-        indent_level: prev[index]?.indent_level ?? 0,
+        parentId: prev[index]?.parentId ?? null,
         assigned_to: '',
       };
       const next = [...prev.slice(0, index + 1), newItem, ...prev.slice(index + 1)];
@@ -688,19 +789,28 @@ export default function NoteEditorScreen() {
 
   const handleIndentItem = useCallback(
     (index: number, delta: 1 | -1) => {
-      let changed = false;
-      setItems((prev) =>
-        prev.map((item, i) => {
-          if (i !== index) return item;
-          const nextIndentLevel = Math.max(0, Math.min(MAX_LIST_ITEM_INDENT, item.indent_level + delta));
-          if (nextIndentLevel === item.indent_level) return item;
-          changed = true;
-          return { ...item, indent_level: nextIndentLevel };
-        }),
-      );
-      if (changed) {
-        markDirtyAndScheduleUpdate();
+      const currentItems = itemsRef.current;
+      const target = currentItems[index];
+      if (!target) return;
+
+      let newParentId: string | null = target.parentId;
+      if (delta === 1) {
+        if (target.parentId !== null) return; // already nested
+        if (itemHasChildren(currentItems, target.id)) return; // would create a grandchild
+        const parentId = precedingTopLevelId(currentItems, target.id);
+        if (!parentId) return; // nothing to nest under
+        newParentId = parentId;
+      } else {
+        if (target.parentId === null) return; // already top-level
+        newParentId = null;
       }
+
+      setItems((prev) =>
+        normalizeItemOrder(
+          prev.map((item) => (item.id === target.id ? { ...item, parentId: newParentId } : item)),
+        ),
+      );
+      markDirtyAndScheduleUpdate();
     },
     [markDirtyAndScheduleUpdate],
   );
@@ -781,7 +891,7 @@ export default function NoteEditorScreen() {
         const newItemRef = getItemRef(newId);
         setItems((prev) => [
           ...prev,
-          { id: newId, text: '', completed: false, position: prev.length, indent_level: 0, assigned_to: '' },
+          { id: newId, text: '', completed: false, position: prev.length, parentId: null, assigned_to: '' },
         ]);
         markDirtyAndScheduleUpdate();
         setTimeout(() => newItemRef.current?.focus(), 50);
@@ -1021,13 +1131,9 @@ export default function NoteEditorScreen() {
   const handleListReorder = useCallback(
     (reorderedUnchecked: LocalItem[]) => {
       Haptics.impactAsync(Haptics.ImpactFeedbackStyle.Medium).catch(() => {});
-      // Merge reordered unchecked with existing checked items
-      setItems(
-        [...reorderedUnchecked, ...checkedItemsRef.current].map((item, index) => ({
-          ...item,
-          position: index,
-        })),
-      );
+      // Merge reordered unchecked with existing checked items, then normalize
+      // so that each parent's children stay contiguous in the combined array.
+      setItems(normalizeItemOrder([...reorderedUnchecked, ...checkedItemsRef.current]));
       markDirtyAndScheduleUpdate();
     },
     [markDirtyAndScheduleUpdate],
@@ -1116,7 +1222,7 @@ export default function NoteEditorScreen() {
               text={item.text}
               completed={item.completed}
               isActive={isActive}
-              indentLevel={item.indent_level}
+              indentLevel={item.parentId ? 1 : 0}
               showDragHandle
               assignedTo={item.assigned_to}
               isShared={!!isNoteShared}
@@ -1124,7 +1230,7 @@ export default function NoteEditorScreen() {
               hasNoteColor={hasNoteColor}
               completedItemTexts={completedItemTexts}
               onDrag={drag}
-              onToggle={() => handleToggleItem(originalIndex)}
+              onToggle={() => { void handleItemCompletedToggle(item.id, !item.completed); }}
               onChangeText={(text) => handleItemTextChange(originalIndex, text)}
               onDelete={() => handleDeleteItem(originalIndex)}
               onSubmitEditing={() => handleInsertItemAfter(originalIndex)}
@@ -1140,7 +1246,7 @@ export default function NoteEditorScreen() {
         </ScaleDecorator>
       );
     },
-    [getItemRef, handleToggleItem, handleItemTextChange, handleDeleteItem, handleInsertItemAfter, handleBackspaceOnEmpty, isNoteShared, collaborators, openAssigneePicker, handleIndentItem, isDark, colors, handleFocusListItem, handleBlurListItem, hasNoteColor, completedItemTexts, handleAcceptSuggestion],
+    [getItemRef, handleItemCompletedToggle, handleItemTextChange, handleDeleteItem, handleInsertItemAfter, handleBackspaceOnEmpty, isNoteShared, collaborators, openAssigneePicker, handleIndentItem, isDark, colors, handleFocusListItem, handleBlurListItem, hasNoteColor, completedItemTexts, handleAcceptSuggestion],
   );
 
   const applyToolbarEdit = useCallback((updater: (prev: string) => string) => {
@@ -1380,23 +1486,51 @@ export default function NoteEditorScreen() {
                   </Text>
                 </TouchableOpacity>
 
-                {!checkedItemsCollapsed &&
-                  checkedItems.map((item) => {
+                {!checkedItemsCollapsed && (() => {
+                  const completedIds = new Set(checkedItems.map((i) => i.id));
+                  const itemsById = new Map(items.map((i) => [i.id, i]));
+                  const rows: React.ReactElement[] = [];
+                  let lastGhostParentId: string | null = null;
+
+                  checkedItems.forEach((item) => {
                     const originalIndex = itemIndexMap.get(item.id);
-                    if (originalIndex === undefined) return null;
-                    return (
+                    if (originalIndex === undefined) return;
+                    const parent = item.parentId ? itemsById.get(item.parentId) : undefined;
+                    const parentIsCompleted = item.parentId ? completedIds.has(item.parentId) : false;
+
+                    if (parent && !parentIsCompleted) {
+                      if (lastGhostParentId !== parent.id) {
+                        lastGhostParentId = parent.id;
+                        rows.push(
+                          <View
+                            key={`ghost-${parent.id}`}
+                            style={styles.ghostParent}
+                            accessibilityLabel={t('note.completedItemGroup', { title: parent.text })}
+                          >
+                            <View style={styles.ghostCheckbox} />
+                            <Text style={[styles.ghostParentText, { color: hasNoteColor ? '#888' : colors.textMuted }]} numberOfLines={1}>
+                              {parent.text}
+                            </Text>
+                          </View>,
+                        );
+                      }
+                    } else {
+                      lastGhostParentId = null;
+                    }
+
+                    rows.push(
                       <ListItem
                         key={item.id}
                         inputRef={getItemRef(item.id)}
                         text={item.text}
                         completed={item.completed}
                         isActive={false}
-                        indentLevel={item.indent_level}
+                        indentLevel={item.parentId ? 1 : 0}
                         assignedTo={item.assigned_to}
                         isShared={!!isNoteShared}
                         collaborators={collaborators}
                         hasNoteColor={hasNoteColor}
-                        onToggle={() => handleToggleItem(originalIndex)}
+                        onToggle={() => { void handleItemCompletedToggle(item.id, !item.completed); }}
                         onChangeText={(text) => handleItemTextChange(originalIndex, text)}
                         onDelete={() => handleDeleteItem(originalIndex)}
                         onSubmitEditing={() => handleInsertItemAfter(originalIndex)}
@@ -1406,9 +1540,12 @@ export default function NoteEditorScreen() {
                         onBlur={handleBlurListItem}
                         onIndent={(delta) => handleIndentItem(originalIndex, delta)}
                         inputAccessoryViewID={Platform.OS === 'ios' ? LIST_INDENT_TOOLBAR_ID : undefined}
-                      />
+                      />,
                     );
-                  })}
+                  });
+
+                  return rows;
+                })()}
               </View>
             )}
           </View>
@@ -1685,5 +1822,25 @@ const styles = StyleSheet.create({
     width: StyleSheet.hairlineWidth,
     height: 18,
     marginHorizontal: 4,
+  },
+  ghostParent: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    opacity: 0.55,
+    paddingVertical: 4,
+    gap: 8,
+  },
+  ghostCheckbox: {
+    width: 18,
+    height: 18,
+    borderRadius: 3,
+    borderWidth: 1,
+    borderColor: '#aaa',
+    flexShrink: 0,
+  },
+  ghostParentText: {
+    fontSize: 14,
+    fontWeight: '600',
+    flex: 1,
   },
 });

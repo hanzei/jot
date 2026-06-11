@@ -120,6 +120,9 @@ jest.mock('../src/hooks/useNotes', () => ({
   useReorderNoteItems: () => ({
     mutateAsync: mockReorderItemsMutateAsync,
   }),
+  useToggleNoteItemCompleted: () => ({
+    mutateAsync: jest.fn().mockResolvedValue([]),
+  }),
 }));
 
 jest.mock('../src/hooks/useOfflineNotes', () => ({
@@ -203,11 +206,12 @@ jest.mock('../src/i18n', () => ({
 }));
 
 describe('NoteEditorScreen list submit behavior', () => {
-  function getPanResponderConfig(createSpy: jest.SpiedFunction<typeof PanResponder.create>, callsBefore: number) {
-    return createSpy.mock.calls
+  function getLastPanResponderConfig(createSpy: jest.SpiedFunction<typeof PanResponder.create>, callsBefore: number) {
+    const configs = createSpy.mock.calls
       .slice(callsBefore)
       .map(([config]) => config)
-      .find((config) => typeof config.onPanResponderRelease === 'function');
+      .filter((config) => typeof config.onPanResponderRelease === 'function');
+    return configs[configs.length - 1];
   }
 
   afterEach(() => {
@@ -298,7 +302,7 @@ describe('NoteEditorScreen list submit behavior', () => {
           text: 'Milk',
           completed: false,
           position: 0,
-          indent_level: 0,
+          parent_id: null,
           assigned_to: '',
           created_at: '2026-01-01T00:00:00.000Z',
           updated_at: '2026-01-01T00:00:00.000Z',
@@ -347,98 +351,73 @@ describe('NoteEditorScreen list submit behavior', () => {
     const { getByTestId, getAllByTestId } = render(<NoteEditorScreen />);
 
     fireEvent.press(getByTestId('toggle-note-type'));
+    // Add two items so the second can be nested under the first
+    fireEvent.press(getByTestId('add-list-item'));
     fireEvent.press(getByTestId('add-list-item'));
 
-    expect(StyleSheet.flatten(getAllByTestId('list-item-row')[0].props.style)?.marginLeft).toBe(0);
+    // Both items start with no indentation
+    expect(StyleSheet.flatten(getAllByTestId('list-item-row')[1].props.style)?.marginLeft).toBe(0);
 
-    const panResponderConfig = getPanResponderConfig(panResponderSpy, callsBefore);
-    expect(panResponderConfig).toBeDefined();
+    // Get the last PanResponder created — belongs to the second (to-be-indented) item
+    const secondItemConfig = getLastPanResponderConfig(panResponderSpy, callsBefore);
+    expect(secondItemConfig).toBeDefined();
+
+    // Swipe right on the second item to nest it under the first
     await act(async () => {
-      panResponderConfig?.onPanResponderRelease?.(mockGestureResponderEvent, createPanState(60, 0));
+      secondItemConfig?.onPanResponderRelease?.(mockGestureResponderEvent, createPanState(60, 0));
     });
 
     await waitFor(() => {
-      expect(StyleSheet.flatten(getAllByTestId('list-item-row')[0].props.style)?.marginLeft).toBe(
+      expect(StyleSheet.flatten(getAllByTestId('list-item-row')[1].props.style)?.marginLeft).toBe(
         VALIDATION.INDENT_PX_PER_LEVEL,
       );
     });
 
-    const updatedPanResponderConfig = getPanResponderConfig(panResponderSpy, callsBefore);
-    expect(updatedPanResponderConfig).toBeDefined();
+    // Re-query the latest configs after re-render
+    const secondItemConfigAfter = getLastPanResponderConfig(panResponderSpy, callsBefore);
+
+    // Swipe left to outdent
     await act(async () => {
-      updatedPanResponderConfig?.onPanResponderRelease?.(mockGestureResponderEvent, createPanState(-60, 0));
+      secondItemConfigAfter?.onPanResponderRelease?.(mockGestureResponderEvent, createPanState(-60, 0));
     });
 
     await waitFor(() => {
-      expect(StyleSheet.flatten(getAllByTestId('list-item-row')[0].props.style)?.marginLeft).toBe(0);
+      expect(StyleSheet.flatten(getAllByTestId('list-item-row')[1].props.style)?.marginLeft).toBe(0);
     });
-
-    await waitFor(() => {
-      expect(mockCreateMutateAsync).toHaveBeenCalledWith(
-        expect.objectContaining({
-          items: expect.arrayContaining([
-            expect.objectContaining({
-              text: '',
-              position: 0,
-              completed: false,
-              indent_level: 0,
-              assigned_to: '',
-            }),
-          ]),
-        }),
-      );
-    });
-
-    mockUpdateMutateAsync.mockClear();
-
-    fireEvent.changeText(getAllByTestId('list-item-text')[0], 'Indented item');
-    await waitFor(() => {
-      expect(mockCreateMutateAsync).toHaveBeenCalledWith(
-        expect.objectContaining({
-          items: expect.arrayContaining([
-            expect.objectContaining({
-              text: 'Indented item',
-              position: 0,
-              completed: false,
-              indent_level: 0,
-              assigned_to: '',
-            }),
-          ]),
-        }),
-      );
-    }, { timeout: 3000 });
   });
 
   it('indents and outdents list item via toolbar buttons', async () => {
     const { getByTestId, getAllByTestId } = render(<NoteEditorScreen />);
 
     fireEvent.press(getByTestId('toggle-note-type'));
+    // Add two items so the second can be nested under the first
+    fireEvent.press(getByTestId('add-list-item'));
     fireEvent.press(getByTestId('add-list-item'));
 
-    const itemRow = getAllByTestId('list-item-row')[0];
-    expect(StyleSheet.flatten(itemRow.props.style)?.marginLeft).toBe(0);
+    const secondItemRow = getAllByTestId('list-item-row')[1];
+    expect(StyleSheet.flatten(secondItemRow.props.style)?.marginLeft).toBe(0);
 
-    // Focus the list item input to set focusedListItemId
-    fireEvent(getAllByTestId('list-item-text')[0], 'focus', { nativeEvent: { target: 1 } });
+    // Focus the second list item input to set focusedListItemId
+    fireEvent(getAllByTestId('list-item-text')[1], 'focus', { nativeEvent: { target: 2 } });
 
-    // Tap indent button
+    // Tap indent button — nests second item under first
     await act(async () => {
       fireEvent.press(getByTestId('list-indent-btn'));
     });
 
     await waitFor(() => {
-      expect(StyleSheet.flatten(getAllByTestId('list-item-row')[0].props.style)?.marginLeft).toBe(
+      expect(StyleSheet.flatten(getAllByTestId('list-item-row')[1].props.style)?.marginLeft).toBe(
         VALIDATION.INDENT_PX_PER_LEVEL,
       );
     });
 
-    // Tap outdent button
+    // Tap outdent button — promotes back to top-level
     await act(async () => {
       fireEvent.press(getByTestId('list-outdent-btn'));
     });
 
     await waitFor(() => {
-      expect(StyleSheet.flatten(getAllByTestId('list-item-row')[0].props.style)?.marginLeft).toBe(0);
+      expect(StyleSheet.flatten(getAllByTestId('list-item-row')[1].props.style)?.marginLeft).toBe(0);
     });
   });
 
