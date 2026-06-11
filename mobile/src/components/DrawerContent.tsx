@@ -310,6 +310,9 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
   }, [isServerActionPending]);
 
   const handleDeleteServer = useCallback((server: ServerAccountEntry) => {
+    if (isServerActionPending) {
+      return;
+    }
     Alert.alert(
       t('serverPicker.deleteConfirmTitle'),
       t('serverPicker.deleteConfirmMessage', { name: server.displayName || server.serverUrl }),
@@ -321,7 +324,11 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
           onPress: async () => {
             setIsServerActionPending(true);
             try {
-              await removeServer(server.serverId);
+              const removed = await removeServer(server.serverId);
+              if (!removed) {
+                Alert.alert(t('common.error'), t('serverPicker.deleteFailed'));
+                return;
+              }
               const [serverList, activeServer] = await Promise.all([listServers(), getActiveServer()]);
               setServers(serverList);
               setActiveServerId(activeServer?.serverId ?? null);
@@ -337,7 +344,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
         },
       ],
     );
-  }, [t]);
+  }, [isServerActionPending, t]);
 
   const handleBackToDashboardFromServerSetup = useCallback(() => {
     setIsServerSetupVisible(false);
