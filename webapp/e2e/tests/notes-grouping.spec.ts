@@ -40,12 +40,14 @@ test.describe('Grouped to-do items', () => {
     // The completed child shows under a non-interactive ghost copy of its parent.
     await expect(page.getByLabel('Group: Packing')).toBeVisible();
 
-    // Uncheck the completed "Socks" → it rejoins the active group and the ghost disappears.
+    // Uncheck the completed "Socks" → it rejoins the active group and the ghost
+    // disappears. force: the completed-section row can briefly reflow after the
+    // check (saved indicator / reconcile), tripping the strict stability wait.
     await page.locator('[data-testid="list-item-row"]')
       .filter({ hasText: 'Socks' })
       .last()
       .locator('input[type="checkbox"]')
-      .uncheck();
+      .uncheck({ force: true });
 
     await expect(page.getByLabel('Group: Packing')).toHaveCount(0);
     await dashboardPage.expectListItemValue(1, 'Socks');
