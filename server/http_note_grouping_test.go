@@ -2,6 +2,7 @@ package main
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/hanzei/jot/server/client"
@@ -116,6 +117,24 @@ func TestNoteGrouping(t *testing.T) {
 		assert.False(t, itemByText(t, items, "Parent").Completed, "cascade is parent->child only")
 
 		_ = parentID
+	})
+
+	t.Run("toggle without completed field is rejected", func(t *testing.T) {
+		ts := setupTestServer(t)
+		user := ts.createTestUser(t, "grpuser5b", "password123", false)
+		noteID, parentID, _, _, _ := createGroupNote(t, user)
+
+		// An omitted "completed" must 400 rather than silently decode to false
+		// and uncheck the item.
+		url := ts.HTTPServer.URL + "/api/v1/notes/" + noteID + "/items/" + parentID + "/toggle-completed"
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, url, strings.NewReader("{}"))
+		require.NoError(t, err)
+		req.Header.Set("Content-Type", "application/json")
+
+		resp, err := user.Client.HTTPClient().Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		assert.Equal(t, http.StatusBadRequest, resp.StatusCode)
 	})
 
 	t.Run("toggle unknown item returns 404", func(t *testing.T) {

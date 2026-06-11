@@ -57,12 +57,13 @@ no preceding top-level item is treated as top-level (`parent_id` stays NULL).
 
 `ON DELETE SET NULL` is deliberate — see *Orphans* below.
 
-**`indent_level` becomes derived, read-only.** It is fully determined by
-`parent_id` (`parent_id IS NULL ? 0 : 1`). The server computes and returns it for
-client rendering convenience (clients already use it for `marginLeft`), but
-**writes set `parent_id`, not `indent_level`**. We keep the column for now (the
-server keeps it in sync) to minimize client-render churn; it may be dropped in a
-later cleanup.
+**`indent_level` is replaced by `parent_id`.** Migration `000002` backfills
+`parent_id` from `indent_level` (`parent_id IS NULL ? 0 : 1`) and then **drops the
+`indent_level` column**; `parent_id` is the sole source of truth. Item responses
+no longer carry `indent_level` — clients derive the one-level indent from
+`parent_id`. `indent_level` survives only as a positional boundary format on bulk
+note-create and Jot import/export, where the server translates it to/from
+`parent_id`.
 
 **Invariants (server-enforced on every write):**
 
@@ -74,8 +75,8 @@ later cleanup.
 
 ### Type changes (`shared/src/types.ts`)
 
-- `NoteItem`: add `parent_id: string | null`. `indent_level` documented as
-  server-derived/read-only.
+- `NoteItem`: add `parent_id: string | null`; `indent_level` is removed from
+  responses (kept optional/deprecated in the type only until mobile migrates).
 - `CreateNoteItemRequest` / `PatchNoteItemRequest`: add `parent_id?: string | null`.
   Remove `indent_level` as a writable field (breaking).
 
@@ -89,7 +90,7 @@ All breaking; enumerate in the PR with upgrade guidance.
 
 2. **New atomic cascade endpoint:**
 
-   ```
+   ```http
    POST /notes/{noteId}/items/{itemId}/toggle-completed
    Body: { "completed": boolean }
    ```

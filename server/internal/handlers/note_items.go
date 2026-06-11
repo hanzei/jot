@@ -41,7 +41,9 @@ type PatchNoteItemRequest struct {
 // ToggleNoteItemCompletedRequest is the body for
 // POST /notes/{id}/items/{item_id}/toggle-completed.
 type ToggleNoteItemCompletedRequest struct {
-	Completed bool `json:"completed"`
+	// Completed is a pointer so an omitted field is rejected by the handler
+	// rather than silently decoding to false and unchecking the item.
+	Completed *bool `json:"completed"`
 }
 
 // ReorderNoteItemsRequest is the body for POST /notes/{id}/items/reorder.
@@ -385,8 +387,11 @@ func (h *NotesHandler) ToggleNoteItemCompleted(w http.ResponseWriter, r *http.Re
 	if err := decodeJSONBody(w, r, &req); err != nil {
 		return http.StatusBadRequest, nil, err
 	}
+	if req.Completed == nil {
+		return http.StatusBadRequest, nil, errors.New("completed is required")
+	}
 
-	items, err := h.noteStore.ToggleItemCompleted(r.Context(), noteID, itemID, req.Completed)
+	items, err := h.noteStore.ToggleItemCompleted(r.Context(), noteID, itemID, *req.Completed)
 	if err != nil {
 		if errors.Is(err, models.ErrNoteItemNotFound) {
 			return http.StatusNotFound, nil, err

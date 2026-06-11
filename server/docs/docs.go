@@ -2866,6 +2866,7 @@ const docTemplate = `{
             "type": "object",
             "properties": {
                 "completed": {
+                    "description": "Completed is a pointer so an omitted field is rejected by the handler\nrather than silently decoding to false and unchecking the item.",
                     "type": "boolean"
                 }
             }

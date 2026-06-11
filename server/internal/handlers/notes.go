@@ -258,7 +258,7 @@ func (h *NotesHandler) createListItems(ctx context.Context, noteID string, items
 	// Sort by position so a parent is always created before its children.
 	ordered := make([]CreateNoteItem, len(items))
 	copy(ordered, items)
-	slices.SortFunc(ordered, func(a, b CreateNoteItem) int { return a.Position - b.Position })
+	slices.SortStableFunc(ordered, func(a, b CreateNoteItem) int { return a.Position - b.Position })
 
 	var lastTopLevelID string
 	for _, item := range ordered {

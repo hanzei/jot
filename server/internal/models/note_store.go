@@ -160,7 +160,7 @@ func duplicateItemsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, noteI
 	// before its children and present in idMap when they are remapped.
 	ordered := make([]NoteItem, len(items))
 	copy(ordered, items)
-	slices.SortFunc(ordered, func(a, b NoteItem) int { return a.Position - b.Position })
+	slices.SortStableFunc(ordered, func(a, b NoteItem) int { return a.Position - b.Position })
 
 	idMap := make(map[string]string, len(ordered))
 	for _, item := range ordered {
@@ -1797,7 +1797,7 @@ func insertImportedItemsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, 
 	// each indented item attaches to the most recent top-level item by position.
 	ordered := make([]JotImportNoteItem, len(items))
 	copy(ordered, items)
-	slices.SortFunc(ordered, func(a, b JotImportNoteItem) int { return a.Position - b.Position })
+	slices.SortStableFunc(ordered, func(a, b JotImportNoteItem) int { return a.Position - b.Position })
 
 	var lastTopLevel sql.NullString
 	for _, item := range ordered {

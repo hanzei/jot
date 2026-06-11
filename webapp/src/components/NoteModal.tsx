@@ -1252,6 +1252,16 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
     const target = before.find(item => item.id === itemId);
     if (!target || target.completed === completed) return;
 
+    // Remember the pre-toggle completed state of just the items this toggle
+    // touches (the target and, for a parent, its children), so an error reverts
+    // only those flags without clobbering edits made to other items meanwhile.
+    const revertCompleted = new Map<string, boolean>([[target.id, target.completed]]);
+    if (target.parentId === null) {
+      for (const item of before) {
+        if (item.parentId === itemId) revertCompleted.set(item.id, item.completed);
+      }
+    }
+
     commitItems(applyCompletedCascade(before, itemId, completed));
 
     // A not-yet-persisted note has no server-side item to toggle; the bulk
@@ -1279,7 +1289,11 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
       flashSaved();
     } catch (error) {
       console.error('Failed to toggle item:', error);
-      commitItems(before);
+      // Revert only the toggled completed flags; leave any concurrent edits.
+      commitItems(itemsRef.current.map(item => {
+        const original = revertCompleted.get(item.id);
+        return original === undefined ? item : { ...item, completed: original };
+      }));
       showError(t('note.failedSaveChanges'));
     }
   };
