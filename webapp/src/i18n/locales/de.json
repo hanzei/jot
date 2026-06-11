@@ -328,6 +328,7 @@
     "deleteForeverTitle": "Endgültig löschen",
     "restore": "Wiederherstellen",
     "completedItems": "Erledigte Elemente ({{count}})",
+    "completedItemGroup": "Gruppe: {{title}}",
     "moreCompletedItems": "+{{count}} erledigte Elemente",
     "editNote": "Notiz bearbeiten",
     "newNote": "Neue Notiz",

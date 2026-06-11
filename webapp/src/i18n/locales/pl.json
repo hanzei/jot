@@ -328,6 +328,7 @@
     "deleteForeverTitle": "Usuń na zawsze",
     "restore": "Przywróć",
     "completedItems": "Ukończone elementy ({{count}})",
+    "completedItemGroup": "Grupa: {{title}}",
     "moreCompletedItems": "+{{count}} ukończonych elementów",
     "editNote": "Edytuj notatkę",
     "newNote": "Nowa notatka",

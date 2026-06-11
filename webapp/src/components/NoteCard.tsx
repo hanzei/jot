@@ -368,7 +368,9 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
               return (
                 <>
                   {uncompletedItems.map((item) => {
-                    const normalizedIndentLevel = Math.max(0, Number(item.indent_level) || 0);
+                    // A child (parent_id set) renders one level indented; nesting
+                    // is capped at one level.
+                    const normalizedIndentLevel = item.parent_id ? 1 : 0;
                     return (
                       <div key={item.id} className="flex items-start min-w-0 text-sm" style={{ marginLeft: normalizedIndentLevel * VALIDATION.INDENT_PX_PER_LEVEL }}>
                         <input

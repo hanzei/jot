@@ -564,15 +564,17 @@ func TestImportUsememosChecklistImportedAsListNote(t *testing.T) {
 
 	assert.Equal(t, "buy milk", note.Items[0].Text)
 	assert.False(t, note.Items[0].Completed)
-	assert.Equal(t, 0, note.Items[0].IndentLevel)
+	assert.Nil(t, note.Items[0].ParentID)
 
 	assert.Equal(t, "walk the dog", note.Items[1].Text)
 	assert.True(t, note.Items[1].Completed)
-	assert.Equal(t, 0, note.Items[1].IndentLevel)
+	assert.Nil(t, note.Items[1].ParentID)
 
 	assert.Equal(t, "feed the cat", note.Items[2].Text)
 	assert.False(t, note.Items[2].Completed)
-	assert.Equal(t, 1, note.Items[2].IndentLevel)
+	// Imported at indent level 1, so nested under the preceding top-level item.
+	require.NotNil(t, note.Items[2].ParentID)
+	assert.Equal(t, note.Items[1].ID, *note.Items[2].ParentID)
 }
 
 func TestImportUsememosTitledChecklistImportedAsListNote(t *testing.T) {

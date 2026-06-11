@@ -328,6 +328,7 @@
     "deleteForeverTitle": "Voor altijd verwijderen",
     "restore": "Herstellen",
     "completedItems": "Voltooide items ({{count}})",
+    "completedItemGroup": "Groep: {{title}}",
     "moreCompletedItems": "+{{count}} voltooide items",
     "editNote": "Notitie bewerken",
     "newNote": "Nieuwe notitie",

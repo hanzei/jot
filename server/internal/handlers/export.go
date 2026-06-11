@@ -83,11 +83,17 @@ func (h *NotesHandler) ExportNotes(w http.ResponseWriter, r *http.Request) (int,
 			exportNote.CheckedItemsCollapsed = n.CheckedItemsCollapsed
 			exportNote.Items = make([]jotExportNoteItem, 0, len(n.Items))
 			for _, item := range n.Items {
+				// indent_level is derived from grouping: a child (parent_id set)
+				// is one level deep, a top-level item is zero.
+				indentLevel := 0
+				if item.ParentID != nil {
+					indentLevel = 1
+				}
 				exportNote.Items = append(exportNote.Items, jotExportNoteItem{
 					Text:        item.Text,
 					Completed:   item.Completed,
 					Position:    item.Position,
-					IndentLevel: item.IndentLevel,
+					IndentLevel: indentLevel,
 				})
 			}
 		case models.NoteTypeText:

@@ -104,12 +104,14 @@ func TestDuplicateNoteEndpoint(t *testing.T) {
 		require.Len(t, duplicated.Items, 2)
 		assert.Equal(t, "Outline release", duplicated.Items[0].Text)
 		assert.Equal(t, 0, duplicated.Items[0].Position)
-		assert.Equal(t, 0, duplicated.Items[0].IndentLevel)
+		assert.Nil(t, duplicated.Items[0].ParentID)
 		assert.False(t, duplicated.Items[0].Completed)
 		assert.Empty(t, duplicated.Items[0].AssignedTo)
 		assert.Equal(t, "Notify team", duplicated.Items[1].Text)
 		assert.Equal(t, 1, duplicated.Items[1].Position)
-		assert.Equal(t, 1, duplicated.Items[1].IndentLevel)
+		// The nested child is re-pointed at the duplicated parent's new ID.
+		require.NotNil(t, duplicated.Items[1].ParentID)
+		assert.Equal(t, duplicated.Items[0].ID, *duplicated.Items[1].ParentID)
 		assert.True(t, duplicated.Items[1].Completed)
 		assert.Empty(t, duplicated.Items[1].AssignedTo)
 
@@ -140,7 +142,8 @@ func TestCreateNotePersistsCompletedItems(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, fetched.Items, 2)
 	assert.False(t, fetched.Items[0].Completed)
-	assert.Equal(t, 0, fetched.Items[0].IndentLevel)
+	assert.Nil(t, fetched.Items[0].ParentID)
 	assert.True(t, fetched.Items[1].Completed)
-	assert.Equal(t, 1, fetched.Items[1].IndentLevel)
+	require.NotNil(t, fetched.Items[1].ParentID)
+	assert.Equal(t, fetched.Items[0].ID, *fetched.Items[1].ParentID)
 }

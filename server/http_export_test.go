@@ -364,10 +364,12 @@ func TestImportJotJSONRoundTrip(t *testing.T) {
 	}
 	assert.Equal(t, "Item 1", itemsByPos[0].Text)
 	assert.True(t, itemsByPos[0].Completed)
-	assert.Equal(t, 0, itemsByPos[0].IndentLevel)
+	assert.Nil(t, itemsByPos[0].ParentID)
 	assert.Equal(t, "Item 2", itemsByPos[1].Text)
 	assert.False(t, itemsByPos[1].Completed)
-	assert.Equal(t, 1, itemsByPos[1].IndentLevel)
+	// Item 2 was imported at indent level 1, so it is nested under Item 1.
+	require.NotNil(t, itemsByPos[1].ParentID)
+	assert.Equal(t, itemsByPos[0].ID, *itemsByPos[1].ParentID)
 
 	// Labeled note (text note — identified by content).
 	ln, ok := byContent["Labeled Note"]

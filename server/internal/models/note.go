@@ -22,17 +22,21 @@ var ErrNoteAlreadyShared = errors.New("note already shared with user")
 var ErrNoteItemNotFound = errors.New("note item not found")
 var ErrNoteItemExists = errors.New("note item already exists")
 var ErrNoteItemCapExceeded = errors.New("note item limit reached")
+var ErrInvalidParentRef = errors.New("invalid parent reference")
 
 // NoteItemPatch carries the fields that may be changed by a partial single-item
 // update. Nil fields are left untouched (resolved against the item's current
 // stored value), so concurrent edits to different columns of the same item
 // merge instead of overwriting one another.
 type NoteItemPatch struct {
-	Text        *string
-	Completed   *bool
-	Position    *int
-	IndentLevel *int
-	AssignedTo  *string
+	Text      *string
+	Completed *bool
+	Position  *int
+	// ParentID, when non-nil, re-parents the item. An empty string makes the
+	// item top-level; a non-empty value attaches it to that parent (which must
+	// itself be a top-level item in the same note). Nil leaves it unchanged.
+	ParentID   *string
+	AssignedTo *string
 }
 
 // DeletedNoteAudience describes which users should receive a note_deleted SSE
@@ -64,15 +68,19 @@ type Note struct {
 }
 
 type NoteItem struct {
-	ID          string    `json:"id"`
-	NoteID      string    `json:"note_id"`
-	Text        string    `json:"text"`
-	Completed   bool      `json:"completed"`
-	Position    int       `json:"position"`
-	IndentLevel int       `json:"indent_level"`
-	AssignedTo  string    `json:"assigned_to"`
-	CreatedAt   time.Time `json:"created_at"`
-	UpdatedAt   time.Time `json:"updated_at"`
+	ID        string `json:"id"`
+	NoteID    string `json:"note_id"`
+	Text      string `json:"text"`
+	Completed bool   `json:"completed"`
+	Position  int    `json:"position"`
+	// ParentID is the item this one is nested under, or nil for a top-level
+	// item. It replaces the former indent_level column: a group is a top-level
+	// item plus the children that reference it. Nesting is capped at one level,
+	// so a parent always has ParentID == nil.
+	ParentID   *string   `json:"parent_id"`
+	AssignedTo string    `json:"assigned_to"`
+	CreatedAt  time.Time `json:"created_at"`
+	UpdatedAt  time.Time `json:"updated_at"`
 }
 
 type NoteShare struct {

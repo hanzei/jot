@@ -1571,6 +1571,86 @@ const docTemplate = `{
                 ]
             }
         },
+        "/notes/{id}/items/{item_id}/toggle-completed": {
+            "post": {
+                "description": "Sets the item's completed flag. When the item is a top-level (parent) item, the same value cascades to all of its children atomically. Returns the note's full item list.",
+                "consumes": [
+                    "application/json"
+                ],
+                "produces": [
+                    "application/json"
+                ],
+                "tags": [
+                    "notes"
+                ],
+                "summary": "Toggle a list item's completed state, cascading to children",
+                "parameters": [
+                    {
+                        "type": "string",
+                        "description": "Note ID",
+                        "name": "id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "type": "string",
+                        "description": "Item ID",
+                        "name": "item_id",
+                        "in": "path",
+                        "required": true
+                    },
+                    {
+                        "description": "Completed state",
+                        "name": "body",
+                        "in": "body",
+                        "required": true,
+                        "schema": {
+                            "$ref": "#/definitions/handlers.ToggleNoteItemCompletedRequest"
+                        }
+                    }
+                ],
+                "responses": {
+                    "200": {
+                        "description": "OK",
+                        "schema": {
+                            "type": "array",
+                            "items": {
+                                "$ref": "#/definitions/models.NoteItem"
+                            }
+                        }
+                    },
+                    "400": {
+                        "description": "bad request",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "401": {
+                        "description": "unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "404": {
+                        "description": "not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "500": {
+                        "description": "internal server error",
+                        "schema": {
+                            "type": "string"
+                        }
+                    }
+                },
+                "security": [
+                    {
+                        "CookieAuth": []
+                    }
+                ]
+            }
+        },
         "/notes/{id}/labels": {
             "post": {
                 "consumes": [
@@ -2584,8 +2664,9 @@ const docTemplate = `{
                 "id": {
                     "type": "string"
                 },
-                "indent_level": {
-                    "type": "integer"
+                "parent_id": {
+                    "description": "ParentID nests the item under a top-level item in the same note. Empty or\nomitted means the item is top-level. Replaces the former indent_level.",
+                    "type": "string"
                 },
                 "position": {
                     "type": "integer"
@@ -2697,8 +2778,9 @@ const docTemplate = `{
                 "completed": {
                     "type": "boolean"
                 },
-                "indent_level": {
-                    "type": "integer"
+                "parent_id": {
+                    "description": "ParentID, when present, re-parents the item (\"\" makes it top-level).",
+                    "type": "string"
                 },
                 "position": {
                     "type": "integer"
@@ -2777,6 +2859,14 @@ const docTemplate = `{
             "properties": {
                 "user_id": {
                     "type": "string"
+                }
+            }
+        },
+        "handlers.ToggleNoteItemCompletedRequest": {
+            "type": "object",
+            "properties": {
+                "completed": {
+                    "type": "boolean"
                 }
             }
         },
@@ -3112,10 +3202,11 @@ const docTemplate = `{
                 "id": {
                     "type": "string"
                 },
-                "indent_level": {
-                    "type": "integer"
-                },
                 "note_id": {
+                    "type": "string"
+                },
+                "parent_id": {
+                    "description": "ParentID is the item this one is nested under, or nil for a top-level\nitem. It replaces the former indent_level column: a group is a top-level\nitem plus the children that reference it. Nesting is capped at one level,\nso a parent always has ParentID == nil.",
                     "type": "string"
                 },
                 "position": {

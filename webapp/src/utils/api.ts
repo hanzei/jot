@@ -130,6 +130,13 @@ export const notes = {
 
   reorderItems: (noteId: string, itemIds: string[]): Promise<void> =>
     api.post(`/notes/${noteId}/items/reorder`, { item_ids: itemIds }).then(() => undefined),
+
+  // Toggles an item's completed flag atomically. When the item is a top-level
+  // (parent) item the same value cascades to all of its children server-side, so
+  // checking a group never splits it. Returns the note's full item list for the
+  // caller to reconcile every affected item from one response.
+  toggleItemCompleted: (noteId: string, itemId: string, completed: boolean): Promise<NoteItem[]> =>
+    api.post(`/notes/${noteId}/items/${itemId}/toggle-completed`, { completed }).then(res => res.data),
 };
 
 export const labels = {

@@ -130,7 +130,7 @@ async function saveNoteInTx(db: SQLiteDatabase, note: Note): Promise<void> {
       await db.runAsync(
         `INSERT OR REPLACE INTO note_items (id, note_id, text, completed, position, indent_level, assigned_to, created_at, updated_at)
          VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
-        [item.id, note.id, item.text, item.completed ? 1 : 0, item.position, item.indent_level, item.assigned_to ?? '', item.created_at ?? '', item.updated_at ?? ''],
+        [item.id, note.id, item.text, item.completed ? 1 : 0, item.position, item.indent_level ?? 0, item.assigned_to ?? '', item.created_at ?? '', item.updated_at ?? ''],
       );
     }
   }

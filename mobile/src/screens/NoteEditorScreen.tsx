@@ -65,7 +65,9 @@ function toLocalItems(serverItems: NoteItem[]): LocalItem[] {
       text: item.text,
       completed: item.completed,
       position: item.position,
-      indent_level: item.indent_level,
+      // indent_level was removed from the API; the server no longer sends it, so
+      // fall back to 0 (flat) until mobile adopts parent_id-based grouping.
+      indent_level: item.indent_level ?? 0,
       assigned_to: item.assigned_to ?? '',
     }));
 }

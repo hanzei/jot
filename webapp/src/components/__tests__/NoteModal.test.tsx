@@ -1,4 +1,4 @@
-import { render, screen, fireEvent } from '@testing-library/react'
+import { render, screen, fireEvent, within } from '@testing-library/react'
 import { describe, it, expect, vi, beforeEach, afterEach } from 'vitest'
 import { type ReactNode } from 'react'
 import NoteModal from '../NoteModal'
@@ -14,6 +14,7 @@ const {
   mockUpdateItem,
   mockDeleteItem,
   mockReorderItems,
+  mockToggleItemCompleted,
 } = vi.hoisted(() => ({
   mockNotesUpdate: vi.fn().mockResolvedValue({}),
   mockNotesCreate: vi.fn().mockResolvedValue({}),
@@ -21,6 +22,10 @@ const {
   mockUpdateItem: vi.fn().mockImplementation((_noteId, itemId, data) => Promise.resolve({ id: itemId, ...data })),
   mockDeleteItem: vi.fn().mockResolvedValue(undefined),
   mockReorderItems: vi.fn().mockResolvedValue(undefined),
+  // By default the toggle endpoint echoes just the toggled item; individual
+  // tests that need cascade override this with the full item list.
+  mockToggleItemCompleted: vi.fn().mockImplementation((_noteId, itemId, completed) =>
+    Promise.resolve([{ id: itemId, completed }])),
 }))
 vi.mock('@/utils/api', () => ({
   notes: {
@@ -30,6 +35,7 @@ vi.mock('@/utils/api', () => ({
     updateItem: mockUpdateItem,
     deleteItem: mockDeleteItem,
     reorderItems: mockReorderItems,
+    toggleItemCompleted: mockToggleItemCompleted,
     addLabel: vi.fn(),
     removeLabel: vi.fn(),
   },
@@ -110,7 +116,7 @@ const createMockListItems = (): NoteItem[] => [
     text: 'First item',
     completed: false,
     position: 0,
-    indent_level: 0,
+    parent_id: null,
     assigned_to: '',
     created_at: '2023-01-01T00:00:00Z',
     updated_at: '2023-01-01T00:00:00Z',
@@ -121,7 +127,7 @@ const createMockListItems = (): NoteItem[] => [
     text: 'Second item',
     completed: true,
     position: 1,
-    indent_level: 0,
+    parent_id: null,
     assigned_to: '',
     created_at: '2023-01-01T00:00:00Z',
     updated_at: '2023-01-01T00:00:00Z',
@@ -475,28 +481,31 @@ describe('NoteModal', () => {
       fireEvent.click(screen.getByText('List'))
       fireEvent.click(screen.getByText('Add item'))
 
+      // Indenting needs a preceding top-level item to nest under, so create a
+      // parent first, then a second item, then indent the second under it.
       let inputs = screen.getAllByTestId('list-item-input')
-      let rows = screen.getAllByTestId('list-item-row')
-      expect(inputs).toHaveLength(1)
-
       fireEvent.change(inputs[0], { target: { value: 'parent' } })
-
-      // Indent the current item with Tab.
-      fireEvent.keyDown(inputs[0], { key: 'Tab', code: 'Tab' })
-
-      inputs = screen.getAllByTestId('list-item-input')
-      rows = screen.getAllByTestId('list-item-row')
-      expect(rows[0].style.marginLeft).toBe(`${VALIDATION.INDENT_PX_PER_LEVEL}px`)
-
-      // Press Enter on the indented item.
       fireEvent.keyDown(inputs[0], { key: 'Enter', code: 'Enter' })
       await vi.runAllTimersAsync()
 
+      inputs = screen.getAllByTestId('list-item-input')
+      expect(inputs).toHaveLength(2)
+      fireEvent.change(inputs[1], { target: { value: 'child' } })
+      fireEvent.keyDown(inputs[1], { key: 'Tab', code: 'Tab' })
+
+      let rows = screen.getAllByTestId('list-item-row')
+      expect(rows[1].style.marginLeft).toBe(`${VALIDATION.INDENT_PX_PER_LEVEL}px`)
+
+      // Press Enter on the indented child → the new item inherits its group.
+      inputs = screen.getAllByTestId('list-item-input')
+      fireEvent.keyDown(inputs[1], { key: 'Enter', code: 'Enter' })
+      await vi.runAllTimersAsync()
+
       const inputsAfter = screen.getAllByTestId('list-item-input')
-      const rowsAfter = screen.getAllByTestId('list-item-row')
-      expect(inputsAfter).toHaveLength(2)
-      expect(rowsAfter[1].style.marginLeft).toBe(`${VALIDATION.INDENT_PX_PER_LEVEL}px`)
-      expect(inputsAfter[1]).toHaveFocus()
+      rows = screen.getAllByTestId('list-item-row')
+      expect(inputsAfter).toHaveLength(3)
+      expect(rows[2].style.marginLeft).toBe(`${VALIDATION.INDENT_PX_PER_LEVEL}px`)
+      expect(inputsAfter[2]).toHaveFocus()
     })
 
     it('pressing Tab then Enter quickly keeps indentation on the new item', async () => {
@@ -505,18 +514,25 @@ describe('NoteModal', () => {
       fireEvent.click(screen.getByText('List'))
       fireEvent.click(screen.getByText('Add item'))
 
-      const inputs = screen.getAllByTestId('list-item-input')
+      // Create a parent and a second item to indent under it.
+      let inputs = screen.getAllByTestId('list-item-input')
       fireEvent.change(inputs[0], { target: { value: 'parent' } })
-
-      // Simulate quick sequential key presses on the same input.
-      fireEvent.keyDown(inputs[0], { key: 'Tab', code: 'Tab' })
       fireEvent.keyDown(inputs[0], { key: 'Enter', code: 'Enter' })
       await vi.runAllTimersAsync()
 
+      inputs = screen.getAllByTestId('list-item-input')
+      fireEvent.change(inputs[1], { target: { value: 'child' } })
+
+      // Simulate quick sequential key presses on the child.
+      fireEvent.keyDown(inputs[1], { key: 'Tab', code: 'Tab' })
+      fireEvent.keyDown(inputs[1], { key: 'Enter', code: 'Enter' })
+      await vi.runAllTimersAsync()
+
       const rowsAfter = screen.getAllByTestId('list-item-row')
-      expect(rowsAfter).toHaveLength(2)
-      expect(rowsAfter[0].style.marginLeft).toBe(`${VALIDATION.INDENT_PX_PER_LEVEL}px`)
+      expect(rowsAfter).toHaveLength(3)
+      // The indented child and the new item below it are both one level in.
       expect(rowsAfter[1].style.marginLeft).toBe(`${VALIDATION.INDENT_PX_PER_LEVEL}px`)
+      expect(rowsAfter[2].style.marginLeft).toBe(`${VALIDATION.INDENT_PX_PER_LEVEL}px`)
     })
 
     it('persisted update keeps inherited indent after quick Tab then Enter on existing note', async () => {
@@ -529,7 +545,18 @@ describe('NoteModal', () => {
             text: 'parent',
             completed: false,
             position: 0,
-            indent_level: 0,
+            parent_id: null,
+            assigned_to: '',
+            created_at: '2023-01-01T00:00:00Z',
+            updated_at: '2023-01-01T00:00:00Z',
+          },
+          {
+            id: 'item2',
+            note_id: '1',
+            text: 'child',
+            completed: false,
+            position: 1,
+            parent_id: null,
             assigned_to: '',
             created_at: '2023-01-01T00:00:00Z',
             updated_at: '2023-01-01T00:00:00Z',
@@ -540,13 +567,14 @@ describe('NoteModal', () => {
       renderNoteModal({ ...defaultProps, note: listNote })
       const inputs = screen.getAllByTestId('list-item-input')
 
-      fireEvent.keyDown(inputs[0], { key: 'Tab', code: 'Tab' })
-      fireEvent.keyDown(inputs[0], { key: 'Enter', code: 'Enter' })
+      // Tab nests the second item under the first; Enter inserts a new item that
+      // inherits that parent.
+      fireEvent.keyDown(inputs[1], { key: 'Tab', code: 'Tab' })
+      fireEvent.keyDown(inputs[1], { key: 'Enter', code: 'Enter' })
       await vi.runAllTimersAsync()
 
-      // Tab indents the existing item; Enter inserts a new item inheriting indent 1.
-      expect(mockUpdateItem).toHaveBeenCalledWith('1', 'item1', expect.objectContaining({ indent_level: 1 }))
-      expect(mockCreateItem).toHaveBeenCalledWith('1', expect.objectContaining({ text: '', indent_level: 1 }))
+      expect(mockUpdateItem).toHaveBeenCalledWith('1', 'item2', expect.objectContaining({ parent_id: 'item1' }))
+      expect(mockCreateItem).toHaveBeenCalledWith('1', expect.objectContaining({ text: '', parent_id: 'item1' }))
     })
 
     it('debounced text autosave does not overwrite quick Tab then Enter changes', async () => {
@@ -556,10 +584,21 @@ describe('NoteModal', () => {
           {
             id: 'item1',
             note_id: '1',
-            text: '',
+            text: 'parent',
             completed: false,
             position: 0,
-            indent_level: 0,
+            parent_id: null,
+            assigned_to: '',
+            created_at: '2023-01-01T00:00:00Z',
+            updated_at: '2023-01-01T00:00:00Z',
+          },
+          {
+            id: 'item2',
+            note_id: '1',
+            text: '',
+            completed: false,
+            position: 1,
+            parent_id: null,
             assigned_to: '',
             created_at: '2023-01-01T00:00:00Z',
             updated_at: '2023-01-01T00:00:00Z',
@@ -570,21 +609,21 @@ describe('NoteModal', () => {
       renderNoteModal({ ...defaultProps, note: listNote })
       const inputs = screen.getAllByTestId('list-item-input')
 
-      // Arms debounced text autosave.
-      fireEvent.change(inputs[0], { target: { value: 'parent' } })
+      // Arms debounced text autosave on the second item.
+      fireEvent.change(inputs[1], { target: { value: 'child' } })
 
       // Quickly apply indent and insertion before debounce flush.
-      fireEvent.keyDown(inputs[0], { key: 'Tab', code: 'Tab' })
-      fireEvent.keyDown(inputs[0], { key: 'Enter', code: 'Enter' })
+      fireEvent.keyDown(inputs[1], { key: 'Tab', code: 'Tab' })
+      fireEvent.keyDown(inputs[1], { key: 'Enter', code: 'Enter' })
 
       // Flush pending timers and async work.
       await vi.runAllTimersAsync()
 
       // The debounced text edit and the structural indent/insert are both
-      // persisted: item1 keeps its text and gains indent 1, and the new item
-      // inherits indent 1.
-      expect(mockUpdateItem).toHaveBeenCalledWith('1', 'item1', expect.objectContaining({ text: 'parent', indent_level: 1 }))
-      expect(mockCreateItem).toHaveBeenCalledWith('1', expect.objectContaining({ text: '', indent_level: 1 }))
+      // persisted: item2 keeps its text and is nested under item1, and the new
+      // item inherits that parent.
+      expect(mockUpdateItem).toHaveBeenCalledWith('1', 'item2', expect.objectContaining({ text: 'child', parent_id: 'item1' }))
+      expect(mockCreateItem).toHaveBeenCalledWith('1', expect.objectContaining({ text: '', parent_id: 'item1' }))
     })
 
     it('queued autosave retries use latest note fields while a save is in-flight', async () => {
@@ -598,7 +637,18 @@ describe('NoteModal', () => {
             text: 'parent',
             completed: false,
             position: 0,
-            indent_level: 0,
+            parent_id: null,
+            assigned_to: '',
+            created_at: '2023-01-01T00:00:00Z',
+            updated_at: '2023-01-01T00:00:00Z',
+          },
+          {
+            id: 'item2',
+            note_id: '1',
+            text: 'child',
+            completed: false,
+            position: 1,
+            parent_id: null,
             assigned_to: '',
             created_at: '2023-01-01T00:00:00Z',
             updated_at: '2023-01-01T00:00:00Z',
@@ -613,10 +663,10 @@ describe('NoteModal', () => {
 
       renderNoteModal({ ...defaultProps, note: listNote })
 
-      const listInput = screen.getByDisplayValue('parent')
+      const listInput = screen.getByDisplayValue('child')
       const titleInput = screen.getByDisplayValue('Initial title')
 
-      // Start first save (indent patch) and keep it in-flight.
+      // Start first save (re-parent patch) and keep it in-flight.
       fireEvent.keyDown(listInput, { key: 'Tab', code: 'Tab' })
 
       // Change non-item draft fields while the save is still in-flight.
@@ -629,11 +679,11 @@ describe('NoteModal', () => {
       resolveFirstItem?.({})
       await vi.runAllTimersAsync()
 
-      // The in-flight indent patch is applied, and the queued retry flushes the
+      // The in-flight re-parent patch is applied, and the queued retry flushes the
       // latest title (scalar patch) and the newly inserted item.
-      expect(mockUpdateItem).toHaveBeenCalledWith('1', 'item1', expect.objectContaining({ indent_level: 1 }))
+      expect(mockUpdateItem).toHaveBeenCalledWith('1', 'item2', expect.objectContaining({ parent_id: 'item1' }))
       expect(mockNotesUpdate).toHaveBeenCalledWith('1', expect.objectContaining({ title: 'Updated title while saving' }))
-      expect(mockCreateItem).toHaveBeenCalledWith('1', expect.objectContaining({ text: '', indent_level: 1 }))
+      expect(mockCreateItem).toHaveBeenCalledWith('1', expect.objectContaining({ text: '', parent_id: 'item1' }))
     })
 
     it('pressing a key other than Enter on a list item does not create a new item', async () => {
@@ -852,8 +902,8 @@ describe('NoteModal', () => {
       const listNote = createMockNote({
         note_type: 'list',
         items: [
-          { id: 'item1', note_id: '1', text: 'First', completed: false, position: 0, indent_level: 0, assigned_to: '', created_at: '', updated_at: '' },
-          { id: 'item2', note_id: '1', text: '', completed: false, position: 1, indent_level: 0, assigned_to: '', created_at: '', updated_at: '' },
+          { id: 'item1', note_id: '1', text: 'First', completed: false, position: 0, parent_id: null, assigned_to: '', created_at: '', updated_at: '' },
+          { id: 'item2', note_id: '1', text: '', completed: false, position: 1, parent_id: null, assigned_to: '', created_at: '', updated_at: '' },
         ],
       })
       mockDeleteItem.mockClear()
@@ -874,7 +924,7 @@ describe('NoteModal', () => {
       const listNote = createMockNote({
         note_type: 'list',
         items: [
-          { id: 'item1', note_id: '1', text: '', completed: false, position: 0, indent_level: 0, assigned_to: '', created_at: '', updated_at: '' },
+          { id: 'item1', note_id: '1', text: '', completed: false, position: 0, parent_id: null, assigned_to: '', created_at: '', updated_at: '' },
         ],
       })
       mockDeleteItem.mockClear()
@@ -926,7 +976,7 @@ describe('NoteModal', () => {
             text: 'Original item',
             completed: false,
             position: 0,
-            indent_level: 0,
+            parent_id: null,
             assigned_to: '',
             created_at: '2023-01-01T00:00:00Z',
             updated_at: '2023-01-01T00:00:00Z',
@@ -944,6 +994,159 @@ describe('NoteModal', () => {
 
       expect(mockUpdateItem).toHaveBeenCalledWith('1', 'item1', expect.objectContaining({ text: 'Updated item' }))
       expect(onSave).toHaveBeenCalled()
+    })
+  })
+
+  describe('Grouping (parent_id)', () => {
+    const item = (id: string, overrides: Partial<NoteItem> = {}): NoteItem => ({
+      id,
+      note_id: '1',
+      text: id,
+      completed: false,
+      position: 0,
+      parent_id: null,
+      assigned_to: '',
+      created_at: '2023-01-01T00:00:00Z',
+      updated_at: '2023-01-01T00:00:00Z',
+      ...overrides,
+    })
+
+    it('checking an item calls the toggle endpoint, not a completed patch', async () => {
+      const listNote = createMockNote({
+        note_type: 'list',
+        items: [item('item1', { text: 'Buy milk' })],
+      })
+      renderNoteModal({ ...defaultProps, note: listNote })
+
+      const checkbox = screen.getAllByRole('checkbox')[0]
+      fireEvent.click(checkbox)
+      await vi.runAllTimersAsync()
+
+      expect(mockToggleItemCompleted).toHaveBeenCalledWith('1', 'item1', true)
+      // Completion must not be sent as a plain field patch (that would skip the cascade).
+      expect(mockUpdateItem).not.toHaveBeenCalledWith('1', 'item1', expect.objectContaining({ completed: true }))
+    })
+
+    it('checking a parent cascades completion to its children from one response', async () => {
+      const listNote = createMockNote({
+        note_type: 'list',
+        items: [
+          item('parent', { text: 'Parent', position: 0 }),
+          item('childA', { text: 'Child A', position: 1, parent_id: 'parent' }),
+          item('childB', { text: 'Child B', position: 2, parent_id: 'parent' }),
+        ],
+      })
+      // Server reports the whole group completed.
+      mockToggleItemCompleted.mockResolvedValueOnce([
+        { id: 'parent', completed: true },
+        { id: 'childA', completed: true },
+        { id: 'childB', completed: true },
+      ])
+      renderNoteModal({ ...defaultProps, note: listNote })
+
+      // The parent is the first checkbox in the active list.
+      fireEvent.click(screen.getAllByRole('checkbox')[0])
+      await vi.runAllTimersAsync()
+
+      expect(mockToggleItemCompleted).toHaveBeenCalledWith('1', 'parent', true)
+      // All three rows cascade to completed → the Completed section shows count 3.
+      expect(screen.getByText('Completed items (3)')).toBeInTheDocument()
+      // Every checkbox now reflects the completed state.
+      const checkboxes = screen.getAllByRole('checkbox') as HTMLInputElement[]
+      expect(checkboxes.every(cb => cb.checked)).toBe(true)
+    })
+
+    it('shows a ghost parent above a completed child whose parent is still active', async () => {
+      const listNote = createMockNote({
+        note_type: 'list',
+        items: [
+          item('parent', { text: 'Groceries', position: 0 }),
+          item('childA', { text: 'Milk', position: 1, parent_id: 'parent', completed: true }),
+        ],
+      })
+      renderNoteModal({ ...defaultProps, note: listNote })
+
+      // The active list still shows the parent; the completed section shows the
+      // child under a non-interactive ghost copy of the parent (aria-labelled).
+      expect(screen.getByLabelText('Group: Groceries')).toBeInTheDocument()
+      expect(screen.getByText('Milk')).toBeInTheDocument()
+    })
+
+    it('indenting the first item is a no-op (nothing to nest under)', async () => {
+      const listNote = createMockNote({
+        note_type: 'list',
+        items: [item('item1', { text: 'only', position: 0 })],
+      })
+      renderNoteModal({ ...defaultProps, note: listNote })
+
+      const input = screen.getAllByTestId('list-item-input')[0]
+      fireEvent.keyDown(input, { key: 'Tab', code: 'Tab' })
+      await vi.runAllTimersAsync()
+
+      const row = screen.getAllByTestId('list-item-row')[0]
+      expect(row.style.marginLeft).toBe('0px')
+      expect(mockUpdateItem).not.toHaveBeenCalled()
+    })
+
+    it('un-indenting a child promotes it to top-level via parent_id ""', async () => {
+      const listNote = createMockNote({
+        note_type: 'list',
+        items: [
+          item('parent', { text: 'Parent', position: 0 }),
+          item('child', { text: 'Child', position: 1, parent_id: 'parent' }),
+        ],
+      })
+      renderNoteModal({ ...defaultProps, note: listNote })
+
+      // Second input is the child; Shift-Tab/left gesture maps to delta -1.
+      const childInput = screen.getAllByTestId('list-item-input')[1]
+      fireEvent.keyDown(childInput, { key: 'Tab', code: 'Tab', shiftKey: true })
+      await vi.runAllTimersAsync()
+
+      expect(mockUpdateItem).toHaveBeenCalledWith('1', 'child', expect.objectContaining({ parent_id: '' }))
+    })
+
+    // Issue #438 problem 1: a checked item must keep its relative slot, so it
+    // unchecks back into place even after items above it are removed. The old
+    // absolute-originalPosition logic dropped it at the end instead.
+    it('unchecking restores an item to its relative slot after items above are removed', async () => {
+      const listNote = createMockNote({
+        note_type: 'list',
+        items: [
+          item('x0', { text: 'X0', position: 0 }),
+          item('x1', { text: 'X1', position: 1 }),
+          item('x2', { text: 'X2', position: 2 }),
+          item('target', { text: 'TARGET', position: 3 }),
+          item('x4', { text: 'X4', position: 4 }),
+        ],
+      })
+      renderNoteModal({ ...defaultProps, note: listNote })
+
+      const removeFirstRow = () => {
+        const rows = screen.getAllByTestId('list-item-row')
+        const buttons = within(rows[0]).getAllByRole('button')
+        fireEvent.click(buttons[buttons.length - 1]) // trash is the last button in the row
+      }
+
+      // Check TARGET (4th active checkbox) → it moves to the completed section.
+      fireEvent.click(screen.getAllByRole('checkbox')[3])
+      await vi.runAllTimersAsync()
+      expect(mockToggleItemCompleted).toHaveBeenCalledWith('1', 'target', true)
+
+      // Remove the two items above TARGET (X0, X1).
+      removeFirstRow()
+      removeFirstRow()
+      await vi.runAllTimersAsync()
+
+      // Uncheck TARGET (now the only completed item → last checkbox).
+      const checkboxes = screen.getAllByRole('checkbox')
+      fireEvent.click(checkboxes[checkboxes.length - 1])
+      await vi.runAllTimersAsync()
+      expect(mockToggleItemCompleted).toHaveBeenCalledWith('1', 'target', false)
+
+      // TARGET lands back between X2 and X4 — its relative slot — not at the end.
+      const values = screen.getAllByTestId('list-item-input').map(el => (el as HTMLTextAreaElement).value)
+      expect(values).toEqual(['X2', 'TARGET', 'X4'])
     })
   })
 

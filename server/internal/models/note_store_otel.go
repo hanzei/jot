@@ -117,12 +117,12 @@ func (s *NoteStore) PurgeOldTrashedNotes(ctx context.Context, olderThan time.Dur
 	return s.inner.PurgeOldTrashedNotes(ctx, olderThan)
 }
 
-func (s *NoteStore) CreateItemWithCompleted(ctx context.Context, noteID string, text string, position int, completed bool, indentLevel int, assignedTo string) (_ *NoteItem, err error) {
+func (s *NoteStore) CreateItemWithCompleted(ctx context.Context, noteID string, text string, position int, completed bool, parentID string, assignedTo string) (_ *NoteItem, err error) {
 	ctx, end := startSpan(ctx, s.tracer, "NoteStore.CreateItemWithCompleted", &err,
 		attribute.String("note.id", noteID),
 	)
 	defer end()
-	return s.inner.CreateItemWithCompleted(ctx, noteID, text, position, completed, indentLevel, assignedTo)
+	return s.inner.CreateItemWithCompleted(ctx, noteID, text, position, completed, parentID, assignedTo)
 }
 
 func (s *NoteStore) GetItemForNote(ctx context.Context, noteID, itemID string) (_ *NoteItem, err error) {
@@ -134,13 +134,13 @@ func (s *NoteStore) GetItemForNote(ctx context.Context, noteID, itemID string) (
 	return s.inner.GetItemForNote(ctx, noteID, itemID)
 }
 
-func (s *NoteStore) CreateItemWithID(ctx context.Context, noteID, itemID, text string, position int, completed bool, indentLevel int, assignedTo string, maxItems int) (_ *NoteItem, err error) {
+func (s *NoteStore) CreateItemWithID(ctx context.Context, noteID, itemID, text string, position int, completed bool, parentID string, assignedTo string, maxItems int) (_ *NoteItem, err error) {
 	ctx, end := startSpan(ctx, s.tracer, "NoteStore.CreateItemWithID", &err,
 		attribute.String("note.id", noteID),
 		attribute.String("item.id", itemID),
 	)
 	defer end()
-	return s.inner.CreateItemWithID(ctx, noteID, itemID, text, position, completed, indentLevel, assignedTo, maxItems)
+	return s.inner.CreateItemWithID(ctx, noteID, itemID, text, position, completed, parentID, assignedTo, maxItems)
 }
 
 func (s *NoteStore) PatchItem(ctx context.Context, noteID, itemID string, patch NoteItemPatch) (_ *NoteItem, err error) {
@@ -167,6 +167,15 @@ func (s *NoteStore) ReorderItems(ctx context.Context, noteID string, itemIDs []s
 	)
 	defer end()
 	return s.inner.ReorderItems(ctx, noteID, itemIDs)
+}
+
+func (s *NoteStore) ToggleItemCompleted(ctx context.Context, noteID, itemID string, completed bool) (_ []NoteItem, err error) {
+	ctx, end := startSpan(ctx, s.tracer, "NoteStore.ToggleItemCompleted", &err,
+		attribute.String("note.id", noteID),
+		attribute.String("item.id", itemID),
+	)
+	defer end()
+	return s.inner.ToggleItemCompleted(ctx, noteID, itemID, completed)
 }
 
 func (s *NoteStore) HasAccess(ctx context.Context, noteID string, userID string) (_ bool, err error) {
