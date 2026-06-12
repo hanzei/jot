@@ -21,12 +21,10 @@ beforeEach(() => {
 
 describe('initLogger', () => {
   it('is idempotent — calling it twice does not double-wrap interceptors', () => {
-    const warnSpy = jest.spyOn(console, 'warn');
     initLogger();
     console.warn('test');
-    // Should only call the spy once, not twice
-    expect(warnSpy).toHaveBeenCalledTimes(1);
-    warnSpy.mockRestore();
+    // If interceptors were double-wrapped, one warn call would produce two log entries
+    expect(getLogs()).toHaveLength(1);
   });
 });
 

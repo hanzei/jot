@@ -11,10 +11,20 @@ const buffer: LogEntry[] = new Array(BUFFER_SIZE);
 let writeIndex = 0;
 let count = 0;
 
+function serializeArg(value: unknown): string {
+  if (typeof value === 'string') return value;
+  if (value instanceof Error) {
+    return value.stack ?? `${value.name}: ${value.message}`;
+  }
+  try {
+    return JSON.stringify(value) ?? String(value);
+  } catch {
+    return String(value);
+  }
+}
+
 function push(level: LogLevel, args: unknown[]): void {
-  const msg = args
-    .map((a) => (typeof a === 'string' ? a : JSON.stringify(a)))
-    .join(' ');
+  const msg = args.map(serializeArg).join(' ');
   buffer[writeIndex] = { ts: new Date().toISOString(), level, msg };
   writeIndex = (writeIndex + 1) % BUFFER_SIZE;
   if (count < BUFFER_SIZE) count++;

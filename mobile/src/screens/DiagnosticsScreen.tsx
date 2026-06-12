@@ -32,6 +32,8 @@ interface DiagnosticsSnapshot {
   lifecycle: ServerSwitchLifecycleState;
   sse: SseState;
   logs: LogEntry[];
+  isConnected: boolean;
+  serverUrl: string;
 }
 
 export default function DiagnosticsScreen() {
@@ -48,17 +50,26 @@ export default function DiagnosticsScreen() {
     lifecycle: getServerSwitchLifecycleState(),
     sse: getSseState(),
     logs: getLogs().slice(-50),
+    isConnected: false,
+    serverUrl: '',
   }));
 
   const refresh = useCallback(async () => {
-    const pendingQueueCount = await getPendingCount(db);
+    let pendingQueueCount = 0;
+    try {
+      pendingQueueCount = await getPendingCount(db);
+    } catch {
+      // DB read failure — show 0 rather than blocking the snapshot update
+    }
     setSnapshot({
       pendingQueueCount,
       lifecycle: getServerSwitchLifecycleState(),
       sse: getSseState(),
       logs: getLogs().slice(-50),
+      isConnected,
+      serverUrl: serverUrl ?? '',
     });
-  }, [db]);
+  }, [db, isConnected, serverUrl]);
 
   useEffect(() => {
     refresh();
@@ -75,10 +86,10 @@ export default function DiagnosticsScreen() {
       platform: Platform.OS,
       appVersion: APP_VERSION,
       server: {
-        url: serverUrl,
+        url: snapshot.serverUrl,
         generationId: snapshot.lifecycle.generationId,
       },
-      network: { isConnected },
+      network: { isConnected: snapshot.isConnected },
       sse: {
         isConnected: snapshot.sse.isConnected,
         reconnectAttempts: snapshot.sse.reconnectAttempts,
@@ -96,7 +107,7 @@ export default function DiagnosticsScreen() {
       recentLogs: snapshot.logs,
     };
     await Share.share({ message: JSON.stringify(report, null, 2) });
-  }, [snapshot, isConnected, serverUrl]);
+  }, [snapshot]);
 
   const { lifecycle, sse } = snapshot;
 
@@ -124,8 +135,8 @@ export default function DiagnosticsScreen() {
           <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('diagnostics.network')}</Text>
           <DiagRow
             label={t('diagnostics.network')}
-            value={isConnected ? t('diagnostics.connected') : t('diagnostics.disconnected')}
-            valueColor={isConnected ? STATUS_GREEN : colors.error}
+            value={snapshot.isConnected ? t('diagnostics.connected') : t('diagnostics.disconnected')}
+            valueColor={snapshot.isConnected ? STATUS_GREEN : colors.error}
           />
         </View>
 
@@ -166,7 +177,7 @@ export default function DiagnosticsScreen() {
         {/* Server */}
         <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('diagnostics.server')}</Text>
-          <DiagRow label={t('diagnostics.serverUrl')} value={serverUrl || '—'} mono />
+          <DiagRow label={t('diagnostics.serverUrl')} value={snapshot.serverUrl || '—'} mono />
           <DiagRow label={t('diagnostics.generationId')} value={String(lifecycle.generationId)} mono />
           <DiagRow
             label={t('diagnostics.switchInProgress')}
