@@ -36,7 +36,15 @@
     "deleteButton": "Verwijderen",
     "deleteConfirmTitle": "Server verwijderen",
     "deleteConfirmMessage": "\"{{name}}\" uit je serverlijst verwijderen?",
-    "deleteFailed": "Server verwijderen mislukt."
+    "deleteFailed": "Server verwijderen mislukt.",
+    "renameButton": "Hernoemen",
+    "renameTitle": "Server een naam geven",
+    "renamePlaceholder": "Mijn Jot-server",
+    "renameSave": "Opslaan",
+    "renameFailed": "Server hernoemen mislukt.",
+    "cancelSetupTitle": "Server niet toevoegen?",
+    "cancelSetupMessage": "De server wordt niet toegevoegd.",
+    "cancelSetupConfirm": "Terug"
   },
   "auth": {
     "signInTitle": "Inloggen bij Jot",
