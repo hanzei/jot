@@ -348,6 +348,43 @@ export async function replaceLocalNoteId(
  * present in the provided server ID set. Local-only notes (id starting with "local_")
  * are never removed.
  */
+export async function getLocalLabels(db: SQLiteDatabase): Promise<Label[]> {
+  const rows = await db.getAllAsync<Pick<NoteRow, 'labels_json'>>(
+    'SELECT labels_json FROM notes WHERE deleted_at IS NULL',
+  );
+  const seen = new Set<string>();
+  const labels: Label[] = [];
+  for (const row of rows) {
+    try {
+      const noteLabels = JSON.parse(row.labels_json) as Label[];
+      for (const label of noteLabels) {
+        if (!seen.has(label.id)) {
+          seen.add(label.id);
+          labels.push(label);
+        }
+      }
+    } catch { /* ignore */ }
+  }
+  labels.sort((a, b) => a.name.localeCompare(b.name));
+  return labels;
+}
+
+export async function getLocalLabelCounts(db: SQLiteDatabase): Promise<Record<string, number>> {
+  const rows = await db.getAllAsync<Pick<NoteRow, 'labels_json'>>(
+    'SELECT labels_json FROM notes WHERE archived = 0 AND deleted_at IS NULL',
+  );
+  const counts: Record<string, number> = {};
+  for (const row of rows) {
+    try {
+      const labels = JSON.parse(row.labels_json) as Label[];
+      for (const label of labels) {
+        counts[label.id] = (counts[label.id] ?? 0) + 1;
+      }
+    } catch { /* ignore */ }
+  }
+  return counts;
+}
+
 export async function removeLocalNotesNotIn(
   db: SQLiteDatabase,
   serverIds: Set<string>,

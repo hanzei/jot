@@ -1,4 +1,4 @@
-import { useRef } from 'react';
+import { useRef, useEffect } from 'react';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSQLiteContext, type SQLiteDatabase } from 'expo-sqlite';
 import {
@@ -11,9 +11,10 @@ import {
   deleteLabel,
 } from '../api/labels';
 import { getNotes } from '../api/notes';
-import { saveNote, saveNotes, renameLabelInLocalNotes, deleteLabelFromLocalNotes } from '../db/noteQueries';
+import { saveNote, saveNotes, renameLabelInLocalNotes, deleteLabelFromLocalNotes, getLocalLabels, getLocalLabelCounts } from '../db/noteQueries';
 import { useNetworkStatus } from './useNetworkStatus';
 import { isServerSwitchInProgress } from '../api/client';
+import type { Label } from '@jot/shared';
 import {
   labelCountsQueryKey,
   labelsQueryKey,
@@ -71,17 +72,63 @@ async function syncLocalNotesAfterLabelMutation(db: SQLiteDatabase) {
 }
 
 export function useLabels() {
-  return useQuery({
+  const db = useSQLiteContext();
+  const queryClient = useQueryClient();
+  const { isConnected } = useNetworkStatus();
+
+  const query = useQuery<Label[]>({
     queryKey: labelsQueryKey(),
-    queryFn: getLabels,
+    queryFn: () => getLocalLabels(db),
+    staleTime: Infinity,
+    gcTime: Infinity,
   });
+
+  useEffect(() => {
+    if (!isConnected) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const serverLabels = await getLabels();
+        if (cancelled) return;
+        queryClient.setQueryData(labelsQueryKey(), serverLabels);
+      } catch (err) {
+        console.warn('Background labels sync failed:', err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isConnected, queryClient]);
+
+  return query;
 }
 
 export function useLabelCounts() {
-  return useQuery({
+  const db = useSQLiteContext();
+  const queryClient = useQueryClient();
+  const { isConnected } = useNetworkStatus();
+
+  const query = useQuery<Record<string, number>>({
     queryKey: labelCountsQueryKey(),
-    queryFn: getLabelCounts,
+    queryFn: () => getLocalLabelCounts(db),
+    staleTime: Infinity,
+    gcTime: Infinity,
   });
+
+  useEffect(() => {
+    if (!isConnected) return;
+    let cancelled = false;
+    (async () => {
+      try {
+        const serverCounts = await getLabelCounts();
+        if (cancelled) return;
+        queryClient.setQueryData(labelCountsQueryKey(), serverCounts);
+      } catch (err) {
+        console.warn('Background label counts sync failed:', err);
+      }
+    })();
+    return () => { cancelled = true; };
+  }, [isConnected, queryClient]);
+
+  return query;
 }
 
 export function useCreateLabel() {
@@ -98,8 +145,14 @@ export function useCreateLabel() {
       }
       return createLabel(name);
     },
-    onSuccess: () => {
-      queryClient.invalidateQueries({ queryKey: labelsQueryKey() });
+    onSuccess: (newLabel) => {
+      // A newly created label is not yet attached to any note, so getLocalLabels()
+      // won't find it — add it directly to avoid it disappearing after the mutation.
+      queryClient.setQueryData<Label[]>(labelsQueryKey(), (old) => {
+        const existing = old ?? [];
+        if (existing.some((l) => l.id === newLabel.id)) return existing;
+        return [...existing, newLabel].sort((a, b) => a.name.localeCompare(b.name));
+      });
       queryClient.invalidateQueries({ queryKey: labelCountsQueryKey() });
       queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
