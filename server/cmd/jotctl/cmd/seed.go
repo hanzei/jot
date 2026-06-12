@@ -306,9 +306,10 @@ func createNote(ctx context.Context, uc *client.Client, n seedNote) (string, err
 		items := make([]client.CreateNoteItem, len(n.items))
 		for i, item := range n.items {
 			items[i] = client.CreateNoteItem{
-				Text:      item.text,
-				Completed: item.completed,
-				Position:  i,
+				Text:        item.text,
+				Completed:   item.completed,
+				Position:    i,
+				IndentLevel: item.indentLevel,
 			}
 		}
 		created, err := uc.CreateListNote(ctx, &client.CreateListNoteRequest{
