@@ -39,6 +39,7 @@ describe('Auth first-run server setup flow', () => {
       login: mockLogin,
       register: mockRegister,
       logout: jest.fn(),
+      clearAuth: jest.fn(),
       revalidateSession: jest.fn(),
       setUser: jest.fn(),
       setSettings: jest.fn(),

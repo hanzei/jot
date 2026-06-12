@@ -21,6 +21,7 @@ interface AuthState {
   login: (username: string, password: string) => Promise<void>;
   register: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
+  clearAuth: () => void;
   revalidateSession: () => Promise<boolean>;
   setUser: React.Dispatch<React.SetStateAction<User | null>>;
   setSettings: (settings: UserSettings) => void;
@@ -150,11 +151,12 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       login,
       register,
       logout,
+      clearAuth,
       revalidateSession,
       setUser,
       setSettings,
     }),
-    [user, settings, isLoading, login, register, logout, revalidateSession],
+    [user, settings, isLoading, login, register, logout, clearAuth, revalidateSession],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;
