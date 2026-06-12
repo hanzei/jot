@@ -274,6 +274,13 @@ export function useUpdateNote() {
     onSuccess: (updatedNote) => {
       queryClient.setQueryData(noteQueryKey(updatedNote.id), updatedNote);
       queryClient.setQueryData(noteLocalQueryKey(updatedNote.id), updatedNote);
+      // Synchronously patch the note in every cached notes-list so the dashboard
+      // shows fresh content immediately on navigation back, without waiting for
+      // the async SQLite refetch that invalidateQueries schedules below.
+      queryClient.setQueriesData<Note[]>(
+        { queryKey: notesLocalQueryScopeKey() },
+        (old) => old?.map((n) => (n.id === updatedNote.id ? updatedNote : n)),
+      );
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
       queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
     },
@@ -675,7 +682,6 @@ export function useToggleNoteItemCompleted() {
           for (const item of serverItems) {
             await patchLocalItem(db, noteId, item.id, { completed: item.completed });
           }
-          queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
           return serverItems;
         } catch (err) {
           // Transient failure: fall through to the offline path so the toggle is
@@ -711,6 +717,12 @@ export function useToggleNoteItemCompleted() {
         body: { completed } as Record<string, unknown>,
       });
       return [];
+    },
+    onSuccess: (_data, { noteId }) => {
+      queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
+      queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+      queryClient.invalidateQueries({ queryKey: noteQueryKey(noteId) });
+      queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
     },
   });
 }
