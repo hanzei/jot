@@ -359,5 +359,31 @@
     "cancelButton": "Cancel",
     "importing": "Importing...",
     "importButton": "Import"
+  },
+  "diagnostics": {
+    "title": "Diagnostics",
+    "developerSection": "Developer",
+    "network": "Network",
+    "connected": "Connected",
+    "disconnected": "Disconnected",
+    "sse": "Server Events",
+    "sseConnected": "Connected",
+    "sseReconnecting": "Reconnecting",
+    "reconnectAttempts": "Reconnect attempts",
+    "syncQueue": "Sync Queue",
+    "pendingOps": "Pending operations",
+    "syncPaused": "Sync paused",
+    "sseQuiesced": "Events paused",
+    "server": "Server",
+    "serverUrl": "URL",
+    "generationId": "Connection generation",
+    "switchInProgress": "Server switch in progress",
+    "degraded": "Degraded",
+    "recentLogs": "Recent Logs",
+    "clearLogs": "Clear Logs",
+    "refresh": "Refresh",
+    "shareDiagnostics": "Share Diagnostics Report",
+    "yes": "Yes",
+    "no": "No"
   }
 }

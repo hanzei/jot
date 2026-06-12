@@ -359,5 +359,31 @@
     "cancelButton": "Annuleren",
     "importing": "Importeren...",
     "importButton": "Importeren"
+  },
+  "diagnostics": {
+    "title": "Diagnose",
+    "developerSection": "Ontwikkelaar",
+    "network": "Netwerk",
+    "connected": "Verbonden",
+    "disconnected": "Niet verbonden",
+    "sse": "Servergebeurtenissen",
+    "sseConnected": "Verbonden",
+    "sseReconnecting": "Opnieuw verbinden",
+    "reconnectAttempts": "Verbindingspogingen",
+    "syncQueue": "Synchronisatiewachtrij",
+    "pendingOps": "Uitstaande bewerkingen",
+    "syncPaused": "Sync gepauzeerd",
+    "sseQuiesced": "Gebeurtenissen gepauzeerd",
+    "server": "Server",
+    "serverUrl": "URL",
+    "generationId": "Verbindingsgeneratie",
+    "switchInProgress": "Serverwisseling bezig",
+    "degraded": "Verminderd",
+    "recentLogs": "Recente logboeken",
+    "clearLogs": "Logboeken wissen",
+    "refresh": "Vernieuwen",
+    "shareDiagnostics": "Diagnoserapport delen",
+    "yes": "Ja",
+    "no": "Nee"
   }
 }
