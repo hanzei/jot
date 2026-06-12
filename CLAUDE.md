@@ -18,7 +18,7 @@
 
 ## Documentation Maintenance
 
-- When development instructions change (build scripts, dev setup, etc.), update the README.md to reflect the changes
+- When development instructions change (build scripts, dev setup, etc.), update the README.md to reflect the changes.
 - When functionality changes (API endpoints, features, configuration options, etc.), update relevant documentation.
 
 ## Git Workflow
@@ -30,11 +30,11 @@
 
 Before submitting a PR, run a sub-agent review loop before finalizing:
 
-1. Launch a sub-agent (use the `simplify` skill or a `general-purpose` agent) to review all changed files for correctness, code quality, and consistency with project conventions.
+1. Launch two sub-agents per round: one using the `code-review` skill (correctness bugs) and one using the `simplify` skill (quality/cleanup and consistency with project conventions) to review all changed files.
 2. Address every piece of valid feedback the review returns (fix bugs, improve clarity, align with conventions).
 3. Repeat steps 1–2 until either:
    - The review returns no valid feedback, **or**
-   - You have completed **4 review rounds** (whichever comes first).
+   - You have completed **2 review rounds** (whichever comes first).
 4. Only proceed to commit/push after the review loop finishes.
 
 ## Development Tasks
@@ -194,7 +194,7 @@ Migration files live in `server/internal/database/migrations/` and are named `NN
 - Unit tests alongside source: e.g., `server/internal/models/note_test.go`
 - Tests spin up an `httptest.Server` against a temporary SQLite database (`/tmp/test_*.db`)
 - Helper types: `TestResponse`, `TestUser`, `TestServer`
-- Use `t.Run` subtests for grouping related cases; do not use `_` as a separator in top-level test function names (e.g. use `TestCreateNote` with `t.Run("success", ...)` subtests, not `TestCreateNote_Success`)
+- Use `t.Run` subtests for grouping related cases; see `server/CLAUDE.md` for the full Go test naming and table-driven test conventions
 - Run: `task test-server`
 
 ---
@@ -217,8 +217,9 @@ Migration files live in `server/internal/database/migrations/` and are named `NN
 
 - `src/utils/api.ts` — axios instance and all API call functions
 - `src/utils/auth.ts` — user/settings read-write helpers in localStorage
-- `src/types/index.ts` — all shared TypeScript interfaces (single source of truth)
 - `src/service-worker.ts` — PWA offline caching via Workbox
+
+Types are distributed across the `@jot/shared` package (`shared/src/`) and imported from `@jot/shared`. Domain model interfaces live in `shared/src/types.ts`; utility types and constants live in their respective modules (`collaborators.ts`, `constants.ts`). All are re-exported from `shared/src/index.ts`. Do not duplicate type definitions in the webapp.
 
 ### Naming Conventions (TypeScript/React)
 
@@ -297,6 +298,7 @@ Persistent data is mounted at `/data` (default `docker-compose.yml` maps host `.
 
 ### CI Checklist (before opening a PR)
 
-1. `task test` — all tests pass
+1. `task test` — all unit/integration tests pass (server, webapp, mobile, shared)
 2. `task lint` — no lint errors
-3. `task test-e2e` — e2e tests pass (add new e2e tests for any new user-facing features)
+3. `task test-e2e` — Playwright e2e tests pass (add new e2e tests for any new user-facing features; not included in `task test`)
+4. `task check-translations` — all locale files are in sync with `en.json` (run if any i18n keys were added or changed)

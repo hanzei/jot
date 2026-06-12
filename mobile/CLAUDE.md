@@ -17,6 +17,19 @@ file in the same directory:
 Do not use the English string as a placeholder in non-English locales. Provide a
 proper translation for each language.
 
+Run `task check-translations` after adding keys to verify all locale files are
+in sync with `en.json`. This task runs from the `webapp/` directory but its
+script checks both webapp and mobile locale directories.
+
+## Sync Loop Safety
+
+The mobile app uses SSE, React Query, and an offline SQLite sync layer — all surfaces where sync loops can form. Follow these rules:
+
+- Always apply exponential backoff on retry (start ≥ 1 s, cap at 60 s); never retry in a tight loop.
+- Detect and break re-entrant sync: if a sync is already in progress, skip rather than queue a second one.
+- Cap the number of consecutive sync attempts before surfacing an error to the user.
+- Prefer idempotent writes (upsert, not insert-then-update) so a replayed sync event is harmless.
+
 ## Safe Area Insets
 
 Screens use `headerShown: false`, so any screen or component rendering content
