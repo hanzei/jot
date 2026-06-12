@@ -333,7 +333,12 @@
     "deleteButton": "Usuń",
     "deleteConfirmTitle": "Usuń serwer",
     "deleteConfirmMessage": "Usunąć \"{{name}}\" z listy serwerów?",
-    "deleteFailed": "Nie udało się usunąć serwera."
+    "deleteFailed": "Nie udało się usunąć serwera.",
+    "renameButton": "Zmień nazwę",
+    "renameTitle": "Nazwij serwer",
+    "renamePlaceholder": "Mój serwer Jot",
+    "renameSave": "Zapisz",
+    "renameFailed": "Nie udało się zmienić nazwy serwera."
   },
   "import": {
     "title": "Importuj z Google Keep",

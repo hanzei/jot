@@ -36,7 +36,12 @@
     "deleteButton": "Remove",
     "deleteConfirmTitle": "Remove server",
     "deleteConfirmMessage": "Remove \"{{name}}\" from your server list?",
-    "deleteFailed": "Failed to remove server."
+    "deleteFailed": "Failed to remove server.",
+    "renameButton": "Rename",
+    "renameTitle": "Name server",
+    "renamePlaceholder": "My Jot Server",
+    "renameSave": "Save",
+    "renameFailed": "Failed to rename server."
   },
   "auth": {
     "signInTitle": "Sign in to Jot",

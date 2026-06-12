@@ -18,7 +18,7 @@ import { useTranslation } from 'react-i18next';
 import { useAuth } from '../store/AuthContext';
 import { useCreateLabel, useDeleteLabel, useLabelCounts, useLabels, useRenameLabel } from '../hooks/useLabels';
 import { useTheme } from '../theme/ThemeContext';
-import { getActiveServer, listServers, removeServer, type ServerAccountEntry } from '../store/serverAccounts';
+import { getActiveServer, listServers, removeServer, renameServer, type ServerAccountEntry } from '../store/serverAccounts';
 import { switchActiveServer } from '../api/client';
 import UserAvatar from './UserAvatar';
 import ServerSetupGate from './ServerSetupGate';
@@ -85,6 +85,8 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
   const [newLabelValue, setNewLabelValue] = useState('');
   const [isServerPickerVisible, setIsServerPickerVisible] = useState(false);
   const [isServerSetupVisible, setIsServerSetupVisible] = useState(false);
+  const [renameServerTarget, setRenameServerTarget] = useState<ServerAccountEntry | null>(null);
+  const [renameServerValue, setRenameServerValue] = useState('');
   const [servers, setServers] = useState<ServerAccountEntry[]>([]);
   const [activeServerId, setActiveServerId] = useState<string | null>(null);
   const [isServerActionPending, setIsServerActionPending] = useState(false);
@@ -345,6 +347,49 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
       ],
     );
   }, [isServerActionPending, t]);
+
+  const handleOpenRenameServer = useCallback((server: ServerAccountEntry) => {
+    if (isServerActionPending) {
+      return;
+    }
+    setRenameServerValue(server.displayName ?? '');
+    setRenameServerTarget(server);
+    setIsServerPickerVisible(false);
+  }, [isServerActionPending]);
+
+  const handleDismissRenameServer = useCallback(() => {
+    if (isServerActionPending) {
+      return;
+    }
+    setRenameServerTarget(null);
+    setRenameServerValue('');
+    setIsServerPickerVisible(true);
+  }, [isServerActionPending]);
+
+  const handleSubmitRenameServer = useCallback(async () => {
+    if (!renameServerTarget || isServerActionPending) {
+      return;
+    }
+    setIsServerActionPending(true);
+    try {
+      const trimmed = renameServerValue.trim();
+      await renameServer(renameServerTarget.serverId, trimmed);
+      setServers(prev =>
+        prev.map(s =>
+          s.serverId === renameServerTarget.serverId
+            ? { ...s, displayName: trimmed.length > 0 ? trimmed : undefined }
+            : s,
+        ),
+      );
+      setRenameServerTarget(null);
+      setRenameServerValue('');
+      setIsServerPickerVisible(true);
+    } catch {
+      Alert.alert(t('common.error'), t('serverPicker.renameFailed'));
+    } finally {
+      setIsServerActionPending(false);
+    }
+  }, [renameServerTarget, renameServerValue, isServerActionPending, t]);
 
   const handleBackToDashboardFromServerSetup = useCallback(() => {
     setIsServerSetupVisible(false);
@@ -762,9 +807,20 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
                         {isActive ? <Ionicons name="checkmark-circle" size={20} color={colors.primary} /> : null}
                       </TouchableOpacity>
                       <TouchableOpacity
+                        onPress={() => handleOpenRenameServer(server)}
+                        disabled={isServerActionPending}
+                        style={styles.serverRowIconButton}
+                        hitSlop={{ top: 8, right: 0, bottom: 8, left: 8 }}
+                        accessibilityRole="button"
+                        accessibilityLabel={t('serverPicker.renameButton')}
+                        testID={`server-picker-rename-${server.serverId}`}
+                      >
+                        <Ionicons name="pencil-outline" size={18} color={colors.icon} />
+                      </TouchableOpacity>
+                      <TouchableOpacity
                         onPress={() => handleDeleteServer(server)}
                         disabled={isServerActionPending}
-                        style={styles.serverDeleteButton}
+                        style={styles.serverRowIconButton}
                         hitSlop={{ top: 8, right: 0, bottom: 8, left: 8 }}
                         accessibilityRole="button"
                         accessibilityLabel={t('serverPicker.deleteButton')}
@@ -887,6 +943,71 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
                 </View>
               )}
             />
+          </Pressable>
+        </Pressable>
+      </Modal>
+
+      <Modal
+        visible={renameServerTarget !== null}
+        transparent
+        animationType="fade"
+        onRequestClose={handleDismissRenameServer}
+      >
+        <Pressable
+          style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}
+          onPress={handleDismissRenameServer}
+        >
+          <Pressable
+            style={[styles.modalCard, { backgroundColor: colors.surface, borderColor: colors.borderLight }]}
+            onPress={(event) => event.stopPropagation()}
+            testID="server-rename-modal"
+          >
+            <Text style={[styles.modalTitle, { color: colors.text }]}>
+              {t('serverPicker.renameTitle')}
+            </Text>
+            <TextInput
+              style={[styles.modalInput, { color: colors.text, borderColor: colors.border, backgroundColor: colors.background }]}
+              value={renameServerValue}
+              onChangeText={setRenameServerValue}
+              placeholder={t('serverPicker.renamePlaceholder')}
+              placeholderTextColor={colors.placeholder}
+              autoFocus
+              editable={!isServerActionPending}
+              returnKeyType="done"
+              onSubmitEditing={() => {
+                void handleSubmitRenameServer();
+              }}
+              testID="server-rename-input"
+            />
+            <View style={styles.modalActions}>
+              <TouchableOpacity
+                style={[styles.modalButton, styles.modalSecondaryButton, { borderColor: colors.border }]}
+                onPress={handleDismissRenameServer}
+                disabled={isServerActionPending}
+                testID="server-rename-cancel"
+              >
+                <Text style={[styles.modalSecondaryText, { color: colors.textSecondary }]}>
+                  {t('common.cancel')}
+                </Text>
+              </TouchableOpacity>
+              <TouchableOpacity
+                style={[
+                  styles.modalButton,
+                  styles.modalPrimaryButton,
+                  { backgroundColor: colors.primary },
+                  (!renameServerValue.trim() || isServerActionPending) && styles.modalButtonDisabled,
+                ]}
+                onPress={() => {
+                  void handleSubmitRenameServer();
+                }}
+                disabled={!renameServerValue.trim() || isServerActionPending}
+                testID="server-rename-submit"
+              >
+                <Text style={styles.modalPrimaryText}>
+                  {isServerActionPending ? t('settings.saving') : t('serverPicker.renameSave')}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </Pressable>
         </Pressable>
       </Modal>
@@ -1036,7 +1157,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     gap: 12,
   },
-  serverDeleteButton: {
+  serverRowIconButton: {
     paddingRight: 12,
     paddingVertical: 10,
   },

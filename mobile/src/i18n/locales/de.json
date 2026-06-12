@@ -330,7 +330,12 @@
     "deleteButton": "Entfernen",
     "deleteConfirmTitle": "Server entfernen",
     "deleteConfirmMessage": "\"{{name}}\" aus deiner Serverliste entfernen?",
-    "deleteFailed": "Server konnte nicht entfernt werden."
+    "deleteFailed": "Server konnte nicht entfernt werden.",
+    "renameButton": "Umbenennen",
+    "renameTitle": "Server benennen",
+    "renamePlaceholder": "Mein Jot-Server",
+    "renameSave": "Speichern",
+    "renameFailed": "Server konnte nicht umbenannt werden."
   },
   "offline": {
     "message": "Du bist offline. Änderungen werden synchronisiert, sobald du wieder verbunden bist."
