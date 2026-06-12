@@ -377,8 +377,12 @@ export async function getLocalLabelCounts(db: SQLiteDatabase): Promise<Record<st
   for (const row of rows) {
     try {
       const labels = JSON.parse(row.labels_json) as Label[];
+      const seenIds = new Set<string>();
       for (const label of labels) {
-        counts[label.id] = (counts[label.id] ?? 0) + 1;
+        if (!seenIds.has(label.id)) {
+          seenIds.add(label.id);
+          counts[label.id] = (counts[label.id] ?? 0) + 1;
+        }
       }
     } catch { /* ignore */ }
   }

@@ -88,11 +88,12 @@ function useBackgroundSyncQuery<T>(
 
   useEffect(() => {
     if (!isConnected) return;
+    const key = getQueryKey();
     let cancelled = false;
     (async () => {
       try {
         const data = await serverFn();
-        if (!cancelled) queryClient.setQueryData(getQueryKey(), data);
+        if (!cancelled) queryClient.setQueryData(key, data);
       } catch { /* background sync — local cache remains */ }
     })();
     return () => { cancelled = true; };

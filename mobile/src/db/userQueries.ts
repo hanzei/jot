@@ -27,6 +27,15 @@ function rowToUser(row: UserRow): User {
 
 export async function saveUsers(db: SQLiteDatabase, users: User[]): Promise<void> {
   await db.withTransactionAsync(async () => {
+    if (users.length === 0) {
+      await db.runAsync('DELETE FROM users');
+    } else {
+      const placeholders = users.map(() => '?').join(',');
+      await db.runAsync(
+        `DELETE FROM users WHERE id NOT IN (${placeholders})`,
+        users.map((u) => u.id),
+      );
+    }
     for (const user of users) {
       await db.runAsync(
         `INSERT OR REPLACE INTO users (id, username, first_name, last_name, role, has_profile_icon, created_at, updated_at)

@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo, useContext } from 'react';
 import {
   View,
   Text,
@@ -13,7 +13,7 @@ import {
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import { searchUsers } from '../api/users';
 import { useNoteShares, useShareNote, useUnshareNote } from '../hooks/useNotes';
 import UserAvatar from '../components/UserAvatar';
@@ -34,7 +34,7 @@ export default function ShareScreen() {
   const { noteId } = route.params;
   const { colors } = useTheme();
   const { t } = useTranslation();
-  const insets = useSafeAreaInsets();
+  const insets = useContext(SafeAreaInsetsContext) ?? { top: 0, right: 0, bottom: 0, left: 0 };
 
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
@@ -75,12 +75,14 @@ export default function ShareScreen() {
   // Fetch search results when debounced query changes (local filter when offline)
   useEffect(() => {
     if (!debouncedQuery) {
+      setIsSearching(false);
       setSearchResults([]);
       setSearchError(false);
       return;
     }
 
     if (!isConnected) {
+      setIsSearching(false);
       const q = debouncedQuery.toLowerCase();
       const filtered = Array.from(usersById.values()).filter(
         (u) =>
@@ -253,7 +255,7 @@ export default function ShareScreen() {
         </Text>
       )}
 
-      <ScrollView keyboardShouldPersistTaps="handled">
+      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: insets.bottom }}>
         {debouncedQuery.length > 0 && (
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>{t('share.results')}</Text>

@@ -34,7 +34,7 @@ export function UsersProvider({ children }: { children: React.ReactNode }) {
     // Load from SQLite first for immediate offline display
     try {
       const localUsers = await getLocalUsers(db);
-      if (isMountedRef.current && localUsers.length > 0) {
+      if (isMountedRef.current) {
         setUsersById(buildUsersMap(user, localUsers));
       }
     } catch { /* ignore — server fetch will follow */ }
