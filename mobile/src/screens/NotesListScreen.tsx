@@ -69,6 +69,7 @@ type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'MainDrawer'
 
 const SEARCH_DEBOUNCE_MS = 300;
 const EMPTY_NOTES: Note[] = [];
+const EMPTY_LOCAL_ORDER: LocalReorderState = { pinned: null, unpinned: null };
 
 interface LocalReorderState {
   pinned: Note[] | null;
@@ -235,7 +236,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     const requestId = ++sortRequestIdRef.current;
 
     setSortMode(nextSort);
-    setLocalOrder({ pinned: null, unpinned: null });
+    setLocalOrder(EMPTY_LOCAL_ORDER);
     if (previousSettings) {
       setSettings({ ...previousSettings, note_sort: nextSort });
     }
@@ -490,10 +491,10 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     return [...pinned, ...other];
   }, [archivedNotes, sortMode]);
 
-  // Clear local order overrides when server data or variant changes
+  // Clear local order overrides when server data, variant, or sort mode changes
   useEffect(() => {
-    setLocalOrder({ pinned: null, unpinned: null });
-  }, [notes, variant]);
+    setLocalOrder(EMPTY_LOCAL_ORDER);
+  }, [notes, variant, sortMode]);
 
   useEffect(() => {
     let cancelled = false;
