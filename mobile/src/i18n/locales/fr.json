@@ -330,7 +330,15 @@
     "deleteButton": "Supprimer",
     "deleteConfirmTitle": "Supprimer le serveur",
     "deleteConfirmMessage": "Supprimer « {{name}} » de votre liste de serveurs ?",
-    "deleteFailed": "Impossible de supprimer le serveur."
+    "deleteFailed": "Impossible de supprimer le serveur.",
+    "renameButton": "Renommer",
+    "renameTitle": "Nommer le serveur",
+    "renamePlaceholder": "Mon serveur Jot",
+    "renameSave": "Enregistrer",
+    "renameFailed": "Impossible de renommer le serveur.",
+    "cancelSetupTitle": "Annuler l'ajout du serveur ?",
+    "cancelSetupMessage": "Le serveur ne sera pas ajouté.",
+    "cancelSetupConfirm": "Retour"
   },
   "offline": {
     "message": "Vous êtes hors ligne. Les modifications seront synchronisées lors de la reconnexion."
