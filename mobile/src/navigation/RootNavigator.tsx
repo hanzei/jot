@@ -14,7 +14,9 @@ import DiagnosticsScreen from '../screens/DiagnosticsScreen';
 
 export type RootStackParamList = {
   MainDrawer: undefined;
-  NoteEditor: { noteId: string | null };
+  // sharedText pre-fills a brand-new note (noteId null) when opened from an
+  // Android share intent.
+  NoteEditor: { noteId: string | null; sharedText?: string };
   Share: { noteId: string };
   Settings: undefined;
   Diagnostics: undefined;

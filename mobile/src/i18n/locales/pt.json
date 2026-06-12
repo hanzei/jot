@@ -340,6 +340,11 @@
     "wrongServerTitle": "Servidor incorreto",
     "wrongServerMessage": "Este link aponta para {{targetServer}}, mas você está conectado a {{currentServer}}."
   },
+  "shareIntent": {
+    "saveTargetLabel": "Salvando em {{server}}",
+    "changeServer": "Alterar",
+    "chooseServerTitle": "Salvar nota compartilhada em"
+  },
   "offline": {
     "message": "Você está offline. As alterações serão sincronizadas quando você se reconectar."
   },

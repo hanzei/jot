@@ -36,6 +36,9 @@ import {
 import { getDatabaseNameForServer, initializeServerDatabase } from './src/db/serverDatabase';
 import { canonicalizeServerOrigin } from '@jot/shared';
 import { addServer, listServers } from './src/store/serverAccounts';
+import { ShareIntentProvider } from 'expo-share-intent';
+import { useShareIntentNavigation } from './src/hooks/useShareIntentNavigation';
+import { setPendingShare } from './src/store/shareIntent';
 import './src/i18n';
 
 const queryClient = new QueryClient({
@@ -299,10 +302,20 @@ function NavigationWrapper() {
     [evaluateIncomingDeepLink, isAuthenticated],
   );
 
+  useShareIntentNavigation({
+    navigationRef,
+    isNavReady,
+    isAuthenticated,
+    revalidateSession,
+  });
+
   React.useEffect(() => {
     if (wasAuthenticatedRef.current && !isAuthenticated) {
       pendingDeepLinkUrlRef.current = null;
       warnedDeepLinkUrlsRef.current.clear();
+      // Drop any share that was waiting to be created; it belonged to the
+      // logged-out session.
+      setPendingShare(null);
     }
     wasAuthenticatedRef.current = isAuthenticated;
   }, [isAuthenticated]);
@@ -463,28 +476,30 @@ export default function App() {
   return (
     <GestureHandlerRootView style={{ flex: 1 }}>
       <SafeAreaProvider>
-        <QueryClientProvider client={queryClient}>
-          <AuthProvider>
-            <SQLiteProvider
-              key={`sqlite-${databaseName}-${dbInitAttempt}`}
-              databaseName={databaseName}
-              onInit={handleDatabaseInit}
-              onError={handleDatabaseError}
-            >
-              <MobileI18nProvider>
-                <ThemeProvider>
-                  <UsersProvider>
-                    <OfflineProvider>
-                      <ToastProvider>
-                        <NavigationWrapper />
-                      </ToastProvider>
-                    </OfflineProvider>
-                  </UsersProvider>
-                </ThemeProvider>
-              </MobileI18nProvider>
-            </SQLiteProvider>
-          </AuthProvider>
-        </QueryClientProvider>
+        <ShareIntentProvider>
+          <QueryClientProvider client={queryClient}>
+            <AuthProvider>
+              <SQLiteProvider
+                key={`sqlite-${databaseName}-${dbInitAttempt}`}
+                databaseName={databaseName}
+                onInit={handleDatabaseInit}
+                onError={handleDatabaseError}
+              >
+                <MobileI18nProvider>
+                  <ThemeProvider>
+                    <UsersProvider>
+                      <OfflineProvider>
+                        <ToastProvider>
+                          <NavigationWrapper />
+                        </ToastProvider>
+                      </OfflineProvider>
+                    </UsersProvider>
+                  </ThemeProvider>
+                </MobileI18nProvider>
+              </SQLiteProvider>
+            </AuthProvider>
+          </QueryClientProvider>
+        </ShareIntentProvider>
       </SafeAreaProvider>
     </GestureHandlerRootView>
   );

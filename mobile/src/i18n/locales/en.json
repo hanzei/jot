@@ -340,6 +340,11 @@
     "wrongServerTitle": "Wrong server",
     "wrongServerMessage": "This link targets {{targetServer}}, but you are connected to {{currentServer}}."
   },
+  "shareIntent": {
+    "saveTargetLabel": "Saving to {{server}}",
+    "changeServer": "Change",
+    "chooseServerTitle": "Save shared note to"
+  },
   "offline": {
     "message": "You're offline. Changes will sync when you reconnect."
   },

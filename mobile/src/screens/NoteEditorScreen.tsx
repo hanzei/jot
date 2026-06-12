@@ -11,6 +11,7 @@ import {
   Platform,
   InputAccessoryView,
   Keyboard,
+  Modal,
   type TextInputProps,
   type TextInput as TextInputType,
 } from 'react-native';
@@ -37,6 +38,8 @@ import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { getCompletedSectionDividerColor, isWhiteHexColor } from '../utils/colorContrast';
 import { fullMarkdownStyles, preprocessMarkdown } from '../utils/markdownStyles';
+import { getActiveServer, listServers, type ServerAccountEntry } from '../store/serverAccounts';
+import { setPendingShare, usePendingShare } from '../store/shareIntent';
 
 type EditorRouteProp = RouteProp<RootStackParamList, 'NoteEditor'>;
 type EditorNavProp = NativeStackNavigationProp<RootStackParamList, 'NoteEditor'>;
@@ -147,12 +150,16 @@ function applyCompletedCascade(items: LocalItem[], itemId: string, completed: bo
 export default function NoteEditorScreen() {
   const navigation = useNavigation<EditorNavProp>();
   const route = useRoute<EditorRouteProp>();
-  const { noteId: initialNoteId } = route.params;
+  const { noteId: initialNoteId, sharedText } = route.params;
   const { t, i18n } = useTranslation();
+
+  // A new note opened from an Android share intent arrives with sharedText to
+  // pre-fill the body.
+  const openedFromShare = initialNoteId === null && !!sharedText;
 
   const [noteId, setNoteId] = useState<string | null>(initialNoteId);
   const [title, setTitle] = useState('');
-  const [content, setContent] = useState('');
+  const [content, setContent] = useState(() => (initialNoteId === null ? sharedText ?? '' : ''));
   const [noteType, setNoteType] = useState<NoteType>('text');
   const [items, setItems] = useState<LocalItem[]>([]);
   const [checkedItemsCollapsed, setCheckedItemsCollapsed] = useState(false);
@@ -169,6 +176,15 @@ export default function NoteEditorScreen() {
   const [syncToast, setSyncToast] = useState<string | null>(null);
   const [isEditingContent, setIsEditingContent] = useState(initialNoteId === null);
   const [listItemFocused, setListItemFocused] = useState(false);
+  // Share-target picker: lets a share be redirected to another server before it
+  // is saved (only relevant when opened from a share and 2+ servers exist).
+  const [shareServers, setShareServers] = useState<ServerAccountEntry[]>([]);
+  const [activeShareServerId, setActiveShareServerId] = useState<string | null>(null);
+  const [shareServerPickerVisible, setShareServerPickerVisible] = useState(false);
+  // Tracks the pending share so a redirect that the navigation layer drops
+  // (e.g. the server switch failed) can be rolled back while still mounted.
+  const pendingShare = usePendingShare();
+  const redirectInitiatedRef = useRef(false);
   const focusedListItemIdRef = useRef<string | null>(null);
   const { usersById } = useUsers();
   const { showToast } = useToast();
@@ -528,6 +544,90 @@ export default function NoteEditorScreen() {
     hasPendingChangesRef.current = true;
     scheduleUpdate();
   }, [scheduleUpdate]);
+
+  // Pre-filled share content must be flagged dirty so it auto-saves (and is not
+  // lost on unmount). Runs once on mount.
+  const sharedInitRef = useRef(false);
+  useEffect(() => {
+    if (sharedInitRef.current || !openedFromShare || !sharedText) {
+      return;
+    }
+    sharedInitRef.current = true;
+    markDirtyAndScheduleUpdate();
+  }, [openedFromShare, sharedText, markDirtyAndScheduleUpdate]);
+
+  // Load the server list so the share-target picker can offer to redirect the
+  // new note to another configured server.
+  useEffect(() => {
+    if (!openedFromShare) {
+      return;
+    }
+    let cancelled = false;
+    void (async () => {
+      const [servers, active] = await Promise.all([listServers(), getActiveServer()]);
+      if (cancelled) {
+        return;
+      }
+      setShareServers(servers);
+      setActiveShareServerId(active?.serverId ?? null);
+    })();
+    return () => {
+      cancelled = true;
+    };
+  }, [openedFromShare]);
+
+  // Redirect the shared note to a different server: stash the text targeted at
+  // that server and let the navigation layer switch servers and re-open the
+  // editor there. We skip the unmount flush so nothing new is written to the
+  // current server on the way out. Because the note auto-saves ~1s after the
+  // editor opens, a draft may already have been created on the current server
+  // by the time the user picks a different one — so we remove it first to avoid
+  // leaving an orphan behind.
+  const handleRedirectShare = useCallback(async (serverId: string) => {
+    setShareServerPickerVisible(false);
+    if (serverId === activeShareServerId) {
+      return;
+    }
+    if (debounceRef.current) {
+      clearTimeout(debounceRef.current);
+      debounceRef.current = null;
+    }
+    intentionalExitRef.current = true;
+    // Wait for any in-flight create so we know whether a note already landed on
+    // the current server.
+    if (saveInFlightRef.current) {
+      try { await saveInFlightRef.current; } catch { /* failure surfaced elsewhere */ }
+    }
+    const createdNoteId = noteIdRef.current;
+    if (createdNoteId) {
+      try {
+        await deleteMutation.mutateAsync(createdNoteId);
+      } catch { /* best effort: leave it on the original server if delete fails */ }
+    }
+    redirectInitiatedRef.current = true;
+    setPendingShare({ text: contentRef.current, targetServerId: serverId });
+  }, [activeShareServerId, deleteMutation]);
+
+  // If the navigation layer drops a redirect we started (the server switch
+  // failed, so no remount unmounts this editor), recover instead of leaving a
+  // deleted draft behind a no-save editor: treat the content as a fresh unsaved
+  // note again and re-arm the auto-save on the current server.
+  useEffect(() => {
+    if (!redirectInitiatedRef.current || pendingShare !== null) {
+      return;
+    }
+    redirectInitiatedRef.current = false;
+    intentionalExitRef.current = false;
+    noteIdRef.current = null;
+    setNoteId(null);
+    setHasCreated(false);
+    markDirtyAndScheduleUpdate();
+  }, [pendingShare, markDirtyAndScheduleUpdate]);
+
+  const activeShareServerName = useMemo(() => {
+    const active = shareServers.find((server) => server.serverId === activeShareServerId);
+    return active?.displayName || active?.serverUrl || '';
+  }, [shareServers, activeShareServerId]);
 
   const flushPendingChanges = useCallback(async (): Promise<boolean> => {
     if (debounceRef.current) {
@@ -1326,6 +1426,21 @@ export default function NoteEditorScreen() {
         </View>
       </View>
 
+      {openedFromShare && shareServers.length > 1 && (
+        <View style={[styles.shareTargetBar, { backgroundColor: colors.primaryLight, borderBottomColor: colors.primary }]} testID="share-target-bar">
+          <Text style={[styles.shareTargetText, { color: colors.primary }]} numberOfLines={1}>
+            {t('shareIntent.saveTargetLabel', { server: activeShareServerName })}
+          </Text>
+          <TouchableOpacity
+            onPress={() => setShareServerPickerVisible(true)}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+            testID="share-change-server-btn"
+          >
+            <Text style={[styles.shareTargetAction, { color: colors.primary }]}>{t('shareIntent.changeServer')}</Text>
+          </TouchableOpacity>
+        </View>
+      )}
+
       {saveError && (
         <TouchableOpacity
           style={[styles.errorBanner, { backgroundColor: colors.errorLight, borderBottomColor: colors.error }]}
@@ -1678,6 +1793,40 @@ export default function NoteEditorScreen() {
           setAssigningItemId(null);
         }}
       />
+
+      <Modal
+        visible={shareServerPickerVisible}
+        transparent
+        animationType="fade"
+        onRequestClose={() => setShareServerPickerVisible(false)}
+      >
+        <TouchableOpacity
+          style={styles.shareModalOverlay}
+          activeOpacity={1}
+          onPress={() => setShareServerPickerVisible(false)}
+        >
+          <View style={[styles.shareModalCard, { backgroundColor: colors.surface }]}>
+            <Text style={[styles.shareModalTitle, { color: colors.text }]}>
+              {t('shareIntent.chooseServerTitle')}
+            </Text>
+            {shareServers.map((server) => (
+              <TouchableOpacity
+                key={server.serverId}
+                style={styles.shareModalRow}
+                onPress={() => { void handleRedirectShare(server.serverId); }}
+                testID={`share-server-option-${server.serverId}`}
+              >
+                <Text style={[styles.shareModalRowText, { color: colors.text }]} numberOfLines={1}>
+                  {server.displayName || server.serverUrl}
+                </Text>
+                {server.serverId === activeShareServerId && (
+                  <Ionicons name="checkmark" size={18} color={colors.primary} />
+                )}
+              </TouchableOpacity>
+            ))}
+          </View>
+        </TouchableOpacity>
+      </Modal>
     </KeyboardAvoidingView>
   );
 }
@@ -1685,6 +1834,52 @@ export default function NoteEditorScreen() {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
+  },
+  shareTargetBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  shareTargetText: {
+    flex: 1,
+    fontSize: 13,
+    marginRight: 12,
+  },
+  shareTargetAction: {
+    fontSize: 13,
+    fontWeight: '600',
+  },
+  shareModalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.4)',
+    justifyContent: 'center',
+    paddingHorizontal: 32,
+  },
+  shareModalCard: {
+    borderRadius: 12,
+    paddingVertical: 8,
+  },
+  shareModalTitle: {
+    fontSize: 15,
+    fontWeight: '600',
+    paddingHorizontal: 16,
+    paddingTop: 12,
+    paddingBottom: 8,
+  },
+  shareModalRow: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'space-between',
+    paddingHorizontal: 16,
+    paddingVertical: 14,
+  },
+  shareModalRowText: {
+    flex: 1,
+    fontSize: 15,
+    marginRight: 12,
   },
   header: {
     flexDirection: 'row',

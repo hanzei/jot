@@ -313,6 +313,11 @@
     "unknownServerMessage": "Ten link wskazuje serwer {{server}}, który nie został jeszcze dodany.",
     "addAndSwitchAction": "Dodaj i przełącz"
   },
+  "shareIntent": {
+    "saveTargetLabel": "Zapisywanie na {{server}}",
+    "changeServer": "Zmień",
+    "chooseServerTitle": "Zapisz udostępnioną notatkę na"
+  },
   "offline": {
     "message": "Jesteś offline. Zmiany zostaną zsynchronizowane po ponownym połączeniu."
   },

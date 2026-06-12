@@ -13,6 +13,16 @@ jest.mock('expo-localization', () => ({
   getLocales: jest.fn(() => [{ languageTag: 'en-US', languageCode: 'en' }]),
 }));
 
+jest.mock('expo-share-intent', () => ({
+  ShareIntentProvider: ({ children }) => children,
+  useShareIntentContext: () => ({
+    hasShareIntent: false,
+    shareIntent: { text: null, webUrl: null, files: null, type: null },
+    resetShareIntent: jest.fn(),
+    error: null,
+  }),
+}));
+
 const mockDb = {
   execAsync: jest.fn().mockResolvedValue(undefined),
   runAsync: jest.fn().mockResolvedValue({ lastInsertRowId: 1, changes: 1 }),

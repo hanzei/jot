@@ -340,6 +340,11 @@
     "cancelSetupMessage": "Le serveur ne sera pas ajouté.",
     "cancelSetupConfirm": "Retour"
   },
+  "shareIntent": {
+    "saveTargetLabel": "Enregistrement sur {{server}}",
+    "changeServer": "Modifier",
+    "chooseServerTitle": "Enregistrer la note partagée sur"
+  },
   "offline": {
     "message": "Vous êtes hors ligne. Les modifications seront synchronisées lors de la reconnexion."
   },
