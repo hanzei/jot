@@ -1,7 +1,7 @@
 import React from 'react';
 import { renderHook, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useNotes, useNote, useCreateNote, useUpdateNote, useDeleteNote, useDuplicateNote } from '../src/hooks/useNotes';
+import { useNotes, useNote, useCreateNote, useUpdateNote, useDeleteNote, useDuplicateNote, useCreateNoteItem, useToggleNoteItemCompleted } from '../src/hooks/useNotes';
 import * as notesApi from '../src/api/notes';
 import * as noteQueriesModule from '../src/db/noteQueries';
 import * as clientModule from '../src/api/client';
@@ -30,9 +30,14 @@ jest.mock('../src/db/noteQueries', () => ({
   updateLocalNote: jest.fn().mockResolvedValue(undefined),
   generateLocalId: jest.fn(() => 'local_test_id'),
   isLocalId: jest.fn((id: string) => id.startsWith('local_')),
+  createLocalItem: jest.fn().mockResolvedValue(undefined),
+  patchLocalItem: jest.fn().mockResolvedValue(undefined),
+  deleteLocalItem: jest.fn().mockResolvedValue(undefined),
+  reorderLocalItems: jest.fn().mockResolvedValue(undefined),
 }));
 
 jest.mock('../src/db/syncQueue', () => ({
+  ...jest.requireActual('../src/db/syncQueue'),
   enqueueOperation: jest.fn().mockResolvedValue(undefined),
 }));
 
@@ -48,6 +53,19 @@ jest.mock('../src/api/client', () => ({
 const mockNotesApi = notesApi as jest.Mocked<typeof notesApi>;
 const mockNoteQueries = noteQueriesModule as jest.Mocked<typeof noteQueriesModule>;
 const mockClientModule = clientModule as jest.Mocked<typeof clientModule>;
+const mockSyncQueue = jest.requireMock('../src/db/syncQueue') as { enqueueOperation: jest.Mock };
+
+function makeAxiosError(status: number) {
+  return Object.assign(new Error(`Request failed with status code ${status}`), {
+    isAxiosError: true,
+    response: { status },
+  });
+}
+
+// A network failure produces an Axios error with no `response` (no HTTP status).
+function makeNetworkError() {
+  return Object.assign(new Error('Network Error'), { isAxiosError: true });
+}
 
 function createWrapper() {
   const queryClient = new QueryClient({
@@ -219,6 +237,138 @@ describe('useNotes hooks', () => {
       expect(enqueueOperation).not.toHaveBeenCalled();
       expect(mockNoteQueries.updateLocalNote).not.toHaveBeenCalled();
       expect(mockNoteQueries.saveNote).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('useUpdateNote (online write failures)', () => {
+    const existingNote = {
+      id: '123', title: 'Old', content: 'Old body', note_type: 'text',
+      color: '#ffffff', pinned: false, archived: false, position: 0,
+      checked_items_collapsed: false, is_shared: false, deleted_at: null,
+      user_id: 'u1', created_at: '', updated_at: '', labels: [], shared_with: [],
+    };
+
+    it('falls back to the local queue when a transient failure (5xx) occurs', async () => {
+      mockNotesApi.updateNote.mockRejectedValueOnce(makeAxiosError(503));
+      mockNoteQueries.getLocalNote.mockResolvedValueOnce(existingNote as never);
+
+      const { result } = renderHook(() => useUpdateNote(), { wrapper: createWrapper() });
+
+      await result.current.mutateAsync({ id: '123', data: { content: 'New body' } });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      // The edit is persisted locally and queued for replay rather than lost,
+      // and the mutation resolves so the editor can exit normally.
+      expect(mockNoteQueries.updateLocalNote).toHaveBeenCalledWith(expect.anything(), '123', { content: 'New body' });
+      expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ operation: 'update', endpoint: '/notes/123', method: 'PATCH' }),
+      );
+      expect((result.current.data as { content: string }).content).toBe('New body');
+    });
+
+    it('falls back to the local queue on a network error (no response)', async () => {
+      mockNotesApi.updateNote.mockRejectedValueOnce(makeNetworkError());
+      mockNoteQueries.getLocalNote.mockResolvedValueOnce(existingNote as never);
+
+      const { result } = renderHook(() => useUpdateNote(), { wrapper: createWrapper() });
+
+      await result.current.mutateAsync({ id: '123', data: { content: 'New body' } });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(mockSyncQueue.enqueueOperation).toHaveBeenCalled();
+    });
+
+    it('surfaces a permanent failure (4xx) without queuing', async () => {
+      mockNotesApi.updateNote.mockRejectedValueOnce(makeAxiosError(400));
+
+      const { result } = renderHook(() => useUpdateNote(), { wrapper: createWrapper() });
+
+      await result.current.mutateAsync({ id: '123', data: { content: 'New body' } }).catch(() => {});
+
+      await waitFor(() => expect(result.current.isError).toBe(true));
+
+      // A real validation/auth error must reach the UI, not be silently queued.
+      expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
+      expect(mockNoteQueries.getLocalNote).not.toHaveBeenCalled();
+    });
+
+    it('surfaces a 401 without queuing (the interceptor logs the user out)', async () => {
+      mockNotesApi.updateNote.mockRejectedValueOnce(makeAxiosError(401));
+
+      const { result } = renderHook(() => useUpdateNote(), { wrapper: createWrapper() });
+
+      await result.current.mutateAsync({ id: '123', data: { content: 'New body' } }).catch(() => {});
+
+      await waitFor(() => expect(result.current.isError).toBe(true));
+
+      expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
+      expect(mockNoteQueries.getLocalNote).not.toHaveBeenCalled();
+    });
+
+    it('rethrows a non-Axios (local) error instead of queuing it', async () => {
+      mockNotesApi.updateNote.mockRejectedValueOnce(new Error('boom'));
+
+      const { result } = renderHook(() => useUpdateNote(), { wrapper: createWrapper() });
+
+      await result.current.mutateAsync({ id: '123', data: { content: 'New body' } }).catch(() => {});
+
+      await waitFor(() => expect(result.current.isError).toBe(true));
+
+      expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
+      expect(mockNoteQueries.getLocalNote).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('item mutations (online write failures)', () => {
+    it('useCreateNoteItem falls back to the local queue on a transient failure', async () => {
+      mockNotesApi.createNoteItem.mockRejectedValueOnce(makeAxiosError(503));
+
+      const { result } = renderHook(() => useCreateNoteItem(), { wrapper: createWrapper() });
+
+      await result.current.mutateAsync({ noteId: 'n1', item: { id: 'i1', text: 'New item', position: 0 } });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      expect(mockNoteQueries.createLocalItem).toHaveBeenCalled();
+      expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ operation: 'createItem', endpoint: '/notes/n1/items', method: 'POST' }),
+      );
+    });
+
+    it('useToggleNoteItemCompleted falls back to the local queue on a transient failure', async () => {
+      mockNotesApi.toggleItemCompleted.mockRejectedValueOnce(makeAxiosError(503));
+      mockNoteQueries.getLocalNote.mockResolvedValueOnce({
+        id: 'n1', note_type: 'list', title: 'L', checked_items_collapsed: false,
+        color: '#ffffff', pinned: false, archived: false, position: 0, is_shared: false,
+        deleted_at: null, user_id: 'u1', created_at: '', updated_at: '', labels: [], shared_with: [],
+        items: [{ id: 'i1', note_id: 'n1', text: 'a', completed: false, position: 0, parent_id: null, assigned_to: '', created_at: '', updated_at: '' }],
+      } as never);
+
+      const { result } = renderHook(() => useToggleNoteItemCompleted(), { wrapper: createWrapper() });
+
+      await result.current.mutateAsync({ noteId: 'n1', itemId: 'i1', completed: true });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ operation: 'toggleItemCompleted', endpoint: '/notes/n1/items/i1/toggle-completed' }),
+      );
+    });
+
+    it('useCreateNoteItem surfaces a permanent failure (4xx) without queuing', async () => {
+      mockNotesApi.createNoteItem.mockRejectedValueOnce(makeAxiosError(400));
+
+      const { result } = renderHook(() => useCreateNoteItem(), { wrapper: createWrapper() });
+
+      await result.current.mutateAsync({ noteId: 'n1', item: { id: 'i1', text: 'New item', position: 0 } }).catch(() => {});
+
+      await waitFor(() => expect(result.current.isError).toBe(true));
+
+      expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
     });
   });
 
