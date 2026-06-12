@@ -19,17 +19,9 @@ proper translation for each language.
 
 ## Safe Area Insets
 
-All screens are registered with `headerShown: false`, so there is no navigation
-header to absorb the status bar / notch / home-indicator. Each screen — and any
-component that renders content flush against a screen edge (custom headers, top
-banners, FABs, bottom toolbars, bottom sheets/modals) — is responsible for
-applying safe-area insets itself. Without this, content renders under the status
-bar at the top or the gesture bar at the bottom.
-
-- Apply `insets.top` to top-edge content (via `paddingTop`) and `insets.bottom`
-  to bottom-edge content (via `paddingBottom`). Centered/scrollable forms should
-  pad both edges so content stays in the safe area even when it grows.
-- Read insets with `useContext(SafeAreaInsetsContext) ?? { top: 0, right: 0, bottom: 0, left: 0 }`
-  for components that may render without a `SafeAreaProvider` (e.g. in unit
-  tests that render the component in isolation). `useSafeAreaInsets()` is fine
-  for screens whose tests mock `react-native-safe-area-context`.
+Screens use `headerShown: false`, so any screen or component rendering content
+against a screen edge (headers, banners, FABs, toolbars, bottom sheets) must
+apply safe-area insets itself: `paddingTop: insets.top` for top content,
+`paddingBottom: insets.bottom` for bottom content. Read insets with
+`useContext(SafeAreaInsetsContext) ?? { top: 0, right: 0, bottom: 0, left: 0 }`
+so components don't throw when rendered without a provider (e.g. in unit tests).
