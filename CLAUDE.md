@@ -30,7 +30,7 @@
 
 Before submitting a PR, run a sub-agent review loop before finalizing:
 
-1. Launch a sub-agent (use the `code-review` skill for correctness bugs, and the `simplify` skill for quality/cleanup and consistency with project conventions) to review all changed files.
+1. Launch two sub-agents per round: one using the `code-review` skill (correctness bugs) and one using the `simplify` skill (quality/cleanup and consistency with project conventions) to review all changed files.
 2. Address every piece of valid feedback the review returns (fix bugs, improve clarity, align with conventions).
 3. Repeat steps 1–2 until either:
    - The review returns no valid feedback, **or**
@@ -194,7 +194,7 @@ Migration files live in `server/internal/database/migrations/` and are named `NN
 - Unit tests alongside source: e.g., `server/internal/models/note_test.go`
 - Tests spin up an `httptest.Server` against a temporary SQLite database (`/tmp/test_*.db`)
 - Helper types: `TestResponse`, `TestUser`, `TestServer`
-- Use `t.Run` subtests for grouping related cases; do not use `_` as a separator in top-level test function names (e.g. use `TestCreateNote` with `t.Run("success", ...)` subtests, not `TestCreateNote_Success`)
+- Use `t.Run` subtests for grouping related cases; see `server/CLAUDE.md` for the full Go test naming and table-driven test conventions
 - Run: `task test-server`
 
 ---
@@ -219,7 +219,7 @@ Migration files live in `server/internal/database/migrations/` and are named `NN
 - `src/utils/auth.ts` — user/settings read-write helpers in localStorage
 - `src/service-worker.ts` — PWA offline caching via Workbox
 
-All TypeScript interfaces are defined in `shared/src/types.ts` (the `@jot/shared` package) and imported from `@jot/shared`. Do not duplicate type definitions in the webapp.
+Types are distributed across the `@jot/shared` package (`shared/src/`) and imported from `@jot/shared`. Domain model interfaces live in `shared/src/types.ts`; utility types and constants live in their respective modules (`collaborators.ts`, `constants.ts`). All are re-exported from `shared/src/index.ts`. Do not duplicate type definitions in the webapp.
 
 ### Naming Conventions (TypeScript/React)
 

@@ -18,7 +18,8 @@ Do not use the English string as a placeholder in non-English locales. Provide a
 proper translation for each language.
 
 Run `task check-translations` after adding keys to verify all locale files are
-in sync with `en.json`.
+in sync with `en.json`. This task runs from the `webapp/` directory but its
+script checks both webapp and mobile locale directories.
 
 ## Sync Loop Safety
 
