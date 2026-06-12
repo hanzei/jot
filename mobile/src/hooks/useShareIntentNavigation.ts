@@ -57,9 +57,11 @@ export function useShareIntentNavigation({
     void (async () => {
       if (pending.targetServerId && pending.targetServerId !== getActiveServerId()) {
         const switched = await switchActiveServer(pending.targetServerId);
-        if (!switched) {
-          // Could not reach the requested server; drop the redirect rather than
-          // silently creating the note on the wrong server.
+        if (!switched || getActiveServerId() !== pending.targetServerId) {
+          // Could not reach the requested server (or the switch completed in a
+          // degraded state without actually changing the active server). Drop
+          // the redirect rather than silently creating the note on the wrong
+          // server or leaving it stranded with no remount to retrigger us.
           setPendingShare(null);
           return;
         }

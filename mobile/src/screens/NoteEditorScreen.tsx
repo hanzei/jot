@@ -155,7 +155,7 @@ export default function NoteEditorScreen() {
 
   // A new note opened from an Android share intent arrives with sharedText to
   // pre-fill the body.
-  const openedFromShare = initialNoteId === null && sharedText !== undefined;
+  const openedFromShare = initialNoteId === null && !!sharedText;
 
   const [noteId, setNoteId] = useState<string | null>(initialNoteId);
   const [title, setTitle] = useState('');
@@ -574,9 +574,12 @@ export default function NoteEditorScreen() {
 
   // Redirect the shared note to a different server: stash the text targeted at
   // that server and let the navigation layer switch servers and re-open the
-  // editor there. We skip the unmount flush so nothing is written to the
-  // current server on the way out.
-  const handleRedirectShare = useCallback((serverId: string) => {
+  // editor there. We skip the unmount flush so nothing new is written to the
+  // current server on the way out. Because the note auto-saves ~1s after the
+  // editor opens, a draft may already have been created on the current server
+  // by the time the user picks a different one — so we remove it first to avoid
+  // leaving an orphan behind.
+  const handleRedirectShare = useCallback(async (serverId: string) => {
     setShareServerPickerVisible(false);
     if (serverId === activeShareServerId) {
       return;
@@ -586,8 +589,19 @@ export default function NoteEditorScreen() {
       debounceRef.current = null;
     }
     intentionalExitRef.current = true;
+    // Wait for any in-flight create so we know whether a note already landed on
+    // the current server.
+    if (saveInFlightRef.current) {
+      try { await saveInFlightRef.current; } catch { /* failure surfaced elsewhere */ }
+    }
+    const createdNoteId = noteIdRef.current;
+    if (createdNoteId) {
+      try {
+        await deleteMutation.mutateAsync(createdNoteId);
+      } catch { /* best effort: leave it on the original server if delete fails */ }
+    }
     setPendingShare({ text: contentRef.current, targetServerId: serverId });
-  }, [activeShareServerId]);
+  }, [activeShareServerId, deleteMutation]);
 
   const activeShareServerName = useMemo(() => {
     const active = shareServers.find((server) => server.serverId === activeShareServerId);
@@ -1778,7 +1792,7 @@ export default function NoteEditorScreen() {
               <TouchableOpacity
                 key={server.serverId}
                 style={styles.shareModalRow}
-                onPress={() => handleRedirectShare(server.serverId)}
+                onPress={() => { void handleRedirectShare(server.serverId); }}
                 testID={`share-server-option-${server.serverId}`}
               >
                 <Text style={[styles.shareModalRowText, { color: colors.text }]} numberOfLines={1}>
