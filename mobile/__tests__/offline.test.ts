@@ -160,6 +160,32 @@ describe('drainQueue', () => {
     expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [5]);
   });
 
+  it('does not duplicate a createItem whose original request already committed (409 replay is dead-lettered)', async () => {
+    // Models the partial-commit case: the server created item i1 but the client
+    // never saw the response (transient failure), so the create was queued for
+    // replay. Replaying it POSTs the same stable id, the server rejects the
+    // duplicate with 409, and the entry is discarded rather than retried.
+    const db = makeMockDb([
+      {
+        id: 20,
+        operation: 'createItem',
+        endpoint: '/notes/n1/items',
+        method: 'POST',
+        body: JSON.stringify({ id: 'i1', text: 'a', position: 0 }),
+        created_at: '',
+      },
+    ]);
+    mockApi.post.mockRejectedValueOnce(makeAxiosError(409));
+
+    const { discardedOperations } = await drainQueue(db as never);
+
+    expect(mockApi.post).toHaveBeenCalledTimes(1);
+    expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [20]);
+    expect(discardedOperations).toEqual([
+      { operation: 'createItem', endpoint: '/notes/n1/items', status: 409 },
+    ]);
+  });
+
   it('stops draining on network errors (non-4xx)', async () => {
     const db = makeMockDb([
       { id: 6, operation: 'update', endpoint: '/notes/abc', method: 'PATCH', body: '{}', created_at: '' },

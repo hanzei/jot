@@ -297,7 +297,11 @@ export function useCreateNoteItem() {
       assertSwitchWriteAllowed();
       // Ensure a stable, server-format ID up front so the local row, the server
       // request, and any queued op all reference the same item (the SQLite
-      // insert must never receive an undefined id).
+      // insert must never receive an undefined id). This id is also what makes a
+      // queued replay idempotent: if a transient failure hides a create the
+      // server actually committed, replaying it POSTs the same id, the server
+      // rejects the duplicate with 409 (ErrNoteItemExists), and drainQueue
+      // dead-letters that 409 instead of creating a second item.
       const itemId: string = item.id ?? generateId();
       const itemWithId: CreateNoteItemRequest = { ...item, id: itemId };
       const local = {
