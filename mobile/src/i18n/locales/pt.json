@@ -327,7 +327,8 @@
     "results": "Resultados",
     "searchFailed": "Pesquisa falhou. Tente novamente.",
     "failedLoad": "Falha ao carregar os compartilhamentos",
-    "removeAccessFor": "Remover compartilhamento para {{username}}"
+    "removeAccessFor": "Remover compartilhamento para {{username}}",
+    "cannotShareUnsyncedNote": "Esta nota ainda não foi sincronizada. Aguarde a sincronização antes de compartilhá-la."
   },
   "deepLink": {
     "missingServerTitle": "Aviso de link profundo",

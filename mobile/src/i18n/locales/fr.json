@@ -300,7 +300,8 @@
     "results": "Résultats",
     "searchFailed": "Recherche échouée. Veuillez réessayer.",
     "failedLoad": "Impossible de charger les partages",
-    "removeAccessFor": "Retirer le partage pour {{username}}"
+    "removeAccessFor": "Retirer le partage pour {{username}}",
+    "cannotShareUnsyncedNote": "Cette note n'a pas encore été synchronisée. Attendez la synchronisation avant de la partager."
   },
   "deepLink": {
     "missingServerTitle": "Avertissement de lien profond",

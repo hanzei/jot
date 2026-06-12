@@ -327,7 +327,8 @@
     "results": "Resultados",
     "searchFailed": "Búsqueda fallida. Inténtalo de nuevo.",
     "failedLoad": "Error al cargar los accesos compartidos",
-    "removeAccessFor": "Eliminar acceso compartido para {{username}}"
+    "removeAccessFor": "Eliminar acceso compartido para {{username}}",
+    "cannotShareUnsyncedNote": "Esta nota aún no se ha sincronizado. Espera a que se sincronice antes de compartirla."
   },
   "deepLink": {
     "missingServerTitle": "Advertencia de enlace profundo",

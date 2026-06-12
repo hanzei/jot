@@ -327,7 +327,8 @@
     "results": "Results",
     "searchFailed": "Search failed. Please try again.",
     "failedLoad": "Failed to load shares",
-    "removeAccessFor": "Remove share for {{username}}"
+    "removeAccessFor": "Remove share for {{username}}",
+    "cannotShareUnsyncedNote": "This note hasn't synced yet. Wait for sync before sharing."
   },
   "deepLink": {
     "missingServerTitle": "Deep link warning",

@@ -327,7 +327,8 @@
     "results": "Resultaten",
     "searchFailed": "Zoeken mislukt. Probeer het opnieuw.",
     "failedLoad": "Gedeelde items laden mislukt",
-    "removeAccessFor": "Delen verwijderen voor {{username}}"
+    "removeAccessFor": "Delen verwijderen voor {{username}}",
+    "cannotShareUnsyncedNote": "Deze notitie is nog niet gesynchroniseerd. Wacht op synchronisatie voordat je deelt."
   },
   "deepLink": {
     "missingServerTitle": "Waarschuwing deep link",

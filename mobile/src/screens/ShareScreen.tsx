@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo, useContext } from 'react';
 import {
   View,
   Text,
@@ -13,11 +13,14 @@ import {
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useNavigation, useRoute, RouteProp } from '@react-navigation/native';
 import { useTranslation } from 'react-i18next';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import { searchUsers } from '../api/users';
 import { useNoteShares, useShareNote, useUnshareNote } from '../hooks/useNotes';
 import UserAvatar from '../components/UserAvatar';
 import { useTheme } from '../theme/ThemeContext';
+import { useNetworkStatus } from '../hooks/useNetworkStatus';
+import { useUsers } from '../store/UsersContext';
+import { isLocalId } from '../db/noteQueries';
 import type { User, NoteShare } from '@jot/shared';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 
@@ -31,7 +34,7 @@ export default function ShareScreen() {
   const { noteId } = route.params;
   const { colors } = useTheme();
   const { t } = useTranslation();
-  const insets = useSafeAreaInsets();
+  const insets = useContext(SafeAreaInsetsContext) ?? { top: 0, right: 0, bottom: 0, left: 0 };
 
   const [searchQuery, setSearchQuery] = useState('');
   const [debouncedQuery, setDebouncedQuery] = useState('');
@@ -40,6 +43,10 @@ export default function ShareScreen() {
   const [searchError, setSearchError] = useState(false);
 
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+
+  const { isConnected } = useNetworkStatus();
+  const { usersById } = useUsers();
+  const isNoteLocalOnly = isLocalId(noteId);
 
   const [pendingUserIds, setPendingUserIds] = useState<Set<string>>(new Set());
   const pendingUserIdsRef = useRef<Set<string>>(new Set());
@@ -65,10 +72,25 @@ export default function ShareScreen() {
     };
   }, [searchQuery]);
 
-  // Fetch search results when debounced query changes
+  // Fetch search results when debounced query changes (local filter when offline)
   useEffect(() => {
     if (!debouncedQuery) {
+      setIsSearching(false);
       setSearchResults([]);
+      setSearchError(false);
+      return;
+    }
+
+    if (!isConnected) {
+      setIsSearching(false);
+      const q = debouncedQuery.toLowerCase();
+      const filtered = Array.from(usersById.values()).filter(
+        (u) =>
+          u.username.toLowerCase().includes(q) ||
+          u.first_name.toLowerCase().includes(q) ||
+          u.last_name.toLowerCase().includes(q),
+      );
+      setSearchResults(filtered);
       setSearchError(false);
       return;
     }
@@ -91,7 +113,7 @@ export default function ShareScreen() {
     return () => {
       cancelled = true;
     };
-  }, [debouncedQuery]);
+  }, [debouncedQuery, isConnected, usersById]);
 
   const sharedUserIds = useMemo(
     () => new Set((currentShares ?? []).map((s) => s.shared_with_user_id)),
@@ -105,11 +127,15 @@ export default function ShareScreen() {
 
   const handleShare = useCallback(
     async (user: User) => {
+      if (isNoteLocalOnly) {
+        Alert.alert(t('common.error'), t('share.cannotShareUnsyncedNote'));
+        return;
+      }
       if (pendingUserIdsRef.current.has(user.id)) return;
       pendingUserIdsRef.current.add(user.id);
       setPendingUserIds(new Set(pendingUserIdsRef.current));
       try {
-        await shareMutateRef.current({ noteId, userId: user.id });
+        await shareMutateRef.current({ noteId, user });
       } catch {
         Alert.alert(t('common.error'), t('share.failedShare'));
       } finally {
@@ -117,7 +143,7 @@ export default function ShareScreen() {
         setPendingUserIds(new Set(pendingUserIdsRef.current));
       }
     },
-    [noteId, t],
+    [noteId, isNoteLocalOnly, t],
   );
 
   const handleUnshare = useCallback(
@@ -223,7 +249,13 @@ export default function ShareScreen() {
         )}
       </View>
 
-      <ScrollView keyboardShouldPersistTaps="handled">
+      {isNoteLocalOnly && (
+        <Text style={[styles.unsyncedNotice, { color: colors.error }]}>
+          {t('share.cannotShareUnsyncedNote')}
+        </Text>
+      )}
+
+      <ScrollView keyboardShouldPersistTaps="handled" contentContainerStyle={{ paddingBottom: insets.bottom }}>
         {debouncedQuery.length > 0 && (
           <View style={styles.section}>
             <Text style={[styles.sectionTitle, { color: colors.textMuted }]}>{t('share.results')}</Text>
@@ -347,5 +379,10 @@ const styles = StyleSheet.create({
   spinner: {
     paddingVertical: 8,
     alignSelf: 'flex-start',
+  },
+  unsyncedNotice: {
+    fontSize: 13,
+    paddingHorizontal: 16,
+    paddingTop: 12,
   },
 });

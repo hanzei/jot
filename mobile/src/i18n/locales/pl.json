@@ -300,7 +300,8 @@
     "results": "Wyniki",
     "searchFailed": "Wyszukiwanie nie powiodło się. Spróbuj ponownie.",
     "failedLoad": "Nie udało się załadować udostępnień",
-    "removeAccessFor": "Usuń udostępnienie dla {{username}}"
+    "removeAccessFor": "Usuń udostępnienie dla {{username}}",
+    "cannotShareUnsyncedNote": "Ta notatka nie została jeszcze zsynchronizowana. Poczekaj na synchronizację przed udostępnieniem."
   },
   "deepLink": {
     "missingServerTitle": "Ostrzeżenie o linku głębokim",
