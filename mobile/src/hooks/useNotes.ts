@@ -650,8 +650,6 @@ export function useShareNote() {
   const isConnectedRef = useRef(isConnected);
   isConnectedRef.current = isConnected;
   const { user: currentUser } = useAuth();
-  const currentUserRef = useRef(currentUser);
-  currentUserRef.current = currentUser;
 
   return useMutation({
     mutationFn: async ({ noteId, user }: { noteId: string; user: User }) => {
@@ -684,7 +682,7 @@ export function useShareNote() {
             id: `optimistic_${user.id}`,
             note_id: noteId,
             shared_with_user_id: user.id,
-            shared_by_user_id: currentUserRef.current?.id ?? '',
+            shared_by_user_id: currentUser?.id ?? '',
             permission_level: 'write',
             username: user.username,
             first_name: user.first_name,

@@ -71,14 +71,17 @@ async function syncLocalNotesAfterLabelMutation(db: SQLiteDatabase) {
   }
 }
 
-export function useLabels() {
-  const db = useSQLiteContext();
+function useBackgroundSyncQuery<T>(
+  getQueryKey: () => unknown[],
+  localFn: () => Promise<T>,
+  serverFn: () => Promise<T>,
+) {
   const queryClient = useQueryClient();
   const { isConnected } = useNetworkStatus();
 
-  const query = useQuery<Label[]>({
-    queryKey: labelsQueryKey(),
-    queryFn: () => getLocalLabels(db),
+  const query = useQuery<T>({
+    queryKey: getQueryKey(),
+    queryFn: localFn,
     staleTime: Infinity,
     gcTime: Infinity,
   });
@@ -88,47 +91,24 @@ export function useLabels() {
     let cancelled = false;
     (async () => {
       try {
-        const serverLabels = await getLabels();
-        if (cancelled) return;
-        queryClient.setQueryData(labelsQueryKey(), serverLabels);
-      } catch (err) {
-        console.warn('Background labels sync failed:', err);
-      }
+        const data = await serverFn();
+        if (!cancelled) queryClient.setQueryData(getQueryKey(), data);
+      } catch { /* background sync — local cache remains */ }
     })();
     return () => { cancelled = true; };
-  }, [isConnected, queryClient]);
+  }, [isConnected, queryClient, getQueryKey, serverFn]);
 
   return query;
 }
 
+export function useLabels() {
+  const db = useSQLiteContext();
+  return useBackgroundSyncQuery(labelsQueryKey, () => getLocalLabels(db), getLabels);
+}
+
 export function useLabelCounts() {
   const db = useSQLiteContext();
-  const queryClient = useQueryClient();
-  const { isConnected } = useNetworkStatus();
-
-  const query = useQuery<Record<string, number>>({
-    queryKey: labelCountsQueryKey(),
-    queryFn: () => getLocalLabelCounts(db),
-    staleTime: Infinity,
-    gcTime: Infinity,
-  });
-
-  useEffect(() => {
-    if (!isConnected) return;
-    let cancelled = false;
-    (async () => {
-      try {
-        const serverCounts = await getLabelCounts();
-        if (cancelled) return;
-        queryClient.setQueryData(labelCountsQueryKey(), serverCounts);
-      } catch (err) {
-        console.warn('Background label counts sync failed:', err);
-      }
-    })();
-    return () => { cancelled = true; };
-  }, [isConnected, queryClient]);
-
-  return query;
+  return useBackgroundSyncQuery(labelCountsQueryKey, () => getLocalLabelCounts(db), getLabelCounts);
 }
 
 export function useCreateLabel() {
