@@ -300,7 +300,8 @@
     "results": "Ergebnisse",
     "searchFailed": "Suche fehlgeschlagen. Bitte erneut versuchen.",
     "failedLoad": "Freigaben konnten nicht geladen werden",
-    "removeAccessFor": "Freigabe für {{username}} entfernen"
+    "removeAccessFor": "Freigabe für {{username}} entfernen",
+    "cannotShareUnsyncedNote": "Diese Notiz wurde noch nicht synchronisiert. Warte auf die Synchronisierung, bevor du sie teilst."
   },
   "deepLink": {
     "missingServerTitle": "Deep-Link-Warnung",

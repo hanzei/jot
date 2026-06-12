@@ -18,12 +18,14 @@ import {
   reorderNoteItems,
   toggleItemCompleted,
 } from '../api/notes';
-import { getNoteShares, shareNote, unshareNote } from '../api/users';
+import { shareNote, unshareNote } from '../api/users';
+import { useOfflineNote } from './useOfflineNotes';
 import { generateId } from '@jot/shared';
 import type {
   Note,
   NoteItem,
   NoteShare,
+  User,
   Label,
   GetNotesParams,
   CreateNoteRequest,
@@ -42,6 +44,7 @@ import {
   permanentDeleteLocalNote,
   updateLocalNote,
   generateLocalId,
+  isLocalId,
   createLocalItem,
   patchLocalItem,
   deleteLocalItem,
@@ -57,7 +60,6 @@ import {
   noteQueryKey,
   notesQueryKey,
   notesLocalQueryScopeKey,
-  noteSharesQueryKey,
   notesQueryScopeKey,
 } from './queryKeys';
 
@@ -633,34 +635,124 @@ export function useReorderNotes() {
 }
 
 export function useNoteShares(noteId: string | null) {
-  return useQuery<NoteShare[]>({
-    queryKey: noteSharesQueryKey(noteId),
-    queryFn: () => getNoteShares(noteId!),
-    enabled: noteId !== null,
-  });
+  const { data: note, isLoading, isError } = useOfflineNote(noteId);
+  return {
+    data: note?.shared_with,
+    isLoading,
+    isError,
+  };
 }
 
 export function useShareNote() {
+  const db = useSQLiteContext();
   const queryClient = useQueryClient();
+  const { isConnected } = useNetworkStatus();
+  const isConnectedRef = useRef(isConnected);
+  isConnectedRef.current = isConnected;
+  const { user: currentUser } = useAuth();
+  const currentUserRef = useRef(currentUser);
+  currentUserRef.current = currentUser;
+
   return useMutation({
-    mutationFn: ({ noteId, userId }: { noteId: string; userId: string }) =>
-      shareNote(noteId, userId),
+    mutationFn: async ({ noteId, user }: { noteId: string; user: User }) => {
+      assertSwitchWriteAllowed();
+      if (isLocalId(noteId)) {
+        throw new Error('cannot share unsynced note');
+      }
+
+      if (isConnectedRef.current) {
+        try {
+          await shareNote(noteId, user.id);
+          // Fetch updated note so shared_with_json in SQLite reflects server state
+          try {
+            const updated = await getNote(noteId);
+            await saveNote(db, updated);
+          } catch { /* share succeeded; note will sync on next background refresh */ }
+          return;
+        } catch (err) {
+          rethrowIfNotQueueable(err);
+          // Transient failure — fall through to offline queue
+        }
+      }
+
+      // Offline path: optimistic local update + enqueue
+      const note = await getLocalNote(db, noteId);
+      if (note) {
+        const existing = note.shared_with ?? [];
+        if (!existing.some((s) => s.shared_with_user_id === user.id)) {
+          const optimisticShare: NoteShare = {
+            id: `optimistic_${user.id}`,
+            note_id: noteId,
+            shared_with_user_id: user.id,
+            shared_by_user_id: currentUserRef.current?.id ?? '',
+            permission_level: 'write',
+            username: user.username,
+            first_name: user.first_name,
+            last_name: user.last_name,
+            has_profile_icon: user.has_profile_icon,
+            created_at: new Date().toISOString(),
+            updated_at: new Date().toISOString(),
+          };
+          await saveNote(db, { ...note, is_shared: true, shared_with: [...existing, optimisticShare] });
+        }
+      }
+      await enqueueOperation(db, {
+        operation: 'share',
+        endpoint: `/notes/${noteId}/share`,
+        method: 'POST',
+        body: { user_id: user.id },
+      });
+    },
     onSuccess: (_data, { noteId }) => {
-      queryClient.invalidateQueries({ queryKey: noteSharesQueryKey(noteId) });
-      queryClient.invalidateQueries({ queryKey: noteQueryKey(noteId) });
+      queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
       queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
     },
   });
 }
 
 export function useUnshareNote() {
+  const db = useSQLiteContext();
   const queryClient = useQueryClient();
+  const { isConnected } = useNetworkStatus();
+  const isConnectedRef = useRef(isConnected);
+  isConnectedRef.current = isConnected;
+
   return useMutation({
-    mutationFn: ({ noteId, userId }: { noteId: string; userId: string }) =>
-      unshareNote(noteId, userId),
+    mutationFn: async ({ noteId, userId }: { noteId: string; userId: string }) => {
+      assertSwitchWriteAllowed();
+      if (isLocalId(noteId)) {
+        throw new Error('cannot unshare unsynced note');
+      }
+
+      if (isConnectedRef.current) {
+        try {
+          await unshareNote(noteId, userId);
+          try {
+            const updated = await getNote(noteId);
+            await saveNote(db, updated);
+          } catch { /* unshare succeeded; note will sync on next background refresh */ }
+          return;
+        } catch (err) {
+          rethrowIfNotQueueable(err);
+        }
+      }
+
+      // Offline path: optimistic local update + enqueue
+      const note = await getLocalNote(db, noteId);
+      if (note) {
+        const updatedShares = (note.shared_with ?? []).filter(
+          (s) => s.shared_with_user_id !== userId,
+        );
+        await saveNote(db, { ...note, is_shared: updatedShares.length > 0, shared_with: updatedShares });
+      }
+      await enqueueOperation(db, {
+        operation: 'unshare',
+        endpoint: `/notes/${noteId}/shares/${userId}`,
+        method: 'DELETE',
+      });
+    },
     onSuccess: (_data, { noteId }) => {
-      queryClient.invalidateQueries({ queryKey: noteSharesQueryKey(noteId) });
-      queryClient.invalidateQueries({ queryKey: noteQueryKey(noteId) });
+      queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
       queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
     },
   });

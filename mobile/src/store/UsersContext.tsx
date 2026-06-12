@@ -2,6 +2,8 @@ import React, { createContext, useContext, useState, useEffect, useCallback, use
 import type { User } from '@jot/shared';
 import { getUsers } from '../api/users';
 import { useAuth } from './AuthContext';
+import { useSQLiteContext } from 'expo-sqlite';
+import { getLocalUsers, saveUsers } from '../db/userQueries';
 
 interface UsersState {
   usersById: Map<string, User>;
@@ -10,7 +12,15 @@ interface UsersState {
 
 const UsersContext = createContext<UsersState | undefined>(undefined);
 
+function buildUsersMap(seedUser: User | null | undefined, list: User[]): Map<string, User> {
+  const map = new Map<string, User>();
+  if (seedUser) map.set(seedUser.id, seedUser as User);
+  for (const u of list) map.set(u.id, u);
+  return map;
+}
+
 export function UsersProvider({ children }: { children: React.ReactNode }) {
+  const db = useSQLiteContext();
   const { user, isAuthenticated } = useAuth();
   const [usersById, setUsersById] = useState<Map<string, User>>(new Map());
   const isMountedRef = useRef(true);
@@ -21,17 +31,24 @@ export function UsersProvider({ children }: { children: React.ReactNode }) {
   }, []);
 
   const loadUsers = useCallback(async () => {
+    // Load from SQLite first for immediate offline display
+    try {
+      const localUsers = await getLocalUsers(db);
+      if (isMountedRef.current && localUsers.length > 0) {
+        setUsersById(buildUsersMap(user, localUsers));
+      }
+    } catch { /* ignore — server fetch will follow */ }
+
+    // Fetch from server and persist to SQLite
     try {
       const users = await getUsers();
       if (!isMountedRef.current) return;
-      const map = new Map<string, User>();
-      if (user) map.set(user.id, user as User);
-      for (const u of users) map.set(u.id, u);
-      setUsersById(map);
+      await saveUsers(db, users);
+      setUsersById(buildUsersMap(user, users));
     } catch {
-      // Silently fail — users map will be empty until next refresh
+      // Silently fail — SQLite data will be used as fallback
     }
-  }, [user]);
+  }, [db, user]);
 
   useEffect(() => {
     if (isAuthenticated) {

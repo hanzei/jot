@@ -16,7 +16,9 @@ export type QueueOperation =
   | 'updateItem'
   | 'deleteItem'
   | 'reorderItems'
-  | 'toggleItemCompleted';
+  | 'toggleItemCompleted'
+  | 'share'
+  | 'unshare';
 
 interface QueueEntry {
   id: number;

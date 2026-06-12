@@ -54,6 +54,17 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
       body TEXT,
       created_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS users (
+      id TEXT PRIMARY KEY,
+      username TEXT NOT NULL,
+      first_name TEXT NOT NULL DEFAULT '',
+      last_name TEXT NOT NULL DEFAULT '',
+      role TEXT NOT NULL DEFAULT 'user',
+      has_profile_icon INTEGER NOT NULL DEFAULT 0,
+      created_at TEXT NOT NULL DEFAULT '',
+      updated_at TEXT NOT NULL DEFAULT ''
+    );
   `);
 
   // Rename legacy note_type 'todo' → 'list' to match server migration 003.

@@ -327,7 +327,8 @@
     "results": "Risultati",
     "searchFailed": "Ricerca non riuscita. Riprova.",
     "failedLoad": "Impossibile caricare le condivisioni",
-    "removeAccessFor": "Rimuovi condivisione per {{username}}"
+    "removeAccessFor": "Rimuovi condivisione per {{username}}",
+    "cannotShareUnsyncedNote": "Questa nota non è ancora stata sincronizzata. Attendi la sincronizzazione prima di condividerla."
   },
   "deepLink": {
     "missingServerTitle": "Avviso link profondo",
