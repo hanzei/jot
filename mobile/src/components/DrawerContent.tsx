@@ -373,7 +373,11 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
     setIsServerActionPending(true);
     try {
       const trimmed = renameServerValue.trim();
-      await renameServer(renameServerTarget.serverId, trimmed);
+      const ok = await renameServer(renameServerTarget.serverId, trimmed);
+      if (!ok) {
+        Alert.alert(t('common.error'), t('serverPicker.renameFailed'));
+        return;
+      }
       setServers(prev =>
         prev.map(s =>
           s.serverId === renameServerTarget.serverId
@@ -1001,12 +1005,12 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
                   styles.modalButton,
                   styles.modalPrimaryButton,
                   { backgroundColor: colors.primary },
-                  (!renameServerValue.trim() || isServerActionPending) && styles.modalButtonDisabled,
+                  isServerActionPending && styles.modalButtonDisabled,
                 ]}
                 onPress={() => {
                   void handleSubmitRenameServer();
                 }}
-                disabled={!renameServerValue.trim() || isServerActionPending}
+                disabled={isServerActionPending}
                 testID="server-rename-submit"
               >
                 <Text style={styles.modalPrimaryText}>

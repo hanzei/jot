@@ -38,7 +38,7 @@
     "deleteConfirmMessage": "Remover \"{{name}}\" da sua lista de servidores?",
     "deleteFailed": "Falha ao remover servidor.",
     "renameButton": "Renomear",
-    "renameTitle": "Nomear servidor",
+    "renameTitle": "Renomear servidor",
     "renamePlaceholder": "Meu servidor Jot",
     "renameSave": "Salvar",
     "renameFailed": "Falha ao renomear servidor.",
