@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useContext, useState } from 'react';
 import {
   Text,
   TextInput,
@@ -9,6 +9,7 @@ import {
   ActivityIndicator,
   ScrollView,
 } from 'react-native';
+import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../store/AuthContext';
@@ -26,6 +27,7 @@ export default function RegisterScreen({ navigation }: RegisterScreenProps) {
   const { register } = useAuth();
   const { colors } = useTheme();
   const { t } = useTranslation();
+  const insets = useContext(SafeAreaInsetsContext) ?? { top: 0, right: 0, bottom: 0, left: 0 };
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -84,7 +86,10 @@ export default function RegisterScreen({ navigation }: RegisterScreenProps) {
       style={[styles.container, { backgroundColor: colors.surface }]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <ScrollView contentContainerStyle={styles.inner} keyboardShouldPersistTaps="handled">
+      <ScrollView
+        contentContainerStyle={[styles.inner, { paddingTop: insets.top, paddingBottom: insets.bottom }]}
+        keyboardShouldPersistTaps="handled"
+      >
         <Text style={[styles.title, { color: colors.text }]}>{t('auth.createAccountTitle')}</Text>
 
         <ServerSetupGate testPrefix="register">

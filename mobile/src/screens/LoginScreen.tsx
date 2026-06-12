@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useContext, useState } from 'react';
 import {
   View,
   Text,
@@ -9,6 +9,7 @@ import {
   Platform,
   ActivityIndicator,
 } from 'react-native';
+import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../store/AuthContext';
@@ -25,6 +26,7 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
   const { login } = useAuth();
   const { colors } = useTheme();
   const { t } = useTranslation();
+  const insets = useContext(SafeAreaInsetsContext) ?? { top: 0, right: 0, bottom: 0, left: 0 };
   const [username, setUsername] = useState('');
   const [password, setPassword] = useState('');
   const [error, setError] = useState('');
@@ -62,7 +64,7 @@ export default function LoginScreen({ navigation }: LoginScreenProps) {
       style={[styles.container, { backgroundColor: colors.surface }]}
       behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
     >
-      <View style={styles.inner}>
+      <View style={[styles.inner, { paddingTop: insets.top, paddingBottom: insets.bottom }]}>
         <Text style={[styles.title, { color: colors.text }]}>Jot</Text>
         <Text style={[styles.subtitle, { color: colors.textSecondary }]}>{t('auth.signInSubtitle')}</Text>
 
