@@ -34,7 +34,7 @@ Before submitting a PR, run a sub-agent review loop before finalizing:
 2. Address every piece of valid feedback the review returns (fix bugs, improve clarity, align with conventions).
 3. Repeat steps 1–2 until either:
    - The review returns no valid feedback, **or**
-   - You have completed **4 review rounds** (whichever comes first).
+   - You have completed **2 review rounds** (whichever comes first).
 4. Only proceed to commit/push after the review loop finishes.
 
 ## Development Tasks
