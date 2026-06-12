@@ -16,3 +16,12 @@ file in the same directory:
 
 Do not use the English string as a placeholder in non-English locales. Provide a
 proper translation for each language.
+
+## Safe Area Insets
+
+Screens use `headerShown: false`, so any screen or component rendering content
+against a screen edge (headers, banners, FABs, toolbars, bottom sheets) must
+apply safe-area insets itself: `paddingTop: insets.top` for top content,
+`paddingBottom: insets.bottom` for bottom content. Read insets with
+`useContext(SafeAreaInsetsContext) ?? { top: 0, right: 0, bottom: 0, left: 0 }`
+so components don't throw when rendered without a provider (e.g. in unit tests).
