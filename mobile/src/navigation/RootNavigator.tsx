@@ -10,12 +10,14 @@ import MainDrawer from './MainDrawer';
 import NoteEditorScreen from '../screens/NoteEditorScreen';
 import ShareScreen from '../screens/ShareScreen';
 import SettingsScreen from '../screens/SettingsScreen';
+import DiagnosticsScreen from '../screens/DiagnosticsScreen';
 
 export type RootStackParamList = {
   MainDrawer: undefined;
   NoteEditor: { noteId: string | null };
   Share: { noteId: string };
   Settings: undefined;
+  Diagnostics: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -46,6 +48,14 @@ function AuthenticatedStack() {
           <Stack.Screen
             name="Settings"
             component={SettingsScreen}
+            options={{
+              headerShown: false,
+              presentation: 'modal',
+            }}
+          />
+          <Stack.Screen
+            name="Diagnostics"
+            component={DiagnosticsScreen}
             options={{
               headerShown: false,
               presentation: 'modal',

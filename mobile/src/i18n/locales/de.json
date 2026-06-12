@@ -351,5 +351,31 @@
     "cancelButton": "Abbrechen",
     "importing": "Importieren...",
     "importButton": "Importieren"
+  },
+  "diagnostics": {
+    "title": "Diagnose",
+    "developerSection": "Entwickler",
+    "network": "Netzwerk",
+    "connected": "Verbunden",
+    "disconnected": "Nicht verbunden",
+    "sse": "Server-Ereignisse",
+    "sseConnected": "Verbunden",
+    "sseReconnecting": "Verbindet erneut",
+    "reconnectAttempts": "Verbindungsversuche",
+    "syncQueue": "Synchronisierungswarteschlange",
+    "pendingOps": "Ausstehende Vorgänge",
+    "syncPaused": "Sync pausiert",
+    "sseQuiesced": "Ereignisse pausiert",
+    "server": "Server",
+    "serverUrl": "URL",
+    "generationId": "Verbindungsgeneration",
+    "switchInProgress": "Serverwechsel läuft",
+    "degraded": "Beeinträchtigt",
+    "recentLogs": "Neueste Protokolle",
+    "clearLogs": "Protokolle löschen",
+    "refresh": "Aktualisieren",
+    "shareDiagnostics": "Diagnosebericht teilen",
+    "yes": "Ja",
+    "no": "Nein"
   }
 }

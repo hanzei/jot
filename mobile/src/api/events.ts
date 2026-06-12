@@ -15,11 +15,17 @@ export class SSEConnectionManager {
   private closed = false;
   private reconnectDelay = BASE_RECONNECT_DELAY_MS;
   private generationId = getCurrentSwitchGenerationId();
+  private _isConnected = false;
+  private _reconnectAttempts = 0;
+
+  isConnected(): boolean { return this._isConnected; }
+  getReconnectAttempts(): number { return this._reconnectAttempts; }
 
   async connect(onEvent: SSECallback): Promise<void> {
     this.callback = onEvent;
     this.closed = false;
     this.reconnectDelay = BASE_RECONNECT_DELAY_MS;
+    this._reconnectAttempts = 0;
     this.generationId = getCurrentSwitchGenerationId();
 
     await this.openConnection();
@@ -43,6 +49,12 @@ export class SSEConnectionManager {
         },
       });
 
+      this.es.addEventListener('open', () => {
+        this._isConnected = true;
+        this._reconnectAttempts = 0;
+        this.reconnectDelay = BASE_RECONNECT_DELAY_MS;
+      });
+
       this.es.addEventListener('message', (event) => {
         // Reset backoff on successful message
         this.reconnectDelay = BASE_RECONNECT_DELAY_MS;
@@ -59,6 +71,7 @@ export class SSEConnectionManager {
       });
 
       this.es.addEventListener('error', (event) => {
+        this._isConnected = false;
         const status = (event as { status?: number })?.status;
         if (status === 401) {
           // Session expired — do not reconnect
@@ -77,6 +90,7 @@ export class SSEConnectionManager {
   private scheduleReconnect(): void {
     if (this.closed) return;
     if (isSseQuiesced()) return;
+    this._reconnectAttempts++;
     this.clearReconnectTimer();
     const delay = this.reconnectDelay;
     this.reconnectDelay = Math.min(this.reconnectDelay * 2, MAX_RECONNECT_DELAY_MS);
@@ -89,6 +103,7 @@ export class SSEConnectionManager {
 
   disconnect(): void {
     this.closed = true;
+    this._isConnected = false;
     this.callback = null;
     this.cleanup();
   }

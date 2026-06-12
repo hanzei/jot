@@ -18,6 +18,8 @@ import {
 import { useTranslation } from 'react-i18next';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { RootStackParamList } from '../navigation/RootNavigator';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useQueryClient } from '@tanstack/react-query';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -51,7 +53,7 @@ import { useActiveServerBaseUrl } from '../hooks/useActiveServerBaseUrl';
 
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
-  const navigation = useNavigation();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList, 'Settings'>>();
   const db = useSQLiteContext();
   const queryClient = useQueryClient();
   const { user, settings, setUser, setSettings } = useAuth();
@@ -989,6 +991,21 @@ export default function SettingsScreen() {
             {themeError !== '' && (
               <Text style={[styles.errorText, { color: colors.error }]}>{displayMessage(t, themeError)}</Text>
             )}
+          </View>
+
+          {/* Developer */}
+          <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
+            <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('diagnostics.developerSection')}</Text>
+            <TouchableOpacity
+              style={styles.aboutToggle}
+              onPress={() => navigation.navigate('Diagnostics')}
+              testID="settings-diagnostics"
+              accessibilityLabel={t('diagnostics.title')}
+              accessibilityRole="button"
+            >
+              <Text style={[styles.aboutToggleText, { color: colors.icon }]}>{t('diagnostics.title')}</Text>
+              <Ionicons name="chevron-forward" size={20} color={colors.textSecondary} />
+            </TouchableOpacity>
           </View>
 
           {/* About */}

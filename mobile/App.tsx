@@ -1,3 +1,6 @@
+import { initLogger } from './src/utils/logger';
+initLogger();
+
 import React from 'react';
 import { ActivityIndicator, Alert, Linking, Text, TouchableOpacity, View } from 'react-native';
 import {

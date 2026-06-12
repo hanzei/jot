@@ -351,5 +351,31 @@
     "cancelButton": "Annulla",
     "importing": "Importazione...",
     "importButton": "Importa"
+  },
+  "diagnostics": {
+    "title": "Diagnostica",
+    "developerSection": "Sviluppatore",
+    "network": "Rete",
+    "connected": "Connesso",
+    "disconnected": "Disconnesso",
+    "sse": "Eventi server",
+    "sseConnected": "Connesso",
+    "sseReconnecting": "Riconnessione in corso",
+    "reconnectAttempts": "Tentativi di riconnessione",
+    "syncQueue": "Coda di sincronizzazione",
+    "pendingOps": "Operazioni in sospeso",
+    "syncPaused": "Sincronizzazione in pausa",
+    "sseQuiesced": "Eventi in pausa",
+    "server": "Server",
+    "serverUrl": "URL",
+    "generationId": "Generazione connessione",
+    "switchInProgress": "Cambio server in corso",
+    "degraded": "Degradato",
+    "recentLogs": "Log recenti",
+    "clearLogs": "Cancella log",
+    "refresh": "Aggiorna",
+    "shareDiagnostics": "Condividi report diagnostico",
+    "yes": "Sì",
+    "no": "No"
   }
 }
