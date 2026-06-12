@@ -3,7 +3,7 @@
  */
 
 import { generateLocalId, isLocalId, replaceLocalNoteId, removeLocalNotesNotIn } from '../src/db/noteQueries';
-import { drainQueue } from '../src/db/syncQueue';
+import { drainQueue, isTransientHttpStatus } from '../src/db/syncQueue';
 import api from '../src/api/client';
 
 function makeAxiosError(status: number) {
@@ -58,6 +58,26 @@ describe('isLocalId', () => {
 
   it('returns false for server-style IDs', () => {
     expect(isLocalId('AbCdEfGhIjKlMnOpQrStUv')).toBe(false);
+  });
+});
+
+// ── isTransientHttpStatus ───────────────────────────────────────────────────
+
+describe('isTransientHttpStatus', () => {
+  it('treats no response (network failure) as transient', () => {
+    expect(isTransientHttpStatus(undefined)).toBe(true);
+  });
+
+  it('treats 401, 408, 429 and 5xx as transient', () => {
+    for (const status of [401, 408, 429, 500, 502, 503]) {
+      expect(isTransientHttpStatus(status)).toBe(true);
+    }
+  });
+
+  it('treats other 4xx client errors as permanent', () => {
+    for (const status of [400, 403, 404, 409, 422]) {
+      expect(isTransientHttpStatus(status)).toBe(false);
+    }
   });
 });
 
@@ -151,6 +171,72 @@ describe('drainQueue', () => {
 
     expect(db.runAsync).not.toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [6]);
     expect(db.runAsync).not.toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [7]);
+  });
+
+  it('discards permanent 4xx errors (e.g. 400) so they cannot wedge the queue', async () => {
+    const db = makeMockDb([
+      { id: 10, operation: 'update', endpoint: '/notes/bad', method: 'PATCH', body: '{"title":""}', created_at: '' },
+      { id: 11, operation: 'update', endpoint: '/notes/ok', method: 'PATCH', body: '{}', created_at: '' },
+    ]);
+    mockApi.patch.mockRejectedValueOnce(makeAxiosError(400));
+    mockApi.patch.mockResolvedValueOnce({ data: {} } as never);
+
+    const { discardedOperations } = await drainQueue(db as never);
+
+    // The bad entry is dead-lettered and the rest of the queue still drains.
+    expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [10]);
+    expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [11]);
+    expect(discardedOperations).toEqual([
+      { operation: 'update', endpoint: '/notes/bad', status: 400 },
+    ]);
+  });
+
+  it('stops draining on 5xx errors and retries the rest later', async () => {
+    const db = makeMockDb([
+      { id: 12, operation: 'update', endpoint: '/notes/abc', method: 'PATCH', body: '{}', created_at: '' },
+      { id: 13, operation: 'update', endpoint: '/notes/xyz', method: 'PATCH', body: '{}', created_at: '' },
+    ]);
+    mockApi.patch.mockRejectedValueOnce(makeAxiosError(503));
+
+    await drainQueue(db as never);
+
+    expect(db.runAsync).not.toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [12]);
+    expect(db.runAsync).not.toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [13]);
+  });
+
+  it('stops draining on 429 (rate limit) and retries the rest later', async () => {
+    const db = makeMockDb([
+      { id: 14, operation: 'update', endpoint: '/notes/abc', method: 'PATCH', body: '{}', created_at: '' },
+    ]);
+    mockApi.patch.mockRejectedValueOnce(makeAxiosError(429));
+
+    await drainQueue(db as never);
+
+    expect(db.runAsync).not.toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [14]);
+  });
+
+  it('stops draining on 401 (does not discard) so the op survives re-auth', async () => {
+    const db = makeMockDb([
+      { id: 15, operation: 'update', endpoint: '/notes/abc', method: 'PATCH', body: '{}', created_at: '' },
+    ]);
+    mockApi.patch.mockRejectedValueOnce(makeAxiosError(401));
+
+    const { discardedOperations } = await drainQueue(db as never);
+
+    expect(db.runAsync).not.toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [15]);
+    expect(discardedOperations).toHaveLength(0);
+  });
+
+  it('stops draining on a non-Axios error rather than discarding the entry', async () => {
+    const db = makeMockDb([
+      { id: 16, operation: 'update', endpoint: '/notes/abc', method: 'PATCH', body: '{}', created_at: '' },
+    ]);
+    mockApi.patch.mockRejectedValueOnce(new Error('unexpected'));
+
+    const { discardedOperations } = await drainQueue(db as never);
+
+    expect(db.runAsync).not.toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [16]);
+    expect(discardedOperations).toHaveLength(0);
   });
 
   it('remaps local IDs after a create operation', async () => {

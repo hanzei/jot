@@ -1,4 +1,5 @@
 import { useRef } from 'react';
+import axios from 'axios';
 import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSQLiteContext } from 'expo-sqlite';
 import {
@@ -47,7 +48,7 @@ import {
   reorderLocalItems,
 } from '../db/noteQueries';
 import type { LocalItemPatch } from '../db/noteQueries';
-import { enqueueOperation } from '../db/syncQueue';
+import { enqueueOperation, isTransientHttpStatus } from '../db/syncQueue';
 import { useNetworkStatus } from './useNetworkStatus';
 import { useAuth } from '../store/AuthContext';
 import { isServerSwitchInProgress } from '../api/client';
@@ -63,6 +64,29 @@ import {
 function assertSwitchWriteAllowed(): void {
   if (isServerSwitchInProgress()) {
     throw new Error('Server switch in progress; write blocked');
+  }
+}
+
+/**
+ * Called from the `catch` of an online write attempt. If the failure is
+ * transient (a flaky connection, timeout, or 5xx), it is swallowed so the
+ * caller can fall back to the offline path — writing locally and queueing the
+ * operation for replay — instead of losing the edit. Permanent failures (4xx
+ * validation/auth/conflict) and unexpected local errors are rethrown so the UI
+ * can surface them to the user.
+ *
+ * 401 is deliberately treated as non-queueable here even though the queue drain
+ * retries it: the API response interceptor reacts to a 401 by clearing the
+ * session and redirecting to login, so the write must surface the error rather
+ * than silently report success while the user is being logged out.
+ */
+function rethrowIfNotQueueable(err: unknown): void {
+  if (!axios.isAxiosError(err)) {
+    throw err;
+  }
+  const status = err.response?.status;
+  if (status === 401 || !isTransientHttpStatus(status)) {
+    throw err;
   }
 }
 
@@ -93,12 +117,19 @@ export function useCreateNote() {
     mutationFn: async (data: CreateNoteRequest): Promise<Note> => {
       assertSwitchWriteAllowed();
       if (isConnectedRef.current) {
-        const note = await createNote(data);
-        await saveNote(db, note);
-        return note;
+        try {
+          const note = await createNote(data);
+          await saveNote(db, note);
+          return note;
+        } catch (err) {
+          // Transient failure: fall through to the offline path so the new note
+          // is persisted locally and queued for replay instead of being lost.
+          rethrowIfNotQueueable(err);
+        }
       }
 
-      // Offline: create locally and queue the server operation
+      // Offline (or a transient online failure): create locally and queue the
+      // server operation.
       const localId = generateLocalId();
       const now = new Date().toISOString();
       const labels: Label[] = [];
@@ -178,12 +209,19 @@ export function useUpdateNote() {
     mutationFn: async ({ id, data }: { id: string; data: UpdateNoteRequest }): Promise<Note> => {
       assertSwitchWriteAllowed();
       if (isConnectedRef.current) {
-        const updatedNote = await updateNote(id, data);
-        await saveNote(db, updatedNote);
-        return updatedNote;
+        try {
+          const updatedNote = await updateNote(id, data);
+          await saveNote(db, updatedNote);
+          return updatedNote;
+        } catch (err) {
+          // Transient failure: fall through to the offline path so the edit is
+          // persisted locally and queued for replay instead of being lost.
+          rethrowIfNotQueueable(err);
+        }
       }
 
-      // Offline: update local DB and queue the server operation
+      // Offline (or a transient online failure): update local DB and queue the
+      // server operation.
       const existing = await getLocalNote(db, id);
       if (!existing) {
         throw new Error(`Note ${id} not found in local DB`);
@@ -271,17 +309,22 @@ export function useCreateNoteItem() {
         assigned_to: itemWithId.assigned_to ?? '',
       };
       if (isConnectedRef.current) {
-        await createNoteItem(noteId, itemWithId);
-        await createLocalItem(db, noteId, local);
-      } else {
-        await createLocalItem(db, noteId, local);
-        await enqueueOperation(db, {
-          operation: 'createItem',
-          endpoint: `/notes/${noteId}/items`,
-          method: 'POST',
-          body: itemWithId as unknown as Record<string, unknown>,
-        });
+        try {
+          await createNoteItem(noteId, itemWithId);
+          await createLocalItem(db, noteId, local);
+          return;
+        } catch (err) {
+          rethrowIfNotQueueable(err);
+        }
       }
+      // Offline (or a transient online failure): write locally and queue.
+      await createLocalItem(db, noteId, local);
+      await enqueueOperation(db, {
+        operation: 'createItem',
+        endpoint: `/notes/${noteId}/items`,
+        method: 'POST',
+        body: itemWithId as unknown as Record<string, unknown>,
+      });
     },
     onSuccess: (_data, { noteId }) => {
       queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
@@ -303,17 +346,22 @@ export function useUpdateNoteItem() {
     mutationFn: async ({ noteId, itemId, data }: { noteId: string; itemId: string; data: PatchNoteItemRequest }): Promise<void> => {
       assertSwitchWriteAllowed();
       if (isConnectedRef.current) {
-        await updateNoteItem(noteId, itemId, data);
-        await patchLocalItem(db, noteId, itemId, data);
-      } else {
-        await patchLocalItem(db, noteId, itemId, data);
-        await enqueueOperation(db, {
-          operation: 'updateItem',
-          endpoint: `/notes/${noteId}/items/${itemId}`,
-          method: 'PATCH',
-          body: data as Record<string, unknown>,
-        });
+        try {
+          await updateNoteItem(noteId, itemId, data);
+          await patchLocalItem(db, noteId, itemId, data);
+          return;
+        } catch (err) {
+          rethrowIfNotQueueable(err);
+        }
       }
+      // Offline (or a transient online failure): write locally and queue.
+      await patchLocalItem(db, noteId, itemId, data);
+      await enqueueOperation(db, {
+        operation: 'updateItem',
+        endpoint: `/notes/${noteId}/items/${itemId}`,
+        method: 'PATCH',
+        body: data as Record<string, unknown>,
+      });
     },
     onSuccess: (_data, { noteId }) => {
       queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
@@ -335,16 +383,21 @@ export function useDeleteNoteItem() {
     mutationFn: async ({ noteId, itemId }: { noteId: string; itemId: string }): Promise<void> => {
       assertSwitchWriteAllowed();
       if (isConnectedRef.current) {
-        await deleteNoteItem(noteId, itemId);
-        await deleteLocalItem(db, noteId, itemId);
-      } else {
-        await deleteLocalItem(db, noteId, itemId);
-        await enqueueOperation(db, {
-          operation: 'deleteItem',
-          endpoint: `/notes/${noteId}/items/${itemId}`,
-          method: 'DELETE',
-        });
+        try {
+          await deleteNoteItem(noteId, itemId);
+          await deleteLocalItem(db, noteId, itemId);
+          return;
+        } catch (err) {
+          rethrowIfNotQueueable(err);
+        }
       }
+      // Offline (or a transient online failure): write locally and queue.
+      await deleteLocalItem(db, noteId, itemId);
+      await enqueueOperation(db, {
+        operation: 'deleteItem',
+        endpoint: `/notes/${noteId}/items/${itemId}`,
+        method: 'DELETE',
+      });
     },
     onSuccess: (_data, { noteId }) => {
       queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
@@ -366,17 +419,22 @@ export function useReorderNoteItems() {
     mutationFn: async ({ noteId, itemIds }: { noteId: string; itemIds: string[] }): Promise<void> => {
       assertSwitchWriteAllowed();
       if (isConnectedRef.current) {
-        await reorderNoteItems(noteId, itemIds);
-        await reorderLocalItems(db, noteId, itemIds);
-      } else {
-        await reorderLocalItems(db, noteId, itemIds);
-        await enqueueOperation(db, {
-          operation: 'reorderItems',
-          endpoint: `/notes/${noteId}/items/reorder`,
-          method: 'POST',
-          body: { item_ids: itemIds } as Record<string, unknown>,
-        });
+        try {
+          await reorderNoteItems(noteId, itemIds);
+          await reorderLocalItems(db, noteId, itemIds);
+          return;
+        } catch (err) {
+          rethrowIfNotQueueable(err);
+        }
       }
+      // Offline (or a transient online failure): write locally and queue.
+      await reorderLocalItems(db, noteId, itemIds);
+      await enqueueOperation(db, {
+        operation: 'reorderItems',
+        endpoint: `/notes/${noteId}/items/reorder`,
+        method: 'POST',
+        body: { item_ids: itemIds } as Record<string, unknown>,
+      });
     },
     onSuccess: (_data, { noteId }) => {
       queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
@@ -398,16 +456,21 @@ export function useDeleteNote() {
     mutationFn: async (id: string): Promise<void> => {
       assertSwitchWriteAllowed();
       if (isConnectedRef.current) {
-        await deleteNote(id);
-        await markLocalNoteDeleted(db, id);
-      } else {
-        await markLocalNoteDeleted(db, id);
-        await enqueueOperation(db, {
-          operation: 'delete',
-          endpoint: `/notes/${id}`,
-          method: 'DELETE',
-        });
+        try {
+          await deleteNote(id);
+          await markLocalNoteDeleted(db, id);
+          return;
+        } catch (err) {
+          rethrowIfNotQueueable(err);
+        }
       }
+      // Offline (or a transient online failure): write locally and queue.
+      await markLocalNoteDeleted(db, id);
+      await enqueueOperation(db, {
+        operation: 'delete',
+        endpoint: `/notes/${id}`,
+        method: 'DELETE',
+      });
     },
     onSuccess: (_data, id) => {
       queryClient.removeQueries({ queryKey: noteQueryKey(id) });
@@ -456,16 +519,21 @@ export function useRestoreNote() {
     mutationFn: async (id: string): Promise<void> => {
       assertSwitchWriteAllowed();
       if (isConnectedRef.current) {
-        await restoreNote(id);
-        await markLocalNoteRestored(db, id);
-      } else {
-        await markLocalNoteRestored(db, id);
-        await enqueueOperation(db, {
-          operation: 'restore',
-          endpoint: `/notes/${id}/restore`,
-          method: 'POST',
-        });
+        try {
+          await restoreNote(id);
+          await markLocalNoteRestored(db, id);
+          return;
+        } catch (err) {
+          rethrowIfNotQueueable(err);
+        }
       }
+      // Offline (or a transient online failure): write locally and queue.
+      await markLocalNoteRestored(db, id);
+      await enqueueOperation(db, {
+        operation: 'restore',
+        endpoint: `/notes/${id}/restore`,
+        method: 'POST',
+      });
     },
     onSuccess: (_data, id) => {
       queryClient.removeQueries({ queryKey: noteQueryKey(id) });
@@ -487,16 +555,21 @@ export function usePermanentDeleteNote() {
     mutationFn: async (id: string): Promise<void> => {
       assertSwitchWriteAllowed();
       if (isConnectedRef.current) {
-        await permanentDeleteNote(id);
-        await permanentDeleteLocalNote(db, id);
-      } else {
-        await permanentDeleteLocalNote(db, id);
-        await enqueueOperation(db, {
-          operation: 'permanentDelete',
-          endpoint: `/notes/${id}?permanent=true`,
-          method: 'DELETE',
-        });
+        try {
+          await permanentDeleteNote(id);
+          await permanentDeleteLocalNote(db, id);
+          return;
+        } catch (err) {
+          rethrowIfNotQueueable(err);
+        }
       }
+      // Offline (or a transient online failure): write locally and queue.
+      await permanentDeleteLocalNote(db, id);
+      await enqueueOperation(db, {
+        operation: 'permanentDelete',
+        endpoint: `/notes/${id}?permanent=true`,
+        method: 'DELETE',
+      });
     },
     onSuccess: (_data, id) => {
       queryClient.removeQueries({ queryKey: noteQueryKey(id) });
@@ -518,23 +591,28 @@ export function useReorderNotes() {
     mutationFn: async (noteIds: string[]): Promise<void> => {
       assertSwitchWriteAllowed();
       if (isConnectedRef.current) {
-        await reorderNotes(noteIds);
-        // Update positions in local DB to match the new order
-        for (let i = 0; i < noteIds.length; i++) {
-          await updateLocalNote(db, noteIds[i], { position: i });
+        try {
+          await reorderNotes(noteIds);
+          // Update positions in local DB to match the new order
+          for (let i = 0; i < noteIds.length; i++) {
+            await updateLocalNote(db, noteIds[i], { position: i });
+          }
+          return;
+        } catch (err) {
+          rethrowIfNotQueueable(err);
         }
-      } else {
-        // Update local positions to reflect the new order immediately, then enqueue
-        for (let i = 0; i < noteIds.length; i++) {
-          await updateLocalNote(db, noteIds[i], { position: i });
-        }
-        await enqueueOperation(db, {
-          operation: 'reorder',
-          endpoint: '/notes/reorder',
-          method: 'POST',
-          body: { note_ids: noteIds } as Record<string, unknown>,
-        });
       }
+      // Offline (or a transient online failure): update local positions to
+      // reflect the new order immediately, then enqueue.
+      for (let i = 0; i < noteIds.length; i++) {
+        await updateLocalNote(db, noteIds[i], { position: i });
+      }
+      await enqueueOperation(db, {
+        operation: 'reorder',
+        endpoint: '/notes/reorder',
+        method: 'POST',
+        body: { note_ids: noteIds } as Record<string, unknown>,
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
@@ -588,15 +666,22 @@ export function useToggleNoteItemCompleted() {
     mutationFn: async ({ noteId, itemId, completed }: { noteId: string; itemId: string; completed: boolean }): Promise<NoteItem[]> => {
       assertSwitchWriteAllowed();
       if (isConnectedRef.current) {
-        const serverItems = await toggleItemCompleted(noteId, itemId, completed);
-        for (const item of serverItems) {
-          await patchLocalItem(db, noteId, item.id, { completed: item.completed });
+        try {
+          const serverItems = await toggleItemCompleted(noteId, itemId, completed);
+          for (const item of serverItems) {
+            await patchLocalItem(db, noteId, item.id, { completed: item.completed });
+          }
+          queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
+          return serverItems;
+        } catch (err) {
+          // Transient failure: fall through to the offline path so the toggle is
+          // applied locally and queued for replay instead of being lost.
+          rethrowIfNotQueueable(err);
         }
-        queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
-        return serverItems;
       }
 
-      // Offline: apply cascade to local DB, enqueue a single toggle op
+      // Offline (or a transient online failure): apply cascade to local DB,
+      // enqueue a single toggle op.
       const note = await getLocalNote(db, noteId);
       if (note && note.note_type === 'list' && note.items) {
         const target = note.items.find((i) => i.id === itemId);
