@@ -675,24 +675,23 @@ export function useShareNote() {
 
       // Offline path: optimistic local update + enqueue
       const note = await getLocalNote(db, noteId);
-      if (note) {
-        const existing = note.shared_with ?? [];
-        if (!existing.some((s) => s.shared_with_user_id === user.id)) {
-          const optimisticShare: NoteShare = {
-            id: `optimistic_${user.id}`,
-            note_id: noteId,
-            shared_with_user_id: user.id,
-            shared_by_user_id: currentUser?.id ?? '',
-            permission_level: 'write',
-            username: user.username,
-            first_name: user.first_name,
-            last_name: user.last_name,
-            has_profile_icon: user.has_profile_icon,
-            created_at: new Date().toISOString(),
-            updated_at: new Date().toISOString(),
-          };
-          await saveNote(db, { ...note, is_shared: true, shared_with: [...existing, optimisticShare] });
-        }
+      if (!note) throw new Error(`Note ${noteId} not found in local cache`);
+      const existing = note.shared_with ?? [];
+      if (!existing.some((s) => s.shared_with_user_id === user.id)) {
+        const optimisticShare: NoteShare = {
+          id: `optimistic_${user.id}`,
+          note_id: noteId,
+          shared_with_user_id: user.id,
+          shared_by_user_id: currentUser?.id ?? '',
+          permission_level: 'write',
+          username: user.username,
+          first_name: user.first_name,
+          last_name: user.last_name,
+          has_profile_icon: user.has_profile_icon,
+          created_at: new Date().toISOString(),
+          updated_at: new Date().toISOString(),
+        };
+        await saveNote(db, { ...note, is_shared: true, shared_with: [...existing, optimisticShare] });
       }
       await enqueueOperation(db, {
         operation: 'share',
@@ -737,12 +736,11 @@ export function useUnshareNote() {
 
       // Offline path: optimistic local update + enqueue
       const note = await getLocalNote(db, noteId);
-      if (note) {
-        const updatedShares = (note.shared_with ?? []).filter(
-          (s) => s.shared_with_user_id !== userId,
-        );
-        await saveNote(db, { ...note, is_shared: updatedShares.length > 0, shared_with: updatedShares });
-      }
+      if (!note) throw new Error(`Note ${noteId} not found in local cache`);
+      const updatedShares = (note.shared_with ?? []).filter(
+        (s) => s.shared_with_user_id !== userId,
+      );
+      await saveNote(db, { ...note, is_shared: updatedShares.length > 0, shared_with: updatedShares });
       await enqueueOperation(db, {
         operation: 'unshare',
         endpoint: `/notes/${noteId}/shares/${userId}`,

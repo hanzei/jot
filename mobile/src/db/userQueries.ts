@@ -42,11 +42,3 @@ export async function getLocalUsers(db: SQLiteDatabase): Promise<User[]> {
   return rows.map(rowToUser);
 }
 
-export async function searchLocalUsers(db: SQLiteDatabase, query: string): Promise<User[]> {
-  const pattern = `%${query}%`;
-  const rows = await db.getAllAsync<UserRow>(
-    'SELECT * FROM users WHERE username LIKE ? OR first_name LIKE ? OR last_name LIKE ? ORDER BY username ASC',
-    [pattern, pattern, pattern],
-  );
-  return rows.map(rowToUser);
-}
