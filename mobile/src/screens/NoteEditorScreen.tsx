@@ -39,7 +39,7 @@ import type { RootStackParamList } from '../navigation/RootNavigator';
 import { getCompletedSectionDividerColor, isWhiteHexColor } from '../utils/colorContrast';
 import { fullMarkdownStyles, preprocessMarkdown } from '../utils/markdownStyles';
 import { getActiveServer, listServers, type ServerAccountEntry } from '../store/serverAccounts';
-import { setPendingShare } from '../store/shareIntent';
+import { setPendingShare, usePendingShare } from '../store/shareIntent';
 
 type EditorRouteProp = RouteProp<RootStackParamList, 'NoteEditor'>;
 type EditorNavProp = NativeStackNavigationProp<RootStackParamList, 'NoteEditor'>;
@@ -181,6 +181,10 @@ export default function NoteEditorScreen() {
   const [shareServers, setShareServers] = useState<ServerAccountEntry[]>([]);
   const [activeShareServerId, setActiveShareServerId] = useState<string | null>(null);
   const [shareServerPickerVisible, setShareServerPickerVisible] = useState(false);
+  // Tracks the pending share so a redirect that the navigation layer drops
+  // (e.g. the server switch failed) can be rolled back while still mounted.
+  const pendingShare = usePendingShare();
+  const redirectInitiatedRef = useRef(false);
   const focusedListItemIdRef = useRef<string | null>(null);
   const { usersById } = useUsers();
   const { showToast } = useToast();
@@ -600,8 +604,25 @@ export default function NoteEditorScreen() {
         await deleteMutation.mutateAsync(createdNoteId);
       } catch { /* best effort: leave it on the original server if delete fails */ }
     }
+    redirectInitiatedRef.current = true;
     setPendingShare({ text: contentRef.current, targetServerId: serverId });
   }, [activeShareServerId, deleteMutation]);
+
+  // If the navigation layer drops a redirect we started (the server switch
+  // failed, so no remount unmounts this editor), recover instead of leaving a
+  // deleted draft behind a no-save editor: treat the content as a fresh unsaved
+  // note again and re-arm the auto-save on the current server.
+  useEffect(() => {
+    if (!redirectInitiatedRef.current || pendingShare !== null) {
+      return;
+    }
+    redirectInitiatedRef.current = false;
+    intentionalExitRef.current = false;
+    noteIdRef.current = null;
+    setNoteId(null);
+    setHasCreated(false);
+    markDirtyAndScheduleUpdate();
+  }, [pendingShare, markDirtyAndScheduleUpdate]);
 
   const activeShareServerName = useMemo(() => {
     const active = shareServers.find((server) => server.serverId === activeShareServerId);

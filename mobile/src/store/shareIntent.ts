@@ -5,6 +5,8 @@
 // lost, so the pending share is held here and replayed once the new tree is
 // ready.
 
+import { useSyncExternalStore } from 'react';
+
 export interface PendingShare {
   // The text to pre-fill the new note with.
   text: string;
@@ -33,4 +35,8 @@ export function subscribePendingShare(listener: () => void): () => void {
   return () => {
     listeners.delete(listener);
   };
+}
+
+export function usePendingShare(): PendingShare | null {
+  return useSyncExternalStore(subscribePendingShare, getPendingShare, getPendingShare);
 }

@@ -1,14 +1,10 @@
-import { useEffect, useSyncExternalStore } from 'react';
+import { useEffect } from 'react';
 import { useShareIntentContext } from 'expo-share-intent';
 import type { NavigationContainerRef } from '@react-navigation/native';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { getActiveServerId, switchActiveServer } from '../api/client';
 import { extractSharedText } from '../utils/shareIntent';
-import { getPendingShare, setPendingShare, subscribePendingShare } from '../store/shareIntent';
-
-export function usePendingShare() {
-  return useSyncExternalStore(subscribePendingShare, getPendingShare, getPendingShare);
-}
+import { setPendingShare, usePendingShare } from '../store/shareIntent';
 
 interface UseShareIntentNavigationParams {
   navigationRef: NavigationContainerRef<RootStackParamList>;
@@ -55,30 +51,39 @@ export function useShareIntentNavigation({
 
     let cancelled = false;
     void (async () => {
-      if (pending.targetServerId && pending.targetServerId !== getActiveServerId()) {
-        const switched = await switchActiveServer(pending.targetServerId);
-        if (!switched || getActiveServerId() !== pending.targetServerId) {
-          // Could not reach the requested server (or the switch completed in a
-          // degraded state without actually changing the active server). Drop
-          // the redirect rather than silently creating the note on the wrong
-          // server or leaving it stranded with no remount to retrigger us.
-          setPendingShare(null);
+      try {
+        if (pending.targetServerId && pending.targetServerId !== getActiveServerId()) {
+          const switched = await switchActiveServer(pending.targetServerId);
+          if (!switched || getActiveServerId() !== pending.targetServerId) {
+            // Could not reach the requested server (or the switch completed in a
+            // degraded state without actually changing the active server). Drop
+            // the redirect rather than silently creating the note on the wrong
+            // server or leaving it stranded with no remount to retrigger us.
+            setPendingShare(null);
+            return;
+          }
+          await revalidateSession();
+          // The switch remounts the navigation tree; this effect re-runs in the
+          // new tree with the target server active (and after login if the
+          // session on that server is no longer valid).
           return;
         }
-        await revalidateSession();
-        // The switch remounts the navigation tree; this effect re-runs in the
-        // new tree with the target server active (and after login if the
-        // session on that server is no longer valid).
-        return;
-      }
 
-      if (!isAuthenticated || cancelled) {
-        // Wait for login; the share is replayed when isAuthenticated flips.
-        return;
-      }
+        if (!isAuthenticated || cancelled) {
+          // Wait for login; the share is replayed when isAuthenticated flips.
+          return;
+        }
 
-      navigationRef.navigate('NoteEditor', { noteId: null, sharedText: pending.text });
-      setPendingShare(null);
+        navigationRef.navigate('NoteEditor', { noteId: null, sharedText: pending.text });
+        setPendingShare(null);
+      } catch (error) {
+        // switchActiveServer/revalidateSession are defensively coded and should
+        // not reject, but guard anyway so a rejection can't become an unhandled
+        // promise rejection. Drop the share rather than retry into a bad state;
+        // a still-mounted editor rolls back its redirect when this clears.
+        console.warn('Failed to process pending share:', error);
+        setPendingShare(null);
+      }
     })();
 
     return () => {
