@@ -18,6 +18,9 @@ export interface ThemeColors {
   warning: string;
   warningBorder: string;
   warningText: string;
+  offlineBanner: string;
+  offlineBannerBorder: string;
+  offlineBannerText: string;
   icon: string;
   iconMuted: string;
   inputBackground: string;
@@ -52,6 +55,9 @@ export const lightColors: ThemeColors = {
   warning: '#fef3c7',
   warningBorder: '#fde68a',
   warningText: '#92400e',
+  offlineBanner: '#1f2937',
+  offlineBannerBorder: '#111827',
+  offlineBannerText: '#f9fafb',
   icon: '#444',
   iconMuted: '#999',
   inputBackground: '#fafafa',
@@ -86,6 +92,9 @@ export const darkColors: ThemeColors = {
   warning: '#422006',
   warningBorder: '#78350f',
   warningText: '#fbbf24',
+  offlineBanner: '#374151',
+  offlineBannerBorder: '#4b5563',
+  offlineBannerText: '#f9fafb',
   icon: '#9ca3af',
   iconMuted: '#6b7280',
   inputBackground: '#1f2937',
