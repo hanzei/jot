@@ -338,7 +338,10 @@
     "renameTitle": "Nazwij serwer",
     "renamePlaceholder": "Mój serwer Jot",
     "renameSave": "Zapisz",
-    "renameFailed": "Nie udało się zmienić nazwy serwera."
+    "renameFailed": "Nie udało się zmienić nazwy serwera.",
+    "cancelSetupTitle": "Anulować dodawanie serwera?",
+    "cancelSetupMessage": "Serwer nie zostanie dodany.",
+    "cancelSetupConfirm": "Wróć"
   },
   "import": {
     "title": "Importuj z Google Keep",

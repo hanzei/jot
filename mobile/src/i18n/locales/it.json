@@ -41,7 +41,10 @@
     "renameTitle": "Assegna un nome al server",
     "renamePlaceholder": "Il mio server Jot",
     "renameSave": "Salva",
-    "renameFailed": "Impossibile rinominare il server."
+    "renameFailed": "Impossibile rinominare il server.",
+    "cancelSetupTitle": "Annullare l'aggiunta del server?",
+    "cancelSetupMessage": "Il server non verrà aggiunto.",
+    "cancelSetupConfirm": "Torna indietro"
   },
   "auth": {
     "signInTitle": "Accedi a Jot",

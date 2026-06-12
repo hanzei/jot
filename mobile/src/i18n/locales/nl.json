@@ -41,7 +41,10 @@
     "renameTitle": "Server een naam geven",
     "renamePlaceholder": "Mijn Jot-server",
     "renameSave": "Opslaan",
-    "renameFailed": "Server hernoemen mislukt."
+    "renameFailed": "Server hernoemen mislukt.",
+    "cancelSetupTitle": "Server niet toevoegen?",
+    "cancelSetupMessage": "De server wordt niet toegevoegd.",
+    "cancelSetupConfirm": "Terug"
   },
   "auth": {
     "signInTitle": "Inloggen bij Jot",

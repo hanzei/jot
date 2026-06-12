@@ -335,7 +335,10 @@
     "renameTitle": "Nommer le serveur",
     "renamePlaceholder": "Mon serveur Jot",
     "renameSave": "Enregistrer",
-    "renameFailed": "Impossible de renommer le serveur."
+    "renameFailed": "Impossible de renommer le serveur.",
+    "cancelSetupTitle": "Annuler l'ajout du serveur ?",
+    "cancelSetupMessage": "Le serveur ne sera pas ajouté.",
+    "cancelSetupConfirm": "Retour"
   },
   "offline": {
     "message": "Vous êtes hors ligne. Les modifications seront synchronisées lors de la reconnexion."

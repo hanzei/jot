@@ -400,6 +400,20 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
     }
   }, [props.navigation, servers.length]);
 
+  const handleConfirmCancelSetup = useCallback(() => {
+    if (isServerActionPending) {
+      return;
+    }
+    Alert.alert(
+      t('serverPicker.cancelSetupTitle'),
+      t('serverPicker.cancelSetupMessage'),
+      [
+        { text: t('common.cancel'), style: 'cancel' },
+        { text: t('serverPicker.cancelSetupConfirm'), onPress: handleBackToDashboardFromServerSetup },
+      ],
+    );
+  }, [isServerActionPending, t, handleBackToDashboardFromServerSetup]);
+
   const displayName = user
     ? [user.first_name, user.last_name].filter(Boolean).join(' ') || user.username
     : '';
@@ -875,19 +889,11 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
         visible={isServerSetupVisible}
         transparent
         animationType="fade"
-        onRequestClose={() => {
-          if (!isServerActionPending) {
-            handleBackToDashboardFromServerSetup();
-          }
-        }}
+        onRequestClose={handleConfirmCancelSetup}
       >
         <Pressable
           style={[styles.modalOverlay, { backgroundColor: colors.overlay }]}
-          onPress={() => {
-            if (!isServerActionPending) {
-              handleBackToDashboardFromServerSetup();
-            }
-          }}
+          onPress={handleConfirmCancelSetup}
         >
           <Pressable
             style={[styles.modalCard, { backgroundColor: colors.surface, borderColor: colors.borderLight }]}
