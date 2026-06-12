@@ -62,7 +62,7 @@ function extractErrorMessage(error: unknown, fallback: string) {
 }
 
 export default function DrawerContent(props: DrawerContentComponentProps) {
-  const { user, logout, revalidateSession } = useAuth();
+  const { user, logout, clearAuth, revalidateSession } = useAuth();
   const { data: labels } = useLabels();
   const { data: labelCounts } = useLabelCounts();
   const createLabel = useCreateLabel();
@@ -331,11 +331,15 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
                 Alert.alert(t('common.error'), t('serverPicker.deleteFailed'));
                 return;
               }
-              const [serverList, activeServer] = await Promise.all([listServers(), getActiveServer()]);
+              const [serverList, newActiveServer] = await Promise.all([listServers(), getActiveServer()]);
               setServers(serverList);
-              setActiveServerId(activeServer?.serverId ?? null);
+              setActiveServerId(newActiveServer?.serverId ?? null);
               if (serverList.length === 0) {
                 setIsServerPickerVisible(false);
+                clearAuth();
+              } else if (server.serverId === activeServerId && newActiveServer) {
+                await switchActiveServer(newActiveServer.serverId);
+                await revalidateSession();
               }
             } catch {
               Alert.alert(t('common.error'), t('serverPicker.deleteFailed'));
@@ -346,7 +350,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
         },
       ],
     );
-  }, [isServerActionPending, t]);
+  }, [isServerActionPending, activeServerId, clearAuth, revalidateSession, t]);
 
   const handleOpenRenameServer = useCallback((server: ServerAccountEntry) => {
     if (isServerActionPending) {
