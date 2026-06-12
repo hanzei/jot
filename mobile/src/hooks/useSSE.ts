@@ -4,6 +4,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useAuth } from '../store/AuthContext';
 import { SSEConnectionManager } from '../api/events';
+import { setActiveSseManager } from '../api/sseState';
 import { CLIENT_ID } from '../api/client';
 import type { SSEEvent } from '@jot/shared';
 import { useNetworkStatus } from './useNetworkStatus';
@@ -41,6 +42,7 @@ export function useSSE(onNoteUpdatedByOther?: SSENotificationCallback): void {
 
     const manager = new SSEConnectionManager();
     managerRef.current = manager;
+    setActiveSseManager(manager);
 
     manager.connect((event: SSEEvent) => {
       // Drop events that originated from this device to avoid redundant invalidations.
@@ -91,6 +93,7 @@ export function useSSE(onNoteUpdatedByOther?: SSENotificationCallback): void {
     if (managerRef.current) {
       managerRef.current.disconnect();
       managerRef.current = null;
+      setActiveSseManager(null);
     }
   }, []);
 
