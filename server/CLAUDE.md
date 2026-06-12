@@ -14,6 +14,8 @@
 - Reserve bare `logrus.*` calls for background goroutines and startup code that have no request context.
 - Log messages should start with a capital letter (e.g., `"Server shutdown complete"`).
 - In tests, use `t.Context()` instead of `context.Background()`
+- Pass `ctx context.Context` as the first parameter of any function that performs I/O, calls another service, or may need to be cancelled
+- Prefer table-driven tests with `t.Run` subtests over duplicated test functions; do not use `_` as a separator in top-level test function names (e.g. `TestCreateNote` with `t.Run("success", ...)`, not `TestCreateNote_Success`)
 
 ## Error Handling (Go)
 
