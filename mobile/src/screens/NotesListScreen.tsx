@@ -4,6 +4,7 @@ import {
   Text,
   TextInput,
   FlatList,
+  SectionList,
   TouchableOpacity,
   RefreshControl,
   StyleSheet,
@@ -73,6 +74,62 @@ interface LocalReorderState {
   pinned: Note[] | null;
   unpinned: Note[] | null;
 }
+
+type NoteSection = { key: string; title: string | null; data: Note[] };
+
+function buildNoteSections(
+  displayPinned: Note[],
+  displayUnpinned: Note[],
+  displayedArchived: Note[],
+  includePinned: boolean,
+  t: (key: string) => string,
+): NoteSection[] {
+  const sections: NoteSection[] = [];
+  if (includePinned && displayPinned.length > 0) {
+    sections.push({ key: 'pinned', title: t('dashboard.pinned'), data: displayPinned });
+  }
+  if (displayUnpinned.length > 0) {
+    sections.push({
+      key: includePinned ? 'other' : 'notes',
+      title: includePinned && displayPinned.length > 0 ? t('dashboard.otherNotes') : null,
+      data: displayUnpinned,
+    });
+  }
+  if (displayedArchived.length > 0) {
+    sections.push({ key: 'archived', title: t('dashboard.archivedResults'), data: displayedArchived });
+  }
+  return sections;
+}
+
+interface NoteListItemProps {
+  note: Note;
+  onPress: (id: string) => void;
+  onMenuPress?: (note: Note) => void;
+  onLongPress?: (note: Note) => void;
+  onLabelPress?: (labelId: string, labelName: string) => void;
+}
+
+const NoteListItem = React.memo(function NoteListItem({
+  note,
+  onPress,
+  onMenuPress,
+  onLongPress,
+  onLabelPress,
+}: NoteListItemProps) {
+  const handlePress = useCallback(() => onPress(note.id), [onPress, note.id]);
+  const handleMenuPress = useCallback(() => onMenuPress?.(note), [onMenuPress, note]);
+  const handleLongPress = useCallback(() => onLongPress?.(note), [onLongPress, note]);
+
+  return (
+    <NoteCard
+      note={note}
+      onPress={handlePress}
+      onMenuPress={onMenuPress ? handleMenuPress : undefined}
+      onLongPress={onLongPress ? handleLongPress : undefined}
+      onLabelPress={onLabelPress}
+    />
+  );
+});
 
 export default function NotesListScreen({ variant = 'notes', labelId }: NotesListScreenProps) {
   const [searchText, setSearchText] = useState('');
@@ -178,6 +235,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     const requestId = ++sortRequestIdRef.current;
 
     setSortMode(nextSort);
+    setLocalOrder({ pinned: null, unpinned: null });
     if (previousSettings) {
       setSettings({ ...previousSettings, note_sort: nextSort });
     }
@@ -432,10 +490,10 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     return [...pinned, ...other];
   }, [archivedNotes, sortMode]);
 
-  // Clear local order overrides when server data changes
+  // Clear local order overrides when server data or variant changes
   useEffect(() => {
     setLocalOrder({ pinned: null, unpinned: null });
-  }, [notes, sortMode, variant]);
+  }, [notes, variant]);
 
   useEffect(() => {
     let cancelled = false;
@@ -473,6 +531,19 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   displayUnpinnedRef.current = displayUnpinned;
 
   const hasPinned = pinnedNotes.length > 0;
+
+  const noteSections = useMemo(
+    () => buildNoteSections(displayPinned, displayUnpinned, displayedArchived, hasPinned, t),
+    [displayPinned, displayUnpinned, displayedArchived, hasPinned, t],
+  );
+
+  const renderSectionHeader = useCallback(
+    ({ section }: { section: NoteSection }) =>
+      section.title ? (
+        <Text style={[styles.sectionHeader, { color: colors.textMuted }]}>{section.title}</Text>
+      ) : null,
+    [colors.textMuted],
+  );
 
   const listEmptyComponent = useMemo(
     () =>
@@ -567,34 +638,17 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
 
   const renderNonDraggableNoteCard = useCallback(
     ({ item }: { item: Note }) => (
-      <NoteCard
+      <NoteListItem
         note={item}
-        onPress={() => handleNotePress(item.id)}
-        onMenuPress={variant !== 'trash' ? () => handleOpenMenu(item) : undefined}
-        onLongPress={variant === 'trash' ? () => handleOpenMenu(item) : undefined}
+        onPress={handleNotePress}
+        onMenuPress={variant !== 'trash' ? handleOpenMenu : undefined}
+        onLongPress={variant === 'trash' ? handleOpenMenu : undefined}
         onLabelPress={variant === 'notes' ? handleLabelPress : undefined}
       />
     ),
     [handleNotePress, handleOpenMenu, variant, handleLabelPress],
   );
 
-  const renderArchivedSection = useCallback(() => {
-    if (displayedArchived.length === 0) return null;
-    return (
-      <>
-        <Text style={[styles.sectionHeader, { color: colors.textMuted }]}>{t('dashboard.archivedResults')}</Text>
-        {displayedArchived.map((item) => (
-          <NoteCard
-            key={item.id}
-            note={item}
-            onPress={() => handleNotePress(item.id)}
-            onMenuPress={() => handleOpenMenu(item)}
-            onLabelPress={variant === 'notes' ? handleLabelPress : undefined}
-          />
-        ))}
-      </>
-    );
-  }, [displayedArchived, colors.textMuted, t, handleNotePress, handleOpenMenu, handleLabelPress, variant]);
 
   // Drag-and-drop is only available in the notes variant while manual sorting is
   // active and no search is in progress (search results mix in archived notes
@@ -914,48 +968,19 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
             {displayPinned.length === 0 && displayUnpinned.length === 0 && listEmptyComponent}
           </NestableScrollContainer>
         ) : (
-          <ScrollView
+          <SectionList
+            sections={noteSections}
+            keyExtractor={(item) => item.id}
+            renderItem={renderNonDraggableNoteCard}
+            renderSectionHeader={renderSectionHeader}
+            stickySectionHeadersEnabled={false}
             refreshControl={
               <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={colors.primary} />
             }
             contentContainerStyle={[styles.listContent, { paddingBottom: listBottomPadding }]}
+            ListEmptyComponent={listEmptyComponent}
             testID="notes-section-list"
-          >
-            {displayPinned.length > 0 && (
-              <>
-                <Text style={[styles.sectionHeader, { color: colors.textMuted }]}>{t('dashboard.pinned')}</Text>
-                {displayPinned.map((item) => (
-                  <NoteCard
-                    key={item.id}
-                    note={item}
-                    onPress={() => handleNotePress(item.id)}
-                    onMenuPress={variant !== 'trash' ? () => handleOpenMenu(item) : undefined}
-                    onLongPress={variant === 'trash' ? () => handleOpenMenu(item) : undefined}
-                    onLabelPress={variant === 'notes' ? handleLabelPress : undefined}
-                  />
-                ))}
-              </>
-            )}
-            {displayUnpinned.length > 0 && (
-              <>
-                {displayPinned.length > 0 && (
-                  <Text style={[styles.sectionHeader, { color: colors.textMuted }]}>{t('dashboard.otherNotes')}</Text>
-                )}
-                {displayUnpinned.map((item) => (
-                  <NoteCard
-                    key={item.id}
-                    note={item}
-                    onPress={() => handleNotePress(item.id)}
-                    onMenuPress={variant !== 'trash' ? () => handleOpenMenu(item) : undefined}
-                    onLongPress={variant === 'trash' ? () => handleOpenMenu(item) : undefined}
-                    onLabelPress={variant === 'notes' ? handleLabelPress : undefined}
-                  />
-                ))}
-              </>
-            )}
-            {renderArchivedSection()}
-            {displayPinned.length === 0 && displayUnpinned.length === 0 && displayedArchived.length === 0 && listEmptyComponent}
-          </ScrollView>
+          />
         )
       ) : isDraggable ? (
         <DraggableFlatList
@@ -973,25 +998,19 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
           testID="notes-flat-list"
         />
       ) : showArchivedSplit ? (
-        <ScrollView
+        <SectionList
+          sections={noteSections}
+          keyExtractor={(item) => item.id}
+          renderItem={renderNonDraggableNoteCard}
+          renderSectionHeader={renderSectionHeader}
+          stickySectionHeadersEnabled={false}
           refreshControl={
             <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={colors.primary} />
           }
           contentContainerStyle={[styles.listContent, { paddingBottom: listBottomPadding }]}
+          ListEmptyComponent={listEmptyComponent}
           testID="notes-section-list"
-        >
-          {displayUnpinned.map((item) => (
-            <NoteCard
-              key={item.id}
-              note={item}
-              onPress={() => handleNotePress(item.id)}
-              onMenuPress={() => handleOpenMenu(item)}
-              onLabelPress={variant === 'notes' ? handleLabelPress : undefined}
-            />
-          ))}
-          {renderArchivedSection()}
-          {displayUnpinned.length === 0 && displayedArchived.length === 0 && listEmptyComponent}
-        </ScrollView>
+        />
       ) : (
         <FlatList
           data={displayUnpinned}
