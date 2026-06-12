@@ -348,9 +348,12 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
 
   const handleBackToDashboardFromServerSetup = useCallback(() => {
     setIsServerSetupVisible(false);
-    setIsServerPickerVisible(false);
-    props.navigation.closeDrawer();
-  }, [props.navigation]);
+    if (servers.length > 0) {
+      setIsServerPickerVisible(true);
+    } else {
+      props.navigation.closeDrawer();
+    }
+  }, [props.navigation, servers.length]);
 
   const displayName = user
     ? [user.first_name, user.last_name].filter(Boolean).join(' ') || user.username
@@ -750,9 +753,11 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
                           <Text style={[styles.serverRowTitle, { color: colors.text }]} numberOfLines={1}>
                             {server.displayName || server.serverUrl}
                           </Text>
-                          <Text style={[styles.serverRowSubtext, { color: colors.textSecondary }]} numberOfLines={1}>
-                            {server.serverUrl}
-                          </Text>
+                          {server.displayName ? (
+                            <Text style={[styles.serverRowSubtext, { color: colors.textSecondary }]} numberOfLines={1}>
+                              {server.serverUrl}
+                            </Text>
+                          ) : null}
                         </View>
                         {isActive ? <Ionicons name="checkmark-circle" size={20} color={colors.primary} /> : null}
                       </TouchableOpacity>
