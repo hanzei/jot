@@ -3,8 +3,9 @@ package cmd
 import "github.com/hanzei/jot/server/client"
 
 type seedItem struct {
-	text      string
-	completed bool
+	text        string
+	completed   bool
+	indentLevel int
 }
 
 type seedNote struct {
@@ -102,6 +103,20 @@ var seedDataset = []seedUser{
 					{text: "Apples", completed: false},
 					{text: "Bread", completed: false},
 					{text: "Coffee", completed: true},
+				},
+			},
+			{
+				noteType: client.NoteTypeList,
+				title:    "Home renovation",
+				color:    "#e6c9a8",
+				items: []seedItem{
+					{text: "Kitchen"},
+					{text: "Replace faucet", completed: true, indentLevel: 1},
+					{text: "Paint cabinets", indentLevel: 1},
+					{text: "Install backsplash", indentLevel: 1},
+					{text: "Bathroom"},
+					{text: "Re-grout tiles", completed: true, indentLevel: 1},
+					{text: "Replace mirror", indentLevel: 1},
 				},
 			},
 			// archived notes (3)
