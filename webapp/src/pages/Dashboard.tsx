@@ -1,5 +1,5 @@
 import { useState, useEffect, useLayoutEffect, useCallback, useMemo, useRef } from 'react';
-import { PlusIcon, DocumentTextIcon, ArchiveBoxIcon, TrashIcon, ClipboardDocumentCheckIcon, ArrowsUpDownIcon, MagnifyingGlassIcon } from '@heroicons/react/24/outline';
+import { PlusIcon, DocumentTextIcon, ArchiveBoxIcon, TrashIcon, ClipboardDocumentCheckIcon, ArrowsUpDownIcon, MagnifyingGlassIcon, XMarkIcon } from '@heroicons/react/24/outline';
 import { useTranslation } from 'react-i18next';
 import { notes, users as usersApi } from '@/utils/api';
 import { getUser, getSettings, setSettings } from '@/utils/auth';
@@ -17,6 +17,7 @@ import { useToast } from '@/hooks/useToast';
 import { useAuthenticatedLayout } from '@/components/AuthenticatedLayout';
 import { isAnyModalDialogOpen, isEditableElementFocused, isOverlayControlFocused } from '@/utils/keyboardShortcuts';
 import { NOTE_SORT_OPTIONS, normalizeNoteSort, sortNotesForDisplay } from '@/utils/noteSort';
+import { isSortWarningDismissed, dismissSortWarning } from '@/utils/sortWarningDismissed';
 import {
   DndContext,
   closestCenter,
@@ -54,6 +55,7 @@ export default function Dashboard() {
   } = useAuthenticatedLayout();
   const [notesList, setNotesList] = useState<Note[]>([]);
   const [noteSort, setNoteSort] = useState<NoteSort>(() => normalizeNoteSort(getSettings()?.note_sort));
+  const [sortWarningDismissed, setSortWarningDismissed] = useState<boolean>(() => isSortWarningDismissed(noteSort));
   const [loading, setLoading] = useState(true);
   const [trashCount, setTrashCount] = useState(0);
   const [isEmptyingTrash, setIsEmptyingTrash] = useState(false);
@@ -783,6 +785,15 @@ export default function Dashboard() {
     }
   }, [noteSort, showToast, t]);
 
+  useEffect(() => {
+    setSortWarningDismissed(isSortWarningDismissed(noteSort));
+  }, [noteSort]);
+
+  const handleDismissSortWarning = useCallback(() => {
+    dismissSortWarning(noteSort);
+    setSortWarningDismissed(true);
+  }, [noteSort]);
+
   const handleDragEnd = async (event: DragEndEvent) => {
     if (showArchived || showBin || showMyTasks || debouncedSearchQuery || noteSort !== 'manual') {
       return;
@@ -1018,16 +1029,23 @@ export default function Dashboard() {
         )}
 
         {/* Notes grid */}
-        {noteSort !== 'manual' && (
+        {noteSort !== 'manual' && !sortWarningDismissed && (
           <div
             data-testid="manual-reorder-disabled-notice"
             className="mb-6 flex items-start gap-3 rounded-lg border border-blue-200 bg-blue-50 px-4 py-3 text-sm text-blue-900 dark:border-blue-900/70 dark:bg-blue-950/40 dark:text-blue-200"
           >
             <ArrowsUpDownIcon className="mt-0.5 h-4 w-4 shrink-0" />
-            <div>
+            <div className="flex-1">
               <span className="font-medium">{t('dashboard.manualReorderDisabledTitle')}</span>{' '}
               <span>{t('dashboard.manualReorderDisabled', { sort: activeSortLabel })}</span>
             </div>
+            <button
+              onClick={handleDismissSortWarning}
+              aria-label={t('common.close')}
+              className="shrink-0 rounded p-0.5 hover:bg-blue-100 dark:hover:bg-blue-900/50"
+            >
+              <XMarkIcon className="h-4 w-4" />
+            </button>
           </div>
         )}
 
