@@ -8,6 +8,7 @@ A self-hosted note-taking application built with Go backend and React frontend. 
 - **Note Types**: Support for both plain text notes and lists with checkboxes
 - **Search & Filter**: Find notes quickly with search and filtering capabilities
 - **Responsive Design**: Works on desktop and mobile devices
+- **Android Share-to-Note**: Select text in any Android app and share it to Jot to create a new note (multi-server users can redirect it to another server before saving)
 - **Self-hosted**: Complete control over your data
 - **SQLite Database**: Lightweight, file-based database
 - **Admin Support**: First registered user becomes admin

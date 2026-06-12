@@ -23,7 +23,14 @@
       "package": "com.jot.app"
     },
     "plugins": [
-      "expo-localization"
+      "expo-localization",
+      [
+        "expo-share-intent",
+        {
+          "androidIntentFilters": ["text/*"],
+          "disableIOS": true
+        }
+      ]
     ]
   }
 }

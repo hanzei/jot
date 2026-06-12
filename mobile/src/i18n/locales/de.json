@@ -340,6 +340,11 @@
     "cancelSetupMessage": "Der Server wird nicht hinzugefügt.",
     "cancelSetupConfirm": "Zurück"
   },
+  "shareIntent": {
+    "saveTargetLabel": "Speichern auf {{server}}",
+    "changeServer": "Ändern",
+    "chooseServerTitle": "Geteilte Notiz speichern auf"
+  },
   "offline": {
     "message": "Du bist offline. Änderungen werden synchronisiert, sobald du wieder verbunden bist."
   },

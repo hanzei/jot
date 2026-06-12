@@ -340,6 +340,11 @@
     "wrongServerTitle": "Verkeerde server",
     "wrongServerMessage": "Deze link verwijst naar {{targetServer}}, maar je bent verbonden met {{currentServer}}."
   },
+  "shareIntent": {
+    "saveTargetLabel": "Opslaan op {{server}}",
+    "changeServer": "Wijzigen",
+    "chooseServerTitle": "Gedeelde notitie opslaan op"
+  },
   "offline": {
     "message": "Je bent offline. Wijzigingen worden gesynchroniseerd als je weer verbinding hebt."
   },

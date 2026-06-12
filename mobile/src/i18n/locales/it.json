@@ -340,6 +340,11 @@
     "unknownServerMessage": "Questo link punta a {{server}}, che non è ancora stato aggiunto.",
     "addAndSwitchAction": "Aggiungi e passa"
   },
+  "shareIntent": {
+    "saveTargetLabel": "Salvataggio su {{server}}",
+    "changeServer": "Cambia",
+    "chooseServerTitle": "Salva la nota condivisa su"
+  },
   "offline": {
     "message": "Sei offline. Le modifiche verranno sincronizzate quando ti riconnetterai."
   },
