@@ -34,6 +34,28 @@ export interface EnqueueParams {
   body?: Record<string, unknown>;
 }
 
+/**
+ * Whether an HTTP status (or `undefined`, meaning no response — a network
+ * failure or timeout) represents a *transient* failure that is worth retrying
+ * later, as opposed to a *permanent* one that will never succeed on replay.
+ *
+ * Transient: network errors (no response), request timeout (408), rate limiting
+ * (429), session expiry that may recover after re-auth (401), and server errors
+ * (5xx). Everything else — notably 4xx client errors such as validation
+ * (400/422), forbidden (403), and missing/conflict (404/409) — is permanent.
+ *
+ * Shared by two call sites so they stay in agreement:
+ *   - online writes (useNotes): transient → fall back to the local queue instead
+ *     of losing the edit; permanent → surface the error to the UI.
+ *   - queue drain: transient → stop draining and retry on the next reconnect;
+ *     permanent → discard (dead-letter) the entry so it cannot wedge the queue.
+ */
+export function isTransientHttpStatus(status: number | undefined): boolean {
+  if (status === undefined) return true;
+  if (status === 401 || status === 408 || status === 429) return true;
+  return status >= 500;
+}
+
 export async function enqueueOperation(db: SQLiteDatabase, params: EnqueueParams): Promise<void> {
   await db.runAsync(
     `INSERT INTO sync_queue (operation, endpoint, method, body, created_at)
@@ -81,20 +103,22 @@ function remapIdsInBody(
 export interface DiscardedOperation {
   operation: QueueOperation;
   endpoint: string;
-  /** HTTP status code that caused the discard (404 or 409). */
+  /** Permanent HTTP status code that caused the discard (a non-transient 4xx). */
   status: number;
 }
 
 export interface DrainResult {
   /** Maps local_* IDs to the server IDs assigned during create operations. */
   idMappings: Array<{ localId: string; serverNote: Note }>;
-  /** Operations that were discarded because the server returned 404 or 409. */
+  /** Operations that were discarded because the server returned a permanent (non-transient 4xx) error. */
   discardedOperations: DiscardedOperation[];
 }
 
 /**
  * Drain the sync queue in FIFO order. For each entry, make the corresponding API call.
- * On success, delete the entry. On 404/409, discard and warn. On network error, stop.
+ * On success, delete the entry. On a permanent client error (non-transient 4xx),
+ * discard the entry and continue. On a transient failure (network/timeout/5xx), stop
+ * draining and retry the remaining entries on the next reconnect.
  *
  * Handles offline-create ID reconciliation: when a `create` operation succeeds, the
  * server returns a new note ID. Any subsequent queue entries that reference the local
@@ -169,13 +193,18 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
     } catch (err) {
       const status = axios.isAxiosError(err) ? err.response?.status : undefined;
 
-      if (status === 404 || status === 409) {
-        // Note no longer exists on server — discard and continue
+      // `isTransientHttpStatus(undefined)` is true, so reaching this branch
+      // guarantees `status` is a defined, non-transient HTTP code.
+      if (status !== undefined && !isTransientHttpStatus(status)) {
+        // Permanent client error (e.g. 400/403/404/409/422) — replaying will
+        // never succeed, so discard (dead-letter) the entry and continue rather
+        // than letting one bad operation wedge the whole queue indefinitely.
         console.warn(`Discarding queued operation id=${entry.id} (HTTP ${status})`);
         discardedOperations.push({ operation: entry.operation, endpoint: entry.endpoint, status });
         await db.runAsync('DELETE FROM sync_queue WHERE id = ?', [entry.id]);
       } else {
-        // Network or server error — stop draining; retry on next reconnect
+        // Transient failure (network/timeout/401/408/429/5xx) or an unexpected
+        // non-HTTP error — stop draining and retry the rest on the next reconnect.
         console.warn(`Queue drain stopped at entry id=${entry.id}:`, err);
         break;
       }
