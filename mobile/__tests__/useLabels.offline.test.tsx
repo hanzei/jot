@@ -133,6 +133,60 @@ describe('useAddLabelToNote (offline)', () => {
     );
   });
 
+  it('reuses a known label case-insensitively (adds "Urgent" when "urgent" exists)', async () => {
+    mockUseNetworkStatus.mockReturnValue({ isConnected: false });
+    mockNoteQueries.getLocalNote.mockResolvedValueOnce({ ...baseNote, labels: [] } as never);
+    mockNoteQueries.getLocalLabels.mockResolvedValueOnce([
+      { id: 'server-l', user_id: 'u1', name: 'urgent', created_at: '', updated_at: '' },
+    ]);
+
+    const { result } = renderHook(() => useAddLabelToNote(), { wrapper: createWrapper() });
+
+    await result.current.mutateAsync({ noteId: 'note-1', name: 'Urgent' });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    // Reused the existing server label (no local_label_id minted), keeping the
+    // user-entered casing in the request body.
+    expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
+      expect.anything(),
+      expect.objectContaining({ body: { name: 'Urgent' } }),
+    );
+  });
+
+  it('does not write or queue when the same label is already attached under a different case', async () => {
+    mockUseNetworkStatus.mockReturnValue({ isConnected: false });
+    mockNoteQueries.getLocalNote.mockResolvedValueOnce({
+      ...baseNote,
+      labels: [{ id: 'server-l', user_id: 'u1', name: 'urgent', created_at: '', updated_at: '' }],
+    } as never);
+
+    const { result } = renderHook(() => useAddLabelToNote(), { wrapper: createWrapper() });
+
+    await result.current.mutateAsync({ noteId: 'note-1', name: 'URGENT' });
+
+    await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+    expect(mockNoteQueries.saveNote).not.toHaveBeenCalled();
+    expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
+  });
+
+  it('rejects a whitespace-only name without touching the DB or queue', async () => {
+    mockUseNetworkStatus.mockReturnValue({ isConnected: false });
+
+    const { result } = renderHook(() => useAddLabelToNote(), { wrapper: createWrapper() });
+
+    await result.current.mutateAsync({ noteId: 'note-1', name: '   ' }).catch(() => {});
+
+    await waitFor(() => expect(result.current.isError).toBe(true));
+
+    expect((result.current.error as Error).message).toMatch(/must not be empty/);
+    expect(mockLabelsApi.addLabelToNote).not.toHaveBeenCalled();
+    expect(mockNoteQueries.getLocalNote).not.toHaveBeenCalled();
+    expect(mockNoteQueries.saveNote).not.toHaveBeenCalled();
+    expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
+  });
+
   it('does not write or queue when the label is already attached', async () => {
     mockUseNetworkStatus.mockReturnValue({ isConnected: false });
     mockNoteQueries.getLocalNote.mockResolvedValueOnce({

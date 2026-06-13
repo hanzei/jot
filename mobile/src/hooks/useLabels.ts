@@ -154,9 +154,13 @@ export function useAddLabelToNote() {
   return useMutation({
     mutationFn: async ({ noteId, name }: { noteId: string; name: string }): Promise<Note> => {
       assertSwitchWriteAllowed();
+      const trimmed = name.trim();
+      if (!trimmed) {
+        throw new Error('Label name must not be empty');
+      }
       if (isConnectedRef.current) {
         try {
-          const updatedNote = await addLabelToNote(noteId, name);
+          const updatedNote = await addLabelToNote(noteId, trimmed);
           await saveNote(db, updatedNote);
           return updatedNote;
         } catch (err) {
@@ -168,22 +172,22 @@ export function useAddLabelToNote() {
 
       // Offline (or a transient online failure): attach the label locally and
       // queue the server operation.
-      const trimmed = name.trim();
       const existing = await getLocalNote(db, noteId);
       if (!existing) {
         throw new Error(`Note ${noteId} not found in local DB`);
       }
       // Already attached locally (and therefore already synced or queued): return
-      // it as-is without writing or queuing a redundant operation. Name is the
-      // server-side uniqueness key for a label.
-      if (existing.labels.some((l) => l.name === trimmed)) {
+      // it as-is without writing or queuing a redundant operation. The server
+      // treats label names as case-insensitively unique, so compare the same way.
+      const normalized = trimmed.toLowerCase();
+      if (existing.labels.some((l) => l.name.toLowerCase() === normalized)) {
         return existing;
       }
       const now = new Date().toISOString();
       // Reuse a known label with this name (so its id matches the server's),
       // otherwise mint a local one that drainQueue reconciles on replay.
       const known = await getLocalLabels(db);
-      const label: Label = known.find((l) => l.name === trimmed) ?? {
+      const label: Label = known.find((l) => l.name.toLowerCase() === normalized) ?? {
         id: generateLocalId(),
         user_id: existing.user_id,
         name: trimmed,
