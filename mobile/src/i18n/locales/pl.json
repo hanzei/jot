@@ -320,7 +320,8 @@
     "chooseServerTitle": "Zapisz udostępnioną notatkę na"
   },
   "offline": {
-    "message": "Jesteś offline. Zmiany zostaną zsynchronizowane po ponownym połączeniu."
+    "message": "Jesteś offline. Zmiany zostaną zsynchronizowane po ponownym połączeniu.",
+    "syncError": "Niektóre zmiany nie zostały jeszcze zsynchronizowane. Nastąpi automatyczna ponowna próba."
   },
   "serverPicker": {
     "open": "Przełącz serwer",

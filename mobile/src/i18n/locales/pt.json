@@ -347,7 +347,8 @@
     "chooseServerTitle": "Salvar nota compartilhada em"
   },
   "offline": {
-    "message": "Você está offline. As alterações serão sincronizadas quando você se reconectar."
+    "message": "Você está offline. As alterações serão sincronizadas quando você se reconectar.",
+    "syncError": "Algumas alterações ainda não foram sincronizadas. Será feita uma nova tentativa automaticamente."
   },
   "import": {
     "title": "Importar do Google Keep",

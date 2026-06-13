@@ -347,7 +347,8 @@
     "chooseServerTitle": "Gedeelde notitie opslaan op"
   },
   "offline": {
-    "message": "Je bent offline. Wijzigingen worden gesynchroniseerd als je weer verbinding hebt."
+    "message": "Je bent offline. Wijzigingen worden gesynchroniseerd als je weer verbinding hebt.",
+    "syncError": "Sommige wijzigingen zijn nog niet gesynchroniseerd. Er wordt automatisch opnieuw geprobeerd."
   },
   "import": {
     "title": "Importeren uit Google Keep",

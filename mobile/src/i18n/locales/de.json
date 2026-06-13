@@ -347,7 +347,8 @@
     "chooseServerTitle": "Geteilte Notiz speichern auf"
   },
   "offline": {
-    "message": "Du bist offline. Änderungen werden synchronisiert, sobald du wieder verbunden bist."
+    "message": "Du bist offline. Änderungen werden synchronisiert, sobald du wieder verbunden bist.",
+    "syncError": "Einige Änderungen wurden noch nicht synchronisiert. Es wird automatisch erneut versucht."
   },
   "import": {
     "title": "Aus Google Keep importieren",
