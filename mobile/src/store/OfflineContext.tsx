@@ -99,6 +99,10 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
   }, [clearDrainTimer, scheduleDrain]);
 
   const performDrain = useCallback(async () => {
+    // Don't attempt to drain while offline — the network call is doomed and would
+    // only stall and reschedule. A timer scheduled while online can fire after we
+    // go offline; the offline NetInfo handler also clears it, this is a backstop.
+    if (!isConnectedRef.current) return;
     if (isSyncDrainPaused()) return;
     if (isDrainingRef.current) {
       // A drain is already running; remember to run again once it finishes so
@@ -188,12 +192,16 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
       if (connected && !prevConnectedRef.current) {
         // Transitioned from offline → online
         handleReconnect().catch(() => {});
+      } else if (!connected) {
+        // Going offline: cancel any pending backoff/debounce drain so we don't
+        // fire doomed network calls until connectivity returns.
+        clearDrainTimer();
       }
       prevConnectedRef.current = connected;
     });
 
     return () => unsubscribe();
-  }, [handleReconnect]);
+  }, [handleReconnect, clearDrainTimer]);
 
   // Drain when the app returns to the foreground (e.g. a write failed transiently
   // while backgrounded). Treated like a reconnect so the session is re-validated.

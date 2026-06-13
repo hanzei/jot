@@ -8,6 +8,7 @@ import React from 'react';
 import { render, act } from '@testing-library/react-native';
 import { AppState, AppStateStatus, Text } from 'react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
+import NetInfo from '@react-native-community/netinfo';
 import { OfflineProvider, useOfflineContext } from '../src/store/OfflineContext';
 import { drainQueue, getPendingCount } from '../src/db/syncQueue';
 
@@ -209,6 +210,29 @@ describe('OfflineProvider queue draining', () => {
 
     expect(mockDrainQueue).toHaveBeenCalledTimes(7);
     expect(lastSyncError).toBe(false);
+  });
+
+  it('cancels the scheduled retry and stops draining when connectivity drops to offline', async () => {
+    // Every drain stalls, so the mount drain schedules a backoff retry.
+    mockGetPendingCount.mockResolvedValue(1);
+    renderProvider();
+    await flush();
+    expect(mockDrainQueue).toHaveBeenCalledTimes(1);
+
+    // NetInfo reports the device went offline.
+    const netInfoListener = (NetInfo.addEventListener as jest.Mock).mock.calls[0][0] as (
+      state: { isConnected: boolean; isInternetReachable: boolean },
+    ) => void;
+    await act(async () => {
+      netInfoListener({ isConnected: false, isInternetReachable: false });
+    });
+
+    // The pending backoff retry must not fire while offline.
+    await act(async () => {
+      jest.advanceTimersByTime(60000);
+    });
+    await flush();
+    expect(mockDrainQueue).toHaveBeenCalledTimes(1);
   });
 
   it('resets the retry budget and resumes draining when a new write is enqueued after the cap', async () => {
