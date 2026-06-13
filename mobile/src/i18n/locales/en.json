@@ -347,7 +347,8 @@
     "chooseServerTitle": "Save shared note to"
   },
   "offline": {
-    "message": "You're offline. Changes will sync when you reconnect."
+    "message": "You're offline. Changes will sync when you reconnect.",
+    "syncError": "Some changes haven't synced yet. They'll retry automatically."
   },
   "import": {
     "title": "Import from Google Keep",
