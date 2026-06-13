@@ -347,7 +347,8 @@
     "chooseServerTitle": "Enregistrer la note partagée sur"
   },
   "offline": {
-    "message": "Vous êtes hors ligne. Les modifications seront synchronisées lors de la reconnexion."
+    "message": "Vous êtes hors ligne. Les modifications seront synchronisées lors de la reconnexion.",
+    "syncError": "Certaines modifications ne sont pas encore synchronisées. Une nouvelle tentative aura lieu automatiquement."
   },
   "import": {
     "title": "Importer depuis Google Keep",

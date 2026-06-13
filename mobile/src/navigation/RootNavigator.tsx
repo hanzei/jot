@@ -5,6 +5,7 @@ import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import { SSEProvider } from '../store/SSEContext';
 import OfflineBanner from '../components/OfflineBanner';
+import SyncErrorBanner from '../components/SyncErrorBanner';
 import AuthStack from './AuthStack';
 import MainDrawer from './MainDrawer';
 import NoteEditorScreen from '../screens/NoteEditorScreen';
@@ -39,6 +40,7 @@ function AuthenticatedStack() {
     <SSEProvider>
       <View style={styles.flex}>
         <OfflineBanner />
+        <SyncErrorBanner />
         <Stack.Navigator>
           <Stack.Screen name="MainDrawer" component={MainDrawer} options={{ headerShown: false }} />
           <Stack.Screen
