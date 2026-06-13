@@ -32,6 +32,7 @@ import ColorPicker from '../components/ColorPicker';
 import LabelPicker from '../components/LabelPicker';
 import AssigneePicker from '../components/AssigneePicker';
 import { buildCollaborators, generateId, VALIDATION, type Collaborator, type NoteType, type NoteItem, type CreateNoteRequest, type UpdateNoteRequest, type UpdateListNoteRequest, type UpdateTextNoteRequest, type PatchNoteItemRequest, type Label } from '@jot/shared';
+import { useAuth } from '../store/AuthContext';
 import { useUsers } from '../store/UsersContext';
 import { useTheme } from '../theme/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
@@ -186,6 +187,7 @@ export default function NoteEditorScreen() {
   const pendingShare = usePendingShare();
   const redirectInitiatedRef = useRef(false);
   const focusedListItemIdRef = useRef<string | null>(null);
+  const { user: currentUser } = useAuth();
   const { usersById } = useUsers();
   const { showToast } = useToast();
 
@@ -1688,8 +1690,8 @@ export default function NoteEditorScreen() {
           <Ionicons name="color-palette-outline" size={22} color={hasNoteColor ? '#444' : colors.icon} />
         </TouchableOpacity>
 
-        {/* Share (only when note is saved, synced, hydrated, and owned by current user) */}
-        {noteId && !isLocalId(noteId) && existingNote && !existingNote.is_shared && (
+        {/* Share (only when note is saved, synced, and owned by current user) */}
+        {noteId && !isLocalId(noteId) && existingNote && existingNote.user_id === currentUser?.id && (
           <TouchableOpacity
             onPress={() => navigation.navigate('Share', { noteId })}
             style={styles.toolbarBtn}

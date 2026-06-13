@@ -24,6 +24,16 @@ export type RootStackParamList = {
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
 
+// Identify a NoteEditor/Share screen by the note it targets. Without this,
+// React Navigation matches routes by name only, so a deep link to a different
+// note while an editor is already open navigates back to the existing instance
+// and merely merges the new params. NoteEditorScreen seeds its state from the
+// initial params and does not react to later param changes, so it would keep
+// showing the first note. Keying on noteId makes a deep link to a different
+// note push a fresh screen instead of reusing the stale one.
+export const getNoteScreenId = ({ params }: { params?: { noteId?: string | null } }): string | undefined =>
+  params?.noteId ?? undefined;
+
 function AuthenticatedStack() {
   return (
     <SSEProvider>
@@ -34,6 +44,7 @@ function AuthenticatedStack() {
           <Stack.Screen
             name="NoteEditor"
             component={NoteEditorScreen}
+            getId={getNoteScreenId}
             options={{
               headerShown: false,
               presentation: 'modal',
@@ -42,6 +53,7 @@ function AuthenticatedStack() {
           <Stack.Screen
             name="Share"
             component={ShareScreen}
+            getId={getNoteScreenId}
             options={{
               headerShown: false,
               presentation: 'modal',
