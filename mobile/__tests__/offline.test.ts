@@ -585,6 +585,17 @@ describe('addLabelToLocalNote', () => {
     expect(db.runAsync).not.toHaveBeenCalled();
   });
 
+  it('is idempotent when the note already has a same-name label differing only in case', async () => {
+    const db = {
+      getFirstAsync: jest.fn().mockResolvedValue({ labels_json: JSON.stringify([label]) }),
+      runAsync: jest.fn().mockResolvedValue(undefined),
+    };
+
+    await addLabelToLocalNote(db as never, 'n1', { ...label, id: 'l2', name: 'WORK' });
+
+    expect(db.runAsync).not.toHaveBeenCalled();
+  });
+
   it('does nothing when the note is not in the local cache', async () => {
     const db = {
       getFirstAsync: jest.fn().mockResolvedValue(null),

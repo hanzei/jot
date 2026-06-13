@@ -149,6 +149,7 @@ export function useCreateLabel() {
     mutationFn: async ({ name }: { name: string }): Promise<Label> => {
       assertSwitchWriteAllowed();
       const trimmed = name.trim();
+      if (!trimmed) throw new Error('Label name must not be empty');
       if (isConnectedRef.current) {
         try {
           return await createLabel(trimmed);
@@ -202,6 +203,7 @@ export function useAddLabelToNote() {
     mutationFn: async ({ noteId, name }: { noteId: string; name: string }) => {
       assertSwitchWriteAllowed();
       const trimmed = name.trim();
+      if (!trimmed) throw new Error('Label name must not be empty');
       if (isConnectedRef.current) {
         try {
           const updatedNote = await addLabelToNote(noteId, trimmed);
@@ -222,7 +224,9 @@ export function useAddLabelToNote() {
       // Reuse an existing label with the same name if known locally; otherwise
       // mint a local label and queue its create so any later op referencing it
       // (e.g. removing it again while still offline) reconciles to the server id.
-      const known = (await getLocalLabels(db)).find((l) => l.name === trimmed);
+      // Match case-insensitively to mirror the server's GetOrCreateLabel lookup.
+      const normalized = trimmed.toLowerCase();
+      const known = (await getLocalLabels(db)).find((l) => l.name.toLowerCase() === normalized);
       const label = known ?? buildLocalLabel(trimmed, user?.id ?? '');
       if (!known) {
         await enqueueOperation(db, {
@@ -314,6 +318,7 @@ export function useRenameLabel() {
     mutationFn: async ({ labelId, name }: { labelId: string; name: string }): Promise<Label> => {
       assertSwitchWriteAllowed();
       const trimmed = name.trim();
+      if (!trimmed) throw new Error('Label name must not be empty');
       if (isConnectedRef.current) {
         try {
           const updatedLabel = await renameLabel(labelId, trimmed);

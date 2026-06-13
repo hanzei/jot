@@ -157,6 +157,15 @@ describe('useLabels write hooks', () => {
       await waitFor(() => expect(result.current.isError).toBe(true));
       expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
     });
+
+    it('rejects a whitespace-only name without calling the API or queuing', async () => {
+      const { result } = renderHook(() => useCreateLabel(), { wrapper: createWrapper() });
+      await result.current.mutateAsync({ name: '   ' }).catch(() => {});
+
+      await waitFor(() => expect(result.current.isError).toBe(true));
+      expect(mockLabelsApi.createLabel).not.toHaveBeenCalled();
+      expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
+    });
   });
 
   // ── useAddLabelToNote ──────────────────────────────────────────────────────
@@ -219,6 +228,40 @@ describe('useLabels write hooks', () => {
         expect.anything(),
         expect.objectContaining({ operation: 'addLabelToNote' }),
       );
+    });
+
+    it('reuses an existing label whose name differs only in case (no createLabel queued)', async () => {
+      mockUseNetworkStatus.mockReturnValue({ isConnected: false });
+      mockNoteQueries.getLocalNote.mockResolvedValue(sampleNote as never);
+      mockNoteQueries.getLocalLabels.mockResolvedValue([
+        { id: 'srv-existing', user_id: 'u1', name: 'urgent', created_at: '', updated_at: '' },
+      ] as never);
+
+      const { result } = renderHook(() => useAddLabelToNote(), { wrapper: createWrapper() });
+      await result.current.mutateAsync({ noteId: 'n1', name: 'Urgent' });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      // The existing "urgent" label is reused rather than minting a new one.
+      expect(mockNoteQueries.addLabelToLocalNote).toHaveBeenCalledWith(
+        expect.anything(),
+        'n1',
+        expect.objectContaining({ id: 'srv-existing', name: 'urgent' }),
+      );
+      const createLabelCalls = mockSyncQueue.enqueueOperation.mock.calls.filter(
+        ([, params]) => params.operation === 'createLabel',
+      );
+      expect(createLabelCalls).toHaveLength(0);
+    });
+
+    it('rejects a whitespace-only name without touching the API, DB, or queue', async () => {
+      const { result } = renderHook(() => useAddLabelToNote(), { wrapper: createWrapper() });
+      await result.current.mutateAsync({ noteId: 'n1', name: '   ' }).catch(() => {});
+
+      await waitFor(() => expect(result.current.isError).toBe(true));
+      expect(mockLabelsApi.addLabelToNote).not.toHaveBeenCalled();
+      expect(mockNoteQueries.getLocalNote).not.toHaveBeenCalled();
+      expect(mockNoteQueries.addLabelToLocalNote).not.toHaveBeenCalled();
+      expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
     });
 
     it('surfaces a permanent failure (4xx) without queuing', async () => {

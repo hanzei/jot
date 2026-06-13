@@ -338,8 +338,10 @@ export async function addLabelToLocalNote(
   label: Label,
 ): Promise<void> {
   await updateNoteLabels(db, noteId, (labels) => {
-    // Idempotent: skip if the note already carries this label (by id or name).
-    if (labels.some((l) => l.id === label.id || l.name === label.name)) return null;
+    // Idempotent: skip if the note already carries this label (by id, or by name
+    // case-insensitively to mirror the server's GetOrCreateLabel lookup).
+    const normalizedName = label.name.toLowerCase();
+    if (labels.some((l) => l.id === label.id || l.name.toLowerCase() === normalizedName)) return null;
     return [...labels, label];
   });
 }
