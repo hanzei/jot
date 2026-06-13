@@ -2,7 +2,7 @@
  * Tests for offline support: local note queries, sync queue, and ID utilities.
  */
 
-import { generateLocalId, isLocalId, replaceLocalNoteId, removeLocalNotesNotIn, getLocalLabels, getLocalLabelCounts } from '../src/db/noteQueries';
+import { generateLocalId, isLocalId, replaceLocalNoteId, removeLocalNotesNotIn, getLocalLabels, getLocalLabelCounts, saveNote } from '../src/db/noteQueries';
 import { drainQueue, isTransientHttpStatus } from '../src/db/syncQueue';
 import api from '../src/api/client';
 
@@ -30,6 +30,7 @@ jest.mock('../src/db/noteQueries', () => ({
 
 const mockApi = api as jest.Mocked<typeof api>;
 const mockReplaceLocalNoteId = replaceLocalNoteId as jest.MockedFunction<typeof replaceLocalNoteId>;
+const mockSaveNote = saveNote as jest.MockedFunction<typeof saveNote>;
 
 // ── generateLocalId / isLocalId ────────────────────────────────────────────
 
@@ -288,6 +289,123 @@ describe('drainQueue', () => {
 
     expect(mockReplaceLocalNoteId).toHaveBeenCalledWith(db, 'local_temp_1', serverNote);
     expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [8]);
+  });
+
+  it('persists the note returned by an addLabel replay so local label ids match the server', async () => {
+    const serverNote = {
+      id: 'note-1', title: '', content: '', note_type: 'text',
+      color: '#ffffff', pinned: false, archived: false, position: 0,
+      checked_items_collapsed: false, is_shared: false, deleted_at: null,
+      user_id: 'u1', created_at: '', updated_at: '',
+      labels: [{ id: 'server-label', user_id: 'u1', name: 'urgent', created_at: '', updated_at: '' }],
+      shared_with: [],
+    };
+    const db = makeMockDb([
+      { id: 30, operation: 'addLabel', endpoint: '/notes/note-1/labels', method: 'POST', body: '{"name":"urgent"}', created_at: '' },
+    ]);
+    mockApi.post.mockResolvedValueOnce({ data: serverNote } as never);
+
+    await drainQueue(db as never);
+
+    expect(mockApi.post).toHaveBeenCalledWith('/notes/note-1/labels', { name: 'urgent' });
+    expect(mockSaveNote).toHaveBeenCalledWith(db, serverNote);
+    expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [30]);
+  });
+
+  it('strips local_label_id and remaps it so a later removeLabel targets the server label', async () => {
+    const serverNote = {
+      id: 'note-1', title: '', content: '', note_type: 'text',
+      color: '#ffffff', pinned: false, archived: false, position: 0,
+      checked_items_collapsed: false, is_shared: false, deleted_at: null,
+      user_id: 'u1', created_at: '', updated_at: '',
+      labels: [{ id: 'server-label', user_id: 'u1', name: 'urgent', created_at: '', updated_at: '' }],
+      shared_with: [],
+    };
+    const db = makeMockDb([
+      {
+        id: 31,
+        operation: 'addLabel',
+        endpoint: '/notes/note-1/labels',
+        method: 'POST',
+        body: '{"name":"urgent","local_label_id":"local_lbl_1"}',
+        created_at: '',
+      },
+      {
+        id: 32,
+        operation: 'removeLabel',
+        endpoint: '/notes/note-1/labels/local_lbl_1',
+        method: 'DELETE',
+        body: null,
+        created_at: '',
+      },
+    ]);
+    mockApi.post.mockResolvedValueOnce({ data: serverNote } as never);
+    mockApi.delete.mockResolvedValueOnce({ data: serverNote } as never);
+
+    await drainQueue(db as never);
+
+    // local_label_id must never be sent to the server.
+    expect(mockApi.post).toHaveBeenCalledWith('/notes/note-1/labels', { name: 'urgent' });
+    // The remove endpoint's local label id is remapped to the server id.
+    expect(mockApi.delete).toHaveBeenCalledWith('/notes/note-1/labels/server-label');
+    expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [31]);
+    expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [32]);
+  });
+
+  it('remaps a local label id even when the server returns a different-cased name', async () => {
+    // The server matches label names case-insensitively and keeps the original
+    // casing, so an offline add of "urgent" can come back attached as "Urgent".
+    const serverNote = {
+      id: 'note-1', title: '', content: '', note_type: 'text',
+      color: '#ffffff', pinned: false, archived: false, position: 0,
+      checked_items_collapsed: false, is_shared: false, deleted_at: null,
+      user_id: 'u1', created_at: '', updated_at: '',
+      labels: [{ id: 'server-label', user_id: 'u1', name: 'Urgent', created_at: '', updated_at: '' }],
+      shared_with: [],
+    };
+    const db = makeMockDb([
+      {
+        id: 34,
+        operation: 'addLabel',
+        endpoint: '/notes/note-1/labels',
+        method: 'POST',
+        body: '{"name":"urgent","local_label_id":"local_lbl_2"}',
+        created_at: '',
+      },
+      {
+        id: 35,
+        operation: 'removeLabel',
+        endpoint: '/notes/note-1/labels/local_lbl_2',
+        method: 'DELETE',
+        body: null,
+        created_at: '',
+      },
+    ]);
+    mockApi.post.mockResolvedValueOnce({ data: serverNote } as never);
+    mockApi.delete.mockResolvedValueOnce({ data: serverNote } as never);
+
+    await drainQueue(db as never);
+
+    expect(mockApi.delete).toHaveBeenCalledWith('/notes/note-1/labels/server-label');
+  });
+
+  it('persists the note returned by a removeLabel replay', async () => {
+    const serverNote = {
+      id: 'note-1', title: '', content: '', note_type: 'text',
+      color: '#ffffff', pinned: false, archived: false, position: 0,
+      checked_items_collapsed: false, is_shared: false, deleted_at: null,
+      user_id: 'u1', created_at: '', updated_at: '', labels: [], shared_with: [],
+    };
+    const db = makeMockDb([
+      { id: 33, operation: 'removeLabel', endpoint: '/notes/note-1/labels/server-label', method: 'DELETE', body: null, created_at: '' },
+    ]);
+    mockApi.delete.mockResolvedValueOnce({ data: serverNote } as never);
+
+    await drainQueue(db as never);
+
+    expect(mockApi.delete).toHaveBeenCalledWith('/notes/note-1/labels/server-label');
+    expect(mockSaveNote).toHaveBeenCalledWith(db, serverNote);
+    expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [33]);
   });
 });
 

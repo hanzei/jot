@@ -18,7 +18,9 @@ export type QueueOperation =
   | 'reorderItems'
   | 'toggleItemCompleted'
   | 'share'
-  | 'unshare';
+  | 'unshare'
+  | 'addLabel'
+  | 'removeLabel';
 
 interface QueueEntry {
   id: number;
@@ -56,6 +58,29 @@ export function isTransientHttpStatus(status: number | undefined): boolean {
   if (status === undefined) return true;
   if (status === 401 || status === 408 || status === 429) return true;
   return status >= 500;
+}
+
+/**
+ * Called from the `catch` of an online write attempt. If the failure is
+ * transient (a flaky connection, timeout, or 5xx), it is swallowed so the
+ * caller can fall back to the offline path — writing locally and queueing the
+ * operation for replay — instead of losing the edit. Permanent failures (4xx
+ * validation/auth/conflict) and unexpected local errors are rethrown so the UI
+ * can surface them to the user.
+ *
+ * 401 is deliberately treated as non-queueable here even though the queue drain
+ * retries it: the API response interceptor reacts to a 401 by clearing the
+ * session and redirecting to login, so the write must surface the error rather
+ * than silently report success while the user is being logged out.
+ */
+export function rethrowIfNotQueueable(err: unknown): void {
+  if (!axios.isAxiosError(err)) {
+    throw err;
+  }
+  const status = err.response?.status;
+  if (status === 401 || !isTransientHttpStatus(status)) {
+    throw err;
+  }
 }
 
 export async function enqueueOperation(db: SQLiteDatabase, params: EnqueueParams): Promise<void> {
@@ -147,6 +172,17 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         body = remapIdsInBody(body, idMap);
       }
 
+      // `local_label_id` is a client-only reconciliation hint carried on an
+      // offline addLabel: it records the locally-minted label id so that, once
+      // the server assigns the real id, a later removeLabel queued against the
+      // local id can be remapped. Strip it before sending so it never reaches
+      // the server.
+      let pendingLabelLocalId: string | undefined;
+      if (entry.operation === 'addLabel' && body && typeof body.local_label_id === 'string') {
+        pendingLabelLocalId = body.local_label_id;
+        delete body.local_label_id;
+      }
+
       // Remap local IDs in the endpoint path, matching only complete path segments
       // to avoid corrupting URLs where the ID appears as a substring.
       let endpoint = entry.endpoint;
@@ -184,11 +220,38 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
               await patchLocalItem(db, noteId, item.id, { completed: item.completed });
             }
           }
+        } else if (entry.operation === 'addLabel') {
+          // The endpoint returns the updated note; persist it so the local copy
+          // reflects the server-assigned label id instead of the one minted
+          // offline.
+          const note = response?.data as Note | undefined;
+          if (note && typeof note.id === 'string') {
+            await saveNote(db, note);
+            // Map the locally-minted label id to the server id so a later
+            // removeLabel queued against the local id targets the right label.
+            // The server matches label names case-insensitively (and stores the
+            // original casing), so match the same way to find the attached label.
+            if (pendingLabelLocalId && typeof body?.name === 'string') {
+              const wanted = body.name.toLowerCase();
+              const serverLabel = note.labels?.find((l) => l.name.toLowerCase() === wanted);
+              if (serverLabel && serverLabel.id !== pendingLabelLocalId) {
+                idMap.set(pendingLabelLocalId, serverLabel.id);
+              }
+            }
+          }
         }
       } else if (entry.method === 'PATCH') {
         await api.patch(endpoint, body);
       } else if (entry.method === 'DELETE') {
-        await api.delete(endpoint);
+        const response = await api.delete(endpoint);
+        if (entry.operation === 'removeLabel') {
+          // The endpoint returns the updated note; persist it so the local copy
+          // matches the server (e.g. updated_at, remaining labels).
+          const note = response?.data as Note | undefined;
+          if (note && typeof note.id === 'string') {
+            await saveNote(db, note);
+          }
+        }
       }
 
       await db.runAsync('DELETE FROM sync_queue WHERE id = ?', [entry.id]);
