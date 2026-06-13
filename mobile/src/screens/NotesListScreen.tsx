@@ -662,7 +662,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
       <View
         style={[
           styles.topControlsRow,
-          variant === 'notes' ? { paddingTop: insets.top + 4 } : undefined,
+          variant === 'notes' ? { paddingTop: isConnected ? insets.top : 0 } : undefined,
         ]}
       >
         {variant === 'notes' && (
