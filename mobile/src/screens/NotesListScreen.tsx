@@ -36,6 +36,7 @@ import LabelPicker from '../components/LabelPicker';
 import type { Note, NoteSort, UpdateNoteRequest } from '@jot/shared';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { NOTE_SORT_OPTIONS, getNoteSortLabel, normalizeNoteSort, sortNotesForDisplay } from '../utils/noteSort';
+import { isSortWarningDismissed, dismissSortWarning } from '../utils/sortWarningDismissed';
 import { emptyTrash as emptyTrashNotes } from '../api/notes';
 import { getLocalNotes, permanentDeleteLocalNote } from '../db/noteQueries';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
@@ -153,6 +154,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   const [localOrder, setLocalOrder] = useState<LocalReorderState>({ pinned: null, unpinned: null });
   const [sortMode, setSortMode] = useState<NoteSort>(() => normalizeNoteSort(settings?.note_sort));
   const [isSortControlsOpen, setIsSortControlsOpen] = useState(false);
+  const [sortWarningDismissed, setSortWarningDismissed] = useState<boolean | null>(null);
   const debounceRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const sortRequestIdRef = useRef(0);
   const trashCountRef = useRef(0);
@@ -263,6 +265,22 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     setIsSortControlsOpen(false);
     void handleSortChange(nextSort);
   }, [handleSortChange]);
+
+  useEffect(() => {
+    let cancelled = false;
+    setSortWarningDismissed(null);
+    void isSortWarningDismissed(sortMode).then((dismissed) => {
+      if (!cancelled) setSortWarningDismissed(dismissed);
+    });
+    return () => {
+      cancelled = true;
+    };
+  }, [sortMode]);
+
+  const handleDismissSortWarning = useCallback(() => {
+    setSortWarningDismissed(true);
+    void dismissSortWarning(sortMode);
+  }, [sortMode]);
 
   const handleNotePress = useCallback(
     (noteId: string) => {
@@ -762,7 +780,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
         </View>
       )}
 
-      {sortMode !== 'manual' && (
+      {sortMode !== 'manual' && sortWarningDismissed === false && (
         <View
           style={[
             styles.sortNotice,
@@ -777,6 +795,14 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
           <Text style={[styles.sortNoticeText, { color: colors.textSecondary }]}>
             {t('dashboard.sortDisabledNotice', { sortLabel: activeSortLabel })}
           </Text>
+          <TouchableOpacity
+            onPress={handleDismissSortWarning}
+            style={styles.sortNoticeDismiss}
+            accessibilityLabel={t('common.close')}
+            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
+          >
+            <Ionicons name="close" size={16} color={colors.primary} />
+          </TouchableOpacity>
         </View>
       )}
     </>
@@ -1240,6 +1266,10 @@ const styles = StyleSheet.create({
     flex: 1,
     fontSize: 13,
     lineHeight: 18,
+  },
+  sortNoticeDismiss: {
+    marginLeft: 8,
+    marginTop: 1,
   },
   sectionHeader: {
     fontSize: 12,
