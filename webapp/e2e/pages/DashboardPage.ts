@@ -8,6 +8,10 @@ export class DashboardPage {
   private async closeActiveDialog() {
     const activeDialog = this.page.getByRole('dialog').last();
     await activeDialog.getByRole('button', { name: 'Close' }).click();
+    // Wait for the dialog to close. When no save is already in flight, the
+    // modal only unmounts after onSave() fires post-PATCH, so this ensures
+    // the save completes before callers close the tab or reload the page.
+    await expect(activeDialog).toBeHidden();
   }
 
   async goto() {
@@ -58,7 +62,6 @@ export class DashboardPage {
       await this.addListItem(item);
     }
     await this.closeActiveDialog();
-    await expect(this.page.getByRole('dialog')).toHaveCount(0);
     await expect(this.page.locator('[data-testid="note-card"]').filter({ hasText: title })).toBeVisible();
   }
 
