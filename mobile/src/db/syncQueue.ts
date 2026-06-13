@@ -58,6 +58,32 @@ export function isTransientHttpStatus(status: number | undefined): boolean {
   return status >= 500;
 }
 
+type EnqueueListener = () => void;
+
+const enqueueListeners = new Set<EnqueueListener>();
+
+/**
+ * Subscribe to be notified whenever an operation is appended to the sync queue.
+ * Lets the offline layer kick off a drain right after a write is queued, instead
+ * of waiting for an offline→online transition. Returns an unsubscribe function.
+ */
+export function subscribeToEnqueue(listener: EnqueueListener): () => void {
+  enqueueListeners.add(listener);
+  return () => {
+    enqueueListeners.delete(listener);
+  };
+}
+
+function notifyEnqueueListeners(): void {
+  for (const listener of enqueueListeners) {
+    try {
+      listener();
+    } catch (err) {
+      console.warn('Enqueue listener failed:', err);
+    }
+  }
+}
+
 export async function enqueueOperation(db: SQLiteDatabase, params: EnqueueParams): Promise<void> {
   await db.runAsync(
     `INSERT INTO sync_queue (operation, endpoint, method, body, created_at)
@@ -70,6 +96,7 @@ export async function enqueueOperation(db: SQLiteDatabase, params: EnqueueParams
       new Date().toISOString(),
     ],
   );
+  notifyEnqueueListeners();
 }
 
 export async function getPendingCount(db: SQLiteDatabase): Promise<number> {
