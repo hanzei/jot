@@ -11,8 +11,21 @@ import {
   deleteLabel,
 } from '../api/labels';
 import { getNotes } from '../api/notes';
-import { saveNote, saveNotes, renameLabelInLocalNotes, deleteLabelFromLocalNotes, getLocalLabels, getLocalLabelCounts } from '../db/noteQueries';
+import {
+  saveNote,
+  saveNotes,
+  renameLabelInLocalNotes,
+  deleteLabelFromLocalNotes,
+  addLabelToLocalNote,
+  removeLabelFromLocalNote,
+  getLocalLabels,
+  getLocalLabelCounts,
+  getLocalNote,
+  generateLocalId,
+} from '../db/noteQueries';
+import { enqueueOperation, rethrowIfNotQueueable } from '../db/syncQueue';
 import { useNetworkStatus } from './useNetworkStatus';
+import { useAuth } from '../store/AuthContext';
 import { isServerSwitchInProgress } from '../api/client';
 import type { Label } from '@jot/shared';
 import {
@@ -112,19 +125,53 @@ export function useLabelCounts() {
   return useBackgroundSyncQuery(labelCountsQueryKey, () => getLocalLabelCounts(db), getLabelCounts);
 }
 
+/** Build an optimistic, locally-created label for the offline / transient-failure path. */
+function buildLocalLabel(name: string, userId: string): Label {
+  const now = new Date().toISOString();
+  return {
+    id: generateLocalId(),
+    user_id: userId,
+    name,
+    created_at: now,
+    updated_at: now,
+  };
+}
+
 export function useCreateLabel() {
   const queryClient = useQueryClient();
+  const db = useSQLiteContext();
   const { isConnected } = useNetworkStatus();
   const isConnectedRef = useRef(isConnected);
   isConnectedRef.current = isConnected;
+  const { user } = useAuth();
 
   return useMutation({
-    mutationFn: async ({ name }: { name: string }) => {
+    mutationFn: async ({ name }: { name: string }): Promise<Label> => {
       assertSwitchWriteAllowed();
-      if (!isConnectedRef.current) {
-        throw new Error('Label creation requires an internet connection');
+      const trimmed = name.trim();
+      if (isConnectedRef.current) {
+        try {
+          return await createLabel(trimmed);
+        } catch (err) {
+          // Transient failure: fall through to the offline path so the label is
+          // queued for replay instead of being lost.
+          rethrowIfNotQueueable(err);
+        }
       }
-      return createLabel(name);
+
+      // Offline (or a transient online failure): create a local placeholder label
+      // and queue the server create. The local id is reconciled to the server id
+      // on replay (see drainQueue's `createLabel` handling). Labels are derived
+      // from notes' labels_json, so a label not yet attached to any note lives
+      // only in the React Query cache (updated in onSuccess) until it is.
+      const localLabel = buildLocalLabel(trimmed, user?.id ?? '');
+      await enqueueOperation(db, {
+        operation: 'createLabel',
+        endpoint: '/labels',
+        method: 'POST',
+        body: { local_id: localLabel.id, name: trimmed },
+      });
+      return localLabel;
     },
     onSuccess: (newLabel) => {
       // A newly created label is not yet attached to any note, so getLocalLabels()
@@ -146,13 +193,56 @@ export function useCreateLabel() {
 export function useAddLabelToNote() {
   const queryClient = useQueryClient();
   const db = useSQLiteContext();
+  const { isConnected } = useNetworkStatus();
+  const isConnectedRef = useRef(isConnected);
+  isConnectedRef.current = isConnected;
+  const { user } = useAuth();
+
   return useMutation({
-    mutationFn: ({ noteId, name }: { noteId: string; name: string }) => {
+    mutationFn: async ({ noteId, name }: { noteId: string; name: string }) => {
       assertSwitchWriteAllowed();
-      return addLabelToNote(noteId, name);
+      const trimmed = name.trim();
+      if (isConnectedRef.current) {
+        try {
+          const updatedNote = await addLabelToNote(noteId, trimmed);
+          await saveNote(db, updatedNote);
+          return updatedNote;
+        } catch (err) {
+          // Transient failure: fall through to the offline path so the edit is
+          // applied locally and queued for replay instead of being lost.
+          rethrowIfNotQueueable(err);
+        }
+      }
+
+      // Offline (or a transient online failure): attach the label to the local
+      // note and queue the server op (the server resolves the label by name).
+      const note = await getLocalNote(db, noteId);
+      if (!note) throw new Error(`Note ${noteId} not found in local cache`);
+
+      // Reuse an existing label with the same name if known locally; otherwise
+      // mint a local label and queue its create so any later op referencing it
+      // (e.g. removing it again while still offline) reconciles to the server id.
+      const known = (await getLocalLabels(db)).find((l) => l.name === trimmed);
+      const label = known ?? buildLocalLabel(trimmed, user?.id ?? '');
+      if (!known) {
+        await enqueueOperation(db, {
+          operation: 'createLabel',
+          endpoint: '/labels',
+          method: 'POST',
+          body: { local_id: label.id, name: trimmed },
+        });
+      }
+
+      await addLabelToLocalNote(db, noteId, label);
+      await enqueueOperation(db, {
+        operation: 'addLabelToNote',
+        endpoint: `/notes/${noteId}/labels`,
+        method: 'POST',
+        body: { name: trimmed },
+      });
+      return note;
     },
-    onSuccess: async (updatedNote, { noteId }) => {
-      await saveNote(db, updatedNote);
+    onSuccess: async (_updatedNote, { noteId }) => {
       queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
       queryClient.invalidateQueries({ queryKey: noteQueryKey(noteId) });
@@ -167,13 +257,40 @@ export function useAddLabelToNote() {
 export function useRemoveLabelFromNote() {
   const queryClient = useQueryClient();
   const db = useSQLiteContext();
+  const { isConnected } = useNetworkStatus();
+  const isConnectedRef = useRef(isConnected);
+  isConnectedRef.current = isConnected;
+
   return useMutation({
-    mutationFn: ({ noteId, labelId }: { noteId: string; labelId: string }) => {
+    mutationFn: async ({ noteId, labelId }: { noteId: string; labelId: string }) => {
       assertSwitchWriteAllowed();
-      return removeLabelFromNote(noteId, labelId);
+      if (isConnectedRef.current) {
+        try {
+          const updatedNote = await removeLabelFromNote(noteId, labelId);
+          await saveNote(db, updatedNote);
+          return updatedNote;
+        } catch (err) {
+          // Transient failure: fall through to the offline path so the edit is
+          // applied locally and queued for replay instead of being lost.
+          rethrowIfNotQueueable(err);
+        }
+      }
+
+      // Offline (or a transient online failure): drop the label from the local
+      // note and queue the server op. If the label id is a local one (added while
+      // offline), it is remapped to the server id on replay (see drainQueue).
+      const note = await getLocalNote(db, noteId);
+      if (!note) throw new Error(`Note ${noteId} not found in local cache`);
+
+      await removeLabelFromLocalNote(db, noteId, labelId);
+      await enqueueOperation(db, {
+        operation: 'removeLabelFromNote',
+        endpoint: `/notes/${noteId}/labels/${labelId}`,
+        method: 'DELETE',
+      });
+      return note;
     },
-    onSuccess: async (updatedNote, { noteId }) => {
-      await saveNote(db, updatedNote);
+    onSuccess: async (_updatedNote, { noteId }) => {
       queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
       queryClient.invalidateQueries({ queryKey: noteQueryKey(noteId) });
@@ -191,24 +308,45 @@ export function useRenameLabel() {
   const isConnectedRef = useRef(isConnected);
   isConnectedRef.current = isConnected;
 
+  const { user } = useAuth();
+
   return useMutation({
-    mutationFn: async ({ labelId, name }: { labelId: string; name: string }) => {
+    mutationFn: async ({ labelId, name }: { labelId: string; name: string }): Promise<Label> => {
       assertSwitchWriteAllowed();
-      if (!isConnectedRef.current) {
-        throw new Error('Label management requires an internet connection');
-      }
-      const updatedLabel = await renameLabel(labelId, name);
-      try {
-        await renameLabelInLocalNotes(db, labelId, updatedLabel.name);
-      } catch (error) {
-        console.warn('Failed to update renamed label locally, retrying with full sync:', error);
+      const trimmed = name.trim();
+      if (isConnectedRef.current) {
         try {
-          await syncLocalNotesAfterLabelMutation(db);
-        } catch (syncError) {
-          console.warn('Failed to resync local notes after label rename:', syncError);
+          const updatedLabel = await renameLabel(labelId, trimmed);
+          try {
+            await renameLabelInLocalNotes(db, labelId, updatedLabel.name);
+          } catch (error) {
+            console.warn('Failed to update renamed label locally, retrying with full sync:', error);
+            try {
+              await syncLocalNotesAfterLabelMutation(db);
+            } catch (syncError) {
+              console.warn('Failed to resync local notes after label rename:', syncError);
+            }
+          }
+          return updatedLabel;
+        } catch (err) {
+          // Transient failure: fall through to the offline path so the rename is
+          // applied locally and queued for replay instead of being lost.
+          rethrowIfNotQueueable(err);
         }
       }
-      return updatedLabel;
+
+      // Offline (or a transient online failure): rename locally and queue. A
+      // local label id (offline-created, not yet synced) is remapped to the
+      // server id on replay (see drainQueue).
+      await renameLabelInLocalNotes(db, labelId, trimmed);
+      await enqueueOperation(db, {
+        operation: 'renameLabel',
+        endpoint: `/labels/${labelId}`,
+        method: 'PATCH',
+        body: { name: trimmed },
+      });
+      const now = new Date().toISOString();
+      return { id: labelId, user_id: user?.id ?? '', name: trimmed, created_at: now, updated_at: now };
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: labelsQueryKey() });
@@ -231,20 +369,36 @@ export function useDeleteLabel() {
   return useMutation({
     mutationFn: async ({ labelId }: { labelId: string }) => {
       assertSwitchWriteAllowed();
-      if (!isConnectedRef.current) {
-        throw new Error('Label management requires an internet connection');
-      }
-      await deleteLabel(labelId);
-      try {
-        await deleteLabelFromLocalNotes(db, labelId);
-      } catch (error) {
-        console.warn('Failed to delete label locally, retrying with full sync:', error);
+      if (isConnectedRef.current) {
         try {
-          await syncLocalNotesAfterLabelMutation(db);
-        } catch (syncError) {
-          console.warn('Failed to resync local notes after label deletion:', syncError);
+          await deleteLabel(labelId);
+          try {
+            await deleteLabelFromLocalNotes(db, labelId);
+          } catch (error) {
+            console.warn('Failed to delete label locally, retrying with full sync:', error);
+            try {
+              await syncLocalNotesAfterLabelMutation(db);
+            } catch (syncError) {
+              console.warn('Failed to resync local notes after label deletion:', syncError);
+            }
+          }
+          return;
+        } catch (err) {
+          // Transient failure: fall through to the offline path so the deletion is
+          // applied locally and queued for replay instead of being lost.
+          rethrowIfNotQueueable(err);
         }
       }
+
+      // Offline (or a transient online failure): delete locally and queue. A
+      // local label id (offline-created, not yet synced) is remapped to the
+      // server id on replay (see drainQueue).
+      await deleteLabelFromLocalNotes(db, labelId);
+      await enqueueOperation(db, {
+        operation: 'deleteLabel',
+        endpoint: `/labels/${labelId}`,
+        method: 'DELETE',
+      });
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: labelsQueryKey() });

@@ -300,6 +300,61 @@ export async function renameLabelInLocalNotes(
   });
 }
 
+/**
+ * Read a single note's labels, apply `transform`, and persist the result. The
+ * write is skipped when `transform` returns `null` (no change), keeping the
+ * helper idempotent. Used by the offline add/remove-label-on-note paths.
+ */
+async function updateNoteLabels(
+  db: SQLiteDatabase,
+  noteId: string,
+  transform: (labels: Label[]) => Label[] | null,
+): Promise<void> {
+  const row = await db.getFirstAsync<Pick<NoteRow, 'labels_json'>>(
+    'SELECT labels_json FROM notes WHERE id = ?',
+    [noteId],
+  );
+  if (!row) return;
+
+  let labels: Label[] = [];
+  try {
+    labels = JSON.parse(row.labels_json) as Label[];
+  } catch {
+    labels = [];
+  }
+
+  const nextLabels = transform(labels);
+  if (nextLabels === null) return;
+
+  await db.runAsync(
+    'UPDATE notes SET labels_json = ?, updated_at = ? WHERE id = ?',
+    [JSON.stringify(nextLabels), new Date().toISOString(), noteId],
+  );
+}
+
+export async function addLabelToLocalNote(
+  db: SQLiteDatabase,
+  noteId: string,
+  label: Label,
+): Promise<void> {
+  await updateNoteLabels(db, noteId, (labels) => {
+    // Idempotent: skip if the note already carries this label (by id or name).
+    if (labels.some((l) => l.id === label.id || l.name === label.name)) return null;
+    return [...labels, label];
+  });
+}
+
+export async function removeLabelFromLocalNote(
+  db: SQLiteDatabase,
+  noteId: string,
+  labelId: string,
+): Promise<void> {
+  await updateNoteLabels(db, noteId, (labels) => {
+    const nextLabels = labels.filter((label) => label.id !== labelId);
+    return nextLabels.length === labels.length ? null : nextLabels;
+  });
+}
+
 export async function deleteLabelFromLocalNotes(
   db: SQLiteDatabase,
   labelId: string,
