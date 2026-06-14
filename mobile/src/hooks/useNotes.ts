@@ -1,5 +1,5 @@
 import { useRef } from 'react';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient, type QueryClient, type QueryKey } from '@tanstack/react-query';
 import { useSQLiteContext } from 'expo-sqlite';
 import {
   getNote,
@@ -45,7 +45,6 @@ import {
   deleteLocalItem,
   reorderLocalItems,
 } from '../db/noteQueries';
-import type { LocalItemPatch } from '../db/noteQueries';
 import { enqueueOperation, rethrowIfNotQueueable } from '../db/syncQueue';
 import { useNetworkStatus } from './useNetworkStatus';
 import { useAuth } from '../store/AuthContext';
@@ -58,6 +57,56 @@ import {
 function assertSwitchWriteAllowed(): void {
   if (isServerSwitchInProgress()) {
     throw new Error('Server switch in progress; write blocked');
+  }
+}
+
+/**
+ * Collects the item ids a completed-toggle should cascade to, mirroring the
+ * server: toggling a top-level item also toggles its direct children. Only ids
+ * whose `completed` actually changes are returned. Shared by the optimistic
+ * cache update and the offline local-DB write so the two stay in agreement.
+ */
+function collectToggleCascade(items: NoteItem[], itemId: string, completed: boolean): string[] {
+  const target = items.find((i) => i.id === itemId);
+  if (!target) return [];
+  const cascadeToChildren = target.parent_id === null;
+  return items
+    .filter(
+      (i) =>
+        (i.id === itemId || (cascadeToChildren && i.parent_id === itemId)) &&
+        i.completed !== completed,
+    )
+    .map((i) => i.id);
+}
+
+/** Returns a copy of `items` with the completed-toggle cascade applied. */
+function applyToggleToItems(items: NoteItem[], itemId: string, completed: boolean): NoteItem[] {
+  const ids = new Set(collectToggleCascade(items, itemId, completed));
+  if (ids.size === 0) return items;
+  return items.map((i) => (ids.has(i.id) ? { ...i, completed } : i));
+}
+
+/**
+ * Snapshot of the cache entries an optimistic note write touches, captured in
+ * `onMutate` so `onError` can restore them if the write ultimately fails.
+ */
+interface OptimisticNoteSnapshot {
+  previousNote: Note | undefined;
+  previousLists: [QueryKey, Note[] | undefined][];
+}
+
+/** Reverts the optimistic cache entries captured by an onMutate snapshot. */
+function rollbackOptimisticNote(
+  queryClient: QueryClient,
+  noteId: string,
+  context: OptimisticNoteSnapshot | undefined,
+): void {
+  if (!context) return;
+  if (context.previousNote !== undefined) {
+    queryClient.setQueryData(noteLocalQueryKey(noteId), context.previousNote);
+  }
+  for (const [key, data] of context.previousLists) {
+    queryClient.setQueryData(key, data);
   }
 }
 
@@ -161,6 +210,23 @@ export function useUpdateNote() {
   isConnectedRef.current = isConnected;
 
   return useMutation({
+    // Reflect the edit in the cache immediately so a slow/half-open connection
+    // feels as snappy as a fully-offline write (which skips straight to local).
+    // The network reconcile still happens in mutationFn; onError rolls this back
+    // if the write ultimately fails (e.g. a permanent 4xx).
+    onMutate: ({ id, data }: { id: string; data: UpdateNoteRequest }) => {
+      const previousNote = queryClient.getQueryData<Note>(noteLocalQueryKey(id));
+      const previousLists = queryClient.getQueriesData<Note[]>({ queryKey: notesLocalQueryScopeKey() });
+      const now = new Date().toISOString();
+      if (previousNote) {
+        queryClient.setQueryData<Note>(noteLocalQueryKey(id), { ...previousNote, ...data, updated_at: now });
+      }
+      queryClient.setQueriesData<Note[]>(
+        { queryKey: notesLocalQueryScopeKey() },
+        (old) => old?.map((n) => (n.id === id ? { ...n, ...data, updated_at: now } : n)),
+      );
+      return { previousNote, previousLists };
+    },
     mutationFn: async ({ id, data }: { id: string; data: UpdateNoteRequest }): Promise<Note> => {
       assertSwitchWriteAllowed();
       if (isConnectedRef.current) {
@@ -202,6 +268,8 @@ export function useUpdateNote() {
       // Build the optimistic return from the data we already have.
       return { ...existing, ...data, updated_at: now };
     },
+    // Roll back the optimistic edit so a failed write doesn't leave a phantom on screen.
+    onError: (_err, { id }, context) => rollbackOptimisticNote(queryClient, id, context),
     onSuccess: (updatedNote) => {
       queryClient.setQueryData(noteLocalQueryKey(updatedNote.id), updatedNote);
       // Synchronously patch the note in every cached notes-list so the dashboard
@@ -670,6 +738,24 @@ export function useToggleNoteItemCompleted() {
   isConnectedRef.current = isConnected;
 
   return useMutation({
+    // Toggle the checkbox in the cache immediately so the change is visible
+    // without waiting on the (slow) network round-trip; onError reverts it.
+    onMutate: ({ noteId, itemId, completed }: { noteId: string; itemId: string; completed: boolean }) => {
+      const previousNote = queryClient.getQueryData<Note>(noteLocalQueryKey(noteId));
+      const previousLists = queryClient.getQueriesData<Note[]>({ queryKey: notesLocalQueryScopeKey() });
+      const applyToggle = (note: Note): Note =>
+        note.note_type === 'list' && note.items
+          ? { ...note, items: applyToggleToItems(note.items, itemId, completed) }
+          : note;
+      if (previousNote) {
+        queryClient.setQueryData<Note>(noteLocalQueryKey(noteId), applyToggle(previousNote));
+      }
+      queryClient.setQueriesData<Note[]>(
+        { queryKey: notesLocalQueryScopeKey() },
+        (old) => old?.map((n) => (n.id === noteId ? applyToggle(n) : n)),
+      );
+      return { previousNote, previousLists };
+    },
     mutationFn: async ({ noteId, itemId, completed }: { noteId: string; itemId: string; completed: boolean }): Promise<NoteItem[]> => {
       assertSwitchWriteAllowed();
       if (isConnectedRef.current) {
@@ -690,20 +776,8 @@ export function useToggleNoteItemCompleted() {
       // enqueue a single toggle op.
       const note = await getLocalNote(db, noteId);
       if (note && note.note_type === 'list' && note.items) {
-        const target = note.items.find((i) => i.id === itemId);
-        if (target) {
-          const cascadeToChildren = target.parent_id === null;
-          const patches: Array<{ id: string; patch: LocalItemPatch }> = [];
-          for (const item of note.items) {
-            const shouldToggle =
-              item.id === itemId || (cascadeToChildren && item.parent_id === itemId);
-            if (shouldToggle && item.completed !== completed) {
-              patches.push({ id: item.id, patch: { completed } });
-            }
-          }
-          for (const { id, patch } of patches) {
-            await patchLocalItem(db, noteId, id, patch);
-          }
+        for (const id of collectToggleCascade(note.items, itemId, completed)) {
+          await patchLocalItem(db, noteId, id, { completed });
         }
       }
       await enqueueOperation(db, {
@@ -714,6 +788,8 @@ export function useToggleNoteItemCompleted() {
       });
       return [];
     },
+    // Revert the optimistic toggle if the write ultimately fails.
+    onError: (_err, { noteId }, context) => rollbackOptimisticNote(queryClient, noteId, context),
     onSuccess: (_data, { noteId }) => {
       queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
