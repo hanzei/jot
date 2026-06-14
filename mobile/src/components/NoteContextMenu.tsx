@@ -12,7 +12,8 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useTranslation } from 'react-i18next';
 import type { Note } from '@jot/shared';
 import { useTheme } from '../theme/ThemeContext';
-import { isLocalId } from '../db/noteQueries';
+import { isUnsyncedNoteId } from '../db/noteQueries';
+import { usePendingNoteIds } from '../store/OfflineContext';
 
 export type ContextMenuViewContext = 'notes' | 'archived' | 'trash' | 'my-tasks';
 
@@ -59,12 +60,13 @@ export default function NoteContextMenu({
 }: NoteContextMenuProps) {
   const { colors } = useTheme();
   const { t } = useTranslation();
+  const pendingNoteIds = usePendingNoteIds();
   const insets = useContext(SafeAreaInsetsContext) ?? { top: 0, right: 0, bottom: 0, left: 0 };
 
   if (!note) return null;
 
   const createLabelAction = (currentNote: Note): Action | null => {
-    if (!onManageLabels || isLocalId(currentNote.id)) {
+    if (!onManageLabels || isUnsyncedNoteId(currentNote.id, pendingNoteIds)) {
       return null;
     }
     return {

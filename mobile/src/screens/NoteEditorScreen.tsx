@@ -24,7 +24,8 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
 import { useCreateNote, useUpdateNote, useDeleteNote, useRestoreNote, useDuplicateNote, useCreateNoteItem, useUpdateNoteItem, useDeleteNoteItem, useReorderNoteItems, useToggleNoteItemCompleted } from '../hooks/useNotes';
 import { useOfflineNote } from '../hooks/useOfflineNotes';
-import { isLocalId } from '../db/noteQueries';
+import { isUnsyncedNoteId } from '../db/noteQueries';
+import { usePendingNoteIds } from '../store/OfflineContext';
 import { useSSESubscription } from '../store/SSEContext';
 import { useToast } from '../hooks/useToast';
 import ListItem from '../components/ListItem';
@@ -154,6 +155,7 @@ export default function NoteEditorScreen() {
   const route = useRoute<EditorRouteProp>();
   const { noteId: initialNoteId, sharedText } = route.params;
   const { t, i18n } = useTranslation();
+  const pendingNoteIds = usePendingNoteIds();
 
   // A new note opened from an Android share intent arrives with sharedText to
   // pre-fill the body.
@@ -1186,7 +1188,7 @@ export default function NoteEditorScreen() {
     }
 
     const currentNoteId = noteIdRef.current;
-    if (!currentNoteId || isLocalId(currentNoteId)) {
+    if (!currentNoteId || isUnsyncedNoteId(currentNoteId, pendingNoteIds)) {
       Alert.alert(t('common.error'), t('note.waitForSyncBeforeDuplicating'));
       return;
     }
@@ -1199,7 +1201,7 @@ export default function NoteEditorScreen() {
     } catch {
       Alert.alert(t('common.error'), t('note.failedDuplicate'));
     }
-  }, [duplicateMutation, flushSave, navigation, t]);
+  }, [duplicateMutation, flushSave, navigation, t, pendingNoteIds]);
 
   // Disable inputs while waiting for existing note to hydrate
   const isHydrating = initialNoteId !== null && !existingNote;
@@ -1693,7 +1695,7 @@ export default function NoteEditorScreen() {
         </TouchableOpacity>
 
         {/* Share (only when note is saved, synced, and owned by current user) */}
-        {noteId && !isLocalId(noteId) && existingNote && existingNote.user_id === currentUser?.id && (
+        {noteId && !isUnsyncedNoteId(noteId, pendingNoteIds) && existingNote && existingNote.user_id === currentUser?.id && (
           <TouchableOpacity
             onPress={() => navigation.navigate('Share', { noteId })}
             style={styles.toolbarBtn}
@@ -1732,7 +1734,7 @@ export default function NoteEditorScreen() {
           </TouchableOpacity>
         )}
 
-        {noteId && !isLocalId(noteId) && (
+        {noteId && !isUnsyncedNoteId(noteId, pendingNoteIds) && (
           <TouchableOpacity
             onPress={handleDuplicate}
             style={styles.toolbarBtn}
@@ -1744,7 +1746,7 @@ export default function NoteEditorScreen() {
         )}
 
         {/* Label button (only when note is saved and synced to server) */}
-        {noteId && !isLocalId(noteId) && (
+        {noteId && !isUnsyncedNoteId(noteId, pendingNoteIds) && (
           <TouchableOpacity
             onPress={() => setLabelPickerVisible(true)}
             style={styles.toolbarBtn}

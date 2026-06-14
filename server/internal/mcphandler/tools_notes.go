@@ -85,10 +85,10 @@ func (h *Handler) handleGetNote(userID string) mcp.ToolHandlerFor[getNoteInput, 
 // -- create_note --------------------------------------------------------------
 
 type createNoteInput struct {
-	Title    string           `json:"title,omitempty"     jsonschema:"Note title"`
-	Content  string           `json:"content,omitempty"   jsonschema:"Note body text (for text notes)"`
-	NoteType models.NoteType  `json:"note_type,omitempty" jsonschema:"Note type: text (default) or list"`
-	Color    string           `json:"color,omitempty"     jsonschema:"Background color as a hex string, e.g. #ffffff"`
+	Title    string          `json:"title,omitempty"     jsonschema:"Note title"`
+	Content  string          `json:"content,omitempty"   jsonschema:"Note body text (for text notes)"`
+	NoteType models.NoteType `json:"note_type,omitempty" jsonschema:"Note type: text (default) or list"`
+	Color    string          `json:"color,omitempty"     jsonschema:"Background color as a hex string, e.g. #ffffff"`
 }
 
 func (h *Handler) handleCreateNote(userID string) mcp.ToolHandlerFor[createNoteInput, any] {
@@ -101,7 +101,7 @@ func (h *Handler) handleCreateNote(userID string) mcp.ToolHandlerFor[createNoteI
 		if color == "" {
 			color = "#ffffff"
 		}
-		note, err := h.noteStore.Create(ctx, userID, in.Title, in.Content, noteType, color)
+		note, err := h.noteStore.Create(ctx, userID, "", in.Title, in.Content, noteType, color)
 		if err != nil {
 			return toolError("create note: %w", err)
 		}

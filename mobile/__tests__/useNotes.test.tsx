@@ -30,6 +30,9 @@ jest.mock('../src/db/noteQueries', () => ({
   permanentDeleteLocalNote: jest.fn().mockResolvedValue(undefined),
   updateLocalNote: jest.fn().mockResolvedValue(undefined),
   generateLocalId: jest.fn(() => 'local_test_id'),
+  generateClientNoteId: jest.fn(() => 'ClientNoteId000000000A'),
+  markNotePendingCreate: jest.fn().mockResolvedValue(undefined),
+  isNotePendingCreate: jest.fn().mockResolvedValue(false),
   isLocalId: jest.fn((id: string) => id.startsWith('local_')),
   createLocalItem: jest.fn().mockResolvedValue(undefined),
   patchLocalItem: jest.fn().mockResolvedValue(undefined),
@@ -166,6 +169,49 @@ describe('useNotes hooks', () => {
 
       expect(mockNotesApi.createNote).not.toHaveBeenCalled();
       expect(mockNoteQueries.saveNote).not.toHaveBeenCalled();
+    });
+  });
+
+  describe('useCreateNote (offline)', () => {
+    it('queues a create with a server-valid client id and flags it pending (#475)', async () => {
+      mockUseNetworkStatus.mockReturnValue({ isConnected: false });
+
+      const { result } = renderHook(() => useCreateNote(), { wrapper: createWrapper() });
+
+      await result.current.mutateAsync({ content: 'Offline note', note_type: 'text' });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      // The note is saved locally with the client id and marked unsynced; the
+      // queued create carries that id (not a legacy local_id) so the replay is
+      // idempotent on the server.
+      expect(mockNotesApi.createNote).not.toHaveBeenCalled();
+      expect(mockNoteQueries.markNotePendingCreate).toHaveBeenCalledWith(
+        expect.anything(),
+        'ClientNoteId000000000A',
+      );
+      expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          operation: 'create',
+          endpoint: '/notes',
+          method: 'POST',
+          body: { id: 'ClientNoteId000000000A', content: 'Offline note', note_type: 'text' },
+        }),
+      );
+      expect(result.current.data?.id).toBe('ClientNoteId000000000A');
+    });
+  });
+
+  describe('useDuplicateNote guard (#475)', () => {
+    it('refuses to duplicate a note whose offline create is still pending', async () => {
+      mockNoteQueries.isNotePendingCreate.mockResolvedValueOnce(true);
+
+      const { result } = renderHook(() => useDuplicateNote(), { wrapper: createWrapper() });
+
+      await expect(result.current.mutateAsync('ServerValidButPending00')).rejects.toThrow(/unsynced/i);
+      expect(mockNotesApi.duplicateNote).not.toHaveBeenCalled();
+      expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
     });
   });
 

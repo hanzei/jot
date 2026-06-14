@@ -10,6 +10,7 @@ import {
   removeLocalNotesNotIn,
   markNoteSyncFailed,
   clearNoteSyncFailed,
+  clearNotePendingCreate,
   getFailedNoteIds,
 } from './noteQueries';
 
@@ -173,9 +174,11 @@ function collectNoteIds(
   if (segments[0] !== 'notes') return;
 
   if (segments.length === 1) {
-    // POST /notes (create): the affected note is the offline-created local id.
-    const localId = body?.local_id;
-    if (typeof localId === 'string') ids.add(localId);
+    // POST /notes (create): the affected note is the offline-created note. Newer
+    // creates carry the client-supplied `id` (issue #475); fall back to the
+    // legacy `local_id` for ops queued before that change.
+    const createId = body?.id ?? body?.local_id;
+    if (typeof createId === 'string') ids.add(createId);
   } else if (segments[1] === 'reorder') {
     // POST /notes/reorder: body.note_ids lists every note whose position moved.
     const noteIds = body?.note_ids;
@@ -413,16 +416,26 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
       if (entry.method === 'POST') {
         const response = await api.post(endpoint, body);
 
-        if ((entry.operation === 'create' || entry.operation === 'duplicate') && body?.local_id) {
-          // Both create and duplicate: the server returns the canonical note.
-          // Reconcile the local id so subsequent queued ops are remapped correctly.
-          const localId = body.local_id as string;
+        if (entry.operation === 'create' || entry.operation === 'duplicate') {
+          // The server returns the canonical note. A create (#475) sends a
+          // server-valid `id` that the server keeps, so the id is stable and no
+          // remap is needed — just adopt the canonical note (server item ids etc.)
+          // and clear the pending-create marker. A duplicate (and any legacy
+          // create still carrying `local_id`) gets a server-assigned id, so its
+          // local id is reconciled and remapped for later queued ops.
+          const clientId = (body?.id ?? body?.local_id) as string | undefined;
           const data = response?.data;
-          if (hasStringId(data) && data.id !== localId) {
+          if (clientId && hasStringId(data)) {
             const serverNote = data as Note;
-            idMap.set(localId, serverNote.id);
-            idMappings.push({ localId, serverNote });
-            await replaceLocalNoteId(db, localId, serverNote);
+            if (serverNote.id !== clientId) {
+              idMap.set(clientId, serverNote.id);
+              idMappings.push({ localId: clientId, serverNote });
+              await replaceLocalNoteId(db, clientId, serverNote);
+            } else {
+              idMappings.push({ localId: clientId, serverNote });
+              await saveNote(db, serverNote);
+              await clearNotePendingCreate(db, clientId);
+            }
           }
         } else if (entry.operation === 'createLabel' && body?.local_id) {
           // Reconcile the offline-generated local label id with the server id so
@@ -497,6 +510,12 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
           await recordDeadLetter(db, entry, endpoint, body, status, noteIds.length === 1 ? noteIds[0] : null);
           for (const noteId of noteIds) {
             await markNoteSyncFailed(db, noteId);
+          }
+        } else if (entry.operation === 'create') {
+          // Replaying a create whose original already committed: the note exists
+          // on the server, so clear its pending-create marker (#475).
+          for (const noteId of affectedNoteIds(endpoint, body)) {
+            await clearNotePendingCreate(db, noteId);
           }
         }
 

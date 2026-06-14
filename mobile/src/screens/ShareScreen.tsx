@@ -20,7 +20,8 @@ import UserAvatar from '../components/UserAvatar';
 import { useTheme } from '../theme/ThemeContext';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import { useUsers } from '../store/UsersContext';
-import { isLocalId } from '../db/noteQueries';
+import { isUnsyncedNoteId } from '../db/noteQueries';
+import { usePendingNoteIds } from '../store/OfflineContext';
 import type { User, NoteShare } from '@jot/shared';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 
@@ -46,7 +47,8 @@ export default function ShareScreen() {
 
   const { isConnected } = useNetworkStatus();
   const { usersById } = useUsers();
-  const isNoteLocalOnly = isLocalId(noteId);
+  const pendingNoteIds = usePendingNoteIds();
+  const isNoteLocalOnly = isUnsyncedNoteId(noteId, pendingNoteIds);
 
   const [pendingUserIds, setPendingUserIds] = useState<Set<string>>(new Set());
   const pendingUserIdsRef = useRef<Set<string>>(new Set());

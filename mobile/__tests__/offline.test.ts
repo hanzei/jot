@@ -2,7 +2,7 @@
  * Tests for offline support: local note queries, sync queue, and ID utilities.
  */
 
-import { generateLocalId, isLocalId, replaceLocalNoteId, removeLocalNotesNotIn, getLocalLabels, getLocalLabelCounts, saveNote, addLabelToLocalNote, removeLabelFromLocalNote } from '../src/db/noteQueries';
+import { generateLocalId, generateClientNoteId, isLocalId, isUnsyncedNoteId, replaceLocalNoteId, removeLocalNotesNotIn, getLocalLabels, getLocalLabelCounts, saveNote, addLabelToLocalNote, removeLabelFromLocalNote } from '../src/db/noteQueries';
 import { drainQueue, isTransientHttpStatus } from '../src/db/syncQueue';
 import api from '../src/api/client';
 
@@ -59,6 +59,33 @@ describe('isLocalId', () => {
 
   it('returns false for server-style IDs', () => {
     expect(isLocalId('AbCdEfGhIjKlMnOpQrStUv')).toBe(false);
+  });
+});
+
+describe('generateClientNoteId', () => {
+  it('produces a 22-char server-valid id (no local_ prefix)', () => {
+    const id = generateClientNoteId();
+    expect(id).toMatch(/^[0-9a-zA-Z]{22}$/);
+    expect(isLocalId(id)).toBe(false);
+  });
+
+  it('generates unique ids', () => {
+    const ids = Array.from({ length: 50 }, () => generateClientNoteId());
+    expect(new Set(ids).size).toBe(ids.length);
+  });
+});
+
+describe('isUnsyncedNoteId', () => {
+  it('is true for a local_ duplicate id', () => {
+    expect(isUnsyncedNoteId('local_abc_1', new Set())).toBe(true);
+  });
+
+  it('is true for a server-valid id still pending its offline create', () => {
+    expect(isUnsyncedNoteId('AbCdEfGhIjKlMnOpQrStUv', new Set(['AbCdEfGhIjKlMnOpQrStUv']))).toBe(true);
+  });
+
+  it('is false for a confirmed server id', () => {
+    expect(isUnsyncedNoteId('AbCdEfGhIjKlMnOpQrStUv', new Set())).toBe(false);
   });
 });
 
@@ -289,6 +316,66 @@ describe('drainQueue', () => {
 
     expect(mockReplaceLocalNoteId).toHaveBeenCalledWith(db, 'local_temp_1', serverNote);
     expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [8]);
+  });
+
+  it('keeps a client-supplied create id stable: adopts the server note, clears pending, no reconcile (#475)', async () => {
+    const clientId = 'AbcdefghijklmnopqrstUv'; // 22-char server-valid id
+    const serverNote = {
+      id: clientId, title: '', content: 'Test', note_type: 'text',
+      color: '#ffffff', pinned: false, archived: false, position: 0,
+      checked_items_collapsed: false, is_shared: false, deleted_at: null,
+      user_id: 'u1', created_at: '', updated_at: '', labels: [], shared_with: [],
+    };
+    const db = makeMockDb([
+      {
+        id: 10,
+        operation: 'create',
+        endpoint: '/notes',
+        method: 'POST',
+        body: JSON.stringify({ id: clientId, content: 'Test', note_type: 'text' }),
+        created_at: '',
+      },
+    ]);
+    mockApi.post.mockResolvedValueOnce({ data: serverNote } as never);
+
+    const { idMappings } = await drainQueue(db as never);
+
+    // The id never changes, so there is no reconcile — the canonical note is
+    // adopted and the pending-create marker is cleared.
+    expect(mockReplaceLocalNoteId).not.toHaveBeenCalled();
+    expect(mockSaveNote).toHaveBeenCalledWith(db, serverNote);
+    expect(db.runAsync).toHaveBeenCalledWith(
+      `UPDATE notes SET sync_state = 'synced' WHERE id = ? AND sync_state = 'pending'`,
+      [clientId],
+    );
+    expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [10]);
+    expect(idMappings).toEqual([{ localId: clientId, serverNote }]);
+  });
+
+  it('clears the pending marker when a replayed create returns 409 (#475)', async () => {
+    const clientId = 'Replay00000000000000Ab';
+    const db = makeMockDb([
+      {
+        id: 11,
+        operation: 'create',
+        endpoint: '/notes',
+        method: 'POST',
+        body: JSON.stringify({ id: clientId, content: 'Test', note_type: 'text' }),
+        created_at: '',
+      },
+    ]);
+    mockApi.post.mockRejectedValueOnce(makeAxiosError(409) as never);
+
+    const { discardedOperations } = await drainQueue(db as never);
+
+    expect(db.runAsync).toHaveBeenCalledWith(
+      `UPDATE notes SET sync_state = 'synced' WHERE id = ? AND sync_state = 'pending'`,
+      [clientId],
+    );
+    expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [11]);
+    expect(discardedOperations).toEqual([
+      { operation: 'create', endpoint: '/notes', status: 409 },
+    ]);
   });
 
   it('reconciles a duplicate local id and replaces the local note with the server note', async () => {

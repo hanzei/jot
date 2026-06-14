@@ -30,10 +30,18 @@ func deref[T any](p *T, def T) T {
 	return def
 }
 
-func (s *noteStore) Create(ctx context.Context, userID string, title, content string, noteType NoteType, color string) (*Note, error) {
-	noteID, err := generateID()
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate note ID: %w", err)
+// Create inserts a new note for the user. When noteID is empty the server
+// generates one; when non-empty the caller-supplied ID is used as the note's
+// primary key so an offline create can be replayed idempotently. Returns
+// ErrNoteExists if a note with that ID already exists (e.g. a replayed create
+// whose original request already committed).
+func (s *noteStore) Create(ctx context.Context, userID, noteID, title, content string, noteType NoteType, color string) (*Note, error) {
+	if noteID == "" {
+		var err error
+		noteID, err = generateID()
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate note ID: %w", err)
+		}
 	}
 
 	tx, err := s.db.BeginTx(ctx, nil)
@@ -41,6 +49,19 @@ func (s *noteStore) Create(ctx context.Context, userID string, title, content st
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
+
+	// Reject a duplicate caller-supplied ID up front so a replayed create returns
+	// ErrNoteExists (mapped to 409) instead of a raw primary-key violation.
+	var exists int
+	if err = tx.QueryRowContext(ctx,
+		s.d.RewritePlaceholders(`SELECT COUNT(*) FROM notes WHERE id = ?`),
+		noteID,
+	).Scan(&exists); err != nil {
+		return nil, fmt.Errorf("failed to check note existence: %w", err)
+	}
+	if exists > 0 {
+		return nil, ErrNoteExists
+	}
 
 	// Shift existing unpinned notes down to make room at position 0.
 	if _, err = tx.ExecContext(ctx,
@@ -1092,7 +1113,6 @@ func (s *noteStore) getItemsByNoteID(ctx context.Context, noteID string) ([]Note
 	}
 	return items, nil
 }
-
 
 func (s *noteStore) CreateItemWithCompleted(ctx context.Context, noteID string, text string, position int, completed bool, parentID string, assignedTo string) (*NoteItem, error) {
 	itemID, err := generateID()

@@ -854,6 +854,12 @@ const docTemplate = `{
                             "type": "string"
                         }
                     },
+                    "409": {
+                        "description": "note with this ID already exists",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
                     "500": {
                         "description": "internal server error",
                         "schema": {
@@ -2683,6 +2689,10 @@ const docTemplate = `{
                     "type": "string"
                 },
                 "content": {
+                    "type": "string"
+                },
+                "id": {
+                    "description": "ID is an optional client-supplied note ID. When provided it is used as the\nnote's primary key so an offline-created note can be replayed idempotently:\na replay whose original create already committed is rejected with 409\ninstead of inserting a duplicate. When empty the server generates one.",
                     "type": "string"
                 },
                 "items": {

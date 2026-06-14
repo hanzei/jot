@@ -27,7 +27,8 @@ import { useUsers } from '../store/UsersContext';
 import { useAuth } from '../store/AuthContext';
 import { useToast } from '../hooks/useToast';
 import { useTheme } from '../theme/ThemeContext';
-import { isLocalId } from '../db/noteQueries';
+import { isUnsyncedNoteId } from '../db/noteQueries';
+import { usePendingNoteIds } from '../store/OfflineContext';
 import SkeletonNoteList from '../components/SkeletonNoteList';
 import NoteCard from '../components/NoteCard';
 import NoteContextMenu, { ContextMenuViewContext } from '../components/NoteContextMenu';
@@ -142,6 +143,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   const [isEmptyingTrash, setIsEmptyingTrash] = useState(false);
   const db = useSQLiteContext();
   const { isConnected } = useNetworkStatus();
+  const pendingNoteIds = usePendingNoteIds();
   const bannerShown = useBannerShown();
   const { colors } = useTheme();
   const { t } = useTranslation();
@@ -378,7 +380,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   }, [restoreNote, showToast, t]);
 
   const handleDuplicate = useCallback(async (note: Note) => {
-    if (isLocalId(note.id)) {
+    if (isUnsyncedNoteId(note.id, pendingNoteIds)) {
       Alert.alert(t('common.error'), t('note.waitForSyncBeforeDuplicating'));
       return;
     }
@@ -389,7 +391,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     } catch {
       Alert.alert(t('common.error'), t('note.failedDuplicate'));
     }
-  }, [duplicateNote, t]);
+  }, [duplicateNote, t, pendingNoteIds]);
 
   const handleDeletePermanently = useCallback((note: Note) => {
     Alert.alert(
