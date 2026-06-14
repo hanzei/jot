@@ -136,13 +136,25 @@ async function saveNoteInTx(db: SQLiteDatabase, note: Note): Promise<void> {
   }
 }
 
-export async function saveNote(db: SQLiteDatabase, note: Note): Promise<void> {
+/**
+ * `skipNoteIds` lists notes that must be left untouched (those with a pending
+ * sync-queue op). Server-sourced writes go through `saveServerNote`/`saveServerNotes`
+ * in syncQueue.ts, which populate this from the queue (see issue #487).
+ */
+interface SaveNoteOptions {
+  skipNoteIds?: ReadonlySet<string>;
+}
+
+export async function saveNote(db: SQLiteDatabase, note: Note, options?: SaveNoteOptions): Promise<void> {
+  if (options?.skipNoteIds?.has(note.id)) return;
   await db.withTransactionAsync(() => saveNoteInTx(db, note));
 }
 
-export async function saveNotes(db: SQLiteDatabase, notes: Note[]): Promise<void> {
+export async function saveNotes(db: SQLiteDatabase, notes: Note[], options?: SaveNoteOptions): Promise<void> {
+  const skipNoteIds = options?.skipNoteIds;
   await db.withTransactionAsync(async () => {
     for (const note of notes) {
+      if (skipNoteIds?.has(note.id)) continue;
       await saveNoteInTx(db, note);
     }
   });
@@ -450,10 +462,17 @@ export async function removeLocalNotesNotIn(
   db: SQLiteDatabase,
   serverIds: Set<string>,
   params?: GetNotesParams,
+  options?: { skipNoteIds?: ReadonlySet<string> },
 ): Promise<void> {
   // my_tasks is a cross-cutting filter (overlaps with the main "notes" scope),
   // so we must not remove notes that may still belong in other views.
   if (params?.my_tasks) return;
+
+  // Notes with a pending sync-queue op are protected from pruning too: a queued
+  // edit can optimistically move a note into this scope (e.g. un-archive/restore)
+  // before the server reflects it, so it would be absent from serverIds and get
+  // deleted, destroying the optimistic edit. The drain reconciles them (#487).
+  const skipNoteIds = options?.skipNoteIds;
 
   const scopeArgs: (string | number | null)[] = [];
   let scopedWhereSql = "id NOT LIKE 'local_%'";
@@ -489,7 +508,7 @@ export async function removeLocalNotesNotIn(
         }
       })
       .map((row) => row.id)
-      .filter((id) => !serverIds.has(id));
+      .filter((id) => !serverIds.has(id) && !skipNoteIds?.has(id));
 
     if (candidateIds.length === 0) {
       return;
@@ -503,10 +522,13 @@ export async function removeLocalNotesNotIn(
   let sql = `DELETE FROM notes WHERE ${scopedWhereSql}`;
   const args = [...scopeArgs];
 
-  if (serverIds.size > 0) {
-    const placeholders = Array.from(serverIds).map(() => '?').join(', ');
+  // Protect both notes still on the server and notes with a pending op:
+  // `id NOT IN (A) AND id NOT IN (B)` is just `id NOT IN (A ∪ B)`.
+  const protectedIds = new Set([...serverIds, ...(skipNoteIds ?? [])]);
+  if (protectedIds.size > 0) {
+    const placeholders = Array.from(protectedIds).map(() => '?').join(', ');
     sql += ` AND id NOT IN (${placeholders})`;
-    args.push(...Array.from(serverIds));
+    args.push(...protectedIds);
   }
 
   await db.runAsync(sql, args);
