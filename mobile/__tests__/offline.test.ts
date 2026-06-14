@@ -2,7 +2,7 @@
  * Tests for offline support: local note queries, sync queue, and ID utilities.
  */
 
-import { generateLocalId, isLocalId, replaceLocalNoteId, removeLocalNotesNotIn, getLocalLabels, getLocalLabelCounts } from '../src/db/noteQueries';
+import { generateLocalId, isLocalId, replaceLocalNoteId, removeLocalNotesNotIn, getLocalLabels, getLocalLabelCounts, saveNote, addLabelToLocalNote, removeLabelFromLocalNote } from '../src/db/noteQueries';
 import { drainQueue, isTransientHttpStatus } from '../src/db/syncQueue';
 import api from '../src/api/client';
 
@@ -30,6 +30,7 @@ jest.mock('../src/db/noteQueries', () => ({
 
 const mockApi = api as jest.Mocked<typeof api>;
 const mockReplaceLocalNoteId = replaceLocalNoteId as jest.MockedFunction<typeof replaceLocalNoteId>;
+const mockSaveNote = saveNote as jest.MockedFunction<typeof saveNote>;
 
 // ── generateLocalId / isLocalId ────────────────────────────────────────────
 
@@ -289,6 +290,90 @@ describe('drainQueue', () => {
     expect(mockReplaceLocalNoteId).toHaveBeenCalledWith(db, 'local_temp_1', serverNote);
     expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [8]);
   });
+
+  it('reconciles a createLabel local id and remaps it for later queued ops', async () => {
+    const db = makeMockDb([
+      {
+        id: 30,
+        operation: 'createLabel',
+        endpoint: '/labels',
+        method: 'POST',
+        body: JSON.stringify({ local_id: 'local_lbl_1', name: 'Work' }),
+        created_at: '',
+      },
+      {
+        id: 31,
+        operation: 'deleteLabel',
+        endpoint: '/labels/local_lbl_1',
+        method: 'DELETE',
+        body: null,
+        created_at: '',
+      },
+    ]);
+    mockApi.post.mockResolvedValueOnce({ data: { id: 'srv_lbl_1', name: 'Work' } } as never);
+    mockApi.delete.mockResolvedValueOnce({ data: {} } as never);
+
+    await drainQueue(db as never);
+
+    // The label is created first, then the delete endpoint is remapped to the server id.
+    expect(mockApi.post).toHaveBeenCalledWith('/labels', { local_id: 'local_lbl_1', name: 'Work' });
+    expect(mockApi.delete).toHaveBeenCalledWith('/labels/srv_lbl_1');
+    expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [30]);
+    expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [31]);
+  });
+
+  it('persists the note returned by an addLabelToNote replay', async () => {
+    const serverNote = {
+      id: 'n1', content: 'body', note_type: 'text',
+      color: '#ffffff', pinned: false, archived: false, position: 0,
+      checked_items_collapsed: false, is_shared: false, deleted_at: null,
+      user_id: 'u1', created_at: '', updated_at: '',
+      labels: [{ id: 'srv_lbl', user_id: 'u1', name: 'Work', created_at: '', updated_at: '' }],
+      shared_with: [],
+    };
+    const db = makeMockDb([
+      {
+        id: 40,
+        operation: 'addLabelToNote',
+        endpoint: '/notes/n1/labels',
+        method: 'POST',
+        body: JSON.stringify({ name: 'Work' }),
+        created_at: '',
+      },
+    ]);
+    mockApi.post.mockResolvedValueOnce({ data: serverNote } as never);
+
+    await drainQueue(db as never);
+
+    expect(mockSaveNote).toHaveBeenCalledWith(db, serverNote);
+    expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [40]);
+  });
+
+  it('persists the note returned by a removeLabelFromNote replay', async () => {
+    const serverNote = {
+      id: 'n1', content: 'body', note_type: 'text',
+      color: '#ffffff', pinned: false, archived: false, position: 0,
+      checked_items_collapsed: false, is_shared: false, deleted_at: null,
+      user_id: 'u1', created_at: '', updated_at: '', labels: [], shared_with: [],
+    };
+    const db = makeMockDb([
+      {
+        id: 41,
+        operation: 'removeLabelFromNote',
+        endpoint: '/notes/n1/labels/l1',
+        method: 'DELETE',
+        body: null,
+        created_at: '',
+      },
+    ]);
+    mockApi.delete.mockResolvedValueOnce({ data: serverNote } as never);
+
+    await drainQueue(db as never);
+
+    expect(mockApi.delete).toHaveBeenCalledWith('/notes/n1/labels/l1');
+    expect(mockSaveNote).toHaveBeenCalledWith(db, serverNote);
+    expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [41]);
+  });
 });
 
 // ── getLocalLabels ─────────────────────────────────────────────────────────
@@ -454,6 +539,116 @@ describe('removeLocalNotesNotIn', () => {
       new Set<string>(),
       { label: 'l1' },
     );
+
+    expect(db.runAsync).not.toHaveBeenCalled();
+  });
+});
+
+// ── addLabelToLocalNote ──────────────────────────────────────────────────────
+
+describe('addLabelToLocalNote', () => {
+  const label = { id: 'l1', user_id: 'u1', name: 'Work', created_at: '', updated_at: '' };
+
+  it('appends the label to a note that does not yet have it', async () => {
+    const db = {
+      getFirstAsync: jest.fn().mockResolvedValue({ labels_json: '[]' }),
+      runAsync: jest.fn().mockResolvedValue(undefined),
+    };
+
+    await addLabelToLocalNote(db as never, 'n1', label);
+
+    expect(db.runAsync).toHaveBeenCalledWith(
+      'UPDATE notes SET labels_json = ?, updated_at = ? WHERE id = ?',
+      [JSON.stringify([label]), expect.any(String), 'n1'],
+    );
+  });
+
+  it('is idempotent when the note already has the label (by id)', async () => {
+    const db = {
+      getFirstAsync: jest.fn().mockResolvedValue({ labels_json: JSON.stringify([label]) }),
+      runAsync: jest.fn().mockResolvedValue(undefined),
+    };
+
+    await addLabelToLocalNote(db as never, 'n1', { ...label, name: 'Different' });
+
+    expect(db.runAsync).not.toHaveBeenCalled();
+  });
+
+  it('is idempotent when the note already has a label of the same name', async () => {
+    const db = {
+      getFirstAsync: jest.fn().mockResolvedValue({ labels_json: JSON.stringify([label]) }),
+      runAsync: jest.fn().mockResolvedValue(undefined),
+    };
+
+    await addLabelToLocalNote(db as never, 'n1', { ...label, id: 'l2' });
+
+    expect(db.runAsync).not.toHaveBeenCalled();
+  });
+
+  it('is idempotent when the note already has a same-name label differing only in case', async () => {
+    const db = {
+      getFirstAsync: jest.fn().mockResolvedValue({ labels_json: JSON.stringify([label]) }),
+      runAsync: jest.fn().mockResolvedValue(undefined),
+    };
+
+    await addLabelToLocalNote(db as never, 'n1', { ...label, id: 'l2', name: 'WORK' });
+
+    expect(db.runAsync).not.toHaveBeenCalled();
+  });
+
+  it('does nothing when the note is not in the local cache', async () => {
+    const db = {
+      getFirstAsync: jest.fn().mockResolvedValue(null),
+      runAsync: jest.fn().mockResolvedValue(undefined),
+    };
+
+    await addLabelToLocalNote(db as never, 'missing', label);
+
+    expect(db.runAsync).not.toHaveBeenCalled();
+  });
+});
+
+// ── removeLabelFromLocalNote ─────────────────────────────────────────────────
+
+describe('removeLabelFromLocalNote', () => {
+  it('removes the matching label from the note', async () => {
+    const labels = [
+      { id: 'l1', user_id: 'u1', name: 'Work', created_at: '', updated_at: '' },
+      { id: 'l2', user_id: 'u1', name: 'Home', created_at: '', updated_at: '' },
+    ];
+    const db = {
+      getFirstAsync: jest.fn().mockResolvedValue({ labels_json: JSON.stringify(labels) }),
+      runAsync: jest.fn().mockResolvedValue(undefined),
+    };
+
+    await removeLabelFromLocalNote(db as never, 'n1', 'l1');
+
+    expect(db.runAsync).toHaveBeenCalledWith(
+      'UPDATE notes SET labels_json = ?, updated_at = ? WHERE id = ?',
+      [JSON.stringify([labels[1]]), expect.any(String), 'n1'],
+    );
+  });
+
+  it('does nothing when the label is not present on the note', async () => {
+    const db = {
+      getFirstAsync: jest.fn().mockResolvedValue({
+        labels_json: JSON.stringify([{ id: 'l2', name: 'Home' }]),
+      }),
+      runAsync: jest.fn().mockResolvedValue(undefined),
+    };
+
+    await removeLabelFromLocalNote(db as never, 'n1', 'l1');
+
+    expect(db.runAsync).not.toHaveBeenCalled();
+  });
+
+  it('does nothing when the note is not in the local cache', async () => {
+    const db = {
+      getFirstAsync: jest.fn().mockResolvedValue(null),
+      runAsync: jest.fn().mockResolvedValue(undefined),
+    };
+
+    await removeLabelFromLocalNote(db as never, 'missing', 'l1');
 
     expect(db.runAsync).not.toHaveBeenCalled();
   });
