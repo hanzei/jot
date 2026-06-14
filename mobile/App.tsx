@@ -487,13 +487,13 @@ export default function App() {
               >
                 <MobileI18nProvider>
                   <ThemeProvider>
-                    <UsersProvider>
-                      <OfflineProvider>
+                    <OfflineProvider>
+                      <UsersProvider>
                         <ToastProvider>
                           <NavigationWrapper />
                         </ToastProvider>
-                      </OfflineProvider>
-                    </UsersProvider>
+                      </UsersProvider>
+                    </OfflineProvider>
                   </ThemeProvider>
                 </MobileI18nProvider>
               </SQLiteProvider>
