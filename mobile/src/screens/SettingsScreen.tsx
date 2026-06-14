@@ -27,7 +27,7 @@ import * as ImagePicker from 'expo-image-picker';
 import * as DocumentPicker from 'expo-document-picker';
 import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
-import { subscribeToClientActiveServerChanges } from '../api/client';
+import { subscribeToClientActiveServerChanges, cacheAuthProfile } from '../api/client';
 import { importKeepFile, getNotes } from '../api/notes';
 import {
   updateMe,
@@ -46,7 +46,7 @@ import type { ThemePreference, AboutInfo, ActiveSession, PersonalAccessToken, Im
 import i18n from '../i18n';
 import { SUPPORTED_LANGUAGES, getLanguagePreference, resolveLanguage, type LanguagePreference } from '../i18n/language';
 import { displayMessage, getCurrentLocale } from '../i18n/utils';
-import { saveServerNotes } from '../db/syncQueue';
+import { saveServerNotes, enqueueOperation, isQueueableError } from '../db/syncQueue';
 import { notesLocalQueryScopeKey } from '../hooks/queryKeys';
 import { getActiveServer } from '../store/serverAccounts';
 import { useActiveServerBaseUrl } from '../hooks/useActiveServerBaseUrl';
@@ -79,6 +79,7 @@ export default function SettingsScreen() {
   const hasProfileIcon = user?.has_profile_icon ?? false;
   const iconVersion = user?.updated_at ?? '';
   const [iconUploading, setIconUploading] = useState(false);
+  const [iconUploadPercent, setIconUploadPercent] = useState(0);
   const [iconDeleting, setIconDeleting] = useState(false);
   const [iconError, setIconError] = useState('');
 
@@ -402,20 +403,42 @@ export default function SettingsScreen() {
     setProfileError('');
     setProfileSuccess('');
     setProfileSaving(true);
+    const profileUpdate = { username, first_name: firstName, last_name: lastName };
+
+    const previousUser = user;
+    if (user) {
+      const optimisticUser = { ...user, ...profileUpdate };
+      setUser(optimisticUser);
+      if (settings) void cacheAuthProfile({ user: optimisticUser, settings });
+    }
+
     try {
-      const { user: updatedUser, settings: updatedSettings } = await updateMe({
-        username, first_name: firstName, last_name: lastName,
-      });
+      const { user: updatedUser, settings: updatedSettings } = await updateMe(profileUpdate);
       setUser(updatedUser);
       setSettings(updatedSettings);
+      void cacheAuthProfile({ user: updatedUser, settings: updatedSettings });
       setProfileSuccess(t('settings.profileUpdated'));
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: string } })?.response?.data;
-      setProfileError(typeof msg === 'string' ? msg.trim() : 'settings.failedUpdateProfile');
+      if (isQueueableError(err)) {
+        await enqueueOperation(db, {
+          operation: 'updateSettings',
+          endpoint: '/users/me',
+          method: 'PATCH',
+          body: profileUpdate,
+        });
+        setProfileSuccess(t('settings.profileUpdated'));
+      } else {
+        if (previousUser) {
+          setUser(previousUser);
+          if (settings) void cacheAuthProfile({ user: previousUser, settings });
+        }
+        const msg = (err as { response?: { data?: string } })?.response?.data;
+        setProfileError(typeof msg === 'string' ? msg.trim() : 'settings.failedUpdateProfile');
+      }
     } finally {
       setProfileSaving(false);
     }
-  }, [firstName, lastName, setSettings, setUser, t, username]);
+  }, [firstName, lastName, setSettings, setUser, t, username, user, settings, db]);
 
   const handleChangePassword = useCallback(async () => {
     setPasswordError('');
@@ -457,23 +480,36 @@ export default function SettingsScreen() {
     setLanguagePref(language);
     void i18n.changeLanguage(resolveLanguage(language));
 
-    if (previousSettings) {
-      setSettings({ ...previousSettings, language });
+    const newSettings = previousSettings ? { ...previousSettings, language } : null;
+    if (newSettings) {
+      setSettings(newSettings);
+      if (user) void cacheAuthProfile({ user, settings: newSettings });
     }
 
     try {
       const { settings: updatedSettings } = await updateMe({ language });
       setSettings(updatedSettings);
+      if (user) void cacheAuthProfile({ user, settings: updatedSettings });
     } catch (err: unknown) {
-      setLanguagePref(previousLanguage);
-      void i18n.changeLanguage(resolveLanguage(previousLanguage));
-      if (previousSettings) {
-        setSettings(previousSettings);
+      if (isQueueableError(err)) {
+        await enqueueOperation(db, {
+          operation: 'updateSettings',
+          endpoint: '/users/me',
+          method: 'PATCH',
+          body: { language },
+        });
+      } else {
+        setLanguagePref(previousLanguage);
+        void i18n.changeLanguage(resolveLanguage(previousLanguage));
+        if (previousSettings) {
+          setSettings(previousSettings);
+          if (user) void cacheAuthProfile({ user, settings: previousSettings });
+        }
+        const msg = (err as { response?: { data?: string } })?.response?.data;
+        setLanguageError(typeof msg === 'string' ? msg.trim() : 'settings.failedUpdateLanguage');
       }
-      const msg = (err as { response?: { data?: string } })?.response?.data;
-      setLanguageError(typeof msg === 'string' ? msg.trim() : 'settings.failedUpdateLanguage');
     }
-  }, [languagePref, settings, setSettings]);
+  }, [languagePref, settings, user, setSettings, db]);
 
   const handleThemeChange = useCallback(async (theme: ThemePreference) => {
     const prev = themePref;
@@ -481,22 +517,35 @@ export default function SettingsScreen() {
     setThemeError('');
     setThemePref(theme);
 
-    if (previousSettings) {
-      setSettings({ ...previousSettings, theme });
+    const newSettings = previousSettings ? { ...previousSettings, theme } : null;
+    if (newSettings) {
+      setSettings(newSettings);
+      if (user) void cacheAuthProfile({ user, settings: newSettings });
     }
 
     try {
       const { settings: updatedSettings } = await updateMe({ theme });
       setSettings(updatedSettings);
+      if (user) void cacheAuthProfile({ user, settings: updatedSettings });
     } catch (err: unknown) {
-      setThemePref(prev);
-      if (previousSettings) {
-        setSettings(previousSettings);
+      if (isQueueableError(err)) {
+        await enqueueOperation(db, {
+          operation: 'updateSettings',
+          endpoint: '/users/me',
+          method: 'PATCH',
+          body: { theme },
+        });
+      } else {
+        setThemePref(prev);
+        if (previousSettings) {
+          setSettings(previousSettings);
+          if (user) void cacheAuthProfile({ user, settings: previousSettings });
+        }
+        const msg = (err as { response?: { data?: string } })?.response?.data;
+        setThemeError(typeof msg === 'string' ? msg.trim() : 'settings.failedUpdateTheme');
       }
-      const msg = (err as { response?: { data?: string } })?.response?.data;
-      setThemeError(typeof msg === 'string' ? msg.trim() : 'settings.failedUpdateTheme');
     }
-  }, [settings, setSettings, themePref]);
+  }, [settings, user, setSettings, themePref, db]);
 
   const handleUploadIcon = useCallback(async () => {
     const result = await ImagePicker.launchImageLibraryAsync({
@@ -510,14 +559,24 @@ export default function SettingsScreen() {
 
     setIconError('');
     setIconUploading(true);
+    setIconUploadPercent(0);
     try {
-      const updatedUser = await uploadProfileIcon(result.assets[0].uri);
+      const updatedUser = await uploadProfileIcon(result.assets[0].uri, (percent) => {
+        if (isMountedRef.current) {
+          setIconUploadPercent(percent);
+        }
+      });
+      if (!isMountedRef.current) return;
       setUser(updatedUser);
     } catch (err: unknown) {
+      if (!isMountedRef.current) return;
       const msg = (err as { response?: { data?: string } })?.response?.data;
       setIconError(typeof msg === 'string' ? msg.trim() : 'settings.iconUploadFailed');
     } finally {
-      setIconUploading(false);
+      if (isMountedRef.current) {
+        setIconUploading(false);
+        setIconUploadPercent(0);
+      }
     }
   }, [setUser]);
 
@@ -610,7 +669,13 @@ export default function SettingsScreen() {
                   accessibilityRole="button"
                 >
                   {iconUploading ? (
-                    <ActivityIndicator size="small" color="#fff" />
+                    iconUploadPercent > 0 ? (
+                      <Text style={styles.uploadButtonText}>
+                        {t('settings.iconUploadProgress', { percent: iconUploadPercent })}
+                      </Text>
+                    ) : (
+                      <ActivityIndicator size="small" color="#fff" />
+                    )
                   ) : (
                     <Text style={styles.uploadButtonText}>{t('settings.uploadIconButton')}</Text>
                   )}

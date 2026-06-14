@@ -169,6 +169,7 @@
     "uploadIconButton": "Subir icono",
     "removeIconButton": "Eliminar icono",
     "iconUploading": "Subiendo...",
+    "iconUploadProgress": "Subiendo {{percent}}%",
     "iconRemoving": "Eliminando...",
     "iconUploadFailed": "Error al subir el icono de perfil",
     "iconDeleteFailed": "Error al eliminar el icono de perfil",

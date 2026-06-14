@@ -11,7 +11,13 @@ export async function changePassword(data: ChangePasswordRequest): Promise<void>
   await api.put('/users/me/password', data);
 }
 
-export async function uploadProfileIcon(uri: string): Promise<User> {
+// Profile-icon uploads can be large on slow cellular — disable the default timeout.
+export const UPLOAD_ICON_TIMEOUT = 0;
+
+export async function uploadProfileIcon(
+  uri: string,
+  onUploadProgress?: (percent: number) => void,
+): Promise<User> {
   const formData = new FormData();
   const filename = uri.split('/').pop() || 'photo.jpg';
   const ext = filename.split('.').pop()?.toLowerCase() || 'jpeg';
@@ -24,8 +30,21 @@ export async function uploadProfileIcon(uri: string): Promise<User> {
     type,
   } as unknown as Blob);
 
+  let lastPercent = -1;
   const res = await api.post('/users/me/profile-icon', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
+    timeout: UPLOAD_ICON_TIMEOUT,
+    ...(onUploadProgress && {
+      onUploadProgress: (progressEvent) => {
+        const percent = progressEvent.total
+          ? Math.round((progressEvent.loaded * 100) / progressEvent.total)
+          : 0;
+        if (percent !== lastPercent) {
+          lastPercent = percent;
+          onUploadProgress(percent);
+        }
+      },
+    }),
   });
   return res.data;
 }

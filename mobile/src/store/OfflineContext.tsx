@@ -113,7 +113,7 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
     isDrainingRef.current = true;
     let stalled = false;
     try {
-      const { idMappings, discardedOperations } = await drainQueue(db);
+      const { idMappings, discardedOperations, syncedSettings } = await drainQueue(db);
       for (const { localId, serverNote } of idMappings) {
         queryClient.setQueryData(noteLocalQueryKey(localId), serverNote);
       }
@@ -129,10 +129,17 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
       // labels) to server ids, so refresh the label list/counts too.
       queryClient.invalidateQueries({ queryKey: labelsQueryKey() });
       queryClient.invalidateQueries({ queryKey: labelCountsQueryKey() });
-
       // drainQueue resolves even when it stops early on a transient failure, so
       // inspect what's left to decide whether a backoff retry is warranted.
       const remaining = await getPendingCount(db);
+      // Revalidate the session after a settings drain only when the queue is
+      // fully empty. The pre-drain revalidation had fetched stale server values
+      // (before the PATCH ran), so we need a fresh GET /me to reflect what the
+      // drain just applied. Guarding on remaining === 0 avoids clobbering
+      // in-memory optimistic state for settings ops that are still pending.
+      if (syncedSettings && remaining === 0) {
+        await revalidateSession().catch(() => {});
+      }
       if (remaining > 0) {
         stalled = true;
         onDrainStalled();
@@ -156,7 +163,7 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
         if (!stalled) scheduleDrain(0);
       }
     }
-  }, [db, queryClient, onDrainStalled, clearDrainTimer, scheduleDrain]);
+  }, [db, queryClient, onDrainStalled, clearDrainTimer, scheduleDrain, revalidateSession]);
 
   performDrainRef.current = performDrain;
 

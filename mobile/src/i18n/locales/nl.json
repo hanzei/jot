@@ -169,6 +169,7 @@
     "uploadIconButton": "Icoon uploaden",
     "removeIconButton": "Icoon verwijderen",
     "iconUploading": "Uploaden...",
+    "iconUploadProgress": "Uploaden {{percent}}%",
     "iconRemoving": "Verwijderen...",
     "iconUploadFailed": "Profielicoon uploaden mislukt",
     "iconDeleteFailed": "Profielicoon verwijderen mislukt",

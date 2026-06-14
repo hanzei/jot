@@ -23,7 +23,8 @@ export type QueueOperation =
   | 'renameLabel'
   | 'deleteLabel'
   | 'addLabelToNote'
-  | 'removeLabelFromNote';
+  | 'removeLabelFromNote'
+  | 'updateSettings';
 
 interface QueueEntry {
   id: number;
@@ -64,24 +65,29 @@ export function isTransientHttpStatus(status: number | undefined): boolean {
 }
 
 /**
+ * Returns true if the error is a transient HTTP failure that can be safely
+ * swallowed and queued for later replay. Returns false for permanent errors
+ * (non-Axios errors, 401, or permanent 4xx) that should be surfaced.
+ *
+ * 401 is treated as non-queueable: the API response interceptor clears the
+ * session on 401, so the write must surface the error rather than queue it.
+ */
+export function isQueueableError(err: unknown): boolean {
+  if (!axios.isAxiosError(err)) return false;
+  const status = err.response?.status;
+  return status !== 401 && isTransientHttpStatus(status);
+}
+
+/**
  * Called from the `catch` of an online write attempt. If the failure is
  * transient (a flaky connection, timeout, or 5xx), it is swallowed so the
  * caller can fall back to the offline path — writing locally and queueing the
  * operation for replay — instead of losing the edit. Permanent failures (4xx
  * validation/auth/conflict) and unexpected local errors are rethrown so the UI
  * can surface them to the user.
- *
- * 401 is deliberately treated as non-queueable here even though the queue drain
- * retries it: the API response interceptor reacts to a 401 by clearing the
- * session and redirecting to login, so the write must surface the error rather
- * than silently report success while the user is being logged out.
  */
 export function rethrowIfNotQueueable(err: unknown): void {
-  if (!axios.isAxiosError(err)) {
-    throw err;
-  }
-  const status = err.response?.status;
-  if (status === 401 || !isTransientHttpStatus(status)) {
+  if (!isQueueableError(err)) {
     throw err;
   }
 }
@@ -261,6 +267,8 @@ export interface DrainResult {
   idMappings: Array<{ localId: string; serverNote: Note }>;
   /** Operations that were discarded because the server returned a permanent (non-transient 4xx) error. */
   discardedOperations: DiscardedOperation[];
+  /** True if at least one `updateSettings` operation was successfully drained. */
+  syncedSettings: boolean;
 }
 
 /**
@@ -285,6 +293,7 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
   const idMap = new Map<string, string>();
   const idMappings: Array<{ localId: string; serverNote: Note }> = [];
   const discardedOperations: DiscardedOperation[] = [];
+  let syncedSettings = false;
 
   for (const entry of entries) {
     try {
@@ -344,6 +353,9 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         }
       } else if (entry.method === 'PATCH') {
         await api.patch(endpoint, body);
+        if (entry.operation === 'updateSettings') {
+          syncedSettings = true;
+        }
       } else if (entry.method === 'DELETE') {
         const response = await api.delete(endpoint);
         if (entry.operation === 'removeLabelFromNote') {
@@ -375,7 +387,7 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
     }
   }
 
-  return { idMappings, discardedOperations };
+  return { idMappings, discardedOperations, syncedSettings };
 }
 
 /**

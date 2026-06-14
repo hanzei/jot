@@ -169,6 +169,7 @@
     "uploadIconButton": "Carica icona",
     "removeIconButton": "Rimuovi icona",
     "iconUploading": "Caricamento...",
+    "iconUploadProgress": "Caricamento {{percent}}%",
     "iconRemoving": "Rimozione...",
     "iconUploadFailed": "Impossibile caricare l'icona del profilo",
     "iconDeleteFailed": "Impossibile rimuovere l'icona del profilo",

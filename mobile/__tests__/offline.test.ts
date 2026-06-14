@@ -437,6 +437,26 @@ describe('drainQueue', () => {
     expect(mockSaveNote).toHaveBeenCalledWith(db, serverNote);
     expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [41]);
   });
+
+  it('processes updateSettings PATCH and sets syncedSettings in the result', async () => {
+    const db = makeMockDb([
+      {
+        id: 50,
+        operation: 'updateSettings',
+        endpoint: '/users/me',
+        method: 'PATCH',
+        body: JSON.stringify({ language: 'de' }),
+        created_at: '',
+      },
+    ]);
+    mockApi.patch.mockResolvedValueOnce({ data: {} } as never);
+
+    const { syncedSettings } = await drainQueue(db as never);
+
+    expect(mockApi.patch).toHaveBeenCalledWith('/users/me', { language: 'de' });
+    expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [50]);
+    expect(syncedSettings).toBe(true);
+  });
 });
 
 // ── getLocalLabels ─────────────────────────────────────────────────────────
