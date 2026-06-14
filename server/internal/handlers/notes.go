@@ -143,6 +143,11 @@ func (h *NotesHandler) publishDeletedNoteEvent(ctx context.Context, noteID strin
 }
 
 type CreateNoteRequest struct {
+	// ID is an optional client-supplied note ID. When provided it is used as the
+	// note's primary key so an offline-created note can be replayed idempotently:
+	// a replay whose original create already committed is rejected with 409
+	// instead of inserting a duplicate. When empty the server generates one.
+	ID       string           `json:"id,omitempty"`
 	Title    string           `json:"title"`
 	Content  string           `json:"content"`
 	NoteType models.NoteType  `json:"note_type"`
@@ -372,6 +377,7 @@ func (h *NotesHandler) GetNotes(w http.ResponseWriter, r *http.Request) (int, an
 //	@Failure	400		{string}	string	"bad request"
 //	@Failure	401		{string}	string	"unauthorized"
 //	@Failure	404		{string}	string	"label not found"
+//	@Failure	409		{string}	string	"note with this ID already exists"
 //	@Failure	500		{string}	string	"internal server error"
 //	@Router		/notes [post]
 func (h *NotesHandler) CreateNote(w http.ResponseWriter, r *http.Request) (int, any, error) {
@@ -389,8 +395,15 @@ func (h *NotesHandler) CreateNote(w http.ResponseWriter, r *http.Request) (int, 
 		return status, nil, err
 	}
 
-	note, err := h.noteStore.Create(r.Context(), user.ID, req.Title, req.Content, req.NoteType, req.Color)
+	if req.ID != "" && !models.IsValidID(req.ID) {
+		return http.StatusBadRequest, nil, errors.New("invalid note ID format")
+	}
+
+	note, err := h.noteStore.Create(r.Context(), user.ID, req.ID, req.Title, req.Content, req.NoteType, req.Color)
 	if err != nil {
+		if errors.Is(err, models.ErrNoteExists) {
+			return http.StatusConflict, nil, fmt.Errorf("create note: %w", err)
+		}
 		return http.StatusInternalServerError, nil, fmt.Errorf("create note: %w", err)
 	}
 

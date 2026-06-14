@@ -39,6 +39,9 @@ import {
   permanentDeleteLocalNote,
   updateLocalNote,
   generateLocalId,
+  generateClientNoteId,
+  markNotePendingCreate,
+  isNotePendingCreate,
   isLocalId,
   createLocalItem,
   patchLocalItem,
@@ -168,13 +171,15 @@ export function useCreateNote() {
       }
 
       // Offline (or a transient online failure): create locally and queue the
-      // server operation.
-      const localId = generateLocalId();
+      // server operation. The note gets a server-valid ID up front so it is sent
+      // as the note's primary key on replay, making the queued create idempotent
+      // (issue #475) — no server-side ID reconciliation needed.
+      const clientId = generateClientNoteId();
       const now = new Date().toISOString();
       const labels: Label[] = [];
       const shared_with: NoteShare[] = [];
       const baseLocalNote = {
-        id: localId,
+        id: clientId,
         user_id: user?.id ?? '',
         color: data.color ?? '#ffffff',
         pinned: false,
@@ -204,7 +209,7 @@ export function useCreateNote() {
                 if (!isChild) lastTopLevelId = id;
                 return {
                   id,
-                  note_id: localId,
+                  note_id: clientId,
                   text: item.text,
                   completed: item.completed ?? false,
                   position: i,
@@ -222,11 +227,14 @@ export function useCreateNote() {
             content: data.content,
           };
       await saveNote(db, localNote);
+      // Flag it unsynced until the queued create drains, so the UI gates actions
+      // that need a server-side note (sharing, labels) in the meantime.
+      await markNotePendingCreate(db, clientId);
       await enqueueOperation(db, {
         operation: 'create',
         endpoint: '/notes',
         method: 'POST',
-        body: { local_id: localId, ...data } as Record<string, unknown>,
+        body: { ...data, id: clientId } as Record<string, unknown>,
       });
       return localNote;
     },
@@ -510,10 +518,11 @@ export function useDuplicateNote() {
   return useMutation({
     mutationFn: async (id: string): Promise<Note> => {
       assertSwitchWriteAllowed();
-      // Guard up front: duplicating an unsynced local note is never safe — it has
-      // no server ID, so both the online API call and the offline queue entry would
-      // reference an ID the server doesn't know about.
-      if (isLocalId(id)) {
+      // Guard up front: duplicating an unsynced note is never safe — the server
+      // doesn't know its ID yet, so both the online API call and the offline queue
+      // entry would reference an ID the server can't resolve. Covers local-only
+      // duplicates and offline creates still awaiting their POST (#475).
+      if (isLocalId(id) || await isNotePendingCreate(db, id)) {
         throw new Error('Cannot duplicate an unsynced note; please wait until it has synced');
       }
       if (isConnectedRef.current) {
@@ -718,7 +727,7 @@ export function useShareNote() {
   return useMutation({
     mutationFn: async ({ noteId, user }: { noteId: string; user: User }) => {
       assertSwitchWriteAllowed();
-      if (isLocalId(noteId)) {
+      if (isLocalId(noteId) || await isNotePendingCreate(db, noteId)) {
         throw new Error('cannot share unsynced note');
       }
 
@@ -780,7 +789,7 @@ export function useUnshareNote() {
   return useMutation({
     mutationFn: async ({ noteId, userId }: { noteId: string; userId: string }) => {
       assertSwitchWriteAllowed();
-      if (isLocalId(noteId)) {
+      if (isLocalId(noteId) || await isNotePendingCreate(db, noteId)) {
         throw new Error('cannot unshare unsynced note');
       }
 

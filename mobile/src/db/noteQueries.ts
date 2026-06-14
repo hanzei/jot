@@ -1,6 +1,6 @@
 import { SQLiteDatabase } from 'expo-sqlite';
 import type { Note, NoteItem, GetNotesParams, Label, NoteShare } from '@jot/shared';
-import { getRandomBytes } from '../utils/random';
+import { getRandomBytes, getStrongRandomBytes } from '../utils/random';
 
 interface NoteRow {
   id: string;
@@ -249,6 +249,47 @@ export async function clearNoteSyncFailed(db: SQLiteDatabase, id: string): Promi
 export async function getFailedNoteIds(db: SQLiteDatabase): Promise<Set<string>> {
   const rows = await db.getAllAsync<{ id: string }>(`SELECT id FROM notes WHERE sync_state = 'failed'`);
   return new Set(rows.map((r) => r.id));
+}
+
+/**
+ * Flag an offline-created note as not yet confirmed by the server. Its
+ * client-generated ID is already a server-valid primary key (see
+ * {@link generateClientNoteId}), so the note carries a normal ID; this marker is
+ * what tells the UI it isn't on the server yet — gating actions that need a
+ * server-side note (sharing, label management) until the queued create drains
+ * (issue #475).
+ */
+export async function markNotePendingCreate(db: SQLiteDatabase, id: string): Promise<void> {
+  await db.runAsync(`UPDATE notes SET sync_state = 'pending' WHERE id = ?`, [id]);
+}
+
+/**
+ * Clear a note's pending-create marker back to 'synced'. Called when its queued
+ * create drains (success or an idempotent 409 — the note already exists on the
+ * server either way). Guarded on the current state so it never touches a
+ * non-pending row.
+ */
+export async function clearNotePendingCreate(db: SQLiteDatabase, id: string): Promise<void> {
+  await db.runAsync(`UPDATE notes SET sync_state = 'synced' WHERE id = ? AND sync_state = 'pending'`, [id]);
+}
+
+/** IDs of notes whose offline create has not yet been confirmed by the server. */
+export async function getPendingCreateNoteIds(db: SQLiteDatabase): Promise<Set<string>> {
+  const rows = await db.getAllAsync<{ id: string }>(`SELECT id FROM notes WHERE sync_state = 'pending'`);
+  return new Set(rows.map((r) => r.id));
+}
+
+/**
+ * Authoritative single-note check used by write mutations: is this note an
+ * offline create the server hasn't confirmed yet (#475)? Reads the row directly
+ * so the guard can't act on a stale in-memory set.
+ */
+export async function isNotePendingCreate(db: SQLiteDatabase, id: string): Promise<boolean> {
+  const row = await db.getFirstAsync<{ sync_state: string }>(
+    `SELECT sync_state FROM notes WHERE id = ?`,
+    [id],
+  );
+  return row?.sync_state === 'pending';
 }
 
 export async function markLocalNoteRestored(db: SQLiteDatabase, id: string): Promise<void> {
@@ -642,6 +683,37 @@ export function generateLocalId(): string {
   return `local_${timestamp}_${random}`;
 }
 
+// Mirrors the server's ID alphabet/length (see server internal/models/id.go) so a
+// client-generated note ID is accepted as-is by the server.
+const SERVER_ID_CHARS = '0123456789abcdefghijklmnopqrstuvwxyzABCDEFGHIJKLMNOPQRSTUVWXYZ';
+const SERVER_ID_LENGTH = 22;
+
+/**
+ * Generate a server-compatible 22-char note ID. Offline-created notes use this
+ * (rather than a `local_*` ID) so the ID is sent as the note's primary key on
+ * `POST /notes` and the create replays idempotently — no server-side ID
+ * reconciliation is needed because the client ID *is* the server ID (issue #475).
+ */
+export function generateClientNoteId(): string {
+  const bytes = new Uint8Array(SERVER_ID_LENGTH);
+  getStrongRandomBytes(bytes);
+  let id = '';
+  for (let i = 0; i < SERVER_ID_LENGTH; i++) {
+    id += SERVER_ID_CHARS[bytes[i] % SERVER_ID_CHARS.length];
+  }
+  return id;
+}
+
 export function isLocalId(id: string): boolean {
   return id.startsWith('local_');
+}
+
+/**
+ * True for a note not yet known to exist on the server: a local-only duplicate
+ * (still carries a `local_*` id pending reconciliation) or an offline create
+ * whose queued `POST /notes` hasn't drained yet (#475). Such notes can't be
+ * shared or have labels managed until the server knows about them.
+ */
+export function isUnsyncedNoteId(id: string, pendingNoteIds: ReadonlySet<string>): boolean {
+  return isLocalId(id) || pendingNoteIds.has(id);
 }

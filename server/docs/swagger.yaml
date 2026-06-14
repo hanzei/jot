@@ -60,6 +60,13 @@ definitions:
         type: string
       content:
         type: string
+      id:
+        description: |-
+          ID is an optional client-supplied note ID. When provided it is used as the
+          note's primary key so an offline-created note can be replayed idempotently:
+          a replay whose original create already committed is rejected with 409
+          instead of inserting a duplicate. When empty the server generates one.
+        type: string
       items:
         items:
           $ref: '#/definitions/handlers.CreateNoteItem'
@@ -1036,6 +1043,10 @@ paths:
             type: string
         "404":
           description: label not found
+          schema:
+            type: string
+        "409":
+          description: note with this ID already exists
           schema:
             type: string
         "500":

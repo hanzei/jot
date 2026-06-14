@@ -112,7 +112,7 @@ func (h *NotesHandler) importKeepNote(ctx context.Context, userID string, kn kee
 	// Keep notes are not silently imported as empty.
 	title, content := keepNoteFields(kn.Title, kn.TextContent, noteType)
 
-	note, err := h.noteStore.Create(ctx, userID, title, content, noteType, color)
+	note, err := h.noteStore.Create(ctx, userID, "", title, content, noteType, color)
 	if err != nil {
 		return err
 	}
@@ -847,7 +847,7 @@ func (h *NotesHandler) importSingleMemo(ctx context.Context, userID string, idx 
 		noteContent = ""
 	}
 
-	note, err := h.noteStore.Create(ctx, userID, noteTitle, noteContent, noteType, models.DefaultNoteColor)
+	note, err := h.noteStore.Create(ctx, userID, "", noteTitle, noteContent, noteType, models.DefaultNoteColor)
 	if err != nil {
 		return false, []string{fmt.Sprintf("failed to import memo #%d: %v", idx+1, err)}
 	}

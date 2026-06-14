@@ -25,10 +25,10 @@ func NewNoteStore(db *sql.DB, d *dialect.Dialect) *NoteStore {
 	}
 }
 
-func (s *NoteStore) Create(ctx context.Context, userID string, title, content string, noteType NoteType, color string) (_ *Note, err error) {
+func (s *NoteStore) Create(ctx context.Context, userID, noteID, title, content string, noteType NoteType, color string) (_ *Note, err error) {
 	ctx, end := startSpan(ctx, s.tracer, "NoteStore.Create", &err)
 	defer end()
-	return s.inner.Create(ctx, userID, title, content, noteType, color)
+	return s.inner.Create(ctx, userID, noteID, title, content, noteType, color)
 }
 
 func (s *NoteStore) Duplicate(ctx context.Context, source *Note, userID string) (_ *Note, err error) {

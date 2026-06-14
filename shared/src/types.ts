@@ -171,6 +171,13 @@ export interface ReorderNoteItemsRequest {
 }
 
 export interface CreateTextNoteRequest {
+  /**
+   * Optional client-supplied note ID. When provided, the server uses it as the
+   * note's primary key, making an offline-created note's replayed POST
+   * idempotent (a replay of an already-committed create returns 409 instead of
+   * duplicating). Omit to let the server generate one.
+   */
+  id?: string;
   content: string;
   note_type: 'text';
   color?: string;
@@ -178,6 +185,8 @@ export interface CreateTextNoteRequest {
 }
 
 export interface CreateListNoteRequest {
+  /** Optional client-supplied note ID; see {@link CreateTextNoteRequest.id}. */
+  id?: string;
   title: string;
   note_type: 'list';
   color?: string;

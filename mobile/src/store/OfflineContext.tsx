@@ -12,6 +12,7 @@ import NetInfo from '@react-native-community/netinfo';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useQueryClient } from '@tanstack/react-query';
 import { drainQueue, getPendingCount, subscribeToEnqueue } from '../db/syncQueue';
+import { getPendingCreateNoteIds } from '../db/noteQueries';
 import { useAuth } from './AuthContext';
 import { isSyncDrainPaused } from './serverSwitchLifecycle';
 import { labelCountsQueryKey, labelsQueryKey, noteLocalQueryKey, noteLocalQueryScopeKey, notesLocalQueryScopeKey } from '../hooks/queryKeys';
@@ -24,9 +25,19 @@ interface OfflineContextValue {
    * a fresh trigger (reconnect, foreground, or a new write) clears it.
    */
   syncError: boolean;
+  /**
+   * IDs of offline-created notes whose `POST /notes` hasn't drained yet (#475).
+   * Such a note already has a server-valid ID, but it isn't on the server, so the
+   * UI gates actions that need a server-side note (sharing, label management).
+   */
+  pendingNoteIds: ReadonlySet<string>;
 }
 
-const OfflineContext = createContext<OfflineContextValue>({ isConnected: true, syncError: false });
+const OfflineContext = createContext<OfflineContextValue>({
+  isConnected: true,
+  syncError: false,
+  pendingNoteIds: new Set(),
+});
 
 // Sync-loop safety knobs (see mobile/CLAUDE.md → "Sync Loop Safety").
 /** Base delay before the first backoff retry after a stalled drain. */
@@ -41,8 +52,21 @@ const ENQUEUE_DRAIN_DEBOUNCE_MS = 1000;
 export function OfflineProvider({ children }: { children: React.ReactNode }) {
   const [isConnected, setIsConnected] = useState(true);
   const [syncError, setSyncError] = useState(false);
+  const [pendingNoteIds, setPendingNoteIds] = useState<ReadonlySet<string>>(new Set());
   const { revalidateSession } = useAuth();
   const db = useSQLiteContext();
+
+  // Reload the set of offline-created notes still awaiting their queued create
+  // (#475). Called after every enqueue and drain so the UI gate stays current.
+  // Keeps the previous Set reference when the contents are unchanged so unrelated
+  // writes (the common case) don't re-render every consumer.
+  const refreshPendingNoteIds = useCallback(() => {
+    getPendingCreateNoteIds(db).then((next) => {
+      setPendingNoteIds((prev) =>
+        prev.size === next.size && [...next].every((id) => prev.has(id)) ? prev : next,
+      );
+    }).catch(() => {});
+  }, [db]);
   const queryClient = useQueryClient();
   const prevConnectedRef = useRef(true);
   const isConnectedRef = useRef(true);
@@ -129,6 +153,8 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
       // labels) to server ids, so refresh the label list/counts too.
       queryClient.invalidateQueries({ queryKey: labelsQueryKey() });
       queryClient.invalidateQueries({ queryKey: labelCountsQueryKey() });
+      // Drained creates may have cleared their pending-create marker (#475).
+      refreshPendingNoteIds();
       // drainQueue resolves even when it stops early on a transient failure, so
       // inspect what's left to decide whether a backoff retry is warranted.
       const remaining = await getPendingCount(db);
@@ -163,7 +189,7 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
         if (!stalled) scheduleDrain(0);
       }
     }
-  }, [db, queryClient, onDrainStalled, clearDrainTimer, scheduleDrain, revalidateSession]);
+  }, [db, queryClient, onDrainStalled, clearDrainTimer, scheduleDrain, revalidateSession, refreshPendingNoteIds]);
 
   performDrainRef.current = performDrain;
 
@@ -229,6 +255,9 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
   // re-syncs without waiting for a disconnect/reconnect cycle.
   useEffect(() => {
     const unsubscribe = subscribeToEnqueue(() => {
+      // Refresh before the offline early-return: an offline create enqueues while
+      // disconnected and must immediately reflect its pending-create marker (#475).
+      refreshPendingNoteIds();
       if (!isConnectedRef.current) return;
       // A fresh write is a new signal that the server may be reachable again, so
       // give the queue a clean retry budget even if a prior streak had paused
@@ -239,16 +268,30 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
       scheduleDrain(ENQUEUE_DRAIN_DEBOUNCE_MS);
     });
     return unsubscribe;
-  }, [scheduleDrain]);
+  }, [scheduleDrain, refreshPendingNoteIds]);
+
+  // Seed the pending-create set on mount so notes created in a previous session
+  // that never drained are gated correctly from first render (#475).
+  useEffect(() => {
+    refreshPendingNoteIds();
+  }, [refreshPendingNoteIds]);
 
   // Cancel any pending drain on unmount.
   useEffect(() => clearDrainTimer, [clearDrainTimer]);
 
-  const value = useMemo<OfflineContextValue>(() => ({ isConnected, syncError }), [isConnected, syncError]);
+  const value = useMemo<OfflineContextValue>(
+    () => ({ isConnected, syncError, pendingNoteIds }),
+    [isConnected, syncError, pendingNoteIds],
+  );
 
   return <OfflineContext.Provider value={value}>{children}</OfflineContext.Provider>;
 }
 
 export function useOfflineContext(): OfflineContextValue {
   return useContext(OfflineContext);
+}
+
+/** IDs of offline-created notes whose create hasn't drained yet (#475). */
+export function usePendingNoteIds(): ReadonlySet<string> {
+  return useContext(OfflineContext).pendingNoteIds;
 }
