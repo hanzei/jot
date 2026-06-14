@@ -1,9 +1,11 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo, useRef } from 'react';
 import type { User } from '@jot/shared';
 import { getUsers } from '../api/users';
+import { getBaseUrl } from '../api/client';
 import { useAuth } from './AuthContext';
 import { useSQLiteContext } from 'expo-sqlite';
 import { getLocalUsers, saveUsers } from '../db/userQueries';
+import { refreshIconCacheForUsers } from '../utils/profileIconCache';
 
 interface UsersState {
   usersById: Map<string, User>;
@@ -45,6 +47,8 @@ export function UsersProvider({ children }: { children: React.ReactNode }) {
       if (!isMountedRef.current) return;
       await saveUsers(db, users);
       setUsersById(buildUsersMap(user, users));
+      // Warm the icon cache opportunistically; errors are non-fatal.
+      void refreshIconCacheForUsers(users, getBaseUrl());
     } catch {
       // Silently fail — SQLite data will be used as fallback
     }
