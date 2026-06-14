@@ -40,6 +40,7 @@ import { isSortWarningDismissed, dismissSortWarning } from '../utils/sortWarning
 import { emptyTrash as emptyTrashNotes } from '../api/notes';
 import { getLocalNotes, permanentDeleteLocalNote } from '../db/noteQueries';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
+import { useBannerShown } from '../hooks/useBannerShown';
 
 function buildUpdateRequest(note: Note, overrides: Partial<UpdateNoteRequest> = {}): UpdateNoteRequest {
   if (note.note_type === 'list') {
@@ -141,6 +142,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   const [isEmptyingTrash, setIsEmptyingTrash] = useState(false);
   const db = useSQLiteContext();
   const { isConnected } = useNetworkStatus();
+  const bannerShown = useBannerShown();
   const { colors } = useTheme();
   const { t } = useTranslation();
   const { showToast } = useToast();
@@ -680,7 +682,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
       <View
         style={[
           styles.topControlsRow,
-          variant === 'notes' ? { paddingTop: isConnected ? insets.top : 0 } : undefined,
+          variant === 'notes' ? { paddingTop: bannerShown ? 0 : insets.top } : undefined,
         ]}
       >
         {variant === 'notes' && (
@@ -1277,7 +1279,7 @@ const styles = StyleSheet.create({
     textTransform: 'uppercase',
     letterSpacing: 0.5,
     paddingHorizontal: 16,
-    paddingTop: 16,
+    paddingTop: 8,
     paddingBottom: 4,
   },
   listContent: {},
