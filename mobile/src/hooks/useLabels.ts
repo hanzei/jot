@@ -13,7 +13,6 @@ import {
 import { getNotes } from '../api/notes';
 import {
   saveNote,
-  saveNotes,
   renameLabelInLocalNotes,
   deleteLabelFromLocalNotes,
   addLabelToLocalNote,
@@ -23,7 +22,7 @@ import {
   getLocalNote,
   generateLocalId,
 } from '../db/noteQueries';
-import { enqueueOperation, rethrowIfNotQueueable, getPendingNoteIds } from '../db/syncQueue';
+import { enqueueOperation, rethrowIfNotQueueable, saveServerNotes } from '../db/syncQueue';
 import { useNetworkStatus } from './useNetworkStatus';
 import { useAuth } from '../store/AuthContext';
 import { isServerSwitchInProgress } from '../api/client';
@@ -66,14 +65,13 @@ async function syncLocalNotesAfterLabelMutation(db: SQLiteDatabase) {
   ] as const;
   const failures: string[] = [];
 
-  // Read the pending set once for all scopes; gate the writes on it so a server
-  // fetch can't clobber a note with an unsynced local edit (#487).
-  const pendingNoteIds = await getPendingNoteIds(db);
-
   for (const scope of scopes) {
     try {
       const notes = await getNotes(scope);
-      await saveNotes(db, notes, { skipNoteIds: pendingNoteIds });
+      // saveServerNotes re-reads the pending set per scope, so an edit queued
+      // mid-loop is gated by the scope saved after it, not just a stale snapshot
+      // taken before the (multi-fetch) loop began (#487).
+      await saveServerNotes(db, notes);
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       failures.push(`${describeLabelSyncScope(scope)} scope: ${detail}`);

@@ -93,12 +93,19 @@ export function useOfflineNote(id: string | null) {
           // Note no longer exists on server — tombstone it locally, unless it has
           // a pending local op: a queued edit/restore may be racing the fetch, so
           // let the drain reconcile it rather than hide the optimistic edit (#487).
-          const pendingNoteIds = await getPendingNoteIds(db);
-          // Re-check cancelled: the effect may have torn down (id change/unmount)
-          // during the await above, in which case we must not write.
-          if (!cancelled && !pendingNoteIds.has(id)) {
-            await markLocalNoteDeleted(db, id);
-            queryClient.invalidateQueries({ queryKey: noteLocalQueryScopeKey() });
+          // Guard the queue read + tombstone so a failure here doesn't escape the
+          // fire-and-forget effect as an unhandled rejection; the local cache
+          // remains as fallback and a later sync retries.
+          try {
+            const pendingNoteIds = await getPendingNoteIds(db);
+            // Re-check cancelled: the effect may have torn down (id change/unmount)
+            // during the await above, in which case we must not write.
+            if (!cancelled && !pendingNoteIds.has(id)) {
+              await markLocalNoteDeleted(db, id);
+              queryClient.invalidateQueries({ queryKey: noteLocalQueryScopeKey() });
+            }
+          } catch (tombstoneErr) {
+            console.warn(`Failed to tombstone note id=${id} after server reported it gone:`, tombstoneErr);
           }
         }
         // Other errors: log for debugging; local cache is used as fallback
