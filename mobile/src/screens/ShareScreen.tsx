@@ -167,7 +167,7 @@ export default function ShareScreen() {
         disabled={pendingUserIds.has(item.id)}
         testID={`search-result-${item.id}`}
       >
-        <UserAvatar userId={item.id} username={item.username} hasProfileIcon={item.has_profile_icon} size="medium" />
+        <UserAvatar userId={item.id} username={item.username} hasProfileIcon={item.has_profile_icon} iconVersion={item.updated_at} size="medium" />
         <View style={styles.userInfo}>
           {(item.first_name || item.last_name) && (
             <Text style={[styles.userName, { color: colors.text }]}>{[item.first_name, item.last_name].filter(Boolean).join(' ')}</Text>
@@ -187,6 +187,7 @@ export default function ShareScreen() {
           userId={item.shared_with_user_id}
           username={item.username ?? item.shared_with_user_id}
           hasProfileIcon={item.has_profile_icon}
+          iconVersion={item.updated_at}
           size="medium"
         />
         <View style={styles.userInfo}>
