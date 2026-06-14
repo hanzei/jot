@@ -678,6 +678,23 @@ describe('useNotes hooks', () => {
       expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
     });
 
+    it('throws a clear error when duplicating an unsynced note while connected', async () => {
+      // isLocalId guard must fire before the API call so we get the explicit
+      // "unsynced" message rather than a confusing 404 from the server.
+      mockUseNetworkStatus.mockReturnValue({ isConnected: true });
+
+      const { result } = renderHook(() => useDuplicateNote(), { wrapper: createWrapper() });
+
+      await result.current.mutateAsync('local_abc').catch(() => {});
+
+      await waitFor(() => expect(result.current.isError).toBe(true));
+
+      expect((result.current.error as Error).message).toMatch(/unsynced/i);
+      expect(mockNotesApi.duplicateNote).not.toHaveBeenCalled();
+      expect(mockNoteQueries.getLocalNote).not.toHaveBeenCalled();
+      expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
+    });
+
     it('throws when the source note is missing from the local cache', async () => {
       mockUseNetworkStatus.mockReturnValue({ isConnected: false });
       mockNoteQueries.getLocalNote.mockResolvedValueOnce(null);

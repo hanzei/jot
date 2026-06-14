@@ -510,6 +510,12 @@ export function useDuplicateNote() {
   return useMutation({
     mutationFn: async (id: string): Promise<Note> => {
       assertSwitchWriteAllowed();
+      // Guard up front: duplicating an unsynced local note is never safe — it has
+      // no server ID, so both the online API call and the offline queue entry would
+      // reference an ID the server doesn't know about.
+      if (isLocalId(id)) {
+        throw new Error('Cannot duplicate an unsynced note; please wait until it has synced');
+      }
       if (isConnectedRef.current) {
         try {
           const duplicatedNote = await duplicateNote(id);
@@ -524,9 +530,6 @@ export function useDuplicateNote() {
 
       // Offline (or a transient online failure): create a local copy and queue
       // the server operation.
-      if (isLocalId(id)) {
-        throw new Error('Cannot duplicate an unsynced note; please wait until it has synced');
-      }
       const source = await getLocalNote(db, id);
       if (!source) {
         throw new Error(`Note ${id} not found in local DB`);
