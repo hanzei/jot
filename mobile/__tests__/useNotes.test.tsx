@@ -1,7 +1,7 @@
 import React from 'react';
 import { renderHook, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useNotes, useNote, useCreateNote, useUpdateNote, useDeleteNote, useDuplicateNote, useCreateNoteItem, useToggleNoteItemCompleted } from '../src/hooks/useNotes';
+import { useCreateNote, useUpdateNote, useDeleteNote, useDuplicateNote, useCreateNoteItem, useToggleNoteItemCompleted } from '../src/hooks/useNotes';
 import * as notesApi from '../src/api/notes';
 import * as noteQueriesModule from '../src/db/noteQueries';
 import * as clientModule from '../src/api/client';
@@ -85,63 +85,6 @@ describe('useNotes hooks', () => {
     // Restore default online state after any test that changed it
     mockUseNetworkStatus.mockReturnValue({ isConnected: true });
     mockClientModule.isServerSwitchInProgress.mockReturnValue(false);
-  });
-
-  describe('useNotes', () => {
-    it('fetches and returns notes', async () => {
-      const mockNotes = [{ id: '1', title: 'Note 1' }];
-      mockNotesApi.getNotes.mockResolvedValueOnce(mockNotes as never);
-
-      const { result } = renderHook(() => useNotes(), { wrapper: createWrapper() });
-
-      await waitFor(() => expect(result.current.isSuccess).toBe(true));
-
-      expect(result.current.data).toEqual(mockNotes);
-      expect(mockNotesApi.getNotes).toHaveBeenCalledWith(undefined);
-    });
-
-    it('passes params to getNotes', async () => {
-      mockNotesApi.getNotes.mockResolvedValueOnce([] as never);
-
-      const params = { archived: true };
-      const { result } = renderHook(() => useNotes(params), { wrapper: createWrapper() });
-
-      await waitFor(() => expect(result.current.isSuccess).toBe(true));
-
-      expect(mockNotesApi.getNotes).toHaveBeenCalledWith(params);
-    });
-
-    it('passes my_tasks param to getNotes', async () => {
-      mockNotesApi.getNotes.mockResolvedValueOnce([] as never);
-
-      const params = { my_tasks: true };
-      const { result } = renderHook(() => useNotes(params), { wrapper: createWrapper() });
-
-      await waitFor(() => expect(result.current.isSuccess).toBe(true));
-
-      expect(mockNotesApi.getNotes).toHaveBeenCalledWith(params);
-    });
-  });
-
-  describe('useNote', () => {
-    it('fetches a single note by ID', async () => {
-      const mockNote = { id: '123', title: 'My Note' };
-      mockNotesApi.getNote.mockResolvedValueOnce(mockNote as never);
-
-      const { result } = renderHook(() => useNote('123'), { wrapper: createWrapper() });
-
-      await waitFor(() => expect(result.current.isSuccess).toBe(true));
-
-      expect(result.current.data).toEqual(mockNote);
-      expect(mockNotesApi.getNote).toHaveBeenCalledWith('123');
-    });
-
-    it('does not fetch when id is null', () => {
-      const { result } = renderHook(() => useNote(null), { wrapper: createWrapper() });
-
-      expect(result.current.fetchStatus).toBe('idle');
-      expect(mockNotesApi.getNote).not.toHaveBeenCalled();
-    });
   });
 
   describe('useCreateNote (online)', () => {

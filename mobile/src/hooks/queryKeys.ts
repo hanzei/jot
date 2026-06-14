@@ -5,10 +5,6 @@ export function notesQueryScopeKey(): [string, string] {
   return ['notes', currentQueryServerScope()];
 }
 
-export function notesQueryKey(params?: GetNotesParams): [string, string, GetNotesParams | undefined] {
-  return ['notes', currentQueryServerScope(), params];
-}
-
 export function noteQueryScopeKey(): [string, string] {
   return ['note', currentQueryServerScope()];
 }

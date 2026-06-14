@@ -1,8 +1,7 @@
 import { useRef } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSQLiteContext } from 'expo-sqlite';
 import {
-  getNotes,
   getNote,
   createNote,
   updateNote,
@@ -26,7 +25,6 @@ import type {
   NoteShare,
   User,
   Label,
-  GetNotesParams,
   CreateNoteRequest,
   UpdateNoteRequest,
   UpdateListNoteRequest,
@@ -57,7 +55,6 @@ import { isServerSwitchInProgress } from '../api/client';
 import {
   noteLocalQueryKey,
   noteQueryKey,
-  notesQueryKey,
   notesLocalQueryScopeKey,
   notesQueryScopeKey,
 } from './queryKeys';
@@ -66,21 +63,6 @@ function assertSwitchWriteAllowed(): void {
   if (isServerSwitchInProgress()) {
     throw new Error('Server switch in progress; write blocked');
   }
-}
-
-export function useNotes(params?: GetNotesParams) {
-  return useQuery<Note[]>({
-    queryKey: notesQueryKey(params),
-    queryFn: () => getNotes(params),
-  });
-}
-
-export function useNote(id: string | null) {
-  return useQuery<Note>({
-    queryKey: noteQueryKey(id),
-    queryFn: () => getNote(id!),
-    enabled: id !== null,
-  });
 }
 
 export function useCreateNote() {

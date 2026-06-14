@@ -12,9 +12,7 @@ import { saveNote, markLocalNoteDeleted } from '../db/noteQueries';
 import { isSseQuiesced, subscribeToServerSwitchLifecycle } from '../store/serverSwitchLifecycle';
 import {
   noteLocalQueryKey,
-  noteQueryKey,
   notesLocalQueryScopeKey,
-  notesQueryScopeKey,
 } from './queryKeys';
 
 export type SSENotificationCallback = (event: SSEEvent) => void;
@@ -56,7 +54,6 @@ export function useSSE(onNoteUpdatedByOther?: SSENotificationCallback): void {
         event.type === 'note_shared' ||
         event.type === 'note_unshared'
       ) {
-        queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
         queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
       }
 
@@ -67,7 +64,6 @@ export function useSSE(onNoteUpdatedByOther?: SSENotificationCallback): void {
           // Persist the updated note to SQLite so offline reads stay current
           saveNote(dbRef.current, note).catch(() => {});
         }
-        queryClient.invalidateQueries({ queryKey: noteQueryKey(note_id) });
         queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(note_id) });
         // Don't fire the "updated by someone else" notification for changes
         // from the same user on another device — query invalidation above is
@@ -79,13 +75,11 @@ export function useSSE(onNoteUpdatedByOther?: SSENotificationCallback): void {
         const { note_id } = event.data;
         // Tombstone the note in SQLite so it disappears from offline views
         markLocalNoteDeleted(dbRef.current, note_id).catch(() => {});
-        queryClient.removeQueries({ queryKey: noteQueryKey(note_id) });
         queryClient.removeQueries({ queryKey: noteLocalQueryKey(note_id) });
       }
     });
 
     // Catch up on anything missed while disconnected
-    queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
     queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
   }, [queryClient]);
 
