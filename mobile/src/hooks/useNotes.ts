@@ -29,8 +29,6 @@ import type {
   GetNotesParams,
   CreateNoteRequest,
   UpdateNoteRequest,
-  UpdateListNoteRequest,
-  UpdateTextNoteRequest,
   CreateNoteItemRequest,
   PatchNoteItemRequest,
 } from '@jot/shared';
@@ -206,48 +204,24 @@ export function useUpdateNote() {
       }
       const now = new Date().toISOString();
 
-      if (existing.note_type === 'list') {
-        // List items are edited via the granular item mutations; this path only
-        // carries scalar fields (title, pinned, archived, color, collapsed).
-        const listData = data as UpdateListNoteRequest;
-        await updateLocalNote(db, id, listData);
+      // List items are edited via the granular item mutations, so this path only
+      // carries scalar fields for both note types (title/content/pinned/archived/
+      // color/collapsed).
+      await updateLocalNote(db, id, data);
 
-        const fullData: UpdateNoteRequest = {
-          title: listData.title ?? existing.title,
-          pinned: listData.pinned ?? existing.pinned,
-          archived: listData.archived ?? existing.archived,
-          color: listData.color ?? existing.color,
-          checked_items_collapsed: listData.checked_items_collapsed ?? existing.checked_items_collapsed,
-        };
-        await enqueueOperation(db, {
-          operation: 'update',
-          endpoint: `/notes/${id}`,
-          method: 'PATCH',
-          body: fullData as Record<string, unknown>,
-        });
+      // Queue only the fields the user actually changed. The server PATCH is a
+      // partial update (absent fields are left unchanged), so sending the full
+      // snapshot would re-assert stale values and clobber fields edited
+      // concurrently on another device when this op replays later.
+      await enqueueOperation(db, {
+        operation: 'update',
+        endpoint: `/notes/${id}`,
+        method: 'PATCH',
+        body: data as Record<string, unknown>,
+      });
 
-        // Build optimistic return from the data we already have (no second DB read)
-        return { ...existing, ...listData, updated_at: now };
-      } else {
-        const textData = data as UpdateTextNoteRequest;
-        await updateLocalNote(db, id, textData);
-
-        const fullData: UpdateNoteRequest = {
-          content: textData.content ?? existing.content,
-          pinned: textData.pinned ?? existing.pinned,
-          archived: textData.archived ?? existing.archived,
-          color: textData.color ?? existing.color,
-        };
-        await enqueueOperation(db, {
-          operation: 'update',
-          endpoint: `/notes/${id}`,
-          method: 'PATCH',
-          body: fullData as Record<string, unknown>,
-        });
-
-        // Build optimistic return from the data we already have (no second DB read)
-        return { ...existing, ...textData, updated_at: now };
-      }
+      // Build the optimistic return from the data we already have.
+      return { ...existing, ...data, updated_at: now };
     },
     onSuccess: (updatedNote) => {
       queryClient.setQueryData(noteQueryKey(updatedNote.id), updatedNote);
