@@ -59,14 +59,17 @@ describe('uploadProfileIcon', () => {
 
   it('strips file:// prefix on iOS', async () => {
     const appendSpy = jest.spyOn(FormData.prototype, 'append');
-    mockAxiosInstance.post.mockResolvedValueOnce({ data: mockUser });
+    try {
+      mockAxiosInstance.post.mockResolvedValueOnce({ data: mockUser });
 
-    await uploadProfileIcon('file:///photos/avatar.jpg');
+      await uploadProfileIcon('file:///photos/avatar.jpg');
 
-    const [key, fileValue] = appendSpy.mock.calls[0];
-    expect(key).toBe('file');
-    expect((fileValue as unknown as { uri: string }).uri).not.toContain('file://');
-    appendSpy.mockRestore();
+      const [key, fileValue] = appendSpy.mock.calls[0];
+      expect(key).toBe('file');
+      expect((fileValue as unknown as { uri: string }).uri).not.toContain('file://');
+    } finally {
+      appendSpy.mockRestore();
+    }
   });
 
   it('calls onUploadProgress with computed percentage', async () => {
