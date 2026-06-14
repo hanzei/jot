@@ -47,7 +47,7 @@ import i18n from '../i18n';
 import { SUPPORTED_LANGUAGES, getLanguagePreference, resolveLanguage, type LanguagePreference } from '../i18n/language';
 import { displayMessage, getCurrentLocale } from '../i18n/utils';
 import { saveNotes } from '../db/noteQueries';
-import { notesLocalQueryScopeKey, notesQueryScopeKey } from '../hooks/queryKeys';
+import { notesLocalQueryScopeKey } from '../hooks/queryKeys';
 import { getActiveServer } from '../store/serverAccounts';
 import { useActiveServerBaseUrl } from '../hooks/useActiveServerBaseUrl';
 
@@ -357,7 +357,6 @@ export default function SettingsScreen() {
         console.warn('Post-import notes sync failed:', syncErr);
       } finally {
         queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
-        queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
       }
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: string } })?.response?.data;

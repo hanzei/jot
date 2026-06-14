@@ -1,22 +1,6 @@
 import type { GetNotesParams } from '@jot/shared';
 import { currentQueryServerScope } from './queryScope';
 
-export function notesQueryScopeKey(): [string, string] {
-  return ['notes', currentQueryServerScope()];
-}
-
-export function notesQueryKey(params?: GetNotesParams): [string, string, GetNotesParams | undefined] {
-  return ['notes', currentQueryServerScope(), params];
-}
-
-export function noteQueryScopeKey(): [string, string] {
-  return ['note', currentQueryServerScope()];
-}
-
-export function noteQueryKey(noteId: string | null): [string, string, string | null] {
-  return ['note', currentQueryServerScope(), noteId];
-}
-
 export function notesLocalQueryScopeKey(): [string, string] {
   return ['notes-local', currentQueryServerScope()];
 }
