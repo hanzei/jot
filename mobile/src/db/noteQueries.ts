@@ -224,6 +224,33 @@ export async function markLocalNoteDeleted(db: SQLiteDatabase, id: string): Prom
   );
 }
 
+/**
+ * Mark a note as having an unsynced write the server permanently rejected
+ * (a dead-lettered op; see issue #492). The local row is the version we preserve,
+ * so {@link getFailedNoteIds} keeps it from being overwritten or pruned by a
+ * background fetch / SSE event until the failure is resolved. No-op if the note
+ * no longer exists locally.
+ */
+export async function markNoteSyncFailed(db: SQLiteDatabase, id: string): Promise<void> {
+  await db.runAsync(`UPDATE notes SET sync_state = 'failed' WHERE id = ?`, [id]);
+}
+
+/**
+ * Clear a note's failed sync state back to 'synced'. Called when a later queued
+ * op for the note drains successfully, so a recovered note resumes syncing from
+ * the server normally. Guarded on the current state so it never touches a
+ * non-failed row.
+ */
+export async function clearNoteSyncFailed(db: SQLiteDatabase, id: string): Promise<void> {
+  await db.runAsync(`UPDATE notes SET sync_state = 'synced' WHERE id = ? AND sync_state = 'failed'`, [id]);
+}
+
+/** IDs of notes currently flagged `sync_state = 'failed'` (see {@link markNoteSyncFailed}). */
+export async function getFailedNoteIds(db: SQLiteDatabase): Promise<Set<string>> {
+  const rows = await db.getAllAsync<{ id: string }>(`SELECT id FROM notes WHERE sync_state = 'failed'`);
+  return new Set(rows.map((r) => r.id));
+}
+
 export async function markLocalNoteRestored(db: SQLiteDatabase, id: string): Promise<void> {
   await db.runAsync(
     'UPDATE notes SET deleted_at = NULL, archived = 0 WHERE id = ?',

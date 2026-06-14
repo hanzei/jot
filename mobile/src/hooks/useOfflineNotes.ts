@@ -3,7 +3,7 @@ import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSQLiteContext } from 'expo-sqlite';
 import axios from 'axios';
 import { getLocalNotes, getLocalNote, markLocalNoteDeleted } from '../db/noteQueries';
-import { getPendingNoteIds, saveServerNote, saveServerNotesScope } from '../db/syncQueue';
+import { getProtectedNoteIds, saveServerNote, saveServerNotesScope } from '../db/syncQueue';
 import { getNotes, getNote } from '../api/notes';
 import type { GetNotesParams, Note } from '@jot/shared';
 import { useNetworkStatus } from './useNetworkStatus';
@@ -108,17 +108,18 @@ export function useOfflineNote(id: string | null) {
         const status = axios.isAxiosError(err) ? err.response?.status : undefined;
         if (status === 404 || status === 410) {
           // Note no longer exists on server — tombstone it locally, unless it has
-          // a pending local op: a queued edit/restore may be racing the fetch, so
-          // let the drain reconcile it rather than hide the optimistic edit (#487).
-          // (404/410 are permanent, so retrySync surfaces them immediately.)
-          // Guard the queue read + tombstone so a failure here doesn't escape the
-          // fire-and-forget effect as an unhandled rejection; the local cache
-          // remains as fallback and a later sync retries.
+          // a pending or failed local op: a queued edit/restore may be racing the
+          // fetch, or a dead-lettered edit may be the version we're preserving, so
+          // let the drain/resolution reconcile it rather than hide the optimistic
+          // edit (#487/#492). (404/410 are permanent, so retrySync surfaces them
+          // immediately.) Guard the queue read + tombstone so a failure here doesn't
+          // escape the fire-and-forget effect as an unhandled rejection; the local
+          // cache remains as fallback and a later sync retries.
           try {
-            const pendingNoteIds = await getPendingNoteIds(db);
+            const protectedNoteIds = await getProtectedNoteIds(db);
             // Re-check cancelled: the effect may have torn down (id change/unmount)
             // during the await above, in which case we must not write.
-            if (!canceller.cancelled && !pendingNoteIds.has(id)) {
+            if (!canceller.cancelled && !protectedNoteIds.has(id)) {
               await markLocalNoteDeleted(db, id);
               queryClient.invalidateQueries({ queryKey: noteLocalQueryScopeKey() });
             }

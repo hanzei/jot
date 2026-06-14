@@ -2,7 +2,16 @@ import { SQLiteDatabase } from 'expo-sqlite';
 import axios from 'axios';
 import api from '../api/client';
 import type { GetNotesParams, Note, NoteItem } from '@jot/shared';
-import { replaceLocalNoteId, saveNote, saveNotes, patchLocalItem, removeLocalNotesNotIn } from './noteQueries';
+import {
+  replaceLocalNoteId,
+  saveNote,
+  saveNotes,
+  patchLocalItem,
+  removeLocalNotesNotIn,
+  markNoteSyncFailed,
+  clearNoteSyncFailed,
+  getFailedNoteIds,
+} from './noteQueries';
 
 export type QueueOperation =
   | 'create'
@@ -148,14 +157,54 @@ function parseQueueBody(body: string | null): Record<string, unknown> | null {
 }
 
 /**
+ * Add the note IDs touched by a single queued op (identified by its endpoint and
+ * already-parsed body) to `ids`. Note IDs are recovered from the endpoint shapes
+ * enqueued by useNotes/useLabels (see the per-branch comments below). Label-only
+ * endpoints (/labels/…) aren't tied to a single note and contribute nothing.
+ */
+function collectNoteIds(
+  endpoint: string,
+  body: Record<string, unknown> | null,
+  ids: Set<string>,
+): void {
+  // Drop any query string (e.g. "/notes/{id}?permanent=true") before splitting,
+  // and filter out the empty segment from the leading slash.
+  const segments = endpoint.split('?')[0].split('/').filter(Boolean);
+  if (segments[0] !== 'notes') return;
+
+  if (segments.length === 1) {
+    // POST /notes (create): the affected note is the offline-created local id.
+    const localId = body?.local_id;
+    if (typeof localId === 'string') ids.add(localId);
+  } else if (segments[1] === 'reorder') {
+    // POST /notes/reorder: body.note_ids lists every note whose position moved.
+    const noteIds = body?.note_ids;
+    if (Array.isArray(noteIds)) {
+      for (const id of noteIds) if (typeof id === 'string') ids.add(id);
+    }
+  } else {
+    // Any /notes/{id}/... op touches that note.
+    ids.add(segments[1]);
+    // POST /notes/{id}/duplicate also creates a local copy; protect its local_id.
+    if (segments.length === 3 && segments[2] === 'duplicate') {
+      const localId = body?.local_id;
+      if (typeof localId === 'string') ids.add(localId);
+    }
+  }
+}
+
+/** The note IDs a single queued op touches, as an array (see {@link collectNoteIds}). */
+function affectedNoteIds(endpoint: string, body: Record<string, unknown> | undefined): string[] {
+  const ids = new Set<string>();
+  collectNoteIds(endpoint, body ?? null, ids);
+  return [...ids];
+}
+
+/**
  * Collect the IDs of every note that currently has a pending operation in the
  * sync queue. Server-sourced read paths (background fetch, SSE) consult this set
  * so a fetch of stale server state can't transiently revert an optimistic local
  * edit before its queued op has drained (see issue #487).
- *
- * Note IDs are recovered from the endpoint shapes enqueued by useNotes/useLabels
- * (see the per-branch comments below). Label-only endpoints (/labels/…) aren't
- * tied to a single note and are skipped.
  */
 export async function getPendingNoteIds(db: SQLiteDatabase): Promise<Set<string>> {
   const entries = await db.getAllAsync<Pick<QueueEntry, 'endpoint' | 'body'>>(
@@ -164,62 +213,54 @@ export async function getPendingNoteIds(db: SQLiteDatabase): Promise<Set<string>
 
   const ids = new Set<string>();
   for (const entry of entries) {
-    // Drop any query string (e.g. "/notes/{id}?permanent=true") before splitting,
-    // and filter out the empty segment from the leading slash.
-    const segments = entry.endpoint.split('?')[0].split('/').filter(Boolean);
-    if (segments[0] !== 'notes') continue;
-
-    if (segments.length === 1) {
-      // POST /notes (create): the affected note is the offline-created local id.
-      const localId = parseQueueBody(entry.body)?.local_id;
-      if (typeof localId === 'string') ids.add(localId);
-    } else if (segments[1] === 'reorder') {
-      // POST /notes/reorder: body.note_ids lists every note whose position moved.
-      const noteIds = parseQueueBody(entry.body)?.note_ids;
-      if (Array.isArray(noteIds)) {
-        for (const id of noteIds) if (typeof id === 'string') ids.add(id);
-      }
-    } else {
-      // Any /notes/{id}/... op touches that note.
-      ids.add(segments[1]);
-      // POST /notes/{id}/duplicate also creates a local copy; protect its local_id.
-      if (segments.length === 3 && segments[2] === 'duplicate') {
-        const localId = parseQueueBody(entry.body)?.local_id;
-        if (typeof localId === 'string') ids.add(localId);
-      }
-    }
+    collectNoteIds(entry.endpoint, parseQueueBody(entry.body), ids);
   }
   return ids;
 }
 
 /**
- * Persist a note fetched from the server (background fetch, SSE, post-import sync),
- * leaving notes with a pending sync-queue op untouched (see {@link getPendingNoteIds}
- * for the rationale, #487). Once the queue drains the gate is empty, so the next
- * server fetch or SSE event re-applies canonical server state normally.
+ * Notes that server-sourced writes must leave untouched: those with a pending
+ * queue op (#487) plus those marked `sync_state = 'failed'` after a dead-lettered
+ * op (#492). A dead-lettered note no longer has a queue row, so the failed flag
+ * is what keeps its preserved local content from being overwritten or pruned by
+ * a later background fetch / SSE event.
  */
-export async function saveServerNote(db: SQLiteDatabase, note: Note): Promise<void> {
-  await saveNote(db, note, { skipNoteIds: await getPendingNoteIds(db) });
+export async function getProtectedNoteIds(db: SQLiteDatabase): Promise<Set<string>> {
+  const [pending, failed] = await Promise.all([getPendingNoteIds(db), getFailedNoteIds(db)]);
+  for (const id of failed) pending.add(id);
+  return pending;
 }
 
-/** Batch counterpart of {@link saveServerNote}; reads the pending set once. */
+/**
+ * Persist a note fetched from the server (background fetch, SSE, post-import sync),
+ * leaving notes with a pending or failed local op untouched (see
+ * {@link getProtectedNoteIds} for the rationale, #487/#492). Once the queue drains
+ * and any failure is resolved the gate is empty, so the next server fetch or SSE
+ * event re-applies canonical server state normally.
+ */
+export async function saveServerNote(db: SQLiteDatabase, note: Note): Promise<void> {
+  await saveNote(db, note, { skipNoteIds: await getProtectedNoteIds(db) });
+}
+
+/** Batch counterpart of {@link saveServerNote}; reads the protected set once. */
 export async function saveServerNotes(db: SQLiteDatabase, notes: Note[]): Promise<void> {
-  await saveNotes(db, notes, { skipNoteIds: await getPendingNoteIds(db) });
+  await saveNotes(db, notes, { skipNoteIds: await getProtectedNoteIds(db) });
 }
 
 /**
  * Reconcile a scoped server note list into local SQLite: persist the fetched notes
  * and prune local rows that have fallen out of this scope. Both steps share a single
- * pending-op set so notes with an unsynced local edit are neither overwritten nor
- * pruned — a queued edit can optimistically move a note into the scope before the
- * server reflects it (e.g. un-archive/restore), and pruning it would lose the edit (#487).
+ * protected-id set so notes with an unsynced (pending or failed) local edit are
+ * neither overwritten nor pruned — a queued edit can optimistically move a note into
+ * the scope before the server reflects it (e.g. un-archive/restore), and pruning it
+ * would lose the edit (#487/#492).
  */
 export async function saveServerNotesScope(
   db: SQLiteDatabase,
   serverNotes: Note[],
   params?: GetNotesParams,
 ): Promise<void> {
-  const skipNoteIds = await getPendingNoteIds(db);
+  const skipNoteIds = await getProtectedNoteIds(db);
   await saveNotes(db, serverNotes, { skipNoteIds });
   const serverIds = new Set(serverNotes.map((n) => n.id));
   await removeLocalNotesNotIn(db, serverIds, params, { skipNoteIds });
@@ -271,11 +312,63 @@ export interface DrainResult {
   syncedSettings: boolean;
 }
 
+/** A dead-lettered op as stored in the `dead_letter` table (see issue #492). */
+export interface DeadLetteredOperation {
+  id: number;
+  operation: QueueOperation;
+  endpoint: string;
+  method: string;
+  body: string | null;
+  status: number;
+  note_id: string | null;
+  created_at: string;
+  failed_at: string;
+}
+
+/** Read all preserved dead-lettered ops, oldest first. */
+export async function getDeadLetteredOperations(db: SQLiteDatabase): Promise<DeadLetteredOperation[]> {
+  return db.getAllAsync<DeadLetteredOperation>('SELECT * FROM dead_letter ORDER BY id ASC');
+}
+
+/**
+ * Preserve a dead-lettered op (its full body + metadata) in the `dead_letter`
+ * table so a permanently-rejected optimistic edit is never silently dropped
+ * (issue #492). `endpoint`/`body` are the *effective* (id-remapped) values that
+ * were actually sent; `noteId` links the row to the affected note when there is
+ * a single clear one.
+ */
+async function recordDeadLetter(
+  db: SQLiteDatabase,
+  entry: QueueEntry,
+  endpoint: string,
+  body: Record<string, unknown> | undefined,
+  status: number,
+  noteId: string | null,
+): Promise<void> {
+  await db.runAsync(
+    `INSERT INTO dead_letter (operation, endpoint, method, body, status, note_id, created_at, failed_at)
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?)`,
+    [
+      entry.operation,
+      endpoint,
+      entry.method,
+      body ? JSON.stringify(body) : null,
+      status,
+      noteId,
+      entry.created_at,
+      new Date().toISOString(),
+    ],
+  );
+}
+
 /**
  * Drain the sync queue in FIFO order. For each entry, make the corresponding API call.
  * On success, delete the entry. On a permanent client error (non-transient 4xx),
- * discard the entry and continue. On a transient failure (network/timeout/5xx), stop
- * draining and retry the remaining entries on the next reconnect.
+ * discard the entry and continue: idempotent 409 conflicts resolve silently, while
+ * every other permanent status dead-letters the op (preserved in the `dead_letter`
+ * table with the affected note flagged `sync_state = 'failed'`) so the optimistic
+ * edit isn't lost (#492). On a transient failure (network/timeout/5xx), stop draining
+ * and retry the remaining entries on the next reconnect.
  *
  * Handles offline-create ID reconciliation: when a `create` operation succeeds, the
  * server returns a new note ID. Any subsequent queue entries that reference the local
@@ -296,8 +389,11 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
   let syncedSettings = false;
 
   for (const entry of entries) {
+    // Declared outside the try so the catch can dead-letter using the *effective*
+    // (id-remapped) endpoint/body that were actually sent to the server.
+    let endpoint = entry.endpoint;
+    let body: Record<string, unknown> | undefined;
     try {
-      let body: Record<string, unknown> | undefined;
       if (entry.body) {
         body = JSON.parse(entry.body) as Record<string, unknown>;
         body = remapIdsInBody(body, idMap);
@@ -305,7 +401,6 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
 
       // Remap local IDs in the endpoint path, matching only complete path segments
       // to avoid corrupting URLs where the ID appears as a substring.
-      let endpoint = entry.endpoint;
       for (const [localId, serverId] of idMap) {
         endpoint = endpoint
           .split('/')
@@ -366,6 +461,13 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
       }
 
       await db.runAsync('DELETE FROM sync_queue WHERE id = ?', [entry.id]);
+
+      // The write landed: if this note was carrying a prior failure, clear it so
+      // it resumes syncing from the server normally (#492). Guarded UPDATE, so a
+      // no-op for the common (already-synced) case.
+      for (const noteId of affectedNoteIds(endpoint, body)) {
+        await clearNoteSyncFailed(db, noteId);
+      }
     } catch (err) {
       const status = axios.isAxiosError(err) ? err.response?.status : undefined;
 
@@ -373,10 +475,26 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
       // guarantees `status` is a defined, non-transient HTTP code.
       if (status !== undefined && !isTransientHttpStatus(status)) {
         // Permanent client error (e.g. 400/403/404/409/422) — replaying will
-        // never succeed, so discard (dead-letter) the entry and continue rather
-        // than letting one bad operation wedge the whole queue indefinitely.
+        // never succeed, so discard the entry and continue rather than letting one
+        // bad operation wedge the whole queue indefinitely.
+        // Report the effective (id-remapped) endpoint so it agrees with the
+        // dead_letter row recorded below.
         console.warn(`Discarding queued operation id=${entry.id} (HTTP ${status})`);
-        discardedOperations.push({ operation: entry.operation, endpoint: entry.endpoint, status });
+        discardedOperations.push({ operation: entry.operation, endpoint, status });
+
+        // 409 is an idempotent already-applied conflict (e.g. replaying a create
+        // whose original request already committed): the local state is correct,
+        // so resolve it silently. Every other permanent status is real data loss —
+        // preserve the op in the dead_letter table and flag the affected note(s)
+        // so the optimistic edit isn't dropped or clobbered by a later fetch (#492).
+        if (status !== 409) {
+          const noteIds = affectedNoteIds(endpoint, body);
+          await recordDeadLetter(db, entry, endpoint, body, status, noteIds[0] ?? null);
+          for (const noteId of noteIds) {
+            await markNoteSyncFailed(db, noteId);
+          }
+        }
+
         await db.runAsync('DELETE FROM sync_queue WHERE id = ?', [entry.id]);
       } else {
         // Transient failure (network/timeout/401/408/429/5xx) or an unexpected

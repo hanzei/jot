@@ -189,11 +189,13 @@ describe('saveServerNote / saveServerNotes', () => {
     expect(db.withTransactionAsync).toHaveBeenCalledTimes(1);
   });
 
-  it('skips only the pending notes in a batch and reads the queue once', async () => {
+  it('skips only the pending notes in a batch and reads the protected set once', async () => {
     const db = makeDb([{ endpoint: '/notes/pending', body: null }]);
     await saveServerNotes(db as never, [makeTextNote('keep'), makeTextNote('pending')]);
 
-    expect(db.getAllAsync).toHaveBeenCalledTimes(1);
+    // The protected set is the pending-queue read plus the failed-notes read —
+    // two reads total per batch, not one per note (which would be N+1).
+    expect(db.getAllAsync).toHaveBeenCalledTimes(2);
     const savedIds = db.runAsync.mock.calls.map((call) => (call[1] as unknown[])[0]);
     expect(savedIds).toContain('keep');
     expect(savedIds).not.toContain('pending');
