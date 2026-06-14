@@ -38,6 +38,16 @@ jest.mock('react-i18next', () => ({
   }),
 }));
 
+let mockPendingNoteIds = new Set<string>();
+jest.mock('../src/store/OfflineContext', () => ({
+  __esModule: true,
+  usePendingNoteIds: () => mockPendingNoteIds,
+}));
+
+afterEach(() => {
+  mockPendingNoteIds = new Set<string>();
+});
+
 const baseNote: Note = {
   id: 'note-1',
   user_id: 'user-1',
@@ -174,6 +184,60 @@ describe('NoteContextMenu labels action', () => {
     );
 
     expect(getByTestId('context-label')).toBeTruthy();
+  });
+
+  it('hides share, duplicate, and label actions for local notes', () => {
+    const { queryByTestId } = render(
+      <NoteContextMenu
+        visible
+        note={{ ...baseNote, id: 'local_123' }}
+        viewContext="notes"
+        onClose={jest.fn()}
+        onPin={jest.fn()}
+        onArchive={jest.fn()}
+        onUnarchive={jest.fn()}
+        onDuplicate={jest.fn()}
+        onMoveToTrash={jest.fn()}
+        onRestore={jest.fn()}
+        onDeletePermanently={jest.fn()}
+        onChangeColor={jest.fn()}
+        onShare={jest.fn()}
+        onManageLabels={jest.fn()}
+      />,
+    );
+
+    expect(queryByTestId('context-share')).toBeNull();
+    expect(queryByTestId('context-duplicate')).toBeNull();
+    expect(queryByTestId('context-label')).toBeNull();
+  });
+
+  it('hides share, duplicate, and label actions for a pending-create note (#475)', () => {
+    mockPendingNoteIds = new Set(['note-1']);
+    const { queryByTestId } = render(
+      <NoteContextMenu
+        visible
+        note={baseNote}
+        viewContext="notes"
+        onClose={jest.fn()}
+        onPin={jest.fn()}
+        onArchive={jest.fn()}
+        onUnarchive={jest.fn()}
+        onDuplicate={jest.fn()}
+        onMoveToTrash={jest.fn()}
+        onRestore={jest.fn()}
+        onDeletePermanently={jest.fn()}
+        onChangeColor={jest.fn()}
+        onShare={jest.fn()}
+        onManageLabels={jest.fn()}
+      />,
+    );
+
+    // Non-server actions stay available; server-bound ones are gated.
+    expect(queryByTestId('context-color')).toBeTruthy();
+    expect(queryByTestId('context-pin')).toBeTruthy();
+    expect(queryByTestId('context-share')).toBeNull();
+    expect(queryByTestId('context-duplicate')).toBeNull();
+    expect(queryByTestId('context-label')).toBeNull();
   });
 
   it('does not render label action when callback is omitted', () => {

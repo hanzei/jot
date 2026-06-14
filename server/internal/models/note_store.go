@@ -81,6 +81,12 @@ func (s *noteStore) Create(ctx context.Context, userID, noteID, title, content s
 		 VALUES (?, ?, ?, ?, ?) RETURNING created_at, updated_at`),
 		noteID, userID, title, content, noteType,
 	).Scan(&note.CreatedAt, &note.UpdatedAt); err != nil {
+		// Two concurrent creates with the same caller-supplied ID can both pass the
+		// existence check above (neither sees the other's uncommitted insert), so
+		// map the primary-key violation to ErrNoteExists to preserve 409 idempotency.
+		if s.d.IsUniqueConstraintError(err) {
+			return nil, ErrNoteExists
+		}
 		return nil, fmt.Errorf("failed to create note: %w", err)
 	}
 
