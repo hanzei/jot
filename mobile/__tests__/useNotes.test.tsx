@@ -2,6 +2,7 @@ import React from 'react';
 import { renderHook, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { useCreateNote, useUpdateNote, useDeleteNote, useDuplicateNote, useCreateNoteItem, useToggleNoteItemCompleted } from '../src/hooks/useNotes';
+import { noteLocalQueryKey, notesLocalQueryKey } from '../src/hooks/queryKeys';
 import * as notesApi from '../src/api/notes';
 import * as noteQueriesModule from '../src/db/noteQueries';
 import * as clientModule from '../src/api/client';
@@ -77,6 +78,33 @@ function createWrapper() {
   return function Wrapper({ children }: { children: React.ReactNode }) {
     return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
   };
+}
+
+// Like createWrapper, but exposes the QueryClient so a test can seed and inspect
+// the cache to assert optimistic (onMutate) updates and their rollback.
+function createWrapperWithClient() {
+  const queryClient = new QueryClient({
+    defaultOptions: {
+      queries: { retry: false },
+      mutations: { retry: false },
+    },
+  });
+  function Wrapper({ children }: { children: React.ReactNode }) {
+    return <QueryClientProvider client={queryClient}>{children}</QueryClientProvider>;
+  }
+  return { wrapper: Wrapper, queryClient };
+}
+
+// A promise whose resolution the test controls, to model a request that is still
+// in flight (a slow / half-open connection) while we assert the optimistic cache.
+function deferred<T>() {
+  let resolve!: (value: T) => void;
+  let reject!: (err: unknown) => void;
+  const promise = new Promise<T>((res, rej) => {
+    resolve = res;
+    reject = rej;
+  });
+  return { promise, resolve, reject };
 }
 
 describe('useNotes hooks', () => {
@@ -387,6 +415,144 @@ describe('useNotes hooks', () => {
 
       expect(mockNotesApi.deleteNote).toHaveBeenCalledWith('123');
       expect(mockNoteQueries.markLocalNoteDeleted).toHaveBeenCalledWith(expect.anything(), '123');
+    });
+  });
+
+  describe('optimistic cache updates on a stalled connection', () => {
+    const existingTextNote = {
+      id: '123', title: '', content: 'Old body', note_type: 'text',
+      color: '#ffffff', pinned: false, archived: false, position: 0,
+      checked_items_collapsed: false, is_shared: false, deleted_at: null,
+      user_id: 'u1', created_at: '', updated_at: '', labels: [], shared_with: [],
+    };
+    const listNote = {
+      id: 'n1', title: 'L', note_type: 'list',
+      color: '#ffffff', pinned: false, archived: false, position: 0,
+      checked_items_collapsed: false, is_shared: false, deleted_at: null,
+      user_id: 'u1', created_at: '', updated_at: '', labels: [], shared_with: [],
+      items: [
+        { id: 'p', note_id: 'n1', text: 'parent', completed: false, position: 0, parent_id: null, assigned_to: '', created_at: '', updated_at: '' },
+        { id: 'c', note_id: 'n1', text: 'child', completed: false, position: 1, parent_id: 'p', assigned_to: '', created_at: '', updated_at: '' },
+      ],
+    };
+
+    it('useUpdateNote reflects the edit in the cache before the request resolves', async () => {
+      const { wrapper, queryClient } = createWrapperWithClient();
+      queryClient.setQueryData(noteLocalQueryKey('123'), existingTextNote);
+      queryClient.setQueryData(notesLocalQueryKey(undefined), [existingTextNote]);
+
+      // The server call stays in flight for the duration of the assertions.
+      // Reset first: clearAllMocks does not drain a leftover mock*Once queue.
+      const pending = deferred<typeof existingTextNote>();
+      mockNotesApi.updateNote.mockReset();
+      mockNotesApi.updateNote.mockReturnValueOnce(pending.promise as never);
+
+      const { result } = renderHook(() => useUpdateNote(), { wrapper });
+      result.current.mutate({ id: '123', data: { content: 'New body' } });
+
+      // Optimistic update is visible while the request is still in flight (we
+      // have not resolved `pending` yet) — the UI does not wait on the network.
+      await waitFor(() => {
+        expect((queryClient.getQueryData(noteLocalQueryKey('123')) as { content: string }).content).toBe('New body');
+      });
+      expect(mockNotesApi.updateNote).toHaveBeenCalledWith('123', { content: 'New body' });
+      expect((queryClient.getQueryData(notesLocalQueryKey(undefined)) as Array<{ content: string }>)[0].content).toBe('New body');
+
+      // Let the request finish so the hook settles cleanly.
+      pending.resolve({ ...existingTextNote, content: 'New body' } as never);
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    });
+
+    it('useUpdateNote rolls back the optimistic edit on a permanent (4xx) failure', async () => {
+      const { wrapper, queryClient } = createWrapperWithClient();
+      queryClient.setQueryData(noteLocalQueryKey('123'), existingTextNote);
+      queryClient.setQueryData(notesLocalQueryKey(undefined), [existingTextNote]);
+      mockNotesApi.updateNote.mockRejectedValueOnce(makeAxiosError(400));
+
+      const { result } = renderHook(() => useUpdateNote(), { wrapper });
+      await result.current.mutateAsync({ id: '123', data: { content: 'New body' } }).catch(() => {});
+
+      await waitFor(() => expect(result.current.isError).toBe(true));
+
+      // The phantom edit is reverted and nothing was queued.
+      expect((queryClient.getQueryData(noteLocalQueryKey('123')) as { content: string }).content).toBe('Old body');
+      expect((queryClient.getQueryData(notesLocalQueryKey(undefined)) as Array<{ content: string }>)[0].content).toBe('Old body');
+      expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
+    });
+
+    it('rolling back a failed update preserves a concurrent optimistic edit to another note in the same list', async () => {
+      const { wrapper, queryClient } = createWrapperWithClient();
+      const noteA = { ...existingTextNote, id: 'a', content: 'A-old' };
+      const noteB = { ...existingTextNote, id: 'b', content: 'B-old' };
+      queryClient.setQueryData(noteLocalQueryKey('a'), noteA);
+      queryClient.setQueryData(notesLocalQueryKey(undefined), [noteA, noteB]);
+
+      // Note A's request stays in flight so we can interleave a concurrent edit.
+      const pending = deferred<typeof noteA>();
+      mockNotesApi.updateNote.mockReset();
+      mockNotesApi.updateNote.mockReturnValueOnce(pending.promise as never);
+
+      const { result } = renderHook(() => useUpdateNote(), { wrapper });
+      result.current.mutate({ id: 'a', data: { content: 'A-new' } });
+
+      // Wait until A's optimistic edit lands (its onMutate has snapshotted the list).
+      await waitFor(() => {
+        const list = queryClient.getQueryData(notesLocalQueryKey(undefined)) as Array<{ id: string; content: string }>;
+        expect(list.find((n) => n.id === 'a')!.content).toBe('A-new');
+      });
+
+      // A different in-flight mutation optimistically edits note B in the same list.
+      queryClient.setQueryData<Array<{ id: string; content: string }>>(
+        notesLocalQueryKey(undefined),
+        (old) => old!.map((n) => (n.id === 'b' ? { ...n, content: 'B-new' } : n)),
+      );
+
+      // Now A fails permanently → its rollback runs.
+      pending.reject(makeAxiosError(400));
+      await waitFor(() => expect(result.current.isError).toBe(true));
+
+      const list = queryClient.getQueryData(notesLocalQueryKey(undefined)) as Array<{ id: string; content: string }>;
+      expect(list.find((n) => n.id === 'a')!.content).toBe('A-old'); // A reverted
+      expect(list.find((n) => n.id === 'b')!.content).toBe('B-new'); // B's concurrent edit preserved
+    });
+
+    it('useToggleNoteItemCompleted toggles the cached item (and cascades) before the request resolves', async () => {
+      const { wrapper, queryClient } = createWrapperWithClient();
+      queryClient.setQueryData(noteLocalQueryKey('n1'), listNote);
+
+      const pending = deferred<unknown[]>();
+      mockNotesApi.toggleItemCompleted.mockReset();
+      mockNotesApi.toggleItemCompleted.mockReturnValueOnce(pending.promise as never);
+
+      const { result } = renderHook(() => useToggleNoteItemCompleted(), { wrapper });
+      result.current.mutate({ noteId: 'n1', itemId: 'p', completed: true });
+
+      await waitFor(() => {
+        const cached = queryClient.getQueryData(noteLocalQueryKey('n1')) as { items: Array<{ id: string; completed: boolean }> };
+        expect(cached.items.find((i) => i.id === 'p')!.completed).toBe(true);
+        // Toggling a top-level item cascades to its children.
+        expect(cached.items.find((i) => i.id === 'c')!.completed).toBe(true);
+      });
+      expect(mockNotesApi.toggleItemCompleted).toHaveBeenCalledWith('n1', 'p', true);
+
+      pending.resolve([]);
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+    });
+
+    it('useToggleNoteItemCompleted rolls back the optimistic toggle on a permanent failure', async () => {
+      const { wrapper, queryClient } = createWrapperWithClient();
+      queryClient.setQueryData(noteLocalQueryKey('n1'), listNote);
+      mockNotesApi.toggleItemCompleted.mockRejectedValueOnce(makeAxiosError(404));
+
+      const { result } = renderHook(() => useToggleNoteItemCompleted(), { wrapper });
+      await result.current.mutateAsync({ noteId: 'n1', itemId: 'p', completed: true }).catch(() => {});
+
+      await waitFor(() => expect(result.current.isError).toBe(true));
+
+      const cached = queryClient.getQueryData(noteLocalQueryKey('n1')) as { items: Array<{ id: string; completed: boolean }> };
+      expect(cached.items.find((i) => i.id === 'p')!.completed).toBe(false);
+      expect(cached.items.find((i) => i.id === 'c')!.completed).toBe(false);
+      expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
     });
   });
 

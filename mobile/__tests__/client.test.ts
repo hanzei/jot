@@ -9,6 +9,8 @@ import {
   clearCachedProfile,
   setServerUrl,
   switchActiveServer,
+  DEFAULT_REQUEST_TIMEOUT_MS,
+  WRITE_REQUEST_TIMEOUT_MS,
 } from '../src/api/client';
 import { getActiveServer, getServerScopedStorageKey } from '../src/store/serverAccounts';
 
@@ -319,6 +321,53 @@ describe('API Client', () => {
 
       expect((staleConfig.signal as AbortSignal).aborted).toBe(true);
       expect(() => responseSuccessInterceptor({ config: staleConfig })).toThrow('Discarded stale response after server switch.');
+    });
+  });
+
+  describe('write request timeout', () => {
+    const getRequestInterceptor = () => {
+      const requestUse = mockAxiosInstance.interceptors.request.use;
+      return requestUse.mock.calls[0]?.[0] as (
+        config: Record<string, unknown>,
+      ) => Promise<Record<string, unknown>>;
+    };
+
+    it('shortens the timeout for data-write requests so the offline fallback engages sooner', async () => {
+      const config = await getRequestInterceptor()({
+        method: 'post', url: '/notes', headers: {}, timeout: DEFAULT_REQUEST_TIMEOUT_MS,
+      });
+      expect(config.timeout).toBe(WRITE_REQUEST_TIMEOUT_MS);
+    });
+
+    it('keeps the default (longer) timeout for reads', async () => {
+      const config = await getRequestInterceptor()({
+        method: 'get', url: '/notes', headers: {}, timeout: DEFAULT_REQUEST_TIMEOUT_MS,
+      });
+      expect(config.timeout).toBe(DEFAULT_REQUEST_TIMEOUT_MS);
+    });
+
+    it('keeps the default timeout for auth writes (no offline queue fallback)', async () => {
+      const config = await getRequestInterceptor()({
+        method: 'post', url: '/login', headers: {}, timeout: DEFAULT_REQUEST_TIMEOUT_MS,
+      });
+      expect(config.timeout).toBe(DEFAULT_REQUEST_TIMEOUT_MS);
+    });
+
+    it('keeps the default timeout for multipart uploads', async () => {
+      const config = await getRequestInterceptor()({
+        method: 'post',
+        url: '/notes/import',
+        headers: { get: () => 'multipart/form-data' },
+        timeout: DEFAULT_REQUEST_TIMEOUT_MS,
+      });
+      expect(config.timeout).toBe(DEFAULT_REQUEST_TIMEOUT_MS);
+    });
+
+    it('does not override an explicit per-request timeout', async () => {
+      const config = await getRequestInterceptor()({
+        method: 'post', url: '/notes', headers: {}, timeout: 60000,
+      });
+      expect(config.timeout).toBe(60000);
     });
   });
 
