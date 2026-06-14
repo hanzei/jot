@@ -1,5 +1,4 @@
 import { useRef } from 'react';
-import axios from 'axios';
 import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSQLiteContext } from 'expo-sqlite';
 import {
@@ -49,7 +48,7 @@ import {
   reorderLocalItems,
 } from '../db/noteQueries';
 import type { LocalItemPatch } from '../db/noteQueries';
-import { enqueueOperation, isTransientHttpStatus } from '../db/syncQueue';
+import { enqueueOperation, rethrowIfNotQueueable } from '../db/syncQueue';
 import { useNetworkStatus } from './useNetworkStatus';
 import { useAuth } from '../store/AuthContext';
 import { isServerSwitchInProgress } from '../api/client';
@@ -61,29 +60,6 @@ import {
 function assertSwitchWriteAllowed(): void {
   if (isServerSwitchInProgress()) {
     throw new Error('Server switch in progress; write blocked');
-  }
-}
-
-/**
- * Called from the `catch` of an online write attempt. If the failure is
- * transient (a flaky connection, timeout, or 5xx), it is swallowed so the
- * caller can fall back to the offline path — writing locally and queueing the
- * operation for replay — instead of losing the edit. Permanent failures (4xx
- * validation/auth/conflict) and unexpected local errors are rethrown so the UI
- * can surface them to the user.
- *
- * 401 is deliberately treated as non-queueable here even though the queue drain
- * retries it: the API response interceptor reacts to a 401 by clearing the
- * session and redirecting to login, so the write must surface the error rather
- * than silently report success while the user is being logged out.
- */
-function rethrowIfNotQueueable(err: unknown): void {
-  if (!axios.isAxiosError(err)) {
-    throw err;
-  }
-  const status = err.response?.status;
-  if (status === 401 || !isTransientHttpStatus(status)) {
-    throw err;
   }
 }
 
