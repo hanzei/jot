@@ -1,12 +1,7 @@
 import { SQLiteDatabase } from 'expo-sqlite';
 
-export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
-  // Run PRAGMAs separately: sqlite3_exec (used by execAsync) stops on the
-  // first error, so mixing PRAGMAs with DDL means a PRAGMA failure would
-  // silently prevent the tables from being created.
-  await db.runAsync('PRAGMA journal_mode = WAL');
-  await db.runAsync('PRAGMA foreign_keys = ON');
-
+// Migration 1: creates initial schema; idempotent via IF NOT EXISTS and column probing.
+const migration1 = async (db: SQLiteDatabase): Promise<void> => {
   await db.execAsync(`
     CREATE TABLE IF NOT EXISTS notes (
       id TEXT PRIMARY KEY,
@@ -88,8 +83,7 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
   // Rename legacy note_type 'todo' → 'list' to match server migration 003.
   await db.runAsync(`UPDATE notes SET note_type = 'list' WHERE note_type = 'todo'`);
 
-  // Migrate existing databases that pre-date newer columns.
-  // Check which columns exist via PRAGMA, then ALTER TABLE only for missing ones.
+  // Handle pre-versioned installs that may be missing newer columns.
   const noteCols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(notes)');
   if (!noteCols.some((c) => c.name === 'sync_state')) {
     await db.runAsync(`ALTER TABLE notes ADD COLUMN sync_state TEXT NOT NULL DEFAULT 'synced'`);
@@ -104,11 +98,12 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
   }
   if (!noteItemColNames.has('parent_id')) {
     await db.runAsync(`ALTER TABLE note_items ADD COLUMN parent_id TEXT DEFAULT NULL`);
-    // Backfill parent_id from indent_level for databases that used the old column.
     if (noteItemColNames.has('indent_level')) {
       const rows = await db.getAllAsync<{ id: string; note_id: string; indent_level: number }>(
         `SELECT id, note_id, indent_level FROM note_items ORDER BY note_id, position`,
       );
+      // Only one level of nesting was supported in the indent_level schema;
+      // all indented rows (indent_level > 0) map to the nearest preceding top-level item.
       let lastNoteId: string | null = null;
       let lastTopLevelId: string | null = null;
       for (const row of rows) {
@@ -124,5 +119,22 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
       }
     }
   }
+};
 
+export const MIGRATIONS: readonly ((db: SQLiteDatabase) => Promise<void>)[] = [migration1];
+
+export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
+  // Run PRAGMAs separately: sqlite3_exec (used by execAsync) stops on the
+  // first error, so mixing PRAGMAs with DDL means a PRAGMA failure would
+  // silently prevent the tables from being created.
+  await db.runAsync('PRAGMA journal_mode = WAL');
+  await db.runAsync('PRAGMA foreign_keys = ON');
+
+  const versionRow = await db.getFirstAsync<{ user_version: number }>('PRAGMA user_version');
+  const currentVersion = versionRow?.user_version ?? 0;
+
+  for (let i = currentVersion; i < MIGRATIONS.length; i++) {
+    await MIGRATIONS[i](db);
+    await db.runAsync(`PRAGMA user_version = ${i + 1}`);
+  }
 }
