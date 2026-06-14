@@ -6,6 +6,7 @@ import { replaceLocalNoteId, saveNote, saveNotes, patchLocalItem, removeLocalNot
 
 export type QueueOperation =
   | 'create'
+  | 'duplicate'
   | 'update'
   | 'delete'
   | 'restore'
@@ -181,6 +182,11 @@ export async function getPendingNoteIds(db: SQLiteDatabase): Promise<Set<string>
     } else {
       // Any /notes/{id}/... op touches that note.
       ids.add(segments[1]);
+      // POST /notes/{id}/duplicate also creates a local copy; protect its local_id.
+      if (segments.length === 3 && segments[2] === 'duplicate') {
+        const localId = parseQueueBody(entry.body)?.local_id;
+        if (typeof localId === 'string') ids.add(localId);
+      }
     }
   }
   return ids;
@@ -310,14 +316,15 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
       if (entry.method === 'POST') {
         const response = await api.post(endpoint, body);
 
-        if (entry.operation === 'create' && body?.local_id) {
+        if ((entry.operation === 'create' || entry.operation === 'duplicate') && body?.local_id) {
+          // Both create and duplicate: the server returns the canonical note.
+          // Reconcile the local id so subsequent queued ops are remapped correctly.
           const localId = body.local_id as string;
           const data = response?.data;
           if (hasStringId(data) && data.id !== localId) {
             const serverNote = data as Note;
             idMap.set(localId, serverNote.id);
             idMappings.push({ localId, serverNote });
-            // Replace local note in DB with server note
             await replaceLocalNoteId(db, localId, serverNote);
           }
         } else if (entry.operation === 'createLabel' && body?.local_id) {
