@@ -65,7 +65,7 @@ describe('uploadProfileIcon', () => {
 
     const [key, fileValue] = appendSpy.mock.calls[0];
     expect(key).toBe('file');
-    expect((fileValue as { uri: string }).uri).not.toContain('file://');
+    expect((fileValue as unknown as { uri: string }).uri).not.toContain('file://');
     appendSpy.mockRestore();
   });
 
