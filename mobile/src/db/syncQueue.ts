@@ -1,9 +1,8 @@
 import { SQLiteDatabase } from 'expo-sqlite';
 import axios from 'axios';
 import api from '../api/client';
-import type { Note } from '@jot/shared';
-import { replaceLocalNoteId, saveNote, patchLocalItem } from './noteQueries';
-import type { NoteItem } from '@jot/shared';
+import type { GetNotesParams, Note, NoteItem } from '@jot/shared';
+import { replaceLocalNoteId, saveNote, saveNotes, patchLocalItem, removeLocalNotesNotIn } from './noteQueries';
 
 export type QueueOperation =
   | 'create'
@@ -130,6 +129,88 @@ export async function enqueueOperation(db: SQLiteDatabase, params: EnqueueParams
 export async function getPendingCount(db: SQLiteDatabase): Promise<number> {
   const row = await db.getFirstAsync<{ count: number }>('SELECT COUNT(*) as count FROM sync_queue');
   return row?.count ?? 0;
+}
+
+function parseQueueBody(body: string | null): Record<string, unknown> | null {
+  if (!body) return null;
+  try {
+    return JSON.parse(body) as Record<string, unknown>;
+  } catch {
+    return null;
+  }
+}
+
+/**
+ * Collect the IDs of every note that currently has a pending operation in the
+ * sync queue. Server-sourced read paths (background fetch, SSE) consult this set
+ * so a fetch of stale server state can't transiently revert an optimistic local
+ * edit before its queued op has drained (see issue #487).
+ *
+ * Note IDs are recovered from the endpoint shapes enqueued by useNotes/useLabels
+ * (see the per-branch comments below). Label-only endpoints (/labels/…) aren't
+ * tied to a single note and are skipped.
+ */
+export async function getPendingNoteIds(db: SQLiteDatabase): Promise<Set<string>> {
+  const entries = await db.getAllAsync<Pick<QueueEntry, 'endpoint' | 'body'>>(
+    'SELECT endpoint, body FROM sync_queue',
+  );
+
+  const ids = new Set<string>();
+  for (const entry of entries) {
+    // Drop any query string (e.g. "/notes/{id}?permanent=true") before splitting,
+    // and filter out the empty segment from the leading slash.
+    const segments = entry.endpoint.split('?')[0].split('/').filter(Boolean);
+    if (segments[0] !== 'notes') continue;
+
+    if (segments.length === 1) {
+      // POST /notes (create): the affected note is the offline-created local id.
+      const localId = parseQueueBody(entry.body)?.local_id;
+      if (typeof localId === 'string') ids.add(localId);
+    } else if (segments[1] === 'reorder') {
+      // POST /notes/reorder: body.note_ids lists every note whose position moved.
+      const noteIds = parseQueueBody(entry.body)?.note_ids;
+      if (Array.isArray(noteIds)) {
+        for (const id of noteIds) if (typeof id === 'string') ids.add(id);
+      }
+    } else {
+      // Any /notes/{id}/... op touches that note.
+      ids.add(segments[1]);
+    }
+  }
+  return ids;
+}
+
+/**
+ * Persist a note fetched from the server (background fetch, SSE, post-import sync),
+ * leaving notes with a pending sync-queue op untouched (see {@link getPendingNoteIds}
+ * for the rationale, #487). Once the queue drains the gate is empty, so the next
+ * server fetch or SSE event re-applies canonical server state normally.
+ */
+export async function saveServerNote(db: SQLiteDatabase, note: Note): Promise<void> {
+  await saveNote(db, note, { skipNoteIds: await getPendingNoteIds(db) });
+}
+
+/** Batch counterpart of {@link saveServerNote}; reads the pending set once. */
+export async function saveServerNotes(db: SQLiteDatabase, notes: Note[]): Promise<void> {
+  await saveNotes(db, notes, { skipNoteIds: await getPendingNoteIds(db) });
+}
+
+/**
+ * Reconcile a scoped server note list into local SQLite: persist the fetched notes
+ * and prune local rows that have fallen out of this scope. Both steps share a single
+ * pending-op set so notes with an unsynced local edit are neither overwritten nor
+ * pruned — a queued edit can optimistically move a note into the scope before the
+ * server reflects it (e.g. un-archive/restore), and pruning it would lose the edit (#487).
+ */
+export async function saveServerNotesScope(
+  db: SQLiteDatabase,
+  serverNotes: Note[],
+  params?: GetNotesParams,
+): Promise<void> {
+  const skipNoteIds = await getPendingNoteIds(db);
+  await saveNotes(db, serverNotes, { skipNoteIds });
+  const serverIds = new Set(serverNotes.map((n) => n.id));
+  await removeLocalNotesNotIn(db, serverIds, params, { skipNoteIds });
 }
 
 function remapValue(value: unknown, idMap: Map<string, string>): unknown {
@@ -290,7 +371,13 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
   return { idMappings, discardedOperations };
 }
 
-/** Persist a note returned by the server during queue drain, if the response looks like a note. */
+/**
+ * Persist a note returned by the server during queue drain, if the response looks
+ * like a note. Deliberately uses the raw (ungated) saveNote, not saveServerNote:
+ * this runs as the queue entry for that note is being drained, so the entry is
+ * still pending and the gate would refuse the server's authoritative response for
+ * the very note we just synced. The drain owns the note here (#487).
+ */
 async function saveNoteFromResponse(db: SQLiteDatabase, data: unknown): Promise<void> {
   if (hasStringId(data)) {
     await saveNote(db, data as Note);

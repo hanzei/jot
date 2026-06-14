@@ -1,10 +1,10 @@
 import React from 'react';
-import { renderHook, act } from '@testing-library/react-native';
+import { renderHook, act, waitFor } from '@testing-library/react-native';
 import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
 import { AppState, AppStateStatus } from 'react-native';
 import { useSSE } from '../src/hooks/useSSE';
 import { SSEConnectionManager } from '../src/api/events';
-import type { SSEEvent } from '@jot/shared';
+import type { Note, SSEEvent } from '@jot/shared';
 import { noteLocalQueryKey, notesLocalQueryScopeKey } from '../src/hooks/queryKeys';
 
 jest.mock('react-native', () => ({
@@ -26,6 +26,20 @@ jest.mock('../src/api/client', () => ({
   ...jest.requireActual('../src/api/client'),
   CLIENT_ID: TEST_CLIENT_ID,
 }));
+
+jest.mock('../src/db/noteQueries', () => ({
+  markLocalNoteDeleted: jest.fn().mockResolvedValue(undefined),
+}));
+
+let mockPendingNoteIds = new Set<string>();
+jest.mock('../src/db/syncQueue', () => ({
+  saveServerNote: jest.fn().mockResolvedValue(undefined),
+  getPendingNoteIds: jest.fn(() => Promise.resolve(mockPendingNoteIds)),
+}));
+
+const mockSaveServerNote = (jest.requireMock('../src/db/syncQueue') as { saveServerNote: jest.Mock }).saveServerNote;
+const mockMarkLocalNoteDeleted = (jest.requireMock('../src/db/noteQueries') as { markLocalNoteDeleted: jest.Mock }).markLocalNoteDeleted;
+const flushMicrotasks = () => new Promise((resolve) => setTimeout(resolve, 0));
 
 // Mock SSEConnectionManager
 let capturedCallback: ((event: SSEEvent) => void) | null = null;
@@ -74,6 +88,7 @@ describe('useSSE', () => {
     capturedCallback = null;
     mockIsAuthenticated = true;
     mockIsConnected = true;
+    mockPendingNoteIds = new Set<string>();
   });
 
   it('starts SSE connection when authenticated', () => {
@@ -138,7 +153,26 @@ describe('useSSE', () => {
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: noteLocalQueryKey('note-123') });
   });
 
-  it('invalidates notes list and removes note query on note_deleted event', () => {
+  it('persists the note payload through the queue-aware saveServerNote (#487)', async () => {
+    const { Wrapper } = createWrapper();
+    renderHook(() => useSSE(), { wrapper: Wrapper });
+
+    const note = { id: 'note-123', note_type: 'text', content: 'fresh' } as unknown as Note;
+    await act(async () => {
+      capturedCallback?.({
+        type: 'note_updated',
+        source_user_id: 'other-user',
+        data: { note_id: 'note-123', note },
+      });
+    });
+
+    // saveServerNote defers to any pending local edit on the note, so the server
+    // version can't overwrite an unsynced optimistic edit (gating verified in
+    // pendingNoteSync.test.ts).
+    await waitFor(() => expect(mockSaveServerNote).toHaveBeenCalledWith(expect.anything(), note));
+  });
+
+  it('invalidates notes list and tombstones the note on note_deleted event', async () => {
     const { queryClient, Wrapper } = createWrapper();
     const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
     const removeSpy = jest.spyOn(queryClient, 'removeQueries');
@@ -146,7 +180,7 @@ describe('useSSE', () => {
     renderHook(() => useSSE(), { wrapper: Wrapper });
     invalidateSpy.mockClear();
 
-    act(() => {
+    await act(async () => {
       capturedCallback?.({
         type: 'note_deleted',
         source_user_id: 'other-user',
@@ -155,7 +189,28 @@ describe('useSSE', () => {
     });
 
     expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: notesLocalQueryScopeKey() });
-    expect(removeSpy).toHaveBeenCalledWith({ queryKey: noteLocalQueryKey('note-123') });
+    await waitFor(() => expect(removeSpy).toHaveBeenCalledWith({ queryKey: noteLocalQueryKey('note-123') }));
+    expect(mockMarkLocalNoteDeleted).toHaveBeenCalledWith(expect.anything(), 'note-123');
+  });
+
+  it('does not tombstone a deleted note that still has a pending local op (#487)', async () => {
+    // A queued edit/restore may be racing the remote delete; defer to the drain
+    // rather than hide the optimistic edit.
+    mockPendingNoteIds = new Set(['note-123']);
+    const { Wrapper } = createWrapper();
+
+    renderHook(() => useSSE(), { wrapper: Wrapper });
+
+    await act(async () => {
+      capturedCallback?.({
+        type: 'note_deleted',
+        source_user_id: 'other-user',
+        data: { note_id: 'note-123', note: null },
+      });
+    });
+    await flushMicrotasks();
+
+    expect(mockMarkLocalNoteDeleted).not.toHaveBeenCalled();
   });
 
   it('invalidates queries for same-user events from a different device', () => {

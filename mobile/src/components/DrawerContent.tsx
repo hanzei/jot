@@ -446,6 +446,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
             userId={user?.id ?? ''}
             username={user?.username ?? ''}
             hasProfileIcon={user?.has_profile_icon}
+            iconVersion={user?.updated_at}
             size="large"
           />
           <View style={styles.profileTextWrap}>
