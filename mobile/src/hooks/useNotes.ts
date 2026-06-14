@@ -421,13 +421,75 @@ export function useDuplicateNote() {
   return useMutation({
     mutationFn: async (id: string): Promise<Note> => {
       assertSwitchWriteAllowed();
-      if (!isConnectedRef.current) {
-        throw new Error('Note duplication requires an internet connection');
+      if (isConnectedRef.current) {
+        try {
+          const duplicatedNote = await duplicateNote(id);
+          await saveNote(db, duplicatedNote);
+          return duplicatedNote;
+        } catch (err) {
+          // Transient failure: fall through to the offline path so the duplicate
+          // is created locally and queued for replay instead of being lost.
+          rethrowIfNotQueueable(err);
+        }
       }
 
-      const duplicatedNote = await duplicateNote(id);
-      await saveNote(db, duplicatedNote);
-      return duplicatedNote;
+      // Offline (or a transient online failure): create a local copy and queue
+      // the server operation.
+      if (isLocalId(id)) {
+        throw new Error('Cannot duplicate an unsynced note; please wait until it has synced');
+      }
+      const source = await getLocalNote(db, id);
+      if (!source) {
+        throw new Error(`Note ${id} not found in local DB`);
+      }
+
+      const localId = generateLocalId();
+      const now = new Date().toISOString();
+      const resetFields = {
+        id: localId,
+        pinned: false,
+        archived: false,
+        position: 0,
+        is_shared: false,
+        shared_with: [] as NoteShare[],
+        deleted_at: null as string | null,
+        created_at: now,
+        updated_at: now,
+      };
+      const localDuplicate: Note = source.note_type === 'list'
+        ? {
+            ...source,
+            ...resetFields,
+            items: (() => {
+              // Build a map from old item IDs to new local IDs so that parent_id
+              // references within the duplicate point to the new items, not to items
+              // in the source note. Items arrive in position order, so parents are
+              // always mapped before their children are processed.
+              const idRemap = new Map<string, string>();
+              return (source.items ?? []).map((item) => {
+                const newId = generateLocalId();
+                idRemap.set(item.id, newId);
+                return {
+                  ...item,
+                  id: newId,
+                  note_id: localId,
+                  parent_id: item.parent_id !== null ? (idRemap.get(item.parent_id) ?? item.parent_id) : null,
+                  created_at: now,
+                  updated_at: now,
+                };
+              });
+            })(),
+          }
+        : { ...source, ...resetFields };
+
+      await saveNote(db, localDuplicate);
+      await enqueueOperation(db, {
+        operation: 'duplicate',
+        endpoint: `/notes/${id}/duplicate`,
+        method: 'POST',
+        body: { local_id: localId } as Record<string, unknown>,
+      });
+      return localDuplicate;
     },
     onSuccess: (duplicatedNote) => {
       queryClient.setQueryData(noteLocalQueryKey(duplicatedNote.id), duplicatedNote);
