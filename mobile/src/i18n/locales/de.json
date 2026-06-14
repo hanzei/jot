@@ -142,6 +142,7 @@
     "uploadIconButton": "Bild hochladen",
     "removeIconButton": "Bild entfernen",
     "iconUploading": "Wird hochgeladen...",
+    "iconUploadProgress": "Wird hochgeladen {{percent}} %",
     "iconRemoving": "Wird entfernt...",
     "iconUploadFailed": "Profilbild konnte nicht hochgeladen werden",
     "iconDeleteFailed": "Profilbild konnte nicht entfernt werden",

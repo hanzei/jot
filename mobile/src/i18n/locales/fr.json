@@ -142,6 +142,7 @@
     "uploadIconButton": "Téléverser une icône",
     "removeIconButton": "Supprimer l'icône",
     "iconUploading": "Téléversement...",
+    "iconUploadProgress": "Téléversement {{percent}} %",
     "iconRemoving": "Suppression...",
     "iconUploadFailed": "Impossible de téléverser l'icône de profil",
     "iconDeleteFailed": "Impossible de supprimer l'icône de profil",

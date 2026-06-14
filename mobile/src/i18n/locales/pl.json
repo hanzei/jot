@@ -142,6 +142,7 @@
     "uploadIconButton": "Prześlij ikonę",
     "removeIconButton": "Usuń ikonę",
     "iconUploading": "Przesyłanie...",
+    "iconUploadProgress": "Przesyłanie {{percent}}%",
     "iconRemoving": "Usuwanie...",
     "iconUploadFailed": "Nie udało się przesłać ikony profilu",
     "iconDeleteFailed": "Nie udało się usunąć ikony profilu",

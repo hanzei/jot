@@ -77,6 +77,7 @@ export default function SettingsScreen() {
 
   const hasProfileIcon = user?.has_profile_icon ?? false;
   const [iconUploading, setIconUploading] = useState(false);
+  const [iconUploadPercent, setIconUploadPercent] = useState<number | null>(null);
   const [iconDeleting, setIconDeleting] = useState(false);
   const [iconError, setIconError] = useState('');
   const [iconVersion, setIconVersion] = useState(user?.updated_at ?? '');
@@ -505,8 +506,11 @@ export default function SettingsScreen() {
 
     setIconError('');
     setIconUploading(true);
+    setIconUploadPercent(0);
     try {
-      const updatedUser = await uploadProfileIcon(result.assets[0].uri);
+      const updatedUser = await uploadProfileIcon(result.assets[0].uri, (percent) => {
+        setIconUploadPercent(percent);
+      });
       setUser(updatedUser);
       setIconVersion(updatedUser.updated_at);
     } catch (err: unknown) {
@@ -514,6 +518,7 @@ export default function SettingsScreen() {
       setIconError(typeof msg === 'string' ? msg.trim() : 'settings.iconUploadFailed');
     } finally {
       setIconUploading(false);
+      setIconUploadPercent(null);
     }
   }, [setUser]);
 
@@ -606,7 +611,13 @@ export default function SettingsScreen() {
                   accessibilityRole="button"
                 >
                   {iconUploading ? (
-                    <ActivityIndicator size="small" color="#fff" />
+                    iconUploadPercent !== null && iconUploadPercent > 0 ? (
+                      <Text style={styles.uploadButtonText}>
+                        {t('settings.iconUploadProgress', { percent: iconUploadPercent })}
+                      </Text>
+                    ) : (
+                      <ActivityIndicator size="small" color="#fff" />
+                    )
                   ) : (
                     <Text style={styles.uploadButtonText}>{t('settings.uploadIconButton')}</Text>
                   )}
