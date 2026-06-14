@@ -104,7 +104,7 @@ func TestCreateNoteIdempotency(t *testing.T) {
 		assert.NotEmpty(t, note.ID)
 	})
 
-	t.Run("same id may be reused across different users", func(t *testing.T) {
+	t.Run("same id across different users is rejected (note ids are globally unique)", func(t *testing.T) {
 		other := ts.createTestUser(t, "idempotencyuser2", "password123", false)
 		id := "CrossUser00000000000Ab"
 

@@ -1,6 +1,6 @@
 import { SQLiteDatabase } from 'expo-sqlite';
 import type { Note, NoteItem, GetNotesParams, Label, NoteShare } from '@jot/shared';
-import { getRandomBytes } from '../utils/random';
+import { getRandomBytes, getStrongRandomBytes } from '../utils/random';
 
 interface NoteRow {
   id: string;
@@ -696,7 +696,7 @@ const SERVER_ID_LENGTH = 22;
  */
 export function generateClientNoteId(): string {
   const bytes = new Uint8Array(SERVER_ID_LENGTH);
-  getRandomBytes(bytes);
+  getStrongRandomBytes(bytes);
   let id = '';
   for (let i = 0; i < SERVER_ID_LENGTH; i++) {
     id += SERVER_ID_CHARS[bytes[i] % SERVER_ID_CHARS.length];
