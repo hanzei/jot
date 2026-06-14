@@ -77,6 +77,14 @@ describe('getPendingNoteIds', () => {
     expect(ids).toEqual(new Set(['local_abc']));
   });
 
+  it('tracks only the new local_id for a duplicate, not the source note it reads', async () => {
+    const db = makeDb([
+      { endpoint: '/notes/src-1/duplicate', body: JSON.stringify({ local_id: 'local_clone' }) },
+    ]);
+    const ids = await getPendingNoteIds(db as never);
+    expect(ids).toEqual(new Set(['local_clone']));
+  });
+
   it('expands body.note_ids for a /notes/reorder entry', async () => {
     const db = makeDb([
       { endpoint: '/notes/reorder', body: JSON.stringify({ note_ids: ['a', 'b', 'c'] }) },
@@ -189,11 +197,13 @@ describe('saveServerNote / saveServerNotes', () => {
     expect(db.withTransactionAsync).toHaveBeenCalledTimes(1);
   });
 
-  it('skips only the pending notes in a batch and reads the queue once', async () => {
+  it('skips only the pending notes in a batch and reads the protected set once', async () => {
     const db = makeDb([{ endpoint: '/notes/pending', body: null }]);
     await saveServerNotes(db as never, [makeTextNote('keep'), makeTextNote('pending')]);
 
-    expect(db.getAllAsync).toHaveBeenCalledTimes(1);
+    // The protected set is the pending-queue read plus the failed-notes read —
+    // two reads total per batch, not one per note (which would be N+1).
+    expect(db.getAllAsync).toHaveBeenCalledTimes(2);
     const savedIds = db.runAsync.mock.calls.map((call) => (call[1] as unknown[])[0]);
     expect(savedIds).toContain('keep');
     expect(savedIds).not.toContain('pending');

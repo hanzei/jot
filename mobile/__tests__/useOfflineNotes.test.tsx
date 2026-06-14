@@ -35,7 +35,7 @@ jest.mock('../src/db/syncQueue', () => ({
   ...jest.requireActual('../src/db/syncQueue'),
   saveServerNotesScope: jest.fn().mockResolvedValue(undefined),
   saveServerNote: jest.fn().mockResolvedValue(undefined),
-  getPendingNoteIds: jest.fn().mockResolvedValue(new Set<string>()),
+  getProtectedNoteIds: jest.fn().mockResolvedValue(new Set<string>()),
 }));
 
 const mockNotesApi = notesApi as jest.Mocked<typeof notesApi>;
@@ -120,7 +120,7 @@ describe('useOfflineNote background fetch (#487)', () => {
 
   it('tombstones a note the server reports gone (404) when it has no pending op', async () => {
     mockNotesApi.getNote.mockRejectedValue(makeAxiosError(404));
-    mockSyncQueue.getPendingNoteIds.mockResolvedValue(new Set<string>());
+    mockSyncQueue.getProtectedNoteIds.mockResolvedValue(new Set<string>());
 
     renderHook(() => useOfflineNote('gone'), { wrapper: createWrapper() });
 
@@ -129,15 +129,16 @@ describe('useOfflineNote background fetch (#487)', () => {
     );
   });
 
-  it('does not tombstone a 404 note that still has a pending local op (#487)', async () => {
-    // A queued edit/restore may be racing the fetch; let the drain reconcile it
-    // rather than hide the optimistic edit.
+  it('does not tombstone a 404 note that still has a pending or failed local op (#487/#492)', async () => {
+    // A queued edit/restore may be racing the fetch, or a dead-lettered edit may be
+    // the version we're preserving; let the drain/resolution reconcile it rather
+    // than hide the optimistic edit.
     mockNotesApi.getNote.mockRejectedValue(makeAxiosError(404));
-    mockSyncQueue.getPendingNoteIds.mockResolvedValue(new Set(['racing']));
+    mockSyncQueue.getProtectedNoteIds.mockResolvedValue(new Set(['racing']));
 
     renderHook(() => useOfflineNote('racing'), { wrapper: createWrapper() });
 
-    await waitFor(() => expect(mockSyncQueue.getPendingNoteIds).toHaveBeenCalled());
+    await waitFor(() => expect(mockSyncQueue.getProtectedNoteIds).toHaveBeenCalled());
     await flushMicrotasks();
     expect(mockNoteQueries.markLocalNoteDeleted).not.toHaveBeenCalled();
   });

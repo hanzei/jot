@@ -35,6 +35,7 @@ jest.mock('../src/api/notes', () => ({
 
 jest.mock('../src/db/noteQueries', () => ({
   saveNotes: jest.fn(),
+  getFailedNoteIds: jest.fn().mockResolvedValue(new Set()),
 }));
 
 jest.mock('@react-navigation/native', () => ({

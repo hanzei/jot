@@ -34,7 +34,7 @@ jest.mock('../src/db/syncQueue', () => ({
   ...jest.requireActual('../src/db/syncQueue'),
   saveServerNotesScope: jest.fn().mockResolvedValue(undefined),
   saveServerNote: jest.fn().mockResolvedValue(undefined),
-  getPendingNoteIds: jest.fn().mockResolvedValue(new Set()),
+  getProtectedNoteIds: jest.fn().mockResolvedValue(new Set()),
 }));
 
 jest.mock('../src/db/userQueries', () => ({
@@ -57,7 +57,7 @@ const mockUserQueries = userQueriesModule as jest.Mocked<typeof userQueriesModul
 const mockSyncQueue = jest.requireMock('../src/db/syncQueue') as {
   saveServerNotesScope: jest.Mock;
   saveServerNote: jest.Mock;
-  getPendingNoteIds: jest.Mock;
+  getProtectedNoteIds: jest.Mock;
 };
 
 function makeAxiosError(status: number) {
@@ -94,7 +94,7 @@ describe('background read-sync retry', () => {
     mockUserQueries.getLocalUsers.mockResolvedValue([]);
     mockSyncQueue.saveServerNotesScope.mockResolvedValue(undefined);
     mockSyncQueue.saveServerNote.mockResolvedValue(undefined);
-    mockSyncQueue.getPendingNoteIds.mockResolvedValue(new Set());
+    mockSyncQueue.getProtectedNoteIds.mockResolvedValue(new Set());
   });
 
   afterEach(() => {

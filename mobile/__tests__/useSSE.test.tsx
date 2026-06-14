@@ -31,10 +31,10 @@ jest.mock('../src/db/noteQueries', () => ({
   markLocalNoteDeleted: jest.fn().mockResolvedValue(undefined),
 }));
 
-let mockPendingNoteIds = new Set<string>();
+let mockProtectedNoteIds = new Set<string>();
 jest.mock('../src/db/syncQueue', () => ({
   saveServerNote: jest.fn().mockResolvedValue(undefined),
-  getPendingNoteIds: jest.fn(() => Promise.resolve(mockPendingNoteIds)),
+  getProtectedNoteIds: jest.fn(() => Promise.resolve(mockProtectedNoteIds)),
 }));
 
 const mockSaveServerNote = (jest.requireMock('../src/db/syncQueue') as { saveServerNote: jest.Mock }).saveServerNote;
@@ -88,7 +88,7 @@ describe('useSSE', () => {
     capturedCallback = null;
     mockIsAuthenticated = true;
     mockIsConnected = true;
-    mockPendingNoteIds = new Set<string>();
+    mockProtectedNoteIds = new Set<string>();
   });
 
   it('starts SSE connection when authenticated', () => {
@@ -193,11 +193,13 @@ describe('useSSE', () => {
     expect(mockMarkLocalNoteDeleted).toHaveBeenCalledWith(expect.anything(), 'note-123');
   });
 
-  it('does not tombstone a deleted note that still has a pending local op (#487)', async () => {
-    // A queued edit/restore may be racing the remote delete; defer to the drain
-    // rather than hide the optimistic edit.
-    mockPendingNoteIds = new Set(['note-123']);
-    const { Wrapper } = createWrapper();
+  it('does not tombstone a deleted note that still has a pending or failed local op (#487/#492)', async () => {
+    // A queued edit/restore may be racing the remote delete, or a dead-lettered edit
+    // may be the version we're preserving; defer to the drain/resolution rather than
+    // hide the optimistic edit.
+    mockProtectedNoteIds = new Set(['note-123']);
+    const { queryClient, Wrapper } = createWrapper();
+    const removeSpy = jest.spyOn(queryClient, 'removeQueries');
 
     renderHook(() => useSSE(), { wrapper: Wrapper });
 
@@ -211,6 +213,8 @@ describe('useSSE', () => {
     await flushMicrotasks();
 
     expect(mockMarkLocalNoteDeleted).not.toHaveBeenCalled();
+    // The note's query cache is also left intact, so an open detail view isn't dropped.
+    expect(removeSpy).not.toHaveBeenCalled();
   });
 
   it('invalidates queries for same-user events from a different device', () => {

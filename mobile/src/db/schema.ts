@@ -24,7 +24,8 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
       created_at TEXT NOT NULL,
       updated_at TEXT NOT NULL,
       labels_json TEXT NOT NULL DEFAULT '[]',
-      shared_with_json TEXT NOT NULL DEFAULT '[]'
+      shared_with_json TEXT NOT NULL DEFAULT '[]',
+      sync_state TEXT NOT NULL DEFAULT 'synced'
     );
 
     CREATE TABLE IF NOT EXISTS note_items (
@@ -55,6 +56,23 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
       created_at TEXT NOT NULL
     );
 
+    -- Dead-lettered sync operations: writes the server permanently rejected
+    -- (non-transient 4xx, excluding idempotent 409s). Preserved with their full
+    -- body + metadata so a failed optimistic edit is never silently dropped and
+    -- can later be surfaced/resolved (issue #492). note_id links the row to the
+    -- affected note (NULL for ops not tied to a single note, e.g. settings).
+    CREATE TABLE IF NOT EXISTS dead_letter (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      operation TEXT NOT NULL,
+      endpoint TEXT NOT NULL,
+      method TEXT NOT NULL,
+      body TEXT,
+      status INTEGER NOT NULL,
+      note_id TEXT,
+      created_at TEXT NOT NULL,
+      failed_at TEXT NOT NULL
+    );
+
     CREATE TABLE IF NOT EXISTS users (
       id TEXT PRIMARY KEY,
       username TEXT NOT NULL,
@@ -72,6 +90,11 @@ export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
 
   // Migrate existing databases that pre-date newer columns.
   // Check which columns exist via PRAGMA, then ALTER TABLE only for missing ones.
+  const noteCols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(notes)');
+  if (!noteCols.some((c) => c.name === 'sync_state')) {
+    await db.runAsync(`ALTER TABLE notes ADD COLUMN sync_state TEXT NOT NULL DEFAULT 'synced'`);
+  }
+
   const noteItemCols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(note_items)');
   const noteItemColNames = new Set(noteItemCols.map((c) => c.name));
   for (const col of ['created_at', 'updated_at', 'assigned_to']) {
