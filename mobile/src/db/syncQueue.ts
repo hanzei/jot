@@ -183,12 +183,14 @@ function collectNoteIds(
       for (const id of noteIds) if (typeof id === 'string') ids.add(id);
     }
   } else {
-    // Any /notes/{id}/... op touches that note.
-    ids.add(segments[1]);
-    // POST /notes/{id}/duplicate also creates a local copy; protect its local_id.
+    // POST /notes/{id}/duplicate creates a local clone: the write belongs to the
+    // clone, not the source note (which it only reads), so track just the new
+    // local_id. Every other /notes/{id}/... op touches that note itself.
     if (segments.length === 3 && segments[2] === 'duplicate') {
       const localId = body?.local_id;
       if (typeof localId === 'string') ids.add(localId);
+    } else {
+      ids.add(segments[1]);
     }
   }
 }
@@ -489,7 +491,10 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         // so the optimistic edit isn't dropped or clobbered by a later fetch (#492).
         if (status !== 409) {
           const noteIds = affectedNoteIds(endpoint, body);
-          await recordDeadLetter(db, entry, endpoint, body, status, noteIds[0] ?? null);
+          // Only link dead_letter.note_id when there's a single clear note (per the
+          // schema contract); a multi-note op like reorder stores NULL. The note(s)
+          // are still each flagged failed below regardless.
+          await recordDeadLetter(db, entry, endpoint, body, status, noteIds.length === 1 ? noteIds[0] : null);
           for (const noteId of noteIds) {
             await markNoteSyncFailed(db, noteId);
           }

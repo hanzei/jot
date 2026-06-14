@@ -198,7 +198,8 @@ describe('useSSE', () => {
     // may be the version we're preserving; defer to the drain/resolution rather than
     // hide the optimistic edit.
     mockProtectedNoteIds = new Set(['note-123']);
-    const { Wrapper } = createWrapper();
+    const { queryClient, Wrapper } = createWrapper();
+    const removeSpy = jest.spyOn(queryClient, 'removeQueries');
 
     renderHook(() => useSSE(), { wrapper: Wrapper });
 
@@ -212,6 +213,8 @@ describe('useSSE', () => {
     await flushMicrotasks();
 
     expect(mockMarkLocalNoteDeleted).not.toHaveBeenCalled();
+    // The note's query cache is also left intact, so an open detail view isn't dropped.
+    expect(removeSpy).not.toHaveBeenCalled();
   });
 
   it('invalidates queries for same-user events from a different device', () => {

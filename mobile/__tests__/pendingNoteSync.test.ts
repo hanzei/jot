@@ -77,6 +77,14 @@ describe('getPendingNoteIds', () => {
     expect(ids).toEqual(new Set(['local_abc']));
   });
 
+  it('tracks only the new local_id for a duplicate, not the source note it reads', async () => {
+    const db = makeDb([
+      { endpoint: '/notes/src-1/duplicate', body: JSON.stringify({ local_id: 'local_clone' }) },
+    ]);
+    const ids = await getPendingNoteIds(db as never);
+    expect(ids).toEqual(new Set(['local_clone']));
+  });
+
   it('expands body.note_ids for a /notes/reorder entry', async () => {
     const db = makeDb([
       { endpoint: '/notes/reorder', body: JSON.stringify({ note_ids: ['a', 'b', 'c'] }) },

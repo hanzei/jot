@@ -131,6 +131,19 @@ describe('drainQueue dead-letter persistence', () => {
     expect(inserts[0][5]).toBe('local_orphan'); // note_id column
   });
 
+  it('stores a NULL note_id for a multi-note reorder but flags every listed note', async () => {
+    const db = makeDrainDb([
+      { id: 30, operation: 'reorder', endpoint: '/notes/reorder', method: 'POST', body: JSON.stringify({ note_ids: ['a', 'b', 'c'] }), created_at: 't0' },
+    ]);
+    mockApi.post.mockRejectedValueOnce(makeAxiosError(400));
+
+    await drainQueue(db as never);
+
+    const inserts = callsStartingWith(db, 'INSERT INTO dead_letter');
+    expect(inserts[0][5]).toBeNull(); // note_id column: no single clear note
+    expect(callsStartingWith(db, `UPDATE notes SET sync_state = 'failed'`)).toEqual([['a'], ['b'], ['c']]);
+  });
+
   it('does not dead-letter or flag an idempotent 409 conflict', async () => {
     const db = makeDrainDb([
       { id: 3, operation: 'createItem', endpoint: '/notes/n1/items', method: 'POST', body: '{"id":"i1"}', created_at: 't0' },
