@@ -6,6 +6,7 @@ import { getLocalNotes, getLocalNote, saveNotes, saveNote, markLocalNoteDeleted,
 import { getNotes, getNote } from '../api/notes';
 import type { GetNotesParams, Note } from '@jot/shared';
 import { useNetworkStatus } from './useNetworkStatus';
+import { retrySync, SyncAbortedError, SyncCanceller } from '../utils/retryWithBackoff';
 import {
   noteLocalQueryKey,
   noteLocalQueryScopeKey,
@@ -19,6 +20,8 @@ export function useOfflineNotes(params?: GetNotesParams, options?: { enabled?: b
   const { isConnected } = useNetworkStatus();
   const paramsRef = useRef(params);
   paramsRef.current = params;
+  const isConnectedRef = useRef(isConnected);
+  isConnectedRef.current = isConnected;
   const enabled = options?.enabled ?? true;
 
   // Primary query: reads from local SQLite (instant on subsequent launches)
@@ -30,9 +33,13 @@ export function useOfflineNotes(params?: GetNotesParams, options?: { enabled?: b
     gcTime: Infinity,
   });
 
-  const syncFromServer = useCallback(async () => {
+  const syncFromServer = useCallback(async (canceller?: SyncCanceller) => {
     try {
-      const serverNotes = await getNotes(paramsRef.current);
+      const serverNotes = await retrySync(() => getNotes(paramsRef.current), {
+        isConnected: () => isConnectedRef.current,
+        canceller,
+      });
+      if (canceller?.cancelled) return;
       await saveNotes(db, serverNotes);
       // Remove local notes that matched this scope but are no longer returned by the server
       // (e.g., archived, deleted, or label-changed on another device).
@@ -40,16 +47,19 @@ export function useOfflineNotes(params?: GetNotesParams, options?: { enabled?: b
       await removeLocalNotesNotIn(db, serverIds, paramsRef.current);
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
     } catch (err) {
-      // Log for debugging; local data is used as fallback
-      console.warn('Background notes sync failed:', err);
+      // Cancelled or offline: expected; keep the local cache.
+      if (err instanceof SyncAbortedError) return;
+      // Retries exhausted (or a permanent error): local data is used as fallback.
+      console.warn('Background notes sync failed after retries:', err);
     }
   }, [db, queryClient]);
 
-  // Background sync when online: fetch from server and update local DB
+  // Background sync when online: fetch from server (with retry/backoff) and update local DB
   useEffect(() => {
-    if (enabled && isConnected) {
-      syncFromServer().catch(() => {});
-    }
+    if (!enabled || !isConnected) return;
+    const canceller = new SyncCanceller();
+    syncFromServer(canceller).catch(() => {});
+    return () => canceller.cancel();
   }, [enabled, isConnected, syncFromServer]);
 
   const refetch = useCallback(async () => {
@@ -68,6 +78,8 @@ export function useOfflineNote(id: string | null) {
   const db = useSQLiteContext();
   const queryClient = useQueryClient();
   const { isConnected } = useNetworkStatus();
+  const isConnectedRef = useRef(isConnected);
+  isConnectedRef.current = isConnected;
 
   const query = useQuery<Note | null>({
     queryKey: noteLocalQueryKey(id),
@@ -77,30 +89,35 @@ export function useOfflineNote(id: string | null) {
     gcTime: Infinity,
   });
 
-  // Background fetch from server when online to keep local cache fresh
+  // Background fetch from server when online (with retry/backoff) to keep local cache fresh
   useEffect(() => {
     if (!id || !isConnected) return;
-    let cancelled = false;
+    const canceller = new SyncCanceller();
     (async () => {
       try {
-        const serverNote = await getNote(id);
-        if (cancelled) return;
+        const serverNote = await retrySync(() => getNote(id), {
+          isConnected: () => isConnectedRef.current,
+          canceller,
+        });
+        if (canceller.cancelled) return;
         await saveNote(db, serverNote);
         queryClient.invalidateQueries({ queryKey: noteLocalQueryScopeKey() });
       } catch (err) {
+        // Cancelled or offline: expected; keep the local cache.
+        if (err instanceof SyncAbortedError) return;
         const status = axios.isAxiosError(err) ? err.response?.status : undefined;
-        if ((status === 404 || status === 410) && !cancelled) {
-          // Note no longer exists on server — tombstone it locally
+        if (status === 404 || status === 410) {
+          // Note no longer exists on server — tombstone it locally. (404/410 are
+          // permanent, so retrySync surfaces them immediately without retrying.)
           await markLocalNoteDeleted(db, id);
           queryClient.invalidateQueries({ queryKey: noteLocalQueryScopeKey() });
+          return;
         }
-        // Other errors: log for debugging; local cache is used as fallback
-        if (status !== 404 && status !== 410) {
-          console.warn(`Background note sync failed for id=${id}:`, err);
-        }
+        // Retries exhausted (or another error): local cache is used as fallback.
+        console.warn(`Background note sync failed for id=${id} after retries:`, err);
       }
     })();
-    return () => { cancelled = true; };
+    return () => { canceller.cancel(); };
   }, [id, isConnected, db, queryClient]);
 
   return query;

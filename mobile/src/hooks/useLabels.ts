@@ -25,6 +25,7 @@ import {
 } from '../db/noteQueries';
 import { enqueueOperation, rethrowIfNotQueueable } from '../db/syncQueue';
 import { useNetworkStatus } from './useNetworkStatus';
+import { retrySync, SyncAbortedError, SyncCanceller } from '../utils/retryWithBackoff';
 import { useAuth } from '../store/AuthContext';
 import { isServerSwitchInProgress } from '../api/client';
 import type { Label } from '@jot/shared';
@@ -88,6 +89,8 @@ function useBackgroundSyncQuery<T>(
 ) {
   const queryClient = useQueryClient();
   const { isConnected } = useNetworkStatus();
+  const isConnectedRef = useRef(isConnected);
+  isConnectedRef.current = isConnected;
 
   const query = useQuery<T>({
     queryKey: getQueryKey(),
@@ -99,14 +102,22 @@ function useBackgroundSyncQuery<T>(
   useEffect(() => {
     if (!isConnected) return;
     const key = getQueryKey();
-    let cancelled = false;
+    const canceller = new SyncCanceller();
     (async () => {
       try {
-        const data = await serverFn();
-        if (!cancelled) queryClient.setQueryData(key, data);
-      } catch { /* background sync — local cache remains */ }
+        const data = await retrySync(serverFn, {
+          isConnected: () => isConnectedRef.current,
+          canceller,
+        });
+        if (!canceller.cancelled) queryClient.setQueryData(key, data);
+      } catch (err) {
+        // Cancelled or offline: expected; keep the local cache.
+        if (err instanceof SyncAbortedError) return;
+        // Retries exhausted (or a permanent error): local cache remains.
+        console.warn('Background sync failed after retries:', err);
+      }
     })();
-    return () => { cancelled = true; };
+    return () => { canceller.cancel(); };
   }, [isConnected, queryClient, getQueryKey, serverFn]);
 
   return query;

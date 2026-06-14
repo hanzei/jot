@@ -4,6 +4,8 @@ import { getUsers } from '../api/users';
 import { useAuth } from './AuthContext';
 import { useSQLiteContext } from 'expo-sqlite';
 import { getLocalUsers, saveUsers } from '../db/userQueries';
+import { useNetworkStatus } from '../hooks/useNetworkStatus';
+import { retrySync, SyncAbortedError, SyncCanceller } from '../utils/retryWithBackoff';
 
 interface UsersState {
   usersById: Map<string, User>;
@@ -22,15 +24,18 @@ function buildUsersMap(seedUser: User | null | undefined, list: User[]): Map<str
 export function UsersProvider({ children }: { children: React.ReactNode }) {
   const db = useSQLiteContext();
   const { user, isAuthenticated } = useAuth();
+  const { isConnected } = useNetworkStatus();
   const [usersById, setUsersById] = useState<Map<string, User>>(new Map());
   const isMountedRef = useRef(true);
+  const isConnectedRef = useRef(isConnected);
+  isConnectedRef.current = isConnected;
 
   useEffect(() => {
     isMountedRef.current = true;
     return () => { isMountedRef.current = false; };
   }, []);
 
-  const loadUsers = useCallback(async () => {
+  const loadUsers = useCallback(async (canceller?: SyncCanceller) => {
     // Load from SQLite first for immediate offline display
     try {
       const localUsers = await getLocalUsers(db);
@@ -39,24 +44,34 @@ export function UsersProvider({ children }: { children: React.ReactNode }) {
       }
     } catch { /* ignore — server fetch will follow */ }
 
-    // Fetch from server and persist to SQLite
     try {
-      const users = await getUsers();
-      if (!isMountedRef.current) return;
+      // Fetch from server (with retry/backoff) and persist to SQLite
+      const users = await retrySync(getUsers, {
+        isConnected: () => isConnectedRef.current,
+        canceller,
+      });
+      if (!isMountedRef.current || canceller?.cancelled) return;
       await saveUsers(db, users);
       setUsersById(buildUsersMap(user, users));
-    } catch {
-      // Silently fail — SQLite data will be used as fallback
+    } catch (err) {
+      // Cancelled or offline: expected; SQLite data is used as fallback.
+      if (err instanceof SyncAbortedError) return;
+      // Retries exhausted (or a permanent error): SQLite data is the fallback.
+      console.warn('Background users sync failed after retries:', err);
     }
   }, [db, user]);
 
+  // Re-runs on reconnect (isConnected false → true) so a transient failure
+  // resumes once connectivity returns instead of waiting for the next mount.
   useEffect(() => {
-    if (isAuthenticated) {
-      loadUsers();
-    } else {
+    if (!isAuthenticated) {
       setUsersById(new Map());
+      return;
     }
-  }, [isAuthenticated, loadUsers]);
+    const canceller = new SyncCanceller();
+    loadUsers(canceller);
+    return () => canceller.cancel();
+  }, [isAuthenticated, isConnected, loadUsers]);
 
   const value = useMemo<UsersState>(
     () => ({ usersById, refreshUsers: loadUsers }),
