@@ -41,6 +41,7 @@ import { getCompletedSectionDividerColor, isWhiteHexColor } from '../utils/color
 import { fullMarkdownStyles, preprocessMarkdown } from '../utils/markdownStyles';
 import { getActiveServer, listServers, type ServerAccountEntry } from '../store/serverAccounts';
 import { setPendingShare, usePendingShare } from '../store/shareIntent';
+import { useBannerShown } from '../hooks/useBannerShown';
 
 type EditorRouteProp = RouteProp<RootStackParamList, 'NoteEditor'>;
 type EditorNavProp = NativeStackNavigationProp<RootStackParamList, 'NoteEditor'>;
@@ -193,6 +194,7 @@ export default function NoteEditorScreen() {
 
   const { colors, isDark } = useTheme();
   const insets = useSafeAreaInsets();
+  const bannerShown = useBannerShown();
   const { data: existingNote } = useOfflineNote(noteId);
   const createMutation = useCreateNote();
   const updateMutation = useUpdateNote();
@@ -1392,7 +1394,7 @@ export default function NoteEditorScreen() {
       behavior={Platform.OS === 'ios' ? 'padding' : undefined}
       keyboardVerticalOffset={Platform.OS === 'ios' ? IOS_KEYBOARD_VERTICAL_OFFSET : 0}
     >
-      <View style={[styles.header, { backgroundColor: noteBackground, borderBottomColor: hasNoteColor ? 'transparent' : colors.borderLight, paddingTop: insets.top + 12 }]}>
+      <View style={[styles.header, { backgroundColor: noteBackground, borderBottomColor: hasNoteColor ? 'transparent' : colors.borderLight, paddingTop: (bannerShown ? 0 : insets.top) + 12 }]}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
           hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}

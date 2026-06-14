@@ -51,9 +51,11 @@ import { notesLocalQueryScopeKey } from '../hooks/queryKeys';
 import { getActiveServer } from '../store/serverAccounts';
 import { useActiveServerBaseUrl } from '../hooks/useActiveServerBaseUrl';
 import { useProfileIcon } from '../hooks/useProfileIcon';
+import { useBannerShown } from '../hooks/useBannerShown';
 
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
+  const bannerShown = useBannerShown();
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList, 'Settings'>>();
   const db = useSQLiteContext();
   const queryClient = useQueryClient();
@@ -619,7 +621,7 @@ export default function SettingsScreen() {
   const selectedDropdownValue = openDropdown === 'language' ? languagePref : themePref;
 
   return (
-    <View style={[styles.container, { paddingTop: insets.top, backgroundColor: colors.background }]}>
+    <View style={[styles.container, { paddingTop: bannerShown ? 0 : insets.top, backgroundColor: colors.background }]}>
       <View style={[styles.header, { borderBottomColor: colors.borderLight, backgroundColor: colors.background }]}>
         <TouchableOpacity
           onPress={() => navigation.goBack()}
