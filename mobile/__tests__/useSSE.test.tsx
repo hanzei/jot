@@ -5,7 +5,7 @@ import { AppState, AppStateStatus } from 'react-native';
 import { useSSE } from '../src/hooks/useSSE';
 import { SSEConnectionManager } from '../src/api/events';
 import type { SSEEvent } from '@jot/shared';
-import { noteQueryKey, notesQueryScopeKey } from '../src/hooks/queryKeys';
+import { noteLocalQueryKey, notesLocalQueryScopeKey } from '../src/hooks/queryKeys';
 
 jest.mock('react-native', () => ({
   Platform: { OS: 'ios' },
@@ -116,7 +116,7 @@ describe('useSSE', () => {
       });
     });
 
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: notesQueryScopeKey() });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: notesLocalQueryScopeKey() });
   });
 
   it('invalidates notes list and specific note on note_updated event', () => {
@@ -134,8 +134,8 @@ describe('useSSE', () => {
       });
     });
 
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: notesQueryScopeKey() });
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: noteQueryKey('note-123') });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: notesLocalQueryScopeKey() });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: noteLocalQueryKey('note-123') });
   });
 
   it('invalidates notes list and removes note query on note_deleted event', () => {
@@ -154,8 +154,8 @@ describe('useSSE', () => {
       });
     });
 
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: notesQueryScopeKey() });
-    expect(removeSpy).toHaveBeenCalledWith({ queryKey: noteQueryKey('note-123') });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: notesLocalQueryScopeKey() });
+    expect(removeSpy).toHaveBeenCalledWith({ queryKey: noteLocalQueryKey('note-123') });
   });
 
   it('invalidates queries for same-user events from a different device', () => {
@@ -177,8 +177,8 @@ describe('useSSE', () => {
     });
 
     // Queries must be invalidated so the current device syncs the remote change
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: notesQueryScopeKey() });
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: noteQueryKey('note-123') });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: notesLocalQueryScopeKey() });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: noteLocalQueryKey('note-123') });
   });
 
   it('filters out events from the same device (matching client_id)', () => {
@@ -254,7 +254,7 @@ describe('useSSE', () => {
       });
     });
 
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: notesQueryScopeKey() });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: notesLocalQueryScopeKey() });
 
     invalidateSpy.mockClear();
 
@@ -267,7 +267,7 @@ describe('useSSE', () => {
       });
     });
 
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: notesQueryScopeKey() });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: notesLocalQueryScopeKey() });
   });
 
   it('does not start connection when offline', () => {

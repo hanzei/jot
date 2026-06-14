@@ -33,10 +33,7 @@ import {
   labelsQueryKey,
   noteLocalQueryKey,
   noteLocalQueryScopeKey,
-  noteQueryKey,
-  noteQueryScopeKey,
   notesLocalQueryScopeKey,
-  notesQueryScopeKey,
 } from './queryKeys';
 
 type LabelSyncScope = { archived?: true; trashed?: true; my_tasks?: true } | undefined;
@@ -183,9 +180,7 @@ export function useCreateLabel() {
         return [...existing, newLabel].sort((a, b) => a.name.localeCompare(b.name));
       });
       queryClient.invalidateQueries({ queryKey: labelCountsQueryKey() });
-      queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
-      queryClient.invalidateQueries({ queryKey: noteQueryScopeKey() });
       queryClient.invalidateQueries({ queryKey: noteLocalQueryScopeKey() });
     },
   });
@@ -247,9 +242,7 @@ export function useAddLabelToNote() {
       return note;
     },
     onSuccess: async (_updatedNote, { noteId }) => {
-      queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
-      queryClient.invalidateQueries({ queryKey: noteQueryKey(noteId) });
       queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
       // Invalidate labels list since a new label name may have been created
       queryClient.invalidateQueries({ queryKey: labelsQueryKey() });
@@ -295,9 +288,7 @@ export function useRemoveLabelFromNote() {
       return note;
     },
     onSuccess: async (_updatedNote, { noteId }) => {
-      queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
-      queryClient.invalidateQueries({ queryKey: noteQueryKey(noteId) });
       queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
       queryClient.invalidateQueries({ queryKey: labelsQueryKey() });
       queryClient.invalidateQueries({ queryKey: labelCountsQueryKey() });
@@ -356,9 +347,7 @@ export function useRenameLabel() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: labelsQueryKey() });
       queryClient.invalidateQueries({ queryKey: labelCountsQueryKey() });
-      queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
-      queryClient.invalidateQueries({ queryKey: noteQueryScopeKey() });
       queryClient.invalidateQueries({ queryKey: noteLocalQueryScopeKey() });
     },
   });
@@ -408,9 +397,7 @@ export function useDeleteLabel() {
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: labelsQueryKey() });
       queryClient.invalidateQueries({ queryKey: labelCountsQueryKey() });
-      queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
-      queryClient.invalidateQueries({ queryKey: noteQueryScopeKey() });
       queryClient.invalidateQueries({ queryKey: noteLocalQueryScopeKey() });
     },
   });

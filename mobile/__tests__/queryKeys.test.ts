@@ -3,10 +3,8 @@ import {
   labelCountsQueryKey,
   labelsQueryKey,
   noteLocalQueryKey,
-  noteQueryKey,
   noteSharesQueryKey,
   notesLocalQueryKey,
-  notesQueryKey,
 } from '../src/hooks/queryKeys';
 
 jest.mock('react-native', () => ({
@@ -32,9 +30,7 @@ describe('query key scoping', () => {
   });
 
   it('scopes note and notes keys by active server', async () => {
-    const firstNotesKey = notesQueryKey({ archived: true });
     const firstLocalNotesKey = notesLocalQueryKey({ archived: true });
-    const firstNoteKey = noteQueryKey('note-1');
     const firstLocalNoteKey = noteLocalQueryKey('note-1');
     const firstLabelsKey = labelsQueryKey();
     const firstLabelCountsKey = labelCountsQueryKey();
@@ -42,23 +38,18 @@ describe('query key scoping', () => {
 
     await setServerUrl('https://scope-b.example.com');
 
-    const secondNotesKey = notesQueryKey({ archived: true });
-    const secondNoteKey = noteQueryKey('note-1');
     const secondLocalNoteKey = noteLocalQueryKey('note-1');
     const secondLabelsKey = labelsQueryKey();
     const secondLabelCountsKey = labelCountsQueryKey();
     const secondSharesKey = noteSharesQueryKey('note-1');
     const secondLocalNotesKey = notesLocalQueryKey({ archived: true });
 
-    expect(firstNotesKey[0]).toBe('notes');
-    expect(firstNoteKey[0]).toBe('note');
+    expect(firstLocalNotesKey[0]).toBe('notes-local');
     expect(firstLocalNoteKey[0]).toBe('note-local');
     expect(firstLabelsKey[0]).toBe('labels');
     expect(firstLabelCountsKey[0]).toBe('label-counts');
     expect(firstSharesKey[0]).toBe('noteShares');
 
-    expect(firstNotesKey[1]).not.toEqual(secondNotesKey[1]);
-    expect(firstNoteKey[1]).not.toEqual(secondNoteKey[1]);
     expect(firstLocalNoteKey[1]).not.toEqual(secondLocalNoteKey[1]);
     expect(firstLabelsKey[1]).not.toEqual(secondLabelsKey[1]);
     expect(firstLabelCountsKey[1]).not.toEqual(secondLabelCountsKey[1]);

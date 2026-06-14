@@ -1,8 +1,7 @@
 import { useRef } from 'react';
-import { useQuery, useMutation, useQueryClient } from '@tanstack/react-query';
+import { useMutation, useQueryClient } from '@tanstack/react-query';
 import { useSQLiteContext } from 'expo-sqlite';
 import {
-  getNotes,
   getNote,
   createNote,
   updateNote,
@@ -26,7 +25,6 @@ import type {
   NoteShare,
   User,
   Label,
-  GetNotesParams,
   CreateNoteRequest,
   UpdateNoteRequest,
   CreateNoteItemRequest,
@@ -54,31 +52,13 @@ import { useAuth } from '../store/AuthContext';
 import { isServerSwitchInProgress } from '../api/client';
 import {
   noteLocalQueryKey,
-  noteQueryKey,
-  notesQueryKey,
   notesLocalQueryScopeKey,
-  notesQueryScopeKey,
 } from './queryKeys';
 
 function assertSwitchWriteAllowed(): void {
   if (isServerSwitchInProgress()) {
     throw new Error('Server switch in progress; write blocked');
   }
-}
-
-export function useNotes(params?: GetNotesParams) {
-  return useQuery<Note[]>({
-    queryKey: notesQueryKey(params),
-    queryFn: () => getNotes(params),
-  });
-}
-
-export function useNote(id: string | null) {
-  return useQuery<Note>({
-    queryKey: noteQueryKey(id),
-    queryFn: () => getNote(id!),
-    enabled: id !== null,
-  });
 }
 
 export function useCreateNote() {
@@ -169,7 +149,6 @@ export function useCreateNote() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
-      queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
     },
   });
 }
@@ -224,7 +203,6 @@ export function useUpdateNote() {
       return { ...existing, ...data, updated_at: now };
     },
     onSuccess: (updatedNote) => {
-      queryClient.setQueryData(noteQueryKey(updatedNote.id), updatedNote);
       queryClient.setQueryData(noteLocalQueryKey(updatedNote.id), updatedNote);
       // Synchronously patch the note in every cached notes-list so the dashboard
       // shows fresh content immediately on navigation back, without waiting for
@@ -234,7 +212,6 @@ export function useUpdateNote() {
         (old) => old?.map((n) => (n.id === updatedNote.id ? updatedNote : n)),
       );
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
-      queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
     },
   });
 }
@@ -292,8 +269,6 @@ export function useCreateNoteItem() {
     onSuccess: (_data, { noteId }) => {
       queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
-      queryClient.invalidateQueries({ queryKey: noteQueryKey(noteId) });
-      queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
     },
   });
 }
@@ -329,8 +304,6 @@ export function useUpdateNoteItem() {
     onSuccess: (_data, { noteId }) => {
       queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
-      queryClient.invalidateQueries({ queryKey: noteQueryKey(noteId) });
-      queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
     },
   });
 }
@@ -365,8 +338,6 @@ export function useDeleteNoteItem() {
     onSuccess: (_data, { noteId }) => {
       queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
-      queryClient.invalidateQueries({ queryKey: noteQueryKey(noteId) });
-      queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
     },
   });
 }
@@ -402,8 +373,6 @@ export function useReorderNoteItems() {
     onSuccess: (_data, { noteId }) => {
       queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
-      queryClient.invalidateQueries({ queryKey: noteQueryKey(noteId) });
-      queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
     },
   });
 }
@@ -436,10 +405,8 @@ export function useDeleteNote() {
       });
     },
     onSuccess: (_data, id) => {
-      queryClient.removeQueries({ queryKey: noteQueryKey(id) });
       queryClient.removeQueries({ queryKey: noteLocalQueryKey(id) });
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
-      queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
     },
   });
 }
@@ -463,10 +430,8 @@ export function useDuplicateNote() {
       return duplicatedNote;
     },
     onSuccess: (duplicatedNote) => {
-      queryClient.setQueryData(noteQueryKey(duplicatedNote.id), duplicatedNote);
       queryClient.setQueryData(noteLocalQueryKey(duplicatedNote.id), duplicatedNote);
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
-      queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
     },
   });
 }
@@ -499,10 +464,8 @@ export function useRestoreNote() {
       });
     },
     onSuccess: (_data, id) => {
-      queryClient.removeQueries({ queryKey: noteQueryKey(id) });
       queryClient.removeQueries({ queryKey: noteLocalQueryKey(id) });
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
-      queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
     },
   });
 }
@@ -535,10 +498,8 @@ export function usePermanentDeleteNote() {
       });
     },
     onSuccess: (_data, id) => {
-      queryClient.removeQueries({ queryKey: noteQueryKey(id) });
       queryClient.removeQueries({ queryKey: noteLocalQueryKey(id) });
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
-      queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
     },
   });
 }
@@ -579,7 +540,6 @@ export function useReorderNotes() {
     },
     onSuccess: () => {
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
-      queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
     },
   });
 }
@@ -652,7 +612,6 @@ export function useShareNote() {
     },
     onSuccess: (_data, { noteId }) => {
       queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
-      queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
     },
   });
 }
@@ -699,7 +658,6 @@ export function useUnshareNote() {
     },
     onSuccess: (_data, { noteId }) => {
       queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
-      queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
     },
   });
 }
@@ -759,8 +717,6 @@ export function useToggleNoteItemCompleted() {
     onSuccess: (_data, { noteId }) => {
       queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(noteId) });
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
-      queryClient.invalidateQueries({ queryKey: noteQueryKey(noteId) });
-      queryClient.invalidateQueries({ queryKey: notesQueryScopeKey() });
     },
   });
 }
