@@ -13,7 +13,6 @@ import {
 import { getNotes } from '../api/notes';
 import {
   saveNote,
-  saveNotes,
   renameLabelInLocalNotes,
   deleteLabelFromLocalNotes,
   addLabelToLocalNote,
@@ -23,7 +22,7 @@ import {
   getLocalNote,
   generateLocalId,
 } from '../db/noteQueries';
-import { enqueueOperation, rethrowIfNotQueueable } from '../db/syncQueue';
+import { enqueueOperation, rethrowIfNotQueueable, saveServerNotes } from '../db/syncQueue';
 import { useNetworkStatus } from './useNetworkStatus';
 import { retrySync, SyncAbortedError, SyncCanceller } from '../utils/retryWithBackoff';
 import { useAuth } from '../store/AuthContext';
@@ -70,7 +69,10 @@ async function syncLocalNotesAfterLabelMutation(db: SQLiteDatabase) {
   for (const scope of scopes) {
     try {
       const notes = await getNotes(scope);
-      await saveNotes(db, notes);
+      // saveServerNotes re-reads the pending set per scope, so an edit queued
+      // mid-loop is gated by the scope saved after it, not just a stale snapshot
+      // taken before the (multi-fetch) loop began (#487).
+      await saveServerNotes(db, notes);
     } catch (error) {
       const detail = error instanceof Error ? error.message : String(error);
       failures.push(`${describeLabelSyncScope(scope)} scope: ${detail}`);

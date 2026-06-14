@@ -26,11 +26,15 @@ const mockUseNetworkStatus = (
 jest.mock('../src/db/noteQueries', () => ({
   getLocalNotes: jest.fn().mockResolvedValue([]),
   getLocalNote: jest.fn().mockResolvedValue(null),
-  saveNotes: jest.fn().mockResolvedValue(undefined),
-  saveNote: jest.fn().mockResolvedValue(undefined),
-  removeLocalNotesNotIn: jest.fn().mockResolvedValue(undefined),
   markLocalNoteDeleted: jest.fn().mockResolvedValue(undefined),
   getLocalLabels: jest.fn().mockResolvedValue([]),
+}));
+
+jest.mock('../src/db/syncQueue', () => ({
+  ...jest.requireActual('../src/db/syncQueue'),
+  saveServerNotesScope: jest.fn().mockResolvedValue(undefined),
+  saveServerNote: jest.fn().mockResolvedValue(undefined),
+  getPendingNoteIds: jest.fn().mockResolvedValue(new Set()),
 }));
 
 jest.mock('../src/db/userQueries', () => ({
@@ -50,6 +54,11 @@ const mockLabelsApi = labelsApi as jest.Mocked<typeof labelsApi>;
 const mockUsersApi = usersApi as jest.Mocked<typeof usersApi>;
 const mockNoteQueries = noteQueriesModule as jest.Mocked<typeof noteQueriesModule>;
 const mockUserQueries = userQueriesModule as jest.Mocked<typeof userQueriesModule>;
+const mockSyncQueue = jest.requireMock('../src/db/syncQueue') as {
+  saveServerNotesScope: jest.Mock;
+  saveServerNote: jest.Mock;
+  getPendingNoteIds: jest.Mock;
+};
 
 function makeAxiosError(status: number) {
   return Object.assign(new Error(`Request failed with status code ${status}`), {
@@ -83,6 +92,9 @@ describe('background read-sync retry', () => {
     mockNoteQueries.getLocalNote.mockResolvedValue(null);
     mockNoteQueries.getLocalLabels.mockResolvedValue([]);
     mockUserQueries.getLocalUsers.mockResolvedValue([]);
+    mockSyncQueue.saveServerNotesScope.mockResolvedValue(undefined);
+    mockSyncQueue.saveServerNote.mockResolvedValue(undefined);
+    mockSyncQueue.getPendingNoteIds.mockResolvedValue(new Set());
   });
 
   afterEach(() => {
@@ -100,11 +112,11 @@ describe('background read-sync retry', () => {
 
     await act(async () => { await jest.advanceTimersByTimeAsync(0); });
     expect(mockNotesApi.getNotes).toHaveBeenCalledTimes(1);
-    expect(mockNoteQueries.saveNotes).not.toHaveBeenCalled();
+    expect(mockSyncQueue.saveServerNotesScope).not.toHaveBeenCalled();
 
     await act(async () => { await jest.advanceTimersByTimeAsync(1000); });
     expect(mockNotesApi.getNotes).toHaveBeenCalledTimes(2);
-    expect(mockNoteQueries.saveNotes).toHaveBeenCalledWith(expect.anything(), [sampleNote]);
+    expect(mockSyncQueue.saveServerNotesScope).toHaveBeenCalledWith(expect.anything(), [sampleNote], undefined);
   });
 
   it('keeps the local cache when notes-list retries are exhausted', async () => {
@@ -116,7 +128,7 @@ describe('background read-sync retry', () => {
     await act(async () => { await jest.advanceTimersByTimeAsync(60000 * 4); });
     // 4 attempts (initial + 3 retries), then give up without writing.
     expect(mockNotesApi.getNotes).toHaveBeenCalledTimes(4);
-    expect(mockNoteQueries.saveNotes).not.toHaveBeenCalled();
+    expect(mockSyncQueue.saveServerNotesScope).not.toHaveBeenCalled();
     expect(warnSpy).toHaveBeenCalledWith('Background notes sync failed after retries:', expect.anything());
     warnSpy.mockRestore();
   });
@@ -144,7 +156,7 @@ describe('background read-sync retry', () => {
 
     await act(async () => { await jest.advanceTimersByTimeAsync(1000); });
     expect(mockNotesApi.getNote).toHaveBeenCalledTimes(2);
-    expect(mockNoteQueries.saveNote).toHaveBeenCalledWith(expect.anything(), sampleNote);
+    expect(mockSyncQueue.saveServerNote).toHaveBeenCalledWith(expect.anything(), sampleNote);
   });
 
   it('tombstones a single note on a permanent 404 without retrying', async () => {

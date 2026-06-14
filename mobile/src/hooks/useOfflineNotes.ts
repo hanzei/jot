@@ -2,7 +2,8 @@ import { useEffect, useCallback, useRef } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSQLiteContext } from 'expo-sqlite';
 import axios from 'axios';
-import { getLocalNotes, getLocalNote, saveNotes, saveNote, markLocalNoteDeleted, removeLocalNotesNotIn } from '../db/noteQueries';
+import { getLocalNotes, getLocalNote, markLocalNoteDeleted } from '../db/noteQueries';
+import { getPendingNoteIds, saveServerNote, saveServerNotesScope } from '../db/syncQueue';
 import { getNotes, getNote } from '../api/notes';
 import type { GetNotesParams, Note } from '@jot/shared';
 import { useNetworkStatus } from './useNetworkStatus';
@@ -40,11 +41,10 @@ export function useOfflineNotes(params?: GetNotesParams, options?: { enabled?: b
         canceller,
       });
       if (canceller?.cancelled) return;
-      await saveNotes(db, serverNotes);
-      // Remove local notes that matched this scope but are no longer returned by the server
-      // (e.g., archived, deleted, or label-changed on another device).
-      const serverIds = new Set(serverNotes.map((n) => n.id));
-      await removeLocalNotesNotIn(db, serverIds, paramsRef.current);
+      // Persist the fetched notes and prune rows that fell out of this scope
+      // (e.g., archived, deleted, or label-changed on another device), both
+      // deferring to notes with pending local edits so they aren't reverted.
+      await saveServerNotesScope(db, serverNotes, paramsRef.current);
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
     } catch (err) {
       // Cancelled or offline: expected; keep the local cache.
@@ -100,17 +100,31 @@ export function useOfflineNote(id: string | null) {
           canceller,
         });
         if (canceller.cancelled) return;
-        await saveNote(db, serverNote);
+        await saveServerNote(db, serverNote);
         queryClient.invalidateQueries({ queryKey: noteLocalQueryScopeKey() });
       } catch (err) {
         // Cancelled or offline: expected; keep the local cache.
         if (err instanceof SyncAbortedError) return;
         const status = axios.isAxiosError(err) ? err.response?.status : undefined;
         if (status === 404 || status === 410) {
-          // Note no longer exists on server — tombstone it locally. (404/410 are
-          // permanent, so retrySync surfaces them immediately without retrying.)
-          await markLocalNoteDeleted(db, id);
-          queryClient.invalidateQueries({ queryKey: noteLocalQueryScopeKey() });
+          // Note no longer exists on server — tombstone it locally, unless it has
+          // a pending local op: a queued edit/restore may be racing the fetch, so
+          // let the drain reconcile it rather than hide the optimistic edit (#487).
+          // (404/410 are permanent, so retrySync surfaces them immediately.)
+          // Guard the queue read + tombstone so a failure here doesn't escape the
+          // fire-and-forget effect as an unhandled rejection; the local cache
+          // remains as fallback and a later sync retries.
+          try {
+            const pendingNoteIds = await getPendingNoteIds(db);
+            // Re-check cancelled: the effect may have torn down (id change/unmount)
+            // during the await above, in which case we must not write.
+            if (!canceller.cancelled && !pendingNoteIds.has(id)) {
+              await markLocalNoteDeleted(db, id);
+              queryClient.invalidateQueries({ queryKey: noteLocalQueryScopeKey() });
+            }
+          } catch (tombstoneErr) {
+            console.warn(`Failed to tombstone note id=${id} after server reported it gone:`, tombstoneErr);
+          }
           return;
         }
         // Retries exhausted (or another error): local cache is used as fallback.

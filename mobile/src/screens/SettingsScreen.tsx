@@ -46,7 +46,7 @@ import type { ThemePreference, AboutInfo, ActiveSession, PersonalAccessToken, Im
 import i18n from '../i18n';
 import { SUPPORTED_LANGUAGES, getLanguagePreference, resolveLanguage, type LanguagePreference } from '../i18n/language';
 import { displayMessage, getCurrentLocale } from '../i18n/utils';
-import { saveNotes } from '../db/noteQueries';
+import { saveServerNotes } from '../db/syncQueue';
 import { notesLocalQueryScopeKey } from '../hooks/queryKeys';
 import { getActiveServer } from '../store/serverAccounts';
 import { useActiveServerBaseUrl } from '../hooks/useActiveServerBaseUrl';
@@ -352,7 +352,7 @@ export default function SettingsScreen() {
       setSelectedImportFile(null);
       try {
         const latestNotes = await getNotes();
-        await saveNotes(db, latestNotes);
+        await saveServerNotes(db, latestNotes);
       } catch (syncErr) {
         console.warn('Post-import notes sync failed:', syncErr);
       } finally {

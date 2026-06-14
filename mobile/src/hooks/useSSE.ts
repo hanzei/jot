@@ -8,7 +8,8 @@ import { setActiveSseManager } from '../api/sseState';
 import { CLIENT_ID } from '../api/client';
 import type { SSEEvent } from '@jot/shared';
 import { useNetworkStatus } from './useNetworkStatus';
-import { saveNote, markLocalNoteDeleted } from '../db/noteQueries';
+import { markLocalNoteDeleted } from '../db/noteQueries';
+import { getPendingNoteIds, saveServerNote } from '../db/syncQueue';
 import { isSseQuiesced, subscribeToServerSwitchLifecycle } from '../store/serverSwitchLifecycle';
 import {
   noteLocalQueryKey,
@@ -62,7 +63,8 @@ export function useSSE(onNoteUpdatedByOther?: SSENotificationCallback): void {
         const { note_id, note } = event.data;
         if (note) {
           // Persist the updated note to SQLite so offline reads stay current
-          saveNote(dbRef.current, note).catch(() => {});
+          // (deferring to a pending local edit on this note; see #487).
+          saveServerNote(dbRef.current, note).catch(() => {});
         }
         queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(note_id) });
         // Don't fire the "updated by someone else" notification for changes
@@ -73,9 +75,19 @@ export function useSSE(onNoteUpdatedByOther?: SSENotificationCallback): void {
         }
       } else if (event.type === 'note_deleted') {
         const { note_id } = event.data;
-        // Tombstone the note in SQLite so it disappears from offline views
-        markLocalNoteDeleted(dbRef.current, note_id).catch(() => {});
-        queryClient.removeQueries({ queryKey: noteLocalQueryKey(note_id) });
+        // Tombstone the note in SQLite so it disappears from offline views — but
+        // defer to a pending local edit/restore on this note: a queued op may be
+        // racing the remote delete, so let the drain reconcile it rather than hide
+        // the optimistic edit (#487). The drain replaying against a server-deleted
+        // note gets a 404 and dead-letters the op, so this can't wedge the queue.
+        const db = dbRef.current;
+        getPendingNoteIds(db)
+          .then((pendingNoteIds) => {
+            if (pendingNoteIds.has(note_id)) return;
+            queryClient.removeQueries({ queryKey: noteLocalQueryKey(note_id) });
+            return markLocalNoteDeleted(db, note_id);
+          })
+          .catch(() => {});
       }
     });
 
