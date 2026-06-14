@@ -221,6 +221,66 @@ describe('useNotes hooks', () => {
   });
 
   describe('useUpdateNote (offline)', () => {
+    const existingTextNote = {
+      id: '123', title: '', content: 'Old body', note_type: 'text',
+      color: '#ffffff', pinned: false, archived: false, position: 0,
+      checked_items_collapsed: false, is_shared: false, deleted_at: null,
+      user_id: 'u1', created_at: '', updated_at: '', labels: [], shared_with: [],
+    };
+    const existingListNote = {
+      id: '456', title: 'Old title', content: '', note_type: 'list',
+      color: '#ffffff', pinned: false, archived: false, position: 0,
+      checked_items_collapsed: false, is_shared: false, deleted_at: null,
+      user_id: 'u1', created_at: '', updated_at: '', labels: [], shared_with: [],
+      items: [],
+    };
+
+    it('queues only the changed fields for a text note (no full-snapshot clobber)', async () => {
+      mockUseNetworkStatus.mockReturnValue({ isConnected: false });
+      mockNoteQueries.getLocalNote.mockResolvedValueOnce(existingTextNote as never);
+
+      const { result } = renderHook(() => useUpdateNote(), { wrapper: createWrapper() });
+
+      await result.current.mutateAsync({ id: '123', data: { content: 'New body' } });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      // Only the user-changed field is queued; pinned/archived/color are absent,
+      // so replaying this PATCH cannot overwrite them with the stale local snapshot.
+      expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          operation: 'update',
+          endpoint: '/notes/123',
+          method: 'PATCH',
+          body: { content: 'New body' },
+        }),
+      );
+    });
+
+    it('queues only the changed fields for a list note (no full-snapshot clobber)', async () => {
+      mockUseNetworkStatus.mockReturnValue({ isConnected: false });
+      mockNoteQueries.getLocalNote.mockResolvedValueOnce(existingListNote as never);
+
+      const { result } = renderHook(() => useUpdateNote(), { wrapper: createWrapper() });
+
+      await result.current.mutateAsync({ id: '456', data: { title: 'New title' } });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      // title is a list-note-specific field; only it is queued — checked_items_collapsed,
+      // pinned, archived, and color stay absent so a replay cannot clobber them.
+      expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          operation: 'update',
+          endpoint: '/notes/456',
+          method: 'PATCH',
+          body: { title: 'New title' },
+        }),
+      );
+    });
+
     it('rejects and does not enqueue or write to DB when note is missing from local cache', async () => {
       mockUseNetworkStatus.mockReturnValue({ isConnected: false });
       mockNoteQueries.getLocalNote.mockResolvedValueOnce(null);
