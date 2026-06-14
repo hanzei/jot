@@ -56,6 +56,7 @@ jest.mock('../src/api/notes', () => ({
 jest.mock('../src/api/client', () => ({
   getBaseUrl: jest.fn(() => 'http://localhost:8080'),
   subscribeToClientActiveServerChanges: jest.fn(() => () => {}),
+  cacheAuthProfile: jest.fn().mockResolvedValue(undefined),
 }));
 
 jest.mock('../src/store/serverAccounts', () => ({

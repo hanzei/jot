@@ -16,7 +16,7 @@ import { drainQueue, getPendingCount } from '../src/db/syncQueue';
 let enqueueListener: (() => void) | null = null;
 
 jest.mock('../src/db/syncQueue', () => ({
-  drainQueue: jest.fn().mockResolvedValue({ idMappings: [], discardedOperations: [] }),
+  drainQueue: jest.fn().mockResolvedValue({ idMappings: [], discardedOperations: [], syncedSettings: false }),
   getPendingCount: jest.fn().mockResolvedValue(0),
   subscribeToEnqueue: jest.fn((listener: () => void) => {
     enqueueListener = listener;
@@ -79,7 +79,7 @@ describe('OfflineProvider queue draining', () => {
     enqueueListener = null;
     lastSyncError = false;
     mockRevalidate.mockResolvedValue(true);
-    mockDrainQueue.mockResolvedValue({ idMappings: [], discardedOperations: [] });
+    mockDrainQueue.mockResolvedValue({ idMappings: [], discardedOperations: [], syncedSettings: false });
     mockGetPendingCount.mockResolvedValue(0);
     jest.spyOn(AppState, 'addEventListener');
   });
@@ -135,7 +135,7 @@ describe('OfflineProvider queue draining', () => {
     mockDrainQueue.mockImplementationOnce(
       () =>
         new Promise((resolve) => {
-          resolveFirst = () => resolve({ idMappings: [], discardedOperations: [] });
+          resolveFirst = () => resolve({ idMappings: [], discardedOperations: [], syncedSettings: false });
         }),
     );
 
