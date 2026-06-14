@@ -30,17 +30,21 @@ export async function uploadProfileIcon(
     type,
   } as unknown as Blob);
 
+  let lastPercent = -1;
   const res = await api.post('/users/me/profile-icon', formData, {
     headers: { 'Content-Type': 'multipart/form-data' },
     timeout: UPLOAD_ICON_TIMEOUT,
-    onUploadProgress: onUploadProgress
-      ? (progressEvent) => {
-          const percent = progressEvent.total
-            ? Math.round((progressEvent.loaded * 100) / progressEvent.total)
-            : 0;
+    ...(onUploadProgress && {
+      onUploadProgress: (progressEvent) => {
+        const percent = progressEvent.total
+          ? Math.round((progressEvent.loaded * 100) / progressEvent.total)
+          : 0;
+        if (percent !== lastPercent) {
+          lastPercent = percent;
           onUploadProgress(percent);
         }
-      : undefined,
+      },
+    }),
   });
   return res.data;
 }

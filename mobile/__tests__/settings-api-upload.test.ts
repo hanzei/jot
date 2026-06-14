@@ -58,16 +58,15 @@ describe('uploadProfileIcon', () => {
   });
 
   it('strips file:// prefix on iOS', async () => {
+    const appendSpy = jest.spyOn(FormData.prototype, 'append');
     mockAxiosInstance.post.mockResolvedValueOnce({ data: mockUser });
 
     await uploadProfileIcon('file:///photos/avatar.jpg');
 
-    const formData = mockAxiosInstance.post.mock.calls[0][1] as FormData;
-    // eslint-disable-next-line @typescript-eslint/no-explicit-any
-    const file = (formData as any)._parts?.[0]?.[1] ?? (formData as any).get?.('file');
-    if (file && typeof file === 'object' && 'uri' in file) {
-      expect((file as { uri: string }).uri).not.toContain('file://');
-    }
+    const [key, fileValue] = appendSpy.mock.calls[0];
+    expect(key).toBe('file');
+    expect((fileValue as { uri: string }).uri).not.toContain('file://');
+    appendSpy.mockRestore();
   });
 
   it('calls onUploadProgress with computed percentage', async () => {
@@ -98,16 +97,13 @@ describe('uploadProfileIcon', () => {
     expect(onProgress).toHaveBeenCalledWith(0);
   });
 
-  it('does not set onUploadProgress when no callback is provided', async () => {
+  it('omits onUploadProgress from the request config when no callback is provided', async () => {
     mockAxiosInstance.post.mockResolvedValueOnce({ data: mockUser });
 
     await uploadProfileIcon('file:///photos/avatar.jpg');
 
-    expect(mockAxiosInstance.post).toHaveBeenCalledWith(
-      '/users/me/profile-icon',
-      expect.anything(),
-      expect.objectContaining({ onUploadProgress: undefined }),
-    );
+    const config = mockAxiosInstance.post.mock.calls[0][2] as Record<string, unknown>;
+    expect(config).not.toHaveProperty('onUploadProgress');
   });
 
   it('returns the updated user', async () => {
