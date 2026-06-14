@@ -228,6 +228,7 @@ describe('DrawerContent', () => {
       userId: 'user-1',
       username: 'alice',
       hasProfileIcon: true,
+      iconVersion: '2026-01-01T00:00:00Z',
       size: 'large',
     });
   });

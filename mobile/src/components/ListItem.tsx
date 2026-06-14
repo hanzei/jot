@@ -210,6 +210,7 @@ function ListItem({
                 userId={assignedTo}
                 username={assignedUser?.username ?? '?'}
                 hasProfileIcon={assignedUser?.hasProfileIcon}
+                iconVersion={assignedUser?.iconVersion}
                 size="small"
               />
             </TouchableOpacity>

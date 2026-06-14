@@ -87,6 +87,7 @@ export default function AssigneePicker({
                     userId={c.userId}
                     username={c.username}
                     hasProfileIcon={c.hasProfileIcon}
+                    iconVersion={c.iconVersion}
                     size="small"
                   />
                   <Text style={[styles.rowText, { color: colors.text }]} numberOfLines={1}>

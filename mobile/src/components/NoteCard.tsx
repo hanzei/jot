@@ -28,6 +28,7 @@ interface AvatarData {
   userId: string;
   username: string;
   hasProfileIcon?: boolean;
+  iconVersion?: string;
 }
 
 function buildNoteAvatars(
@@ -45,17 +46,20 @@ function buildNoteAvatars(
       userId: note.user_id,
       username: owner?.username || '?',
       hasProfileIcon: owner?.has_profile_icon,
+      iconVersion: owner?.updated_at,
     });
   }
 
   note.shared_with
     ?.filter(s => s.shared_with_user_id !== currentUserId)
     .forEach(s => {
+      const u = usersById.get(s.shared_with_user_id);
       avatars.push({
         key: s.id,
         userId: s.shared_with_user_id,
         username: s.username || '?',
-        hasProfileIcon: s.has_profile_icon ?? usersById.get(s.shared_with_user_id)?.has_profile_icon,
+        hasProfileIcon: s.has_profile_icon ?? u?.has_profile_icon,
+        iconVersion: u?.updated_at ?? s.updated_at,
       });
     });
 
@@ -81,6 +85,7 @@ function NoteAvatars({ note }: { note: Note }) {
             userId={avatar.userId}
             username={avatar.username}
             hasProfileIcon={avatar.hasProfileIcon}
+            iconVersion={avatar.iconVersion}
             size="small"
           />
         </View>
