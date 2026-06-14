@@ -92,11 +92,13 @@ function applyToggleToItems(items: NoteItem[], itemId: string, completed: boolea
 /**
  * Snapshot of the cache entries an optimistic note write touches, captured by
  * `applyOptimisticNote` so `rollbackOptimisticNote` can restore them if the
- * write ultimately fails.
+ * write ultimately fails. We record the affected note's *prior entry* per list
+ * (not the whole list array) so rollback restores only that note, leaving
+ * concurrent optimistic edits to other notes in the same list untouched.
  */
 interface OptimisticNoteSnapshot {
   previousNote: Note | undefined;
-  previousLists: [QueryKey, Note[] | undefined][];
+  previousListEntries: { key: QueryKey; note: Note }[];
 }
 
 /**
@@ -112,15 +114,17 @@ function applyOptimisticNote(
   transform: (note: Note) => Note,
 ): OptimisticNoteSnapshot {
   const previousNote = queryClient.getQueryData<Note>(noteLocalQueryKey(noteId));
-  const previousLists = queryClient.getQueriesData<Note[]>({ queryKey: notesLocalQueryScopeKey() });
   if (previousNote) {
     queryClient.setQueryData<Note>(noteLocalQueryKey(noteId), transform(previousNote));
   }
-  queryClient.setQueriesData<Note[]>(
-    { queryKey: notesLocalQueryScopeKey() },
-    (old) => old?.map((n) => (n.id === noteId ? transform(n) : n)),
-  );
-  return { previousNote, previousLists };
+  const previousListEntries: { key: QueryKey; note: Note }[] = [];
+  for (const [key, list] of queryClient.getQueriesData<Note[]>({ queryKey: notesLocalQueryScopeKey() })) {
+    const prior = list?.find((n) => n.id === noteId);
+    if (!prior) continue;
+    previousListEntries.push({ key, note: prior });
+    queryClient.setQueryData<Note[]>(key, (old) => old?.map((n) => (n.id === noteId ? transform(n) : n)));
+  }
+  return { previousNote, previousListEntries };
 }
 
 /** Reverts the optimistic cache entries captured by an onMutate snapshot. */
@@ -133,8 +137,10 @@ function rollbackOptimisticNote(
   if (context.previousNote !== undefined) {
     queryClient.setQueryData(noteLocalQueryKey(noteId), context.previousNote);
   }
-  for (const [key, data] of context.previousLists) {
-    queryClient.setQueryData(key, data);
+  // Restore only the affected note within each list (reading current cache) so a
+  // failed write doesn't wipe newer optimistic edits to other notes in the list.
+  for (const { key, note } of context.previousListEntries) {
+    queryClient.setQueryData<Note[]>(key, (old) => old?.map((n) => (n.id === noteId ? note : n)));
   }
 }
 

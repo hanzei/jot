@@ -480,6 +480,42 @@ describe('useNotes hooks', () => {
       expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
     });
 
+    it('rolling back a failed update preserves a concurrent optimistic edit to another note in the same list', async () => {
+      const { wrapper, queryClient } = createWrapperWithClient();
+      const noteA = { ...existingTextNote, id: 'a', content: 'A-old' };
+      const noteB = { ...existingTextNote, id: 'b', content: 'B-old' };
+      queryClient.setQueryData(noteLocalQueryKey('a'), noteA);
+      queryClient.setQueryData(notesLocalQueryKey(undefined), [noteA, noteB]);
+
+      // Note A's request stays in flight so we can interleave a concurrent edit.
+      const pending = deferred<typeof noteA>();
+      mockNotesApi.updateNote.mockReset();
+      mockNotesApi.updateNote.mockReturnValueOnce(pending.promise as never);
+
+      const { result } = renderHook(() => useUpdateNote(), { wrapper });
+      result.current.mutate({ id: 'a', data: { content: 'A-new' } });
+
+      // Wait until A's optimistic edit lands (its onMutate has snapshotted the list).
+      await waitFor(() => {
+        const list = queryClient.getQueryData(notesLocalQueryKey(undefined)) as Array<{ id: string; content: string }>;
+        expect(list.find((n) => n.id === 'a')!.content).toBe('A-new');
+      });
+
+      // A different in-flight mutation optimistically edits note B in the same list.
+      queryClient.setQueryData<Array<{ id: string; content: string }>>(
+        notesLocalQueryKey(undefined),
+        (old) => old!.map((n) => (n.id === 'b' ? { ...n, content: 'B-new' } : n)),
+      );
+
+      // Now A fails permanently → its rollback runs.
+      pending.reject(makeAxiosError(400));
+      await waitFor(() => expect(result.current.isError).toBe(true));
+
+      const list = queryClient.getQueryData(notesLocalQueryKey(undefined)) as Array<{ id: string; content: string }>;
+      expect(list.find((n) => n.id === 'a')!.content).toBe('A-old'); // A reverted
+      expect(list.find((n) => n.id === 'b')!.content).toBe('B-new'); // B's concurrent edit preserved
+    });
+
     it('useToggleNoteItemCompleted toggles the cached item (and cascades) before the request resolves', async () => {
       const { wrapper, queryClient } = createWrapperWithClient();
       queryClient.setQueryData(noteLocalQueryKey('n1'), listNote);
