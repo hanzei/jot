@@ -403,6 +403,14 @@ export default function SettingsScreen() {
     setProfileSuccess('');
     setProfileSaving(true);
     const profileUpdate = { username, first_name: firstName, last_name: lastName };
+
+    const previousUser = user;
+    if (user) {
+      const optimisticUser = { ...user, ...profileUpdate };
+      setUser(optimisticUser);
+      if (settings) void cacheAuthProfile({ user: optimisticUser, settings });
+    }
+
     try {
       const { user: updatedUser, settings: updatedSettings } = await updateMe(profileUpdate);
       setUser(updatedUser);
@@ -411,11 +419,6 @@ export default function SettingsScreen() {
       setProfileSuccess(t('settings.profileUpdated'));
     } catch (err: unknown) {
       if (isQueueableError(err)) {
-        if (user) {
-          const optimisticUser = { ...user, ...profileUpdate };
-          setUser(optimisticUser);
-          if (settings) void cacheAuthProfile({ user: optimisticUser, settings });
-        }
         await enqueueOperation(db, {
           operation: 'updateSettings',
           endpoint: '/users/me',
@@ -424,6 +427,10 @@ export default function SettingsScreen() {
         });
         setProfileSuccess(t('settings.profileUpdated'));
       } else {
+        if (previousUser) {
+          setUser(previousUser);
+          if (settings) void cacheAuthProfile({ user: previousUser, settings });
+        }
         const msg = (err as { response?: { data?: string } })?.response?.data;
         setProfileError(typeof msg === 'string' ? msg.trim() : 'settings.failedUpdateProfile');
       }

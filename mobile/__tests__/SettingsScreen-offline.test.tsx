@@ -409,7 +409,7 @@ describe('SettingsScreen offline / queued settings changes', () => {
       );
     });
 
-    it('shows error and does not enqueue when updateMe fails with permanent 4xx', async () => {
+    it('applies optimistic update then reverts and shows error when updateMe fails permanently (4xx)', async () => {
       const { setUser } = setupAuth();
       mockUpdateMe.mockRejectedValue(
         Object.assign(makeAxiosError(422), { response: { status: 422, data: 'username taken' } }),
@@ -424,12 +424,14 @@ describe('SettingsScreen offline / queued settings changes', () => {
         expect(getByText('username taken')).toBeTruthy();
       });
 
-      // Should not update user optimistically for permanent errors
-      expect(setUser).not.toHaveBeenCalled();
+      // First call: optimistic update; second call: revert to original
+      expect(setUser).toHaveBeenCalledTimes(2);
+      expect(setUser).toHaveBeenNthCalledWith(1, expect.objectContaining({ username: 'alice' }));
+      expect(setUser).toHaveBeenNthCalledWith(2, baseUser);
       expect(mockEnqueueOperation).not.toHaveBeenCalled();
     });
 
-    it('shows error and does not enqueue when updateMe fails with 400', async () => {
+    it('applies optimistic update then reverts and shows error when updateMe fails with 400', async () => {
       const { setUser } = setupAuth();
       mockUpdateMe.mockRejectedValue(
         Object.assign(makeAxiosError(400), { response: { status: 400, data: 'invalid input' } }),
@@ -444,7 +446,8 @@ describe('SettingsScreen offline / queued settings changes', () => {
         expect(getByText('invalid input')).toBeTruthy();
       });
 
-      expect(setUser).not.toHaveBeenCalled();
+      expect(setUser).toHaveBeenCalledTimes(2);
+      expect(setUser).toHaveBeenNthCalledWith(2, baseUser);
       expect(mockEnqueueOperation).not.toHaveBeenCalled();
     });
   });
