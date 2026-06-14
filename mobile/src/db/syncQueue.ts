@@ -18,7 +18,12 @@ export type QueueOperation =
   | 'reorderItems'
   | 'toggleItemCompleted'
   | 'share'
-  | 'unshare';
+  | 'unshare'
+  | 'createLabel'
+  | 'renameLabel'
+  | 'deleteLabel'
+  | 'addLabelToNote'
+  | 'removeLabelFromNote';
 
 interface QueueEntry {
   id: number;
@@ -56,6 +61,29 @@ export function isTransientHttpStatus(status: number | undefined): boolean {
   if (status === undefined) return true;
   if (status === 401 || status === 408 || status === 429) return true;
   return status >= 500;
+}
+
+/**
+ * Called from the `catch` of an online write attempt. If the failure is
+ * transient (a flaky connection, timeout, or 5xx), it is swallowed so the
+ * caller can fall back to the offline path — writing locally and queueing the
+ * operation for replay — instead of losing the edit. Permanent failures (4xx
+ * validation/auth/conflict) and unexpected local errors are rethrown so the UI
+ * can surface them to the user.
+ *
+ * 401 is deliberately treated as non-queueable here even though the queue drain
+ * retries it: the API response interceptor reacts to a 401 by clearing the
+ * session and redirecting to login, so the write must surface the error rather
+ * than silently report success while the user is being logged out.
+ */
+export function rethrowIfNotQueueable(err: unknown): void {
+  if (!axios.isAxiosError(err)) {
+    throw err;
+  }
+  const status = err.response?.status;
+  if (status === 401 || !isTransientHttpStatus(status)) {
+    throw err;
+  }
 }
 
 type EnqueueListener = () => void;
@@ -129,6 +157,11 @@ function remapIdsInBody(
   return remapValue(body, idMap) as Record<string, unknown>;
 }
 
+/** Narrow an unknown API response to something carrying a string `id` (a note or label). */
+function hasStringId(data: unknown): data is { id: string } {
+  return data !== null && typeof data === 'object' && typeof (data as { id?: unknown }).id === 'string';
+}
+
 export interface DiscardedOperation {
   operation: QueueOperation;
   endpoint: string;
@@ -190,18 +223,27 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         if (entry.operation === 'create' && body?.local_id) {
           const localId = body.local_id as string;
           const data = response?.data;
-          if (
-            data !== null &&
-            typeof data === 'object' &&
-            typeof (data as Note).id === 'string' &&
-            (data as Note).id !== localId
-          ) {
+          if (hasStringId(data) && data.id !== localId) {
             const serverNote = data as Note;
             idMap.set(localId, serverNote.id);
             idMappings.push({ localId, serverNote });
             // Replace local note in DB with server note
             await replaceLocalNoteId(db, localId, serverNote);
           }
+        } else if (entry.operation === 'createLabel' && body?.local_id) {
+          // Reconcile the offline-generated local label id with the server id so
+          // later queued ops that reference it (rename/delete/remove-from-note)
+          // are remapped. Labels are derived from notes' labels_json rather than a
+          // dedicated table, so no row is rewritten here — the remap is enough.
+          const localId = body.local_id as string;
+          const data = response?.data;
+          if (hasStringId(data) && data.id !== localId) {
+            idMap.set(localId, data.id);
+          }
+        } else if (entry.operation === 'addLabelToNote') {
+          // The server returns the updated note; persist it so labels_json
+          // reflects the server-assigned label id (replacing any local id).
+          await saveNoteFromResponse(db, response?.data);
         } else if (entry.operation === 'toggleItemCompleted') {
           const items = response?.data as NoteItem[] | undefined;
           if (Array.isArray(items) && items.length > 0) {
@@ -215,7 +257,12 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
       } else if (entry.method === 'PATCH') {
         await api.patch(endpoint, body);
       } else if (entry.method === 'DELETE') {
-        await api.delete(endpoint);
+        const response = await api.delete(endpoint);
+        if (entry.operation === 'removeLabelFromNote') {
+          // The server returns the updated note; persist it so the local
+          // labels_json drops the removed label and stays consistent.
+          await saveNoteFromResponse(db, response?.data);
+        }
       }
 
       await db.runAsync('DELETE FROM sync_queue WHERE id = ?', [entry.id]);
@@ -243,7 +290,9 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
   return { idMappings, discardedOperations };
 }
 
-/** Persist a note that was returned by the server after a successful sync, updating local DB. */
-export async function updateLocalFromServer(db: SQLiteDatabase, note: Note): Promise<void> {
-  await saveNote(db, note);
+/** Persist a note returned by the server during queue drain, if the response looks like a note. */
+async function saveNoteFromResponse(db: SQLiteDatabase, data: unknown): Promise<void> {
+  if (hasStringId(data)) {
+    await saveNote(db, data as Note);
+  }
 }

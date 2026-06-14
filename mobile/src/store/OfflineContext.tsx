@@ -14,7 +14,7 @@ import { useQueryClient } from '@tanstack/react-query';
 import { drainQueue, getPendingCount, subscribeToEnqueue } from '../db/syncQueue';
 import { useAuth } from './AuthContext';
 import { isSyncDrainPaused } from './serverSwitchLifecycle';
-import { noteLocalQueryKey, noteLocalQueryScopeKey, notesLocalQueryScopeKey } from '../hooks/queryKeys';
+import { labelCountsQueryKey, labelsQueryKey, noteLocalQueryKey, noteLocalQueryScopeKey, notesLocalQueryScopeKey } from '../hooks/queryKeys';
 
 interface OfflineContextValue {
   isConnected: boolean;
@@ -125,6 +125,10 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
       }
       queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
       queryClient.invalidateQueries({ queryKey: noteLocalQueryScopeKey() });
+      // Drained label ops may have reconciled local label ids (offline-created
+      // labels) to server ids, so refresh the label list/counts too.
+      queryClient.invalidateQueries({ queryKey: labelsQueryKey() });
+      queryClient.invalidateQueries({ queryKey: labelCountsQueryKey() });
 
       // drainQueue resolves even when it stops early on a transient failure, so
       // inspect what's left to decide whether a backoff retry is warranted.
