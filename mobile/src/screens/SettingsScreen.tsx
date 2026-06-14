@@ -46,10 +46,11 @@ import type { ThemePreference, AboutInfo, ActiveSession, PersonalAccessToken, Im
 import i18n from '../i18n';
 import { SUPPORTED_LANGUAGES, getLanguagePreference, resolveLanguage, type LanguagePreference } from '../i18n/language';
 import { displayMessage, getCurrentLocale } from '../i18n/utils';
-import { saveNotes } from '../db/noteQueries';
+import { saveServerNotes } from '../db/syncQueue';
 import { notesLocalQueryScopeKey } from '../hooks/queryKeys';
 import { getActiveServer } from '../store/serverAccounts';
 import { useActiveServerBaseUrl } from '../hooks/useActiveServerBaseUrl';
+import { useProfileIcon } from '../hooks/useProfileIcon';
 
 export default function SettingsScreen() {
   const insets = useSafeAreaInsets();
@@ -76,11 +77,15 @@ export default function SettingsScreen() {
   const [passwordSuccess, setPasswordSuccess] = useState('');
 
   const hasProfileIcon = user?.has_profile_icon ?? false;
+  const iconVersion = user?.updated_at ?? '';
   const [iconUploading, setIconUploading] = useState(false);
   const [iconUploadPercent, setIconUploadPercent] = useState<number | null>(null);
   const [iconDeleting, setIconDeleting] = useState(false);
   const [iconError, setIconError] = useState('');
-  const [iconVersion, setIconVersion] = useState(user?.updated_at ?? '');
+
+  const settingsIconNetworkUrl =
+    hasProfileIcon && user ? `${activeServerBaseUrl}/api/v1/users/${user.id}/profile-icon` : '';
+  const localIconUri = useProfileIcon(user?.id, hasProfileIcon, iconVersion, settingsIconNetworkUrl);
 
   const [languagePref, setLanguagePref] = useState<LanguagePreference>(
     getLanguagePreference(settings?.language),
@@ -353,7 +358,7 @@ export default function SettingsScreen() {
       setSelectedImportFile(null);
       try {
         const latestNotes = await getNotes();
-        await saveNotes(db, latestNotes);
+        await saveServerNotes(db, latestNotes);
       } catch (syncErr) {
         console.warn('Post-import notes sync failed:', syncErr);
       } finally {
@@ -512,7 +517,6 @@ export default function SettingsScreen() {
         setIconUploadPercent(percent);
       });
       setUser(updatedUser);
-      setIconVersion(updatedUser.updated_at);
     } catch (err: unknown) {
       const msg = (err as { response?: { data?: string } })?.response?.data;
       setIconError(typeof msg === 'string' ? msg.trim() : 'settings.iconUploadFailed');
@@ -592,7 +596,7 @@ export default function SettingsScreen() {
               <View>
                 {hasProfileIcon && user ? (
                   <Image
-                    source={{ uri: `${activeServerBaseUrl}/api/v1/users/${user.id}/profile-icon?v=${iconVersion}` }}
+                    source={{ uri: localIconUri ?? settingsIconNetworkUrl }}
                     style={styles.profileAvatar}
                   />
                 ) : (
