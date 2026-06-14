@@ -196,9 +196,28 @@ export async function probeServerReachability(url: string): Promise<ServerReacha
 // Unique ID for this app launch, used to suppress SSE echoes of our own mutations.
 export const CLIENT_ID = randomUUID();
 
+/**
+ * Default request timeout, used for reads. Reads can legitimately take a while
+ * on a slow link and there is no local fallback for them, so we wait longer.
+ */
+export const DEFAULT_REQUEST_TIMEOUT_MS = 15000;
+/**
+ * Shorter timeout for data-write requests (POST/PATCH/DELETE). On a degraded
+ * (slow / half-open) connection a write would otherwise stall for the full read
+ * timeout before the offline queue fallback engages, making weak-signal writes
+ * feel broken while fully-offline writes feel instant. A tighter budget lets the
+ * fallback (local persist + enqueue for replay) kick in sooner. File uploads and
+ * auth requests are excluded below — they have no queue fallback and can be slow.
+ */
+export const WRITE_REQUEST_TIMEOUT_MS = 5000;
+
+// Auth requests have no offline queue fallback and may be slow on a weak link,
+// so they keep the default (longer) timeout rather than the short write budget.
+const AUTH_ENDPOINT_PATHS = new Set(['/login', '/register', '/logout']);
+
 const api = axios.create({
   baseURL: `${currentBaseUrl}/api/v1`,
-  timeout: 15000,
+  timeout: DEFAULT_REQUEST_TIMEOUT_MS,
   headers: {
     'Content-Type': 'application/json',
     'User-Agent': `JotMobile/1.0 (${platformLabel[Platform.OS] ?? Platform.OS})`,
@@ -377,6 +396,19 @@ api.interceptors.request.use(async (config) => {
   const method = (config.method || 'get').toUpperCase();
   if (isServerSwitchInProgressInternal() && method !== 'GET' && method !== 'HEAD' && method !== 'OPTIONS') {
     throw new CanceledError('Server switch in progress; write request blocked.');
+  }
+
+  // Apply the shorter write timeout to data writes so the offline-queue fallback
+  // engages sooner on a stalled connection. We only override the default — an
+  // explicit per-request timeout (e.g. a longer one for a big operation) wins.
+  // Multipart uploads and auth requests are exempt (no queue fallback / may be slow).
+  if (
+    (method === 'POST' || method === 'PATCH' || method === 'DELETE') &&
+    config.timeout === DEFAULT_REQUEST_TIMEOUT_MS &&
+    !AUTH_ENDPOINT_PATHS.has(config.url ?? '') &&
+    !String(config.headers?.get?.('Content-Type') ?? '').includes('multipart/form-data')
+  ) {
+    config.timeout = WRITE_REQUEST_TIMEOUT_MS;
   }
 
   const switchAwareConfig = config as SwitchAwareAxiosRequestConfig;
