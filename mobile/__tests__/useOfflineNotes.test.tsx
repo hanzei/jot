@@ -32,6 +32,7 @@ jest.mock('../src/db/noteQueries', () => ({
 }));
 
 jest.mock('../src/db/syncQueue', () => ({
+  ...jest.requireActual('../src/db/syncQueue'),
   saveServerNotesScope: jest.fn().mockResolvedValue(undefined),
   saveServerNote: jest.fn().mockResolvedValue(undefined),
   getPendingNoteIds: jest.fn().mockResolvedValue(new Set<string>()),
