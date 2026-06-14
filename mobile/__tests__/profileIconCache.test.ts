@@ -14,7 +14,7 @@ const mockDownloadAsync = jest.fn<Promise<{ status: number }>, [string, string]>
 const mockDeleteAsync = jest.fn<Promise<void>, [string, { idempotent: boolean }]>();
 const mockReadDirectoryAsync = jest.fn<Promise<string[]>, [string]>();
 
-jest.mock('expo-file-system', () => ({
+jest.mock('expo-file-system/legacy', () => ({
   cacheDirectory: 'file:///cache/',
   getInfoAsync: (path: string) => mockGetInfoAsync(path),
   makeDirectoryAsync: (path: string, opts: { intermediates: boolean }) => mockMakeDirectoryAsync(path, opts),
