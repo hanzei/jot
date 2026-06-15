@@ -284,12 +284,16 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
       }
       switchedSuccessfully = true;
 
-      // revalidateSession returns false only when the target server's stored
-      // session is no longer valid (expired, or the account was deleted): it
-      // clears auth so the app drops to that server's login screen. That is an
-      // expected switch outcome — the user signs in again with new credentials
-      // — so prompt for re-authentication rather than reporting a failure.
-      if (!(await revalidateSession())) {
+      // revalidateSession returns false when the target server's stored session
+      // is no longer valid (expired, or the account was deleted): it clears auth
+      // so the app redirects to that server's login screen. Skip closeDrawer in
+      // that case (the navigator is already unmounting) and prompt the user to
+      // sign in again rather than reporting a switch failure.
+      const authenticated = await revalidateSession();
+      setIsServerPickerVisible(false);
+      if (authenticated) {
+        props.navigation.closeDrawer();
+      } else {
         const targetServer = servers.find((server) => server.serverId === serverId);
         Alert.alert(
           t('serverPicker.sessionExpiredTitle'),
@@ -297,14 +301,6 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
             server: targetServer?.displayName || targetServer?.serverUrl || '',
           }),
         );
-      }
-
-      setIsServerPickerVisible(false);
-      try {
-        props.navigation.closeDrawer();
-      } catch {
-        // clearAuth may already be tearing down the drawer after a logout; the
-        // teardown is not a switch failure, so swallow it here.
       }
     } catch {
       Alert.alert(t('common.error'), t('serverPicker.switchFailed'));
@@ -940,10 +936,12 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
                   if (!ok) {
                     return;
                   }
-                  await revalidateSession();
+                  const authenticated = await revalidateSession();
                   setIsServerSetupVisible(false);
                   setIsServerPickerVisible(false);
-                  props.navigation.closeDrawer();
+                  if (authenticated) {
+                    props.navigation.closeDrawer();
+                  }
                 } catch {
                   Alert.alert(t('common.error'), t('serverPicker.switchFailed'));
                 } finally {
