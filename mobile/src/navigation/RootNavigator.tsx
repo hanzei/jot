@@ -14,6 +14,7 @@ import ShareScreen from '../screens/ShareScreen';
 import SettingsScreen from '../screens/SettingsScreen';
 import SyncFailuresScreen from '../screens/SyncFailuresScreen';
 import DiagnosticsScreen from '../screens/DiagnosticsScreen';
+import LogsFullscreenScreen from '../screens/LogsFullscreenScreen';
 
 export type RootStackParamList = {
   MainDrawer: undefined;
@@ -24,6 +25,7 @@ export type RootStackParamList = {
   Settings: undefined;
   SyncFailures: undefined;
   Diagnostics: undefined;
+  LogsFullscreen: undefined;
 };
 
 const Stack = createNativeStackNavigator<RootStackParamList>();
@@ -84,6 +86,14 @@ function AuthenticatedStack() {
           <Stack.Screen
             name="Diagnostics"
             component={DiagnosticsScreen}
+            options={{
+              headerShown: false,
+              presentation: 'modal',
+            }}
+          />
+          <Stack.Screen
+            name="LogsFullscreen"
+            component={LogsFullscreenScreen}
             options={{
               headerShown: false,
               presentation: 'modal',

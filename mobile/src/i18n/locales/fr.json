@@ -417,6 +417,7 @@
     "degraded": "Dégradé",
     "recentLogs": "Journaux récents",
     "clearLogs": "Effacer les journaux",
+    "expandLogs": "Voir tous les journaux",
     "refresh": "Actualiser",
     "shareDiagnostics": "Partager le rapport de diagnostic",
     "yes": "Oui",
