@@ -30,6 +30,8 @@
     "invalidUrl": "Server URL must start with http:// or https://.",
     "addFailed": "Failed to add server.",
     "switchFailed": "Failed to switch server.",
+    "sessionExpiredTitle": "Sign in required",
+    "sessionExpiredMessage": "Your saved session for \"{{server}}\" is no longer valid. The account may have been removed. Please sign in again.",
     "duplicateTitle": "Server already added",
     "duplicateMessage": "That server already exists in your list.",
     "switchToExisting": "Switch to existing",

@@ -325,6 +325,8 @@
     "urlRequired": "L'URL du serveur est requise",
     "invalidUrl": "URL du serveur invalide. Utilisez http:// ou https://",
     "switchFailed": "Impossible de changer de serveur",
+    "sessionExpiredTitle": "Connexion requise",
+    "sessionExpiredMessage": "Votre session enregistrée pour « {{server}} » n'est plus valide. Le compte a peut-être été supprimé. Veuillez vous reconnecter.",
     "addFailed": "Impossible d'ajouter le serveur",
     "duplicateTitle": "Serveur déjà ajouté",
     "duplicateMessage": "Ce serveur existe déjà. Souhaitez-vous y basculer ?",

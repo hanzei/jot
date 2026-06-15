@@ -30,6 +30,8 @@
     "invalidUrl": "La URL del servidor no es válida.",
     "addFailed": "No se pudo añadir el servidor.",
     "switchFailed": "No se pudo cambiar de servidor.",
+    "sessionExpiredTitle": "Inicio de sesión requerido",
+    "sessionExpiredMessage": "Tu sesión guardada para «{{server}}» ya no es válida. Es posible que se haya eliminado la cuenta. Vuelve a iniciar sesión.",
     "duplicateTitle": "Servidor ya añadido",
     "duplicateMessage": "Este servidor ya existe en tu lista.",
     "switchToExisting": "Cambiar al existente",

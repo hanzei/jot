@@ -283,10 +283,24 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
         return;
       }
       switchedSuccessfully = true;
+
+      // revalidateSession returns false when the target server's stored session
+      // is no longer valid (expired, or the account was deleted): it clears auth
+      // so the app redirects to that server's login screen. Skip closeDrawer in
+      // that case (the navigator is already unmounting) and prompt the user to
+      // sign in again rather than reporting a switch failure.
       const authenticated = await revalidateSession();
       setIsServerPickerVisible(false);
       if (authenticated) {
         props.navigation.closeDrawer();
+      } else {
+        const targetServer = servers.find((server) => server.serverId === serverId);
+        Alert.alert(
+          t('serverPicker.sessionExpiredTitle'),
+          t('serverPicker.sessionExpiredMessage', {
+            server: targetServer?.displayName || targetServer?.serverUrl || '',
+          }),
+        );
       }
     } catch {
       Alert.alert(t('common.error'), t('serverPicker.switchFailed'));
@@ -303,7 +317,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
         await refreshServerPickerData();
       }
     }
-  }, [isServerActionPending, loadServerPickerData, props.navigation, revalidateSession, refreshServerPickerData, t]);
+  }, [isServerActionPending, loadServerPickerData, props.navigation, revalidateSession, refreshServerPickerData, servers, t]);
 
   const handleOpenServerSetup = useCallback(() => {
     if (isServerActionPending) {
