@@ -1,0 +1,96 @@
+name: Mobile — Google Play Store
+
+permissions:
+  contents: read
+
+on:
+  push:
+    tags: ["v*"]
+
+jobs:
+  publish:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@de0fac2e4500dabe0009e67214ff5f5447ce83dd # v6
+
+      - uses: actions/setup-node@53b83947a5a98c8d113130e565377fae1a50d02f # v6
+        with:
+          node-version: "24"
+          cache: "npm"
+          cache-dependency-path: mobile/package-lock.json
+
+      - uses: actions/setup-java@be666c2fcd27ec809703dec50e508c2fdc7f6654 # v5
+        with:
+          distribution: temurin
+          java-version: "17"
+
+      - name: Pre-install NDK and CMake
+        run: |
+          $ANDROID_HOME/cmdline-tools/latest/bin/sdkmanager \
+            "ndk;27.1.12297006" \
+            "cmake;3.22.1"
+
+      - name: Install dependencies
+        run: npm ci
+        working-directory: ./mobile
+
+      - name: Write google-services.json
+        run: echo "$GOOGLE_SERVICES_JSON" > mobile/google-services.json
+        env:
+          GOOGLE_SERVICES_JSON: ${{ secrets.GOOGLE_SERVICES_JSON }}
+
+      - name: Compute version code from tag
+        id: version
+        run: |
+          TAG="${GITHUB_REF_NAME#v}"
+          SEMVER="${TAG%%-*}"
+          IFS='.' read -r MAJOR MINOR PATCH <<< "$SEMVER"
+          MAJOR="${MAJOR:-0}"; MINOR="${MINOR:-0}"; PATCH="${PATCH:-0}"
+          VERSION_CODE=$(( MAJOR * 1000000 + MINOR * 1000 + PATCH ))
+          echo "code=$VERSION_CODE" >> "$GITHUB_OUTPUT"
+          echo "name=$SEMVER" >> "$GITHUB_OUTPUT"
+
+      - name: Set version in app.json
+        env:
+          VERSION_CODE: ${{ steps.version.outputs.code }}
+          VERSION_NAME: ${{ steps.version.outputs.name }}
+        run: |
+          jq --argjson code "$VERSION_CODE" \
+             --arg name "$VERSION_NAME" \
+             '.expo.android.versionCode = $code | .expo.version = $name' \
+             mobile/app.json > mobile/app.json.tmp
+          mv mobile/app.json.tmp mobile/app.json
+
+      - name: Generate native Android project
+        run: npx expo prebuild --platform android --clean
+        working-directory: ./mobile
+
+      - name: Configure gradle.properties
+        run: |
+          echo "reactNativeArchitectures=arm64-v8a" >> ./mobile/android/gradle.properties
+          echo "org.gradle.jvmargs=-Xmx4g -XX:MaxMetaspaceSize=1g" >> ./mobile/android/gradle.properties
+          echo "expo.inlineModules.watchedDirectories=[]" >> ./mobile/android/gradle.properties
+
+      - name: Write keystore
+        run: echo "$KEYSTORE_BASE64" | base64 -d > ./mobile/android/release.keystore
+        env:
+          KEYSTORE_BASE64: ${{ secrets.ANDROID_KEYSTORE_BASE64 }}
+
+      - uses: gradle/actions/setup-gradle@50e97c2cd7a37755bbfafc9c5b7cafaece252f6e # v6
+
+      - name: Build release AAB
+        run: ./gradlew bundleRelease
+        working-directory: ./mobile/android
+        env:
+          ANDROID_KEYSTORE_PATH: release.keystore
+          ANDROID_KEY_ALIAS: ${{ secrets.ANDROID_KEY_ALIAS }}
+          ANDROID_STORE_PASSWORD: ${{ secrets.ANDROID_STORE_PASSWORD }}
+          ANDROID_KEY_PASSWORD: ${{ secrets.ANDROID_KEY_PASSWORD }}
+
+      - name: Upload to Google Play (internal track)
+        uses: r0adkll/upload-google-play@e738b9dd8f2476ea806d921b64aacd24f34515a5 # v1.1.5
+        with:
+          serviceAccountJsonPlainText: ${{ secrets.GOOGLE_PLAY_SERVICE_ACCOUNT_JSON }}
+          packageName: com.jot.app
+          releaseFiles: mobile/android/app/build/outputs/bundle/release/app-release.aab
+          track: internal

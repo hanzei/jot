@@ -20,7 +20,8 @@
         "foregroundImage": "./assets/adaptive-icon.png",
         "backgroundColor": "#ffffff"
       },
-      "package": "com.jot.app"
+      "package": "com.jot.app",
+      "versionCode": 1
     },
     "plugins": [
       "expo-localization",
