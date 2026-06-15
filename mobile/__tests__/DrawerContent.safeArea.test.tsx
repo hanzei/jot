@@ -16,6 +16,7 @@ const mockRenameLabelMutateAsync = jest.fn();
 const mockDeleteLabelMutateAsync = jest.fn();
 const mockUserAvatar = jest.fn();
 let mockHasProfileIcon = true;
+const mockRevalidateSession = jest.fn(async () => true);
 
 jest.mock('../src/store/AuthContext', () => ({
   useAuth: () => ({
@@ -30,7 +31,8 @@ jest.mock('../src/store/AuthContext', () => ({
       updated_at: '2026-01-01T00:00:00Z',
     },
     logout: jest.fn(),
-    revalidateSession: jest.fn(async () => true),
+    clearAuth: jest.fn(),
+    revalidateSession: mockRevalidateSession,
   }),
 }));
 
@@ -136,6 +138,7 @@ describe('DrawerContent', () => {
     mockLabelsData.length = 0;
     Object.keys(mockLabelCountsData).forEach((key) => delete mockLabelCountsData[key]);
     mockHasProfileIcon = true;
+    mockRevalidateSession.mockResolvedValue(true);
     mockListServers.mockResolvedValue([]);
     mockGetActiveServer.mockResolvedValue(null);
     mockAddServer.mockResolvedValue({ success: true, serverId: 'srv_new' });
@@ -398,5 +401,76 @@ describe('DrawerContent', () => {
       expect(mockCreateLabelMutateAsync).toHaveBeenCalledWith({ name: 'Errands' });
     });
     expect(alertSpy).toHaveBeenCalledWith('labels.createSuccess');
+  });
+
+  it('closes server picker but does not call closeDrawer when switching to server with deleted account', async () => {
+    const alertSpy = jest.spyOn(Alert, 'alert').mockImplementation(jest.fn());
+    const serverA = { serverId: 'srv_a', serverUrl: 'https://a.example.com', lastUsedAt: '2026-01-01T00:00:00Z' };
+    const serverB = { serverId: 'srv_b', serverUrl: 'https://b.example.com', lastUsedAt: '2026-01-01T00:00:00Z' };
+
+    mockListServers.mockResolvedValue([serverA, serverB]);
+    mockGetActiveServer.mockResolvedValue(serverA);
+    mockSwitchActiveServer.mockResolvedValue(true);
+    // revalidateSession returns false when the account on server B was deleted (401)
+    mockRevalidateSession.mockResolvedValue(false);
+
+    const closeDrawer = jest.fn();
+    const props = makeProps();
+    props.navigation.closeDrawer = closeDrawer;
+
+    const { getByTestId, findByTestId, queryByTestId } = render(<DrawerContent {...props} />);
+    fireEvent.press(getByTestId('drawer-profile-button'));
+    await findByTestId('server-picker-modal');
+    // Wait for the server list to load inside the picker
+    const serverBRow = await findByTestId(`server-picker-row-${serverB.serverId}`);
+
+    fireEvent.press(serverBRow);
+
+    await waitFor(() => {
+      expect(mockSwitchActiveServer).toHaveBeenCalledWith(serverB.serverId);
+    });
+    await waitFor(() => {
+      expect(mockRevalidateSession).toHaveBeenCalled();
+    });
+    await waitFor(() => {
+      expect(queryByTestId('server-picker-modal')).toBeNull();
+    });
+    // closeDrawer must NOT be called — auth state change (isAuthenticated=false) handles navigation
+    expect(closeDrawer).not.toHaveBeenCalled();
+    // No "switch failed" error alert — the server switch itself succeeded; user is redirected to login
+    expect(alertSpy).not.toHaveBeenCalled();
+  });
+
+  it('closes server picker and calls closeDrawer when switching to server with valid session', async () => {
+    const serverA = { serverId: 'srv_a', serverUrl: 'https://a.example.com', lastUsedAt: '2026-01-01T00:00:00Z' };
+    const serverB = { serverId: 'srv_b', serverUrl: 'https://b.example.com', lastUsedAt: '2026-01-01T00:00:00Z' };
+
+    mockListServers.mockResolvedValue([serverA, serverB]);
+    mockGetActiveServer.mockResolvedValue(serverA);
+    mockSwitchActiveServer.mockResolvedValue(true);
+    mockRevalidateSession.mockResolvedValue(true);
+
+    const closeDrawer = jest.fn();
+    const props = makeProps();
+    props.navigation.closeDrawer = closeDrawer;
+
+    const { getByTestId, findByTestId, queryByTestId } = render(<DrawerContent {...props} />);
+    fireEvent.press(getByTestId('drawer-profile-button'));
+    await findByTestId('server-picker-modal');
+    // Wait for the server list to load inside the picker
+    const serverBRow = await findByTestId(`server-picker-row-${serverB.serverId}`);
+
+    fireEvent.press(serverBRow);
+
+    await waitFor(() => {
+      expect(mockSwitchActiveServer).toHaveBeenCalledWith(serverB.serverId);
+    });
+    await waitFor(() => {
+      expect(mockRevalidateSession).toHaveBeenCalled();
+    });
+    await waitFor(() => {
+      expect(queryByTestId('server-picker-modal')).toBeNull();
+    });
+    expect(closeDrawer).toHaveBeenCalled();
   });
 });
