@@ -291,7 +291,10 @@
     "outdentItem": "Remover recuo",
     "itemsPasted_one": "1 item colado",
     "itemsPasted_other": "{{count}} itens colados",
-    "filterByLabel": "Filtrar por etiqueta: {{label}}"
+    "filterByLabel": "Filtrar por etiqueta: {{label}}",
+    "saveFailedExitTitle": "Falha ao salvar",
+    "saveFailedExitMessage": "Não foi possível salvar as alterações. Tente novamente ou descarte-as para sair.",
+    "discardAndLeave": "Descartar e sair"
   },
   "labels": {
     "title": "Etiquetas",

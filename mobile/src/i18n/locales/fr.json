@@ -262,7 +262,10 @@
     "outdentItem": "Désindenter",
     "itemsPasted_one": "1 élément collé",
     "itemsPasted_other": "{{count}} éléments collés",
-    "filterByLabel": "Filtrer par étiquette : {{label}}"
+    "filterByLabel": "Filtrer par étiquette : {{label}}",
+    "saveFailedExitTitle": "Échec de l’enregistrement",
+    "saveFailedExitMessage": "Vos modifications n’ont pas pu être enregistrées. Réessayez ou abandonnez-les pour quitter.",
+    "discardAndLeave": "Abandonner et quitter"
   },
   "labels": {
     "title": "Étiquettes",

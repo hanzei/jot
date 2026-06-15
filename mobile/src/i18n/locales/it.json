@@ -291,7 +291,10 @@
     "outdentItem": "Rimuovi rientro",
     "itemsPasted_one": "1 elemento incollato",
     "itemsPasted_other": "{{count}} elementi incollati",
-    "filterByLabel": "Filtra per etichetta: {{label}}"
+    "filterByLabel": "Filtra per etichetta: {{label}}",
+    "saveFailedExitTitle": "Salvataggio fallito",
+    "saveFailedExitMessage": "Le modifiche non hanno potuto essere salvate. Riprova o scartale per uscire.",
+    "discardAndLeave": "Scarta ed esci"
   },
   "labels": {
     "title": "Etichette",

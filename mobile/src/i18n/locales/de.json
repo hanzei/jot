@@ -262,7 +262,10 @@
     "outdentItem": "Ausrücken",
     "itemsPasted_one": "1 Element eingefügt",
     "itemsPasted_other": "{{count}} Elemente eingefügt",
-    "filterByLabel": "Nach Label filtern: {{label}}"
+    "filterByLabel": "Nach Label filtern: {{label}}",
+    "saveFailedExitTitle": "Speichern fehlgeschlagen",
+    "saveFailedExitMessage": "Deine Änderungen konnten nicht gespeichert werden. Erneut versuchen oder verwerfen und verlassen.",
+    "discardAndLeave": "Verwerfen & verlassen"
   },
   "labels": {
     "title": "Labels",
