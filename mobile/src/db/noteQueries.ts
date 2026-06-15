@@ -347,11 +347,10 @@ export async function renameLabelInLocalNotes(
   labelId: string,
   name: string,
 ): Promise<void> {
-  const rows = await db.getAllAsync<Pick<NoteRow, 'id' | 'labels_json'>>(
-    'SELECT id, labels_json FROM notes',
-  );
-
   await withSerializedTransaction(db, async () => {
+    const rows = await db.getAllAsync<Pick<NoteRow, 'id' | 'labels_json'>>(
+      'SELECT id, labels_json FROM notes',
+    );
     for (const row of rows) {
       let labels: Label[] = [];
       try {
@@ -442,11 +441,10 @@ export async function deleteLabelFromLocalNotes(
   db: SQLiteDatabase,
   labelId: string,
 ): Promise<void> {
-  const rows = await db.getAllAsync<Pick<NoteRow, 'id' | 'labels_json'>>(
-    'SELECT id, labels_json FROM notes',
-  );
-
   await withSerializedTransaction(db, async () => {
+    const rows = await db.getAllAsync<Pick<NoteRow, 'id' | 'labels_json'>>(
+      'SELECT id, labels_json FROM notes',
+    );
     for (const row of rows) {
       let labels: Label[] = [];
       try {
