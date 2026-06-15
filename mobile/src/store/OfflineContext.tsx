@@ -11,8 +11,8 @@ import { AppState } from 'react-native';
 import NetInfo from '@react-native-community/netinfo';
 import { useSQLiteContext } from 'expo-sqlite';
 import { useQueryClient } from '@tanstack/react-query';
-import { drainQueue, getPendingCount, subscribeToEnqueue } from '../db/syncQueue';
-import { getPendingCreateNoteIds } from '../db/noteQueries';
+import { drainQueue, getPendingCount, getDeadLetterCount, subscribeToEnqueue } from '../db/syncQueue';
+import { getPendingCreateNoteIds, getFailedNoteIds } from '../db/noteQueries';
 import { useAuth } from './AuthContext';
 import { isSyncDrainPaused } from './serverSwitchLifecycle';
 import { labelCountsQueryKey, labelsQueryKey, noteLocalQueryKey, noteLocalQueryScopeKey, notesLocalQueryScopeKey } from '../hooks/queryKeys';
@@ -31,12 +31,30 @@ interface OfflineContextValue {
    * UI gates actions that need a server-side note (sharing, label management).
    */
   pendingNoteIds: ReadonlySet<string>;
+  /**
+   * IDs of notes flagged `sync_state = 'failed'` after a dead-lettered op (#492).
+   * Drives the per-note "didn't sync" badge (#493).
+   */
+  failedNoteIds: ReadonlySet<string>;
+  /** Number of preserved dead-lettered ops; drives the review banner count (#493). */
+  syncFailureCount: number;
+  /** True while the user has dismissed the sync-failures banner for the current batch (#493). */
+  syncFailuresBannerDismissed: boolean;
+  /** Dismiss the sync-failures banner until a new failure arrives (#493). */
+  dismissSyncFailuresBanner: () => void;
+  /** Re-read failed-note ids and the dead-letter count after a drain or a resolution (#493). */
+  refreshSyncFailures: () => void;
 }
 
 const OfflineContext = createContext<OfflineContextValue>({
   isConnected: true,
   syncError: false,
   pendingNoteIds: new Set(),
+  failedNoteIds: new Set(),
+  syncFailureCount: 0,
+  syncFailuresBannerDismissed: false,
+  dismissSyncFailuresBanner: () => {},
+  refreshSyncFailures: () => {},
 });
 
 // Sync-loop safety knobs (see mobile/CLAUDE.md → "Sync Loop Safety").
@@ -49,12 +67,28 @@ const MAX_CONSECUTIVE_DRAIN_FAILURES = 6;
 /** Debounce applied to drains triggered by a fresh enqueue, to coalesce bursts of writes. */
 const ENQUEUE_DRAIN_DEBOUNCE_MS = 1000;
 
+/** True when two string sets hold exactly the same ids (order-independent). */
+function sameStringSet(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
+  if (a.size !== b.size) return false;
+  for (const id of b) if (!a.has(id)) return false;
+  return true;
+}
+
 export function OfflineProvider({ children }: { children: React.ReactNode }) {
   const [isConnected, setIsConnected] = useState(true);
   const [syncError, setSyncError] = useState(false);
   const [pendingNoteIds, setPendingNoteIds] = useState<ReadonlySet<string>>(new Set());
+  const [failedNoteIds, setFailedNoteIds] = useState<ReadonlySet<string>>(new Set());
+  const [syncFailureCount, setSyncFailureCount] = useState(0);
+  const [syncFailuresBannerDismissed, setSyncFailuresBannerDismissed] = useState(false);
   const { revalidateSession } = useAuth();
   const db = useSQLiteContext();
+  // Last observed dead-letter count, so a fresh failure can re-surface a banner
+  // the user previously dismissed.
+  const prevFailureCountRef = useRef(0);
+  // Monotonic id of the latest refreshSyncFailures call, so an out-of-order
+  // earlier read discards its stale result instead of clobbering fresh state.
+  const refreshSyncFailuresSeqRef = useRef(0);
 
   // Reload the set of offline-created notes still awaiting their queued create
   // (#475). Called after every enqueue and drain so the UI gate stays current.
@@ -62,11 +96,34 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
   // writes (the common case) don't re-render every consumer.
   const refreshPendingNoteIds = useCallback(() => {
     getPendingCreateNoteIds(db).then((next) => {
-      setPendingNoteIds((prev) =>
-        prev.size === next.size && [...next].every((id) => prev.has(id)) ? prev : next,
-      );
+      setPendingNoteIds((prev) => (sameStringSet(prev, next) ? prev : next));
     }).catch(() => {});
   }, [db]);
+
+  // Re-read the failed-note ids (for the per-note badge) and dead-letter count
+  // (for the review banner) after a drain or a user resolution (#492/#493). When
+  // the count grows, re-surface a banner the user had previously dismissed so a
+  // newly-failed change isn't hidden. Keeps the previous Set reference when the
+  // contents are unchanged so unrelated drains don't re-render every consumer.
+  const refreshSyncFailures = useCallback(() => {
+    // Tag each refresh so a slower earlier read can't overwrite a newer one's
+    // result when two refreshes (e.g. mount + a drain) are in flight at once.
+    const seq = refreshSyncFailuresSeqRef.current + 1;
+    refreshSyncFailuresSeqRef.current = seq;
+    Promise.all([getFailedNoteIds(db), getDeadLetterCount(db)]).then(([nextIds, nextCount]) => {
+      if (seq !== refreshSyncFailuresSeqRef.current) return; // superseded by a newer refresh
+      setFailedNoteIds((prev) => (sameStringSet(prev, nextIds) ? prev : nextIds));
+      setSyncFailureCount(nextCount);
+      if (nextCount > prevFailureCountRef.current) {
+        setSyncFailuresBannerDismissed(false);
+      }
+      prevFailureCountRef.current = nextCount;
+    }).catch(() => {});
+  }, [db]);
+
+  const dismissSyncFailuresBanner = useCallback(() => {
+    setSyncFailuresBannerDismissed(true);
+  }, []);
   const queryClient = useQueryClient();
   const prevConnectedRef = useRef(true);
   const isConnectedRef = useRef(true);
@@ -155,6 +212,9 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
       queryClient.invalidateQueries({ queryKey: labelCountsQueryKey() });
       // Drained creates may have cleared their pending-create marker (#475).
       refreshPendingNoteIds();
+      // A drain can dead-letter ops (new failures) or clear a prior failure, so
+      // refresh the failed-note badges and review-banner count (#492/#493).
+      refreshSyncFailures();
       // drainQueue resolves even when it stops early on a transient failure, so
       // inspect what's left to decide whether a backoff retry is warranted.
       const remaining = await getPendingCount(db);
@@ -189,7 +249,7 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
         if (!stalled) scheduleDrain(0);
       }
     }
-  }, [db, queryClient, onDrainStalled, clearDrainTimer, scheduleDrain, revalidateSession, refreshPendingNoteIds]);
+  }, [db, queryClient, onDrainStalled, clearDrainTimer, scheduleDrain, revalidateSession, refreshPendingNoteIds, refreshSyncFailures]);
 
   performDrainRef.current = performDrain;
 
@@ -276,12 +336,36 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
     refreshPendingNoteIds();
   }, [refreshPendingNoteIds]);
 
+  // Seed the failed-note badges and review-banner count on mount so failures
+  // preserved from a previous session surface immediately (#492/#493).
+  useEffect(() => {
+    refreshSyncFailures();
+  }, [refreshSyncFailures]);
+
   // Cancel any pending drain on unmount.
   useEffect(() => clearDrainTimer, [clearDrainTimer]);
 
   const value = useMemo<OfflineContextValue>(
-    () => ({ isConnected, syncError, pendingNoteIds }),
-    [isConnected, syncError, pendingNoteIds],
+    () => ({
+      isConnected,
+      syncError,
+      pendingNoteIds,
+      failedNoteIds,
+      syncFailureCount,
+      syncFailuresBannerDismissed,
+      dismissSyncFailuresBanner,
+      refreshSyncFailures,
+    }),
+    [
+      isConnected,
+      syncError,
+      pendingNoteIds,
+      failedNoteIds,
+      syncFailureCount,
+      syncFailuresBannerDismissed,
+      dismissSyncFailuresBanner,
+      refreshSyncFailures,
+    ],
   );
 
   return <OfflineContext.Provider value={value}>{children}</OfflineContext.Provider>;
@@ -294,4 +378,9 @@ export function useOfflineContext(): OfflineContextValue {
 /** IDs of offline-created notes whose create hasn't drained yet (#475). */
 export function usePendingNoteIds(): ReadonlySet<string> {
   return useContext(OfflineContext).pendingNoteIds;
+}
+
+/** IDs of notes whose unsynced change was permanently rejected (#492/#493). */
+export function useFailedNoteIds(): ReadonlySet<string> {
+  return useContext(OfflineContext).failedNoteIds;
 }
