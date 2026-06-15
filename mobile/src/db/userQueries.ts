@@ -1,5 +1,6 @@
 import { SQLiteDatabase } from 'expo-sqlite';
 import type { User } from '@jot/shared';
+import { withSerializedTransaction } from './transaction';
 
 interface UserRow {
   id: string;
@@ -26,7 +27,7 @@ function rowToUser(row: UserRow): User {
 }
 
 export async function saveUsers(db: SQLiteDatabase, users: User[]): Promise<void> {
-  await db.withTransactionAsync(async () => {
+  await withSerializedTransaction(db, async () => {
     if (users.length === 0) {
       await db.runAsync('DELETE FROM users');
     } else {
