@@ -90,8 +90,8 @@ function makeDb(localNote: Note | null) {
   return {
     getFirstAsync: jest.fn().mockResolvedValue(row),
     getAllAsync: jest.fn().mockResolvedValue(
-      localNote?.note_type === 'list'
-        ? localNote.items.map((i) => ({ ...i, completed: i.completed ? 1 : 0 }))
+      localNote && localNote.note_type === 'list'
+        ? (localNote.items ?? []).map((i) => ({ ...i, completed: i.completed ? 1 : 0 }))
         : [],
     ),
     runAsync: jest.fn().mockResolvedValue(undefined),

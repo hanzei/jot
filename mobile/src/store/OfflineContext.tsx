@@ -67,6 +67,13 @@ const MAX_CONSECUTIVE_DRAIN_FAILURES = 6;
 /** Debounce applied to drains triggered by a fresh enqueue, to coalesce bursts of writes. */
 const ENQUEUE_DRAIN_DEBOUNCE_MS = 1000;
 
+/** True when two string sets hold exactly the same ids (order-independent). */
+function sameStringSet(a: ReadonlySet<string>, b: ReadonlySet<string>): boolean {
+  if (a.size !== b.size) return false;
+  for (const id of b) if (!a.has(id)) return false;
+  return true;
+}
+
 export function OfflineProvider({ children }: { children: React.ReactNode }) {
   const [isConnected, setIsConnected] = useState(true);
   const [syncError, setSyncError] = useState(false);
@@ -86,9 +93,7 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
   // writes (the common case) don't re-render every consumer.
   const refreshPendingNoteIds = useCallback(() => {
     getPendingCreateNoteIds(db).then((next) => {
-      setPendingNoteIds((prev) =>
-        prev.size === next.size && [...next].every((id) => prev.has(id)) ? prev : next,
-      );
+      setPendingNoteIds((prev) => (sameStringSet(prev, next) ? prev : next));
     }).catch(() => {});
   }, [db]);
 
@@ -99,9 +104,7 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
   // contents are unchanged so unrelated drains don't re-render every consumer.
   const refreshSyncFailures = useCallback(() => {
     Promise.all([getFailedNoteIds(db), getDeadLetterCount(db)]).then(([nextIds, nextCount]) => {
-      setFailedNoteIds((prev) =>
-        prev.size === nextIds.size && [...nextIds].every((id) => prev.has(id)) ? prev : nextIds,
-      );
+      setFailedNoteIds((prev) => (sameStringSet(prev, nextIds) ? prev : nextIds));
       setSyncFailureCount(nextCount);
       if (nextCount > prevFailureCountRef.current) {
         setSyncFailuresBannerDismissed(false);
