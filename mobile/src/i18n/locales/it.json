@@ -27,6 +27,8 @@
     "addButton": "Aggiungi server",
     "working": "Caricamento...",
     "switchFailed": "Impossibile cambiare server",
+    "sessionExpiredTitle": "Accesso richiesto",
+    "sessionExpiredMessage": "La sessione salvata per «{{server}}» non è più valida. L'account potrebbe essere stato rimosso. Effettua di nuovo l'accesso.",
     "addFailed": "Impossibile aggiungere server",
     "urlRequired": "L'URL del server è obbligatorio",
     "invalidUrl": "Inserisci un URL server valido",

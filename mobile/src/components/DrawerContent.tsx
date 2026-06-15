@@ -283,9 +283,29 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
         return;
       }
       switchedSuccessfully = true;
-      await revalidateSession();
+
+      // revalidateSession returns false only when the target server's stored
+      // session is no longer valid (expired, or the account was deleted): it
+      // clears auth so the app drops to that server's login screen. That is an
+      // expected switch outcome — the user signs in again with new credentials
+      // — so prompt for re-authentication rather than reporting a failure.
+      if (!(await revalidateSession())) {
+        const targetServer = servers.find((server) => server.serverId === serverId);
+        Alert.alert(
+          t('serverPicker.sessionExpiredTitle'),
+          t('serverPicker.sessionExpiredMessage', {
+            server: targetServer?.displayName || targetServer?.serverUrl || '',
+          }),
+        );
+      }
+
       setIsServerPickerVisible(false);
-      props.navigation.closeDrawer();
+      try {
+        props.navigation.closeDrawer();
+      } catch {
+        // clearAuth may already be tearing down the drawer after a logout; the
+        // teardown is not a switch failure, so swallow it here.
+      }
     } catch {
       Alert.alert(t('common.error'), t('serverPicker.switchFailed'));
     } finally {
@@ -301,7 +321,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
         await refreshServerPickerData();
       }
     }
-  }, [isServerActionPending, loadServerPickerData, props.navigation, revalidateSession, refreshServerPickerData, t]);
+  }, [isServerActionPending, loadServerPickerData, props.navigation, revalidateSession, refreshServerPickerData, servers, t]);
 
   const handleOpenServerSetup = useCallback(() => {
     if (isServerActionPending) {
