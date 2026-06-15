@@ -289,7 +289,10 @@
     "outdentItem": "Outdent",
     "itemsPasted_one": "1 item pasted",
     "itemsPasted_other": "{{count}} items pasted",
-    "filterByLabel": "Filter by label: {{label}}"
+    "filterByLabel": "Filter by label: {{label}}",
+    "saveFailedExitTitle": "Save failed",
+    "saveFailedExitMessage": "Your changes couldn't be saved. Retry or discard them to leave.",
+    "discardAndLeave": "Discard & leave"
   },
   "labels": {
     "title": "Labels",

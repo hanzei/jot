@@ -289,7 +289,10 @@
     "outdentItem": "Quitar sangría",
     "itemsPasted_one": "1 elemento pegado",
     "itemsPasted_other": "{{count}} elementos pegados",
-    "filterByLabel": "Filtrar por etiqueta: {{label}}"
+    "filterByLabel": "Filtrar por etiqueta: {{label}}",
+    "saveFailedExitTitle": "Error al guardar",
+    "saveFailedExitMessage": "No se pudieron guardar los cambios. Reintenta o descártalos para salir.",
+    "discardAndLeave": "Descartar y salir"
   },
   "labels": {
     "title": "Etiquetas",

@@ -289,7 +289,10 @@
     "outdentItem": "Inspringing verwijderen",
     "itemsPasted_one": "1 item geplakt",
     "itemsPasted_other": "{{count}} items geplakt",
-    "filterByLabel": "Filteren op label: {{label}}"
+    "filterByLabel": "Filteren op label: {{label}}",
+    "saveFailedExitTitle": "Opslaan mislukt",
+    "saveFailedExitMessage": "Je wijzigingen konden niet worden opgeslagen. Probeer het opnieuw of verwerp ze om te verlaten.",
+    "discardAndLeave": "Verwerpen en verlaten"
   },
   "labels": {
     "title": "Labels",

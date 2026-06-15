@@ -262,7 +262,10 @@
     "outdentItem": "Usuń wcięcie",
     "itemsPasted_one": "1 element wklejony",
     "itemsPasted_other": "{{count}} elementy wklejone",
-    "filterByLabel": "Filtruj według etykiety: {{label}}"
+    "filterByLabel": "Filtruj według etykiety: {{label}}",
+    "saveFailedExitTitle": "Zapisywanie nie powiodło się",
+    "saveFailedExitMessage": "Nie można było zapisać zmian. Spróbuj ponownie lub odrzuć je, aby wyjść.",
+    "discardAndLeave": "Odrzuć i wyjdź"
   },
   "labels": {
     "title": "Etykiety",

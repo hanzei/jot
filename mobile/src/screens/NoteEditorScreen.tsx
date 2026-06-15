@@ -665,9 +665,40 @@ export default function NoteEditorScreen() {
         clearTimeout(debounceRef.current);
         debounceRef.current = null;
       }
+
+      const showSaveFailedAlert = () => {
+        Alert.alert(
+          t('note.saveFailedExitTitle'),
+          t('note.saveFailedExitMessage'),
+          [
+            {
+              text: t('note.discardAndLeave'),
+              style: 'destructive',
+              onPress: () => {
+                intentionalExitRef.current = true;
+                navigation.dispatch(event.data.action);
+              },
+            },
+            {
+              text: t('common.retry'),
+              onPress: async () => {
+                const retrySucceeded = await flushSave();
+                if (retrySucceeded) {
+                  intentionalExitRef.current = true;
+                  navigation.dispatch(event.data.action);
+                } else {
+                  showSaveFailedAlert();
+                }
+              },
+            },
+          ],
+        );
+      };
+
       void (async () => {
         const saveSucceeded = await flushSave();
         if (!saveSucceeded) {
+          showSaveFailedAlert();
           return;
         }
         intentionalExitRef.current = true;
@@ -675,7 +706,7 @@ export default function NoteEditorScreen() {
       })();
     });
     return unsubscribe;
-  }, [flushSave, navigation]);
+  }, [flushSave, navigation, t]);
 
   // Flush pending save on unmount (prevent data loss), skip if intentionally exiting
   useEffect(() => {
