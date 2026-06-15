@@ -86,6 +86,9 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
   // Last observed dead-letter count, so a fresh failure can re-surface a banner
   // the user previously dismissed.
   const prevFailureCountRef = useRef(0);
+  // Monotonic id of the latest refreshSyncFailures call, so an out-of-order
+  // earlier read discards its stale result instead of clobbering fresh state.
+  const refreshSyncFailuresSeqRef = useRef(0);
 
   // Reload the set of offline-created notes still awaiting their queued create
   // (#475). Called after every enqueue and drain so the UI gate stays current.
@@ -103,7 +106,12 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
   // newly-failed change isn't hidden. Keeps the previous Set reference when the
   // contents are unchanged so unrelated drains don't re-render every consumer.
   const refreshSyncFailures = useCallback(() => {
+    // Tag each refresh so a slower earlier read can't overwrite a newer one's
+    // result when two refreshes (e.g. mount + a drain) are in flight at once.
+    const seq = refreshSyncFailuresSeqRef.current + 1;
+    refreshSyncFailuresSeqRef.current = seq;
     Promise.all([getFailedNoteIds(db), getDeadLetterCount(db)]).then(([nextIds, nextCount]) => {
+      if (seq !== refreshSyncFailuresSeqRef.current) return; // superseded by a newer refresh
       setFailedNoteIds((prev) => (sameStringSet(prev, nextIds) ? prev : nextIds));
       setSyncFailureCount(nextCount);
       if (nextCount > prevFailureCountRef.current) {

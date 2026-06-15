@@ -371,7 +371,8 @@
     "unknownNote": "Note inconnue",
     "untitledNote": "Note sans titre",
     "emptyTitle": "Tout est à jour",
-    "emptySubtext": "Aucune modification non synchronisée à examiner."
+    "emptySubtext": "Aucune modification non synchronisée à examiner.",
+    "loadError": "Impossible de charger les modifications non synchronisées."
   },
   "import": {
     "title": "Importer depuis Google Keep",

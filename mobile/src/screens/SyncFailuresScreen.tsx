@@ -39,7 +39,7 @@ export default function SyncFailuresScreen() {
   const insets = useContext(SafeAreaInsetsContext) ?? { top: 0, right: 0, bottom: 0, left: 0 };
   const db = useSQLiteContext();
 
-  const { deadLetters, isLoading, keepMyVersion, discard } = useSyncFailures();
+  const { deadLetters, isLoading, isError, refetch, keepMyVersion, discard } = useSyncFailures();
   // Local content of each affected note, for the "which note" context.
   const [notesById, setNotesById] = useState<Record<string, Note | null>>({});
   // Id of the dead-letter currently being resolved, to disable its actions.
@@ -172,6 +172,20 @@ export default function SyncFailuresScreen() {
 
       {isLoading ? (
         <ActivityIndicator size="large" color={colors.primary} style={styles.spinner} />
+      ) : isError ? (
+        <View style={styles.empty} testID="sync-failures-error">
+          <Ionicons name="alert-circle-outline" size={64} color={colors.handleColor} />
+          <Text style={[styles.emptyTitle, { color: colors.text }]}>{t('syncFailures.loadError')}</Text>
+          <TouchableOpacity
+            style={[styles.retryButton, { backgroundColor: colors.primary }]}
+            onPress={() => { void refetch(); }}
+            testID="sync-failures-retry"
+            accessibilityRole="button"
+            accessibilityLabel={t('common.retry')}
+          >
+            <Text style={styles.retryText}>{t('common.retry')}</Text>
+          </TouchableOpacity>
+        </View>
       ) : deadLetters.length === 0 ? (
         <View style={styles.empty} testID="sync-failures-empty">
           <Ionicons name="checkmark-circle-outline" size={64} color={colors.handleColor} />
@@ -284,5 +298,16 @@ const styles = StyleSheet.create({
     fontSize: 14,
     marginTop: 8,
     textAlign: 'center',
+  },
+  retryButton: {
+    marginTop: 16,
+    paddingHorizontal: 24,
+    paddingVertical: 10,
+    borderRadius: 8,
+  },
+  retryText: {
+    color: '#fff',
+    fontSize: 15,
+    fontWeight: '600',
   },
 });

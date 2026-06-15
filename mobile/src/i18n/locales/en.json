@@ -371,7 +371,8 @@
     "unknownNote": "Unknown note",
     "untitledNote": "Untitled note",
     "emptyTitle": "All caught up",
-    "emptySubtext": "There are no unsynced changes to review."
+    "emptySubtext": "There are no unsynced changes to review.",
+    "loadError": "Couldn't load unsynced changes."
   },
   "import": {
     "title": "Import from Google Keep",

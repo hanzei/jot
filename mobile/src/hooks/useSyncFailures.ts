@@ -71,26 +71,29 @@ function isGoneStatus(status: number | undefined): boolean {
  * gone for this user). Shared by both Discard and the tail of Keep-my-version.
  */
 export async function reconcileDiscard(db: SQLiteDatabase, dl: DeadLetteredOperation): Promise<void> {
-  await deleteDeadLetter(db, dl.id);
-  if (!dl.note_id) return;
-
-  if (dl.operation === 'create') {
-    await permanentDeleteLocalNote(db, dl.note_id);
-    return;
-  }
-
-  await clearNoteSyncFailed(db, dl.note_id);
-  try {
-    const serverNote = await getNote(dl.note_id);
-    await saveNote(db, serverNote);
-  } catch (err) {
-    const status = axios.isAxiosError(err) ? err.response?.status : undefined;
-    if (isGoneStatus(status)) {
-      await markLocalNoteDeleted(db, dl.note_id);
+  if (dl.note_id) {
+    if (dl.operation === 'create') {
+      await permanentDeleteLocalNote(db, dl.note_id);
+    } else {
+      await clearNoteSyncFailed(db, dl.note_id);
+      try {
+        const serverNote = await getNote(dl.note_id);
+        await saveNote(db, serverNote);
+      } catch (err) {
+        const status = axios.isAxiosError(err) ? err.response?.status : undefined;
+        if (isGoneStatus(status)) {
+          await markLocalNoteDeleted(db, dl.note_id);
+        }
+        // Offline or transient: the failed flag is already cleared, so a later
+        // background fetch reconciles the note normally.
+      }
     }
-    // Offline or transient: the failed flag is already cleared, so a later
-    // background fetch reconciles the note normally.
   }
+
+  // Remove the dead-letter row last — only after the local reconciliation above
+  // has completed — so a failure mid-reconciliation leaves the record intact and
+  // the resolution can be retried instead of orphaning a still-failed note.
+  await deleteDeadLetter(db, dl.id);
 }
 
 /**

@@ -371,7 +371,8 @@
     "unknownNote": "Onbekende notitie",
     "untitledNote": "Notitie zonder titel",
     "emptyTitle": "Helemaal bij",
-    "emptySubtext": "Er zijn geen niet-gesynchroniseerde wijzigingen om te bekijken."
+    "emptySubtext": "Er zijn geen niet-gesynchroniseerde wijzigingen om te bekijken.",
+    "loadError": "Kon niet-gesynchroniseerde wijzigingen niet laden."
   },
   "import": {
     "title": "Importeren uit Google Keep",

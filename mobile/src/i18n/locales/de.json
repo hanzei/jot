@@ -371,7 +371,8 @@
     "unknownNote": "Unbekannte Notiz",
     "untitledNote": "Notiz ohne Titel",
     "emptyTitle": "Alles erledigt",
-    "emptySubtext": "Es gibt keine nicht synchronisierten Änderungen zu überprüfen."
+    "emptySubtext": "Es gibt keine nicht synchronisierten Änderungen zu überprüfen.",
+    "loadError": "Nicht synchronisierte Änderungen konnten nicht geladen werden."
   },
   "import": {
     "title": "Aus Google Keep importieren",

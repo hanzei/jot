@@ -204,6 +204,17 @@ describe('reconcileDiscard', () => {
     expect(runCalls(db, `UPDATE notes SET sync_state = 'synced'`)).toHaveLength(0);
     expect(mockGetNote).not.toHaveBeenCalled();
   });
+
+  it('removes the dead-letter row only after the note reconciliation, so a mid-step failure keeps it for retry', async () => {
+    const db = makeDb(makeTextNote('n1'));
+    mockGetNote.mockResolvedValueOnce(makeTextNote('n1', 'server'));
+    await reconcileDiscard(db as never, dl({ id: 3, operation: 'update', note_id: 'n1' }));
+
+    const order = (sqlPrefix: string) =>
+      db.runAsync.mock.calls.findIndex((c) => String(c[0]).startsWith(sqlPrefix));
+    // The dead-letter delete is the last write — it follows clearing the failed flag.
+    expect(order('DELETE FROM dead_letter')).toBeGreaterThan(order(`UPDATE notes SET sync_state = 'synced'`));
+  });
 });
 
 describe('keepThenDiscard', () => {

@@ -371,7 +371,8 @@
     "unknownNote": "Nota desconocida",
     "untitledNote": "Nota sin título",
     "emptyTitle": "Todo al día",
-    "emptySubtext": "No hay cambios sin sincronizar para revisar."
+    "emptySubtext": "No hay cambios sin sincronizar para revisar.",
+    "loadError": "No se pudieron cargar los cambios sin sincronizar."
   },
   "import": {
     "title": "Importar desde Google Keep",

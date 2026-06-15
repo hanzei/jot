@@ -344,7 +344,8 @@
     "unknownNote": "Nieznana notatka",
     "untitledNote": "Notatka bez tytułu",
     "emptyTitle": "Wszystko na bieżąco",
-    "emptySubtext": "Brak niezsynchronizowanych zmian do przejrzenia."
+    "emptySubtext": "Brak niezsynchronizowanych zmian do przejrzenia.",
+    "loadError": "Nie udało się wczytać niezsynchronizowanych zmian."
   },
   "serverPicker": {
     "open": "Przełącz serwer",
