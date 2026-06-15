@@ -30,6 +30,8 @@
     "invalidUrl": "Voer een geldige server-URL in (http:// of https://).",
     "addFailed": "Server toevoegen mislukt.",
     "switchFailed": "Server wisselen mislukt.",
+    "sessionExpiredTitle": "Aanmelden vereist",
+    "sessionExpiredMessage": "Je opgeslagen sessie voor ‘{{server}}’ is niet langer geldig. Het account is mogelijk verwijderd. Meld je opnieuw aan.",
     "duplicateTitle": "Server al toegevoegd",
     "duplicateMessage": "Deze server bestaat al in je lijst.",
     "switchToExisting": "Naar bestaande server",

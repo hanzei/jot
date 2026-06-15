@@ -363,6 +363,8 @@
     "duplicateMessage": "Ten serwer jest już na liście.",
     "switchToExisting": "Przełącz na istniejący",
     "switchFailed": "Nie udało się przełączyć serwera.",
+    "sessionExpiredTitle": "Wymagane logowanie",
+    "sessionExpiredMessage": "Zapisana sesja dla „{{server}}” nie jest już ważna. Konto mogło zostać usunięte. Zaloguj się ponownie.",
     "addFailed": "Nie udało się dodać serwera.",
     "deleteButton": "Usuń",
     "deleteConfirmTitle": "Usuń serwer",

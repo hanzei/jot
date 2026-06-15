@@ -329,6 +329,8 @@
     "invalidUrl": "Ungültige Server-URL. Verwende http:// oder https://",
     "addFailed": "Server konnte nicht hinzugefügt werden",
     "switchFailed": "Serverwechsel fehlgeschlagen",
+    "sessionExpiredTitle": "Anmeldung erforderlich",
+    "sessionExpiredMessage": "Deine gespeicherte Sitzung für „{{server}}“ ist nicht mehr gültig. Möglicherweise wurde das Konto entfernt. Bitte melde dich erneut an.",
     "duplicateTitle": "Server bereits hinzugefügt",
     "duplicateMessage": "Dieser Server ist bereits in deiner Liste.",
     "switchToExisting": "Zu vorhandenem wechseln",

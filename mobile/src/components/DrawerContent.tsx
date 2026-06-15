@@ -283,9 +283,25 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
         return;
       }
       switchedSuccessfully = true;
-      await revalidateSession();
+
+      // revalidateSession returns false when the target server's stored session
+      // is no longer valid (expired, or the account was deleted): it clears auth
+      // so the app redirects to that server's login screen. Skip closeDrawer in
+      // that case (the navigator is already unmounting) and prompt the user to
+      // sign in again rather than reporting a switch failure.
+      const authenticated = await revalidateSession();
       setIsServerPickerVisible(false);
-      props.navigation.closeDrawer();
+      if (authenticated) {
+        props.navigation.closeDrawer();
+      } else {
+        const targetServer = servers.find((server) => server.serverId === serverId);
+        Alert.alert(
+          t('serverPicker.sessionExpiredTitle'),
+          t('serverPicker.sessionExpiredMessage', {
+            server: targetServer?.displayName || targetServer?.serverUrl || '',
+          }),
+        );
+      }
     } catch {
       Alert.alert(t('common.error'), t('serverPicker.switchFailed'));
     } finally {
@@ -301,7 +317,7 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
         await refreshServerPickerData();
       }
     }
-  }, [isServerActionPending, loadServerPickerData, props.navigation, revalidateSession, refreshServerPickerData, t]);
+  }, [isServerActionPending, loadServerPickerData, props.navigation, revalidateSession, refreshServerPickerData, servers, t]);
 
   const handleOpenServerSetup = useCallback(() => {
     if (isServerActionPending) {
@@ -920,10 +936,12 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
                   if (!ok) {
                     return;
                   }
-                  await revalidateSession();
+                  const authenticated = await revalidateSession();
                   setIsServerSetupVisible(false);
                   setIsServerPickerVisible(false);
-                  props.navigation.closeDrawer();
+                  if (authenticated) {
+                    props.navigation.closeDrawer();
+                  }
                 } catch {
                   Alert.alert(t('common.error'), t('serverPicker.switchFailed'));
                 } finally {
