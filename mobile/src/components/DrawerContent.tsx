@@ -283,9 +283,11 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
         return;
       }
       switchedSuccessfully = true;
-      await revalidateSession();
+      const authenticated = await revalidateSession();
       setIsServerPickerVisible(false);
-      props.navigation.closeDrawer();
+      if (authenticated) {
+        props.navigation.closeDrawer();
+      }
     } catch {
       Alert.alert(t('common.error'), t('serverPicker.switchFailed'));
     } finally {
@@ -920,10 +922,12 @@ export default function DrawerContent(props: DrawerContentComponentProps) {
                   if (!ok) {
                     return;
                   }
-                  await revalidateSession();
+                  const authenticated = await revalidateSession();
                   setIsServerSetupVisible(false);
                   setIsServerPickerVisible(false);
-                  props.navigation.closeDrawer();
+                  if (authenticated) {
+                    props.navigation.closeDrawer();
+                  }
                 } catch {
                   Alert.alert(t('common.error'), t('serverPicker.switchFailed'));
                 } finally {
