@@ -351,6 +351,28 @@
     "message": "Du bist offline. Änderungen werden synchronisiert, sobald du wieder verbunden bist.",
     "syncError": "Einige Änderungen wurden noch nicht synchronisiert. Es wird automatisch erneut versucht."
   },
+  "syncFailures": {
+    "bannerCount_one": "{{count}} Änderung konnte nicht gespeichert werden – Überprüfen",
+    "bannerCount_other": "{{count}} Änderungen konnten nicht gespeichert werden – Überprüfen",
+    "badge": "Nicht synchronisiert",
+    "editorBanner": "Eine Änderung an dieser Notiz konnte nicht gespeichert werden – Überprüfen",
+    "title": "Nicht synchronisierte Änderungen",
+    "intro": "Diese Änderungen konnten nicht auf dem Server gespeichert werden. Wähle für jede aus, was geschehen soll.",
+    "keep": "Meine Version behalten",
+    "discard": "Verwerfen",
+    "discardTitle": "Änderung verwerfen?",
+    "discardConfirm": "Dadurch wird die Serverversion übernommen und deine nicht synchronisierte Änderung dauerhaft verworfen.",
+    "keepFailed": "Deine Version konnte nicht behalten werden. Bitte versuche es erneut.",
+    "discardFailed": "Die Änderung konnte nicht verworfen werden. Bitte versuche es erneut.",
+    "causeDeleted": "Diese Notiz wurde auf einem anderen Gerät gelöscht.",
+    "causeUnshared": "Du hast keinen Zugriff mehr auf diese Notiz.",
+    "causeInvalid": "Die Änderung wurde als ungültig abgelehnt.",
+    "causeUnknown": "Die Änderung konnte nicht gespeichert werden.",
+    "unknownNote": "Unbekannte Notiz",
+    "untitledNote": "Notiz ohne Titel",
+    "emptyTitle": "Alles erledigt",
+    "emptySubtext": "Es gibt keine nicht synchronisierten Änderungen zu überprüfen."
+  },
   "import": {
     "title": "Aus Google Keep importieren",
     "description": "Lade eine Google Keep-Exportdatei hoch. Exportiere deine Notizen aus Google Takeout und lade das .zip-Archiv oder eine einzelne .json-Notiz-Datei hoch.",

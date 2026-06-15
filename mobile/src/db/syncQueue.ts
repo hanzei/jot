@@ -335,6 +335,21 @@ export async function getDeadLetteredOperations(db: SQLiteDatabase): Promise<Dea
   return db.getAllAsync<DeadLetteredOperation>('SELECT * FROM dead_letter ORDER BY id ASC');
 }
 
+/** Count of preserved dead-lettered ops; drives the "N changes couldn't be saved" banner (#493). */
+export async function getDeadLetterCount(db: SQLiteDatabase): Promise<number> {
+  const row = await db.getFirstAsync<{ count: number }>('SELECT COUNT(*) as count FROM dead_letter');
+  return row?.count ?? 0;
+}
+
+/**
+ * Remove a resolved dead-letter row once the user has chosen how to handle it
+ * (kept-as-new or discarded; see issue #493). Clearing the affected note's
+ * `sync_state = 'failed'` flag is the caller's responsibility.
+ */
+export async function deleteDeadLetter(db: SQLiteDatabase, id: number): Promise<void> {
+  await db.runAsync('DELETE FROM dead_letter WHERE id = ?', [id]);
+}
+
 /**
  * Preserve a dead-lettered op (its full body + metadata) in the `dead_letter`
  * table so a permanently-rejected optimistic edit is never silently dropped

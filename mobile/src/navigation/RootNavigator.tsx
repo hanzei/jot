@@ -6,11 +6,13 @@ import { useTheme } from '../theme/ThemeContext';
 import { SSEProvider } from '../store/SSEContext';
 import OfflineBanner from '../components/OfflineBanner';
 import SyncErrorBanner from '../components/SyncErrorBanner';
+import SyncFailuresBanner from '../components/SyncFailuresBanner';
 import AuthStack from './AuthStack';
 import MainDrawer from './MainDrawer';
 import NoteEditorScreen from '../screens/NoteEditorScreen';
 import ShareScreen from '../screens/ShareScreen';
 import SettingsScreen from '../screens/SettingsScreen';
+import SyncFailuresScreen from '../screens/SyncFailuresScreen';
 import DiagnosticsScreen from '../screens/DiagnosticsScreen';
 
 export type RootStackParamList = {
@@ -20,6 +22,7 @@ export type RootStackParamList = {
   NoteEditor: { noteId: string | null; sharedText?: string };
   Share: { noteId: string };
   Settings: undefined;
+  SyncFailures: undefined;
   Diagnostics: undefined;
 };
 
@@ -41,6 +44,7 @@ function AuthenticatedStack() {
       <View style={styles.flex}>
         <OfflineBanner />
         <SyncErrorBanner />
+        <SyncFailuresBanner />
         <Stack.Navigator>
           <Stack.Screen name="MainDrawer" component={MainDrawer} options={{ headerShown: false }} />
           <Stack.Screen
@@ -64,6 +68,14 @@ function AuthenticatedStack() {
           <Stack.Screen
             name="Settings"
             component={SettingsScreen}
+            options={{
+              headerShown: false,
+              presentation: 'modal',
+            }}
+          />
+          <Stack.Screen
+            name="SyncFailures"
+            component={SyncFailuresScreen}
             options={{
               headerShown: false,
               presentation: 'modal',

@@ -351,6 +351,28 @@
     "message": "Você está offline. As alterações serão sincronizadas quando você se reconectar.",
     "syncError": "Algumas alterações ainda não foram sincronizadas. Será feita uma nova tentativa automaticamente."
   },
+  "syncFailures": {
+    "bannerCount_one": "Não foi possível salvar {{count}} alteração — Revisar",
+    "bannerCount_other": "Não foi possível salvar {{count}} alterações — Revisar",
+    "badge": "Não sincronizado",
+    "editorBanner": "Não foi possível salvar uma alteração nesta nota — Revisar",
+    "title": "Alterações não sincronizadas",
+    "intro": "Estas alterações não puderam ser salvas no servidor. Escolha o que fazer com cada uma.",
+    "keep": "Manter minha versão",
+    "discard": "Descartar",
+    "discardTitle": "Descartar alteração?",
+    "discardConfirm": "Isso aceita a versão do servidor e descarta permanentemente sua alteração não sincronizada.",
+    "keepFailed": "Não foi possível manter sua versão. Tente novamente.",
+    "discardFailed": "Não foi possível descartar a alteração. Tente novamente.",
+    "causeDeleted": "Esta nota foi excluída em outro dispositivo.",
+    "causeUnshared": "Você não tem mais acesso a esta nota.",
+    "causeInvalid": "A alteração foi rejeitada por ser inválida.",
+    "causeUnknown": "Não foi possível salvar a alteração.",
+    "unknownNote": "Nota desconhecida",
+    "untitledNote": "Nota sem título",
+    "emptyTitle": "Tudo em dia",
+    "emptySubtext": "Não há alterações não sincronizadas para revisar."
+  },
   "import": {
     "title": "Importar do Google Keep",
     "description": "Envie um arquivo de exportação do Google Keep. Exporte suas notas pelo Google Takeout e envie o arquivo .zip ou um arquivo .json individual.",

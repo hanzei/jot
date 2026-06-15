@@ -6,6 +6,7 @@ import { useTranslation } from 'react-i18next';
 import { VALIDATION, type Note, type NoteItem, type User } from '@jot/shared';
 import { useTheme } from '../theme/ThemeContext';
 import { useAuth } from '../store/AuthContext';
+import { useFailedNoteIds } from '../store/OfflineContext';
 import { useUsers } from '../store/UsersContext';
 import UserAvatar from './UserAvatar';
 import { isWhiteHexColor } from '../utils/colorContrast';
@@ -139,6 +140,8 @@ function ListPreview({ items, hasColor }: { items: NoteItem[]; hasColor?: boolea
 function NoteCard({ note, onPress, onLongPress, onMenuPress, onLabelPress }: NoteCardProps) {
   const { colors } = useTheme();
   const { t } = useTranslation();
+  const failedNoteIds = useFailedNoteIds();
+  const didNotSync = failedNoteIds.has(note.id);
   const hasColor = !!(note.color && !isWhiteHexColor(note.color));
 
   return (
@@ -153,6 +156,19 @@ function NoteCard({ note, onPress, onLongPress, onMenuPress, onLabelPress }: Not
       activeOpacity={0.7}
       testID={`note-card-${note.id}`}
     >
+      {didNotSync && (
+        <View
+          style={[styles.failedBadge, { backgroundColor: hasColor ? 'rgba(0,0,0,0.08)' : colors.warning }]}
+          testID={`note-failed-badge-${note.id}`}
+          accessibilityLabel={t('syncFailures.badge')}
+        >
+          <Ionicons name="alert-circle" size={13} color={hasColor ? '#a14b00' : colors.warningText} />
+          <Text style={[styles.failedBadgeText, { color: hasColor ? '#a14b00' : colors.warningText }]}>
+            {t('syncFailures.badge')}
+          </Text>
+        </View>
+      )}
+
       <View style={styles.cardHeader}>
         <View style={styles.cardHeaderContent}>
           {note.note_type === 'list' && note.title ? (
@@ -235,6 +251,20 @@ const styles = StyleSheet.create({
   cardHeader: {
     flexDirection: 'row',
     alignItems: 'flex-start',
+  },
+  failedBadge: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    alignSelf: 'flex-start',
+    gap: 4,
+    paddingHorizontal: 8,
+    paddingVertical: 3,
+    borderRadius: 10,
+    marginBottom: 6,
+  },
+  failedBadgeText: {
+    fontSize: 11,
+    fontWeight: '600',
   },
   cardHeaderContent: {
     flex: 1,

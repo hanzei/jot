@@ -18,6 +18,7 @@ let enqueueListener: (() => void) | null = null;
 jest.mock('../src/db/syncQueue', () => ({
   drainQueue: jest.fn().mockResolvedValue({ idMappings: [], discardedOperations: [], syncedSettings: false }),
   getPendingCount: jest.fn().mockResolvedValue(0),
+  getDeadLetterCount: jest.fn().mockResolvedValue(0),
   subscribeToEnqueue: jest.fn((listener: () => void) => {
     enqueueListener = listener;
     return () => {

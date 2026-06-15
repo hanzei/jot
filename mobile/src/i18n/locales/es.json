@@ -351,6 +351,28 @@
     "message": "Estás sin conexión. Los cambios se sincronizarán cuando vuelvas a conectarte.",
     "syncError": "Algunos cambios aún no se han sincronizado. Se reintentará automáticamente."
   },
+  "syncFailures": {
+    "bannerCount_one": "No se pudo guardar {{count}} cambio — Revisar",
+    "bannerCount_other": "No se pudieron guardar {{count}} cambios — Revisar",
+    "badge": "No se sincronizó",
+    "editorBanner": "No se pudo guardar un cambio de esta nota — Revisar",
+    "title": "Cambios sin sincronizar",
+    "intro": "Estos cambios no se pudieron guardar en el servidor. Elige qué hacer con cada uno.",
+    "keep": "Conservar mi versión",
+    "discard": "Descartar",
+    "discardTitle": "¿Descartar cambio?",
+    "discardConfirm": "Esto acepta la versión del servidor y descarta permanentemente tu cambio sin sincronizar.",
+    "keepFailed": "No se pudo conservar tu versión. Inténtalo de nuevo.",
+    "discardFailed": "No se pudo descartar el cambio. Inténtalo de nuevo.",
+    "causeDeleted": "Esta nota se eliminó en otro dispositivo.",
+    "causeUnshared": "Ya no tienes acceso a esta nota.",
+    "causeInvalid": "El cambio se rechazó por no ser válido.",
+    "causeUnknown": "No se pudo guardar el cambio.",
+    "unknownNote": "Nota desconocida",
+    "untitledNote": "Nota sin título",
+    "emptyTitle": "Todo al día",
+    "emptySubtext": "No hay cambios sin sincronizar para revisar."
+  },
   "import": {
     "title": "Importar desde Google Keep",
     "description": "Sube un archivo de exportación de Google Keep. Exporta tus notas desde Google Takeout y sube el archivo .zip o un archivo .json individual.",

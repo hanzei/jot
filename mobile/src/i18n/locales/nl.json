@@ -351,6 +351,28 @@
     "message": "Je bent offline. Wijzigingen worden gesynchroniseerd als je weer verbinding hebt.",
     "syncError": "Sommige wijzigingen zijn nog niet gesynchroniseerd. Er wordt automatisch opnieuw geprobeerd."
   },
+  "syncFailures": {
+    "bannerCount_one": "{{count}} wijziging kon niet worden opgeslagen — Bekijken",
+    "bannerCount_other": "{{count}} wijzigingen konden niet worden opgeslagen — Bekijken",
+    "badge": "Niet gesynchroniseerd",
+    "editorBanner": "Een wijziging aan deze notitie kon niet worden opgeslagen — Bekijken",
+    "title": "Niet-gesynchroniseerde wijzigingen",
+    "intro": "Deze wijzigingen konden niet op de server worden opgeslagen. Kies wat je met elke wijziging wilt doen.",
+    "keep": "Mijn versie behouden",
+    "discard": "Verwerpen",
+    "discardTitle": "Wijziging verwerpen?",
+    "discardConfirm": "Hiermee wordt de serverversie geaccepteerd en je niet-gesynchroniseerde wijziging definitief verwijderd.",
+    "keepFailed": "Kon je versie niet behouden. Probeer het opnieuw.",
+    "discardFailed": "Kon de wijziging niet verwerpen. Probeer het opnieuw.",
+    "causeDeleted": "Deze notitie is op een ander apparaat verwijderd.",
+    "causeUnshared": "Je hebt geen toegang meer tot deze notitie.",
+    "causeInvalid": "De wijziging is als ongeldig geweigerd.",
+    "causeUnknown": "De wijziging kon niet worden opgeslagen.",
+    "unknownNote": "Onbekende notitie",
+    "untitledNote": "Notitie zonder titel",
+    "emptyTitle": "Helemaal bij",
+    "emptySubtext": "Er zijn geen niet-gesynchroniseerde wijzigingen om te bekijken."
+  },
   "import": {
     "title": "Importeren uit Google Keep",
     "description": "Upload een Google Keep-exportbestand. Exporteer je notities via Google Takeout en upload het .zip-archief of een individueel .json-notitiebestand.",

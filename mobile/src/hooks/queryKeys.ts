@@ -28,3 +28,7 @@ export function labelCountsQueryKey(): [string, string] {
 export function noteSharesQueryKey(noteId: string | null): [string, string, string | null] {
   return ['noteShares', currentQueryServerScope(), noteId];
 }
+
+export function deadLettersQueryKey(): [string, string] {
+  return ['dead-letters', currentQueryServerScope()];
+}

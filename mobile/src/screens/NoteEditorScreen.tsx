@@ -25,7 +25,7 @@ import { useTranslation } from 'react-i18next';
 import { useCreateNote, useUpdateNote, useDeleteNote, useRestoreNote, useDuplicateNote, useCreateNoteItem, useUpdateNoteItem, useDeleteNoteItem, useReorderNoteItems, useToggleNoteItemCompleted } from '../hooks/useNotes';
 import { useOfflineNote } from '../hooks/useOfflineNotes';
 import { isUnsyncedNoteId } from '../db/noteQueries';
-import { usePendingNoteIds } from '../store/OfflineContext';
+import { usePendingNoteIds, useFailedNoteIds } from '../store/OfflineContext';
 import { useSSESubscription } from '../store/SSEContext';
 import { useToast } from '../hooks/useToast';
 import ListItem from '../components/ListItem';
@@ -156,6 +156,7 @@ export default function NoteEditorScreen() {
   const { noteId: initialNoteId, sharedText } = route.params;
   const { t, i18n } = useTranslation();
   const pendingNoteIds = usePendingNoteIds();
+  const failedNoteIds = useFailedNoteIds();
 
   // A new note opened from an Android share intent arrives with sharedText to
   // pre-fill the body.
@@ -1432,6 +1433,22 @@ export default function NoteEditorScreen() {
         </View>
       </View>
 
+      {!!noteId && failedNoteIds.has(noteId) && (
+        <TouchableOpacity
+          style={[styles.failedBar, { backgroundColor: colors.warning, borderBottomColor: colors.warningBorder }]}
+          onPress={() => navigation.navigate('SyncFailures')}
+          testID="editor-failed-bar"
+          accessibilityRole="button"
+          accessibilityLabel={t('syncFailures.badge')}
+        >
+          <Ionicons name="alert-circle" size={16} color={colors.warningText} />
+          <Text style={[styles.failedBarText, { color: colors.warningText }]} numberOfLines={1}>
+            {t('syncFailures.editorBanner')}
+          </Text>
+          <Ionicons name="chevron-forward" size={16} color={colors.warningText} />
+        </TouchableOpacity>
+      )}
+
       {openedFromShare && shareServers.length > 1 && (
         <View style={[styles.shareTargetBar, { backgroundColor: colors.primaryLight, borderBottomColor: colors.primary }]} testID="share-target-bar">
           <Text style={[styles.shareTargetText, { color: colors.primary }]} numberOfLines={1}>
@@ -1848,6 +1865,19 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 10,
     borderBottomWidth: StyleSheet.hairlineWidth,
+  },
+  failedBar: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 8,
+    paddingHorizontal: 16,
+    paddingVertical: 10,
+    borderBottomWidth: 1,
+  },
+  failedBarText: {
+    flex: 1,
+    fontSize: 13,
+    fontWeight: '600',
   },
   shareTargetText: {
     flex: 1,

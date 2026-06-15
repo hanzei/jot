@@ -23,6 +23,12 @@ jest.mock('../src/store/UsersContext', () => ({
   }),
 }));
 
+let mockFailedNoteIds = new Set<string>();
+jest.mock('../src/store/OfflineContext', () => ({
+  __esModule: true,
+  useFailedNoteIds: () => mockFailedNoteIds,
+}));
+
 const baseNote: Note = {
   id: 'note-1',
   user_id: 'user-1',
@@ -61,6 +67,21 @@ const baseListNote: Note = {
 describe('NoteCard', () => {
   beforeEach(async () => {
     await i18n.changeLanguage('en');
+    mockFailedNoteIds = new Set<string>();
+  });
+
+  it('shows a "didn\'t sync" badge for a note in the failed sync state', () => {
+    mockFailedNoteIds = new Set(['note-1']);
+    const { getByTestId, getByText } = render(<NoteCard note={baseNote} onPress={jest.fn()} />);
+
+    expect(getByTestId('note-failed-badge-note-1')).toBeTruthy();
+    expect(getByText("Didn't sync")).toBeTruthy();
+  });
+
+  it('does not show the badge for a normally-synced note', () => {
+    const { queryByTestId } = render(<NoteCard note={baseNote} onPress={jest.fn()} />);
+
+    expect(queryByTestId('note-failed-badge-note-1')).toBeNull();
   });
 
   it('renders content for text notes', () => {

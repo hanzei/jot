@@ -351,6 +351,28 @@
     "message": "Vous êtes hors ligne. Les modifications seront synchronisées lors de la reconnexion.",
     "syncError": "Certaines modifications ne sont pas encore synchronisées. Une nouvelle tentative aura lieu automatiquement."
   },
+  "syncFailures": {
+    "bannerCount_one": "{{count}} modification n'a pas pu être enregistrée — Examiner",
+    "bannerCount_other": "{{count}} modifications n'ont pas pu être enregistrées — Examiner",
+    "badge": "Non synchronisé",
+    "editorBanner": "Une modification de cette note n'a pas pu être enregistrée — Examiner",
+    "title": "Modifications non synchronisées",
+    "intro": "Ces modifications n'ont pas pu être enregistrées sur le serveur. Choisissez quoi faire pour chacune.",
+    "keep": "Garder ma version",
+    "discard": "Abandonner",
+    "discardTitle": "Abandonner la modification ?",
+    "discardConfirm": "Cela accepte la version du serveur et supprime définitivement votre modification non synchronisée.",
+    "keepFailed": "Impossible de garder votre version. Veuillez réessayer.",
+    "discardFailed": "Impossible d'abandonner la modification. Veuillez réessayer.",
+    "causeDeleted": "Cette note a été supprimée sur un autre appareil.",
+    "causeUnshared": "Vous n'avez plus accès à cette note.",
+    "causeInvalid": "La modification a été rejetée comme non valide.",
+    "causeUnknown": "La modification n'a pas pu être enregistrée.",
+    "unknownNote": "Note inconnue",
+    "untitledNote": "Note sans titre",
+    "emptyTitle": "Tout est à jour",
+    "emptySubtext": "Aucune modification non synchronisée à examiner."
+  },
   "import": {
     "title": "Importer depuis Google Keep",
     "description": "Téléversez un fichier d'export Google Keep. Exportez vos notes depuis Google Takeout et téléversez l'archive .zip ou un fichier .json individuel.",

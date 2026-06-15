@@ -324,6 +324,28 @@
     "message": "Jesteś offline. Zmiany zostaną zsynchronizowane po ponownym połączeniu.",
     "syncError": "Niektóre zmiany nie zostały jeszcze zsynchronizowane. Nastąpi automatyczna ponowna próba."
   },
+  "syncFailures": {
+    "bannerCount_one": "Nie udało się zapisać {{count}} zmiany — Przejrzyj",
+    "bannerCount_other": "Nie udało się zapisać {{count}} zmian — Przejrzyj",
+    "badge": "Nie zsynchronizowano",
+    "editorBanner": "Nie udało się zapisać zmiany w tej notatce — Przejrzyj",
+    "title": "Niezsynchronizowane zmiany",
+    "intro": "Tych zmian nie udało się zapisać na serwerze. Wybierz, co zrobić z każdą z nich.",
+    "keep": "Zachowaj moją wersję",
+    "discard": "Odrzuć",
+    "discardTitle": "Odrzucić zmianę?",
+    "discardConfirm": "Spowoduje to zaakceptowanie wersji z serwera i trwałe odrzucenie niezsynchronizowanej zmiany.",
+    "keepFailed": "Nie udało się zachować Twojej wersji. Spróbuj ponownie.",
+    "discardFailed": "Nie udało się odrzucić zmiany. Spróbuj ponownie.",
+    "causeDeleted": "Ta notatka została usunięta na innym urządzeniu.",
+    "causeUnshared": "Nie masz już dostępu do tej notatki.",
+    "causeInvalid": "Zmiana została odrzucona jako nieprawidłowa.",
+    "causeUnknown": "Nie udało się zapisać zmiany.",
+    "unknownNote": "Nieznana notatka",
+    "untitledNote": "Notatka bez tytułu",
+    "emptyTitle": "Wszystko na bieżąco",
+    "emptySubtext": "Brak niezsynchronizowanych zmian do przejrzenia."
+  },
   "serverPicker": {
     "open": "Przełącz serwer",
     "title": "Serwery",
