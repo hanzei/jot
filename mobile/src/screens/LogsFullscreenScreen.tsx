@@ -1,6 +1,6 @@
 import React from 'react';
 import { Platform, ScrollView, StyleSheet, Text, TouchableOpacity, View } from 'react-native';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { Ionicons } from '@expo/vector-icons';
@@ -15,7 +15,7 @@ const MONO = Platform.OS === 'ios' ? 'Menlo' : 'monospace';
 export default function LogsFullscreenScreen() {
   const { colors } = useTheme();
   const { t } = useTranslation();
-  const insets = useSafeAreaInsets();
+  const insets = React.useContext(SafeAreaInsetsContext) ?? { top: 0, right: 0, bottom: 0, left: 0 };
   const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
 
   const logs = getLogs().slice().reverse();
