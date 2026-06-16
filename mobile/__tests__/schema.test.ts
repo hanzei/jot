@@ -23,7 +23,7 @@ const runSqls = (db: MockDb): string[] =>
 
 const ALL_NOTES_COLS = [
   'id', 'user_id', 'title', 'content', 'note_type', 'color', 'pinned', 'archived',
-  'position', 'checked_items_collapsed', 'is_shared', 'deleted_at', 'created_at',
+  'position', 'checked_items_collapsed', 'version', 'is_shared', 'deleted_at', 'created_at',
   'updated_at', 'labels_json', 'shared_with_json', 'sync_state',
 ].map((name) => ({ name }));
 
@@ -45,7 +45,8 @@ describe('migrateDatabase', () => {
       const db = makeDb({
         getAllAsync: jest.fn()
           .mockResolvedValueOnce(ALL_NOTES_COLS)
-          .mockResolvedValueOnce(ALL_NOTE_ITEM_COLS),
+          .mockResolvedValueOnce(ALL_NOTE_ITEM_COLS)
+          .mockResolvedValueOnce(ALL_NOTES_COLS), // migration2 version probe
       });
       await migrateDatabase(db as unknown as SQLiteDatabase);
 
@@ -70,7 +71,8 @@ describe('migrateDatabase', () => {
       const db = makeDb({
         getAllAsync: jest.fn()
           .mockResolvedValueOnce(ALL_NOTES_COLS)
-          .mockResolvedValueOnce(ALL_NOTE_ITEM_COLS),
+          .mockResolvedValueOnce(ALL_NOTE_ITEM_COLS)
+          .mockResolvedValueOnce(ALL_NOTES_COLS), // migration2 version probe
       });
       await migrateDatabase(db as unknown as SQLiteDatabase);
 
@@ -83,12 +85,28 @@ describe('migrateDatabase', () => {
       const db = makeDb({
         getAllAsync: jest.fn()
           .mockResolvedValueOnce(notesColsWithoutSyncState)
-          .mockResolvedValueOnce(ALL_NOTE_ITEM_COLS),
+          .mockResolvedValueOnce(ALL_NOTE_ITEM_COLS)
+          .mockResolvedValueOnce(ALL_NOTES_COLS), // migration2 version probe
       });
       await migrateDatabase(db as unknown as SQLiteDatabase);
 
       expect(db.runAsync).toHaveBeenCalledWith(
         `ALTER TABLE notes ADD COLUMN sync_state TEXT NOT NULL DEFAULT 'synced'`,
+      );
+    });
+
+    it('adds the version column when it is missing (issue #489)', async () => {
+      const notesColsWithoutVersion = ALL_NOTES_COLS.filter((c) => c.name !== 'version');
+      const db = makeDb({
+        getAllAsync: jest.fn()
+          .mockResolvedValueOnce(ALL_NOTES_COLS) // migration1 sync_state probe
+          .mockResolvedValueOnce(ALL_NOTE_ITEM_COLS)
+          .mockResolvedValueOnce(notesColsWithoutVersion), // migration2 version probe
+      });
+      await migrateDatabase(db as unknown as SQLiteDatabase);
+
+      expect(db.runAsync).toHaveBeenCalledWith(
+        `ALTER TABLE notes ADD COLUMN version INTEGER NOT NULL DEFAULT 1`,
       );
     });
 
@@ -99,7 +117,8 @@ describe('migrateDatabase', () => {
       const db = makeDb({
         getAllAsync: jest.fn()
           .mockResolvedValueOnce(ALL_NOTES_COLS)
-          .mockResolvedValueOnce(noteItemColsWithoutNew),
+          .mockResolvedValueOnce(noteItemColsWithoutNew)
+          .mockResolvedValueOnce(ALL_NOTES_COLS), // migration2 version probe
       });
       await migrateDatabase(db as unknown as SQLiteDatabase);
 
@@ -139,7 +158,8 @@ describe('migrateDatabase', () => {
         getAllAsync: jest.fn()
           .mockResolvedValueOnce(ALL_NOTES_COLS)
           .mockResolvedValueOnce(noteItemColsWithIndent)
-          .mockResolvedValueOnce(rows),
+          .mockResolvedValueOnce(rows)
+          .mockResolvedValueOnce(ALL_NOTES_COLS), // migration2 version probe
       });
       await migrateDatabase(db as unknown as SQLiteDatabase);
 
@@ -161,7 +181,8 @@ describe('migrateDatabase', () => {
       const db = makeDb({
         getAllAsync: jest.fn()
           .mockResolvedValueOnce(ALL_NOTES_COLS)
-          .mockResolvedValueOnce(noteItemColsWithoutBoth),
+          .mockResolvedValueOnce(noteItemColsWithoutBoth)
+          .mockResolvedValueOnce(ALL_NOTES_COLS), // migration2 version probe
       });
       await migrateDatabase(db as unknown as SQLiteDatabase);
 

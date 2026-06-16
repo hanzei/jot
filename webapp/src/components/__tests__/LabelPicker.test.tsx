@@ -97,7 +97,7 @@ describe('LabelPicker', () => {
   it('creates a label via the API for an existing note', async () => {
     const note = {
       id: 'note1', user_id: 'user1', note_type: 'text' as const, content: '', pinned: false,
-      archived: false, color: '#fff', is_shared: false, deleted_at: null,
+      version: 1, archived: false, color: '#fff', is_shared: false, deleted_at: null,
       created_at: '2023-01-01T00:00:00Z', updated_at: '2023-01-01T00:00:00Z', labels: [], position: 0,
     }
     mockAddLabel.mockResolvedValue({ ...note, labels: [makeLabel('Fresh')] })
@@ -117,7 +117,7 @@ describe('LabelPicker', () => {
   it('does not fire duplicate API requests while a create is in flight', async () => {
     const note = {
       id: 'note1', user_id: 'user1', note_type: 'text' as const, content: '', pinned: false,
-      archived: false, color: '#fff', is_shared: false, deleted_at: null,
+      version: 1, archived: false, color: '#fff', is_shared: false, deleted_at: null,
       created_at: '2023-01-01T00:00:00Z', updated_at: '2023-01-01T00:00:00Z', labels: [], position: 0,
     }
     // Never-resolving promise keeps the request "in flight".

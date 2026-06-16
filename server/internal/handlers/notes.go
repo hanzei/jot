@@ -174,6 +174,12 @@ type UpdateNoteRequest struct {
 	Archived              *bool   `json:"archived"`
 	Color                 *string `json:"color"`
 	CheckedItemsCollapsed *bool   `json:"checked_items_collapsed"`
+	// BaseVersion enables optimistic concurrency: when set, the update is
+	// rejected with 409 unless the note's current version still matches it,
+	// so a stale edit (e.g. an offline write replayed after another device
+	// changed the note) is detected instead of silently overwriting (issue
+	// #489). When omitted, the update behaves as a last-write-wins write.
+	BaseVersion *int `json:"base_version,omitempty"`
 }
 
 type EmptyTrashResponse struct {
@@ -585,6 +591,7 @@ func (h *NotesHandler) validateUpdateNoteFields(ctx context.Context, id, userID 
 //	@Failure	400		{string}	string	"bad request"
 //	@Failure	401		{string}	string	"unauthorized"
 //	@Failure	404		{string}	string	"not found"
+//	@Failure	409		{string}	string	"version conflict: note changed since base_version"
 //	@Failure	500		{string}	string	"internal server error"
 //	@Router		/notes/{id} [patch]
 func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, any, error) {
@@ -614,10 +621,13 @@ func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, 
 		return status, nil, prefetchErr
 	}
 
-	err := h.noteStore.Update(r.Context(), id, user.ID, req.Title, req.Content, req.Color, req.Pinned, req.Archived, req.CheckedItemsCollapsed)
+	err := h.noteStore.Update(r.Context(), id, user.ID, req.Title, req.Content, req.Color, req.Pinned, req.Archived, req.CheckedItemsCollapsed, req.BaseVersion)
 	if err != nil {
 		if errors.Is(err, models.ErrNoteNotFound) || errors.Is(err, models.ErrNoteNoAccess) {
 			return http.StatusNotFound, nil, err
+		}
+		if errors.Is(err, models.ErrNoteVersionConflict) {
+			return http.StatusConflict, nil, err
 		}
 		return http.StatusInternalServerError, nil, fmt.Errorf("update note: %w", err)
 	}

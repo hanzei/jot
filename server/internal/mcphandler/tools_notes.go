@@ -130,7 +130,7 @@ func (h *Handler) handleUpdateNote(userID string) mcp.ToolHandlerFor[updateNoteI
 		if in.ID == "" {
 			return toolError("id is required")
 		}
-		if err := h.noteStore.Update(ctx, in.ID, userID, in.Title, in.Content, in.Color, in.Pinned, in.Archived, in.CheckedItemsCollapsed); err != nil {
+		if err := h.noteStore.Update(ctx, in.ID, userID, in.Title, in.Content, in.Color, in.Pinned, in.Archived, in.CheckedItemsCollapsed, nil); err != nil {
 			return toolError("update note: %w", err)
 		}
 		note, err := h.noteStore.GetByID(ctx, in.ID, userID)

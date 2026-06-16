@@ -128,7 +128,7 @@ func (h *NotesHandler) importKeepNote(ctx context.Context, userID string, kn kee
 
 	if kn.IsPinned || kn.IsArchived {
 		f := false
-		if err := h.noteStore.Update(ctx, note.ID, userID, nil, nil, nil, &kn.IsPinned, &kn.IsArchived, &f); err != nil {
+		if err := h.noteStore.Update(ctx, note.ID, userID, nil, nil, nil, &kn.IsPinned, &kn.IsArchived, &f, nil); err != nil {
 			return err
 		}
 	}
@@ -866,7 +866,7 @@ func (h *NotesHandler) importSingleMemo(ctx context.Context, userID string, idx 
 	archived := state == usememosStateArchived
 	if memo.Pinned || archived {
 		f := false
-		if err := h.noteStore.Update(ctx, note.ID, userID, nil, nil, nil, &memo.Pinned, &archived, &f); err != nil {
+		if err := h.noteStore.Update(ctx, note.ID, userID, nil, nil, nil, &memo.Pinned, &archived, &f, nil); err != nil {
 			errs = append(errs, fmt.Sprintf("memo #%d: failed to set pinned/archived: %v", idx+1, err))
 		}
 	}

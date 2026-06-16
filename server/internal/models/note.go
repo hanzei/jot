@@ -20,6 +20,7 @@ var ErrNoteNotInTrash = errors.New("note not found in trash or not owned by user
 var ErrNoteShareNotFound = errors.New("note share not found")
 var ErrNoteAlreadyShared = errors.New("note already shared with user")
 var ErrNoteExists = errors.New("note already exists")
+var ErrNoteVersionConflict = errors.New("note was modified by another write")
 var ErrNoteItemNotFound = errors.New("note item not found")
 var ErrNoteItemExists = errors.New("note item already exists")
 var ErrNoteItemCapExceeded = errors.New("note item limit reached")
@@ -48,11 +49,15 @@ type DeletedNoteAudience struct {
 }
 
 type Note struct {
-	ID                    string      `json:"id"`
-	UserID                string      `json:"user_id"`
-	Title                 string      `json:"title"`
-	Content               string      `json:"content"`
-	NoteType              NoteType    `json:"note_type"`
+	ID       string   `json:"id"`
+	UserID   string   `json:"user_id"`
+	Title    string   `json:"title"`
+	Content  string   `json:"content"`
+	NoteType NoteType `json:"note_type"`
+	// Version is an optimistic-concurrency counter bumped on every shared-content
+	// (title/content) change. Clients echo the version their edit was based on as
+	// base_version on update so a stale write can be rejected (issue #489).
+	Version               int         `json:"version"`
 	Color                 string      `json:"color"`
 	Pinned                bool        `json:"pinned"`
 	Archived              bool        `json:"archived"`

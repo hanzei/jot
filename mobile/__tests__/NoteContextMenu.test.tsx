@@ -53,6 +53,7 @@ const baseNote: Note = {
   user_id: 'user-1',
   content: '',
   note_type: 'text',
+  version: 1,
   color: '#ffffff',
   pinned: false,
   archived: false,

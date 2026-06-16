@@ -37,6 +37,7 @@ function makeTextNote(id: string): Note {
     user_id: 'u1',
     note_type: 'text',
     content: 'body',
+    version: 1,
     color: '#ffffff',
     pinned: false,
     archived: false,
@@ -59,11 +60,26 @@ type QueueRow = {
   created_at: string;
 };
 
-function makeDrainDb(entries: QueueRow[]) {
+function makeDrainDb(entries: QueueRow[], opts: { versions?: Record<string, number> } = {}) {
+  // Mutable per-note version store so the test can observe drainQueue resolving an
+  // update's base_version from the local version and advancing it after each op.
+  const versions: Record<string, number> = { ...opts.versions };
   return {
     getAllAsync: jest.fn().mockResolvedValue([...entries]),
-    runAsync: jest.fn().mockResolvedValue(undefined),
-    getFirstAsync: jest.fn().mockResolvedValue({ count: entries.length }),
+    runAsync: jest.fn((sql: string, args?: unknown[]) => {
+      if (typeof sql === 'string' && sql.startsWith('UPDATE notes SET version')) {
+        // setLocalNoteVersion: args = [version, id]
+        versions[args?.[1] as string] = args?.[0] as number;
+      }
+      return Promise.resolve(undefined);
+    }),
+    getFirstAsync: jest.fn((sql: string, args?: unknown[]) => {
+      if (typeof sql === 'string' && sql.includes('SELECT version FROM notes')) {
+        const id = args?.[0] as string;
+        return Promise.resolve(id in versions ? { version: versions[id] } : null);
+      }
+      return Promise.resolve({ count: entries.length });
+    }),
     withTransactionAsync: jest.fn(async (cb: () => Promise<void> | void) => { await cb(); }),
   };
 }
@@ -157,6 +173,56 @@ describe('drainQueue dead-letter persistence', () => {
     // Still discarded from the queue so it can't wedge the drain.
     expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [3]);
     expect(discardedOperations).toEqual([{ operation: 'createItem', endpoint: '/notes/n1/items', status: 409 }]);
+  });
+
+  it('dead-letters an update 409 (version conflict) instead of dropping it silently', async () => {
+    // A 409 on an `update` is an optimistic-concurrency conflict: the note
+    // changed on another device since base_version (#489). Unlike an idempotent
+    // create/item 409, it must be preserved + flagged so the stale edit surfaces
+    // in the failed-changes banner instead of being silently clobbered.
+    const db = makeDrainDb(
+      [{ id: 7, operation: 'update', endpoint: '/notes/n1', method: 'PATCH', body: '{"content":"mine"}', created_at: 't0' }],
+      { versions: { n1: 3 } },
+    );
+    mockApi.patch.mockRejectedValueOnce(makeAxiosError(409));
+
+    const { discardedOperations } = await drainQueue(db as never);
+
+    const inserts = callsStartingWith(db, 'INSERT INTO dead_letter');
+    expect(inserts).toHaveLength(1);
+    expect(inserts[0][0]).toBe('update'); // operation column
+    expect(inserts[0][4]).toBe(409); // status column
+    expect(inserts[0][5]).toBe('n1'); // note_id column
+    expect(callsStartingWith(db, `UPDATE notes SET sync_state = 'failed'`)).toEqual([['n1']]);
+    expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [7]);
+    expect(discardedOperations).toEqual([{ operation: 'update', endpoint: '/notes/n1', status: 409 }]);
+  });
+
+  it('resolves each queued update base_version from the advancing local version so a same-note chain does not self-conflict (#489)', async () => {
+    // Two offline content edits to the same note (base local version 3). The first
+    // drains, the server bumps to 4, and setLocalNoteVersion advances the local
+    // version; the second must replay against 4, not the stale 3, or it would be
+    // wrongly dead-lettered as a cross-device conflict. base_version is resolved at
+    // drain time from the local version, not stored in the queued body.
+    const db = makeDrainDb(
+      [
+        { id: 8, operation: 'update', endpoint: '/notes/n1', method: 'PATCH', body: '{"content":"first"}', created_at: 't0' },
+        { id: 9, operation: 'update', endpoint: '/notes/n1', method: 'PATCH', body: '{"content":"second"}', created_at: 't1' },
+      ],
+      { versions: { n1: 3 } },
+    );
+    mockApi.patch
+      .mockResolvedValueOnce({ data: { ...makeTextNote('n1'), version: 4 } } as never)
+      .mockResolvedValueOnce({ data: { ...makeTextNote('n1'), version: 5 } } as never);
+
+    await drainQueue(db as never);
+
+    // First replays against the base version 3; second against the advanced 4.
+    expect(mockApi.patch).toHaveBeenNthCalledWith(1, '/notes/n1', { content: 'first', base_version: 3 });
+    expect(mockApi.patch).toHaveBeenNthCalledWith(2, '/notes/n1', { content: 'second', base_version: 4 });
+    // Both drained cleanly — nothing dead-lettered or flagged failed.
+    expect(callsStartingWith(db, 'INSERT INTO dead_letter')).toHaveLength(0);
+    expect(callsStartingWith(db, `UPDATE notes SET sync_state = 'failed'`)).toHaveLength(0);
   });
 
   it('clears a prior failed flag when a later op for the note drains successfully', async () => {

@@ -56,6 +56,7 @@ type Note struct {
 	Title                 string      `json:"title"`
 	Content               string      `json:"content"`
 	NoteType              NoteType    `json:"note_type"`
+	Version               int         `json:"version"`
 	Color                 string      `json:"color"`
 	Pinned                bool        `json:"pinned"`
 	Archived              bool        `json:"archived"`
@@ -148,6 +149,10 @@ type UpdateTextNoteRequest struct {
 	Pinned   *bool   `json:"pinned,omitempty"`
 	Archived *bool   `json:"archived,omitempty"`
 	Color    *string `json:"color,omitempty"`
+	// BaseVersion enables optimistic concurrency: when set, the server rejects
+	// the update with 409 unless the note's current version still matches it
+	// (issue #489). Omit for last-write-wins behavior.
+	BaseVersion *int `json:"base_version,omitempty"`
 }
 
 // UpdateListNoteRequest is the body for PATCH /api/v1/notes/{id} on a list note.
@@ -160,6 +165,8 @@ type UpdateListNoteRequest struct {
 	Archived              *bool   `json:"archived,omitempty"`
 	Color                 *string `json:"color,omitempty"`
 	CheckedItemsCollapsed *bool   `json:"checked_items_collapsed,omitempty"`
+	// BaseVersion enables optimistic concurrency; see UpdateTextNoteRequest.
+	BaseVersion *int `json:"base_version,omitempty"`
 }
 
 // CreateNoteItemRequest is the body for POST /api/v1/notes/{id}/items. ID is

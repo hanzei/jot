@@ -9,6 +9,7 @@ interface NoteRow {
   title: string;
   content: string;
   note_type: string;
+  version: number;
   color: string;
   pinned: number;
   archived: number;
@@ -42,6 +43,9 @@ function rowToNote(row: NoteRow, items: NoteItem[] = []): Note {
   const base = {
     id: row.id,
     user_id: row.user_id,
+    // Older local rows (pre-#489) predate the column; default to 1 so the note
+    // is still usable and the first server fetch supplies the real version.
+    version: row.version ?? 1,
     color: row.color,
     pinned: row.pinned === 1,
     archived: row.archived === 1,
@@ -101,16 +105,17 @@ async function saveNoteInTx(db: SQLiteDatabase, note: Note): Promise<void> {
 
   await db.runAsync(
     `INSERT OR REPLACE INTO notes
-       (id, user_id, title, content, note_type, color, pinned, archived, position,
+       (id, user_id, title, content, note_type, version, color, pinned, archived, position,
         checked_items_collapsed, is_shared, deleted_at, created_at, updated_at,
         labels_json, shared_with_json)
-     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
+     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`,
     [
       note.id,
       note.user_id,
       title,
       content,
       note.note_type,
+      note.version,
       note.color,
       note.pinned ? 1 : 0,
       note.archived ? 1 : 0,
@@ -340,6 +345,26 @@ export async function updateLocalNote(
   values.push(id);
 
   await db.runAsync(`UPDATE notes SET ${fields.join(', ')} WHERE id = ?`, values);
+}
+
+/**
+ * Read a note's current optimistic-concurrency version, or null if the note
+ * isn't in the local DB. Used by the queue drain to resolve an update's
+ * base_version at replay time (see {@link setLocalNoteVersion}, #489).
+ */
+export async function getLocalNoteVersion(db: SQLiteDatabase, id: string): Promise<number | null> {
+  const row = await db.getFirstAsync<{ version: number }>('SELECT version FROM notes WHERE id = ?', [id]);
+  return row?.version ?? null;
+}
+
+/**
+ * Refresh just a note's `version` column from a server response during queue
+ * drain. Only the version is touched (not content) so a later same-note edit
+ * still pending in the queue keeps its optimistic content; the bumped version
+ * lets the next queued edit to this note replay against the right base (#489).
+ */
+export async function setLocalNoteVersion(db: SQLiteDatabase, id: string, version: number): Promise<void> {
+  await db.runAsync('UPDATE notes SET version = ? WHERE id = ?', [version, id]);
 }
 
 export async function renameLabelInLocalNotes(
