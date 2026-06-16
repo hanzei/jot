@@ -1237,7 +1237,7 @@ const docTemplate = `{
                         }
                     },
                     "409": {
-                        "description": "version conflict: note changed since base_version",
+                        "description": "version conflict for title/content update: note changed since base_version",
                         "schema": {
                             "type": "string"
                         }
@@ -2894,7 +2894,7 @@ const docTemplate = `{
                     "type": "boolean"
                 },
                 "base_version": {
-                    "description": "BaseVersion enables optimistic concurrency: when set, the update is\nrejected with 409 unless the note's current version still matches it,\nso a stale edit (e.g. an offline write replayed after another device\nchanged the note) is detected instead of silently overwriting (issue\n#489). When omitted, the update behaves as a last-write-wins write.",
+                    "description": "BaseVersion enables optimistic concurrency for shared title/content\nchanges: when those fields are changed and this is set, the update is\nrejected with 409 unless the note's current version still matches it.\nPer-user-only fields (color, pinned, archived, checked_items_collapsed)\nignore this value. When omitted, shared-content updates behave as\nlast-write-wins writes.",
                     "type": "integer"
                 },
                 "checked_items_collapsed": {
