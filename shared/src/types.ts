@@ -90,6 +90,13 @@ interface BaseNote {
   id: string;
   user_id: string;
   note_type: NoteType;
+  /**
+   * Optimistic-concurrency counter bumped server-side on every shared-content
+   * (title/content) change. Echo it as `base_version` on an update so a stale
+   * write is rejected with 409 instead of silently clobbering a newer edit made
+   * on another device (issue #489).
+   */
+  version: number;
   color: string;
   pinned: boolean;
   archived: boolean;
@@ -196,14 +203,24 @@ export interface CreateListNoteRequest {
 
 export type CreateNoteRequest = CreateTextNoteRequest | CreateListNoteRequest;
 
-export interface UpdateTextNoteRequest {
+/**
+ * Optimistic-concurrency guard shared by both update-request shapes: the note
+ * `version` the edit was based on. When present, the server rejects the write
+ * with 409 if the note's content changed since (issue #489); only meaningful
+ * alongside a `title`/`content` change, so it is omitted for per-user-only edits.
+ */
+interface BaseUpdateNoteRequest {
+  base_version?: number;
+}
+
+export interface UpdateTextNoteRequest extends BaseUpdateNoteRequest {
   content?: string;
   pinned?: boolean;
   archived?: boolean;
   color?: string;
 }
 
-export interface UpdateListNoteRequest {
+export interface UpdateListNoteRequest extends BaseUpdateNoteRequest {
   title?: string;
   pinned?: boolean;
   archived?: boolean;

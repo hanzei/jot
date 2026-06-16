@@ -193,6 +193,14 @@ definitions:
     properties:
       archived:
         type: boolean
+      base_version:
+        description: |-
+          BaseVersion enables optimistic concurrency: when set, the update is
+          rejected with 409 unless the note's current version still matches it,
+          so a stale edit (e.g. an offline write replayed after another device
+          changed the note) is detected instead of silently overwriting (issue
+          #489). When omitted, the update behaves as a last-write-wins write.
+        type: integer
       checked_items_collapsed:
         type: boolean
       color:
@@ -398,6 +406,12 @@ definitions:
         type: string
       user_id:
         type: string
+      version:
+        description: |-
+          Version is an optimistic-concurrency counter bumped on every shared-content
+          (title/content) change. Clients echo the version their edit was based on as
+          base_version on update so a stale write can be rejected (issue #489).
+        type: integer
     type: object
   models.NoteItem:
     properties:
@@ -1161,6 +1175,10 @@ paths:
             type: string
         "404":
           description: not found
+          schema:
+            type: string
+        "409":
+          description: 'version conflict: note changed since base_version'
           schema:
             type: string
         "500":

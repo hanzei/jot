@@ -181,6 +181,9 @@ export function useCreateNote() {
       const baseLocalNote = {
         id: clientId,
         user_id: user?.id ?? '',
+        // A brand-new note starts at version 1, matching the server's default;
+        // the first successful sync replaces it with the canonical server note.
+        version: 1,
         color: data.color ?? '#ffffff',
         pinned: false,
         archived: false,
@@ -258,9 +261,21 @@ export function useUpdateNote() {
     },
     mutationFn: async ({ id, data }: { id: string; data: UpdateNoteRequest }): Promise<Note> => {
       assertSwitchWriteAllowed();
+
+      const existing = await getLocalNote(db, id);
+      // Only content edits (title/content) are version-guarded; per-user fields
+      // (color/pinned/archived/collapsed) live in note_user_state and aren't.
+      const fields = data as { title?: string; content?: string };
+      const touchesContent = fields.title !== undefined || fields.content !== undefined;
+
       if (isConnectedRef.current) {
         try {
-          const updatedNote = await updateNote(id, data);
+          // Online: gate on the version we currently hold locally so the server
+          // can reject a write that raced a concurrent edit on another device
+          // (#489). A 409 is permanent, so rethrowIfNotQueueable surfaces it.
+          const body: UpdateNoteRequest =
+            touchesContent && existing ? { ...data, base_version: existing.version } : data;
+          const updatedNote = await updateNote(id, body);
           await saveNote(db, updatedNote);
           return updatedNote;
         } catch (err) {
@@ -272,7 +287,6 @@ export function useUpdateNote() {
 
       // Offline (or a transient online failure): update local DB and queue the
       // server operation.
-      const existing = await getLocalNote(db, id);
       if (!existing) {
         throw new Error(`Note ${id} not found in local DB`);
       }
@@ -286,7 +300,10 @@ export function useUpdateNote() {
       // Queue only the fields the user actually changed. The server PATCH is a
       // partial update (absent fields are left unchanged), so sending the full
       // snapshot would re-assert stale values and clobber fields edited
-      // concurrently on another device when this op replays later.
+      // concurrently on another device when this op replays later. base_version is
+      // intentionally NOT stored here: drainQueue resolves it from the note's
+      // local version at replay time, so a chain of offline edits to one note
+      // replays against the advancing version instead of self-conflicting (#489).
       await enqueueOperation(db, {
         operation: 'update',
         endpoint: `/notes/${id}`,
