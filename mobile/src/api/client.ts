@@ -473,7 +473,7 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       const url: string = config?.url || '';
       const isAuthEndpoint = url === '/login' || url === '/register' || url === '/logout' || url === '/me';
-      if (!isAuthEndpoint && !isHandlingUnauthorized) {
+      if (!isAuthEndpoint && !isHandlingUnauthorized && sessionCache !== null) {
         isHandlingUnauthorized = true;
         sessionCache = null;
         try {
