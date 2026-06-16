@@ -443,6 +443,7 @@ api.interceptors.request.use(async (config) => {
 
 // On 401, clear stored session (handled by AuthContext for navigation)
 let onUnauthorized: (() => void) | null = null;
+let isHandlingUnauthorized = false;
 
 export function setOnUnauthorized(cb: (() => void) | null): void {
   onUnauthorized = cb;
@@ -472,10 +473,15 @@ api.interceptors.response.use(
     if (error.response?.status === 401) {
       const url: string = config?.url || '';
       const isAuthEndpoint = url === '/login' || url === '/register' || url === '/logout' || url === '/me';
-      if (!isAuthEndpoint) {
-        await clearStoredSession();
-        await clearCachedProfile();
-        onUnauthorized?.();
+      if (!isAuthEndpoint && !isHandlingUnauthorized && sessionCache !== null) {
+        isHandlingUnauthorized = true;
+        sessionCache = null;
+        try {
+          await Promise.all([clearStoredSession(), clearCachedProfile()]);
+          onUnauthorized?.();
+        } finally {
+          isHandlingUnauthorized = false;
+        }
       }
     }
     return Promise.reject(error);
@@ -576,13 +582,12 @@ export async function getStoredSession(): Promise<string | null> {
 }
 
 export async function clearStoredSession(): Promise<void> {
+  sessionCache = null;
   const serverId = await resolveActiveServerId();
   if (!serverId) {
-    sessionCache = null;
     return;
   }
   await deleteServerStorageValue(serverId, SESSION_KEY);
-  sessionCache = null;
 }
 
 export async function initializeServerContext(): Promise<void> {

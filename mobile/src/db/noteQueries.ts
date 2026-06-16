@@ -1,6 +1,7 @@
 import { SQLiteDatabase } from 'expo-sqlite';
 import type { Note, NoteItem, GetNotesParams, Label, NoteShare } from '@jot/shared';
 import { getRandomBytes, getStrongRandomBytes } from '../utils/random';
+import { withSerializedTransaction } from './transaction';
 
 interface NoteRow {
   id: string;
@@ -147,12 +148,12 @@ interface SaveNoteOptions {
 
 export async function saveNote(db: SQLiteDatabase, note: Note, options?: SaveNoteOptions): Promise<void> {
   if (options?.skipNoteIds?.has(note.id)) return;
-  await db.withTransactionAsync(() => saveNoteInTx(db, note));
+  await withSerializedTransaction(db, () => saveNoteInTx(db, note));
 }
 
 export async function saveNotes(db: SQLiteDatabase, notes: Note[], options?: SaveNoteOptions): Promise<void> {
   const skipNoteIds = options?.skipNoteIds;
-  await db.withTransactionAsync(async () => {
+  await withSerializedTransaction(db, async () => {
     for (const note of notes) {
       if (skipNoteIds?.has(note.id)) continue;
       await saveNoteInTx(db, note);
@@ -346,11 +347,10 @@ export async function renameLabelInLocalNotes(
   labelId: string,
   name: string,
 ): Promise<void> {
-  const rows = await db.getAllAsync<Pick<NoteRow, 'id' | 'labels_json'>>(
-    'SELECT id, labels_json FROM notes',
-  );
-
-  await db.withTransactionAsync(async () => {
+  await withSerializedTransaction(db, async () => {
+    const rows = await db.getAllAsync<Pick<NoteRow, 'id' | 'labels_json'>>(
+      'SELECT id, labels_json FROM notes',
+    );
     for (const row of rows) {
       let labels: Label[] = [];
       try {
@@ -441,11 +441,10 @@ export async function deleteLabelFromLocalNotes(
   db: SQLiteDatabase,
   labelId: string,
 ): Promise<void> {
-  const rows = await db.getAllAsync<Pick<NoteRow, 'id' | 'labels_json'>>(
-    'SELECT id, labels_json FROM notes',
-  );
-
-  await db.withTransactionAsync(async () => {
+  await withSerializedTransaction(db, async () => {
+    const rows = await db.getAllAsync<Pick<NoteRow, 'id' | 'labels_json'>>(
+      'SELECT id, labels_json FROM notes',
+    );
     for (const row of rows) {
       let labels: Label[] = [];
       try {
@@ -474,7 +473,7 @@ export async function replaceLocalNoteId(
 ): Promise<void> {
   // Wrap DELETE + INSERT in a single transaction so a mid-operation crash cannot
   // leave the note permanently deleted without the new server ID being written.
-  await db.withTransactionAsync(async () => {
+  await withSerializedTransaction(db, async () => {
     await db.runAsync('DELETE FROM notes WHERE id = ?', [oldId]);
     await saveNoteInTx(db, newNote);
   });
@@ -621,7 +620,7 @@ export interface LocalItemInput {
 
 export async function createLocalItem(db: SQLiteDatabase, noteId: string, item: LocalItemInput): Promise<void> {
   const now = new Date().toISOString();
-  await db.withTransactionAsync(async () => {
+  await withSerializedTransaction(db, async () => {
     await db.runAsync(
       `INSERT OR REPLACE INTO note_items (id, note_id, text, completed, position, parent_id, assigned_to, created_at, updated_at)
        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)`,
@@ -651,14 +650,14 @@ export async function patchLocalItem(db: SQLiteDatabase, noteId: string, itemId:
   fields.push('updated_at = ?');
   values.push(new Date().toISOString());
   values.push(itemId, noteId);
-  await db.withTransactionAsync(async () => {
+  await withSerializedTransaction(db, async () => {
     await db.runAsync(`UPDATE note_items SET ${fields.join(', ')} WHERE id = ? AND note_id = ?`, values);
     await touchLocalNote(db, noteId);
   });
 }
 
 export async function deleteLocalItem(db: SQLiteDatabase, noteId: string, itemId: string): Promise<void> {
-  await db.withTransactionAsync(async () => {
+  await withSerializedTransaction(db, async () => {
     await db.runAsync('DELETE FROM note_items WHERE id = ? AND note_id = ?', [itemId, noteId]);
     await touchLocalNote(db, noteId);
   });
@@ -666,7 +665,7 @@ export async function deleteLocalItem(db: SQLiteDatabase, noteId: string, itemId
 
 export async function reorderLocalItems(db: SQLiteDatabase, noteId: string, itemIds: string[]): Promise<void> {
   const now = new Date().toISOString();
-  await db.withTransactionAsync(async () => {
+  await withSerializedTransaction(db, async () => {
     for (let i = 0; i < itemIds.length; i++) {
       await db.runAsync('UPDATE note_items SET position = ?, updated_at = ? WHERE id = ? AND note_id = ?', [i, now, itemIds[i], noteId]);
     }
