@@ -174,11 +174,12 @@ type UpdateNoteRequest struct {
 	Archived              *bool   `json:"archived"`
 	Color                 *string `json:"color"`
 	CheckedItemsCollapsed *bool   `json:"checked_items_collapsed"`
-	// BaseVersion enables optimistic concurrency: when set, the update is
-	// rejected with 409 unless the note's current version still matches it,
-	// so a stale edit (e.g. an offline write replayed after another device
-	// changed the note) is detected instead of silently overwriting (issue
-	// #489). When omitted, the update behaves as a last-write-wins write.
+	// BaseVersion enables optimistic concurrency for shared title/content
+	// changes: when those fields are changed and this is set, the update is
+	// rejected with 409 unless the note's current version still matches it.
+	// Per-user-only fields (color, pinned, archived, checked_items_collapsed)
+	// ignore this value. When omitted, shared-content updates behave as
+	// last-write-wins writes.
 	BaseVersion *int `json:"base_version,omitempty"`
 }
 
@@ -591,7 +592,7 @@ func (h *NotesHandler) validateUpdateNoteFields(ctx context.Context, id, userID 
 //	@Failure	400		{string}	string	"bad request"
 //	@Failure	401		{string}	string	"unauthorized"
 //	@Failure	404		{string}	string	"not found"
-//	@Failure	409		{string}	string	"version conflict: note changed since base_version"
+//	@Failure	409		{string}	string	"version conflict for title/content update: note changed since base_version"
 //	@Failure	500		{string}	string	"internal server error"
 //	@Router		/notes/{id} [patch]
 func (h *NotesHandler) UpdateNote(w http.ResponseWriter, r *http.Request) (int, any, error) {

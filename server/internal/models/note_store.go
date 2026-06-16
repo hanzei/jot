@@ -557,7 +557,9 @@ func (s *noteStore) Update(ctx context.Context, id string, userID string, title,
 }
 
 // updateNoteContentTx updates title, content, and version inside tx. When baseVersion is non-nil
-// the write is gated on the current version; zero rows affected means ErrNoteVersionConflict.
+// the write is gated on the current version; on a version mismatch (zero rows affected) it re-reads
+// the current title/content: if they already match the requested values it returns nil (idempotent
+// success), otherwise ErrNoteVersionConflict.
 func (s *noteStore) updateNoteContentTx(ctx context.Context, tx *sql.Tx, id, title, content string, baseVersion *int) error {
 	query := `UPDATE notes SET title = ?, content = ?, version = version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
 	args := []any{title, content, id}
@@ -576,9 +578,24 @@ func (s *noteStore) updateNoteContentTx(ctx context.Context, tx *sql.Tx, id, tit
 	if err != nil {
 		return fmt.Errorf("failed to get rows affected: %w", err)
 	}
-	// The note row exists (HasAccess verified above), so zero rows means the version
-	// guard did not match: another write changed the content first.
+	// Zero rows means the version guard did not match. Re-read to check whether the
+	// winning write already applied the same title/content; if so, treat this as a
+	// no-op success rather than a conflict, since the desired state is already present.
 	if rows == 0 {
+		var currentTitle, currentContent string
+		err = tx.QueryRowContext(ctx,
+			s.d.RewritePlaceholders(`SELECT title, content FROM notes WHERE id = ? AND deleted_at IS NULL`),
+			id,
+		).Scan(&currentTitle, &currentContent)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return ErrNoteNotFound
+			}
+			return fmt.Errorf("get current note content: %w", err)
+		}
+		if currentTitle == title && currentContent == content {
+			return nil
+		}
 		return ErrNoteVersionConflict
 	}
 	return nil
