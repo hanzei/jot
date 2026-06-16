@@ -1,5 +1,6 @@
 import React, { createContext, useContext, useState, useEffect, useCallback, useMemo } from 'react';
 import type { User, UserSettings } from '@jot/shared';
+import { useQueryClient } from '@tanstack/react-query';
 import {
   auth,
   getStoredSession,
@@ -43,11 +44,13 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const queryClient = useQueryClient();
 
   const clearAuth = useCallback(() => {
     setUser(null);
     setSettings(null);
-  }, []);
+    queryClient.clear();
+  }, [queryClient]);
 
   useEffect(() => {
     setOnUnauthorized(clearAuth);

@@ -4,6 +4,11 @@ import { Text, TouchableOpacity } from 'react-native';
 import { AuthProvider, useAuth } from '../src/store/AuthContext';
 import { auth, getStoredSession, setOnUnauthorized, clearStoredSession, cacheAuthProfile, getCachedAuthProfile, clearCachedProfile } from '../src/api/client';
 
+const mockQueryClient = { clear: jest.fn() };
+jest.mock('@tanstack/react-query', () => ({
+  useQueryClient: () => mockQueryClient,
+}));
+
 jest.mock('../src/api/client', () => ({
   auth: {
     login: jest.fn(),

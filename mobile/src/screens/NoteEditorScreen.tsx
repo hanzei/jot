@@ -51,6 +51,7 @@ const IOS_KEYBOARD_VERTICAL_OFFSET = 88;
 const FOCUSED_INPUT_KEYBOARD_MARGIN = 120;
 const MARKDOWN_TOOLBAR_ID = 'markdown-formatting-toolbar';
 const LIST_INDENT_TOOLBAR_ID = 'list-indent-toolbar';
+const MAX_EXIT_SAVE_RETRIES = 3;
 
 interface LocalItem {
   id: string;
@@ -666,7 +667,7 @@ export default function NoteEditorScreen() {
         debounceRef.current = null;
       }
 
-      const showSaveFailedAlert = () => {
+      const showSaveFailedAlert = (retriesLeft = MAX_EXIT_SAVE_RETRIES) => {
         Alert.alert(
           t('note.saveFailedExitTitle'),
           t('note.saveFailedExitMessage'),
@@ -679,18 +680,22 @@ export default function NoteEditorScreen() {
                 navigation.dispatch(event.data.action);
               },
             },
-            {
-              text: t('common.retry'),
-              onPress: async () => {
-                const retrySucceeded = await flushSave();
-                if (retrySucceeded) {
-                  intentionalExitRef.current = true;
-                  navigation.dispatch(event.data.action);
-                } else {
-                  showSaveFailedAlert();
-                }
-              },
-            },
+            ...(retriesLeft > 0
+              ? [
+                  {
+                    text: t('common.retry'),
+                    onPress: async () => {
+                      const retrySucceeded = await flushSave();
+                      if (retrySucceeded) {
+                        intentionalExitRef.current = true;
+                        navigation.dispatch(event.data.action);
+                      } else {
+                        showSaveFailedAlert(retriesLeft - 1);
+                      }
+                    },
+                  },
+                ]
+              : []),
           ],
         );
       };
