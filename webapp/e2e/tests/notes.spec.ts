@@ -227,8 +227,9 @@ test.describe('Notes', () => {
     await page.waitForTimeout(1100);
     // Patch the alpha note directly so updated_at changes deterministically without
     // relying on modal timing or extra UI interactions in this ordering test.
-    // content must differ from the stored value so the server's contentChanged check
-    // fires and bumps updated_at.
+    // createNote() creates list notes (title only), so content is rejected. Use a
+    // round-trip title change (alpha → alpha_tmp → alpha) to bump updated_at while
+    // keeping the final title intact for the sort assertions below.
     await page.evaluate(async () => {
       const response = await fetch('/api/v1/notes', { credentials: 'include' });
       const notes = await response.json() as Array<{ id: string; title: string }>;
@@ -237,16 +238,17 @@ test.describe('Notes', () => {
         throw new Error('alpha note not found');
       }
 
-      const updateResponse = await fetch(`/api/v1/notes/${alphaNote.id}`, {
+      const patch = (body: object) => fetch(`/api/v1/notes/${alphaNote.id}`, {
         method: 'PATCH',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({ content: 'updated' }),
+        body: JSON.stringify(body),
       });
 
-      if (!updateResponse.ok) {
-        throw new Error(`Failed to update alpha note: ${updateResponse.status}`);
-      }
+      const r1 = await patch({ title: 'alpha_tmp' });
+      if (!r1.ok) throw new Error(`Failed to update alpha note: ${r1.status}`);
+      const r2 = await patch({ title: 'alpha' });
+      if (!r2.ok) throw new Error(`Failed to revert alpha note title: ${r2.status}`);
     });
     await dashboardPage.selectSort('updated_at');
     await dashboardPage.expectVisibleNoteTitles(['Zulu', 'alpha', 'Bravo']);
