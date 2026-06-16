@@ -417,6 +417,7 @@
     "degraded": "Beeinträchtigt",
     "recentLogs": "Neueste Protokolle",
     "clearLogs": "Protokolle löschen",
+    "expandLogs": "Vollständige Protokolle anzeigen",
     "refresh": "Aktualisieren",
     "shareDiagnostics": "Diagnosebericht teilen",
     "yes": "Ja",

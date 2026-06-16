@@ -123,13 +123,13 @@ function ListPreview({ items, hasColor }: { items: NoteItem[]; hasColor?: boolea
             style={[styles.listRow, { marginLeft: indentLevel * VALIDATION.INDENT_PX_PER_LEVEL }]}
             testID={`note-card-list-row-${item.id}`}
           >
-            <Ionicons name="square-outline" size={14} color={hasColor ? '#999' : colors.iconMuted} />
-            <LinkText text={item.text} style={[styles.listText, { color: hasColor ? '#666' : colors.textSecondary }]} />
+            <Ionicons name="square-outline" size={14} color={hasColor ? '#555' : colors.textSecondary} />
+            <LinkText text={item.text} style={[styles.listText, { color: hasColor ? '#1a1a1a' : colors.text }]} />
           </View>
         );
       })}
       {completedCount > 0 && (
-        <Text style={[styles.completedCount, { color: hasColor ? '#999' : colors.textMuted }]}>
+        <Text style={[styles.completedCount, { color: hasColor ? '#555' : colors.textSecondary }]}>
           {t('note.moreCompletedItems', { count: completedCount })}
         </Text>
       )}
@@ -297,12 +297,12 @@ const styles = StyleSheet.create({
     paddingVertical: 1,
   },
   listText: {
-    fontSize: 13,
+    fontSize: 14,
     flex: 1,
     flexShrink: 1,
   },
   completedCount: {
-    fontSize: 12,
+    fontSize: 13,
     marginTop: 2,
   },
   footer: {
