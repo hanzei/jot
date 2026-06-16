@@ -227,16 +227,11 @@ test.describe('Notes', () => {
     await page.waitForTimeout(1100);
     // Patch the alpha note directly so updated_at changes deterministically without
     // relying on modal timing or extra UI interactions in this ordering test.
+    // content must differ from the stored value so the server's contentChanged check
+    // fires and bumps updated_at.
     await page.evaluate(async () => {
       const response = await fetch('/api/v1/notes', { credentials: 'include' });
-      const notes = await response.json() as Array<{
-        id: string;
-        title: string;
-        pinned: boolean;
-        archived: boolean;
-        color: string;
-        checked_items_collapsed: boolean;
-      }>;
+      const notes = await response.json() as Array<{ id: string; title: string }>;
       const alphaNote = notes.find(note => note.title === 'alpha');
       if (!alphaNote) {
         throw new Error('alpha note not found');
@@ -246,13 +241,7 @@ test.describe('Notes', () => {
         method: 'PATCH',
         credentials: 'include',
         headers: { 'Content-Type': 'application/json' },
-        body: JSON.stringify({
-          title: alphaNote.title,
-          pinned: alphaNote.pinned,
-          archived: alphaNote.archived,
-          color: alphaNote.color,
-          checked_items_collapsed: alphaNote.checked_items_collapsed,
-        }),
+        body: JSON.stringify({ content: 'updated' }),
       });
 
       if (!updateResponse.ok) {
