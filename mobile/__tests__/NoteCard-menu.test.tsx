@@ -25,6 +25,7 @@ const baseNote: Note = {
   user_id: 'user-1',
   content: 'Some content here',
   note_type: 'text',
+  version: 1,
   color: '#ffffff',
   pinned: false,
   archived: false,

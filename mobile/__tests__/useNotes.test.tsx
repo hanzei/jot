@@ -239,13 +239,13 @@ describe('useNotes hooks', () => {
 
   describe('useUpdateNote (offline)', () => {
     const existingTextNote = {
-      id: '123', title: '', content: 'Old body', note_type: 'text',
+      id: '123', title: '', content: 'Old body', note_type: 'text', version: 7,
       color: '#ffffff', pinned: false, archived: false, position: 0,
       checked_items_collapsed: false, is_shared: false, deleted_at: null,
       user_id: 'u1', created_at: '', updated_at: '', labels: [], shared_with: [],
     };
     const existingListNote = {
-      id: '456', title: 'Old title', content: '', note_type: 'list',
+      id: '456', title: 'Old title', content: '', note_type: 'list', version: 3,
       color: '#ffffff', pinned: false, archived: false, position: 0,
       checked_items_collapsed: false, is_shared: false, deleted_at: null,
       user_id: 'u1', created_at: '', updated_at: '', labels: [], shared_with: [],
@@ -264,6 +264,8 @@ describe('useNotes hooks', () => {
 
       // Only the user-changed field is queued; pinned/archived/color are absent,
       // so replaying this PATCH cannot overwrite them with the stale local snapshot.
+      // base_version is NOT stored in the queued body — drainQueue resolves it from
+      // the note's local version at replay time so a chain doesn't self-conflict (#489).
       expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
         expect.anything(),
         expect.objectContaining({
@@ -298,6 +300,29 @@ describe('useNotes hooks', () => {
       );
     });
 
+    it('omits base_version for a per-user-only change (no content edit)', async () => {
+      mockUseNetworkStatus.mockReturnValue({ isConnected: false });
+      mockNoteQueries.getLocalNote.mockResolvedValueOnce(existingTextNote as never);
+
+      const { result } = renderHook(() => useUpdateNote(), { wrapper: createWrapper() });
+
+      await result.current.mutateAsync({ id: '123', data: { pinned: true } });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      // pinned is a per-user field; it is not version-guarded, so no base_version
+      // is attached (sending one would cause false conflicts for other devices).
+      expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          operation: 'update',
+          endpoint: '/notes/123',
+          method: 'PATCH',
+          body: { pinned: true },
+        }),
+      );
+    });
+
     it('rejects and does not enqueue or write to DB when note is missing from local cache', async () => {
       mockUseNetworkStatus.mockReturnValue({ isConnected: false });
       mockNoteQueries.getLocalNote.mockResolvedValueOnce(null);
@@ -319,11 +344,28 @@ describe('useNotes hooks', () => {
 
   describe('useUpdateNote (online write failures)', () => {
     const existingNote = {
-      id: '123', title: 'Old', content: 'Old body', note_type: 'text',
+      id: '123', title: 'Old', content: 'Old body', note_type: 'text', version: 9,
       color: '#ffffff', pinned: false, archived: false, position: 0,
       checked_items_collapsed: false, is_shared: false, deleted_at: null,
       user_id: 'u1', created_at: '', updated_at: '', labels: [], shared_with: [],
     };
+
+    it('sends base_version on an online content update', async () => {
+      const updated = { ...existingNote, content: 'New body', version: 10 };
+      mockNotesApi.updateNote.mockResolvedValueOnce(updated as never);
+      mockNoteQueries.getLocalNote.mockResolvedValueOnce(existingNote as never);
+
+      const { result } = renderHook(() => useUpdateNote(), { wrapper: createWrapper() });
+
+      await result.current.mutateAsync({ id: '123', data: { content: 'New body' } });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+
+      // The note's current version is echoed so the server can reject a write
+      // that raced a concurrent edit (#489).
+      expect(mockNotesApi.updateNote).toHaveBeenCalledWith('123', { content: 'New body', base_version: 9 });
+      expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
+    });
 
     it('falls back to the local queue when a transient failure (5xx) occurs', async () => {
       mockNotesApi.updateNote.mockRejectedValueOnce(makeAxiosError(503));
@@ -366,9 +408,10 @@ describe('useNotes hooks', () => {
 
       await waitFor(() => expect(result.current.isError).toBe(true));
 
-      // A real validation/auth error must reach the UI, not be silently queued.
+      // A real validation/auth error must reach the UI, not be silently queued
+      // or written to the local DB (the offline fallback path).
       expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
-      expect(mockNoteQueries.getLocalNote).not.toHaveBeenCalled();
+      expect(mockNoteQueries.updateLocalNote).not.toHaveBeenCalled();
     });
 
     it('surfaces a 401 without queuing (the interceptor logs the user out)', async () => {
@@ -381,7 +424,7 @@ describe('useNotes hooks', () => {
       await waitFor(() => expect(result.current.isError).toBe(true));
 
       expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
-      expect(mockNoteQueries.getLocalNote).not.toHaveBeenCalled();
+      expect(mockNoteQueries.updateLocalNote).not.toHaveBeenCalled();
     });
 
     it('rethrows a non-Axios (local) error instead of queuing it', async () => {
@@ -394,7 +437,7 @@ describe('useNotes hooks', () => {
       await waitFor(() => expect(result.current.isError).toBe(true));
 
       expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
-      expect(mockNoteQueries.getLocalNote).not.toHaveBeenCalled();
+      expect(mockNoteQueries.updateLocalNote).not.toHaveBeenCalled();
     });
   });
 

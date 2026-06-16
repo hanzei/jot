@@ -6,6 +6,7 @@ const defaultBase = {
   archived: false,
   color: '#ffffff',
   user_id: 'user1',
+  version: 1,
   is_shared: false,
   deleted_at: null,
   created_at: '2023-01-01T00:00:00Z',

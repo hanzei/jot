@@ -1236,6 +1236,12 @@ const docTemplate = `{
                             "type": "string"
                         }
                     },
+                    "409": {
+                        "description": "version conflict for title/content update: note changed since base_version",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
                     "500": {
                         "description": "internal server error",
                         "schema": {
@@ -2887,6 +2893,10 @@ const docTemplate = `{
                 "archived": {
                     "type": "boolean"
                 },
+                "base_version": {
+                    "description": "BaseVersion enables optimistic concurrency for shared title/content\nchanges: when those fields are changed and this is set, the update is\nrejected with 409 unless the note's current version still matches it.\nPer-user-only fields (color, pinned, archived, checked_items_collapsed)\nignore this value. When omitted, shared-content updates behave as\nlast-write-wins writes.",
+                    "type": "integer"
+                },
                 "checked_items_collapsed": {
                     "type": "boolean"
                 },
@@ -3195,6 +3205,10 @@ const docTemplate = `{
                 },
                 "user_id": {
                     "type": "string"
+                },
+                "version": {
+                    "description": "Version is an optimistic-concurrency counter bumped on every shared-content\n(title/content) change. Clients echo the version their edit was based on as\nbase_version on update so a stale write can be rejected (issue #489).",
+                    "type": "integer"
                 }
             }
         },

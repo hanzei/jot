@@ -13,6 +13,7 @@ function makeTextNote(id: string): Note {
     id,
     user_id: 'u1',
     note_type: 'text',
+    version: 1,
     content: 'body',
     color: '#ffffff',
     pinned: false,

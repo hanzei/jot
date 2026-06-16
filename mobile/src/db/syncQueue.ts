@@ -12,6 +12,8 @@ import {
   clearNoteSyncFailed,
   clearNotePendingCreate,
   getFailedNoteIds,
+  getLocalNoteVersion,
+  setLocalNoteVersion,
 } from './noteQueries';
 
 export type QueueOperation =
@@ -477,9 +479,29 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
           }
         }
       } else if (entry.method === 'PATCH') {
-        await api.patch(endpoint, body);
+        const updateNoteID =
+          entry.operation === 'update' ? affectedNoteIds(endpoint, body)[0] : undefined;
+        if (updateNoteID !== undefined && body && ('content' in body || 'title' in body)) {
+          // Resolve the optimistic-concurrency base from the note's current local
+          // version at replay time. setLocalNoteVersion below advances that version
+          // after each drained edit, so a chain of offline edits to one note
+          // replays against the right base even across separate drains; a note
+          // changed on another device keeps its stale local version (it's
+          // protected from server overwrite while queued, #487), so a real
+          // conflict is still caught (#489).
+          const version = await getLocalNoteVersion(db, updateNoteID);
+          if (version !== null) body.base_version = version;
+        }
+        const response = await api.patch(endpoint, body);
         if (entry.operation === 'updateSettings') {
           syncedSettings = true;
+        } else if (updateNoteID !== undefined) {
+          // Refresh just the local version from the canonical response so the next
+          // queued edit to this note resolves a fresh base_version (above).
+          const serverNote = response?.data;
+          if (hasStringId(serverNote) && typeof (serverNote as Note).version === 'number') {
+            await setLocalNoteVersion(db, updateNoteID, (serverNote as Note).version);
+          }
         }
       } else if (entry.method === 'DELETE') {
         const response = await api.delete(endpoint);
@@ -512,12 +534,17 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         console.warn(`Discarding queued operation id=${entry.id} (HTTP ${status})`);
         discardedOperations.push({ operation: entry.operation, endpoint, status });
 
-        // 409 is an idempotent already-applied conflict (e.g. replaying a create
-        // whose original request already committed): the local state is correct,
-        // so resolve it silently. Every other permanent status is real data loss —
-        // preserve the op in the dead_letter table and flag the affected note(s)
-        // so the optimistic edit isn't dropped or clobbered by a later fetch (#492).
-        if (status !== 409) {
+        // A 409 from a create/duplicate replay is an idempotent already-applied
+        // conflict (the original request already committed): the local state is
+        // correct, so resolve it silently. A 409 from an `update` is an
+        // optimistic-concurrency conflict — the note changed on another device
+        // since the edit's base_version (#489) — so it is real potential data
+        // loss and must be dead-lettered like any other permanent failure, so the
+        // edit is preserved and surfaced ("changed on another device") via the
+        // failed-changes banner instead of being silently dropped. Every other
+        // permanent status also dead-letters (#492).
+        const idempotentConflict = status === 409 && entry.operation !== 'update';
+        if (!idempotentConflict) {
           const noteIds = affectedNoteIds(endpoint, body);
           // Only link dead_letter.note_id when there's a single clear note (per the
           // schema contract); a multi-note op like reorder stores NULL. The note(s)

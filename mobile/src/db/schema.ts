@@ -14,6 +14,7 @@ const migration1 = async (db: SQLiteDatabase): Promise<void> => {
       archived INTEGER NOT NULL DEFAULT 0,
       position INTEGER NOT NULL DEFAULT 0,
       checked_items_collapsed INTEGER NOT NULL DEFAULT 0,
+      version INTEGER NOT NULL DEFAULT 1,
       is_shared INTEGER NOT NULL DEFAULT 0,
       deleted_at TEXT,
       created_at TEXT NOT NULL,
@@ -121,7 +122,21 @@ const migration1 = async (db: SQLiteDatabase): Promise<void> => {
   }
 };
 
-export const MIGRATIONS: readonly ((db: SQLiteDatabase) => Promise<void>)[] = [migration1];
+// Migration 2: add an optimistic-concurrency version column to notes (issue #489).
+// Mirrors the server's notes.version: it lets a queued offline update carry the
+// version its edit was based on so a stale write is detected instead of silently
+// clobbering a concurrent change. Column-probed so it is safe on installs that
+// already created the table.
+const migration2 = async (db: SQLiteDatabase): Promise<void> => {
+  // Fresh installs already get the column from migration1's CREATE TABLE; this
+  // ALTER is only for installs created before the column existed.
+  const noteCols = await db.getAllAsync<{ name: string }>('PRAGMA table_info(notes)');
+  if (!noteCols.some((c) => c.name === 'version')) {
+    await db.runAsync(`ALTER TABLE notes ADD COLUMN version INTEGER NOT NULL DEFAULT 1`);
+  }
+};
+
+export const MIGRATIONS: readonly ((db: SQLiteDatabase) => Promise<void>)[] = [migration1, migration2];
 
 export async function migrateDatabase(db: SQLiteDatabase): Promise<void> {
   // Run PRAGMAs separately: sqlite3_exec (used by execAsync) stops on the

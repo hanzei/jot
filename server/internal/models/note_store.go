@@ -107,6 +107,7 @@ func (s *noteStore) Create(ctx context.Context, userID, noteID, title, content s
 	note.Title = title
 	note.Content = content
 	note.NoteType = noteType
+	note.Version = 1
 	note.Color = color
 	note.Position = nextPosition
 	note.UnpinnedPosition = &nextPosition
@@ -248,7 +249,7 @@ func duplicateLabelsTx(ctx context.Context, tx *sql.Tx, d *dialect.Dialect, note
 }
 
 func buildGetByUserIDQuery(userID string, archived bool, trashed bool, search string, labelID string, myTasks bool) (string, []any) {
-	const selectCols = `SELECT DISTINCT n.id, n.user_id, n.title, n.content, n.note_type,
+	const selectCols = `SELECT DISTINCT n.id, n.user_id, n.title, n.content, n.note_type, n.version,
 				  nus.color, nus.pinned, nus.archived, nus.position, nus.unpinned_position, nus.checked_items_collapsed,
 				  n.deleted_at, n.created_at, n.updated_at`
 
@@ -292,8 +293,8 @@ func buildGetByUserIDQuery(userID string, archived bool, trashed bool, search st
 func scanNote(rows *sql.Rows) (Note, error) {
 	var note Note
 	err := rows.Scan(
-		&note.ID, &note.UserID, &note.Title, &note.Content,
-		&note.NoteType, &note.Color, &note.Pinned, &note.Archived, &note.Position, &note.UnpinnedPosition, &note.CheckedItemsCollapsed,
+		&note.ID, &note.UserID, &note.Title, &note.Content, &note.NoteType, &note.Version,
+		&note.Color, &note.Pinned, &note.Archived, &note.Position, &note.UnpinnedPosition, &note.CheckedItemsCollapsed,
 		&note.DeletedAt, &note.CreatedAt, &note.UpdatedAt,
 	)
 	return note, err
@@ -381,7 +382,7 @@ func (s *noteStore) batchLoadSharesAndLabels(ctx context.Context, notes []*Note,
 }
 
 func (s *noteStore) GetByID(ctx context.Context, id string, userID string) (*Note, error) {
-	query := `SELECT n.id, n.user_id, n.title, n.content, n.note_type,
+	query := `SELECT n.id, n.user_id, n.title, n.content, n.note_type, n.version,
 			  nus.color, nus.pinned, nus.archived, nus.position, nus.unpinned_position, nus.checked_items_collapsed,
 			  n.deleted_at, n.created_at, n.updated_at
 			  FROM active_notes n
@@ -390,8 +391,8 @@ func (s *noteStore) GetByID(ctx context.Context, id string, userID string) (*Not
 
 	var note Note
 	err := s.db.QueryRowContext(ctx, s.d.RewritePlaceholders(query), userID, id).Scan(
-		&note.ID, &note.UserID, &note.Title, &note.Content,
-		&note.NoteType, &note.Color, &note.Pinned, &note.Archived, &note.Position, &note.UnpinnedPosition, &note.CheckedItemsCollapsed,
+		&note.ID, &note.UserID, &note.Title, &note.Content, &note.NoteType, &note.Version,
+		&note.Color, &note.Pinned, &note.Archived, &note.Position, &note.UnpinnedPosition, &note.CheckedItemsCollapsed,
 		&note.DeletedAt, &note.CreatedAt, &note.UpdatedAt,
 	)
 	if err != nil {
@@ -425,7 +426,7 @@ func (s *noteStore) GetByIDAnyState(ctx context.Context, id string, userID strin
 		return nil, ErrNoteNotFound
 	}
 
-	query := `SELECT n.id, n.user_id, n.title, n.content, n.note_type,
+	query := `SELECT n.id, n.user_id, n.title, n.content, n.note_type, n.version,
 			  nus.color, nus.pinned, nus.archived, nus.position, nus.unpinned_position, nus.checked_items_collapsed,
 			  n.deleted_at, n.created_at, n.updated_at
 			  FROM notes n
@@ -434,8 +435,8 @@ func (s *noteStore) GetByIDAnyState(ctx context.Context, id string, userID strin
 
 	var ownedNote Note
 	err = s.db.QueryRowContext(ctx, s.d.RewritePlaceholders(query), userID, id, userID).Scan(
-		&ownedNote.ID, &ownedNote.UserID, &ownedNote.Title, &ownedNote.Content,
-		&ownedNote.NoteType, &ownedNote.Color, &ownedNote.Pinned, &ownedNote.Archived, &ownedNote.Position, &ownedNote.UnpinnedPosition, &ownedNote.CheckedItemsCollapsed,
+		&ownedNote.ID, &ownedNote.UserID, &ownedNote.Title, &ownedNote.Content, &ownedNote.NoteType, &ownedNote.Version,
+		&ownedNote.Color, &ownedNote.Pinned, &ownedNote.Archived, &ownedNote.Position, &ownedNote.UnpinnedPosition, &ownedNote.CheckedItemsCollapsed,
 		&ownedNote.DeletedAt, &ownedNote.CreatedAt, &ownedNote.UpdatedAt,
 	)
 	if err != nil {
@@ -477,7 +478,15 @@ func (s *noteStore) populateNoteDetails(ctx context.Context, note *Note, userID 
 	return nil
 }
 
-func (s *noteStore) Update(ctx context.Context, id string, userID string, title, content, color *string, pinned, archived, checkedItemsCollapsed *bool) error {
+// Update applies a partial note update. When baseVersion is non-nil it enables
+// optimistic concurrency on the shared content (title/content): the write is
+// rejected with ErrNoteVersionConflict unless the note's current version still
+// matches baseVersion, so a stale offline edit cannot silently clobber a newer
+// change made on another device (issue #489). The version counter is only
+// consulted/bumped when title or content is being changed; per-user fields
+// (color, pinned, archived, checked_items_collapsed) are never version-guarded,
+// since they live in note_user_state and differ per collaborator.
+func (s *noteStore) Update(ctx context.Context, id string, userID string, title, content, color *string, pinned, archived, checkedItemsCollapsed *bool, baseVersion *int) error {
 	hasAccess, err := s.HasAccess(ctx, id, userID)
 	if err != nil {
 		return fmt.Errorf("failed to check access: %w", err)
@@ -505,15 +514,16 @@ func (s *noteStore) Update(ctx context.Context, id string, userID string, title,
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	// Only update shared fields (title/content) when the caller explicitly
-	// provided at least one — skipping avoids overwriting concurrent edits
-	// when only per-user fields (color, pinned, etc.) are changing.
-	if title != nil || content != nil {
-		if _, err = tx.ExecContext(ctx,
-			s.d.RewritePlaceholders(`UPDATE notes SET title = ?, content = ?, updated_at = CURRENT_TIMESTAMP WHERE id = ?`),
-			resolvedTitle, resolvedContent, id,
-		); err != nil {
-			return fmt.Errorf("failed to update note: %w", err)
+	// Only touch the shared fields (title/content) when the caller provided at
+	// least one AND it actually differs from the stored value. Skipping a no-op
+	// (e.g. an editor autosave that resends unchanged content) avoids a spurious
+	// version bump that would invalidate other devices' base_version, and avoids
+	// overwriting concurrent edits when only per-user fields are changing.
+	contentChanged := (title != nil || content != nil) &&
+		(resolvedTitle != currentNote.Title || resolvedContent != currentNote.Content)
+	if contentChanged {
+		if err = s.updateNoteContentTx(ctx, tx, id, resolvedTitle, resolvedContent, baseVersion); err != nil {
+			return err
 		}
 	}
 
@@ -542,6 +552,51 @@ func (s *noteStore) Update(ctx context.Context, id string, userID string, title,
 
 	if err = tx.Commit(); err != nil {
 		return fmt.Errorf("commit note update: %w", err)
+	}
+	return nil
+}
+
+// updateNoteContentTx updates title, content, and version inside tx. When baseVersion is non-nil
+// the write is gated on the current version; on a version mismatch (zero rows affected) it re-reads
+// the current title/content: if they already match the requested values it returns nil (idempotent
+// success), otherwise ErrNoteVersionConflict.
+func (s *noteStore) updateNoteContentTx(ctx context.Context, tx *sql.Tx, id, title, content string, baseVersion *int) error {
+	query := `UPDATE notes SET title = ?, content = ?, version = version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
+	args := []any{title, content, id}
+	if baseVersion != nil {
+		query += ` AND version = ?`
+		args = append(args, *baseVersion)
+	}
+	result, err := tx.ExecContext(ctx, s.d.RewritePlaceholders(query), args...)
+	if err != nil {
+		return fmt.Errorf("failed to update note: %w", err)
+	}
+	if baseVersion == nil {
+		return nil
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+	// Zero rows means the version guard did not match. Re-read to check whether the
+	// winning write already applied the same title/content; if so, treat this as a
+	// no-op success rather than a conflict, since the desired state is already present.
+	if rows == 0 {
+		var currentTitle, currentContent string
+		err = tx.QueryRowContext(ctx,
+			s.d.RewritePlaceholders(`SELECT title, content FROM notes WHERE id = ? AND deleted_at IS NULL`),
+			id,
+		).Scan(&currentTitle, &currentContent)
+		if err != nil {
+			if errors.Is(err, sql.ErrNoRows) {
+				return ErrNoteNotFound
+			}
+			return fmt.Errorf("get current note content: %w", err)
+		}
+		if currentTitle == title && currentContent == content {
+			return nil
+		}
+		return ErrNoteVersionConflict
 	}
 	return nil
 }
@@ -1681,7 +1736,7 @@ func (s *noteStore) AddLabelToNote(ctx context.Context, noteID, labelID, userID 
 // It filters on notes.user_id (not note_user_state.user_id) so notes merely
 // shared with the current user are never included.
 func (s *noteStore) GetOwnedNotesForExport(ctx context.Context, userID string) ([]*Note, error) {
-	query := s.d.RewritePlaceholders(`SELECT n.id, n.user_id, n.title, n.content, n.note_type,
+	query := s.d.RewritePlaceholders(`SELECT n.id, n.user_id, n.title, n.content, n.note_type, n.version,
 			  nus.color, nus.pinned, nus.archived, nus.position, nus.unpinned_position, nus.checked_items_collapsed,
 			  n.deleted_at, n.created_at, n.updated_at
 			  FROM notes n
