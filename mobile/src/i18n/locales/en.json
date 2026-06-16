@@ -417,6 +417,7 @@
     "degraded": "Degraded",
     "recentLogs": "Recent Logs",
     "clearLogs": "Clear Logs",
+    "expandLogs": "View full logs",
     "refresh": "Refresh",
     "shareDiagnostics": "Share Diagnostics Report",
     "yes": "Yes",
