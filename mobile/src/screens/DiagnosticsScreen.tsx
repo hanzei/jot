@@ -8,6 +8,8 @@ import {
   TouchableOpacity,
   View,
 } from 'react-native';
+import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
+import type { RootStackParamList } from '../navigation/RootNavigator';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
@@ -40,7 +42,7 @@ export default function DiagnosticsScreen() {
   const { colors } = useTheme();
   const { t } = useTranslation();
   const insets = useSafeAreaInsets();
-  const navigation = useNavigation();
+  const navigation = useNavigation<NativeStackNavigationProp<RootStackParamList>>();
   const db = useSQLiteContext();
   const { isConnected } = useNetworkStatus();
   const serverUrl = useActiveServerBaseUrl();
@@ -195,19 +197,35 @@ export default function DiagnosticsScreen() {
         <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
           <View style={styles.sectionTitleRow}>
             <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('diagnostics.recentLogs')}</Text>
-            <TouchableOpacity onPress={handleClearLogs} accessibilityRole="button">
-              <Text style={[styles.clearLogsButton, { color: colors.primary }]}>
-                {t('diagnostics.clearLogs')}
-              </Text>
-            </TouchableOpacity>
+            <View style={styles.logsHeaderActions}>
+              <TouchableOpacity
+                onPress={() => navigation.navigate('LogsFullscreen')}
+                style={styles.expandButton}
+                accessibilityRole="button"
+                accessibilityLabel={t('diagnostics.expandLogs')}
+              >
+                <Ionicons name="expand-outline" size={18} color={colors.primary} />
+              </TouchableOpacity>
+              <TouchableOpacity onPress={handleClearLogs} accessibilityRole="button">
+                <Text style={[styles.clearLogsButton, { color: colors.primary }]}>
+                  {t('diagnostics.clearLogs')}
+                </Text>
+              </TouchableOpacity>
+            </View>
           </View>
-          {snapshot.logs.length === 0 ? (
-            <Text style={[styles.noLogs, { color: colors.textSecondary }]}>—</Text>
-          ) : (
-            snapshot.logs.slice().reverse().map((entry, i) => (
-              <LogEntryRow key={i} entry={entry} />
-            ))
-          )}
+          <TouchableOpacity
+            onPress={() => navigation.navigate('LogsFullscreen')}
+            accessibilityRole="button"
+            activeOpacity={0.7}
+          >
+            {snapshot.logs.length === 0 ? (
+              <Text style={[styles.noLogs, { color: colors.textSecondary }]}>—</Text>
+            ) : (
+              snapshot.logs.slice().reverse().map((entry, i) => (
+                <LogEntryRow key={entry.ts + i} entry={entry} />
+              ))
+            )}
+          </TouchableOpacity>
         </View>
 
         {/* Actions */}
@@ -329,6 +347,14 @@ const styles = StyleSheet.create({
     alignItems: 'center',
     justifyContent: 'space-between',
     marginBottom: 12,
+  },
+  logsHeaderActions: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    gap: 12,
+  },
+  expandButton: {
+    padding: 2,
   },
   clearLogsButton: {
     fontSize: 13,
