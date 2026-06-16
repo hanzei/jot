@@ -522,30 +522,8 @@ func (s *noteStore) Update(ctx context.Context, id string, userID string, title,
 	contentChanged := (title != nil || content != nil) &&
 		(resolvedTitle != currentNote.Title || resolvedContent != currentNote.Content)
 	if contentChanged {
-		// Bump the version on every real shared-content change so other devices can
-		// detect they edited a stale copy. When baseVersion is supplied, gate the
-		// write on it atomically (WHERE version = ?) so a concurrent bump between
-		// our read above and this write is still caught.
-		query := `UPDATE notes SET title = ?, content = ?, version = version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
-		args := []any{resolvedTitle, resolvedContent, id}
-		if baseVersion != nil {
-			query += ` AND version = ?`
-			args = append(args, *baseVersion)
-		}
-		result, err := tx.ExecContext(ctx, s.d.RewritePlaceholders(query), args...)
-		if err != nil {
-			return fmt.Errorf("failed to update note: %w", err)
-		}
-		if baseVersion != nil {
-			rows, err := result.RowsAffected()
-			if err != nil {
-				return fmt.Errorf("failed to get rows affected: %w", err)
-			}
-			// The note row exists (HasAccess passed above), so zero rows means the
-			// version guard did not match: another write changed the content first.
-			if rows == 0 {
-				return ErrNoteVersionConflict
-			}
+		if err = s.updateNoteContentTx(ctx, tx, id, resolvedTitle, resolvedContent, baseVersion); err != nil {
+			return err
 		}
 	}
 
@@ -574,6 +552,34 @@ func (s *noteStore) Update(ctx context.Context, id string, userID string, title,
 
 	if err = tx.Commit(); err != nil {
 		return fmt.Errorf("commit note update: %w", err)
+	}
+	return nil
+}
+
+// updateNoteContentTx updates title, content, and version inside tx. When baseVersion is non-nil
+// the write is gated on the current version; zero rows affected means ErrNoteVersionConflict.
+func (s *noteStore) updateNoteContentTx(ctx context.Context, tx *sql.Tx, id, title, content string, baseVersion *int) error {
+	query := `UPDATE notes SET title = ?, content = ?, version = version + 1, updated_at = CURRENT_TIMESTAMP WHERE id = ?`
+	args := []any{title, content, id}
+	if baseVersion != nil {
+		query += ` AND version = ?`
+		args = append(args, *baseVersion)
+	}
+	result, err := tx.ExecContext(ctx, s.d.RewritePlaceholders(query), args...)
+	if err != nil {
+		return fmt.Errorf("failed to update note: %w", err)
+	}
+	if baseVersion == nil {
+		return nil
+	}
+	rows, err := result.RowsAffected()
+	if err != nil {
+		return fmt.Errorf("failed to get rows affected: %w", err)
+	}
+	// The note row exists (HasAccess verified above), so zero rows means the version
+	// guard did not match: another write changed the content first.
+	if rows == 0 {
+		return ErrNoteVersionConflict
 	}
 	return nil
 }
