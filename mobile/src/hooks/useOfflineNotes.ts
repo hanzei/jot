@@ -62,22 +62,22 @@ export function useOfflineNotes(params?: GetNotesParams, options?: { enabled?: b
     return () => canceller.cancel();
   }, [enabled, isConnected, syncFromServer]);
 
-  const [isManualRefetching, setIsManualRefetching] = useState(false);
+  const [refetchCount, setRefetchCount] = useState(0);
 
   const refetch = useCallback(async () => {
-    setIsManualRefetching(true);
+    setRefetchCount(c => c + 1);
     try {
       await syncFromServer();
       return await query.refetch();
     } finally {
-      setIsManualRefetching(false);
+      setRefetchCount(c => c - 1);
     }
   }, [syncFromServer, query]);
 
   return {
     ...query,
     refetch,
-    isRefetching: isManualRefetching,
+    isRefetching: refetchCount > 0,
   };
 }
 
