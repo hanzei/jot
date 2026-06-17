@@ -33,3 +33,22 @@ export function preprocessMarkdown(content: string): string {
     .replace(/^(\s*[-*+]\s+)\[x\]\s*/gim, '$1☑ ')
     .replace(/^(\s*[-*+]\s+)\[ \]\s*/gim, '$1☐ ');
 }
+
+export function stripMarkdownForPreview(content: string): string {
+  return content
+    .replace(/```[\s\S]*?```/g, '')          // fenced code blocks
+    .replace(/^#{1,6}\s+/gm, '')             // headings
+    .replace(/(\*\*|__)(.*?)\1/g, '$2')      // bold
+    .replace(/(\*|_)(.*?)\1/g, '$2')         // italic
+    .replace(/~~(.*?)~~/g, '$1')             // strikethrough
+    .replace(/`([^`]+)`/g, '$1')             // inline code
+    .replace(/!\[[^\]]*\]\([^)]+\)/g, '')    // images
+    .replace(/\[([^\]]+)\]\([^)]+\)/g, '$1') // links, keep label
+    .replace(/^>\s*/gm, '')                  // blockquotes
+    .replace(/^[\s]*[-*+]\s+\[(x|X| )\]\s*/gm, '') // task list items (bullet + checkbox)
+    .replace(/^[\s]*[-*+]\s+/gm, '')         // remaining unordered list markers
+    .replace(/^[\s]*\d+\.\s+/gm, '')         // ordered list markers
+    .replace(/^[-*_]{3,}\s*$/gm, '')         // horizontal rules
+    .replace(/\n+/g, ' ')                    // collapse newlines to spaces
+    .trim();
+}
