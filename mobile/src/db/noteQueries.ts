@@ -156,14 +156,23 @@ export async function saveNote(db: SQLiteDatabase, note: Note, options?: SaveNot
   await withSerializedTransaction(db, () => saveNoteInTx(db, note));
 }
 
+/**
+ * Persist a batch of notes without opening its own transaction. Must only be
+ * called from within an existing transaction context (see saveNotes / reconcileServerNotesScope).
+ */
+async function saveNotesInTx(
+  db: SQLiteDatabase,
+  notes: Note[],
+  skipNoteIds?: ReadonlySet<string>,
+): Promise<void> {
+  for (const note of notes) {
+    if (skipNoteIds?.has(note.id)) continue;
+    await saveNoteInTx(db, note);
+  }
+}
+
 export async function saveNotes(db: SQLiteDatabase, notes: Note[], options?: SaveNoteOptions): Promise<void> {
-  const skipNoteIds = options?.skipNoteIds;
-  await withSerializedTransaction(db, async () => {
-    for (const note of notes) {
-      if (skipNoteIds?.has(note.id)) continue;
-      await saveNoteInTx(db, note);
-    }
-  });
+  await withSerializedTransaction(db, () => saveNotesInTx(db, notes, options?.skipNoteIds));
 }
 
 export async function getLocalNotes(db: SQLiteDatabase, params?: GetNotesParams): Promise<Note[]> {
@@ -556,6 +565,19 @@ export async function removeLocalNotesNotIn(
   params?: GetNotesParams,
   options?: { skipNoteIds?: ReadonlySet<string> },
 ): Promise<void> {
+  await removeLocalNotesNotInTx(db, serverIds, params, options?.skipNoteIds);
+}
+
+/**
+ * Prune-scope body without its own transaction. Must only be called from within
+ * an existing transaction context (see removeLocalNotesNotIn / reconcileServerNotesScope).
+ */
+async function removeLocalNotesNotInTx(
+  db: SQLiteDatabase,
+  serverIds: Set<string>,
+  params?: GetNotesParams,
+  skipNoteIds?: ReadonlySet<string>,
+): Promise<void> {
   // my_tasks is a cross-cutting filter (overlaps with the main "notes" scope),
   // so we must not remove notes that may still belong in other views.
   if (params?.my_tasks) return;
@@ -564,8 +586,6 @@ export async function removeLocalNotesNotIn(
   // edit can optimistically move a note into this scope (e.g. un-archive/restore)
   // before the server reflects it, so it would be absent from serverIds and get
   // deleted, destroying the optimistic edit. The drain reconciles them (#487).
-  const skipNoteIds = options?.skipNoteIds;
-
   const scopeArgs: (string | number | null)[] = [];
   let scopedWhereSql = "id NOT LIKE 'local_%'";
 
@@ -624,6 +644,34 @@ export async function removeLocalNotesNotIn(
   }
 
   await db.runAsync(sql, args);
+}
+
+/**
+ * Atomically reconcile a scoped server note list into local SQLite: persist the
+ * fetched notes and prune local rows that have fallen out of this scope, both in
+ * a *single* transaction. The notes-list and single-note queries read straight
+ * from SQLite (staleTime: Infinity) and refetch on every invalidation, so when
+ * the save and the prune ran as two separate writes a concurrent read could
+ * observe the half-written intermediate state — which on reconnect, as several
+ * triggers raced to refresh, surfaced as a visible flash to an empty/partial
+ * list. Wrapping both in one transaction makes a reader see either the full
+ * pre-state or the full post-state, never a partial one.
+ *
+ * Both steps share a single `skipNoteIds` set so notes with an unsynced (pending
+ * or failed) local edit are neither overwritten nor pruned (#487/#492).
+ */
+export async function reconcileServerNotesScope(
+  db: SQLiteDatabase,
+  serverNotes: Note[],
+  params?: GetNotesParams,
+  options?: SaveNoteOptions,
+): Promise<void> {
+  const skipNoteIds = options?.skipNoteIds;
+  const serverIds = new Set(serverNotes.map((n) => n.id));
+  await withSerializedTransaction(db, async () => {
+    await saveNotesInTx(db, serverNotes, skipNoteIds);
+    await removeLocalNotesNotInTx(db, serverIds, params, skipNoteIds);
+  });
 }
 
 // --- Granular local list-item mutations -----------------------------------

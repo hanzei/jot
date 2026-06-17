@@ -141,6 +141,8 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
   const rerunRequestedRef = useRef(false);
   // Holds the latest performDrain so timers always call the current closure.
   const performDrainRef = useRef<() => void>(() => {});
+  // Guard so near-simultaneous reconnect signals collapse into a single resync.
+  const isReconnectingRef = useRef(false);
 
   const clearDrainTimer = useCallback(() => {
     if (drainTimerRef.current !== null) {
@@ -255,15 +257,25 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
 
   const handleReconnect = useCallback(async () => {
     if (isSyncDrainPaused()) return;
-    // Re-validate session with the server (handles offline-authenticated users
-    // and refreshes user/settings for all returning-online users).
-    const stillAuthenticated = await revalidateSession();
-    if (!stillAuthenticated) return;
-    // A fresh connectivity/foreground signal: give the queue a clean budget of
-    // retries even if a prior streak of failures had paused auto-retrying.
-    failureCountRef.current = 0;
-    setSyncError(false);
-    await performDrain();
+    // A NetInfo offline→online transition and an AppState foreground commonly fire
+    // together when the device wakes, and each would otherwise re-validate the
+    // session and drain — invalidating every query — independently, causing the UI
+    // to refresh several times in a row. Collapse overlapping signals into one.
+    if (isReconnectingRef.current) return;
+    isReconnectingRef.current = true;
+    try {
+      // Re-validate session with the server (handles offline-authenticated users
+      // and refreshes user/settings for all returning-online users).
+      const stillAuthenticated = await revalidateSession();
+      if (!stillAuthenticated) return;
+      // A fresh connectivity/foreground signal: give the queue a clean budget of
+      // retries even if a prior streak of failures had paused auto-retrying.
+      failureCountRef.current = 0;
+      setSyncError(false);
+      await performDrain();
+    } finally {
+      isReconnectingRef.current = false;
+    }
   }, [revalidateSession, performDrain]);
 
   useEffect(() => {

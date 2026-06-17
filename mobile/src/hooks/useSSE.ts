@@ -109,9 +109,13 @@ export function useSSE(onNoteUpdatedByOther?: SSENotificationCallback): void {
         }
       })();
     });
-
-    // Catch up on anything missed while disconnected
-    queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+    // No catch-up invalidation here: startConnection runs on every reconnect,
+    // foreground, and server-switch, and a blanket invalidate only re-reads the
+    // (still-stale) local SQLite — it doesn't fetch from the server. The actual
+    // catch-up after a reconnect is useOfflineNotes' background server resync,
+    // which fires on the same isConnected flip, and live SSE events deliver any
+    // subsequent changes. Invalidating here just added a redundant refetch that
+    // raced the resync and contributed to the on-reconnect screen flashing.
   }, [queryClient]);
 
   const stopConnection = useCallback(() => {
