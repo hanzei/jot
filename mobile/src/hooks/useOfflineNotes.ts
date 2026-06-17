@@ -1,4 +1,4 @@
-import { useEffect, useCallback, useRef } from 'react';
+import { useEffect, useCallback, useRef, useState } from 'react';
 import { useQuery, useQueryClient } from '@tanstack/react-query';
 import { useSQLiteContext } from 'expo-sqlite';
 import axios from 'axios';
@@ -62,15 +62,22 @@ export function useOfflineNotes(params?: GetNotesParams, options?: { enabled?: b
     return () => canceller.cancel();
   }, [enabled, isConnected, syncFromServer]);
 
+  const [refetchCount, setRefetchCount] = useState(0);
+
   const refetch = useCallback(async () => {
-    await syncFromServer();
-    return query.refetch();
+    setRefetchCount(c => c + 1);
+    try {
+      await syncFromServer();
+      return await query.refetch();
+    } finally {
+      setRefetchCount(c => c - 1);
+    }
   }, [syncFromServer, query]);
 
   return {
     ...query,
     refetch,
-    isRefetching: query.isFetching,
+    isRefetching: refetchCount > 0,
   };
 }
 
