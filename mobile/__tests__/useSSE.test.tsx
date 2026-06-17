@@ -172,6 +172,45 @@ describe('useSSE', () => {
     await waitFor(() => expect(mockSaveServerNote).toHaveBeenCalledWith(expect.anything(), note));
   });
 
+  it('persists the note to SQLite before invalidating queries so the refetch reads fresh data', async () => {
+    // Regression: the notes list and single-note queries read straight from SQLite
+    // (staleTime: Infinity), so invalidating before saveServerNote lands makes the
+    // refetch read stale rows — the remote change (item toggle, edited text) never
+    // surfaces on the dashboard until the next background sync.
+    let resolveSave: (() => void) | undefined;
+    mockSaveServerNote.mockImplementationOnce(
+      () => new Promise<void>((resolve) => { resolveSave = resolve; }),
+    );
+
+    const { queryClient, Wrapper } = createWrapper();
+    const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
+
+    renderHook(() => useSSE(), { wrapper: Wrapper });
+    invalidateSpy.mockClear();
+
+    const note = { id: 'note-123', note_type: 'list', title: 'Groceries' } as unknown as Note;
+    act(() => {
+      capturedCallback?.({
+        type: 'note_updated',
+        source_user_id: 'other-user',
+        data: { note_id: 'note-123', note },
+      });
+    });
+
+    // While the write is in flight, queries must not be invalidated yet.
+    await flushMicrotasks();
+    expect(mockSaveServerNote).toHaveBeenCalledWith(expect.anything(), note);
+    expect(invalidateSpy).not.toHaveBeenCalled();
+
+    // Once the write lands, both the single note and the dashboard list refresh.
+    await act(async () => {
+      resolveSave?.();
+      await flushMicrotasks();
+    });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: noteLocalQueryKey('note-123') });
+    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: notesLocalQueryScopeKey() });
+  });
+
   it('invalidates notes list and tombstones the note on note_deleted event', async () => {
     const { queryClient, Wrapper } = createWrapper();
     const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
@@ -188,9 +227,11 @@ describe('useSSE', () => {
       });
     });
 
-    expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: notesLocalQueryScopeKey() });
     await waitFor(() => expect(removeSpy).toHaveBeenCalledWith({ queryKey: noteLocalQueryKey('note-123') }));
     expect(mockMarkLocalNoteDeleted).toHaveBeenCalledWith(expect.anything(), 'note-123');
+    // The list is refreshed only after the tombstone lands, so the refetch can't
+    // read the still-present row.
+    await waitFor(() => expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: notesLocalQueryScopeKey() }));
   });
 
   it('does not tombstone a deleted note that still has a pending or failed local op (#487/#492)', async () => {

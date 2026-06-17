@@ -47,49 +47,67 @@ export function useSSE(onNoteUpdatedByOther?: SSENotificationCallback): void {
       // Drop events that originated from this device to avoid redundant invalidations.
       if (event.client_id && event.client_id === CLIENT_ID) return;
 
-      // Note-related events require refreshing the notes list
-      if (
-        event.type === 'note_created' ||
-        event.type === 'note_updated' ||
-        event.type === 'note_deleted' ||
-        event.type === 'note_shared' ||
-        event.type === 'note_unshared'
-      ) {
-        queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
-      }
-
-      // Per-event-type extras
-      if (event.type === 'note_updated') {
-        const { note_id, note } = event.data;
-        if (note) {
-          // Persist the updated note to SQLite so offline reads stay current
-          // (deferring to a pending local edit on this note; see #487).
-          saveServerNote(dbRef.current, note).catch(() => {});
-        }
-        queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(note_id) });
-        // Don't fire the "updated by someone else" notification for changes
-        // from the same user on another device — query invalidation above is
-        // sufficient to sync the state.
-        if (event.source_user_id !== userIdRef.current) {
-          onNoteUpdatedRef.current?.(event);
-        }
-      } else if (event.type === 'note_deleted') {
-        const { note_id } = event.data;
-        // Tombstone the note in SQLite so it disappears from offline views — but
-        // defer to a pending or failed local edit/restore on this note: a queued op
-        // may be racing the remote delete, or a dead-lettered edit may be the version
-        // we're preserving, so let the drain/resolution reconcile it rather than hide
-        // the optimistic edit (#487/#492). The drain replaying against a server-deleted
-        // note gets a 404 and dead-letters the op, so this can't wedge the queue.
+      // Apply the SQLite write *before* invalidating queries. The notes list and
+      // single-note queries read straight from SQLite (staleTime: Infinity), so an
+      // invalidation triggers an immediate refetch; invalidating before the write
+      // lands makes that refetch read stale rows, and nothing re-fetches once the
+      // write completes (the change wouldn't surface until the next background
+      // sync). Awaiting the write first keeps the refetch in sync — this mirrors
+      // useOfflineNote's background-fetch ordering.
+      void (async () => {
         const db = dbRef.current;
-        getProtectedNoteIds(db)
-          .then((protectedNoteIds) => {
-            if (protectedNoteIds.has(note_id)) return;
-            queryClient.removeQueries({ queryKey: noteLocalQueryKey(note_id) });
-            return markLocalNoteDeleted(db, note_id);
-          })
-          .catch(() => {});
-      }
+        switch (event.type) {
+          case 'note_updated': {
+            const { note_id, note } = event.data;
+            if (note) {
+              // Persist the updated note to SQLite so offline reads stay current
+              // (deferring to a pending local edit on this note; see #487).
+              try {
+                await saveServerNote(db, note);
+              } catch {
+                // Note has a pending/failed local op or the write failed; keep the
+                // local copy and let the queue drain / next sync reconcile it.
+              }
+            }
+            queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(note_id) });
+            queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+            // Don't fire the "updated by someone else" notification for changes
+            // from the same user on another device — query invalidation above is
+            // sufficient to sync the state.
+            if (event.source_user_id !== userIdRef.current) {
+              onNoteUpdatedRef.current?.(event);
+            }
+            break;
+          }
+          case 'note_deleted': {
+            const { note_id } = event.data;
+            // Tombstone the note in SQLite so it disappears from offline views — but
+            // defer to a pending or failed local edit/restore on this note: a queued op
+            // may be racing the remote delete, or a dead-lettered edit may be the version
+            // we're preserving, so let the drain/resolution reconcile it rather than hide
+            // the optimistic edit (#487/#492). The drain replaying against a server-deleted
+            // note gets a 404 and dead-letters the op, so this can't wedge the queue.
+            try {
+              const protectedNoteIds = await getProtectedNoteIds(db);
+              if (!protectedNoteIds.has(note_id)) {
+                queryClient.removeQueries({ queryKey: noteLocalQueryKey(note_id) });
+                await markLocalNoteDeleted(db, note_id);
+              }
+            } catch {
+              // Leave the local copy in place; a later sync reconciles it.
+            }
+            queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+            break;
+          }
+          case 'note_created':
+          case 'note_shared':
+          case 'note_unshared':
+            // No local write in this path; refresh the list so the new/changed
+            // note is picked up by the next background sync + refetch.
+            queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+            break;
+        }
+      })();
     });
 
     // Catch up on anything missed while disconnected
