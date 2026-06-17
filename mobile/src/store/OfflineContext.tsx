@@ -143,6 +143,9 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
   const performDrainRef = useRef<() => void>(() => {});
   // Guard so near-simultaneous reconnect signals collapse into a single resync.
   const isReconnectingRef = useRef(false);
+  // Set when a reconnect is requested while one is already in flight, so we run
+  // one more pass afterward and don't drop the later signal's session refresh.
+  const reconnectRerunRequestedRef = useRef(false);
 
   const clearDrainTimer = useCallback(() => {
     if (drainTimerRef.current !== null) {
@@ -260,19 +263,27 @@ export function OfflineProvider({ children }: { children: React.ReactNode }) {
     // A NetInfo offline→online transition and an AppState foreground commonly fire
     // together when the device wakes, and each would otherwise re-validate the
     // session and drain — invalidating every query — independently, causing the UI
-    // to refresh several times in a row. Collapse overlapping signals into one.
-    if (isReconnectingRef.current) return;
+    // to refresh several times in a row. Collapse overlapping signals into one,
+    // remembering to run one final pass so a later signal's session refresh isn't
+    // dropped (mirrors performDrain's rerun-requested handling).
+    if (isReconnectingRef.current) {
+      reconnectRerunRequestedRef.current = true;
+      return;
+    }
     isReconnectingRef.current = true;
     try {
-      // Re-validate session with the server (handles offline-authenticated users
-      // and refreshes user/settings for all returning-online users).
-      const stillAuthenticated = await revalidateSession();
-      if (!stillAuthenticated) return;
-      // A fresh connectivity/foreground signal: give the queue a clean budget of
-      // retries even if a prior streak of failures had paused auto-retrying.
-      failureCountRef.current = 0;
-      setSyncError(false);
-      await performDrain();
+      do {
+        reconnectRerunRequestedRef.current = false;
+        // Re-validate session with the server (handles offline-authenticated users
+        // and refreshes user/settings for all returning-online users).
+        const stillAuthenticated = await revalidateSession();
+        if (!stillAuthenticated) return;
+        // A fresh connectivity/foreground signal: give the queue a clean budget of
+        // retries even if a prior streak of failures had paused auto-retrying.
+        failureCountRef.current = 0;
+        setSyncError(false);
+        await performDrain();
+      } while (reconnectRerunRequestedRef.current);
     } finally {
       isReconnectingRef.current = false;
     }
