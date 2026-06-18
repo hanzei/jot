@@ -7,7 +7,7 @@ import {
   saveNote,
   saveNotes,
   patchLocalItem,
-  removeLocalNotesNotIn,
+  reconcileServerNotesScope,
   markNoteSyncFailed,
   clearNoteSyncFailed,
   clearNotePendingCreate,
@@ -255,12 +255,9 @@ export async function saveServerNotes(db: SQLiteDatabase, notes: Note[]): Promis
 }
 
 /**
- * Reconcile a scoped server note list into local SQLite: persist the fetched notes
- * and prune local rows that have fallen out of this scope. Both steps share a single
- * protected-id set so notes with an unsynced (pending or failed) local edit are
- * neither overwritten nor pruned — a queued edit can optimistically move a note into
- * the scope before the server reflects it (e.g. un-archive/restore), and pruning it
- * would lose the edit (#487/#492).
+ * Reconcile a scoped server note list into local SQLite. Reads the protected-id set
+ * once (notes with an unsynced pending/failed local edit, #487/#492) and delegates to
+ * {@link reconcileServerNotesScope}, which applies the save and the prune atomically.
  */
 export async function saveServerNotesScope(
   db: SQLiteDatabase,
@@ -268,9 +265,7 @@ export async function saveServerNotesScope(
   params?: GetNotesParams,
 ): Promise<void> {
   const skipNoteIds = await getProtectedNoteIds(db);
-  await saveNotes(db, serverNotes, { skipNoteIds });
-  const serverIds = new Set(serverNotes.map((n) => n.id));
-  await removeLocalNotesNotIn(db, serverIds, params, { skipNoteIds });
+  await reconcileServerNotesScope(db, serverNotes, params, { skipNoteIds });
 }
 
 function remapValue(value: unknown, idMap: Map<string, string>): unknown {
