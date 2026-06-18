@@ -49,6 +49,6 @@ export function stripMarkdownForPreview(content: string): string {
     .replace(/^[\s]*[-*+]\s+/gm, '')         // remaining unordered list markers
     .replace(/^[\s]*\d+\.\s+/gm, '')         // ordered list markers
     .replace(/^[-*_]{3,}\s*$/gm, '')         // horizontal rules
-    .replace(/\n+/g, ' ')                    // collapse newlines to spaces
+    .replace(/[\r\n]+/g, ' ')                 // collapse newlines to spaces
     .trim();
 }

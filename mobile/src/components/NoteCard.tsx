@@ -1,4 +1,4 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useTranslation } from 'react-i18next';
@@ -142,6 +142,10 @@ function NoteCard({ note, onPress, onLongPress, onMenuPress, onLabelPress }: Not
   const failedNoteIds = useFailedNoteIds();
   const didNotSync = failedNoteIds.has(note.id);
   const hasColor = !!(note.color && !isWhiteHexColor(note.color));
+  const textPreview = useMemo(
+    () => note.note_type === 'text' && note.content ? stripMarkdownForPreview(note.content) : null,
+    [note.note_type, note.content],
+  );
 
   return (
     <TouchableOpacity
@@ -175,12 +179,12 @@ function NoteCard({ note, onPress, onLongPress, onMenuPress, onLabelPress }: Not
               {note.title}
             </Text>
           ) : null}
-          {note.note_type === 'text' && note.content ? (
+          {textPreview ? (
             <Text
               style={[styles.contentText, { color: hasColor ? '#1a1a1a' : colors.text }]}
               numberOfLines={3}
             >
-              {stripMarkdownForPreview(note.content)}
+              {textPreview}
             </Text>
           ) : null}
         </View>
