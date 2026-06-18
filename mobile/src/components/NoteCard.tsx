@@ -1,6 +1,5 @@
-import React from 'react';
+import React, { useMemo } from 'react';
 import { View, Text, StyleSheet, TouchableOpacity } from 'react-native';
-import Markdown from 'react-native-markdown-display';
 import Ionicons from '@expo/vector-icons/Ionicons';
 import { useTranslation } from 'react-i18next';
 import { VALIDATION, type Note, type NoteItem, type User } from '@jot/shared';
@@ -10,7 +9,7 @@ import { useFailedNoteIds } from '../store/OfflineContext';
 import { useUsers } from '../store/UsersContext';
 import UserAvatar from './UserAvatar';
 import { isWhiteHexColor } from '../utils/colorContrast';
-import { compactMarkdownStyles, preprocessMarkdown } from '../utils/markdownStyles';
+import { stripMarkdownForPreview } from '../utils/markdownStyles';
 import LinkText from './LinkText';
 
 interface NoteCardProps {
@@ -143,6 +142,10 @@ function NoteCard({ note, onPress, onLongPress, onMenuPress, onLabelPress }: Not
   const failedNoteIds = useFailedNoteIds();
   const didNotSync = failedNoteIds.has(note.id);
   const hasColor = !!(note.color && !isWhiteHexColor(note.color));
+  const textPreview = useMemo(
+    () => note.note_type === 'text' && note.content ? stripMarkdownForPreview(note.content) : null,
+    [note],
+  );
 
   return (
     <TouchableOpacity
@@ -176,6 +179,14 @@ function NoteCard({ note, onPress, onLongPress, onMenuPress, onLabelPress }: Not
               {note.title}
             </Text>
           ) : null}
+          {textPreview ? (
+            <Text
+              style={[styles.contentText, { color: hasColor ? '#1a1a1a' : colors.text }]}
+              numberOfLines={3}
+            >
+              {textPreview}
+            </Text>
+          ) : null}
         </View>
         {onMenuPress && (
           <TouchableOpacity
@@ -190,14 +201,6 @@ function NoteCard({ note, onPress, onLongPress, onMenuPress, onLabelPress }: Not
           </TouchableOpacity>
         )}
       </View>
-
-      {note.note_type === 'text' && note.content ? (
-        <View style={styles.contentPreview}>
-          <Markdown style={compactMarkdownStyles(hasColor ? '#666' : colors.textSecondary)}>
-            {preprocessMarkdown(note.content)}
-          </Markdown>
-        </View>
-      ) : null}
 
       {note.note_type === 'list' && note.items && note.items.length > 0 ? (
         <ListPreview items={note.items} hasColor={hasColor} />
@@ -279,13 +282,9 @@ const styles = StyleSheet.create({
     fontWeight: '600',
     marginBottom: 4,
   },
-  content: {
+  contentText: {
     fontSize: 14,
     lineHeight: 20,
-  },
-  contentPreview: {
-    maxHeight: 60,
-    overflow: 'hidden',
   },
   listPreview: {
     marginTop: 4,
