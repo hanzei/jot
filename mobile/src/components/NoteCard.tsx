@@ -144,7 +144,7 @@ function NoteCard({ note, onPress, onLongPress, onMenuPress, onLabelPress }: Not
   const hasColor = !!(note.color && !isWhiteHexColor(note.color));
   const textPreview = useMemo(
     () => note.note_type === 'text' && note.content ? stripMarkdownForPreview(note.content) : null,
-    [note.note_type, note.content],
+    [note],
   );
 
   return (
