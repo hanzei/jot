@@ -24,6 +24,12 @@ export default function AccountSection() {
   const [profileSuccess, setProfileSuccess] = useState('');
 
   useEffect(() => {
+    setFirstName(user?.first_name ?? '');
+    setLastName(user?.last_name ?? '');
+    setUsername(user?.username ?? '');
+  }, [user?.first_name, user?.last_name, user?.username]);
+
+  useEffect(() => {
     setProfileSuccess('');
   }, [settings?.language]);
 

@@ -48,18 +48,19 @@ export default function PATsSection() {
         const nextServerUrl = activeServer?.serverUrl ?? null;
         if (previousServerUrlRef.current !== nextServerUrl) {
           previousServerUrlRef.current = nextServerUrl;
+          const serverUrl = nextServerUrl;
           setPats([]);
           setPatsError('');
           setPatsLoading(true);
           void listPATs()
             .then((nextPATs) => {
-              if (mounted) setPats(nextPATs);
+              if (mounted && previousServerUrlRef.current === serverUrl) setPats(nextPATs);
             })
             .catch(() => {
-              if (mounted) setPatsError('settings.patsLoadError');
+              if (mounted && previousServerUrlRef.current === serverUrl) setPatsError('settings.patsLoadError');
             })
             .finally(() => {
-              if (mounted) setPatsLoading(false);
+              if (mounted && previousServerUrlRef.current === serverUrl) setPatsLoading(false);
             });
         }
       } catch {

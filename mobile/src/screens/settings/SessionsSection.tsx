@@ -37,18 +37,19 @@ export default function SessionsSection() {
         const nextServerUrl = activeServer?.serverUrl ?? null;
         if (previousServerUrlRef.current !== nextServerUrl) {
           previousServerUrlRef.current = nextServerUrl;
+          const serverUrl = nextServerUrl;
           setSessions([]);
           setSessionsError('');
           setSessionsLoading(true);
           void listSessions()
             .then((nextSessions) => {
-              if (mounted) setSessions(nextSessions);
+              if (mounted && previousServerUrlRef.current === serverUrl) setSessions(nextSessions);
             })
             .catch(() => {
-              if (mounted) setSessionsError('settings.sessionsLoadFailed');
+              if (mounted && previousServerUrlRef.current === serverUrl) setSessionsError('settings.sessionsLoadFailed');
             })
             .finally(() => {
-              if (mounted) setSessionsLoading(false);
+              if (mounted && previousServerUrlRef.current === serverUrl) setSessionsLoading(false);
             });
         }
       } catch {

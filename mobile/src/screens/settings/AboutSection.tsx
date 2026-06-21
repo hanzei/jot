@@ -60,6 +60,8 @@ export default function AboutSection() {
         aboutRequestSeqRef.current += 1;
         previousServerUrlRef.current = null;
         setActiveServerUrl(null);
+        setAboutInfo(null);
+        setAboutError('');
         setAboutLoading(false);
       }
     };

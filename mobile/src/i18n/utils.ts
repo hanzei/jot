@@ -11,5 +11,7 @@ export function getCurrentLocale(): string | undefined {
 
 export function extractApiError(err: unknown): string | undefined {
   const msg = (err as { response?: { data?: string } })?.response?.data;
-  return typeof msg === 'string' ? msg.trim() : undefined;
+  if (typeof msg !== 'string') return undefined;
+  const trimmed = msg.trim();
+  return trimmed || undefined;
 }
