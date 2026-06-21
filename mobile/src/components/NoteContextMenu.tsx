@@ -12,7 +12,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useTranslation } from 'react-i18next';
 import type { Note } from '@jot/shared';
 import { useTheme } from '../theme/ThemeContext';
-import { isUnsyncedNoteId } from '../db/noteQueries';
+import { isUnsyncedNoteId, isLocalId } from '../db/noteQueries';
 import { usePendingNoteIds } from '../store/OfflineContext';
 
 export type ContextMenuViewContext = 'notes' | 'archived' | 'trash' | 'my-tasks';
@@ -65,9 +65,10 @@ export default function NoteContextMenu({
 
   if (!note) return null;
 
-  // Actions that need a server-side note (share, duplicate, label management) are
-  // hidden while the note is unsynced — its create hasn't reached the server yet,
-  // so they'd dead-end at the mutation guard (#475).
+  // Duplicate and label management need the note to already exist on the server,
+  // so they're hidden while its create is still pending (#475). Sharing is the
+  // exception: an offline-created note's create drains FIFO before the queued
+  // share, so only a local_* duplicate (no server id yet) blocks sharing.
   const isUnsynced = isUnsyncedNoteId(note.id, pendingNoteIds);
 
   const createLabelAction = (currentNote: Note): Action | null => {
@@ -92,7 +93,7 @@ export default function NoteContextMenu({
       testId: 'context-color',
     });
     // is_shared means the current user is a recipient, not the owner — hide Share for non-owners
-    if (!note.is_shared && !isUnsynced) {
+    if (!note.is_shared && !isLocalId(note.id)) {
       actions.push({
         icon: 'share-social-outline',
         label: t('note.share'),

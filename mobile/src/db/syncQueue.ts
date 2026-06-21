@@ -472,6 +472,11 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
               await patchLocalItem(db, noteId, item.id, { completed: item.completed });
             }
           }
+        } else if (entry.operation === 'share') {
+          // Share returns 204 (no body) and the optimistic local note carries a
+          // synthetic `optimistic_<userId>` share row; re-fetch the canonical note
+          // so shared_with reflects the server-assigned share ids.
+          await reconcileNoteFromServer(db, affectedNoteIds(endpoint, body)[0]);
         }
       } else if (entry.method === 'PATCH') {
         const updateNoteID =
@@ -504,6 +509,10 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
           // The server returns the updated note; persist it so the local
           // labels_json drops the removed label and stays consistent.
           await saveNoteFromResponse(db, response?.data);
+        } else if (entry.operation === 'unshare') {
+          // Unshare returns 204 (no body); re-fetch so shared_with/is_shared
+          // reflect the server state after the removal.
+          await reconcileNoteFromServer(db, affectedNoteIds(endpoint, body)[0]);
         }
       }
 
@@ -579,5 +588,24 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
 async function saveNoteFromResponse(db: SQLiteDatabase, data: unknown): Promise<void> {
   if (hasStringId(data)) {
     await saveNote(db, data as Note);
+  }
+}
+
+/**
+ * Re-fetch a note from the server and persist it during queue drain. Used by
+ * share/unshare ops, which return 204 (no body) yet leave the local note holding
+ * an optimistic `shared_with` (a synthetic `optimistic_<userId>` row, or a row the
+ * unshare removed): a GET reconciles it to the server-assigned share ids. Like
+ * {@link saveNoteFromResponse} this uses the raw (ungated) saveNote — the drain
+ * owns the note as its entry is processed (#487). Best-effort: a failed fetch
+ * leaves the optimistic state for the next background sync to reconcile.
+ */
+async function reconcileNoteFromServer(db: SQLiteDatabase, noteId: string | undefined): Promise<void> {
+  if (!noteId) return;
+  try {
+    const response = await api.get(`/notes/${noteId}`);
+    await saveNoteFromResponse(db, response?.data);
+  } catch (err) {
+    console.warn(`Failed to reconcile note id=${noteId} after share/unshare drain:`, err);
   }
 }

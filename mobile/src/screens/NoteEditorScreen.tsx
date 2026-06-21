@@ -24,7 +24,7 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
 import { useCreateNote, useUpdateNote, useDeleteNote, useRestoreNote, useDuplicateNote, useCreateNoteItem, useUpdateNoteItem, useDeleteNoteItem, useReorderNoteItems, useToggleNoteItemCompleted } from '../hooks/useNotes';
 import { useOfflineNote } from '../hooks/useOfflineNotes';
-import { isUnsyncedNoteId } from '../db/noteQueries';
+import { isUnsyncedNoteId, isLocalId } from '../db/noteQueries';
 import { usePendingNoteIds, useFailedNoteIds } from '../store/OfflineContext';
 import { useSSESubscription } from '../store/SSEContext';
 import { useToast } from '../hooks/useToast';
@@ -1747,8 +1747,11 @@ export default function NoteEditorScreen() {
           <Ionicons name="color-palette-outline" size={22} color={hasNoteColor ? '#444' : colors.icon} />
         </TouchableOpacity>
 
-        {/* Share (only when note is saved, synced, and owned by current user) */}
-        {noteId && !isUnsyncedNoteId(noteId, pendingNoteIds) && existingNote && existingNote.user_id === currentUser?.id && (
+        {/* Share (when the note is saved and owned by the current user). An
+            offline-created note can be shared: its create drains FIFO before the
+            queued share (#475). Only a local_* duplicate (no server id yet) is
+            excluded. */}
+        {noteId && !isLocalId(noteId) && existingNote && existingNote.user_id === currentUser?.id && (
           <TouchableOpacity
             onPress={() => navigation.navigate('Share', { noteId })}
             style={styles.toolbarBtn}
