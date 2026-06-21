@@ -376,6 +376,25 @@ export async function setLocalNoteVersion(db: SQLiteDatabase, id: string, versio
   await db.runAsync('UPDATE notes SET version = ? WHERE id = ?', [version, id]);
 }
 
+/**
+ * Update only a note's share columns (`is_shared` + `shared_with`) from a server
+ * snapshot, leaving title/content/items/version untouched. Used by the queue
+ * drain to reconcile optimistic share rows after a share/unshare without
+ * clobbering a content edit that may still be queued for the same note: the
+ * `update` drain only bumps the version (see {@link setLocalNoteVersion}), so a
+ * full saveNote here would revert that pending edit until the next background sync.
+ */
+export async function updateLocalNoteShares(
+  db: SQLiteDatabase,
+  id: string,
+  shares: { is_shared: boolean; shared_with: NoteShare[] },
+): Promise<void> {
+  await db.runAsync(
+    'UPDATE notes SET is_shared = ?, shared_with_json = ? WHERE id = ?',
+    [shares.is_shared ? 1 : 0, JSON.stringify(shares.shared_with ?? []), id],
+  );
+}
+
 export async function renameLabelInLocalNotes(
   db: SQLiteDatabase,
   labelId: string,

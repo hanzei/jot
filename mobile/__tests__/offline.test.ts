@@ -563,9 +563,15 @@ describe('drainQueue', () => {
 
     expect(mockApi.post).toHaveBeenCalledWith('/notes/n1/share', { user_id: 'u2' });
     // The optimistic `optimistic_<userId>` share row is replaced by re-fetching
-    // the canonical note (share returns 204, so there is no response body).
+    // the canonical note (share returns 204, so there is no response body). Only
+    // the share columns are written, not a full saveNote, so a content edit still
+    // queued for the same note isn't clobbered.
     expect(mockApi.get).toHaveBeenCalledWith('/notes/n1');
-    expect(mockSaveNote).toHaveBeenCalledWith(db, serverNote);
+    expect(mockSaveNote).not.toHaveBeenCalled();
+    expect(db.runAsync).toHaveBeenCalledWith(
+      'UPDATE notes SET is_shared = ?, shared_with_json = ? WHERE id = ?',
+      [1, JSON.stringify(serverNote.shared_with), 'n1'],
+    );
     expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [60]);
   });
 
@@ -585,7 +591,11 @@ describe('drainQueue', () => {
 
     expect(mockApi.delete).toHaveBeenCalledWith('/notes/n1/shares/u2');
     expect(mockApi.get).toHaveBeenCalledWith('/notes/n1');
-    expect(mockSaveNote).toHaveBeenCalledWith(db, serverNote);
+    expect(mockSaveNote).not.toHaveBeenCalled();
+    expect(db.runAsync).toHaveBeenCalledWith(
+      'UPDATE notes SET is_shared = ?, shared_with_json = ? WHERE id = ?',
+      [0, JSON.stringify([]), 'n1'],
+    );
     expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [61]);
   });
 
@@ -601,7 +611,10 @@ describe('drainQueue', () => {
     // The share itself succeeded, so the entry is removed even though the
     // best-effort reconcile fetch failed (the next background sync reconciles).
     expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [62]);
-    expect(mockSaveNote).not.toHaveBeenCalled();
+    expect(db.runAsync).not.toHaveBeenCalledWith(
+      'UPDATE notes SET is_shared = ?, shared_with_json = ? WHERE id = ?',
+      expect.anything(),
+    );
   });
 });
 

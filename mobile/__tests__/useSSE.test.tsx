@@ -397,9 +397,14 @@ describe('useSSE', () => {
     await waitFor(() => expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: notesLocalQueryScopeKey() }));
   });
 
-  it('does not remove the note on note_unshared for the owner or other collaborators', async () => {
-    // The owner/other audience members receive the event too; for them it is
-    // informational and must not delete their copy.
+  it('refreshes (does not remove) the note on note_unshared for the owner or other collaborators', async () => {
+    // The owner/remaining collaborators receive the event too; they keep the note
+    // but its shared_with changed. The event has no payload and SQLite-backed
+    // queries don't refetch on a bare invalidation, so the note is fetched and
+    // saved, and both the detail and list caches are invalidated.
+    const fetched = { id: 'note-123', note_type: 'text', is_shared: false } as unknown as Note;
+    mockGetNote.mockResolvedValueOnce(fetched);
+
     const { queryClient, Wrapper } = createWrapper();
     const invalidateSpy = jest.spyOn(queryClient, 'invalidateQueries');
 
@@ -416,6 +421,9 @@ describe('useSSE', () => {
     });
 
     expect(mockPermanentDeleteLocalNote).not.toHaveBeenCalled();
+    await waitFor(() => expect(mockGetNote).toHaveBeenCalledWith('note-123'));
+    await waitFor(() => expect(mockSaveServerNote).toHaveBeenCalledWith(expect.anything(), fetched));
+    await waitFor(() => expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: noteLocalQueryKey('note-123') }));
     await waitFor(() => expect(invalidateSpy).toHaveBeenCalledWith({ queryKey: notesLocalQueryScopeKey() }));
   });
 

@@ -14,6 +14,7 @@ import {
   getFailedNoteIds,
   getLocalNoteVersion,
   setLocalNoteVersion,
+  updateLocalNoteShares,
 } from './noteQueries';
 
 export type QueueOperation =
@@ -592,19 +593,27 @@ async function saveNoteFromResponse(db: SQLiteDatabase, data: unknown): Promise<
 }
 
 /**
- * Re-fetch a note from the server and persist it during queue drain. Used by
- * share/unshare ops, which return 204 (no body) yet leave the local note holding
- * an optimistic `shared_with` (a synthetic `optimistic_<userId>` row, or a row the
- * unshare removed): a GET reconciles it to the server-assigned share ids. Like
- * {@link saveNoteFromResponse} this uses the raw (ungated) saveNote — the drain
- * owns the note as its entry is processed (#487). Best-effort: a failed fetch
- * leaves the optimistic state for the next background sync to reconcile.
+ * Re-fetch a note from the server and reconcile its share state during queue
+ * drain. Used by share/unshare ops, which return 204 (no body) yet leave the
+ * local note holding an optimistic `shared_with` (a synthetic `optimistic_<userId>`
+ * row, or a row the unshare removed): a GET reconciles it to the server-assigned
+ * share ids. Only the share columns are written (not a full saveNote) so a content
+ * edit still queued for the same note isn't clobbered — the `update` drain bumps
+ * only the version, so a full overwrite would revert that pending edit until the
+ * next background sync. Best-effort: a failed fetch leaves the optimistic state
+ * for the next background sync to reconcile.
  */
 async function reconcileNoteFromServer(db: SQLiteDatabase, noteId: string | undefined): Promise<void> {
   if (!noteId) return;
   try {
-    const response = await api.get(`/notes/${noteId}`);
-    await saveNoteFromResponse(db, response?.data);
+    const data = (await api.get(`/notes/${noteId}`))?.data;
+    if (hasStringId(data)) {
+      const note = data as Note;
+      await updateLocalNoteShares(db, note.id, {
+        is_shared: note.is_shared,
+        shared_with: note.shared_with ?? [],
+      });
+    }
   } catch (err) {
     console.warn(`Failed to reconcile note id=${noteId} after share/unshare drain:`, err);
   }

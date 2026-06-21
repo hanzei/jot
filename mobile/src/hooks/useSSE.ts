@@ -127,12 +127,11 @@ export function useSSE(onNoteUpdatedByOther?: SSENotificationCallback): void {
           }
           case 'note_unshared': {
             const { note_id } = event.data;
-            // The recipient who lost access receives no note payload and can no
-            // longer see the note in any scope, so hard-remove it locally (not a
-            // tombstone — it must not linger in their trash view). Defer to a
-            // pending/failed local op (#487/#492). For the owner and other
-            // collaborators this event is informational; just refresh the list.
             if (event.target_user_id === userIdRef.current) {
+              // The recipient who lost access receives no note payload and can no
+              // longer see the note in any scope, so hard-remove it locally (not a
+              // tombstone — it must not linger in their trash view). Defer to a
+              // pending/failed local op (#487/#492).
               try {
                 const protectedNoteIds = await getProtectedNoteIds(db);
                 if (!protectedNoteIds.has(note_id)) {
@@ -142,6 +141,19 @@ export function useSSE(onNoteUpdatedByOther?: SSENotificationCallback): void {
               } catch {
                 // Leave the local copy in place; a later sync reconciles it.
               }
+            } else {
+              // Owner / remaining collaborator: they keep the note but its
+              // shared_with changed. The event carries no payload, and the
+              // SQLite-backed queries (staleTime: Infinity) won't refetch on a
+              // bare invalidation, so fetch the canonical note to refresh
+              // shared_with/is_shared (deferring to a pending local edit; #487).
+              try {
+                await saveServerNote(db, await getNote(note_id));
+              } catch {
+                // Fetch failed or note has a pending/failed local op; the next
+                // background sync reconciles it.
+              }
+              queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(note_id) });
             }
             queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
             break;
