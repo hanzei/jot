@@ -14,6 +14,7 @@ import {
   getFailedNoteIds,
   getLocalNoteVersion,
   setLocalNoteVersion,
+  updateLocalNoteShares,
 } from './noteQueries';
 
 export type QueueOperation =
@@ -472,6 +473,11 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
               await patchLocalItem(db, noteId, item.id, { completed: item.completed });
             }
           }
+        } else if (entry.operation === 'share') {
+          // Share returns 204 (no body) and the optimistic local note carries a
+          // synthetic `optimistic_<userId>` share row; re-fetch the canonical note
+          // so shared_with reflects the server-assigned share ids.
+          await reconcileNoteFromServer(db, affectedNoteIds(endpoint, body)[0]);
         }
       } else if (entry.method === 'PATCH') {
         const updateNoteID =
@@ -504,6 +510,10 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
           // The server returns the updated note; persist it so the local
           // labels_json drops the removed label and stays consistent.
           await saveNoteFromResponse(db, response?.data);
+        } else if (entry.operation === 'unshare') {
+          // Unshare returns 204 (no body); re-fetch so shared_with/is_shared
+          // reflect the server state after the removal.
+          await reconcileNoteFromServer(db, affectedNoteIds(endpoint, body)[0]);
         }
       }
 
@@ -579,5 +589,32 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
 async function saveNoteFromResponse(db: SQLiteDatabase, data: unknown): Promise<void> {
   if (hasStringId(data)) {
     await saveNote(db, data as Note);
+  }
+}
+
+/**
+ * Re-fetch a note from the server and reconcile its share state during queue
+ * drain. Used by share/unshare ops, which return 204 (no body) yet leave the
+ * local note holding an optimistic `shared_with` (a synthetic `optimistic_<userId>`
+ * row, or a row the unshare removed): a GET reconciles it to the server-assigned
+ * share ids. Only the share columns are written (not a full saveNote) so a content
+ * edit still queued for the same note isn't clobbered — the `update` drain bumps
+ * only the version, so a full overwrite would revert that pending edit until the
+ * next background sync. Best-effort: a failed fetch leaves the optimistic state
+ * for the next background sync to reconcile.
+ */
+async function reconcileNoteFromServer(db: SQLiteDatabase, noteId: string | undefined): Promise<void> {
+  if (!noteId) return;
+  try {
+    const data = (await api.get(`/notes/${noteId}`))?.data;
+    if (hasStringId(data)) {
+      const note = data as Note;
+      await updateLocalNoteShares(db, note.id, {
+        is_shared: note.is_shared,
+        shared_with: note.shared_with ?? [],
+      });
+    }
+  } catch (err) {
+    console.warn(`Failed to reconcile note id=${noteId} after share/unshare drain:`, err);
   }
 }

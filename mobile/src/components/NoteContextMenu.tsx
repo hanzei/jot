@@ -12,8 +12,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useTranslation } from 'react-i18next';
 import type { Note } from '@jot/shared';
 import { useTheme } from '../theme/ThemeContext';
-import { isUnsyncedNoteId } from '../db/noteQueries';
-import { usePendingNoteIds } from '../store/OfflineContext';
+import { isLocalId } from '../db/noteQueries';
 
 export type ContextMenuViewContext = 'notes' | 'archived' | 'trash' | 'my-tasks';
 
@@ -60,18 +59,16 @@ export default function NoteContextMenu({
 }: NoteContextMenuProps) {
   const { colors } = useTheme();
   const { t } = useTranslation();
-  const pendingNoteIds = usePendingNoteIds();
   const insets = useContext(SafeAreaInsetsContext) ?? { top: 0, right: 0, bottom: 0, left: 0 };
 
   if (!note) return null;
 
-  // Actions that need a server-side note (share, duplicate, label management) are
-  // hidden while the note is unsynced — its create hasn't reached the server yet,
-  // so they'd dead-end at the mutation guard (#475).
-  const isUnsynced = isUnsyncedNoteId(note.id, pendingNoteIds);
+  // Share, label management, and duplicate all queue FIFO behind an offline-created
+  // note's create, so they only need a server-valid id (#475); a local_* duplicate
+  // (no server id yet) is the only case that blocks them.
 
   const createLabelAction = (currentNote: Note): Action | null => {
-    if (!onManageLabels || isUnsyncedNoteId(currentNote.id, pendingNoteIds)) {
+    if (!onManageLabels || isLocalId(currentNote.id)) {
       return null;
     }
     return {
@@ -92,7 +89,7 @@ export default function NoteContextMenu({
       testId: 'context-color',
     });
     // is_shared means the current user is a recipient, not the owner — hide Share for non-owners
-    if (!note.is_shared && !isUnsynced) {
+    if (!note.is_shared && !isLocalId(note.id)) {
       actions.push({
         icon: 'share-social-outline',
         label: t('note.share'),
@@ -112,7 +109,7 @@ export default function NoteContextMenu({
       onPress: () => { onClose(); onArchive(note); },
       testId: 'context-archive',
     });
-    if (!isUnsynced) {
+    if (!isLocalId(note.id)) {
       actions.push({
         icon: 'copy-outline',
         label: t('note.duplicate'),
@@ -138,7 +135,7 @@ export default function NoteContextMenu({
       onPress: () => { onClose(); onUnarchive(note); },
       testId: 'context-unarchive',
     });
-    if (!isUnsynced) {
+    if (!isLocalId(note.id)) {
       actions.push({
         icon: 'copy-outline',
         label: t('note.duplicate'),

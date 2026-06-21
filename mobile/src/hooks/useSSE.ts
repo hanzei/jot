@@ -8,8 +8,9 @@ import { setActiveSseManager } from '../api/sseState';
 import { CLIENT_ID } from '../api/client';
 import type { SSEEvent } from '@jot/shared';
 import { useNetworkStatus } from './useNetworkStatus';
-import { markLocalNoteDeleted } from '../db/noteQueries';
+import { markLocalNoteDeleted, permanentDeleteLocalNote } from '../db/noteQueries';
 import { getProtectedNoteIds, saveServerNote } from '../db/syncQueue';
+import { getNote } from '../api/notes';
 import { isSseQuiesced, subscribeToServerSwitchLifecycle } from '../store/serverSwitchLifecycle';
 import {
   noteLocalQueryKey,
@@ -100,12 +101,63 @@ export function useSSE(onNoteUpdatedByOther?: SSENotificationCallback): void {
             break;
           }
           case 'note_created':
-          case 'note_shared':
-          case 'note_unshared':
-            // No local write in this path; refresh the list so the new/changed
-            // note is picked up by the next background sync + refetch.
+          case 'note_shared': {
+            const { note_id, note } = event.data;
+            // Persist the note straight into SQLite (deferring to a pending local
+            // edit; see #487). The list/detail queries read from SQLite with
+            // staleTime: Infinity, so invalidation alone only re-reads the
+            // (still-missing) local rows — it does NOT trigger a server fetch (that
+            // only fires on an isConnected flip). Without writing here, a note newly
+            // created/shared on another device wouldn't appear until the next
+            // reconnect or foreground. If the event carries no payload (older
+            // server), fall back to a one-shot fetch.
+            try {
+              if (note) {
+                await saveServerNote(db, note);
+              } else {
+                await saveServerNote(db, await getNote(note_id));
+              }
+            } catch {
+              // Pending/failed local op, fetch failure, or note inaccessible;
+              // the next background sync reconciles it.
+            }
+            queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(note_id) });
             queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
             break;
+          }
+          case 'note_unshared': {
+            const { note_id } = event.data;
+            if (event.target_user_id === userIdRef.current) {
+              // The recipient who lost access receives no note payload and can no
+              // longer see the note in any scope, so hard-remove it locally (not a
+              // tombstone — it must not linger in their trash view). Defer to a
+              // pending/failed local op (#487/#492).
+              try {
+                const protectedNoteIds = await getProtectedNoteIds(db);
+                if (!protectedNoteIds.has(note_id)) {
+                  queryClient.removeQueries({ queryKey: noteLocalQueryKey(note_id) });
+                  await permanentDeleteLocalNote(db, note_id);
+                }
+              } catch {
+                // Leave the local copy in place; a later sync reconciles it.
+              }
+            } else {
+              // Owner / remaining collaborator: they keep the note but its
+              // shared_with changed. The event carries no payload, and the
+              // SQLite-backed queries (staleTime: Infinity) won't refetch on a
+              // bare invalidation, so fetch the canonical note to refresh
+              // shared_with/is_shared (deferring to a pending local edit; #487).
+              try {
+                await saveServerNote(db, await getNote(note_id));
+              } catch {
+                // Fetch failed or note has a pending/failed local op; the next
+                // background sync reconciles it.
+              }
+              queryClient.invalidateQueries({ queryKey: noteLocalQueryKey(note_id) });
+            }
+            queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
+            break;
+          }
         }
       })();
     });

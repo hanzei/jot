@@ -21,6 +21,8 @@ import {
   getLocalLabelCounts,
   getLocalNote,
   generateLocalId,
+  isLocalId,
+  isNotePendingCreate,
 } from '../db/noteQueries';
 import { enqueueOperation, rethrowIfNotQueueable, saveServerNotes } from '../db/syncQueue';
 import { useNetworkStatus } from './useNetworkStatus';
@@ -212,7 +214,16 @@ export function useAddLabelToNote() {
       assertSwitchWriteAllowed();
       const trimmed = name.trim();
       if (!trimmed) throw new Error('Label name must not be empty');
-      if (isConnectedRef.current) {
+      // A local_* duplicate has no server id yet, so its labels can't be managed.
+      if (isLocalId(noteId)) {
+        throw new Error('cannot manage labels on unsynced note');
+      }
+      // An offline-created note already carries a server-valid id (#475) and its
+      // queued create drains FIFO before this label op, so queue rather than
+      // calling online against a note the server doesn't know yet (a 404 would
+      // surface as an error instead of syncing).
+      const pendingCreate = await isNotePendingCreate(db, noteId);
+      if (isConnectedRef.current && !pendingCreate) {
         try {
           const updatedNote = await addLabelToNote(noteId, trimmed);
           await saveNote(db, updatedNote);
@@ -274,7 +285,15 @@ export function useRemoveLabelFromNote() {
   return useMutation({
     mutationFn: async ({ noteId, labelId }: { noteId: string; labelId: string }) => {
       assertSwitchWriteAllowed();
-      if (isConnectedRef.current) {
+      // A local_* duplicate has no server id yet, so its labels can't be managed.
+      if (isLocalId(noteId)) {
+        throw new Error('cannot manage labels on unsynced note');
+      }
+      // An offline-created note (#475) drains its create FIFO before this label
+      // op, so queue rather than calling online against a note the server doesn't
+      // know yet.
+      const pendingCreate = await isNotePendingCreate(db, noteId);
+      if (isConnectedRef.current && !pendingCreate) {
         try {
           const updatedNote = await removeLabelFromNote(noteId, labelId);
           await saveNote(db, updatedNote);

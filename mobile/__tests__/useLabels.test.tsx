@@ -36,6 +36,8 @@ jest.mock('../src/db/noteQueries', () => ({
   getLocalLabelCounts: jest.fn().mockResolvedValue({}),
   getLocalNote: jest.fn().mockResolvedValue(null),
   generateLocalId: jest.fn(() => 'local_label_id'),
+  isLocalId: jest.fn((id: string) => id.startsWith('local_')),
+  isNotePendingCreate: jest.fn().mockResolvedValue(false),
 }));
 
 jest.mock('../src/db/syncQueue', () => ({
@@ -202,6 +204,32 @@ describe('useLabels write hooks', () => {
         expect.anything(),
         expect.objectContaining({ operation: 'addLabelToNote', endpoint: '/notes/n1/labels', method: 'POST', body: { name: 'New' } }),
       );
+    });
+
+    it('queues (does not call the API) for a pending-create note even when online (#475)', async () => {
+      // The note's create hasn't drained yet, so a direct API call would 404.
+      // The label op queues FIFO behind the create instead.
+      mockNoteQueries.isNotePendingCreate.mockResolvedValueOnce(true);
+      mockNoteQueries.getLocalNote.mockResolvedValue(sampleNote as never);
+      mockNoteQueries.getLocalLabels.mockResolvedValue([]);
+
+      const { result } = renderHook(() => useAddLabelToNote(), { wrapper: createWrapper() });
+      await result.current.mutateAsync({ noteId: 'n1', name: 'Soon' });
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
+      expect(mockLabelsApi.addLabelToNote).not.toHaveBeenCalled();
+      expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({ operation: 'addLabelToNote', endpoint: '/notes/n1/labels' }),
+      );
+    });
+
+    it('throws for a local_* duplicate note (no server id yet)', async () => {
+      const { result } = renderHook(() => useAddLabelToNote(), { wrapper: createWrapper() });
+
+      await expect(result.current.mutateAsync({ noteId: 'local_dup_1', name: 'X' })).rejects.toThrow(/unsynced/i);
+      expect(mockLabelsApi.addLabelToNote).not.toHaveBeenCalled();
+      expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
     });
 
     it('reuses an existing local label by name without queuing a createLabel', async () => {
