@@ -1801,8 +1801,9 @@ export default function NoteEditorScreen() {
           </TouchableOpacity>
         )}
 
-        {/* Label button (only when note is saved and synced to server) */}
-        {noteId && !isUnsyncedNoteId(noteId, pendingNoteIds) && (
+        {/* Label button. Like Share, label ops queue FIFO behind an offline-created
+            note's create (#475), so only a local_* duplicate (no server id) is excluded. */}
+        {noteId && !isLocalId(noteId) && (
           <TouchableOpacity
             onPress={() => setLabelPickerVisible(true)}
             style={styles.toolbarBtn}

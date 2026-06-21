@@ -212,7 +212,7 @@ describe('NoteContextMenu labels action', () => {
     expect(queryByTestId('context-label')).toBeNull();
   });
 
-  it('shows share but hides duplicate and label actions for a pending-create note (#475)', () => {
+  it('shows share and label but hides duplicate for a pending-create note (#475)', () => {
     mockPendingNoteIds = new Set(['note-1']);
     const { queryByTestId } = render(
       <NoteContextMenu
@@ -234,13 +234,13 @@ describe('NoteContextMenu labels action', () => {
     );
 
     // An offline-created note has a server-valid id and its create drains FIFO
-    // before the queued share, so Share is available. Duplicate and label
-    // management still need the note to exist server-side, so they stay gated.
+    // before the queued share/label ops, so Share and Labels are available.
+    // Duplicate needs a server-assigned id reconciled on replay, so it stays gated.
     expect(queryByTestId('context-color')).toBeTruthy();
     expect(queryByTestId('context-pin')).toBeTruthy();
     expect(queryByTestId('context-share')).toBeTruthy();
+    expect(queryByTestId('context-label')).toBeTruthy();
     expect(queryByTestId('context-duplicate')).toBeNull();
-    expect(queryByTestId('context-label')).toBeNull();
   });
 
   it('does not render label action when callback is omitted', () => {

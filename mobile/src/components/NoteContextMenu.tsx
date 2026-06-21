@@ -65,14 +65,14 @@ export default function NoteContextMenu({
 
   if (!note) return null;
 
-  // Duplicate and label management need the note to already exist on the server,
-  // so they're hidden while its create is still pending (#475). Sharing is the
-  // exception: an offline-created note's create drains FIFO before the queued
-  // share, so only a local_* duplicate (no server id yet) blocks sharing.
+  // Duplicate needs a server-assigned id reconciled on replay, so it stays hidden
+  // while the create is still pending (#475). Share and label management queue
+  // FIFO behind the create, so they only need a server-valid id — a local_*
+  // duplicate (no server id yet) is the only case that blocks them.
   const isUnsynced = isUnsyncedNoteId(note.id, pendingNoteIds);
 
   const createLabelAction = (currentNote: Note): Action | null => {
-    if (!onManageLabels || isUnsyncedNoteId(currentNote.id, pendingNoteIds)) {
+    if (!onManageLabels || isLocalId(currentNote.id)) {
       return null;
     }
     return {
