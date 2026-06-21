@@ -99,7 +99,6 @@ export const styles = StyleSheet.create({
     marginTop: 8,
   },
   successText: {
-    color: '#22c55e',
     fontSize: 13,
     marginTop: 8,
   },
@@ -231,11 +230,11 @@ export const styles = StyleSheet.create({
     flexShrink: 1,
     textAlign: 'right',
   },
-  sessionsDescription: {
+  sectionDescription: {
     fontSize: 13,
     marginBottom: 12,
   },
-  sessionsLoader: {
+  sectionLoader: {
     marginVertical: 8,
   },
   sessionsList: {

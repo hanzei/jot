@@ -7,7 +7,7 @@ import { useTheme } from '../../theme/ThemeContext';
 import { updateMe } from '../../api/settings';
 import { cacheAuthProfile } from '../../api/client';
 import { enqueueOperation, isQueueableError } from '../../db/syncQueue';
-import { displayMessage } from '../../i18n/utils';
+import { displayMessage, extractApiError } from '../../i18n/utils';
 import { styles } from './styles';
 
 export default function AccountSection() {
@@ -60,8 +60,7 @@ export default function AccountSection() {
           setUser(previousUser);
           if (settings) void cacheAuthProfile({ user: previousUser, settings });
         }
-        const msg = (err as { response?: { data?: string } })?.response?.data;
-        setProfileError(typeof msg === 'string' ? msg.trim() : 'settings.failedUpdateProfile');
+        setProfileError(extractApiError(err) ?? 'settings.failedUpdateProfile');
       }
     } finally {
       setProfileSaving(false);
@@ -108,7 +107,7 @@ export default function AccountSection() {
       {profileError !== '' && (
         <Text style={[styles.errorText, { color: colors.error }]}>{displayMessage(t, profileError)}</Text>
       )}
-      {profileSuccess !== '' && <Text style={styles.successText}>{profileSuccess}</Text>}
+      {profileSuccess !== '' && <Text style={[styles.successText, { color: colors.success }]}>{profileSuccess}</Text>}
       <TouchableOpacity
         style={[styles.primaryButton, { backgroundColor: colors.primary }, profileSaving && styles.buttonDisabled]}
         onPress={handleSaveProfile}

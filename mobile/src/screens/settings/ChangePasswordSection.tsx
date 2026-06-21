@@ -5,7 +5,7 @@ import { useAuth } from '../../store/AuthContext';
 import { useTheme } from '../../theme/ThemeContext';
 import { changePassword } from '../../api/settings';
 import { VALIDATION } from '@jot/shared';
-import { displayMessage } from '../../i18n/utils';
+import { displayMessage, extractApiError } from '../../i18n/utils';
 import { styles } from './styles';
 
 export default function ChangePasswordSection() {
@@ -49,8 +49,7 @@ export default function ChangePasswordSection() {
       setNewPassword('');
       setConfirmPassword('');
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: string } })?.response?.data;
-      setPasswordError(typeof msg === 'string' ? msg.trim() : 'settings.failedChangePassword');
+      setPasswordError(extractApiError(err) ?? 'settings.failedChangePassword');
     } finally {
       setPasswordSaving(false);
     }
@@ -96,7 +95,7 @@ export default function ChangePasswordSection() {
       {passwordError !== '' && (
         <Text style={[styles.errorText, { color: colors.error }]}>{displayMessage(t, passwordError)}</Text>
       )}
-      {passwordSuccess !== '' && <Text style={styles.successText}>{passwordSuccess}</Text>}
+      {passwordSuccess !== '' && <Text style={[styles.successText, { color: colors.success }]}>{passwordSuccess}</Text>}
       <TouchableOpacity
         style={[styles.primaryButton, { backgroundColor: colors.primary }, passwordSaving && styles.buttonDisabled]}
         onPress={handleChangePassword}

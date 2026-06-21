@@ -138,7 +138,7 @@ export default function PATsSection() {
   return (
     <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
       <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('settings.patsSection')}</Text>
-      <Text style={[styles.sessionsDescription, { color: colors.textSecondary }]}>
+      <Text style={[styles.sectionDescription, { color: colors.textSecondary }]}>
         {t('settings.patsDescription')}
       </Text>
       <View style={styles.patCreateRow}>
@@ -168,9 +168,9 @@ export default function PATsSection() {
         <Text style={[styles.errorText, { color: colors.error }]}>{displayMessage(t, patsError)}</Text>
       )}
       {patsLoading ? (
-        <ActivityIndicator size="small" color={colors.primary} style={styles.sessionsLoader} />
+        <ActivityIndicator size="small" color={colors.primary} style={styles.sectionLoader} />
       ) : pats.length === 0 ? (
-        <Text style={[styles.sessionsDescription, { color: colors.textSecondary }]}>
+        <Text style={[styles.sectionDescription, { color: colors.textSecondary }]}>
           {t('settings.patsNone')}
         </Text>
       ) : (

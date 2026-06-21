@@ -8,3 +8,8 @@ export function displayMessage(t: TFunction, message: string): string {
 export function getCurrentLocale(): string | undefined {
   return i18n.resolvedLanguage || i18n.language || undefined;
 }
+
+export function extractApiError(err: unknown): string | undefined {
+  const msg = (err as { response?: { data?: string } })?.response?.data;
+  return typeof msg === 'string' ? msg.trim() : undefined;
+}

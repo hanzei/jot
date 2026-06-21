@@ -96,7 +96,6 @@ export default function SessionsSection() {
         {
           text: t('common.cancel'),
           style: 'cancel',
-          onPress: () => undefined,
         },
         {
           text: t('settings.sessionsRevoke'),
@@ -114,15 +113,15 @@ export default function SessionsSection() {
   return (
     <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
       <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('settings.sessionsSection')}</Text>
-      <Text style={[styles.sessionsDescription, { color: colors.textSecondary }]}>
-        {t('settings.sessionsDescription')}
+      <Text style={[styles.sectionDescription, { color: colors.textSecondary }]}>
+        {t('settings.sectionDescription')}
       </Text>
       {sessionsLoading ? (
-        <ActivityIndicator size="small" color={colors.primary} style={styles.sessionsLoader} />
+        <ActivityIndicator size="small" color={colors.primary} style={styles.sectionLoader} />
       ) : sessionsError !== '' ? (
         <Text style={[styles.errorText, { color: colors.error }]}>{displayMessage(t, sessionsError)}</Text>
       ) : sessions.length === 0 ? (
-        <Text style={[styles.sessionsDescription, { color: colors.textSecondary }]}>
+        <Text style={[styles.sectionDescription, { color: colors.textSecondary }]}>
           {t('settings.sessionsNone')}
         </Text>
       ) : (

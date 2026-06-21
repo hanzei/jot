@@ -8,7 +8,7 @@ import { useTheme } from '../../theme/ThemeContext';
 import { importKeepFile, getNotes } from '../../api/notes';
 import { saveServerNotes } from '../../db/syncQueue';
 import { notesLocalQueryScopeKey } from '../../hooks/queryKeys';
-import { displayMessage } from '../../i18n/utils';
+import { displayMessage, extractApiError } from '../../i18n/utils';
 import type { ImportResponse } from '@jot/shared';
 import { styles } from './styles';
 
@@ -74,8 +74,7 @@ export default function ImportSection() {
         queryClient.invalidateQueries({ queryKey: notesLocalQueryScopeKey() });
       }
     } catch (err: unknown) {
-      const msg = (err as { response?: { data?: string } })?.response?.data;
-      setImportError(typeof msg === 'string' ? msg.trim() : 'import.importFailed');
+      setImportError(extractApiError(err) ?? 'import.importFailed');
     } finally {
       setImporting(false);
     }
@@ -84,7 +83,7 @@ export default function ImportSection() {
   return (
     <View style={[styles.section, { backgroundColor: colors.surface, borderColor: colors.border }]}>
       <Text style={[styles.sectionTitle, { color: colors.text }]}>{t('settings.importSection')}</Text>
-      <Text style={[styles.sessionsDescription, { color: colors.textSecondary }]}>
+      <Text style={[styles.sectionDescription, { color: colors.textSecondary }]}>
         {t('settings.importDescription')}
       </Text>
       <TouchableOpacity
@@ -110,7 +109,7 @@ export default function ImportSection() {
       )}
       {importResult && (
         <>
-          <Text style={[styles.successText, styles.importResultText]}>
+          <Text style={[styles.successText, styles.importResultText, { color: colors.success }]}>
             {t('import.importedNotes', { count: importResult.imported })}
             {importResult.skipped > 0 ? ` ${t('import.skipped', { count: importResult.skipped })}` : ''}
             {importResult.errors?.length ? `, ${t('import.failed', { count: importResult.errors.length })}` : ''}.

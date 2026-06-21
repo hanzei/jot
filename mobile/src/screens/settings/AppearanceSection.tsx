@@ -16,7 +16,7 @@ import { updateMe } from '../../api/settings';
 import { cacheAuthProfile } from '../../api/client';
 import { enqueueOperation, isQueueableError } from '../../db/syncQueue';
 import { SUPPORTED_LANGUAGES, getLanguagePreference, resolveLanguage, type LanguagePreference } from '../../i18n/language';
-import { displayMessage } from '../../i18n/utils';
+import { displayMessage, extractApiError } from '../../i18n/utils';
 import i18n from '../../i18n';
 import type { ThemePreference } from '@jot/shared';
 import { styles } from './styles';
@@ -73,8 +73,7 @@ export default function AppearanceSection() {
           setSettings(previousSettings);
           if (user) void cacheAuthProfile({ user, settings: previousSettings });
         }
-        const msg = (err as { response?: { data?: string } })?.response?.data;
-        setLanguageError(typeof msg === 'string' ? msg.trim() : 'settings.failedUpdateLanguage');
+        setLanguageError(extractApiError(err) ?? 'settings.failedUpdateLanguage');
       }
     }
   }, [languagePref, settings, user, setSettings, db]);
@@ -109,8 +108,7 @@ export default function AppearanceSection() {
           setSettings(previousSettings);
           if (user) void cacheAuthProfile({ user, settings: previousSettings });
         }
-        const msg = (err as { response?: { data?: string } })?.response?.data;
-        setThemeError(typeof msg === 'string' ? msg.trim() : 'settings.failedUpdateTheme');
+        setThemeError(extractApiError(err) ?? 'settings.failedUpdateTheme');
       }
     }
   }, [settings, user, setSettings, themePref, db]);

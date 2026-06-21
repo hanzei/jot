@@ -13,7 +13,7 @@ import { useTheme } from '../../theme/ThemeContext';
 import { uploadProfileIcon, deleteProfileIcon } from '../../api/settings';
 import { useActiveServerBaseUrl } from '../../hooks/useActiveServerBaseUrl';
 import { useProfileIcon } from '../../hooks/useProfileIcon';
-import { displayMessage } from '../../i18n/utils';
+import { displayMessage, extractApiError } from '../../i18n/utils';
 import { styles } from './styles';
 
 export default function ProfileIconSection() {
@@ -68,8 +68,7 @@ export default function ProfileIconSection() {
       setUser(updatedUser);
     } catch (err: unknown) {
       if (!isMountedRef.current) return;
-      const msg = (err as { response?: { data?: string } })?.response?.data;
-      setIconError(typeof msg === 'string' ? msg.trim() : 'settings.iconUploadFailed');
+      setIconError(extractApiError(err) ?? 'settings.iconUploadFailed');
     } finally {
       if (isMountedRef.current) {
         setIconUploading(false);
