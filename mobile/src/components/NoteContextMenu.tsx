@@ -12,8 +12,7 @@ import Ionicons from '@expo/vector-icons/Ionicons';
 import { useTranslation } from 'react-i18next';
 import type { Note } from '@jot/shared';
 import { useTheme } from '../theme/ThemeContext';
-import { isUnsyncedNoteId, isLocalId } from '../db/noteQueries';
-import { usePendingNoteIds } from '../store/OfflineContext';
+import { isLocalId } from '../db/noteQueries';
 
 export type ContextMenuViewContext = 'notes' | 'archived' | 'trash' | 'my-tasks';
 
@@ -60,16 +59,13 @@ export default function NoteContextMenu({
 }: NoteContextMenuProps) {
   const { colors } = useTheme();
   const { t } = useTranslation();
-  const pendingNoteIds = usePendingNoteIds();
   const insets = useContext(SafeAreaInsetsContext) ?? { top: 0, right: 0, bottom: 0, left: 0 };
 
   if (!note) return null;
 
-  // Duplicate needs a server-assigned id reconciled on replay, so it stays hidden
-  // while the create is still pending (#475). Share and label management queue
-  // FIFO behind the create, so they only need a server-valid id — a local_*
-  // duplicate (no server id yet) is the only case that blocks them.
-  const isUnsynced = isUnsyncedNoteId(note.id, pendingNoteIds);
+  // Share, label management, and duplicate all queue FIFO behind an offline-created
+  // note's create, so they only need a server-valid id (#475); a local_* duplicate
+  // (no server id yet) is the only case that blocks them.
 
   const createLabelAction = (currentNote: Note): Action | null => {
     if (!onManageLabels || isLocalId(currentNote.id)) {
@@ -113,7 +109,7 @@ export default function NoteContextMenu({
       onPress: () => { onClose(); onArchive(note); },
       testId: 'context-archive',
     });
-    if (!isUnsynced) {
+    if (!isLocalId(note.id)) {
       actions.push({
         icon: 'copy-outline',
         label: t('note.duplicate'),
@@ -139,7 +135,7 @@ export default function NoteContextMenu({
       onPress: () => { onClose(); onUnarchive(note); },
       testId: 'context-unarchive',
     });
-    if (!isUnsynced) {
+    if (!isLocalId(note.id)) {
       actions.push({
         icon: 'copy-outline',
         label: t('note.duplicate'),

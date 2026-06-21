@@ -24,8 +24,8 @@ import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useTranslation } from 'react-i18next';
 import { useCreateNote, useUpdateNote, useDeleteNote, useRestoreNote, useDuplicateNote, useCreateNoteItem, useUpdateNoteItem, useDeleteNoteItem, useReorderNoteItems, useToggleNoteItemCompleted } from '../hooks/useNotes';
 import { useOfflineNote } from '../hooks/useOfflineNotes';
-import { isUnsyncedNoteId, isLocalId } from '../db/noteQueries';
-import { usePendingNoteIds, useFailedNoteIds } from '../store/OfflineContext';
+import { isLocalId } from '../db/noteQueries';
+import { useFailedNoteIds } from '../store/OfflineContext';
 import { useSSESubscription } from '../store/SSEContext';
 import { useToast } from '../hooks/useToast';
 import ListItem from '../components/ListItem';
@@ -156,7 +156,6 @@ export default function NoteEditorScreen() {
   const route = useRoute<EditorRouteProp>();
   const { noteId: initialNoteId, sharedText } = route.params;
   const { t, i18n } = useTranslation();
-  const pendingNoteIds = usePendingNoteIds();
   const failedNoteIds = useFailedNoteIds();
 
   // A new note opened from an Android share intent arrives with sharedText to
@@ -1225,7 +1224,10 @@ export default function NoteEditorScreen() {
     }
 
     const currentNoteId = noteIdRef.current;
-    if (!currentNoteId || isUnsyncedNoteId(currentNoteId, pendingNoteIds)) {
+    // A local_* duplicate can't be re-duplicated until it reconciles to a server
+    // id; an offline-created note (server-valid id, #475) duplicates fine — its
+    // create drains FIFO before the queued duplicate.
+    if (!currentNoteId || isLocalId(currentNoteId)) {
       Alert.alert(t('common.error'), t('note.waitForSyncBeforeDuplicating'));
       return;
     }
@@ -1238,7 +1240,7 @@ export default function NoteEditorScreen() {
     } catch {
       Alert.alert(t('common.error'), t('note.failedDuplicate'));
     }
-  }, [duplicateMutation, flushSave, navigation, t, pendingNoteIds]);
+  }, [duplicateMutation, flushSave, navigation, t]);
 
   // Disable inputs while waiting for existing note to hydrate
   const isHydrating = initialNoteId !== null && !existingNote;
@@ -1790,7 +1792,9 @@ export default function NoteEditorScreen() {
           </TouchableOpacity>
         )}
 
-        {noteId && !isUnsyncedNoteId(noteId, pendingNoteIds) && (
+        {/* Duplicate. An offline-created note duplicates fine (create drains FIFO
+            before the queued duplicate, #475); only a local_* duplicate is excluded. */}
+        {noteId && !isLocalId(noteId) && (
           <TouchableOpacity
             onPress={handleDuplicate}
             style={styles.toolbarBtn}

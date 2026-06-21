@@ -27,8 +27,7 @@ import { useUsers } from '../store/UsersContext';
 import { useAuth } from '../store/AuthContext';
 import { useToast } from '../hooks/useToast';
 import { useTheme } from '../theme/ThemeContext';
-import { isUnsyncedNoteId } from '../db/noteQueries';
-import { usePendingNoteIds } from '../store/OfflineContext';
+import { isLocalId } from '../db/noteQueries';
 import SkeletonNoteList from '../components/SkeletonNoteList';
 import NoteCard from '../components/NoteCard';
 import NoteContextMenu, { ContextMenuViewContext } from '../components/NoteContextMenu';
@@ -143,7 +142,6 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   const [isEmptyingTrash, setIsEmptyingTrash] = useState(false);
   const db = useSQLiteContext();
   const { isConnected } = useNetworkStatus();
-  const pendingNoteIds = usePendingNoteIds();
   const bannerShown = useBannerShown();
   const { colors } = useTheme();
   const { t } = useTranslation();
@@ -380,7 +378,9 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   }, [restoreNote, showToast, t]);
 
   const handleDuplicate = useCallback(async (note: Note) => {
-    if (isUnsyncedNoteId(note.id, pendingNoteIds)) {
+    // An offline-created note duplicates fine (its create drains FIFO before the
+    // queued duplicate, #475); only a local_* duplicate must wait to reconcile.
+    if (isLocalId(note.id)) {
       Alert.alert(t('common.error'), t('note.waitForSyncBeforeDuplicating'));
       return;
     }
@@ -391,7 +391,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     } catch {
       Alert.alert(t('common.error'), t('note.failedDuplicate'));
     }
-  }, [duplicateNote, t, pendingNoteIds]);
+  }, [duplicateNote, t]);
 
   const handleDeletePermanently = useCallback((note: Note) => {
     Alert.alert(

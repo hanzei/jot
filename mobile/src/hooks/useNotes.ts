@@ -535,14 +535,18 @@ export function useDuplicateNote() {
   return useMutation({
     mutationFn: async (id: string): Promise<Note> => {
       assertSwitchWriteAllowed();
-      // Guard up front: duplicating an unsynced note is never safe — the server
-      // doesn't know its ID yet, so both the online API call and the offline queue
-      // entry would reference an ID the server can't resolve. Covers local-only
-      // duplicates and offline creates still awaiting their POST (#475).
-      if (isLocalId(id) || await isNotePendingCreate(db, id)) {
+      // A local_* duplicate has no server id yet (it awaits id reconciliation),
+      // so it can't be the source of another duplicate — the queued op would
+      // reference an id the server can't resolve across drain passes.
+      if (isLocalId(id)) {
         throw new Error('Cannot duplicate an unsynced note; please wait until it has synced');
       }
-      if (isConnectedRef.current) {
+      // An offline-created note already carries a server-valid id (#475) and its
+      // queued create drains FIFO before this duplicate, so queue rather than
+      // calling online against a note the server doesn't know yet (a 404 would
+      // surface as an error instead of syncing).
+      const pendingCreate = await isNotePendingCreate(db, id);
+      if (isConnectedRef.current && !pendingCreate) {
         try {
           const duplicatedNote = await duplicateNote(id);
           await saveNote(db, duplicatedNote);

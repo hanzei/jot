@@ -204,14 +204,31 @@ describe('useNotes hooks', () => {
   });
 
   describe('useDuplicateNote guard (#475)', () => {
-    it('refuses to duplicate a note whose offline create is still pending', async () => {
+    it('queues (does not call the API) when duplicating a pending-create note even while online', async () => {
+      // The source note has a server-valid id but its create hasn't drained, so a
+      // direct API call would 404. The duplicate queues FIFO behind the create.
       mockNoteQueries.isNotePendingCreate.mockResolvedValueOnce(true);
+      mockNoteQueries.getLocalNote.mockResolvedValueOnce({
+        id: 'ServerValidButPending00', title: '', content: 'Hi', note_type: 'text',
+        color: '#ffffff', pinned: false, archived: false, position: 0, version: 1,
+        checked_items_collapsed: false, is_shared: false, deleted_at: null,
+        user_id: 'u1', created_at: '', updated_at: '', labels: [], shared_with: [],
+      } as never);
 
       const { result } = renderHook(() => useDuplicateNote(), { wrapper: createWrapper() });
 
-      await expect(result.current.mutateAsync('ServerValidButPending00')).rejects.toThrow(/unsynced/i);
+      await result.current.mutateAsync('ServerValidButPending00');
+
+      await waitFor(() => expect(result.current.isSuccess).toBe(true));
       expect(mockNotesApi.duplicateNote).not.toHaveBeenCalled();
-      expect(mockSyncQueue.enqueueOperation).not.toHaveBeenCalled();
+      expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
+        expect.anything(),
+        expect.objectContaining({
+          operation: 'duplicate',
+          endpoint: '/notes/ServerValidButPending00/duplicate',
+          method: 'POST',
+        }),
+      );
     });
   });
 
