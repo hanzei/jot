@@ -82,13 +82,15 @@ export default function ProfileIconSection() {
     setIconDeleting(true);
     try {
       await deleteProfileIcon();
+      if (!isMountedRef.current) return;
       setUser(prev =>
         prev ? { ...prev, has_profile_icon: false, updated_at: new Date().toISOString() } : prev,
       );
     } catch {
+      if (!isMountedRef.current) return;
       setIconError('settings.iconDeleteFailed');
     } finally {
-      setIconDeleting(false);
+      if (isMountedRef.current) setIconDeleting(false);
     }
   }, [setUser]);
 
