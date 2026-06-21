@@ -6,7 +6,6 @@ import {
   ScrollView,
   TouchableOpacity,
   Alert,
-  StyleSheet,
   KeyboardAvoidingView,
   Platform,
   InputAccessoryView,
@@ -32,7 +31,7 @@ import ListItem from '../components/ListItem';
 import ColorPicker from '../components/ColorPicker';
 import LabelPicker from '../components/LabelPicker';
 import AssigneePicker from '../components/AssigneePicker';
-import { buildCollaborators, generateId, VALIDATION, type Collaborator, type NoteType, type NoteItem, type CreateNoteRequest, type UpdateNoteRequest, type UpdateListNoteRequest, type UpdateTextNoteRequest, type PatchNoteItemRequest, type Label } from '@jot/shared';
+import { buildCollaborators, generateId, VALIDATION, type Collaborator, type NoteType, type CreateNoteRequest, type UpdateNoteRequest, type UpdateListNoteRequest, type UpdateTextNoteRequest, type PatchNoteItemRequest, type Label } from '@jot/shared';
 import { useAuth } from '../store/AuthContext';
 import { useUsers } from '../store/UsersContext';
 import { useTheme } from '../theme/ThemeContext';
@@ -43,6 +42,20 @@ import { fullMarkdownStyles, preprocessMarkdown } from '../utils/markdownStyles'
 import { getActiveServer, listServers, type ServerAccountEntry } from '../store/serverAccounts';
 import { setPendingShare, usePendingShare } from '../store/shareIntent';
 import { useBannerShown } from '../hooks/useBannerShown';
+import {
+  type LocalItem,
+  type ItemSnapshot,
+  toLocalItems,
+  serializeItems,
+  itemSnapshot,
+  normalizeItemOrder,
+  itemHasChildren,
+  precedingTopLevelId,
+  applyCompletedCascade,
+} from './noteEditor/listItemModel';
+import { MarkdownToolbarContent, ListIndentToolbarContent } from './noteEditor/EditorToolbars';
+import CheckedItemsSection, { type ListItemHandlers } from './noteEditor/CheckedItemsSection';
+import { styles } from './noteEditor/styles';
 
 type EditorRouteProp = RouteProp<RootStackParamList, 'NoteEditor'>;
 type EditorNavProp = NativeStackNavigationProp<RootStackParamList, 'NoteEditor'>;
@@ -52,104 +65,6 @@ const FOCUSED_INPUT_KEYBOARD_MARGIN = 120;
 const MARKDOWN_TOOLBAR_ID = 'markdown-formatting-toolbar';
 const LIST_INDENT_TOOLBAR_ID = 'list-indent-toolbar';
 const MAX_EXIT_SAVE_RETRIES = 3;
-
-interface LocalItem {
-  id: string;
-  text: string;
-  completed: boolean;
-  position: number;
-  parentId: string | null;
-  assigned_to: string;
-}
-
-function toLocalItems(serverItems: NoteItem[]): LocalItem[] {
-  return [...serverItems]
-    .sort((a, b) => a.position - b.position)
-    .map((item) => ({
-      id: item.id,
-      text: item.text,
-      completed: item.completed,
-      position: item.position,
-      parentId: item.parent_id ?? null,
-      assigned_to: item.assigned_to ?? '',
-    }));
-}
-
-function serializeItems(items: LocalItem[]) {
-  return items.map((item, i) => ({
-    id: item.id,
-    text: item.text,
-    position: i,
-    completed: item.completed,
-    indent_level: item.parentId ? 1 : 0,
-    assigned_to: item.assigned_to,
-  }));
-}
-
-// Mergeable fields of a list item, used as the per-item baseline for diffing
-// local edits against the last-saved state.
-type ItemSnapshot = Pick<LocalItem, 'text' | 'completed' | 'parentId' | 'assigned_to'>;
-const itemSnapshot = (item: LocalItem): ItemSnapshot => ({
-  text: item.text,
-  completed: item.completed,
-  parentId: item.parentId,
-  assigned_to: item.assigned_to,
-});
-
-// normalizeItemOrder walks top-level items in order and emits each one followed
-// by its children (keeping a group contiguous). Orphaned children (parent gone)
-// are promoted to top-level. Renumbers position = 0..N across the whole set.
-function normalizeItemOrder(items: LocalItem[]): LocalItem[] {
-  const childrenByParent = new Map<string, LocalItem[]>();
-  for (const it of items) {
-    if (it.parentId !== null) {
-      const siblings = childrenByParent.get(it.parentId) ?? [];
-      siblings.push(it);
-      childrenByParent.set(it.parentId, siblings);
-    }
-  }
-  const ordered: LocalItem[] = [];
-  const placed = new Set<string>();
-  for (const it of items) {
-    if (it.parentId !== null) continue;
-    ordered.push(it);
-    placed.add(it.id);
-    for (const child of childrenByParent.get(it.id) ?? []) {
-      ordered.push(child);
-      placed.add(child.id);
-    }
-  }
-  for (const it of items) {
-    if (!placed.has(it.id)) ordered.push({ ...it, parentId: null });
-  }
-  return ordered.map((it, index) => ({ ...it, position: index }));
-}
-
-function itemHasChildren(items: LocalItem[], itemId: string): boolean {
-  return items.some((it) => it.parentId === itemId);
-}
-
-function precedingTopLevelId(items: LocalItem[], itemId: string): string | null {
-  let last: string | null = null;
-  for (const it of items) {
-    if (it.id === itemId) return last;
-    if (it.parentId === null) last = it.id;
-  }
-  return null;
-}
-
-// applyCompletedCascade mirrors the server: toggling a top-level item also
-// toggles all its children; toggling a child touches only that item.
-function applyCompletedCascade(items: LocalItem[], itemId: string, completed: boolean): LocalItem[] {
-  const target = items.find((item) => item.id === itemId);
-  if (!target) return items;
-  const cascadeToChildren = target.parentId === null;
-  return items.map((item) => {
-    if (item.id === itemId) return { ...item, completed };
-    if (cascadeToChildren && item.parentId === itemId) return { ...item, completed };
-    return item;
-  });
-}
 
 export default function NoteEditorScreen() {
   const navigation = useNavigation<EditorNavProp>();
@@ -1343,16 +1258,25 @@ export default function NoteEditorScreen() {
   const hasNoteColor = !!color && !isWhiteHexColor(color);
 
   const listIndentToolbarContent = noteType === 'list' ? (
-    <View style={[styles.formattingToolbar, { backgroundColor: colors.surfaceVariant, borderTopColor: colors.border }]}>
-      <TouchableOpacity onPress={() => handleListIndent(-1)} style={styles.fmtBtn} accessibilityLabel={t('note.outdentItem')} testID="list-outdent-btn">
-        <Ionicons name="arrow-back-outline" size={18} color={colors.text} />
-      </TouchableOpacity>
-      <View style={[styles.fmtSep, { backgroundColor: colors.border }]} />
-      <TouchableOpacity onPress={() => handleListIndent(1)} style={styles.fmtBtn} accessibilityLabel={t('note.indentItem')} testID="list-indent-btn">
-        <Ionicons name="arrow-forward-outline" size={18} color={colors.text} />
-      </TouchableOpacity>
-    </View>
+    <ListIndentToolbarContent onIndent={handleListIndent} />
   ) : null;
+
+  // Per-item callbacks shared by the active list (renderListItem) and the
+  // completed-items section, so both wire ListItem the same way.
+  const listItemHandlers = useMemo<ListItemHandlers>(
+    () => ({
+      onToggle: (itemId, completed) => { void handleItemCompletedToggle(itemId, completed); },
+      onChangeText: handleItemTextChange,
+      onDelete: handleDeleteItem,
+      onInsertAfter: handleInsertItemAfter,
+      onBackspaceOnEmpty: handleBackspaceOnEmpty,
+      onAssignPress: openAssigneePicker,
+      onFocus: handleFocusListItem,
+      onBlur: handleBlurListItem,
+      onIndent: handleIndentItem,
+    }),
+    [handleItemCompletedToggle, handleItemTextChange, handleDeleteItem, handleInsertItemAfter, handleBackspaceOnEmpty, openAssigneePicker, handleFocusListItem, handleBlurListItem, handleIndentItem],
+  );
 
   const renderListItem = useCallback(
     ({ item, drag, isActive }: { item: LocalItem; drag: () => void; isActive: boolean }) => {
@@ -1375,15 +1299,15 @@ export default function NoteEditorScreen() {
               hasNoteColor={hasNoteColor}
               completedItemTexts={completedItemTexts}
               onDrag={drag}
-              onToggle={() => { void handleItemCompletedToggle(item.id, !item.completed); }}
-              onChangeText={(text) => handleItemTextChange(originalIndex, text)}
-              onDelete={() => handleDeleteItem(originalIndex)}
-              onSubmitEditing={() => handleInsertItemAfter(originalIndex)}
-              onBackspaceOnEmpty={() => handleBackspaceOnEmpty(originalIndex)}
-              onAssignPress={() => openAssigneePicker(item.id)}
-              onFocus={(event) => handleFocusListItem(item.id, event)}
-              onBlur={handleBlurListItem}
-              onIndent={(delta) => handleIndentItem(originalIndex, delta)}
+              onToggle={() => listItemHandlers.onToggle(item.id, !item.completed)}
+              onChangeText={(text) => listItemHandlers.onChangeText(originalIndex, text)}
+              onDelete={() => listItemHandlers.onDelete(originalIndex)}
+              onSubmitEditing={() => listItemHandlers.onInsertAfter(originalIndex)}
+              onBackspaceOnEmpty={() => listItemHandlers.onBackspaceOnEmpty(originalIndex)}
+              onAssignPress={() => listItemHandlers.onAssignPress(item.id)}
+              onFocus={(event) => listItemHandlers.onFocus(item.id, event)}
+              onBlur={listItemHandlers.onBlur}
+              onIndent={(delta) => listItemHandlers.onIndent(originalIndex, delta)}
               onAcceptSuggestion={(text) => handleAcceptSuggestion(item.id, text)}
               inputAccessoryViewID={Platform.OS === 'ios' ? LIST_INDENT_TOOLBAR_ID : undefined}
             />
@@ -1391,7 +1315,7 @@ export default function NoteEditorScreen() {
         </ScaleDecorator>
       );
     },
-    [getItemRef, handleItemCompletedToggle, handleItemTextChange, handleDeleteItem, handleInsertItemAfter, handleBackspaceOnEmpty, isNoteShared, collaborators, openAssigneePicker, handleIndentItem, isDark, colors, handleFocusListItem, handleBlurListItem, hasNoteColor, completedItemTexts, handleAcceptSuggestion],
+    [getItemRef, listItemHandlers, isNoteShared, collaborators, isDark, colors, hasNoteColor, completedItemTexts, handleAcceptSuggestion],
   );
 
   const applyToolbarEdit = useCallback((updater: (prev: string) => string) => {
@@ -1591,41 +1515,23 @@ export default function NoteEditorScreen() {
 
             {/* Android: formatting toolbar in layout (shown when editing) */}
             {Platform.OS === 'android' && isEditingContent && (
-              <View style={[styles.formattingToolbar, { backgroundColor: colors.surfaceVariant, borderTopColor: colors.border }]}>
-                <TouchableOpacity onPress={() => wrapMobileSelection('**', '**')} style={styles.fmtBtn} accessibilityLabel={t('note.formatBold')}>
-                  <Text style={[styles.fmtBtnText, { color: colors.text, fontWeight: '700' }]}>B</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={() => wrapMobileSelection('*', '*')} style={styles.fmtBtn} accessibilityLabel={t('note.formatItalic')}>
-                  <Text style={[styles.fmtBtnText, { color: colors.text, fontStyle: 'italic' }]}>I</Text>
-                </TouchableOpacity>
-                <View style={[styles.fmtSep, { backgroundColor: colors.border }]} />
-                <TouchableOpacity onPress={insertMobileHeading} style={styles.fmtBtn} accessibilityLabel={t('note.formatHeading')}>
-                  <Text style={[styles.fmtBtnText, { color: colors.text }]}>H₂</Text>
-                </TouchableOpacity>
-                <TouchableOpacity onPress={insertMobileBullet} style={styles.fmtBtn} accessibilityLabel={t('note.formatBulletList')}>
-                  <Text style={[styles.fmtBtnText, { color: colors.text }]}>• list</Text>
-                </TouchableOpacity>
-              </View>
+              <MarkdownToolbarContent
+                onBold={() => wrapMobileSelection('**', '**')}
+                onItalic={() => wrapMobileSelection('*', '*')}
+                onHeading={insertMobileHeading}
+                onBullet={insertMobileBullet}
+              />
             )}
 
             {/* iOS: formatting toolbar as InputAccessoryView (docks above keyboard) */}
             {Platform.OS === 'ios' && noteType === 'text' && (
               <InputAccessoryView nativeID={MARKDOWN_TOOLBAR_ID}>
-                <View style={[styles.formattingToolbar, { backgroundColor: colors.surfaceVariant, borderTopColor: colors.border }]}>
-                  <TouchableOpacity onPress={() => wrapMobileSelection('**', '**')} style={styles.fmtBtn} accessibilityLabel={t('note.formatBold')}>
-                    <Text style={[styles.fmtBtnText, { color: colors.text, fontWeight: '700' }]}>B</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={() => wrapMobileSelection('*', '*')} style={styles.fmtBtn} accessibilityLabel={t('note.formatItalic')}>
-                    <Text style={[styles.fmtBtnText, { color: colors.text, fontStyle: 'italic' }]}>I</Text>
-                  </TouchableOpacity>
-                  <View style={[styles.fmtSep, { backgroundColor: colors.border }]} />
-                  <TouchableOpacity onPress={insertMobileHeading} style={styles.fmtBtn} accessibilityLabel={t('note.formatHeading')}>
-                    <Text style={[styles.fmtBtnText, { color: colors.text }]}>H₂</Text>
-                  </TouchableOpacity>
-                  <TouchableOpacity onPress={insertMobileBullet} style={styles.fmtBtn} accessibilityLabel={t('note.formatBulletList')}>
-                    <Text style={[styles.fmtBtnText, { color: colors.text }]}>• list</Text>
-                  </TouchableOpacity>
-                </View>
+                <MarkdownToolbarContent
+                  onBold={() => wrapMobileSelection('**', '**')}
+                  onItalic={() => wrapMobileSelection('*', '*')}
+                  onHeading={insertMobileHeading}
+                  onBullet={insertMobileBullet}
+                />
               </InputAccessoryView>
             )}
           </>
@@ -1645,85 +1551,19 @@ export default function NoteEditorScreen() {
               <Text style={[styles.addItemText, { color: colors.primary }]}>{t('note.addItem')}</Text>
             </TouchableOpacity>
 
-            {checkedItems.length > 0 && (
-              <View style={[styles.checkedSection, { borderTopColor: completedSectionDividerColor }]} testID="checked-items-section">
-                <TouchableOpacity
-                  style={styles.checkedHeader}
-                  onPress={handleToggleCollapsed}
-                  testID="toggle-checked-items"
-                >
-                  <Ionicons
-                    name={checkedItemsCollapsed ? 'chevron-forward' : 'chevron-down'}
-                    size={18}
-                    color={hasNoteColor ? '#888' : colors.iconMuted}
-                  />
-                  <Text style={[styles.checkedHeaderText, { color: hasNoteColor ? '#777' : colors.textMuted }]}>
-                    {t('note.completedItems', { count: checkedItems.length })}
-                  </Text>
-                </TouchableOpacity>
-
-                {!checkedItemsCollapsed && (() => {
-                  const completedIds = new Set(checkedItems.map((i) => i.id));
-                  const itemsById = new Map(items.map((i) => [i.id, i]));
-                  const rows: React.ReactElement[] = [];
-                  let lastGhostParentId: string | null = null;
-
-                  checkedItems.forEach((item) => {
-                    const originalIndex = itemIndexMap.get(item.id);
-                    if (originalIndex === undefined) return;
-                    const parent = item.parentId ? itemsById.get(item.parentId) : undefined;
-                    const parentIsCompleted = item.parentId ? completedIds.has(item.parentId) : false;
-
-                    if (parent && !parentIsCompleted) {
-                      if (lastGhostParentId !== parent.id) {
-                        lastGhostParentId = parent.id;
-                        rows.push(
-                          <View
-                            key={`ghost-${parent.id}`}
-                            style={styles.ghostParent}
-                            accessibilityLabel={t('note.completedItemGroup', { title: parent.text })}
-                          >
-                            <View style={styles.ghostCheckbox} />
-                            <Text style={[styles.ghostParentText, { color: hasNoteColor ? '#888' : colors.textMuted }]} numberOfLines={1}>
-                              {parent.text}
-                            </Text>
-                          </View>,
-                        );
-                      }
-                    } else {
-                      lastGhostParentId = null;
-                    }
-
-                    rows.push(
-                      <ListItem
-                        key={item.id}
-                        inputRef={getItemRef(item.id)}
-                        text={item.text}
-                        completed={item.completed}
-                        isActive={false}
-                        indentLevel={item.parentId ? 1 : 0}
-                        assignedTo={item.assigned_to}
-                        isShared={!!isNoteShared}
-                        collaborators={collaborators}
-                        hasNoteColor={hasNoteColor}
-                        onToggle={() => { void handleItemCompletedToggle(item.id, !item.completed); }}
-                        onChangeText={(text) => handleItemTextChange(originalIndex, text)}
-                        onDelete={() => handleDeleteItem(originalIndex)}
-                        onSubmitEditing={() => handleInsertItemAfter(originalIndex)}
-                        onBackspaceOnEmpty={() => handleBackspaceOnEmpty(originalIndex)}
-                        onAssignPress={() => openAssigneePicker(item.id)}
-                        onFocus={(event) => handleFocusListItem(item.id, event)}
-                        onBlur={handleBlurListItem}
-                        onIndent={(delta) => handleIndentItem(originalIndex, delta)}
-                        inputAccessoryViewID={Platform.OS === 'ios' ? LIST_INDENT_TOOLBAR_ID : undefined}
-                      />,
-                    );
-                  });
-
-                  return rows;
-                })()}
-              </View>
-            )}
+            <CheckedItemsSection
+              checkedItems={checkedItems}
+              items={items}
+              itemIndexMap={itemIndexMap}
+              collapsed={checkedItemsCollapsed}
+              onToggleCollapsed={handleToggleCollapsed}
+              getItemRef={getItemRef}
+              isNoteShared={!!isNoteShared}
+              collaborators={collaborators}
+              hasNoteColor={hasNoteColor}
+              dividerColor={completedSectionDividerColor}
+              handlers={listItemHandlers}
+            />
           </View>
         )}
       </ScrollView>
@@ -1897,225 +1737,3 @@ export default function NoteEditorScreen() {
     </KeyboardAvoidingView>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  shareTargetBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  failedBar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 8,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-  },
-  failedBarText: {
-    flex: 1,
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  shareTargetText: {
-    flex: 1,
-    fontSize: 13,
-    marginRight: 12,
-  },
-  shareTargetAction: {
-    fontSize: 13,
-    fontWeight: '600',
-  },
-  shareModalOverlay: {
-    flex: 1,
-    backgroundColor: 'rgba(0, 0, 0, 0.4)',
-    justifyContent: 'center',
-    paddingHorizontal: 32,
-  },
-  shareModalCard: {
-    borderRadius: 12,
-    paddingVertical: 8,
-  },
-  shareModalTitle: {
-    fontSize: 15,
-    fontWeight: '600',
-    paddingHorizontal: 16,
-    paddingTop: 12,
-    paddingBottom: 8,
-  },
-  shareModalRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 14,
-  },
-  shareModalRowText: {
-    flex: 1,
-    fontSize: 15,
-    marginRight: 12,
-  },
-  header: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingBottom: 12,
-    borderBottomWidth: StyleSheet.hairlineWidth,
-  },
-  headerRight: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 12,
-  },
-  typeToggle: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    gap: 4,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 8,
-  },
-  typeToggleText: {
-    fontSize: 14,
-    fontWeight: '500',
-  },
-  scrollContent: {
-    flex: 1,
-    paddingHorizontal: 16,
-  },
-  scrollContentContainer: {
-    paddingBottom: 96,
-  },
-  titleInput: {
-    fontSize: 22,
-    fontWeight: '600',
-    paddingVertical: 16,
-    paddingHorizontal: 0,
-  },
-  contentInput: {
-    fontSize: 16,
-    lineHeight: 24,
-    minHeight: 200,
-    paddingHorizontal: 0,
-  },
-  listContainer: {
-    paddingBottom: 16,
-  },
-  addItemRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 8,
-    gap: 8,
-  },
-  addItemText: {
-    fontSize: 16,
-  },
-  checkedSection: {
-    marginTop: 16,
-    borderTopWidth: 1,
-    paddingTop: 8,
-  },
-  checkedHeader: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingVertical: 8,
-    gap: 4,
-  },
-  checkedHeaderText: {
-    fontSize: 14,
-  },
-  toolbar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    borderTopWidth: StyleSheet.hairlineWidth,
-    paddingHorizontal: 8,
-    paddingVertical: 8,
-    gap: 2,
-  },
-  toolbarBtn: {
-    padding: 10,
-    borderRadius: 20,
-  },
-  toolbarSpacer: {
-    flex: 1,
-  },
-  errorBanner: {
-    borderBottomWidth: 1,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
-  errorText: {
-    fontSize: 14,
-    textAlign: 'center',
-  },
-  syncToast: {
-    borderBottomWidth: 1,
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-  },
-  syncToastText: {
-    fontSize: 14,
-    textAlign: 'center',
-  },
-  draggingListItem: {
-    borderRadius: 8,
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 4,
-  },
-  contentPreview: {
-    flex: 1,
-    paddingHorizontal: 0,
-    paddingTop: 8,
-    minHeight: 120,
-  },
-  formattingToolbar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    paddingHorizontal: 8,
-    paddingVertical: 6,
-    borderTopWidth: StyleSheet.hairlineWidth,
-  },
-  fmtBtn: {
-    paddingHorizontal: 10,
-    paddingVertical: 6,
-    borderRadius: 6,
-  },
-  fmtBtnText: {
-    fontSize: 14,
-  },
-  fmtSep: {
-    width: StyleSheet.hairlineWidth,
-    height: 18,
-    marginHorizontal: 4,
-  },
-  ghostParent: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    opacity: 0.55,
-    paddingVertical: 4,
-    gap: 8,
-  },
-  ghostCheckbox: {
-    width: 18,
-    height: 18,
-    borderRadius: 3,
-    borderWidth: 1,
-    borderColor: '#aaa',
-    flexShrink: 0,
-  },
-  ghostParentText: {
-    fontSize: 14,
-    fontWeight: '600',
-    flex: 1,
-  },
-});
