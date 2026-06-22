@@ -35,6 +35,19 @@ func (c *Client) CreateLabel(ctx context.Context, name string) (*Label, error) {
 	return &label, nil
 }
 
+// CreateLabelWithID creates a label with a client-supplied ID. Returns a 409 error
+// if the ID (or name) is already in use for this user.
+func (c *Client) CreateLabelWithID(ctx context.Context, id, name string) (*Label, error) {
+	var label Label
+	if err := c.doJSON(ctx, http.MethodPost, "/api/v1/labels", map[string]string{
+		"id":   id,
+		"name": name,
+	}, &label); err != nil {
+		return nil, err
+	}
+	return &label, nil
+}
+
 // AddLabel creates or finds a label by name and attaches it to a note.
 // Returns the updated note.
 func (c *Client) AddLabel(ctx context.Context, noteID, name string) (*Note, error) {

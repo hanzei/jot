@@ -427,10 +427,10 @@ const docTemplate = `{
                 "tags": [
                     "labels"
                 ],
-                "summary": "Create or return an existing label",
+                "summary": "Create a label, or return the existing one when no ID is supplied",
                 "parameters": [
                     {
-                        "description": "Label name",
+                        "description": "Label name and optional client-supplied ID",
                         "name": "body",
                         "in": "body",
                         "required": true,
@@ -454,6 +454,12 @@ const docTemplate = `{
                     },
                     "401": {
                         "description": "unauthorized",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "409": {
+                        "description": "label already exists",
                         "schema": {
                             "type": "string"
                         }
@@ -2633,6 +2639,10 @@ const docTemplate = `{
         "handlers.AddLabelRequest": {
             "type": "object",
             "properties": {
+                "id": {
+                    "description": "ID is an optional client-supplied label ID. When provided it is used as the\nlabel's primary key so an offline-created label can be replayed idempotently:\na replay whose original create already committed is rejected with 409\ninstead of inserting a duplicate. When empty the server generates one.",
+                    "type": "string"
+                },
                 "name": {
                     "type": "string"
                 }
