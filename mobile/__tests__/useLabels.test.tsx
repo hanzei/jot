@@ -35,7 +35,7 @@ jest.mock('../src/db/noteQueries', () => ({
   getLocalLabels: jest.fn().mockResolvedValue([]),
   getLocalLabelCounts: jest.fn().mockResolvedValue({}),
   getLocalNote: jest.fn().mockResolvedValue(null),
-  generateLocalId: jest.fn(() => 'local_label_id'),
+  generateClientLabelId: jest.fn(() => 'client_label_id'),
   isLocalId: jest.fn((id: string) => id.startsWith('local_')),
   isNotePendingCreate: jest.fn().mockResolvedValue(false),
 }));
@@ -130,10 +130,10 @@ describe('useLabels write hooks', () => {
           operation: 'createLabel',
           endpoint: '/labels',
           method: 'POST',
-          body: { local_id: 'local_label_id', name: 'Work' },
+          body: { id: 'client_label_id', name: 'Work' },
         }),
       );
-      expect((result.current.data as { id: string }).id).toBe('local_label_id');
+      expect((result.current.data as { id: string }).id).toBe('client_label_id');
     });
 
     it('queues the create when offline', async () => {
@@ -146,7 +146,7 @@ describe('useLabels write hooks', () => {
       expect(mockLabelsApi.createLabel).not.toHaveBeenCalled();
       expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
         expect.anything(),
-        expect.objectContaining({ operation: 'createLabel', body: { local_id: 'local_label_id', name: 'Home' } }),
+        expect.objectContaining({ operation: 'createLabel', body: { id: 'client_label_id', name: 'Home' } }),
       );
     });
 
@@ -198,7 +198,7 @@ describe('useLabels write hooks', () => {
       expect(mockNoteQueries.addLabelToLocalNote).toHaveBeenCalled();
       expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
         expect.anything(),
-        expect.objectContaining({ operation: 'createLabel', body: { local_id: 'local_label_id', name: 'New' } }),
+        expect.objectContaining({ operation: 'createLabel', body: { id: 'client_label_id', name: 'New' } }),
       );
       expect(mockSyncQueue.enqueueOperation).toHaveBeenCalledWith(
         expect.anything(),
