@@ -1,7 +1,6 @@
 import React from 'react';
 import { useTranslation } from 'react-i18next';
 import { useAuth } from '../store/AuthContext';
-import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import { useOfflineContext } from '../store/OfflineContext';
 import { useTheme } from '../theme/ThemeContext';
 import Banner from './Banner';
@@ -15,8 +14,7 @@ import Banner from './Banner';
  */
 export default function RevalidationErrorBanner() {
   const { revalidationFailed } = useAuth();
-  const { isConnected } = useNetworkStatus();
-  const { syncError } = useOfflineContext();
+  const { isConnected, syncError } = useOfflineContext();
   const { colors } = useTheme();
   const { t } = useTranslation();
 

@@ -13,7 +13,7 @@ export function useBannerShown(): boolean {
   return (
     !isConnected ||
     syncError ||
-    (isConnected && revalidationFailed) ||
+    revalidationFailed ||
     (syncFailureCount > 0 && !syncFailuresBannerDismissed)
   );
 }

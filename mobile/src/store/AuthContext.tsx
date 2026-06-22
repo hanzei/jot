@@ -38,14 +38,16 @@ interface AuthState {
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
 
+function getHttpStatus(error: unknown): number | undefined {
+  return (error as { response?: { status?: number } })?.response?.status;
+}
+
 function isUnauthorizedError(error: unknown): boolean {
-  const status = (error as { response?: { status?: number } })?.response?.status;
-  return status === 401;
+  return getHttpStatus(error) === 401;
 }
 
 function isHttpResponseError(error: unknown): boolean {
-  const status = (error as { response?: { status?: number } })?.response?.status;
-  return typeof status === 'number';
+  return typeof getHttpStatus(error) === 'number';
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
@@ -152,17 +154,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         clearAuth();
         return false;
       }
-      const status = (error as { response?: { status?: number } })?.response?.status;
-      if (isTransientHttpStatus(status)) {
-        // Network error, timeout (408), rate limit (429), or 5xx — transient,
-        // stay authenticated and let the caller retry on the next reconnect.
-        return true;
-      }
       // Permanent non-401 error (e.g. 403, 422): the server is reachable but
       // rejecting the session for a non-auth reason. Stay authenticated (local
       // data is still usable) but surface a warning so the user isn't silently
-      // left in a broken state.
-      setRevalidationFailed(true);
+      // left in a broken state. Network errors, timeouts, and 5xx are transient
+      // and do not trigger the warning.
+      if (!isTransientHttpStatus(getHttpStatus(error))) {
+        setRevalidationFailed(true);
+      }
       return true;
     }
   }, [clearAuth]);

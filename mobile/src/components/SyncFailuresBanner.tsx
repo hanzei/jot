@@ -31,7 +31,7 @@ export default function SyncFailuresBanner() {
   const { t } = useTranslation();
   const navigation = useNavigation<NavigationProp>();
 
-  const otherBannerAbove = !isConnected || syncError || (isConnected && revalidationFailed);
+  const otherBannerAbove = !isConnected || syncError || revalidationFailed;
 
   return (
     <Banner
