@@ -30,9 +30,15 @@ jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ goBack: jest.fn() }),
 }));
 
-jest.mock('react-native-safe-area-context', () => ({
-  useSafeAreaInsets: () => ({ top: 0, bottom: 0, left: 0, right: 0 }),
-}));
+jest.mock('react-native-safe-area-context', () => {
+  const { createContext } = jest.requireActual<typeof import('react')>('react');
+  const insets = { top: 0, right: 0, bottom: 0, left: 0 };
+  return {
+    __esModule: true,
+    useSafeAreaInsets: () => insets,
+    SafeAreaInsetsContext: createContext(insets),
+  };
+});
 
 jest.mock('expo-image-picker', () => ({
   launchImageLibraryAsync: jest.fn(),
