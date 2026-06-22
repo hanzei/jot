@@ -97,7 +97,8 @@
     "noteUnarchived": "Note désarchivée",
     "noteDeleted": "Note déplacée vers la corbeille",
     "noteRestored": "Note restaurée",
-    "undo": "Annuler"
+    "undo": "Annuler",
+    "toastActionHint": "Appuyer pour {{action}}"
   },
   "settings": {
     "title": "Paramètres",
