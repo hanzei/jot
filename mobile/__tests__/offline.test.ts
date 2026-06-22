@@ -417,6 +417,110 @@ describe('drainQueue', () => {
     expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [31]);
   });
 
+  it('resolves a createLabel 409 as idempotent when the server label has the same ID (replay)', async () => {
+    const clientId = 'ClientLblId00000000001';
+    const db = makeMockDb([
+      {
+        id: 32,
+        operation: 'createLabel',
+        endpoint: '/labels',
+        method: 'POST',
+        body: JSON.stringify({ id: clientId, name: 'Work' }),
+        created_at: '',
+      },
+    ]);
+    mockApi.post.mockRejectedValueOnce(makeAxiosError(409) as never);
+    mockApi.get.mockResolvedValueOnce({ data: [{ id: clientId, name: 'Work' }] } as never);
+
+    const { discardedOperations } = await drainQueue(db as never);
+
+    // Resolved via GET /labels — same server ID, no remap needed.
+    expect(mockApi.get).toHaveBeenCalledWith('/labels');
+    expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [32]);
+    // No dead-letter inserted.
+    const calls = (db.runAsync as jest.Mock).mock.calls as unknown[][];
+    expect(calls.some((c) => String(c[0]).startsWith('INSERT INTO dead_letter'))).toBe(false);
+    expect(discardedOperations).toEqual([{ operation: 'createLabel', endpoint: '/labels', status: 409 }]);
+  });
+
+  it('remaps a createLabel 409 to the server ID when there is a name collision', async () => {
+    const clientId = 'ClientLblId00000000002';
+    const serverLblId = 'ServerLblId0000000002';
+    const db = makeMockDb([
+      {
+        id: 33,
+        operation: 'createLabel',
+        endpoint: '/labels',
+        method: 'POST',
+        body: JSON.stringify({ id: clientId, name: 'Home' }),
+        created_at: '',
+      },
+      {
+        id: 34,
+        operation: 'deleteLabel',
+        endpoint: `/labels/${clientId}`,
+        method: 'DELETE',
+        body: null,
+        created_at: '',
+      },
+    ]);
+    mockApi.post.mockRejectedValueOnce(makeAxiosError(409) as never);
+    mockApi.get.mockResolvedValueOnce({ data: [{ id: serverLblId, name: 'Home' }] } as never);
+    mockApi.delete.mockResolvedValueOnce({ data: {} } as never);
+
+    const { discardedOperations } = await drainQueue(db as never);
+
+    // Downstream delete endpoint remapped to the server label ID.
+    expect(mockApi.delete).toHaveBeenCalledWith(`/labels/${serverLblId}`);
+    expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [33]);
+    expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [34]);
+    expect(discardedOperations).toEqual([{ operation: 'createLabel', endpoint: '/labels', status: 409 }]);
+  });
+
+  it('dead-letters a createLabel 409 when the label is not found via GET /labels', async () => {
+    const db = makeMockDb([
+      {
+        id: 35,
+        operation: 'createLabel',
+        endpoint: '/labels',
+        method: 'POST',
+        body: JSON.stringify({ id: 'ClientLblId00000000003', name: 'Gone' }),
+        created_at: '',
+      },
+    ]);
+    mockApi.post.mockRejectedValueOnce(makeAxiosError(409) as never);
+    mockApi.get.mockResolvedValueOnce({ data: [] } as never);
+
+    const { discardedOperations } = await drainQueue(db as never);
+
+    const calls = (db.runAsync as jest.Mock).mock.calls as unknown[][];
+    expect(calls.some((c) => String(c[0]).startsWith('INSERT INTO dead_letter'))).toBe(true);
+    expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [35]);
+    expect(discardedOperations).toEqual([{ operation: 'createLabel', endpoint: '/labels', status: 409 }]);
+  });
+
+  it('dead-letters a createLabel 409 when the GET /labels lookup itself fails', async () => {
+    const db = makeMockDb([
+      {
+        id: 36,
+        operation: 'createLabel',
+        endpoint: '/labels',
+        method: 'POST',
+        body: JSON.stringify({ id: 'ClientLblId00000000004', name: 'Fail' }),
+        created_at: '',
+      },
+    ]);
+    mockApi.post.mockRejectedValueOnce(makeAxiosError(409) as never);
+    mockApi.get.mockRejectedValueOnce(new Error('Network Error') as never);
+
+    const { discardedOperations } = await drainQueue(db as never);
+
+    const calls = (db.runAsync as jest.Mock).mock.calls as unknown[][];
+    expect(calls.some((c) => String(c[0]).startsWith('INSERT INTO dead_letter'))).toBe(true);
+    expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [36]);
+    expect(discardedOperations).toEqual([{ operation: 'createLabel', endpoint: '/labels', status: 409 }]);
+  });
+
   it('persists the note returned by an addLabelToNote replay', async () => {
     const serverNote = {
       id: 'n1', content: 'body', note_type: 'text',

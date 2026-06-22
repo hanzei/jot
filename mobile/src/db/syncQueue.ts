@@ -441,10 +441,10 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
             await clearNotePendingCreate(db, clientId);
           }
         } else if (entry.operation === 'createLabel' && body?.local_id) {
-          // Reconcile the offline-generated local label id with the server id so
-          // later queued ops that reference it (rename/delete/remove-from-note)
-          // are remapped. Labels are derived from notes' labels_json rather than a
-          // dedicated table, so no row is rewritten here — the remap is enough.
+          // Backward compat: ops queued before issue #546 carried a `local_*`
+          // placeholder id that the server replaced with a new server id. Remap
+          // so later ops (rename/delete) reference the correct id. New ops carry
+          // a client-supplied `id` (the server id) and skip this block entirely.
           const localId = body.local_id as string;
           const data = response?.data;
           if (hasStringId(data) && data.id !== localId) {
@@ -538,7 +538,38 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         // edit is preserved and surfaced ("changed on another device") via the
         // failed-changes banner instead of being silently dropped. Every other
         // permanent status also dead-letters (#492).
-        const idempotentConflict = status === 409 && entry.operation !== 'update';
+        //
+        // createLabel 409s require special handling: the conflict response body
+        // doesn't include the canonical label ID, so we resolve it via GET /labels.
+        // If the server label ID differs from the client-supplied body.id (name
+        // conflict vs. a different label), we remap it so downstream rename/delete
+        // ops reference the correct server ID. If the lookup fails or the label
+        // isn't found, dead-letter instead of silently dropping a potentially
+        // broken id-mapping.
+        let idempotentConflict = status === 409 && entry.operation !== 'update' && entry.operation !== 'createLabel';
+        if (status === 409 && entry.operation === 'createLabel') {
+          const clientLabelId = body?.id as string | undefined;
+          const labelName = body?.name as string | undefined;
+          if (clientLabelId && labelName) {
+            try {
+              const labelsResp = await api.get<Array<{ id: string; name: string }>>('/labels');
+              const serverLabel = (labelsResp.data ?? []).find(
+                (l) => l.name.toLowerCase() === labelName.toLowerCase(),
+              );
+              if (serverLabel) {
+                if (serverLabel.id !== clientLabelId) {
+                  // Name conflict: another label owns this name with a different server
+                  // ID. Remap so downstream rename/delete ops use the correct ID.
+                  idMap.set(clientLabelId, serverLabel.id);
+                }
+                idempotentConflict = true;
+              }
+              // serverLabel not found: fall through to dead-letter
+            } catch {
+              // GET /labels failed: fall through to dead-letter
+            }
+          }
+        }
         if (!idempotentConflict) {
           const noteIds = affectedNoteIds(endpoint, body);
           // Only link dead_letter.note_id when there's a single clear note (per the

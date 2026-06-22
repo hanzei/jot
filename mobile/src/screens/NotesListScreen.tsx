@@ -2,12 +2,10 @@ import React, { useState, useCallback, useMemo, useEffect, useRef } from 'react'
 import {
   View,
   Text,
-  TextInput,
   FlatList,
   SectionList,
   TouchableOpacity,
   RefreshControl,
-  StyleSheet,
   ActivityIndicator,
   Alert,
   ScrollView,
@@ -32,34 +30,18 @@ import NoteCard from '../components/NoteCard';
 import NoteContextMenu, { ContextMenuViewContext } from '../components/NoteContextMenu';
 import ColorPicker from '../components/ColorPicker';
 import LabelPicker from '../components/LabelPicker';
-import type { Note, NoteSort, UpdateNoteRequest } from '@jot/shared';
+import type { Note, NoteSort } from '@jot/shared';
 import type { RootStackParamList } from '../navigation/RootNavigator';
-import { NOTE_SORT_OPTIONS, getNoteSortLabel, normalizeNoteSort, sortNotesForDisplay } from '../utils/noteSort';
+import { normalizeNoteSort, sortNotesForDisplay } from '../utils/noteSort';
 import { isSortWarningDismissed, dismissSortWarning } from '../utils/sortWarningDismissed';
 import { emptyTrash as emptyTrashNotes } from '../api/notes';
 import { getLocalNotes, permanentDeleteLocalNote } from '../db/noteQueries';
 import { useNetworkStatus } from '../hooks/useNetworkStatus';
 import { useBannerShown } from '../hooks/useBannerShown';
-
-function buildUpdateRequest(note: Note, overrides: Partial<UpdateNoteRequest> = {}): UpdateNoteRequest {
-  if (note.note_type === 'list') {
-    return {
-      title: note.title,
-      pinned: note.pinned,
-      archived: note.archived,
-      color: note.color,
-      checked_items_collapsed: note.checked_items_collapsed,
-      ...overrides,
-    };
-  }
-  return {
-    content: note.content,
-    pinned: note.pinned,
-    archived: note.archived,
-    color: note.color,
-    ...overrides,
-  };
-}
+import { styles } from './notesList/styles';
+import { buildUpdateRequest, buildNoteSections, type LocalReorderState, type NoteSection } from './notesList/noteListUtils';
+import NoteListItem from './notesList/NoteListItem';
+import NotesListHeader from './notesList/NotesListHeader';
 
 interface NotesListScreenProps {
   variant?: 'notes' | 'archived' | 'trash' | 'my-tasks';
@@ -71,67 +53,6 @@ type NavigationProp = NativeStackNavigationProp<RootStackParamList, 'MainDrawer'
 const SEARCH_DEBOUNCE_MS = 300;
 const EMPTY_NOTES: Note[] = [];
 const EMPTY_LOCAL_ORDER: LocalReorderState = { pinned: null, unpinned: null };
-
-interface LocalReorderState {
-  pinned: Note[] | null;
-  unpinned: Note[] | null;
-}
-
-type NoteSection = { key: string; title: string | null; data: Note[] };
-
-function buildNoteSections(
-  displayPinned: Note[],
-  displayUnpinned: Note[],
-  displayedArchived: Note[],
-  includePinned: boolean,
-  t: (key: string) => string,
-): NoteSection[] {
-  const sections: NoteSection[] = [];
-  if (includePinned && displayPinned.length > 0) {
-    sections.push({ key: 'pinned', title: t('dashboard.pinned'), data: displayPinned });
-  }
-  if (displayUnpinned.length > 0) {
-    sections.push({
-      key: includePinned ? 'other' : 'notes',
-      title: includePinned && displayPinned.length > 0 ? t('dashboard.otherNotes') : null,
-      data: displayUnpinned,
-    });
-  }
-  if (displayedArchived.length > 0) {
-    sections.push({ key: 'archived', title: t('dashboard.archivedResults'), data: displayedArchived });
-  }
-  return sections;
-}
-
-interface NoteListItemProps {
-  note: Note;
-  onPress: (id: string) => void;
-  onMenuPress?: (note: Note) => void;
-  onLongPress?: (note: Note) => void;
-  onLabelPress?: (labelId: string, labelName: string) => void;
-}
-
-const NoteListItem = React.memo(function NoteListItem({
-  note,
-  onPress,
-  onMenuPress,
-  onLongPress,
-  onLabelPress,
-}: NoteListItemProps) {
-  const handlePress = useCallback(() => onPress(note.id), [onPress, note.id]);
-  const handleMenuPress = useCallback(() => onMenuPress?.(note), [onMenuPress, note]);
-  const handleLongPress = useCallback(() => onLongPress?.(note), [onLongPress, note]);
-
-  return (
-    <NoteCard
-      note={note}
-      onPress={handlePress}
-      onMenuPress={onMenuPress ? handleMenuPress : undefined}
-      onLongPress={onLongPress ? handleLongPress : undefined}
-      onLabelPress={onLabelPress}
-    />
-  );
-});
 
 export default function NotesListScreen({ variant = 'notes', labelId }: NotesListScreenProps) {
   const [searchText, setSearchText] = useState('');
@@ -147,7 +68,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   const { showToast } = useToast();
   const insets = useSafeAreaInsets();
   const fabBottom = Math.max(insets.bottom + 20, 20);
-  const listBottomPadding = variant === 'notes' ? fabBottom + 60 : 80;
+  const listBottomPadding = variant === 'notes' ? fabBottom + 60 : insets.bottom + 80;
 
   const [contextMenuNote, setContextMenuNote] = useState<Note | null>(null);
   const [colorPickerNote, setColorPickerNote] = useState<Note | null>(null);
@@ -282,6 +203,8 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     setSortWarningDismissed(true);
     void dismissSortWarning(sortMode);
   }, [sortMode]);
+
+  const handleToggleSort = useCallback(() => setIsSortControlsOpen((open) => !open), []);
 
   const handleNotePress = useCallback(
     (noteId: string) => {
@@ -664,144 +587,27 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     [handleNotePress, handleOpenMenu, variant, handleLabelPress],
   );
 
-
   // Drag-and-drop is only available in the notes variant while manual sorting is
   // active and no search is in progress (search results mix in archived notes
   // and reordering a filtered list is not meaningful).
   const isDraggable = variant === 'notes' && sortMode === 'manual' && !debouncedSearch;
-  const activeSortLabel = getNoteSortLabel(sortMode, t);
 
-  const renderTopControls = () => (
-    <>
-      <View
-        style={[
-          styles.topControlsRow,
-          variant === 'notes' ? { paddingTop: bannerShown ? 0 : insets.top } : undefined,
-        ]}
-      >
-        {variant === 'notes' && (
-          <TouchableOpacity
-            style={[styles.menuButton, { backgroundColor: colors.surface, borderColor: colors.searchBorder }]}
-            onPress={handleToggleDrawer}
-            testID="drawer-toggle"
-            accessibilityLabel={t('nav.openMenu')}
-            accessibilityRole="button"
-          >
-            <Ionicons name="menu" size={22} color={colors.text} />
-          </TouchableOpacity>
-        )}
-        <View style={[styles.searchContainer, { backgroundColor: colors.searchBackground, borderColor: colors.searchBorder }]}>
-          <Ionicons name="search" size={18} color={colors.iconMuted} style={styles.searchIcon} />
-          <TextInput
-            style={[styles.searchInput, { color: colors.text }]}
-            placeholder={t('dashboard.searchPlaceholder')}
-            placeholderTextColor={colors.placeholder}
-            accessibilityLabel={t('dashboard.searchPlaceholder')}
-            value={searchText}
-            onChangeText={setSearchText}
-            returnKeyType="search"
-            testID="search-input"
-          />
-          {searchText.length > 0 && (
-            <TouchableOpacity
-              onPress={handleClearSearch}
-              testID="clear-search"
-              accessibilityRole="button"
-              accessibilityLabel={t('common.clearSearch')}
-              hitSlop={{ top: 12, right: 12, bottom: 12, left: 12 }}
-            >
-              <Ionicons name="close-circle" size={18} color={colors.iconMuted} />
-            </TouchableOpacity>
-          )}
-        </View>
-        <TouchableOpacity
-          style={[
-            styles.sortToggleButton,
-            {
-              borderColor: colors.searchBorder,
-              backgroundColor: isSortControlsOpen ? colors.primaryLight : colors.surface,
-            },
-          ]}
-          onPress={() => setIsSortControlsOpen((open) => !open)}
-          testID="sort-toggle"
-          accessibilityRole="button"
-          accessibilityLabel={t('dashboard.sortAccessibilityLabel', { sortLabel: activeSortLabel })}
-          accessibilityState={{ expanded: isSortControlsOpen }}
-        >
-          <Ionicons name="swap-vertical" size={18} color={isSortControlsOpen ? colors.primary : colors.iconMuted} />
-        </TouchableOpacity>
-      </View>
-
-      {/* Sort preference is global across notes, archived, trash, labels, and my-tasks views. */}
-      {isSortControlsOpen && (
-        <View style={styles.sortControlsContainer}>
-          <ScrollView
-            horizontal
-            showsHorizontalScrollIndicator={false}
-            contentContainerStyle={styles.sortControlsContent}
-            testID="sort-controls"
-          >
-            {NOTE_SORT_OPTIONS.map((option) => {
-              const isActive = sortMode === option;
-              const optionLabel = getNoteSortLabel(option, t);
-              return (
-                <TouchableOpacity
-                  key={option}
-                  style={[
-                    styles.sortChip,
-                    {
-                      borderColor: isActive ? colors.primary : colors.border,
-                      backgroundColor: isActive ? colors.primaryLight : colors.surface,
-                    },
-                  ]}
-                  onPress={() => handleSortChipPress(option)}
-                  testID={`sort-chip-${option}`}
-                  accessibilityRole="button"
-                  accessibilityLabel={t('dashboard.sortAccessibilityLabel', { sortLabel: optionLabel })}
-                  accessibilityState={{ selected: isActive }}
-                >
-                  <Text
-                    style={[
-                      styles.sortChipText,
-                      { color: isActive ? colors.primary : colors.textSecondary },
-                      isActive && styles.sortChipTextActive,
-                    ]}
-                  >
-                    {optionLabel}
-                  </Text>
-                </TouchableOpacity>
-              );
-            })}
-          </ScrollView>
-        </View>
-      )}
-
-      {sortMode !== 'manual' && sortWarningDismissed === false && (
-        <View
-          style={[
-            styles.sortNotice,
-            {
-              backgroundColor: colors.primaryLight,
-              borderColor: colors.primary,
-            },
-          ]}
-          testID="sort-disabled-notice"
-        >
-          <Ionicons name="swap-vertical" size={16} color={colors.primary} style={styles.sortNoticeIcon} />
-          <Text style={[styles.sortNoticeText, { color: colors.textSecondary }]}>
-            {t('dashboard.sortDisabledNotice', { sortLabel: activeSortLabel })}
-          </Text>
-          <TouchableOpacity
-            onPress={handleDismissSortWarning}
-            style={styles.sortNoticeDismiss}
-            accessibilityLabel={t('common.close')}
-            hitSlop={{ top: 8, bottom: 8, left: 8, right: 8 }}
-          >
-            <Ionicons name="close" size={16} color={colors.primary} />
-          </TouchableOpacity>
-        </View>
-      )}
-    </>
+  const header = (
+    <NotesListHeader
+      variant={variant}
+      bannerShown={bannerShown}
+      topInset={insets.top}
+      searchText={searchText}
+      onSearchChange={setSearchText}
+      onClearSearch={handleClearSearch}
+      isSortOpen={isSortControlsOpen}
+      onToggleSort={handleToggleSort}
+      sortMode={sortMode}
+      onSortSelect={handleSortChipPress}
+      sortWarningDismissed={sortWarningDismissed}
+      onDismissSortWarning={handleDismissSortWarning}
+      onToggleDrawer={handleToggleDrawer}
+    />
   );
 
   // Show full-screen loading only on initial load (no prior data, no active search query).
@@ -810,7 +616,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   if (isLoading && !notes && !debouncedSearch) {
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
-        {renderTopControls()}
+        {header}
         <SkeletonNoteList />
       </View>
     );
@@ -851,7 +657,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
 
     return (
       <View style={[styles.container, { backgroundColor: colors.background }]}>
-        {renderTopControls()}
+        {header}
         {errorContent}
       </View>
     );
@@ -866,7 +672,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
       variant === 'my-tasks' ? 'clipboard-outline' : 'document-text-outline';
     return (
       <View style={[styles.emptyWrapper, { backgroundColor: colors.background }]}>
-        {variant === 'notes' && renderTopControls()}
+        {variant === 'notes' && header}
         {variant === 'trash' && (
           <View style={[styles.trashBanner, { backgroundColor: colors.warning, borderBottomColor: colors.warningBorder }]}>
             <Ionicons name="information-circle-outline" size={16} color={colors.warningText} style={styles.trashBannerIcon} />
@@ -948,7 +754,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
         </View>
       )}
 
-      {renderTopControls()}
+      {header}
 
       {/* Notes list */}
       {hasPinned ? (
@@ -957,7 +763,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
             refreshControl={
               <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={colors.primary} />
             }
-            contentContainerStyle={[styles.listContent, { paddingBottom: listBottomPadding }]}
+            contentContainerStyle={{ paddingBottom: listBottomPadding }}
             testID="notes-section-list"
           >
             {displayPinned.length > 0 && (
@@ -1000,7 +806,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
             refreshControl={
               <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={colors.primary} />
             }
-            contentContainerStyle={[styles.listContent, { paddingBottom: listBottomPadding }]}
+            contentContainerStyle={{ paddingBottom: listBottomPadding }}
             ListEmptyComponent={listEmptyComponent}
             testID="notes-section-list"
           />
@@ -1016,7 +822,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
           refreshControl={
             <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={colors.primary} />
           }
-          contentContainerStyle={[styles.listContent, { paddingBottom: listBottomPadding }]}
+          contentContainerStyle={{ paddingBottom: listBottomPadding }}
           ListEmptyComponent={listEmptyComponent}
           testID="notes-flat-list"
         />
@@ -1030,7 +836,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
           refreshControl={
             <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={colors.primary} />
           }
-          contentContainerStyle={[styles.listContent, { paddingBottom: listBottomPadding }]}
+          contentContainerStyle={{ paddingBottom: listBottomPadding }}
           ListEmptyComponent={listEmptyComponent}
           testID="notes-section-list"
         />
@@ -1042,7 +848,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
           refreshControl={
             <RefreshControl refreshing={isRefetching} onRefresh={handleRefresh} tintColor={colors.primary} />
           }
-          contentContainerStyle={[styles.listContent, { paddingBottom: listBottomPadding }]}
+          contentContainerStyle={{ paddingBottom: listBottomPadding }}
           ListEmptyComponent={listEmptyComponent}
           testID="notes-flat-list"
         />
@@ -1095,219 +901,3 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
     </View>
   );
 }
-
-const styles = StyleSheet.create({
-  container: {
-    flex: 1,
-  },
-  emptyWrapper: {
-    flex: 1,
-  },
-  emptyContent: {
-    width: '100%',
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 32,
-  },
-  emptyScroll: {
-    flex: 1,
-  },
-  emptyScrollContent: {
-    flexGrow: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  errorScrollContent: {
-    flexGrow: 1,
-  },
-  emptyContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 32,
-  },
-  emptyTitle: {
-    fontSize: 20,
-    fontWeight: '600',
-    marginTop: 16,
-  },
-  emptySubtext: {
-    fontSize: 14,
-    marginTop: 8,
-    textAlign: 'center',
-  },
-  emptySearchContainer: {
-    paddingTop: 48,
-    alignItems: 'center',
-    gap: 8,
-  },
-  emptySearchTitle: {
-    fontSize: 16,
-    fontWeight: '500',
-  },
-  trashBanner: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    paddingHorizontal: 16,
-    paddingVertical: 10,
-    borderBottomWidth: 1,
-  },
-  trashBannerMessage: {
-    flex: 1,
-    flexDirection: 'row',
-    alignItems: 'center',
-  },
-  trashBannerIcon: {
-    marginRight: 8,
-  },
-  trashBannerText: {
-    fontSize: 13,
-    flex: 1,
-  },
-  emptyTrashButton: {
-    marginLeft: 12,
-    minWidth: 96,
-    paddingHorizontal: 12,
-    paddingVertical: 6,
-    borderRadius: 999,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  emptyTrashButtonDisabled: {
-    opacity: 0.6,
-  },
-  emptyTrashButtonText: {
-    fontSize: 12,
-    fontWeight: '600',
-  },
-  topControlsRow: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginHorizontal: 12,
-    marginTop: 8,
-    marginBottom: 8,
-    gap: 8,
-  },
-  menuButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  searchContainer: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    flex: 1,
-    borderRadius: 22,
-    borderWidth: 1,
-    paddingHorizontal: 12,
-    height: 40,
-  },
-  searchIcon: {
-    marginRight: 8,
-  },
-  searchInput: {
-    flex: 1,
-    fontSize: 14,
-    paddingVertical: 0,
-  },
-  sortToggleButton: {
-    width: 44,
-    height: 44,
-    borderRadius: 22,
-    borderWidth: 1,
-    alignItems: 'center',
-    justifyContent: 'center',
-  },
-  sortControlsContainer: {
-    marginHorizontal: 12,
-    marginBottom: 8,
-  },
-  sortControlsContent: {
-    gap: 8,
-    paddingRight: 8,
-  },
-  sortChip: {
-    borderWidth: 1,
-    borderRadius: 999,
-    paddingHorizontal: 12,
-    paddingVertical: 7,
-  },
-  sortChipText: {
-    fontSize: 13,
-    fontWeight: '500',
-  },
-  sortChipTextActive: {
-    fontWeight: '600',
-  },
-  sortNotice: {
-    flexDirection: 'row',
-    alignItems: 'flex-start',
-    marginHorizontal: 16,
-    marginBottom: 8,
-    borderWidth: 1,
-    borderRadius: 12,
-    paddingHorizontal: 12,
-    paddingVertical: 10,
-  },
-  sortNoticeIcon: {
-    marginRight: 8,
-    marginTop: 1,
-  },
-  sortNoticeText: {
-    flex: 1,
-    fontSize: 13,
-    lineHeight: 18,
-  },
-  sortNoticeDismiss: {
-    marginLeft: 8,
-    marginTop: 1,
-  },
-  sectionHeader: {
-    fontSize: 12,
-    fontWeight: '600',
-    textTransform: 'uppercase',
-    letterSpacing: 0.5,
-    paddingHorizontal: 16,
-    paddingTop: 8,
-    paddingBottom: 4,
-  },
-  listContent: {},
-  retryButton: {
-    marginTop: 16,
-    paddingHorizontal: 24,
-    paddingVertical: 10,
-    borderRadius: 8,
-  },
-  retryText: {
-    color: '#fff',
-    fontSize: 15,
-    fontWeight: '600',
-  },
-  fab: {
-    position: 'absolute',
-    right: 20,
-    width: 56,
-    height: 56,
-    borderRadius: 28,
-    justifyContent: 'center',
-    alignItems: 'center',
-    elevation: 4,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.25,
-    shadowRadius: 4,
-  },
-  draggingCard: {
-    opacity: 0.9,
-    elevation: 8,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 4 },
-    shadowOpacity: 0.3,
-    shadowRadius: 8,
-  },
-});

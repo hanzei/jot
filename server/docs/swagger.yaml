@@ -2,6 +2,13 @@ basePath: /api/v1
 definitions:
   handlers.AddLabelRequest:
     properties:
+      id:
+        description: |-
+          ID is an optional client-supplied label ID. When provided it is used as the
+          label's primary key so an offline-created label can be replayed idempotently:
+          a replay whose original create already committed is rejected with 409
+          instead of inserting a duplicate. When empty the server generates one.
+        type: string
       name:
         type: string
     type: object
@@ -795,7 +802,7 @@ paths:
       consumes:
       - application/json
       parameters:
-      - description: Label name
+      - description: Label name and optional client-supplied ID
         in: body
         name: body
         required: true
@@ -816,13 +823,17 @@ paths:
           description: unauthorized
           schema:
             type: string
+        "409":
+          description: label already exists
+          schema:
+            type: string
         "500":
           description: internal server error
           schema:
             type: string
       security:
       - CookieAuth: []
-      summary: Create or return an existing label
+      summary: Create a label, or return the existing one when no ID is supplied
       tags:
       - labels
   /labels/{id}:
