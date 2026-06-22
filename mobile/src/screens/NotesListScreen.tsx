@@ -68,7 +68,7 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   const { showToast } = useToast();
   const insets = useSafeAreaInsets();
   const fabBottom = Math.max(insets.bottom + 20, 20);
-  const listBottomPadding = variant === 'notes' ? fabBottom + 60 : 80;
+  const listBottomPadding = variant === 'notes' ? fabBottom + 60 : insets.bottom + 80;
 
   const [contextMenuNote, setContextMenuNote] = useState<Note | null>(null);
   const [colorPickerNote, setColorPickerNote] = useState<Note | null>(null);
