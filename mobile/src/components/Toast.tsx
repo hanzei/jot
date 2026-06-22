@@ -1,4 +1,4 @@
-import React, { useCallback, useEffect, useRef, useState } from 'react';
+import React, { useCallback, useContext, useEffect, useRef, useState } from 'react';
 import {
   Animated,
   Easing,
@@ -22,11 +22,20 @@ interface ToastMessage {
 }
 
 const TOAST_DURATION_MS = 4000;
+const ENTER_ANIMATION_MS = 180;
 const EXIT_ANIMATION_MS = 180;
+
+// Fixed colors chosen to read on the dark offlineBanner background in both themes.
+const TYPE_CONFIG: Record<ToastType, { color: string; iconName: keyof typeof Ionicons.glyphMap }> = {
+  success: { color: '#86efac', iconName: 'checkmark-circle-outline' },
+  error:   { color: '#f87171', iconName: 'alert-circle-outline' },
+  info:    { color: '#60a5fa', iconName: 'information-circle-outline' },
+};
 
 export function ToastProvider({ children }: { children: React.ReactNode }) {
   const [toasts, setToasts] = useState<ToastMessage[]>([]);
   const nextIdRef = useRef(0);
+  const insets = useContext(SafeAreaInsetsContext) ?? { top: 0, right: 0, bottom: 0, left: 0 };
 
   const showToast = useCallback((message: string, type: ToastType = 'success', action?: ToastAction) => {
     const id = nextIdRef.current++;
@@ -40,19 +49,15 @@ export function ToastProvider({ children }: { children: React.ReactNode }) {
   return (
     <ToastContext.Provider value={{ showToast }}>
       {children}
-      <SafeAreaInsetsContext.Consumer>
-        {(insets) => (
-          <View
-            pointerEvents="box-none"
-            style={[styles.container, { paddingBottom: 12 + (insets?.bottom ?? 0) }]}
-            testID="toast-container"
-          >
-            {toasts.map((toast) => (
-              <ToastItem key={toast.id} toast={toast} onDismiss={dismissToast} />
-            ))}
-          </View>
-        )}
-      </SafeAreaInsetsContext.Consumer>
+      <View
+        pointerEvents="box-none"
+        style={[styles.container, { paddingBottom: 24 + insets.bottom }]}
+        testID="toast-container"
+      >
+        {toasts.map((toast) => (
+          <ToastItem key={toast.id} toast={toast} onDismiss={dismissToast} />
+        ))}
+      </View>
     </ToastContext.Provider>
   );
 }
@@ -66,16 +71,7 @@ function ToastItem({ toast, onDismiss }: { toast: ToastMessage; onDismiss: (id: 
   const [isActionInFlight, setIsActionInFlight] = useState(false);
   const opacity = useRef(new Animated.Value(0)).current;
   const translateY = useRef(new Animated.Value(12)).current;
-  const typeColor = toast.type === 'success'
-    ? colors.success
-    : toast.type === 'error'
-      ? colors.error
-      : colors.primary;
-  const iconName: keyof typeof Ionicons.glyphMap = toast.type === 'success'
-    ? 'checkmark-circle-outline'
-    : toast.type === 'error'
-      ? 'alert-circle-outline'
-      : 'information-circle-outline';
+  const { color: typeColor, iconName } = TYPE_CONFIG[toast.type];
 
   const clearAutoDismissTimer = useCallback(() => {
     if (autoDismissTimerRef.current) {
@@ -113,13 +109,13 @@ function ToastItem({ toast, onDismiss }: { toast: ToastMessage; onDismiss: (id: 
     Animated.parallel([
       Animated.timing(opacity, {
         toValue: 1,
-        duration: 180,
+        duration: ENTER_ANIMATION_MS,
         easing: Easing.out(Easing.quad),
         useNativeDriver: true,
       }),
       Animated.timing(translateY, {
         toValue: 0,
-        duration: 180,
+        duration: ENTER_ANIMATION_MS,
         easing: Easing.out(Easing.quad),
         useNativeDriver: true,
       }),
@@ -137,16 +133,16 @@ function ToastItem({ toast, onDismiss }: { toast: ToastMessage; onDismiss: (id: 
       style={[
         styles.toast,
         {
-          backgroundColor: colors.surface,
-          borderColor: colors.border,
+          backgroundColor: colors.offlineBanner,
+          borderColor: colors.offlineBannerBorder,
           opacity,
           transform: [{ translateY }],
         },
       ]}
       accessibilityLiveRegion="polite"
     >
-      <Ionicons name={iconName} size={20} color={typeColor} style={styles.icon} />
-      <Text style={[styles.message, { color: colors.text }]} numberOfLines={3}>
+      <Ionicons name={iconName} size={22} color={typeColor} style={styles.icon} />
+      <Text style={[styles.message, { color: colors.offlineBannerText }]} numberOfLines={3}>
         {toast.message}
       </Text>
       {toast.action && (
@@ -167,17 +163,17 @@ function ToastItem({ toast, onDismiss }: { toast: ToastMessage; onDismiss: (id: 
             }
           }}
           disabled={isActionInFlight}
-          style={styles.actionButton}
+          style={[styles.actionButton, { backgroundColor: colors.primary }, isActionInFlight && styles.actionButtonDisabled]}
           testID={`toast-action-${toast.id}`}
           accessibilityRole="button"
           accessibilityLabel={toast.action.label}
           accessibilityHint={t('dashboard.toastActionHint', { action: toast.action.label })}
         >
-          <Text style={[styles.actionText, { color: colors.primary }]}>{toast.action.label}</Text>
+          <Text style={styles.actionText}>{toast.action.label}</Text>
         </TouchableOpacity>
       )}
       <TouchableOpacity onPress={() => close()} style={styles.closeButton} accessibilityLabel={t('common.close')}>
-        <Ionicons name="close" size={16} color={colors.textMuted} />
+        <Ionicons name="close" size={18} color={colors.offlineBannerText} />
       </TouchableOpacity>
     </Animated.View>
   );
@@ -189,7 +185,6 @@ const styles = StyleSheet.create({
     left: 12,
     right: 12,
     bottom: 0,
-    paddingBottom: 12,
     zIndex: 100,
     alignItems: 'center',
     gap: 8,
@@ -200,34 +195,40 @@ const styles = StyleSheet.create({
     maxWidth: 560,
     borderWidth: 1,
     borderRadius: 12,
-    paddingVertical: 10,
-    paddingHorizontal: 12,
+    paddingVertical: 14,
+    paddingHorizontal: 16,
     flexDirection: 'row',
     alignItems: 'center',
     shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.15,
-    shadowRadius: 6,
-    elevation: 4,
+    shadowOffset: { width: 0, height: 4 },
+    shadowOpacity: 0.3,
+    shadowRadius: 10,
+    elevation: 8,
   },
   icon: {
-    marginRight: 8,
+    marginRight: 10,
   },
   message: {
     flex: 1,
-    fontSize: 14,
-    lineHeight: 18,
+    fontSize: 15,
+    lineHeight: 22,
   },
   actionButton: {
-    marginLeft: 10,
-    paddingVertical: 2,
+    marginLeft: 12,
+    paddingVertical: 8,
+    paddingHorizontal: 14,
+    borderRadius: 20,
+  },
+  actionButtonDisabled: {
+    opacity: 0.6,
   },
   actionText: {
-    fontSize: 13,
-    fontWeight: '600',
+    fontSize: 14,
+    fontWeight: '700',
+    color: '#fff',
   },
   closeButton: {
-    marginLeft: 4,
-    padding: 4,
+    marginLeft: 8,
+    padding: 8,
   },
 });

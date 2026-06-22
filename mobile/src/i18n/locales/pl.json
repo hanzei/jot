@@ -97,7 +97,8 @@
     "noteUnarchived": "Notatka przywrócona z archiwum",
     "noteDeleted": "Notatka przeniesiona do kosza",
     "noteRestored": "Notatka przywrócona",
-    "undo": "Cofnij"
+    "undo": "Cofnij",
+    "toastActionHint": "Dotknij, aby {{action}}"
   },
   "settings": {
     "title": "Ustawienia",

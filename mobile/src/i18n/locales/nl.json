@@ -126,7 +126,8 @@
     "noteUnarchived": "Notitie uit archief gehaald",
     "noteDeleted": "Notitie naar prullenbak verplaatst",
     "noteRestored": "Notitie hersteld",
-    "undo": "Ongedaan maken"
+    "undo": "Ongedaan maken",
+    "toastActionHint": "Tik om {{action}} te activeren"
   },
   "settings": {
     "title": "Instellingen",
