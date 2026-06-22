@@ -153,7 +153,7 @@ describe('Notes API', () => {
 
       const result = await duplicateNote('123');
 
-      expect(mockAxiosInstance.post).toHaveBeenCalledWith('/notes/123/duplicate');
+      expect(mockAxiosInstance.post).toHaveBeenCalledWith('/notes/123/duplicate', undefined);
       expect(result).toEqual(duplicated);
     });
   });

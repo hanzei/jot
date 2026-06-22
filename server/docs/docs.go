@@ -1258,6 +1258,9 @@ const docTemplate = `{
         },
         "/notes/{id}/duplicate": {
             "post": {
+                "consumes": [
+                    "application/json"
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -1272,6 +1275,14 @@ const docTemplate = `{
                         "name": "id",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "description": "Optional client-supplied ID for idempotent replay",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.DuplicateNoteRequest"
+                        }
                     }
                 ],
                 "responses": {
@@ -1295,6 +1306,12 @@ const docTemplate = `{
                     },
                     "404": {
                         "description": "not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "409": {
+                        "description": "conflict — duplicate ID already exists",
                         "schema": {
                             "type": "string"
                         }
@@ -2740,6 +2757,14 @@ const docTemplate = `{
             "properties": {
                 "deleted": {
                     "type": "integer"
+                }
+            }
+        },
+        "handlers.DuplicateNoteRequest": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
                 }
             }
         },
