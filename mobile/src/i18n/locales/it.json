@@ -126,7 +126,8 @@
     "noteUnarchived": "Nota ripristinata dall'archivio",
     "noteDeleted": "Nota spostata nel cestino",
     "noteRestored": "Nota ripristinata",
-    "undo": "Annulla"
+    "undo": "Annulla",
+    "toastActionHint": "Tocca per {{action}}"
   },
   "settings": {
     "title": "Impostazioni",

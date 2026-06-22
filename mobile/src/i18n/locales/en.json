@@ -126,7 +126,8 @@
     "noteUnarchived": "Note unarchived",
     "noteDeleted": "Note moved to trash",
     "noteRestored": "Note restored",
-    "undo": "Undo"
+    "undo": "Undo",
+    "toastActionHint": "Tap to {{action}}"
   },
   "settings": {
     "title": "Settings",

@@ -67,6 +67,7 @@
     "noteDeleted": "Notiz in den Papierkorb verschoben",
     "noteRestored": "Notiz wiederhergestellt",
     "undo": "Rückgängig",
+    "toastActionHint": "{{action}} ausführen",
     "pinned": "Angeheftet",
     "otherNotes": "Weitere Notizen",
     "archivedResults": "Archiviert",

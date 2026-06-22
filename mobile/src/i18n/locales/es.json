@@ -114,6 +114,7 @@
     "noteDeleted": "Nota movida a la papelera",
     "noteRestored": "Nota restaurada",
     "undo": "Deshacer",
+    "toastActionHint": "Toca para {{action}}",
     "noSearchResults": "No hay notas que coincidan con \"{{query}}\"",
     "noNotesForLabel": "No hay notas para esta etiqueta",
     "tryDifferentKeywords": "Prueba con otras palabras clave",
