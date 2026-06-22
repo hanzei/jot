@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef, useCallback, useMemo } from 'react';
+import React, { useState, useEffect, useRef, useCallback, useMemo, useContext } from 'react';
 import {
   View,
   Text,
@@ -36,7 +36,7 @@ import { buildCollaborators, generateId, VALIDATION, type Collaborator, type Not
 import { useAuth } from '../store/AuthContext';
 import { useUsers } from '../store/UsersContext';
 import { useTheme } from '../theme/ThemeContext';
-import { useSafeAreaInsets } from 'react-native-safe-area-context';
+import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { getCompletedSectionDividerColor, isWhiteHexColor } from '../utils/colorContrast';
 import { formatEditorStateForShare } from '../utils/noteTextFormatter';
@@ -113,7 +113,7 @@ export default function NoteEditorScreen() {
   const { showToast } = useToast();
 
   const { colors, isDark } = useTheme();
-  const insets = useSafeAreaInsets();
+  const insets = useContext(SafeAreaInsetsContext) ?? { top: 0, right: 0, bottom: 0, left: 0 };
   const bannerShown = useBannerShown();
   const { data: existingNote } = useOfflineNote(noteId);
   const createMutation = useCreateNote();
