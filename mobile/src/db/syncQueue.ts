@@ -3,7 +3,6 @@ import axios from 'axios';
 import api from '../api/client';
 import type { GetNotesParams, Note, NoteItem } from '@jot/shared';
 import {
-  replaceLocalNoteId,
   saveNote,
   saveNotes,
   patchLocalItem,
@@ -177,10 +176,9 @@ function collectNoteIds(
   if (segments[0] !== 'notes') return;
 
   if (segments.length === 1) {
-    // POST /notes (create): the affected note is the offline-created note. Newer
-    // creates carry the client-supplied `id` (issue #475); fall back to the
-    // legacy `local_id` for ops queued before that change.
-    const createId = body?.id ?? body?.local_id;
+    // POST /notes (create): the affected note is the offline-created note, identified
+    // by the client-supplied `id` (issue #475).
+    const createId = body?.id;
     if (typeof createId === 'string') ids.add(createId);
   } else if (segments[1] === 'reorder') {
     // POST /notes/reorder: body.note_ids lists every note whose position moved.
@@ -191,10 +189,9 @@ function collectNoteIds(
   } else {
     // POST /notes/{id}/duplicate creates a local clone: the write belongs to the
     // clone, not the source note (which it only reads), so track just the new
-    // note id. Newer ops carry `id` (server-valid client id); fall back to the
-    // legacy `local_id` for ops queued before this change.
+    // note id via the client-supplied `id`.
     if (segments.length === 3 && segments[2] === 'duplicate') {
-      const dupId = body?.id ?? body?.local_id;
+      const dupId = body?.id;
       if (typeof dupId === 'string') ids.add(dupId);
     } else {
       ids.add(segments[1]);
@@ -308,7 +305,7 @@ export interface DiscardedOperation {
 }
 
 export interface DrainResult {
-  /** Maps local_* IDs to the server IDs assigned during create operations. */
+  /** The canonical server note returned for each drained create/duplicate operation. */
   idMappings: Array<{ localId: string; serverNote: Note }>;
   /** Operations that were discarded because the server returned a permanent (non-transient 4xx) error. */
   discardedOperations: DiscardedOperation[];
@@ -389,9 +386,10 @@ async function recordDeadLetter(
  * edit isn't lost (#492). On a transient failure (network/timeout/5xx), stop draining
  * and retry the remaining entries on the next reconnect.
  *
- * Handles offline-create ID reconciliation: when a `create` operation succeeds, the
- * server returns a new note ID. Any subsequent queue entries that reference the local
- * temporary ID are remapped to the server-assigned ID before execution.
+ * Handles offline-create ID reconciliation: when a `create` or `duplicate` operation
+ * succeeds, the server echoes back the client-supplied ID unchanged. The canonical
+ * server note (with authoritative fields like `updated_at`, version, item IDs) is
+ * adopted locally and the pending-create marker is cleared.
  *
  * Returns an array of {localId, serverNote} pairs for any create operations that
  * succeeded, so callers can update their caches.
@@ -401,7 +399,7 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
     'SELECT * FROM sync_queue ORDER BY id ASC',
   );
 
-  // Maps local_* IDs → server IDs as creates are processed
+  // Maps offline label IDs → server IDs as createLabel ops are processed
   const idMap = new Map<string, string>();
   const idMappings: Array<{ localId: string; serverNote: Note }> = [];
   const discardedOperations: DiscardedOperation[] = [];
@@ -431,25 +429,16 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
         const response = await api.post(endpoint, body);
 
         if (entry.operation === 'create' || entry.operation === 'duplicate') {
-          // The server returns the canonical note. A create (#475) sends a
-          // server-valid `id` that the server keeps, so the id is stable and no
-          // remap is needed — just adopt the canonical note (server item ids etc.)
-          // and clear the pending-create marker. A duplicate (and any legacy
-          // create still carrying `local_id`) gets a server-assigned id, so its
-          // local id is reconciled and remapped for later queued ops.
-          const clientId = (body?.id ?? body?.local_id) as string | undefined;
+          // The server keeps the client-supplied `id`, so the id is stable —
+          // adopt the canonical note (server item ids etc.) and clear the
+          // pending-create marker. No id remap is needed.
+          const clientId = body?.id as string | undefined;
           const data = response?.data;
           if (clientId && hasStringId(data)) {
             const serverNote = data as Note;
-            if (serverNote.id !== clientId) {
-              idMap.set(clientId, serverNote.id);
-              idMappings.push({ localId: clientId, serverNote });
-              await replaceLocalNoteId(db, clientId, serverNote);
-            } else {
-              idMappings.push({ localId: clientId, serverNote });
-              await saveNote(db, serverNote);
-              await clearNotePendingCreate(db, clientId);
-            }
+            idMappings.push({ localId: clientId, serverNote });
+            await saveNote(db, serverNote);
+            await clearNotePendingCreate(db, clientId);
           }
         } else if (entry.operation === 'createLabel' && body?.local_id) {
           // Reconcile the offline-generated local label id with the server id so

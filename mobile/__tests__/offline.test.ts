@@ -2,7 +2,7 @@
  * Tests for offline support: local note queries, sync queue, and ID utilities.
  */
 
-import { generateLocalId, generateClientNoteId, isLocalId, isUnsyncedNoteId, replaceLocalNoteId, removeLocalNotesNotIn, getLocalLabels, getLocalLabelCounts, saveNote, addLabelToLocalNote, removeLabelFromLocalNote } from '../src/db/noteQueries';
+import { generateLocalId, generateClientNoteId, isLocalId, isUnsyncedNoteId, removeLocalNotesNotIn, getLocalLabels, getLocalLabelCounts, saveNote, addLabelToLocalNote, removeLabelFromLocalNote } from '../src/db/noteQueries';
 import { drainQueue, isTransientHttpStatus } from '../src/db/syncQueue';
 import api from '../src/api/client';
 
@@ -25,12 +25,10 @@ jest.mock('../src/api/client', () => ({
 
 jest.mock('../src/db/noteQueries', () => ({
   ...jest.requireActual('../src/db/noteQueries'),
-  replaceLocalNoteId: jest.fn().mockResolvedValue(undefined),
   saveNote: jest.fn().mockResolvedValue(undefined),
 }));
 
 const mockApi = api as jest.Mocked<typeof api>;
-const mockReplaceLocalNoteId = replaceLocalNoteId as jest.MockedFunction<typeof replaceLocalNoteId>;
 const mockSaveNote = saveNote as jest.MockedFunction<typeof saveNote>;
 
 // ── generateLocalId / isLocalId ────────────────────────────────────────────
@@ -294,31 +292,6 @@ describe('drainQueue', () => {
     expect(discardedOperations).toHaveLength(0);
   });
 
-  it('remaps local IDs after a create operation', async () => {
-    const serverNote = {
-      id: 'server-abc', title: 'Test', content: '', note_type: 'text',
-      color: '#ffffff', pinned: false, archived: false, position: 0,
-      checked_items_collapsed: false, is_shared: false, deleted_at: null,
-      user_id: 'u1', created_at: '', updated_at: '', labels: [], shared_with: [],
-    };
-    const db = makeMockDb([
-      {
-        id: 8,
-        operation: 'create',
-        endpoint: '/notes',
-        method: 'POST',
-        body: JSON.stringify({ local_id: 'local_temp_1', title: 'Test', content: '', note_type: 'text' }),
-        created_at: '',
-      },
-    ]);
-    mockApi.post.mockResolvedValueOnce({ data: serverNote } as never);
-
-    await drainQueue(db as never);
-
-    expect(mockReplaceLocalNoteId).toHaveBeenCalledWith(db, 'local_temp_1', serverNote);
-    expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [8]);
-  });
-
   it('keeps a client-supplied create id stable: adopts the server note, clears pending, no reconcile (#475)', async () => {
     const clientId = 'AbcdefghijklmnopqrstUv'; // 22-char server-valid id
     const serverNote = {
@@ -341,9 +314,7 @@ describe('drainQueue', () => {
 
     const { idMappings } = await drainQueue(db as never);
 
-    // The id never changes, so there is no reconcile — the canonical note is
-    // adopted and the pending-create marker is cleared.
-    expect(mockReplaceLocalNoteId).not.toHaveBeenCalled();
+    // The id never changes — adopt the canonical note and clear the pending-create marker.
     expect(mockSaveNote).toHaveBeenCalledWith(db, serverNote);
     expect(db.runAsync).toHaveBeenCalledWith(
       `UPDATE notes SET sync_state = 'synced' WHERE id = ? AND sync_state = 'pending'`,
@@ -405,76 +376,10 @@ describe('drainQueue', () => {
     const { idMappings } = await drainQueue(db as never);
 
     expect(mockApi.post).toHaveBeenCalledWith('/notes/src-123/duplicate', { id: clientId });
-    // Stable-id path: save canonical note and clear pending-create; no id replacement.
+    // Save canonical note and clear pending-create marker.
     expect(mockSaveNote).toHaveBeenCalledWith(db, serverNote);
-    expect(mockReplaceLocalNoteId).not.toHaveBeenCalled();
     expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [9]);
     expect(idMappings).toEqual([{ localId: clientId, serverNote }]);
-  });
-
-  it('reconciles a legacy duplicate local_id and replaces the local note with the server note', async () => {
-    // Backward-compat: old-style ops queued before this change still use { local_id }.
-    // The server assigns a new id, so serverNote.id !== local_id → replaceLocalNoteId runs.
-    const serverNote = {
-      id: 'server-dup', title: 'Source copy', content: 'body', note_type: 'text',
-      color: '#ffffff', pinned: false, archived: false, position: 0,
-      checked_items_collapsed: false, is_shared: false, deleted_at: null,
-      user_id: 'u1', created_at: '', updated_at: '', labels: [], shared_with: [],
-    };
-    const db = makeMockDb([
-      {
-        id: 10,
-        operation: 'duplicate',
-        endpoint: '/notes/src-123/duplicate',
-        method: 'POST',
-        body: JSON.stringify({ local_id: 'local_dup_1' }),
-        created_at: '',
-      },
-    ]);
-    mockApi.post.mockResolvedValueOnce({ data: serverNote } as never);
-
-    const { idMappings } = await drainQueue(db as never);
-
-    expect(mockApi.post).toHaveBeenCalledWith('/notes/src-123/duplicate', { local_id: 'local_dup_1' });
-    expect(mockReplaceLocalNoteId).toHaveBeenCalledWith(db, 'local_dup_1', serverNote);
-    expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [10]);
-    expect(idMappings).toEqual([{ localId: 'local_dup_1', serverNote }]);
-  });
-
-  it('remaps a legacy duplicate local_id in later queue entries that reference it', async () => {
-    const serverNote = {
-      id: 'server-dup', title: '', content: 'body', note_type: 'text',
-      color: '#ffffff', pinned: false, archived: false, position: 0,
-      checked_items_collapsed: false, is_shared: false, deleted_at: null,
-      user_id: 'u1', created_at: '', updated_at: '', labels: [], shared_with: [],
-    };
-    const db = makeMockDb([
-      {
-        id: 17,
-        operation: 'duplicate',
-        endpoint: '/notes/src-123/duplicate',
-        method: 'POST',
-        body: JSON.stringify({ local_id: 'local_dup_1' }),
-        created_at: '',
-      },
-      {
-        id: 18,
-        operation: 'update',
-        endpoint: '/notes/local_dup_1',
-        method: 'PATCH',
-        body: JSON.stringify({ content: 'edited' }),
-        created_at: '',
-      },
-    ]);
-    mockApi.post.mockResolvedValueOnce({ data: serverNote } as never);
-    mockApi.patch.mockResolvedValueOnce({ data: {} } as never);
-
-    await drainQueue(db as never);
-
-    // The update endpoint should be remapped to the server-assigned id.
-    expect(mockApi.patch).toHaveBeenCalledWith('/notes/server-dup', { content: 'edited' });
-    expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [17]);
-    expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [18]);
   });
 
   it('reconciles a createLabel local id and remaps it for later queued ops', async () => {
