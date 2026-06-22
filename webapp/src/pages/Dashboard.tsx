@@ -6,7 +6,7 @@ import { getUser, getSettings, setSettings } from '@/utils/auth';
 import type { Note, User, SSEEvent, NoteSort } from '@jot/shared';
 import { useSSE } from '@/hooks/useSSE';
 import { SSEStatusIndicator } from '@/components/SSEStatusIndicator';
-import { useSearchParams, useParams } from 'react-router';
+import { useSearchParams, useParams, useNavigate } from 'react-router';
 import PageContent from '@/components/PageContent';
 import SearchBar from '@/components/SearchBar';
 import SortableNoteCard from '@/components/SortableNoteCard';
@@ -46,6 +46,7 @@ export default function Dashboard() {
   const { showToast } = useToast();
   const { noteId: noteIdParam } = useParams<{ noteId?: string }>();
   const [searchParams, setSearchParams] = useSearchParams();
+  const navigate = useNavigate();
   const {
     labels: labelsList,
     loadLabels,
@@ -311,9 +312,9 @@ export default function Dashboard() {
       openNoteIdRef.current = null;
       const returnTo = returnPathRef.current;
       returnPathRef.current = '/';
-      window.history.replaceState(null, '', returnTo);
+      navigate(returnTo, { replace: true });
     }
-  }, []);
+  }, [navigate]);
 
   const openNoteFromUrl = useCallback((noteId: string) => {
     openNoteIdRef.current = null;
