@@ -541,7 +541,7 @@ func (h *NotesHandler) DuplicateNote(w http.ResponseWriter, r *http.Request) (in
 	duplicatedNote, err := h.noteStore.Duplicate(r.Context(), sourceNote, user.ID, req.ID)
 	if err != nil {
 		if errors.Is(err, models.ErrNoteExists) {
-			return http.StatusConflict, nil, fmt.Errorf("duplicate note: %w", err)
+			return http.StatusConflict, nil, err
 		}
 		return http.StatusInternalServerError, nil, fmt.Errorf("duplicate note: %w", err)
 	}

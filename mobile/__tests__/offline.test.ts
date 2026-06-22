@@ -378,6 +378,10 @@ describe('drainQueue', () => {
     expect(mockApi.post).toHaveBeenCalledWith('/notes/src-123/duplicate', { id: clientId });
     // Save canonical note and clear pending-create marker.
     expect(mockSaveNote).toHaveBeenCalledWith(db, serverNote);
+    expect(db.runAsync).toHaveBeenCalledWith(
+      `UPDATE notes SET sync_state = 'synced' WHERE id = ? AND sync_state = 'pending'`,
+      [clientId],
+    );
     expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [9]);
     expect(idMappings).toEqual([{ localId: clientId, serverNote }]);
   });

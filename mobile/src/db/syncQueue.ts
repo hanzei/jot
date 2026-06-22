@@ -548,9 +548,9 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
           for (const noteId of noteIds) {
             await markNoteSyncFailed(db, noteId);
           }
-        } else if (entry.operation === 'create') {
-          // Replaying a create whose original already committed: the note exists
-          // on the server, so clear its pending-create marker (#475).
+        } else if (entry.operation === 'create' || entry.operation === 'duplicate') {
+          // Replaying a create/duplicate whose original already committed: the
+          // note exists on the server, so clear its pending-create marker (#475).
           for (const noteId of affectedNoteIds(endpoint, body)) {
             await clearNotePendingCreate(db, noteId);
           }
