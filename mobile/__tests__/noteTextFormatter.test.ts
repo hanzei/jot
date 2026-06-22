@@ -145,4 +145,15 @@ describe('formatEditorStateForShare — list notes', () => {
     ];
     expect(formatEditorStateForShare('list', '', '', items)).toBe('[ ] Top\n  [ ] Sub');
   });
+
+  it('respects position when input items are out of order', () => {
+    const items: LocalItem[] = [
+      makeLocalItem('i3', 'Third', false, null, 2),
+      makeLocalItem('i1', 'First', false, null, 0),
+      makeLocalItem('i2', 'Second', true, null, 1),
+    ];
+    expect(formatEditorStateForShare('list', '', '', items)).toBe(
+      '[ ] First\n[x] Second\n[ ] Third',
+    );
+  });
 });

@@ -20,12 +20,16 @@ interface TreeItem {
   text: string;
   completed: boolean;
   parentId: string | null;
+  position: number;
 }
 
 function renderItemLines(items: TreeItem[], parentId: string | null = null, depth = 0): string[] {
   const indent = '  '.repeat(depth);
   const lines: string[] = [];
-  for (const item of items.filter((i) => i.parentId === parentId)) {
+  const siblings = items
+    .filter((i) => i.parentId === parentId)
+    .sort((a, b) => a.position - b.position);
+  for (const item of siblings) {
     lines.push(`${indent}${item.completed ? '[x]' : '[ ]'} ${item.text}`);
     lines.push(...renderItemLines(items, item.id, depth + 1));
   }
@@ -53,6 +57,7 @@ export function formatEditorStateForShare(
     text: i.text,
     completed: i.completed,
     parentId: i.parentId,
+    position: i.position,
   }));
   const itemLines = renderItemLines(treeItems);
   if (itemLines.length > 0) parts.push(itemLines.join('\n'));
@@ -75,6 +80,7 @@ export function formatNoteForShare(note: Note): string {
     text: i.text,
     completed: i.completed,
     parentId: i.parent_id,
+    position: i.position,
   }));
   const itemLines = renderItemLines(treeItems);
   if (itemLines.length > 0) parts.push(itemLines.join('\n'));
