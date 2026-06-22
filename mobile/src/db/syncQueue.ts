@@ -451,10 +451,10 @@ export async function drainQueue(db: SQLiteDatabase): Promise<DrainResult> {
             }
           }
         } else if (entry.operation === 'createLabel' && body?.local_id) {
-          // Reconcile the offline-generated local label id with the server id so
-          // later queued ops that reference it (rename/delete/remove-from-note)
-          // are remapped. Labels are derived from notes' labels_json rather than a
-          // dedicated table, so no row is rewritten here — the remap is enough.
+          // Backward compat: ops queued before issue #546 carried a `local_*`
+          // placeholder id that the server replaced with a new server id. Remap
+          // so later ops (rename/delete) reference the correct id. New ops carry
+          // a client-supplied `id` (the server id) and skip this block entirely.
           const localId = body.local_id as string;
           const data = response?.data;
           if (hasStringId(data) && data.id !== localId) {

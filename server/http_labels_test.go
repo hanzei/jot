@@ -177,6 +177,68 @@ func TestCreateLabel(t *testing.T) {
 	})
 }
 
+func TestCreateLabelWithClientID(t *testing.T) {
+	ts := setupTestServer(t)
+	user := ts.createTestUser(t, "labelwithid", "password123", false)
+
+	t.Run("client-supplied ID is used as the label ID", func(t *testing.T) {
+		label, err := user.Client.CreateLabelWithID(t.Context(), "aaaaaaaaaaaaaaaaaaaaaa", "work")
+		require.NoError(t, err)
+		require.NotNil(t, label)
+		assert.Equal(t, "aaaaaaaaaaaaaaaaaaaaaa", label.ID)
+		assert.Equal(t, "work", label.Name)
+	})
+
+	t.Run("replay with same ID returns 409", func(t *testing.T) {
+		_, err := user.Client.CreateLabelWithID(t.Context(), "bbbbbbbbbbbbbbbbbbbbbb", "personal")
+		require.NoError(t, err)
+
+		_, err = user.Client.CreateLabelWithID(t.Context(), "bbbbbbbbbbbbbbbbbbbbbb", "personal")
+		require.Error(t, err)
+		assert.Equal(t, http.StatusConflict, client.StatusCode(err))
+	})
+
+	t.Run("same ID with different name also returns 409", func(t *testing.T) {
+		_, err := user.Client.CreateLabelWithID(t.Context(), "cccccccccccccccccccccc", "first")
+		require.NoError(t, err)
+
+		_, err = user.Client.CreateLabelWithID(t.Context(), "cccccccccccccccccccccc", "second")
+		require.Error(t, err)
+		assert.Equal(t, http.StatusConflict, client.StatusCode(err))
+	})
+
+	t.Run("invalid ID format returns 400", func(t *testing.T) {
+		_, err := user.Client.CreateLabelWithID(t.Context(), "local_bad_id", "badlabel")
+		require.Error(t, err)
+		assert.Equal(t, http.StatusBadRequest, client.StatusCode(err))
+	})
+
+	t.Run("label is retrievable after creation", func(t *testing.T) {
+		_, err := user.Client.CreateLabelWithID(t.Context(), "dddddddddddddddddddddd", "retrievable")
+		require.NoError(t, err)
+
+		labels, err := user.Client.ListLabels(t.Context())
+		require.NoError(t, err)
+		var found bool
+		for _, l := range labels {
+			if l.ID == "dddddddddddddddddddddd" {
+				found = true
+				assert.Equal(t, "retrievable", l.Name)
+			}
+		}
+		assert.True(t, found, "expected label with client-supplied ID to appear in list")
+	})
+
+	t.Run("name conflict with a different ID returns 409", func(t *testing.T) {
+		_, err := user.Client.CreateLabelWithID(t.Context(), "eeeeeeeeeeeeeeeeeeeeee", "sharedname")
+		require.NoError(t, err)
+
+		_, err = user.Client.CreateLabelWithID(t.Context(), "ffffffffffffffffffffff", "sharedname")
+		require.Error(t, err)
+		assert.Equal(t, http.StatusConflict, client.StatusCode(err))
+	})
+}
+
 func TestGetLabelCounts(t *testing.T) {
 	ts := setupTestServer(t)
 	user := ts.createTestUser(t, "countlabels", "password123", false)

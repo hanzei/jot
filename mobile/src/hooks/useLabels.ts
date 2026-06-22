@@ -20,7 +20,7 @@ import {
   getLocalLabels,
   getLocalLabelCounts,
   getLocalNote,
-  generateLocalId,
+  generateClientLabelId,
   isLocalId,
   isNotePendingCreate,
 } from '../db/noteQueries';
@@ -141,7 +141,7 @@ export function useLabelCounts() {
 function buildLocalLabel(name: string, userId: string): Label {
   const now = new Date().toISOString();
   return {
-    id: generateLocalId(),
+    id: generateClientLabelId(),
     user_id: userId,
     name,
     created_at: now,
@@ -173,16 +173,17 @@ export function useCreateLabel() {
       }
 
       // Offline (or a transient online failure): create a local placeholder label
-      // and queue the server create. The local id is reconciled to the server id
-      // on replay (see drainQueue's `createLabel` handling). Labels are derived
-      // from notes' labels_json, so a label not yet attached to any note lives
-      // only in the React Query cache (updated in onSuccess) until it is.
+      // and queue the server create. The client-generated id is sent to the server
+      // as the label's primary key (#546), so no ID reconciliation is needed on
+      // replay. Labels are derived from notes' labels_json, so a label not yet
+      // attached to any note lives only in the React Query cache (updated in
+      // onSuccess) until it is.
       const localLabel = buildLocalLabel(trimmed, user?.id ?? '');
       await enqueueOperation(db, {
         operation: 'createLabel',
         endpoint: '/labels',
         method: 'POST',
-        body: { local_id: localLabel.id, name: trimmed },
+        body: { id: localLabel.id, name: trimmed },
       });
       return localLabel;
     },
@@ -252,7 +253,7 @@ export function useAddLabelToNote() {
           operation: 'createLabel',
           endpoint: '/labels',
           method: 'POST',
-          body: { local_id: label.id, name: trimmed },
+          body: { id: label.id, name: trimmed },
         });
       }
 

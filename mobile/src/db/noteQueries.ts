@@ -785,7 +785,7 @@ const SERVER_ID_LENGTH = 22;
  * `POST /notes` and the create replays idempotently — no server-side ID
  * reconciliation is needed because the client ID *is* the server ID (issue #475).
  */
-export function generateClientNoteId(): string {
+function generateClientId(): string {
   const bytes = new Uint8Array(SERVER_ID_LENGTH);
   getStrongRandomBytes(bytes);
   let id = '';
@@ -793,6 +793,26 @@ export function generateClientNoteId(): string {
     id += SERVER_ID_CHARS[bytes[i] % SERVER_ID_CHARS.length];
   }
   return id;
+}
+
+/**
+ * Generate a server-compatible 22-char note ID. Offline-created notes use this
+ * (rather than a `local_*` ID) so the ID is sent as the note's primary key on
+ * `POST /notes` and the create replays idempotently — no server-side ID
+ * reconciliation is needed because the client ID *is* the server ID (issue #475).
+ */
+export function generateClientNoteId(): string {
+  return generateClientId();
+}
+
+/**
+ * Generate a server-compatible 22-char label ID. Offline-created labels use this
+ * (rather than a `local_*` ID) so the ID is sent as the label's primary key on
+ * `POST /labels` and the create replays idempotently — no server-side ID
+ * reconciliation is needed because the client ID *is* the server ID (issue #546).
+ */
+export function generateClientLabelId(): string {
+  return generateClientId();
 }
 
 export function isLocalId(id: string): boolean {
