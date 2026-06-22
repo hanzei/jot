@@ -27,7 +27,6 @@ import { useUsers } from '../store/UsersContext';
 import { useAuth } from '../store/AuthContext';
 import { useToast } from '../hooks/useToast';
 import { useTheme } from '../theme/ThemeContext';
-import { isLocalId } from '../db/noteQueries';
 import SkeletonNoteList from '../components/SkeletonNoteList';
 import NoteCard from '../components/NoteCard';
 import NoteContextMenu, { ContextMenuViewContext } from '../components/NoteContextMenu';
@@ -378,13 +377,6 @@ export default function NotesListScreen({ variant = 'notes', labelId }: NotesLis
   }, [restoreNote, showToast, t]);
 
   const handleDuplicate = useCallback(async (note: Note) => {
-    // An offline-created note duplicates fine (its create drains FIFO before the
-    // queued duplicate, #475); only a local_* duplicate must wait to reconcile.
-    if (isLocalId(note.id)) {
-      Alert.alert(t('common.error'), t('note.waitForSyncBeforeDuplicating'));
-      return;
-    }
-
     try {
       await duplicateNote.mutateAsync(note.id);
       Alert.alert(t('note.duplicate'), t('note.duplicated'));

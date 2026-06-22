@@ -191,10 +191,11 @@ function collectNoteIds(
   } else {
     // POST /notes/{id}/duplicate creates a local clone: the write belongs to the
     // clone, not the source note (which it only reads), so track just the new
-    // local_id. Every other /notes/{id}/... op touches that note itself.
+    // note id. Newer ops carry `id` (server-valid client id); fall back to the
+    // legacy `local_id` for ops queued before this change.
     if (segments.length === 3 && segments[2] === 'duplicate') {
-      const localId = body?.local_id;
-      if (typeof localId === 'string') ids.add(localId);
+      const dupId = body?.id ?? body?.local_id;
+      if (typeof dupId === 'string') ids.add(dupId);
     } else {
       ids.add(segments[1]);
     }

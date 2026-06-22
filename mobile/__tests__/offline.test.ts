@@ -379,7 +379,42 @@ describe('drainQueue', () => {
     ]);
   });
 
-  it('reconciles a duplicate local id and replaces the local note with the server note', async () => {
+  it('adopts the server note and clears pending-create when duplicate uses a client-supplied id', async () => {
+    // New-style offline duplicate: client sends { id } instead of { local_id }.
+    // The server keeps the client-supplied id, so serverNote.id === clientId →
+    // the stable-id path runs (saveNote + clearNotePendingCreate), no remap needed.
+    const clientId = 'DupClientId000000000Ab';
+    const serverNote = {
+      id: clientId, title: 'Copy of Source', content: 'body', note_type: 'text',
+      color: '#ffffff', pinned: false, archived: false, position: 0,
+      checked_items_collapsed: false, is_shared: false, deleted_at: null,
+      user_id: 'u1', created_at: '', updated_at: '', labels: [], shared_with: [],
+    };
+    const db = makeMockDb([
+      {
+        id: 9,
+        operation: 'duplicate',
+        endpoint: '/notes/src-123/duplicate',
+        method: 'POST',
+        body: JSON.stringify({ id: clientId }),
+        created_at: '',
+      },
+    ]);
+    mockApi.post.mockResolvedValueOnce({ data: serverNote } as never);
+
+    const { idMappings } = await drainQueue(db as never);
+
+    expect(mockApi.post).toHaveBeenCalledWith('/notes/src-123/duplicate', { id: clientId });
+    // Stable-id path: save canonical note and clear pending-create; no id replacement.
+    expect(mockSaveNote).toHaveBeenCalledWith(db, serverNote);
+    expect(mockReplaceLocalNoteId).not.toHaveBeenCalled();
+    expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [9]);
+    expect(idMappings).toEqual([{ localId: clientId, serverNote }]);
+  });
+
+  it('reconciles a legacy duplicate local_id and replaces the local note with the server note', async () => {
+    // Backward-compat: old-style ops queued before this change still use { local_id }.
+    // The server assigns a new id, so serverNote.id !== local_id → replaceLocalNoteId runs.
     const serverNote = {
       id: 'server-dup', title: 'Source copy', content: 'body', note_type: 'text',
       color: '#ffffff', pinned: false, archived: false, position: 0,
@@ -388,7 +423,7 @@ describe('drainQueue', () => {
     };
     const db = makeMockDb([
       {
-        id: 9,
+        id: 10,
         operation: 'duplicate',
         endpoint: '/notes/src-123/duplicate',
         method: 'POST',
@@ -402,11 +437,11 @@ describe('drainQueue', () => {
 
     expect(mockApi.post).toHaveBeenCalledWith('/notes/src-123/duplicate', { local_id: 'local_dup_1' });
     expect(mockReplaceLocalNoteId).toHaveBeenCalledWith(db, 'local_dup_1', serverNote);
-    expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [9]);
+    expect(db.runAsync).toHaveBeenCalledWith('DELETE FROM sync_queue WHERE id = ?', [10]);
     expect(idMappings).toEqual([{ localId: 'local_dup_1', serverNote }]);
   });
 
-  it('remaps a duplicate local id in later queue entries that reference it', async () => {
+  it('remaps a legacy duplicate local_id in later queue entries that reference it', async () => {
     const serverNote = {
       id: 'server-dup', title: '', content: 'body', note_type: 'text',
       color: '#ffffff', pinned: false, archived: false, position: 0,

@@ -187,7 +187,11 @@ describe('NoteContextMenu labels action', () => {
     expect(getByTestId('context-label')).toBeTruthy();
   });
 
-  it('hides share, duplicate, and label actions for local notes', () => {
+  it('hides share and label actions for local notes, but shows duplicate', () => {
+    // Duplicate no longer requires a server id — offline duplicates now use a
+    // server-valid client id, so the action is available for all notes including
+    // ones with a local_* id (e.g. offline-created labels still produce local_ ids).
+    // Share and label management still require a server id, so those remain hidden.
     const { queryByTestId } = render(
       <NoteContextMenu
         visible
@@ -208,7 +212,7 @@ describe('NoteContextMenu labels action', () => {
     );
 
     expect(queryByTestId('context-share')).toBeNull();
-    expect(queryByTestId('context-duplicate')).toBeNull();
+    expect(queryByTestId('context-duplicate')).toBeTruthy();
     expect(queryByTestId('context-label')).toBeNull();
   });
 

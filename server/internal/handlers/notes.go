@@ -482,18 +482,29 @@ func (h *NotesHandler) GetNote(w http.ResponseWriter, r *http.Request) (int, any
 	return http.StatusOK, sanitizeNote(*note), nil
 }
 
+// DuplicateNoteRequest is the optional request body for the duplicate endpoint.
+// When ID is supplied the caller's value is used as the new note's primary key
+// so the operation is idempotent on replay (same ID → 409, no second copy).
+// Omitting the body or leaving ID empty falls back to server-side ID generation.
+type DuplicateNoteRequest struct {
+	ID string `json:"id"`
+}
+
 // DuplicateNote godoc
 //
 //	@Summary	Duplicate an existing note
 //	@Tags		notes
 //	@Security	CookieAuth
+//	@Accept		json
 //	@Produce	json
-//	@Param		id	path		string	true	"Note ID"
-//	@Success	201	{object}	models.Note
-//	@Failure	400	{string}	string	"bad request"
-//	@Failure	401	{string}	string	"unauthorized"
-//	@Failure	404	{string}	string	"not found"
-//	@Failure	500	{string}	string	"internal server error"
+//	@Param		id		path		string				true	"Note ID"
+//	@Param		body	body		DuplicateNoteRequest	false	"Optional client-supplied ID for idempotent replay"
+//	@Success	201		{object}	models.Note
+//	@Failure	400		{string}	string	"bad request"
+//	@Failure	401		{string}	string	"unauthorized"
+//	@Failure	404		{string}	string	"not found"
+//	@Failure	409		{string}	string	"conflict — duplicate ID already exists"
+//	@Failure	500		{string}	string	"internal server error"
 //	@Router		/notes/{id}/duplicate [post]
 func (h *NotesHandler) DuplicateNote(w http.ResponseWriter, r *http.Request) (int, any, error) {
 	user, ok := auth.GetUserFromContext(r.Context())
@@ -509,6 +520,16 @@ func (h *NotesHandler) DuplicateNote(w http.ResponseWriter, r *http.Request) (in
 		return http.StatusBadRequest, nil, errors.New("invalid note ID format")
 	}
 
+	var req DuplicateNoteRequest
+	if r.ContentLength != 0 {
+		if err := decodeJSONBody(w, r, &req); err != nil {
+			return http.StatusBadRequest, nil, err
+		}
+	}
+	if req.ID != "" && !models.IsValidID(req.ID) {
+		return http.StatusBadRequest, nil, errors.New("invalid duplicate note ID format")
+	}
+
 	sourceNote, err := h.noteStore.GetByID(r.Context(), id, user.ID)
 	if err != nil {
 		if errors.Is(err, models.ErrNoteNotFound) {
@@ -517,8 +538,11 @@ func (h *NotesHandler) DuplicateNote(w http.ResponseWriter, r *http.Request) (in
 		return http.StatusInternalServerError, nil, fmt.Errorf("get note: %w", err)
 	}
 
-	duplicatedNote, err := h.noteStore.Duplicate(r.Context(), sourceNote, user.ID)
+	duplicatedNote, err := h.noteStore.Duplicate(r.Context(), sourceNote, user.ID, req.ID)
 	if err != nil {
+		if errors.Is(err, models.ErrNoteExists) {
+			return http.StatusConflict, nil, fmt.Errorf("duplicate note: %w", err)
+		}
 		return http.StatusInternalServerError, nil, fmt.Errorf("duplicate note: %w", err)
 	}
 
