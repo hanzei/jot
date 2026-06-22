@@ -11,6 +11,7 @@ import {
   InputAccessoryView,
   Keyboard,
   Modal,
+  Share,
   type TextInputProps,
   type TextInput as TextInputType,
 } from 'react-native';
@@ -38,6 +39,7 @@ import { useTheme } from '../theme/ThemeContext';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import { getCompletedSectionDividerColor, isWhiteHexColor } from '../utils/colorContrast';
+import { formatEditorStateForShare } from '../utils/noteTextFormatter';
 import { fullMarkdownStyles, preprocessMarkdown } from '../utils/markdownStyles';
 import { getActiveServer, listServers, type ServerAccountEntry } from '../store/serverAccounts';
 import { setPendingShare, usePendingShare } from '../store/shareIntent';
@@ -987,6 +989,11 @@ export default function NoteEditorScreen() {
     setAssigneePickerVisible(true);
   }, []);
 
+  const handleNativeShare = useCallback(() => {
+    const text = formatEditorStateForShare(noteTypeRef.current, titleRef.current, contentRef.current, itemsRef.current);
+    if (text.trim()) void Share.share({ message: text });
+  }, []);
+
   const handleDelete = useCallback(() => {
     if (!noteId) {
       intentionalExitRef.current = true;
@@ -1585,10 +1592,23 @@ export default function NoteEditorScreen() {
           <Ionicons name="color-palette-outline" size={22} color={hasNoteColor ? '#444' : colors.icon} />
         </TouchableOpacity>
 
-        {/* Share (when the note is saved and owned by the current user). An
-            offline-created note can be shared: its create drains FIFO before the
-            queued share (#475). Notes with a local_* id (offline labels) are
-            excluded since they have no server id yet. */}
+        {/* Send: share note content via the system share sheet. Available for
+            any saved note regardless of ownership. */}
+        {noteId && (
+          <TouchableOpacity
+            onPress={handleNativeShare}
+            style={styles.toolbarBtn}
+            testID="toolbar-send-btn"
+            accessibilityLabel={t('note.send')}
+          >
+            <Ionicons name="share-outline" size={22} color={hasNoteColor ? '#444' : colors.icon} />
+          </TouchableOpacity>
+        )}
+
+        {/* Share with collaborators (when the note is saved and owned by the current
+            user). An offline-created note can be shared: its create drains FIFO
+            before the queued share (#475). Notes with a local_* id (offline labels)
+            are excluded since they have no server id yet. */}
         {noteId && !isLocalId(noteId) && existingNote && existingNote.user_id === currentUser?.id && (
           <TouchableOpacity
             onPress={() => navigation.navigate('Share', { noteId })}
@@ -1596,7 +1616,7 @@ export default function NoteEditorScreen() {
             testID="toolbar-share-btn"
             accessibilityLabel={t('note.share')}
           >
-            <Ionicons name="share-social-outline" size={22} color={hasNoteColor ? '#444' : colors.icon} />
+            <Ionicons name="person-add-outline" size={22} color={hasNoteColor ? '#444' : colors.icon} />
           </TouchableOpacity>
         )}
 

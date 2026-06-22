@@ -26,6 +26,7 @@ jest.mock('react-i18next', () => ({
       const labels: Record<string, string> = {
         'note.changeColor': 'Note color',
         'note.share': 'Share',
+        'note.send': 'Send',
         'note.pin': 'Pin',
         'note.unpin': 'Unpin',
         'note.archive': 'Archive',
