@@ -1251,6 +1251,9 @@
         },
         "/notes/{id}/duplicate": {
             "post": {
+                "consumes": [
+                    "application/json"
+                ],
                 "produces": [
                     "application/json"
                 ],
@@ -1265,6 +1268,14 @@
                         "name": "id",
                         "in": "path",
                         "required": true
+                    },
+                    {
+                        "description": "Optional client-supplied ID for idempotent replay",
+                        "name": "body",
+                        "in": "body",
+                        "schema": {
+                            "$ref": "#/definitions/handlers.DuplicateNoteRequest"
+                        }
                     }
                 ],
                 "responses": {
@@ -1288,6 +1299,12 @@
                     },
                     "404": {
                         "description": "not found",
+                        "schema": {
+                            "type": "string"
+                        }
+                    },
+                    "409": {
+                        "description": "conflict — duplicate ID already exists",
                         "schema": {
                             "type": "string"
                         }
@@ -2733,6 +2750,14 @@
             "properties": {
                 "deleted": {
                     "type": "integer"
+                }
+            }
+        },
+        "handlers.DuplicateNoteRequest": {
+            "type": "object",
+            "properties": {
+                "id": {
+                    "type": "string"
                 }
             }
         },

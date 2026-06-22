@@ -1139,11 +1139,7 @@ export default function NoteEditorScreen() {
     }
 
     const currentNoteId = noteIdRef.current;
-    // A local_* duplicate can't be re-duplicated until it reconciles to a server
-    // id; an offline-created note (server-valid id, #475) duplicates fine — its
-    // create drains FIFO before the queued duplicate.
-    if (!currentNoteId || isLocalId(currentNoteId)) {
-      Alert.alert(t('common.error'), t('note.waitForSyncBeforeDuplicating'));
+    if (!currentNoteId) {
       return;
     }
 
@@ -1591,8 +1587,8 @@ export default function NoteEditorScreen() {
 
         {/* Share (when the note is saved and owned by the current user). An
             offline-created note can be shared: its create drains FIFO before the
-            queued share (#475). Only a local_* duplicate (no server id yet) is
-            excluded. */}
+            queued share (#475). Notes with a local_* id (offline labels) are
+            excluded since they have no server id yet. */}
         {noteId && !isLocalId(noteId) && existingNote && existingNote.user_id === currentUser?.id && (
           <TouchableOpacity
             onPress={() => navigation.navigate('Share', { noteId })}
@@ -1632,9 +1628,8 @@ export default function NoteEditorScreen() {
           </TouchableOpacity>
         )}
 
-        {/* Duplicate. An offline-created note duplicates fine (create drains FIFO
-            before the queued duplicate, #475); only a local_* duplicate is excluded. */}
-        {noteId && !isLocalId(noteId) && (
+        {/* Duplicate. */}
+        {noteId && (
           <TouchableOpacity
             onPress={handleDuplicate}
             style={styles.toolbarBtn}
@@ -1645,8 +1640,9 @@ export default function NoteEditorScreen() {
           </TouchableOpacity>
         )}
 
-        {/* Label button. Like Share, label ops queue FIFO behind an offline-created
-            note's create (#475), so only a local_* duplicate (no server id) is excluded. */}
+        {/* Label button. Label ops queue FIFO behind an offline-created note's
+            create (#475), so they work for pending-create notes. Only unsynced
+            notes with a local_* id (offline labels) are excluded. */}
         {noteId && !isLocalId(noteId) && (
           <TouchableOpacity
             onPress={() => setLabelPickerVisible(true)}

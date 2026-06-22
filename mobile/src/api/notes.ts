@@ -68,8 +68,8 @@ export async function restoreNote(id: string): Promise<void> {
   await api.post(`/notes/${id}/restore`);
 }
 
-export async function duplicateNote(id: string): Promise<Note> {
-  const res = await api.post(`/notes/${id}/duplicate`);
+export async function duplicateNote(id: string, clientId?: string): Promise<Note> {
+  const res = await api.post(`/notes/${id}/duplicate`, clientId ? { id: clientId } : undefined);
   return res.data;
 }
 

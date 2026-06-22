@@ -519,19 +519,6 @@ export async function deleteLabelFromLocalNotes(
   });
 }
 
-export async function replaceLocalNoteId(
-  db: SQLiteDatabase,
-  oldId: string,
-  newNote: Note,
-): Promise<void> {
-  // Wrap DELETE + INSERT in a single transaction so a mid-operation crash cannot
-  // leave the note permanently deleted without the new server ID being written.
-  await withSerializedTransaction(db, async () => {
-    await db.runAsync('DELETE FROM notes WHERE id = ?', [oldId]);
-    await saveNoteInTx(db, newNote);
-  });
-}
-
 /**
  * Remove local (server-synced) notes that match the given query scope but are not
  * present in the provided server ID set. Local-only notes (id starting with "local_")

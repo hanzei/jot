@@ -121,16 +121,36 @@ func duplicateNoteTitle(title string) string {
 	return "Copy of " + title
 }
 
-func (s *noteStore) Duplicate(ctx context.Context, source *Note, userID string) (*Note, error) {
+// Duplicate creates a copy of source owned by userID. When clientID is non-empty
+// it is used as the new note's primary key so the operation is idempotent on
+// replay; when empty a server-side ID is generated. Returns ErrNoteExists when
+// clientID is already taken (e.g. a replayed duplicate whose original committed).
+func (s *noteStore) Duplicate(ctx context.Context, source *Note, userID, clientID string) (*Note, error) {
 	tx, err := s.db.BeginTx(ctx, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to begin transaction: %w", err)
 	}
 	defer func() { _ = tx.Rollback() }()
 
-	noteID, err := generateID()
-	if err != nil {
-		return nil, fmt.Errorf("failed to generate note ID: %w", err)
+	noteID := clientID
+	if noteID == "" {
+		noteID, err = generateID()
+		if err != nil {
+			return nil, fmt.Errorf("failed to generate note ID: %w", err)
+		}
+	} else {
+		// Reject a duplicate caller-supplied ID up front so a replayed duplicate
+		// returns ErrNoteExists (mapped to 409) instead of a raw constraint error.
+		var exists int
+		if err = tx.QueryRowContext(ctx,
+			s.d.RewritePlaceholders(`SELECT COUNT(*) FROM notes WHERE id = ?`),
+			noteID,
+		).Scan(&exists); err != nil {
+			return nil, fmt.Errorf("failed to check note existence: %w", err)
+		}
+		if exists > 0 {
+			return nil, ErrNoteExists
+		}
 	}
 
 	if _, err = tx.ExecContext(ctx,
@@ -151,6 +171,11 @@ func (s *noteStore) Duplicate(ctx context.Context, source *Note, userID string) 
 		source.Content,
 		source.NoteType,
 	); err != nil {
+		// Two concurrent duplicates with the same caller-supplied ID can both pass
+		// the existence check above; map the constraint violation to ErrNoteExists.
+		if clientID != "" && s.d.IsUniqueConstraintError(err) {
+			return nil, ErrNoteExists
+		}
 		return nil, fmt.Errorf("failed to create duplicated note: %w", err)
 	}
 
