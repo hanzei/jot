@@ -327,7 +327,8 @@
   },
   "offline": {
     "message": "Jesteś offline. Zmiany zostaną zsynchronizowane po ponownym połączeniu.",
-    "syncError": "Niektóre zmiany nie zostały jeszcze zsynchronizowane. Nastąpi automatyczna ponowna próba."
+    "syncError": "Niektóre zmiany nie zostały jeszcze zsynchronizowane. Nastąpi automatyczna ponowna próba.",
+    "revalidationError": "Nie można zweryfikować sesji z serwerem. Używane są lokalne dane."
   },
   "syncFailures": {
     "bannerCount_one": "Nie udało się zapisać {{count}} zmiany — Przejrzyj",

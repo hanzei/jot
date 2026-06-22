@@ -3,6 +3,7 @@ import { useTranslation } from 'react-i18next';
 import { useNavigation } from '@react-navigation/native';
 import type { NativeStackNavigationProp } from '@react-navigation/native-stack';
 import { useOfflineContext } from '../store/OfflineContext';
+import { useAuth } from '../store/AuthContext';
 import { useTheme } from '../theme/ThemeContext';
 import type { RootStackParamList } from '../navigation/RootNavigator';
 import Banner from './Banner';
@@ -25,11 +26,12 @@ export default function SyncFailuresBanner() {
     syncFailuresBannerDismissed,
     dismissSyncFailuresBanner,
   } = useOfflineContext();
+  const { revalidationFailed } = useAuth();
   const { colors } = useTheme();
   const { t } = useTranslation();
   const navigation = useNavigation<NavigationProp>();
 
-  const otherBannerAbove = !isConnected || syncError;
+  const otherBannerAbove = !isConnected || syncError || (isConnected && revalidationFailed);
 
   return (
     <Banner

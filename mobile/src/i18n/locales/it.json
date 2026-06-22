@@ -356,7 +356,8 @@
   },
   "offline": {
     "message": "Sei offline. Le modifiche verranno sincronizzate quando ti riconnetterai.",
-    "syncError": "Alcune modifiche non sono ancora state sincronizzate. Verrà effettuato un nuovo tentativo automaticamente."
+    "syncError": "Alcune modifiche non sono ancora state sincronizzate. Verrà effettuato un nuovo tentativo automaticamente.",
+    "revalidationError": "Impossibile verificare la sessione con il server. Vengono utilizzati i dati locali."
   },
   "syncFailures": {
     "bannerCount_one": "Impossibile salvare {{count}} modifica — Rivedi",

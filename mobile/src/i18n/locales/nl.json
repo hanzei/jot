@@ -356,7 +356,8 @@
   },
   "offline": {
     "message": "Je bent offline. Wijzigingen worden gesynchroniseerd als je weer verbinding hebt.",
-    "syncError": "Sommige wijzigingen zijn nog niet gesynchroniseerd. Er wordt automatisch opnieuw geprobeerd."
+    "syncError": "Sommige wijzigingen zijn nog niet gesynchroniseerd. Er wordt automatisch opnieuw geprobeerd.",
+    "revalidationError": "Sessie kon niet worden geverifieerd met de server. Lokale gegevens worden gebruikt."
   },
   "syncFailures": {
     "bannerCount_one": "{{count}} wijziging kon niet worden opgeslagen — Bekijken",
