@@ -1,5 +1,5 @@
 import { useState, useEffect, useMemo, useRef, useCallback, type ReactElement } from 'react';
-import { XMarkIcon, PlusIcon, TrashIcon, ChevronDownIcon, ArchiveBoxIcon, ArchiveBoxXMarkIcon, ShareIcon, UserPlusIcon, CheckIcon, TagIcon, DocumentDuplicateIcon, DevicePhoneMobileIcon, PaintBrushIcon } from '@heroicons/react/24/outline';
+import { XMarkIcon, PlusIcon, TrashIcon, ChevronDownIcon, ArchiveBoxIcon, ArchiveBoxXMarkIcon, UserPlusIcon, CheckIcon, TagIcon, DocumentDuplicateIcon, DevicePhoneMobileIcon, PaintBrushIcon } from '@heroicons/react/24/outline';
 import { Dialog, DialogPanel } from '@headlessui/react';
 import { useTranslation } from 'react-i18next';
 import { VALIDATION, NOTE_COLORS, buildCollaborators, generateId, type Note, type NoteItem, type NoteType, type CreateNoteRequest, type UpdateNoteRequest, type PatchNoteItemRequest, type Label, type User, type Collaborator } from '@jot/shared';
@@ -2242,7 +2242,7 @@ export default function NoteModal({ note, onClose, onSave, onRefresh, onShare, o
                         title={t('note.share')}
                         aria-label={t('note.share')}
                       >
-                        <ShareIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
+                        <UserPlusIcon className="h-5 w-5 text-gray-600 dark:text-gray-300" />
                       </button>
                     )}
                     {onDuplicate && (

@@ -4,7 +4,7 @@ import {
   TrashIcon,
   ArchiveBoxIcon,
   ArchiveBoxXMarkIcon,
-  ShareIcon,
+  UserPlusIcon,
   ArrowUturnLeftIcon,
   DocumentDuplicateIcon,
 } from '@heroicons/react/24/outline';
@@ -269,7 +269,7 @@ export default function NoteCard({ note, onEdit, onDelete, onDuplicate, onShare,
                       className="flex items-center justify-between w-full px-4 py-2 text-sm text-gray-700 dark:text-gray-200 data-[focus]:bg-gray-100 dark:data-[focus]:bg-slate-700"
                     >
                       <span className="flex items-center">
-                        <ShareIcon className="h-4 w-4 mr-2" />
+                        <UserPlusIcon className="h-4 w-4 mr-2" />
                         {t('note.share')}
                       </span>
                       <MenuKbd>S</MenuKbd>

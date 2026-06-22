@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   StyleSheet,
   Pressable,
+  Share,
 } from 'react-native';
 import { SafeAreaInsetsContext } from 'react-native-safe-area-context';
 import Ionicons from '@expo/vector-icons/Ionicons';
@@ -13,6 +14,7 @@ import { useTranslation } from 'react-i18next';
 import type { Note } from '@jot/shared';
 import { useTheme } from '../theme/ThemeContext';
 import { isLocalId } from '../db/noteQueries';
+import { formatNoteForShare } from '../utils/noteTextFormatter';
 
 export type ContextMenuViewContext = 'notes' | 'archived' | 'trash' | 'my-tasks';
 
@@ -88,10 +90,20 @@ export default function NoteContextMenu({
       onPress: () => { onClose(); onChangeColor(note); },
       testId: 'context-color',
     });
+    actions.push({
+      icon: 'share-outline',
+      label: t('note.send'),
+      onPress: () => {
+        onClose();
+        const text = formatNoteForShare(note);
+        if (text.trim()) void Share.share({ message: text });
+      },
+      testId: 'context-send',
+    });
     // is_shared means the current user is a recipient, not the owner — hide Share for non-owners
     if (!note.is_shared && !isLocalId(note.id)) {
       actions.push({
-        icon: 'share-social-outline',
+        icon: 'person-add-outline',
         label: t('note.share'),
         onPress: () => { onClose(); onShare(note); },
         testId: 'context-share',
@@ -127,6 +139,16 @@ export default function NoteContextMenu({
       testId: 'context-trash',
     });
   } else if (viewContext === 'archived') {
+    actions.push({
+      icon: 'share-outline',
+      label: t('note.send'),
+      onPress: () => {
+        onClose();
+        const text = formatNoteForShare(note);
+        if (text.trim()) void Share.share({ message: text });
+      },
+      testId: 'context-send',
+    });
     actions.push({
       icon: 'archive-outline',
       label: t('note.unarchive'),
