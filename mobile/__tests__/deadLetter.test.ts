@@ -127,13 +127,14 @@ describe('drainQueue dead-letter persistence', () => {
   });
 
   it('flags a dead-lettered offline-create so its orphan local note is distinguishable from a synced one', async () => {
+    const orphanId = 'ClientNoteId000000000A';
     const db = makeDrainDb([
       {
         id: 2,
         operation: 'create',
         endpoint: '/notes',
         method: 'POST',
-        body: JSON.stringify({ local_id: 'local_orphan', title: 'x', content: '', note_type: 'text' }),
+        body: JSON.stringify({ id: orphanId, title: 'x', content: '', note_type: 'text' }),
         created_at: 't0',
       },
     ]);
@@ -142,9 +143,9 @@ describe('drainQueue dead-letter persistence', () => {
     await drainQueue(db as never);
 
     const failedMarks = callsStartingWith(db, `UPDATE notes SET sync_state = 'failed'`);
-    expect(failedMarks).toEqual([['local_orphan']]);
+    expect(failedMarks).toEqual([[orphanId]]);
     const inserts = callsStartingWith(db, 'INSERT INTO dead_letter');
-    expect(inserts[0][5]).toBe('local_orphan'); // note_id column
+    expect(inserts[0][5]).toBe(orphanId); // note_id column
   });
 
   it('stores a NULL note_id for a multi-note reorder but flags every listed note', async () => {
@@ -238,29 +239,30 @@ describe('drainQueue dead-letter persistence', () => {
     expect(callsStartingWith(db, 'INSERT INTO dead_letter')).toHaveLength(0);
   });
 
-  it('dead-letters using the id-remapped endpoint after an earlier create reconciled the local id', async () => {
-    const serverNote = makeTextNote('server-1');
+  it('dead-letters an update queued after an offline create when the update fails', async () => {
+    const clientId = 'ClientNoteId000000001A';
+    const serverNote = makeTextNote(clientId);
     const db = makeDrainDb([
       {
         id: 5,
         operation: 'create',
         endpoint: '/notes',
         method: 'POST',
-        body: JSON.stringify({ local_id: 'local_a', title: 'x', content: '', note_type: 'text' }),
+        body: JSON.stringify({ id: clientId, title: 'x', content: '', note_type: 'text' }),
         created_at: 't0',
       },
-      { id: 6, operation: 'update', endpoint: '/notes/local_a', method: 'PATCH', body: '{"content":"z"}', created_at: 't1' },
+      { id: 6, operation: 'update', endpoint: `/notes/${clientId}`, method: 'PATCH', body: '{"content":"z"}', created_at: 't1' },
     ]);
     mockApi.post.mockResolvedValueOnce({ data: serverNote } as never);
     mockApi.patch.mockRejectedValueOnce(makeAxiosError(403));
 
     await drainQueue(db as never);
 
-    // The dead-lettered update is stored and flagged against the *server* id.
+    // The dead-lettered update is stored and flagged against the client/server id.
     const inserts = callsStartingWith(db, 'INSERT INTO dead_letter');
-    expect(inserts[0][1]).toBe('/notes/server-1'); // endpoint column
-    expect(inserts[0][5]).toBe('server-1'); // note_id column
-    expect(callsStartingWith(db, `UPDATE notes SET sync_state = 'failed'`)).toEqual([['server-1']]);
+    expect(inserts[0][1]).toBe(`/notes/${clientId}`); // endpoint column
+    expect(inserts[0][5]).toBe(clientId); // note_id column
+    expect(callsStartingWith(db, `UPDATE notes SET sync_state = 'failed'`)).toEqual([[clientId]]);
   });
 });
 

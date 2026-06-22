@@ -70,20 +70,20 @@ describe('getPendingNoteIds', () => {
     expect(ids).toEqual(new Set(['n1', 'n2', 'n3', 'n4', 'n5', 'n6', 'n7', 'n8']));
   });
 
-  it('uses body.local_id for offline-create (POST /notes) entries', async () => {
+  it('uses body.id for offline-create (POST /notes) entries', async () => {
     const db = makeDb([
-      { endpoint: '/notes', body: JSON.stringify({ local_id: 'local_abc', title: 'x' }) },
+      { endpoint: '/notes', body: JSON.stringify({ id: 'ClientNoteId000000000A', title: 'x' }) },
     ]);
     const ids = await getPendingNoteIds(db as never);
-    expect(ids).toEqual(new Set(['local_abc']));
+    expect(ids).toEqual(new Set(['ClientNoteId000000000A']));
   });
 
-  it('tracks only the new local_id for a duplicate, not the source note it reads', async () => {
+  it('tracks only the new id for a duplicate, not the source note it reads', async () => {
     const db = makeDb([
-      { endpoint: '/notes/src-1/duplicate', body: JSON.stringify({ local_id: 'local_clone' }) },
+      { endpoint: '/notes/src-1/duplicate', body: JSON.stringify({ id: 'DupClientId000000000A' }) },
     ]);
     const ids = await getPendingNoteIds(db as never);
-    expect(ids).toEqual(new Set(['local_clone']));
+    expect(ids).toEqual(new Set(['DupClientId000000000A']));
   });
 
   it('expands body.note_ids for a /notes/reorder entry', async () => {

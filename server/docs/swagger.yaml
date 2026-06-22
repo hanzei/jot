@@ -94,6 +94,11 @@ definitions:
       deleted:
         type: integer
     type: object
+  handlers.DuplicateNoteRequest:
+    properties:
+      id:
+        type: string
+    type: object
   handlers.EmptyTrashResponse:
     properties:
       deleted:
@@ -1194,12 +1199,19 @@ paths:
       - notes
   /notes/{id}/duplicate:
     post:
+      consumes:
+      - application/json
       parameters:
       - description: Note ID
         in: path
         name: id
         required: true
         type: string
+      - description: Optional client-supplied ID for idempotent replay
+        in: body
+        name: body
+        schema:
+          $ref: '#/definitions/handlers.DuplicateNoteRequest'
       produces:
       - application/json
       responses:
@@ -1217,6 +1229,10 @@ paths:
             type: string
         "404":
           description: not found
+          schema:
+            type: string
+        "409":
+          description: conflict — duplicate ID already exists
           schema:
             type: string
         "500":

@@ -1,6 +1,9 @@
 package main
 
 import (
+	"bytes"
+	"encoding/json"
+	"net/http"
 	"testing"
 
 	"github.com/hanzei/jot/server/client"
@@ -146,4 +149,96 @@ func TestCreateNotePersistsCompletedItems(t *testing.T) {
 	assert.True(t, fetched.Items[1].Completed)
 	require.NotNil(t, fetched.Items[1].ParentID)
 	assert.Equal(t, fetched.Items[0].ID, *fetched.Items[1].ParentID)
+}
+
+// TestDuplicateNoteIdempotency covers the client-supplied ID path that makes
+// an offline-duplicate's replayed POST /notes/{id}/duplicate idempotent.
+func TestDuplicateNoteIdempotency(t *testing.T) {
+	// postDuplicateRaw sends a raw JSON body to POST /api/v1/notes/{id}/duplicate
+	// and returns the HTTP status code plus the decoded response note (nil on non-201).
+	postDuplicateRaw := func(t *testing.T, httpClient *http.Client, baseURL, sourceID string, body map[string]any) (int, *client.Note) {
+		t.Helper()
+		data, err := json.Marshal(body)
+		require.NoError(t, err)
+		req, err := http.NewRequestWithContext(t.Context(), http.MethodPost,
+			baseURL+"/api/v1/notes/"+sourceID+"/duplicate", bytes.NewReader(data))
+		require.NoError(t, err)
+		req.Header.Set("Content-Type", "application/json")
+		resp, err := httpClient.Do(req)
+		require.NoError(t, err)
+		defer resp.Body.Close()
+		if resp.StatusCode != http.StatusCreated {
+			return resp.StatusCode, nil
+		}
+		var note client.Note
+		require.NoError(t, json.NewDecoder(resp.Body).Decode(&note))
+		return resp.StatusCode, &note
+	}
+
+	t.Run("client-supplied id is used as the duplicate's primary key", func(t *testing.T) {
+		ts := setupTestServer(t)
+		user := ts.createTestUser(t, "dupid-user", "password123", false)
+
+		source, err := user.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{Content: "original"})
+		require.NoError(t, err)
+
+		clientID := "DupClientId000000000Ab"
+		status, note := postDuplicateRaw(t, user.Client.HTTPClient(), ts.HTTPServer.URL, source.ID, map[string]any{"id": clientID})
+		require.Equal(t, http.StatusCreated, status)
+		require.NotNil(t, note)
+		assert.Equal(t, clientID, note.ID)
+
+		fetched, err := user.Client.GetNote(t.Context(), clientID)
+		require.NoError(t, err)
+		assert.Equal(t, clientID, fetched.ID)
+	})
+
+	t.Run("replaying a duplicate with the same id returns 409 and does not create a second copy", func(t *testing.T) {
+		ts := setupTestServer(t)
+		user := ts.createTestUser(t, "dupid-replay", "password123", false)
+
+		source, err := user.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{Content: "original"})
+		require.NoError(t, err)
+
+		clientID := "DupReplay00000000000Ab"
+		status, _ := postDuplicateRaw(t, user.Client.HTTPClient(), ts.HTTPServer.URL, source.ID, map[string]any{"id": clientID})
+		require.Equal(t, http.StatusCreated, status)
+
+		replayStatus, _ := postDuplicateRaw(t, user.Client.HTTPClient(), ts.HTTPServer.URL, source.ID, map[string]any{"id": clientID})
+		assert.Equal(t, http.StatusConflict, replayStatus)
+
+		notes, err := user.Client.ListNotes(t.Context(), nil)
+		require.NoError(t, err)
+		count := 0
+		for _, n := range notes {
+			if n.ID == clientID {
+				count++
+			}
+		}
+		assert.Equal(t, 1, count, "expected exactly one note with the replayed id")
+	})
+
+	t.Run("omitting the body generates a server-side id (backward-compatible)", func(t *testing.T) {
+		ts := setupTestServer(t)
+		user := ts.createTestUser(t, "dupid-noBody", "password123", false)
+
+		source, err := user.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{Content: "original"})
+		require.NoError(t, err)
+
+		duplicated, err := user.Client.DuplicateNote(t.Context(), source.ID)
+		require.NoError(t, err)
+		assert.NotEmpty(t, duplicated.ID)
+		assert.NotEqual(t, source.ID, duplicated.ID)
+	})
+
+	t.Run("invalid id format in body returns 400", func(t *testing.T) {
+		ts := setupTestServer(t)
+		user := ts.createTestUser(t, "dupid-badid", "password123", false)
+
+		source, err := user.Client.CreateTextNote(t.Context(), &client.CreateTextNoteRequest{Content: "original"})
+		require.NoError(t, err)
+
+		status, _ := postDuplicateRaw(t, user.Client.HTTPClient(), ts.HTTPServer.URL, source.ID, map[string]any{"id": "too-short"})
+		assert.Equal(t, http.StatusBadRequest, status)
+	})
 }

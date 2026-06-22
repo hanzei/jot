@@ -109,14 +109,12 @@ export default function NoteContextMenu({
       onPress: () => { onClose(); onArchive(note); },
       testId: 'context-archive',
     });
-    if (!isLocalId(note.id)) {
-      actions.push({
-        icon: 'copy-outline',
-        label: t('note.duplicate'),
-        onPress: () => { onClose(); onDuplicate(note); },
-        testId: 'context-duplicate',
-      });
-    }
+    actions.push({
+      icon: 'copy-outline',
+      label: t('note.duplicate'),
+      onPress: () => { onClose(); onDuplicate(note); },
+      testId: 'context-duplicate',
+    });
     const labelAction = createLabelAction(note);
     if (labelAction) {
       actions.push(labelAction);
@@ -135,14 +133,12 @@ export default function NoteContextMenu({
       onPress: () => { onClose(); onUnarchive(note); },
       testId: 'context-unarchive',
     });
-    if (!isLocalId(note.id)) {
-      actions.push({
-        icon: 'copy-outline',
-        label: t('note.duplicate'),
-        onPress: () => { onClose(); onDuplicate(note); },
-        testId: 'context-duplicate',
-      });
-    }
+    actions.push({
+      icon: 'copy-outline',
+      label: t('note.duplicate'),
+      onPress: () => { onClose(); onDuplicate(note); },
+      testId: 'context-duplicate',
+    });
     const labelAction = createLabelAction(note);
     if (labelAction) {
       actions.push(labelAction);

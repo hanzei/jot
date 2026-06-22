@@ -535,12 +535,6 @@ export function useDuplicateNote() {
   return useMutation({
     mutationFn: async (id: string): Promise<Note> => {
       assertSwitchWriteAllowed();
-      // A local_* duplicate has no server id yet (it awaits id reconciliation),
-      // so it can't be the source of another duplicate — the queued op would
-      // reference an id the server can't resolve across drain passes.
-      if (isLocalId(id)) {
-        throw new Error('Cannot duplicate an unsynced note; please wait until it has synced');
-      }
       // An offline-created note already carries a server-valid id (#475) and its
       // queued create drains FIFO before this duplicate, so queue rather than
       // calling online against a note the server doesn't know yet (a 404 would
@@ -558,17 +552,19 @@ export function useDuplicateNote() {
         }
       }
 
-      // Offline (or a transient online failure): create a local copy and queue
-      // the server operation.
+      // Offline (or a transient online failure): create a local copy with a
+      // server-valid client ID and queue the server operation. The client ID is
+      // sent in the request body so the server keeps it — making the replay
+      // idempotent (same ID → 409, treated as already-applied, no second copy).
       const source = await getLocalNote(db, id);
       if (!source) {
         throw new Error(`Note ${id} not found in local DB`);
       }
 
-      const localId = generateLocalId();
+      const clientId = generateClientNoteId();
       const now = new Date().toISOString();
       const resetFields = {
-        id: localId,
+        id: clientId,
         pinned: false,
         archived: false,
         position: 0,
@@ -586,7 +582,8 @@ export function useDuplicateNote() {
               // Build a map from old item IDs to new local IDs so that parent_id
               // references within the duplicate point to the new items, not to items
               // in the source note. Items arrive in position order, so parents are
-              // always mapped before their children are processed.
+              // always mapped before their children are processed. Item IDs are
+              // temporary and replaced by the server's canonical IDs on drain.
               const idRemap = new Map<string, string>();
               return (source.items ?? []).map((item) => {
                 const newId = generateLocalId();
@@ -594,7 +591,7 @@ export function useDuplicateNote() {
                 return {
                   ...item,
                   id: newId,
-                  note_id: localId,
+                  note_id: clientId,
                   parent_id: item.parent_id !== null ? (idRemap.get(item.parent_id) ?? item.parent_id) : null,
                   created_at: now,
                   updated_at: now,
@@ -605,11 +602,12 @@ export function useDuplicateNote() {
         : { ...source, ...resetFields };
 
       await saveNote(db, localDuplicate);
+      await markNotePendingCreate(db, clientId);
       await enqueueOperation(db, {
         operation: 'duplicate',
         endpoint: `/notes/${id}/duplicate`,
         method: 'POST',
-        body: { local_id: localId } as Record<string, unknown>,
+        body: { id: clientId } as Record<string, unknown>,
       });
       return localDuplicate;
     },
