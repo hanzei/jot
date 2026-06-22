@@ -28,14 +28,11 @@
 
 ## Code Review Loop
 
-Before submitting a PR, run a sub-agent review loop before finalizing:
+Before submitting a PR, run a single review pass if the change is substantive (more than a trivial fix such as a typo, config tweak, or single-line change):
 
-1. Launch two sub-agents per round: one using the `code-review` skill (correctness bugs) and one using the `simplify` skill (quality/cleanup and consistency with project conventions) to review all changed files.
+1. Launch **one sub-agent** that runs both `/code-review --effort medium` (correctness bugs) and `/simplify` (quality/cleanup and consistency with project conventions) on all changed files.
 2. Address every piece of valid feedback the review returns (fix bugs, improve clarity, align with conventions).
-3. Repeat steps 1–2 until either:
-   - The review returns no valid feedback, **or**
-   - You have completed **2 review rounds** (whichever comes first).
-4. Only proceed to commit/push after the review loop finishes.
+3. Only proceed to commit/push after the review pass finishes — do not repeat the loop.
 
 ## Development Tasks
 
