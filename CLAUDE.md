@@ -28,7 +28,9 @@
 
 ## Code Review Loop
 
-Before submitting a PR, run a single review pass if the change is substantive (more than a trivial fix such as a typo, config tweak, or single-line change):
+Only run a review pass for large, complex PRs — this should be a rare exception, not the default. Skip for anything that isn't genuinely large and architecturally significant (e.g. most bug fixes, small features, refactors, config changes, and single-area changes do not qualify).
+
+When a PR does qualify:
 
 1. Launch **one sub-agent** that runs both `/code-review --effort medium` (correctness bugs) and `/simplify` (quality/cleanup and consistency with project conventions) on all changed files.
 2. Address every piece of valid feedback the review returns (fix bugs, improve clarity, align with conventions).
