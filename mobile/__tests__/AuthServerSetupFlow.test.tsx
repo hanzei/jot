@@ -36,6 +36,7 @@ describe('Auth first-run server setup flow', () => {
       settings: null,
       isAuthenticated: false,
       isLoading: false,
+      revalidationFailed: false,
       login: mockLogin,
       register: mockRegister,
       logout: jest.fn(),
