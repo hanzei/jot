@@ -356,7 +356,8 @@
   },
   "offline": {
     "message": "You're offline. Changes will sync when you reconnect.",
-    "syncError": "Some changes haven't synced yet. They'll retry automatically."
+    "syncError": "Some changes haven't synced yet. They'll retry automatically.",
+    "revalidationError": "Couldn't verify your session with the server. Using local data."
   },
   "syncFailures": {
     "bannerCount_one": "{{count}} change couldn't be saved — Review",

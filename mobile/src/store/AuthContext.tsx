@@ -13,12 +13,20 @@ import {
   clearCachedProfile,
   initializeServerContext,
 } from '../api/client';
+import { isTransientHttpStatus } from '../db/syncQueue';
 
 interface AuthState {
   user: User | null;
   settings: UserSettings | null;
   isAuthenticated: boolean;
   isLoading: boolean;
+  /**
+   * True when `revalidateSession` received a permanent non-401 HTTP error
+   * (e.g. 403, 422) from the server. Network errors and 5xx/timeout are
+   * transient and do not set this flag. Cleared on successful revalidation or
+   * on logout/clearAuth.
+   */
+  revalidationFailed: boolean;
   login: (username: string, password: string) => Promise<void>;
   register: (username: string, password: string) => Promise<void>;
   logout: () => Promise<void>;
@@ -30,25 +38,29 @@ interface AuthState {
 
 const AuthContext = createContext<AuthState | undefined>(undefined);
 
+function getHttpStatus(error: unknown): number | undefined {
+  return (error as { response?: { status?: number } })?.response?.status;
+}
+
 function isUnauthorizedError(error: unknown): boolean {
-  const status = (error as { response?: { status?: number } })?.response?.status;
-  return status === 401;
+  return getHttpStatus(error) === 401;
 }
 
 function isHttpResponseError(error: unknown): boolean {
-  const status = (error as { response?: { status?: number } })?.response?.status;
-  return typeof status === 'number';
+  return typeof getHttpStatus(error) === 'number';
 }
 
 export function AuthProvider({ children }: { children: React.ReactNode }) {
   const [user, setUser] = useState<User | null>(null);
   const [settings, setSettings] = useState<UserSettings | null>(null);
   const [isLoading, setIsLoading] = useState(true);
+  const [revalidationFailed, setRevalidationFailed] = useState(false);
   const queryClient = useQueryClient();
 
   const clearAuth = useCallback(() => {
     setUser(null);
     setSettings(null);
+    setRevalidationFailed(false);
     queryClient.clear();
   }, [queryClient]);
 
@@ -133,6 +145,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser(response.user);
       setSettings(response.settings);
       await cacheAuthProfile(response);
+      setRevalidationFailed(false);
       return true;
     } catch (error) {
       if (isUnauthorizedError(error)) {
@@ -140,6 +153,14 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
         await clearCachedProfile();
         clearAuth();
         return false;
+      }
+      // Permanent non-401 error (e.g. 403, 422): the server is reachable but
+      // rejecting the session for a non-auth reason. Stay authenticated (local
+      // data is still usable) but surface a warning so the user isn't silently
+      // left in a broken state. Network errors, timeouts, and 5xx are transient
+      // and do not trigger the warning.
+      if (!isTransientHttpStatus(getHttpStatus(error))) {
+        setRevalidationFailed(true);
       }
       return true;
     }
@@ -151,6 +172,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       settings,
       isAuthenticated: user !== null,
       isLoading,
+      revalidationFailed,
       login,
       register,
       logout,
@@ -159,7 +181,7 @@ export function AuthProvider({ children }: { children: React.ReactNode }) {
       setUser,
       setSettings,
     }),
-    [user, settings, isLoading, login, register, logout, clearAuth, revalidateSession],
+    [user, settings, isLoading, revalidationFailed, login, register, logout, clearAuth, revalidateSession],
   );
 
   return <AuthContext.Provider value={value}>{children}</AuthContext.Provider>;

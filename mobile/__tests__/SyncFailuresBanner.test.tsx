@@ -1,12 +1,19 @@
 import React from 'react';
 import { render, fireEvent } from '@testing-library/react-native';
 import { useOfflineContext } from '../src/store/OfflineContext';
+import { useAuth } from '../src/store/AuthContext';
 import SyncFailuresBanner from '../src/components/SyncFailuresBanner';
 
 const mockNavigate = jest.fn();
 jest.mock('@react-navigation/native', () => ({
   useNavigation: () => ({ navigate: mockNavigate }),
 }));
+
+jest.mock('../src/store/AuthContext', () => ({
+  useAuth: jest.fn(),
+}));
+
+const mockUseAuth = useAuth as jest.MockedFunction<typeof useAuth>;
 
 const mockDismiss = jest.fn();
 const baseContext = {
@@ -30,6 +37,9 @@ describe('SyncFailuresBanner', () => {
   beforeEach(() => {
     jest.clearAllMocks();
     mockUseOfflineContext.mockReturnValue(baseContext);
+    mockUseAuth.mockReturnValue({
+      revalidationFailed: false,
+    } as unknown as ReturnType<typeof useAuth>);
   });
 
   it('renders the failure count and opens the review screen on tap', () => {
