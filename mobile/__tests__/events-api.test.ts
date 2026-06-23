@@ -248,7 +248,9 @@ describe('SSEConnectionManager', () => {
     jest.useRealTimers();
   });
 
-  it('does not reconnect when keepalive-style messages arrive within the stall window', async () => {
+  it('does not reconnect when keepalive empty-data messages arrive within the stall window', async () => {
+    // The server sends `data:\n\n` (empty data event) as a keepalive every 30s so
+    // that the message listener fires and resets the watchdog.
     jest.useFakeTimers();
 
     const manager = new SSEConnectionManager();
@@ -260,10 +262,10 @@ describe('SSEConnectionManager', () => {
 
     MockEventSource.mockClear();
 
-    // Simulate keepalive messages (no data) arriving every 30s over 3 minutes.
+    // Simulate keepalive empty-data events arriving every 30s over 3 minutes.
     for (let i = 0; i < 6; i++) {
       await jest.advanceTimersByTimeAsync(30_000);
-      messageHandler({});
+      messageHandler({ data: undefined });
     }
 
     expect(MockEventSource).not.toHaveBeenCalled();
@@ -335,6 +337,56 @@ describe('SSEConnectionManager', () => {
     // After base reconnect delay the connection is re-established.
     await jest.advanceTimersByTimeAsync(3_000);
     expect(MockEventSource).toHaveBeenCalledTimes(1);
+
+    manager.disconnect();
+    jest.useRealTimers();
+  });
+
+  it('clears _isConnected when the watchdog triggers a reconnect', async () => {
+    jest.useFakeTimers();
+
+    const manager = new SSEConnectionManager();
+    await manager.connect(jest.fn());
+
+    const openHandler = mockAddEventListener.mock.calls.find(
+      (call: [string, unknown]) => call[0] === 'open',
+    )?.[1] as () => void;
+
+    openHandler();
+    expect(manager.isConnected()).toBe(true);
+
+    MockEventSource.mockClear();
+
+    // Watchdog fires after stall timeout + one interval.
+    await jest.advanceTimersByTimeAsync(90_000);
+
+    expect(manager.isConnected()).toBe(false);
+
+    manager.disconnect();
+    jest.useRealTimers();
+  });
+
+  it('does not double-schedule reconnect when error fires before the watchdog', async () => {
+    // If an error triggers scheduleReconnect() (e.g. at t=60s) and then the
+    // watchdog also fires (t=90s), the watchdog must skip rather than cancel
+    // the pending error-triggered reconnect and double the backoff delay.
+    jest.useFakeTimers();
+
+    const manager = new SSEConnectionManager();
+    await manager.connect(jest.fn());
+
+    const errorHandler = mockAddEventListener.mock.calls.find(
+      (call: [string, unknown]) => call[0] === 'error',
+    )?.[1] as (event: { status?: number }) => void;
+
+    // Error fires at t=60s — schedules a 3s reconnect.
+    await jest.advanceTimersByTimeAsync(60_000);
+    errorHandler({});
+    expect(manager.getReconnectAttempts()).toBe(1);
+
+    // Watchdog fires at t=90s — must NOT increment attempts again.
+    await jest.advanceTimersByTimeAsync(30_000);
+    expect(manager.getReconnectAttempts()).toBe(1);
 
     manager.disconnect();
     jest.useRealTimers();

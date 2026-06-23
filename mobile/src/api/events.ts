@@ -62,7 +62,7 @@ export class SSEConnectionManager {
       });
 
       this.es.addEventListener('message', (event) => {
-        // Reset watchdog and backoff on any message (including keepalive comments with no data).
+        // Reset watchdog and backoff on any message (including keepalive empty-data events).
         this.lastEventAt = Date.now();
         this.reconnectDelay = BASE_RECONNECT_DELAY_MS;
         if (!event.data) return;
@@ -137,7 +137,11 @@ export class SSEConnectionManager {
   private startWatchdog(): void {
     this.lastEventAt = Date.now();
     this.watchdogTimer = setInterval(() => {
+      // If a reconnect is already scheduled (e.g. triggered by an error event),
+      // don't interfere — cleanup() would cancel that timer and double the backoff.
+      if (this.reconnectTimer !== null) return;
       if (Date.now() - this.lastEventAt > STALL_TIMEOUT_MS) {
+        this._isConnected = false;
         this.cleanup();
         this.scheduleReconnect();
       }
