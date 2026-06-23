@@ -81,7 +81,9 @@ func (h *EventsHandler) ServeSSE(w http.ResponseWriter, r *http.Request) {
 			}
 			flusher.Flush()
 		case <-ticker.C:
-			if _, err := fmt.Fprintf(w, ": keepalive\n\n"); err != nil {
+			// Send an empty data event (not an SSE comment) so the client's
+			// message listener fires and can reset its liveness watchdog.
+			if _, err := fmt.Fprintf(w, "data:\n\n"); err != nil {
 				return
 			}
 			flusher.Flush()

@@ -5,6 +5,9 @@ import { getCurrentSwitchGenerationId, isSseQuiesced } from '../store/serverSwit
 
 const BASE_RECONNECT_DELAY_MS = 3000;
 const MAX_RECONNECT_DELAY_MS = 60000;
+const WATCHDOG_INTERVAL_MS = 15_000;
+// Server sends keepalives every 30s; 2.5× gives margin for two missed beats before reconnecting.
+const STALL_TIMEOUT_MS = 75_000;
 
 type SSECallback = (event: SSEEvent) => void;
 
@@ -12,6 +15,8 @@ export class SSEConnectionManager {
   private es: EventSource | null = null;
   private callback: SSECallback | null = null;
   private reconnectTimer: ReturnType<typeof setTimeout> | null = null;
+  private watchdogTimer: ReturnType<typeof setInterval> | null = null;
+  private lastEventAt = Date.now();
   private closed = false;
   private reconnectDelay = BASE_RECONNECT_DELAY_MS;
   private generationId = getCurrentSwitchGenerationId();
@@ -53,10 +58,12 @@ export class SSEConnectionManager {
         this._isConnected = true;
         this._reconnectAttempts = 0;
         this.reconnectDelay = BASE_RECONNECT_DELAY_MS;
+        this.lastEventAt = Date.now();
       });
 
       this.es.addEventListener('message', (event) => {
-        // Reset backoff on successful message
+        // Reset watchdog and backoff on any message (including keepalive empty-data events).
+        this.lastEventAt = Date.now();
         this.reconnectDelay = BASE_RECONNECT_DELAY_MS;
         if (!event.data) return;
         if (this.generationId !== getCurrentSwitchGenerationId() || isSseQuiesced()) {
@@ -81,6 +88,8 @@ export class SSEConnectionManager {
         // Schedule reconnect with exponential backoff
         this.scheduleReconnect();
       });
+
+      this.startWatchdog();
     } catch {
       // Handle errors (e.g., SecureStore failures) — schedule a retry
       this.scheduleReconnect();
@@ -110,6 +119,7 @@ export class SSEConnectionManager {
 
   private cleanup(): void {
     this.clearReconnectTimer();
+    this.stopWatchdog();
     if (this.es) {
       this.es.removeAllEventListeners();
       this.es.close();
@@ -121,6 +131,27 @@ export class SSEConnectionManager {
     if (this.reconnectTimer) {
       clearTimeout(this.reconnectTimer);
       this.reconnectTimer = null;
+    }
+  }
+
+  private startWatchdog(): void {
+    this.lastEventAt = Date.now();
+    this.watchdogTimer = setInterval(() => {
+      // If a reconnect is already scheduled (e.g. triggered by an error event),
+      // don't interfere — cleanup() would cancel that timer and double the backoff.
+      if (this.reconnectTimer !== null) return;
+      if (Date.now() - this.lastEventAt > STALL_TIMEOUT_MS) {
+        this._isConnected = false;
+        this.cleanup();
+        this.scheduleReconnect();
+      }
+    }, WATCHDOG_INTERVAL_MS);
+  }
+
+  private stopWatchdog(): void {
+    if (this.watchdogTimer) {
+      clearInterval(this.watchdogTimer);
+      this.watchdogTimer = null;
     }
   }
 }
