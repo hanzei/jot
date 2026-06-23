@@ -229,4 +229,114 @@ describe('SSEConnectionManager', () => {
 
     jest.useRealTimers();
   });
+
+  it('triggers reconnect after stall timeout with no events', async () => {
+    jest.useFakeTimers();
+
+    const manager = new SSEConnectionManager();
+    await manager.connect(jest.fn());
+
+    MockEventSource.mockClear();
+
+    // Stall timeout (75s) + one watchdog interval (15s) = watchdog fires at 90s,
+    // then schedules reconnect via existing 3s base backoff delay.
+    await jest.advanceTimersByTimeAsync(93_000);
+
+    expect(MockEventSource).toHaveBeenCalledTimes(1);
+
+    manager.disconnect();
+    jest.useRealTimers();
+  });
+
+  it('does not reconnect when keepalive-style messages arrive within the stall window', async () => {
+    jest.useFakeTimers();
+
+    const manager = new SSEConnectionManager();
+    await manager.connect(jest.fn());
+
+    const messageHandler = mockAddEventListener.mock.calls.find(
+      (call: [string, unknown]) => call[0] === 'message',
+    )?.[1] as (event: { data?: string }) => void;
+
+    MockEventSource.mockClear();
+
+    // Simulate keepalive messages (no data) arriving every 30s over 3 minutes.
+    for (let i = 0; i < 6; i++) {
+      await jest.advanceTimersByTimeAsync(30_000);
+      messageHandler({});
+    }
+
+    expect(MockEventSource).not.toHaveBeenCalled();
+
+    manager.disconnect();
+    jest.useRealTimers();
+  });
+
+  it('resets the stall clock when the open event fires', async () => {
+    jest.useFakeTimers();
+
+    const manager = new SSEConnectionManager();
+    await manager.connect(jest.fn());
+
+    const openHandler = mockAddEventListener.mock.calls.find(
+      (call: [string, unknown]) => call[0] === 'open',
+    )?.[1] as () => void;
+
+    MockEventSource.mockClear();
+
+    // Advance close to the stall threshold without crossing it.
+    await jest.advanceTimersByTimeAsync(70_000);
+
+    // open fires (e.g., a reconnect completes) — resets lastEventAt.
+    openHandler();
+
+    // Advance another 30s (100s total since start, only 30s since last open).
+    // Watchdog should see < 75s since open and must not reconnect.
+    await jest.advanceTimersByTimeAsync(30_000);
+
+    expect(MockEventSource).not.toHaveBeenCalled();
+
+    manager.disconnect();
+    jest.useRealTimers();
+  });
+
+  it('clears watchdog on disconnect so no reconnect fires after disconnection', async () => {
+    jest.useFakeTimers();
+
+    const manager = new SSEConnectionManager();
+    await manager.connect(jest.fn());
+
+    manager.disconnect();
+    MockEventSource.mockClear();
+
+    // Advance well past stall timeout — watchdog must be cleared.
+    await jest.advanceTimersByTimeAsync(120_000);
+
+    expect(MockEventSource).not.toHaveBeenCalled();
+
+    jest.useRealTimers();
+  });
+
+  it('watchdog reconnect uses existing exponential backoff path', async () => {
+    jest.useFakeTimers();
+
+    const manager = new SSEConnectionManager();
+    await manager.connect(jest.fn());
+
+    MockEventSource.mockClear();
+
+    // Let the watchdog fire.
+    await jest.advanceTimersByTimeAsync(90_000);
+
+    // Watchdog schedules a reconnect via scheduleReconnect() (3s base delay).
+    // EventSource should not be created immediately.
+    expect(MockEventSource).not.toHaveBeenCalled();
+
+    // After base reconnect delay the connection is re-established.
+    await jest.advanceTimersByTimeAsync(3_000);
+    expect(MockEventSource).toHaveBeenCalledTimes(1);
+
+    manager.disconnect();
+    jest.useRealTimers();
+  });
 });
