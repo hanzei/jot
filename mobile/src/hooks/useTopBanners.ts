@@ -49,8 +49,11 @@ export function useVisibleTopBanners(): TopBannerKey[] {
   const { revalidationFailed } = useAuth();
 
   const visible: TopBannerKey[] = [];
-  // Offline takes priority; the rest are gated on isConnected so they never
-  // compete with it.
+  // Offline takes priority; the connection-state banners below it are gated on
+  // isConnected so they never compete with it. syncFailures is intentionally
+  // not gated: dead-lettered changes stay failed regardless of connectivity, so
+  // it stacks below the offline banner (rather than replacing it) when both
+  // apply.
   if (!isConnected) visible.push('offline');
   if (isConnected && sseReconnecting) visible.push('sseReconnect');
   if (isConnected && syncError) visible.push('syncError');

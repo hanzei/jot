@@ -72,6 +72,14 @@ describe('useVisibleTopBanners', () => {
     expect(result.current).toEqual(['offline']);
   });
 
+  it('stacks the sync-failures banner below the offline banner when both apply', () => {
+    // Dead-lettered changes stay failed regardless of connectivity, so the
+    // sync-failures banner is intentionally not gated on isConnected.
+    setup({ isConnected: false, syncFailureCount: 2 });
+    const { result } = renderHook(() => useVisibleTopBanners());
+    expect(result.current).toEqual(['offline', 'syncFailures']);
+  });
+
   it('shows the SSE reconnect banner when online but the stream is down', () => {
     setup({ sseReconnecting: true });
     const { result } = renderHook(() => useVisibleTopBanners());
