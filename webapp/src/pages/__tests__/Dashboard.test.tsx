@@ -8,7 +8,7 @@ import Dashboard from '../Dashboard'
 import type { AuthResponse, Note, Label, NoteSort, UserSettings } from '@jot/shared'
 import { notes, labels, users } from '@/utils/api'
 import * as auth from '@/utils/auth'
-import { useAuthenticatedLayout } from '@/components/AuthenticatedLayout'
+import { useAuthenticatedLayout, type AuthenticatedLayoutContext } from '@/components/AuthenticatedLayout'
 import { createMockNote, createMockListNote } from '@/utils/__tests__/test-helpers'
 import { ToastProvider } from '@/components/Toast'
 
@@ -261,7 +261,7 @@ describe('Dashboard', () => {
         handleRenameLabel: vi.fn().mockResolvedValue(true),
         handleDeleteLabel: vi.fn().mockResolvedValue(true),
         registerLabelCallbacks: vi.fn(),
-        registerSSECallbacks: mockRegisterSSECallbacks,
+        registerSSECallbacks: mockRegisterSSECallbacks as unknown as AuthenticatedLayoutContext['registerSSECallbacks'],
         setSearchBar: (content: ReactNode) => captureSearchBarRef.current(content),
       }
     })
