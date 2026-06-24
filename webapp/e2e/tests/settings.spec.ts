@@ -170,7 +170,7 @@ test.describe('Settings', () => {
 
       // Reload and verify the theme is still applied
       await page.reload();
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('load');
       await expect(page.locator('html')).toHaveClass(/dark/);
 
       void authenticatedUser;
@@ -186,7 +186,7 @@ test.describe('Settings', () => {
       await saveResponse;
 
       await page.reload();
-      await page.waitForLoadState('networkidle');
+      await page.waitForLoadState('load');
 
       const value = await settingsPage.getThemeSelectValue();
       expect(value).toBe('dark');

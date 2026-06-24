@@ -1,6 +1,6 @@
 import { useState, useRef, useCallback, useEffect, useMemo, type ReactNode } from 'react';
 import { useSSE } from '@/hooks/useSSE';
-import type { SSEStatus, SSEEvent } from '@/hooks/useSSE';
+import type { SSEEvent } from '@/hooks/useSSE';
 import { Outlet, useOutletContext, useMatch, useNavigate, useSearchParams } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import {
