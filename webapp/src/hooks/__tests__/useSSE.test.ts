@@ -127,7 +127,7 @@ describe('useSSE', () => {
       expect(result.current).toBe('reconnecting')
     })
 
-    it('reports disconnected once the browser gives up (CLOSED)', () => {
+    it('reports disconnected once the browser gives up (CLOSED) before ever opening', () => {
       const { result } = renderHook(() => useSSE({ onEvent: vi.fn() }))
 
       act(() => {
@@ -135,6 +135,115 @@ describe('useSSE', () => {
       })
 
       expect(result.current).toBe('disconnected')
+    })
+
+    it('reports reconnecting when a previously-open connection reaches CLOSED', () => {
+      const { result } = renderHook(() => useSSE({ onEvent: vi.fn() }))
+
+      act(() => {
+        MockEventSource.instances[0].simulateOpen()
+      })
+      act(() => {
+        MockEventSource.instances[0].simulateError(MockEventSource.CLOSED)
+      })
+
+      expect(result.current).toBe('reconnecting')
+    })
+  })
+
+  describe('manual reconnect after the browser gives up (CLOSED)', () => {
+    beforeEach(() => {
+      vi.useFakeTimers()
+    })
+    afterEach(() => {
+      vi.useRealTimers()
+    })
+
+    it('opens a fresh EventSource after the backoff delay', () => {
+      renderHook(() => useSSE({ onEvent: vi.fn() }))
+
+      act(() => {
+        MockEventSource.instances[0].simulateError(MockEventSource.CLOSED)
+      })
+      // The dead EventSource is closed and no new one exists yet.
+      expect(MockEventSource.instances[0].closeCalled).toBe(true)
+      expect(MockEventSource.instances).toHaveLength(1)
+
+      act(() => {
+        vi.advanceTimersByTime(1000)
+      })
+      expect(MockEventSource.instances).toHaveLength(2)
+      expect(MockEventSource.instances[1].url).toBe('/api/v1/events')
+    })
+
+    it('returns to connected once the reconnect opens (banner clears)', () => {
+      const { result } = renderHook(() => useSSE({ onEvent: vi.fn() }))
+
+      act(() => {
+        MockEventSource.instances[0].simulateError(MockEventSource.CLOSED)
+      })
+      expect(result.current).toBe('disconnected')
+
+      act(() => {
+        vi.advanceTimersByTime(1000)
+      })
+      act(() => {
+        MockEventSource.instances[1].simulateOpen()
+      })
+
+      expect(result.current).toBe('connected')
+    })
+
+    it('grows the backoff delay on repeated failures and resets after a success', () => {
+      renderHook(() => useSSE({ onEvent: vi.fn() }))
+
+      // First failure → retry after 1s.
+      act(() => {
+        MockEventSource.instances[0].simulateError(MockEventSource.CLOSED)
+      })
+      act(() => {
+        vi.advanceTimersByTime(1000)
+      })
+      expect(MockEventSource.instances).toHaveLength(2)
+
+      // Second failure → retry after 2s (not yet at 1s).
+      act(() => {
+        MockEventSource.instances[1].simulateError(MockEventSource.CLOSED)
+      })
+      act(() => {
+        vi.advanceTimersByTime(1000)
+      })
+      expect(MockEventSource.instances).toHaveLength(2)
+      act(() => {
+        vi.advanceTimersByTime(1000)
+      })
+      expect(MockEventSource.instances).toHaveLength(3)
+
+      // A successful open resets the backoff back to 1s.
+      act(() => {
+        MockEventSource.instances[2].simulateOpen()
+      })
+      act(() => {
+        MockEventSource.instances[2].simulateError(MockEventSource.CLOSED)
+      })
+      act(() => {
+        vi.advanceTimersByTime(1000)
+      })
+      expect(MockEventSource.instances).toHaveLength(4)
+    })
+
+    it('does not open a new EventSource after unmount', () => {
+      const { unmount } = renderHook(() => useSSE({ onEvent: vi.fn() }))
+
+      act(() => {
+        MockEventSource.instances[0].simulateError(MockEventSource.CLOSED)
+      })
+      unmount()
+      act(() => {
+        vi.advanceTimersByTime(60000)
+      })
+
+      expect(MockEventSource.instances).toHaveLength(1)
     })
   })
 
