@@ -12,7 +12,14 @@ interface SSEContextValue {
   sseReconnecting: boolean;
 }
 
-const SSEContext = createContext<SSEContextValue | undefined>(undefined);
+// A concrete default (rather than undefined) so consumers like
+// useVisibleTopBanners can read SSE state from anywhere in the tree without a
+// provider throwing — mirroring OfflineContext and the safe-area-inset
+// convention in mobile/CLAUDE.md.
+const SSEContext = createContext<SSEContextValue>({
+  subscribe: () => () => {},
+  sseReconnecting: false,
+});
 
 export function SSEProvider({ children }: { children: React.ReactNode }) {
   const listenersRef = useRef<Set<(event: SSEEvent) => void>>(new Set());
@@ -51,9 +58,7 @@ export function SSEProvider({ children }: { children: React.ReactNode }) {
 }
 
 export function useSSEContext(): SSEContextValue {
-  const context = useContext(SSEContext);
-  if (!context) throw new Error('useSSEContext must be used within SSEProvider');
-  return context;
+  return useContext(SSEContext);
 }
 
 export function useSSESubscription(noteId: string | null, onUpdated: () => void): void {
