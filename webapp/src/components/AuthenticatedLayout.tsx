@@ -1,5 +1,6 @@
 import { useState, useRef, useCallback, useEffect, useMemo, type ReactNode } from 'react';
-import type { SSEStatus } from '@/hooks/useSSE';
+import { useSSE } from '@/hooks/useSSE';
+import type { SSEStatus, SSEEvent } from '@/hooks/useSSE';
 import { Outlet, useOutletContext, useMatch, useNavigate, useSearchParams } from 'react-router';
 import { useTranslation } from 'react-i18next';
 import {
@@ -20,6 +21,11 @@ interface LabelCallbacks {
   onDeleteSuccess?: (label: Label) => void | Promise<void>;
 }
 
+interface SSECallbacks {
+  onEvent?: (event: SSEEvent) => void;
+  onConnected?: () => void;
+}
+
 export interface AuthenticatedLayoutContext {
   labels: Label[];
   labelCounts: Record<string, number> | null;
@@ -29,9 +35,8 @@ export interface AuthenticatedLayoutContext {
   handleRenameLabel: (label: Label, name: string) => Promise<boolean>;
   handleDeleteLabel: (label: Label) => Promise<boolean>;
   registerLabelCallbacks: (callbacks: LabelCallbacks) => void;
+  registerSSECallbacks: (callbacks: SSECallbacks) => void;
   setSearchBar: (content: ReactNode) => void;
-  sseStatus: SSEStatus | null;
-  setSseStatus: (status: SSEStatus | null) => void;
 }
 
 // eslint-disable-next-line react-refresh/only-export-components
@@ -56,12 +61,21 @@ const AuthenticatedLayout = ({ onLogout }: AuthenticatedLayoutProps) => {
   // Search bar slot: Dashboard injects its search bar via setSearchBar
   const [searchBar, setSearchBar] = useState<ReactNode>(null);
 
-  // SSE status: Dashboard pushes its connection state up so AppLayout can show
-  // a banner inline below the header when the server is unreachable.
-  const [sseStatus, setSseStatus] = useState<SSEStatus | null>(null);
-
   // Label callbacks registered by Dashboard so it can react to label changes
   const labelCallbacksRef = useRef<LabelCallbacks>({});
+
+  // SSE callbacks registered by Dashboard so it can react to real-time events.
+  // Stored in a ref so registration doesn't restart the SSE connection.
+  const sseCallbacksRef = useRef<SSECallbacks>({});
+
+  const registerSSECallbacks = useCallback((callbacks: SSECallbacks) => {
+    sseCallbacksRef.current = callbacks;
+  }, []);
+
+  const sseStatus = useSSE({
+    onEvent: (event) => sseCallbacksRef.current.onEvent?.(event),
+    onConnected: () => sseCallbacksRef.current.onConnected?.(),
+  });
 
   const handleLabelRenameSuccess = useCallback(async (label: Label, newName: string) => {
     await labelCallbacksRef.current.onRenameSuccess?.(label, newName);
@@ -177,9 +191,8 @@ const AuthenticatedLayout = ({ onLogout }: AuthenticatedLayoutProps) => {
     handleRenameLabel,
     handleDeleteLabel,
     registerLabelCallbacks,
+    registerSSECallbacks,
     setSearchBar,
-    sseStatus,
-    setSseStatus,
   }), [
     labels,
     labelCounts,
@@ -189,7 +202,7 @@ const AuthenticatedLayout = ({ onLogout }: AuthenticatedLayoutProps) => {
     handleRenameLabel,
     handleDeleteLabel,
     registerLabelCallbacks,
-    sseStatus,
+    registerSSECallbacks,
   ]);
 
   return (
